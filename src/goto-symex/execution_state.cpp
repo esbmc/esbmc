@@ -349,7 +349,7 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
 
   goto_symext::symex_goto(old_guard);
 
-  if(!pre_goto_guard.is_false() && !is_nil_expr(old_guard))
+  if(!pre_goto_guard.is_false())
   {
     if(threads_state.size() >= thread_cswitch_threshold)
     {
@@ -793,6 +793,9 @@ void execution_statet::analyze_assign(const expr2tc &code)
 
 void execution_statet::analyze_read(const expr2tc &code)
 {
+  if(is_nil_expr(code))
+    return;
+
   std::set<expr2tc> global_reads;
   get_expr_globals(ns, code, global_reads);
 
