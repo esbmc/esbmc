@@ -798,7 +798,7 @@ void execution_statet::analyze_read(const expr2tc &code)
 
   if(global_reads.size() > 0)
   {
-    // Record read/written data
+    // Record read data
     thread_last_reads[active_thread].insert(
       global_reads.begin(), global_reads.end());
   }
