@@ -40,7 +40,14 @@ bool language_uit::parse(const std::string &filename)
   }
 
   if(config.options.get_bool_option("old-frontend"))
-    mode++;
+  {
+    mode = get_old_frontend_mode(mode);
+    if(mode == -1)
+    {
+      msg.error("old-frontend was not built on this version of ESBMC");
+      return true;
+    }
+  }
 
   // Check that it opens
   std::ifstream infile(filename.c_str());
@@ -65,7 +72,7 @@ bool language_uit::parse(const std::string &filename)
   msg.status("Parsing", filename);
 
 #ifdef ENABLE_SOLIDITY_FRONTEND
-  if(mode == 2) // 0 for clang-c, 2 for Solidity
+  if(mode == get_mode("Solidity AST"))
     language.set_func_name(_cmdline.vm["function"].as<std::string>());
 #endif
 
