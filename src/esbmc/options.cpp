@@ -242,6 +242,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"forward-condition", NULL, "check the forward condition"},
     {"inductive-step", NULL, "check the inductive step"},
     {"k-induction", NULL, "prove by k-induction "},
+    {"goto-contractor", NULL, "prove by k-induction using contractors"},
     {"k-induction-parallel",
      NULL,
      "prove by k-induction, running each step on a separate process"},
