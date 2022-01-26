@@ -42,7 +42,7 @@ languaget *new_solidity_language(const messaget &msg);
   }
 #define LANGAPI_HAVE_MODE_CLANG_CPP                                            \
   {                                                                            \
-    "C", &new_clang_cpp_language, extensions_cpp                               \
+    "C", &new_clang_cpp_language, extensions_cpp                             \
   }
 #define LANGAPI_HAVE_MODE_SOLAST                                               \
   {                                                                            \
@@ -63,6 +63,7 @@ languaget *new_solidity_language(const messaget &msg);
 
 int get_mode(const std::string &str);
 int get_mode_filename(const std::string &filename);
+int get_old_frontend_mode(int current_mode);
 
 languaget *new_language(const char *mode, const messaget &msg);
 
