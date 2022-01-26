@@ -42,7 +42,7 @@ languaget *new_solidity_language(const messaget &msg);
   }
 #define LANGAPI_HAVE_MODE_CLANG_CPP                                            \
   {                                                                            \
-    "C", &new_clang_cpp_language, extensions_cpp                             \
+    "C", &new_clang_cpp_language, extensions_cpp                               \
   }
 #define LANGAPI_HAVE_MODE_SOLAST                                               \
   {                                                                            \
