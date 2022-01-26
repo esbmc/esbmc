@@ -107,7 +107,7 @@ void jimple_class_method::from_json(const json &j)
   j.at("name").get_to(this->name);
   name +=
     "_" +
-    get_hash_name(); // to handle polimorphism, the method will have an uuid based on its type and arguments
+    get_hash_name(); // to handle polymorphism, the method will have an uuid based on its type and arguments
   try
   {
     j.at("throws").get_to(this->throws);

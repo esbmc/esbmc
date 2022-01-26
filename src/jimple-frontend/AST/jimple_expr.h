@@ -170,7 +170,7 @@ public:
  * int arr[3];
  * lengthof(arr) = 3
  */
-class jimple_lenghof : public jimple_expr
+class jimple_lengthof : public jimple_expr
 {
 public:
   virtual void from_json(const json &j) override;
