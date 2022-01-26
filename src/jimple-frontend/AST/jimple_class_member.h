@@ -50,34 +50,12 @@ public:
     const std::string &class_name,
     const std::string &file_name) const;
 
-  const std::string &get_name() const
-  {
-    return name;
-  }
-
-  const std::string &get_throws() const
-  {
-    return throws;
-  }
-  const jimple_modifiers &get_modifiers() const
-  {
-    return modifiers;
-  }
-
-  const jimple_type &get_type() const
-  {
-    return type;
-  }
-
-  const std::shared_ptr<jimple_method_body> &get_body() const
-  {
-    return body;
-  }
-
-  const std::vector<std::shared_ptr<jimple_type>> &get_parameters() const
-  {
-    return parameters;
-  }
+  std::string name;
+  jimple_modifiers modifiers;
+  std::string throws;
+  jimple_type type;
+  std::shared_ptr<jimple_method_body> body;
+  std::vector<std::shared_ptr<jimple_type>> parameters;
 
 protected:
   // We need an unique name for each function
@@ -87,12 +65,6 @@ protected:
     // TODO: DRY
     return std::to_string(parameters.size());
   }
-  std::string name;
-  jimple_modifiers modifiers;
-  std::string throws;
-  jimple_type type;
-  std::shared_ptr<jimple_method_body> body;
-  std::vector<std::shared_ptr<jimple_type>> parameters;
 };
 
 // TODO: Class Field

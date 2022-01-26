@@ -75,12 +75,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  const std::string &getValue() const
-  {
-    return value;
-  }
-
-protected:
   std::string value;
 };
 
@@ -141,22 +135,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  const std::string &getBinop() const
-  {
-    return binop;
-  }
-
-  std::shared_ptr<jimple_expr> &getLhs()
-  {
-    return lhs;
-  }
-
-  std::shared_ptr<jimple_expr> &getRhs()
-  {
-    return rhs;
-  }
-
-protected:
   std::string binop;
   std::shared_ptr<jimple_expr> lhs;
   std::shared_ptr<jimple_expr> rhs;
@@ -181,22 +159,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  const std::string &getVarName() const
-  {
-    return var_name;
-  }
-
-  std::shared_ptr<jimple_expr> &getFrom()
-  {
-    return from;
-  }
-
-  std::shared_ptr<jimple_type> &getType()
-  {
-    return to;
-  }
-
-protected:
   std::string var_name;
   std::shared_ptr<jimple_expr> from;
   std::shared_ptr<jimple_type> to;
@@ -222,12 +184,7 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  std::shared_ptr<jimple_expr> &getFrom()
-  {
-    return from;
-  }
-
-protected:
+ 
   std::shared_ptr<jimple_expr> from;
 };
 
@@ -253,17 +210,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  std::shared_ptr<jimple_expr> &getSize()
-  {
-    return size;
-  }
-
-  std::shared_ptr<jimple_type> &getType()
-  {
-    return type;
-  }
-
-protected:
   std::shared_ptr<jimple_type> type;
   std::shared_ptr<jimple_expr> size;
 };
@@ -288,20 +234,10 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  const std::string &getBaseClass() const
-  {
-    return base_class;
-  }
-
-  const std::string &getMethod() const
-  {
-    return method;
-  }
-
-  const std::vector<std::shared_ptr<jimple_expr>> &getParameters() const
-  {
-    return parameters;
-  }
+  std::string base_class;
+  std::string method;
+  exprt lhs;
+  std::vector<std::shared_ptr<jimple_expr>> parameters;
 
   void set_lhs(exprt expr)
   {
@@ -316,10 +252,7 @@ protected:
     // TODO: DRY
     return std::to_string(parameters.size());
   }
-  std::string base_class;
-  std::string method;
-  exprt lhs;
-  std::vector<std::shared_ptr<jimple_expr>> parameters;
+  
 };
 
 /**
@@ -380,17 +313,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  std::shared_ptr<jimple_expr> &getIndex()
-  {
-    return index;
-  }
-
-  std::shared_ptr<jimple_expr> &getBase()
-  {
-    return base;
-  }
-
-protected:
   std::shared_ptr<jimple_expr> index;
   std::shared_ptr<jimple_expr> base;
 };
@@ -439,7 +361,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-protected:
   std::string from;
   std::string field;
   std::shared_ptr<jimple_type> type;
