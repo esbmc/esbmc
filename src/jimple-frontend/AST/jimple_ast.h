@@ -56,7 +56,7 @@ protected:
    *
    * TODO: Right now, we are setting it as C mode. In time, we
    * should convert it to Jimple.
-   * By using C mdoe, we don't have to worry about typecast and
+   * By using C mode, we don't have to worry about typecast and
    * primitives for now.
    * 
    * We still need to create every intrinsic type and variable for JVM
