@@ -33,7 +33,7 @@ int get_mode(const std::string &str)
 int get_old_frontend_mode(int current_mode)
 {
   unsigned i;
-  auto expected = mode_table[current_mode++].name;
+  std::string expected(mode_table[current_mode++].name);
   for(i = current_mode; mode_table[i].name != nullptr; i++)
     if(expected == mode_table[i].name)
       return i;
