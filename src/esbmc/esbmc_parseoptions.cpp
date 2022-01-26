@@ -38,6 +38,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_contractor.h>
 #include <goto-programs/interval_analysis.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
@@ -1598,6 +1599,12 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("k-induction-parallel"))
     {
       goto_k_induction(goto_functions, msg);
+    }
+
+    if(cmdline.isset("goto-contractor"))
+    {
+      interval_analysis(goto_functions, ns);
+      goto_contractor(goto_functions, msg);
     }
 
     if(cmdline.isset("termination"))
