@@ -32,22 +32,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  const std::string &get_local_name() const
-  {
-    return local_name;
-  }
-
-  const std::string &get_at_identifier() const
-  {
-    return at_identifier;
-  }
-
-  const jimple_type &get_type() const
-  {
-    return type;
-  }
-
-protected:
   std::string local_name;
   std::string at_identifier;
   jimple_type type;
@@ -68,22 +52,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  const std::string &getBaseClass() const
-  {
-    return base_class;
-  }
-
-  const std::string &getMethod() const
-  {
-    return method;
-  }
-
-  const std::vector<std::shared_ptr<jimple_expr>> &getParameters() const
-  {
-    return parameters;
-  }
-
-protected:
   // We need an unique name for each function
   std::string get_hash_name() const
   {
@@ -128,12 +96,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  const std::string &getLabel() const
-  {
-    return label;
-  }
-
-protected:
   std::string label;
   std::shared_ptr<jimple_full_method_body> members;
 };
@@ -153,12 +115,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  const std::string &getLabel() const
-  {
-    return label;
-  }
-
-protected:
   std::string label;
 };
 
@@ -177,17 +133,6 @@ public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
 
-  const std::string &getVariable() const
-  {
-    return variable;
-  }
-
-  const std::shared_ptr<jimple_expr> &getExpr() const
-  {
-    return expr;
-  }
-
-protected:
   std::string variable;
   std::shared_ptr<jimple_expr> expr;
   bool is_skip = false;
@@ -208,12 +153,6 @@ public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
 
-  const std::shared_ptr<jimple_expr> &getPos() const
-  {
-    return pos;
-  }
-
-protected:
   std::shared_ptr<jimple_expr> pos;
 };
 
@@ -228,16 +167,6 @@ public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
 
-  const std::string &getVariable() const
-  {
-    return variable;
-  }
-  const std::string &getValue() const
-  {
-    return value;
-  }
-
-protected:
   std::string variable;
   std::string value;
 };
@@ -257,17 +186,6 @@ public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
 
-  const std::string &getLabel() const
-  {
-    return label;
-  }
-
-  std::shared_ptr<jimple_expr> &getCond()
-  {
-    return cond;
-  }
-
-protected:
   std::shared_ptr<jimple_expr> cond;
   std::string label;
 };
@@ -287,7 +205,6 @@ class jimple_throw : public jimple_statement
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
 
-protected:
   std::shared_ptr<jimple_expr> expr;
 };
 

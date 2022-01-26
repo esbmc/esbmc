@@ -108,8 +108,8 @@ exprt jimple_file::to_exprt(contextt &ctx) const
   }
 
   std::string id, name;
-  id = "tag-" + this->get_class_name();
-  name = this->get_class_name();
+  id = "tag-" + this->class_name;
+  name = this->class_name;
 
   // Check if class already exists
   if(ctx.find_symbol(id) != nullptr)

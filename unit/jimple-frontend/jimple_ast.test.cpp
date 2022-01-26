@@ -40,15 +40,15 @@ SCENARIO("AST initialization from JSON (basic constructs)", "[jimple-frontend]")
     jimple_file f;
     j.get_to(f);
 
-    REQUIRE(f.get_class_name() == "MainKt");
-    REQUIRE_FALSE(f.get_class_name() == "FalseClassName");
+    REQUIRE(f.class_name == "MainKt");
+    REQUIRE_FALSE(f.class_name == "FalseClassName");
     REQUIRE(!f.is_interface());
     REQUIRE_FALSE(f.is_interface());
-    REQUIRE(f.get_extends() == "java.lang.Object");
+    REQUIRE(f.extends == "java.lang.Object");
 
-    REQUIRE(f.get_implements() == "(No implements)");
-    REQUIRE(f.get_modifiers().is_public());
-    REQUIRE(f.get_body().size() == 0);
+    REQUIRE(f.implements == "(No implements)");
+    REQUIRE(f.modifiers.is_public());
+    REQUIRE(f.body.size() == 0);
   }
 }
 
@@ -77,15 +77,15 @@ SCENARIO("AST initialization from JSON (methods)", "[jimple-frontend]")
     jimple_class_method f;
     j.get_to(f);
 
-    REQUIRE(f.get_name() == "method_0");
-    REQUIRE_FALSE(f.get_name() == "WrongMethodName");
-    REQUIRE(f.get_throws() == "(No throw)");
-    REQUIRE_FALSE(f.get_throws() == "exception");
-    REQUIRE(f.get_type().is_array() == false);
-    REQUIRE_FALSE(f.get_type().is_array());
-    REQUIRE(f.get_parameters().size() == 0);
-    REQUIRE(f.get_modifiers().is_public());
-    REQUIRE_FALSE(f.get_modifiers().is_private());
+    REQUIRE(f.name == "method_0");
+    REQUIRE_FALSE(f.name == "WrongMethodName");
+    REQUIRE(f.throws == "(No throw)");
+    REQUIRE_FALSE(f.throws == "exception");
+    REQUIRE(f.type.is_array() == false);
+    REQUIRE_FALSE(f.type.is_array());
+    REQUIRE(f.parameters.size() == 0);
+    REQUIRE(f.modifiers.is_public());
+    REQUIRE_FALSE(f.modifiers.is_private());
   }
 }
 
@@ -107,12 +107,12 @@ SCENARIO("AST initialization from JSON (declarations)", "[jimple-frontend]")
     jimple_declaration f;
     j.get_to(f);
 
-    REQUIRE(f.get_name() == "a");
-    REQUIRE_FALSE(f.get_name() == "b");
-    REQUIRE(f.get_type().getTName() == "int");
-    REQUIRE_FALSE(f.get_type().getTName() == "void");
-    REQUIRE(f.get_type().getTDim() == 0);
-    REQUIRE_FALSE(f.get_type().getTDim() == 1);
+    REQUIRE(f.name == "a");
+    REQUIRE_FALSE(f.name == "b");
+    REQUIRE(f.type.name == "int");
+    REQUIRE_FALSE(f.type.name == "void");
+    REQUIRE(f.type.dimensions == 0);
+    REQUIRE_FALSE(f.type.dimensions == 1);
   }
 }
 
@@ -130,8 +130,8 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
     jimple_goto f;
     j.get_to(f);
 
-    REQUIRE(f.getLabel() == "label1");
-    REQUIRE_FALSE(f.getLabel() == "label");
+    REQUIRE(f.label == "label1");
+    REQUIRE_FALSE(f.label == "label");
   }
 
   GIVEN("A label statement")
@@ -147,8 +147,8 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
     jimple_label f;
     j.get_to(f);
 
-    REQUIRE(f.getLabel() == "label2");
-    REQUIRE_FALSE(f.getLabel() == "label");
+    REQUIRE(f.label == "label2");
+    REQUIRE_FALSE(f.label == "label");
   }
 
   GIVEN("An assertion statement")
@@ -165,10 +165,10 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
     jimple_assertion f;
     j.get_to(f);
 
-    REQUIRE(f.getValue() == "42");
-    REQUIRE_FALSE(f.getValue() == "15");
-    REQUIRE(f.getVariable() == "x");
-    REQUIRE_FALSE(f.getVariable() == "y");
+    REQUIRE(f.value == "42");
+    REQUIRE_FALSE(f.value == "15");
+    REQUIRE(f.variable == "x");
+    REQUIRE_FALSE(f.variable == "y");
   }
 
   GIVEN("An invoke statement")
@@ -185,12 +185,12 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
     jimple_invoke f;
     j.get_to(f);
 
-    REQUIRE(f.getBaseClass() == "URI1495");
-    REQUIRE_FALSE(f.getBaseClass() == "BaseClass");
-    REQUIRE(f.getMethod() == "foo_0");
-    REQUIRE_FALSE(f.getMethod() == "bar");
-    REQUIRE(f.getParameters().size() == 0);
-    REQUIRE_FALSE(f.getParameters().size() == 1);
+    REQUIRE(f.base_class == "URI1495");
+    REQUIRE_FALSE(f.base_class == "BaseClass");
+    REQUIRE(f.method == "foo_0");
+    REQUIRE_FALSE(f.method == "bar");
+    REQUIRE(f.parameters.size() == 0);
+    REQUIRE_FALSE(f.parameters.size() == 1);
   }
 
   GIVEN("An if statement")
@@ -217,8 +217,8 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
     jimple_if f;
     j.get_to(f);
 
-    REQUIRE(f.getLabel() == "label2");
-    REQUIRE_FALSE(f.getLabel() == "label");
+    REQUIRE(f.label == "label2");
+    REQUIRE_FALSE(f.label == "label");
   }
 
   GIVEN("An assignment statement")
@@ -235,8 +235,8 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
     jimple_assignment f;
     j.get_to(f);
 
-    REQUIRE(f.getVariable() == "x");
-    REQUIRE_FALSE(f.getVariable() == "y");
+    REQUIRE(f.variable == "x");
+    REQUIRE_FALSE(f.variable == "y");
   }
 
   GIVEN("An identity statement")
@@ -255,14 +255,14 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
     jimple_identity f;
     j.get_to(f);
 
-    REQUIRE(f.get_local_name() == "r0");
-    REQUIRE_FALSE(f.get_local_name() == "r1");
-    REQUIRE(f.get_at_identifier() == "this");
-    REQUIRE_FALSE(f.get_at_identifier() == "");
-    REQUIRE(f.get_type().getTName() == "int");
-    REQUIRE_FALSE(f.get_type().getTName() == "void");
-    REQUIRE(f.get_type().getTDim() == 0);
-    REQUIRE_FALSE(f.get_type().getTDim() == 1);
+    REQUIRE(f.local_name == "r0");
+    REQUIRE_FALSE(f.local_name == "r1");
+    REQUIRE(f.at_identifier == "this");
+    REQUIRE_FALSE(f.at_identifier == "");
+    REQUIRE(f.type.name == "int");
+    REQUIRE_FALSE(f.type.name == "void");
+    REQUIRE(f.type.dimensions == 0);
+    REQUIRE_FALSE(f.type.dimensions == 1);
   }
 }
 
@@ -280,8 +280,8 @@ SCENARIO("AST initialization from JSON (expressions)", "[jimple-frontend]")
     jimple_constant f;
     j.get_to(f);
 
-    REQUIRE(f.getValue() == "1");
-    REQUIRE_FALSE(f.getValue() == "15");
+    REQUIRE(f.value == "1");
+    REQUIRE_FALSE(f.value == "15");
   }
 
   GIVEN("An expression symbol")
@@ -320,7 +320,7 @@ SCENARIO("AST initialization from JSON (expressions)", "[jimple-frontend]")
     jimple_binop f;
     j.get_to(f);
 
-    REQUIRE(f.getBinop() == "-");
-    REQUIRE_FALSE(f.getBinop() == "+");
+    REQUIRE(f.binop == "-");
+    REQUIRE_FALSE(f.binop == "+");
   }
 }
