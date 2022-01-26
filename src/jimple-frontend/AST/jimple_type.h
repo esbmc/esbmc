@@ -26,20 +26,12 @@ public:
     return dimensions > 0;
   }
 
-  const std::string &getTName() const
-  {
-    return name;
-  }
-
-  const short &getTDim() const
-  {
-    return dimensions;
-  }
-
-protected:
   std::string name; // e.g. int[][][][][] => name = int
   short dimensions; // e.g. int[][][][][] => dimensions = 5
 
+
+protected:
+  
   typet get_base_type() const;
   typet get_builtin_type() const;
 

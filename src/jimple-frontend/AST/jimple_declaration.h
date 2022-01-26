@@ -29,19 +29,9 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  const jimple_type &get_type() const
-  {
-    return type;
-  }
-
-  const std::string &get_name() const
-  {
-    return name;
-  }
-
-protected:
   jimple_type type;
   std::string name;
+
 };
 
 #endif //ESBMC_JIMPLE_DECLARATION_H

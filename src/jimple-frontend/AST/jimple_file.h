@@ -57,37 +57,10 @@ public:
    */
   virtual exprt to_exprt(contextt &ctx) const;
 
-  file_type get_mode() const
-  {
-    return mode;
-  }
-  const std::string &get_class_name() const
-  {
-    return class_name;
-  }
-  const std::string &get_extends() const
-  {
-    return extends;
-  }
-  const std::string &get_implements() const
-  {
-    return implements;
-  }
-  const jimple_modifiers &get_modifiers() const
-  {
-    return modifiers;
-  }
-  const std::vector<jimple_class_method> &get_body() const
-  {
-    return body;
-  }
-
   bool is_interface() const
   {
-    return get_mode() == file_type::Interface;
+    return mode == file_type::Interface;
   }
-
-protected:
   file_type mode;
   std::string class_name;
   std::string extends;
