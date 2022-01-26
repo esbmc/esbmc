@@ -184,12 +184,12 @@ exprt jimple_cast::to_exprt(
   return from_expr;
 };
 
-void jimple_lenghof::from_json(const json &j)
+void jimple_lengthof::from_json(const json &j)
 {
   from = get_expression(j.at("from"));
 }
 
-exprt jimple_lenghof::to_exprt(
+exprt jimple_lengthof::to_exprt(
   contextt &ctx,
   const std::string &class_name,
   const std::string &function_name) const
