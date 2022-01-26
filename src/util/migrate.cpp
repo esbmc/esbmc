@@ -311,7 +311,7 @@ type2tc migrate_type(const typet &type)
     return type2tc(new string_type2t(iwidth));
   }
 
-  throw fmt::format("{}", type).c_str();
+  assert(0 && fmt::format("{}", type).c_str());
   abort();
 }
 
@@ -1837,10 +1837,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = extract2tc(type, theop, upper, lower);
   }
   else
-  {
-    expr.dump();
     assert(0 && fmt::format("{}\nmigrate expr failed", expr).c_str());
-  }
 }
 
 typet migrate_type_back(const type2tc &ref)
