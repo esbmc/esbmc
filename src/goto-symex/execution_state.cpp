@@ -793,7 +793,7 @@ void execution_statet::analyze_assign(const expr2tc &code)
 
 void execution_statet::analyze_read(const expr2tc &code)
 {
-  std::set<expr2tc> global_reads, global_writes;
+  std::set<expr2tc> global_reads;
   get_expr_globals(ns, code, global_reads);
 
   if(global_reads.size() > 0)
