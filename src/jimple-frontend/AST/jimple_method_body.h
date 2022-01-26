@@ -9,7 +9,7 @@
 #include <util/std_code.h>
 
 /**
- * @brief A Jimple method definition
+ * @brief A Jimple method declaration
  * 
  * Something such as: public void foo() { }
  */
@@ -35,7 +35,6 @@ public:
   virtual exprt
   to_exprt(contextt &, const std::string &, const std::string &) const
   {
-    dump();
     code_skipt dummy;
     return dummy;
   }
