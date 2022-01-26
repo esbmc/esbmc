@@ -33,8 +33,8 @@ extern const char *extensions_jimple[];
 languaget *new_clang_c_language(const messaget &msg);
 languaget *new_clang_cpp_language(const messaget &msg);
 languaget *new_jimple_language(const messaget &msg);
-languaget *new_ansi_c_language();
-languaget *new_cpp_language();
+languaget *new_ansi_c_language(const messaget &msg);
+languaget *new_cpp_language(const messaget &msg);
 languaget *new_solidity_language(const messaget &msg);
 
 // List of language entries, one can put in the mode table:
