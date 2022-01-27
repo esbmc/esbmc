@@ -320,11 +320,11 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
   {
     auto union_type = to_union_type(type);
 
-    std::vector<expr2tc> members;
-    for(auto const &member_type : union_type.members)
-      members.push_back(gen_zero(member_type, array_as_array_of));
+    assert(!union_type.members.empty());
+    std::vector<expr2tc> members = {
+      gen_zero(union_type.members.front(), array_as_array_of)};
 
-    return constant_union2tc(type, members);
+    return constant_union2tc(type, union_type.member_names.front(), members);
   }
 
   default:
