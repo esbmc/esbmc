@@ -350,6 +350,26 @@ expr2tc constant_string2t::to_array() const
   return final_val;
 }
 
+void with2t::assert_consistency() const
+{
+  if(is_array_type(source_value))
+  {
+    assert(is_bv_type(update_field->type));
+    assert(update_value->type == to_array_type(source_value->type).subtype);
+  }
+  else
+  {
+    const struct_union_data *d =
+      dynamic_cast<const struct_union_data *>(source_value->type.get());
+    assert(d);
+    assert(update_field->expr_id == constant_string_id);
+    unsigned c =
+      d->get_component_number(to_constant_string2t(update_field).value);
+    assert(update_value->type == d->members[c]);
+  }
+  assert(type == source_value->type);
+}
+
 const expr2tc &object_descriptor2t::get_root_object() const
 {
   const expr2tc *tmp = &object;

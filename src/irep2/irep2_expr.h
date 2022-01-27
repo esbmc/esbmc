@@ -2794,6 +2794,7 @@ public:
  *  and one for structs/unions. @extends with_data */
 class with2t : public with_expr_methods
 {
+  void assert_consistency() const;
 public:
   /** Primary constructor.
    *  @param type Type of this expression; Same as source.
@@ -2807,6 +2808,9 @@ public:
     const expr2tc &value)
     : with_expr_methods(type, with_id, source, field, value)
   {
+#if 0 && !defined(NDEBUG)
+    assert_consistency();
+#endif
   }
   with2t(const with2t &ref) = default;
 
