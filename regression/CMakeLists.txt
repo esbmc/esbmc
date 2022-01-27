@@ -8,7 +8,7 @@ find_package(Python)
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 
 function(add_esbmc_regression_test folder modes test)
-    set(test_name "regression-${folder}-${test}")
+    set(test_name "regression/${folder}/${test}")
     add_test(NAME ${test_name}
             COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
             --tool=${ESBMC_BIN} --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder} --modes ${modes} --file=${test})
