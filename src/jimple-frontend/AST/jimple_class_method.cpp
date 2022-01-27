@@ -12,7 +12,7 @@ exprt jimple_class_method::to_exprt(
   exprt dummy;
   code_typet method_type;
   typet inner_type;
-  inner_type = type.to_typet();
+  inner_type = type.to_typet(ctx);
   method_type.return_type() = inner_type;
 
   auto id = get_method_name(class_name, name);
@@ -52,7 +52,7 @@ exprt jimple_class_method::to_exprt(
   // In Jimple, every parameter is named as @parameter#
   for(long unsigned int i = 0; i < parameters.size(); i++)
   {
-    auto param_type = parameters[i]->to_typet();
+    auto param_type = parameters[i]->to_typet(ctx);
 
     code_typet::argumentt param;
 

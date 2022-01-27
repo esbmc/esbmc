@@ -66,7 +66,7 @@ public:
   std::string extends;
   std::string implements;
   jimple_modifiers modifiers;
-  std::vector<jimple_class_method> body;
+  std::vector<std::shared_ptr<jimple_class_member>> body;
 
 private:
   std::map<std::string, file_type> from_map = {

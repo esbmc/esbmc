@@ -196,6 +196,46 @@ exprt jimple_assignment_deref::to_exprt(
   return assign;
 }
 
+
+
+std::string jimple_assignment_field::to_string() const
+{
+  std::ostringstream oss;
+  oss << "Assignment: " << variable << "->" << field << " = " << expr->to_string();
+  return oss.str();
+}
+
+void jimple_assignment_field::from_json(const json &j)
+{
+  j.at("name").get_to(variable);
+  j.at("field").get_to(field);
+  expr = jimple_expr::get_expression(j.at("value"));
+}
+
+exprt jimple_assignment_field::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+    // 1. Look over the local scope
+  auto symbol_name = get_symbol_name(class_name, function_name, variable);
+  symbolt &s = *ctx.find_symbol(symbol_name);
+  member_exprt op(symbol_expr(s), "tag-" + field, s.type);
+  exprt &base = op.struct_op();
+  if(base.type().is_pointer())
+  {
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+
+  code_assignt assign(
+    op,
+    expr->to_exprt(ctx, class_name, function_name));
+  return assign;
+}
+
 std::string jimple_if::to_string() const
 {
   std::ostringstream oss;

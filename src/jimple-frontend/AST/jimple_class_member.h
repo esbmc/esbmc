@@ -23,9 +23,39 @@ Description: This interface will hold anything
  */
 class jimple_class_member : public jimple_ast
 {
+  public:
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &file_name) const = 0;
 };
 
-// TODO: class_field
+/**
+ * @brief A class (or interface) field of a Jimple file
+ * 
+ * example:
+ * 
+ * class Foo {
+ *    
+ *   public int a;
+ * }
+ * 
+ */
+class jimple_class_field : public jimple_class_member
+{
+public:
+  virtual void from_json(const json &j) override;
+  virtual std::string to_string() const override;
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &file_name) const override;
+
+  std::string name;
+  jimple_modifiers modifiers;
+  jimple_type type;
+};
+
 // TODO: class_definition
 
 /**
@@ -48,7 +78,7 @@ public:
   virtual exprt to_exprt(
     contextt &ctx,
     const std::string &class_name,
-    const std::string &file_name) const;
+    const std::string &file_name) const override;
 
   std::string name;
   jimple_modifiers modifiers;
@@ -66,6 +96,4 @@ protected:
     return std::to_string(parameters.size());
   }
 };
-
-// TODO: Class Field
 #endif //ESBMC_JIMPLE_CLASS_MEMBER_H
