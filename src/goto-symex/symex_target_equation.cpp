@@ -312,7 +312,7 @@ static constant_array2tc flatten_union(const constant_union2t &expr)
   return constant_array2tc(arraytype, byte_array);
 }
 
-static expr2tc flatten_unions(expr2tc expr, type2tc access_hint = {});
+static expr2tc flatten_unions(expr2tc expr);
 
 static expr2tc flatten_with(const with2t &with)
 {
@@ -325,7 +325,7 @@ static expr2tc flatten_with(const with2t &with)
   assert(member_offset_bits(with.type, field) == 0);
   unsigned c = u->get_component_number(field);
   const type2tc &member_type = u->members[c];
-  expr2tc flattened_source = flatten_unions(with.source_value, member_type);
+  expr2tc flattened_source = flatten_unions(with.source_value /*, member_type */);
   assert(is_array_type(flattened_source->type));
   assert(to_array_type(flattened_source->type).subtype == get_uint8_type());
   expr2tc flattened_value = flatten_unions(with.update_value);
@@ -336,11 +336,9 @@ static expr2tc flatten_with(const with2t &with)
     assert(bytes.is_uint64());
     uint64_t bytes64 = bytes.to_uint64();
     assert(bytes64 <= UINT_MAX);
-    expr2tc *value_bytes = is_scalar_type(flattened_value)
-                             ? dereferencet::extract_bytes_from_scalar(
-                                 flattened_value, bytes64, gen_ulong(0))
-                             : dereferencet::extract_bytes_from_array(
-                                 flattened_value, bytes64, gen_ulong(0));
+    std::vector<expr2tc> value_bytes;
+    flatten_to_bytes(flattened_value, value_bytes);
+    assert(bytes64 <= value_bytes.size());
     expr2tc res;
     if(is_constant_expr(flattened_source))
     {
@@ -355,18 +353,17 @@ static expr2tc flatten_with(const with2t &with)
       for(size_t i = 0; i < bytes64; i++)
         res = with2tc(res->type, res, gen_ulong(i), value_bytes[i]);
     }
-    delete[] value_bytes;
     return res;
   }
   else
     assert(0 && "unimplemented");
 }
 
-static expr2tc flatten_unions(expr2tc expr, type2tc access_hint)
+static expr2tc flatten_unions(expr2tc expr)
 {
   struct
   {
-    void operator()(expr2tc &e, type2tc access_hint = {}) const
+    void operator()(expr2tc &e) const
     {
       if(is_union_type(e))
       {
@@ -419,7 +416,7 @@ static expr2tc flatten_unions(expr2tc expr, type2tc access_hint)
         e->Foreach_operand(*this);
     }
   } do_flatten;
-  do_flatten(expr, access_hint);
+  do_flatten(expr);
   return expr;
 }
 
