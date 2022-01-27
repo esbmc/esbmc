@@ -329,7 +329,7 @@ public:
    *  --smt-thread-guard is enabled, we ask the solver.
    *  @return True when state guard is false
    */
-  bool is_cur_state_guard_false();
+  bool is_cur_state_guard_false(const expr2tc &guard);
 
   /**
    *  Generates execution guard that's true if this interleaving can be reached.
