@@ -5,7 +5,7 @@ exprt jimple_declaration::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {
-  typet t = this->type.to_typet();
+  typet t = this->type.to_typet(ctx);
 
   std::string id, name;
   id = get_symbol_name(class_name, function_name, this->name);

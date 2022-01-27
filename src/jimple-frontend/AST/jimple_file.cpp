@@ -29,7 +29,7 @@ std::string jimple_file::to_string() const
   oss << "\n\n";
   for(auto &x : body)
   {
-    oss << x.to_string();
+    oss << x->to_string();
     oss << "\n\n";
   }
 
@@ -62,11 +62,20 @@ void jimple_file::from_json(const json &j)
   {
     // TODO: Here is where to add support for signatures
     auto content_type = x.at("object").get<std::string>();
+     std::shared_ptr<jimple_class_member> to_add;
     if(content_type == "Method")
     {
-      auto member = x.get<jimple_class_method>();
-      body.push_back(member);
+      jimple_class_method m;
+      x.get_to(m);
+      to_add = std::make_shared<jimple_class_method>(m);      
     }
+    else if (content_type == "Field")
+    {
+      jimple_class_field m;
+      x.get_to(m);
+      to_add = std::make_shared<jimple_class_field>(m);
+    }
+    body.push_back(to_add);
   }
 }
 
@@ -129,15 +138,23 @@ exprt jimple_file::to_exprt(contextt &ctx) const
   symbolt *added_symbol = ctx.find_symbol(symbol_name);
 
   // Add class/interface members
+  auto total_size = 0;
   for(auto const &field : body)
   {
-    struct_typet::componentt comp;
-    exprt &tmp = comp;
-    tmp = field.to_exprt(ctx, name, name);
-    // TODO: only add declarations
-    //t.components().push_back(comp);
+    if(std::dynamic_pointer_cast<jimple_class_field>(field))
+    {
+      struct_typet::componentt comp;
+      exprt &tmp = comp;
+      tmp = field->to_exprt(ctx, name, name);
+      comp.swap(tmp);
+      t.components().push_back(comp);
+      total_size += std::stoi(comp.type().width().as_string());
+    }
+    else
+      field->to_exprt(ctx,name,name);
   }
 
+  t.set("width", total_size);
   added_symbol->type = t;
   return e;
 }

@@ -156,6 +156,24 @@ public:
   std::shared_ptr<jimple_expr> pos;
 };
 
+/**
+ * @brief Assignment of a field of an object
+ *
+ * obj.a = 42;
+ */
+class jimple_assignment_field : public jimple_assignment
+{
+public:
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+  virtual std::string to_string() const override;
+  virtual void from_json(const json &j) override;
+
+  std::string field; // (a)
+};
+
 // For debug
 class jimple_assertion : public jimple_statement
 {

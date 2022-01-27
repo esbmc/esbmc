@@ -69,6 +69,7 @@ public:
     Assertion,       // TODO: This will be removed eventually (for debugging)
     Assignment,      // A = 42
     AssignmentDeref, // A[2] = 3
+    AssignmentField, // A.a = 42
     Identity, // @this, @parameter0, @parameter1, ...; This will be removed as it can solved directly in the frontend
     StaticInvoke,  // foo() (where foo is a static function)
     SpecialInvoke, // A.foo() (where A is an object)
@@ -93,6 +94,7 @@ private:
     {"Goto", statement::Goto},
     {"SetVariable", statement::Assignment},
     {"SetVariableDeref", statement::AssignmentDeref},
+    {"SetVariableField", statement::AssignmentField},
     {"Assert", statement::Assertion},
     {"If", statement::If},
     {"Throw", statement::Throw}};
@@ -106,6 +108,7 @@ private:
     {statement::Goto, "Goto"},
     {statement::Assignment, "Assignment"},
     {statement::AssignmentDeref, "AssignmentDeref"},
+    {statement::AssignmentField, "AssignmentField"},
     {statement::Assertion, "Assertion"},
     {statement::If, "If"},
     {statement::Declaration, "Declaration"},
