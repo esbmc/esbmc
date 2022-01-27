@@ -300,12 +300,16 @@ void execution_statet::symex_step(reachability_treet &art)
     // actually been executed, so context switching achieves nothing. (We
     // don't do this for the active_atomic_number though, because it's cheap,
     // and should be balanced under all circumstances anyway).
-    if(!state.guard.is_false())
+    if(
+      !state.guard.is_false() ||
+      !is_cur_state_guard_false(state.guard.as_expr()))
       force_cswitch();
 
     break;
   case RETURN:
-    if(!state.guard.is_false())
+    if(
+      !state.guard.is_false() ||
+      !is_cur_state_guard_false(state.guard.as_expr()))
     {
       expr2tc thecode = instruction.code, assign;
       if(make_return_assignment(assign, thecode))
@@ -511,7 +515,7 @@ void execution_statet::preserve_last_paths()
 
   // Add the current path to the set of paths to be preserved. Don't do this
   // if the current guard is false, though.
-  if(!ls.guard.is_false())
+  if(!ls.guard.is_false() || !is_cur_state_guard_false(ls.guard.as_expr()))
     pp.push_back(std::make_pair(ls.source.pc, goto_statet(ls, msg)));
 
   // Now then -- was it a goto? And did we actually branch to it? Detect this
@@ -597,6 +601,11 @@ void execution_statet::preserve_last_paths()
 
 void execution_statet::cull_all_paths()
 {
+  if(
+    is_false(cur_state->guard.as_expr()) ||
+    is_cur_state_guard_false(cur_state->guard.as_expr()))
+    return;
+
   // Walk through _all_ symbolic paths in the program and wipe them out.
   // Current path is easy: set the guard to false. phi_function will overwrite
   // any different valuation left in the l2 map.
@@ -642,12 +651,12 @@ void execution_statet::restore_last_paths()
   list.clear();
 }
 
-bool execution_statet::is_cur_state_guard_false()
+bool execution_statet::is_cur_state_guard_false(const expr2tc &guard)
 {
   // So, can the assumption actually be true? If enabled, ask the solver.
   if(smt_thread_guard)
   {
-    expr2tc parent_guard = threads_state[active_thread].guard.as_expr();
+    expr2tc parent_guard = guard;
 
     runtime_encoded_equationt *rte =
       dynamic_cast<runtime_encoded_equationt *>(target.get());
@@ -688,6 +697,15 @@ void execution_statet::execute_guard()
   else
     parent_guard = threads_state[last_active_thread].guard.as_expr();
 
+  // If we simplified the global guard expr to false, write that to thread
+  // guards, not the symbolic guard name. This is the only way to bail out of
+  // evaluating a particular interleaving early right now.
+  if(is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
+  {
+    cur_state->guard.make_false();
+    return;
+  }
+
   // Rename value, allows its use in other renamed exprs
   state_level2->make_assignment(guard_expr, expr2tc(), expr2tc());
 
@@ -699,21 +717,14 @@ void execution_statet::execute_guard()
   target->assumption(
     guardt().as_expr(), assumpt, get_active_state().source, first_loop);
 
-  // If we simplified the global guard expr to false, write that to thread
-  // guards, not the symbolic guard name. This is the only way to bail out of
-  // evaluating a particular interleaving early right now.
-  if(is_false(parent_guard))
-  {
-    cur_state->guard.make_false();
-    return;
-  }
-
   // Check to see whether or not the state guard is false, indicating we've
   // found an unviable interleaving. However don't do this if we didn't
   // /actually/ switch between threads, because it's acceptable to have a
   // context switch point in a branch where the guard is false (it just isn't
   // acceptable to permit switching).
-  if(last_active_thread != active_thread && is_cur_state_guard_false())
+  if(
+    last_active_thread != active_thread &&
+    is_cur_state_guard_false(threads_state[active_thread].guard.as_expr()))
     interleaving_unviable = true;
 }
 
