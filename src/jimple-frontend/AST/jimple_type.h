@@ -19,7 +19,7 @@ class jimple_type : public jimple_ast
 public:
   virtual void from_json(const json &j) override;
   virtual std::string to_string() const override;
-  virtual typet to_typet() const;
+  virtual typet to_typet(const contextt &ctx) const;
 
   bool is_array() const
   {
@@ -32,13 +32,13 @@ public:
 
 protected:
   
-  typet get_base_type() const;
+  typet get_base_type(const contextt &ctx) const;
   typet get_builtin_type() const;
 
   // TODO: Support for matrix
-  typet get_arr_type() const
+  typet get_arr_type(const contextt &ctx) const
   {
-    typet base = get_base_type();
+    typet base = get_base_type(ctx);
     return pointer_typet(base);
   }
 

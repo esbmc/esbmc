@@ -93,6 +93,13 @@ void jimple_full_method_body::from_json(const json &stmts)
       to_add = std::make_shared<jimple_assignment_deref>(s);
       break;
     }
+    case statement::AssignmentField:
+    {
+      jimple_assignment_field s;
+      stmt.get_to(s);
+      to_add = std::make_shared<jimple_assignment_field>(s);
+      break;
+    }
     case statement::Assertion:
     {
       throw fmt::format("Assertion type {}", stmt);

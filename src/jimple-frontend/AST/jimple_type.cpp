@@ -12,7 +12,7 @@ void jimple_type::from_json(const json &j)
   bt = from_map.count(name) != 0 ? from_map[name] : BASE_TYPES::OTHER;
 }
 
-typet jimple_type::get_base_type() const
+typet jimple_type::get_base_type(const contextt &ctx) const
 {
   switch(bt)
   {
@@ -25,19 +25,18 @@ typet jimple_type::get_base_type() const
   case BASE_TYPES::_VOID:
     return empty_typet();
 
-  case BASE_TYPES::OTHER:
-    return struct_union_typet(name);
-
   default:
-    return typet(name);
+    auto symbol = ctx.find_symbol("tag-" + name);
+    if(symbol == nullptr) throw "Type not found: " + name;
+    return pointer_typet(symbol->type);
   }
 }
 
-typet jimple_type::to_typet() const
+typet jimple_type::to_typet(const contextt &ctx) const
 {
   if(is_array())
-    return get_arr_type();
-  return get_base_type();
+    return get_arr_type(ctx);
+  return get_base_type(ctx);
 }
 
 std::string jimple_type::to_string() const

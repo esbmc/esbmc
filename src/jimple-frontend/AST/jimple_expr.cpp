@@ -180,7 +180,7 @@ exprt jimple_cast::to_exprt(
   auto from_expr = from->to_exprt(ctx, class_name, function_name);
   c_typecastt c_typecast(ctx);
 
-  c_typecast.implicit_typecast(from_expr, to->to_typet());
+  c_typecast.implicit_typecast(from_expr, to->to_typet(ctx));
   return from_expr;
 };
 
@@ -269,13 +269,15 @@ exprt jimple_expr_invoke::to_exprt(
   return block;
 }
 
+#include <iostream>
+
 exprt jimple_newarray::to_exprt(
   contextt &ctx,
   const std::string &class_name,
   const std::string &function_name) const
 {
   // Generate base_type
-  auto base_type = type->to_typet();
+  auto base_type = type->to_typet(ctx);
 
   // Create tmp var to receive the allocation
   auto tmp_symbol =
@@ -291,7 +293,9 @@ exprt jimple_newarray::to_exprt(
 
   // LHS of call is the tmp var
   call.lhs() = symbol_expr(tmp_added_symbol);
-  auto as_number = std::stoi(base_type.width().as_string()) / 8;
+  auto to_convert = base_type.is_pointer() ? base_type.subtype().width() : base_type.width();
+  auto as_number = std::stoi(to_convert.as_string());
+
   auto value_operand = gen_binary(
     "*",
     uint_type(),
@@ -356,14 +360,27 @@ void jimple_field_access::from_json(const json &j)
 }
 
 exprt jimple_field_access::to_exprt(
-  contextt &,
-  const std::string &,
-  const std::string &) const
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
 {
-  auto result = gen_zero(type->to_typet());
+  auto result = gen_zero(type->to_typet(ctx));
   // HACK: For now I will set some intrinsics directly (this should go to SYMEX)
   if(from == "kotlin._Assertions" && field == "ENABLED")
     result.make_true();
   // TODO: Needs OOP members
-  return result;
+  
+  // 1. Look over the local scope
+  auto symbol_name = get_symbol_name(class_name, function_name, from);
+  symbolt &s = *ctx.find_symbol(symbol_name);
+  member_exprt op(symbol_expr(s), "tag-" + field, s.type);
+  exprt &base = op.struct_op();
+  if(base.type().is_pointer())
+  {
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+  return op;
 };
