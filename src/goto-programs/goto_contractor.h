@@ -36,19 +36,30 @@ public:
       //TODO: find properties -- goto_function
       //TODO: find intervals -- frama-c
       get_intervals(_goto_functions);
+      //TODO: convert from ESBMC to ibex format
 
       //TODO: find goto-program - done
-      //TODO: add IBex library
-      //TODO: contract
+      //TODO: add IBex library - done
+      //TODO: contract - done
+      //auto new_intervals = contractor(n_vars, vars, domains, constraint);
       //TODO: reflect results on goto-program by inserting assume.
       insert_assume(_goto_functions);
     }
   }
+
 private:
-  Interval x;
+  int n_vars;
+  std::string **vars;
+  IntervalVector domains;
+  std::string *constraint;
+
   //void goto_k_induction();
   void get_intervals(goto_functionst functionst);
-
+  IntervalVector contractor(
+    int n_vars,
+    string **vars,
+    IntervalVector domains,
+    string *constraint);
   void insert_assume(goto_functionst goto_functions);
 };
 
