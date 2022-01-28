@@ -419,6 +419,7 @@ public:
   }
   struct_type2t(const struct_type2t &ref) = default;
   unsigned int get_width() const override;
+  bool is_fam() const;
 
   static std::string field_names[esbmct::num_type_fields];
 };

@@ -193,6 +193,12 @@ unsigned int struct_type2t::get_width() const
   return width;
 }
 
+bool struct_type2t::is_fam() const
+{
+  auto last = members.back();
+  return (is_array_type(last) && to_array_type(last).size_is_infinite);
+}
+
 unsigned int union_type2t::get_width() const
 {
   // Iterate over members accumulating width.
