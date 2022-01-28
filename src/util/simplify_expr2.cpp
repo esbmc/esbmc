@@ -890,18 +890,19 @@ expr2tc pointer_offset2t::do_simplify() const
 expr2tc index2t::do_simplify() const
 {
   expr2tc new_index = try_simplification(index);
+  expr2tc src = try_simplification(source_value);
 
-  if(is_with2t(source_value))
+  if(is_with2t(src))
   {
     // Index is the same as an update to the thing we're indexing; we can
     // just take the update value from the "with" below.
-    if(new_index == to_with2t(source_value).update_field)
-      return to_with2t(source_value).update_value;
+    if(new_index == to_with2t(src).update_field)
+      return to_with2t(src).update_value;
 
     return expr2tc();
   }
 
-  if(is_constant_array2t(source_value) && is_constant_int2t(new_index))
+  if(is_constant_array2t(src) && is_constant_int2t(new_index))
   {
     // Index might be greater than the constant array size. This means we can't
     // simplify it, and the user might be eaten by an assertion failure in the
@@ -910,7 +911,7 @@ expr2tc index2t::do_simplify() const
     if(idx.value.is_negative())
       return expr2tc();
 
-    const constant_array2t &arr = to_constant_array2t(source_value);
+    const constant_array2t &arr = to_constant_array2t(src);
     unsigned long the_idx = idx.as_ulong();
     if(the_idx >= arr.datatype_members.size())
       return expr2tc();
@@ -918,14 +919,14 @@ expr2tc index2t::do_simplify() const
     return arr.datatype_members[the_idx];
   }
 
-  if(is_constant_string2t(source_value) && is_constant_int2t(new_index))
+  if(is_constant_string2t(src) && is_constant_int2t(new_index))
   {
     // Same index situation
     const constant_int2t &idx = to_constant_int2t(new_index);
     if(idx.value.is_negative())
       return expr2tc();
 
-    const constant_string2t &str = to_constant_string2t(source_value);
+    const constant_string2t &str = to_constant_string2t(src);
     unsigned long the_idx = idx.as_ulong();
     if(the_idx > str.value.as_string().size()) // allow reading null term.
       return expr2tc();
@@ -937,8 +938,11 @@ expr2tc index2t::do_simplify() const
   }
 
   // Only thing this index can evaluate to is the default value of this array
-  if(is_constant_array_of2t(source_value))
-    return to_constant_array_of2t(source_value).initializer;
+  if(is_constant_array_of2t(src))
+    return to_constant_array_of2t(src).initializer;
+
+  if(src != source_value || new_index != index)
+    return index2tc(type, src, new_index);
 
   return expr2tc();
 }
