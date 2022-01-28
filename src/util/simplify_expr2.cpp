@@ -1593,7 +1593,7 @@ expr2tc nearbyint2t::do_simplify() const
 
 expr2tc address_of2t::do_simplify() const
 {
-  // NB: address of never has its operands simplified below its feet for sanitys
+  // NB: address_of never has its operands simplified below its feet for sanity's
   // sake.
   // Only attempt to simplify indexes. Whatever we're taking the address of,
   // we can't simplify away the symbol.
