@@ -359,32 +359,21 @@ static expr2tc flatten_with(const with2t &with)
     assert(0 && "unimplemented");
 }
 
-static void fix_union_type(type2tc &type, bool is_pointer)
+static void fix_union_type(type2tc &type)
 {
-  if(!is_pointer && is_union_type(type))
+  if(is_union_type(type))
   {
     // Replace with byte array.
     type2tc new_type = type;
     auto size = type_byte_size(new_type);
     type = type2tc(
       new array_type2t(get_uint8_type(), gen_ulong(size.to_uint64()), false));
-    return;
-  }
-
-  // Otherwise, recurse, taking care to handle pointers appropriately. All
-  // pointers to unions should remain union types.
-  if(0 && is_pointer_type(type))
-  {
-    fix_union_type(to_pointer_type(type).subtype, /* true */ false);
-  }
-  else if(0 && is_structure_type(type))
-  {
-    for(type2tc &mem : static_cast<struct_union_data *>(type.get())->members)
-      fix_union_type(mem, false);
   }
   else
   {
-    type->Foreach_subtype([](type2tc &ty){ fix_union_type(ty, false); });
+    // Otherwise, recurse, taking care to handle pointers appropriately. All
+    // pointers to unions should remain union types.
+    type->Foreach_subtype(fix_union_type);
   }
 }
 
@@ -411,12 +400,12 @@ static void fix_union_expr(expr2tc &expr)
         member_type, flattened_source, gen_ulong(0), guard);
 
       // Fix type
-      fix_union_type(expr->type, false);
+      fix_union_type(expr->type);
     }
     else
     {
       expr->Foreach_operand(fix_union_expr);
-      fix_union_type(expr->type, false);
+      fix_union_type(expr->type);
     }
   }
   else if(is_union_type(expr))
@@ -424,11 +413,11 @@ static void fix_union_expr(expr2tc &expr)
     if(is_with2t(expr))
     {
       expr = flatten_with(to_with2t(expr));
-      fix_union_type(expr->type, false); // XXX unnecessary?
+      fix_union_type(expr->type); // XXX unnecessary?
     }
     else if(is_symbol2t(expr))
     {
-      fix_union_type(expr->type, false); // XXX unnecessary?
+      fix_union_type(expr->type); // XXX unnecessary?
     }
     else
     {
@@ -442,12 +431,7 @@ static void fix_union_expr(expr2tc &expr)
       if(is_constant_union2t(expr))
         expr = flatten_union(to_constant_union2t(expr));
       else
-        fix_union_type(expr->type, false); // XXX unnecessary?
-      /*
-      expr2tc new_expr;
-      migrate_expr(expr, new_expr);
-      expr = migrate_expr_back(new_expr);
-      */
+        fix_union_type(expr->type);
     }
   }
   else if(is_dereference2t(expr))
@@ -460,13 +444,13 @@ static void fix_union_expr(expr2tc &expr)
     // be transformed into a dereference to one of the fields _within_ the
     // union, so we never up constructing a union reference.
     expr->Foreach_operand(fix_union_expr);
-    fix_union_type(expr->type, /* true */ false);
+    fix_union_type(expr->type);
   }
   else
   {
     // Default action: recurse and beat types.
 
-    fix_union_type(expr->type, false);
+    fix_union_type(expr->type);
 
     expr->Foreach_operand(fix_union_expr);
   }
@@ -478,7 +462,7 @@ static expr2tc flatten_unions(const expr2tc &e)
   if(is_nil_expr(expr))
     return expr;
   fix_union_expr(expr);
-  fix_union_type(expr->type, false);
+  fix_union_type(expr->type);
   return expr;
 }
 
