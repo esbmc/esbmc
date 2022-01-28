@@ -762,7 +762,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     break;
   }
 
-  // Array with undefined type, as in function args
+  // Array with undefined type, as in function args or FAMs
   case clang::Type::IncompleteArray:
   {
     const clang::IncompleteArrayType &arr =
@@ -772,7 +772,8 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if(get_type(arr.getElementType(), sub_type))
       return true;
 
-    new_type = array_typet(sub_type, gen_one(index_type()));
+    new_type = array_typet(sub_type);
+    new_type.size(exprt("infinity", uint_type()));
     break;
   }
 
@@ -1616,7 +1617,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         else
           elem_type = to_array_type(t).subtype();
 
-        gen_typecast(ns, init, elem_type);
+        // Avoid typecast for infinity initialization
+        if(elem_type.find(typet::a_size).id() != "infinity")
+          gen_typecast(ns, init, elem_type);
         inits.operands().at(i) = init;
       }
 
