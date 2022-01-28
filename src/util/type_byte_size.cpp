@@ -55,7 +55,18 @@ BigInt type_byte_size_default(const type2tc &type, const BigInt &defaultval)
 
 BigInt type_byte_size(const type2tc &type)
 {
-  BigInt bits = type_byte_size_bits(type);
+  BigInt bits;
+  try
+  {
+    bits = type_byte_size_bits(type);
+  }
+  catch(array_type2t::inf_sized_array_excp *e)
+  {
+    // Corner Case: IncompleteArray in Function argument, assume length=1
+    const array_type2t &t2 = to_array_type(type);
+    BigInt subsize = type_byte_size_bits(t2.subtype);
+    bits = subsize;
+  }
 
   return (bits + 7) / 8;
 }
@@ -119,7 +130,19 @@ BigInt type_byte_size_bits(const type2tc &type)
     // necessary to make arrays align properly if malloc'd, see C89 6.3.3.4.
     BigInt accumulated_size = 0;
     for(auto const &it : to_struct_type(type).members)
-      accumulated_size += type_byte_size_bits(it);
+    {
+      try
+      {
+        accumulated_size += type_byte_size_bits(it);
+      }
+      catch(array_type2t::inf_sized_array_excp *e)
+      {
+        // Corner Case: FAM
+        assert(to_struct_type(type).is_fam());
+        // Add 1 to accumulated size
+        accumulated_size += 1;
+      }
+    }
 
     // At the end of that, the tests above should have rounded accumulated size
     // up to a size that contains the required trailing padding for array
