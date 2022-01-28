@@ -601,6 +601,9 @@ void execution_statet::preserve_last_paths()
 
 void execution_statet::cull_all_paths()
 {
+  // check whether the guard is enabled before culling all execution paths.
+  // this check should prevent us from removing execution paths that are needed
+  // to verifying a given safety property (cf. GitHub issue #608).
   if(
     is_false(cur_state->guard.as_expr()) ||
     is_cur_state_guard_false(cur_state->guard.as_expr()))
