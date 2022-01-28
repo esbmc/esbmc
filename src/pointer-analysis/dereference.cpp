@@ -1475,7 +1475,14 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   unsigned int struct_offset = intref.value.to_uint64();
   for(const type2tc &target_type : structtype.members)
   {
-    unsigned n_bits = type_byte_size_bits(target_type).to_uint64();
+    unsigned n_bits;
+    try {
+    n_bits = type_byte_size_bits(target_type).to_uint64();
+    }
+    catch(array_type2t::inf_sized_array_excp *e)
+    {
+      n_bits = type_byte_size_bits(to_array_type(target_type).subtype).to_uint64();
+    }
     expr2tc target;
     if(is_array_type(target_type))
       target = stitch_together_from_byte_array(

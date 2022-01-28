@@ -1,4 +1,4 @@
-CORE
+KNWONBUG
 main.c
 --compact-trace
 ^VERIFICATION FAILED$

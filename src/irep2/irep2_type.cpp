@@ -142,21 +142,22 @@ unsigned int array_type2t::get_width() const
 {
   // Two edge cases: the array can have infinite size, or it can have a dynamic
   // size that's determined by the solver.
+  unsigned long num_elems;
   if(size_is_infinite)
-    throw new inf_sized_array_excp();
-
-  if(array_size->expr_id != expr2t::constant_int_id)
+    num_elems = 0;
+  else if(array_size->expr_id != expr2t::constant_int_id)
     throw new dyn_sized_array_excp(array_size);
 
   // Otherwise, we can multiply the size of the subtype by the number of elements.
   unsigned int sub_width = subtype->get_width();
 
   const expr2t *elem_size = array_size.get();
+  if(!size_is_infinite){
   const constant_int2t *const_elem_size =
     dynamic_cast<const constant_int2t *>(elem_size);
   assert(const_elem_size != nullptr);
-  unsigned long num_elems = const_elem_size->as_ulong();
-
+  num_elems = const_elem_size->as_ulong();; 
+}
   return num_elems * sub_width;
 }
 
