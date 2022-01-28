@@ -1118,7 +1118,22 @@ void dereferencet::construct_from_const_struct_offset(
   {
     BigInt m_offs =
       member_offset_bits(value->type, struct_type.member_names[i]);
-    BigInt m_size = type_byte_size_bits(it);
+
+    BigInt m_size;
+    try
+    {
+      m_size = type_byte_size_bits(it);
+    }
+    catch(array_type2t::inf_sized_array_excp *e)
+    {
+      // Corner Case: FAM
+      assert(struct_type.is_fam());
+      expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
+      constant_int2tc new_offs(pointer_type2(), int_offset - m_offs);
+      build_reference_rec(memb, new_offs, type, guard, mode);
+      value = memb;
+      return;
+    }
 
     if(m_size == 0)
     {
@@ -2169,7 +2184,9 @@ void dereferencet::check_data_obj_access(
   add2tc add(access_sz_e->type, offset, access_sz_e);
   greaterthan2tc gt(add, data_sz_e);
 
-  if(!options.get_bool_option("no-bounds-check"))
+  if(
+    !options.get_bool_option("no-bounds-check") &&
+    !(is_struct_type(value->type) && to_struct_type(value->type).is_fam()))
   {
     guardt tmp_guard = guard;
     tmp_guard.add(gt);
