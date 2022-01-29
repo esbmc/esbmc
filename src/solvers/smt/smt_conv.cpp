@@ -973,7 +973,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(
       !int_encoding &&
-      "Concatonate encountered in integer mode; unimplemented (and funky)");
+      "Concatenate encountered in integer mode; unimplemented (and funky)");
     a = mk_concat(args[0], args[1]);
     break;
   }
