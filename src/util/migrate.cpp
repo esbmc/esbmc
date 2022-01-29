@@ -685,7 +685,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     type = migrate_type(expr.type());
 
     std::vector<expr2tc> members;
-    forall_operands(it, expr) {
+    forall_operands(it, expr)
+    {
       expr2tc new_ref;
       migrate_expr(*it, new_ref);
 

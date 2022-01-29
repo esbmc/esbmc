@@ -992,7 +992,6 @@ void dereferencet::build_reference_rec(
     construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
     break;
 
-
   case flag_src_union | flag_dst_union | flag_is_const_offs:
     construct_struct_ref_from_const_offset(value, offset, type, guard);
     break;
@@ -1113,8 +1112,7 @@ void dereferencet::construct_from_array(
 
     // Extracting and stitching bytes together
     value = stitch_together_from_byte_array(
-      num_bytes,
-      extract_bytes_from_array(value, num_bytes, offset_bytes));
+      num_bytes, extract_bytes_from_array(value, num_bytes, offset_bytes));
 
     expr2tc offset_bits = modulus2tc(offset->type, offset, gen_ulong(8));
     simplify(offset_bits);
@@ -1175,16 +1173,13 @@ void dereferencet::construct_from_const_offset(
 
   // Extracting and stitching bytes together
   value = stitch_together_from_byte_array(
-    num_bytes,
-    extract_bytes_from_scalar(value, num_bytes, offset_bytes));
+    num_bytes, extract_bytes_from_scalar(value, num_bytes, offset_bytes));
 
   expr2tc offset_bits = modulus2tc(offset->type, offset, gen_ulong(8));
   simplify(offset_bits);
 
   value = extract_bits_from_byte_array(
-    value,
-    offset_bits,
-    type_byte_size_bits(type).to_uint64());
+    value, offset_bits, type_byte_size_bits(type).to_uint64());
 
   // Extracting bits from the produced bv
   value = bitcast2tc(type, value);
@@ -1447,8 +1442,7 @@ void dereferencet::construct_from_dyn_offset(
 
   // Extracting and stitching bytes together
   value = stitch_together_from_byte_array(
-    num_bytes,
-    extract_bytes_from_scalar(value, num_bytes, offset_bytes));
+    num_bytes, extract_bytes_from_scalar(value, num_bytes, offset_bytes));
 
   // Extracting bits from the produced bv
   value = extract_bits_from_byte_array(
@@ -2019,7 +2013,8 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   assert(num_bits.is_uint64());
   uint64_t num_bits64 = num_bits.to_uint64();
   assert(num_bits64 <= ULONG_MAX);
-  unsigned int num_bytes = compute_num_bytes_to_extract(offset_bits, num_bits64);
+  unsigned int num_bytes =
+    compute_num_bytes_to_extract(offset_bits, num_bits64);
 
   offset_bits = modulus2tc(offset_bits->type, offset_bits, gen_ulong(8));
   simplify(offset_bits);
