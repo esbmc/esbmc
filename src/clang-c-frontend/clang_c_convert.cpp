@@ -1921,7 +1921,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         else if(t.is_array())
         {
           elem_type = to_array_type(t).subtype();
-          do_typecast = to_array_type(t).get("incomplete") != "true";
+          do_typecast = t.get("incomplete") != "true";
         }
         else
           elem_type = to_vector_type(t).subtype();
