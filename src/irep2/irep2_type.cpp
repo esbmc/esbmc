@@ -160,6 +160,7 @@ unsigned int array_type2t::get_width() const
   return num_elems * sub_width;
 }
 
+
 unsigned int vector_type2t::get_width() const
 {
   unsigned int sub_width = subtype->get_width();
@@ -171,6 +172,18 @@ unsigned int vector_type2t::get_width() const
   unsigned long num_elems = const_elem_size->as_ulong();
 
   return num_elems * sub_width;
+}
+
+bool array_type2t::fam() const
+{
+  try
+  {
+    return get_width() == 0;
+  }
+  catch(...)
+  {
+    return true;
+  }
 }
 
 unsigned int pointer_type2t::get_width() const

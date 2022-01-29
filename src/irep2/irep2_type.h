@@ -548,6 +548,7 @@ public:
   virtual ~array_type2t() = default;
 
   unsigned int get_width() const override;
+  bool fam() const;
 
   /** Exception for invalid manipulations of an infinitely sized array. No
    *  actual data stored. */
