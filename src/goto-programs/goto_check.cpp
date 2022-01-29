@@ -347,7 +347,10 @@ void goto_checkt::bounds_check(
   assert(is_array_type(t) || is_string_type(t));
 
   // We can't check the upper bound of an infinite sized array
-  if(is_array_type(t) && to_array_type(t).size_is_infinite)
+  // or of FAMs
+  if(
+    is_array_type(t) &&
+    (to_array_type(t).size_is_infinite || to_array_type(t).fam()))
     return;
 
   const expr2tc &array_size =
