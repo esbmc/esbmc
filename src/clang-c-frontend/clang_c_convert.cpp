@@ -1602,11 +1602,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         else
         {
           elem_type = to_array_type(t).subtype();
-          do_typecast = to_array_type(t).get("incomplete") != "true";
+          do_typecast = t.get("incomplete") != "true";
         }
 
-        //if(do_typecast)
-        //gen_typecast(ns, init, elem_type);
+        if(do_typecast)
+          gen_typecast(ns, init, elem_type);
         inits.operands().at(i) = init;
       }
 
