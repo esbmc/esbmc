@@ -72,7 +72,8 @@ void symex_target_equationt::output(
   SSA_step.guard = flatten_unions(guard);
   SSA_step.type = goto_trace_stept::OUTPUT;
   SSA_step.source = source;
-  SSA_step.output_args = args;
+  for(const expr2tc &o : args)
+    SSA_step.output_args.push_back(flatten_unions(o));
   SSA_step.format_string = fmt;
 
   if(debug_print)
