@@ -263,6 +263,18 @@ void execution_statet::symex_step(reachability_treet &art)
 
   switch(instruction.type)
   {
+  case FUNCTION_CALL:
+    // if the guard is enabled, we should allow a context-switch to happen
+    // before the function call. If the code inside the function call just contains
+    // local variables, we won't context-switch to other threads.
+    if(
+      !state.guard.is_false() ||
+      !is_cur_state_guard_false(state.guard.as_expr()))
+    {
+      force_cswitch();
+      goto_symext::symex_step(art);
+    }
+    break;
   case END_FUNCTION:
     if(instruction.function == "__ESBMC_main")
     {
