@@ -1596,17 +1596,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           return true;
 
         typet elem_type;
-        bool do_typecast = true;
         if(t.is_struct() || t.is_union())
           elem_type = to_struct_union_type(t).components()[i].type();
         else
-        {
           elem_type = to_array_type(t).subtype();
-          do_typecast = t.get("incomplete") != "true";
-        }
 
-        if(do_typecast)
+        if(elem_type.get("incomplete") != "true")
           gen_typecast(ns, init, elem_type);
+
         inits.operands().at(i) = init;
       }
 
