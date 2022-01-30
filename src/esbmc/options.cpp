@@ -245,6 +245,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "limit number of context switches for each thread"},
     {"state-hashing", NULL, "enable state-hashing, prunes duplicate states"},
+    {"no-goto-merge",
+     NULL,
+     "do not not merge gotos when restoring the last paths after a "
+     "context-switch"},
     {"no-por", NULL, "do not do partial order reduction"},
     {"all-runs",
      NULL,

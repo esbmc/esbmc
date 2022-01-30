@@ -649,6 +649,16 @@ void execution_statet::restore_last_paths()
     const auto &loc = p.first;
     const auto &gs = p.second;
 
+    // check whether there are goto statements that cannot be merged
+    if(
+      options.get_bool_option("no-goto-merge") &&
+      cur_state->top().goto_state_map[loc].size() != 0)
+    {
+      msg.error(
+        "There are goto statements that shouldn't be merged at this point");
+      abort();
+    }
+
     // Create a fresh new goto_statet to be merged in at the target insn
     cur_state->top().goto_state_map[loc].emplace_back(*cur_state, msg);
     // Get ref to it
