@@ -214,6 +214,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
       type2tc subtype = arr_type.subtype;
 
       // We shouldn't have any bit left behind
+      // This will not work for FAMs!
       //assert(new_from->type->get_width() % subtype->get_width() == 0);
       unsigned int num_el = new_from->type->get_width() / subtype->get_width();
 
