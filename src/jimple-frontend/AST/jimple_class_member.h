@@ -64,13 +64,13 @@ public:
  * example:
  * 
  * class Foo {
- *   public void jimple_class_method {
+ *   public void jimple_method {
  *      do_stuff();
  *   }
  * }
  * 
  */
-class jimple_class_method : public jimple_class_member
+class jimple_method : public jimple_class_member
 {
 public:
   virtual void from_json(const json &j) override;

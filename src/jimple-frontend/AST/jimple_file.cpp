@@ -65,9 +65,9 @@ void jimple_file::from_json(const json &j)
      std::shared_ptr<jimple_class_member> to_add;
     if(content_type == "Method")
     {
-      jimple_class_method m;
+      jimple_method m;
       x.get_to(m);
-      to_add = std::make_shared<jimple_class_method>(m);      
+      to_add = std::make_shared<jimple_method>(m);
     }
     else if (content_type == "Field")
     {

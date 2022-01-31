@@ -74,7 +74,7 @@ SCENARIO("AST initialization from JSON (methods)", "[jimple-frontend]")
     nlohmann::json j;
     file >> j;
 
-    jimple_class_method f;
+    jimple_method f;
     j.get_to(f);
 
     REQUIRE(f.name == "method_0");
