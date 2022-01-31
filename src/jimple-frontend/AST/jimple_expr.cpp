@@ -138,7 +138,7 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
     return std::make_shared<jimple_field_access>(c);
   }
 
-  throw "Invalid expr type";
+  throw "Invalid expr type: " + expr_type;
 }
 
 void jimple_binop::from_json(const json &j)
