@@ -19,6 +19,7 @@
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
+#include <util/prefix.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <util/string2array.h>
@@ -268,12 +269,13 @@ void execution_statet::symex_step(reachability_treet &art)
     // before the function call. If the code inside the function call just contains
     // local variables, we won't context-switch to other threads.
     if(
-      !state.guard.is_false() ||
-      !is_cur_state_guard_false(state.guard.as_expr()))
+      (!state.guard.is_false() ||
+       !is_cur_state_guard_false(state.guard.as_expr())) &&
+      !has_prefix(instruction.function.as_string(), "c:@F@pthread"))
     {
       force_cswitch();
-      goto_symext::symex_step(art);
     }
+    goto_symext::symex_step(art);
     break;
   case END_FUNCTION:
     if(instruction.function == "__ESBMC_main")
@@ -307,16 +309,6 @@ void execution_statet::symex_step(reachability_treet &art)
   case ATOMIC_END:
     decrement_active_atomic_number();
     state.source.pc++;
-
-    // Don't context switch if the guard is false. This instruction hasn't
-    // actually been executed, so context switching achieves nothing. (We
-    // don't do this for the active_atomic_number though, because it's cheap,
-    // and should be balanced under all circumstances anyway).
-    if(
-      !state.guard.is_false() ||
-      !is_cur_state_guard_false(state.guard.as_expr()))
-      force_cswitch();
-
     break;
   case RETURN:
     if(
