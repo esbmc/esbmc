@@ -289,9 +289,11 @@ int pthread_mutex_init(
   const pthread_mutexattr_t *mutexattr)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
   __ESBMC_mutex_count_field(*mutex) = 0;
   __ESBMC_mutex_owner_field(*mutex) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 

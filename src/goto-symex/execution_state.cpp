@@ -281,7 +281,6 @@ void execution_statet::symex_step(reachability_treet &art)
     if(instruction.function == "__ESBMC_main")
     {
       end_thread();
-      force_cswitch();
     }
     else if(
       instruction.function == "c:@F@main" &&
