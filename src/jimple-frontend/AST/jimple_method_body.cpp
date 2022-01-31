@@ -1,7 +1,3 @@
-//
-// Created by rafaelsamenezes on 21/09/2021.
-//
-
 #include <jimple-frontend/AST/jimple_method_body.h>
 #include <jimple-frontend/AST/jimple_declaration.h>
 #include <jimple-frontend/AST/jimple_statement.h>
