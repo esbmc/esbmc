@@ -3,7 +3,7 @@
 #include <util/expr_util.h>
 #include <util/message/format.h>
 
-exprt jimple_class_method::to_exprt(
+exprt jimple_method::to_exprt(
   contextt &ctx,
   const std::string &class_name,
   const std::string &) const
@@ -88,7 +88,7 @@ exprt jimple_class_method::to_exprt(
   return dummy;
 }
 
-void jimple_class_method::from_json(const json &j)
+void jimple_method::from_json(const json &j)
 {
   // Method modifiers
   modifiers = j.at("modifiers").get<jimple_modifiers>();
@@ -122,7 +122,7 @@ void jimple_class_method::from_json(const json &j)
   auto values = j_body.get<jimple_full_method_body>();
   this->body = std::make_shared<jimple_full_method_body>(values);
 }
-std::string jimple_class_method::to_string() const
+std::string jimple_method::to_string() const
 {
   std::ostringstream oss;
   oss << "Class Method"
