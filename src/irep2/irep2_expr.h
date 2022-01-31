@@ -2808,7 +2808,7 @@ public:
     const expr2tc &value)
     : with_expr_methods(type, with_id, source, field, value)
   {
-#if 0 && !defined(NDEBUG)
+#if !defined(NDEBUG)
     assert_consistency();
 #endif
   }
