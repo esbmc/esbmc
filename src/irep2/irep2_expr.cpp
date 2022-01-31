@@ -350,6 +350,7 @@ expr2tc constant_string2t::to_array() const
   return final_val;
 }
 
+#ifndef NDEBUG
 void with2t::assert_consistency() const
 {
   if(is_array_type(source_value))
@@ -369,6 +370,7 @@ void with2t::assert_consistency() const
   }
   assert(type == source_value->type);
 }
+#endif
 
 const expr2tc &object_descriptor2t::get_root_object() const
 {
