@@ -24,6 +24,11 @@ Description: Jimple File AST parser and holder
  * - contain modifiers: public/private/static/etc... 
  *   (see jimple_modifiers.hpp)
  * - contain methods and attributes.
+ *
+ * Notes:
+ * - Java/Kotlin have support for inner classes. When compiled into bytecode
+ *   each class has its own .class file. For example, an inner class Bar
+ *   inside the Foo class will generate both Foo.class and Foo$Bar.class.
  */
 class jimple_file : public jimple_ast
 {
