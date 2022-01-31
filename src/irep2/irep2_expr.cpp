@@ -351,12 +351,31 @@ expr2tc constant_string2t::to_array() const
 }
 
 #ifndef NDEBUG
+static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
+{
+  if(is_array_type(a))
+  {
+    assert(is_array_type(b));
+    const array_type2t &at = to_array_type(a);
+    const array_type2t &bt = to_array_type(b);
+    assert_type_compat_for_with(at.subtype, bt.subtype);
+    assert(at.size_is_infinite == bt.size_is_infinite);
+    if(is_symbol2t(at.array_size) || is_symbol2t(bt.array_size))
+      return;
+    assert(at.array_size == bt.array_size);
+  }
+  else
+    assert(a == b);
+}
+
 void with2t::assert_consistency() const
 {
   if(is_array_type(source_value))
   {
     assert(is_bv_type(update_field->type));
-    assert(update_value->type == to_array_type(source_value->type).subtype);
+    assert_type_compat_for_with(
+      to_array_type(source_value->type).subtype,
+      update_value->type);
   }
   else
   {

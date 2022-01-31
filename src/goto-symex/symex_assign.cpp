@@ -595,7 +595,11 @@ void goto_symext::symex_assign_concat(
   auto rhs_it = extracts.begin();
   while(lhs_it != operand_list.end())
   {
-    symex_assign_rec(*lhs_it, full_lhs, *rhs_it, rhs, guard, hidden);
+    expr2tc new_rhs = *rhs_it;
+    const type2tc &type = (*lhs_it)->type;
+    if(new_rhs->type != type)
+      new_rhs = typecast2tc(type, new_rhs);
+    symex_assign_rec(*lhs_it, full_lhs, new_rhs, rhs, guard, hidden);
     lhs_it++;
     rhs_it++;
   }
