@@ -370,8 +370,11 @@ exprt jimple_field_access::to_exprt(
 {
   auto result = gen_zero(type->to_typet(ctx));
   // HACK: For now I will set some intrinsics directly (this should go to SYMEX)
-  if(from == "kotlin._Assertions" && field == "ENABLED")
+  if(from == "kotlin._Assertions" && field == "ENABLED") {
     result.make_true();
+    return result;
+  }
+
   // TODO: Needs OOP members
   
   // 1. Look over the local scope
