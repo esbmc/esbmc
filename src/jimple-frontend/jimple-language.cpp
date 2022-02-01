@@ -22,6 +22,7 @@ bool jimple_languaget::from_type(
   const namespacet &)
 {
   // TODO
+  assert(!"Not implemented yet");
   return false;
 }
 bool jimple_languaget::from_expr(
@@ -30,6 +31,7 @@ bool jimple_languaget::from_expr(
   const namespacet &)
 {
   // TODO
+  assert(!"Not implemented yet");
   return false;
 }
 
