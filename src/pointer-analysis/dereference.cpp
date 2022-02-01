@@ -1078,9 +1078,14 @@ void dereferencet::construct_from_const_offset(
       value = expr2tc();
       return;
     }
-
-    // Try to handle unaligned write by writting directly to the base_object
-    value = get_base_object(value);
+    // We are accessing more than one member of a struct.
+    // So, get step down one level to the source_value and
+    // resort to extracting bytes from it.
+    else
+    {
+      member2tc themember = to_member2t(value);
+      value = themember->source_value;
+    }
   }
 
   unsigned int num_bytes =
@@ -1853,7 +1858,9 @@ expr2tc *dereferencet::extract_bytes_from_scalar(
   {
     index2tc new_index = to_index2t(object);
     new_object = new_index->source_value;
-    accuml_offs = add2tc(accuml_offs->type, accuml_offs, new_index->index);
+    // Adjust the offset taking into account the array subtype
+    accuml_offs = add2tc(accuml_offs->type, accuml_offs,
+      mul2tc(new_index->index->type, new_index->index, gen_ulong(new_index->type->get_width() / 8)));
     simplify(accuml_offs);
   }
 
