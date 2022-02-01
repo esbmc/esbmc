@@ -7,6 +7,7 @@
 #include <util/std_types.h>
 #include <jimple-frontend/AST/jimple_statement.h>
 #include <util/arith_tools.h>
+#include "util/c_typecast.h"
 
 void jimple_identity::from_json(const json &j)
 {
@@ -162,6 +163,9 @@ exprt jimple_assignment::to_exprt(
     return expr->to_exprt(ctx, class_name, function_name);
   }
   auto from_expr = expr->to_exprt(ctx, class_name, function_name);
+  c_typecastt c_typecast(ctx);
+  c_typecast.implicit_typecast(from_expr, added_symbol.type);
+
   code_assignt assign(symbol_expr(added_symbol), from_expr);
   return assign;
 }
@@ -257,9 +261,9 @@ exprt jimple_if::to_exprt(
   code_gotot code_goto;
   code_goto.set_destination(label);
 
+  auto condition = cond->to_exprt(ctx, class_name, function_name);
   codet if_expr("ifthenelse");
-  if_expr.copy_to_operands(
-    cond->to_exprt(ctx, class_name, function_name), code_goto);
+  if_expr.copy_to_operands(condition, code_goto);
 
   return if_expr;
 }
