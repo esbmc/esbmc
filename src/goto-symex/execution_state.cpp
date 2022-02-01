@@ -214,6 +214,18 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   return *this;
 }
 
+// We should filter these function calls during the symex_step since
+// we have already handle them in the instrumentation phase of the GOTO programs.
+inline bool filter_function_call(const std::string name)
+{
+  if(
+    !has_prefix(name, "c:@__ESBMC") && !has_prefix(name, "c:@F@__VERIFIER_") &&
+    !has_prefix(name, "c:@F@pthread"))
+    return true;
+  else
+    return false;
+}
+
 void execution_statet::symex_step(reachability_treet &art)
 {
   statet &state = get_active_state();
@@ -271,7 +283,7 @@ void execution_statet::symex_step(reachability_treet &art)
     if(
       (!state.guard.is_false() ||
        !is_cur_state_guard_false(state.guard.as_expr())) &&
-      !has_prefix(instruction.function.as_string(), "c:@F@pthread"))
+      filter_function_call(instruction.function.as_string()))
     {
       force_cswitch();
     }
