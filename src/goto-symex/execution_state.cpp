@@ -643,8 +643,6 @@ void execution_statet::restore_last_paths()
   // created from the present values of l2-renaming and value set, as we
   // (presumably) switch back in from a different thread. Then schedule the
   // states to be merged in at their original locations.
-  // Given that we're discarding a lot of data here this could all be more
-  // efficient, but it's what we've got.
 
   auto &list = preserved_paths[active_thread];
   for(auto const &p : list)
@@ -662,18 +660,43 @@ void execution_statet::restore_last_paths()
         "There are goto statements that shouldn't be merged at this point");
       abort();
     }
-
     // Create a fresh new goto_statet to be merged in at the target insn
     cur_state->top().goto_state_map[loc].emplace_back(*cur_state, msg);
-    // Get ref to it
-    auto &new_gs = *cur_state->top().goto_state_map[loc].begin();
 
-    // Proceed to fill new_gs with old data. Ideally this would be a method...
-    new_gs.num_instructions = gs.num_instructions;
-    new_gs.local_variables = gs.local_variables;
-    new_gs.value_set = gs.value_set;
-    new_gs.guard = gs.guard;
-    assert(new_gs.thread_id == gs.thread_id);
+    statet::framet &frame = cur_state->top();
+
+    // first, see if this is a target at all
+    statet::goto_state_mapt::iterator state_map_it =
+      frame.goto_state_map.find(cur_state->source.pc);
+
+    if(state_map_it == frame.goto_state_map.end())
+      return; // nothing to do
+
+    // we need to merge
+    statet::goto_state_listt &state_list = state_map_it->second;
+
+    for(auto list_it = state_list.rbegin(); list_it != state_list.rend();
+        list_it++)
+    {
+      statet::goto_statet &goto_state = *list_it;
+
+      if(!goto_state.guard.is_false())
+      {
+        goto_state.num_instructions = gs.num_instructions;
+        goto_state.local_variables = gs.local_variables;
+        goto_state.value_set = gs.value_set;
+        goto_state.guard = gs.guard;
+        assert(goto_state.thread_id == gs.thread_id);
+        // adjust depth
+        cur_state->num_instructions =
+          std::min(cur_state->num_instructions, goto_state.num_instructions);
+      }
+
+      cur_state->guard = std::move(gs.guard);
+    }
+
+    // clean up to save some memory
+    frame.goto_state_map.erase(state_map_it);
 
     // And that is it!
   }
