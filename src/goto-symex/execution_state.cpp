@@ -652,7 +652,8 @@ void execution_statet::restore_last_paths()
     const auto &loc = p.first;
     const auto &gs = p.second;
 
-    // check whether there are goto statements that cannot be merged
+    // This is an experimental option to stop the verification process
+    // if we have more than one state at a given location to merge.
     if(
       options.get_bool_option("no-goto-merge") &&
       cur_state->top().goto_state_map[loc].size() != 0)
@@ -669,6 +670,8 @@ void execution_statet::restore_last_paths()
 
     // Proceed to fill new_gs with old data. Ideally this would be a method...
     new_gs.num_instructions = gs.num_instructions;
+    new_gs.local_variables = gs.local_variables;
+    new_gs.value_set = gs.value_set;
     new_gs.guard = gs.guard;
     assert(new_gs.thread_id == gs.thread_id);
 
