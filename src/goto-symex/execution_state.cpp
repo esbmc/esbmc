@@ -19,7 +19,6 @@
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
-#include <util/prefix.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <util/string2array.h>
@@ -214,18 +213,6 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   return *this;
 }
 
-// We should filter these function calls during the symex_step since
-// we have already handle them in the instrumentation phase of the GOTO programs.
-inline bool filter_function_call(const std::string name)
-{
-  if(
-    !has_prefix(name, "c:@__ESBMC") && !has_prefix(name, "c:@F@__VERIFIER_") &&
-    !has_prefix(name, "c:@F@pthread"))
-    return true;
-  else
-    return false;
-}
-
 void execution_statet::symex_step(reachability_treet &art)
 {
   statet &state = get_active_state();
@@ -276,19 +263,6 @@ void execution_statet::symex_step(reachability_treet &art)
 
   switch(instruction.type)
   {
-  case FUNCTION_CALL:
-    // if the guard is enabled, we should allow a context-switch to happen
-    // before the function call. If the code inside the function call just contains
-    // local variables, we won't context-switch to other threads.
-    if(
-      (!state.guard.is_false() ||
-       !is_cur_state_guard_false(state.guard.as_expr())) &&
-      filter_function_call(instruction.function.as_string()))
-    {
-      force_cswitch();
-    }
-    goto_symext::symex_step(art);
-    break;
   case END_FUNCTION:
     if(instruction.function == "__ESBMC_main")
     {
@@ -643,6 +617,8 @@ void execution_statet::restore_last_paths()
   // created from the present values of l2-renaming and value set, as we
   // (presumably) switch back in from a different thread. Then schedule the
   // states to be merged in at their original locations.
+  // Given that we're discarding a lot of data here this could all be more
+  // efficient, but it's what we've got.
 
   auto &list = preserved_paths[active_thread];
   for(auto const &p : list)
@@ -662,41 +638,13 @@ void execution_statet::restore_last_paths()
     }
     // Create a fresh new goto_statet to be merged in at the target insn
     cur_state->top().goto_state_map[loc].emplace_back(*cur_state, msg);
+    // Get ref to it
+    auto &new_gs = *cur_state->top().goto_state_map[loc].begin();
 
-    statet::framet &frame = cur_state->top();
-
-    // first, see if this is a target at all
-    statet::goto_state_mapt::iterator state_map_it =
-      frame.goto_state_map.find(cur_state->source.pc);
-
-    if(state_map_it == frame.goto_state_map.end())
-      return; // nothing to do
-
-    // we need to merge
-    statet::goto_state_listt &state_list = state_map_it->second;
-
-    for(auto list_it = state_list.rbegin(); list_it != state_list.rend();
-        list_it++)
-    {
-      statet::goto_statet &goto_state = *list_it;
-
-      if(!goto_state.guard.is_false())
-      {
-        goto_state.num_instructions = gs.num_instructions;
-        goto_state.local_variables = gs.local_variables;
-        goto_state.value_set = gs.value_set;
-        goto_state.guard = gs.guard;
-        assert(goto_state.thread_id == gs.thread_id);
-        // adjust depth
-        cur_state->num_instructions =
-          std::min(cur_state->num_instructions, goto_state.num_instructions);
-      }
-
-      cur_state->guard = std::move(gs.guard);
-    }
-
-    // clean up to save some memory
-    frame.goto_state_map.erase(state_map_it);
+    // Proceed to fill new_gs with old data. Ideally this would be a method...
+    new_gs.num_instructions = gs.num_instructions;
+    new_gs.guard = gs.guard;
+    assert(new_gs.thread_id == gs.thread_id);
 
     // And that is it!
   }

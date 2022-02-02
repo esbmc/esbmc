@@ -479,6 +479,9 @@ void goto_symext::intrinsic_switch_from(reachability_treet &art)
   // Mark switching back to this thread as already having been explored
   art.get_cur_state()
     .DFS_traversed[art.get_cur_state().get_active_state_number()] = true;
+
+  // And force a context switch.
+  art.get_cur_state().force_cswitch();
 }
 
 void goto_symext::intrinsic_get_thread_id(
