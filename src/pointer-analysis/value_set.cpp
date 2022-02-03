@@ -1008,23 +1008,20 @@ void value_sett::assign(
 
   if(is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
+    /* either both union or both struct */
+    assert(lhs_type->type_id == rhs->type->type_id);
+
     // Assign the values of all members of the rhs thing to the lhs. It's
     // sort-of-valid for the right hand side to be a superclass of the subclass,
     // in which case there are some fields not common between them, so we
     // iterate over the superclasses members.
-    const std::vector<type2tc> &members = (is_struct_type(rhs->type))
-                                            ? to_struct_type(rhs->type).members
-                                            : to_union_type(rhs->type).members;
-    const std::vector<irep_idt> &member_names =
-      (is_struct_type(rhs->type)) ? to_struct_type(rhs->type).member_names
-                                  : to_union_type(rhs->type).member_names;
+    auto *rhs_data = static_cast<const struct_union_data *>(rhs->type.get());
+    const std::vector<type2tc> &members = rhs_data->members;
+    const std::vector<irep_idt> &member_names = rhs_data->member_names;
 
-    unsigned int i = 0;
-    for(std::vector<type2tc>::const_iterator c_it = members.begin();
-        c_it != members.end();
-        c_it++, i++)
+    for(size_t i = 0; i<members.size(); i++)
     {
-      const type2tc &subtype = *c_it;
+      const type2tc &subtype = members[i];
       const irep_idt &name = member_names[i];
 
       // ignore methods
@@ -1064,7 +1061,7 @@ void value_sett::assign(
 
     if(is_unknown2t(rhs) || is_invalid2t(rhs))
     {
-      // Assign an uknown subtype value to the array's (unknown) index.
+      // Assign an unknown subtype value to the array's (unknown) index.
       unknown2tc unknown_field(arr_type.subtype);
       assign(lhs_index, unknown_field, add_to_sets);
     }
@@ -1428,14 +1425,12 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   const type2tc &type = src->type;
   assert(is_struct_type(type) || is_union_type(type));
 
-  // Work around for the current lack of type inheretance
-  const std::vector<type2tc> &members = (is_struct_type(type))
-                                          ? to_struct_type(type).members
-                                          : to_union_type(type).members;
+  auto *data = static_cast<const struct_union_data *>(type.get());
+  const std::vector<type2tc> &members = data->members;
 
   if(is_constant_struct2t(src))
   {
-    unsigned no = to_struct_type(type).get_component_number(component_name);
+    unsigned no = data->get_component_number(component_name);
     return to_constant_struct2t(src).datatype_members[no];
   }
   if(is_with2t(src))
@@ -1459,8 +1454,7 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   }
 
   // give up
-  unsigned no = static_cast<const struct_union_data &>(*type.get())
-                  .get_component_number(component_name);
+  unsigned no = data->get_component_number(component_name);
   const type2tc &subtype = members[no];
   member2tc memb(subtype, src, component_name);
   return memb;
