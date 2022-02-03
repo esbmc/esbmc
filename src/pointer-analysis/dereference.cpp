@@ -1259,18 +1259,15 @@ void dereferencet::construct_from_dyn_struct_offset(
     BigInt field_size = type_byte_size_bits(it);
 
     // Round up to word size
-    expr2tc field_offs = constant_int2tc(offset->type, offs);
+    expr2tc field_offset = constant_int2tc(offset->type, offs);
     expr2tc field_top = constant_int2tc(offset->type, offs + field_size);
-    expr2tc lower_bound = greaterthanequal2tc(bits_offset, field_offs);
+    expr2tc lower_bound = greaterthanequal2tc(bits_offset, field_offset);
     expr2tc upper_bound = lessthan2tc(bits_offset, field_top);
     expr2tc field_guard = and2tc(lower_bound, upper_bound);
 
     if(is_struct_type(it))
     {
       // Handle recursive structs in bytes
-      expr2tc field_offset = constant_int2tc(
-        offset->type,
-        member_offset_bits(value->type, struct_type.member_names[i]));
       expr2tc new_offset = sub2tc(offset->type, offset, field_offset);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
 
@@ -1281,9 +1278,6 @@ void dereferencet::construct_from_dyn_struct_offset(
     }
     else if(is_array_type(it))
     {
-      expr2tc field_offset = constant_int2tc(
-        offset->type,
-        member_offset_bits(value->type, struct_type.member_names[i]));
       expr2tc new_offset = sub2tc(offset->type, offset, field_offset);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
 
@@ -1312,14 +1306,11 @@ void dereferencet::construct_from_dyn_struct_offset(
     else
     {
       // Not fully aligned; devolve to byte extract.
-      expr2tc field_offset = constant_int2tc(
-        offset->type,
-        member_offset_bits(value->type, struct_type.member_names[i]));
-      expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
+      expr2tc new_offset = sub2tc(offset->type, offset, field_offset);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
 
       unsigned int num_bytes = compute_num_bytes_to_extract(
-        offset, type_byte_size_bits(type).to_uint64());
+        field_offset, type_byte_size_bits(type).to_uint64());
       // Converting offset to bytes before bytes extraction
       expr2tc new_offset_bytes =
         div2tc(new_offset->type, new_offset, gen_ulong(8));
