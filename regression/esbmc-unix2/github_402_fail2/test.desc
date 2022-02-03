@@ -1,4 +1,4 @@
 CORE
 main.c
-
+--no-goto-merge
 ^VERIFICATION FAILED$
