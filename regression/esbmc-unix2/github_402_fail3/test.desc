@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
---no-por
-^VERIFICATION FAILED$
+--no-por --no-goto-merge
+^There are goto statements that shouldn't be merged at this point$
