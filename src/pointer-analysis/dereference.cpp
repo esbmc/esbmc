@@ -1807,25 +1807,34 @@ expr2tc *dereferencet::extract_bytes_from_array(
     assert(
       !is_array_type(subtype) &&
       "Can't extract bytes from multi-dimensional arrays");
-    assert(
-      subtype->get_width() == 8 &&
-      "Can only extract bytes for stitching from byte array");
   }
   else
   {
     subtype = get_uint8_type(); //XXX signedness of chars
   }
 
-  // XXX -- this doesn't allow for scenarios where we read, say, a uint32 from
-  // an array of uint16s.
-
   expr2tc *exprs = new expr2tc[num_bytes];
-
-  // Here we are just going through a byte array
   expr2tc accuml_offs = offset;
   for(unsigned int i = 0; i < num_bytes; i++)
   {
-    exprs[i] = index2tc(subtype, array, accuml_offs);
+    index2tc the_index = index2tc(subtype, array, accuml_offs);
+    if(subtype->get_width() <= 8)
+    {
+      // This is a byte array
+      exprs[i] = the_index;
+    }
+    else
+    {
+      const type2tc &bytetype = get_uint8_type();
+      // Extracting bytes from the current index
+      for(unsigned int j = 0; j < subtype->get_width() / 8; j++)
+      {
+        exprs[i] =
+          byte_extract2tc(bytetype, the_index, gen_ulong(j), is_big_endian);
+        i++;
+      }
+      i--;
+    }
     accuml_offs = add2tc(offset->type, accuml_offs, gen_ulong(1));
   }
 
