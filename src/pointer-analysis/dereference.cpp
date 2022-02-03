@@ -1548,12 +1548,11 @@ void dereferencet::construct_struct_ref_from_const_offset(
     // (but compatible check already gets that;), arrays of structs; and other
     // crazy inside structs.
 
-    const struct_type2t &struct_type = to_struct_type(value->type);
+    auto *data = static_cast<const struct_union_data *>(value->type.get());
     unsigned int i = 0;
-    for(auto const &it : struct_type.members)
+    for(auto const &it : data->members)
     {
-      BigInt offs =
-        member_offset_bits(value->type, struct_type.member_names[i]);
+      BigInt offs = member_offset_bits(value->type, data->member_names[i]);
       BigInt size = type_byte_size_bits(it);
 
       if(
@@ -1577,7 +1576,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
         // menace. Recurse to continue our checks.
         BigInt new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs.to_uint64());
-        value = member2tc(it, value, struct_type.member_names[i]);
+        value = member2tc(it, value, data->member_names[i]);
 
         construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
         return;
