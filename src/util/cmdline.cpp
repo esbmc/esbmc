@@ -15,8 +15,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /* Parses 's' according to a simple interpretation of shell rules, taking only
  * whitespace and the characters ', " and \ into account. */
-static std::vector<std::string> simple_shell_unescape(
-  const char *s, const messaget &msg, const char *var)
+static std::vector<std::string>
+simple_shell_unescape(const char *s, const messaget &msg, const char *var)
 {
   static const char WHITE[] = " \t\r\n\f\v";
 
@@ -100,7 +100,7 @@ static std::vector<std::string> simple_shell_unescape(
       }
       arg.push_back(*s++);
     }
-done:
+  done:
     if(mode)
     {
       msg.warning(fmt::format(
