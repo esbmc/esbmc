@@ -21,13 +21,105 @@
 #define _PTHREAD_H	1
 
 #include <stddef.h>
+#include <stdint.h>
 
-#include <bits/pthreadtypes.h>
+#ifndef _MSVC
+#define NULL 0
+#endif
+
+typedef int32_t __clockid_t;
+
+typedef unsigned long int pthread_t;
+
+typedef union pthread_attr_t
+{
+  long int __align;
+} pthread_attr_t;
+
+
+typedef struct
+{
+  int __lock;
+  unsigned int __count;
+  int __owner;
+} pthread_mutex_t;
+
+/* Mutex initializer. */
+#define PTHREAD_MUTEX_INITIALIZER { 0, 0, 0, }
+
+typedef union
+{
+  int __align;
+} pthread_mutexattr_t;
+
+
+typedef struct
+{
+  int __lock;
+  unsigned int __futex;
+  unsigned int __nwaiters;
+} pthread_cond_t;
+
+/* Conditional variable handling. */
+#define PTHREAD_COND_INITIALIZER { 0, 0, 0, }
+
+typedef union
+{
+  int __align;
+} pthread_condattr_t;
+
+
+/* Keys for thread-specific data */
+typedef unsigned int pthread_key_t;
+
+
+/* Once-only execution */
+typedef int pthread_once_t;
+
+
+//#if defined __USE_UNIX98 || defined __USE_XOPEN2K
+//jmorse - we always want this, regardless of feature flags.
+typedef struct
+{
+  int __lock;
+} pthread_rwlock_t;
+
+/* Read-write lock initializer. */
+#define PTHREAD_RWLOCK_INITIALIZER { 0, }
+
+typedef union
+{
+  long int __align;
+} pthread_rwlockattr_t;
+//#endif
+
+
+#ifdef __USE_XOPEN2K
+/* POSIX spinlock data type.  */
+typedef volatile int pthread_spinlock_t;
+
+
+/* POSIX barriers data type.  The structure of the type is
+   deliberately not exposed.  */
+typedef union
+{
+  long int __align;
+} pthread_barrier_t;
+
+typedef union
+{
+  int __align;
+} pthread_barrierattr_t;
+#endif
+
+
+#if __WORDSIZE == 32
+/* Extra attributes for the cleanup functions.  */
+# define __cleanup_fct_attribute __attribute__ ((__regparm__ (1)))
+#endif
 
 #ifdef __cplusplus
-
 extern "C" {
-
 #endif
 
 /* Detach state.  */
@@ -79,17 +171,6 @@ enum
 };
 #endif
 
-
-/* Mutex initializers.  */
-#if __WORDSIZE == 64
-# define PTHREAD_MUTEX_INITIALIZER \
-  { { 0, 0, 0, 0, 0, 0, { 0, 0 } } }
-#else
-# define PTHREAD_MUTEX_INITIALIZER \
-  { { 0, 0, 0, 0, 0, { 0 } } }
-#endif
-
-
 /* Read-write lock types.  */
 #if defined __USE_UNIX98 || defined __USE_XOPEN2K
 enum
@@ -99,10 +180,6 @@ enum
   PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP,
   PTHREAD_RWLOCK_DEFAULT_NP = PTHREAD_RWLOCK_PREFER_READER_NP
 };
-
-/* Read-write lock initializers.  */
-# define PTHREAD_RWLOCK_INITIALIZER \
-  { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }
 #endif  /* Unix98 or XOpen2K */
 
 
@@ -136,9 +213,6 @@ enum
 };
 
 
-
-/* Conditional variable handling.  */
-#define PTHREAD_COND_INITIALIZER { { 0, 0, 0, 0, 0, (void *) 0, 0, 0 } }
 
 
 /* Cleanup buffers */
@@ -719,9 +793,7 @@ __NTH (pthread_equal (pthread_t __thread1, pthread_t __thread2))
 #endif
 
 #ifdef __cplusplus
-
 }
-
 #endif
 
 #endif	/* pthread.h */
