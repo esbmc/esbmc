@@ -5,6 +5,14 @@ set(inputs limits.h pthread.h stdarg.h stdbool.h stddef.h
            sys/_types/_pthread_attr_t.h
            # MacOSX11.0 and above
            sys/_pthread/_pthread_attr_t.h
+           sys/_pthread/_pthread_cond_t.h
+           sys/_pthread/_pthread_condattr_t.h
+           sys/_pthread/_pthread_key_t.h
+           sys/_pthread/_pthread_mutex_t.h
+           sys/_pthread/_pthread_mutexattr_t.h
+           sys/_pthread/_pthread_once_t.h
+           sys/_pthread/_pthread_rwlock_t.h
+           sys/_pthread/_pthread_t.h
    )
 mangle(mangled_files ${CMAKE_CURRENT_SOURCE_DIR} ${inputs}
        PREFIX esbmc_libc_header_
