@@ -12,7 +12,9 @@ set(inputs limits.h pthread.h stdarg.h stdbool.h stddef.h
            sys/_pthread/_pthread_mutexattr_t.h
            sys/_pthread/_pthread_once_t.h
            sys/_pthread/_pthread_rwlock_t.h
+           sys/_pthread/_pthread_rwlockattr_t.h
            sys/_pthread/_pthread_t.h
+           sys/_pthread/_pthread_types.h
    )
 mangle(mangled_files ${CMAKE_CURRENT_SOURCE_DIR} ${inputs}
        PREFIX esbmc_libc_header_
