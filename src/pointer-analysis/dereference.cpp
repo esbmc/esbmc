@@ -1264,25 +1264,20 @@ void dereferencet::construct_from_dyn_struct_offset(
     expr2tc lower_bound = greaterthanequal2tc(bits_offset, field_offset);
     expr2tc upper_bound = lessthan2tc(bits_offset, field_top);
     expr2tc field_guard = and2tc(lower_bound, upper_bound);
+    expr2tc field = member2tc(it, value, struct_type.member_names[i]);
+    expr2tc new_offset = sub2tc(offset->type, offset, field_offset);
+    simplify(new_offset);
 
     if(is_struct_type(it))
     {
-      // Handle recursive structs in bytes
-      expr2tc new_offset = sub2tc(offset->type, offset, field_offset);
-      expr2tc field = member2tc(it, value, struct_type.member_names[i]);
-
-      simplify(new_offset);
+      // Handle recursive structs
       construct_from_dyn_struct_offset(
         field, new_offset, type, guard, alignment, mode, &failed_container);
       extract_list.emplace_back(field_guard, field);
     }
     else if(is_array_type(it))
     {
-      expr2tc new_offset = sub2tc(offset->type, offset, field_offset);
-      expr2tc field = member2tc(it, value, struct_type.member_names[i]);
-
-      simplify(new_offset);
-      build_reference_rec(field, new_offset, type, guard, mode, alignment);
+      construct_from_array(field, new_offset, type, guard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
     }
     else if((access_sz > it->get_width()) && (type->get_width() != 8))
@@ -1298,35 +1293,14 @@ void dereferencet::construct_from_dyn_struct_offset(
     {
       // This is fully aligned, just pull it out and possibly cast,
       // XXX endian?
-      expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       if(!base_type_eq(field->type, type, ns))
         field = bitcast2tc(type, field);
       extract_list.emplace_back(field_guard, field);
     }
     else
     {
-      // Not fully aligned; devolve to byte extract.
-      expr2tc new_offset = sub2tc(offset->type, offset, field_offset);
-      expr2tc field = member2tc(it, value, struct_type.member_names[i]);
-
-      unsigned int num_bytes = compute_num_bytes_to_extract(
-        field_offset, type_byte_size_bits(type).to_uint64());
-      // Converting offset to bytes before bytes extraction
-      expr2tc new_offset_bytes =
-        div2tc(new_offset->type, new_offset, gen_ulong(8));
-      simplify(new_offset_bytes);
-
-      // Extracting and stitching bytes together
-      expr2tc *bytes =
-        extract_bytes_from_scalar(field, num_bytes, new_offset_bytes);
-      stitch_together_from_byte_array(field, num_bytes, bytes);
-      delete[] bytes;
-
-      // Extracting bits from the produced bv
-      extract_bits_from_byte_array(
-        field, offset, type_byte_size_bits(type).to_uint64());
-
-      field = bitcast2tc(type, field);
+      // Try to resolve this recursively
+      build_reference_rec(field, new_offset, type, guard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
     }
 
@@ -2243,6 +2217,11 @@ unsigned int dereferencet::compute_num_bytes_to_extract(
   // By default we assume that the "offset" is aligned to 8 bits.
   // So we just compute the number of bytes that completely contain
   // the target bits (hence, adding 7 before division).
+  //
+  // This is not correct generally. This won't work when
+  // dealing with a dynamic offset to a bitfield. Hence, we need
+  // to implement a check if the "constant" part of the offset
+  // is a multiple of 8 bits
   unsigned int num_bytes = (num_bits + 7) / 8;
 
   // If "offset" is known (i.e., constant), we should take this into
