@@ -63,7 +63,7 @@ public:
     if(config.set(cmdline, msg))
       return 1;
     config.options.cmdline(cmdline);
-    msg.set_verbosity(VerbosityLevel::Result);
+    msg.set_verbosity(VerbosityLevel::Debug);
 
     if(!cmdline.isset("output"))
     {
