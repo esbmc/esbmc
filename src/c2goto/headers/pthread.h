@@ -509,7 +509,8 @@ extern int pthread_mutexattr_getpshared (__const pthread_mutexattr_t *
 extern int pthread_mutexattr_setpshared (pthread_mutexattr_t *__attr,
 					 int __pshared);
 
-#if defined __USE_UNIX98 || defined __USE_XOPEN2K8
+// #if defined __USE_UNIX98 || defined __USE_XOPEN2K8
+// fbrausse: always expose, no harm done
 /* Return in *KIND the mutex kind attribute in *ATTR.  */
 extern int pthread_mutexattr_gettype (__const pthread_mutexattr_t *__restrict
 				      __attr, int *__restrict __kind);
@@ -518,7 +519,7 @@ extern int pthread_mutexattr_gettype (__const pthread_mutexattr_t *__restrict
    PTHREAD_MUTEX_RECURSIVE, PTHREAD_MUTEX_ERRORCHECK, or
    PTHREAD_MUTEX_DEFAULT).  */
 extern int pthread_mutexattr_settype (pthread_mutexattr_t *__attr, int __kind);
-#endif
+// #endif
 
 /* Return in *PROTOCOL the mutex protocol attribute in *ATTR.  */
 extern int pthread_mutexattr_getprotocol (__const pthread_mutexattr_t *
