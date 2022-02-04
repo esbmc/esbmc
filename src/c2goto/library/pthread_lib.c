@@ -40,8 +40,8 @@ _Bool __ESBMC_pthread_thread_ended[1];
 __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_detach[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-void *__ESBMC_pthread_end_values[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
 
 void(
   __attribute__((annotate("__ESBMC_inf_size"))) *
@@ -573,7 +573,7 @@ __ESBMC_HIDE:;
 
   __ESBMC_atomic_begin();
 
-// Have we been signalled?
+  // Have we been signalled?
   _Bool signalled = __ESBMC_cond_lock_field(*cond) == 0;
 
   /**
