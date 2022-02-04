@@ -1019,7 +1019,7 @@ void value_sett::assign(
     const std::vector<type2tc> &members = rhs_data->members;
     const std::vector<irep_idt> &member_names = rhs_data->member_names;
 
-    for(size_t i = 0; i<members.size(); i++)
+    for(size_t i = 0; i < members.size(); i++)
     {
       const type2tc &subtype = members[i];
       const irep_idt &name = member_names[i];
