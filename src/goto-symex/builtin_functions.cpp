@@ -451,7 +451,9 @@ void goto_symext::symex_cpp_delete(const expr2tc &)
 
 void goto_symext::intrinsic_yield(reachability_treet &art)
 {
-  art.get_cur_state().force_cswitch();
+  // Don't context switch if the guard is false.
+  if(!cur_state->guard.is_false())
+    art.get_cur_state().force_cswitch();
 }
 
 void goto_symext::intrinsic_switch_to(
