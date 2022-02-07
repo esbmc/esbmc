@@ -2120,26 +2120,26 @@ expr2tc smt_convt::get(const expr2tc &expr)
   case expr2t::with_id:
   {
     // This will be converted
-    with2t with = to_with2t(res);
+    const with2t &with = to_with2t(res);
     expr2tc update_val = with.update_value;
-    expr2tc update_fld = with.update_field;
 
     if(
       is_array_type(with.type) &&
       is_array_type(to_array_type(with.type).subtype))
     {
-      update_fld = decompose_store_chain(expr, update_val);
+      decompose_store_chain(expr, update_val);
     }
 
-    expr2tc src = get(with.source_value);
-    expr2tc val = get(update_val);
-    if(is_nil_expr(src)) /* XXX this does not have the type of res! */
-      return val;
-    expr2tc fld = get(update_fld);
-    expr2tc res = with2tc(with.type, src, fld, val);
-    simplify(res);
-
-    return res;
+    /* This function get() is only used to obtain assigned values to the RHS of
+     * SSA_step assignments in order to generate counter-examples. with2t
+     * expressions for these RHS are only generated during the transformations
+     * performed by symex_assign(), which from the counter-example's point of
+     * view behave like no-ops as the RHS of counter-example assignments should
+     * only show the concretely updated value in expressions of composite type.
+     * Thus, there is no need to construct the full with2t expression here,
+     * since it can't sensibly be interpreted anyways due to simplification
+     * during convert_ast(). */
+    return get(update_val);
   }
 
   case expr2t::address_of_id:
