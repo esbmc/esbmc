@@ -31,22 +31,12 @@ bool language_uit::parse()
 
 bool language_uit::parse(const std::string &filename)
 {
-  int mode = get_mode_filename(filename);
+  int mode = get_mode_filename(filename, &(config.options));
 
   if(mode < 0)
   {
     msg.error("failed to figure out type of file", filename);
     return true;
-  }
-
-  if(config.options.get_bool_option("old-frontend"))
-  {
-    mode = get_old_frontend_mode(mode);
-    if(mode == -1)
-    {
-      msg.error("old-frontend was not built on this version of ESBMC");
-      return true;
-    }
   }
 
   // Check that it opens

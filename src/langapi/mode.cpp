@@ -30,18 +30,7 @@ int get_mode(const std::string &str)
   return -1;
 }
 
-int get_old_frontend_mode(int current_mode)
-{
-  unsigned i;
-  std::string expected(mode_table[current_mode++].name);
-  for(i = current_mode; mode_table[i].name != nullptr; i++)
-    if(expected == mode_table[i].name)
-      return i;
-
-  return -1;
-}
-
-int get_mode_filename(const std::string &filename)
+int get_mode_filename(const std::string &filename, optionst *options)
 {
   const char *ext = strrchr(filename.c_str(), '.');
 
@@ -54,10 +43,24 @@ int get_mode_filename(const std::string &filename)
     return -1;
 
   int mode;
+  bool first_match_found = false;
   for(mode = 0; mode_table[mode].name != nullptr; mode++)
+  {
     for(unsigned i = 0; mode_table[mode].extensions[i] != nullptr; i++)
+    {
       if(mode_table[mode].extensions[i] == extension)
+      {
+        // We have two frontends for C and C++ respectively: one is clang and the other one is C++.
+        // We return mode on the second match using old-frontend.
+        if(options->get_bool_option("old-frontend") && !first_match_found)
+        {
+          first_match_found = true;
+          continue;
+        }
         return mode;
+      }
+    }
+  }
 
   return -1;
 }
