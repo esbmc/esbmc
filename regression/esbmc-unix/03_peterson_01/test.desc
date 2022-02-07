@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 1 --no-unwinding-assertions --context-bound 2
+--incremental-bmc --context-bound 3 --no-por
 ^VERIFICATION FAILED$
