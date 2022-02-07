@@ -72,6 +72,39 @@ static inline expr2tc get_base_dereference(const expr2tc &e)
   }
 }
 
+static inline expr2tc replace_dyn_offset_with_zero(const expr2tc &e)
+{
+  // Here we try to extract the constant part of a dynamic offset
+  // comprised by constants, dynamic pointer offset symbol and some arithmetic
+  // operations by replacing all symbolic offsets with 0.
+  // This method is necessary for computing the correct number
+  // of bytes for extraction of bitfields as they can be not aligned to a byte.
+  if(is_add2t(e))
+    return add2tc(e->type, replace_dyn_offset_with_zero(to_add2t(e).side_1),
+      replace_dyn_offset_with_zero(to_add2t(e).side_2));
+
+  if(is_sub2t(e))
+    return sub2tc(e->type, replace_dyn_offset_with_zero(to_sub2t(e).side_1),
+      replace_dyn_offset_with_zero(to_sub2t(e).side_2));
+
+  if(is_mul2t(e))
+    return mul2tc(e->type, replace_dyn_offset_with_zero(to_mul2t(e).side_1),
+      replace_dyn_offset_with_zero(to_mul2t(e).side_2));
+
+  if(is_div2t(e))
+    return div2tc(e->type, replace_dyn_offset_with_zero(to_div2t(e).side_1),
+      replace_dyn_offset_with_zero(to_div2t(e).side_2));
+
+  if(is_pointer_offset2t(e))
+    return gen_ulong(0);
+
+  if(is_constant_int2t(e))
+    return e;
+
+  // If it is none of the above, just return 0
+  return gen_ulong(0);
+}
+
 bool dereferencet::has_dereference(const expr2tc &expr) const
 {
   if(is_nil_expr(expr))
@@ -1351,8 +1384,10 @@ void dereferencet::construct_from_dyn_offset(
   if(!is_bv_type(value->type) && !is_fixedbv_type(value->type))
     value = bitcast2tc(get_uint_type(value->type->get_width()), value);
 
+  expr2tc replaced_dyn_offset = replace_dyn_offset_with_zero(offset);
+  simplify(replaced_dyn_offset);
   unsigned int num_bytes =
-    compute_num_bytes_to_extract(offset, type_byte_size_bits(type).to_uint64());
+    compute_num_bytes_to_extract(replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
   // Converting offset to bytes before bytes extraction
   expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
   simplify(offset_bytes);
@@ -2217,11 +2252,6 @@ unsigned int dereferencet::compute_num_bytes_to_extract(
   // By default we assume that the "offset" is aligned to 8 bits.
   // So we just compute the number of bytes that completely contain
   // the target bits (hence, adding 7 before division).
-  //
-  // This is not correct generally. This won't work when
-  // dealing with a dynamic offset to a bitfield. Hence, we need
-  // to implement a check if the "constant" part of the offset
-  // is a multiple of 8 bits
   unsigned int num_bytes = (num_bits + 7) / 8;
 
   // If "offset" is known (i.e., constant), we should take this into
