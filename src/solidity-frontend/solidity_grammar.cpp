@@ -99,7 +99,9 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
       //  "typeString": "uint8[2] memory"
       // Need to search for the substring "array" as in "typeIdentifier"
-      if(type_name["typeIdentifier"].get<std::string>().find("dyn") != std::string::npos)
+      if(
+        type_name["typeIdentifier"].get<std::string>().find("dyn") !=
+        std::string::npos)
         return DynArrayTypeName;
 
       return ArrayTypeName;
