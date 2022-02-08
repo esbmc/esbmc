@@ -508,7 +508,6 @@ void goto_symext::intrinsic_set_thread_data(
   expr2tc threadid = call.operands[0];
   expr2tc startdata = call.operands[1];
 
-  state.global_guard.add(cur_state->guard.as_expr());
   state.rename(threadid);
   state.rename(startdata);
 

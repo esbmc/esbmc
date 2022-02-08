@@ -84,7 +84,6 @@ execution_statet::execution_statet(
   preserved_paths.emplace_back();
   cur_state = &threads_state.front();
   cur_state->global_guard.make_true();
-  cur_state->global_guard.add(get_guard_identifier());
 
   atomic_numbers.push_back(0);
 
