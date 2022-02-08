@@ -63,14 +63,20 @@ void pattern_checker::check_authorization_through_tx_origin(
     {
       if((*itr)["nodeType"].get<std::string>() == "ExpressionStatement")
       {
-        printf("DEBUG_TX_ORIGIN: in check_authorization_through_tx_origin - ExpressionStatement\n");
+        printf(
+          "DEBUG_TX_ORIGIN: in check_authorization_through_tx_origin - "
+          "ExpressionStatement\n");
         const nlohmann::json &expr = (*itr)["expression"];
         if(expr["nodeType"] == "FunctionCall")
         {
-          printf("DEBUG_TX_ORIGIN: in check_authorization_through_tx_origin - FunctionCall\n");
+          printf(
+            "DEBUG_TX_ORIGIN: in check_authorization_through_tx_origin - "
+            "FunctionCall\n");
           if(expr["kind"] == "functionCall")
           {
-            printf("DEBUG_TX_ORIGIN: in check_authorization_through_tx_origin - functionCall\n");
+            printf(
+              "DEBUG_TX_ORIGIN: in check_authorization_through_tx_origin - "
+              "functionCall\n");
             check_require_call(expr);
           }
         }
@@ -95,7 +101,9 @@ void pattern_checker::check_require_call(const nlohmann::json &expr)
       // Checking 1 argument as in require(<leftExpr> == <rightExpr>)
       if(call_args.size() == 1)
       {
-        printf("DEBUG_TX_ORIGIN: in check_require_call - confirmed call_args.size() == 1\n");
+        printf(
+          "DEBUG_TX_ORIGIN: in check_require_call - confirmed call_args.size() "
+          "== 1\n");
         check_require_argument(call_args);
       }
     }
@@ -142,7 +150,8 @@ void pattern_checker::check_tx_origin(const nlohmann::json &left_expr)
       {
         printf("DEBUG_TX_ORIGIN: in check_tx_origin - tx\n");
         //assert(!"Found vulnerability SWC-115 Authorization through tx.origin");
-        msg.error("Found vulnerability SWC-115 Authorization through tx.origin");
+        msg.error(
+          "Found vulnerability SWC-115 Authorization through tx.origin");
         msg.error("VERIFICATION FAILED");
         exit(EXIT_SUCCESS);
       }

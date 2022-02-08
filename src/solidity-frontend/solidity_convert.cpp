@@ -31,8 +31,8 @@ solidity_convertert::solidity_convertert(
     current_functionName("")
 {
   std::ifstream in(_contract_path);
-  contract_contents.assign((std::istreambuf_iterator<char>(in)),
-      std::istreambuf_iterator<char>());
+  contract_contents.assign(
+    (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
 bool solidity_convertert::convert()
@@ -199,11 +199,11 @@ bool solidity_convertert::get_var_decl(
   // For array, do NOT use ["typeName"]. Otherwise, it will cause problem
   // when populating typet in get_cast
   bool dyn_array = is_dyn_array(ast_node["typeDescriptions"]);
-  if (dyn_array)
+  if(dyn_array)
   {
     // append size expr in typeDescription JSON object
     const nlohmann::json &type_descriptor = add_dyn_array_size_expr(
-        ast_node["typeName"]["typeDescriptions"], ast_node);
+      ast_node["typeName"]["typeDescriptions"], ast_node);
     if(get_type_description(type_descriptor, t))
       return true;
   }
@@ -261,7 +261,8 @@ bool solidity_convertert::get_var_decl(
   // For state var decl, we look for "value".
   // For local var decl, we look for "initialValue"
   bool has_init =
-    (ast_node.contains("value") || ast_node.contains("initialValue")) && !dyn_array;
+    (ast_node.contains("value") || ast_node.contains("initialValue")) &&
+    !dyn_array;
   if(symbol.static_lifetime && !symbol.is_extern && !has_init)
   {
     symbol.value = gen_zero(t, true);
@@ -334,7 +335,7 @@ bool solidity_convertert::get_function_definition(
   get_function_definition_name(ast_node, name, id);
 
   // TODO: debug remove before commit
-  if (name == "func_dynamic")
+  if(name == "func_dynamic")
     printf("@@ found func_dynamic\n");
 
   // 8. populate "std::string debug_modulename"
@@ -1256,7 +1257,7 @@ bool solidity_convertert::get_type_description(
   {
     // Deal with dynamic array
     exprt size_expr;
-    if (type_name.contains("sizeExpr"))
+    if(type_name.contains("sizeExpr"))
     {
       const nlohmann::json &rtn_expr = type_name["sizeExpr"];
       // wrap it in an ImplicitCastExpr to convert LValue to RValue
@@ -1499,7 +1500,9 @@ void solidity_convertert::get_function_definition_name(
   id = name;
 }
 
-unsigned int solidity_convertert::add_offset(const std::string& src, unsigned int start_position)
+unsigned int solidity_convertert::add_offset(
+  const std::string &src,
+  unsigned int start_position)
 {
   // extract the length from "start:length:index"
   std::string offset = src.substr(1, src.find(":"));
@@ -1508,44 +1511,50 @@ unsigned int solidity_convertert::add_offset(const std::string& src, unsigned in
   return end_position;
 }
 
-std::string solidity_convertert::get_src_from_json(const nlohmann::json &ast_node)
+std::string
+solidity_convertert::get_src_from_json(const nlohmann::json &ast_node)
 {
   // some nodes may have "src" inside a member json object
   // we need to deal with them case by case based on the node type
-  SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(ast_node);
+  SolidityGrammar::ExpressionT type =
+    SolidityGrammar::get_expression_t(ast_node);
   switch(type)
   {
-    case SolidityGrammar::ExpressionT::ImplicitCastExprClass:
-    {
-      assert(ast_node.contains("subExpr"));
-      assert(ast_node["subExpr"].contains("src"));
-      return ast_node["subExpr"]["src"].get<std::string>();
-      break;
-    }
-    default:
-    {
-      assert(!"Unsupported node type when getting src from JSON");
-      return "";
-    }
+  case SolidityGrammar::ExpressionT::ImplicitCastExprClass:
+  {
+    assert(ast_node.contains("subExpr"));
+    assert(ast_node["subExpr"].contains("src"));
+    return ast_node["subExpr"]["src"].get<std::string>();
+    break;
+  }
+  default:
+  {
+    assert(!"Unsupported node type when getting src from JSON");
+    return "";
+  }
   }
 }
 
 unsigned int solidity_convertert::get_line_number(
-  const nlohmann::json &ast_node, bool final_position)
+  const nlohmann::json &ast_node,
+  bool final_position)
 {
   // Solidity src means "start:length:index", where "start" represents the position of the first char byte of the identifier.
-  std::string src = ast_node.contains("src") ?
-    ast_node["src"].get<std::string>() : get_src_from_json(ast_node);
+  std::string src = ast_node.contains("src")
+                      ? ast_node["src"].get<std::string>()
+                      : get_src_from_json(ast_node);
 
   std::string position = src.substr(0, src.find(":"));
   unsigned int byte_position = std::stoul(position) + 1;
 
-  if (final_position)
+  if(final_position)
     byte_position = add_offset(src, byte_position);
 
   // the line number can be calculated by counting the number of line breaks prior to the identifier.
-  unsigned int loc = std::count(contract_contents.begin(),
-      (contract_contents.begin()+byte_position), '\n');
+  unsigned int loc = std::count(
+    contract_contents.begin(),
+    (contract_contents.begin() + byte_position),
+    '\n');
   return loc;
 }
 
@@ -1570,7 +1579,8 @@ void solidity_convertert::get_location_from_decl(
 }
 
 void solidity_convertert::get_start_location_from_stmt(
-    const nlohmann::json &ast_node,locationt &location)
+  const nlohmann::json &ast_node,
+  locationt &location)
 {
   std::string function_name;
 
@@ -1588,7 +1598,8 @@ void solidity_convertert::get_start_location_from_stmt(
 }
 
 void solidity_convertert::get_final_location_from_stmt(
-    const nlohmann::json &ast_node,locationt &location)
+  const nlohmann::json &ast_node,
+  locationt &location)
 {
   std::string function_name;
 
@@ -1674,12 +1685,13 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
     assert(!"Unable to find the corresponding local variable decl. Current function does not have a function body.");
 
   // Search function parameter
-  if (current_func.contains("parameters"))
+  if(current_func.contains("parameters"))
   {
-    if (current_func["parameters"]["parameters"].size())
+    if(current_func["parameters"]["parameters"].size())
     {
       // var decl in function parameter array
-      for(const auto &param_decl : current_func["parameters"]["parameters"].items())
+      for(const auto &param_decl :
+          current_func["parameters"]["parameters"].items())
       {
         const nlohmann::json &param = param_decl.value();
         assert(param["nodeType"] == "VariableDeclaration");
@@ -1973,16 +1985,16 @@ nlohmann::json solidity_convertert::make_array_to_pointer_type(
   return adjusted_type;
 }
 
-nlohmann::json
-solidity_convertert::add_dyn_array_size_expr(
-    const nlohmann::json &type_descriptor, const nlohmann::json &dyn_array_node)
+nlohmann::json solidity_convertert::add_dyn_array_size_expr(
+  const nlohmann::json &type_descriptor,
+  const nlohmann::json &dyn_array_node)
 {
   nlohmann::json adjusted_descriptor;
   adjusted_descriptor = type_descriptor;
   // get the JSON object for size expr and merge it with the original type descriptor
   assert(dyn_array_node.contains("initialValue"));
-  adjusted_descriptor.push_back(
-      nlohmann::json::object_t::value_type("sizeExpr", dyn_array_node["initialValue"]["arguments"][0]));
+  adjusted_descriptor.push_back(nlohmann::json::object_t::value_type(
+    "sizeExpr", dyn_array_node["initialValue"]["arguments"][0]));
   return adjusted_descriptor;
 }
 
@@ -2007,9 +2019,11 @@ solidity_convertert::get_array_size(const nlohmann::json &type_descrpt)
 
 bool solidity_convertert::is_dyn_array(const nlohmann::json &json_in)
 {
-  if (json_in.contains("typeIdentifier"))
+  if(json_in.contains("typeIdentifier"))
   {
-    if(json_in["typeIdentifier"].get<std::string>().find("dyn") != std::string::npos)
+    if(
+      json_in["typeIdentifier"].get<std::string>().find("dyn") !=
+      std::string::npos)
     {
       return true;
     }
@@ -2021,6 +2035,7 @@ bool solidity_convertert::is_dyn_array(const nlohmann::json &json_in)
 void solidity_convertert::print_json(const nlohmann::json &json_in)
 {
   printf("### JSON: ###\n");
-  std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations in front of each line
+  std::cout << std::setw(2) << json_in
+            << '\n'; // '2' means 2x indentations in front of each line
   printf("\n");
 }

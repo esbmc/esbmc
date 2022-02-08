@@ -33,7 +33,7 @@ protected:
   namespacet ns;
   nlohmann::json
     &ast_json; // json for Solidity AST. Use vector for multiple contracts
-  const std::string &sol_func; // Solidity function to be verified
+  const std::string &sol_func;      // Solidity function to be verified
   const std::string &contract_path; //smart contract source file
   const messaget &msg;
   std::string absolute_path;
@@ -92,11 +92,17 @@ protected:
     std::string &id);
 
   // line number and locations
-  void get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
-  void get_start_location_from_stmt(const nlohmann::json &ast_node, locationt &location);
-  void get_final_location_from_stmt(const nlohmann::json &ast_node, locationt &location);
-  unsigned int get_line_number(const nlohmann::json &ast_node, bool final_position=false);
-  unsigned int add_offset(const std::string& src, unsigned int start_position);
+  void
+  get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
+  void get_start_location_from_stmt(
+    const nlohmann::json &ast_node,
+    locationt &location);
+  void get_final_location_from_stmt(
+    const nlohmann::json &ast_node,
+    locationt &location);
+  unsigned int
+  get_line_number(const nlohmann::json &ast_node, bool final_position = false);
+  unsigned int add_offset(const std::string &src, unsigned int start_position);
   std::string get_src_from_json(const nlohmann::json &ast_node);
 
   symbolt *move_symbol_to_context(symbolt &symbol);
@@ -116,7 +122,9 @@ protected:
   nlohmann::json make_array_to_pointer_type(const nlohmann::json &type_descrpt);
   std::string get_array_size(const nlohmann::json &type_descrpt);
   bool is_dyn_array(const nlohmann::json &json_in);
-  nlohmann::json add_dyn_array_size_expr(const nlohmann::json &type_descriptor, const nlohmann::json &dyn_array_node);
+  nlohmann::json add_dyn_array_size_expr(
+    const nlohmann::json &type_descriptor,
+    const nlohmann::json &dyn_array_node);
 
   void get_default_symbol(
     symbolt &symbol,
