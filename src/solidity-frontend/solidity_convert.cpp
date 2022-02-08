@@ -1552,9 +1552,10 @@ unsigned int solidity_convertert::get_line_number(
 
   // the line number can be calculated by counting the number of line breaks prior to the identifier.
   unsigned int loc = std::count(
-    contract_contents.begin(),
-    (contract_contents.begin() + byte_position),
-    '\n');
+                       contract_contents.begin(),
+                       (contract_contents.begin() + byte_position),
+                       '\n') +
+                     1;
   return loc;
 }
 
