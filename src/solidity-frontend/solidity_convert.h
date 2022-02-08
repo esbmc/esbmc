@@ -93,6 +93,7 @@ protected:
   void
   get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
   void get_start_location_from_stmt(locationt &location);
+  unsigned int get_line_number(const nlohmann::json &ast_node);
   symbolt *move_symbol_to_context(symbolt &symbol);
 
   // auxiliary functions
