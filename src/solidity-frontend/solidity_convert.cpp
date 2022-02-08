@@ -10,16 +10,19 @@
 #include <util/std_expr.h>
 #include <regex>
 #include <util/message/format.h>
+#include <fstream>
 
 solidity_convertert::solidity_convertert(
   contextt &_context,
   nlohmann::json &_ast_json,
   const std::string &_sol_func,
+  const std::string &_contract_path,
   const messaget &msg)
   : context(_context),
     ns(context),
     ast_json(_ast_json),
     sol_func(_sol_func),
+    contract_path(_contract_path),
     msg(msg),
     global_scope_id(0),
     current_scope_var_num(1),
@@ -27,6 +30,10 @@ solidity_convertert::solidity_convertert(
     current_forStmt(nullptr),
     current_functionName("")
 {
+  std::ifstream in(_contract_path);
+  contract_contents.assign((std::istreambuf_iterator<char>(in)),
+      std::istreambuf_iterator<char>());
+  std::cout << contract_contents << std::endl;
 }
 
 bool solidity_convertert::convert()
