@@ -130,14 +130,6 @@ public:
   int get_ileave_direction_from_user() const;
 
   /**
-   *  Decide context switch from --round-robin.
-   *  Called when --round-robin scheduling is picked. Decides which context
-   *  switch to take on that basis.
-   *  @return Thread ID to switch to according to scheduling
-   */
-  int get_ileave_direction_from_scheduling() const;
-
-  /**
    *  Determine if a thread can be run.
    *  Checks that the thread hasn't ended, has an empty stack, is blocked by
    *  POR and so forth etc. Potentially prints a comment as to why the thread
@@ -373,8 +365,6 @@ protected:
   /** Flag as to whether we're picking interleaving directions explicitly.
    *  Corresponds to the --interactive-ileaves option. */
   bool interactive_ileaves;
-  /** Flag as to whether we're scheduling using round-robin. */
-  bool round_robin;
   /** Are we using the --schedule scheduling method? */
   bool schedule;
 

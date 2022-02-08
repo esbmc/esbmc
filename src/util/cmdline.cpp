@@ -13,6 +13,107 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <sstream>
 #include <util/message/format.h>
 
+/* Parses 's' according to a simple interpretation of shell rules, taking only
+ * whitespace and the characters ', " and \ into account. */
+static std::vector<std::string>
+simple_shell_unescape(const char *s, const messaget &msg, const char *var)
+{
+  static const char WHITE[] = " \t\r\n\f\v";
+
+  if(!s)
+    return {};
+  std::vector<std::string> split;
+  while(*s)
+  {
+    /* skip white-space */
+    while(*s && strchr(WHITE, *s))
+      s++;
+    if(!*s)
+      break;
+    std::string arg;
+    enum : char
+    {
+      NONE,
+      DQUOT = '"',
+      SQUOT = '\'',
+      ESC = '\\',
+    } mode = NONE;
+    while(*s)
+    {
+      switch(mode)
+      {
+      case NONE:
+        /* white-space delimits strings */
+        if(strchr(WHITE, *s))
+          goto done;
+        /* special chars in this mode */
+        switch(*s)
+        {
+        case '\'':
+          mode = SQUOT;
+          s++;
+          continue;
+        case '"':
+          mode = DQUOT;
+          s++;
+          continue;
+        case '\\':
+          /* skip first backslash */
+          mode = ESC;
+          s++;
+          if(!*s)
+            goto done;
+          mode = NONE;
+          break;
+        }
+        break;
+      case SQUOT:
+        /* the only special char in single-quote mode is ' */
+        switch(*s)
+        {
+        case '\'':
+          mode = NONE;
+          s++;
+          continue;
+        }
+        break;
+      case DQUOT:
+        /* special chars in double-quote mode */
+        switch(*s)
+        {
+        case '"':
+          mode = NONE;
+          s++;
+          continue;
+        case '\\':
+          mode = ESC;
+          if(!s[1])
+            goto done;
+          mode = DQUOT;
+          if(strchr("\\\"", s[1]))
+            s++;
+          break;
+        }
+        break;
+      case ESC:
+        __builtin_unreachable();
+      }
+      arg.push_back(*s++);
+    }
+  done:
+    if(mode)
+    {
+      msg.warning(fmt::format(
+        "cannot parse environment variable {}: unfinished {}, ignoring...",
+        var,
+        mode));
+      return {};
+    }
+    split.emplace_back(std::move(arg));
+  }
+  return split;
+}
+
 std::string verification_file;
 
 cmdlinet::~cmdlinet()
@@ -103,6 +204,12 @@ bool cmdlinet::parse(
   p.add("input-file", -1);
   try
   {
+    boost::program_options::store(
+      boost::program_options::command_line_parser(
+        simple_shell_unescape(getenv("ESBMC_OPTS"), msg, "ESBMC_OPTS"))
+        .options(all_cmdline_options)
+        .run(),
+      vm);
     boost::program_options::store(
       boost::program_options::command_line_parser(argc, argv)
         .options(all_cmdline_options)

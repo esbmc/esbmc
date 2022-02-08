@@ -5,7 +5,7 @@ set(ESBMC_BIN "${CMAKE_BINARY_DIR}/src/esbmc/esbmc")
 if(WIN32)
     set(ESBMC_BIN "${CMAKE_INSTALL_PREFIX}/bin/esbmc.exe")
 elseif(APPLE)
-    set(MACOS_ESBMC_WRAPPER "#!/bin/sh\n${ESBMC_BIN} -I${C2GOTO_INCLUDE_DIR} $@")
+    set(MACOS_ESBMC_WRAPPER "#!/bin/sh\n${ESBMC_BIN} --sysroot ${C2GOTO_SYSROOT} $@")
     file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/macos-wrapper.sh ${MACOS_ESBMC_WRAPPER})
     set(ESBMC_BIN "${CMAKE_CURRENT_BINARY_DIR}/macos-wrapper.sh")
 endif()
@@ -45,12 +45,11 @@ function(mangle output_c dir)
   cmake_parse_arguments(MANGLE "${kw0}" "${kw1}" "" ${ARGN})
   if (MANGLE_WILDCARD)
     set(single_file_desc "${MANGLE_WILDCARD} in ${dir}/")
-    file(GLOB inputs CONFIGURE_DEPENDS ${dir}/${MANGLE_WILDCARD} ${MANGLE_UNPARSED_ARGUMENTS})
+    file(GLOB inputs RELATIVE ${dir} CONFIGURE_DEPENDS ${dir}/${MANGLE_WILDCARD} ${MANGLE_UNPARSED_ARGUMENTS})
   else()
     set(inputs ${MANGLE_UNPARSED_ARGUMENTS})
     list(JOIN ", " inputs single_file_desc)
     set(single_file_desc "${inputs} in ${dir}")
-    list(TRANSFORM inputs PREPEND ${dir}/)
   endif()
   set(cmd0 ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py)
   if (MANGLE_MACRO)
@@ -61,7 +60,8 @@ function(mangle output_c dir)
   endif()
   if (MANGLE_SINGLE)
     set(outputs ${output_c})
-    set(dep ${CMAKE_SOURCE_DIR}/scripts/flail.py)
+    list(TRANSFORM inputs PREPEND ${dir}/ OUTPUT_VARIABLE dep)
+    list(APPEND dep ${CMAKE_SOURCE_DIR}/scripts/flail.py)
     set(cmd ${cmd0} -o ${output_c})
     if (MANGLE_ACC_HEADERS_INTO)
       list(APPEND outputs ${MANGLE_ACC_HEADERS_INTO})
@@ -69,19 +69,18 @@ function(mangle output_c dir)
     endif()
     add_custom_command(OUTPUT ${outputs}
                        COMMAND ${cmd} ${inputs}
-                       DEPENDS ${dep} ${inputs}
-                       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+                       DEPENDS ${dep}
+                       WORKING_DIRECTORY ${dir}
                        COMMENT "Converting ${single_file_desc} to data"
                        VERBATIM)
   else()
     set(result_c "")
     set(includes "")
     foreach(in_f ${inputs})
-      file(RELATIVE_PATH out ${dir} ${in_f})
-      string(PREPEND out "${CMAKE_CURRENT_BINARY_DIR}/")
+      set(out "${CMAKE_CURRENT_BINARY_DIR}/${in_f}")
       set(outputs ${out}.c)
       set(cmd ${cmd0} -o ${out}.c)
-      set(dep ${in_f} ${CMAKE_SOURCE_DIR}/scripts/flail.py)
+      set(dep ${dir}/${in_f} ${CMAKE_SOURCE_DIR}/scripts/flail.py)
       if (MANGLE_ACC_HEADERS_INTO)
         list(APPEND outputs ${out}.h)
         list(APPEND cmd --header ${out}.h)
@@ -90,8 +89,8 @@ function(mangle output_c dir)
       endif()
       add_custom_command(OUTPUT ${outputs}
         COMMAND ${cmd} ${in_f}
-        DEPENDS ${dep} ${in_f}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        DEPENDS ${dep}
+        WORKING_DIRECTORY ${dir}
         COMMENT "Converting ${in_f} to data"
         VERBATIM
         )

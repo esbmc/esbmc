@@ -6,12 +6,21 @@
 ![Build All Solvers](https://github.com/esbmc/esbmc/workflows/Build%20All%20Solvers/badge.svg)
 [![codecov](https://codecov.io/gh/esbmc/esbmc/branch/master/graph/badge.svg)](https://codecov.io/gh/esbmc/esbmc)
 
-
-
-
 ESBMC (the Efficient SMT-based Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++ programs. It can verify both predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions automatically. ESBMC supports the Clang compiler as its C/C++ frontend, IEEE floating-point arithmetic for various SMT solvers, implements the Solidity grammar production rules as its Solidity frontend and state-of-the-art incremental BMC and k-induction algorithms.
 
-To build ESBMC, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. For getting started, we recommend first reading some of the background material / publications, to understand exactly what this technique can provide, for example our SV-COMP tool papers, which are available [online](https://ssvlab.github.io/esbmc/publications.html).
+To build ESBMC, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. For getting started, we recommend first reading some of the background material / publications, to understand exactly what this technique can provide, for example our SV-COMP papers, which are available [online](https://ssvlab.github.io/esbmc/publications.html).
+
+We also provide a short video that explains ESBMC: 
+
+https://www.youtube.com/watch?v=uJ5Jn0sxm08&t=2182s
+
+This video was delivered as part of a technical talk on exploiting the SAT revolution for automated software verification in a workshop between Arm Research and the University of Manchester.
+
+We offer a post-graduate course in software security that explains the internals of ESBMC. 
+
+https://ssvlab.github.io/lucasccordeiro/courses/2020/01/software-security/index.html
+
+This course unit introduces students to basic and advanced approaches to formally build verified trustworthy software systems, where trustworthy comprise five attributes: *reliability*, *availability*, *safety*, *resilience* and *security*.
 
 The cannonical public location of ESBMCs source is on github:
 

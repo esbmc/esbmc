@@ -1,5 +1,16 @@
 #ifndef __ESBMC_HEADERS_STDDEF_H_
 #define __ESBMC_HEADERS_STDDEF_H_
+
+#ifdef __clang__
+
+#define __need_ptrdiff_t	/* ptrdiff_t */
+#define __need_size_t		/* size_t */
+#define __need_wchar_t		/* wchar_t */
+#define __need_NULL		/* NULL */
+#define __need_STDDEF_H_misc	/* offsetof() and max_align_t */
+#include_next <stddef.h>
+
+#else
 /* stddef.h is supposed to contain various compiler specific types and
  * facilities: */
 
@@ -34,5 +45,7 @@ typedef unsigned int size_t;
 
 /* ESBMC's ANSI-C parser handles this natively */
 #define offsetof(type, member) __builtin_offsetof(type, member)
+
+#endif /* !defined(__clang__) */
 
 #endif /* __ESBMC_HEADERS_STDDEF_H_ */
