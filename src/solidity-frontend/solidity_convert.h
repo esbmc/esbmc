@@ -20,6 +20,7 @@ public:
     contextt &_context,
     nlohmann::json &_ast_json,
     const std::string &_sol_func,
+    const std::string &_contract_path,
     const messaget &msg);
   virtual ~solidity_convertert() = default;
 
@@ -33,8 +34,10 @@ protected:
   nlohmann::json
     &ast_json; // json for Solidity AST. Use vector for multiple contracts
   const std::string &sol_func; // Solidity function to be verified
+  const std::string &contract_path; //smart contract source file
   const messaget &msg;
   std::string absolute_path;
+  std::string contract_contents = "";
   int global_scope_id; // scope id of "ContractDefinition"
 
   unsigned int current_scope_var_num;
