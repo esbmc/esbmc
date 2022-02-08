@@ -33,7 +33,6 @@ solidity_convertert::solidity_convertert(
   std::ifstream in(_contract_path);
   contract_contents.assign((std::istreambuf_iterator<char>(in)),
       std::istreambuf_iterator<char>());
-  std::cout << contract_contents << std::endl;
 }
 
 bool solidity_convertert::convert()
@@ -1498,21 +1497,30 @@ void solidity_convertert::get_function_definition_name(
 {
   // Follow the way in clang:
   //  - For function name, just use the ast_node["name"]
-  name =
-    ast_node["name"]
-      .get<
-        std::
-          string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
+  // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
+  name = ast_node["name"].get<std::string>();
   id = name;
+}
+
+unsigned int solidity_convertert::get_line_number(
+  const nlohmann::json &ast_node)
+{
+  // Solidity src means "start:length:index", where "start" represents the position of the first char byte of the identifier.
+  std::string src = ast_node["src"].get<std::string>();
+  std::string position = src.substr(0, src.find(":"));
+  unsigned int byte_position = std::stoul(position) + 1;
+
+  // the line number can be calculated by counting the number of line breaks prior to the identifier.
+  unsigned int loc = std::count(contract_contents.begin(),
+      (contract_contents.begin()+byte_position), '\n');
+  return loc;
 }
 
 void solidity_convertert::get_location_from_decl(
   const nlohmann::json &ast_node,
   locationt &location)
 {
-  // The src manager of Solidity AST JSON is too encryptic.
-  // For the time being we are setting it to "1".
-  location.set_line(1);
+  location.set_line(get_line_number(ast_node));
   location.set_file(
     absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
 
@@ -1537,7 +1545,7 @@ void solidity_convertert::get_start_location_from_stmt(locationt &location)
 
   // The src manager of Solidity AST JSON is too encryptic.
   // For the time being we are setting it to "1".
-  location.set_line(1);
+  location.set_line(101);
   location.set_file(
     absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
 
