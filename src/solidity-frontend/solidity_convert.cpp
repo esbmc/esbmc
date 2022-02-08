@@ -464,7 +464,7 @@ bool solidity_convertert::get_block(
 {
   // For rule block
   locationt location;
-  get_start_location_from_stmt(location);
+  get_start_location_from_stmt(block, location);
 
   SolidityGrammar::BlockT type = SolidityGrammar::get_block_t(block);
   msg.debug(fmt::format(
@@ -494,11 +494,8 @@ bool solidity_convertert::get_block(
     }
     msg.debug(fmt::format(" \t@@@ CompoundStmt has {} statements", ctr));
 
-    // TODO: Figure out the source location manager of Solidity AST JSON
-    // It's too cryptic. Currently we are using get_start_location_from_stmt.
-    // However, it should be get_final_location_from_stmt.
     locationt location_end;
-    get_start_location_from_stmt(location_end);
+    get_final_location_from_stmt(block, location_end);
 
     _block.end_location(location_end);
 
@@ -705,7 +702,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
   // For rule expression
   // We need to do location settings to match clang C's number of times to set the locations when recurring
   locationt location;
-  get_start_location_from_stmt(location);
+  get_start_location_from_stmt(expr, location);
 
   SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
   msg.debug(fmt::format(
@@ -1502,13 +1499,49 @@ void solidity_convertert::get_function_definition_name(
   id = name;
 }
 
+unsigned int solidity_convertert::add_offset(const std::string& src, unsigned int start_position)
+{
+  // extract the length from "start:length:index"
+  std::string offset = src.substr(1, src.find(":"));
+  // already added 1 in start_position
+  unsigned int end_position = start_position + std::stoul(offset);
+  return end_position;
+}
+
+std::string solidity_convertert::get_src_from_json(const nlohmann::json &ast_node)
+{
+  // some nodes may have "src" inside a member json object
+  // we need to deal with them case by case based on the node type
+  SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(ast_node);
+  switch(type)
+  {
+    case SolidityGrammar::ExpressionT::ImplicitCastExprClass:
+    {
+      assert(ast_node.contains("subExpr"));
+      assert(ast_node["subExpr"].contains("src"));
+      return ast_node["subExpr"]["src"].get<std::string>();
+      break;
+    }
+    default:
+    {
+      assert(!"Unsupported node type when getting src from JSON");
+      return "";
+    }
+  }
+}
+
 unsigned int solidity_convertert::get_line_number(
-  const nlohmann::json &ast_node)
+  const nlohmann::json &ast_node, bool final_position)
 {
   // Solidity src means "start:length:index", where "start" represents the position of the first char byte of the identifier.
-  std::string src = ast_node["src"].get<std::string>();
+  std::string src = ast_node.contains("src") ?
+    ast_node["src"].get<std::string>() : get_src_from_json(ast_node);
+
   std::string position = src.substr(0, src.find(":"));
   unsigned int byte_position = std::stoul(position) + 1;
+
+  if (final_position)
+    byte_position = add_offset(src, byte_position);
 
   // the line number can be calculated by counting the number of line breaks prior to the identifier.
   unsigned int loc = std::count(contract_contents.begin(),
@@ -1536,7 +1569,8 @@ void solidity_convertert::get_location_from_decl(
   }
 }
 
-void solidity_convertert::get_start_location_from_stmt(locationt &location)
+void solidity_convertert::get_start_location_from_stmt(
+    const nlohmann::json &ast_node,locationt &location)
 {
   std::string function_name;
 
@@ -1545,7 +1579,25 @@ void solidity_convertert::get_start_location_from_stmt(locationt &location)
 
   // The src manager of Solidity AST JSON is too encryptic.
   // For the time being we are setting it to "1".
-  location.set_line(101);
+  location.set_line(get_line_number(ast_node));
+  location.set_file(
+    absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+
+  if(!function_name.empty())
+    location.set_function(function_name);
+}
+
+void solidity_convertert::get_final_location_from_stmt(
+    const nlohmann::json &ast_node,locationt &location)
+{
+  std::string function_name;
+
+  if(current_functionDecl)
+    function_name = current_functionName;
+
+  // The src manager of Solidity AST JSON is too encryptic.
+  // For the time being we are setting it to "1".
+  location.set_line(get_line_number(ast_node, true));
   location.set_file(
     absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
 

@@ -1,4 +1,4 @@
 CORE
 MyContract_underflow_UnaryOp.solast
---function func_underflow
+--function func_underflow --contract MyContract_underflow_UnaryOp.sol
 ^VERIFICATION FAILED$

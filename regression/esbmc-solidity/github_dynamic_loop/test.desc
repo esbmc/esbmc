@@ -1,4 +1,4 @@
 CORE
 dynamic_array_oob_loop.solast
---function dyn_array_oob_loop --incremental-bmc
+--function dyn_array_oob_loop --incremental-bmc --contract dynamic_array_oob_loop.sol
 ^VERIFICATION FAILED$

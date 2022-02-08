@@ -1,4 +1,4 @@
 CORE
 MyContract_satisfiability_2.solast
---function func_sat
+--function func_sat --contract MyContract_satisfiability_2.sol
 ^VERIFICATION FAILED$
