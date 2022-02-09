@@ -10,11 +10,73 @@
 #include <ibex/ibex_Interval.h>
 #include "ibex.h"
 
+#define MAX_VAR 10
+
 using namespace ibex;
 
 void goto_contractor(
   goto_functionst &goto_functions,
   const messaget &message_handler);
+
+class MyMap
+{
+public:
+  IntervalVector intervals;
+  std::string var_name[MAX_VAR];
+  MyMap()
+  {
+    intervals.resize(MAX_VAR);
+  }
+  int add_var(std::string name)
+  {
+    if(find(name) == -1 && n < MAX_VAR)
+    {
+      var_name[n] = name;
+      n++;
+      return n - 1;
+    }
+    return -1;
+  }
+  void add_interval(double lb, double ub, int index)
+  {
+    interval *p;
+    intervals[index] = Interval(lb, ub);
+  }
+  void update_lb_interval(double lb, int index)
+  {
+    add_interval(lb, intervals[index].ub(), index);
+  }
+  void update_ub_interval(double ub, int index)
+  {
+    add_interval(intervals[index].lb(), ub, index);
+  }
+  int find(std::string name)
+  {
+    for(int i = 0; i < n; i++)
+      if(var_name[i] == name)
+        return i;
+
+    return -1;
+  }
+  void dump()
+  {
+    std::cout << "size = " << n << std::endl;
+    std::cout << "[";
+    for(int i = 0; i < n; i++)
+      std::cout << var_name[i] << ":" << intervals[i] << " ";
+    std::cout << "]" << std::endl;
+  }
+  int size()
+  {
+    return n;
+  }
+
+private:
+  int n = 0;
+  //Variable *x[10];
+  Variable *x;
+
+};
 
 class goto_contractort : public goto_k_inductiont
 {
@@ -33,34 +95,44 @@ public:
   {
     if(function_loops.size())
     {
+      map = new MyMap();
+      vars = new Variable(MAX_VAR);
       //TODO: find properties -- goto_function
+      get_constraints(_goto_functions);
       //TODO: find intervals -- frama-c
-      get_intervals(_goto_functions);
       //TODO: convert from ESBMC to ibex format
-
+      get_intervals(_goto_functions);
       //TODO: find goto-program - done
       //TODO: add IBex library - done
       //TODO: contract - done
-      //auto new_intervals = contractor(n_vars, vars, domains, constraint);
+      auto new_intervals = contractor();
       //TODO: reflect results on goto-program by inserting assume.
-      insert_assume(_goto_functions);
+      insert_assume(_goto_functions, new_intervals);
     }
   }
 
 private:
-  int n_vars;
-  std::string **vars;
   IntervalVector domains;
-  std::string *constraint;
+  Variable *vars;
+  Ctc *ctc;
+  MyMap *map;
+  NumConstraint *constraint;
 
   //void goto_k_induction();
+  void get_constraints(goto_functionst functionst);
   void get_intervals(goto_functionst functionst);
-  IntervalVector contractor(
-    int n_vars,
-    string **vars,
-    IntervalVector domains,
-    string *constraint);
-  void insert_assume(goto_functionst goto_functions);
+
+  IntervalVector contractor();
+
+  void insert_assume(goto_functionst goto_functions, IntervalVector vector);
+  std::string get_constraints_from_expr2t(irep_container<expr2t>);
+
+  Ctc *create_contractors_from_expr2t(irep_container<expr2t>);
+  NumConstraint *create_constraint_from_expr2t(irep_container<expr2t>);
+  Function *create_function_from_expr2t(irep_container<expr2t>);
+  int create_variable_from_expr2t(irep_container<expr2t>);
+
+  void parse_intervals(irep_container<expr2t> expr);
 };
 
 #endif //ESBMC_GOTO_CONTRACTOR_H
