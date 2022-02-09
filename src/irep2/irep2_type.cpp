@@ -160,18 +160,6 @@ unsigned int array_type2t::get_width() const
   return num_elems * sub_width;
 }
 
-bool array_type2t::fam() const
-{
-  try
-  {
-    return get_width() == 0;
-  }
-  catch(...)
-  {
-    return true;
-  }
-}
-
 unsigned int pointer_type2t::get_width() const
 {
   return config.ansi_c.pointer_width;
