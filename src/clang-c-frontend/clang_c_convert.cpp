@@ -2796,8 +2796,8 @@ void clang_c_convertert::get_decl_name(
       // Anonymous fields, generate a name based on the type
       const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(nd);
       name = "anon";
-      id = getFullyQualifiedName(fd.getType(), *ASTContext) + 
-        "$" + std::to_string(fd.getFieldIndex());
+      id = getFullyQualifiedName(fd.getType(), *ASTContext) + "$" +
+           std::to_string(fd.getFieldIndex());
     }
     return;
 
@@ -2808,8 +2808,8 @@ void clang_c_convertert::get_decl_name(
       const clang::IndirectFieldDecl &fd =
         static_cast<const clang::IndirectFieldDecl &>(nd);
       name = "anon";
-      id = getFullyQualifiedName(fd.getType(), *ASTContext) + 
-        "$" + std::to_string(fd.getAnonField()->getFieldIndex());
+      id = getFullyQualifiedName(fd.getType(), *ASTContext) + "$" +
+           std::to_string(fd.getAnonField()->getFieldIndex());
       return;
     }
     break;

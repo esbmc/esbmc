@@ -74,25 +74,42 @@ static inline expr2tc get_base_dereference(const expr2tc &e)
 
 static inline expr2tc replace_dyn_offset_with_zero(const expr2tc &e)
 {
-  // Here we try to extract the constant part of a dynamic offset
-  // comprised by constants, dynamic pointer offset symbol and some arithmetic
-  // operations by replacing all symbolic offsets with 0.
-  // This method is necessary for computing the correct number
-  // of bytes for extraction of bitfields as they can be not aligned to a byte.
+  // Knowing the offset value is important when we try to
+  // extract a value that is not aligned to a byte (e.g., suppose we have
+  // a struct {unsigned field1 : 7; unsigned field2 : 10}, and to correctly
+  // extract field2 we need to extract 3 bytes as field2 spans over 3 bytes
+  // of the struct). Otherwise, the total number of bytes is completely
+  // defined by its type size (i.e., type_byte_size_bits). If we are dealing
+  // with a dynamic offset, we can make some reasonable assumptions.
+  // Since the symbolic part of the dynamic_offset cannot encode an address
+  // of a bit-field, we can safely assume that it is always aligned to a byte,
+  // and we can replace the symbolic part with 0, thus obtaining the constant
+  // offset to the field within the inner-most struct.
+  // And this is all that's required to correctly calculate the number of bytes
+  // occupied by a bit-field member.
+
   if(is_add2t(e))
-    return add2tc(e->type, replace_dyn_offset_with_zero(to_add2t(e).side_1),
+    return add2tc(
+      e->type,
+      replace_dyn_offset_with_zero(to_add2t(e).side_1),
       replace_dyn_offset_with_zero(to_add2t(e).side_2));
 
   if(is_sub2t(e))
-    return sub2tc(e->type, replace_dyn_offset_with_zero(to_sub2t(e).side_1),
+    return sub2tc(
+      e->type,
+      replace_dyn_offset_with_zero(to_sub2t(e).side_1),
       replace_dyn_offset_with_zero(to_sub2t(e).side_2));
 
   if(is_mul2t(e))
-    return mul2tc(e->type, replace_dyn_offset_with_zero(to_mul2t(e).side_1),
+    return mul2tc(
+      e->type,
+      replace_dyn_offset_with_zero(to_mul2t(e).side_1),
       replace_dyn_offset_with_zero(to_mul2t(e).side_2));
 
   if(is_div2t(e))
-    return div2tc(e->type, replace_dyn_offset_with_zero(to_div2t(e).side_1),
+    return div2tc(
+      e->type,
+      replace_dyn_offset_with_zero(to_div2t(e).side_1),
       replace_dyn_offset_with_zero(to_div2t(e).side_2));
 
   if(is_pointer_offset2t(e))
@@ -1063,8 +1080,12 @@ void dereferencet::construct_from_array(
     // Might read from more than one element, legitimately. Requires stitching.
     // Alignment assertion / guarantee ensures we don't do something silly.
     // This will construct from whatever the subtype is...
+    // Make sure that we extract a correct number of bytes
+    // if the offset is dynamic
+    expr2tc replaced_dyn_offset = replace_dyn_offset_with_zero(offset);
+    simplify(replaced_dyn_offset);
     unsigned int num_bytes = compute_num_bytes_to_extract(
-      offset, type_byte_size_bits(type).to_uint64());
+      replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
 
     // Converting offset to bytes for byte extracting
     expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
@@ -1386,8 +1407,8 @@ void dereferencet::construct_from_dyn_offset(
 
   expr2tc replaced_dyn_offset = replace_dyn_offset_with_zero(offset);
   simplify(replaced_dyn_offset);
-  unsigned int num_bytes =
-    compute_num_bytes_to_extract(replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
+  unsigned int num_bytes = compute_num_bytes_to_extract(
+    replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
   // Converting offset to bytes before bytes extraction
   expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
   simplify(offset_bytes);
@@ -1868,8 +1889,13 @@ expr2tc *dereferencet::extract_bytes_from_scalar(
     index2tc new_index = to_index2t(object);
     new_object = new_index->source_value;
     // Adjust the offset taking into account the array subtype
-    accuml_offs = add2tc(accuml_offs->type, accuml_offs,
-      mul2tc(new_index->index->type, new_index->index, gen_ulong(new_index->type->get_width() / 8)));
+    accuml_offs = add2tc(
+      accuml_offs->type,
+      accuml_offs,
+      mul2tc(
+        new_index->index->type,
+        new_index->index,
+        gen_ulong(new_index->type->get_width() / 8)));
     simplify(accuml_offs);
   }
 
