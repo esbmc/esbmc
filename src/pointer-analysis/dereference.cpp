@@ -1348,9 +1348,14 @@ void dereferencet::construct_from_dyn_struct_offset(
     expr2tc new_offset = sub2tc(offset->type, offset, field_offset);
     simplify(new_offset);
     // This breaks FAM
-    if(is_array_type(it) && to_array_type(it).fam())
+    if(
+      is_array_type(it) &&
+      (to_array_type(it).array_size->expr_id != expr2t::constant_int_id ||
+       !to_array_type(it).get_width()))
     {
-      msg.warning("Dynamic index for FAM member detected. Upper bound will not be verified...");
+      msg.warning(
+        "Dynamic index for FAM member detected. Upper bound will not be "
+        "verified...");
       field_guard = lower_bound;
     }
 
@@ -2272,10 +2277,10 @@ void dereferencet::check_data_obj_access(
   // Check for FAM struct
   if(is_struct_type(value->type))
   {
-     auto &v = to_struct_type(value->type);
-      auto last = v.members.back();
-      if (is_array_type(last) && to_array_type(last).fam())
-        return;
+    auto &v = to_struct_type(value->type);
+    auto last = v.members.back();
+    if(is_array_type(last) && !to_array_type(last).get_width())
+      return;
   }
 
   expr2tc offset = typecast2tc(pointer_type2(), src_offset);

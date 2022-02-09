@@ -350,7 +350,7 @@ void goto_checkt::bounds_check(
   // or of FAMs
   if(
     is_array_type(t) &&
-    (to_array_type(t).size_is_infinite || to_array_type(t).fam()))
+    (to_array_type(t).size_is_infinite || !to_array_type(t).get_width()))
     return;
 
   const expr2tc &array_size =
