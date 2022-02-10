@@ -66,6 +66,7 @@ static const char *expr_names[] = {
   "same_object",
   "pointer_offset",
   "pointer_object",
+  "pointer_capability",
   "address_of",
   "byte_extract",
   "byte_update",
