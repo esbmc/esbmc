@@ -204,7 +204,7 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
     os = "freebsd";
     if(ansi_c.cheri == ansi_ct::CHERI_PURECAP)
     {
-      if(flavor != "purecap")
+      if(!flavor.empty() && flavor != "purecap")
         msg.warning(
           "overriding flavor '" + flavor + "' by 'purecap' due to --cheri");
       flavor = "purecap";
