@@ -499,6 +499,26 @@ public:
     const expr2tc &v2)
     : arith_ops(t, id), side_1(v1), side_2(v2)
   {
+#ifndef NDEBUG
+    bool p1 = is_pointer_type(v1);
+    bool p2 = is_pointer_type(v2);
+    auto is_bv_type = [](const type2tc &t)
+    {
+      return t->type_id == type2t::unsignedbv_id ||
+             t->type_id == type2t::signedbv_id;
+    };
+    if(p1 && p2)
+    {
+      assert(id == expr2t::sub_id);
+      assert(is_bv_type(t));
+      assert(t->get_width() == config.ansi_c.address_width);
+    }
+    else
+    {
+      assert(p2 || (is_bv_type(t) == is_bv_type(v1->type) && t->get_width() == v1->type->get_width()));
+      assert(p1 || (is_bv_type(t) == is_bv_type(v2->type) && t->get_width() == v2->type->get_width()));
+    }
+#endif
   }
   arith_2ops(const arith_2ops &ref) = default;
 
