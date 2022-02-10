@@ -464,10 +464,12 @@ int __ESBMC_sync_fetch_and_add(int*, int);
   })
     )";
 
-  if (config.ansi_c.cheri)
+  if(config.ansi_c.cheri)
   {
-    intrinsics += "__SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability);";
-    intrinsics += "void *__capability __esbmc_cheri_bounds_set(void *__capability, __SIZE_TYPE__);";
+    intrinsics += R"(
+__SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability);
+void *__capability __esbmc_cheri_bounds_set(void *__capability, __SIZE_TYPE__);
+    )";
   }
 
   return intrinsics;
