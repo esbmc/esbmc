@@ -1507,8 +1507,8 @@ irep_typedefs(ieee_div, ieee_arith_2ops);
 irep_typedefs(ieee_fma, ieee_arith_3ops);
 irep_typedefs(ieee_sqrt, ieee_arith_1op);
 irep_typedefs(modulus, arith_2ops);
-irep_typedefs(shl, arith_2ops);
-irep_typedefs(ashr, arith_2ops);
+irep_typedefs(shl, bit_2ops);
+irep_typedefs(ashr, bit_2ops);
 irep_typedefs(same_object, same_object_data);
 irep_typedefs(pointer_offset, pointer_ops);
 irep_typedefs(pointer_object, pointer_ops);
@@ -2598,8 +2598,8 @@ public:
 };
 
 /** Shift left operation. Shifts contents of first operand left by number of
- *  bit positions indicated by the second operand. Both must be integers. Types
- *  of both operands and expr type should match. @extends arith_2ops */
+ *  bit positions indicated by the second operand. Both must be integers.
+ * @extends bit_2ops */
 class shl2t : public shl_expr_methods
 {
 public:
