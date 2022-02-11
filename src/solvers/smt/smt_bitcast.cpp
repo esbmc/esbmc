@@ -65,8 +65,9 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
       is_constant_int2t(arraytype.array_size) &&
       "Can't flatten array with unbounded size");
 
+    auto array_for_ref = arraytype.array_size;
     // Iterate over each element and flatten them
-    const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
+    const constant_int2t &intref = to_constant_int2t(array_for_ref);
     assert(intref.value > 0);
 
     size_t sz = intref.value.to_uint64();
