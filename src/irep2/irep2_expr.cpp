@@ -374,8 +374,7 @@ void with2t::assert_consistency() const
   {
     assert(is_bv_type(update_field->type));
     assert_type_compat_for_with(
-      to_array_type(source_value->type).subtype,
-      update_value->type);
+      to_array_type(source_value->type).subtype, update_value->type);
   }
   else
   {

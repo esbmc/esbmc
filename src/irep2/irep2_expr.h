@@ -502,8 +502,7 @@ public:
 #ifndef NDEBUG
     bool p1 = is_pointer_type(v1);
     bool p2 = is_pointer_type(v2);
-    auto is_bv_type = [](const type2tc &t)
-    {
+    auto is_bv_type = [](const type2tc &t) {
       return t->type_id == type2t::unsignedbv_id ||
              t->type_id == type2t::signedbv_id;
     };
@@ -515,8 +514,12 @@ public:
     }
     else
     {
-      assert(p2 || (is_bv_type(t) == is_bv_type(v1->type) && t->get_width() == v1->type->get_width()));
-      assert(p1 || (is_bv_type(t) == is_bv_type(v2->type) && t->get_width() == v2->type->get_width()));
+      assert(
+        p2 || (is_bv_type(t) == is_bv_type(v1->type) &&
+               t->get_width() == v1->type->get_width()));
+      assert(
+        p1 || (is_bv_type(t) == is_bv_type(v2->type) &&
+               t->get_width() == v2->type->get_width()));
     }
 #endif
   }
@@ -2815,6 +2818,7 @@ public:
 class with2t : public with_expr_methods
 {
   void assert_consistency() const;
+
 public:
   /** Primary constructor.
    *  @param type Type of this expression; Same as source.
