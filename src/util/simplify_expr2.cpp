@@ -424,15 +424,15 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
   }
   if(u1 && w1 > w2)
   {
-    f = typecast2tc(a, f);   // u1 != u2 && u1 && w1 > w2
+    f = typecast2tc(a, f); // u1 != u2 && u1 && w1 > w2
     return a;
   }
   if(u2 && w1 < w2)
   {
-    e = typecast2tc(b, e);   // u1 != u2 && !u1 && w1 < w2
+    e = typecast2tc(b, e); // u1 != u2 && !u1 && w1 < w2
     return b;
   }
-                             // u1 != u2 && w1 != w2 && (!u1 || w1 <= w2) && (!u2 || w1 >= w2)
+  // u1 != u2 && w1 != w2 && (!u1 || w1 <= w2) && (!u2 || w1 >= w2)
   type2tc t = get_uint_type(std::max(w1, w2));
   e = typecast2tc(t, e);
   f = typecast2tc(t, f);
