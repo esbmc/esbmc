@@ -378,8 +378,10 @@ struct Addtor
   }
 };
 
-static type2tc common_arith_op2_type(const type2tc &a, const type2tc &b)
+static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
 {
+  const type2tc &a = e->type;
+  const type2tc &b = f->type;
   bool p1 = is_pointer_type(a);
   bool p2 = is_pointer_type(b);
   if(p1 && p2)
@@ -388,12 +390,67 @@ static type2tc common_arith_op2_type(const type2tc &a, const type2tc &b)
     return a;
   if(p2)
     return b;
-  assert(a->get_width() == b->get_width());
-  if(a->type_id == type2t::unsignedbv_id)
+  unsigned w1 = a->get_width();
+  unsigned w2 = b->get_width();
+  bool u1 = a->type_id == type2t::unsignedbv_id;
+  bool u2 = b->type_id == type2t::unsignedbv_id;
+  if(u1 == u2)
+  {
+    if(w1 > w2)
+    {
+      f = typecast2tc(a, f); // u1 == u2 && w1 > w2
+      return a;
+    }
+    else if(w1 < w2)
+    {
+      e = typecast2tc(b, e); // u1 == u2 && w1 < w2
+      return b;
+    }
+    else
+      return a;
+  }
+  if(w1 == w2)
+  {
+    if(u1)
+    {
+      f = typecast2tc(a, f); // u1 != u2 && u1 && w1 == w2
+      return a;
+    }
+    else
+    {
+      e = typecast2tc(b, e); // u1 != u2 && !u1 && w1 == w22
+      return b;
+    }
+  }
+  if(u1 && w1 > w2)
+  {
+    f = typecast2tc(a, f);   // u1 != u2 && u1 && w1 > w2
     return a;
-  if(b->type_id == type2t::unsignedbv_id)
+  }
+  if(u2 && w1 < w2)
+  {
+    e = typecast2tc(b, e);   // u1 != u2 && !u1 && w1 < w2
     return b;
-  return a;
+  }
+                             // u1 != u2 && w1 != w2 && (!u1 || w1 <= w2) && (!u2 || w1 >= w2)
+  type2tc t = get_uint_type(std::max(w1, w2));
+  e = typecast2tc(t, e);
+  f = typecast2tc(t, f);
+  return t;
+#if 0
+  type2tc t = w1 == w2             ? u1 ? a : b
+              : w1 > w2 &&u1 != u2 ? a
+              : w1 < w2 &&u2 != u1 ? b
+              : u1                 ? get_uint_type(std::max(w1, w2))
+                                   : get_int_type(std::max(w1, w2));
+  if(w1 < w2)
+    e = typecast2tc(
+  if(u1 && w1 >= w2)
+    return a;
+  if(u2 && w2 >= w1)
+    return b;
+  return u1 || u2 ? get_uint_type(std::max(w1, w2)) : w1 >= w2 ? a : b;
+#endif
 }
 
 expr2tc add2t::do_simplify() const
@@ -405,7 +462,9 @@ expr2tc add2t::do_simplify() const
   // Attempt associative simplification
   std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
     [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
-    return add2tc(common_arith_op2_type(arg1->type, arg2->type), arg1, arg2);
+    expr2tc a = arg1, b = arg2;
+    type2tc t = common_arith_op2_type(a, b);
+    return add2tc(t, a, b);
   };
 
   return attempt_associative_simplify(*this, add_wrapper);
