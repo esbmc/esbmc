@@ -11,6 +11,7 @@ import re
 import xml.etree.ElementTree as ET
 import time
 import shlex
+from datetime import datetime
 #####################
 # Testing Tool
 #####################
@@ -33,6 +34,16 @@ import shlex
 # ALL -> Run all tests
 SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
 FAIL_MODES = ["KNOWNBUG"]
+
+# ESBMC output logs
+# If the user wants to keep the logs, please add "--retain-logs" argument.
+# The logs will be kept in the director named as "20220211_073815_<test_name>".
+NOW = datetime.now().strftime("%Y%m%d_%H%M%S")
+LOG_DIR=""
+LOG_RETENTION = False
+
+# Use old C and C++ frontend
+OLD_FRONTEND = False
 
 class BaseTest:
     """This class is responsible to:
@@ -58,6 +69,9 @@ class BaseTest:
             as a KNOWNBUG and (if supported) add the issue
             to it"""
         raise NotImplementedError
+
+    def append_test_arg(self, arg: str):
+        self.test_args += arg
 
     def __str__(self):
         return f'[{self.name}]: {self.test_dir}, {self.test_mode}'
@@ -246,6 +260,11 @@ def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
 
     def test(self):
+        # old frontend
+        if OLD_FRONTEND:
+            test_case.append_test_arg(" --old-frontend")
+
+        # run test and collect output
         stdout, stderr = executor.run(test_case)
         if stdout == None:
             timeout_message ="\nTIMEOUT TEST: " + str(test_case.test_dir)
@@ -256,6 +275,17 @@ def _add_test(test_case, executor):
             str(test_case.test_regex) + "\n\nPROGRAM OUTPUT\n"
         error_message = output_to_validate + "\n\nARGUMENTS: " + \
             str(test_case.generate_run_argument_list(*executor.tool))
+
+        if LOG_RETENTION:
+            print("Creating test case log {fname} in {dirname}... ".format(fname=test_case.name, dirname=LOG_DIR))
+            dir_path = os.path.dirname(os.path.realpath(__file__))
+            destination = dir_path + '/' + LOG_DIR +'/' + test_case.name
+            print(destination)
+            f=open(destination, 'a')
+            f.write("ESBMC args: " + test_case.test_args + '\n\n')
+            f.write(output_to_validate)
+            f.close()
+            print("=========================")
 
         matches_regex = True
         for regex in test_case.test_regex:
@@ -313,6 +343,10 @@ def _arg_parsing():
                         help="Path for the Standard C++ Libraries abstractions")
     parser.add_argument("--mark_knownbug_with_word", required=False,
                         help="If test fails with word then mark it as a knownbug")
+    parser.add_argument("--retain-logs", default=False, action="store_true", required=False,
+            help="Keep ESBMC logs for further analysis. The logs will be stored in {dirname}".format(dirname=NOW))
+    parser.add_argument("--old-frontend", default=False, action="store_true", required=False,
+            help="Use ansi-c and cpp old frontend")
 
     main_args = parser.parse_args()
     if main_args.timeout:
@@ -322,6 +356,19 @@ def _arg_parsing():
 
     regression_path = os.path.join(os.path.dirname(os.path.relpath(__file__)),
                                    main_args.regression)
+
+    # create a directory for log retention
+    if main_args.retain_logs:
+        global LOG_DIR
+        LOG_DIR = (NOW + "_" + regression_path).replace("/", "_")
+        os.mkdir(LOG_DIR)
+        global LOG_RETENTION
+        LOG_RETENTION = True
+
+    # use old frontend
+    if main_args.old_frontend:
+        global OLD_FRONTEND
+        OLD_FRONTEND = True
 
     if main_args.file:
         gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
