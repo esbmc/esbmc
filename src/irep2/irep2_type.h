@@ -493,7 +493,7 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Empty type. For void pointers and the like, with no type. No extra data */
+/** Type of functions. @extends code_data */
 class code_type2t : public code_type_methods
 {
 public:
