@@ -39,11 +39,14 @@ FAIL_MODES = ["KNOWNBUG"]
 # If the user wants to keep the logs, please add "--retain-logs" argument.
 # The logs will be kept in the director named as "20220211_073815_<test_name>".
 NOW = datetime.now().strftime("%Y%m%d_%H%M%S")
-LOG_DIR=""
+LOG_DIR = ""
 LOG_RETENTION = False
 
 # Use old C and C++ frontend
 OLD_FRONTEND = False
+
+# user defined operation mode directory
+OP_MODE_DIR = ""
 
 class BaseTest:
     """This class is responsible to:
@@ -264,6 +267,10 @@ def _add_test(test_case, executor):
         if OLD_FRONTEND:
             test_case.append_test_arg(" --old-frontend")
 
+        # user defined operation mode directory
+        if OP_MODE_DIR:
+            test_case.append_test_arg(" {}".format(OP_MODE_DIR))
+
         # run test and collect output
         stdout, stderr = executor.run(test_case)
         if stdout == None:
@@ -277,15 +284,12 @@ def _add_test(test_case, executor):
             str(test_case.generate_run_argument_list(*executor.tool))
 
         if LOG_RETENTION:
-            print("Creating test case log {fname} in {dirname}... ".format(fname=test_case.name, dirname=LOG_DIR))
             dir_path = os.path.dirname(os.path.realpath(__file__))
             destination = dir_path + '/' + LOG_DIR +'/' + test_case.name
-            print(destination)
             f=open(destination, 'a')
             f.write("ESBMC args: " + test_case.test_args + '\n\n')
             f.write(output_to_validate)
             f.close()
-            print("=========================")
 
         matches_regex = True
         for regex in test_case.test_regex:
@@ -347,6 +351,7 @@ def _arg_parsing():
             help="Keep ESBMC logs for further analysis. The logs will be stored in {dirname}".format(dirname=NOW))
     parser.add_argument("--old-frontend", default=False, action="store_true", required=False,
             help="Use ansi-c and cpp old frontend")
+    parser.add_argument("--opmodedir", required=False, help="operation mode directory")
 
     main_args = parser.parse_args()
     if main_args.timeout:
@@ -364,6 +369,12 @@ def _arg_parsing():
         os.mkdir(LOG_DIR)
         global LOG_RETENTION
         LOG_RETENTION = True
+
+    # user defined operation mode directory
+    if main_args.opmodedir:
+        global OP_MODE_DIR
+        args = vars(main_args)
+        OP_MODE_DIR = args['opmodedir']
 
     # use old frontend
     if main_args.old_frontend:
