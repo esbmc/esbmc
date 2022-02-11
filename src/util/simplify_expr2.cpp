@@ -378,6 +378,24 @@ struct Addtor
   }
 };
 
+static type2tc common_arith_op2_type(const type2tc &a, const type2tc &b)
+{
+  bool p1 = is_pointer_type(a);
+  bool p2 = is_pointer_type(b);
+  if(p1 && p2)
+    return get_int_type(config.ansi_c.pointer_width);
+  if(p1)
+    return a;
+  if(p2)
+    return b;
+  assert(a->get_width() == b->get_width());
+  if(a->type_id == type2t::unsignedbv_id)
+    return a;
+  if(b->type_id == type2t::unsignedbv_id)
+    return b;
+  return a;
+}
+
 expr2tc add2t::do_simplify() const
 {
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
@@ -387,7 +405,7 @@ expr2tc add2t::do_simplify() const
   // Attempt associative simplification
   std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
     [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
-    return add2tc(this->type, arg1, arg2);
+    return add2tc(common_arith_op2_type(arg1->type, arg2->type), arg1, arg2);
   };
 
   return attempt_associative_simplify(*this, add_wrapper);
