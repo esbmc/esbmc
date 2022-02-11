@@ -22,6 +22,7 @@ public:
   goto_checkt(const namespacet &_ns, optionst &_options, const messaget &msg)
     : ns(_ns),
       options(_options),
+      msg(msg),
       new_code(msg),
       disable_bounds_check(options.get_bool_option("no-bounds-check")),
       disable_pointer_check(options.get_bool_option("no-pointer-check")),
@@ -39,6 +40,7 @@ public:
 protected:
   const namespacet &ns;
   optionst &options;
+  const messaget &msg;
 
   void check(const expr2tc &expr, const locationt &location);
 
@@ -335,6 +337,7 @@ void goto_checkt::bounds_check(
 
   std::string name =
     "array bounds violated: " + array_name(ns, ind.source_value);
+
   const expr2tc &the_index = ind.index;
 
   // Lower bound access should be greather than zero
@@ -348,10 +351,32 @@ void goto_checkt::bounds_check(
 
   // We can't check the upper bound of an infinite sized array
   // or of FAMs
+  // TODO: Rewrite this in a proper way
   if(
     is_array_type(t) &&
     (to_array_type(t).size_is_infinite || !to_array_type(t).get_width()))
-    return;
+  {
+    // Is it a FAM?
+    if(is_member2t(ind.source_value))
+    {
+      auto member = to_member2t(ind.source_value);
+      if(is_symbol2t(member.source_value))
+      {
+        // Lookup for FAM
+        auto fam = ns.lookup(to_symbol2t(member.source_value).thename);
+
+        // If it is a dereference, lets check it later!
+        if(fam.value.is_dereference())
+          return;
+
+        // We can add the bound check then!
+      }
+      else
+        return;
+    }
+    else
+      return;
+  }
 
   const expr2tc &array_size =
     is_array_type(t)
