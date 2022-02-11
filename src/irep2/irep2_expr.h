@@ -511,7 +511,7 @@ public:
     {
       assert(id == expr2t::sub_id);
       assert(is_bv_type(t));
-      assert(t->get_width() == config.ansi_c.address_width);
+      assert(t->get_width() == config.ansi_c.pointer_width);
     }
     else
     {
