@@ -11,8 +11,6 @@
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
 
-#include <iostream> // @@ DEBUG: remove before commit
-
 class solidity_convertert
 {
 public:
@@ -25,8 +23,6 @@ public:
   virtual ~solidity_convertert() = default;
 
   bool convert();
-
-  void print_json(const nlohmann::json &json_in);
 
 protected:
   contextt &context;

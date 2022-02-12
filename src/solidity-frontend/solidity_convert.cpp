@@ -334,7 +334,6 @@ bool solidity_convertert::get_function_definition(
   std::string name, id;
   get_function_definition_name(ast_node, name, id);
 
-  // TODO: debug remove before commit
   if(name == "func_dynamic")
     printf("@@ found func_dynamic\n");
 
@@ -2030,13 +2029,4 @@ bool solidity_convertert::is_dyn_array(const nlohmann::json &json_in)
     }
   }
   return false;
-}
-
-// @@ DEBUG: remove before commit
-void solidity_convertert::print_json(const nlohmann::json &json_in)
-{
-  printf("### JSON: ###\n");
-  std::cout << std::setw(2) << json_in
-            << '\n'; // '2' means 2x indentations in front of each line
-  printf("\n");
 }
