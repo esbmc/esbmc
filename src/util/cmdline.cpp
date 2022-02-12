@@ -96,7 +96,8 @@ simple_shell_unescape(const char *s, const messaget &msg, const char *var)
         }
         break;
       case ESC:
-          abort();
+        msg.error("Arrived at an unreachable place");
+        abort();
       }
       arg.push_back(*s++);
     }
