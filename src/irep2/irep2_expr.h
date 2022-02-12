@@ -2855,6 +2855,15 @@ public:
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
     : member_expr_methods(type, member_id, source, memb)
   {
+#ifndef NDEBUG
+    assert(
+      source->type->type_id == type2t::struct_id ||
+      source->type->type_id == type2t::union_id);
+    auto *data = dynamic_cast<const struct_union_data *>(source->type.get());
+    assert(data);
+    /* internally asserts consistency conditions */
+    data->get_component_number(memb);
+#endif
   }
   member2t(const member2t &ref) = default;
 
