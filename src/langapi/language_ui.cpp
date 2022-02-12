@@ -83,7 +83,6 @@ bool language_uit::parse(const std::string &filename)
     }
     else
     {
-      //language.set_smart_contract_source(_cmdline.vm["contract"].as<std::string>());
       language.set_smart_contract_source(config.options.get_option("contract"));
     }
   }
