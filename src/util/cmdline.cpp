@@ -96,7 +96,7 @@ simple_shell_unescape(const char *s, const messaget &msg, const char *var)
         }
         break;
       case ESC:
-        __builtin_unreachable();
+          abort();
       }
       arg.push_back(*s++);
     }
