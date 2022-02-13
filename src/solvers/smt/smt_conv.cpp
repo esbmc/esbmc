@@ -78,10 +78,13 @@ smt_convt::smt_convt(
   /* TODO: pointer_object is actually identified by an 'unsigned int' number */
   members.push_back(ptraddr_type2()); /* CHERI-TODO */
   members.push_back(ptraddr_type2());
-  members.push_back(ptraddr_type2());
   names.emplace_back("pointer_object");
   names.emplace_back("pointer_offset");
-  names.emplace_back("pointer_cap_info");
+  if(config.ansi_c.cheri)
+  {
+    members.push_back(ptraddr_type2());
+    names.emplace_back("pointer_cap_info");
+  }
 
   pointer_struct = {members, names, names, "pointer_struct"};
 
@@ -682,6 +685,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::pointer_capability_id:
   {
+    assert(config.ansi_c.cheri);
     const pointer_capability2t &obj = to_pointer_capability2t(expr);
     // Potentially walk through some typecasts
     const expr2tc *ptr = &obj.ptr_obj;
