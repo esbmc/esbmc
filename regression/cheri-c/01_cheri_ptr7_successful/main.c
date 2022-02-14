@@ -1,5 +1,4 @@
 #include <assert.h>
-//#include <cheri/cheric.h>
 #include <cheri/cheric.h>
 
 char array[2];
