@@ -1,5 +1,5 @@
 //#include <cheri/cheric.h>
-#include "cheric.h"
+#include <cheri/cheric.h>
 
 int main(int argc, char *argv[])
 {
