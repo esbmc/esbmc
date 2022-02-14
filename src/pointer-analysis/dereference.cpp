@@ -1834,8 +1834,11 @@ expr2tc *dereferencet::extract_bytes_from_array(
     subtype = get_uint8_type(); //XXX signedness of chars
   }
 
+  // Calculating how many bytes are occupied by each array index
+  unsigned int bytes_per_index = subtype->get_width() / 8;
   expr2tc *exprs = new expr2tc[num_bytes];
-  expr2tc accuml_offs = offset;
+  // Calculating the array index based on the given byte offset
+  expr2tc accuml_offs = div2tc(offset->type, offset, gen_ulong(bytes_per_index));
   for(unsigned int i = 0; i < num_bytes; i++)
   {
     index2tc the_index = index2tc(subtype, array, accuml_offs);
@@ -1848,7 +1851,7 @@ expr2tc *dereferencet::extract_bytes_from_array(
     {
       const type2tc &bytetype = get_uint8_type();
       // Extracting bytes from the current index
-      for(unsigned int j = 0; j < subtype->get_width() / 8; j++)
+      for(unsigned int j = 0; j < bytes_per_index; j++)
       {
         exprs[i] =
           byte_extract2tc(bytetype, the_index, gen_ulong(j), is_big_endian);
@@ -1884,6 +1887,7 @@ expr2tc *dereferencet::extract_bytes_from_scalar(
   // the extraction process does not get stuck on the same index.
   expr2tc new_object = object;
   expr2tc accuml_offs = offset;
+
   if(is_index2t(object))
   {
     index2tc new_index = to_index2t(object);
