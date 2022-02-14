@@ -1838,7 +1838,8 @@ expr2tc *dereferencet::extract_bytes_from_array(
   unsigned int bytes_per_index = subtype->get_width() / 8;
   expr2tc *exprs = new expr2tc[num_bytes];
   // Calculating the array index based on the given byte offset
-  expr2tc accuml_offs = div2tc(offset->type, offset, gen_ulong(bytes_per_index));
+  expr2tc accuml_offs =
+    div2tc(offset->type, offset, gen_ulong(bytes_per_index));
   for(unsigned int i = 0; i < num_bytes; i++)
   {
     index2tc the_index = index2tc(subtype, array, accuml_offs);
