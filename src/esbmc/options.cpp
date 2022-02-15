@@ -46,6 +46,14 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-symex-value-sets",
      NULL,
      "show value-set analysis during symbolic execution"}}},
+#ifdef ENABLE_SOLIDITY_FRONTEND
+  {"Solidity frontend",
+   {
+     {"contract",
+      boost::program_options::value<std::string>()->value_name("path"),
+      "set smart contract source"},
+   }},
+#endif
   {"Frontend",
    {{"include,I",
      boost::program_options::value<std::vector<std::string>>()->value_name(

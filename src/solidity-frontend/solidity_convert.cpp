@@ -10,16 +10,19 @@
 #include <util/std_expr.h>
 #include <regex>
 #include <util/message/format.h>
+#include <fstream>
 
 solidity_convertert::solidity_convertert(
   contextt &_context,
   nlohmann::json &_ast_json,
   const std::string &_sol_func,
+  const std::string &_contract_path,
   const messaget &msg)
   : context(_context),
     ns(context),
     ast_json(_ast_json),
     sol_func(_sol_func),
+    contract_path(_contract_path),
     msg(msg),
     global_scope_id(0),
     current_scope_var_num(1),
@@ -27,6 +30,9 @@ solidity_convertert::solidity_convertert(
     current_forStmt(nullptr),
     current_functionName("")
 {
+  std::ifstream in(_contract_path);
+  contract_contents.assign(
+    (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
 bool solidity_convertert::convert()
@@ -192,8 +198,20 @@ bool solidity_convertert::get_var_decl(
   // to improve the re-usability of get_type* function, when dealing with non-array var decls.
   // For array, do NOT use ["typeName"]. Otherwise, it will cause problem
   // when populating typet in get_cast
-  if(get_type_description(ast_node["typeName"]["typeDescriptions"], t))
-    return true;
+  bool dyn_array = is_dyn_array(ast_node["typeDescriptions"]);
+  if(dyn_array)
+  {
+    // append size expr in typeDescription JSON object
+    const nlohmann::json &type_descriptor = add_dyn_array_size_expr(
+      ast_node["typeName"]["typeDescriptions"], ast_node);
+    if(get_type_description(type_descriptor, t))
+      return true;
+  }
+  else
+  {
+    if(get_type_description(ast_node["typeName"]["typeDescriptions"], t))
+      return true;
+  }
 
   // 2. populate id and name
   std::string name, id;
@@ -243,7 +261,8 @@ bool solidity_convertert::get_var_decl(
   // For state var decl, we look for "value".
   // For local var decl, we look for "initialValue"
   bool has_init =
-    ast_node.contains("value") || ast_node.contains("initialValue");
+    (ast_node.contains("value") || ast_node.contains("initialValue")) &&
+    !dyn_array;
   if(symbol.static_lifetime && !symbol.is_extern && !has_init)
   {
     symbol.value = gen_zero(t, true);
@@ -314,6 +333,9 @@ bool solidity_convertert::get_function_definition(
   // 7. Populate "std::string id, name"
   std::string name, id;
   get_function_definition_name(ast_node, name, id);
+
+  if(name == "func_dynamic")
+    printf("@@ found func_dynamic\n");
 
   // 8. populate "std::string debug_modulename"
   std::string debug_modulename =
@@ -442,7 +464,7 @@ bool solidity_convertert::get_block(
 {
   // For rule block
   locationt location;
-  get_start_location_from_stmt(location);
+  get_start_location_from_stmt(block, location);
 
   SolidityGrammar::BlockT type = SolidityGrammar::get_block_t(block);
   msg.debug(fmt::format(
@@ -472,11 +494,8 @@ bool solidity_convertert::get_block(
     }
     msg.debug(fmt::format(" \t@@@ CompoundStmt has {} statements", ctr));
 
-    // TODO: Figure out the source location manager of Solidity AST JSON
-    // It's too cryptic. Currently we are using get_start_location_from_stmt.
-    // However, it should be get_final_location_from_stmt.
     locationt location_end;
-    get_start_location_from_stmt(location_end);
+    get_final_location_from_stmt(block, location_end);
 
     _block.end_location(location_end);
 
@@ -683,7 +702,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
   // For rule expression
   // We need to do location settings to match clang C's number of times to set the locations when recurring
   locationt location;
-  get_start_location_from_stmt(location);
+  get_start_location_from_stmt(expr, location);
 
   SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
   msg.debug(fmt::format(
@@ -1233,6 +1252,34 @@ bool solidity_convertert::get_type_description(
 
     break;
   }
+  case SolidityGrammar::TypeNameT::DynArrayTypeName:
+  {
+    // Deal with dynamic array
+    exprt size_expr;
+    if(type_name.contains("sizeExpr"))
+    {
+      const nlohmann::json &rtn_expr = type_name["sizeExpr"];
+      // wrap it in an ImplicitCastExpr to convert LValue to RValue
+      nlohmann::json implicit_cast_expr =
+        make_implicit_cast_expr(rtn_expr, "LValueToRValue");
+      if(get_expr(implicit_cast_expr, size_expr))
+        return true;
+    }
+    else
+    {
+      new_type = empty_typet();
+    }
+
+    typet subtype;
+    nlohmann::json array_elementary_type =
+      make_array_elementary_type(type_name);
+    if(get_type_description(array_elementary_type, subtype))
+      return true;
+
+    new_type = array_typet(subtype, size_expr);
+
+    break;
+  }
   default:
   {
     msg.debug(fmt::format(
@@ -1447,21 +1494,75 @@ void solidity_convertert::get_function_definition_name(
 {
   // Follow the way in clang:
   //  - For function name, just use the ast_node["name"]
-  name =
-    ast_node["name"]
-      .get<
-        std::
-          string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
+  // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
+  name = ast_node["name"].get<std::string>();
   id = name;
+}
+
+unsigned int solidity_convertert::add_offset(
+  const std::string &src,
+  unsigned int start_position)
+{
+  // extract the length from "start:length:index"
+  std::string offset = src.substr(1, src.find(":"));
+  // already added 1 in start_position
+  unsigned int end_position = start_position + std::stoul(offset);
+  return end_position;
+}
+
+std::string
+solidity_convertert::get_src_from_json(const nlohmann::json &ast_node)
+{
+  // some nodes may have "src" inside a member json object
+  // we need to deal with them case by case based on the node type
+  SolidityGrammar::ExpressionT type =
+    SolidityGrammar::get_expression_t(ast_node);
+  switch(type)
+  {
+  case SolidityGrammar::ExpressionT::ImplicitCastExprClass:
+  {
+    assert(ast_node.contains("subExpr"));
+    assert(ast_node["subExpr"].contains("src"));
+    return ast_node["subExpr"]["src"].get<std::string>();
+    break;
+  }
+  default:
+  {
+    assert(!"Unsupported node type when getting src from JSON");
+    return "";
+  }
+  }
+}
+
+unsigned int solidity_convertert::get_line_number(
+  const nlohmann::json &ast_node,
+  bool final_position)
+{
+  // Solidity src means "start:length:index", where "start" represents the position of the first char byte of the identifier.
+  std::string src = ast_node.contains("src")
+                      ? ast_node["src"].get<std::string>()
+                      : get_src_from_json(ast_node);
+
+  std::string position = src.substr(0, src.find(":"));
+  unsigned int byte_position = std::stoul(position) + 1;
+
+  if(final_position)
+    byte_position = add_offset(src, byte_position);
+
+  // the line number can be calculated by counting the number of line breaks prior to the identifier.
+  unsigned int loc = std::count(
+                       contract_contents.begin(),
+                       (contract_contents.begin() + byte_position),
+                       '\n') +
+                     1;
+  return loc;
 }
 
 void solidity_convertert::get_location_from_decl(
   const nlohmann::json &ast_node,
   locationt &location)
 {
-  // The src manager of Solidity AST JSON is too encryptic.
-  // For the time being we are setting it to "1".
-  location.set_line(1);
+  location.set_line(get_line_number(ast_node));
   location.set_file(
     absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
 
@@ -1477,7 +1578,9 @@ void solidity_convertert::get_location_from_decl(
   }
 }
 
-void solidity_convertert::get_start_location_from_stmt(locationt &location)
+void solidity_convertert::get_start_location_from_stmt(
+  const nlohmann::json &ast_node,
+  locationt &location)
 {
   std::string function_name;
 
@@ -1486,7 +1589,26 @@ void solidity_convertert::get_start_location_from_stmt(locationt &location)
 
   // The src manager of Solidity AST JSON is too encryptic.
   // For the time being we are setting it to "1".
-  location.set_line(1);
+  location.set_line(get_line_number(ast_node));
+  location.set_file(
+    absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+
+  if(!function_name.empty())
+    location.set_function(function_name);
+}
+
+void solidity_convertert::get_final_location_from_stmt(
+  const nlohmann::json &ast_node,
+  locationt &location)
+{
+  std::string function_name;
+
+  if(current_functionDecl)
+    function_name = current_functionName;
+
+  // The src manager of Solidity AST JSON is too encryptic.
+  // For the time being we are setting it to "1".
+  location.set_line(get_line_number(ast_node, true));
   location.set_file(
     absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
 
@@ -1541,6 +1663,7 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
   {
     if(current_func["body"].contains("statements"))
     {
+      // var declaration in local statements
       for(const auto &body_stmt : current_func["body"]["statements"].items())
       {
         const nlohmann::json &stmt = body_stmt.value();
@@ -1560,6 +1683,23 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
   }
   else
     assert(!"Unable to find the corresponding local variable decl. Current function does not have a function body.");
+
+  // Search function parameter
+  if(current_func.contains("parameters"))
+  {
+    if(current_func["parameters"]["parameters"].size())
+    {
+      // var decl in function parameter array
+      for(const auto &param_decl :
+          current_func["parameters"]["parameters"].items())
+      {
+        const nlohmann::json &param = param_decl.value();
+        assert(param["nodeType"] == "VariableDeclaration");
+        if(param["id"] == ref_decl_id)
+          return param;
+      }
+    }
+  }
 
   // if no matching state or local var decl, search decl in current_forStmt
   const nlohmann::json &current_for = *current_forStmt;
@@ -1845,6 +1985,19 @@ nlohmann::json solidity_convertert::make_array_to_pointer_type(
   return adjusted_type;
 }
 
+nlohmann::json solidity_convertert::add_dyn_array_size_expr(
+  const nlohmann::json &type_descriptor,
+  const nlohmann::json &dyn_array_node)
+{
+  nlohmann::json adjusted_descriptor;
+  adjusted_descriptor = type_descriptor;
+  // get the JSON object for size expr and merge it with the original type descriptor
+  assert(dyn_array_node.contains("initialValue"));
+  adjusted_descriptor.push_back(nlohmann::json::object_t::value_type(
+    "sizeExpr", dyn_array_node["initialValue"]["arguments"][0]));
+  return adjusted_descriptor;
+}
+
 std::string
 solidity_convertert::get_array_size(const nlohmann::json &type_descrpt)
 {
@@ -1862,4 +2015,18 @@ solidity_convertert::get_array_size(const nlohmann::json &type_descrpt)
     assert(!"Unsupported - Missing array size in type descriptor. Detected dynamic array?");
 
   return the_size;
+}
+
+bool solidity_convertert::is_dyn_array(const nlohmann::json &json_in)
+{
+  if(json_in.contains("typeIdentifier"))
+  {
+    if(
+      json_in["typeIdentifier"].get<std::string>().find("dyn") !=
+      std::string::npos)
+    {
+      return true;
+    }
+  }
+  return false;
 }

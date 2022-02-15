@@ -73,7 +73,19 @@ bool language_uit::parse(const std::string &filename)
 
 #ifdef ENABLE_SOLIDITY_FRONTEND
   if(mode == get_mode("Solidity AST"))
+  {
     language.set_func_name(_cmdline.vm["function"].as<std::string>());
+
+    if(config.options.get_option("contract") == "")
+    {
+      msg.error("Please set the smart contract source file.");
+      return true;
+    }
+    else
+    {
+      language.set_smart_contract_source(config.options.get_option("contract"));
+    }
+  }
 #endif
 
   if(language.parse(filename, msg))

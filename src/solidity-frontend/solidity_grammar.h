@@ -34,8 +34,11 @@ enum TypeNameT
   // auxiliary type for ArrayToPointer when dereferencing array, e.g. a[0]
   PointerArrayToPtr,
 
-  // array type
+  // static array type
   ArrayTypeName,
+
+  // dynamic array type
+  DynArrayTypeName,
 
   TypeNameTError
 };

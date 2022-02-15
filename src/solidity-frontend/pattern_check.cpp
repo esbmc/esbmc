@@ -1,4 +1,5 @@
 #include <solidity-frontend/pattern_check.h>
+#include <stdlib.h>
 
 pattern_checker::pattern_checker(
   const nlohmann::json &_ast_nodes,
@@ -65,7 +66,9 @@ void pattern_checker::check_authorization_through_tx_origin(
         if(expr["nodeType"] == "FunctionCall")
         {
           if(expr["kind"] == "functionCall")
+          {
             check_require_call(expr);
+          }
         }
       }
     }
@@ -84,7 +87,9 @@ void pattern_checker::check_require_call(const nlohmann::json &expr)
       // There should be just one argument, the BinaryOpration expression.
       // Checking 1 argument as in require(<leftExpr> == <rightExpr>)
       if(call_args.size() == 1)
+      {
         check_require_argument(call_args);
+      }
     }
   }
 }
@@ -105,7 +110,9 @@ void pattern_checker::check_require_argument(const nlohmann::json &call_args)
       if(
         left_expr["nodeType"].get<std::string>() ==
         "MemberAccess") // tx.origin is of the type MemberAccess expression
+      {
         check_tx_origin(left_expr);
+      }
     } // end of "=="
   }   // end of "BinaryOperation"
 }
@@ -118,7 +125,13 @@ void pattern_checker::check_tx_origin(const nlohmann::json &left_expr)
     if(left_expr["expression"]["nodeType"].get<std::string>() == "Identifier")
     {
       if(left_expr["expression"]["name"].get<std::string>() == "tx")
-        assert(!"Found vulnerability SWC-115 Authorization through tx.origin");
+      {
+        //assert(!"Found vulnerability SWC-115 Authorization through tx.origin");
+        msg.error(
+          "Found vulnerability SWC-115 Authorization through tx.origin");
+        msg.error("VERIFICATION FAILED");
+        exit(EXIT_SUCCESS);
+      }
     }
   }
 }

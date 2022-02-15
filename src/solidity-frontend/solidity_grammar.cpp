@@ -99,6 +99,11 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
       //  "typeString": "uint8[2] memory"
       // Need to search for the substring "array" as in "typeIdentifier"
+      if(
+        type_name["typeIdentifier"].get<std::string>().find("dyn") !=
+        std::string::npos)
+        return DynArrayTypeName;
+
       return ArrayTypeName;
     }
     else
@@ -137,6 +142,7 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(Pointer)
     ENUM_TO_STR(PointerArrayToPtr)
     ENUM_TO_STR(ArrayTypeName)
+    ENUM_TO_STR(DynArrayTypeName)
     ENUM_TO_STR(TypeNameTError)
   default:
   {
