@@ -9,6 +9,7 @@
 #include <iostream>
 #include <ibex/ibex_Interval.h>
 #include "ibex.h"
+#include "util/goto_expr_factory.h"
 
 #define MAX_VAR 10
 
@@ -23,15 +24,23 @@ class MyMap
 public:
   IntervalVector intervals;
   std::string var_name[MAX_VAR];
+  symbol2tc symbols[MAX_VAR];
+
   MyMap()
   {
     intervals.resize(MAX_VAR);
   }
-  int add_var(std::string name)
+  int add_var(std::string name, symbol2t symbol)
   {
     if(find(name) == -1 && n < MAX_VAR)
     {
+      symbols[n] = symbol;
       var_name[n] = name;
+      auto w = symbol.type->get_width();
+      if(is_signedbv_type(symbol.type))
+        add_interval(pow(-2,w-1),pow(2,w-1)-1,n);
+      else
+        add_interval(0,pow(2,w)-1,n);
       n++;
       return n - 1;
     }
@@ -63,7 +72,7 @@ public:
     std::cout << "size = " << n << std::endl;
     std::cout << "[";
     for(int i = 0; i < n; i++)
-      std::cout << var_name[i] << ":" << intervals[i] << " ";
+      std::cout << var_name[i] << ":" << intervals[i] << " : ";
     std::cout << "]" << std::endl;
   }
   int size()
@@ -75,7 +84,6 @@ private:
   int n = 0;
   //Variable *x[10];
   Variable *x;
-
 };
 
 class goto_contractort : public goto_k_inductiont
