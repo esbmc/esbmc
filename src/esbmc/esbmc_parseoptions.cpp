@@ -473,7 +473,7 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("falsification"))
     return doit_falsification();
 
-  if(cmdline.isset("k-induction"))
+  if(cmdline.isset("k-induction") || cmdline.isset("goto-contractor"))
     return doit_k_induction();
 
   if(cmdline.isset("k-induction-parallel"))

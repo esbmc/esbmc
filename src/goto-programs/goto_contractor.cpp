@@ -77,32 +77,63 @@ void goto_contractort::insert_assume(
 {
   //auto function = goto_functions.function_map.find("c:@F@main");
 
-  std::cout << "------------------loop" << std::endl;
+  std::cout << "Inserting assumes: " << std::endl;
   loopst loop;
   for(auto &function_loop : function_loops)
     loop = function_loop;
 
-  auto loop_head = loop.get_original_loop_head();
-  loop_head->dump();
+  //auto t = loop.get_original_loop_head();
+  //loop_head->dump();
+  goto_programt::targett t = loop.get_original_loop_head();
   auto loop_exit = loop.get_original_loop_exit();
-  loop_exit->dump();
+  loop_exit;
+  //loop_exit->dump();
 
   goto_programt dest(message_handler);
 
-  expr2tc zero = gen_zero(get_uint32_type());
-  expr2tc one = gen_one(get_uint32_type());
-  greaterthanequal2tc cond(one, zero);
+  //expr2tc zero = gen_zero(get_uint32_type());
+  //expr2tc one = gen_one(get_uint32_type());
+  //greaterthanequal2tc cond(one, zero);
+  for(; t != loop_exit; t++);
+
   for(int i = 0; i < map->size(); i++)
   {
+    //std::cout << "test to string for intervals" << cond << std::endl;
 
-    std::cout << "test to string for intervals" << cond << std::endl;
-    cond->dump();
-    simplify(cond);
-    cond->dump();
+    symbol2tc X = map->symbols[i];
+    if(isfinite(new_intervals[i].lb()))
+    {
+      auto lb = create_signed_32_value_expr(new_intervals[i].lb());
+      //auto lb = gen_one(get_int32_type());
+      auto cond = create_greaterthanequal_relation(X,lb);
+      //assume_cond(cond, t, loop_exit->location);
+      goto_programt tmp_e(message_handler);
+      goto_programt::targett e = tmp_e.add_instruction(ASSUME);
+      e->inductive_step_instruction = false;//config.options.is_kind();
+      e->guard = cond;
+      e->location = loop_exit->location;
+      //dest.destructive_append(tmp_e);
+      goto_function.body.destructive_insert(loop_exit,tmp_e);
 
-    assume_cond(cond, dest, loop_exit->location);
-    dest.dump();
-    goto_function.body.insert_swap(loop_exit, dest);
+      //goto_function.body.destructive_insert(loop_exit,cond);
+    }
+    if(isfinite(new_intervals[i].ub()))
+    {
+      auto ub = create_signed_32_value_expr(new_intervals[i].ub());
+      //auto ub = gen_one(get_int32_type());
+      auto cond = create_lessthanequal_relation(X, ub);
+      //assume_cond(cond, dest, loop_exit->location);
+      goto_programt tmp_e(message_handler);
+      goto_programt::targett e = tmp_e.add_instruction(ASSUME);
+      e->inductive_step_instruction = false;//config.options.is_kind();
+      e->guard = cond;
+      e->location = loop_exit->location;
+      //dest.destructive_append(tmp_e);
+      goto_function.body.destructive_insert(loop_exit,tmp_e);
+    }
+    //assume_cond(cond, dest, loop_exit->location);
+    //dest.dump();
+
   }
 }
 
@@ -178,6 +209,8 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   //auto op = get_expr_id(expr);
   Function *f = nullptr;
   Function *g, *h;
+  cout<<"dumping expression:"<<endl;
+  expr->dump();
   if(is_add2t(expr))
   {
     g = create_function_from_expr2t(to_add2t(expr).side_1);
@@ -216,7 +249,7 @@ int goto_contractort::create_variable_from_expr2t(irep_container<expr2t> expr)
   int index = map->find(var_name);
   if(index == -1)
   {
-    int new_index = map->add_var(var_name);
+    int new_index = map->add_var(var_name, to_symbol2t(expr));
     map->dump();
     if(new_index != -1)
       return new_index;
