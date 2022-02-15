@@ -53,7 +53,8 @@ void goto_contractort::insert_assume(
   goto_functionst goto_functions,
   IntervalVector new_intervals)
 {
-  std::cout << "Inserting assumes.. " << std::endl;
+
+  std::cout << "Inserting assumes: " << std::endl;
   loopst loop;
   for(auto &function_loop : function_loops)
     loop = function_loop;
@@ -216,6 +217,7 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   //auto op = get_expr_id(expr);
   Function *f = nullptr;
   Function *g, *h;
+
   cout << "dumping expression:" << endl;
   expr->dump();
   if(is_add2t(expr))
