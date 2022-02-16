@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 inv_Newton-2.c
 --unwind 10
 VERIFICATION FAILED
