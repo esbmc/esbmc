@@ -107,12 +107,6 @@ void c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
       // ignore
     }
     else if(
-      in_context.type.id() == "struct" &&
-      new_symbol.type.id() == "incomplete_struct")
-    {
-      // ignore
-    }
-    else if(
       ns.follow(in_context.type).id() == "incomplete_array" &&
       ns.follow(new_symbol.type).is_array())
     {
