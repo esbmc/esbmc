@@ -83,8 +83,7 @@ smt_astt array_sym_smt_ast::update(
   expr2tc index;
   if(is_nil_expr(idx_expr))
   {
-    index =
-      constant_int2tc(make_array_domain_type(array_type), BigInt(idx));
+    index = constant_int2tc(make_array_domain_type(array_type), BigInt(idx));
   }
   else
   {
