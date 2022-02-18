@@ -310,6 +310,10 @@ _Bool __ESBMC_is_dynamic[1];
 __attribute__((annotate("__ESBMC_inf_size")))
 unsigned __ESBMC_alloc_size[1];
 
+// Get object size
+unsigned __ESBMC_get_object_size(const void *);
+
+
 _Bool __ESBMC_is_little_endian();
 
 int __ESBMC_rounding_mode = 0;
