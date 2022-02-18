@@ -1021,3 +1021,24 @@ void goto_symext::intrinsic_memset(
     bump_call();
   }
 }
+
+void goto_symext::intrinsic_get_object_size(
+  const code_function_call2t &func_call,
+  reachability_treet &)
+{
+  assert(func_call.operands.size() == 1 && "Wrong get_object_size signature");
+  auto ptr = func_call.operands[0];
+
+  // Work out what the ptr points at.
+  internal_deref_items.clear();
+  dereference2tc deref(get_empty_type(), ptr);
+  dereference(deref, dereferencet::INTERNAL);
+
+  assert(is_array_type(internal_deref_items.front().object->type));
+  auto obj_size =
+    to_array_type(internal_deref_items.front().object->type).array_size;
+
+  expr2tc ret_ref = func_call.ret;
+  dereference(ret_ref, dereferencet::READ);
+  symex_assign(code_assign2tc(ret_ref, obj_size), false, cur_state->guard);
+}

@@ -461,6 +461,10 @@ void goto_symext::run_intrinsic(
   {
     intrinsic_memset(art, func_call);
   }
+  else if(symname == "c:@F@__ESBMC_get_object_size")
+  {
+    intrinsic_get_object_size(func_call, art);
+  }
   else if(has_prefix(symname, "c:@F@__ESBMC_overflow"))
   {
     bool is_mult = has_prefix(symname, "c:@F@__ESBMC_overflow_smul") ||
