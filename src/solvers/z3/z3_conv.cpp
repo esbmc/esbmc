@@ -1155,7 +1155,7 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
     return pointer_logic.back().pointer_expr(p, expr->type);
   }
 
-  // Otherwise, run through all fields and despatch to 'get' again.
+  // Otherwise, run through all fields and dispatch to 'get' again.
   constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
   unsigned int i = 0;
   for(auto const &it : strct.members)

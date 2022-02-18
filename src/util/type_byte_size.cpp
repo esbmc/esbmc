@@ -234,7 +234,7 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
   if(is_dynamic_object2t(expr))
   {
     // This is a dynamic object represented something allocated; from the static
-    // pointer analysis. Assume that this is thet bottom of the expression.
+    // pointer analysis. Assume that this is the bottom of the expression.
     return gen_ulong(0);
   }
 
