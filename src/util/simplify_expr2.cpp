@@ -818,11 +818,11 @@ expr2tc member2t::do_simplify() const
 
       s = uni.datatype_members[no];
 
-      // If the type we just selected isn't compatible, it means that whatever
-      // field is in the constant union /isn't/ the field we're selecting from
-      // it. So don't simplify it, because we can't.
-      default_message
-        msg; // This can be the default, because base_type will not print anything
+      /* If the type we just selected isn't compatible, it means that whatever
+       * field is in the constant union /isn't/ the field we're selecting from
+       * it. So don't simplify it, because we can't. */
+      // This can be the default, because base_type will not print anything
+      default_message msg;
       if(
         !is_pointer_type(type) &&
         !base_type_eq(type, s->type, namespacet(contextt(msg))))

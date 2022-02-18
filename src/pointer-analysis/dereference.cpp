@@ -1262,7 +1262,7 @@ void dereferencet::construct_from_const_struct_offset(
       return;
     }
 
-    if(int_offset < (m_offs + m_size))
+    if(int_offset < m_offs + m_size)
     {
       // This access starts in this field, but by process of elimination,
       // doesn't end in it. Which means reading padding data (or an alignment
