@@ -118,17 +118,51 @@ protected:
    * 
    * @return symbolt 
    */
-  static symbolt get_allocation_function()
+  static symbolt get_allocation_function(typet alloc_type, exprt alloc_size)
   {
     std::string allocation_function = "malloc";
     code_typet code_type;
     code_type.return_type() = pointer_typet(empty_typet());
+    //code_type.return_type().cmt_type(alloc_type);
+    //code_type.return_type().cmt_size(alloc_size);
+    //code_type.cmt_type(alloc_type);
+    //code_type.cmt_size(alloc_size);
+    
     code_type.arguments().push_back(uint_type());
     symbolt symbol;
     symbol.mode = "C";
     symbol.type = code_type;
     symbol.name = allocation_function;
     symbol.id = allocation_function;
+    symbol.is_extern = false;
+    symbol.file_local = false;
+    return symbol;
+  }
+
+  /**
+   * @brief Get the esbmc_get_object_size symbol
+   * 
+   * This is going to be the function to be called
+   * for `lengthof`
+   * 
+   * @return symbolt 
+   */
+  static symbolt get_lengthof_function()
+  {
+    std::string func = "__ESBMC_get_object_size";
+    code_typet code_type;
+    code_type.return_type() = uint_type();
+    //code_type.return_type().cmt_type(alloc_type);
+    //code_type.return_type().cmt_size(alloc_size);
+    //code_type.cmt_type(alloc_type);
+    //code_type.cmt_size(alloc_size);
+    
+    code_type.arguments().push_back(pointer_typet(empty_typet()));
+    symbolt symbol;
+    symbol.mode = "C";
+    symbol.type = code_type;
+    symbol.name = func;
+    symbol.id = func;
     symbol.is_extern = false;
     symbol.file_local = false;
     return symbol;
