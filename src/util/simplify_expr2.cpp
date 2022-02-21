@@ -394,63 +394,23 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
   unsigned w2 = b->get_width();
   bool u1 = a->type_id == type2t::unsignedbv_id;
   bool u2 = b->type_id == type2t::unsignedbv_id;
-  if(u1 == u2)
+  if(u1 == u2 && w1 == w2) /* no type-cast required */
+    return a;
+  if(u1 == u2 ? w1 > w2 : w1 >= w2 && u1) /* common type is that of e */
   {
-    if(w1 > w2)
-    {
-      f = typecast2tc(a, f); // u1 == u2 && w1 > w2
-      return a;
-    }
-    else if(w1 < w2)
-    {
-      e = typecast2tc(b, e); // u1 == u2 && w1 < w2
-      return b;
-    }
-    else
-      return a;
-  }
-  if(w1 == w2)
-  {
-    if(u1)
-    {
-      f = typecast2tc(a, f); // u1 != u2 && u1 && w1 == w2
-      return a;
-    }
-    else
-    {
-      e = typecast2tc(b, e); // u1 != u2 && !u1 && w1 == w22
-      return b;
-    }
-  }
-  if(u1 && w1 > w2)
-  {
-    f = typecast2tc(a, f); // u1 != u2 && u1 && w1 > w2
+    f = typecast2tc(a, f);
     return a;
   }
-  if(u2 && w1 < w2)
+  if(u1 == u2 || (w1 <= w2 && u2)) /* common type is that of f */
   {
-    e = typecast2tc(b, e); // u1 != u2 && !u1 && w1 < w2
+    e = typecast2tc(b, e);
     return b;
   }
-  // u1 != u2 && w1 != w2 && (!u1 || w1 <= w2) && (!u2 || w1 >= w2)
+  /* common type is neither, so type-cast both operands */
   type2tc t = get_uint_type(std::max(w1, w2));
   e = typecast2tc(t, e);
   f = typecast2tc(t, f);
   return t;
-#if 0
-  type2tc t = w1 == w2             ? u1 ? a : b
-              : w1 > w2 &&u1 != u2 ? a
-              : w1 < w2 &&u2 != u1 ? b
-              : u1                 ? get_uint_type(std::max(w1, w2))
-                                   : get_int_type(std::max(w1, w2));
-  if(w1 < w2)
-    e = typecast2tc(
-  if(u1 && w1 >= w2)
-    return a;
-  if(u2 && w2 >= w1)
-    return b;
-  return u1 || u2 ? get_uint_type(std::max(w1, w2)) : w1 >= w2 ? a : b;
-#endif
 }
 
 expr2tc add2t::do_simplify() const
