@@ -350,7 +350,6 @@ expr2tc constant_string2t::to_array() const
   return final_val;
 }
 
-#ifndef NDEBUG
 static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
 {
   if(is_array_type(a))
@@ -367,8 +366,8 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
   else if(is_code_type(a))
   {
     assert(is_code_type(b));
-    const code_type2t &at = to_code_type(a);
-    const code_type2t &bt = to_code_type(b);
+    const code_type2t &at [[gnu::unused]] = to_code_type(a);
+    const code_type2t &bt [[gnu::unused]] = to_code_type(b);
     assert(at.arguments == bt.arguments);
     assert(at.ret_type == bt.ret_type);
     /* don't compare argument names, they could be empty on one side */
@@ -410,7 +409,6 @@ void with2t::assert_consistency() const
   }
   assert(type == source_value->type);
 }
-#endif
 
 const expr2tc &object_descriptor2t::get_root_object() const
 {
