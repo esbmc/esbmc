@@ -92,8 +92,8 @@ protected:
   std::string get_hash_name() const
   {
     // TODO: use some hashing to also use the types
-    // TODO: DRY
-    return std::to_string(parameters.size());
+    int add = modifiers.is_static() ? 0 : 1;
+    return std::to_string(parameters.size() + add);
   }
 };
 #endif //ESBMC_JIMPLE_CLASS_MEMBER_H

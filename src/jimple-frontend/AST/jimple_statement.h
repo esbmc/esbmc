@@ -57,10 +57,12 @@ public:
   {
     // TODO: use some hashing to also use the types
     // TODO: DRY
-    return std::to_string(parameters.size());
+    auto increment = variable != "" ? 1 : 0;
+    return std::to_string(parameters.size() + increment);
   }
   std::string base_class;
   std::string method;
+  std::string variable = ""; // TODO: Specialization jimple_invoke and jimple_virtual_invoke!!!
   std::vector<std::shared_ptr<jimple_expr>> parameters;
 };
 
@@ -133,45 +135,9 @@ public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
 
-  std::string variable;
-  std::shared_ptr<jimple_expr> expr;
+  std::shared_ptr<jimple_expr> lhs;
+  std::shared_ptr<jimple_expr> rhs;
   bool is_skip = false;
-};
-
-/**
- * @brief Assignment of a position of a vector
- * 
- * a[2] = 42;
- */
-class jimple_assignment_deref : public jimple_assignment
-{
-public:
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-  virtual std::string to_string() const override;
-  virtual void from_json(const json &j) override;
-
-  std::shared_ptr<jimple_expr> pos;
-};
-
-/**
- * @brief Assignment of a field of an object
- *
- * obj.a = 42;
- */
-class jimple_assignment_field : public jimple_assignment
-{
-public:
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-  virtual std::string to_string() const override;
-  virtual void from_json(const json &j) override;
-
-  std::string field; // (a)
 };
 
 // For debug
