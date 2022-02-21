@@ -499,7 +499,7 @@ public:
     const expr2tc &v2)
     : arith_ops(t, id), side_1(v1), side_2(v2)
   {
-#ifndef NDEBUG
+#ifndef NDEBUG /* only check consistency in non-Release builds */
     bool p1 = is_pointer_type(v1);
     bool p2 = is_pointer_type(v2);
     auto is_bv_type = [](const type2tc &t) {
@@ -2832,7 +2832,7 @@ public:
     const expr2tc &value)
     : with_expr_methods(type, with_id, source, field, value)
   {
-#if !defined(NDEBUG)
+#ifndef NDEBUG /* only check consistency in non-Release builds */
     assert_consistency();
 #endif
   }
@@ -2855,7 +2855,7 @@ public:
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
     : member_expr_methods(type, member_id, source, memb)
   {
-#ifndef NDEBUG
+#ifndef NDEBUG /* only check consistency in non-Release builds */
     assert(
       source->type->type_id == type2t::struct_id ||
       source->type->type_id == type2t::union_id);
