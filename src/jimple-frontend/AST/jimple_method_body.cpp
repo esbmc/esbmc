@@ -50,9 +50,19 @@ void jimple_full_method_body::from_json(const json &stmts)
       to_add = std::make_shared<jimple_invoke>(s);
       break;
     }
+    case statement::VirtualInvoke:
+    {
+      jimple_invoke s;
+      stmt.get_to(s);
+      to_add = std::make_shared<jimple_invoke>(s);
+      break;
+    }
     case statement::SpecialInvoke:
     {
-      continue;
+      jimple_invoke s;
+      stmt.get_to(s);
+      to_add = std::make_shared<jimple_invoke>(s);
+      break;      
     }
     case statement::Return:
     {
@@ -80,20 +90,6 @@ void jimple_full_method_body::from_json(const json &stmts)
       jimple_assignment s;
       stmt.get_to(s);
       to_add = std::make_shared<jimple_assignment>(s);
-      break;
-    }
-    case statement::AssignmentDeref:
-    {
-      jimple_assignment_deref s;
-      stmt.get_to(s);
-      to_add = std::make_shared<jimple_assignment_deref>(s);
-      break;
-    }
-    case statement::AssignmentField:
-    {
-      jimple_assignment_field s;
-      stmt.get_to(s);
-      to_add = std::make_shared<jimple_assignment_field>(s);
       break;
     }
     case statement::Assertion:

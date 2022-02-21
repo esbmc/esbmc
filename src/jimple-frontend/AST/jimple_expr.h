@@ -244,15 +244,59 @@ public:
     lhs = expr;
   }
 
+  bool is_nondet_call() const {
+    return base_class == "org.sosy_lab.sv_benchmarks.Verifier";
+  }
+
 protected:
   // We need an unique name for each function
   std::string get_hash_name() const
   {
-    // TODO: use some hashing to also use the types
-    // TODO: DRY
     return std::to_string(parameters.size());
   }
-  
+};
+
+/**
+ * @brief The result of a function call
+ * 
+ * int a = foo();
+ * 
+ */
+class jimple_virtual_invoke : public jimple_expr
+{
+public:
+  virtual void from_json(const json &j) override;
+  virtual std::string to_string() const override
+  {
+    return "Jimple Virtual Invoke";
+  }
+
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
+  std::string base_class;
+  std::string method;
+  exprt lhs;
+  std::string variable;
+  std::vector<std::shared_ptr<jimple_expr>> parameters;
+
+  void set_lhs(exprt expr)
+  {
+    lhs = expr;
+  }
+
+  bool is_nondet_call() const {
+    return base_class == "java.util.Random";
+  }
+
+protected:
+  // We need an unique name for each function
+  std::string get_hash_name() const
+  {
+    return std::to_string(parameters.size() + 1);
+  }
 };
 
 /**
@@ -318,21 +362,26 @@ public:
 };
 
 /**
- * @brief Nondet call
+ * @brief Nondet call (This in an extension)
  * 
  */
 class jimple_nondet : public jimple_expr
 {
 public:
   jimple_nondet() = default;
+  explicit jimple_nondet(std::string mode) : mode(mode) {}
   virtual std::string to_string() const override
   {
     return "Jimple Nondet";
   }
   virtual void from_json(const json &) override
   {
+    assert("This class shouldn't be used from Jimple directly");
+    abort();
   }
 
+  const std::string mode; // Int, char, long, etc... e.g. Random().nextInt()
+  //std::string bound;
   virtual exprt to_exprt(
     contextt &ctx,
     const std::string &class_name,
@@ -340,20 +389,20 @@ public:
 };
 
 /**
- * @brief A field member of object
+ * @brief A static member of object/class
  * 
- * class Foo { int a; }
+ * class Foo { static int a; }
  * 
  * Foo f = ...;
- * int a = F.a; // F.a is a field access
+ * int a = F.a; // F.a (or Foo.a) is a static member access
  * 
  */
-class jimple_field_access : public jimple_expr
+class jimple_static_member : public jimple_expr
 {
 public:
   virtual std::string to_string() const override
   {
-    return "Jimple Field Access";
+    return "Jimple Static Member";
   }
   virtual void from_json(const json &j) override;
   virtual exprt to_exprt(
@@ -361,6 +410,35 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
+  std::string from;
+  std::string field;
+  std::shared_ptr<jimple_type> type;
+};
+
+/**
+ * @brief A virtual member of object
+ * 
+ * class Foo { int a; }
+ * 
+ * Foo f = ...;
+ * int a = F.a; // F.a is a virtual member access
+ * 
+ */
+class jimple_virtual_member : public jimple_expr
+{
+public:
+  virtual std::string to_string() const override
+  {
+    return "Jimple Virtual Member";
+  }
+  virtual void from_json(const json &j) override;
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
+  
+  std::string variable;
   std::string from;
   std::string field;
   std::shared_ptr<jimple_type> type;

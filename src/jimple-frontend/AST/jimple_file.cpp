@@ -150,11 +150,21 @@ exprt jimple_file::to_exprt(contextt &ctx) const
       t.components().push_back(comp);
       total_size += std::stoi(comp.type().width().as_string());
     }
-    else
-      field->to_exprt(ctx,name,name);
+    //else
+    //  field->to_exprt(ctx,name,name);
   }
 
   t.set("width", total_size);
   added_symbol->type = t;
+
+  for(auto const &field : body)
+  {
+    if(!std::dynamic_pointer_cast<jimple_class_field>(field))
+    {
+      field->to_exprt(ctx,name,name);
+    }
+    //else
+    //  
+  }
   return e;
 }

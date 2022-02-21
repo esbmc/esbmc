@@ -47,6 +47,12 @@ exprt jimple_method::to_exprt(
     param_symbol.file_local = true;
 
     ctx.move_symbol_to_context(param_symbol);
+
+     code_typet::argumentt param;
+     param.type() = this_type;
+     param.cmt_base_name(param_name);
+     param.cmt_identifier(param_id);
+     method_type.arguments().push_back(param);
   }
 
   // In Jimple, every parameter is named as @parameter#

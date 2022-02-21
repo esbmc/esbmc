@@ -68,11 +68,10 @@ public:
   {
     Assertion,       // TODO: This will be removed eventually (for debugging)
     Assignment,      // A = 42
-    AssignmentDeref, // A[2] = 3
-    AssignmentField, // A.a = 42
     Identity, // @this, @parameter0, @parameter1, ...; This will be removed as it can solved directly in the frontend
     StaticInvoke,  // foo() (where foo is a static function)
     SpecialInvoke, // A.foo() (where A is an object)
+    VirtualInvoke,
     Return,        // return; return 42;
     Label,         // 1:, 2:; (GOTO labels)
     Goto,          // goto 1;
@@ -89,12 +88,11 @@ private:
     {"identity", statement::Identity},
     {"StaticInvoke", statement::StaticInvoke},
     {"SpecialInvoke", statement::SpecialInvoke},
+    {"VirtualInvoke", statement::VirtualInvoke},
     {"Return", statement::Return},
     {"Label", statement::Label},
     {"Goto", statement::Goto},
     {"SetVariable", statement::Assignment},
-    {"SetVariableDeref", statement::AssignmentDeref},
-    {"SetVariableField", statement::AssignmentField},
     {"Assert", statement::Assertion},
     {"If", statement::If},
     {"Throw", statement::Throw}};
@@ -103,12 +101,11 @@ private:
     {statement::Identity, "Identity"},
     {statement::StaticInvoke, "StaticInvoke"},
     {statement::SpecialInvoke, "SpecialInvoke"},
+    {statement::VirtualInvoke, "VirtualInvoke"},
     {statement::Return, "Return"},
     {statement::Label, "Label"},
     {statement::Goto, "Goto"},
     {statement::Assignment, "Assignment"},
-    {statement::AssignmentDeref, "AssignmentDeref"},
-    {statement::AssignmentField, "AssignmentField"},
     {statement::Assertion, "Assertion"},
     {statement::If, "If"},
     {statement::Declaration, "Declaration"},
