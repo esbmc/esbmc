@@ -126,18 +126,14 @@ void jimple_label::from_json(const json &j)
 std::string jimple_assignment::to_string() const
 {
   std::ostringstream oss;
-  oss << "Assignment: " << variable << " = " << expr->to_string();
+  oss << "Assignment: " << lhs->to_string() << " = " << rhs->to_string();
   return oss.str();
 }
 
 void jimple_assignment::from_json(const json &j)
-{
-  j.at("name").get_to(variable);
-  //TODO: Remove this hack
-  if(!j.at("value").contains("expr_type"))
-    is_skip = true;
-  else
-    expr = jimple_expr::get_expression(j.at("value"));
+{  
+  lhs = jimple_expr::get_expression(j.at("lhs"));
+  rhs = jimple_expr::get_expression(j.at("rhs"));
 }
 
 exprt jimple_assignment::to_exprt(
@@ -151,25 +147,32 @@ exprt jimple_assignment::to_exprt(
     code_skipt skip;
     return skip;
   }
-  std::ostringstream oss;
-  oss << class_name << ":" << function_name << "@" << variable;
+  
+  auto lhs_handle = lhs->to_exprt(ctx,class_name,function_name);
 
-  symbolt &added_symbol = *ctx.find_symbol(oss.str());
-
-  auto dyn_expr = std::dynamic_pointer_cast<jimple_expr_invoke>(expr);
-  if(dyn_expr)
+  auto dyn_expr = std::dynamic_pointer_cast<jimple_expr_invoke>(rhs);
+  if(dyn_expr && !dyn_expr->is_nondet_call())
   {
-    dyn_expr->set_lhs(symbol_expr(added_symbol));
-    return expr->to_exprt(ctx, class_name, function_name);
+    dyn_expr->set_lhs(lhs_handle);
+    return rhs->to_exprt(ctx, class_name, function_name);
   }
-  auto from_expr = expr->to_exprt(ctx, class_name, function_name);
-  c_typecastt c_typecast(ctx);
-  c_typecast.implicit_typecast(from_expr, added_symbol.type);
 
-  code_assignt assign(symbol_expr(added_symbol), from_expr);
+  auto dyn2_expr = std::dynamic_pointer_cast<jimple_virtual_invoke>(rhs);
+  if(dyn2_expr && !dyn2_expr->is_nondet_call())
+  {
+    dyn2_expr->set_lhs(lhs_handle);
+    return rhs->to_exprt(ctx, class_name, function_name);
+  }
+
+  auto from_expr = rhs->to_exprt(ctx, class_name, function_name);
+  c_typecastt c_typecast(ctx);
+  c_typecast.implicit_typecast(from_expr, lhs_handle.type());
+
+  code_assignt assign(lhs_handle, from_expr);
   return assign;
 }
 
+/*
 std::string jimple_assignment_deref::to_string() const
 {
   std::ostringstream oss;
@@ -199,8 +202,6 @@ exprt jimple_assignment_deref::to_exprt(
     expr->to_exprt(ctx, class_name, function_name));
   return assign;
 }
-
-
 
 std::string jimple_assignment_field::to_string() const
 {
@@ -239,6 +240,7 @@ exprt jimple_assignment_field::to_exprt(
     expr->to_exprt(ctx, class_name, function_name));
   return assign;
 }
+*/
 
 std::string jimple_if::to_string() const
 {
@@ -327,12 +329,15 @@ void jimple_invoke::from_json(const json &j)
 {
   j.at("base_class").get_to(base_class);
   j.at("method").get_to(method);
+  if(j.contains("variable"))
+    j.at("variable").get_to(variable);
   for(auto x : j.at("parameters"))
   {
     parameters.push_back(std::move(jimple_expr::get_expression(x)));
   }
   method += "_" + get_hash_name();
 }
+
 
 exprt jimple_invoke::to_exprt(
   contextt &ctx,
@@ -346,14 +351,58 @@ exprt jimple_invoke::to_exprt(
     return skip;
   }
 
+  // TODO: Move intrinsics to backend
+  if(base_class == "java.lang.Runtime")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  // Don't care for the default object constructor
+  if(base_class == "java.lang.Object")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  // Don't care for Random
+  if(base_class == "java.util.Random")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  // Don't care for Random
+  if(base_class == "java.lang.String")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(base_class == "java.lang.AssertionError")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
   code_blockt block;
   code_function_callt call;
 
   std::ostringstream oss;
   oss << base_class << ":" << method;
-
   auto symbol = ctx.find_symbol(oss.str());
   call.function() = symbol_expr(*symbol);
+
+  if(variable != "")
+  {
+    // Let's add @THIS
+    auto this_expression = jimple_symbol(variable).to_exprt(ctx, class_name, function_name);
+    call.arguments().push_back(this_expression);
+    auto temp = get_symbol_name(base_class, method, "@this");
+    symbolt &added_symbol = *ctx.find_symbol(temp);
+    code_assignt assign(symbol_expr(added_symbol), this_expression);
+    block.operands().push_back(assign);
+  }
 
   for(unsigned long int i = 0; i < parameters.size(); i++)
   {
