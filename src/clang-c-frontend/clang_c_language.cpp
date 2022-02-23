@@ -239,14 +239,26 @@ bool clang_c_languaget::typecheck(
 {
   contextt new_context(msg);
 
+  // Add symbols in new_context
+  // The symbols here cover AST nodes from internals and source code
+  // DEBUG: new_context.symbols 0 -> 72
+  // DEBUG: context.symbols 0 -> 0
   clang_c_convertert converter(new_context, ASTs, msg);
   if(converter.convert())
     return true;
 
+  // Adjust symbol attributes, such as:
+  //  - overwrite macro type with real type
+  //  - adjust side effect
+  //  - add additional symbol e.g. c:@F@assert
+  // DEBUG: new_context.symbols 72 -> 73
+  // DEBUG: context.symbols 0 -> 0
   clang_c_adjust adjuster(new_context, msg);
   if(adjuster.adjust())
     return true;
 
+  // DEBUG: new_context.symbols: 73 -> 73
+  // DEBUG: context.symbols: 0 -> 73
   if(c_link(context, new_context, msg, module))
     return true;
 
@@ -273,8 +285,20 @@ bool clang_c_languaget::preprocess(
 
 bool clang_c_languaget::final(contextt &context, const messaget &msg)
 {
-  add_cprover_library(context, msg, this);
-  return clang_main(context, msg);
+  // This function adds the cprover builtin symbols and __ESBMC_main symbol.
+  // The symbol table is updated following the steps below:
+  //
+  // Step 1: add_cprover_library adds buildtin symbols:
+  //  - c:@__ESBMC_num_threads_running
+  //  - c:builtin_libs.c@358@F@__ESBMC_sync_fetch_and_add@initial
+  //  - c:builtin_libs.c@307@F@__ESBMC_sync_fetch_and_add@ptr
+  //  - c:builtin_libs.c@317@F@__ESBMC_sync_fetch_and_add@value
+  //  - c:@__ESBMC_num_total_threads
+  //
+  // Step 2: clang_main adds the follow symbol:
+  //  - __ESBMC_main
+  add_cprover_library(context, msg, this); // DEBUG: symbols 73 -> 78
+  return clang_main(context, msg); // DEBUG: symbols 78 -> 79
 }
 
 std::string clang_c_languaget::internal_additions()
