@@ -2169,7 +2169,11 @@ expr2tc smt_convt::get(const expr2tc &expr)
      * only show the concretely updated value in expressions of composite type.
      * Thus, there is no need to construct the full with2t expression here,
      * since it can't sensibly be interpreted anyways due to simplification
-     * during convert_ast(). */
+     * during convert_ast().
+     *
+     * Thereby we also do not have to care about cases when src->type and the
+     * constructed with2t's source's type differ, e.g., arrays of differing
+     * sizes would be constructed for regression/esbmc/loop_unroll_incr_true. */
     return get(update_val);
   }
 

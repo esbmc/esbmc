@@ -351,6 +351,66 @@ expr2tc constant_string2t::to_array() const
   return final_val;
 }
 
+static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
+{
+  if(is_array_type(a))
+  {
+    assert(is_array_type(b));
+    const array_type2t &at = to_array_type(a);
+    const array_type2t &bt = to_array_type(b);
+    assert_type_compat_for_with(at.subtype, bt.subtype);
+    assert(at.size_is_infinite == bt.size_is_infinite);
+    if(is_symbol2t(at.array_size) || is_symbol2t(bt.array_size))
+      return;
+    assert(at.array_size == bt.array_size);
+  }
+  else if(is_code_type(a))
+  {
+    assert(is_code_type(b));
+    const code_type2t &at [[gnu::unused]] = to_code_type(a);
+    const code_type2t &bt [[gnu::unused]] = to_code_type(b);
+    assert(at.arguments == bt.arguments);
+    assert(at.ret_type == bt.ret_type);
+    /* don't compare argument names, they could be empty on one side */
+    assert(at.ellipsis == bt.ellipsis);
+  }
+  else if(is_pointer_type(a))
+  {
+    assert(is_pointer_type(b));
+    assert_type_compat_for_with(
+      to_pointer_type(a).subtype, to_pointer_type(b).subtype);
+  }
+  else
+    assert(a == b);
+}
+
+void with2t::assert_consistency() const
+{
+  if(is_array_type(source_value))
+  {
+    assert(is_bv_type(update_field->type));
+    assert_type_compat_for_with(
+      to_array_type(source_value->type).subtype, update_value->type);
+  }
+  else if(is_string_type(source_value))
+  {
+    assert(is_bv_type(update_field->type));
+    assert(is_bv_type(update_value->type));
+    assert(update_value->type->get_width() == config.ansi_c.char_width);
+  }
+  else
+  {
+    const struct_union_data *d =
+      dynamic_cast<const struct_union_data *>(source_value->type.get());
+    assert(d);
+    assert(update_field->expr_id == constant_string_id);
+    unsigned c =
+      d->get_component_number(to_constant_string2t(update_field).value);
+    assert_type_compat_for_with(update_value->type, d->members[c]);
+  }
+  assert(type == source_value->type);
+}
+
 const expr2tc &object_descriptor2t::get_root_object() const
 {
   const expr2tc *tmp = &object;

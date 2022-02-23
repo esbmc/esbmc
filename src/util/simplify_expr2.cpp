@@ -378,6 +378,41 @@ struct Addtor
   }
 };
 
+static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
+{
+  const type2tc &a = e->type;
+  const type2tc &b = f->type;
+  bool p1 = is_pointer_type(a);
+  bool p2 = is_pointer_type(b);
+  if(p1 && p2)
+    return get_int_type(config.ansi_c.pointer_width);
+  if(p1)
+    return a;
+  if(p2)
+    return b;
+  unsigned w1 = a->get_width();
+  unsigned w2 = b->get_width();
+  bool u1 = a->type_id == type2t::unsignedbv_id;
+  bool u2 = b->type_id == type2t::unsignedbv_id;
+  if(u1 == u2 && w1 == w2) /* no type-cast required */
+    return a;
+  if(u1 == u2 ? w1 > w2 : w1 >= w2 && u1) /* common type is that of e */
+  {
+    f = typecast2tc(a, f);
+    return a;
+  }
+  if(u1 == u2 || (w1 <= w2 && u2)) /* common type is that of f */
+  {
+    e = typecast2tc(b, e);
+    return b;
+  }
+  /* common type is neither, so type-cast both operands */
+  type2tc t = get_uint_type(std::max(w1, w2));
+  e = typecast2tc(t, e);
+  f = typecast2tc(t, f);
+  return t;
+}
+
 expr2tc add2t::do_simplify() const
 {
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
@@ -387,7 +422,9 @@ expr2tc add2t::do_simplify() const
   // Attempt associative simplification
   std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
     [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
-    return add2tc(this->type, arg1, arg2);
+    expr2tc a = arg1, b = arg2;
+    type2tc t = common_arith_op2_type(a, b);
+    return add2tc(t, a, b);
   };
 
   return attempt_associative_simplify(*this, add_wrapper);
@@ -781,11 +818,11 @@ expr2tc member2t::do_simplify() const
 
       s = uni.datatype_members[no];
 
-      // If the type we just selected isn't compatible, it means that whatever
-      // field is in the constant union /isn't/ the field we're selecting from
-      // it. So don't simplify it, because we can't.
-      default_message
-        msg; // This can be the default, because base_type will not print anything
+      /* If the type we just selected isn't compatible, it means that whatever
+       * field is in the constant union /isn't/ the field we're selecting from
+       * it. So don't simplify it, because we can't. */
+      // This can be the default, because base_type will not print anything
+      default_message msg;
       if(
         !is_pointer_type(type) &&
         !base_type_eq(type, s->type, namespacet(contextt(msg))))

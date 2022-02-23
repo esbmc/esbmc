@@ -499,6 +499,29 @@ public:
     const expr2tc &v2)
     : arith_ops(t, id), side_1(v1), side_2(v2)
   {
+#ifndef NDEBUG /* only check consistency in non-Release builds */
+    bool p1 = is_pointer_type(v1);
+    bool p2 = is_pointer_type(v2);
+    auto is_bv_type = [](const type2tc &t) {
+      return t->type_id == type2t::unsignedbv_id ||
+             t->type_id == type2t::signedbv_id;
+    };
+    if(p1 && p2)
+    {
+      assert(id == expr2t::sub_id);
+      assert(is_bv_type(t));
+      assert(t->get_width() == config.ansi_c.pointer_width);
+    }
+    else
+    {
+      assert(
+        p2 || (is_bv_type(t) == is_bv_type(v1->type) &&
+               t->get_width() == v1->type->get_width()));
+      assert(
+        p1 || (is_bv_type(t) == is_bv_type(v2->type) &&
+               t->get_width() == v2->type->get_width()));
+    }
+#endif
   }
   arith_2ops(const arith_2ops &ref) = default;
 
@@ -1507,8 +1530,8 @@ irep_typedefs(ieee_div, ieee_arith_2ops);
 irep_typedefs(ieee_fma, ieee_arith_3ops);
 irep_typedefs(ieee_sqrt, ieee_arith_1op);
 irep_typedefs(modulus, arith_2ops);
-irep_typedefs(shl, arith_2ops);
-irep_typedefs(ashr, arith_2ops);
+irep_typedefs(shl, bit_2ops);
+irep_typedefs(ashr, bit_2ops);
 irep_typedefs(same_object, same_object_data);
 irep_typedefs(pointer_offset, pointer_ops);
 irep_typedefs(pointer_object, pointer_ops);
@@ -2599,8 +2622,8 @@ public:
 };
 
 /** Shift left operation. Shifts contents of first operand left by number of
- *  bit positions indicated by the second operand. Both must be integers. Types
- *  of both operands and expr type should match. @extends arith_2ops */
+ *  bit positions indicated by the second operand. Both must be integers.
+ * @extends bit_2ops */
 class shl2t : public shl_expr_methods
 {
 public:
@@ -2808,6 +2831,8 @@ public:
  *  and one for structs/unions. @extends with_data */
 class with2t : public with_expr_methods
 {
+  void assert_consistency() const;
+
 public:
   /** Primary constructor.
    *  @param type Type of this expression; Same as source.
@@ -2821,6 +2846,9 @@ public:
     const expr2tc &value)
     : with_expr_methods(type, with_id, source, field, value)
   {
+#ifndef NDEBUG /* only check consistency in non-Release builds */
+    assert_consistency();
+#endif
   }
   with2t(const with2t &ref) = default;
 
@@ -2841,6 +2869,15 @@ public:
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
     : member_expr_methods(type, member_id, source, memb)
   {
+#ifndef NDEBUG /* only check consistency in non-Release builds */
+    assert(
+      source->type->type_id == type2t::struct_id ||
+      source->type->type_id == type2t::union_id);
+    auto *data = dynamic_cast<const struct_union_data *>(source->type.get());
+    assert(data);
+    /* internally asserts consistency conditions */
+    data->get_component_number(memb);
+#endif
   }
   member2t(const member2t &ref) = default;
 
