@@ -730,277 +730,389 @@ void goto_symext::symex_va_arg(const expr2tc &lhs, const sideeffect2t &code)
   symex_assign(code_assign2tc(lhs, va_rhs), true);
 }
 
+// Computes the equivalent object value when considering a memset operation on it
+expr2tc gen_byte_expression(
+  const type2tc &type,
+  const expr2tc &src,
+  const expr2tc &value,
+  const size_t num_of_bytes,
+  const size_t offset)
+{
+  /**
+   * The idea of this expression is to compute the object value
+   * in the case where every byte `value` was set set up until num_of_bytes
+   * 
+   * @warning this function does not add any pointer/memory/bounds check!
+   *          they should be added before calling this function!
+   * 
+   * In summary, there are two main computations here:
+   * 
+   * A. Generate the byte representation, this is mostly through
+   *    the `result` expression. The expression is initialized with zero
+   *    and then, until the num_of_bytes is reached it will do a full byte
+   *    left-shift followed by an bitor operation with the byte value:
+   * 
+   *    Example, for a integer(4 bytes) with memset using 3 bytes and value 0xF1
+   * 
+   *    step 1: 0x00000000 -- left-shift 8 -- 0x00000000 -- bitor -- 0x000000F1
+   *    step 2: 0x000000F1 -- left-shift 8 -- 0x0000F100 -- bitor -- 0x0000F1F1
+   *    step 3: 0x0000F1F1 -- left-shift 8 -- 0x00F1F100 -- bitor -- 0x00F1F1F1
+   *    
+   *    Since we only want 3 bytes, the initialized object value would be 0x00F1F1F1
+   * 
+   * B. Generate a mask of the bits that were not set, this is done because skipped bits
+   *    need to be returned back. The computation of this is simple, we initialize every
+   *    bit that was changed by the byte-representation computation with a 1. Which is then
+   *    negated to be applied with an bitand in the original value:
+   * 
+   *    Back to the example in A, we had the byte-representation of  0x00F1F1F1. If the
+   *    original value was 0xA2A2A2A2, then we would have the following mask:
+   *    
+   *    step 1: 0x00000000 -- set-bits -- 0x000000FF
+   *    step 2: 0x000000FF -- set-bits -- 0x0000FFFF
+   *    step 3: 0x0000FFFF -- set-bits -- 0x00FFFFFF
+   * 
+   *   So, 0x00FFFFFF is the mask for all bits changed. We can negate it to: 0xFF000000
+   *   
+   *   Then, we can apply it to the original source value with bitand
+   * 
+   *   0xA2A2A2A2 AND 0xFF000000 --> 0xA2000000
+   * 
+   * Finally, we get the result from A and B and unify them through a bitor
+   *   
+   *  0xA2000000 OR 0x00F1F1F1 --> 0xA2F1F1F1
+   * 
+   * Note about offsets: To handle them, we apply left shifts to the remaining offset after
+   * the computation of the object-value and initial mask representation
+   * 
+   */
+
+  expr2tc result = gen_zero(type);
+  auto value_downcast = typecast2tc(get_uint8_type(), value);
+  auto value_upcast = typecast2tc(
+    type,
+    value_downcast); // so smt_conv will complain about the width of the type
+
+  expr2tc mask = gen_zero(type);
+
+  auto eight = constant_int2tc(int_type2(), BigInt((int)8));
+  auto one = constant_int2tc(int_type2(), BigInt((int)1));
+  for(unsigned i = 0; i < num_of_bytes; i++)
+  {
+    result = shl2tc(type, result, eight);
+    result = bitor2tc(type, result, value_upcast);
+
+    for(int m = 0; m < 8; m++)
+    {
+      mask = shl2tc(type, mask, one);
+      mask = bitor2tc(type, mask, one);
+    }
+  }
+
+  // Do the rest of the offset!
+  for(unsigned i = 0; i < offset; i++)
+  {
+    result = shl2tc(type, result, eight);
+    mask = shl2tc(type, mask, eight);
+  }
+
+  mask = bitnot2tc(type, mask);
+  mask = bitand2tc(type, src, mask);
+  result = bitor2tc(type, result, mask);
+
+  auto simplified = result->simplify();
+  if(simplified)
+    return simplified;
+
+  return result;
+}
+
+inline expr2tc gen_value_by_byte(
+  const type2tc &type,
+  const expr2tc &src,
+  const expr2tc &value,
+  const size_t num_of_bytes,
+  const size_t offset)
+{
+  /**
+   * @brief Construct a new object, initializing it with the memset equivalent
+   *
+   * There are a few corner cases here:
+   * 
+   * 1 - Primitives: these are simple: just generate the byte_expression directly
+   * 2 - Arrays: these are ok: just keep generating byte_expression for each member
+   *        until a limit has arrived. Dynamic memory is dealt here.
+   * 3 - Structs/Union: these are the hardest as we have to take the alignment into
+   *        account when dealing with it. Hopefully the clang-frontend already give it
+   *        to us.
+   * 
+   */
+
+  // I am not sure if bitwise operations are valid for floats
+  if(is_floatbv_type(type) || is_fixedbv_type(type))
+    throw std::invalid_argument("This will not work for floats");
+
+  if(is_array_type(type))
+  {
+    /*
+     * Very straighforward, get the total number_of_bytes and keep subtracting until
+     * the end
+     */
+
+    constant_array2tc result = gen_zero(type);
+
+    auto base_size = type_byte_size(to_array_type(type).subtype).to_uint64();
+
+    auto bytes_left = num_of_bytes;
+    auto offset_left = offset;
+
+    for(unsigned i = 0; i < result->datatype_members.size(); i++)
+    {
+      BigInt position(i);
+      index2tc local_member(
+        to_array_type(type).subtype,
+        src,
+        constant_int2tc(get_uint32_type(), position));
+      // Skip offsets
+      if(offset_left >= base_size)
+      {
+        result->datatype_members[i] = local_member;
+        offset_left -= base_size;
+      }
+      else
+      {
+        assert(offset_left < base_size);
+        auto bytes_to_write = bytes_left < base_size ? bytes_left : base_size;
+        result->datatype_members[i] = gen_value_by_byte(
+          to_array_type(type).subtype,
+          local_member,
+          value,
+          bytes_to_write,
+          offset_left);
+        bytes_left =
+          bytes_left <= base_size ? 0 : bytes_left - (base_size - offset_left);
+        offset_left = offset_left <= base_size ? 0 : offset_left - base_size;
+        assert(offset_left == 0);
+      }
+    }
+
+    return result;
+  }
+
+  if(is_struct_type(type))
+  {
+    /** Similar to array, however get the size of
+     * each component
+     */
+    constant_struct2tc result = gen_zero(type);
+
+    auto bytes_left = num_of_bytes;
+    auto offset_left = offset;
+
+    for(unsigned i = 0; i < result->datatype_members.size(); i++)
+    {
+      auto current_member_type = result->datatype_members[i]->type;
+      auto current_member_size =
+        type_byte_size(current_member_type).to_uint64();
+
+      auto name = to_struct_type(type).member_names[i];
+      member2tc local_member(current_member_type, src, name);
+
+      // Skip offsets
+      if(offset_left >= current_member_size)
+      {
+        result->datatype_members[i] = local_member;
+        offset_left -= current_member_size;
+      }
+      else
+      {
+        assert(offset_left < current_member_size);
+        auto bytes_to_write =
+          bytes_left < current_member_size ? bytes_left : current_member_size;
+
+        result->datatype_members[i] = gen_value_by_byte(
+          current_member_type,
+          local_member,
+          value,
+          bytes_to_write,
+          offset_left);
+
+        bytes_left = bytes_left < current_member_size
+                       ? 0
+                       : bytes_left - (current_member_size - offset_left);
+        offset_left = offset_left <= current_member_size
+                        ? 0
+                        : offset_left - current_member_size;
+        assert(offset_left == 0);
+      }
+    }
+    return result;
+  }
+
+  if(is_union_type(type))
+  {
+    /**
+     * Unions are not nice, let's go through every member
+     * and get the biggest one! And then use it directly
+     * 
+     * @warning there is a semantic difference on this when
+     * compared to c:@F@__memset_impl. While this function
+     * will yield the same result as `clang` would, ESBMC
+     * will handle the dereference (in the __memset_impl)
+     * using the first member, which can lead to overflows.
+     * See GitHub Issue #639
+     * 
+     */
+    constant_union2tc result = gen_zero(type);
+
+    auto union_total_size = type_byte_size(type).to_uint64();
+    // Let's find a member with the biggest size
+    int selected_member_index;
+
+    for(unsigned i = 0; i < to_union_type(type).members.size(); i++)
+    {
+      if(
+        type_byte_size(to_union_type(type).members[i]).to_uint64() ==
+        union_total_size)
+      {
+        selected_member_index = i;
+        break;
+      }
+    }
+
+    auto name = to_union_type(type).member_names[selected_member_index];
+    auto member_type = to_union_type(type).members[selected_member_index];
+    member2tc member(member_type, src, name);
+
+    result->init_field = name;
+    result->datatype_members[0] =
+      gen_value_by_byte(member_type, member, value, num_of_bytes, offset);
+    return result;
+  }
+
+  // Found a primitive! Just apply the function
+  return gen_byte_expression(type, src, value, num_of_bytes, offset);
+}
+
 void goto_symext::intrinsic_memset(
   reachability_treet &art,
   const code_function_call2t &func_call)
 {
+  /**
+     * @brief This function will try to initialize the object pointed by
+     * the address in a smarter way, minimizing the number of assignments.
+     * This is intend to optimize the behaviour of a memset operation:
+     * 
+     * memset(void* ptr, int value, size_t num_of_bytes)
+     * 
+     * - ptr can point to anything. We have to add checks!
+     * - value is interpreted as a uchar.
+     * - num_of_bytes must be known. If it is nondet, we will bump the call
+     * 
+     * In plain C, the objective of a call such as:
+     * 
+     * int a;
+     * memset(&a, value, num)
+     * 
+     * Would generate something as:
+     *      
+     * int temp = 0;
+     * for(int i = 0; i < num; i++) temp = byte | (temp << 8);
+     * a = temp;
+     * 
+     * This is just a simplification for understanding though. During the
+     * instrumentation size checks will be added, and also, the original
+     * bytes from `a` that were not overwritten must be mantained! 
+     * Arrays will need to be added up to an nth element.
+     * 
+     * In ESBMC though, we have 2 main methods of dealing with memory objects:
+     * 
+     * A. Heap objects, which are valid/invalid. They are the easiest to deal
+     *    with, as the dereference will actually return a big array of char to us.
+     *    For this case, we can just overwrite the members directly with the value
+     * 
+     * B. Stack objects, which are typed. It will be hard, this will require operations
+     *    which depends on the base type and also on padding.
+     * 
+     */
+
+  // 1. Check for the functions parameters and do the deref and processing!
+
   assert(func_call.operands.size() == 3 && "Wrong memset signature");
   auto &ex_state = art.get_cur_state();
-  expr2tc ptr = func_call.operands[0];
-  expr2tc value = func_call.operands[1];
-  expr2tc size = func_call.operands[2];
-  std::map<type2tc, std::list<std::pair<type2tc, unsigned int>>> ref_types;
-
-  // This can be a conditional intrinsic
   if(ex_state.cur_state->guard.is_false())
     return;
 
-  // Define a local function for translating to calling the unwinding C
-  // implementation of memset
-  auto bump_call = [this, &func_call]() -> void {
+  // 2. Try to generate the optimized object. If not, go to the default call
+  try
+  {
+    // Get the argument
+    expr2tc arg0 = func_call.operands[0];
+    expr2tc arg1 = func_call.operands[1];
+    expr2tc arg2 = func_call.operands[2];
+
+    internal_deref_items.clear();
+    dereference2tc deref(get_empty_type(), arg0);
+    dereference(deref, dereferencet::INTERNAL);
+
+    // Is this pointing to a valid place?
+    if(!internal_deref_items.size())
+      throw std::invalid_argument("Couldn't deref the object");
+
+    arg0 = internal_deref_items.front().object;
+    auto offset = internal_deref_items.front().offset;
+
+    auto base_arg0 = internal_deref_items.front().object;
+    // Can we get the value of the object?
+    cur_state->rename(arg0);
+    cur_state->rename(arg1);
+    cur_state->rename(arg2);
+    cur_state->rename(offset);
+
+    if(!arg0 || !arg1 || !arg2 || !offset)
+      throw std::invalid_argument("Couldn't rename argument objects");
+
+    auto simplified = arg2->simplify();
+    if(simplified)
+      arg2 = simplified;
+
+    auto offset_simplified = offset->simplify();
+    if(offset_simplified)
+      offset = offset_simplified;
+
+    if(is_symbol2t(arg2) || is_symbol2t(offset))
+      throw std::invalid_argument(
+        "Can't optimize symbolic offsets or symbolic number_of_bytes");
+
+    auto number_of_bytes = to_constant_int2t(arg2).as_ulong();
+    auto number_of_offset = to_constant_int2t(offset).as_ulong();
+
+    // If this will cause some dereference issue... might as well rely on the default implementation
+    auto type_size = type_byte_size(arg0->type).to_uint64();
+    if(
+      ((type_size - number_of_offset) < number_of_bytes) ||
+      (number_of_offset > type_size))
+      throw std::invalid_argument("Safety constraints were violated");
+
+    auto new_object = gen_value_by_byte(
+      arg0->type, arg0, arg1, number_of_bytes, number_of_offset);
+
+    // 4. Assign the new object
+    symex_assign(
+      code_assign2tc(base_arg0, new_object), false, cur_state->guard);
+  }
+  catch(const std::invalid_argument &e)
+  {
     // We're going to execute a function call, and that's going to mess with
     // the program counter. Set it back *onto* pointing at this intrinsic, so
     // symex_function_call calculates the right return address. Misery.
     cur_state->source.pc--;
-
     expr2tc newcall = func_call.clone();
     code_function_call2t &mutable_funccall = to_code_function_call2t(newcall);
     mutable_funccall.function =
       symbol2tc(get_empty_type(), "c:@F@__memset_impl");
     // Execute call
     symex_function_call(newcall);
-    return;
-  };
-
-  // Skip if the operand is not zero. Because honestly, there's very little
-  // point.
-  cur_state->rename(value);
-  if(!is_constant_int2t(value) || to_constant_int2t(value).value != 0)
-  {
-    bump_call();
-    return;
-  }
-
-  // Work out what the ptr points at.
-  internal_deref_items.clear();
-  dereference2tc deref(get_empty_type(), ptr);
-  dereference(deref, dereferencet::INTERNAL);
-
-  // Work out here whether we can construct an assignment for each thing
-  // pointed at by the ptr.
-  cur_state->rename(size);
-  bool can_construct = true;
-  for(const auto &item : internal_deref_items)
-  {
-    const expr2tc &offs = item.offset;
-
-    int tmpsize;
-    try
-    {
-      tmpsize = type_byte_size(item.object->type).to_int64();
-    }
-    catch(const array_type2t::dyn_sized_array_excp &e)
-    {
-      tmpsize = -1;
-    }
-    catch(const array_type2t::inf_sized_array_excp &e)
-    {
-      tmpsize = -1;
-    }
-
-    if(
-      is_constant_int2t(offs) && to_constant_int2t(offs).value == 0 &&
-      is_constant_int2t(size) && to_constant_int2t(size).value == tmpsize)
-    {
-      continue;
-    }
-    else if(
-      !is_constant_int2t(offs) && is_constant_int2t(size) &&
-      to_constant_int2t(size).value == tmpsize)
-    {
-      continue;
-    }
-
-    // Alternately, we might be memsetting a field within a struct. Don't allow
-    // setting more than one field at a time, unaligned access, or the like.
-    // If you're setting a random run of bytes within a struct, best to use
-    // the C implementation.
-    if(is_struct_type(item.object->type) && is_constant_int2t(size))
-    {
-      unsigned int sz = to_constant_int2t(size).value.to_uint64();
-      ref_types.insert(std::make_pair(
-        item.object->type, std::list<std::pair<type2tc, unsigned int>>()));
-
-      std::function<bool(const type2tc &, unsigned int)> right_sized_field;
-      right_sized_field = [item, sz, &right_sized_field, &ref_types](
-                            const type2tc &strct, unsigned int offs) -> bool {
-        const struct_type2t &sref = to_struct_type(strct);
-        bool retval = false;
-        unsigned int i = 0;
-        for(const auto &elem : sref.members)
-        {
-          // Is this this field?
-          unsigned int fieldsize = type_byte_size(elem).to_uint64();
-          if(fieldsize == sz)
-          {
-            unsigned int new_offs = offs;
-            new_offs += member_offset(strct, sref.member_names[i]).to_uint64();
-            ref_types[item.object->type].push_back(
-              std::make_pair(elem, new_offs));
-            retval = true;
-          }
-
-          // Or in a struct in this field?
-          if(is_struct_type(elem))
-          {
-            unsigned int new_offs = offs;
-            new_offs += member_offset(strct, sref.member_names[i]).to_uint64();
-            if(right_sized_field(elem, new_offs))
-              retval = true;
-          }
-
-          i++;
-        }
-
-        return retval;
-      };
-
-      // Is there at least one field the same size
-      if(right_sized_field(item.object->type, 0))
-        continue;
-    }
-
-    can_construct = false;
-  }
-
-  if(can_construct)
-  {
-    for(const auto &item : internal_deref_items)
-    {
-      const expr2tc &offs = item.offset;
-      expr2tc val = gen_zero(item.object->type);
-      guardt curguard(cur_state->guard);
-      curguard.add(item.guard);
-
-      int tmpsize;
-      try
-      {
-        tmpsize = type_byte_size(item.object->type).to_int64();
-      }
-      catch(const array_type2t::dyn_sized_array_excp &e)
-      {
-        tmpsize = -1;
-      }
-      catch(const array_type2t::inf_sized_array_excp &e)
-      {
-        tmpsize = -1;
-      }
-
-      if(is_constant_int2t(offs) && to_constant_int2t(offs).value == 0)
-      {
-        symex_assign(code_assign2tc(item.object, val), false, curguard);
-      }
-      else if(
-        !is_constant_int2t(offs) && is_constant_int2t(size) &&
-        to_constant_int2t(size).value == tmpsize)
-      {
-        // It's a memset where the size is such that the only valid offset is
-        // zero.
-        symex_assign(code_assign2tc(item.object, val), false, curguard);
-        expr2tc eq = equality2tc(offs, gen_zero(offs->type));
-        curguard.guard_expr(eq);
-        if(!options.get_bool_option("no-pointer-check"))
-          claim(eq, "Memset of full-object-size must have zero offset");
-      }
-      else if(is_struct_type(item.object->type) && is_constant_int2t(size))
-      {
-        // Misery time: rather than re-building the build-reference-to logic,
-        // use it here. The memset'd size might correspond to a large number
-        // of incompatible types though: so we might need to _try_ to build
-        // references to a lot of them.
-        std::list<std::tuple<type2tc, expr2tc, expr2tc>> out_list;
-        std::list<std::pair<type2tc, unsigned int>> in_list;
-        auto it = ref_types.find(item.object->type);
-        assert(it != ref_types.end());
-        in_list = it->second;
-
-        // We now have a list of types and offsets we might resolve to.
-        symex_dereference_statet sds(*this, *cur_state);
-        dereferencet dereference(ns, new_context, options, sds);
-        dereference.set_block_assertions();
-        for(const auto &cur_type : in_list)
-        {
-          expr2tc value = item.object;
-          expr2tc this_offs = gen_ulong(cur_type.second);
-
-          if(is_array_type(cur_type.first))
-          {
-            // Build a reference to the first elem.
-            const array_type2t &arrtype = to_array_type(cur_type.first);
-            // Converting offset into bits here
-            expr2tc new_offset =
-              mul2tc(this_offs->type, this_offs, gen_ulong(8));
-            simplify(new_offset);
-
-            dereference.build_reference_rec(
-              value, new_offset, arrtype.subtype, curguard, dereferencet::READ);
-          }
-          else
-          {
-            // Converting offset into bits here
-            expr2tc new_offset =
-              mul2tc(this_offs->type, this_offs, gen_ulong(8));
-            simplify(new_offset);
-
-            dereference.build_reference_rec(
-              value, new_offset, cur_type.first, curguard, dereferencet::READ);
-          }
-
-          out_list.push_back(std::make_tuple(cur_type.first, value, this_offs));
-          // XXX: what if we generate an address of a stitched expr?
-        }
-
-        // OK, we now have a list of references we might point at. Assert that
-        // we actually point at one of them.
-        expr2tc or_accuml = gen_false_expr();
-        for(const auto &ref : out_list)
-        {
-          const expr2tc &this_offs = std::get<2>(ref);
-          pointer_offset2tc ptroffs(this_offs->type, ptr);
-          equality2tc eq(this_offs, ptroffs);
-          or_accuml = or2tc(or_accuml, eq);
-        }
-
-        curguard.guard_expr(or_accuml);
-        if(!options.get_bool_option("no-pointer-check"))
-          claim(
-            or_accuml,
-            "Unaligned, cross-field or other non-field-based memset?");
-        for(const auto &ref : out_list)
-        {
-          guardt newguard(curguard);
-          pointer_offset2tc ptroffs(std::get<2>(ref)->type, ptr);
-          equality2tc eq(std::get<2>(ref), ptroffs);
-          newguard.add(eq);
-
-          expr2tc target = std::get<1>(ref);
-          if(is_array_type(std::get<0>(ref)))
-          {
-            // Actually, the deref'd operand is now an array.
-            assert(is_index2t(target));
-            const index2t &idx = to_index2t(target);
-            target = idx.source_value;
-          }
-
-          expr2tc zero = gen_zero(std::get<0>(ref));
-          symex_assign(code_assign2tc(target, zero), false, newguard);
-        }
-      }
-      else
-      {
-        log_error("Logic mismatch in memset intrinsic");
-        abort();
-      }
-    }
-
-    // Construct assignment to return value
-    expr2tc ret_ref = func_call.ret;
-    dereference(ret_ref, dereferencet::READ);
-    symex_assign(code_assign2tc(ret_ref, ptr), false, cur_state->guard);
-  }
-  else
-  {
-    bump_call();
   }
 }
 
