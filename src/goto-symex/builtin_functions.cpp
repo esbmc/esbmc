@@ -747,12 +747,14 @@ expr2tc gen_byte_expression_byte_update(
   auto optimized = src->simplify();
   if(optimized)
   {
-    found_constant = is_typecast2t(optimized) && is_constant_int2t(to_typecast2t(optimized).from);
-    if(found_constant) {
-       new_src = to_typecast2t(optimized).from;
-       new_type = get_int64_type();
-    }      
-  }  
+    found_constant = is_typecast2t(optimized) &&
+                     is_constant_int2t(to_typecast2t(optimized).from);
+    if(found_constant)
+    {
+      new_src = to_typecast2t(optimized).from;
+      new_type = get_int64_type();
+    }
+  }
 
   expr2tc result = new_src;
   auto value_downcast = typecast2tc(get_uint8_type(), value);
@@ -761,11 +763,16 @@ expr2tc gen_byte_expression_byte_update(
   for(size_t counter = 0; counter < num_of_bytes; counter++)
   {
     constant_int2tc increment(get_int32_type(), BigInt(counter));
-    result = byte_update2tc(new_type, result, add2tc(off->type, off, increment), value_downcast, false);
-  }  
+    result = byte_update2tc(
+      new_type,
+      result,
+      add2tc(off->type, off, increment),
+      value_downcast,
+      false);
+  }
 
   if(found_constant)
-      result = typecast2tc(type, result);
+    result = typecast2tc(type, result);
 
   auto simplified = result->simplify();
   if(simplified)
@@ -773,7 +780,6 @@ expr2tc gen_byte_expression_byte_update(
 
   return result;
 }
-
 
 // Computes the equivalent object value when considering a memset operation on it
 expr2tc gen_byte_expression(
@@ -833,7 +839,8 @@ expr2tc gen_byte_expression(
    */
 
   if(is_pointer_type(type))
-    return gen_byte_expression_byte_update(type, src, value, num_of_bytes, offset);
+    return gen_byte_expression_byte_update(
+      type, src, value, num_of_bytes, offset);
   expr2tc result = gen_zero(type);
   auto value_downcast = typecast2tc(get_uint8_type(), value);
   auto value_upcast = typecast2tc(
