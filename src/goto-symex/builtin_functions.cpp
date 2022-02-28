@@ -731,6 +731,32 @@ void goto_symext::symex_va_arg(const expr2tc &lhs, const sideeffect2t &code)
 }
 
 // Computes the equivalent object value when considering a memset operation on it
+expr2tc gen_byte_expression_byte_update(
+  const type2tc &type,
+  const expr2tc &src,
+  const expr2tc &value,
+  const size_t num_of_bytes,
+  const size_t offset)
+{
+  expr2tc result = src;
+  auto value_downcast = typecast2tc(get_uint8_type(), value);
+
+  constant_int2tc off(get_int32_type(), BigInt(offset));
+  for(size_t counter = 0; counter < num_of_bytes; counter++)
+  {
+    constant_int2tc increment(get_int32_type(), BigInt(counter));
+    result = byte_update2tc(type, result, add2tc(off->type, off, increment), value_downcast, false);
+  }
+
+  auto simplified = result->simplify();
+  if(simplified)
+    return simplified;
+
+  return result;
+}
+
+
+// Computes the equivalent object value when considering a memset operation on it
 expr2tc gen_byte_expression(
   const type2tc &type,
   const expr2tc &src,
@@ -787,6 +813,8 @@ expr2tc gen_byte_expression(
    * 
    */
 
+  if(is_pointer_type(type))
+    return gen_byte_expression_byte_update(type, src, value, num_of_bytes, offset);
   expr2tc result = gen_zero(type);
   auto value_downcast = typecast2tc(get_uint8_type(), value);
   auto value_upcast = typecast2tc(
@@ -911,6 +939,13 @@ inline expr2tc gen_value_by_byte(
 
     for(unsigned i = 0; i < result->datatype_members.size(); i++)
     {
+      auto name = to_struct_type(type).member_names[i];
+      member2tc local_member(to_struct_type(type).members[i], src, name);
+
+      // Since it is a symbol, lets start from the old value
+      if(is_pointer_type(to_struct_type(type).members[i]))
+        result->datatype_members[i] = local_member;
+
       auto current_member_type = result->datatype_members[i]->type;
       auto current_member_size =
         type_byte_size(current_member_type).to_uint64();
