@@ -738,15 +738,34 @@ expr2tc gen_byte_expression_byte_update(
   const size_t num_of_bytes,
   const size_t offset)
 {
-  expr2tc result = src;
+  // Sadly, our simplifier can not do byte operations
+  // safely. We can however :)
+  auto new_src = src;
+  auto new_type = type;
+
+  auto found_constant = false;
+  auto optimized = src->simplify();
+  if(optimized)
+  {
+    found_constant = is_typecast2t(optimized) && is_constant_int2t(to_typecast2t(optimized).from);
+    if(found_constant) {
+       new_src = to_typecast2t(optimized).from;
+       new_type = get_int64_type();
+    }      
+  }  
+
+  expr2tc result = new_src;
   auto value_downcast = typecast2tc(get_uint8_type(), value);
 
   constant_int2tc off(get_int32_type(), BigInt(offset));
   for(size_t counter = 0; counter < num_of_bytes; counter++)
   {
     constant_int2tc increment(get_int32_type(), BigInt(counter));
-    result = byte_update2tc(type, result, add2tc(off->type, off, increment), value_downcast, false);
-  }
+    result = byte_update2tc(new_type, result, add2tc(off->type, off, increment), value_downcast, false);
+  }  
+
+  if(found_constant)
+      result = typecast2tc(type, result);
 
   auto simplified = result->simplify();
   if(simplified)
@@ -947,11 +966,9 @@ inline expr2tc gen_value_by_byte(
         result->datatype_members[i] = local_member;
 
       auto current_member_type = result->datatype_members[i]->type;
+
       auto current_member_size =
         type_byte_size(current_member_type).to_uint64();
-
-      auto name = to_struct_type(type).member_names[i];
-      member2tc local_member(current_member_type, src, name);
 
       // Skip offsets
       if(offset_left >= current_member_size)
@@ -1094,9 +1111,12 @@ void goto_symext::intrinsic_memset(
     if(!internal_deref_items.size())
       throw std::invalid_argument("Couldn't deref the object");
 
+    // Are we pointing to multiple places?
+    if(internal_deref_items.size() > 1)
+      throw std::invalid_argument("No support for those yet");
+
     arg0 = internal_deref_items.front().object;
     auto offset = internal_deref_items.front().offset;
-
     auto base_arg0 = internal_deref_items.front().object;
     // Can we get the value of the object?
     cur_state->rename(arg0);
