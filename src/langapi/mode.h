@@ -62,7 +62,7 @@ languaget *new_solidity_language(const messaget &msg);
   }
 
 int get_mode(const std::string &str);
-int get_mode_filename(const std::string &filename, optionst *options);
+int get_mode_filename(const std::string &filename);
 
 languaget *new_language(const char *mode, const messaget &msg);
 

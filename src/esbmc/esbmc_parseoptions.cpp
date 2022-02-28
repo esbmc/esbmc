@@ -1423,9 +1423,9 @@ bool esbmc_parseoptionst::get_goto_program(
       }
 
       // Typecheking (old frontend) or adjust (clang frontend)
-      if(typecheck()) // DEBUG: symbols 0 -> 73
+      if(typecheck())
         return true;
-      if(final()) // DEBUG: symbols 73 -> 79
+      if(final())
         return true;
 
       // we no longer need any parse trees or language files
@@ -1446,7 +1446,7 @@ bool esbmc_parseoptionst::get_goto_program(
       // Ahem
       migrate_namespace_lookup = new namespacet(context);
 
-      goto_convert(context, options, goto_functions, msg); // DEBUG: symbols 79 -> 79
+      goto_convert(context, options, goto_functions, msg);
     }
 
     fine_timet parse_stop = current_time();

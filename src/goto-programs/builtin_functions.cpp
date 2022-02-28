@@ -515,6 +515,7 @@ void goto_convertt::do_function_call_symbol(
   const irep_idt &identifier = function.identifier();
 
   const symbolt *symbol;
+
   if(ns.lookup(identifier, symbol))
   {
     err_location(function);

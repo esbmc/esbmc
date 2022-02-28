@@ -31,7 +31,7 @@ bool language_uit::parse()
 
 bool language_uit::parse(const std::string &filename)
 {
-  int mode = get_mode_filename(filename, &(config.options));
+  int mode = get_mode_filename(filename);
 
   if(mode < 0)
   {

@@ -297,14 +297,17 @@ bool c_main(
   // Call to main symbol is now in "call"; construct calls to thread library
   // hooks for main thread start and main thread end.
 
+  // For the old frontend, we just use pthread_start_main_hook instead of "c:@F@pthread_start_main_hook" in the old frontend.
+  // The latter is used by clang-c-frontend to verify multi-threaded programs and atomics.
+  // If we want to use the latter, we also need to deal with the symbols referred to from the body of c:@F@pthread_strat_main_hook,
+  // such as __ESBMC_num_threads_running, __ESBMC_num_total_threads, and __ESBMC_atomic_end .etc.
+  // This will become an independent task to add thread support. See clang_c_languaget::final function for example.
   code_function_callt thread_start_call;
   thread_start_call.location() = symbol.location;
-  thread_start_call.function() = symbol_exprt("c:@F@pthread_start_main_hook"); // DEBUG: fail
-  //thread_start_call.function() = symbol_exprt("pthread_start_main_hook"); // DEBUG: fixes
+  thread_start_call.function() = symbol_exprt("pthread_start_main_hook");
   code_function_callt thread_end_call;
   thread_end_call.location() = symbol.location;
-  thread_end_call.function() = symbol_exprt("c:@F@pthread_end_main_hook"); // DEBUG: fail
-  //thread_end_call.function() = symbol_exprt("pthread_end_main_hook"); // DEBUG: fixes
+  thread_end_call.function() = symbol_exprt("pthread_end_main_hook");
 
   init_code.move_to_operands(thread_start_call);
   init_code.move_to_operands(call);

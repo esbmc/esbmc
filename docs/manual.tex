@@ -431,14 +431,7 @@ assignment is emitted assigning the initial value to the global variable.
 \section{GOTO programs}
 
 This section covers both the GOTO program record itself, and the GOTO
-instructions that make it up. Before launching into a description of these
-records, it is important to understand that CBMC synthesizes the
-\url{goto_programt} class from the \url{goto_program_templatet}
-template. This can lead to the most confusing and obscure error messages
-if you do not realise that you're manipulating a template. From a design
-point of view, the reason for this appears to be so that the types of
-the GOTO program body could be parameterised; a decision that is almost
-entirely without merit.
+instructions that make it up.
 
 The \url{goto_programt} class is more or less just a container for a
 list of GOTO instructions (of class \url{goto_programt::instructiont}).

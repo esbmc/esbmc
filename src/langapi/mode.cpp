@@ -30,7 +30,7 @@ int get_mode(const std::string &str)
   return -1;
 }
 
-int get_mode_filename(const std::string &filename, optionst *options)
+int get_mode_filename(const std::string &filename)
 {
   const char *ext = strrchr(filename.c_str(), '.');
 
@@ -52,7 +52,7 @@ int get_mode_filename(const std::string &filename, optionst *options)
       {
         // We have two frontends for C and C++ respectively: one is clang and the other one is C++.
         // We return mode on the second match using old-frontend.
-        if(options->get_bool_option("old-frontend") && !first_match_found)
+        if(config.options.get_bool_option("old-frontend") && !first_match_found)
         {
           first_match_found = true;
           continue;

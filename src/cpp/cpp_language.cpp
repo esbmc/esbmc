@@ -21,7 +21,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/config.h>
 #include <util/replace_symbol.h>
 #include <util/message/format.h>
-#include <iostream> // DEBUG: remove before commit
 
 bool cpp_languaget::preprocess(
   const std::string &path,
@@ -147,7 +146,6 @@ bool cpp_languaget::parse(
   std::ostringstream o_preprocessed;
 
   internal_additions(o_preprocessed);
-  //std::cout << o_preprocessed.str() << std::endl;
 
   if(preprocess(path, o_preprocessed, message_handler))
     return true;
@@ -204,14 +202,8 @@ bool cpp_languaget::final(contextt &context, const messaget &message_handler)
 
 void cpp_languaget::show_parse(std::ostream &out)
 {
-  unsigned index = 0;
-  for (const auto &it : cpp_parse_tree.items)
-  {
-    out << fmt::format("### cpp parse tree item #{}:\n", index++);
+  for(const auto &it : cpp_parse_tree.items)
     show_parse(out, it);
-    out << fmt::format("### end of cpp parse tree item #{}\n\n", index);
-  }
-  out << fmt::format("### cpp parse tree total items: {}\n", index);
 }
 
 void cpp_languaget::show_parse(std::ostream &out, const cpp_itemt &item)

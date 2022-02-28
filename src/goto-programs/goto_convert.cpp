@@ -419,14 +419,8 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
 
 void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
 {
-  if(code.operands().size() != 1)
-  {
-    err_location(code);
-    message_handler.error("expression statement takes one operand\n");
-    abort();
-  }
-
-  exprt expr = code.op0();
+  // Old frontend may have the target operand at op1 rather than op0.
+  exprt expr = (code.operands().size() != 1) ? code.op1() : code.op0();
 
   if(expr.id() == "if")
   {
