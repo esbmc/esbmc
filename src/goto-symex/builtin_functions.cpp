@@ -1127,6 +1127,8 @@ void goto_symext::intrinsic_memset(
   expr2tc arg1 = func_call.operands[1];
   expr2tc arg2 = func_call.operands[2];
 
+  msg.debug("[memset] started call");
+
   // Checks where arg0 points to
   internal_deref_items.clear();
   dereference2tc deref(get_empty_type(), arg0);
@@ -1193,6 +1195,40 @@ void goto_symext::intrinsic_memset(
       return;
     }
 
+    // TODO: Why (X*Y)/Y is not X?
+    if(is_div2t(item_offset))
+    {
+      auto as_div = to_div2t(item_offset);
+      if(is_mul2t(as_div.side_1) && is_constant_int2t(as_div.side_2))
+      {
+        auto as_mul = to_mul2t(as_div.side_1);
+        if(
+          is_constant_int2t(as_mul.side_2) &&
+          (to_constant_int2t(as_mul.side_2).as_ulong() ==
+           to_constant_int2t(as_div.side_2).as_ulong()))
+        {
+          // if side_1 of mult is a pointer_offset, then it is just zero
+          if(is_pointer_offset2t(as_mul.side_1))
+          {
+            msg.debug("[memset] TODO: some simplifications are missing");
+            item_offset = constant_int2tc(get_uint64_type(), BigInt(0));
+          }
+        }
+      }
+    }
+
+    if(!is_constant_int2t(item_offset))
+    {
+      /* If we reached here, item_offset is not symbolic
+       * and we don't know what the actual value of it is...
+       *
+       * For now bum_call later expand our simplifier
+       */
+      msg.debug("[memset] TODO: some simplifications are missing");
+      bump_call();
+      return;
+    }
+
     auto number_of_offset = to_constant_int2t(item_offset).as_ulong();
     auto type_size = type_byte_size(item_object->type).to_uint64();
 
@@ -1237,7 +1273,7 @@ void goto_symext::intrinsic_memset(
     ex_state.cur_state->guard.guard_expr(null_check);
     claim(null_check, " dereference failure: NULL pointer");
   }
-  msg.debug("[memset] adding return");
+
   expr2tc ret_ref = func_call.ret;
   dereference(ret_ref, dereferencet::READ);
   symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
