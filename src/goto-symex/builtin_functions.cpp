@@ -1224,13 +1224,26 @@ void goto_symext::intrinsic_memset(
        *
        * For now bum_call later expand our simplifier
        */
-      msg.debug("[memset] TODO: some simplifications are missing");
+      msg.debug("[memset] TODO: some simplifications are missing, bumping call");
       bump_call();
       return;
     }
 
-    auto number_of_offset = to_constant_int2t(item_offset).as_ulong();
+    auto number_of_offset = to_constant_int2t(item_offset).value.to_uint64();
     auto type_size = type_byte_size(item_object->type).to_uint64();
+
+    if(is_code_type(item_object->type))
+    {
+      auto error_msg =  fmt::format(
+          "dereference failure: trying to deref a ptr code");     
+      
+      auto false_expr = gen_false_expr();
+      guard.guard_expr(false_expr);
+      claim(
+        false_expr,
+        error_msg);
+      continue;
+    }
 
     auto is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
                          (number_of_offset > type_size);
@@ -1238,16 +1251,16 @@ void goto_symext::intrinsic_memset(
       is_out_bounds && !options.get_bool_option("no-pointer-check") &&
       !options.get_bool_option("no-bounds-check"))
     {
-      guard.add(gen_false_expr());
-      claim(
-        gen_false_expr(),
-        fmt::format(
+      auto error_msg =  fmt::format(
           "dereference failure: memset of memory segment of size {} with {} "
           "bytes",
           type_size - number_of_offset,
-          number_of_bytes));
-      symex_assign(
-        code_assign2tc(item.object, gen_zero(item_object->type)), false, guard);
+          number_of_bytes);
+      
+      guard.add(gen_false_expr());
+      claim(
+        gen_false_expr(),
+        error_msg);
       continue;
     }
 
