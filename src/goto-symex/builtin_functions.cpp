@@ -738,7 +738,7 @@ expr2tc gen_byte_expression_byte_update(
   const size_t num_of_bytes,
   const size_t offset)
 {
-  // Sadly, our simplifier can not do byte operations
+  // Sadly, our simplifier can not typecast from value operations
   // safely. We can however :)
   auto new_src = src;
   auto new_type = type;
@@ -904,7 +904,7 @@ inline expr2tc gen_value_by_byte(
 
   // I am not sure if bitwise operations are valid for floats
   if(is_floatbv_type(type) || is_fixedbv_type(type))
-    throw std::invalid_argument("This will not work for floats");
+    return expr2tc();
 
   if(is_array_type(type))
   {
@@ -1102,80 +1102,145 @@ void goto_symext::intrinsic_memset(
   if(ex_state.cur_state->guard.is_false())
     return;
 
-  // 2. Try to generate the optimized object. If not, go to the default call
-  try
-  {
-    // Get the argument
-    expr2tc arg0 = func_call.operands[0];
-    expr2tc arg1 = func_call.operands[1];
-    expr2tc arg2 = func_call.operands[2];
-
-    internal_deref_items.clear();
-    dereference2tc deref(get_empty_type(), arg0);
-    dereference(deref, dereferencet::INTERNAL);
-
-    // Is this pointing to a valid place?
-    if(!internal_deref_items.size())
-      throw std::invalid_argument("Couldn't deref the object");
-
-    // Are we pointing to multiple places?
-    if(internal_deref_items.size() > 1)
-      throw std::invalid_argument("No support for those yet");
-
-    arg0 = internal_deref_items.front().object;
-    auto offset = internal_deref_items.front().offset;
-    auto base_arg0 = internal_deref_items.front().object;
-    // Can we get the value of the object?
-    cur_state->rename(arg0);
-    cur_state->rename(arg1);
-    cur_state->rename(arg2);
-    cur_state->rename(offset);
-
-    if(!arg0 || !arg1 || !arg2 || !offset)
-      throw std::invalid_argument("Couldn't rename argument objects");
-
-    auto simplified = arg2->simplify();
-    if(simplified)
-      arg2 = simplified;
-
-    auto offset_simplified = offset->simplify();
-    if(offset_simplified)
-      offset = offset_simplified;
-
-    if(is_symbol2t(arg2) || is_symbol2t(offset))
-      throw std::invalid_argument(
-        "Can't optimize symbolic offsets or symbolic number_of_bytes");
-
-    auto number_of_bytes = to_constant_int2t(arg2).as_ulong();
-    auto number_of_offset = to_constant_int2t(offset).as_ulong();
-
-    // If this will cause some dereference issue... might as well rely on the default implementation
-    auto type_size = type_byte_size(arg0->type).to_uint64();
-    if(
-      ((type_size - number_of_offset) < number_of_bytes) ||
-      (number_of_offset > type_size))
-      throw std::invalid_argument("Safety constraints were violated");
-
-    auto new_object = gen_value_by_byte(
-      arg0->type, arg0, arg1, number_of_bytes, number_of_offset);
-
-    // 4. Assign the new object
-    symex_assign(
-      code_assign2tc(base_arg0, new_object), false, cur_state->guard);
-  }
-  catch(const std::invalid_argument &e)
-  {
+  // Define a local function for translating to calling the unwinding C
+  // implementation of memset
+  auto bump_call = [this, &func_call]() -> void {
     // We're going to execute a function call, and that's going to mess with
     // the program counter. Set it back *onto* pointing at this intrinsic, so
     // symex_function_call calculates the right return address. Misery.
     cur_state->source.pc--;
+
     expr2tc newcall = func_call.clone();
     code_function_call2t &mutable_funccall = to_code_function_call2t(newcall);
     mutable_funccall.function =
       symbol2tc(get_empty_type(), "c:@F@__memset_impl");
     // Execute call
     symex_function_call(newcall);
+    return;
+  };
+
+  /* Get the arguments
+     * arg0: ptr to object
+     * arg1: int for the new byte value
+     * arg2: number of bytes to be set */
+  expr2tc arg0 = func_call.operands[0];
+  expr2tc arg1 = func_call.operands[1];
+  expr2tc arg2 = func_call.operands[2];
+
+  // Checks where arg0 points to
+  internal_deref_items.clear();
+  dereference2tc deref(get_empty_type(), arg0);
+  dereference(deref, dereferencet::INTERNAL);
+
+  /* Preconditions for the optimization:
+     * A: It should point to someplace
+     * B: byte itself should be renamed properly 
+     * C: Number of bytes cannot be symbolic 
+     * D: This is a simplification. So don't run with --no-simplify */
+  cur_state->rename(arg1);
+  cur_state->rename(arg2);
+  if(
+    !internal_deref_items.size() || !arg1 || !arg2 || is_symbol2t(arg2) ||
+    options.get_bool_option("no-simplify"))
+  {
+    /* Not sure what to do here, let's rely
+       * on the default implementation then */
+    msg.debug("[memset] Couldn't optimize memset due to precondition");
+    bump_call();
+    return;
   }
+
+  auto simplified = arg2->simplify();
+  if(simplified)
+    arg2 = simplified;
+
+  auto number_of_bytes = to_constant_int2t(arg2).as_ulong();
+
+  // If no byte was changed... we are finished
+
+  // Where are we pointing to?
+  for(auto &item : internal_deref_items)
+  {
+    auto guard = ex_state.cur_state->guard;
+    auto item_object = item.object;
+    auto item_offset = item.offset;
+    guard.add(item.guard);
+
+    cur_state->rename(item_object);
+    cur_state->rename(item_offset);
+
+    /* Pre-requisites locally:
+       * item_object must be something!
+       * item_offset must be something! */
+    if(!item_object || !item_offset)
+    {
+      msg.debug("[memset] Couldn't get item_object/item_offset");
+      bump_call();
+      return;
+    }
+
+    auto offset_simplified = item_offset->simplify();
+    if(offset_simplified)
+      item_offset = offset_simplified;
+
+    // We can't optimize symbolic offsets :/
+    if(is_symbol2t(item_offset))
+    {
+      msg.debug(fmt::format(
+        "[memset] Item offset is symbolic: {}",
+        to_symbol2t(item_offset).get_symbol_name()));
+      bump_call();
+      return;
+    }
+
+    auto number_of_offset = to_constant_int2t(item_offset).as_ulong();
+    auto type_size = type_byte_size(item_object->type).to_uint64();
+
+    auto is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
+                         (number_of_offset > type_size);
+    if(
+      is_out_bounds && !options.get_bool_option("no-pointer-check") &&
+      !options.get_bool_option("no-bounds-check"))
+    {
+      guard.add(gen_false_expr());
+      claim(
+        gen_false_expr(),
+        fmt::format(
+          "dereference failure: memset of memory segment of size {} with {} "
+          "bytes",
+          type_size - number_of_offset,
+          number_of_bytes));
+      symex_assign(
+        code_assign2tc(item.object, gen_zero(item_object->type)), false, guard);
+      continue;
+    }
+
+    auto new_object = gen_value_by_byte(
+      item_object->type, item_object, arg1, number_of_bytes, number_of_offset);
+
+    // Where we able to optimize it? If not... bump call
+    if(!new_object)
+    {
+      msg.debug("[memset] gen_value_by_byte failed");
+      bump_call();
+      return;
+    }
+    // 4. Assign the new object
+    symex_assign(code_assign2tc(item.object, new_object), false, guard);
+  }
+  // Lastly, let's add a NULL ptr check
+  if(!options.get_bool_option("no-pointer-check"))
+  {
+    symbol2tc null_sym(arg0->type, "NULL");
+    same_object2tc obj(arg0, null_sym);
+    not2tc null_check(same_object2tc(arg0, null_sym));
+    ex_state.cur_state->guard.guard_expr(null_check);
+    claim(null_check, " dereference failure: NULL pointer");
+  }
+  msg.debug("[memset] adding return");
+  expr2tc ret_ref = func_call.ret;
+  dereference(ret_ref, dereferencet::READ);
+  symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
 }
 
 void goto_symext::intrinsic_get_object_size(
