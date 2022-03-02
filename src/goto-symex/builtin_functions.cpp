@@ -1156,6 +1156,13 @@ void goto_symext::intrinsic_memset(
   if(simplified)
     arg2 = simplified;
 
+  if(!is_constant_int2t(arg2))
+  {
+    msg.debug("[memset] TODO: simplifier issues :/");
+    bump_call();
+    return;
+  }
+
   auto number_of_bytes = to_constant_int2t(arg2).as_ulong();
 
   // If no byte was changed... we are finished
