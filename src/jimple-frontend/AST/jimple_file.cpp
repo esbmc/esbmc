@@ -1,6 +1,8 @@
 #include <map>
 #include <fstream>
 #include <jimple-frontend/AST/jimple_file.h>
+#include <util/message/default_message.h>
+#include <util/message/format.h>
 #include <util/std_code.h>
 #include <util/expr_util.h>
 
@@ -62,18 +64,24 @@ void jimple_file::from_json(const json &j)
   {
     // TODO: Here is where to add support for signatures
     auto content_type = x.at("object").get<std::string>();
-     std::shared_ptr<jimple_class_member> to_add;
+    std::shared_ptr<jimple_class_member> to_add;
     if(content_type == "Method")
     {
       jimple_method m;
       x.get_to(m);
       to_add = std::make_shared<jimple_method>(m);
     }
-    else if (content_type == "Field")
+    else if(content_type == "Field")
     {
       jimple_class_field m;
       x.get_to(m);
       to_add = std::make_shared<jimple_class_field>(m);
+    }
+    else
+    {
+      default_message msg;
+      msg.error(fmt::format("Unsupported object: {}", content_type));
+      abort();
     }
     body.push_back(to_add);
   }
@@ -110,12 +118,6 @@ exprt jimple_file::to_exprt(contextt &ctx) const
 
   exprt e = code_skipt();
 
-  // TODO: support interface
-  if(is_interface())
-  {
-    throw "Interface is not supported";
-  }
-
   std::string id, name;
   id = "tag-" + this->class_name;
   name = this->class_name;
@@ -150,21 +152,21 @@ exprt jimple_file::to_exprt(contextt &ctx) const
       t.components().push_back(comp);
       total_size += std::stoi(comp.type().width().as_string());
     }
-    //else
-    //  field->to_exprt(ctx,name,name);
   }
 
+  // Here is where we add the inherited fields
+
+  // Finally, the structure is ready. Lets add it
   t.set("width", total_size);
   added_symbol->type = t;
 
+  // Add the methods and definitions
   for(auto const &field : body)
   {
     if(!std::dynamic_pointer_cast<jimple_class_field>(field))
     {
-      field->to_exprt(ctx,name,name);
+      field->to_exprt(ctx, name, name);
     }
-    //else
-    //  
   }
   return e;
 }

@@ -156,12 +156,10 @@ void jimple_languaget::setup_main(contextt &context)
   static_lifetime_init(context, init_code);
 
   init_code.make_block();
-  //init_code.end_location(symbol.value.end_location());
 
   // build call to function
 
   code_function_callt call;
-  //call.location() = symbol.location;
   call.function() = symbol_expr(symbol);
 
   const code_typet::argumentst &arguments =

@@ -62,7 +62,7 @@ void jimple_full_method_body::from_json(const json &stmts)
       jimple_invoke s;
       stmt.get_to(s);
       to_add = std::make_shared<jimple_invoke>(s);
-      break;      
+      break;
     }
     case statement::Return:
     {
@@ -91,10 +91,6 @@ void jimple_full_method_body::from_json(const json &stmts)
       stmt.get_to(s);
       to_add = std::make_shared<jimple_assignment>(s);
       break;
-    }
-    case statement::Assertion:
-    {
-      throw fmt::format("Assertion type {}", stmt);
     }
     case statement::Throw:
     {

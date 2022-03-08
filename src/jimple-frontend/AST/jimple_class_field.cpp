@@ -13,7 +13,7 @@ exprt jimple_class_field::to_exprt(
   typet t = type.to_typet(ctx);
   std::string id;
   id = "tag-" + name;
-  struct_union_typet::componentt comp(id, name, t); 
+  struct_union_typet::componentt comp(id, name, t);
   return comp;
 }
 
@@ -25,7 +25,6 @@ void jimple_class_field::from_json(const json &j)
   j.at("type").get_to(type);
   // Method Name
   j.at("name").get_to(this->name);
-  
 }
 std::string jimple_class_field::to_string() const
 {

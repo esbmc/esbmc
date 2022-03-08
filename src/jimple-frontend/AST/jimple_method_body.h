@@ -66,12 +66,11 @@ public:
 
   enum class statement
   {
-    Assertion,       // TODO: This will be removed eventually (for debugging)
-    Assignment,      // A = 42
+    Assignment, // A = 42
     Identity, // @this, @parameter0, @parameter1, ...; This will be removed as it can solved directly in the frontend
-    StaticInvoke,  // foo() (where foo is a static function)
-    SpecialInvoke, // A.foo() (where A is an object)
-    VirtualInvoke,
+    StaticInvoke, // foo() (where foo is a static function)
+    SpecialInvoke, // Special methods of the class: constructors/static-constructor
+    VirtualInvoke, // A.foo() (where A is an object)
     Return,        // return; return 42;
     Label,         // 1:, 2:; (GOTO labels)
     Goto,          // goto 1;
@@ -93,7 +92,6 @@ private:
     {"Label", statement::Label},
     {"Goto", statement::Goto},
     {"SetVariable", statement::Assignment},
-    {"Assert", statement::Assertion},
     {"If", statement::If},
     {"Throw", statement::Throw}};
 
@@ -106,7 +104,6 @@ private:
     {statement::Label, "Label"},
     {statement::Goto, "Goto"},
     {statement::Assignment, "Assignment"},
-    {statement::Assertion, "Assertion"},
     {statement::If, "If"},
     {statement::Declaration, "Declaration"},
     {statement::Throw, "Throw"}};

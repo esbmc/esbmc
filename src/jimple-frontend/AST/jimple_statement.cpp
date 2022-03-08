@@ -131,7 +131,7 @@ std::string jimple_assignment::to_string() const
 }
 
 void jimple_assignment::from_json(const json &j)
-{  
+{
   lhs = jimple_expr::get_expression(j.at("lhs"));
   rhs = jimple_expr::get_expression(j.at("rhs"));
 }
@@ -147,8 +147,8 @@ exprt jimple_assignment::to_exprt(
     code_skipt skip;
     return skip;
   }
-  
-  auto lhs_handle = lhs->to_exprt(ctx,class_name,function_name);
+
+  auto lhs_handle = lhs->to_exprt(ctx, class_name, function_name);
 
   auto dyn_expr = std::dynamic_pointer_cast<jimple_expr_invoke>(rhs);
   if(dyn_expr && !dyn_expr->is_nondet_call())
@@ -338,7 +338,6 @@ void jimple_invoke::from_json(const json &j)
   method += "_" + get_hash_name();
 }
 
-
 exprt jimple_invoke::to_exprt(
   contextt &ctx,
   const std::string &class_name,
@@ -396,7 +395,8 @@ exprt jimple_invoke::to_exprt(
   if(variable != "")
   {
     // Let's add @THIS
-    auto this_expression = jimple_symbol(variable).to_exprt(ctx, class_name, function_name);
+    auto this_expression =
+      jimple_symbol(variable).to_exprt(ctx, class_name, function_name);
     call.arguments().push_back(this_expression);
     auto temp = get_symbol_name(base_class, method, "@this");
     symbolt &added_symbol = *ctx.find_symbol(temp);
