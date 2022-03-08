@@ -53,7 +53,6 @@ void goto_contractort::insert_assume(
   goto_functionst goto_functions,
   IntervalVector new_intervals)
 {
-
   std::cout << "Inserting assumes: " << std::endl;
   loopst loop;
   for(auto &function_loop : function_loops)
