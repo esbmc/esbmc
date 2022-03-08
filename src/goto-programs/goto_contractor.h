@@ -38,7 +38,7 @@ public:
       var_name[n] = name;
       auto w = symbol.type->get_width();
       if(is_signedbv_type(symbol.type))
-        add_interval(pow(-2,w-1),pow(2,w-1)-1,n);
+        add_interval(-pow(2,w-1),pow(2,w-1)-1,n);
       else
         add_interval(0,pow(2,w)-1,n);
       n++;
@@ -103,19 +103,19 @@ public:
   {
     if(function_loops.size())
     {
+      //initialize map
       map = new MyMap();
       vars = new Variable(MAX_VAR);
-      //TODO: find properties -- goto_function
+      //find properties
+      //convert from ESBMC to ibex format
       get_constraints(_goto_functions);
-      //TODO: find intervals -- frama-c
-      //TODO: convert from ESBMC to ibex format
+      //find intervals -- frama-c
       get_intervals(_goto_functions);
-      //TODO: find goto-program - done
-      //TODO: add IBex library - done
-      //TODO: contract - done
+      //contract
       auto new_intervals = contractor();
-      //TODO: reflect results on goto-program by inserting assume.
+      //reflect results on goto-program by inserting assume.
       insert_assume(_goto_functions, new_intervals);
+      //clean up
     }
   }
 
@@ -132,7 +132,9 @@ private:
 
   IntervalVector contractor();
 
-  void insert_assume(goto_functionst goto_functions, IntervalVector vector);
+  ibex::CmpOp get_complement(ibex::CmpOp);
+
+    void insert_assume(goto_functionst goto_functions, IntervalVector vector);
   std::string get_constraints_from_expr2t(irep_container<expr2t>);
 
   Ctc *create_contractors_from_expr2t(irep_container<expr2t>);

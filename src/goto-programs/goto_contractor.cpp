@@ -27,12 +27,8 @@ void goto_contractort::get_constraints(goto_functionst goto_functions)
   while(it != function->second.body.instructions.end())
   {
     if(it->is_assert())
-    {
-      //std::cout << "found assert: \n";
-      //it->dump();
       constraint = create_constraint_from_expr2t(it->guard);
-      //cout << "here is the constraint" << *constraint << endl;
-    }
+
     it++;
   }
 }
@@ -47,106 +43,65 @@ void goto_contractort::get_intervals(goto_functionst goto_functions)
   while(it != function->second.body.instructions.end())
   {
     if(it->is_assume())
-    {
-      //std::cout << "found assume at:" << it->location.as_string() << " : "
-      //         << it->location_number << "\n";
-      //it->guard->dump();
       parse_intervals(it->guard);
-      //map->dump();
-    }
+
     it++;
   }
-  //std::cout << "------------------get vars" << std::endl;
-  //only last loop
-  /*loopst loop;
-  for(auto &function_loop : function_loops)
-    loop = function_loop;
-
-  //found vars as string.
-  auto vars_ESBMC = loop.get_modified_loop_vars();
-  string vars_CSP[vars_ESBMC.size()];
-  int i = 0;
-  for(const auto &item : vars_ESBMC)
-    if(is_symbol2t(item))
-      vars_CSP[i++] = to_symbol2t(item).get_symbol_name();*/
 }
 
 void goto_contractort::insert_assume(
   goto_functionst goto_functions,
   IntervalVector new_intervals)
 {
-  //auto function = goto_functions.function_map.find("c:@F@main");
-
-  std::cout << "Inserting assumes: " << std::endl;
+  std::cout << "Inserting assumes.. " << std::endl;
   loopst loop;
   for(auto &function_loop : function_loops)
     loop = function_loop;
 
-  //auto t = loop.get_original_loop_head();
-  //loop_head->dump();
   goto_programt::targett t = loop.get_original_loop_head();
   auto loop_exit = loop.get_original_loop_exit();
-  loop_exit;
-  //loop_exit->dump();
 
   goto_programt dest(message_handler);
 
-  //expr2tc zero = gen_zero(get_uint32_type());
-  //expr2tc one = gen_one(get_uint32_type());
-  //greaterthanequal2tc cond(one, zero);
-  for(; t != loop_exit; t++);
+  for(; t != loop_exit; t++)
+    ;
 
   for(int i = 0; i < map->size(); i++)
   {
-    //std::cout << "test to string for intervals" << cond << std::endl;
-
     symbol2tc X = map->symbols[i];
-    if(isfinite(new_intervals[i].lb()))
+    if(isfinite(new_intervals[i].lb()) && map->intervals[i].lb() != new_intervals[i].lb())
     {
+      if(is_signedbv_type(X)){}
       auto lb = create_signed_32_value_expr(new_intervals[i].lb());
-      //auto lb = gen_one(get_int32_type());
-      auto cond = create_greaterthanequal_relation(X,lb);
-      //assume_cond(cond, t, loop_exit->location);
+      auto cond = create_greaterthanequal_relation(X, lb);
       goto_programt tmp_e(message_handler);
       goto_programt::targett e = tmp_e.add_instruction(ASSUME);
-      e->inductive_step_instruction = false;//config.options.is_kind();
+      e->inductive_step_instruction = false; //config.options.is_kind();
       e->guard = cond;
       e->location = loop_exit->location;
-      //dest.destructive_append(tmp_e);
-      goto_function.body.destructive_insert(loop_exit,tmp_e);
-
-      //goto_function.body.destructive_insert(loop_exit,cond);
+      goto_function.body.destructive_insert(loop_exit, tmp_e);
     }
-    if(isfinite(new_intervals[i].ub()))
+    if(isfinite(new_intervals[i].ub())&& map->intervals[i].ub() != new_intervals[i].ub())
     {
       auto ub = create_signed_32_value_expr(new_intervals[i].ub());
-      //auto ub = gen_one(get_int32_type());
       auto cond = create_lessthanequal_relation(X, ub);
-      //assume_cond(cond, dest, loop_exit->location);
       goto_programt tmp_e(message_handler);
       goto_programt::targett e = tmp_e.add_instruction(ASSUME);
-      e->inductive_step_instruction = false;//config.options.is_kind();
+      e->inductive_step_instruction = false; //config.options.is_kind();
       e->guard = cond;
       e->location = loop_exit->location;
-      //dest.destructive_append(tmp_e);
-      goto_function.body.destructive_insert(loop_exit,tmp_e);
+      goto_function.body.destructive_insert(loop_exit, tmp_e);
     }
-    //assume_cond(cond, dest, loop_exit->location);
-    //dest.dump();
-
   }
 }
 
 IntervalVector goto_contractort::contractor()
 {
-  //NumConstraint c((char *)vars[0], (char *)vars[1], (char *)constraint);
   NumConstraint c = *constraint;
   std::cout << "My Constraint:" << c << std::endl;
   std::cout << "My Function:" << c.f << std::endl;
 
-  auto complement = LEQ;
-  if(!c.right_hand_side().lb().is_zero())
-    complement = GEQ; //wrong
+  auto complement = get_complement(c.op);
 
   NumConstraint c2(c.f, complement);
   std::cout << "My complement Constraint:" << c2 << std::endl;
@@ -158,14 +113,7 @@ IntervalVector goto_contractort::contractor()
   domains = map->intervals;
   std::cout << "My domains:" << domains << std::endl;
   auto X = domains;
-  /*c_out.contract(X);
-  IntervalVector *s_out;
-  int num = domains.diff(X, s_out);
-  std::cout << "My domains after outer contractor:" << X << std::endl;
-  for(int i = 0; i < num; i++)
-    std::cout << "s_out[" << i << "]:" << s_out[i] << std::endl;*/
 
-  //X = domains;
   IntervalVector *s_in;
   c_in.contract(X);
   int num = domains.diff(X, s_in);
@@ -174,6 +122,25 @@ IntervalVector goto_contractort::contractor()
     std::cout << "s_in[" << i << "]:" << s_in[i] << std::endl;
 
   return X;
+}
+ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
+{
+  switch(op)
+  {
+  case GEQ:
+    return LT;
+  case GT:
+    return LEQ;
+  case LEQ:
+    return GT;
+  case LT:
+    return GEQ;
+  default:
+    cout<<"cant process equal"<<endl;
+    abort();
+    break;
+  }
+  return GEQ;
 }
 // && ||
 Ctc *goto_contractort::create_contractors_from_expr2t(irep_container<expr2t>)
@@ -199,17 +166,57 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
     c = new NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars));
     return c;
   }
+  else if(is_greaterthan2t(expr))
+  {
+    Function *f, *g;
+    f = create_function_from_expr2t(to_greaterthan2t(expr).side_1);
+    g = create_function_from_expr2t(to_greaterthan2t(expr).side_2);
+    c = new NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
+    return c;
+  }
+  else if(is_lessthanequal2t(expr))
+  {
+    Function *f, *g;
+    f = create_function_from_expr2t(to_lessthanequal2t(expr).side_1);
+    g = create_function_from_expr2t(to_lessthanequal2t(expr).side_2);
+    c = new NumConstraint(*vars, (*f)(*vars) <= (*g)(*vars));
+    return c;
+  }
+  else if(is_lessthan2t(expr))
+  {
+    Function *f, *g;
+    f = create_function_from_expr2t(to_lessthan2t(expr).side_1);
+    g = create_function_from_expr2t(to_lessthan2t(expr).side_2);
+    c = new NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
+    return c;
+  }
+  else if(is_equality2t(expr))
+  {
+    Function *f, *g;
+    f = create_function_from_expr2t(to_equality2t(expr).side_1);
+    g = create_function_from_expr2t(to_equality2t(expr).side_2);
+    c = new NumConstraint(*vars, (*f)(*vars) = (*g)(*vars));
+    return c;
+  }
+  else if(is_notequal2t(expr))
+  {
+    Function *f, *g;
+    f = create_function_from_expr2t(to_notequal2t(expr).side_1);
+    g = create_function_from_expr2t(to_notequal2t(expr).side_2);
+    c = new NumConstraint(*vars, (*f)(*vars) = (*g)(*vars));
+    return c;
+  }
   //>,<,<=
   return nullptr;
 }
-//+-
+//+-*/
 Function *
 goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
 {
   //auto op = get_expr_id(expr);
   Function *f = nullptr;
   Function *g, *h;
-  cout<<"dumping expression:"<<endl;
+  cout << "dumping expression:" << endl;
   expr->dump();
   if(is_add2t(expr))
   {
@@ -225,6 +232,9 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   }
   else if(is_mul2t(expr))
   {
+    g = create_function_from_expr2t(to_mul2t(expr).side_1);
+    h = create_function_from_expr2t(to_mul2t(expr).side_2);
+    f = new Function(*vars, (*g)(*vars) * (*h)(*vars));
   }
   else if(is_div2t(expr))
   {
@@ -239,6 +249,13 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
       cout << "ERROR: MAX VAR SIZE REACHED" << endl;
       exit(1);
     }
+  }
+  else if(is_typecast2t(expr))
+  {
+  }
+  else if(is_constant_int2t(expr))
+  {
+    //f = new Function(*vars, to_constant_int2t(expr).value.to_int64());
   }
   return f;
 }
@@ -260,10 +277,17 @@ int goto_contractort::create_variable_from_expr2t(irep_container<expr2t> expr)
 
 void goto_contractort::parse_intervals(irep_container<expr2t> expr)
 {
-  if(is_lessthan2t(expr))
+  //expr->dump();
+  if(is_typecast2t(expr))
+    parse_intervals(to_typecast2t(expr).from);
+  else if(is_and2t(expr))
+  {
+    parse_intervals(to_and2t(expr).side_1);
+    parse_intervals(to_and2t(expr).side_2);
+  }
+  else if(is_lessthan2t(expr))
   {
     auto f = to_lessthan2t(expr);
-
     if(is_symbol2t(f.side_1))
     {
       int index =
@@ -274,18 +298,33 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
         {
           //error
         }
-        //cout<<get_expr_id(f.side_2).c_str()<<endl;
         auto number = to_constant_int2t(f.side_2).as_long();
         map->update_ub_interval(number, index);
       }
       else
       {
-        //error
+        //var is not in constraint list
+        return;
       }
     }
     else if(is_symbol2t(f.side_2))
     {
-      //look up
+      int index =
+        map->find((string)to_symbol2t(f.side_2).get_symbol_name().c_str());
+      if(index != -1)
+      {
+        if(!is_number_type(f.side_1))
+        {
+          //error
+        }
+        auto number = to_constant_int2t(f.side_1).as_long();
+        map->update_ub_interval(number, index);
+      }
+      else
+      {
+        //var is not in constraint list
+        return;
+      }
     }
   }
   else if(is_lessthanequal2t(expr))
@@ -317,12 +356,59 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
   }
   else if(is_greaterthanequal2t(expr))
   {
+    auto f = to_greaterthanequal2t(expr);
+    if(is_symbol2t(f.side_1))
+    {
+      int index =
+        map->find((string)to_symbol2t(f.side_1).get_symbol_name().c_str());
+      if(index != -1)
+      {
+        if(!is_number_type(f.side_2))
+        {
+          //error
+        }
+        auto number = to_constant_int2t(f.side_2).as_long();
+        map->update_lb_interval(number, index);
+      }
+      else
+      {
+        //ignore
+      }
+    }
+    else if(is_symbol2t(f.side_2))
+    {
+      //look up
+    }
   }
   else if(is_greaterthan2t(expr))
   {
   }
   else if(is_equality2t(expr))
   {
+    auto f = to_equality2t(expr);
+    if(is_symbol2t(f.side_1))
+    {
+      int index =
+        map->find((string)to_symbol2t(f.side_1).get_symbol_name().c_str());
+      if(index != -1)
+      {
+        if(!is_number_type(f.side_2))
+        {
+          //error
+        }
+        auto number = to_constant_int2t(f.side_2).as_long();
+        map->update_ub_interval(number, index);
+        map->update_lb_interval(number, index);
+      }
+      else
+      {
+        //ignore
+      }
+    }
+    else if(is_symbol2t(f.side_2))
+    {
+      //look up
+    }
   }
   else if(is_notequal2t(expr))
   {
