@@ -23,7 +23,7 @@ Description: This interface will hold anything
  */
 class jimple_class_member : public jimple_ast
 {
-  public:
+public:
   virtual exprt to_exprt(
     contextt &ctx,
     const std::string &class_name,

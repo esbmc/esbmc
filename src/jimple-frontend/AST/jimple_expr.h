@@ -184,7 +184,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
- 
   std::shared_ptr<jimple_expr> from;
 };
 
@@ -244,7 +243,8 @@ public:
     lhs = expr;
   }
 
-  bool is_nondet_call() const {
+  bool is_nondet_call() const
+  {
     return base_class == "org.sosy_lab.sv_benchmarks.Verifier";
   }
 
@@ -287,7 +287,8 @@ public:
     lhs = expr;
   }
 
-  bool is_nondet_call() const {
+  bool is_nondet_call() const
+  {
     return base_class == "java.util.Random";
   }
 
@@ -369,7 +370,9 @@ class jimple_nondet : public jimple_expr
 {
 public:
   jimple_nondet() = default;
-  explicit jimple_nondet(std::string mode) : mode(mode) {}
+  explicit jimple_nondet(std::string mode) : mode(mode)
+  {
+  }
   virtual std::string to_string() const override
   {
     return "Jimple Nondet";
@@ -437,7 +440,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  
   std::string variable;
   std::string from;
   std::string field;

@@ -97,7 +97,6 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
     c.from_json(j);
     return std::make_shared<jimple_virtual_invoke>(c);
   }
-  
 
   if(expr_type == "binop")
   {
@@ -220,20 +219,18 @@ exprt jimple_lengthof::to_exprt(
   const std::string &function_name) const
 {
   auto expr = from->to_exprt(ctx, class_name, function_name);
-  auto tmp_symbol =
-    get_temp_symbol(uint_type(), class_name, function_name);
+  auto tmp_symbol = get_temp_symbol(uint_type(), class_name, function_name);
   symbolt &tmp_added_symbol = *ctx.move_symbol_to_context(tmp_symbol);
-  
+
   // Create a function call for allocation
   code_function_callt call;
   auto alloca_symbol = get_lengthof_function();
-  
+
   symbolt &added_symbol = *ctx.move_symbol_to_context(alloca_symbol);
-  
-  call.function() =  symbol_expr(added_symbol);
+
+  call.function() = symbol_expr(added_symbol);
 
   call.arguments().push_back(expr);
-  
 
   // Create a sideffect call to represent the allocation
   side_effect_expr_function_callt sideeffect;
@@ -327,7 +324,6 @@ exprt jimple_expr_invoke::to_exprt(
   return block;
 }
 
-
 void jimple_virtual_invoke::from_json(const json &j)
 {
   lhs = nil_exprt();
@@ -384,12 +380,13 @@ exprt jimple_virtual_invoke::to_exprt(
   if(!lhs.is_nil())
   {
     call.lhs() = lhs;
-  }    
+  }
 
   if(variable != "")
   {
     // Let's add @THIS
-    auto this_expression = jimple_symbol(variable).to_exprt(ctx, class_name, function_name);
+    auto this_expression =
+      jimple_symbol(variable).to_exprt(ctx, class_name, function_name);
     call.arguments().push_back(this_expression);
     auto temp = get_symbol_name(base_class, method, "@this");
     symbolt &added_symbol = *ctx.find_symbol(temp);
@@ -415,7 +412,6 @@ exprt jimple_virtual_invoke::to_exprt(
   return block;
 }
 
-
 #include <iostream>
 
 exprt jimple_newarray::to_exprt(
@@ -438,7 +434,7 @@ exprt jimple_newarray::to_exprt(
   if(alloc_type.is_nil())
     alloc_type = char_type();
 
-/*
+  /*
   if(alloc_type.id() == "symbol")
     alloc_type = ns.follow(alloc_type);
 */
@@ -447,35 +443,35 @@ exprt jimple_newarray::to_exprt(
     //alloc_size.make_typecast(uint_type());
     //simplify(alloc_size);
   }
-  
+
   // Create a function call for allocation
   code_function_callt call;
-  auto alloca_symbol = get_allocation_function(alloc_type, alloc_size);
-  
+  auto alloca_symbol = get_allocation_function();
+
   symbolt &added_symbol = *ctx.move_symbol_to_context(alloca_symbol);
-  
-  call.function() =  symbol_expr(added_symbol);
+
+  call.function() = symbol_expr(added_symbol);
   //call.function().dump();
   //call.function().return_type().cmt_type(alloc_type);
-    //call.function().cmt_size(alloc_size);
+  //call.function().cmt_size(alloc_size);
   //call.function().type() = pointer_typet(empty_typet());
-  
+
   //call.function().return_type() = pointer_typet(empty_typet());
   //call.type() = base_type.is_pointer() ? base_type.subtype().type() : base_type.type();
 
   // LHS of call is the tmp var
   call.lhs() = symbol_expr(tmp_added_symbol);
-  auto to_convert = base_type.is_pointer() ? base_type.subtype().width() : base_type.width();
-  
+  auto to_convert =
+    base_type.is_pointer() ? base_type.subtype().width() : base_type.width();
+
   auto as_number = std::stoi(to_convert.as_string()); // we want bytes
 
   auto new_expr = exprt("*", uint_type());
   auto base_size = constant_exprt(
-      integer2binary(as_number, 10), integer2string(as_number), uint_type());
-  new_expr.move_to_operands(alloc_size, base_size);  
+    integer2binary(as_number, 10), integer2string(as_number), uint_type());
+  new_expr.move_to_operands(alloc_size, base_size);
 
   call.arguments().push_back(new_expr);
-  
 
   // Create a sideffect call to represent the allocation
   side_effect_expr_function_callt sideeffect;
@@ -518,8 +514,6 @@ exprt jimple_nondet::to_exprt(
   const std::string &,
   const std::string &) const
 {
-
-
   auto type = char_type(); // TODO: hashmap here!
   exprt rhs = exprt("sideeffect", type);
   rhs.statement("nondet");
@@ -543,19 +537,20 @@ exprt jimple_static_member::to_exprt(
 {
   auto result = gen_zero(type->to_typet(ctx));
   // HACK: For now I will set some intrinsics directly (this should go to SYMEX)
-  if(from == "kotlin._Assertions" && field == "ENABLED") {
+  if(from == "kotlin._Assertions" && field == "ENABLED")
+  {
     result.make_true();
     return result;
   }
 
-  if(from == "Main" && field == "$assertionsDisabled") {
+  if(from == "Main" && field == "$assertionsDisabled")
+  {
     result.make_false();
     return result;
   }
-  
 
   // TODO: Needs OOP members
-  
+
   // 1. Look over the local scope
   auto symbol_name = get_symbol_name(class_name, function_name, from);
   symbolt &s = *ctx.find_symbol(symbol_name);
@@ -588,7 +583,6 @@ exprt jimple_virtual_member::to_exprt(
 {
   auto result = gen_zero(type->to_typet(ctx));
   auto struct_type = (*ctx.find_symbol("tag-" + from)).type;
-  
 
   // 1. Look over the local scope
   auto symbol_name = get_symbol_name(class_name, function_name, variable);

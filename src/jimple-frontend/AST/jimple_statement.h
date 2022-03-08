@@ -62,7 +62,8 @@ public:
   }
   std::string base_class;
   std::string method;
-  std::string variable = ""; // TODO: Specialization jimple_invoke and jimple_virtual_invoke!!!
+  std::string variable =
+    ""; // TODO: Specialization jimple_invoke and jimple_virtual_invoke!!!
   std::vector<std::shared_ptr<jimple_expr>> parameters;
 };
 
