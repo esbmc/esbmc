@@ -18,8 +18,7 @@ bool jimple_languaget::typecheck(
   jimple_converter converter(context, root, msg);
   if(converter.convert())
   {
-    msg.error(
-      fmt::format("Failed to convert module {}", root.class_name));
+    msg.error(fmt::format("Failed to convert module {}", root.class_name));
     return true;
   }
 

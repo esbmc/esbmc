@@ -118,16 +118,11 @@ protected:
    * 
    * @return symbolt 
    */
-  static symbolt get_allocation_function(typet alloc_type, exprt alloc_size)
+  static symbolt get_allocation_function()
   {
     std::string allocation_function = "malloc";
     code_typet code_type;
     code_type.return_type() = pointer_typet(empty_typet());
-    //code_type.return_type().cmt_type(alloc_type);
-    //code_type.return_type().cmt_size(alloc_size);
-    //code_type.cmt_type(alloc_type);
-    //code_type.cmt_size(alloc_size);
-    
     code_type.arguments().push_back(uint_type());
     symbolt symbol;
     symbol.mode = "C";
@@ -152,11 +147,6 @@ protected:
     std::string func = "__ESBMC_get_object_size";
     code_typet code_type;
     code_type.return_type() = uint_type();
-    //code_type.return_type().cmt_type(alloc_type);
-    //code_type.return_type().cmt_size(alloc_size);
-    //code_type.cmt_type(alloc_type);
-    //code_type.cmt_size(alloc_size);
-    
     code_type.arguments().push_back(pointer_typet(empty_typet()));
     symbolt symbol;
     symbol.mode = "C";
@@ -190,7 +180,7 @@ protected:
   /**
    * @brief Get the symbol name id
    * 
-   * Note: Jimple is already is SSA form
+   * Note: Jimple is already in SSA form
    * 
    * @param class_name 
    * @param function_name 
@@ -204,7 +194,6 @@ protected:
   {
     std::ostringstream oss;
     oss << get_method_name(class_name, function_name) << "@" << symbol;
-
     return oss.str();
   }
 

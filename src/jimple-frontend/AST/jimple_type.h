@@ -29,9 +29,7 @@ public:
   std::string name; // e.g. int[][][][][] => name = int
   short dimensions; // e.g. int[][][][][] => dimensions = 5
 
-
 protected:
-  
   typet get_base_type(const contextt &ctx) const;
   typet get_builtin_type() const;
 
@@ -62,11 +60,13 @@ private:
     {"double", BASE_TYPES::INT},
     {"void", BASE_TYPES::_VOID},
     {"Main", BASE_TYPES::INT}, // TODO: handle this properly
-    {"java.util.Random", BASE_TYPES::INT},         // We dont really care about the initialization of this mode
+    {"java.util.Random",
+     BASE_TYPES::
+       INT}, // We dont really care about the initialization of this mode
     {"java.lang.String", BASE_TYPES::INT},         // TODO: handle this properly
     {"java.lang.AssertionError", BASE_TYPES::INT}, // TODO: handle this properly
-    {"java.lang.Runtime", BASE_TYPES::INT}, // TODO: handle this properly
-    {"java.lang.Class", BASE_TYPES::INT}, // TODO: handle this properly
+    {"java.lang.Runtime", BASE_TYPES::INT},        // TODO: handle this properly
+    {"java.lang.Class", BASE_TYPES::INT},          // TODO: handle this properly
     {"__other", BASE_TYPES::OTHER}};
 };
 
