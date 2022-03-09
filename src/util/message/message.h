@@ -37,7 +37,7 @@ public:
   virtual void
   error(const std::string &message, const std::string location = "") const
   {
-    print(VerbosityLevel::Error, "###ERROR: " + message, location);
+    print(VerbosityLevel::Error, "### ERROR: " + message, location);
   }
   /**
    * @brief Prints a warning message
