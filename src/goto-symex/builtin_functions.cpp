@@ -996,6 +996,9 @@ inline expr2tc gen_value_by_byte(
           bytes_to_write,
           offset_left);
 
+        if(!result->datatype_members[i])
+          return expr2tc();
+
         bytes_left = bytes_left < current_member_size
                        ? 0
                        : bytes_left - (current_member_size - offset_left);
@@ -1231,7 +1234,8 @@ void goto_symext::intrinsic_memset(
        *
        * For now bum_call later expand our simplifier
        */
-      msg.debug("[memset] TODO: some simplifications are missing, bumping call");
+      msg.debug(
+        "[memset] TODO: some simplifications are missing, bumping call");
       bump_call();
       return;
     }
@@ -1241,14 +1245,12 @@ void goto_symext::intrinsic_memset(
 
     if(is_code_type(item_object->type))
     {
-      auto error_msg =  fmt::format(
-          "dereference failure: trying to deref a ptr code");     
-      
+      auto error_msg =
+        fmt::format("dereference failure: trying to deref a ptr code");
+
       auto false_expr = gen_false_expr();
       guard.guard_expr(false_expr);
-      claim(
-        false_expr,
-        error_msg);
+      claim(false_expr, error_msg);
       continue;
     }
 
@@ -1258,16 +1260,14 @@ void goto_symext::intrinsic_memset(
       is_out_bounds && !options.get_bool_option("no-pointer-check") &&
       !options.get_bool_option("no-bounds-check"))
     {
-      auto error_msg =  fmt::format(
-          "dereference failure: memset of memory segment of size {} with {} "
-          "bytes",
-          type_size - number_of_offset,
-          number_of_bytes);
-      
+      auto error_msg = fmt::format(
+        "dereference failure: memset of memory segment of size {} with {} "
+        "bytes",
+        type_size - number_of_offset,
+        number_of_bytes);
+
       guard.add(gen_false_expr());
-      claim(
-        gen_false_expr(),
-        error_msg);
+      claim(gen_false_expr(), error_msg);
       continue;
     }
 
