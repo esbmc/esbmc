@@ -138,6 +138,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"partial-loops", NULL, "permit paths with partial loops"},
     {"unroll-loops", NULL, ""},
     {"no-slice", NULL, "do not remove unused equations"},
+    {"initialize-nondet-variables",
+     NULL,
+     "initialize declarations with nondet expression (if it hasn`t a default "
+     "value)"},
     {"goto-unwind", NULL, "unroll bounded loops at goto level"},
     {"unlimited-goto-unwind",
      NULL,
