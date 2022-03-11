@@ -46,6 +46,7 @@ extern "C"
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
+#include <goto-programs/mark_decl_as_non_det.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -1560,6 +1561,9 @@ bool esbmc_parseoptionst::process_goto_program(
       bounded_loop_unroller unwind_loops(goto_functions, unroll_limit);
       unwind_loops.run();
     }
+
+    if(options.get_bool_option("initialize-nondet-variables"))
+      mark_decl_as_non_det(context, goto_functions).run();
 
     // do partial inlining
     if(!cmdline.isset("no-inlining"))
