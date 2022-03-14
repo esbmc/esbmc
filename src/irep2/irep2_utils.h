@@ -267,6 +267,17 @@ inline expr2tc conjunction(std::vector<expr2tc> cs)
   return res;
 }
 
+inline expr2tc gen_nondet(const type2tc &type)
+{
+  return sideeffect2tc(
+            type,
+            expr2tc(),
+            expr2tc(),
+            std::vector<expr2tc>(),
+            type2tc(),
+            sideeffect2t::nondet);
+}
+
 inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
 {
   switch(type->type_id)
