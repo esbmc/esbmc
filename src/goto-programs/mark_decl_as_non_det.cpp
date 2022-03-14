@@ -16,6 +16,8 @@ bool mark_decl_as_non_det::runOnFunction(
     auto decl = to_code_decl2t(it->code);
     symbolt *s = context.find_symbol(decl.value);
 
+    // find_symbol should always work here
+    assert(s);
     // Global variables and function declaration shouldn`t reach here
     assert(!s->static_lifetime || !s->type.is_code());
 
@@ -23,17 +25,12 @@ bool mark_decl_as_non_det::runOnFunction(
     if(s->value.is_nil())
     {
       // Initialize it with nondet then
-      exprt nondet = exprt("sideeffect", s->type);
-      nondet.statement("nondet");
-      code_assignt assign(symbol_exprt(decl.value), nondet);
-      assign.location() = it->location;
-
-      auto next_inst = it;
-      next_inst++;
-      goto_programt::targett t =
-        F.second.body.instructions.insert(next_inst, ASSIGN);
-      migrate_expr(assign, t->code);
-      t->location = assign.location();
+      expr2tc new_value =
+        code_assign2tc(
+          symbol2tc(decl.type, decl.value),
+          gen_nondet(decl.type));
+      it->make_assignment();
+      it->code = new_value;
     }
   }
 
