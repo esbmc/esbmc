@@ -21,5 +21,4 @@ protected:
   contextt &context;
   virtual bool
   runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
-  std::vector<symbol2tc> changed;
 };
