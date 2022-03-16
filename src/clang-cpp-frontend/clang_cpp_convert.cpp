@@ -542,38 +542,24 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::CXXConstructExprClass:
   {
+    // Reference to a declared construstor
     const clang::CXXConstructExpr &ctr_call =
       static_cast<const clang::CXXConstructExpr &>(stmt);
 
-    /*
-    // Do we really need the side_effect for default constructor?
-    const clang::Decl *callee = ctr_call.getExpr();
-
-    exprt callee_expr;
-    if(get_expr(*callee, callee_expr))
-      return true;
-    */
-
-    typet type;
-    if(get_type(ctr_call.getType(), type))
-      return true;
-
-    side_effect_expr_function_callt call;
-    //call.function() = callee_expr;
-    call.type() = type;
-
-    // Do args
-    for(const clang::Expr *arg : ctr_call.arguments())
+    if(ctr_call.getNumArgs() != 0)
     {
-      exprt single_arg;
-      if(get_expr(*arg, single_arg))
+      assert(
+        !"come back and continue - got user defined ctor, need side effect?");
+    }
+    else
+    {
+      // no additional annotation for zero-arg constructor
+      typet t;
+      if(get_type(ctr_call.getType(), t))
         return true;
-
-      call.arguments().push_back(single_arg);
+      new_expr = gen_zero(t);
     }
 
-    new_expr = call;
-    assert(!"Continue from here");
     break;
   }
 
