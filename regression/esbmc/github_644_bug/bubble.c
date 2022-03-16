@@ -6,14 +6,14 @@ int main()
     int temp;
 
     int table[ARRAY_SIZE];
-    for(i = 0; i < ARRAY_SIZE; i++)
+    for(int i = 0; i < ARRAY_SIZE; i++)
        __ESBMC_assume(table[i] < 10 && table[i] > 0);
 
     int ti, tj;
-    for(i = 0; i < ARRAY_SIZE; i++)
+    for(int i = 0; i < ARRAY_SIZE; i++)
     {
         ti = table[i];
-        for(j  = i + 1; j < ARRAY_SIZE; j++)
+        for(int j  = i + 1; j < ARRAY_SIZE; j++)
         {
             tj = table[j];
             if(table[i] > table[j])
