@@ -540,6 +540,43 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXConstructExprClass:
+  {
+    const clang::CXXConstructExpr &ctr_call =
+      static_cast<const clang::CXXConstructExpr &>(stmt);
+
+    /*
+    // Do we really need the side_effect for default constructor?
+    const clang::Decl *callee = ctr_call.getExpr();
+
+    exprt callee_expr;
+    if(get_expr(*callee, callee_expr))
+      return true;
+    */
+
+    typet type;
+    if(get_type(ctr_call.getType(), type))
+      return true;
+
+    side_effect_expr_function_callt call;
+    //call.function() = callee_expr;
+    call.type() = type;
+
+    // Do args
+    for(const clang::Expr *arg : ctr_call.arguments())
+    {
+      exprt single_arg;
+      if(get_expr(*arg, single_arg))
+        return true;
+
+      call.arguments().push_back(single_arg);
+    }
+
+    new_expr = call;
+    assert(!"Continue from here");
+    break;
+  }
+
   default:
     return clang_c_convertert::get_expr(stmt, new_expr);
   }
