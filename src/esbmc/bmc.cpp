@@ -41,6 +41,13 @@
 #include <atomic>
 #include <goto-symex/witnesses.h>
 
+#include <goto-symex/execution_trace.h>
+#include <clang-c-frontend/expr2ccode.h>
+
+#include <iostream>
+
+std::vector<c_instructiont> instructions_to_c;
+
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
 {
@@ -621,6 +628,14 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     "Symex completed in: {}s ({} assignments)",
     time2string(symex_stop - symex_start),
     eq->SSA_steps.size());
+
+  if(options.get_bool_option("symex-ssa-trace-as-c"))
+  {
+    for(c_instructiont it : instructions_to_c)
+    {
+      std::cerr << it.convert_to_c(ns) << "\n";
+    }
+  }
 
   if(options.get_bool_option("double-assign-check"))
     eq->check_for_duplicate_assigns();
