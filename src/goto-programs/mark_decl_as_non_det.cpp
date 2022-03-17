@@ -27,8 +27,13 @@ bool mark_decl_as_non_det::runOnFunction(
       // Initialize it with nondet then
       expr2tc new_value =
         code_assign2tc(symbol2tc(decl.type, decl.value), gen_nondet(decl.type));
-      it->make_assignment();
-      it->code = new_value;
+
+      // Due to the value set analysis, we need to split declarations and assignments
+      auto insert_pos = it;
+      insert_pos++;
+      auto t = F.second.body.instructions.insert(insert_pos, ASSIGN);
+      t->location = it->location;
+      t->code = new_value;
     }
   }
 
