@@ -16,6 +16,9 @@
 #include <util/std_expr.h>
 #include <vector>
 
+#include <clang-c-frontend/expr2ccode.h>
+#include <goto-symex/execution_trace.h>
+
 bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
 {
   auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
@@ -53,6 +56,16 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
 
 void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 {
+  
+  if(options.get_bool_option("symex-ssa-trace-as-c"))
+  {
+    c_instructiont c_instruction;
+    c_instruction.make_assertion(claim_expr);
+    c_instruction.msg = msg;
+    c_instruction.location = cur_state->source.pc->location;
+    instructions_to_c.push_back(c_instruction);
+  }
+  
   // Convert asserts in assumes, if it's not the last loop iteration
   // also, don't convert assertions added by the bidirectional search
   if(inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
@@ -339,6 +352,14 @@ void goto_symext::symex_step(reachability_treet &art)
       "GOTO instruction type {} not handled in goto_symext::symex_step",
       instruction.type);
     abort();
+  }
+
+  if(options.get_bool_option("symex-ssa-trace-as-c"))
+  {
+    if(instruction.type != ASSERT)
+    {
+      instructions_to_c.push_back(c_instructiont(instruction));
+    }
   }
 }
 
