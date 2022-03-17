@@ -25,7 +25,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"smt-formula-only",
      NULL,
      "only show SMT formula {not supported by all solvers},"},
-    {"smt-formula-too ",
+    {"smt-formula-too",
      NULL,
      "show SMT formula (not supported by all solvers), and verify"},
     {"smt-model",
