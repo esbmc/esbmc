@@ -1295,7 +1295,7 @@ int esbmc_parseoptionst::do_forward_condition(
   case smt_convt::P_UNSATISFIABLE:
     msg.result(fmt::format(
       "\nSolution found by the forward condition; "
-      "all states are reachable (k = {:d}",
+      "all states are reachable (k = {:d})",
       k_step));
     return false;
 
