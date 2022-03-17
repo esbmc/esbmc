@@ -695,6 +695,9 @@ void goto_convertt::remove_function_call(
     new_base_name += id2string(symbol->name);
     new_base_name += "$" + std::to_string(++tmp_symbol.counter);
 
+    if(options.get_bool_option("symex-ssa-trace-as-c"))
+      new_base_name = "dynamic_" + std::to_string(temporary_counter) + "_array";
+
     new_symbol.name = new_base_name;
     new_symbol.mode = symbol->mode;
   }
