@@ -473,7 +473,7 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("falsification"))
     return doit_falsification();
 
-  if(cmdline.isset("k-induction") || cmdline.isset("goto-contractor"))
+  if(cmdline.isset("k-induction"))
     return doit_k_induction();
 
   if(cmdline.isset("k-induction-parallel"))
@@ -1604,7 +1604,7 @@ bool esbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("goto-contractor"))
     {
       interval_analysis(goto_functions, ns);
-      goto_contractor(goto_functions, msg);
+      goto_contractort(goto_functions, msg);
     }
 
     if(cmdline.isset("termination"))
