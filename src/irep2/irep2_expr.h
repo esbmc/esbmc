@@ -512,7 +512,7 @@ public:
       assert(is_bv_type(t));
       assert(t->get_width() == config.ansi_c.pointer_width);
     }
-    else
+    else if(!(is_vector_type(v1->type) || is_vector_type(v2->type)))
     {
       assert(
         p2 || (is_bv_type(t) == is_bv_type(v1->type) &&
