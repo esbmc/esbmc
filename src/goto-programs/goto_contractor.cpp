@@ -5,20 +5,7 @@
 #include "goto_contractor.h"
 
 using namespace std;
-void goto_contractor(
-  goto_functionst &goto_functions,
-  const messaget &message_handler)
-{
-  Forall_goto_functions(it, goto_functions)
-  {
-    if(it->second.body_available)
-    {
-      std::cout << it->first << "\n";
-      goto_contractort(it->first, goto_functions, it->second, message_handler);
-    }
-  }
-  goto_functions.update();
-}
+
 
 void goto_contractort::get_constraints(goto_functionst goto_functions)
 {
@@ -49,6 +36,54 @@ void goto_contractort::get_intervals(goto_functionst goto_functions)
   }
 }
 
+void goto_contractort::parse_intervals(irep_container<expr2t> expr)
+{
+  symbol2tc symbol;
+  double value;
+
+  if(!is_comp_expr(expr))
+    return;
+
+  std::shared_ptr<relation_data> rel;
+  rel = dynamic_pointer_cast<relation_data>(expr);
+
+  //expr->dump();
+  //side1 1 is a symbol or typecast to symbol
+  auto side1 = rel->side_1;
+  //side 2 is always a number.
+  auto side2 = rel->side_2;
+
+  if(is_typecast2t(side1))
+    if(is_symbol2t(to_typecast2t(side1).from))
+      symbol = to_symbol2t(to_typecast2t(side1).from);
+    else
+      return;
+  else if(is_symbol2t(side1))
+    symbol = to_symbol2t(side1);
+  else
+    return;
+
+  if(!is_constant_int2t(side2) && !is_constant_floatbv2t(side2))
+    return;
+  if(is_constant_int2t(side2))
+    value = to_constant_int2t(side2).as_long();
+  else
+    return;
+
+  int index =
+    map->find((string)symbol->get_symbol_name().c_str());
+  if(index == -1) return;
+  if(is_greaterthan2t(expr) || is_greaterthanequal2t(expr))
+    map->update_lb_interval(value, index);
+  else if(is_lessthan2t(expr) || is_lessthanequal2t(expr))
+    map->update_ub_interval(value, index);
+  else if(is_equality2t(expr))
+  {
+    map->update_lb_interval(value, index);
+    map->update_ub_interval(value, index);
+  }
+}
+
 void goto_contractort::insert_assume(
   goto_functionst goto_functions,
   IntervalVector new_intervals)
@@ -66,12 +101,19 @@ void goto_contractort::insert_assume(
   for(; t != loop_exit; t++)
     ;
 
+  auto it = goto_functions.function_map.find("c:@F@main");
+  auto goto_function = it->second;
+
   for(int i = 0; i < map->size(); i++)
   {
     symbol2tc X = map->symbols[i];
-    if(isfinite(new_intervals[i].lb()) && map->intervals[i].lb() != new_intervals[i].lb())
+    if(
+      isfinite(new_intervals[i].lb()) &&
+      map->intervals[i].lb() != new_intervals[i].lb())
     {
-      if(is_signedbv_type(X)){}
+      if(is_signedbv_type(X))
+      {
+      }
       auto lb = create_signed_32_value_expr(new_intervals[i].lb());
       auto cond = create_greaterthanequal_relation(X, lb);
       goto_programt tmp_e(message_handler);
@@ -81,7 +123,9 @@ void goto_contractort::insert_assume(
       e->location = loop_exit->location;
       goto_function.body.destructive_insert(loop_exit, tmp_e);
     }
-    if(isfinite(new_intervals[i].ub())&& map->intervals[i].ub() != new_intervals[i].ub())
+    if(
+      isfinite(new_intervals[i].ub()) &&
+      map->intervals[i].ub() != new_intervals[i].ub())
     {
       auto ub = create_signed_32_value_expr(new_intervals[i].ub());
       auto cond = create_lessthanequal_relation(X, ub);
@@ -136,7 +180,7 @@ ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
   case LT:
     return GEQ;
   default:
-    cout<<"cant process equal"<<endl;
+    cout << "cant process equal" << endl;
     abort();
     break;
   }
@@ -239,6 +283,9 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   }
   else if(is_div2t(expr))
   {
+    g = create_function_from_expr2t(to_mul2t(expr).side_1);
+    h = create_function_from_expr2t(to_mul2t(expr).side_2);
+    f = new Function(*vars, (*g)(*vars) / (*h)(*vars));
   }
   else if(is_symbol2t(expr))
   {
@@ -253,10 +300,15 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   }
   else if(is_typecast2t(expr))
   {
+    f = create_function_from_expr2t(to_typecast2t(expr).from);
   }
   else if(is_constant_int2t(expr))
   {
     //f = new Function(*vars, to_constant_int2t(expr).value.to_int64());
+  }
+  else if(is_comp_expr(expr))
+  {
+    //Abort contractor
   }
   return f;
 }
@@ -276,150 +328,33 @@ int goto_contractort::create_variable_from_expr2t(irep_container<expr2t> expr)
   return index;
 }
 
-void goto_contractort::parse_intervals(irep_container<expr2t> expr)
+bool goto_contractort::run1()
 {
-  //expr->dump();
-  if(is_typecast2t(expr))
-    parse_intervals(to_typecast2t(expr).from);
-  else if(is_and2t(expr))
+  cout << "testing foo" << endl;
+  auto it = goto_functions.function_map.find("c:@F@main");
+  //Forall_goto_functions(it, goto_functions)
   {
-    parse_intervals(to_and2t(expr).side_1);
-    parse_intervals(to_and2t(expr).side_2);
-  }
-  else if(is_lessthan2t(expr))
-  {
-    auto f = to_lessthan2t(expr);
-    if(is_symbol2t(f.side_1))
+    number_of_functions++;
+    runOnFunction(*it);
+    if(it->second.body_available)
     {
-      int index =
-        map->find((string)to_symbol2t(f.side_1).get_symbol_name().c_str());
-      if(index != -1)
-      {
-        if(!is_number_type(f.side_2))
-        {
-          //error
-        }
-        auto number = to_constant_int2t(f.side_2).as_long();
-        map->update_ub_interval(number, index);
-      }
-      else
-      {
-        //var is not in constraint list
-        return;
-      }
-    }
-    else if(is_symbol2t(f.side_2))
-    {
-      int index =
-        map->find((string)to_symbol2t(f.side_2).get_symbol_name().c_str());
-      if(index != -1)
-      {
-        if(!is_number_type(f.side_1))
-        {
-          //error
-        }
-        auto number = to_constant_int2t(f.side_1).as_long();
-        map->update_ub_interval(number, index);
-      }
-      else
-      {
-        //var is not in constraint list
-        return;
-      }
-    }
-  }
-  else if(is_lessthanequal2t(expr))
-  {
-    auto f = to_lessthanequal2t(expr);
+      const messaget msg;
+      goto_loopst goto_loops(it->first, goto_functions, it->second, msg);
+      auto function_loops = goto_loops.get_loops();
+      this->function_loops = function_loops;
+      //number_of_loops += function_loops.size();
+      //if(function_loops.size())
+      //{
+      //  goto_functiont &goto_function = it->second;
+      //  goto_programt &goto_program = goto_function.body;
 
-    if(is_symbol2t(f.side_1))
-    {
-      int index =
-        map->find((std::string)to_symbol2t(f.side_1).get_symbol_name().c_str());
-      if(index != -1)
-      {
-        if(!is_number_type(f.side_2))
-        { //error
-        }
-        //cout << get_expr_id(f.side_2).c_str() << endl;
-        auto number = to_constant_int2t(f.side_2).as_long();
-        map->update_ub_interval(number, index);
-      }
-      else
-      {
-        //error
-      }
-    }
-    else if(is_symbol2t(f.side_2))
-    {
-      //look up
+      // Foreach loop in the function
+      //for(auto itt = function_loops.rbegin(); itt != function_loops.rend();
+      //  ++itt)
+      //runOnLoop(*itt, goto_program);
+      //}
     }
   }
-  else if(is_greaterthanequal2t(expr))
-  {
-    auto f = to_greaterthanequal2t(expr);
-    if(is_symbol2t(f.side_1))
-    {
-      int index =
-        map->find((string)to_symbol2t(f.side_1).get_symbol_name().c_str());
-      if(index != -1)
-      {
-        if(!is_number_type(f.side_2))
-        {
-          //error
-        }
-        auto number = to_constant_int2t(f.side_2).as_long();
-        map->update_lb_interval(number, index);
-      }
-      else
-      {
-        //ignore
-      }
-    }
-    else if(is_symbol2t(f.side_2))
-    {
-      //look up
-    }
-  }
-  else if(is_greaterthan2t(expr))
-  {
-  }
-  else if(is_equality2t(expr))
-  {
-    auto f = to_equality2t(expr);
-    if(is_symbol2t(f.side_1))
-    {
-      int index =
-        map->find((string)to_symbol2t(f.side_1).get_symbol_name().c_str());
-      if(index != -1)
-      {
-        if(!is_number_type(f.side_2))
-        {
-          //error
-        }
-        auto number = to_constant_int2t(f.side_2).as_long();
-        map->update_ub_interval(number, index);
-        map->update_lb_interval(number, index);
-      }
-      else
-      {
-        //ignore
-      }
-    }
-    else if(is_symbol2t(f.side_2))
-    {
-      //look up
-    }
-  }
-  else if(is_notequal2t(expr))
-  {
-  }
-  else if(is_symbol2t(expr))
-  {
-    //get index;
-  }
-  else
-  {
-    //error
-  }
+  goto_functions.update();
+  return true;
 }

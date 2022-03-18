@@ -71,5 +71,5 @@ void optionst::cmdline(cmdlinet &cmds)
 bool optionst::is_kind() const
 {
   return get_bool_option("k-induction") ||
-         get_bool_option("k-induction-parallel") || get_bool_option("goto-contractor");
+         get_bool_option("k-induction-parallel");
 }
