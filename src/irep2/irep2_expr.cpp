@@ -20,6 +20,7 @@ static const char *expr_names[] = {
   "constant_struct",
   "constant_union",
   "constant_array",
+  "constant_vector",
   "constant_array_of",
   "symbol",
   "typecast",
@@ -390,6 +391,12 @@ void with2t::assert_consistency() const
     assert(is_bv_type(update_field->type));
     assert_type_compat_for_with(
       to_array_type(source_value->type).subtype, update_value->type);
+  }
+  else if(is_vector_type(source_value))
+  {
+    assert(is_bv_type(update_field->type));
+    assert_type_compat_for_with(
+      to_vector_type(source_value->type).subtype, update_value->type);
   }
   else if(is_string_type(source_value))
   {
