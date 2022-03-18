@@ -23,6 +23,8 @@ std::string code_type2t::field_names[esbmct::num_type_fields] =
   {"arguments", "ret_type", "argument_names", "ellipsis", ""};
 std::string array_type2t::field_names[esbmct::num_type_fields] =
   {"subtype", "array_size", "size_is_infinite", "", ""};
+std::string vector_type2t::field_names[esbmct::num_type_fields] =
+  {"subtype", "array_size", "size_is_infinite", "", ""};
 std::string pointer_type2t::field_names[esbmct::num_type_fields] =
   {"subtype", "", "", "", ""};
 std::string fixedbv_type2t::field_names[esbmct::num_type_fields] =
@@ -54,6 +56,8 @@ std::string constant_array_of2t::field_names[esbmct::num_type_fields] =
   {"initializer", "", "", "", ""};
 std::string constant_string2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
+std::string constant_vector2t::field_names[esbmct::num_type_fields] =
+  {"members", "", "", "", ""};
 std::string symbol2t::field_names[esbmct::num_type_fields] =
   {"name", "renamelev", "level1_num", "level2_num", "thread_num", "node_num"};
 std::string typecast2t::field_names[esbmct::num_type_fields] =
