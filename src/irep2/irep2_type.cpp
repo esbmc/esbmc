@@ -240,6 +240,119 @@ expr2tc vector_type2t::distribute_operation(
   }
 }
 
+expr2tc vector_type2t::distribute_operation(
+  expr2t::expr_ids id,
+  expr2tc op1,
+  expr2tc op2)
+{
+// Safety check is there any other id for arith?
+#ifndef NDEBUG
+  // TODO: bitwise, ieee, shift
+  /*
+  assert(
+    id == expr2t::add_id || id == expr2t::sub_id ||
+         id == expr2t::mul_id || id == expr2t::div_id ||
+         id == expr2t::modulus_id
+  );
+ */
+  assert(is_vector_type(op1) || is_vector_type(op2));
+#endif
+  auto is_op1_vector = is_vector_type(op1);
+  auto vector_length = is_op1_vector ? to_vector_type(op1->type).array_size
+                                     : to_vector_type(op2->type).array_size;
+  assert(is_constant_int2t(vector_length));
+
+  auto vector_subtype = is_op1_vector ? to_vector_type(op1->type).subtype
+                                      : to_vector_type(op2->type).subtype;
+  auto result = is_op1_vector ? gen_zero(op1->type) : gen_zero(op2->type);
+
+  /*
+   * If both op1 and op2 are vectors the resulting value
+   * would be the operation over each member
+   *
+   * Example:
+   *
+   * op1 = {1,2,3,4}
+   * op2 = {1,1,1,1}
+   * func = add
+   *
+   * This would result in:
+   *
+   * { add(op1[0], op2[0]), add(op1[1], op2[1]), ...}
+   * {2,3,4,5}
+   */
+
+  /*
+   * If only one of the operator is a vector, then the result
+   * would extract each value of the vector and apply the value to
+   * the other operator
+   *
+   * Example:
+   *
+   * op1 = {1,2,3,4}
+   * op2 = 1
+   * func = add
+   *
+   * This would result in:
+   *
+   * { add(op1[0], 1), add(op1[1], 1), ...}
+   * {2,3,4,5}
+   */
+
+  auto is_op_between_vectors = is_vector_type(op1) && is_vector_type(op2);
+  for(size_t i = 0; i < to_constant_int2t(vector_length).as_ulong(); i++)
+  {
+    BigInt position(i);
+
+    expr2tc local_op1;
+    if(is_vector_type(op1->type))
+    {
+      local_op1 = index2tc(
+        to_vector_type(op1->type).subtype,
+        op1,
+        constant_int2tc(get_uint32_type(), position));
+    }
+    else
+      local_op1 = op1;
+
+    expr2tc local_op2;
+    if(is_vector_type(op2->type))
+    {
+      local_op2 = index2tc(
+        to_vector_type(op1->type).subtype,
+        op2,
+        constant_int2tc(get_uint32_type(), position));
+    }
+    else
+      local_op2 = op2;
+    expr2tc to_add;
+    switch(id)
+    {
+    case expr2t::sub_id:
+      to_add = sub2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      break;
+    case expr2t::mul_id:
+      to_add = mul2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      break;
+    case expr2t::div_id:
+      to_add = div2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      break;
+    case expr2t::modulus_id:
+      to_add =
+        modulus2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      break;
+    case expr2t::add_id:
+      to_add = add2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      break;
+    default:
+      assert(0 && "Unsupported operation for Vector");
+      abort();
+    }
+    to_constant_vector2t(result).datatype_members[i] = to_add;
+  }
+  return result;
+}
+
 unsigned int pointer_type2t::get_width() const
 {
   return config.ansi_c.pointer_width;
