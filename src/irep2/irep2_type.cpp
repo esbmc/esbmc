@@ -304,7 +304,7 @@ expr2tc vector_type2t::distribute_operation(
   {
     BigInt position(i);
 
-    expr2tc local_op1;
+    expr2tc local_op1 = op1;
     if(is_vector_type(op1->type))
     {
       local_op1 = index2tc(
@@ -312,10 +312,8 @@ expr2tc vector_type2t::distribute_operation(
         op1,
         constant_int2tc(get_uint32_type(), position));
     }
-    else
-      local_op1 = op1;
 
-    expr2tc local_op2;
+    expr2tc local_op2 = op2;
     if(is_vector_type(op2->type))
     {
       local_op2 = index2tc(
@@ -323,8 +321,7 @@ expr2tc vector_type2t::distribute_operation(
         op2,
         constant_int2tc(get_uint32_type(), position));
     }
-    else
-      local_op2 = op2;
+
     expr2tc to_add;
     switch(id)
     {
