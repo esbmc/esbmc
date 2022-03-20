@@ -241,12 +241,38 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     return (cache_result->ast);
 
   // Vectors!
-  if(is_vector_type(expr) && is_arith_expr(expr))
+  if(is_vector_type(expr))
   {
-    std::shared_ptr<arith_2ops> arith;
-    arith = std::dynamic_pointer_cast<arith_2ops>(expr);
-    return convert_ast(vector_type2t::distribute_operation(
-      arith->expr_id, arith->side_1, arith->side_2));
+    if(is_neg2t(expr))
+    {
+      return convert_ast(vector_type2t::distribute_operation(
+        expr->expr_id, to_neg2t(expr).value));
+    }
+    if(is_bitnot2t(expr))
+    {
+      return convert_ast(vector_type2t::distribute_operation(
+        expr->expr_id, to_bitnot2t(expr).value));
+    }
+
+    std::shared_ptr<ieee_arith_2ops> ops;
+    ops = std::dynamic_pointer_cast<ieee_arith_2ops>(expr);
+    if(ops)
+    {
+      return convert_ast(vector_type2t::distribute_operation(
+        ops->expr_id, ops->side_1, ops->side_2, ops->rounding_mode));
+    }
+    if(is_arith_expr(expr))
+    {
+      std::shared_ptr<arith_2ops> arith;
+      arith = std::dynamic_pointer_cast<arith_2ops>(expr);
+      return convert_ast(vector_type2t::distribute_operation(
+        arith->expr_id, arith->side_1, arith->side_2));
+    }
+    std::shared_ptr<bit_2ops> bit;
+    bit = std::dynamic_pointer_cast<bit_2ops>(expr);
+    if(bit)
+      return convert_ast(vector_type2t::distribute_operation(
+        bit->expr_id, bit->side_1, bit->side_2));
   }
 
   std::vector<smt_astt> args;
@@ -1934,14 +1960,6 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
   {
     smt_astt tmp = convert_ast(src_value);
     return tmp->select(this, newidx);
-  }
-
-  // Vector, might shot circuit it as well
-  if(is_vector_type(index.source_value))
-  {
-    smt_astt tmp = convert_ast(src_value);
-    tmp = tmp->select(this, newidx);
-    return tmp;
   }
 
   smt_astt a = convert_ast(src_value);

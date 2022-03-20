@@ -243,19 +243,11 @@ expr2tc vector_type2t::distribute_operation(
 expr2tc vector_type2t::distribute_operation(
   expr2t::expr_ids id,
   expr2tc op1,
-  expr2tc op2)
+  expr2tc op2,
+  expr2tc rm)
 {
-// Safety check is there any other id for arith?
 #ifndef NDEBUG
-  // TODO: bitwise, ieee, shift
-  /*
-  assert(
-    id == expr2t::add_id || id == expr2t::sub_id ||
-         id == expr2t::mul_id || id == expr2t::div_id ||
-         id == expr2t::modulus_id
-  );
- */
-  assert(is_vector_type(op1) || is_vector_type(op2));
+  assert(is_vector_type(op1) || (op2 && is_vector_type(op2)));
 #endif
   auto is_op1_vector = is_vector_type(op1);
   auto vector_length = is_op1_vector ? to_vector_type(op1->type).array_size
@@ -299,7 +291,8 @@ expr2tc vector_type2t::distribute_operation(
    * {2,3,4,5}
    */
 
-  auto is_op_between_vectors = is_vector_type(op1) && is_vector_type(op2);
+  auto is_op_between_vectors =
+    is_vector_type(op1) && (op2 && is_vector_type(op2));
   for(size_t i = 0; i < to_constant_int2t(vector_length).as_ulong(); i++)
   {
     BigInt position(i);
@@ -314,7 +307,7 @@ expr2tc vector_type2t::distribute_operation(
     }
 
     expr2tc local_op2 = op2;
-    if(is_vector_type(op2->type))
+    if(op2 && is_vector_type(op2->type))
     {
       local_op2 = index2tc(
         to_vector_type(op1->type).subtype,
@@ -325,6 +318,12 @@ expr2tc vector_type2t::distribute_operation(
     expr2tc to_add;
     switch(id)
     {
+    case expr2t::neg_id:
+      to_add = neg2tc(to_vector_type(op1->type).subtype, local_op1);
+      break;
+    case expr2t::bitnot_id:
+      to_add = bitnot2tc(to_vector_type(op1->type).subtype, local_op1);
+      break;
     case expr2t::sub_id:
       to_add = sub2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
       break;
@@ -340,6 +339,37 @@ expr2tc vector_type2t::distribute_operation(
       break;
     case expr2t::add_id:
       to_add = add2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      break;
+    case expr2t::shl_id:
+      to_add = shl2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      break;
+    case expr2t::bitxor_id:
+      to_add =
+        bitxor2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      break;
+    case expr2t::bitor_id:
+      to_add =
+        bitor2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      break;
+    case expr2t::bitand_id:
+      to_add =
+        bitand2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      break;
+    case expr2t::ieee_add_id:
+      to_add = ieee_add2tc(
+        to_vector_type(op1->type).subtype, local_op1, local_op2, rm);
+      break;
+    case expr2t::ieee_div_id:
+      to_add = ieee_div2tc(
+        to_vector_type(op1->type).subtype, local_op1, local_op2, rm);
+      break;
+    case expr2t::ieee_sub_id:
+      to_add = ieee_sub2tc(
+        to_vector_type(op1->type).subtype, local_op1, local_op2, rm);
+      break;
+    case expr2t::ieee_mul_id:
+      to_add = ieee_mul2tc(
+        to_vector_type(op1->type).subtype, local_op1, local_op2, rm);
       break;
     default:
       assert(0 && "Unsupported operation for Vector");
