@@ -239,6 +239,16 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   smt_cachet::const_iterator cache_result = smt_cache.find(expr);
   if(cache_result != smt_cache.end())
     return (cache_result->ast);
+
+  // Vectors!
+  if(is_vector_type(expr) && is_arith_expr(expr))
+  {
+    std::shared_ptr<arith_2ops> arith;
+    arith = std::dynamic_pointer_cast<arith_2ops>(expr);
+    return convert_ast(vector_type2t::distribute_operation(
+      arith->expr_id, arith->side_1, arith->side_2));
+  }
+
   std::vector<smt_astt> args;
   args.reserve(expr->get_num_sub_exprs());
 
