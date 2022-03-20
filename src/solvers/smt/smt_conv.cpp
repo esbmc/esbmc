@@ -1213,7 +1213,6 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
 
     // Determine the range if we have arrays of arrays.
     type2tc range = get_flattened_array_subtype(type);
-
     if(is_tuple_ast_type(range))
     {
       type2tc thetype = flatten_array_type(type);
@@ -1232,7 +1231,6 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     {
       r = convert_sort(range);
     }
-
     result = mk_array_sort(d, r);
     break;
   }
@@ -1938,6 +1936,14 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
     return tmp->select(this, newidx);
   }
 
+  // Vector, might shot circuit it as well
+  if(is_vector_type(index.source_value))
+  {
+    smt_astt tmp = convert_ast(src_value);
+    tmp = tmp->select(this, newidx);
+    return tmp;
+  }
+
   smt_astt a = convert_ast(src_value);
   a = a->select(this, newidx);
 
@@ -1987,6 +1993,11 @@ smt_astt smt_convt::convert_array_store(const expr2tc &expr)
 
 type2tc smt_convt::flatten_array_type(const type2tc &type)
 {
+  // If vector, convert to array
+  if(is_vector_type(type))
+    return array_type2tc(
+      to_vector_type(type).subtype, to_vector_type(type).array_size, false);
+
   // If this is not an array, we return an array of size 1
   if(!is_array_type(type))
     return array_type2tc(type, gen_one(int_type2()), false);
