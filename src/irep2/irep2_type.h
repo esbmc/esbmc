@@ -630,10 +630,14 @@ public:
    * @param airth_id the id for the operation
    * @param op1 the first operand
    * @param op2 the second operand
+   * @param rm rounding mode (for ieee)
    * @return expr2tc with the resulting vector
    */
-  static expr2tc
-  distribute_operation(expr2t::expr_ids id, expr2tc op1, expr2tc op2);
+  static expr2tc distribute_operation(
+    expr2t::expr_ids id,
+    expr2tc op1,
+    expr2tc op2 = expr2tc(),
+    expr2tc rm = expr2tc());
 };
 
 /** Pointer type.
