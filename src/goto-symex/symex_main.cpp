@@ -627,6 +627,7 @@ void goto_symext::run_intrinsic(
 
     expr2tc op1 = func_call.operands[0];
     cur_state->rename(op1);
+
     symex_assign(code_assign2tc(
       func_call.ret,
       is_constant_int2t(op1) ? gen_true_expr() : gen_false_expr()));
