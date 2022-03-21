@@ -428,7 +428,7 @@ void bmct::bidirectional_search(
   // We should only analyse the inductive step's cex and we're running
   // in k-induction mode
   if(!(options.get_bool_option("inductive-step") &&
-       options.get_bool_option("k-induction") ))
+       options.get_bool_option("k-induction")))
     return;
 
   // We'll walk list of SSA steps and look for inductive assignments
