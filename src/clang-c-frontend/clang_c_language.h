@@ -10,6 +10,7 @@ Author:
 #define CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
 
 #include <util/language.h>
+#include <unordered_map>
 
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
@@ -70,6 +71,9 @@ protected:
 
   std::vector<std::string> compiler_args;
   std::vector<std::unique_ptr<clang::ASTUnit>> ASTs;
+
+  std::vector<symbolt> extern_symbols;
+  bool add_later(contextt &ctx, symbolt symbol);
 };
 
 languaget *new_clang_c_language(const messaget &msg);
