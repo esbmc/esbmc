@@ -162,6 +162,8 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
 
   compiler_args.emplace_back("-D__builtin_memcpy=memcpy");
 
+  compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
+
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
 
