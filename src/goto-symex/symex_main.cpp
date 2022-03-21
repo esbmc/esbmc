@@ -543,6 +543,18 @@ void goto_symext::run_intrinsic(
         : gen_false_expr();
     symex_assign(code_assign2tc(func_call.ret, is_little_endian));
   }
+  else if(symname == "c:@F@__ESBMC_builtin_constant_p")
+  {
+    assert(
+      func_call.operands.size() == 1 && "Wrong __ESBMC_builtin_constant_p signature");
+    auto &ex_state = art.get_cur_state();
+    if(ex_state.cur_state->guard.is_false())
+      return;
+
+    expr2tc op1 = func_call.operands[0];
+    cur_state->rename(op1);
+    symex_assign(code_assign2tc(func_call.ret, is_constant_int2t(op1) ? gen_true_expr() : gen_false_expr()));
+  }
   else if(has_prefix(symname, "c:@F@__ESBMC_sync_fetch_and_add"))
   {
     // Already modelled in builtin_libs
