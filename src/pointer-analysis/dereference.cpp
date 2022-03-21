@@ -519,7 +519,8 @@ expr2tc dereferencet::dereference(
   // now build big case split
   // only "good" objects
 
-  if(is_struct_type(type)) {
+  if(is_struct_type(type))
+  {
     msg.warning("FAM dereference!");
   }
 
@@ -1096,11 +1097,12 @@ void dereferencet::construct_from_array(
       replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
 
     if(!num_bytes)
-      {
-        msg.warning("FAM detected, extracting the entire array on deref");
-        // Are we handling a FAM? Extract everything
-        num_bytes = compute_num_bytes_to_extract(offset, type_byte_size_bits(value->type).to_uint64());
-      }
+    {
+      msg.warning("FAM detected, extracting the entire array on deref");
+      // Are we handling a FAM? Extract everything
+      num_bytes = compute_num_bytes_to_extract(
+        offset, type_byte_size_bits(value->type).to_uint64());
+    }
 
     // Converting offset to bytes for byte extracting
     expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
@@ -1225,21 +1227,26 @@ void dereferencet::construct_from_const_struct_offset(
          * it
         */
         if(is_symbol2t(value) && mode == READ)
-          {
+        {
           auto fam = ns.lookup(to_symbol2t(value).thename);
           //assert(fam.is_struct());
-          auto last_operand = to_array_type(fam.value.operands().back().type()).size();
-          BigInt size(to_constant_expr(last_operand).get_value().as_string().c_str(), 2);
+          auto last_operand =
+            to_array_type(fam.value.operands().back().type()).size();
+          BigInt size(
+            to_constant_expr(last_operand).get_value().as_string().c_str(), 2);
           auto limit = size * type->get_width();
-          if((new_offs->value + type->get_width()) > limit) {
+          if((new_offs->value + type->get_width()) > limit)
+          {
             dereference_failure(
-                                "pointer dereference",
-                                fmt::format("Invalid read from FAM with offset {}. FAM contains {} elements", new_offs->value / type->get_width(), size),
-                                guard);
-
+              "pointer dereference",
+              fmt::format(
+                "Invalid read from FAM with offset {}. FAM contains {} "
+                "elements",
+                new_offs->value / type->get_width(),
+                size),
+              guard);
           }
         }
-
 
         // Extract.
         build_reference_rec(memb, new_offs, type, guard, mode);
@@ -1371,6 +1378,29 @@ void dereferencet::construct_from_dyn_struct_offset(
     // Compute some kind of guard
     BigInt field_size = type_byte_size_bits(it);
 
+    // This breaks FAM
+    // Lets compute field size manually for fam :)
+    if(
+      is_array_type(it) &&
+      (to_array_type(it).array_size->expr_id != expr2t::constant_int_id ||
+       !to_array_type(it).get_width()))
+    {
+      auto fam = ns.lookup(to_symbol2t(value).thename);
+      auto last_operand =
+        to_array_type(fam.value.operands().back().type()).size();
+      BigInt quantity(
+        to_constant_expr(last_operand).get_value().as_string().c_str(), 2);
+      auto base_type_width = type_byte_size_bits(to_array_type(it).subtype);
+      field_size = quantity * base_type_width;
+
+      msg.debug(fmt::format(
+        "Adding field size: {}, quantity: {}, base_type: {}, offs: {}",
+        field_size,
+        quantity,
+        base_type_width,
+        offs));
+    }
+
     // Round up to word size
     expr2tc field_offset = constant_int2tc(offset->type, offs);
     expr2tc field_top = constant_int2tc(offset->type, offs + field_size);
@@ -1380,28 +1410,6 @@ void dereferencet::construct_from_dyn_struct_offset(
     expr2tc field = member2tc(it, value, struct_type.member_names[i]);
     expr2tc new_offset = sub2tc(offset->type, offset, field_offset);
     simplify(new_offset);
-    // This breaks FAM
-    // Lets compute field size manually for fam :)
-    if(
-      is_array_type(it) &&
-      (to_array_type(it).array_size->expr_id != expr2t::constant_int_id ||
-       !to_array_type(it).get_width()))
-    {
-      auto fam = ns.lookup(to_symbol2t(value).thename);
-      auto last_operand = to_array_type(fam.value.operands().back().type()).size();
-      BigInt quantity(to_constant_expr(last_operand).get_value().as_string().c_str(), 2);
-      auto base_type_width = type_byte_size_bits(to_array_type(it).subtype);
-      field_size = quantity * base_type_width;
-
-      msg.debug(fmt::format("Adding field size: {}, quantity: {}, base_type: {}, offs: {}", field_size, quantity, base_type_width, offs));
-    }
-
-    // Round up to word size
-    expr2tc field_offs = constant_int2tc(offset->type, offs);
-    expr2tc field_top = constant_int2tc(offset->type, offs + field_size);
-    expr2tc lower_bound = greaterthanequal2tc(bits_offset, field_offs);
-    expr2tc upper_bound = lessthan2tc(bits_offset, field_top);
-    expr2tc field_guard = and2tc(lower_bound, upper_bound);
 
     if(is_struct_type(it))
     {
@@ -2332,30 +2340,30 @@ void dereferencet::check_data_obj_access(
   add2tc add(access_sz_e->type, offset, access_sz_e);
   greaterthan2tc gt(add, data_sz_e);
 
-   // Check for FAM struct
+  // Check for FAM struct
   if(is_struct_type(value->type))
   {
     // Here we are checking for a dynamic index of a FAM!
     auto &v = to_struct_type(value->type);
     auto last = v.members.back();
     if(is_array_type(last) && !to_array_type(last).get_width())
+    {
+      msg.debug("FAM in obj access");
+      if(is_symbol2t(value))
       {
-        msg.debug("FAM in obj access");
-        if(is_symbol2t(value))
-          {
-          auto fam = ns.lookup(to_symbol2t(value).thename);
-           // Is FAM pointing to a static object?
-          if(!has_prefix(fam.id.as_string(), "symex_dynamic::"))
-            {
-              msg.debug("Skipping FAM check on obj access");
-              return;
-            }
-          else {
-            msg.debug("Dynamic memory for FAM");
-          }
-
-          }
+        auto fam = ns.lookup(to_symbol2t(value).thename);
+        // Is FAM pointing to a static object?
+        if(!has_prefix(fam.id.as_string(), "symex_dynamic::"))
+        {
+          msg.debug("Skipping FAM check on obj access");
+          return;
+        }
+        else
+        {
+          msg.debug("Dynamic memory for FAM");
+        }
       }
+    }
   }
 
   if(!options.get_bool_option("no-bounds-check"))
