@@ -97,7 +97,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cex-output",
      boost::program_options::value<std::string>(),
      "save the counterexample into a file"},
-    dded an option to save counterexample into a file{
+     {
       "witness-output",
       boost::program_options::value<std::string>(),
       "generate the verification result witness in GraphML format"},
