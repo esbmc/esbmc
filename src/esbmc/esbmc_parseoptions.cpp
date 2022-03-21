@@ -229,6 +229,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   options.cmdline(cmdline);
   set_verbosity_msg(msg);
 
+  if(cmdline.isset("cex-output"))
+    options.set_option("cex-output", cmdline.getval("cex-output"));
+
   /* graphML generation options check */
   if(cmdline.isset("witness-output"))
     options.set_option("witness-output", cmdline.getval("witness-output"));
