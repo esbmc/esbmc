@@ -74,13 +74,15 @@ expr2tc expr2t::simplify() const
     // An operand has been changed; clone ourselves and update.
     expr2tc new_us = clone();
     std::list<expr2tc>::iterator it2 = newoperands.begin();
-    new_us->Foreach_operand([&it2](expr2tc &e) {
-      if((*it2) == nullptr)
-        ; // No change in operand;
-      else
-        e = *it2; // Operand changed; overwrite with new one.
-      it2++;
-    });
+    new_us->Foreach_operand(
+      [&it2](expr2tc &e)
+      {
+        if((*it2) == nullptr)
+          ; // No change in operand;
+        else
+          e = *it2; // Operand changed; overwrite with new one.
+        it2++;
+      });
 
     // Finally, attempt simplification again.
     expr2tc tmp = new_us->do_simplify();
@@ -133,8 +135,8 @@ static void fetch_ops_from_this_type(
 {
   if(expr->expr_id == id)
   {
-    expr->foreach_operand(
-      [&ops, id](const expr2tc &e) { fetch_ops_from_this_type(ops, id, e); });
+    expr->foreach_operand([&ops, id](const expr2tc &e)
+                          { fetch_ops_from_this_type(ops, id, e); });
   }
   else
   {
@@ -163,9 +165,8 @@ static bool rebalance_associative_tree(
   // faster than stringly stuff.
 
   // Extract immediate operands
-  expr.foreach_operand([&ops, &expr](const expr2tc &e) {
-    fetch_ops_from_this_type(ops, expr.expr_id, e);
-  });
+  expr.foreach_operand([&ops, &expr](const expr2tc &e)
+                       { fetch_ops_from_this_type(ops, expr.expr_id, e); });
 
   // Are there enough constant values in there?
   unsigned int const_values = 0;
@@ -297,9 +298,8 @@ static expr2tc simplify_arith_2ops(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
 
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
+    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt &
+    { return to_constant_int2t(c).value; };
 
     simpl_res = TFunctor<BigInt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -328,9 +328,8 @@ static expr2tc simplify_arith_2ops(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_bool2t;
 
-    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
-      return to_constant_bool2t(c).value;
-    };
+    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool &
+    { return to_constant_bool2t(c).value; };
 
     simpl_res = TFunctor<bool>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -415,13 +414,87 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
 
 expr2tc add2t::do_simplify() const
 {
+  // (A + 1) + ~B --> A - B
+  if(is_add2t(side_1) && is_bitnot2t(side_2))
+  {
+    dump();
+    auto sidecheck = to_add2t(side_1).side_2;
+    auto sidecheck2 = to_add2t(side_1).side_1;
+    if(is_constant_int2t(sidecheck) == 1)
+    {
+      printf("ENTRADA------------------------------------------\n");
+      dump();
+      auto B = to_bitnot2t(side_2).value;
+      auto new_operand = sub2tc(side_1->type, sidecheck2, B);
+      printf("SAIDA------------------------------------------\n");
+      new_operand->dump();
+      return new_operand;
+    }
+  }
+  // (~B + A) + 1 --> A - B
+  //&&
+  // (A + ~B) + 1 --> A - B
+  if(is_add2t(side_1) && is_constant_int2t(side_2) == 1)
+  {
+    printf("-----------------------------------------\n");
+    auto sidecheck_1 = to_add2t(side_1).side_1;
+    auto sidecheck_2 = to_add2t(side_1).side_2;
+
+    if(is_bitnot2t(sidecheck_1) && is_symbol2t(sidecheck_2))
+    {
+      printf("Entrada:\n\n");
+      dump();
+
+      auto B = to_bitnot2t(sidecheck_1).value;
+      auto new_operand = sub2tc(side_1->type, sidecheck_2, B);
+
+      printf("Saida:\n\n");
+      new_operand->dump();
+      return new_operand;
+    }
+
+    if(is_symbol2t(sidecheck_1) && is_bitnot2t(sidecheck_2))
+    {
+      printf("Entrada----------------------------:\n");
+      dump();
+
+      auto B = to_bitnot2t(sidecheck_2).value;
+      auto new_operand_2 = sub2tc(side_1->type, sidecheck_1, B);
+
+      printf("Saida------------------------------:\n");
+      new_operand_2->dump();
+      return new_operand_2;
+    }
+  }
+
+  // ~B + (A + 1) --> A - B
+  if(is_bitnot2t(side_1) && is_add2t(side_2))
+  {
+    printf("-----------------------------------------\n");
+    auto sidecheck_1 = to_add2t(side_2).side_1;
+    auto sidecheck_2 = to_add2t(side_2).side_2;
+    if(is_symbol2t(sidecheck_1) && is_constant_int2t(sidecheck_2) == 1)
+    {
+      printf("Entrada----------------------------:\n");
+      dump();
+
+      auto B = to_bitnot2t(side_1).value;
+      auto new_operand_2 = sub2tc(side_1->type, sidecheck_1, B);
+
+      printf("Saida------------------------------:\n");
+      new_operand_2->dump();
+      return new_operand_2;
+    }
+  }
+
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if(!is_nil_expr(res))
     return res;
 
   // Attempt associative simplification
   std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
-    [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
+    [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc
+  {
     expr2tc a = arg1, b = arg2;
     type2tc t = common_arith_op2_type(a, b);
     return add2tc(t, a, b);
@@ -1033,9 +1106,8 @@ static expr2tc simplify_logic_2ops(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
 
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
+    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt &
+    { return to_constant_int2t(c).value; };
 
     simpl_res = TFunctor<BigInt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1057,9 +1129,8 @@ static expr2tc simplify_logic_2ops(
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
     std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt & {
-      return to_constant_floatbv2t(c).value;
-    };
+      [](expr2tc &c) -> ieee_floatt &
+    { return to_constant_floatbv2t(c).value; };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1069,9 +1140,8 @@ static expr2tc simplify_logic_2ops(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_bool2t;
 
-    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
-      return to_constant_bool2t(c).value;
-    };
+    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool &
+    { return to_constant_bool2t(c).value; };
 
     simpl_res = TFunctor<bool>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1303,90 +1373,80 @@ static expr2tc do_bit_munge_operation(
 
 expr2tc bitand2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 & op2);
-  };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
+  { return (op1 & op2); };
 
   return do_bit_munge_operation<bitand2t>(op, type, side_1, side_2);
 }
 
 expr2tc bitor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 | op2);
-  };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
+  { return (op1 | op2); };
 
   return do_bit_munge_operation<bitor2t>(op, type, side_1, side_2);
 }
 
 expr2tc bitxor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 ^ op2);
-  };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
+  { return (op1 ^ op2); };
 
   return do_bit_munge_operation<bitxor2t>(op, type, side_1, side_2);
 }
 
 expr2tc bitnand2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ~(op1 & op2);
-  };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
+  { return ~(op1 & op2); };
 
   return do_bit_munge_operation<bitnand2t>(op, type, side_1, side_2);
 }
 
 expr2tc bitnor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ~(op1 | op2);
-  };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
+  { return ~(op1 | op2); };
 
   return do_bit_munge_operation<bitnor2t>(op, type, side_1, side_2);
 }
 
 expr2tc bitnxor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ~(op1 ^ op2);
-  };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
+  { return ~(op1 ^ op2); };
 
   return do_bit_munge_operation<bitnxor2t>(op, type, side_1, side_2);
 }
 
 expr2tc bitnot2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t) {
-    return ~(op1);
-  };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t)
+  { return ~(op1); };
 
   return do_bit_munge_operation<bitnot2t>(op, type, value, value);
 }
 
 expr2tc shl2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ((uint64_t)op1 << op2);
-  };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
+  { return ((uint64_t)op1 << op2); };
 
   return do_bit_munge_operation<shl2t>(op, type, side_1, side_2);
 }
 
 expr2tc lshr2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ((uint64_t)op1) >> ((uint64_t)op2);
-  };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
+  { return ((uint64_t)op1) >> ((uint64_t)op2); };
 
   return do_bit_munge_operation<lshr2t>(op, type, side_1, side_2);
 }
 
 expr2tc ashr2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 >> op2);
-  };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
+  { return (op1 >> op2); };
 
   return do_bit_munge_operation<ashr2t>(op, type, side_1, side_2);
 }
@@ -1690,9 +1750,8 @@ static expr2tc simplify_relations(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
 
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
+    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt &
+    { return to_constant_int2t(c).value; };
 
     simpl_res = TFunctor<BigInt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1714,9 +1773,8 @@ static expr2tc simplify_relations(
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
     std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt & {
-      return to_constant_floatbv2t(c).value;
-    };
+      [](expr2tc &c) -> ieee_floatt &
+    { return to_constant_floatbv2t(c).value; };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1752,9 +1810,8 @@ static expr2tc simplify_floatbv_relations(
         (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
       std::function<ieee_floatt &(expr2tc &)> get_value =
-        [](expr2tc &c) -> ieee_floatt & {
-        return to_constant_floatbv2t(c).value;
-      };
+        [](expr2tc &c) -> ieee_floatt &
+      { return to_constant_floatbv2t(c).value; };
 
       simpl_res = TFunctor<ieee_floatt>::simplify(
         simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -2422,9 +2479,8 @@ static expr2tc simplify_floatbv_2ops(
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
     std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt & {
-      return to_constant_floatbv2t(c).value;
-    };
+      [](expr2tc &c) -> ieee_floatt &
+    { return to_constant_floatbv2t(c).value; };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);
