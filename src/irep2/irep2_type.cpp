@@ -290,9 +290,6 @@ expr2tc vector_type2t::distribute_operation(
    * { add(op1[0], 1), add(op1[1], 1), ...}
    * {2,3,4,5}
    */
-
-  auto is_op_between_vectors =
-    is_vector_type(op1) && (op2 && is_vector_type(op2));
   for(size_t i = 0; i < to_constant_int2t(vector_length).as_ulong(); i++)
   {
     BigInt position(i);
