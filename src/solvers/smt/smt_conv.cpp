@@ -2283,7 +2283,7 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   }
 
   default:
-    if(options.get_bool_option("non-supported-models-as-zero"))
+    if(!options.get_bool_option("non-supported-models-as-zero"))
     {
       msg.error(fmt::format(
         "Unimplemented type'd expression ({}) in smt get", type->type_id));
@@ -2319,7 +2319,7 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
     return tuple_api->tuple_get(expr);
 
   default:
-    if(options.get_bool_option("non-supported-models-as-zero"))
+    if(!options.get_bool_option("non-supported-models-as-zero"))
     {
       msg.error(fmt::format(
         "Unimplemented type'd expression ({}) in smt get",
