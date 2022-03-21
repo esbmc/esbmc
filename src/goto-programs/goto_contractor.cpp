@@ -4,9 +4,6 @@
 
 #include "goto_contractor.h"
 
-using namespace std;
-
-
 void goto_contractort::get_constraints(goto_functionst goto_functions)
 {
   auto function = goto_functions.function_map.find("c:@F@main");
@@ -24,7 +21,7 @@ void goto_contractort::get_intervals(goto_functionst goto_functions)
 {
   //only main here
   auto function = goto_functions.function_map.find("c:@F@main");
-  std::cout << "\n parsing assumes\nfound main: " << function->first << "\n";
+  //std::cout << "\n parsing assumes\nfound main: " << function->first << "\n";
   auto it = function->second.body.instructions.begin();
 
   while(it != function->second.body.instructions.end())
@@ -47,7 +44,6 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
   std::shared_ptr<relation_data> rel;
   rel = dynamic_pointer_cast<relation_data>(expr);
 
-  //expr->dump();
   //side1 1 is a symbol or typecast to symbol
   auto side1 = rel->side_1;
   //side 2 is always a number.
@@ -70,17 +66,25 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
   else
     return;
 
-  int index =
-    map->find((string)symbol->get_symbol_name().c_str());
-  if(index == -1) return;
-  if(is_greaterthan2t(expr) || is_greaterthanequal2t(expr))
-    map->update_lb_interval(value, index);
-  else if(is_lessthan2t(expr) || is_lessthanequal2t(expr))
-    map->update_ub_interval(value, index);
-  else if(is_equality2t(expr))
+  int index = map->find(symbol->get_symbol_name());
+  if(index == -1)
+    return;
+  switch(expr->expr_id)
   {
+  case expr2t::expr_ids::greaterthan_id:
+  case expr2t::expr_ids::greaterthanequal_id:
+    map->update_lb_interval(value, index);
+    break;
+  case expr2t::expr_ids::lessthan_id:
+  case expr2t::expr_ids::lessthanequal_id:
+    map->update_ub_interval(value, index);
+    break;
+  case expr2t::expr_ids::equality_id:
     map->update_lb_interval(value, index);
     map->update_ub_interval(value, index);
+    break;
+  default:;
+    //error
   }
 }
 
@@ -88,7 +92,8 @@ void goto_contractort::insert_assume(
   goto_functionst goto_functions,
   IntervalVector new_intervals)
 {
-  std::cout << "Inserting assumes: " << std::endl;
+  message_handler.status("Inserting assumes.. ");
+
   loopst loop;
   for(auto &function_loop : function_loops)
     loop = function_loop;
@@ -111,9 +116,6 @@ void goto_contractort::insert_assume(
       isfinite(new_intervals[i].lb()) &&
       map->intervals[i].lb() != new_intervals[i].lb())
     {
-      if(is_signedbv_type(X))
-      {
-      }
       auto lb = create_signed_32_value_expr(new_intervals[i].lb());
       auto cond = create_greaterthanequal_relation(X, lb);
       goto_programt tmp_e(message_handler);
@@ -141,29 +143,30 @@ void goto_contractort::insert_assume(
 
 IntervalVector goto_contractort::contractor()
 {
+  //TODO: replace cout with message.status
   NumConstraint c = *constraint;
-  std::cout << "My Constraint:" << c << std::endl;
-  std::cout << "My Function:" << c.f << std::endl;
+  //message_handler.status("My Constraint:" + c );
+  //std::cout << "My Function:" << c.f << std::endl;
 
   auto complement = get_complement(c.op);
 
   NumConstraint c2(c.f, complement);
-  std::cout << "My complement Constraint:" << c2 << std::endl;
-  std::cout << "My Function:" << c2.f << std::endl;
+  //std::cout << "My complement Constraint:" << c2 << std::endl;
+  //std::cout << "My Function:" << c2.f << std::endl;
 
   CtcFwdBwd c_out(c);
   CtcFwdBwd c_in(c2);
 
   domains = map->intervals;
-  std::cout << "My domains:" << domains << std::endl;
+  //std::cout << "My domains:" << domains << std::endl;
   auto X = domains;
 
   IntervalVector *s_in;
   c_in.contract(X);
   int num = domains.diff(X, s_in);
-  std::cout << "My domains after Inner contractor:" << X << std::endl;
-  for(int i = 0; i < num; i++)
-    std::cout << "s_in[" << i << "]:" << s_in[i] << std::endl;
+  //std::cout << "My domains after Inner contractor:" << X << std::endl;
+  //for(int i = 0; i < num; i++)
+  //message_handler.debug( "s_in[%d]: %f",i,  s_in[i]));
 
   return X;
 }
@@ -180,8 +183,8 @@ ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
   case LT:
     return GEQ;
   default:
-    cout << "cant process equal" << endl;
-    abort();
+    message_handler.status("cant process equal");
+    //abort();
     break;
   }
   return GEQ;
@@ -195,12 +198,11 @@ Ctc *goto_contractort::create_contractors_from_expr2t(irep_container<expr2t>)
 NumConstraint *
 goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
 {
+  //TODO: change to switch
   NumConstraint *c = nullptr;
   if(is_arith_expr(expr) || is_constant_number(expr) || is_symbol2t(expr))
   {
-    //Function *f=create_function_from_expr2t(expr);
-    //NumConstraint *c= new NumConstraint(*vars,(*f)(*vars));
-    cout << " NOT A CONSTRAINT " << endl;
+    message_handler.status("NOT A CONSTRAINT ");
   }
   else if(is_greaterthanequal2t(expr))
   {
@@ -257,12 +259,11 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
 Function *
 goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
 {
-  //auto op = get_expr_id(expr);
   Function *f = nullptr;
   Function *g, *h;
-
-  cout << "dumping expression:" << endl;
+  
   expr->dump();
+  //TODO: change to switch
   if(is_add2t(expr))
   {
     g = create_function_from_expr2t(to_add2t(expr).side_1);
@@ -294,7 +295,7 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
       f = new Function(*vars, (*vars)[index]);
     else
     {
-      cout << "ERROR: MAX VAR SIZE REACHED" << endl;
+      message_handler.error("ERROR: MAX VAR SIZE REACHED");
       exit(1);
     }
   }
@@ -330,9 +331,7 @@ int goto_contractort::create_variable_from_expr2t(irep_container<expr2t> expr)
 
 bool goto_contractort::run1()
 {
-  cout << "testing foo" << endl;
   auto it = goto_functions.function_map.find("c:@F@main");
-  //Forall_goto_functions(it, goto_functions)
   {
     number_of_functions++;
     runOnFunction(*it);
@@ -342,17 +341,6 @@ bool goto_contractort::run1()
       goto_loopst goto_loops(it->first, goto_functions, it->second, msg);
       auto function_loops = goto_loops.get_loops();
       this->function_loops = function_loops;
-      //number_of_loops += function_loops.size();
-      //if(function_loops.size())
-      //{
-      //  goto_functiont &goto_function = it->second;
-      //  goto_programt &goto_program = goto_function.body;
-
-      // Foreach loop in the function
-      //for(auto itt = function_loops.rbegin(); itt != function_loops.rend();
-      //  ++itt)
-      //runOnLoop(*itt, goto_program);
-      //}
     }
   }
   goto_functions.update();

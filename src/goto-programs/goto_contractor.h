@@ -20,6 +20,7 @@
 #include <goto-programs/loopst.h>
 #include <util/message/message_stream.h>
 #include <util/std_types.h>
+#include "irep2/irep2.h"
 
 #define MAX_VAR 10
 
@@ -125,7 +126,7 @@ public:
     }
   }
 
-  enum RELATION {GET,LET,LTQ,GTQ,EQU,NEQ};
+
 
 private:
   IntervalVector domains;
@@ -135,15 +136,12 @@ private:
   NumConstraint *constraint;
 
   unsigned number_of_functions = 0;
-  unsigned number_of_loops = 0;
 
   typedef std::list<loopst> function_loopst;
   function_loopst function_loops;
 
   messaget message_handler;
-  //goto_functiont goto_function;
 
-  //void goto_k_induction();
   void get_constraints(goto_functionst functionst);
   void get_intervals(goto_functionst functionst);
 
