@@ -57,6 +57,7 @@ extern "C"
 #include <util/symbol.h>
 #include <util/time_stopping.h>
 #include <util/message/format.h>
+#include <util/message/fmt_message_handler.h>
 
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -411,6 +412,18 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
 int esbmc_parseoptionst::doit()
 {
+  // Configure msg output
+
+  if(cmdline.isset("file-output"))
+  {
+    FILE *f = fopen(cmdline.getval("file-output"), "w+");
+    out = f;
+    err = f;
+  }
+
+  std::shared_ptr<message_handlert> handler =
+    std::make_shared<fmt_message_handler>(out, err);
+  msg.add_message_handler(handler);
   //
   // Print a banner
   //
@@ -1707,9 +1720,10 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 
 void esbmc_parseoptionst::help()
 {
-  msg.status(
+  default_message dmsg;
+  dmsg.status(
     fmt::format("\n* * *           ESBMC {}          * * *", ESBMC_VERSION));
   std::ostringstream oss;
   oss << cmdline.cmdline_options;
-  msg.status(oss.str());
+  dmsg.status(oss.str());
 }
