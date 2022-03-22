@@ -96,10 +96,11 @@ protected:
     static unsigned int counter = 0;
 
     std::string id, name;
-    id = get_symbol_name(
-      class_name, function_name, "return_value$tmp$" + counter++);
+    
     name = "return_value$tmp$";
-    name += counter;
+    name += counter++;
+    id = get_symbol_name(
+      class_name, function_name, name);
     auto tmp_symbol =
       create_jimple_symbolt(t, class_name, name, id, function_name);
 

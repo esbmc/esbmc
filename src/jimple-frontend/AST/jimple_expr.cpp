@@ -33,15 +33,20 @@ exprt jimple_symbol::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {
+  // Is this null symbol?
+  if(var_name == "null")
+    return gen_zero(int_type());
   // 1. Look over the local scope
   auto symbol_name = get_symbol_name(class_name, function_name, var_name);
-  symbolt &s = *ctx.find_symbol(symbol_name);
+  symbolt *s = ctx.find_symbol(symbol_name);
+  if(!s)
+    throw fmt::format("Could not find symbol: {}", symbol_name);
 
   // TODO:
   // 2. Look over the class scope
   // 3. Look over the global scope (possibly don't need)
 
-  return symbol_expr(s);
+  return symbol_expr(*s);
 };
 
 std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
@@ -289,10 +294,23 @@ exprt jimple_expr_invoke::to_exprt(
     return skip;
   }
 
-  if(is_nondet_call())
+  if(method == "inflate_1")
   {
-    jimple_nondet nondet(method);
-    return nondet.to_exprt(ctx, class_name, function_name);
+    code_skipt skip;
+    return skip;
+  }
+
+  if(method == "getRoot_1")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  bool is_parse_int = (base_class == "java.lang.Integer") && (method == "parseInt_1");
+  if(is_nondet_call() || is_parse_int)
+  {
+    code_skipt skip;
+    return skip;
   }
 
   code_blockt block;
@@ -302,6 +320,8 @@ exprt jimple_expr_invoke::to_exprt(
   oss << base_class << ":" << method;
 
   auto symbol = ctx.find_symbol(oss.str());
+  if(!symbol)
+    throw fmt::format("Symbol not found: {}", oss.str());
   call.function() = symbol_expr(*symbol);
   if(!lhs.is_nil())
     call.lhs() = lhs;
@@ -363,6 +383,49 @@ exprt jimple_virtual_invoke::to_exprt(
     return skip;
   }
 
+  // TODO: Move intrinsics to backend
+  if(base_class == "android.widget.EditText")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(base_class == "java.lang.Object")
+  {
+    code_skipt skip;
+    return skip;
+  }
+  
+  if(method == "getLayoutInflater_1")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(method == "inflate_1")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(method == "getRoot_1")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(method == "setContentView_2")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(method == "findViewById_2")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
   if(is_nondet_call())
   {
     jimple_nondet nondet(method);
@@ -376,6 +439,8 @@ exprt jimple_virtual_invoke::to_exprt(
   oss << base_class << ":" << method;
 
   auto symbol = ctx.find_symbol(oss.str());
+  if(!symbol)
+    throw fmt::format("Could not find symbol: {}", oss.str());
   call.function() = symbol_expr(*symbol);
   if(!lhs.is_nil())
   {
@@ -575,13 +640,16 @@ void jimple_virtual_member::from_json(const json &j)
   j.at("signature").at("type").get_to(t);
   type = std::make_shared<jimple_type>(t);
 }
-
+#include <iostream>
 exprt jimple_virtual_member::to_exprt(
   contextt &ctx,
   const std::string &class_name,
   const std::string &function_name) const
 {
   auto result = gen_zero(type->to_typet(ctx));
+  // Fix this
+  if(from == "com.example.jimplebmc.databinding.ActivityMainBinding")
+    return result;
   auto struct_type = (*ctx.find_symbol("tag-" + from)).type;
 
   // 1. Look over the local scope

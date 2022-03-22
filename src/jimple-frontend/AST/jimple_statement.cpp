@@ -6,6 +6,7 @@
 #include <util/std_expr.h>
 #include <util/std_types.h>
 #include <jimple-frontend/AST/jimple_statement.h>
+#include <util/message/format.h>
 #include <util/arith_tools.h>
 #include "util/c_typecast.h"
 
@@ -384,12 +385,65 @@ exprt jimple_invoke::to_exprt(
     return skip;
   }
 
+  if(base_class == "java.security.InvalidParameterException")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(base_class == "android.widget.Button")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(base_class == "androidx.appcompat.app.AppCompatActivity")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(base_class == "com.example.jimplebmc.MainActivity$$ExternalSyntheticLambda0")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(method == "getLayoutInflater_1")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(method == "setContentView_2")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(method == "findViewById_2")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(method == "setSupportActionBar_2")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
   code_blockt block;
   code_function_callt call;
 
   std::ostringstream oss;
   oss << base_class << ":" << method;
   auto symbol = ctx.find_symbol(oss.str());
+
+  if(!symbol)
+  {
+    throw fmt::format("Couldnt find: {}", oss.str());
+  }
   call.function() = symbol_expr(*symbol);
 
   if(variable != "")
