@@ -35,7 +35,7 @@ void goto_contractort::get_intervals(goto_functionst goto_functions)
 void goto_contractort::parse_intervals(irep_container<expr2t> expr)
 {
   symbol2tc symbol;
-  double value;
+  long value;
 
   if(!is_comp_expr(expr))
     return;
@@ -139,32 +139,36 @@ void goto_contractort::insert_assume(
 
 IntervalVector goto_contractort::contractor()
 {
-  //TODO: replace cout with message.status
   NumConstraint c = *constraint;
-  //message_handler.status("My Constraint:" + c );
-  //std::cout << "My Function:" << c.f << std::endl;
+
+  std::ostringstream oss;
+  oss << "\t- Constraint:" << c;
+  oss << "\n\t- Function:" << c.f;
 
   auto complement = get_complement(c.op);
 
   NumConstraint c2(c.f, complement);
-  //std::cout << "My complement Constraint:" << c2 << std::endl;
-  //std::cout << "My Function:" << c2.f << std::endl;
+  oss << "\n\t- Complement: " << c2;
 
   CtcFwdBwd c_out(c);
   CtcFwdBwd c_in(c2);
 
   domains = map->intervals;
-  //std::cout << "My domains:" << domains << std::endl;
+  oss << "\n\t- Domains (before): " << domains;
   auto X = domains;
 
   c_in.contract(X);
 
   ///Keep this for later
-  //IntervalVector *s_in;
+  IntervalVector *s_in;
   //int num = domains.diff(X, s_in);
+  oss << "\n\t- Domains (after): " << X;
   //std::cout << "My domains after Inner contractor:" << X << std::endl;
-  //for(int i = 0; i < num; i++)
-  //message_handler.debug( "s_in[%d]: %f",i,  s_in[i]));
+  //  for(int i = 0; i < num; i++)
+  //    oss << "\n\t- "
+  //    message_handler.debug( "s_in[%d]: %f",i,  s_in[i]));
+
+  message_handler.status(oss.str());
 
   return X;
 }
