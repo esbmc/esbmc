@@ -245,6 +245,7 @@ public:
 
   bool is_nondet_call() const
   {
+    //bool is_parse_int = (base_class == "java.lang.Integer") && (method == "parseInt_1");
     return base_class == "org.sosy_lab.sv_benchmarks.Verifier";
   }
 
@@ -289,7 +290,8 @@ public:
 
   bool is_nondet_call() const
   {
-    return base_class == "java.util.Random";
+    //bool is_parse_int = (base_class == "java.lang.Integer") && (method == "parseInt_1");
+    return (base_class == "java.util.Random");
   }
 
 protected:

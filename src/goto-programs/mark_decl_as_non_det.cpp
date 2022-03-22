@@ -26,7 +26,7 @@ bool mark_decl_as_non_det::runOnFunction(
     {
       // Initialize it with nondet then
       expr2tc new_value =
-        code_assign2tc(symbol2tc(decl.type, decl.value), gen_nondet(decl.type));
+        code_assign2tc(symbol2tc(decl.type, decl.value), gen_zero(decl.type));
 
       // Due to the value set analysis, we need to split declarations and assignments
       auto insert_pos = it;

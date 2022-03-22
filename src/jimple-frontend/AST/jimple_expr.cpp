@@ -307,7 +307,17 @@ exprt jimple_expr_invoke::to_exprt(
   }
 
   bool is_parse_int = (base_class == "java.lang.Integer") && (method == "parseInt_1");
-  if(is_nondet_call() || is_parse_int)
+  if(is_parse_int)
+  {
+    code_blockt block;
+    exprt rhs = exprt("sideeffect", int_type());
+    rhs.statement("nondet");
+    code_assignt assign(lhs, rhs);
+    block.operands().push_back(assign);
+    return block;
+  }
+
+   if(is_nondet_call())
   {
     code_skipt skip;
     return skip;
