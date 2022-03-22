@@ -80,11 +80,11 @@ public:
   void dump()
   {
     ///Used only for testing. will be removed.
-    std::cout << "size = " << n << std::endl;
-    std::cout << "[";
-    for(int i = 0; i < n; i++)
-      std::cout << var_name[i] << ":" << intervals[i] << " : ";
-    std::cout << "]" << std::endl;
+    //    std::cout << "size = " << n << std::endl;
+    //    std::cout << "[";
+    //    for(int i = 0; i < n; i++)
+    //      std::cout << var_name[i] << ":" << intervals[i] << " : ";
+    //    std::cout << "]" << std::endl;
   }
   int size()
   {
