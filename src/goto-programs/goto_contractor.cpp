@@ -21,7 +21,6 @@ void goto_contractort::get_intervals(goto_functionst goto_functions)
 {
   //only main here
   auto function = goto_functions.function_map.find("c:@F@main");
-  //std::cout << "\n parsing assumes\nfound main: " << function->first << "\n";
   auto it = function->second.body.instructions.begin();
 
   while(it != function->second.body.instructions.end())
@@ -42,7 +41,7 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
     return;
 
   std::shared_ptr<relation_data> rel;
-  rel = dynamic_pointer_cast<relation_data>(expr);
+  rel = std::dynamic_pointer_cast<relation_data>(expr);
 
   //side1 1 is a symbol or typecast to symbol
   auto side1 = rel->side_1;
@@ -92,19 +91,16 @@ void goto_contractort::insert_assume(
   goto_functionst goto_functions,
   IntervalVector new_intervals)
 {
+
   message_handler.status("Inserting assumes.. ");
 
   loopst loop;
   for(auto &function_loop : function_loops)
     loop = function_loop;
 
-  goto_programt::targett t = loop.get_original_loop_head();
   auto loop_exit = loop.get_original_loop_exit();
 
   goto_programt dest(message_handler);
-
-  for(; t != loop_exit; t++)
-    ;
 
   auto it = goto_functions.function_map.find("c:@F@main");
   auto goto_function = it->second;
@@ -161,9 +157,11 @@ IntervalVector goto_contractort::contractor()
   //std::cout << "My domains:" << domains << std::endl;
   auto X = domains;
 
-  IntervalVector *s_in;
   c_in.contract(X);
-  int num = domains.diff(X, s_in);
+
+  ///Keep this for later
+  //IntervalVector *s_in;
+  //int num = domains.diff(X, s_in);
   //std::cout << "My domains after Inner contractor:" << X << std::endl;
   //for(int i = 0; i < num; i++)
   //message_handler.debug( "s_in[%d]: %f",i,  s_in[i]));
@@ -202,7 +200,7 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
   NumConstraint *c = nullptr;
   if(is_arith_expr(expr) || is_constant_number(expr) || is_symbol2t(expr))
   {
-    message_handler.status("NOT A CONSTRAINT ");
+    message_handler.status("Expression is complex, skipping this assert");
   }
   else if(is_greaterthanequal2t(expr))
   {
@@ -261,8 +259,7 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
 {
   Function *f = nullptr;
   Function *g, *h;
-  
-  expr->dump();
+
   //TODO: change to switch
   if(is_add2t(expr))
   {
@@ -321,7 +318,7 @@ int goto_contractort::create_variable_from_expr2t(irep_container<expr2t> expr)
   if(index == -1)
   {
     int new_index = map->add_var(var_name, to_symbol2t(expr));
-    map->dump();
+    //map->dump();
     if(new_index != -1)
       return new_index;
     return -1;

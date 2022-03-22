@@ -45,7 +45,9 @@ public:
     {
       symbols[n] = symbol;
       var_name[n] = name;
-      auto w = symbol.type->get_width();
+
+      ///keep for later. set initial intervals
+      //auto w = symbol.type->get_width();
       /*if(is_signedbv_type(symbol.type))
         add_interval(-pow(2,w-1),pow(2,w-1)-1,n);
       else
@@ -57,7 +59,6 @@ public:
   }
   void add_interval(double lb, double ub, int index)
   {
-    interval *p;
     intervals[index] = Interval(lb, ub);
   }
   void update_lb_interval(double lb, int index)
@@ -78,6 +79,7 @@ public:
   }
   void dump()
   {
+    ///Used only for testing. will be removed.
     std::cout << "size = " << n << std::endl;
     std::cout << "[";
     for(int i = 0; i < n; i++)
@@ -115,12 +117,16 @@ public:
       vars = new Variable(MAX_VAR);
       //find properties
       //convert from ESBMC to ibex format
+      message_handler.status("1/4 - Parsing asserts to create CSP Constraints.");
       get_constraints(_goto_functions);
       //find intervals -- frama-c
+      message_handler.status("2/4 - Parsing assumes to set values for variables intervals.");
       get_intervals(_goto_functions);
       //contract
+      message_handler.status("3/4 - Applying contractor.");
       auto new_intervals = contractor();
       //reflect results on goto-program by inserting assume.
+      message_handler.status("4/4 - Inserting assumes.");
       insert_assume(_goto_functions, new_intervals);
       //clean up
     }
