@@ -48,15 +48,21 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
   //side 2 is always a number.
   auto side2 = rel->side_2;
 
-  if(is_typecast2t(side1))
-    if(is_symbol2t(to_typecast2t(side1).from))
-      symbol = to_symbol2t(to_typecast2t(side1).from);
-    else
-      return;
-  else if(is_symbol2t(side1))
-    symbol = to_symbol2t(side1);
+  auto obj = get_base_object(side1);
+  if(is_symbol2t(obj))
+    symbol = to_symbol2t(obj);
   else
     return;
+  ///keeping this for later
+  //  if(is_typecast2t(side1))
+  //    if(is_symbol2t(to_typecast2t(side1).from))
+  //      symbol = to_symbol2t(to_typecast2t(side1).from);
+  //    else
+  //      return;
+  //  else if(is_symbol2t(side1))
+  //    symbol = to_symbol2t(side1);
+  //  else
+  //    return;
 
   if(!is_constant_int2t(side2) && !is_constant_floatbv2t(side2))
     return;
@@ -116,7 +122,7 @@ void goto_contractort::insert_assume(
       auto cond = create_greaterthanequal_relation(X, lb);
       goto_programt tmp_e(message_handler);
       goto_programt::targett e = tmp_e.add_instruction(ASSUME);
-      e->inductive_step_instruction = false; //config.options.is_kind();
+      e->inductive_step_instruction = false;
       e->guard = cond;
       e->location = loop_exit->location;
       goto_function.body.destructive_insert(loop_exit, tmp_e);
@@ -129,7 +135,7 @@ void goto_contractort::insert_assume(
       auto cond = create_lessthanequal_relation(X, ub);
       goto_programt tmp_e(message_handler);
       goto_programt::targett e = tmp_e.add_instruction(ASSUME);
-      e->inductive_step_instruction = false; //config.options.is_kind();
+      e->inductive_step_instruction = false;
       e->guard = cond;
       e->location = loop_exit->location;
       goto_function.body.destructive_insert(loop_exit, tmp_e);
@@ -200,13 +206,41 @@ Ctc *goto_contractort::create_contractors_from_expr2t(irep_container<expr2t>)
 NumConstraint *
 goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
 {
-  //TODO: change to switch
   NumConstraint *c = nullptr;
-  if(is_arith_expr(expr) || is_constant_number(expr) || is_symbol2t(expr))
+  if(
+    is_arith_expr(expr) || is_constant_number(expr) || is_symbol2t(expr) ||
+    is_notequal2t(expr))
   {
     message_handler.status("Expression is complex, skipping this assert");
   }
-  else if(is_greaterthanequal2t(expr))
+
+  std::shared_ptr<relation_data> rel;
+  rel = std::dynamic_pointer_cast<relation_data>(expr);
+
+  Function *f, *g;
+  f = create_function_from_expr2t(rel->side_1);
+  g = create_function_from_expr2t(rel->side_2);
+  switch(expr->expr_id)
+  {
+  case expr2t::expr_ids::greaterthanequal_id:
+    c = new NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars));
+    break;
+  case expr2t::expr_ids::greaterthan_id:
+    c = new NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
+    break;
+  case expr2t::expr_ids::lessthanequal_id:
+    c = new NumConstraint(*vars, (*f)(*vars) <= (*g)(*vars));
+    break;
+  case expr2t::expr_ids::lessthan_id:
+    c = new NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
+    break;
+  case expr2t::expr_ids::equality_id:
+    c = new NumConstraint(*vars, (*f)(*vars) = (*g)(*vars));
+    break;
+  }
+  ///keeping this for later
+  /*
+  if(is_greaterthanequal2t(expr))
   {
     Function *f, *g;
     f = create_function_from_expr2t(to_greaterthanequal2t(expr).side_1);
@@ -253,9 +287,9 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
     g = create_function_from_expr2t(to_notequal2t(expr).side_2);
     c = new NumConstraint(*vars, (*f)(*vars) = (*g)(*vars));
     return c;
-  }
-  //>,<,<=
-  return nullptr;
+  }*/
+
+  return c;
 }
 //+-*/
 Function *
@@ -265,6 +299,56 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   Function *g, *h;
 
   //TODO: change to switch
+  if(is_comp_expr(expr))
+  {
+    //Abort contractor
+  }
+  switch(expr->expr_id)
+  {
+  case expr2t::expr_ids::add_id:
+    g = create_function_from_expr2t(to_add2t(expr).side_1);
+    h = create_function_from_expr2t(to_add2t(expr).side_2);
+    f = new Function(*vars, (*g)(*vars) + (*h)(*vars));
+    break;
+  case expr2t::expr_ids::sub_id:
+    g = create_function_from_expr2t(to_sub2t(expr).side_1);
+    h = create_function_from_expr2t(to_sub2t(expr).side_2);
+    f = new Function(*vars, (*g)(*vars) - (*h)(*vars));
+    break;
+  case expr2t::expr_ids::mul_id:
+    g = create_function_from_expr2t(to_mul2t(expr).side_1);
+    h = create_function_from_expr2t(to_mul2t(expr).side_2);
+    f = new Function(*vars, (*g)(*vars) * (*h)(*vars));
+    break;
+  case expr2t::expr_ids::div_id:
+    g = create_function_from_expr2t(to_div2t(expr).side_1);
+    h = create_function_from_expr2t(to_div2t(expr).side_2);
+    f = new Function(*vars, (*g)(*vars) / (*h)(*vars));
+    break;
+  case expr2t::expr_ids::symbol_id:
+  {
+    int index = create_variable_from_expr2t(expr);
+    if(index != -1)
+      f = new Function(*vars, (*vars)[index]);
+    else
+      message_handler.error("ERROR: MAX VAR SIZE REACHED");
+    break;
+  }
+  case expr2t::expr_ids::typecast_id:
+    f = create_function_from_expr2t(to_typecast2t(expr).from);
+    break;
+  case expr2t::expr_ids::constant_int_id:
+  {
+    const ExprConstant &c =
+      ExprConstant::new_scalar(to_constant_int2t(expr).value.to_int64());
+    f = new Function(*vars, c);
+    break;
+  }
+  default:
+    f = nullptr;
+  }
+  //if(is_arith_expr(expr) && !is_modulus2t(expr) && !is_abs2t(expr))
+  /*
   if(is_add2t(expr))
   {
     g = create_function_from_expr2t(to_add2t(expr).side_1);
@@ -273,8 +357,8 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   }
   else if(is_sub2t(expr))
   {
-    g = create_function_from_expr2t(to_add2t(expr).side_1);
-    h = create_function_from_expr2t(to_add2t(expr).side_2);
+    g = create_function_from_expr2t(to_sub2t(expr).side_1);
+    h = create_function_from_expr2t(to_sub2t(expr).side_2);
     f = new Function(*vars, (*g)(*vars) - (*h)(*vars));
   }
   else if(is_mul2t(expr))
@@ -285,8 +369,8 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   }
   else if(is_div2t(expr))
   {
-    g = create_function_from_expr2t(to_mul2t(expr).side_1);
-    h = create_function_from_expr2t(to_mul2t(expr).side_2);
+    g = create_function_from_expr2t(to_div2t(expr).side_1);
+    h = create_function_from_expr2t(to_div2t(expr).side_2);
     f = new Function(*vars, (*g)(*vars) / (*h)(*vars));
   }
   else if(is_symbol2t(expr))
@@ -297,7 +381,7 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
     else
     {
       message_handler.error("ERROR: MAX VAR SIZE REACHED");
-      exit(1);
+      //exit(1);
     }
   }
   else if(is_typecast2t(expr))
@@ -306,12 +390,14 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   }
   else if(is_constant_int2t(expr))
   {
-    //f = new Function(*vars, to_constant_int2t(expr).value.to_int64());
+    const ExprConstant &c =
+      ExprConstant::new_scalar(to_constant_int2t(expr).value.to_int64());
+    f = new Function(*vars, c);
   }
   else if(is_comp_expr(expr))
   {
     //Abort contractor
-  }
+  }*/
   return f;
 }
 
@@ -322,7 +408,6 @@ int goto_contractort::create_variable_from_expr2t(irep_container<expr2t> expr)
   if(index == -1)
   {
     int new_index = map->add_var(var_name, to_symbol2t(expr));
-    //map->dump();
     if(new_index != -1)
       return new_index;
     return -1;

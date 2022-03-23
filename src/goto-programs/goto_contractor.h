@@ -21,12 +21,11 @@
 #include <util/message/message_stream.h>
 #include <util/std_types.h>
 #include "irep2/irep2.h"
+#include "util/type_byte_size.h"
 
 #define MAX_VAR 10
 
 using namespace ibex;
-
-
 
 class MyMap
 {
@@ -108,7 +107,6 @@ public:
   {
     message_handler = _message_handler;
 
-
     run1();
     if(function_loops.size())
     {
@@ -117,10 +115,12 @@ public:
       vars = new Variable(MAX_VAR);
       //find properties
       //convert from ESBMC to ibex format
-      message_handler.status("1/4 - Parsing asserts to create CSP Constraints.");
+      message_handler.status(
+        "1/4 - Parsing asserts to create CSP Constraints.");
       get_constraints(_goto_functions);
       //find intervals -- frama-c
-      message_handler.status("2/4 - Parsing assumes to set values for variables intervals.");
+      message_handler.status(
+        "2/4 - Parsing assumes to set values for variables intervals.");
       get_intervals(_goto_functions);
       //contract
       message_handler.status("3/4 - Applying contractor.");
@@ -131,8 +131,6 @@ public:
       //clean up
     }
   }
-
-
 
 private:
   IntervalVector domains;
