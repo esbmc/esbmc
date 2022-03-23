@@ -417,52 +417,34 @@ expr2tc add2t::do_simplify() const
   // (A + 1) + ~B --> A - B
   if(is_add2t(side_1) && is_bitnot2t(side_2))
   {
-    dump();
     auto sidecheck = to_add2t(side_1).side_2;
     auto sidecheck2 = to_add2t(side_1).side_1;
-    if(is_constant_int2t(sidecheck) == 1)
+    if(to_constant_int(sidecheck).value == 1)
     {
-      printf("ENTRADA------------------------------------------\n");
-      dump();
       auto B = to_bitnot2t(side_2).value;
-      auto new_operand = sub2tc(side_1->type, sidecheck2, B);
-      printf("SAIDA------------------------------------------\n");
-      new_operand->dump();
+      auto new_operand = sub2tc(side_1->type, sidecheck2, B);      
       return new_operand;
     }
   }
   // (~B + A) + 1 --> A - B
   //&&
   // (A + ~B) + 1 --> A - B
-  if(is_add2t(side_1) && is_constant_int2t(side_2) == 1)
+  if(is_add2t(side_1) && to_constant_int(side_2).value == 1)
   {
-    printf("-----------------------------------------\n");
     auto sidecheck_1 = to_add2t(side_1).side_1;
     auto sidecheck_2 = to_add2t(side_1).side_2;
 
     if(is_bitnot2t(sidecheck_1) && is_symbol2t(sidecheck_2))
     {
-      printf("Entrada:\n\n");
-      dump();
-
       auto B = to_bitnot2t(sidecheck_1).value;
       auto new_operand = sub2tc(side_1->type, sidecheck_2, B);
-
-      printf("Saida:\n\n");
-      new_operand->dump();
       return new_operand;
     }
 
     if(is_symbol2t(sidecheck_1) && is_bitnot2t(sidecheck_2))
     {
-      printf("Entrada----------------------------:\n");
-      dump();
-
       auto B = to_bitnot2t(sidecheck_2).value;
       auto new_operand_2 = sub2tc(side_1->type, sidecheck_1, B);
-
-      printf("Saida------------------------------:\n");
-      new_operand_2->dump();
       return new_operand_2;
     }
   }
@@ -470,19 +452,12 @@ expr2tc add2t::do_simplify() const
   // ~B + (A + 1) --> A - B
   if(is_bitnot2t(side_1) && is_add2t(side_2))
   {
-    printf("-----------------------------------------\n");
     auto sidecheck_1 = to_add2t(side_2).side_1;
     auto sidecheck_2 = to_add2t(side_2).side_2;
-    if(is_symbol2t(sidecheck_1) && is_constant_int2t(sidecheck_2) == 1)
+    if(is_symbol2t(sidecheck_1) && to_constant_int(sidecheck_2).value == 1)
     {
-      printf("Entrada----------------------------:\n");
-      dump();
-
       auto B = to_bitnot2t(side_1).value;
       auto new_operand_2 = sub2tc(side_1->type, sidecheck_1, B);
-
-      printf("Saida------------------------------:\n");
-      new_operand_2->dump();
       return new_operand_2;
     }
   }
