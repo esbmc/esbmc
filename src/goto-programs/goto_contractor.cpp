@@ -26,7 +26,10 @@ void goto_contractort::get_intervals(goto_functionst goto_functions)
   while(it != function->second.body.instructions.end())
   {
     if(it->is_assume())
+    {
+      it->dump();
       parse_intervals(it->guard);
+    }
 
     it++;
   }
@@ -36,6 +39,10 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
 {
   symbol2tc symbol;
   long value;
+
+
+  expr = get_base_object(expr);
+
 
   if(!is_comp_expr(expr))
     return;
@@ -178,6 +185,7 @@ IntervalVector goto_contractort::contractor()
 
   return X;
 }
+
 ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
 {
   switch(op)
@@ -197,12 +205,12 @@ ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
   }
   return GEQ;
 }
-// && ||
+
 Ctc *goto_contractort::create_contractors_from_expr2t(irep_container<expr2t>)
 {
   return nullptr;
 }
-//>=,<
+
 NumConstraint *
 goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
 {
@@ -236,6 +244,8 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
     break;
   case expr2t::expr_ids::equality_id:
     c = new NumConstraint(*vars, (*f)(*vars) = (*g)(*vars));
+    break;
+  default:
     break;
   }
   ///keeping this for later
@@ -291,14 +301,13 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
 
   return c;
 }
-//+-*/
+
 Function *
 goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
 {
   Function *f = nullptr;
   Function *g, *h;
 
-  //TODO: change to switch
   if(is_comp_expr(expr))
   {
     //Abort contractor

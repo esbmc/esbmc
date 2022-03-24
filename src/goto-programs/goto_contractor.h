@@ -110,33 +110,29 @@ public:
     run1();
     if(function_loops.size())
     {
-      //initialize map
       map = new MyMap();
       vars = new Variable(MAX_VAR);
-      //find properties
-      //convert from ESBMC to ibex format
       message_handler.status(
         "1/4 - Parsing asserts to create CSP Constraints.");
       get_constraints(_goto_functions);
-      //find intervals -- frama-c
       message_handler.status(
         "2/4 - Parsing assumes to set values for variables intervals.");
       get_intervals(_goto_functions);
-      //contract
       message_handler.status("3/4 - Applying contractor.");
       auto new_intervals = contractor();
-      //reflect results on goto-program by inserting assume.
       message_handler.status("4/4 - Inserting assumes.");
       insert_assume(_goto_functions, new_intervals);
-      //clean up
     }
   }
 
 private:
   IntervalVector domains;
+  ///vars variable references to be used in Ibex formulas
   Variable *vars;
   Ctc *ctc;
+  /// map is where the variable references and intervals are stored.
   MyMap *map;
+  /// constraint is where the constraint for CSP will be stored.
   NumConstraint *constraint;
 
   unsigned number_of_functions = 0;
@@ -146,9 +142,18 @@ private:
 
   messaget message_handler;
 
+  /// \Function get_constraint is a function that will go through each asert in the program and parse it from ESBMC expression to an IBEX expression that will be added to constraints in the CSP.
+  /// \param functionst list of functions in the goto program
+  /// \returns the function will return nothing. However the constraints will be added to the list of constraints.
   void get_constraints(goto_functionst functionst);
+
+  /// \Function get_intervals is a function that will go through each asert in the program and parse it from ESBMC expression to a triplet that are the variable name and and update its interval depending on the relation it will decide if the lower or the upper limit or both.
+  /// \param functionst list of functions in the goto program
+  /// \returns the function will return nothing. However the values of the intervals of each variable will be updated in the Map that holds the variable information
   void get_intervals(goto_functionst functionst);
 
+  /// \Function contractor function will apply the contractor on the parsed constraint and intervals. it will apply the inner contractor by calculating the complement of the assert and contract.
+  /// \return Interval vector that represents the area that should be checked by the bmc.
   IntervalVector contractor();
 
   ibex::CmpOp get_complement(ibex::CmpOp);
@@ -161,7 +166,7 @@ private:
   int create_variable_from_expr2t(irep_container<expr2t>);
 
   void parse_intervals(irep_container<expr2t> expr);
-  //override to get loops
+
   bool run1();
 };
 
