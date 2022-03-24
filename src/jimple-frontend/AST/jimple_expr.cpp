@@ -294,6 +294,13 @@ exprt jimple_expr_invoke::to_exprt(
     return skip;
   }
 
+  // TODO: Move intrinsics to backend
+  if(base_class == "android.content.Intent")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
   if(method == "inflate_1")
   {
     code_skipt skip;
@@ -660,7 +667,16 @@ exprt jimple_virtual_member::to_exprt(
   // Fix this
   if(from == "com.example.jimplebmc.databinding.ActivityMainBinding")
     return result;
-  auto struct_type = (*ctx.find_symbol("tag-" + from)).type;
+
+  if(from.find(".databinding.") != std::string::npos)
+    return result;
+
+  auto inner_symbol = ctx.find_symbol("tag-" + from);
+  if(!inner_symbol)
+  {
+    throw fmt::format("Unsupported virtual member: {}", from);
+  }
+  auto struct_type = (*inner_symbol).type;
 
   // 1. Look over the local scope
   auto symbol_name = get_symbol_name(class_name, function_name, variable);

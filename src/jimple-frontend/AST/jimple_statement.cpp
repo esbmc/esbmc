@@ -397,6 +397,35 @@ exprt jimple_invoke::to_exprt(
     return skip;
   }
 
+  if(base_class == "android.content.Intent")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(method == "startActivity_2")
+  {
+    code_function_callt call;
+
+    std::ostringstream oss;
+    oss << class_name << ":" << function_name << "@" << variable;
+
+    // TODO: move this from here
+    std::string id, name;
+    id = "__ESBMC_assert";
+    name = "__ESBMC_assert";
+
+    auto symbol =
+      create_jimple_symbolt(code_typet(), class_name, name, id, function_name);
+
+    symbolt &added_symbol = *ctx.move_symbol_to_context(symbol);
+
+    call.function() = symbol_expr(added_symbol);
+    exprt value_operand = from_integer(0, int_type());
+    call.arguments().push_back(value_operand);
+    return call;
+  }
+
   if(base_class == "androidx.appcompat.app.AppCompatActivity")
   {
     code_skipt skip;
@@ -404,6 +433,12 @@ exprt jimple_invoke::to_exprt(
   }
 
   if(base_class == "com.example.jimplebmc.MainActivity$$ExternalSyntheticLambda0")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if(base_class.find("$$ExternalSyntheticLambda") != std::string::npos)
   {
     code_skipt skip;
     return skip;
@@ -442,7 +477,7 @@ exprt jimple_invoke::to_exprt(
 
   if(!symbol)
   {
-    throw fmt::format("Couldnt find: {}", oss.str());
+    throw fmt::format("Couldn't find: {}", oss.str());
   }
   call.function() = symbol_expr(*symbol);
 
