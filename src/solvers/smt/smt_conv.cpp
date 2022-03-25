@@ -1996,8 +1996,10 @@ type2tc smt_convt::flatten_array_type(const type2tc &type)
 
   while(is_array_type(to_array_type(type_rec).subtype))
   {
-    arr_size =
-      mul2tc(arr_size1->type, to_array_type(type_rec).array_size, arr_size);
+    arr_size = mul2tc(
+      arr_size1->type,
+      to_array_type(to_array_type(type_rec).subtype).array_size,
+      arr_size);
     type_rec = to_array_type(type_rec).subtype;
   }
   simplify(arr_size);
