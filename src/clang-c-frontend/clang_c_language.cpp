@@ -380,6 +380,7 @@ _Bool __ESBMC_overflow_umul(unsigned int, unsigned int, unsigned int *);
 _Bool __ESBMC_overflow_umull(unsigned long int, unsigned long int, unsigned long int *);
 _Bool __ESBMC_overflow_umulll(unsigned long long int, unsigned long long int, unsigned long long int *);
 int __ESBMC_sync_fetch_and_add(int*, int);
+int __ESBMC_builtin_constant_p(int);
 
 // This is causing problems when using the C++ frontend. It needs to be rewritten
 #define __atomic_load_n(PTR, MO)                                               \
