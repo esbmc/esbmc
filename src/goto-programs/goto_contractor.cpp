@@ -337,7 +337,7 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   case expr2t::expr_ids::symbol_id:
   {
     int index = create_variable_from_expr2t(expr);
-    if(index != -1)
+    if(index != NOT_FOUND)
       f = new Function(*vars, (*vars)[index]);
     else
       message_handler.error("ERROR: MAX VAR SIZE REACHED");
@@ -414,12 +414,12 @@ int goto_contractort::create_variable_from_expr2t(irep_container<expr2t> expr)
 {
   std::string var_name = to_symbol2t(expr).get_symbol_name().c_str();
   int index = map->find(var_name);
-  if(index == -1)
+  if(index == NOT_FOUND)
   {
     int new_index = map->add_var(var_name, to_symbol2t(expr));
-    if(new_index != -1)
+    if(new_index != NOT_FOUND)
       return new_index;
-    return -1;
+    return NOT_FOUND;
   }
   return index;
 }
