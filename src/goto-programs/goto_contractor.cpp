@@ -40,9 +40,14 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
   symbol2tc symbol;
   long value;
 
-
   expr = get_base_object(expr);
 
+  if(is_and2t(expr))
+  {
+    parse_intervals(to_and2t(expr).side_1);
+    parse_intervals(to_and2t(expr).side_2);
+    return;
+  }
 
   if(!is_comp_expr(expr))
     return;
@@ -71,15 +76,23 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
   //  else
   //    return;
 
+  //message_handler.status(get_expr_id(side2));
+  //side2->dump();
+  bool neg = false;
+  if(is_neg2t(side2))
+  {
+    neg = true;
+    side2 = to_neg2t(side2).value;
+  }
   if(!is_constant_int2t(side2) && !is_constant_floatbv2t(side2))
     return;
   if(is_constant_int2t(side2))
-    value = to_constant_int2t(side2).as_long();
+    value = to_constant_int2t(side2).as_long() * (neg?-1:1);
   else
     return;
 
   int index = map->find(symbol->get_symbol_name());
-  if(index == -1)
+  if(index == NOT_FOUND)
     return;
   switch(expr->expr_id)
   {
