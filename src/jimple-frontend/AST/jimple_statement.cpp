@@ -6,8 +6,10 @@
 #include <util/std_expr.h>
 #include <util/std_types.h>
 #include <jimple-frontend/AST/jimple_statement.h>
+#include <jimple-frontend/AST/jimple_globals.h>
 #include <util/message/format.h>
 #include <util/arith_tools.h>
+#include <util/string_constant.h>
 #include "util/c_typecast.h"
 
 void jimple_identity::from_json(const json &j)
@@ -325,6 +327,7 @@ std::string jimple_invoke::to_string() const
   oss << "Invoke: " << method;
   return oss.str();
 }
+#include <iostream>
 
 void jimple_invoke::from_json(const json &j)
 {
@@ -397,10 +400,15 @@ exprt jimple_invoke::to_exprt(
     return skip;
   }
 
-  if(base_class == "android.content.Intent")
-  {
-    code_skipt skip;
-    return skip;
+  if(base_class == "android.content.Intent" && method == "<init>_3")
+  { 
+    // TODO: Fix this!
+    jimple_symbol s(variable);
+    code_assignt asd(s.to_exprt(ctx, class_name, function_name),
+    parameters[1]->to_exprt(ctx, base_class, function_name));
+    //code_expressiont asd(parameters[1]->to_exprt(ctx, base_class, function_name));
+    
+    return asd; 
   }
 
   if(method == "startActivity_2")
@@ -409,6 +417,11 @@ exprt jimple_invoke::to_exprt(
 
     std::ostringstream oss;
     oss << class_name << ":" << function_name << "@" << variable;
+    
+    auto target = config.options.get_option("target");
+    int i = jimple::get_reference(target);
+    auto class_obj = parameters[0]->to_exprt(ctx, class_name, function_name);
+    //abort();
 
     // TODO: move this from here
     std::string id, name;
@@ -421,8 +434,10 @@ exprt jimple_invoke::to_exprt(
     symbolt &added_symbol = *ctx.move_symbol_to_context(symbol);
 
     call.function() = symbol_expr(added_symbol);
-    exprt value_operand = from_integer(0, int_type());
-    call.arguments().push_back(value_operand);
+    exprt value_operand = from_integer(i, int_type());
+    
+    equality_exprt check(class_obj, value_operand);
+    call.arguments().push_back(gen_not(check));
     return call;
   }
 

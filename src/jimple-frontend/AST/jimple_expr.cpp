@@ -1,4 +1,5 @@
 #include <jimple-frontend/AST/jimple_expr.h>
+#include <jimple-frontend/AST/jimple_globals.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
@@ -7,6 +8,7 @@
 #include <util/std_expr.h>
 #include <util/message/format.h>
 #include <util/message/default_message.h>
+
 
 void jimple_constant::from_json(const json &j)
 {
@@ -78,7 +80,13 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
 
   if(expr_type == "class_reference")
   {
-    jimple_constant c("-1");
+    std::string key;
+    j.at("value").get_to(key);
+    std::ostringstream oss;
+    // TODO: this is not ok
+    oss << jimple::get_reference(key);
+    jimple_constant c(oss.str());
+    jimple::class_reference.push_back(key);
     return std::make_shared<jimple_constant>(c);
   }
 
@@ -324,6 +332,15 @@ exprt jimple_expr_invoke::to_exprt(
     return block;
   }
 
+  if(method == "isChecked_1")
+  {
+    code_blockt block;
+    exprt rhs = exprt("sideeffect", uint_type());
+    rhs.statement("nondet");
+    block.operands().push_back(rhs);
+    return block;
+  }
+
    if(is_nondet_call())
   {
     code_skipt skip;
@@ -441,6 +458,16 @@ exprt jimple_virtual_invoke::to_exprt(
   {
     code_skipt skip;
     return skip;
+  }
+
+  if(method == "isChecked_1")
+  {
+    code_blockt block;
+    exprt rhs = exprt("sideeffect", int_type());
+    rhs.statement("nondet");
+    code_assignt assign(lhs, rhs);
+    block.operands().push_back(assign);
+    return block;
   }
 
   if(is_nondet_call())

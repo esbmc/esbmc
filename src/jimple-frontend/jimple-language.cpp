@@ -111,7 +111,7 @@ void jimple_languaget::add_intrinsics(contextt &context)
 
 void jimple_languaget::setup_main(contextt &context)
 {
-  irep_idt main_symbol;
+  irep_idt main_symbol;  
 
   std::string main =
     (config.main != "") ? config.main : "main_1"; // main(String[])
