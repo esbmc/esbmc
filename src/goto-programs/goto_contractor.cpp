@@ -138,7 +138,7 @@ void goto_contractort::insert_assume(
       isfinite(new_intervals[i].lb()) &&
       map->intervals[i].lb() != new_intervals[i].lb())
     {
-      auto lb = create_signed_32_value_expr(new_intervals[i].lb());
+      auto lb = create_value_expr(new_intervals[i].lb(), int_type2());
       auto cond = create_greaterthanequal_relation(X, lb);
       goto_programt tmp_e(message_handler);
       goto_programt::targett e = tmp_e.add_instruction(ASSUME);
@@ -151,7 +151,7 @@ void goto_contractort::insert_assume(
       isfinite(new_intervals[i].ub()) &&
       map->intervals[i].ub() != new_intervals[i].ub())
     {
-      auto ub = create_signed_32_value_expr(new_intervals[i].ub());
+      auto ub = create_value_expr(new_intervals[i].ub(), int_type2());
       auto cond = create_lessthanequal_relation(X, ub);
       goto_programt tmp_e(message_handler);
       goto_programt::targett e = tmp_e.add_instruction(ASSUME);
