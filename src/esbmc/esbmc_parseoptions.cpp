@@ -38,7 +38,6 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
-#include <goto-programs/goto_contractor.h>
 #include <goto-programs/interval_analysis.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
@@ -66,6 +65,10 @@ extern "C"
 
 #ifdef ENABLE_OLD_FRONTEND
 #include <ansi-c/c_preprocess.h>
+#endif
+
+#ifdef ENABLE_GOTO_CONTRACTOR
+#include <goto-programs/goto_contractor.h>
 #endif
 
 #include <util/message/default_message.h>
@@ -1605,7 +1608,11 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if(cmdline.isset("goto-contractor"))
     {
+      #ifdef ENABLE_GOTO_CONTRACTOR
       goto_contractort(goto_functions, msg);
+      #else
+      msg.error("Current build does not support contractors");
+      #endif
     }
 
     if(cmdline.isset("termination"))
