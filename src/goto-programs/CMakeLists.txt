@@ -1,5 +1,14 @@
 add_library(gotoprograms goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp goto_program.cpp goto_check.cpp goto_inline.cpp remove_skip.cpp goto_convert_functions.cpp remove_unreachable.cpp builtin_functions.cpp show_claims.cpp destructor.cpp set_claims.cpp add_race_assertions.cpp rw_set.cpp read_goto_binary.cpp static_analysis.cpp goto_program_serialization.cpp goto_function_serialization.cpp read_bin_goto_object.cpp goto_program_irep.cpp format_strings.cpp loop_numbers.cpp goto_loops.cpp write_goto_binary.cpp goto_k_induction.cpp loopst.cpp ai.cpp ai_domain.cpp interval_analysis.cpp interval_domain.cpp goto_contractor.cpp )
 add_library(gotoalgorithms loop_unroll.cpp mark_decl_as_non_det.cpp)
+
+if(ENABLE_GOTO_CONTRACTOR)
+    include(FindIbex)
+    add_library(gotocontractor goto_contractor.cpp)
+    target_link_libraries(gotocontractor ${IBEX_LDFLAGS})
+    target_compile_options(gotocontractor PUBLIC ${IBEX_CFLAGS})
+    target_include_directories(gotocontractor PUBLIC ${IBEX_CFLAGS})
+endif()
+
 target_link_libraries(gotoalgorithms algorithms gotoprograms)
 target_include_directories(gotoprograms
     PRIVATE ${Boost_INCLUDE_DIRS}
@@ -7,10 +16,5 @@ target_include_directories(gotoprograms
 target_include_directories(gotoalgorithms
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-include (FindPkgConfig)
-pkg_search_module (IBEX REQUIRED ibex)
-message (STATUS "Found Ibex version ${IBEX_VERSION}")
 
-target_link_libraries(gotoprograms pointeranalysis bigint ${IBEX_LDFLAGS})
-target_compile_options (gotoprograms PUBLIC ${IBEX_CFLAGS})
-target_include_directories (gotoprograms PUBLIC ${IBEX_INCLUDE_DIRS})
+target_link_libraries(gotoprograms pointeranalysis bigint)
