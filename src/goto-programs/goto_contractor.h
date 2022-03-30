@@ -8,7 +8,7 @@
 #include "goto_k_induction.h"
 #include <iostream>
 #include <ibex/ibex_Interval.h>
-#include "ibex.h"
+#include <ibex.h>
 #include "util/goto_expr_factory.h"
 #include "goto_functions.h"
 #include <util/algorithms.h>
@@ -124,7 +124,6 @@ public:
     : goto_functions_algorithm(_goto_functions, true)
   {
     message_handler = _message_handler;
-
     run1();
     if(function_loops.size())
     {

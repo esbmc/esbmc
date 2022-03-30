@@ -1612,6 +1612,7 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_contractort(goto_functions, msg);
       #else
       msg.error("Current build does not support contractors");
+      abort();
       #endif
     }
 
