@@ -450,11 +450,10 @@ expr2tc add2t::do_simplify() const
     }
   };
 
-
   // (~B + A) + 1 --> A - B
   //&&
   // (A + ~B) + 1 --> A - B
-  
+
   if(is_add2t(side_1) && is_constant_int2t(side_2) == 1)
   {
     auto sidecheck_1 = to_add2t(side_1).side_1;
@@ -550,35 +549,34 @@ expr2tc add2t::do_simplify() const
       return constant_int2tc(side_2->type, -1);
     }
   }
-}
 
-// ~B + (A + 1) --> A - B
-if(is_bitnot2t(side_1) && is_add2t(side_2))
-{
-  auto sidecheck_1 = to_add2t(side_2).side_1;
-  auto sidecheck_2 = to_add2t(side_2).side_2;
-  if(is_symbol2t(sidecheck_1) && to_constant_int(sidecheck_2).value == 1)
+  // ~B + (A + 1) --> A - B
+  if(is_bitnot2t(side_1) && is_add2t(side_2))
   {
-    auto B = to_bitnot2t(side_1).value;
-    auto new_operand_2 = sub2tc(side_1->type, sidecheck_1, B);
-    return new_operand_2;
+    auto sidecheck_1 = to_add2t(side_2).side_1;
+    auto sidecheck_2 = to_add2t(side_2).side_2;
+    if(is_symbol2t(sidecheck_1) && to_constant_int(sidecheck_2).value == 1)
+    {
+      auto B = to_bitnot2t(side_1).value;
+      auto new_operand_2 = sub2tc(side_1->type, sidecheck_1, B);
+      return new_operand_2;
+    }
   }
-}
 
-expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
-if(!is_nil_expr(res))
-  return res;
+  expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
+  if(!is_nil_expr(res))
+    return res;
 
-// Attempt associative simplification
-std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
-  [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc
-{
-  expr2tc a = arg1, b = arg2;
-  type2tc t = common_arith_op2_type(a, b);
-  return add2tc(t, a, b);
-};
+  // Attempt associative simplification
+  std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
+    [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc
+  {
+    expr2tc a = arg1, b = arg2;
+    type2tc t = common_arith_op2_type(a, b);
+    return add2tc(t, a, b);
+  };
 
-return attempt_associative_simplify(*this, add_wrapper);
+  return attempt_associative_simplify(*this, add_wrapper);
 }
 
 template <class constant_type>
