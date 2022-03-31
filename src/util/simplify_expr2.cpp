@@ -551,18 +551,7 @@ expr2tc add2t::do_simplify() const
     }
   }
 
-  // ~B + (A + 1) --> A - B
-  if(is_bitnot2t(side_1) && is_add2t(side_2))
-  {
-    auto sidecheck_1 = to_add2t(side_2).side_1;
-    auto sidecheck_2 = to_add2t(side_2).side_2;
-    if(is_symbol2t(sidecheck_1) && to_constant_int(sidecheck_2).value == 1)
-    {
-      auto B = to_bitnot2t(side_1).value;
-      auto new_operand_2 = sub2tc(side_1->type, sidecheck_1, B);
-      return new_operand_2;
-    }
-  }
+  
 
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if(!is_nil_expr(res))
