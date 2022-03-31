@@ -440,33 +440,35 @@ expr2tc add2t::do_simplify() const
     }
   }
 
-  auto side_check = [](expr2tc &side_1, expr2tc &side_2)
-  {
-    if(is_bitnot2t(side_1) && is_symbol2t(side_2))
-    {
-      auto B = to_bitnot2t(side_1).value;
-      auto new_operand = sub2tc(side_1->type, side_2, B);
-      return new_operand;
-    }
-  };
-
   // (~B + A) + 1 --> A - B
   //&&
   // (A + ~B) + 1 --> A - B
+
+  auto simplify = [](expr2tc &e, expr2tc &f) -> expr2tc
+  {
+    if(is_bitnot2t(e))
+    {
+      auto B = to_bitnot2t(e).value;
+      auto new_operand = sub2tc(e->type, f, B);
+      return new_operand;
+    }
+    else if(is_bitnot2t(f))
+    {
+      auto B = to_bitnot2t(f).value;
+      auto new_operand = sub2tc(f->type, e, B);
+      return new_operand;
+    }
+    return expr2tc();
+  };
 
   if(is_add2t(side_1) && is_constant_int2t(side_2) == 1)
   {
     auto sidecheck_1 = to_add2t(side_1).side_1;
     auto sidecheck_2 = to_add2t(side_1).side_2;
 
-    if(side_check(sidecheck_1, sidecheck_2))
-    {
-      return side_check(sidecheck_1, sidecheck_2);
-    }
-    if(side_check(sidecheck_2, sidecheck_1))
-    {
-      return side_check(sidecheck_2, sidecheck_1);
-    }
+    auto new_operand = simplify(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
   }
 
   // ~B + (A + 1) --> A - B
@@ -489,7 +491,6 @@ expr2tc add2t::do_simplify() const
   {
     auto sidecheck_1 = to_sub2t(side_2).side_1;
     auto sidecheck_2 = to_sub2t(side_2).side_2;
-    dump();
 
     if(is_symbol2t(sidecheck_1) && is_symbol2t(sidecheck_2))
     {
