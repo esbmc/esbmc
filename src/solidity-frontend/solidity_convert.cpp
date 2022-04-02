@@ -11,6 +11,7 @@
 #include <regex>
 #include <util/message/format.h>
 #include <fstream>
+#include <iostream>
 
 solidity_convertert::solidity_convertert(
   contextt &_context,
@@ -685,6 +686,27 @@ bool solidity_convertert::get_statement(
     }
 
     new_expr = if_expr;
+    break;
+  }
+  case SolidityGrammar::StatementT::WhileStatement: {
+    exprt cond = true_exprt();
+    if (get_expr(stmt["condition"], cond))
+    {
+      return true;
+    }
+
+    codet body = codet();
+    if (get_block(stmt["body"], body)) {
+      return true;
+    }
+
+    convert_expression_to_code(body);
+
+    code_whilet code_while;
+    code_while.cond() = cond;
+    code_while.body() = body;
+
+    new_expr = code_while;
     break;
   }
   default:
@@ -2029,4 +2051,12 @@ bool solidity_convertert::is_dyn_array(const nlohmann::json &json_in)
     }
   }
   return false;
+}
+
+void solidity_convertert::print_json(nlohmann::json &json) {
+  std::cout << std::setw(2) << json << std::endl;
+}
+
+void solidity_convertert::print_json(nlohmann::json &json, std::string &key) {
+  std::cout << std::setw(2) << json[key] << std::endl;
 }
