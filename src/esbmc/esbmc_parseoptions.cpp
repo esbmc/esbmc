@@ -1608,12 +1608,12 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if(cmdline.isset("goto-contractor"))
     {
-      #ifdef ENABLE_GOTO_CONTRACTOR
+#ifdef ENABLE_GOTO_CONTRACTOR
       goto_contractort(goto_functions, msg);
-      #else
+#else
       msg.error("Current build does not support contractors");
       abort();
-      #endif
+#endif
     }
 
     if(cmdline.isset("termination"))
