@@ -7,8 +7,6 @@
 
 #include "goto_k_induction.h"
 #include <iostream>
-#include <ibex/ibex_Interval.h>
-#include <ibex.h>
 #include "util/goto_expr_factory.h"
 #include "goto_functions.h"
 #include <util/algorithms.h>
@@ -20,6 +18,10 @@
 #include <goto-programs/loopst.h>
 #include <util/message/message_stream.h>
 #include <util/std_types.h>
+#include <ibex.h>
+#include <ibex/ibex_Interval.h>
+#include <ibex/ibex_Expr.h>
+#include <ibex/ibex_Ctc.h>
 #include "irep2/irep2.h"
 #include "util/type_byte_size.h"
 
@@ -34,14 +36,14 @@ using namespace ibex;
  * a new variable. Also update a variable interval by changing the upper/lower
  * limit.
  */
-class MyMap
+class CspMap
 {
 public:
-  IntervalVector intervals;
+  ibex::IntervalVector intervals;
   std::string var_name[MAX_VAR];
   symbol2tc symbols[MAX_VAR];
 
-  MyMap()
+  CspMap()
   {
     intervals.resize(MAX_VAR);
   }
@@ -83,15 +85,6 @@ public:
 
     return NOT_FOUND;
   }
-  void dump()
-  {
-    ///Used only for testing. will be removed.
-    //    std::cout << "size = " << n << std::endl;
-    //    std::cout << "[";
-    //    for(int i = 0; i < n; i++)
-    //      std::cout << var_name[i] << ":" << intervals[i] << " : ";
-    //    std::cout << "]" << std::endl;
-  }
   int size()
   {
     return n;
@@ -99,7 +92,6 @@ public:
 
 private:
   int n = 0;
-  //Variable *x[10];
   Variable *x;
 };
 
@@ -124,21 +116,56 @@ public:
     : goto_functions_algorithm(_goto_functions, true)
   {
     message_handler = _message_handler;
-    run1();
+    initialize_main_function_loops();
     if(function_loops.size())
     {
-      map = new MyMap();
+      map = new CspMap();
       vars = new Variable(MAX_VAR);
       message_handler.status(
         "1/4 - Parsing asserts to create CSP Constraints.");
       get_constraints(_goto_functions);
+      if(constraint == nullptr)
+      {
+        message_handler.status(
+          "Constraint expression not supported. Aborting goto-contractor");
+        return;
+      }
       message_handler.status(
         "2/4 - Parsing assumes to set values for variables intervals.");
       get_intervals(_goto_functions);
       message_handler.status("3/4 - Applying contractor.");
       auto new_intervals = contractor();
-      message_handler.status("4/4 - Inserting assumes.");
-      insert_assume(_goto_functions, new_intervals);
+      if(new_intervals == map->intervals)
+      {
+        message_handler.status(
+          "4/4 - Intervals remained unchanged. No assumes will be inserted");
+      }
+      else
+      {
+        message_handler.status("4/4 - Inserting assumes.");
+        insert_assume(_goto_functions, new_intervals);
+      }
+    }
+  }
+  /**
+   * This destructor that will delete all objects allocated of type Function
+   * and NumConstraint
+   */
+  ~goto_contractort()
+  {
+    while(!list_of_constraints.empty())
+    {
+      auto p = list_of_constraints.front();
+      if(p != nullptr)
+        delete(p);
+      list_of_constraints.pop_front();
+    }
+    while(!list_of_functions.empty())
+    {
+      auto p = list_of_functions.front();
+      if(p != nullptr)
+        delete(p);
+      list_of_functions.pop_front();
     }
   }
 
@@ -146,11 +173,14 @@ private:
   IntervalVector domains;
   ///vars variable references to be used in Ibex formulas
   Variable *vars;
-  Ctc *ctc;
+  ibex::Ctc *ctc;
   /// map is where the variable references and intervals are stored.
-  MyMap *map;
+  CspMap *map;
   /// constraint is where the constraint for CSP will be stored.
-  NumConstraint *constraint;
+  ibex::NumConstraint *constraint;
+
+  std::list<Function *> list_of_functions;
+  std::list<NumConstraint *> list_of_constraints;
 
   unsigned number_of_functions = 0;
 
@@ -203,7 +233,7 @@ private:
 
   void parse_intervals(irep_container<expr2t> expr);
 
-  bool run1();
+  bool initialize_main_function_loops();
 };
 
 #endif //ESBMC_GOTO_CONTRACTOR_H
