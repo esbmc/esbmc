@@ -615,7 +615,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         i >> j;
         j.at("no-slice-symbols").get_to(ignored_symbols);
       }
-      ignored = slicer::slice(eq, options.get_bool_option("slice-assumes"), ignored_symbols);
+      ignored = slicer::slice(
+        eq, options.get_bool_option("slice-assumes"), ignored_symbols);
     }
     else
       ignored = slicer::simple_slice(eq);

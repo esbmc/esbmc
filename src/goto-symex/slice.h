@@ -25,7 +25,10 @@ namespace slicer
  * @param ignored_symbols list of symbols that cannot be sliced
  * @return number of steps that were ignored
  */
-BigInt slice(std::shared_ptr<symex_target_equationt> &eq, bool slice_assume, std::unordered_set<std::string> ignored_symbols);
+BigInt slice(
+  std::shared_ptr<symex_target_equationt> &eq,
+  bool slice_assume,
+  std::unordered_set<std::string> ignored_symbols);
 
 /**
  * Naive slicer: slice every step after the last assertion
