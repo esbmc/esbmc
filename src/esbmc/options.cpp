@@ -100,6 +100,7 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "parse source files using our old frontend {deprecated},"},
     {"result-only", NULL, "do not print the counter-example"},
+    {"json-options-input", boost::program_options::value<std::string>(), "use a JSON file as the configuration input"},
 #ifdef _WIN32
     {"i386-macos", NULL, "set MACOS/I386 architecture"},
     {"ppc-macos", NULL, "set PPC/I386 architecture"},

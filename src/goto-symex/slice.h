@@ -22,9 +22,10 @@ namespace slicer
  * Helper function to call the slicer
  * @param eq symex formula to be sliced
  * @param slice_assume whether assumes should be sliced
+ * @param ignored_symbols list of symbols that cannot be sliced
  * @return number of steps that were ignored
  */
-BigInt slice(std::shared_ptr<symex_target_equationt> &eq, bool slice_assume);
+BigInt slice(std::shared_ptr<symex_target_equationt> &eq, bool slice_assume, std::unordered_set<std::string> ignored_symbols);
 
 /**
  * Naive slicer: slice every step after the last assertion
@@ -45,7 +46,7 @@ BigInt simple_slice(std::shared_ptr<symex_target_equationt> &eq);
 class symex_slicet
 {
 public:
-  symex_slicet(bool assume);
+  symex_slicet(bool assume, std::unordered_set<std::string> ignored_symbols);
   /**
    * Iterate over all steps of the \eq in REVERSE order,
    * getting symbol dependencies. If an
@@ -67,6 +68,7 @@ protected:
    */
   typedef std::unordered_set<std::string> symbol_sett;
   symbol_sett depends;
+  const symbol_sett ignored_symbols;
   // Anonymous function to add elements into #depends
   std::function<bool(const symbol2t &)> add_to_deps;
   // TODO: we probably don't need #add_to_deps
