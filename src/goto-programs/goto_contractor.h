@@ -42,10 +42,13 @@ public:
   ibex::IntervalVector intervals;
   std::string var_name[MAX_VAR];
   symbol2tc symbols[MAX_VAR];
+  bool nondecreasing[MAX_VAR], nonincreasing[MAX_VAR];
 
   CspMap()
   {
     intervals.resize(MAX_VAR);
+    for(int i=0;i<MAX_VAR;i++)
+    nondecreasing[i] = nonincreasing[i] = false;
   }
   int add_var(std::string name, symbol2t symbol)
   {
@@ -79,19 +82,19 @@ public:
   }
   int find(std::string name)
   {
-    for(int i = 0; i < n; i++)
+    for(size_t i = 0; i < n; i++)
       if(var_name[i] == name)
         return i;
 
     return NOT_FOUND;
   }
-  int size()
+  size_t size()
   {
     return n;
   }
 
 private:
-  int n = 0;
+  size_t n = 0;
   Variable *x;
 };
 
@@ -122,7 +125,7 @@ public:
       map = new CspMap();
       vars = new Variable(MAX_VAR);
       message_handler.status(
-        "1/4 - Parsing asserts to create CSP Constraints.");
+        "1/5 - Parsing asserts to create CSP Constraints.");
       get_constraints(_goto_functions);
       if(constraint == nullptr)
       {
@@ -130,19 +133,21 @@ public:
           "Constraint expression not supported. Aborting goto-contractor");
         return;
       }
+      message_handler.status("2/5 - Checking if loop is monotone.");
+      monotonicity_check(_goto_functions);
       message_handler.status(
-        "2/4 - Parsing assumes to set values for variables intervals.");
+        "3/5 - Parsing assumes to set values for variables intervals.");
       get_intervals(_goto_functions);
-      message_handler.status("3/4 - Applying contractor.");
+      message_handler.status("4/5 - Applying contractor.");
       auto new_intervals = contractor();
       if(new_intervals == map->intervals)
       {
         message_handler.status(
-          "4/4 - Intervals remained unchanged. No assumes will be inserted");
+          "5/5 - Intervals remained unchanged. No assumes will be inserted");
       }
       else
       {
-        message_handler.status("4/4 - Inserting assumes.");
+        message_handler.status("5/5 - Inserting assumes.");
         insert_assume(_goto_functions, new_intervals);
       }
     }
@@ -151,24 +156,29 @@ public:
    * This destructor that will delete all objects allocated of type Function
    * and NumConstraint
    */
-  ~goto_contractort()
+  /*~goto_contractort()
   {
     while(!list_of_constraints.empty())
     {
-      auto p = list_of_constraints.front();
+      auto p = (NumConstraint*)list_of_constraints.front();
       if(p != nullptr)
-        delete(p);
+      {
+        std::ostringstream oss;
+        oss << "\t- Constraint:" << *p;
+        message_handler.status(oss.str());
+        //delete(p);
+      }
       list_of_constraints.pop_front();
     }
     while(!list_of_functions.empty())
     {
-      auto p = list_of_functions.front();
+      auto p = (Function*)list_of_functions.front();
       if(p != nullptr)
         delete(p);
       list_of_functions.pop_front();
     }
   }
-
+*/
 private:
   IntervalVector domains;
   ///vars variable references to be used in Ibex formulas
@@ -234,6 +244,14 @@ private:
   void parse_intervals(irep_container<expr2t> expr);
 
   bool initialize_main_function_loops();
+
+  /**
+ * Naive appraoch to determine if a loop is monotonic
+ * This function will be replaced later with exrapolation by using intervals
+ * from frama-c eva plugin
+ * @param functionst
+ */
+  void monotonicity_check(goto_functionst functionst);
 };
 
 #endif //ESBMC_GOTO_CONTRACTOR_H

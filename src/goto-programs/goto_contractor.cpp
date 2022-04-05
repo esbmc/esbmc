@@ -170,6 +170,8 @@ IntervalVector goto_contractort::contractor()
 
   c_in.contract(X);
 
+  oss << "\n\t- Domains (after): " << X;
+
   message_handler.status(oss.str());
 
   return X;
@@ -237,9 +239,8 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
     c = new NumConstraint(*vars, (*f)(*vars) = (*g)(*vars));
     break;
   default:
-    break;
+    return nullptr;
   }
-
   list_of_constraints.push_front(c);
   return c;
 }
@@ -281,14 +282,21 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
     default:
       return nullptr;
     }
+    list_of_functions.push_front(f);
     break;
   case expr2t::expr_ids::symbol_id:
   {
     int index = create_variable_from_expr2t(expr);
     if(index != NOT_FOUND)
+    {
       f = new Function(*vars, (*vars)[index]);
+      list_of_functions.push_front(f);
+    }
     else
+    {
       message_handler.error("ERROR: MAX VAR SIZE REACHED");
+      return nullptr;
+    }
     break;
   }
   case expr2t::expr_ids::typecast_id:
@@ -299,12 +307,13 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
     const ExprConstant &c =
       ExprConstant::new_scalar(to_constant_int2t(expr).value.to_int64());
     f = new Function(*vars, c);
+    list_of_functions.push_front(f);
     break;
   }
   default:
     f = nullptr;
   }
-  list_of_functions.push_front(f);
+
   return f;
 }
 
@@ -314,10 +323,7 @@ int goto_contractort::create_variable_from_expr2t(irep_container<expr2t> expr)
   int index = map->find(var_name);
   if(index == NOT_FOUND)
   {
-    int new_index = map->add_var(var_name, to_symbol2t(expr));
-    if(new_index != NOT_FOUND)
-      return new_index;
-    return NOT_FOUND;
+    index = map->add_var(var_name, to_symbol2t(expr));
   }
   return index;
 }
@@ -338,4 +344,44 @@ bool goto_contractort::initialize_main_function_loops()
   }
   goto_functions.update();
   return true;
+}
+
+void goto_contractort::monotonicity_check(goto_functionst functionst)
+{
+  loopst loop;
+  for(auto &function_loop : function_loops)
+    loop = function_loop;
+
+  auto it = loop.get_original_loop_head();
+  while(it != loop.get_original_loop_exit())
+  {
+    if(it->is_assign())
+    {
+      //check lhs
+      auto index = map->find(
+        to_symbol2t(to_code_assign2t(it->code).target).get_symbol_name());
+      if(index == NOT_FOUND)
+      {
+        it++;
+        continue;
+      }
+      to_code_assign2t(it->code);
+      //check rhs
+      auto source = to_code_assign2t(it->code).source;
+      switch(source->expr_id)
+      {
+      case expr2t::expr_ids::add_id:
+      case expr2t::expr_ids::mul_id:
+        map->nondecreasing[index] = true;
+        break;
+      case expr2t::expr_ids::sub_id:
+      case expr2t::expr_ids::div_id:
+        map->nonincreasing[index] = true;
+        break;
+      default:
+        break;
+      }
+    }
+    it++;
+  }
 }
