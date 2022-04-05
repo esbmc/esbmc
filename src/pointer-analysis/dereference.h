@@ -371,21 +371,23 @@ private:
     const type2tc &type,
     const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
-  std::vector<expr2tc> extract_bytes_from_array(
+  expr2tc* extract_bytes_from_array(
     const expr2tc &array,
     unsigned int bytes,
     const expr2tc &offset);
-  std::vector<expr2tc> extract_bytes_from_scalar(
+  expr2tc* extract_bytes_from_scalar(
     const expr2tc &object,
     unsigned int bytes,
     const expr2tc &offset);
-  expr2tc stitch_together_from_byte_array(
+  void stitch_together_from_byte_array(
+    expr2tc &value,
     unsigned int num_bytes,
-    const std::vector<expr2tc> &bytes);
+    const expr2tc *bytes);
   expr2tc stitch_together_from_byte_array(
     const type2tc &type,
+    unsigned int num_bytes,
     const expr2tc &byte_array,
-    expr2tc offset_bits,
+    const expr2tc &offset_bits,
     const guardt &guard);
   void wrap_in_scalar_step_list(
     expr2tc &value,
@@ -417,12 +419,12 @@ private:
     unsigned long minwidth,
     const expr2tc &&offset,
     const guardt &guard);
-  unsigned int static compute_num_bytes_to_extract(
+  unsigned int compute_num_bytes_to_extract(
     const expr2tc offset,
     unsigned long num_bits);
-  static expr2tc extract_bits_from_byte_array(
-    const expr2tc &value,
-    const expr2tc &offset,
+  void extract_bits_from_byte_array(
+    expr2tc &value,
+    expr2tc offset,
     unsigned long num_bits);
 
 public:

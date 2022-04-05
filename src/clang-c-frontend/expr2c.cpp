@@ -1090,29 +1090,38 @@ std::string expr2ct::convert_constant(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2ct::convert_struct_union_body(
-  const exprt::operandst &operands,
-  const struct_union_typet::componentst &components)
+std::string expr2ct::convert_struct(const exprt &src, unsigned &precedence)
 {
-  size_t n = components.size();
-  assert(n == operands.size());
+  const typet full_type = ns.follow(src.type());
+
+  if(full_type.id() != "struct")
+    return convert_norep(src, precedence);
+
+  const struct_typet &struct_type = to_struct_type(full_type);
+
+  const struct_typet::componentst &components = struct_type.components();
+
+  if(components.size() != src.operands().size())
+    return convert_norep(src, precedence);
 
   std::string dest = "{ ";
+
+  exprt::operandst::const_iterator o_it = src.operands().begin();
 
   bool first = true;
   bool newline = false;
   unsigned last_size = 0;
 
-  for(size_t i = 0; i < n; i++)
+  for(const auto &component : struct_type.components())
   {
-    const auto &operand = operands[i];
-    const auto &component = components[i];
-
-    if(component.type().is_code())
+    if(o_it->type().is_code())
       continue;
 
     if(component.get_is_padding())
+    {
+      ++o_it;
       continue;
+    }
 
     if(first)
       first = false;
@@ -1126,7 +1135,7 @@ std::string expr2ct::convert_struct_union_body(
         dest += " ";
     }
 
-    std::string tmp = convert(operand);
+    std::string tmp = convert(*o_it);
 
     if(last_size + 40 < dest.size())
     {
@@ -1140,6 +1149,8 @@ std::string expr2ct::convert_struct_union_body(
     dest += component.pretty_name().as_string();
     dest += "=";
     dest += tmp;
+
+    o_it++;
   }
 
   dest += " }";
@@ -1147,57 +1158,20 @@ std::string expr2ct::convert_struct_union_body(
   return dest;
 }
 
-std::string expr2ct::convert_struct(const exprt &src, unsigned &precedence)
-{
-  const typet full_type = ns.follow(src.type());
-
-  if(full_type.id() != "struct")
-    return convert_norep(src, precedence);
-
-  const struct_typet &struct_type = to_struct_type(full_type);
-  const struct_union_typet::componentst &components = struct_type.components();
-
-  if(components.size() != src.operands().size())
-    return convert_norep(src, precedence);
-
-  return convert_struct_union_body(src.operands(), components);
-}
-
 std::string expr2ct::convert_union(const exprt &src, unsigned &precedence)
 {
-  const typet full_type = ns.follow(src.type());
-
-  if(full_type.id() != "union")
+  std::string dest = "{ ";
+  if(src.operands().size() != 1)
     return convert_norep(src, precedence);
 
-  const exprt::operandst &operands = src.operands();
-  const irep_idt &init [[gnu::unused]] = src.component_name();
+  std::string tmp = convert(src.op0());
+  dest += ".";
+  dest += src.component_name().as_string();
+  dest += "=";
+  dest += tmp;
 
-  if(operands.size() == 1)
-  {
-    /* Initializer known */
-    assert(!init.empty());
-    std::string dest = "{ ";
-
-    std::string tmp = convert(src.op0());
-
-    dest += ".";
-    dest += init.as_string();
-    dest += "=";
-    dest += tmp;
-
-    dest += " }";
-
-    return dest;
-  }
-  else
-  {
-    /* Initializer unknown, expect operands assigned to each member and convert
-     * all of them */
-    assert(init.empty());
-    return convert_struct_union_body(
-      operands, to_union_type(full_type).components());
-  }
+  dest += " }";
+  return dest;
 }
 
 std::string expr2ct::convert_array(const exprt &src, unsigned &)
@@ -1767,7 +1741,12 @@ std::string expr2ct::convert_code_assign(const codet &src, unsigned indent)
   unsigned int precedent = 15;
   std::string tmp = convert(src.op0(), precedent);
   tmp += "=";
-  tmp += convert(src.op1(), precedent);
+  if(
+    src.op1().id() == "constant" && src.op1().type().id() == "array" &&
+    src.op1().pretty().find("byte_extract") != std::string::npos)
+    tmp += "FLATTENED_UNION_LITERAL()";
+  else
+    tmp += convert(src.op1(), precedent);
 
   std::string dest = indent_str(indent) + tmp + ";";
 

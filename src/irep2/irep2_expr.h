@@ -114,31 +114,6 @@ public:
   typedef esbmct::expr2t_traits<datatype_members_field> traits;
 };
 
-class constant_union_data : public constant_datatype_data
-{
-public:
-  constant_union_data(
-    const type2tc &t,
-    expr2t::expr_ids id,
-    irep_idt init_field,
-    std::vector<expr2tc> m)
-    : constant_datatype_data(t, id, std::move(m)), init_field(init_field)
-  {
-  }
-  constant_union_data(const constant_union_data &) = default;
-
-  irep_idt init_field;
-
-  // Type mangling:
-  typedef esbmct::field_traits<
-    irep_idt,
-    constant_union_data,
-    &constant_union_data::init_field>
-    init_field_field;
-  typedef esbmct::expr2t_traits<datatype_members_field, init_field_field>
-    traits;
-};
-
 class constant_bool_data : public constant2t
 {
 public:
@@ -1488,7 +1463,7 @@ irep_typedefs(constant_int, constant_int_data);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data);
 irep_typedefs(constant_floatbv, constant_floatbv_data);
 irep_typedefs(constant_struct, constant_datatype_data);
-irep_typedefs(constant_union, constant_union_data);
+irep_typedefs(constant_union, constant_datatype_data);
 irep_typedefs(constant_array, constant_datatype_data);
 irep_typedefs(constant_vector, constant_datatype_data);
 irep_typedefs(constant_bool, constant_bool_data);
@@ -1743,13 +1718,10 @@ public:
    *  @param type Type of this structure, presumably a union_type2t
    *  @param members Vector of member values that make up this union.
    */
-  constant_union2t(
-    const type2tc &type,
-    irep_idt init_field,
-    const std::vector<expr2tc> &members)
-    : constant_union_expr_methods(type, constant_union_id, init_field, members)
+  constant_union2t(const type2tc &type, const std::vector<expr2tc> &members)
+    : constant_union_expr_methods(type, constant_union_id, members)
   {
-    assert(is_union_type(type));
+
   }
   constant_union2t(const constant_union2t &ref) = default;
 
@@ -1958,7 +1930,7 @@ public:
   bitcast2t(const type2tc &type, const expr2tc &from)
     : bitcast_expr_methods(type, bitcast_id, from)
   {
-    assert(type->get_width() == from->type->get_width());
+    //assert(type->get_width() == from->type->get_width());
   }
 
   bitcast2t(const bitcast2t &ref) = default;
@@ -2795,7 +2767,7 @@ public:
   }
   byte_extract2t(const byte_extract2t &ref) = default;
 
-  expr2tc do_simplify() const override;
+  //expr2tc do_simplify() const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };

@@ -333,26 +333,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   case expr2t::constant_union_id:
-  {
-    // Get size
-    const constant_union2t &cu = to_constant_union2t(expr);
-    const expr2tc &src_expr = cu.datatype_members.at(0);
-#ifndef NDEBUG
-    if(!cu.init_field.empty())
-    {
-      const union_type2t &ut = to_union_type(expr->type);
-      unsigned c = ut.get_component_number(cu.init_field);
-      /* Can only initialize unions by expressions of same type as init_field */
-      assert(src_expr->type == ut.members[c]);
-    }
-#endif
-    a = convert_ast(typecast2tc(
-      get_uint_type(type_byte_size_bits(expr->type).to_uint64()),
-      bitcast2tc(
-        get_uint_type(type_byte_size_bits(src_expr->type).to_uint64()),
-        src_expr)));
-    break;
-  }
+    msg.error("Post-parse union literals are deprecated and broken, sorry");
+    abort();
   case expr2t::constant_vector_id:
   {
     a = array_create((constant_vector2tc)expr);
@@ -650,27 +632,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 #endif
 
       a = srcval->update(this, convert_ast(with.update_value), idx);
-    }
-    else if(is_union_type(expr))
-    {
-      uint64_t bits = type_byte_size_bits(expr->type).to_uint64();
-      const union_type2t &tu = to_union_type(expr->type);
-      assert(is_constant_string2t(with.update_field));
-      unsigned c =
-        tu.get_component_number(to_constant_string2t(with.update_field).value);
-      uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
-      expr2tc upd = bitcast2tc(
-        get_uint_type(mem_bits), typecast2tc(tu.members[c], with.update_value));
-      if(mem_bits < bits)
-        upd = concat2tc(
-          get_uint_type(bits),
-          extract2tc(
-            get_uint_type(bits - mem_bits),
-            with.source_value,
-            bits - 1,
-            mem_bits),
-          upd);
-      a = convert_ast(upd);
     }
     else
     {
@@ -1265,11 +1226,6 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = mk_array_sort(d, r);
     break;
   }
-  case type2t::union_id:
-  {
-    result = mk_int_bv_sort(type_byte_size_bits(type).to_uint64());
-    break;
-  }
 
   default:
     msg.error(fmt::format(
@@ -1635,25 +1591,16 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
 smt_astt smt_convt::convert_member(const expr2tc &expr)
 {
   const member2t &member = to_member2t(expr);
+  unsigned int idx = -1;
 
   // Special case unions: bitcast it to bv then convert it back to the
   // requested member type
-  if(is_union_type(member.source_value))
-  {
-    BigInt size = type_byte_size_bits(member.source_value->type);
-    expr2tc to_bv =
-      bitcast2tc(get_uint_type(size.to_uint64()), member.source_value);
-    return convert_ast(bitcast2tc(
-      expr->type,
-      typecast2tc(
-        get_uint_type(type_byte_size_bits(expr->type).to_uint64()), to_bv)));
-  }
+
 
   assert(
     is_struct_type(member.source_value) ||
     is_pointer_type(member.source_value));
-  unsigned int idx =
-    get_member_name_field(member.source_value->type, member.member);
+  idx = get_member_name_field(member.source_value->type, member.member);
 
   smt_astt src = convert_ast(member.source_value);
   return src->project(this, idx);
@@ -2174,7 +2121,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
   case expr2t::with_id:
   {
     // This will be converted
-    const with2t &with = to_with2t(res);
+    with2t with = to_with2t(res);
     expr2tc update_val = with.update_value;
 
     if(
@@ -2299,28 +2246,6 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   case type2t::pointer_id:
     return tuple_api->tuple_get(type, a);
 
-  case type2t::union_id:
-  {
-    expr2tc uint_rep =
-      get_by_ast(get_uint_type(type_byte_size_bits(type).to_uint64()), a);
-    std::vector<expr2tc> members;
-    /* TODO: this violates the assumption in the rest of ESBMC that
-     *       constant_union2t only have at most 1 member initializer.
-     *       Maybe it makes sense to go for one of the largest ones instead of
-     *       all members? */
-    for(const type2tc &member_type : to_union_type(type).members)
-    {
-      expr2tc cast = bitcast2tc(
-        member_type,
-        typecast2tc(
-          get_uint_type(type_byte_size_bits(member_type).to_uint64()),
-          uint_rep));
-      simplify(cast);
-      members.push_back(cast);
-    }
-    return constant_union2tc(
-      type, "" /* TODO: which field assigned last? */, members);
-  }
 
   default:
     if(!options.get_bool_option("non-supported-models-as-zero"))
@@ -2348,7 +2273,6 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
-  case type2t::union_id:
     return get_by_ast(expr->type, convert_ast(expr));
 
   case type2t::array_id:
@@ -2388,7 +2312,7 @@ expr2tc smt_convt::get_array(const expr2tc &expr)
   if(w > 10)
     w = 10;
 
-  array_type2t ar = to_array_type(flatten_array_type(expr->type));
+  const array_type2t &ar = to_array_type(flatten_array_type(expr->type));
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
   type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
   std::vector<expr2tc> fields;

@@ -252,35 +252,14 @@ void value_sett::get_value_set_rec(
     assert(is_struct_type(source_type) || is_union_type(source_type));
 #endif
 
-    irep_idt single_source;
-    if(is_struct_type(memb.source_value))
-      single_source = memb.member;
-    else if(is_constant_union2t(memb.source_value))
-      single_source = to_constant_union2t(memb.source_value).init_field;
-    if(!single_source.empty())
-    {
-      // Add '.$field' to the suffix, identifying the member from the other
-      // members of the struct's variable.
-      get_value_set_rec(
-        memb.source_value,
-        dest,
-        "." + single_source.as_string() + suffix,
-        original_type);
-    }
-    else
-    {
-      /* We have a member of a union. The value-set of it is the same as the
-       * union of the value-sets of each member. */
-      assert(is_union_type(memb.source_value->type));
-      auto *u =
-        static_cast<const struct_union_data *>(memb.source_value->type.get());
-      for(const irep_idt &name : u->member_names)
-        get_value_set_rec(
-          memb.source_value,
-          dest,
-          "." + name.as_string() + suffix,
-          original_type);
-    }
+    // Add '.$field' to the suffix, identifying the member from the other
+    // members of the struct's variable.
+    get_value_set_rec(
+      memb.source_value,
+      dest,
+      "." + memb.member.as_string() + suffix,
+      original_type);
+
     return;
   }
 
@@ -807,16 +786,10 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     bool has_const_index_offset = false;
     try
     {
-      /* We put some effort into determining whether the offset is constant
-       * since during symex many are and if they are overlooked we end up
-       * building huge if-then-else chains in all the
-       * dereference::construct_*_dyn_*_offset() methods. */
-      expr2tc idx = index.index;
-      simplify(idx);
-      if(is_constant_int2t(idx))
+      if(is_constant_int2t(index.index))
       {
         index_offset =
-          to_constant_int2t(idx).value * type_byte_size(index.type);
+          to_constant_int2t(index.index).value * type_byte_size(index.type);
         has_const_index_offset = true;
       }
     }
@@ -1014,20 +987,25 @@ void value_sett::assign(
 
   if(is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
-    /* either both union or both struct */
-    assert(lhs_type->type_id == rhs->type->type_id);
 
     // Assign the values of all members of the rhs thing to the lhs. It's
     // sort-of-valid for the right hand side to be a superclass of the subclass,
     // in which case there are some fields not common between them, so we
     // iterate over the superclasses members.
-    auto *rhs_data = static_cast<const struct_union_data *>(rhs->type.get());
-    const std::vector<type2tc> &members = rhs_data->members;
-    const std::vector<irep_idt> &member_names = rhs_data->member_names;
+    const std::vector<type2tc> &members = (is_struct_type(rhs->type))
+                                            ? to_struct_type(rhs->type).members
+                                            : to_union_type(rhs->type).members;
+    const std::vector<irep_idt> &member_names =
+      (is_struct_type(rhs->type)) ? to_struct_type(rhs->type).member_names
+                                  : to_union_type(rhs->type).member_names;
 
-    for(size_t i = 0; i < members.size(); i++)
+    unsigned int i = 0;
+    for(std::vector<type2tc>::const_iterator c_it = members.begin();
+        c_it != members.end();
+        c_it++, i++)
+
     {
-      const type2tc &subtype = members[i];
+      const type2tc &subtype = *c_it;
       const irep_idt &name = member_names[i];
 
       // ignore methods
@@ -1431,22 +1409,14 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   const type2tc &type = src->type;
   assert(is_struct_type(type) || is_union_type(type));
 
-  auto *data = static_cast<const struct_union_data *>(type.get());
-  const std::vector<type2tc> &members = data->members;
+  const std::vector<type2tc> &members = (is_struct_type(type))
+                                          ? to_struct_type(type).members
+                                          : to_union_type(type).members;
 
   if(is_constant_struct2t(src))
   {
-    unsigned no = data->get_component_number(component_name);
+    unsigned no = to_struct_type(type).get_component_number(component_name);
     return to_constant_struct2t(src).datatype_members[no];
-  }
-  if(is_constant_union2t(src))
-  {
-    const constant_union2t &un = to_constant_union2t(src);
-    if(un.init_field == component_name)
-    {
-      assert(un.datatype_members.size() == 1);
-      return un.datatype_members[0];
-    }
   }
   if(is_with2t(src))
   {
@@ -1469,7 +1439,8 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   }
 
   // give up
-  unsigned no = data->get_component_number(component_name);
+  unsigned no = static_cast<const struct_union_data &>(*type.get())
+                  .get_component_number(component_name);
   const type2tc &subtype = members[no];
   member2tc memb(subtype, src, component_name);
   return memb;

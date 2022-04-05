@@ -807,8 +807,9 @@ expr2tc with2t::do_simplify() const
     if(thetype.members[no] != update_value->type)
       return expr2tc();
 
-    std::vector<expr2tc> newmembers = {update_value};
-    return constant_union2tc(type, thetype.member_names[no], newmembers);
+    std::vector<expr2tc> newmembers;
+    newmembers.push_back(update_value);
+    return constant_union2tc(type, newmembers);
   }
   else if(is_constant_array2t(source_value) && is_constant_int2t(update_field))
   {
@@ -1010,19 +1011,19 @@ expr2tc pointer_offset2t::do_simplify() const
 expr2tc index2t::do_simplify() const
 {
   expr2tc new_index = try_simplification(index);
-  expr2tc src = try_simplification(source_value);
+  //expr2tc src = try_simplification(source_value);
 
-  if(is_with2t(src))
+  if(is_with2t(source_value))
   {
     // Index is the same as an update to the thing we're indexing; we can
     // just take the update value from the "with" below.
-    if(new_index == to_with2t(src).update_field)
-      return to_with2t(src).update_value;
+    if(new_index == to_with2t(source_value).update_field)
+      return to_with2t(source_value).update_value;
 
     return expr2tc();
   }
 
-  if(is_constant_array2t(src) && is_constant_int2t(new_index))
+  if(is_constant_array2t(source_value) && is_constant_int2t(new_index))
   {
     // Index might be greater than the constant array size. This means we can't
     // simplify it, and the user might be eaten by an assertion failure in the
@@ -1031,7 +1032,7 @@ expr2tc index2t::do_simplify() const
     if(idx.value.is_negative())
       return expr2tc();
 
-    const constant_array2t &arr = to_constant_array2t(src);
+    const constant_array2t &arr = to_constant_array2t(source_value);
     unsigned long the_idx = idx.as_ulong();
     if(the_idx >= arr.datatype_members.size())
       return expr2tc();
@@ -1056,14 +1057,14 @@ expr2tc index2t::do_simplify() const
     return arr.datatype_members[the_idx];
   }
 
-  if(is_constant_string2t(src) && is_constant_int2t(new_index))
+  if(is_constant_string2t(source_value) && is_constant_int2t(new_index))
   {
     // Same index situation
     const constant_int2t &idx = to_constant_int2t(new_index);
     if(idx.value.is_negative())
       return expr2tc();
 
-    const constant_string2t &str = to_constant_string2t(src);
+    const constant_string2t &str = to_constant_string2t(source_value);
     unsigned long the_idx = idx.as_ulong();
     if(the_idx > str.value.as_string().size()) // allow reading null term.
       return expr2tc();
@@ -1075,11 +1076,8 @@ expr2tc index2t::do_simplify() const
   }
 
   // Only thing this index can evaluate to is the default value of this array
-  if(is_constant_array_of2t(src))
-    return to_constant_array_of2t(src).initializer;
-
-  if(src != source_value || new_index != index)
-    return index2tc(type, src, new_index);
+  if(is_constant_array_of2t(source_value))
+    return to_constant_array_of2t(source_value).initializer;
 
   return expr2tc();
 }
@@ -2976,66 +2974,6 @@ expr2tc constant_struct2t::do_simplify() const
 expr2tc constant_array2t::do_simplify() const
 {
   return expr2tc();
-}
-
-expr2tc byte_extract2t::do_simplify() const
-{
-  expr2tc src = try_simplification(source_value);
-  expr2tc off = try_simplification(source_offset);
-
-  if(is_array_type(src))
-  {
-    const array_type2t &at = to_array_type(src->type);
-    if(is_bv_type(at.subtype) && at.subtype->get_width() == type->get_width())
-      return try_simplification(
-        bitcast2tc(type, index2tc(at.subtype, src, off)));
-  }
-
-  if(is_constant_int2t(off) && type == get_uint8_type())
-  {
-    const BigInt &off_value = to_constant_int2t(off).value;
-    if(src->type == type && off_value.is_zero())
-      return src;
-
-    if(off_value.is_uint64() && is_constant_expr(src))
-    {
-      uint64_t off64 = off_value.to_uint64();
-      if(is_constant_int2t(src) && off64 * 8 >= off64)
-      {
-        off64 *= 8;
-        const BigInt &src_value = to_constant_int2t(src).value;
-        bool neg = is_signedbv_type(src) && src_value.is_negative();
-        unsigned width = src->type->get_width();
-        /* width bits in ss...ss|...|ssssssss|xxxxxxxx|xxxxxxxx|...|xxxxxxxx|
-         * at most 64 bits x; s = neg ? 1 : 0; off64 is in bits */
-        if(
-          (neg ? src_value.is_int64() : src_value.is_uint64()) &&
-          off64 + 8 <= width)
-        {
-          /* We assume two's complement, as does do_bit_munge_operation() */
-
-          /* constant repetition of sign bit? */
-          if(big_endian ? off64 + 64 + 8 <= width : off64 >= 64)
-            return constant_int2tc(type, BigInt(neg ? 0xff : 0x00));
-          /* now we know that we are extracting part of |xxxxxxxx|...|xxxxxxxx| */
-          uint64_t x = neg ? src_value.to_int64() : src_value.to_uint64();
-          if(big_endian)
-          {
-            /* off64 + 64 + 8 > width and off64 + 8 <= width
-             * i.e. width-off64-8 in [0,64) */
-            off64 = width - off64 - 8;
-          }
-          return constant_int2tc(type, BigInt((x >> off64) & 0xff));
-        }
-        /* XXX how to simplify this? */
-      }
-    }
-  }
-
-  if(src != source_value || off != source_offset)
-    return byte_extract2tc(type, src, off, big_endian);
-
-  return {};
 }
 
 expr2tc byte_update2t::do_simplify() const
