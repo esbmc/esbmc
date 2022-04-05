@@ -8,7 +8,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-symex/slice.h>
 
-symex_slicet::symex_slicet(bool assume, std::unordered_set<std::string> ignored_symbols)
+symex_slicet::symex_slicet(
+  bool assume,
+  std::unordered_set<std::string> ignored_symbols)
   : ignored(0),
     slice_assumes(assume),
     ignored_symbols(ignored_symbols),
@@ -106,7 +108,6 @@ void symex_slicet::slice_assume(symex_target_equationt::SSA_stept &SSA_step)
   }
 }
 
-#include <iostream>
 void symex_slicet::slice_assignment(symex_target_equationt::SSA_stept &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
@@ -115,7 +116,8 @@ void symex_slicet::slice_assignment(symex_target_equationt::SSA_stept &SSA_step)
 
   auto check_in_deps = [this](const symbol2t &s) -> bool {
     return (depends.find(s.get_symbol_name()) != depends.end()) ||
-           (ignored_symbols.find(s.thename.as_string()) != ignored_symbols.end());
+           (ignored_symbols.find(s.thename.as_string()) !=
+            ignored_symbols.end());
   };
 
   if(!get_symbols(SSA_step.lhs, check_in_deps))
@@ -153,8 +155,10 @@ void symex_slicet::slice_renumber(symex_target_equationt::SSA_stept &SSA_step)
   // Don't collect the symbol; this insn has no effect on dependencies.
 }
 
-BigInt
-slicer::slice(std::shared_ptr<symex_target_equationt> &eq, bool slice_assumes, std::unordered_set<std::string> ignored_symbols)
+BigInt slicer::slice(
+  std::shared_ptr<symex_target_equationt> &eq,
+  bool slice_assumes,
+  std::unordered_set<std::string> ignored_symbols)
 {
   symex_slicet symex_slice(slice_assumes, ignored_symbols);
   symex_slice.slice(eq);
