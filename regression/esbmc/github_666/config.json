@@ -1,0 +1,5 @@
+{
+        "no-slice-symbols": [
+                "c:no_slice.c@14@F@main@foo"
+        ]
+}
