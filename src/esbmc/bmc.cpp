@@ -42,6 +42,10 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 #include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
+#include <nlohmann/json.hpp>
+
+// For json parsing
+using json = nlohmann::json;
 
 bmct::bmct(
   goto_functionst &funcs,
@@ -607,7 +611,19 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     fine_timet slice_start = current_time();
     BigInt ignored;
     if(!options.get_bool_option("no-slice"))
-      ignored = slicer::slice(eq, options.get_bool_option("slice-assumes"));
+    {
+      std::unordered_set<std::string> ignored_symbols;
+      // TODO: This could be expanded to the whole ESBMC options and configuration system (#477)
+      auto ignored_symbols_file = options.get_option("json-options-input");
+      if(ignored_symbols_file != "")
+      {
+        std::ifstream i(ignored_symbols_file);
+        json j;
+        i >> j;
+        j.at("no-slice-symbols").get_to(ignored_symbols);
+      }
+      ignored = slicer::slice(eq, options.get_bool_option("slice-assumes"), ignored_symbols);
+    }
     else
       ignored = slicer::simple_slice(eq);
     fine_timet slice_stop = current_time();
