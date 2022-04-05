@@ -22,6 +22,8 @@ bool symex_slicet::get_symbols(
   std::function<bool(const symbol2t &)> fn)
 {
   bool res = false;
+
+  // Recursively look if any of the operands has a inner symbol
   expr->foreach_operand([this, &fn, &res](const expr2tc &e) {
     if(!is_nil_expr(e))
       res = get_symbols(e, fn) || res;
@@ -32,6 +34,7 @@ bool symex_slicet::get_symbols(
     return res;
 
   const symbol2t &tmp = to_symbol2t(expr);
+  // Add the symbol into de dependency list
   return fn(tmp) || res;
 }
 
@@ -83,6 +86,7 @@ void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
 
 void symex_slicet::slice_assume(symex_target_equationt::SSA_stept &SSA_step)
 {
+  // TODO: add an assert here
   auto check_in_deps = [this](const symbol2t &s) -> bool {
     return depends.find(s.get_symbol_name()) != depends.end();
   };
@@ -105,7 +109,10 @@ void symex_slicet::slice_assignment(symex_target_equationt::SSA_stept &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
 
+  // TODO: create an option to ignore nondet symbols (test case generation)
+
   auto check_in_deps = [this](const symbol2t &s) -> bool {
+
     return depends.find(s.get_symbol_name()) != depends.end();
   };
 
@@ -144,14 +151,15 @@ void symex_slicet::slice_renumber(symex_target_equationt::SSA_stept &SSA_step)
   // Don't collect the symbol; this insn has no effect on dependencies.
 }
 
-BigInt slice(std::shared_ptr<symex_target_equationt> &eq, bool slice_assumes)
+BigInt
+slicer::slice(std::shared_ptr<symex_target_equationt> &eq, bool slice_assumes)
 {
   symex_slicet symex_slice(slice_assumes);
   symex_slice.slice(eq);
   return symex_slice.ignored;
 }
 
-BigInt simple_slice(std::shared_ptr<symex_target_equationt> &eq)
+BigInt slicer::simple_slice(std::shared_ptr<symex_target_equationt> &eq)
 {
   BigInt ignored = 0;
 
