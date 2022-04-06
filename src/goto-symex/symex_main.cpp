@@ -556,7 +556,7 @@ void goto_symext::run_intrinsic(
     cur_state->rename(op1);
     symex_assign(code_assign2tc(
       func_call.ret,
-      is_constant_int2t(op1) ? gen_true_expr() : gen_false_expr()));
+      is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
   }
   else if(has_prefix(symname, "c:@F@__ESBMC_sync_fetch_and_add"))
   {
