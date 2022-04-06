@@ -10,7 +10,6 @@
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
-#include <iostream>
 
 class solidity_convertert
 {
@@ -24,8 +23,6 @@ public:
   virtual ~solidity_convertert() = default;
 
   bool convert();
-	static void print_json(nlohmann::json &json);
-	static void print_json(nlohmann::json &json, std::string &key);
 
 protected:
   contextt &context;

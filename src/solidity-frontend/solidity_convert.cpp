@@ -11,7 +11,6 @@
 #include <regex>
 #include <util/message/format.h>
 #include <fstream>
-#include <iostream>
 
 solidity_convertert::solidity_convertert(
   contextt &_context,
@@ -2051,12 +2050,4 @@ bool solidity_convertert::is_dyn_array(const nlohmann::json &json_in)
     }
   }
   return false;
-}
-
-void solidity_convertert::print_json(nlohmann::json &json) {
-  std::cout << std::setw(2) << json << std::endl;
-}
-
-void solidity_convertert::print_json(nlohmann::json &json, std::string &key) {
-  std::cout << std::setw(2) << json[key] << std::endl;
 }
