@@ -687,15 +687,17 @@ bool solidity_convertert::get_statement(
     new_expr = if_expr;
     break;
   }
-  case SolidityGrammar::StatementT::WhileStatement: {
+  case SolidityGrammar::StatementT::WhileStatement:
+  {
     exprt cond = true_exprt();
-    if (get_expr(stmt["condition"], cond))
+    if(get_expr(stmt["condition"], cond))
     {
       return true;
     }
 
     codet body = codet();
-    if (get_block(stmt["body"], body)) {
+    if(get_block(stmt["body"], body))
+    {
       return true;
     }
 
