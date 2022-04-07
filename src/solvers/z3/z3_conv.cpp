@@ -12,19 +12,17 @@
 
 #define new_ast new_solver_ast<z3_smt_ast>
 
-#if !defined(Z3_THROW)
-#if __cpp_exceptions || _CPPUNWIND || __EXCEPTIONS
-#define Z3_THROW(x) throw x
-#else
-#define Z3_THROW(x)                                                            \
-  {                                                                            \
-  }
-#endif
-#endif // !defined(Z3_THROW)
-
 static void error_handler(Z3_context c, Z3_error_code e)
 {
-  Z3_THROW(z3::exception(Z3_get_error_msg(c, e)));
+  std::ostringstream oss;
+  oss << "Z3 error " << e << " encountered"
+      << "\n";
+  oss << Z3_get_error_msg(c, e);
+  default_message msg;
+  // use msg.status + abort instead of msg.error
+  // In GDB, the latter does not show a backtrace of the exact failure line in this function
+  msg.status(oss.str());
+  abort();
 }
 
 smt_convt *create_new_z3_solver(
