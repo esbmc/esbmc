@@ -19,9 +19,7 @@ static void error_handler(Z3_context c, Z3_error_code e)
       << "\n";
   oss << Z3_get_error_msg(c, e);
   default_message msg;
-  // use msg.status + abort instead of msg.error
-  // In GDB, the latter does not show a backtrace of the exact failure line in this function
-  msg.status(oss.str());
+  msg.error(oss.str());
   abort();
 }
 
