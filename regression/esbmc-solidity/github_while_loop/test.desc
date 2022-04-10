@@ -1,5 +1,4 @@
 CORE
 contract.solast
 --function while_loop --contract contract.sol
-.*line 8 function while_loop
 ^VERIFICATION SUCCESSFUL$
