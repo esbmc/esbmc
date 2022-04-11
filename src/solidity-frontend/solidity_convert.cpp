@@ -691,15 +691,11 @@ bool solidity_convertert::get_statement(
   {
     exprt cond = true_exprt();
     if(get_expr(stmt["condition"], cond))
-    {
       return true;
-    }
 
     codet body = codet();
     if(get_block(stmt["body"], body))
-    {
       return true;
-    }
 
     convert_expression_to_code(body);
 
