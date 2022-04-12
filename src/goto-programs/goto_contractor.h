@@ -5,10 +5,9 @@
 #ifndef ESBMC_GOTO_CONTRACTOR_H
 #define ESBMC_GOTO_CONTRACTOR_H
 
-#include "goto_k_induction.h"
 #include <iostream>
-#include "util/goto_expr_factory.h"
-#include "goto_functions.h"
+#include <util/goto_expr_factory.h>
+#include <goto-programs/goto_functions.h>
 #include <util/algorithms.h>
 #include <util/message/message.h>
 #include <goto-programs/goto_loops.h>
@@ -22,13 +21,9 @@
 #include <ibex/ibex_Interval.h>
 #include <ibex/ibex_Expr.h>
 #include <ibex/ibex_Ctc.h>
-#include "irep2/irep2.h"
-#include "util/type_byte_size.h"
+#include <irep2/irep2.h>
+#include <util/type_byte_size.h>
 
-#define MAX_VAR 10
-#define NOT_FOUND -1
-
-using namespace ibex;
 
 /**
  * This class is for mapping the variables with their names and intervals.
@@ -39,6 +34,9 @@ using namespace ibex;
 class CspMap
 {
 public:
+  static constexpr int MAX_VAR=10;
+  static constexpr int NOT_FOUND=-1;
+
   ibex::IntervalVector intervals;
   std::string var_name[MAX_VAR];
   symbol2tc symbols[MAX_VAR];
@@ -57,12 +55,8 @@ public:
       symbols[n] = symbol;
       var_name[n] = name;
 
-      ///keep for later. set initial intervals
-      //auto w = symbol.type->get_width();
-      /*if(is_signedbv_type(symbol.type))
-        add_interval(-pow(2,w-1),pow(2,w-1)-1,n);
-      else
-        add_interval(0,pow(2,w)-1,n);*/
+      //TODO: set initial intervals based on type and width.
+
       n++;
       return n - 1;
     }
@@ -70,7 +64,7 @@ public:
   }
   void add_interval(double lb, double ub, int index)
   {
-    intervals[index] = Interval(lb, ub);
+    intervals[index] = ibex::Interval(lb, ub);
   }
   void update_lb_interval(double lb, int index)
   {
@@ -95,7 +89,7 @@ public:
 
 private:
   size_t n = 0;
-  Variable *x;
+  ibex::Variable *x;
 };
 
 class goto_contractort : public goto_functions_algorithm
@@ -123,7 +117,7 @@ public:
     if(function_loops.size())
     {
       map = new CspMap();
-      vars = new Variable(MAX_VAR);
+      vars = new ibex::Variable(CspMap::MAX_VAR);
       message_handler.status(
         "1/5 - Parsing asserts to create CSP Constraints.");
       get_constraints(_goto_functions);
@@ -134,7 +128,7 @@ public:
         return;
       }
       message_handler.status("2/5 - Checking if loop is monotone.");
-      monotonicity_check(_goto_functions);
+      monotonicity_check();
       message_handler.status(
         "3/5 - Parsing assumes to set values for variables intervals.");
       get_intervals(_goto_functions);
@@ -152,45 +146,16 @@ public:
       }
     }
   }
-  /**
-   * This destructor that will delete all objects allocated of type Function
-   * and NumConstraint
-   */
-  /*~goto_contractort()
-  {
-    while(!list_of_constraints.empty())
-    {
-      auto p = (NumConstraint*)list_of_constraints.front();
-      if(p != nullptr)
-      {
-        std::ostringstream oss;
-        oss << "\t- Constraint:" << *p;
-        message_handler.status(oss.str());
-        //delete(p);
-      }
-      list_of_constraints.pop_front();
-    }
-    while(!list_of_functions.empty())
-    {
-      auto p = (Function*)list_of_functions.front();
-      if(p != nullptr)
-        delete(p);
-      list_of_functions.pop_front();
-    }
-  }
-*/
+
 private:
-  IntervalVector domains;
+  ibex::IntervalVector domains;
   ///vars variable references to be used in Ibex formulas
-  Variable *vars;
+  ibex::Variable *vars;
   ibex::Ctc *ctc;
   /// map is where the variable references and intervals are stored.
   CspMap *map;
   /// constraint is where the constraint for CSP will be stored.
-  ibex::NumConstraint *constraint;
-
-  std::list<Function *> list_of_functions;
-  std::list<NumConstraint *> list_of_constraints;
+  std::shared_ptr<ibex::NumConstraint> constraint;
 
   unsigned number_of_functions = 0;
 
@@ -217,7 +182,7 @@ private:
 
   /// \Function contractor function will apply the contractor on the parsed constraint and intervals. it will apply the inner contractor by calculating the complement of the assert and contract.
   /// \return Interval vector that represents the area that should be checked by the bmc.
-  IntervalVector contractor();
+  ibex::IntervalVector contractor();
 
   /** \Function get_complement will take a comparison operation and get its complement. Operators are defined in ibex as the enumeration ibex::CmpOP.
    * @param CmpOp is a comparison operator.
@@ -234,11 +199,14 @@ private:
    * @param goto_functions goto program functions
    * @param vector result from the contractor.
    */
-  void insert_assume(goto_functionst goto_functions, IntervalVector vector);
+  void
+  insert_assume(goto_functionst goto_functions, ibex::IntervalVector vector);
 
-  Ctc *create_contractors_from_expr2t(irep_container<expr2t>);
-  NumConstraint *create_constraint_from_expr2t(irep_container<expr2t>);
-  Function *create_function_from_expr2t(irep_container<expr2t>);
+  ibex::Ctc *create_contractors_from_expr2t(irep_container<expr2t>);
+  std::shared_ptr<ibex::NumConstraint>
+    create_constraint_from_expr2t(irep_container<expr2t>);
+  std::shared_ptr<ibex::Function>
+    create_function_from_expr2t(irep_container<expr2t>);
   int create_variable_from_expr2t(irep_container<expr2t>);
 
   void parse_intervals(irep_container<expr2t> expr);
@@ -251,7 +219,7 @@ private:
  * from frama-c eva plugin
  * @param functionst
  */
-  void monotonicity_check(goto_functionst functionst);
+  void monotonicity_check(void);
 };
 
 #endif //ESBMC_GOTO_CONTRACTOR_H

@@ -11,8 +11,8 @@ find_library(IBEX_LIB_SOPLEX soplex libsoplex HINTS ${IBEX_DIR} $ENV{HOME}/ibex 
 find_path(IBEX_INCLUDE_DIRS ibex.h HINTS ${IBEX_DIR} $ENV{HOME}/ibex PATH_SUFFIXES include)
 
 if(IBEX_INCLUDE_DIRS STREQUAL "IBEX_INCLUDE_DIRS-NOTFOUND")
-        message(FATAL_ERROR "Could not find ibex include headers, please check IBEX_DIR")
-    endif()
+    message(FATAL_ERROR "Could not find ibex include headers, please check IBEX_DIR")
+endif()
 
 if(IBEX_LIB STREQUAL "IBEX_LIB-NOTFOUND")
    message(FATAL_ERROR "Could not find libibex, please check IBEX_DIR")

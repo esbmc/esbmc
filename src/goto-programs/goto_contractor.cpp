@@ -2,7 +2,7 @@
 // Created by Mohannad Aldughaim on 09/01/2022.
 //
 
-#include "goto_contractor.h"
+#include <goto-programs/goto_contractor.h>
 
 void goto_contractort::get_constraints(goto_functionst goto_functions)
 {
@@ -71,13 +71,11 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
   }
   if(!is_constant_int2t(side2))
     return;
-  if(is_constant_int2t(side2))
-    value = to_constant_int2t(side2).as_long() * (neg ? -1 : 1);
-  else
-    return;
+
+  value = to_constant_int2t(side2).as_long() * (neg ? -1 : 1);
 
   int index = map->find(symbol->get_symbol_name());
-  if(index == NOT_FOUND)
+  if(index == CspMap::NOT_FOUND)
     return;
   switch(expr->expr_id)
   {
@@ -94,13 +92,12 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
     map->update_ub_interval(value, index);
     break;
   default:;
-    //error
   }
 }
 
 void goto_contractort::insert_assume(
   goto_functionst goto_functions,
-  IntervalVector new_intervals)
+  ibex::IntervalVector new_intervals)
 {
 
   message_handler.status("Inserting assumes.. ");
@@ -148,9 +145,9 @@ void goto_contractort::insert_assume(
   }
 }
 
-IntervalVector goto_contractort::contractor()
+ibex::IntervalVector goto_contractort::contractor()
 {
-  NumConstraint c = *constraint;
+  ibex::NumConstraint c = *constraint;
 
   std::ostringstream oss;
   oss << "\t- Constraint:" << c;
@@ -158,11 +155,11 @@ IntervalVector goto_contractort::contractor()
 
   auto complement = get_complement(c.op);
 
-  NumConstraint c2(c.f, complement);
+  ibex::NumConstraint c2(c.f, complement);
   oss << "\n\t- Complement: " << c2;
 
-  CtcFwdBwd c_out(c);
-  CtcFwdBwd c_in(c2);
+  ibex::CtcFwdBwd c_out(c);
+  ibex::CtcFwdBwd c_in(c2);
 
   domains = map->intervals;
   oss << "\n\t- Domains (before): " << domains;
@@ -181,30 +178,31 @@ ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
 {
   switch(op)
   {
-  case GEQ:
-    return LT;
-  case GT:
-    return LEQ;
-  case LEQ:
-    return GT;
-  case LT:
-    return GEQ;
+  case ibex::GEQ:
+    return ibex::LT;
+  case ibex::GT:
+    return ibex::LEQ;
+  case ibex::LEQ:
+    return ibex::GT;
+  case ibex::LT:
+    return ibex::GEQ;
   default:
     message_handler.status("cant process equal");
     break;
   }
-  return GEQ;
+  return ibex::GEQ;
 }
 
-Ctc *goto_contractort::create_contractors_from_expr2t(irep_container<expr2t>)
+ibex::Ctc *
+goto_contractort::create_contractors_from_expr2t(irep_container<expr2t>)
 {
   return nullptr;
 }
 
-NumConstraint *
+std::shared_ptr<ibex::NumConstraint>
 goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
 {
-  NumConstraint *c = nullptr;
+  std::shared_ptr<ibex::NumConstraint> c;
   if(
     is_arith_expr(expr) || is_constant_number(expr) || is_symbol2t(expr) ||
     is_notequal2t(expr))
@@ -216,7 +214,7 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
   std::shared_ptr<relation_data> rel;
   rel = std::dynamic_pointer_cast<relation_data>(expr);
 
-  Function *f, *g;
+  std::shared_ptr<ibex::Function> f, g;
   f = create_function_from_expr2t(rel->side_1);
   g = create_function_from_expr2t(rel->side_2);
   if(f == nullptr || g == nullptr)
@@ -224,32 +222,33 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
   switch(expr->expr_id)
   {
   case expr2t::expr_ids::greaterthanequal_id:
-    c = new NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars));
+    c =
+      std::make_shared<ibex::NumConstraint>(*vars, (*f)(*vars) >= (*g)(*vars));
     break;
   case expr2t::expr_ids::greaterthan_id:
-    c = new NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
+    c = std::make_shared<ibex::NumConstraint>(*vars, (*f)(*vars) > (*g)(*vars));
     break;
   case expr2t::expr_ids::lessthanequal_id:
-    c = new NumConstraint(*vars, (*f)(*vars) <= (*g)(*vars));
+    c =
+      std::make_shared<ibex::NumConstraint>(*vars, (*f)(*vars) <= (*g)(*vars));
     break;
   case expr2t::expr_ids::lessthan_id:
-    c = new NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
+    c = std::make_shared<ibex::NumConstraint>(*vars, (*f)(*vars) < (*g)(*vars));
     break;
   case expr2t::expr_ids::equality_id:
-    c = new NumConstraint(*vars, (*f)(*vars) = (*g)(*vars));
+    c = std::make_shared<ibex::NumConstraint>(*vars, (*f)(*vars) = (*g)(*vars));
     break;
   default:
     return nullptr;
   }
-  list_of_constraints.push_front(c);
   return c;
 }
 
-Function *
+std::shared_ptr<ibex::Function>
 goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
 {
-  Function *f = nullptr;
-  Function *g, *h;
+  std::shared_ptr<ibex::Function> f = nullptr;
+  std::shared_ptr<ibex::Function> g, h;
 
   if(is_comp_expr(expr))
   {
@@ -268,29 +267,27 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
     switch(expr->expr_id)
     {
     case expr2t::expr_ids::add_id:
-      f = new Function(*vars, (*g)(*vars) + (*h)(*vars));
+      f = std::make_shared<ibex::Function>(*vars, (*g)(*vars) + (*h)(*vars));
       break;
     case expr2t::expr_ids::sub_id:
-      f = new Function(*vars, (*g)(*vars) - (*h)(*vars));
+      f = std::make_shared<ibex::Function>(*vars, (*g)(*vars) - (*h)(*vars));
       break;
     case expr2t::expr_ids::mul_id:
-      f = new Function(*vars, (*g)(*vars) * (*h)(*vars));
+      f = std::make_shared<ibex::Function>(*vars, (*g)(*vars) * (*h)(*vars));
       break;
     case expr2t::expr_ids::div_id:
-      f = new Function(*vars, (*g)(*vars) / (*h)(*vars));
+      f = std::make_shared<ibex::Function>(*vars, (*g)(*vars) / (*h)(*vars));
       break;
     default:
       return nullptr;
     }
-    list_of_functions.push_front(f);
     break;
   case expr2t::expr_ids::symbol_id:
   {
     int index = create_variable_from_expr2t(expr);
-    if(index != NOT_FOUND)
+    if(index != CspMap::NOT_FOUND)
     {
-      f = new Function(*vars, (*vars)[index]);
-      list_of_functions.push_front(f);
+      f = std::make_shared<ibex::Function>(*vars, (*vars)[index]);
     }
     else
     {
@@ -304,10 +301,9 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
     break;
   case expr2t::expr_ids::constant_int_id:
   {
-    const ExprConstant &c =
-      ExprConstant::new_scalar(to_constant_int2t(expr).value.to_int64());
-    f = new Function(*vars, c);
-    list_of_functions.push_front(f);
+    const ibex::ExprConstant &c =
+      ibex::ExprConstant::new_scalar(to_constant_int2t(expr).value.to_int64());
+    f = std::make_shared<ibex::Function>(*vars, c);
     break;
   }
   default:
@@ -321,7 +317,7 @@ int goto_contractort::create_variable_from_expr2t(irep_container<expr2t> expr)
 {
   std::string var_name = to_symbol2t(expr).get_symbol_name().c_str();
   int index = map->find(var_name);
-  if(index == NOT_FOUND)
+  if(index == CspMap::NOT_FOUND)
   {
     index = map->add_var(var_name, to_symbol2t(expr));
   }
@@ -346,7 +342,8 @@ bool goto_contractort::initialize_main_function_loops()
   return true;
 }
 
-void goto_contractort::monotonicity_check(goto_functionst functionst)
+//TODO: rewrite this function
+void goto_contractort::monotonicity_check()
 {
   loopst loop;
   for(auto &function_loop : function_loops)
@@ -357,16 +354,15 @@ void goto_contractort::monotonicity_check(goto_functionst functionst)
   {
     if(it->is_assign())
     {
-      //check lhs
       auto index = map->find(
         to_symbol2t(to_code_assign2t(it->code).target).get_symbol_name());
-      if(index == NOT_FOUND)
+      if(index == CspMap::NOT_FOUND)
       {
         it++;
         continue;
       }
       to_code_assign2t(it->code);
-      //check rhs
+
       auto source = to_code_assign2t(it->code).source;
       switch(source->expr_id)
       {
