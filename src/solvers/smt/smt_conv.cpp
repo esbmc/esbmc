@@ -942,12 +942,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else
     {
-      if(!(is_signedbv_type(lte.side_1) && is_signedbv_type(lte.side_2)))
-      {
-        lte.side_1->dump();
-        lte.side_2->dump();
-        abort();
-      }
+      assert(is_signedbv_type(lte.side_1) && is_signedbv_type(lte.side_2));
       a = mk_bvsle(args[0], args[1]);
     }
     break;
