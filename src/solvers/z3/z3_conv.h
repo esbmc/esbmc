@@ -11,6 +11,8 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 #include <solvers/smt/smt_conv.h>
 #include <z3++.h>
+#include <fstream>
+#include <util/message/default_message.h>
 
 class z3_smt_ast : public solver_smt_ast<z3::expr>
 {
@@ -203,6 +205,9 @@ public:
 
   void dump_smt() override;
   void print_model() override;
+
+private:
+  void print_smt_formulae(std::ostream &dest);
 
 public:
   //  Must be first member; that way it's the last to be destroyed.
