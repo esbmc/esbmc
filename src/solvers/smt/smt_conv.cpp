@@ -675,7 +675,17 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::typecast_id:
   {
-    a = convert_typecast(expr);
+    const typecast2t &cast = to_typecast2t(expr);
+    if(
+      int_encoding && is_floatbv_type(cast.from->type) &&
+      is_floatbv_type(cast.type))
+    {
+      // When using --ir mode and --floatbv, we ignore the fp-to-fp typecasting
+      // and the just encode the original fp term using real
+      a = convert_terminal(cast.from);
+    }
+    else
+      a = convert_typecast(expr);
     break;
   }
   case expr2t::nearbyint_id:
