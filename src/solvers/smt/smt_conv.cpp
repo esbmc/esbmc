@@ -227,8 +227,8 @@ void smt_convt::set_to(const expr2tc &expr, bool value)
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
-  smt_astt side1 = convert_ast(eq.side_1);
-  smt_astt side2 = convert_ast(eq.side_2);
+  smt_astt side1 = convert_ast(eq.side_1); // LHS
+  smt_astt side2 = convert_ast(eq.side_2); // RHS
   side2->assign(this, side1);
 
   // Put that into the smt cache, thus preserving the value of the assigned symbols.
