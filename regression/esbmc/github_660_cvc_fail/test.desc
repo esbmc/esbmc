@@ -1,0 +1,4 @@
+CORE
+main.c
+--ir --cvc
+^VERIFICATION FAILED$
