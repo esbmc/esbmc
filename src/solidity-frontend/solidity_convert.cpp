@@ -787,12 +787,19 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 
     switch(literal_kind)
     {
-    case "bool" {
-      if(convert_integer_literal(literal, the_value, new_expr)) return true;
+    case "bool":
+    {
+      if(convert_integer_literal(literal, the_value, new_expr))
+        return true;
       break;
-    } case "number" {
-      if(convert_bool_literal(literal, the_value, new_expr)) return true; break;
-    } default:
+    }
+    case "number":
+    {
+      if(convert_bool_literal(literal, the_value, new_expr))
+        return true;
+      break;
+    }
+    default:
       assert(!"Literal not implemented")
     }
 
