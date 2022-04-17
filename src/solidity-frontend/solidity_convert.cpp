@@ -781,11 +781,20 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
   case SolidityGrammar::ExpressionT::Literal:
   {
     // make a type-name json for integer literal conversion
+    std::string literal_kind = expr["kind"].get<std::string>();
     std::string the_value = expr["value"].get<std::string>();
-    const nlohmann::json &integer_literal = expr["typeDescriptions"];
+    const nlohmann::json &literal = expr["typeDescriptions"];
 
-    if(convert_integer_literal(integer_literal, the_value, new_expr))
-      return true;
+    switch(literal_kind)
+    {
+    case "bool" {
+      if(convert_integer_literal(literal, the_value, new_expr)) return true;
+      break;
+    } case "number" {
+      if(convert_bool_literal(literal, the_value, new_expr)) return true; break;
+    } default:
+      assert(!"Literal not implemented")
+    }
 
     break;
   }
