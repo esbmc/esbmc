@@ -800,7 +800,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
       break;
     }
     default:
-      assert(!"Literal not implemented")
+      assert(!"Literal not implemented");
     }
 
     break;
