@@ -18,6 +18,21 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/simplify_expr.h>
 #include <util/type_byte_size.h>
 
+static std::size_t ext_int_representation_bytes(const typet &type)
+{
+  // We represent an ExtInt with the smallest integer type that can hold it
+  // TODO: This should be limited to a maximum of 8 bytes, but pointer analysis
+  // currently expects the fields to be aligned to the least power of 2 greater
+  // than the width in bytes
+  const std::size_t bits = string2integer(type.width().as_string()).to_uint64();
+
+  std::size_t result;
+  for(result = 1; bits > result * config.ansi_c.char_width; result *= 2)
+    ;
+
+  return result;
+}
+
 BigInt alignment(const typet &type, const namespacet &ns)
 {
   // we need to consider a number of different cases:
@@ -67,6 +82,8 @@ BigInt alignment(const typet &type, const namespacet &ns)
     // we align these according to the 'underlying type'
     result = alignment(type.subtype(), ns);
   }
+  else if(type.get_bool("#extint"))
+    result = ext_int_representation_bytes(type);
   else if(
     type.id() == typet::t_unsignedbv || type.id() == typet::t_signedbv ||
     type.id() == typet::t_fixedbv || type.id() == typet::t_floatbv ||
@@ -102,6 +119,23 @@ static struct_typet::componentst::iterator pad_bit_field(
   component.type().set("#bitfield", true);
   component.set_is_padding(true);
   return std::next(components.insert(where, component));
+}
+
+static struct_typet::componentst::iterator pad_ext_int_after(
+  struct_typet::componentst &components,
+  struct_typet::componentst::iterator where,
+  std::size_t pad_bits)
+{
+  where = std::next(where);
+  const unsignedbv_typet padding_type(pad_bits);
+
+  std::string index = std::to_string(where - components.begin());
+  struct_typet::componentt component(
+    "ext_int_pad$" + index, "anon_ext_int_pad$" + index, padding_type);
+
+  component.type().set("#extint", true);
+  component.set_is_padding(true);
+  return components.insert(where, component);
 }
 
 static struct_typet::componentst::iterator pad(
@@ -150,6 +184,22 @@ void add_padding(struct_typet &type, const namespacet &ns)
         }
 
         bit_field_bits = 0;
+      }
+
+      // Pad out extints that arent in bitfields
+      if(it->type().get_bool("#extint") && !it->type().get_bool("#bitfield"))
+      {
+        assert(bit_field_bits == 0);
+
+        // Pad to nearest multiple of representation width
+        const std::size_t repr_bytes = ext_int_representation_bytes(it->type());
+        const std::size_t repr_bits = repr_bytes * config.ansi_c.char_width;
+        const std::size_t w =
+          string2integer(it->type().width().as_string()).to_uint64();
+
+        const std::size_t unaligned_bits = w % repr_bits;
+        const std::size_t pad = unaligned_bits ? repr_bits - unaligned_bits : 0;
+        it = pad_ext_int_after(components, it, pad);
       }
     }
 
@@ -200,6 +250,13 @@ void add_padding(struct_typet &type, const namespacet &ns)
         continue;
       }
     }
+    else if(it->get_is_padding() && it_type.get_bool("#extint"))
+    {
+      // The alignment offset of ExtInt padding (that is not part of a bit field)
+      // is accounted for by the main ExtInt field, so not done here
+      assert(bit_field_bits == 0);
+      continue;
+    }
     else
       a = alignment(it_type, ns);
 
@@ -222,6 +279,26 @@ void add_padding(struct_typet &type, const namespacet &ns)
         it = pad(components, it, pad_bits);
         offset += pad_bytes;
       }
+    }
+
+    if(it_type.get_bool("#extint"))
+    {
+      assert(!it->get_is_padding());
+      std::size_t w = string2integer(it_type.width().as_string()).to_uint64();
+
+      // If the next field is padding for this one, add its width to the offset
+      // too
+      const auto pad_field = std::next(it);
+      if(
+        pad_field != components.end() && pad_field->get_is_padding() &&
+        pad_field->type().get_bool("#extint"))
+      {
+        w += string2integer(pad_field->type().width().as_string()).to_uint64();
+      }
+
+      assert(w % (a.to_uint64() * config.ansi_c.char_width) == 0);
+      offset += w / config.ansi_c.char_width;
+      continue;
     }
 
     type2tc thetype = migrate_type(it_type);

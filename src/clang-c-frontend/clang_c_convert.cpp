@@ -325,7 +325,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     for(const auto &attr : attrs)
     {
       if(attr->getKind() == clang::attr::Packed)
-        t.set("packed", "true");
+        t.set("packed", true);
 
       if(attr->getKind() == clang::attr::Aligned)
       {
@@ -1009,6 +1009,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       new_type = unsignedbv_typet(n);
     }
 
+    new_type.set("#extint", true);
     break;
   }
 
