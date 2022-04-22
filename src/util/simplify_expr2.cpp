@@ -417,10 +417,8 @@ expr2tc add2t::do_simplify() const
   // X + X --> X << 1
   if(is_symbol2t(side_1) && is_symbol2t(side_2))
   {
-    dump();
     auto name_1 = to_symbol2t(side_1).get_symbol_name();
     auto name_2 = to_symbol2t(side_2).get_symbol_name();
-
     if(name_1 == name_2)
     {
       return shl2tc(type, side_1, from_integer(1, type));
@@ -428,7 +426,7 @@ expr2tc add2t::do_simplify() const
   }
 
   // (A + 1) + ~B --> A - B
-  if(is_add2t(side_1) && is_bitnot2t(side_2))
+  auto simplify_1 = [=](const expr2tc e, const expr2tc f) -> expr2tc
   {
     auto sidecheck = to_add2t(side_1).side_2;
     auto sidecheck2 = to_add2t(side_1).side_1;
@@ -438,13 +436,23 @@ expr2tc add2t::do_simplify() const
       auto new_operand = sub2tc(side_1->type, sidecheck2, B);
       return new_operand;
     }
+    return expr2tc();
+  };
+
+  if(is_add2t(side_1) && is_bitnot2t(side_2))
+  {
+    auto new_operand = simplify_1(side_1, side_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(is_bitnot2t(side_1) && is_add2t(side_2))
+  {
+    auto new_operand = simplify_1(side_2, side_1);
+    if(new_operand)
+      return new_operand;
   }
 
-  // (~B + A) + 1 --> A - B
-  //&&
-  // (A + ~B) + 1 --> A - B
-
-  auto simplify = [](expr2tc &e, expr2tc &f) -> expr2tc
+  auto simplify_2 = [](const expr2tc &e, const expr2tc &f) -> expr2tc
   {
     if(is_bitnot2t(e))
     {
@@ -461,97 +469,176 @@ expr2tc add2t::do_simplify() const
     return expr2tc();
   };
 
+  // (~B + A) + 1 --> A - B
+
   if(is_add2t(side_1) && is_constant_int2t(side_2) == 1)
   {
     auto sidecheck_1 = to_add2t(side_1).side_1;
     auto sidecheck_2 = to_add2t(side_1).side_2;
+    auto new_operand = simplify_2(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(is_add2t(side_2) && is_constant_int2t(side_1) == 1)
+  {
+    auto sidecheck_1 = to_add2t(side_2).side_1;
+    auto sidecheck_2 = to_add2t(side_2).side_2;
+    auto new_operand = simplify_2(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
+  }
 
-    auto new_operand = simplify(sidecheck_1, sidecheck_2);
+  // (A + ~B) + 1 --> A - B
+  if(is_add2t(side_2) && is_constant_int2t(side_1) == 1)
+  {
+    auto sidecheck_1 = to_add2t(side_2).side_1;
+    auto sidecheck_2 = to_add2t(side_2).side_2;
+    auto new_operand = simplify_2(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(is_add2t(side_1) && is_constant_int2t(side_2) == 1)
+  {
+    auto sidecheck_1 = to_add2t(side_1).side_1;
+    auto sidecheck_2 = to_add2t(side_1).side_2;
+    auto new_operand = simplify_2(sidecheck_1, sidecheck_2);
     if(new_operand)
       return new_operand;
   }
 
   // ~B + (A + 1) --> A - B
-  if(is_bitnot2t(side_1) && is_add2t(side_2))
+  if(is_add2t(side_1) && is_bitnot2t(side_2))
+  {
+    auto sidecheck_1 = to_add2t(side_1).side_1;
+    auto sidecheck_2 = to_add2t(side_1).side_2;
+    auto new_operand = simplify_2(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(is_add2t(side_2) && is_bitnot2t(side_1))
   {
     auto sidecheck_1 = to_add2t(side_2).side_1;
     auto sidecheck_2 = to_add2t(side_2).side_2;
-    if(is_symbol2t(sidecheck_1) && is_constant_int2t(sidecheck_2) == 1)
-    {
-      auto B = to_bitnot2t(side_1).value;
-      auto new_operand_2 = sub2tc(side_1->type, sidecheck_1, B);
-
-      return new_operand_2;
-    }
+    auto new_operand = simplify_2(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
+  }
+  // ~B + (A + 1) --> A - B
+  if(is_add2t(side_1) && is_bitnot2t(side_2))
+  {
+    auto sidecheck_1 = to_add2t(side_1).side_1;
+    auto sidecheck_2 = to_add2t(side_1).side_2;
+    auto new_operand = simplify_2(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(is_add2t(side_2) && is_bitnot2t(side_1))
+  {
+    auto sidecheck_1 = to_add2t(side_2).side_1;
+    auto sidecheck_2 = to_add2t(side_2).side_2;
+    auto new_operand = simplify_2(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
   }
 
-  // X + (Y - X) -> Y
-
-  if(is_symbol2t(side_1) && is_sub2t(side_2))
+  auto simplify_3 = [](const expr2tc e, const expr2tc f) -> expr2tc
   {
-    auto sidecheck_1 = to_sub2t(side_2).side_1;
-    auto sidecheck_2 = to_sub2t(side_2).side_2;
-
-    if(is_symbol2t(sidecheck_1) && is_symbol2t(sidecheck_2))
+    if(is_sub2t(e))
     {
-      auto name_1 = to_symbol2t(sidecheck_2).get_symbol_name();
-      auto name_2 = to_symbol2t(side_1).get_symbol_name();
-
-      if(name_1 == name_2)
+      auto sidecheck_1 = to_sub2t(e).side_1;
+      auto sidecheck_2 = to_sub2t(e).side_2;
+      if(is_symbol2t(sidecheck_1) && is_symbol2t(sidecheck_2))
       {
-        return sidecheck_1;
+        auto name_1 = to_symbol2t(sidecheck_2).get_symbol_name();
+        auto name_2 = to_symbol2t(e).get_symbol_name();
+        if(name_1 == name_2)
+        {
+          return sidecheck_1;
+        }
       }
     }
+    else if(is_sub2t(f))
+    {
+      auto sidecheck_1 = to_sub2t(f).side_1;
+      auto sidecheck_2 = to_sub2t(f).side_2;
+      if(is_symbol2t(sidecheck_1) && is_symbol2t(sidecheck_2))
+      {
+        auto name_1 = to_symbol2t(sidecheck_2).get_symbol_name();
+        auto name_2 = to_symbol2t(f).get_symbol_name();
+        if(name_1 == name_2)
+        {
+          return sidecheck_1;
+        }
+      }
+    }
+    return expr2tc();
+  };
+
+  // X + (Y - X) -> Y
+  if(is_add2t(side_1) && is_sub2t(side_2))
+  {
+    auto sidecheck_1 = to_add2t(side_1).side_1;
+    auto sidecheck_2 = to_add2t(side_1).side_2;
+    auto new_operand = simplify_3(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(is_add2t(side_2) && is_sub2t(side_1))
+  {
+    auto sidecheck_1 = to_add2t(side_2).side_1;
+    auto sidecheck_2 = to_add2t(side_2).side_2;
+    auto new_operand = simplify_3(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
   }
 
   // (Y - X) + X -> Y
-
-  if(is_sub2t(side_1) && is_symbol2t(side_2))
+  if(is_sub2t(side_1) && is_sub2t(side_2))
   {
     auto sidecheck_1 = to_sub2t(side_1).side_1;
     auto sidecheck_2 = to_sub2t(side_1).side_2;
-
-    if(is_symbol2t(sidecheck_1) && is_symbol2t(sidecheck_2))
-    {
-      auto name_1 = to_symbol2t(sidecheck_2).get_symbol_name();
-      auto name_2 = to_symbol2t(side_2).get_symbol_name();
-
-      if(name_1 == name_2)
-      {
-        return sidecheck_1;
-      }
-    }
+    auto new_operand = simplify_3(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(is_sub2t(side_2) && is_sub2t(side_1))
+  {
+    auto sidecheck_1 = to_sub2t(side_2).side_1;
+    auto sidecheck_2 = to_sub2t(side_2).side_2;
+    auto new_operand = simplify_3(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
   }
 
-  // X + ~X -> -1
+  auto simplify_4 = [](const expr2tc e, const expr2tc f) -> expr2tc
+  {
+    if(is_bitnot2t(e))
+    {
+      auto name_1 = to_symbol2t(e).get_symbol_name();
+      auto name_2 = to_symbol2t(to_bitnot2t(f).value).get_symbol_name();
+      if(name_1 == name_2)
+      {
+        return constant_int2tc(e->type, -1);
+      }
+    }
+    return expr2tc();
+  };
 
+  // X + ~X -> -1
   if(is_symbol2t(side_1) && is_bitnot2t(side_2))
   {
-    auto name_1 = to_symbol2t(side_1).get_symbol_name();
-    auto bitnot_value = to_bitnot2t(side_2).value;
-    auto name_2 = to_symbol2t(bitnot_value).get_symbol_name();
-
-    if(name_1 == name_2)
-    {
-      return constant_int2tc(side_1->type, -1);
-    }
+    auto new_operand = simplify_4(side_1, side_2);
+    if(new_operand)
+      return new_operand;
   }
 
   // ~X + X -> -1
-
   if(is_bitnot2t(side_1) && is_symbol2t(side_2))
   {
-    auto name_1 = to_symbol2t(side_2).get_symbol_name();
-    auto bitnot_value = to_bitnot2t(side_1).value;
-    auto name_2 = to_symbol2t(bitnot_value).get_symbol_name();
-
-    if(name_1 == name_2)
-    {
-      return constant_int2tc(side_2->type, -1);
-    }
+    auto new_operand = simplify_4(side_1, side_2);
+    if(new_operand)
+      return new_operand;
   }
-
-  
 
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if(!is_nil_expr(res))
