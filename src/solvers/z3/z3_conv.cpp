@@ -7,8 +7,6 @@
 
 #include <cassert>
 #include <z3_conv.h>
-#include <fstream>
-#include <util/message/default_message.h>
 
 #define new_ast new_solver_ast<z3_smt_ast>
 
@@ -18,7 +16,9 @@ static void error_handler(Z3_context c, Z3_error_code e)
   oss << "Z3 error " << e << " encountered"
       << "\n";
   oss << Z3_get_error_msg(c, e);
-  assert(0 && oss.str().c_str());
+  default_message msg;
+  msg.error(oss.str());
+  abort();
 }
 
 smt_convt *create_new_z3_solver(
@@ -1283,29 +1283,37 @@ void z3_convt::dump_smt()
   const std::string &filename = options.get_option("output");
   if(!filename.empty())
   {
+    // print to output file
     std::ofstream out(filename.c_str());
-    if(out)
-    {
-      // Add whatever logic is needed.
-      // Add sovler specific declarations as well.
-      out << "(set-info :smt-lib-version 2.6)\n";
-      out << "(set-option :print-success true)\n";
-      out << "(set-option :produce-models true)\n";
-      out << "; Asserts from ESMBC starts\n";
-      out << solver; // All VCC conditions in SMTLIB format.
-      out << "; Asserts from ESMBC ends\n";
-      out << "(apply (then simplify solve-eqs))\n";
-      out << "(check-sat)\n";
-      out << "(get-model)\n";
-      out << "(exit)\n";
-    }
+    print_smt_formulae(out);
   }
+  else
+  {
+    // print to screen
+    default_message msg;
+    std::ostringstream oss;
+    print_smt_formulae(oss);
+    msg.debug(oss.str());
+  }
+}
 
+void z3_convt::print_smt_formulae(std::ostream &dest)
+{
   Z3_ast_vector __z3_assertions = Z3_solver_get_assertions(z3_ctx, solver);
-  default_message msg;
-  std::ostringstream oss;
-  oss << "Assertions Size : " << Z3_ast_vector_size(z3_ctx, __z3_assertions);
-  msg.debug(oss.str());
+  // Add whatever logic is needed.
+  // Add sovler specific declarations as well.
+  dest << "(set-info :smt-lib-version 2.6)\n";
+  dest << "(set-option :print-success true)\n";
+  dest << "(set-option :produce-models true)\n";
+  dest << "; Asserts from ESMBC starts\n";
+  dest << solver; // All VCC conditions in SMTLIB format.
+  dest << "; Asserts from ESMBC ends\n";
+  dest << "(apply (then simplify solve-eqs))\n";
+  dest << "(check-sat)\n";
+  dest << "(get-model)\n";
+  dest << "(exit)\n";
+  dest << "Total number of safety properties: "
+       << Z3_ast_vector_size(z3_ctx, __z3_assertions) << std::endl;
 }
 
 smt_astt z3_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)

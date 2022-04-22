@@ -97,6 +97,7 @@ enum StatementT
   ReturnStatement,       // rule return-statement
   ForStatement,          // rule for-statement
   IfStatement,           // rule if-statement
+  WhileStatement,
   StatementTError
 };
 StatementT get_statement_t(const nlohmann::json &stmt);

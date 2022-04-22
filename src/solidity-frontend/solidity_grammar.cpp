@@ -287,6 +287,10 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return IfStatement;
   }
+  else if(stmt["nodeType"] == "WhileStatement")
+  {
+    return WhileStatement;
+  }
   else
   {
     assert(!((fmt::format(
@@ -307,6 +311,7 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(ReturnStatement)
     ENUM_TO_STR(ForStatement)
     ENUM_TO_STR(IfStatement)
+    ENUM_TO_STR(WhileStatement)
     ENUM_TO_STR(StatementTError)
   default:
   {
