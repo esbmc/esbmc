@@ -687,6 +687,25 @@ bool solidity_convertert::get_statement(
     new_expr = if_expr;
     break;
   }
+  case SolidityGrammar::StatementT::WhileStatement:
+  {
+    exprt cond = true_exprt();
+    if(get_expr(stmt["condition"], cond))
+      return true;
+
+    codet body = codet();
+    if(get_block(stmt["body"], body))
+      return true;
+
+    convert_expression_to_code(body);
+
+    code_whilet code_while;
+    code_while.cond() = cond;
+    code_while.body() = body;
+
+    new_expr = code_while;
+    break;
+  }
   default:
   {
     assert(!"Unimplemented type in rule statement");

@@ -50,7 +50,6 @@ execution_statet::execution_statet(
 {
   art1 = owning_rt;
   CS_number = 0;
-  TS_number = 0;
   node_id = 0;
   tid_is_set = false;
   monitor_tid = 0;
@@ -176,7 +175,6 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   no_return_value_opt = ex.no_return_value_opt;
 
   CS_number = ex.CS_number;
-  TS_number = ex.TS_number;
 
   thread_last_reads = ex.thread_last_reads;
   thread_last_writes = ex.thread_last_writes;

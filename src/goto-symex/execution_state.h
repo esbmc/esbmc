@@ -145,28 +145,10 @@ public:
     CS_number++;
   }
 
-  /** Increase number of time slices performed by this ex_state */
-  void increment_time_slice()
-  {
-    TS_number++;
-  }
-
-  /** Reset the number of time slices performed by this ex_state */
-  void reset_time_slice()
-  {
-    TS_number = 0;
-  }
-
   /** Get the number of context switches performed by this ex_state */
   int get_context_switch()
   {
     return CS_number;
-  }
-
-  /** Get the number of time slices performed by this ex_state */
-  int get_time_slice()
-  {
-    return TS_number;
   }
 
   /** Reset record of what context switches were taken from this ex_state */
@@ -553,8 +535,6 @@ public:
   unsigned int active_thread;
   /** Name prefix for execution guard. */
   irep_idt guard_execution;
-  /** Number of timeslices observed by this ex_state. */
-  int TS_number;
   /** Number of nondeterministic symbols in this state. */
   unsigned nondet_count;
   /** Number of dynamic objects in this state. */

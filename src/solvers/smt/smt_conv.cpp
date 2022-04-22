@@ -227,8 +227,8 @@ void smt_convt::set_to(const expr2tc &expr, bool value)
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
-  smt_astt side1 = convert_ast(eq.side_1);
-  smt_astt side2 = convert_ast(eq.side_2);
+  smt_astt side1 = convert_ast(eq.side_1); // LHS
+  smt_astt side2 = convert_ast(eq.side_2); // RHS
   side2->assign(this, side1);
 
   // Put that into the smt cache, thus preserving the value of the assigned symbols.
@@ -2002,8 +2002,10 @@ type2tc smt_convt::flatten_array_type(const type2tc &type)
 
   while(is_array_type(to_array_type(type_rec).subtype))
   {
-    arr_size =
-      mul2tc(arr_size1->type, to_array_type(type_rec).array_size, arr_size);
+    arr_size = mul2tc(
+      arr_size1->type,
+      to_array_type(to_array_type(type_rec).subtype).array_size,
+      arr_size);
     type_rec = to_array_type(type_rec).subtype;
   }
   simplify(arr_size);
