@@ -415,15 +415,13 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
 expr2tc add2t::do_simplify() const
 {
   // X + X --> X << 1
-  if(is_symbol2t(side_1) && is_symbol2t(side_2))
+  auto hash_side_1 = side_1->do_crc();
+  auto hash_side_2 = side_2->do_crc();
+  if(hash_side_1 == hash_side_2)
   {
-    auto name_1 = to_symbol2t(side_1).get_symbol_name();
-    auto name_2 = to_symbol2t(side_2).get_symbol_name();
-    if(name_1 == name_2)
-    {
-      return shl2tc(type, side_1, from_integer(1, type));
-    }
+    return shl2tc(type, side_1, from_integer(1, type));
   }
+
 
   // (A + 1) + ~B --> A - B
   auto simplify_1 = [=](const expr2tc e, const expr2tc f) -> expr2tc
