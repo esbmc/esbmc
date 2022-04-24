@@ -28,11 +28,13 @@
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
+  const std::string &_mode,
   const messaget &msg)
   : ASTContext(nullptr),
     context(_context),
     ns(context),
     ASTs(_ASTs),
+    symbol_mode(_mode),
     msg(msg),
     current_scope_var_num(1),
     sm(nullptr),
@@ -2745,7 +2747,7 @@ void clang_c_convertert::get_default_symbol(
   std::string id,
   locationt location)
 {
-  symbol.mode = "C";
+  symbol.mode = symbol_mode;
   symbol.module = module_name;
   symbol.location = std::move(location);
   symbol.type = std::move(type);

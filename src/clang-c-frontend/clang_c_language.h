@@ -61,6 +61,10 @@ public:
   ~clang_c_languaget() override = default;
   explicit clang_c_languaget(const messaget &msg);
 
+  // language mode
+  std::string mode;
+  void set_mode(const std::string &path);
+
 protected:
   virtual std::string internal_additions();
   virtual void force_file_type();

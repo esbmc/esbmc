@@ -57,9 +57,11 @@ bool clang_cpp_languaget::typecheck(
   const std::string &module,
   const messaget &message_handler)
 {
+  assert(mode == "C++");
+
   contextt new_context(message_handler);
 
-  clang_cpp_convertert converter(new_context, ASTs, message_handler);
+  clang_cpp_convertert converter(new_context, ASTs, mode, message_handler);
   if(converter.convert())
     return true;
 

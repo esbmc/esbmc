@@ -6,6 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include <boost/range/empty.hpp>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -15,6 +16,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <AST/build_ast.h>
 #include <ansi-c/c_preprocess.h>
 #include <boost/filesystem.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 #include <c2goto/cprover_library.h>
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/clang_c_convert.h>
@@ -35,6 +37,7 @@ languaget *new_clang_c_language(const messaget &msg)
 
 clang_c_languaget::clang_c_languaget(const messaget &msg) : languaget(msg)
 {
+  mode = "";
   // Build the compile arguments
   build_compiler_args(clang_headers_path());
 }
@@ -205,10 +208,30 @@ void clang_c_languaget::force_file_type()
   compiler_args.push_back("c");
 }
 
+void clang_c_languaget::set_mode(const std::string &path)
+{
+  assert(mode.empty());
+  if(boost::ends_with(path, ".cpp"))
+  {
+    mode = "C++";
+  }
+  else if(boost::ends_with(path, ".c"))
+  {
+    mode = "C";
+  }
+  else
+  {
+    msg.error("Unknown language processed by clang-c-frontend");
+    abort();
+  }
+}
+
 bool clang_c_languaget::parse(const std::string &path, const messaget &msg)
 {
-  // preprocessing
+  // set language mode
+  set_mode(path);
 
+  // preprocessing
   std::ostringstream o_preprocessed;
   if(preprocess(path, o_preprocessed, msg))
     return true;
@@ -241,9 +264,11 @@ bool clang_c_languaget::typecheck(
   const std::string &module,
   const messaget &msg)
 {
+  assert(mode == "C");
+
   contextt new_context(msg);
 
-  clang_c_convertert converter(new_context, ASTs, msg);
+  clang_c_convertert converter(new_context, ASTs, mode, msg);
   if(converter.convert())
     return true;
 

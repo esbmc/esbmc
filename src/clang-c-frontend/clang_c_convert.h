@@ -44,6 +44,7 @@ public:
   clang_c_convertert(
     contextt &_context,
     std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
+    const std::string &_mode,
     const messaget &msg);
   virtual ~clang_c_convertert() = default;
 
@@ -67,6 +68,7 @@ protected:
   contextt &context;
   namespacet ns;
   std::vector<std::unique_ptr<clang::ASTUnit>> &ASTs;
+  const std::string &symbol_mode;
   const messaget &msg;
 
   unsigned int current_scope_var_num;
