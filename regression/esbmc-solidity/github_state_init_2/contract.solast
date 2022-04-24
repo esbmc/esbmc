@@ -1,0 +1,242 @@
+JSON AST (compact format):
+
+
+======= contract.sol =======
+{
+  "absolutePath": "contract.sol",
+  "exportedSymbols":
+  {
+    "StateVarInit":
+    [
+      15
+    ]
+  },
+  "id": 16,
+  "nodeType": "SourceUnit",
+  "nodes":
+  [
+    {
+      "id": 1,
+      "literals":
+      [
+        "solidity",
+        ">=",
+        "0.7",
+        ".0",
+        "<",
+        "0.9",
+        ".0"
+      ],
+      "nodeType": "PragmaDirective",
+      "src": "0:31:0"
+    },
+    {
+      "abstract": false,
+      "baseContracts": [],
+      "canonicalName": "StateVarInit",
+      "contractDependencies": [],
+      "contractKind": "contract",
+      "fullyImplemented": true,
+      "id": 15,
+      "linearizedBaseContracts":
+      [
+        15
+      ],
+      "name": "StateVarInit",
+      "nameLocation": "42:12:0",
+      "nodeType": "ContractDefinition",
+      "nodes":
+      [
+        {
+          "constant": false,
+          "id": 4,
+          "mutability": "mutable",
+          "name": "x",
+          "nameLocation": "67:1:0",
+          "nodeType": "VariableDeclaration",
+          "scope": 15,
+          "src": "61:11:0",
+          "stateVariable": true,
+          "storageLocation": "default",
+          "typeDescriptions":
+          {
+            "typeIdentifier": "t_uint8",
+            "typeString": "uint8"
+          },
+          "typeName":
+          {
+            "id": 2,
+            "name": "uint8",
+            "nodeType": "ElementaryTypeName",
+            "src": "61:5:0",
+            "typeDescriptions":
+            {
+              "typeIdentifier": "t_uint8",
+              "typeString": "uint8"
+            }
+          },
+          "value":
+          {
+            "hexValue": "33",
+            "id": 3,
+            "isConstant": false,
+            "isLValue": false,
+            "isPure": true,
+            "kind": "number",
+            "lValueRequested": false,
+            "nodeType": "Literal",
+            "src": "71:1:0",
+            "typeDescriptions":
+            {
+              "typeIdentifier": "t_rational_3_by_1",
+              "typeString": "int_const 3"
+            },
+            "value": "3"
+          },
+          "visibility": "internal"
+        },
+        {
+          "body":
+          {
+            "id": 13,
+            "nodeType": "Block",
+            "src": "112:31:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "arguments":
+                  [
+                    {
+                      "commonType":
+                      {
+                        "typeIdentifier": "t_uint8",
+                        "typeString": "uint8"
+                      },
+                      "id": 10,
+                      "isConstant": false,
+                      "isLValue": false,
+                      "isPure": false,
+                      "lValueRequested": false,
+                      "leftExpression":
+                      {
+                        "id": 8,
+                        "name": "x",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 4,
+                        "src": "129:1:0",
+                        "typeDescriptions":
+                        {
+                          "typeIdentifier": "t_uint8",
+                          "typeString": "uint8"
+                        }
+                      },
+                      "nodeType": "BinaryOperation",
+                      "operator": "==",
+                      "rightExpression":
+                      {
+                        "hexValue": "34",
+                        "id": 9,
+                        "isConstant": false,
+                        "isLValue": false,
+                        "isPure": true,
+                        "kind": "number",
+                        "lValueRequested": false,
+                        "nodeType": "Literal",
+                        "src": "134:1:0",
+                        "typeDescriptions":
+                        {
+                          "typeIdentifier": "t_rational_4_by_1",
+                          "typeString": "int_const 4"
+                        },
+                        "value": "4"
+                      },
+                      "src": "129:6:0",
+                      "typeDescriptions":
+                      {
+                        "typeIdentifier": "t_bool",
+                        "typeString": "bool"
+                      }
+                    }
+                  ],
+                  "expression":
+                  {
+                    "argumentTypes":
+                    [
+                      {
+                        "typeIdentifier": "t_bool",
+                        "typeString": "bool"
+                      }
+                    ],
+                    "id": 7,
+                    "name": "assert",
+                    "nodeType": "Identifier",
+                    "overloadedDeclarations": [],
+                    "referencedDeclaration": -3,
+                    "src": "122:6:0",
+                    "typeDescriptions":
+                    {
+                      "typeIdentifier": "t_function_assert_pure$_t_bool_$returns$__$",
+                      "typeString": "function (bool) pure"
+                    }
+                  },
+                  "id": 11,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": false,
+                  "kind": "functionCall",
+                  "lValueRequested": false,
+                  "names": [],
+                  "nodeType": "FunctionCall",
+                  "src": "122:14:0",
+                  "tryCall": false,
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_tuple$__$",
+                    "typeString": "tuple()"
+                  }
+                },
+                "id": 12,
+                "nodeType": "ExpressionStatement",
+                "src": "122:14:0"
+              }
+            ]
+          },
+          "functionSelector": "6d8380f3",
+          "id": 14,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "state_var_init",
+          "nameLocation": "88:14:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 5,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "102:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 6,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "112:0:0"
+          },
+          "scope": 15,
+          "src": "79:64:0",
+          "stateMutability": "nonpayable",
+          "virtual": false,
+          "visibility": "public"
+        }
+      ],
+      "scope": 16,
+      "src": "33:112:0",
+      "usedErrors": []
+    }
+  ],
+  "src": "0:146:0"
+}
