@@ -223,7 +223,6 @@ bool solidity_convertert::get_var_decl(
     get_state_var_decl_name(ast_node, name, id);
   else if(current_functionDecl)
   {
-    // location variable in function body
     assert(current_functionName != "");
     get_var_decl_name(ast_node, name, id);
   }
