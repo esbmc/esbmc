@@ -1,7 +1,7 @@
 pragma solidity >=0.4.26;
 
 contract MyContract {
-	function foo() public {
+	function bool_literal() public {
 		bool y = true;
 		assert(y);
 	}

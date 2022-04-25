@@ -49,7 +49,7 @@ JSON AST (compact format):
           {
             "id": 12,
             "nodeType": "Block",
-            "src": "72:34:0",
+            "src": "81:35:0",
             "statements":
             [
               {
@@ -63,11 +63,11 @@ JSON AST (compact format):
                     "constant": false,
                     "id": 5,
                     "mutability": "mutable",
-                    "name": "y",
-                    "nameLocation": "81:1:0",
+                    "name": "x",
+                    "nameLocation": "90:1:0",
                     "nodeType": "VariableDeclaration",
                     "scope": 12,
-                    "src": "76:6:0",
+                    "src": "85:6:0",
                     "stateVariable": false,
                     "storageLocation": "default",
                     "typeDescriptions":
@@ -80,7 +80,7 @@ JSON AST (compact format):
                       "id": 4,
                       "name": "bool",
                       "nodeType": "ElementaryTypeName",
-                      "src": "76:4:0",
+                      "src": "85:4:0",
                       "typeDescriptions":
                       {
                         "typeIdentifier": "t_bool",
@@ -93,7 +93,7 @@ JSON AST (compact format):
                 "id": 7,
                 "initialValue":
                 {
-                  "hexValue": "74727565",
+                  "hexValue": "66616c7365",
                   "id": 6,
                   "isConstant": false,
                   "isLValue": false,
@@ -101,16 +101,16 @@ JSON AST (compact format):
                   "kind": "bool",
                   "lValueRequested": false,
                   "nodeType": "Literal",
-                  "src": "85:4:0",
+                  "src": "94:5:0",
                   "typeDescriptions":
                   {
                     "typeIdentifier": "t_bool",
                     "typeString": "bool"
                   },
-                  "value": "true"
+                  "value": "false"
                 },
                 "nodeType": "VariableDeclarationStatement",
-                "src": "76:13:0"
+                "src": "85:14:0"
               },
               {
                 "expression":
@@ -119,11 +119,11 @@ JSON AST (compact format):
                   [
                     {
                       "id": 9,
-                      "name": "y",
+                      "name": "x",
                       "nodeType": "Identifier",
                       "overloadedDeclarations": [],
                       "referencedDeclaration": 5,
-                      "src": "100:1:0",
+                      "src": "110:1:0",
                       "typeDescriptions":
                       {
                         "typeIdentifier": "t_bool",
@@ -145,7 +145,7 @@ JSON AST (compact format):
                     "nodeType": "Identifier",
                     "overloadedDeclarations": [],
                     "referencedDeclaration": -3,
-                    "src": "93:6:0",
+                    "src": "103:6:0",
                     "typeDescriptions":
                     {
                       "typeIdentifier": "t_function_assert_pure$_t_bool_$returns$__$",
@@ -160,7 +160,7 @@ JSON AST (compact format):
                   "lValueRequested": false,
                   "names": [],
                   "nodeType": "FunctionCall",
-                  "src": "93:9:0",
+                  "src": "103:9:0",
                   "tryCall": false,
                   "typeDescriptions":
                   {
@@ -170,43 +170,43 @@ JSON AST (compact format):
                 },
                 "id": 11,
                 "nodeType": "ExpressionStatement",
-                "src": "93:9:0"
+                "src": "103:9:0"
               }
             ]
           },
-          "functionSelector": "c2985578",
+          "functionSelector": "a5dca050",
           "id": 13,
           "implemented": true,
           "kind": "function",
           "modifiers": [],
-          "name": "foo",
-          "nameLocation": "59:3:0",
+          "name": "bool_literal",
+          "nameLocation": "59:12:0",
           "nodeType": "FunctionDefinition",
           "parameters":
           {
             "id": 2,
             "nodeType": "ParameterList",
             "parameters": [],
-            "src": "62:2:0"
+            "src": "71:2:0"
           },
           "returnParameters":
           {
             "id": 3,
             "nodeType": "ParameterList",
             "parameters": [],
-            "src": "72:0:0"
+            "src": "81:0:0"
           },
           "scope": 14,
-          "src": "50:56:0",
+          "src": "50:66:0",
           "stateMutability": "nonpayable",
           "virtual": false,
           "visibility": "public"
         }
       ],
       "scope": 15,
-      "src": "27:81:0",
+      "src": "27:91:0",
       "usedErrors": []
     }
   ],
-  "src": "0:110:0"
+  "src": "0:120:0"
 }
