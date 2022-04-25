@@ -2247,6 +2247,12 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
     return get_by_value(type, get_bv(a, is_signedbv_type(type)));
 
   case type2t::floatbv_id:
+    if(int_encoding)
+    {
+      /* TODO: how to retrieve an floatbv from a rational or algebraic real
+       * number in a meaningful way? */
+      return expr2tc();
+    }
     return constant_floatbv2tc(fp_api->get_fpbv(a));
 
   case type2t::struct_id:
