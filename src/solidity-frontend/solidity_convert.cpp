@@ -185,6 +185,8 @@ bool solidity_convertert::get_var_decl_stmt(
   return false;
 }
 
+// rule state-variable-declaration
+// rule variable-declaration-statement
 bool solidity_convertert::get_var_decl(
   const nlohmann::json &ast_node,
   exprt &new_expr)
@@ -213,22 +215,21 @@ bool solidity_convertert::get_var_decl(
       return true;
   }
 
+  bool is_state_var = ast_node["stateVariable"] == true;
+
   // 2. populate id and name
   std::string name, id;
-  if(ast_node["stateVariable"] == true)
+  if(is_state_var)
     get_state_var_decl_name(ast_node, name, id);
+  else if(current_functionDecl)
+  {
+    assert(current_functionName != "");
+    get_var_decl_name(ast_node, name, id);
+  }
   else
   {
-    if(!current_functionDecl)
-    {
-      assert(!"Error: ESBMC could not find the parent scope for this local variable");
-    }
-    else
-    {
-      // location variable in function body
-      assert(current_functionName != "");
-      get_var_decl_name(ast_node, name, id);
-    }
+    assert(
+      !"Error: ESBMC could not find the parent scope for this local variable");
   }
 
   // 3. populate location
@@ -244,18 +245,8 @@ bool solidity_convertert::get_var_decl(
   get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
 
   symbol.lvalue = true;
-  if(ast_node["stateVariable"] == true)
-  {
-    // for global variables
-    symbol.static_lifetime = true;
-    symbol.file_local = false;
-  }
-  else
-  {
-    // for local variables
-    symbol.static_lifetime = false;
-    symbol.file_local = true;
-  }
+  symbol.static_lifetime = is_state_var;
+  symbol.file_local = !is_state_var;
   symbol.is_extern = false;
 
   // For state var decl, we look for "value".
@@ -278,8 +269,11 @@ bool solidity_convertert::get_var_decl(
 
   if(has_init)
   {
+    nlohmann::json init_value =
+      is_state_var ? ast_node["value"] : ast_node["initialValue"];
+
     exprt val;
-    if(get_expr(ast_node["initialValue"], val))
+    if(get_expr(init_value, val))
       return true;
 
     solidity_gen_typecast(ns, val, t);
