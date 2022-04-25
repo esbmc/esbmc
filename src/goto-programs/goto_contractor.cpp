@@ -7,30 +7,18 @@
 void goto_contractort::get_constraints(goto_functionst goto_functions)
 {
   auto function = goto_functions.function_map.find("c:@F@main");
-  auto it = function->second.body.instructions.begin();
-  while(it != function->second.body.instructions.end())
-  {
-    if(it->is_assert())
-      constraint = create_constraint_from_expr2t(it->guard);
-
-    it++;
-  }
+  for(const auto &ins : function->second.body.instructions)
+    if(ins.is_assert())
+      constraint = create_constraint_from_expr2t(ins.guard);
 }
 
 void goto_contractort::get_intervals(goto_functionst goto_functions)
 {
   auto function = goto_functions.function_map.find("c:@F@main");
-  auto it = function->second.body.instructions.begin();
 
-  while(it != function->second.body.instructions.end())
-  {
-    if(it->is_assume())
-    {
-      parse_intervals(it->guard);
-    }
-
-    it++;
-  }
+  for(const auto &ins : function->second.body.instructions)
+    if(ins.is_assume())
+      parse_intervals(ins.guard);
 }
 
 void goto_contractort::parse_intervals(irep_container<expr2t> expr)
@@ -199,10 +187,10 @@ goto_contractort::create_contractors_from_expr2t(irep_container<expr2t>)
   return nullptr;
 }
 
-std::shared_ptr<ibex::NumConstraint>
+ibex::NumConstraint *
 goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
 {
-  std::shared_ptr<ibex::NumConstraint> c;
+  ibex::NumConstraint *c;
   if(
     is_arith_expr(expr) || is_constant_number(expr) || is_symbol2t(expr) ||
     is_notequal2t(expr))
@@ -214,7 +202,7 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
   std::shared_ptr<relation_data> rel;
   rel = std::dynamic_pointer_cast<relation_data>(expr);
 
-  std::shared_ptr<ibex::Function> f, g;
+  ibex::Function *f, *g;
   f = create_function_from_expr2t(rel->side_1);
   g = create_function_from_expr2t(rel->side_2);
   if(f == nullptr || g == nullptr)
@@ -222,21 +210,19 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
   switch(expr->expr_id)
   {
   case expr2t::expr_ids::greaterthanequal_id:
-    c =
-      std::make_shared<ibex::NumConstraint>(*vars, (*f)(*vars) >= (*g)(*vars));
+    c = new ibex::NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars));
     break;
   case expr2t::expr_ids::greaterthan_id:
-    c = std::make_shared<ibex::NumConstraint>(*vars, (*f)(*vars) > (*g)(*vars));
+    c = new ibex::NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
     break;
   case expr2t::expr_ids::lessthanequal_id:
-    c =
-      std::make_shared<ibex::NumConstraint>(*vars, (*f)(*vars) <= (*g)(*vars));
+    c = new ibex::NumConstraint(*vars, (*f)(*vars) <= (*g)(*vars));
     break;
   case expr2t::expr_ids::lessthan_id:
-    c = std::make_shared<ibex::NumConstraint>(*vars, (*f)(*vars) < (*g)(*vars));
+    c = new ibex::NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
     break;
   case expr2t::expr_ids::equality_id:
-    c = std::make_shared<ibex::NumConstraint>(*vars, (*f)(*vars) = (*g)(*vars));
+    c = new ibex::NumConstraint(*vars, (*f)(*vars) = (*g)(*vars));
     break;
   default:
     return nullptr;
@@ -244,11 +230,11 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
   return c;
 }
 
-std::shared_ptr<ibex::Function>
+ibex::Function *
 goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
 {
-  std::shared_ptr<ibex::Function> f = nullptr;
-  std::shared_ptr<ibex::Function> g, h;
+  ibex::Function *f = nullptr;
+  ibex::Function *g, *h;
 
   if(is_comp_expr(expr))
   {
@@ -260,34 +246,40 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   case expr2t::expr_ids::sub_id:
   case expr2t::expr_ids::mul_id:
   case expr2t::expr_ids::div_id:
-    g = create_function_from_expr2t(to_add2t(expr).side_1);
-    h = create_function_from_expr2t(to_add2t(expr).side_2);
+  {
+    std::shared_ptr<arith_2ops> arith_op;
+    if(!is_arith_expr(expr))
+      return nullptr;
+    arith_op = std::dynamic_pointer_cast<arith_2ops>(expr);
+    g = create_function_from_expr2t(arith_op->side_1);
+    h = create_function_from_expr2t(arith_op->side_2);
     if(g == nullptr || h == nullptr)
       return nullptr;
-    switch(expr->expr_id)
+    switch(arith_op->expr_id)
     {
     case expr2t::expr_ids::add_id:
-      f = std::make_shared<ibex::Function>(*vars, (*g)(*vars) + (*h)(*vars));
+      f = new ibex::Function(*vars, (*g)(*vars) + (*h)(*vars));
       break;
     case expr2t::expr_ids::sub_id:
-      f = std::make_shared<ibex::Function>(*vars, (*g)(*vars) - (*h)(*vars));
+      f = new ibex::Function(*vars, (*g)(*vars) - (*h)(*vars));
       break;
     case expr2t::expr_ids::mul_id:
-      f = std::make_shared<ibex::Function>(*vars, (*g)(*vars) * (*h)(*vars));
+      f = new ibex::Function(*vars, (*g)(*vars) * (*h)(*vars));
       break;
     case expr2t::expr_ids::div_id:
-      f = std::make_shared<ibex::Function>(*vars, (*g)(*vars) / (*h)(*vars));
+      f = new ibex::Function(*vars, (*g)(*vars) / (*h)(*vars));
       break;
     default:
       return nullptr;
     }
     break;
+  }
   case expr2t::expr_ids::symbol_id:
   {
     int index = create_variable_from_expr2t(expr);
     if(index != CspMap::NOT_FOUND)
     {
-      f = std::make_shared<ibex::Function>(*vars, (*vars)[index]);
+      f = new ibex::Function(*vars, (*vars)[index]);
     }
     else
     {
@@ -303,7 +295,7 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   {
     const ibex::ExprConstant &c =
       ibex::ExprConstant::new_scalar(to_constant_int2t(expr).value.to_int64());
-    f = std::make_shared<ibex::Function>(*vars, c);
+    f = new ibex::Function(*vars, c);
     break;
   }
   default:
