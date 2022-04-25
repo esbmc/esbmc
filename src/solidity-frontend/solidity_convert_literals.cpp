@@ -53,13 +53,16 @@ bool solidity_convertert::convert_bool_literal(
   if(the_value == "true")
   {
     dest = true_exprt();
-  }
-  else if(the_value == "false")
-  {
-    dest = false_exprt();
+    return false;
   }
 
-  return false;
+  if(the_value == "false")
+  {
+    dest = false_exprt();
+    return false;
+  }
+
+  return true;
 }
 
 // TODO: Character literal
