@@ -24,7 +24,6 @@
 #include <irep2/irep2.h>
 #include <util/type_byte_size.h>
 
-
 /**
  * This class is for mapping the variables with their names and intervals.
  * It includes functionalities such as search for a variable by name and add
@@ -34,8 +33,8 @@
 class CspMap
 {
 public:
-  static constexpr int MAX_VAR=10;
-  static constexpr int NOT_FOUND=-1;
+  static constexpr int MAX_VAR = 10;
+  static constexpr int NOT_FOUND = -1;
 
   ibex::IntervalVector intervals;
   std::string var_name[MAX_VAR];
@@ -45,10 +44,10 @@ public:
   CspMap()
   {
     intervals.resize(MAX_VAR);
-    for(int i=0;i<MAX_VAR;i++)
-    nondecreasing[i] = nonincreasing[i] = false;
+    for(int i = 0; i < MAX_VAR; i++)
+      nondecreasing[i] = nonincreasing[i] = false;
   }
-  int add_var(std::string name, symbol2t symbol)
+  int add_var(const std::string name, symbol2t symbol)
   {
     if(find(name) == NOT_FOUND && n < MAX_VAR)
     {
@@ -94,8 +93,6 @@ private:
 
 class goto_contractort : public goto_functions_algorithm
 {
-  // +constructor
-
 public:
   /**
    * This constructor will run the goto-contractor procedure.
@@ -155,7 +152,7 @@ private:
   /// map is where the variable references and intervals are stored.
   CspMap *map;
   /// constraint is where the constraint for CSP will be stored.
-  std::shared_ptr<ibex::NumConstraint> constraint;
+  ibex::NumConstraint *constraint;
 
   unsigned number_of_functions = 0;
 
@@ -203,10 +200,8 @@ private:
   insert_assume(goto_functionst goto_functions, ibex::IntervalVector vector);
 
   ibex::Ctc *create_contractors_from_expr2t(irep_container<expr2t>);
-  std::shared_ptr<ibex::NumConstraint>
-    create_constraint_from_expr2t(irep_container<expr2t>);
-  std::shared_ptr<ibex::Function>
-    create_function_from_expr2t(irep_container<expr2t>);
+  ibex::NumConstraint *create_constraint_from_expr2t(irep_container<expr2t>);
+  ibex::Function *create_function_from_expr2t(irep_container<expr2t>);
   int create_variable_from_expr2t(irep_container<expr2t>);
 
   void parse_intervals(irep_container<expr2t> expr);
