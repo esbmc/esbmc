@@ -579,7 +579,7 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
   {
     // When using --ir mode and --floatbv, we ignore the fp-to-fp typecasting
     // and the just encode the original fp term using real mode
-    return convert_terminal(cast.from);
+    return convert_ast(cast.from);
   }
 
   if(cast.type == cast.from->type)
