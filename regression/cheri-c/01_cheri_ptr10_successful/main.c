@@ -10,6 +10,6 @@ void* foo(void *a) {
 int main() {
   int a = nondet_int() % 10;
   int *__capability cap_ptr = cheri_ptr(&a, sizeof(a));
-  assert(*cap_ptr < 10);
+  assert(*cap_ptr >= 10 || *cap_ptr < 10);
   return 0;
 }
