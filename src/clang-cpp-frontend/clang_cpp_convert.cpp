@@ -548,6 +548,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if(ctr_call.getNumArgs() != 0)
     {
+      // TODO: currently only supporting zero-argument implicit default constructors.
       assert(
         !"come back and continue - got user defined ctor, need side effect?");
     }
