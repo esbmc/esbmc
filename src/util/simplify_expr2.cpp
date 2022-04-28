@@ -640,6 +640,43 @@ expr2tc add2t::do_simplify() const
       return new_operand;
   }
 
+  // X+0 -> X
+  // 0+X -> X
+  
+  auto simplify_5 = [](const expr2tc e, const expr2tc f) -> expr2tc {
+    if(is_constant_int2t(e) && is_constant_int2t(f))
+    {
+      if(to_constant_int2t(e).value == 0)
+        return e;
+      if(to_constant_int2t(f).value == 0)
+        return f;
+    }
+    return expr2tc();
+  };
+
+  // X + 0 -> X
+  if(is_add2t(side_1) && is_constant_int2t(side_2) && to_constant_int2t(side_2).value == 0)
+  {
+    auto sidecheck_1 = to_add2t(side_1).side_1;
+    auto sidecheck_2 = to_add2t(side_1).side_2;
+    auto new_operand = simplify_5(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
+  }
+  
+  // 0 + X -> X
+
+  if(is_add2t(side_2) && is_constant_int2t(side_1) && to_constant_int2t(side_1).value == 0)
+  {
+    auto sidecheck_1 = to_add2t(side_2).side_1;
+    auto sidecheck_2 = to_add2t(side_2).side_2;
+    auto new_operand = simplify_5(sidecheck_1, sidecheck_2);
+    if(new_operand)
+      return new_operand;
+  }
+
+
+
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if(!is_nil_expr(res))
     return res;
