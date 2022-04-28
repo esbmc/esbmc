@@ -4,6 +4,15 @@
 
 #include <goto-programs/goto_contractor.h>
 
+void goto_contractor(
+  goto_functionst &goto_functions,
+  const messaget &message_handler)
+{
+  goto_contractort gotoContractort( goto_functions, message_handler);
+
+  goto_functions.update();
+}
+
 void goto_contractort::get_constraints(goto_functionst goto_functions)
 {
   auto function = goto_functions.function_map.find("c:@F@main");
@@ -24,7 +33,7 @@ void goto_contractort::get_intervals(goto_functionst goto_functions)
 void goto_contractort::parse_intervals(irep_container<expr2t> expr)
 {
   symbol2tc symbol;
-  long value;
+  BigInt value;
 
   expr = get_base_object(expr);
 
@@ -62,30 +71,29 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
 
   value = to_constant_int2t(side2).as_long() * (neg ? -1 : 1);
 
-  int index = map->find(symbol->get_symbol_name());
-  if(index == CspMap::NOT_FOUND)
+  //int index = map->find(symbol->get_symbol_name());
+  if(map.find(symbol->get_symbol_name()) == CspMap::NOT_FOUND)
     return;
   switch(expr->expr_id)
   {
   case expr2t::expr_ids::greaterthan_id:
   case expr2t::expr_ids::greaterthanequal_id:
-    map->update_lb_interval(value, index);
+    map.update_lb_interval(value.to_int64(), symbol->get_symbol_name());
     break;
   case expr2t::expr_ids::lessthan_id:
   case expr2t::expr_ids::lessthanequal_id:
-    map->update_ub_interval(value, index);
+    map.update_ub_interval(value.to_int64(), symbol->get_symbol_name());
     break;
   case expr2t::expr_ids::equality_id:
-    map->update_lb_interval(value, index);
-    map->update_ub_interval(value, index);
+    map.update_lb_interval(value.to_int64(), symbol->get_symbol_name());
+    map.update_ub_interval(value.to_int64(), symbol->get_symbol_name());
     break;
   default:;
   }
 }
 
 void goto_contractort::insert_assume(
-  goto_functionst goto_functions,
-  ibex::IntervalVector new_intervals)
+  goto_functionst goto_functions)
 {
 
   message_handler.status("Inserting assumes.. ");
@@ -98,17 +106,16 @@ void goto_contractort::insert_assume(
 
   goto_programt dest(message_handler);
 
-  auto it = goto_functions.function_map.find("c:@F@main");
-  auto goto_function = it->second;
+  auto goto_function = goto_functions.function_map.find("c:@F@main")->second;
 
-  for(size_t i = 0; i < map->size(); i++)
+
+  for(auto const &var : map.var_map)
   {
-    symbol2tc X = map->symbols[i];
+    symbol2tc X = var.second.getSymbol();
     if(
-      isfinite(new_intervals[i].lb()) &&
-      map->intervals[i].lb() != new_intervals[i].lb())
+      var.second.isIntervalChanged())
     {
-      auto lb = create_value_expr(new_intervals[i].lb(), int_type2());
+      auto lb = create_value_expr(var.second.getInterval().lb(), int_type2());
       auto cond = create_greaterthanequal_relation(X, lb);
       goto_programt tmp_e(message_handler);
       goto_programt::targett e = tmp_e.add_instruction(ASSUME);
@@ -116,19 +123,15 @@ void goto_contractort::insert_assume(
       e->guard = cond;
       e->location = loop_exit->location;
       goto_function.body.destructive_insert(loop_exit, tmp_e);
-    }
-    if(
-      isfinite(new_intervals[i].ub()) &&
-      map->intervals[i].ub() != new_intervals[i].ub())
-    {
-      auto ub = create_value_expr(new_intervals[i].ub(), int_type2());
-      auto cond = create_lessthanequal_relation(X, ub);
-      goto_programt tmp_e(message_handler);
-      goto_programt::targett e = tmp_e.add_instruction(ASSUME);
-      e->inductive_step_instruction = false;
-      e->guard = cond;
-      e->location = loop_exit->location;
-      goto_function.body.destructive_insert(loop_exit, tmp_e);
+
+      auto ub = create_value_expr(var.second.getInterval().ub(), int_type2());
+      auto cond2 = create_lessthanequal_relation(X, ub);
+      goto_programt tmp_e2(message_handler);
+      goto_programt::targett e2 = tmp_e2.add_instruction(ASSUME);
+      e2->inductive_step_instruction = false;
+      e2->guard = cond2;
+      e2->location = loop_exit->location;
+      goto_function.body.destructive_insert(loop_exit, tmp_e2);
     }
   }
 }
@@ -149,13 +152,15 @@ ibex::IntervalVector goto_contractort::contractor()
   ibex::CtcFwdBwd c_out(c);
   ibex::CtcFwdBwd c_in(c2);
 
-  domains = map->intervals;
+  domains = map.create_interval_vector();
+
   oss << "\n\t- Domains (before): " << domains;
   auto X = domains;
 
   c_in.contract(X);
 
   oss << "\n\t- Domains (after): " << X;
+  map.update_intervals(X);
 
   message_handler.status(oss.str());
 
@@ -181,11 +186,6 @@ ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
   return ibex::GEQ;
 }
 
-ibex::Ctc *
-goto_contractort::create_contractors_from_expr2t(irep_container<expr2t>)
-{
-  return nullptr;
-}
 
 ibex::NumConstraint *
 goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
@@ -233,7 +233,7 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
 ibex::Function *
 goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
 {
-  ibex::Function *f = nullptr;
+  ibex::Function *f;
   ibex::Function *g, *h;
 
   if(is_comp_expr(expr))
@@ -307,11 +307,11 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
 
 int goto_contractort::create_variable_from_expr2t(irep_container<expr2t> expr)
 {
-  std::string var_name = to_symbol2t(expr).get_symbol_name().c_str();
-  int index = map->find(var_name);
+  std::string var_name = to_symbol2t(expr).get_symbol_name();
+  int index = map.find(var_name);
   if(index == CspMap::NOT_FOUND)
   {
-    index = map->add_var(var_name, to_symbol2t(expr));
+    index = map.add_var(var_name, to_symbol2t(expr));
   }
   return index;
 }
@@ -346,7 +346,7 @@ void goto_contractort::monotonicity_check()
   {
     if(it->is_assign())
     {
-      auto index = map->find(
+      auto index = map.find(
         to_symbol2t(to_code_assign2t(it->code).target).get_symbol_name());
       if(index == CspMap::NOT_FOUND)
       {
@@ -360,11 +360,11 @@ void goto_contractort::monotonicity_check()
       {
       case expr2t::expr_ids::add_id:
       case expr2t::expr_ids::mul_id:
-        map->nondecreasing[index] = true;
+        map.decreasing[index] = true;
         break;
       case expr2t::expr_ids::sub_id:
       case expr2t::expr_ids::div_id:
-        map->nonincreasing[index] = true;
+        map.increasing[index] = true;
         break;
       default:
         break;
@@ -372,4 +372,35 @@ void goto_contractort::monotonicity_check()
     }
     it++;
   }
+}
+const ibex::Interval &vart::getInterval() const
+{
+  return interval;
+}
+int vart::getIndex() const
+{
+  return index;
+}
+vart::vart(const string &varName, const symbol2tc &symbol, const size_t &index)
+{
+  this->var_name = varName;
+  this->symbol = symbol;
+  this->index = index;
+  interval_changed = false;
+}
+void vart::setInterval(const ibex::Interval &interval)
+{
+  this->interval = interval;
+}
+bool vart::isIntervalChanged() const
+{
+  return interval_changed;
+}
+void vart::setIntervalChanged(bool intervalChanged)
+{
+  interval_changed = intervalChanged;
+}
+const symbol2tc &vart::getSymbol() const
+{
+  return symbol;
 }

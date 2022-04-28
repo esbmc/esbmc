@@ -1609,7 +1609,7 @@ bool esbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("goto-contractor"))
     {
 #ifdef ENABLE_GOTO_CONTRACTOR
-      goto_contractort(goto_functions, msg);
+      goto_contractor(goto_functions, msg);
 #else
       msg.error(
         "Current build does not support contractors. If ibex is installed, add "

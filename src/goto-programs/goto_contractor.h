@@ -24,6 +24,30 @@
 #include <irep2/irep2.h>
 #include <util/type_byte_size.h>
 
+void goto_contractor(
+  goto_functionst &goto_functions,
+  const messaget &message_handler);
+
+class vart
+{
+private:
+  ibex::Interval interval;
+  std::string var_name;
+  symbol2tc symbol;
+  size_t index;
+  bool interval_changed;
+
+public:
+  int getIndex() const;
+
+public:
+  vart(const string &varName, const symbol2tc &symbol, const size_t &index);
+  const ibex::Interval &getInterval() const;
+  void setInterval(const ibex::Interval &interval);
+  bool isIntervalChanged() const;
+  void setIntervalChanged(bool intervalChanged);
+  const symbol2tc &getSymbol() const;
+};
 /**
  * This class is for mapping the variables with their names and intervals.
  * It includes functionalities such as search for a variable by name and add
@@ -36,59 +60,77 @@ public:
   static constexpr int MAX_VAR = 10;
   static constexpr int NOT_FOUND = -1;
 
-  ibex::IntervalVector intervals;
-  std::string var_name[MAX_VAR];
-  symbol2tc symbols[MAX_VAR];
-  bool nondecreasing[MAX_VAR], nonincreasing[MAX_VAR];
+  bool decreasing[MAX_VAR], increasing[MAX_VAR];
+
+  std::map<std::string, vart> var_map;
 
   CspMap()
   {
-    intervals.resize(MAX_VAR);
     for(int i = 0; i < MAX_VAR; i++)
-      nondecreasing[i] = nonincreasing[i] = false;
+      decreasing[i] = increasing[i] = false;
   }
-  int add_var(const std::string name, symbol2t symbol)
+  size_t add_var(const std::string &name, const symbol2t &symbol)
   {
-    if(find(name) == NOT_FOUND && n < MAX_VAR)
+    auto find = var_map.find(name);
+    if(find == var_map.end())
     {
-      symbols[n] = symbol;
-      var_name[n] = name;
+      vart var(name, symbol, n);
+      var_map.insert(std::make_pair(name, var));
 
       //TODO: set initial intervals based on type and width.
 
       n++;
       return n - 1;
     }
-    return NOT_FOUND;
+    return find->second.getIndex();
   }
-  void add_interval(double lb, double ub, int index)
-  {
-    intervals[index] = ibex::Interval(lb, ub);
-  }
-  void update_lb_interval(double lb, int index)
-  {
-    add_interval(lb, intervals[index].ub(), index);
-  }
-  void update_ub_interval(double ub, int index)
-  {
-    add_interval(intervals[index].lb(), ub, index);
-  }
-  int find(std::string name)
-  {
-    for(size_t i = 0; i < n; i++)
-      if(var_name[i] == name)
-        return i;
 
-    return NOT_FOUND;
+  void update_lb_interval(double lb, const std::string &name)
+  {
+    auto find = var_map.find(name);
+    ibex::Interval X(lb, find->second.getInterval().ub());
+    find->second.setInterval(X);
   }
-  size_t size()
+  void update_ub_interval(double ub, const std::string &name)
+  {
+    auto find = var_map.find(name);
+    ibex::Interval X(find->second.getInterval().lb(), ub);
+    find->second.setInterval(X);
+  }
+  int find(const std::string &name)
+  {
+    auto find = var_map.find(name);
+    if(find == var_map.end())
+      return NOT_FOUND;
+    return find->second.getIndex();
+  }
+  size_t size() const
   {
     return n;
   }
 
+  ibex::IntervalVector create_interval_vector()
+  {
+    ibex::IntervalVector X(var_map.size());
+    for(auto const &var : var_map)
+      X[var.second.getIndex()] = var.second.getInterval();
+    return X;
+  }
+
+  void update_intervals(ibex::IntervalVector vector)
+  {
+    for(auto &var : var_map)
+    {
+      if(var.second.getInterval() != vector[var.second.getIndex()])
+      {
+        var.second.setInterval(vector[var.second.getIndex()]);
+        var.second.setIntervalChanged(true);
+      }
+    }
+  }
+
 private:
   size_t n = 0;
-  ibex::Variable *x;
 };
 
 class goto_contractort : public goto_functions_algorithm
@@ -111,9 +153,8 @@ public:
   {
     message_handler = _message_handler;
     initialize_main_function_loops();
-    if(function_loops.size())
+    if(!function_loops.empty())
     {
-      map = new CspMap();
       vars = new ibex::Variable(CspMap::MAX_VAR);
       message_handler.status(
         "1/5 - Parsing asserts to create CSP Constraints.");
@@ -126,21 +167,16 @@ public:
       }
       message_handler.status("2/5 - Checking if loop is monotone.");
       monotonicity_check();
+
       message_handler.status(
         "3/5 - Parsing assumes to set values for variables intervals.");
       get_intervals(_goto_functions);
+
       message_handler.status("4/5 - Applying contractor.");
       auto new_intervals = contractor();
-      if(new_intervals == map->intervals)
-      {
-        message_handler.status(
-          "5/5 - Intervals remained unchanged. No assumes will be inserted");
-      }
-      else
-      {
-        message_handler.status("5/5 - Inserting assumes.");
-        insert_assume(_goto_functions, new_intervals);
-      }
+
+      message_handler.status("5/5 - Inserting assumes.");
+      insert_assume(_goto_functions);
     }
   }
 
@@ -148,9 +184,8 @@ private:
   ibex::IntervalVector domains;
   ///vars variable references to be used in Ibex formulas
   ibex::Variable *vars;
-  ibex::Ctc *ctc;
   /// map is where the variable references and intervals are stored.
-  CspMap *map;
+  CspMap map;
   /// constraint is where the constraint for CSP will be stored.
   ibex::NumConstraint *constraint;
 
@@ -197,9 +232,8 @@ private:
    * @param vector result from the contractor.
    */
   void
-  insert_assume(goto_functionst goto_functions, ibex::IntervalVector vector);
+  insert_assume(goto_functionst goto_functions);
 
-  ibex::Ctc *create_contractors_from_expr2t(irep_container<expr2t>);
   ibex::NumConstraint *create_constraint_from_expr2t(irep_container<expr2t>);
   ibex::Function *create_function_from_expr2t(irep_container<expr2t>);
   int create_variable_from_expr2t(irep_container<expr2t>);
@@ -214,7 +248,7 @@ private:
  * from frama-c eva plugin
  * @param functionst
  */
-  void monotonicity_check(void);
+  void monotonicity_check();
 };
 
 #endif //ESBMC_GOTO_CONTRACTOR_H
