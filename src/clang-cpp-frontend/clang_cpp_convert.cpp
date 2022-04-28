@@ -540,6 +540,30 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXConstructExprClass:
+  {
+    // Reference to a declared construstor
+    const clang::CXXConstructExpr &ctr_call =
+      static_cast<const clang::CXXConstructExpr &>(stmt);
+
+    if(ctr_call.getNumArgs() != 0)
+    {
+      // TODO: currently only supporting zero-argument implicit default constructors.
+      assert(
+        !"come back and continue - got user defined ctor, need side effect?");
+    }
+    else
+    {
+      // no additional annotation for zero-arg constructor
+      typet t;
+      if(get_type(ctr_call.getType(), t))
+        return true;
+      new_expr = gen_zero(t);
+    }
+
+    break;
+  }
+
   default:
     return clang_c_convertert::get_expr(stmt, new_expr);
   }
