@@ -427,7 +427,7 @@ expr2tc add2t::do_simplify() const
   auto simplify_1 = [](const expr2tc e, const expr2tc f) -> expr2tc {
     auto sidecheck = to_add2t(e).side_2;
     auto sidecheck2 = to_add2t(e).side_1;
-    if(is_constant_int2t(sidecheck) == 1)
+    if(to_constant_int2t(sidecheck).value == 1)
     {
       auto B = to_bitnot2t(f).value;
       auto new_operand = sub2tc(e->type, sidecheck2, B);
@@ -499,7 +499,7 @@ expr2tc add2t::do_simplify() const
     if(new_operand)
       return new_operand;
   }
-  if(is_add2t(side_1) && is_constant_int2t(side_2) == 1)
+  if(is_add2t(side_1) && is_constant_int2t(side_2) && to_constant_int2t(side_2).value == 1)
   {
     auto sidecheck_1 = to_add2t(side_1).side_1;
     auto sidecheck_2 = to_add2t(side_1).side_2;
