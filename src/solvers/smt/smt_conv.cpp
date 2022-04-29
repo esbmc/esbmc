@@ -2724,6 +2724,13 @@ expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
   default:;
   }
 
+  if(options.get_bool_option("non-supported-models-as-zero"))
+  {
+    msg.warning(fmt::format(
+      "Can't generate one for type {}. Returning zero", get_type_id(type)));
+    return gen_zero(type);
+  }
+
   msg.error(fmt::format("Can't generate one for type {}", get_type_id(type)));
   abort();
 }
