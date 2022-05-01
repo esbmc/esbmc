@@ -675,8 +675,6 @@ expr2tc add2t::do_simplify() const
       return new_operand;
   }
 
-
-
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if(!is_nil_expr(res))
     return res;
