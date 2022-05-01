@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--function state_var_init --contract contract.sol
+^VERIFICATION FAILED$

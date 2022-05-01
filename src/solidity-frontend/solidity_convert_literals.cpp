@@ -5,6 +5,7 @@
 #include <util/expr_util.h>
 #include <util/ieee_float.h>
 #include <util/string_constant.h>
+#include <util/std_expr.h>
 
 // Integer literal
 bool solidity_convertert::convert_integer_literal(
@@ -36,6 +37,32 @@ bool solidity_convertert::convert_integer_literal(
 
   dest.swap(the_val);
   return false;
+}
+
+bool solidity_convertert::convert_bool_literal(
+  const nlohmann::json &bool_literal,
+  std::string the_value,
+  exprt &dest)
+{
+  typet type;
+  if(get_type_description(bool_literal, type))
+    return true;
+
+  assert(type.is_bool());
+
+  if(the_value == "true")
+  {
+    dest = true_exprt();
+    return false;
+  }
+
+  if(the_value == "false")
+  {
+    dest = false_exprt();
+    return false;
+  }
+
+  return true;
 }
 
 // TODO: Character literal
