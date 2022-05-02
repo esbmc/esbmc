@@ -499,7 +499,9 @@ expr2tc add2t::do_simplify() const
     if(new_operand)
       return new_operand;
   }
-  if(is_add2t(side_1) && is_constant_int2t(side_2) && to_constant_int2t(side_2).value == 1)
+  if(
+    is_add2t(side_1) && is_constant_int2t(side_2) &&
+    to_constant_int2t(side_2).value == 1)
   {
     auto sidecheck_1 = to_add2t(side_1).side_1;
     auto sidecheck_2 = to_add2t(side_1).side_2;
@@ -642,7 +644,7 @@ expr2tc add2t::do_simplify() const
 
   // X+0 -> X
   // 0+X -> X
-  
+
   auto simplify_5 = [](const expr2tc e, const expr2tc f) -> expr2tc {
     if(is_constant_int2t(e) && is_constant_int2t(f))
     {
@@ -655,7 +657,9 @@ expr2tc add2t::do_simplify() const
   };
 
   // X + 0 -> X
-  if(is_add2t(side_1) && is_constant_int2t(side_2) && to_constant_int2t(side_2).value == 0)
+  if(
+    is_add2t(side_1) && is_constant_int2t(side_2) &&
+    to_constant_int2t(side_2).value == 0)
   {
     auto sidecheck_1 = to_add2t(side_1).side_1;
     auto sidecheck_2 = to_add2t(side_1).side_2;
@@ -663,10 +667,12 @@ expr2tc add2t::do_simplify() const
     if(new_operand)
       return new_operand;
   }
-  
+
   // 0 + X -> X
 
-  if(is_add2t(side_2) && is_constant_int2t(side_1) && to_constant_int2t(side_1).value == 0)
+  if(
+    is_add2t(side_2) && is_constant_int2t(side_1) &&
+    to_constant_int2t(side_1).value == 0)
   {
     auto sidecheck_1 = to_add2t(side_2).side_1;
     auto sidecheck_2 = to_add2t(side_2).side_2;
