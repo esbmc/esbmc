@@ -30,13 +30,6 @@ public:
   {
   }
 
-  ~esbmc_parseoptionst()
-  {
-    close_file(out);
-    if(out != err)
-      close_file(err);
-  }
-
 protected:
   virtual void get_command_line_options(optionst &options);
   virtual int do_bmc(bmct &bmc);
@@ -81,18 +74,6 @@ protected:
   void preprocessing();
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
-
-  FILE *out = stdout;
-  FILE *err = stderr;
-
-private:
-  void close_file(FILE *f)
-  {
-    if(f != stdout && f != stderr)
-    {
-      fclose(f);
-    }
-  }
 
 public:
   goto_functionst goto_functions;

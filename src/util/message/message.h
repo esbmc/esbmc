@@ -18,10 +18,10 @@ Maintainers:
 /**
  * @brief messaget is used to send messages that
  * can be implemented by any kind of frontend
- *
+ * 
  * It may be from colorful output to full GUI modules,
  * this can also hold a number of of message_handlers
- *
+ * 
  */
 class messaget
 {
@@ -30,18 +30,18 @@ public:
 
   /**
    * @brief Prints an error message
-   *
+   * 
    * @param message string to be printed
    * @param location location where the message happened
    */
   virtual void
   error(const std::string &message, const std::string location = "") const
   {
-    print(VerbosityLevel::Error, "### ERROR: \n" + message, location);
+    print(VerbosityLevel::Error, message, location);
   }
   /**
    * @brief Prints a warning message
-   *
+   * 
    * @param message string to be printed
    * @param location location where the message happened
    */
@@ -52,7 +52,7 @@ public:
   }
   /**
    * @brief Prints a result message
-   *
+   * 
    * @param message string to be printed
    * @param location location where the message happened
    */
@@ -63,7 +63,7 @@ public:
   }
   /**
    * @brief Prints a progress message
-   *
+   * 
    * @param message string to be printed
    * @param progress: float from 0-1 that represents the current progress of the latest task. (-1 means infinite)
    * @param location location where the message happened
@@ -80,7 +80,7 @@ public:
 
   /**
    * @brief Updates progress of specific task
-   *
+   * 
    * @param index of task
    * @param progress new progress status
    */
@@ -91,7 +91,7 @@ public:
   }
   /**
    * @brief Prints a status message
-   *
+   * 
    * @param message string to be printed
    * @param location location where the message happened
    */
@@ -102,7 +102,7 @@ public:
   }
   /**
    * @brief Prints a debug message
-   *
+   * 
    * @param message string to be printed
    * @param location location where the message happened
    */
@@ -114,7 +114,7 @@ public:
 
   /**
    * @brief Set the verbosity level
-   *
+   * 
    * @param _verbosity new verbosity leveel
    */
   virtual void set_verbosity(VerbosityLevel _verbosity)
@@ -124,7 +124,7 @@ public:
 
   /**
    * @brief Get the verbosity level
-   *
+   * 
    * @return VerbosityLevel level
    */
   virtual VerbosityLevel get_verbosity() const
@@ -171,7 +171,7 @@ public:
 
   /**
    * @brief Append a message_handler to be used
-   *
+   * 
    * @param handler to be appended
    */
   void add_message_handler(std::shared_ptr<message_handlert> &handler)

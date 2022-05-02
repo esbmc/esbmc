@@ -968,9 +968,8 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
 
   unsigned int globals = 0;
 
-  expr->foreach_operand([this, &globals](const expr2tc &e) {
-    globals += get_expr_number_globals(e);
-  });
+  expr->foreach_operand([this, &globals](const expr2tc &e)
+                        { globals += get_expr_number_globals(e); });
 
   return globals;
 }

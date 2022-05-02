@@ -2,7 +2,6 @@
 #define UTIL_IREP2_UTILS_H_
 
 #include <util/c_types.h>
-#include <util/message/default_message.h>
 #include <util/message/format.h>
 #include <irep2/irep2_expr.h>
 #include <util/migrate.h>
@@ -267,17 +266,6 @@ inline expr2tc conjunction(std::vector<expr2tc> cs)
   return res;
 }
 
-inline expr2tc gen_nondet(const type2tc &type)
-{
-  return sideeffect2tc(
-    type,
-    expr2tc(),
-    expr2tc(),
-    std::vector<expr2tc>(),
-    type2tc(),
-    sideeffect2t::nondet);
-}
-
 inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
 {
   switch(type->type_id)
@@ -332,19 +320,17 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
   {
     auto union_type = to_union_type(type);
 
-    assert(!union_type.members.empty());
-    std::vector<expr2tc> members = {
-      gen_zero(union_type.members.front(), array_as_array_of)};
+    std::vector<expr2tc> members;
+    for(auto const &member_type : union_type.members)
+      members.push_back(gen_zero(member_type, array_as_array_of));
 
-    return constant_union2tc(type, union_type.member_names.front(), members);
+    return constant_union2tc(type, members);
   }
 
   default:
     break;
   }
 
-  default_message msg;
-  msg.error(fmt::format("Can't generate zero for type {}", get_type_id(type)));
   abort();
 }
 
@@ -377,8 +363,9 @@ inline expr2tc gen_one(const type2tc &type)
     break;
   }
 
-  default_message msg;
-  msg.error(fmt::format("Can't generate one for type {}", get_type_id(type)));
+  assert(
+    0 &&
+    fmt::format("Can't generate one for type {}", get_type_id(type)).c_str());
   abort();
 }
 

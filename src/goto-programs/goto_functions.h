@@ -29,8 +29,9 @@ Date: June 2003
 class goto_functiont
 {
 public:
-  goto_programt body;
-  code_typet type;
+  goto_programt
+    body;          // body of the function, which contains a list of functions
+  code_typet type; //type of the function
   bool body_available;
 
   // The set of functions that have been inlined into this one. Necessary to
@@ -54,7 +55,8 @@ class goto_functionst
 {
 public:
   typedef std::map<irep_idt, goto_functiont> function_mapt;
-  function_mapt function_map;
+  function_mapt
+    function_map; //map between intermediate representation and goto function format
 
   ~goto_functionst() = default;
   void clear()

@@ -159,12 +159,8 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     "-D__builtin_umulll_overflow=__ESBMC_overflow_umulll");
   compiler_args.emplace_back(
     "-D__sync_fetch_and_add=__ESBMC_sync_fetch_and_add");
-  compiler_args.emplace_back(
-    "-D__builtin_constant_p=__ESBMC_builtin_constant_p");
 
   compiler_args.emplace_back("-D__builtin_memcpy=memcpy");
-
-  compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
 
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
@@ -314,10 +310,6 @@ _Bool __ESBMC_is_dynamic[1];
 __attribute__((annotate("__ESBMC_inf_size")))
 unsigned __ESBMC_alloc_size[1];
 
-// Get object size
-unsigned __ESBMC_get_object_size(const void *);
-
-
 _Bool __ESBMC_is_little_endian();
 
 int __ESBMC_rounding_mode = 0;
@@ -382,7 +374,6 @@ _Bool __ESBMC_overflow_umul(unsigned int, unsigned int, unsigned int *);
 _Bool __ESBMC_overflow_umull(unsigned long int, unsigned long int, unsigned long int *);
 _Bool __ESBMC_overflow_umulll(unsigned long long int, unsigned long long int, unsigned long long int *);
 int __ESBMC_sync_fetch_and_add(int*, int);
-int __ESBMC_builtin_constant_p(int);
 
 // This is causing problems when using the C++ frontend. It needs to be rewritten
 #define __atomic_load_n(PTR, MO)                                               \

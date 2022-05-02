@@ -27,10 +27,6 @@
 #define NULL 0
 #endif
 
-/* Forward declaration required because the type is used in pthread function
- * parameters below. */
-struct timespec;
-
 typedef int32_t __clockid_t;
 
 typedef unsigned long int pthread_t;

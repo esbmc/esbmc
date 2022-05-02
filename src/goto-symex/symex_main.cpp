@@ -461,10 +461,6 @@ void goto_symext::run_intrinsic(
   {
     intrinsic_memset(art, func_call);
   }
-  else if(symname == "c:@F@__ESBMC_get_object_size")
-  {
-    intrinsic_get_object_size(func_call, art);
-  }
   else if(has_prefix(symname, "c:@F@__ESBMC_overflow"))
   {
     bool is_mult = has_prefix(symname, "c:@F@__ESBMC_overflow_smul") ||
@@ -542,21 +538,6 @@ void goto_symext::run_intrinsic(
         ? gen_true_expr()
         : gen_false_expr();
     symex_assign(code_assign2tc(func_call.ret, is_little_endian));
-  }
-  else if(symname == "c:@F@__ESBMC_builtin_constant_p")
-  {
-    assert(
-      func_call.operands.size() == 1 &&
-      "Wrong __ESBMC_builtin_constant_p signature");
-    auto &ex_state = art.get_cur_state();
-    if(ex_state.cur_state->guard.is_false())
-      return;
-
-    expr2tc op1 = func_call.operands[0];
-    cur_state->rename(op1);
-    symex_assign(code_assign2tc(
-      func_call.ret,
-      is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
   }
   else if(has_prefix(symname, "c:@F@__ESBMC_sync_fetch_and_add"))
   {

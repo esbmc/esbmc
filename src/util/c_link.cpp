@@ -16,8 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/namespace.h>
 #include <util/typecheck.h>
 
-namespace
-{
 class c_linkt : public typecheckt
 {
 public:
@@ -99,6 +97,12 @@ void c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
     {
       // replace old symbol
       in_context.type = new_symbol.type;
+    }
+    else if(
+      in_context.type.id() == "struct" &&
+      new_symbol.type.id() == "incomplete_struct")
+    {
+      // ignore
     }
     else if(
       in_context.type.id() == "struct" &&
@@ -326,7 +330,6 @@ void c_linkt::move(symbolt &new_symbol)
   if(context.move(new_symbol, new_symbol_ptr))
     duplicate(*new_symbol_ptr, new_symbol);
 }
-} /* end anonymous namespace */
 
 bool c_link(
   contextt &context,

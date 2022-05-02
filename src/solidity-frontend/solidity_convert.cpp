@@ -185,8 +185,6 @@ bool solidity_convertert::get_var_decl_stmt(
   return false;
 }
 
-// rule state-variable-declaration
-// rule variable-declaration-statement
 bool solidity_convertert::get_var_decl(
   const nlohmann::json &ast_node,
   exprt &new_expr)
@@ -215,21 +213,22 @@ bool solidity_convertert::get_var_decl(
       return true;
   }
 
-  bool is_state_var = ast_node["stateVariable"] == true;
-
   // 2. populate id and name
   std::string name, id;
-  if(is_state_var)
+  if(ast_node["stateVariable"] == true)
     get_state_var_decl_name(ast_node, name, id);
-  else if(current_functionDecl)
-  {
-    assert(current_functionName != "");
-    get_var_decl_name(ast_node, name, id);
-  }
   else
   {
-    assert(
-      !"Error: ESBMC could not find the parent scope for this local variable");
+    if(!current_functionDecl)
+    {
+      assert(!"Error: ESBMC could not find the parent scope for this local variable");
+    }
+    else
+    {
+      // location variable in function body
+      assert(current_functionName != "");
+      get_var_decl_name(ast_node, name, id);
+    }
   }
 
   // 3. populate location
@@ -245,8 +244,18 @@ bool solidity_convertert::get_var_decl(
   get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
 
   symbol.lvalue = true;
-  symbol.static_lifetime = is_state_var;
-  symbol.file_local = !is_state_var;
+  if(ast_node["stateVariable"] == true)
+  {
+    // for global variables
+    symbol.static_lifetime = true;
+    symbol.file_local = false;
+  }
+  else
+  {
+    // for local variables
+    symbol.static_lifetime = false;
+    symbol.file_local = true;
+  }
   symbol.is_extern = false;
 
   // For state var decl, we look for "value".
@@ -269,11 +278,8 @@ bool solidity_convertert::get_var_decl(
 
   if(has_init)
   {
-    nlohmann::json init_value =
-      is_state_var ? ast_node["value"] : ast_node["initialValue"];
-
     exprt val;
-    if(get_expr(init_value, val))
+    if(get_expr(ast_node["initialValue"], val))
       return true;
 
     solidity_gen_typecast(ns, val, t);
@@ -681,25 +687,6 @@ bool solidity_convertert::get_statement(
     new_expr = if_expr;
     break;
   }
-  case SolidityGrammar::StatementT::WhileStatement:
-  {
-    exprt cond = true_exprt();
-    if(get_expr(stmt["condition"], cond))
-      return true;
-
-    codet body = codet();
-    if(get_block(stmt["body"], body))
-      return true;
-
-    convert_expression_to_code(body);
-
-    code_whilet code_while;
-    code_while.cond() = cond;
-    code_while.body() = body;
-
-    new_expr = code_while;
-    break;
-  }
   default:
   {
     assert(!"Unimplemented type in rule statement");
@@ -782,27 +769,10 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
   {
     // make a type-name json for integer literal conversion
     std::string the_value = expr["value"].get<std::string>();
-    const nlohmann::json &literal = expr["typeDescriptions"];
-    SolidityGrammar::ElementaryTypeNameT type_name =
-      SolidityGrammar::get_elementary_type_name_t(literal);
+    const nlohmann::json &integer_literal = expr["typeDescriptions"];
 
-    switch(type_name)
-    {
-    case SolidityGrammar::ElementaryTypeNameT::UINT8:
-    {
-      if(convert_integer_literal(literal, the_value, new_expr))
-        return true;
-      break;
-    }
-    case SolidityGrammar::ElementaryTypeNameT::BOOL:
-    {
-      if(convert_bool_literal(literal, the_value, new_expr))
-        return true;
-      break;
-    }
-    default:
-      assert(!"Literal not implemented");
-    }
+    if(convert_integer_literal(integer_literal, the_value, new_expr))
+      return true;
 
     break;
   }

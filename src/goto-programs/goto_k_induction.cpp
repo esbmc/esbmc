@@ -208,7 +208,13 @@ void goto_k_inductiont::make_nondet_assign(
       config.options.get_bool_option("add-symex-value-sets") &&
       is_pointer_type(lhs))
       continue;
-    expr2tc rhs = gen_nondet(lhs->type);
+    expr2tc rhs = sideeffect2tc(
+      lhs->type,
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::nondet);
 
     goto_programt::targett t = dest.add_instruction(ASSIGN);
     t->inductive_step_instruction = true;

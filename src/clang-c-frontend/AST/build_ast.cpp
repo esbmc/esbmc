@@ -28,9 +28,9 @@ static clang::driver::Driver *newDriver(
   llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> VFS)
 {
   clang::driver::Driver *CompilerDriver;
-/* Clang's API changed between version 11 and 12 in that it now requires a name
+/* Clang's API changed between version 11 and 13 in that it now requires a name
  * to construct a Driver. */
-#if CLANG_VERSION_MAJOR >= 12
+#if CLANG_VERSION_MAJOR >= 13
   CompilerDriver = new clang::driver::Driver(
     BinaryName,
     llvm::sys::getDefaultTargetTriple(),

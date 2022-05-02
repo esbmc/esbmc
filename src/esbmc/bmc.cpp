@@ -7,6 +7,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include "util/c_types.h"
 #include <csignal>
 #include <sys/types.h>
 
@@ -42,6 +43,10 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 #include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
+#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/classification.hpp>
+#include <goto-programs/goto_domain.h>
+#include <esbmc/bmc_domain_split.h>
 
 bmct::bmct(
   goto_functionst &funcs,
@@ -84,7 +89,17 @@ void bmct::do_cbmc(
   std::shared_ptr<smt_convt> &smt_conv,
   std::shared_ptr<symex_target_equationt> &eq)
 {
+  /* msg.status("no domain splitting"); */
+  //no domain splitting
   eq->convert(*smt_conv.get());
+}
+
+void bmct::do_cbmc_dp(
+  std::shared_ptr<smt_convt> &smt_conv,
+  std::shared_ptr<symex_target_equationt> &eq,
+  int index)
+{
+  eq->convert(*smt_conv.get(), smt_conv->convert_ast(dsc[index]));
 }
 
 void bmct::successful_trace()
@@ -120,13 +135,6 @@ void bmct::error_trace(
   goto_tracet goto_trace;
   build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace, msg);
 
-  std::string output_file = options.get_option("cex-output");
-  if(output_file != "")
-  {
-    std::ofstream out(output_file);
-    show_goto_trace(out, ns, goto_trace, msg);
-  }
-
   std::string witness_output = options.get_option("witness-output");
   if(witness_output != "")
     violation_graphml_goto_trace(options, ns, goto_trace, msg);
@@ -155,7 +163,7 @@ smt_convt::resultt bmct::run_decision_procedure(
   msg.status(fmt::format("Encoding remaining VCC(s) using {}", logic));
 
   fine_timet encode_start = current_time();
-  do_cbmc(smt_conv, eq);
+  do_cbmc(smt_conv, eq); // convert using smt_conv (includes applying SSA steps)
   fine_timet encode_stop = current_time();
 
   std::ostringstream str;
@@ -188,9 +196,115 @@ smt_convt::resultt bmct::run_decision_procedure(
   str << "s";
   msg.status(str.str());
 
+  report_trace(dec_result, eq);
+  report_result(dec_result);
+
   return dec_result;
 }
 
+//run_decision_procedure with domain partition
+smt_convt::resultt
+bmct::run_decision_procedure_dp(std::shared_ptr<symex_target_equationt> &eq)
+{
+  std::string logic;
+
+  if(!options.get_bool_option("int-encoding"))
+  {
+    logic = "bit-vector";
+    logic += (!config.ansi_c.use_fixed_for_float) ? "/floating-point " : " ";
+    logic += "arithmetic";
+  }
+  else
+    logic = "integer/real arithmetic";
+
+  msg.status(fmt::format("Encoding remaining VCC(s) using {}", logic));
+
+  //Create copies of the equation for each domain parition
+  std::vector<std::shared_ptr<symex_target_equationt>> eqs(dsc.size());
+  for(unsigned int i = 0; i < dsc.size(); i++)
+  {
+    eqs.at(i) = std::dynamic_pointer_cast<symex_target_equationt>(eq->clone());
+  }
+
+  //Create smt converters, one for each equation
+  std::vector<std::shared_ptr<smt_convt>> smts(eqs.size());
+  for(unsigned int i = 0; i < dsc.size(); i++)
+  {
+    smts.at(i) =
+      std::shared_ptr<smt_convt>(create_solver_factory("", ns, options, msg));
+  }
+
+  fine_timet encode_start = current_time();
+  for(unsigned int i = 0; i < dsc.size(); i++)
+  {
+    do_cbmc_dp(
+      smts.at(i),
+      eqs.at(i),
+      i); // convert each equation using smt_conv (includes applying SSA steps)
+  }
+  fine_timet encode_stop = current_time();
+
+  std::ostringstream str;
+  str << "Encoding to solver time: ";
+  output_time(encode_stop - encode_start, str);
+  str << "s";
+  msg.status(str.str());
+
+  /* if( */
+  /*   options.get_bool_option("smt-formula-too") || */
+  /*   options.get_bool_option("smt-formula-only")) */
+  /* { */
+  /*   smt_conv->dump_smt(); */
+  /*   if(options.get_bool_option("smt-formula-only")) */
+  /*     return smt_convt::P_SMTLIB; */
+  /* } */
+
+  std::stringstream ss;
+  ss << "Solving with solver " << smts.at(0)->solver_text();
+  msg.status(ss.str());
+
+  //one result per domain-partition
+  std::vector<smt_convt::resultt> results(eqs.size());
+
+  fine_timet sat_start = current_time();
+  for(unsigned int i = 0; i < smts.size(); i++)
+  {
+    smt_convt::resultt result = smts.at(i)->dec_solve();
+    results.at(i) = result;
+
+    //Terminate the model checking early if one of the equations is not satisfiable.
+    if(result != smt_convt::P_UNSATISFIABLE)
+    {
+      fine_timet sat_stop = current_time();
+      // output runtime
+      str.clear();
+      str << "\nRuntime decision procedure: ";
+      output_time(sat_stop - sat_start, str);
+      str << "s";
+      msg.status(str.str());
+
+      //need to set this to print errors correctly
+      //a bit of a "hack", but works
+      this->runtime_solver = smts.at(i);
+
+      report_trace(result, eqs.at(i));
+      report_result(result);
+      return result;
+    }
+  }
+  fine_timet sat_stop = current_time();
+
+  // output runtime
+  str.clear();
+  str << "\nRuntime decision procedure: ";
+  output_time(sat_stop - sat_start, str);
+  str << "s";
+  msg.status(str.str());
+
+  /* report_trace(results.back(), eqs.back()); */
+  report_success();
+  return smt_convt::P_UNSATISFIABLE;
+}
 void bmct::report_success()
 {
   msg.status("\nVERIFICATION SUCCESSFUL");
@@ -364,8 +478,6 @@ smt_convt::resultt bmct::start_bmc()
 {
   std::shared_ptr<symex_target_equationt> eq;
   smt_convt::resultt res = run(eq);
-  report_trace(res, eq);
-  report_result(res);
   return res;
 }
 
@@ -564,6 +676,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     }
     else
     {
+      //perform symbolic execution
       result = symex->get_next_formula();
     }
   }
@@ -588,6 +701,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
   fine_timet symex_stop = current_time();
 
+  //cast upwards from symex_targett to symex_target_equationt
   eq = std::dynamic_pointer_cast<symex_target_equationt>(result->target);
 
   {
@@ -601,6 +715,47 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
   if(options.get_bool_option("double-assign-check"))
     eq->check_for_duplicate_assigns();
+
+  //perform domain splitting
+  if(options.get_bool_option("domain-partition-smt"))
+  {
+    int depth = std::stoi(options.get_option("domain-partition-depth"));
+
+    msg.status(
+      fmt::format("Performing domain-splitting with depth {} ", depth));
+
+    BMC_Domain_Split bmcds(msg, eq->SSA_steps);
+
+    bmcds.bmc_get_free_variables();
+
+    if(bmcds.free_vars.size() != 0)
+    {
+      bmcds.print_free_vars();
+
+      bmcds.bmc_free_var_occurances();
+
+      std::pair<expr2tc, int> v = bmcds.bmc_most_used();
+
+      expr2tc var = v.first;
+      int uses = v.second;
+
+      msg.status(fmt::format(
+        "{} is the most used variable with {} use(s)",
+        to_symbol2t(var).thename.as_string(),
+        uses));
+
+      msg.status(fmt::format(
+        "spitting the domain of {} ", to_symbol2t(var).thename.as_string()));
+
+      //generate the exprs to perform domain splitting on */
+      //dsc is an member of the bmc class
+      dsc = bmcds.bmc_split_domain_exprs(var, depth);
+    }
+    else
+    {
+      msg.status("no valid free-variables");
+    }
+  }
 
   try
   {
@@ -664,12 +819,19 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return smt_convt::P_UNSATISFIABLE;
     }
 
+    if(options.get_bool_option("domain-partition-smt") && dsc.size() > 0)
+    {
+      //run decision procedure on multiple equations
+      return run_decision_procedure_dp(eq);
+    }
+
     if(!options.get_bool_option("smt-during-symex"))
     {
       runtime_solver =
         std::shared_ptr<smt_convt>(create_solver_factory("", ns, options, msg));
     }
 
+    //perform checking
     return run_decision_procedure(runtime_solver, eq);
   }
 

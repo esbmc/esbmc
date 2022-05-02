@@ -135,10 +135,6 @@ protected:
     const nlohmann::json &integer_literal,
     std::string the_value,
     exprt &dest);
-  bool convert_bool_literal(
-    const nlohmann::json &bool_literal,
-    std::string the_value,
-    exprt &dest);
 };
 
 #endif /* SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_ */
