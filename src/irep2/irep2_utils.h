@@ -206,6 +206,12 @@ inline expr2tc gen_ulong(unsigned long val)
   return v;
 }
 
+inline expr2tc gen_slong(unsigned long val)
+{
+  constant_int2tc v(get_int_type(config.ansi_c.word_size), BigInt(val));
+  return v;
+}
+
 inline const type2tc &get_array_subtype(const type2tc &type)
 {
   return to_array_type(type).subtype;

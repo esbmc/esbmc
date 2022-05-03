@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <assert.h>
-#include <cheri.h>
+#include <cheri/cheric.h>
 
 #if __WORDSIZE != 64
 # error wrong architecture for cheri; is the --sysroot set correctly for mips64-unknown-linux?

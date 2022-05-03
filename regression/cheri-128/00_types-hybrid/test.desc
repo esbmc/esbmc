@@ -1,4 +1,4 @@
 CORE
 main.c
---cheri hybrid --64
+--cheri hybrid --64 --big-endian
 ^VERIFICATION SUCCESSFUL$
