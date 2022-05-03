@@ -1,0 +1,4 @@
+CORE
+main.c
+--cheri purecap --big-endian --force-malloc-success
+^VERIFICATION FAILED$
