@@ -8,7 +8,7 @@ void goto_contractor(
   goto_functionst &goto_functions,
   const messaget &message_handler)
 {
-  goto_contractort gotoContractort( goto_functions, message_handler);
+  goto_contractort gotoContractort(goto_functions, message_handler);
 
   goto_functions.update();
 }
@@ -92,10 +92,8 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
   }
 }
 
-void goto_contractort::insert_assume(
-  goto_functionst goto_functions)
+void goto_contractort::insert_assume(goto_functionst goto_functions)
 {
-
   message_handler.status("Inserting assumes.. ");
 
   loopst loop;
@@ -108,12 +106,10 @@ void goto_contractort::insert_assume(
 
   auto goto_function = goto_functions.function_map.find("c:@F@main")->second;
 
-
   for(auto const &var : map.var_map)
   {
     symbol2tc X = var.second.getSymbol();
-    if(
-      var.second.isIntervalChanged())
+    if(var.second.isIntervalChanged())
     {
       auto lb = create_value_expr(var.second.getInterval().lb(), int_type2());
       auto cond = create_greaterthanequal_relation(X, lb);
@@ -185,7 +181,6 @@ ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
   }
   return ibex::GEQ;
 }
-
 
 ibex::NumConstraint *
 goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)

@@ -268,8 +268,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     // Convert /all the arguments/. Via magical delegates.
     unsigned int i = 0;
-    expr->foreach_operand([this, &args, &i](const expr2tc &e)
-                          { args[i++] = convert_ast(e); });
+    expr->foreach_operand(
+      [this, &args, &i](const expr2tc &e) { args[i++] = convert_ast(e); });
   }
   }
 
@@ -2213,25 +2213,21 @@ expr2tc smt_convt::get(const expr2tc &expr)
     if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       arr_size = get(arr_size);
 
-    res->type->Foreach_subtype(
-      [this](type2tc &t)
-      {
-        if(!is_array_type(t))
-          return;
+    res->type->Foreach_subtype([this](type2tc &t) {
+      if(!is_array_type(t))
+        return;
 
-        expr2tc &arr_size = to_array_type(t).array_size;
-        if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-          arr_size = get(arr_size);
-      });
+      expr2tc &arr_size = to_array_type(t).array_size;
+      if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+        arr_size = get(arr_size);
+    });
   }
 
   // Recurse on operands
-  res->Foreach_operand(
-    [this](expr2tc &e)
-    {
-      expr2tc new_e = get(e);
-      e = new_e;
-    });
+  res->Foreach_operand([this](expr2tc &e) {
+    expr2tc new_e = get(e);
+    e = new_e;
+  });
 
   // And simplify
   simplify(res);
