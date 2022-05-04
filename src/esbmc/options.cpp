@@ -172,7 +172,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"bv", NULL, "use solver with bit-vector arithmetic"},
     {"ir", NULL, "use solver with integer/real arithmetic"},
     {"smtlib", NULL, "use SMT lib format"},
-    {"non-supported-models-as-zero", NULL, "if ESBMC does  as a zero"},
+    {"non-supported-models-as-zero",
+     NULL,
+     "if ESBMC can't extract a type/expression from the solver, then the value "
+     "will be set to zero"},
     {"smtlib-solver-prog",
 
      boost::program_options::value<std::string>(),
