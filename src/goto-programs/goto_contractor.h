@@ -173,7 +173,7 @@ public:
       get_intervals(_goto_functions);
 
       message_handler.status("4/5 - Applying contractor.");
-      auto new_intervals = contractor();
+      contractor();
 
       message_handler.status("5/5 - Inserting assumes.");
       insert_assume(_goto_functions);
@@ -214,7 +214,7 @@ private:
 
   /// \Function contractor function will apply the contractor on the parsed constraint and intervals. it will apply the inner contractor by calculating the complement of the assert and contract.
   /// \return Interval vector that represents the area that should be checked by the bmc.
-  ibex::IntervalVector contractor();
+  void contractor();
 
   /** \Function get_complement will take a comparison operation and get its complement. Operators are defined in ibex as the enumeration ibex::CmpOP.
    * @param CmpOp is a comparison operator.
