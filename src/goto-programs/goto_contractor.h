@@ -231,8 +231,7 @@ private:
    * @param goto_functions goto program functions
    * @param vector result from the contractor.
    */
-  void
-  insert_assume(goto_functionst goto_functions);
+  void insert_assume(goto_functionst goto_functions);
 
   ibex::NumConstraint *create_constraint_from_expr2t(irep_container<expr2t>);
   ibex::Function *create_function_from_expr2t(irep_container<expr2t>);
