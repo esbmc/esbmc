@@ -514,7 +514,7 @@ exprt jimple_nondet::to_exprt(
   const std::string &,
   const std::string &) const
 {
-  auto type = char_type(); // TODO: hashmap here!
+  auto type = int_type(); // TODO: hashmap here!
   exprt rhs = exprt("sideeffect", type);
   rhs.statement("nondet");
 
