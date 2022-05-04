@@ -132,7 +132,7 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
   }
 }
 
-ibex::IntervalVector goto_contractort::contractor()
+void goto_contractort::contractor()
 {
   ibex::NumConstraint c = *constraint;
 
@@ -160,7 +160,7 @@ ibex::IntervalVector goto_contractort::contractor()
 
   message_handler.status(oss.str());
 
-  return X;
+
 }
 
 ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
