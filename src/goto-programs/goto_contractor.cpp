@@ -159,8 +159,6 @@ void goto_contractort::contractor()
   map.update_intervals(X);
 
   message_handler.status(oss.str());
-
-
 }
 
 ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
