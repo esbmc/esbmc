@@ -42,6 +42,7 @@ jobs:
 
   run-benchexec:
     runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
+    timeout-minutes: 2880
     needs: build-linux
     steps:
       - name: Download Linux Build
