@@ -17,6 +17,15 @@ Test cases with asterisk(\*) are modified manually to verify a specific feature.
 | ch3_11    | scope resolution, function prototypes|
 | ch3_15    | preceeding features plus *substr* function of COM <string>, standard error stream|
 | ch4_08    | counter-controlled *while* loop with definite repetition, int division|
-| ch4_12    | sentinel-controlled *while* loop w/o definite repetition, double, static_cast, COM <iomanip> setprecision, fixed|
+| ch4_12    | sentinel-controlled *while* loop w/o definite repetition, double, static_cast, COM <iomanip> *setprecision* and *fixed* functions|
 | ch4_16\*  | C++11 list initialisation (aka uniform initialisation)|
 | ch4_16_2\*| C++11 list initialisation (aka uniform initialisation), addition assignment operator|
+| ch5_01    | COM <iostream>, *while* loop, pre-increment operator|
+| ch5_02    | COM <iostream>, *for* loop, pre-increment operator|
+| ch5_05    | same as above plus addition assignment operator|
+| ch5_06    | COM <cmath> *pow* function, COM <iostream>, *setw* function|
+| ch5_07    | *do...while* loop|
+| ch5_09\*  | C++11 in-class initialization, *switch* statement|
+| ch5_13    | *break* statement|
+| ch5_14    | *continue* statement|
+| ch5_18    | Logical operator *&&* *||* *!*, COM <iostream> *boolalpha* function|
