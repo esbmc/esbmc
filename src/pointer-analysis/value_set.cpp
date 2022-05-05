@@ -585,9 +585,11 @@ void value_sett::get_value_set_rec(
     auto op_contains_valid_address = [this](value_sett::object_mapt o) -> bool {
       for(const auto &it : o)
       {
-        if(is_symbol2t(object_numbering[it.first]))
+        auto expr = object_numbering[it.first];
+        if(is_symbol2t(expr) || is_constant_string2t(expr))
           return true;
       }
+
       return false;
     };
 
