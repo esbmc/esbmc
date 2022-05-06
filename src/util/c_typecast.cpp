@@ -361,9 +361,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
     signedbv_type2tc signed_type = type;
     unsigned width = signed_type->width;
 
-    if(width == 128)
-      return INT128;
-    else if(width <= config.ansi_c.char_width)
+    if(width <= config.ansi_c.char_width)
       return CHAR;
     else if(width <= config.ansi_c.int_width)
       return INT;
@@ -371,15 +369,15 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
       return LONG;
     else if(width <= config.ansi_c.long_long_int_width)
       return LONGLONG;
+    if(width <= config.ansi_c.int_128_width)
+      return INT128;
   }
   else if(is_unsignedbv_type(type))
   {
     unsignedbv_type2tc unsigned_type = type;
     unsigned width = unsigned_type->width;
 
-    if(width == 128)
-      return UINT128;
-    else if(width <= config.ansi_c.char_width)
+    if(width <= config.ansi_c.char_width)
       return UCHAR;
     else if(width <= config.ansi_c.int_width)
       return UINT;
@@ -387,6 +385,8 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
       return ULONG;
     else if(width <= config.ansi_c.long_long_int_width)
       return ULONGLONG;
+    if(width <= config.ansi_c.int_128_width)
+      return UINT128;
   }
   else if(is_bool_type(type))
     return BOOL;
