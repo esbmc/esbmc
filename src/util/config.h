@@ -102,6 +102,9 @@ public:
     bool char_is_unsigned;
     bool use_fixed_for_float;
 
+    // for fixed size
+    unsigned int_128_width = 128;
+
     typedef enum
     {
       NO_ENDIANESS,
