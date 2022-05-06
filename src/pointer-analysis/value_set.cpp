@@ -574,11 +574,11 @@ void value_sett::get_value_set_rec(
     get_value_set_rec(op1, op1_set, "", (op1)->type, false);
 
     /*
-     * The main idea here is to be able to detect if any address might be valid at all.
-     * If any side of the pointer arithmetic is not a valid-object, then we can
-     * assume that it is not the pointer operand.
+     * The main idea here is to detect if any address might be valid at all. If any side
+     * of the pointer arithmetic is not a valid object, we can assume that it is not the
+     * pointer operand.
      *
-     * As of now, there is one KNOWNBUG (esbmc/github_659_2_true), which is triggered by
+     * As of now, there is one KNOWNBUG (esbmc/github_695_2_true), which is triggered by
      * a cast of the index as char ptr. This makes ESBMC think that both operands are
      * valid, which is currently unsupported.
      */
