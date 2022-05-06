@@ -1359,7 +1359,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
       type2tc range = get_flattened_array_subtype(expr->type);
 
       // If this is an array of structs, we have a tuple array sym.
-      if(is_structure_type(range) || is_pointer_type(range))
+      if(is_tuple_ast_type(range))
         return tuple_api->mk_tuple_array_symbol(expr);
     }
 
