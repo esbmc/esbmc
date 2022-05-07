@@ -152,7 +152,7 @@ void goto_symext::symex_assign(
   // rated for dealing with this concept; perform a NOP.
   try
   {
-    if(is_struct_type(code.target->type))
+    if(is_structure_type(code.target->type))
     {
       const struct_type2t &t2 =
         static_cast<const struct_type2t &>(*code.target->type);
