@@ -20,7 +20,7 @@
 
 typedef int fpos_t;
 
-typedef void FILE;
+typedef void* FILE;
 
 typedef unsigned int TMP_MAX;
 
@@ -54,7 +54,7 @@ extern "C" {
 
   int vprintf(const char * format, va_list arg);
 
-  //int vsprintf(char * str, const char * format, va_list arg); // removed as duplicate of vsprintf in cstdarg
+  int vsprintf(char * str, const char * format, va_list arg);
 
   int fgetc(FILE * stream);
 
