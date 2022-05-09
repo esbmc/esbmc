@@ -77,6 +77,8 @@ void symex_target_equationt::output(
     debug_print_step(SSA_step);
 }
 
+//TODO:
+//add assumption using this instead???
 void symex_target_equationt::assumption(
   const expr2tc &guard,
   const expr2tc &cond,
@@ -140,10 +142,28 @@ void symex_target_equationt::renumber(
     debug_print_step(SSA_step);
 }
 
+// Takes in an initial assumption instead
+void symex_target_equationt::convert(smt_convt &smt_conv, smt_astt assumpt_ast)
+{
+  smt_convt::ast_vec assertions; //things we want to check
+
+  /* msg.status("convert_called"); */
+
+  for(auto &SSA_step : SSA_steps)
+  {
+    convert_internal_step(smt_conv, assumpt_ast, assertions, SSA_step);
+  }
+
+  if(!assertions.empty())
+    smt_conv.assert_ast(
+      smt_conv.make_n_ary(&smt_conv, &smt_convt::mk_or, assertions));
+}
+
 void symex_target_equationt::convert(smt_convt &smt_conv)
 {
-  smt_convt::ast_vec assertions;
-  smt_astt assumpt_ast = smt_conv.convert_ast(gen_true_expr());
+  smt_convt::ast_vec assertions; //things we want to check
+  smt_astt assumpt_ast = smt_conv.convert_ast(
+    gen_true_expr()); //assumptions we make to prove the assertations
 
   for(auto &SSA_step : SSA_steps)
     convert_internal_step(smt_conv, assumpt_ast, assertions, SSA_step);
@@ -226,10 +246,11 @@ void symex_target_equationt::convert_internal_step(
 
   if(step.is_assert())
   {
+    //assumptions \implies condition
     step.cond_ast = smt_conv.imply_ast(assumpt_ast, step.cond_ast);
     assertions.push_back(smt_conv.invert_ast(step.cond_ast));
   }
-  else if(step.is_assume())
+  else if(step.is_assume()) // add another assumption using logical and
   {
     smt_convt::ast_vec v;
     v.push_back(assumpt_ast);
