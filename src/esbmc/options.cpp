@@ -151,6 +151,15 @@ const struct group_opt_templ all_cmd_options[] = {
     {"termination",
      NULL,
      "incremental loop unwinding assertion verification"}}},
+  {"Domain Partitioning",
+   {{"domain-partition-smt",
+     NULL,
+     "splits the domain of non-deterministic variables into multiple "
+     "smt formulas to be checked seperately. The most used variable is chosen "
+     "to be split"},
+    {"domain-partition-depth",
+     boost::program_options::value<int>()->default_value(2)->value_name("nr"),
+     "How many times should the domain be partitioned"}}},
   {"Solver",
    {{"list-solvers", NULL, "list available solvers and exit"},
     {"boolector", NULL, "use Boolector (default),"},
