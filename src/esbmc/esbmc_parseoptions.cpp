@@ -444,6 +444,8 @@ int esbmc_parseoptionst::doit()
   std::shared_ptr<message_handlert> handler =
     std::make_shared<fmt_message_handler>(out, err);
   msg.add_message_handler(handler);
+  //seed rng
+  srand(time(NULL));
   //
   // Print a banner
   //

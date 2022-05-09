@@ -81,7 +81,12 @@ void goto_domain_split_numeric(
   goto_programt &goto_program,
   const symbol2tc &var,
   const uint32_t val,
+<<<<<<< HEAD
   const bool lt)
+=======
+  const bool lt,
+  const messaget &msg)
+>>>>>>> fdd53a3e4 (domain paritioning implementation rebase)
 {
   auto &ins = goto_program.instructions;
   goto_programt::targett i = ins.begin();
@@ -144,3 +149,7 @@ void goto_domain_split_numeric(
   //insert assumption after the first assignment of the variable to its non-det value.
   /* goto_program.insert_swap(i, tmp_e); */
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> fdd53a3e4 (domain paritioning implementation rebase)
