@@ -99,6 +99,10 @@ if(ENABLE_SOLIDITY_FRONTEND)
   add_definitions(-DENABLE_SOLIDITY_FRONTEND)
 endif()
 
+if(ENABLE_GOTO_CONTRACTOR)
+  add_compile_options(-DENABLE_GOTO_CONTRACTOR)
+endif()
+
 add_subdirectory(src)
 
 include(Irep2Optimization)
