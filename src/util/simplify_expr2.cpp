@@ -655,9 +655,14 @@ expr2tc add2t::do_simplify() const
   // X + 0 -> X
   // 0 + X -> X
   if(
-    is_add2t(side_1) && is_constant_int2t(side_2) && to_constant_int2t(side_2).value == 0
-    || is_constant_int2t(side_1) && is_add2t(side_2) &&	to_constant_int2t(side_1).value == 0)
+    is_add2t(side_1) && is_constant_int2t(side_2) && to_constant_int2t(side_2).value == 0)
   {
+    auto new_operand = simplify_5(side_1, side_2);
+    if(new_operand)
+      return new_operand;
+  }
+
+  if(is_sub2t(side_1) && is_constant_int2t(side_2) && to_constant_int2t(side_2).value == 0){
     auto new_operand = simplify_5(side_1, side_2);
     if(new_operand)
       return new_operand;
