@@ -1,0 +1,4 @@
+CORE
+main.c
+--interval-analysis --no-pointer-check --goto-contractor --incremental --unlimited-k-step
+^VERIFICATION FAILED$
