@@ -1,6 +1,6 @@
 ## ESBMC-CHERI Video & Download
 
-This [video]() describes how to obtain, build and run ESBMC-CHERI on an example.
+This [video](https://youtu.be/CsWHnmU4UMs) describes how to obtain, build and run ESBMC-CHERI on an example.
 
 A pre-compiled binary for Linux is available in the pre-release
 [ESBMC-CHERI](https://github.com/esbmc/esbmc/releases/tag/v6.9-cheri), for other
