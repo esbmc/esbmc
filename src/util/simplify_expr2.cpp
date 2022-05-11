@@ -418,9 +418,7 @@ expr2tc add2t::do_simplify() const
   // X + X --> X << 1
   if(is_symbol2t(side_1) && is_symbol2t(side_2))
   {
-    auto name_side_1 = to_symbol2t(side_1).get_symbol_name();
-    auto name_side_2 = to_symbol2t(side_2).get_symbol_name();
-    if(name_side_1 == name_side_2)
+    if(to_symbol2t(side_1)==to_symbol2t(side_2))
       return shl2tc(type, side_1, from_integer(1, type));
   }
 
@@ -610,8 +608,6 @@ expr2tc add2t::do_simplify() const
   auto simplify_4 = [](const expr2tc e, const expr2tc f) -> expr2tc {
     if(is_bitnot2t(e))
     {
-      auto name_1 = to_symbol2t(e).get_symbol_name();
-      auto name_2 = to_symbol2t(to_bitnot2t(f).value).get_symbol_name();
       if(to_symbol2t(e) == to_symbol2t(to_bitnot2t(f).value))
         return constant_int2tc(e->type, -1);
     }
