@@ -485,7 +485,7 @@ expr2tc add2t::do_simplify() const
       return new_operand;
   }
   if(
-    is_add2t(side_1) && is_constant_int(side_2) &&
+    is_add2t(side_1) && is_constant_int2t(side_2) &&
     to_constant_int2t(side_2).value == 1)
   {
     auto new_operand =
