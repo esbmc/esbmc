@@ -624,7 +624,7 @@ expr2tc add2t::do_simplify() const
     if(is_constant_int2t(e) && is_symbol2t(f))
       if(to_constant_int2t(f).value == 0)
         return e;
-        
+
     return expr2tc();
   };
 
