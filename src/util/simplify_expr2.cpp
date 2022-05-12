@@ -417,10 +417,8 @@ expr2tc add2t::do_simplify() const
 {
   // X + X --> X << 1
   if(is_symbol2t(side_1) && is_symbol2t(side_2))
-  {
     if(side_1 == side_2)
       return shl2tc(type, side_1, from_integer(1, type));
-  }
 
   // (A + 1) + ~B --> A - B
   auto simplify_1 = [](const expr2tc &e, const expr2tc &f) -> expr2tc {
@@ -551,10 +549,8 @@ expr2tc add2t::do_simplify() const
       auto sidecheck_1 = to_sub2t(f).side_1;
       auto sidecheck_2 = to_sub2t(f).side_2;
       if(is_symbol2t(sidecheck_1) && is_symbol2t(sidecheck_2))
-      {
         if(to_symbol2t(sidecheck_2) == to_symbol2t(f))
           return sidecheck_1;
-      }
     }
     return expr2tc();
   };
@@ -626,10 +622,9 @@ expr2tc add2t::do_simplify() const
         return f;
     }
     if(is_constant_int2t(e) && is_symbol2t(f))
-    {
       if(to_constant_int2t(f).value == 0)
         return e;
-    }
+        
     return expr2tc();
   };
 
