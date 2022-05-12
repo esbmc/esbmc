@@ -458,7 +458,7 @@ expr2tc add2t::do_simplify() const
   // (~B + A) + 1 --> A - B
 
   if(
-    is_add2t(side_1) && is_constant_int(side_2) &&
+    is_add2t(side_1) && is_constant_int2t(side_2) &&
     to_constant_int2t(side_2).value == 1)
   {
     auto new_operand =
@@ -467,7 +467,7 @@ expr2tc add2t::do_simplify() const
       return new_operand;
   }
   if(
-    is_add2t(side_2) && is_constant_int(side_2) &&
+    is_add2t(side_2) && is_constant_int2t(side_2) &&
     to_constant_int2t(side_1).value == 1)
   {
     auto new_operand =
@@ -594,10 +594,14 @@ expr2tc add2t::do_simplify() const
   // X+0 -> X
   // 0+X -> X
 
-  if(is_sub2t(Side_1) && to_constant_int2t(Side_2).value == 0)
+  if(
+    is_sub2t(Side_1) && is_constant_int2t(Side_2) &&
+    to_constant_int2t(Side_2).value == 0)
     std::swap(Side_1, Side_2);
 
-  if(is_add2t(Side_1) && to_constant_int2t(Side_2).value == 0)
+  if(
+    is_add2t(Side_1) && is_constant_int2t(Side_2) &&
+    to_constant_int2t(Side_2).value == 0)
   {
     return Side_1;
   }
