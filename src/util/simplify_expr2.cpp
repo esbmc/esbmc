@@ -457,14 +457,18 @@ expr2tc add2t::do_simplify() const
 
   // (~B + A) + 1 --> A - B
 
-  if(is_add2t(side_1) && to_constant_int2t(side_2).value == 1)
+  if(
+    is_add2t(side_1) && is_constant_int(side_2) &&
+    to_constant_int2t(side_2).value == 1)
   {
     auto new_operand =
       simplify_2(to_add2t(side_1).side_1, to_add2t(side_1).side_2);
     if(new_operand)
       return new_operand;
   }
-  if(is_add2t(side_2) && to_constant_int2t(side_1).value == 1)
+  if(
+    is_add2t(side_2) && is_constant_int(side_2) &&
+    to_constant_int2t(side_1).value == 1)
   {
     auto new_operand =
       simplify_2(to_add2t(side_2).side_1, to_add2t(side_2).side_2);
@@ -480,7 +484,9 @@ expr2tc add2t::do_simplify() const
     if(new_operand)
       return new_operand;
   }
-  if(is_add2t(side_1) && to_constant_int2t(side_2).value == 1)
+  if(
+    is_add2t(side_1) && is_constant_int(side_2) &&
+    to_constant_int2t(side_2).value == 1)
   {
     auto new_operand =
       simplify_2(to_add2t(side_1).side_1, to_add2t(side_1).side_2);
