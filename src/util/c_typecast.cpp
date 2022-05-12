@@ -369,6 +369,8 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
       return LONG;
     else if(width <= config.ansi_c.long_long_int_width)
       return LONGLONG;
+    if(width <= config.ansi_c.int_128_width)
+      return INT128;
   }
   else if(is_unsignedbv_type(type))
   {
@@ -383,6 +385,8 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
       return ULONG;
     else if(width <= config.ansi_c.long_long_int_width)
       return ULONGLONG;
+    if(width <= config.ansi_c.int_128_width)
+      return UINT128;
   }
   else if(is_bool_type(type))
     return BOOL;
@@ -441,6 +445,12 @@ void c_typecastt::implicit_typecast_arithmetic(exprt &expr, c_typet c_type)
     assert(false); // should always be promoted
   case INT:
     new_type = int_type();
+    break;
+  case INT128:
+    new_type = int128_type();
+    break;
+  case UINT128:
+    new_type = uint128_type();
     break;
   case UINT:
     new_type = uint_type();
@@ -501,6 +511,12 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr, c_typet c_type)
     abort();
   case INT:
     new_type = int_type2();
+    break;
+  case INT128:
+    new_type = int128_type2();
+    break;
+  case UINT128:
+    new_type = uint128_type2();
     break;
   case UINT:
     new_type = uint_type2();
