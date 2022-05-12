@@ -67,21 +67,21 @@ protected:
 	virtual void imbue ( const locale & loc ){}
 
 //	Buffer management and positioning:
-	virtual streambuf * setbuf ( char * s, streamsize n ){}
-	virtual streampos seekoff ( streamoff off, seekdir way, openmode which = in | out ){}
-	virtual streampos seekpos ( streampos sp, openmode which = in | out ){}
-	virtual int sync ( ){}
+	virtual streambuf * setbuf ( char * s, streamsize n );
+	virtual streampos seekoff ( streamoff off, seekdir way, openmode which = in | out );
+	virtual streampos seekpos ( streampos sp, openmode which = in | out );
+	virtual int sync ( );
 
 //	Input functions (get):
-	virtual streamsize showmanyc ( ){}
-	virtual streamsize xsgetn ( char * s, streamsize n ){}
-	virtual int underflow ( ){}
-	virtual int uflow ( ){}
-	virtual int pbackfail ( int c = EOF ){}
+	virtual streamsize showmanyc ( );
+	virtual streamsize xsgetn ( char * s, streamsize n );
+	virtual int underflow ( );
+	virtual int uflow ( );
+	virtual int pbackfail ( int c = EOF );
 
 //	Output functions (put):
-	virtual streamsize xsputn ( const char * s, streamsize n ){}
-	virtual int overflow ( int c = EOF ){}
+	virtual streamsize xsputn ( const char * s, streamsize n );
+	virtual int overflow ( int c = EOF );
 
 
 };
