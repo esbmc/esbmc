@@ -1061,10 +1061,10 @@ void value_sett::assign(
     }
     else
     {
-      /* types do not agree, this can happen during for dereferences like this:
+      /* types do not agree, this can happen during dereferences like this:
        *   struct S { int x; } a;
        *   int b;
-       *   a = (struct S *)&b;
+       *   a = *(struct S *)&b;
        * and is caught as a dereference_failure by build_reference_to().
        *
        * Thus, we ignore this value-set assignment request here.
