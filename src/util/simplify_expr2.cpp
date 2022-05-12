@@ -8,6 +8,8 @@
 #include <irep2/irep2_utils.h>
 #include <util/type_byte_size.h>
 #include <util/message/default_message.h>
+#include <algorithm>
+#include <bits/stdc++.h>
 
 expr2tc expr2t::do_simplify() const
 {
@@ -415,33 +417,26 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
 
 expr2tc add2t::do_simplify() const
 {
+  auto Side_1 = side_1;
+  auto Side_2 = side_2;
+
   // X + X --> X << 1
   if(is_symbol2t(side_1) && is_symbol2t(side_2))
     if(side_1 == side_2)
       return shl2tc(type, side_1, from_integer(1, type));
 
   // (A + 1) + ~B --> A - B
-  auto simplify_1 = [](const expr2tc &e, const expr2tc &f) -> expr2tc {
-    if(to_constant_int2t(to_add2t(e).side_2).value == 1)
+  if(is_bitnot2t(Side_1) && is_add2t(Side_2))
+    std::swap(Side_1, Side_2);
+
+  if(is_add2t(Side_1) && is_bitnot2t(Side_2))
+  {
+    if(to_constant_int2t(to_add2t(Side_1).side_2).value == 1)
     {
-      auto B = to_bitnot2t(f).value;
-      auto new_operand = sub2tc(e->type, to_add2t(e).side_1, B);
+      auto B = to_bitnot2t(Side_2).value;
+      auto new_operand = sub2tc(Side_1->type, to_add2t(Side_2).side_1, B);
       return new_operand;
     }
-    return expr2tc();
-  };
-
-  if(is_add2t(side_1) && is_bitnot2t(side_2))
-  {
-    auto new_operand = simplify_1(side_1, side_2);
-    if(new_operand)
-      return new_operand;
-  }
-  if(is_bitnot2t(side_1) && is_add2t(side_2))
-  {
-    auto new_operand = simplify_1(side_2, side_1);
-    if(new_operand)
-      return new_operand;
   }
 
   auto simplify_2 = [](const expr2tc &e, const expr2tc &f) -> expr2tc {
@@ -462,18 +457,14 @@ expr2tc add2t::do_simplify() const
 
   // (~B + A) + 1 --> A - B
 
-  if(
-    is_add2t(side_1) && is_constant_int2t(side_2) &&
-    to_constant_int2t(side_2).value == 1)
+  if(is_add2t(side_1) && to_constant_int2t(side_2).value == 1)
   {
     auto new_operand =
       simplify_2(to_add2t(side_1).side_1, to_add2t(side_1).side_2);
     if(new_operand)
       return new_operand;
   }
-  if(
-    is_add2t(side_2) && is_constant_int2t(side_1) &&
-    to_constant_int2t(side_1).value == 1)
+  if(is_add2t(side_2) && to_constant_int2t(side_1).value == 1)
   {
     auto new_operand =
       simplify_2(to_add2t(side_2).side_1, to_add2t(side_2).side_2);
@@ -482,18 +473,14 @@ expr2tc add2t::do_simplify() const
   }
 
   // (A + ~B) + 1 --> A - B
-  if(
-    is_add2t(side_2) && is_constant_int2t(side_1) &&
-    to_constant_int2t(side_1).value == 1)
+  if(is_add2t(side_2) && to_constant_int2t(side_1).value == 1)
   {
     auto new_operand =
       simplify_2(to_add2t(side_2).side_1, to_add2t(side_2).side_2);
     if(new_operand)
       return new_operand;
   }
-  if(
-    is_add2t(side_1) && is_constant_int2t(side_2) &&
-    to_constant_int2t(side_2).value == 1)
+  if(is_add2t(side_1) && to_constant_int2t(side_2).value == 1)
   {
     auto new_operand =
       simplify_2(to_add2t(side_1).side_1, to_add2t(side_1).side_2);
@@ -517,7 +504,7 @@ expr2tc add2t::do_simplify() const
       return new_operand;
   }
 
-  // ~B + (A + 1) --> A - B
+  // ~B + (1 + A) --> A - B
   if(is_add2t(side_1) && is_bitnot2t(side_2))
   {
     auto new_operand =
@@ -587,63 +574,26 @@ expr2tc add2t::do_simplify() const
       return new_operand;
   }
 
-  auto simplify_4 = [](const expr2tc &e, const expr2tc &f) -> expr2tc {
-    if(is_bitnot2t(e))
-    {
-      if(to_symbol2t(e) == to_symbol2t(to_bitnot2t(f).value))
-        return constant_int2tc(e->type, -1);
-    }
-    return expr2tc();
-  };
-
   // X + ~X -> -1
-  if(is_symbol2t(side_1) && is_bitnot2t(side_2))
-  {
-    auto new_operand = simplify_4(side_1, side_2);
-    if(new_operand)
-      return new_operand;
-  }
+  if(is_symbol2t(Side_1) && is_bitnot2t(Side_2))
+    std::swap(Side_1, Side_2);
 
   // ~X + X -> -1
-  if(is_bitnot2t(side_1) && is_symbol2t(side_2))
+  if(is_bitnot2t(Side_1) && is_symbol2t(Side_2))
   {
-    auto new_operand = simplify_4(side_1, side_2);
-    if(new_operand)
-      return new_operand;
+    if(to_symbol2t(Side_1) == to_symbol2t(to_bitnot2t(Side_2).value))
+      return constant_int2tc(Side_1->type, -1);
   }
 
   // X+0 -> X
   // 0+X -> X
 
-  auto simplify_5 = [](const expr2tc &e, const expr2tc &f) -> expr2tc {
-    if(is_symbol2t(e) && is_constant_int2t(f))
-    {
-      if(to_constant_int2t(f).value == 0)
-        return f;
-    }
-    if(is_constant_int2t(e) && is_symbol2t(f))
-      if(to_constant_int2t(f).value == 0)
-        return e;
+  if(is_sub2t(Side_1) && to_constant_int2t(Side_2).value == 0)
+    std::swap(Side_1, Side_2);
 
-    return expr2tc();
-  };
-
-  if(
-    is_add2t(side_1) && is_constant_int2t(side_2) &&
-    to_constant_int2t(side_2).value == 0)
+  if(is_add2t(Side_1) && to_constant_int2t(Side_2).value == 0)
   {
-    auto new_operand = simplify_5(side_1, side_2);
-    if(new_operand)
-      return new_operand;
-  }
-
-  if(
-    is_sub2t(side_1) && is_constant_int2t(side_2) &&
-    to_constant_int2t(side_2).value == 0)
-  {
-    auto new_operand = simplify_5(side_1, side_2);
-    if(new_operand)
-      return new_operand;
+    return Side_1;
   }
 
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
