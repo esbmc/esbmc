@@ -418,7 +418,7 @@ expr2tc add2t::do_simplify() const
   // X + X --> X << 1
   if(is_symbol2t(side_1) && is_symbol2t(side_2))
   {
-    if(to_symbol2t(side_1)==to_symbol2t(side_2))
+    if(to_symbol2t(side_1) == to_symbol2t(side_2))
       return shl2tc(type, side_1, from_integer(1, type));
   }
 
