@@ -9,7 +9,6 @@
 #include <util/type_byte_size.h>
 #include <util/message/default_message.h>
 #include <algorithm>
-#include <bits/stdc++.h>
 
 expr2tc expr2t::do_simplify() const
 {
