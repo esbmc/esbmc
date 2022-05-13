@@ -1,4 +1,5 @@
 CORE
 main.c
 --compact-trace
+^\s*array bounds violated:
 ^VERIFICATION FAILED$
