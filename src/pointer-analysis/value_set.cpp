@@ -610,7 +610,7 @@ void value_sett::get_value_set_rec(
             if(!is_nil_type(subtype))
             {
               if(is_empty_type(subtype))
-                throw new type2t::symbolic_type_excp();
+                throw type2t::symbolic_type_excp();
 
               // Potentially rename,
               const type2tc renamed = ns.follow(subtype);
@@ -628,13 +628,13 @@ void value_sett::get_value_set_rec(
           is_const = false;
         }
       }
-      catch(array_type2t::dyn_sized_array_excp *e)
+      catch(const array_type2t::dyn_sized_array_excp &e)
       { // Nondet'ly sized.
       }
-      catch(array_type2t::inf_sized_array_excp *e)
+      catch(const array_type2t::inf_sized_array_excp &e)
       {
       }
-      catch(type2t::symbolic_type_excp *e)
+      catch(const type2t::symbolic_type_excp &e)
       {
         // This vastly annoying piece of code is making operations on void
         // pointers, or worse. If a void pointer, treat the multiplier of the
@@ -820,7 +820,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         has_const_index_offset = true;
       }
     }
-    catch(array_type2t::dyn_sized_array_excp *e)
+    catch(const array_type2t::dyn_sized_array_excp &e)
     {
       // Not a constant index offset then.
     }
