@@ -6,8 +6,10 @@ typedef struct {
 
 int array1[2];
 int array2[2];
-int end;
-int other;
+int pos0;
+int pos1;
+int pos2;
+
 
 FAM fam = {
 	{
@@ -19,8 +21,9 @@ FAM fam = {
 	}
 	,
 	{
-		&other,
-		&end
+		&pos0,
+		&pos1,
+		&pos2
 	}
 };
 
@@ -40,14 +43,24 @@ void FamInit()
 
 #include <assert.h>
 int main() {
+
+  assert(fam.a[0] == &array1[0]);
+  assert(fam.a[1] == 0);
+  assert(fam.b[0] == &array2[0]);
+  assert(fam.b[1] == 0);
+  assert(fam.free[0] == &pos0);
+  assert(fam.free[1] == &pos1);
+  assert(fam.free[2] == &pos2);
+
+
   FamInit();
-  FAM *dst = (FAM*) malloc(sizeof(int*) * 6);
-  memcpy(dst->free, &fam.free, sizeof(int*) * 6);
+  FAM *dst = (FAM*) malloc(sizeof(int*) * 7);
+  memcpy(dst->free, &fam.free, sizeof(int*) * 3);
+
   int **pra = dst->a;
-  //assert(pra[0] == &array1[0]);
-  //assert(pra[1] == &array1[1]);
-  //assert(pra[2] == &array2[0]);
-  //assert(pra[3] == &array2[1]);
-  assert(pra[4] == &other);
-  assert(pra[5] == &end);
+  assert(pra[4] == &pos0);
+  assert(pra[5] == &pos1);
+  assert(pra[6] == &pos2);
+
+  free(dst);
 }
