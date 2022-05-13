@@ -554,7 +554,8 @@ void goto_checkt::bounds_check(
   // TODO: Rewrite this in a proper way
   if(
     is_array_type(t) &&
-    (to_array_type(t).size_is_infinite || !to_array_type(t).get_width()))
+    (to_array_type(t).size_is_infinite ||
+     (to_constant_int2t(to_array_type(t).array_size).value == 0)))
   {
     // Is it a FAM?
     if(is_member2t(ind.source_value))
@@ -570,6 +571,8 @@ void goto_checkt::bounds_check(
           return;
 
         // We can add the bound check then!
+        // TODO: get the upper bound
+        return;
       }
       else
         return;
