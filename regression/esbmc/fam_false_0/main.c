@@ -5,5 +5,5 @@ typedef struct {
 
 int main() {
   FAM F = {1, {}};
-  F.arr[10] = 7; // out-of-bounds
+  F.arr[2000] = 7; // out-of-bounds
 }

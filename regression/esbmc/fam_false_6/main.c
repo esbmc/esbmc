@@ -1,7 +1,7 @@
 typedef struct {
   int *a[2];
   int *b[2];
-  int *free[]; // int *free[1]
+  int *free[];
 } FAM;
 
 int array1[2];

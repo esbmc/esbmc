@@ -12,5 +12,8 @@ main() {
     matrix[i] = (FAM*) malloc(sizeof(FAM) + sizeof(int)*5);
   }
   matrix[9]->arr[4] = 42;
+  for(int i = 0; i < 10; i++) {
+    free(matrix[i]);
+  }
   free(matrix);
 }
