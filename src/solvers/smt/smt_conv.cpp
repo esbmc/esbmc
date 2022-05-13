@@ -1757,6 +1757,24 @@ expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
   if(domain_width == config.ansi_c.int_width)
     return idx;
 
+  // If both the index and the array are constant, we should check if the index is being lost
+  if(is_constant_int2t(idx))
+  {
+    auto index_value = to_constant_int2t(idx).value.to_uint64();
+    auto limit = pow(2, domain_width);
+    if(index_value >= limit)
+    {
+      // TODO: Maybe we should propagate an invalid expression here?
+      msg.error(fmt::format(
+        "ESBMC encodes array domains by the nearest power of 2. "
+        "Current array has a index limit of {}. \nArray: {}\nIndex: {}",
+        limit,
+        *arr_sort,
+        *idx));
+      abort();
+    }
+  }
+
   // Otherwise, we need to extract the lower bits out of this.
   return typecast2tc(
     get_uint_type(domain_width), idx, gen_zero(get_int32_type()));
