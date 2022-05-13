@@ -792,50 +792,50 @@ expr2tc gen_byte_expression(
   /**
    * The idea of this expression is to compute the object value
    * in the case where every byte `value` was set set up until num_of_bytes
-   * 
+   *
    * @warning this function does not add any pointer/memory/bounds check!
    *          they should be added before calling this function!
-   * 
+   *
    * In summary, there are two main computations here:
-   * 
+   *
    * A. Generate the byte representation, this is mostly through
    *    the `result` expression. The expression is initialized with zero
    *    and then, until the num_of_bytes is reached it will do a full byte
    *    left-shift followed by an bitor operation with the byte value:
-   * 
+   *
    *    Example, for a integer(4 bytes) with memset using 3 bytes and value 0xF1
-   * 
+   *
    *    step 1: 0x00000000 -- left-shift 8 -- 0x00000000 -- bitor -- 0x000000F1
    *    step 2: 0x000000F1 -- left-shift 8 -- 0x0000F100 -- bitor -- 0x0000F1F1
    *    step 3: 0x0000F1F1 -- left-shift 8 -- 0x00F1F100 -- bitor -- 0x00F1F1F1
-   *    
+   *
    *    Since we only want 3 bytes, the initialized object value would be 0x00F1F1F1
-   * 
+   *
    * B. Generate a mask of the bits that were not set, this is done because skipped bits
    *    need to be returned back. The computation of this is simple, we initialize every
    *    bit that was changed by the byte-representation computation with a 1. Which is then
    *    negated to be applied with an bitand in the original value:
-   * 
+   *
    *    Back to the example in A, we had the byte-representation of  0x00F1F1F1. If the
    *    original value was 0xA2A2A2A2, then we would have the following mask:
-   *    
+   *
    *    step 1: 0x00000000 -- set-bits -- 0x000000FF
    *    step 2: 0x000000FF -- set-bits -- 0x0000FFFF
    *    step 3: 0x0000FFFF -- set-bits -- 0x00FFFFFF
-   * 
+   *
    *   So, 0x00FFFFFF is the mask for all bits changed. We can negate it to: 0xFF000000
-   *   
+   *
    *   Then, we can apply it to the original source value with bitand
-   * 
+   *
    *   0xA2A2A2A2 AND 0xFF000000 --> 0xA2000000
-   * 
+   *
    * Finally, we get the result from A and B and unify them through a bitor
-   *   
+   *
    *  0xA2000000 OR 0x00F1F1F1 --> 0xA2F1F1F1
-   * 
+   *
    * Note about offsets: To handle them, we apply left shifts to the remaining offset after
    * the computation of the object-value and initial mask representation
-   * 
+   *
    */
 
   if(is_pointer_type(type))
@@ -892,14 +892,14 @@ inline expr2tc gen_value_by_byte(
    * @brief Construct a new object, initializing it with the memset equivalent
    *
    * There are a few corner cases here:
-   * 
+   *
    * 1 - Primitives: these are simple: just generate the byte_expression directly
    * 2 - Arrays: these are ok: just keep generating byte_expression for each member
    *        until a limit has arrived. Dynamic memory is dealt here.
    * 3 - Structs/Union: these are the hardest as we have to take the alignment into
    *        account when dealing with it. Hopefully the clang-frontend already give it
    *        to us.
-   * 
+   *
    */
 
   // I am not sure if bitwise operations are valid for floats
@@ -1016,14 +1016,14 @@ inline expr2tc gen_value_by_byte(
     /**
      * Unions are not nice, let's go through every member
      * and get the biggest one! And then use it directly
-     * 
+     *
      * @warning there is a semantic difference on this when
      * compared to c:@F@__memset_impl. While this function
      * will yield the same result as `clang` would, ESBMC
      * will handle the dereference (in the __memset_impl)
      * using the first member, which can lead to overflows.
      * See GitHub Issue #639
-     * 
+     *
      */
     constant_union2tc result = gen_zero(type);
 
@@ -1064,38 +1064,38 @@ void goto_symext::intrinsic_memset(
      * @brief This function will try to initialize the object pointed by
      * the address in a smarter way, minimizing the number of assignments.
      * This is intend to optimize the behaviour of a memset operation:
-     * 
+     *
      * memset(void* ptr, int value, size_t num_of_bytes)
-     * 
+     *
      * - ptr can point to anything. We have to add checks!
      * - value is interpreted as a uchar.
      * - num_of_bytes must be known. If it is nondet, we will bump the call
-     * 
+     *
      * In plain C, the objective of a call such as:
-     * 
+     *
      * int a;
      * memset(&a, value, num)
-     * 
+     *
      * Would generate something as:
-     *      
+     *
      * int temp = 0;
      * for(int i = 0; i < num; i++) temp = byte | (temp << 8);
      * a = temp;
-     * 
+     *
      * This is just a simplification for understanding though. During the
      * instrumentation size checks will be added, and also, the original
-     * bytes from `a` that were not overwritten must be mantained! 
+     * bytes from `a` that were not overwritten must be mantained!
      * Arrays will need to be added up to an nth element.
-     * 
+     *
      * In ESBMC though, we have 2 main methods of dealing with memory objects:
-     * 
+     *
      * A. Heap objects, which are valid/invalid. They are the easiest to deal
      *    with, as the dereference will actually return a big array of char to us.
      *    For this case, we can just overwrite the members directly with the value
-     * 
+     *
      * B. Stack objects, which are typed. It will be hard, this will require operations
      *    which depends on the base type and also on padding.
-     * 
+     *
      */
 
   // 1. Check for the functions parameters and do the deref and processing!
@@ -1139,8 +1139,8 @@ void goto_symext::intrinsic_memset(
 
   /* Preconditions for the optimization:
      * A: It should point to someplace
-     * B: byte itself should be renamed properly 
-     * C: Number of bytes cannot be symbolic 
+     * B: byte itself should be renamed properly
+     * C: Number of bytes cannot be symbolic
      * D: This is a simplification. So don't run with --no-simplify */
   cur_state->rename(arg1);
   cur_state->rename(arg2);
@@ -1232,7 +1232,7 @@ void goto_symext::intrinsic_memset(
       /* If we reached here, item_offset is not symbolic
        * and we don't know what the actual value of it is...
        *
-       * For now bum_call later expand our simplifier
+       * For now bump_call, later we should expand our simplifier
        */
       msg.debug(
         "[memset] TODO: some simplifications are missing, bumping call");
