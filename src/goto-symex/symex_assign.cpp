@@ -152,19 +152,13 @@ void goto_symext::symex_assign(
   // union. The rest of the model checker isn't rated for dealing with this
   // concept; perform a NOP.
   /* TODO: either we support empty classes/structs/unions, or we don't. */
-  try
+  if(is_structure_type(code.target->type))
   {
-    if(is_structure_type(code.target->type))
-    {
-      const struct_type2t &t2 =
-        static_cast<const struct_type2t &>(*code.target->type);
+    const struct_union_data &t2 =
+      static_cast<const struct_union_data &>(*code.target->type);
 
-      if(!t2.members.size())
-        return;
-    }
-  }
-  catch(const array_type2t::dyn_sized_array_excp &)
-  {
+    if(t2.members.empty())
+      return;
   }
 
   expr2tc original_lhs = code.target;
