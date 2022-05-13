@@ -1155,10 +1155,7 @@ void goto_symext::intrinsic_memset(
     return;
   }
 
-  auto simplified = arg2->simplify();
-  if(simplified)
-    arg2 = simplified;
-
+  simplify(arg2);
   if(!is_constant_int2t(arg2))
   {
     msg.debug("[memset] TODO: simplifier issues :/");
@@ -1191,10 +1188,7 @@ void goto_symext::intrinsic_memset(
       return;
     }
 
-    auto offset_simplified = item_offset->simplify();
-    if(offset_simplified)
-      item_offset = offset_simplified;
-
+    simplify(item_offset);
     // We can't optimize symbolic offsets :/
     if(is_symbol2t(item_offset))
     {
