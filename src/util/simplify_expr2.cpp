@@ -416,17 +416,13 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
 
 expr2tc add2t::do_simplify() const
 {
-  printf("TESTE-----------\n");
   auto Side_1 = side_1;
   auto Side_2 = side_2;
 
   // X + X --> X << 1
   if(is_symbol2t(side_1) && is_symbol2t(side_2))
     if(side_1 == side_2)
-    {
-      printf("X + X --> X << 1\n");
       return shl2tc(type, side_1, from_integer(1, type));
-    }
 
   // (A + 1) + ~B --> A - B
   if(is_bitnot2t(Side_1) && is_add2t(Side_2))
@@ -438,7 +434,6 @@ expr2tc add2t::do_simplify() const
       is_constant_int2t(to_add2t(Side_1).side_2) &&
       to_constant_int2t(to_add2t(Side_1).side_2).value == 1)
     {
-      printf("(A + 1) + ~B --> A - B\n");
       auto B = to_bitnot2t(Side_2).value;
       auto new_operand = sub2tc(Side_1->type, to_add2t(Side_2).side_1, B);
       return new_operand;
@@ -446,7 +441,6 @@ expr2tc add2t::do_simplify() const
   }
 
   auto simplify_2 = [](const expr2tc &e, const expr2tc &f) -> expr2tc {
-    printf("simplify_2\n");
     if(is_bitnot2t(e))
     {
       auto B = to_bitnot2t(e).value;
@@ -536,7 +530,6 @@ expr2tc add2t::do_simplify() const
   }
 
   auto simplify_3 = [](const expr2tc &e, const expr2tc &f) -> expr2tc {
-    printf("simplify_3\n");
     if(is_sub2t(e))
     {
       auto sidecheck_1 = to_sub2t(e).side_1;
@@ -597,7 +590,6 @@ expr2tc add2t::do_simplify() const
   // ~X + X -> -1
   if(is_bitnot2t(Side_1) && is_symbol2t(Side_2))
   {
-    printf("simplify_2: \n");
     if(to_symbol2t(Side_1) == to_symbol2t(to_bitnot2t(Side_2).value))
       return constant_int2tc(Side_1->type, -1);
   }
@@ -613,10 +605,7 @@ expr2tc add2t::do_simplify() const
   if(
     is_add2t(Side_1) && is_constant_int2t(Side_2) &&
     to_constant_int2t(Side_2).value == 0)
-  {
-    printf("simplify_2: \n");
-    return Side_1;
-  }
+      return Side_1;
 
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if(!is_nil_expr(res))
