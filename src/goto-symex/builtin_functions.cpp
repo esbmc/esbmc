@@ -792,9 +792,7 @@ expr2tc gen_byte_expression_byte_update(
   if(found_constant)
     result = typecast2tc(type, result);
 
-  auto simplified = result->simplify();
-  if(simplified)
-    return simplified;
+  simplify(result);
 
   return result;
 }
@@ -892,10 +890,7 @@ expr2tc gen_byte_expression(
   mask = bitand2tc(type, src, mask);
   result = bitor2tc(type, result, mask);
 
-  auto simplified = result->simplify();
-  if(simplified)
-    return simplified;
-
+  simplify(result);
   return result;
 }
 
