@@ -605,7 +605,7 @@ expr2tc add2t::do_simplify() const
   if(
     is_add2t(Side_1) && is_constant_int2t(Side_2) &&
     to_constant_int2t(Side_2).value == 0)
-      return Side_1;
+    return Side_1;
 
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if(!is_nil_expr(res))
