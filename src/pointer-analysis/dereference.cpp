@@ -1083,7 +1083,7 @@ void dereferencet::construct_from_array(
 
     if(!num_bytes)
     {
-      msg.warning("FAM detected, extracting the entire array on deref");
+      msg.debug("FAM detected, extracting the entire array on deref");
       // Are we handling a FAM? Extract everything
       num_bytes = compute_num_bytes_to_extract(
         offset, type_byte_size_bits(value->type).to_uint64());
@@ -1199,7 +1199,7 @@ void dereferencet::construct_from_const_struct_offset(
       if(is_array_type(it))
       {
         // Array of size 0 in a struct, means FAM
-        msg.warning("FAM in deref");
+        msg.debug("FAM in deref");
         // TODO: Check for allignment.
         // GET THE VALUES
         expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
@@ -2053,6 +2053,13 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   simplify(offset_bytes);
 
   BigInt num_bits = type_byte_size_bits(type);
+  if(!num_bits.compare(0))
+  {
+    /* 0 could mean that we are dealing with a FAM
+     * we have to extract the entire byte_array */
+    msg.debug("Size of type returned 0. Is this an incomplete array?");
+    num_bits = type_byte_size_bits(byte_array->type);
+  }
   assert(num_bits.is_uint64());
   uint64_t num_bits64 = num_bits.to_uint64();
   assert(num_bits64 <= ULONG_MAX);
@@ -2062,6 +2069,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   offset_bits = modulus2tc(offset_bits->type, offset_bits, gen_ulong(8));
   simplify(offset_bits);
 
+  msg.debug(fmt::format("New num_bytes: {}", num_bytes));
   return bitcast2tc(
     type,
     extract_bits_from_byte_array(
