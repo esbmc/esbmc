@@ -986,9 +986,7 @@ inline expr2tc gen_value_by_byte(
       else
       {
         assert(offset_left < current_member_size);
-        auto bytes_to_write =
-          bytes_left < current_member_size ? bytes_left : current_member_size;
-
+        auto bytes_to_write = std::min(bytes_left, current_member_size);
         result->datatype_members[i] = gen_value_by_byte(
           current_member_type,
           local_member,
