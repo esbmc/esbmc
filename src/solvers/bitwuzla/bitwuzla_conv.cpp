@@ -711,7 +711,7 @@ expr2tc bitwuzla_convt::get_array_elem(
 {
   const bitw_smt_ast *ast = dynamic_cast<const bitw_smt_ast *>(array);
   if(ast == nullptr)
-    throw new type2t::symbolic_type_excp();
+    throw type2t::symbolic_type_excp();
 
   size_t size;
   BitwuzlaTerm **indicies, **values, *default_value;

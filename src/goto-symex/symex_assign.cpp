@@ -161,9 +161,8 @@ void goto_symext::symex_assign(
         return;
     }
   }
-  catch(array_type2t::dyn_sized_array_excp *foo)
+  catch(const array_type2t::dyn_sized_array_excp &)
   {
-    delete foo;
   }
 
   expr2tc original_lhs = code.target;

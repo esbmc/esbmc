@@ -260,9 +260,9 @@ void goto_symext::track_new_pointer(
       BigInt object_size = type_byte_size(new_type);
       object_size_exp = constant_int2tc(uint_type2(), object_size.to_uint64());
     }
-    catch(array_type2t::dyn_sized_array_excp *e)
+    catch(const array_type2t::dyn_sized_array_excp &e)
     {
-      object_size_exp = typecast2tc(uint_type2(), e->size);
+      object_size_exp = typecast2tc(uint_type2(), e.size);
     }
   }
   else
@@ -807,11 +807,11 @@ void goto_symext::intrinsic_memset(
     {
       tmpsize = type_byte_size(item.object->type).to_int64();
     }
-    catch(array_type2t::dyn_sized_array_excp *e)
+    catch(const array_type2t::dyn_sized_array_excp &e)
     {
       tmpsize = -1;
     }
-    catch(array_type2t::inf_sized_array_excp *e)
+    catch(const array_type2t::inf_sized_array_excp &e)
     {
       tmpsize = -1;
     }
@@ -895,11 +895,11 @@ void goto_symext::intrinsic_memset(
       {
         tmpsize = type_byte_size(item.object->type).to_int64();
       }
-      catch(array_type2t::dyn_sized_array_excp *e)
+      catch(const array_type2t::dyn_sized_array_excp &e)
       {
         tmpsize = -1;
       }
-      catch(array_type2t::inf_sized_array_excp *e)
+      catch(const array_type2t::inf_sized_array_excp &e)
       {
         tmpsize = -1;
       }

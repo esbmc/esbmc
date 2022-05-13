@@ -297,18 +297,18 @@ smt_astt smt_convt::convert_identifier_pointer(
       uint64_t type_size = expr->type->get_width() / 8;
       size = constant_int2tc(ptr_loc_type, BigInt(type_size));
     }
-    catch(array_type2t::dyn_sized_array_excp *e)
+    catch(const array_type2t::dyn_sized_array_excp &e)
     {
-      size = e->size;
+      size = e.size;
     }
-    catch(array_type2t::inf_sized_array_excp *e)
+    catch(const array_type2t::inf_sized_array_excp &e)
     {
       // This can occur when external symbols with no known size are used.
       // in that case, make a reasonable assumption on how large they might be,
       // say, 64k.
       size = constant_int2tc(ptr_loc_type, BigInt(0x10000));
     }
-    catch(type2t::symbolic_type_excp *e)
+    catch(const type2t::symbolic_type_excp &e)
     {
       // Type is empty or code -- something that we can never have a real size
       // for. In that case, create an object of size 1: this means we have a
