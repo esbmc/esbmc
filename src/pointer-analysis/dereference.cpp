@@ -1341,9 +1341,15 @@ void dereferencet::construct_from_dyn_struct_offset(
         field, new_offset, type, guard, alignment, mode, &failed_container);
       extract_list.emplace_back(field_guard, field);
     }
-    else if(is_array_type(it) || is_union_type(it))
+    else if(is_array_type(it))
     {
       construct_from_array(field, new_offset, type, guard, mode, alignment);
+      extract_list.emplace_back(field_guard, field);
+    }
+    else if(is_union_type(it))
+    {
+      // Try to resolve this recursively
+      build_reference_rec(field, new_offset, type, guard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
     }
     else if(
