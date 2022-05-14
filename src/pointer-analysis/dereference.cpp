@@ -1293,7 +1293,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   // if we are accessing the struct using a byte, we can ignore alignment
   // rules, so convert the struct to bv and dispatch it to
   // construct_from_dyn_offset
-  if(type->get_width() == 8)
+  if(type->get_width() == config.ansi_c.char_width)
   {
     value = bitcast2tc(get_uint_type(value->type->get_width()), value);
     return construct_from_dyn_offset(value, offset, type);
@@ -1346,7 +1346,9 @@ void dereferencet::construct_from_dyn_struct_offset(
       construct_from_array(field, new_offset, type, guard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
     }
-    else if((access_sz > it->get_width()) && (type->get_width() != 8))
+    else if(
+      access_sz > it->get_width() &&
+      type->get_width() != config.ansi_c.char_width)
     {
       guardt newguard(guard);
       newguard.add(field_guard);
