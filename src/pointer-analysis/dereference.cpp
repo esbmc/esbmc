@@ -685,7 +685,7 @@ expr2tc dereferencet::build_reference_to(
 
   value = object;
 
-  // Produce a guard that the dererferenced pointer points at this object.
+  // Produce a guard that the dereferenced pointer points at this object.
   type2tc ptr_type = type2tc(new pointer_type2t(object->type));
   address_of2tc obj_ptr(ptr_type, object);
   pointer_guard = same_object2tc(deref_expr, obj_ptr);
