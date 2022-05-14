@@ -1380,13 +1380,8 @@ void dereferencet::construct_from_dyn_struct_offset(
   // Build up the new value, switching on the field guard, with the failed
   // symbol at the base.
   expr2tc new_value = failed_container;
-  for(std::list<std::pair<expr2tc, expr2tc>>::const_iterator it =
-        extract_list.begin();
-      it != extract_list.end();
-      it++)
-  {
-    new_value = if2tc(type, it->first, it->second, new_value);
-  }
+  for(const auto &it : extract_list)
+    new_value = if2tc(type, it.first, it.second, new_value);
 
   value = new_value;
 }
