@@ -277,7 +277,9 @@ bool clang_c_languaget::preprocess(
 
 bool clang_c_languaget::final(contextt &context, const messaget &msg)
 {
+  // populate symbol value using c2goto operational models
   add_cprover_library(context, msg, this);
+  // add __ESBMC__main symbol
   return clang_main(context, msg);
 }
 
