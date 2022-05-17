@@ -20,8 +20,7 @@ void print_free_vars(std::vector<expr2tc> &vars, const messaget &msg)
 
 //gets free variable declared in the main function
 //these are the candidates for domain splitting
-std::vector<expr2tc>
-get_free_vars_main(goto_functionst &goto_functions)
+std::vector<expr2tc> get_free_vars_main(goto_functionst &goto_functions)
 {
   std::vector<expr2tc> free_vars;
 
@@ -82,8 +81,7 @@ void goto_domain_split_numeric(
   goto_programt &goto_program,
   const symbol2tc &var,
   const uint32_t val,
-  const bool lt
-  )
+  const bool lt)
 {
   auto &ins = goto_program.instructions;
   goto_programt::targett i = ins.begin();
@@ -146,4 +144,3 @@ void goto_domain_split_numeric(
   //insert assumption after the first assignment of the variable to its non-det value.
   /* goto_program.insert_swap(i, tmp_e); */
 }
-
