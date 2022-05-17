@@ -214,14 +214,26 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::TranslationUnitDecl &tu =
       static_cast<const clang::TranslationUnitDecl &>(decl);
 
+    msg.debug(fmt::format(
+      "TranslationUnit has a total of {} declarations",
+      std::distance(std::cbegin(tu.decls()), std::cend(tu.decls()))));
+    static unsigned ctr = 0;
     for(auto const &decl : tu.decls())
     {
       // This is a global declaration (variable, function, struct, etc)
       // We don't need the exprt, it will be automatically added to the
       // context
       exprt dummy_decl;
+      printf("Converting symbol %u\n", ctr);
+      if(ctr == 10)
+      {
+        printf("converting class symbol\n");
+      }
+
       if(get_decl(*decl, dummy_decl))
         return true;
+
+      ctr++;
     }
 
     break;
@@ -359,6 +371,9 @@ bool clang_c_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &recordd,
   struct_union_typet &type)
 {
+  msg.debug(fmt::format(
+    "RecordDecl has {} fields",
+    std::distance(std::cbegin(recordd.fields()), std::cend(recordd.fields()))));
   // First, parse the fields
   for(auto const *field : recordd.fields())
   {
@@ -537,6 +552,9 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 
   std::string id, name;
   get_decl_name(fd, name, id);
+
+  if(name == "c:@F@main")
+    printf("Got main function decl\n");
 
   symbolt symbol;
   get_default_symbol(
