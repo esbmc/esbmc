@@ -16,6 +16,10 @@ public:
   virtual ~clang_cpp_convertert() = default;
 
 protected:
+  typedef std::unordered_map<std::size_t, std::pair<std::string, typet>>
+    this_mapt;
+  this_mapt this_map;
+
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
 
   bool get_type(const clang::QualType &type, typet &new_type) override;
@@ -50,6 +54,8 @@ protected:
     exprt &new_expr);
 
   bool get_expr(const clang::Stmt &stmt, exprt &new_expr) override;
+
+  bool search_this_map(const std::size_t address, this_mapt::iterator &this_it);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
