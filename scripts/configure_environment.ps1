@@ -15,5 +15,5 @@ Invoke-WebRequest $Z3 -OutFile $Z3_ZIP
 Expand-Archive -LiteralPath $Z3_ZIP -DestinationPath $Z3_DEST
 
 ls C:\vcpkg\installed\x64-windows\bin\
-Copy-Item C:\vcpkg\installed\x64-windows\bin\boost_filesystem-vc143-mt-x64-1_78.dll C:\Deps
-Copy-Item C:\vcpkg\installed\x64-windows\bin\boost_program_options-vc143-mt-x64-1_78.dll C:\Deps
+Copy-Item C:\vcpkg\installed\x64-windows\bin\boost_filesystem-vc143-mt-x64-1_79.dll C:\Deps
+Copy-Item C:\vcpkg\installed\x64-windows\bin\boost_program_options-vc143-mt-x64-1_79.dll C:\Deps

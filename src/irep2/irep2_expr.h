@@ -114,6 +114,31 @@ public:
   typedef esbmct::expr2t_traits<datatype_members_field> traits;
 };
 
+class constant_union_data : public constant_datatype_data
+{
+public:
+  constant_union_data(
+    const type2tc &t,
+    expr2t::expr_ids id,
+    irep_idt init_field,
+    std::vector<expr2tc> m)
+    : constant_datatype_data(t, id, std::move(m)), init_field(init_field)
+  {
+  }
+  constant_union_data(const constant_union_data &) = default;
+
+  irep_idt init_field;
+
+  // Type mangling:
+  typedef esbmct::field_traits<
+    irep_idt,
+    constant_union_data,
+    &constant_union_data::init_field>
+    init_field_field;
+  typedef esbmct::expr2t_traits<datatype_members_field, init_field_field>
+    traits;
+};
+
 class constant_bool_data : public constant2t
 {
 public:
@@ -474,6 +499,29 @@ public:
     const expr2tc &v2)
     : arith_ops(t, id), side_1(v1), side_2(v2)
   {
+#ifndef NDEBUG /* only check consistency in non-Release builds */
+    bool p1 = is_pointer_type(v1);
+    bool p2 = is_pointer_type(v2);
+    auto is_bv_type = [](const type2tc &t) {
+      return t->type_id == type2t::unsignedbv_id ||
+             t->type_id == type2t::signedbv_id;
+    };
+    if(p1 && p2)
+    {
+      assert(id == expr2t::sub_id);
+      assert(is_bv_type(t));
+      assert(t->get_width() == config.ansi_c.pointer_width);
+    }
+    else
+    {
+      assert(
+        p2 || (is_bv_type(t) == is_bv_type(v1->type) &&
+               t->get_width() == v1->type->get_width()));
+      assert(
+        p1 || (is_bv_type(t) == is_bv_type(v2->type) &&
+               t->get_width() == v2->type->get_width()));
+    }
+#endif
   }
   arith_2ops(const arith_2ops &ref) = default;
 
@@ -1440,7 +1488,7 @@ irep_typedefs(constant_int, constant_int_data);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data);
 irep_typedefs(constant_floatbv, constant_floatbv_data);
 irep_typedefs(constant_struct, constant_datatype_data);
-irep_typedefs(constant_union, constant_datatype_data);
+irep_typedefs(constant_union, constant_union_data);
 irep_typedefs(constant_array, constant_datatype_data);
 irep_typedefs(constant_bool, constant_bool_data);
 irep_typedefs(constant_array_of, constant_array_of_data);
@@ -1482,8 +1530,8 @@ irep_typedefs(ieee_div, ieee_arith_2ops);
 irep_typedefs(ieee_fma, ieee_arith_3ops);
 irep_typedefs(ieee_sqrt, ieee_arith_1op);
 irep_typedefs(modulus, arith_2ops);
-irep_typedefs(shl, arith_2ops);
-irep_typedefs(ashr, arith_2ops);
+irep_typedefs(shl, bit_2ops);
+irep_typedefs(ashr, bit_2ops);
 irep_typedefs(same_object, same_object_data);
 irep_typedefs(pointer_offset, pointer_ops);
 irep_typedefs(pointer_object, pointer_ops);
@@ -1685,18 +1733,22 @@ public:
  *  to the members described in the type. However, it seems the values pumped
  *  at us by CBMC only ever have one member (at position 0) representing the
  *  most recent value written to the union.
- *  @extend constant_datatype_data
+ *  @extend constant_union_data
  */
 class constant_union2t : public constant_union_expr_methods
 {
 public:
   /** Primary constructor.
    *  @param type Type of this structure, presumably a union_type2t
-   *  @param membrs Vector of member values that make up this union.
+   *  @param members Vector of member values that make up this union.
    */
-  constant_union2t(const type2tc &type, const std::vector<expr2tc> &members)
-    : constant_union_expr_methods(type, constant_union_id, members)
+  constant_union2t(
+    const type2tc &type,
+    irep_idt init_field,
+    const std::vector<expr2tc> &members)
+    : constant_union_expr_methods(type, constant_union_id, init_field, members)
   {
+    assert(is_union_type(type));
   }
   constant_union2t(const constant_union2t &ref) = default;
 
@@ -1868,6 +1920,9 @@ public:
  *  is bitcasting floats: if one typecasted them to integers, they would be
  *  rounded; bitcasting them produces the bit-representation of the float, as
  *  an integer value.
+ *
+ *  Bitcasts are only allowed between types of equal width.
+ *
  *  @extends bitcast_data
  */
 class bitcast2t : public bitcast_expr_methods
@@ -1880,6 +1935,7 @@ public:
   bitcast2t(const type2tc &type, const expr2tc &from)
     : bitcast_expr_methods(type, bitcast_id, from)
   {
+    assert(type->get_width() == from->type->get_width());
   }
 
   bitcast2t(const bitcast2t &ref) = default;
@@ -2565,8 +2621,8 @@ public:
 };
 
 /** Shift left operation. Shifts contents of first operand left by number of
- *  bit positions indicated by the second operand. Both must be integers. Types
- *  of both operands and expr type should match. @extends arith_2ops */
+ *  bit positions indicated by the second operand. Both must be integers.
+ * @extends bit_2ops */
 class shl2t : public shl_expr_methods
 {
 public:
@@ -2716,6 +2772,8 @@ public:
   }
   byte_extract2t(const byte_extract2t &ref) = default;
 
+  expr2tc do_simplify() const override;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2759,6 +2817,8 @@ public:
  *  and one for structs/unions. @extends with_data */
 class with2t : public with_expr_methods
 {
+  void assert_consistency() const;
+
 public:
   /** Primary constructor.
    *  @param type Type of this expression; Same as source.
@@ -2772,6 +2832,9 @@ public:
     const expr2tc &value)
     : with_expr_methods(type, with_id, source, field, value)
   {
+#ifndef NDEBUG /* only check consistency in non-Release builds */
+    assert_consistency();
+#endif
   }
   with2t(const with2t &ref) = default;
 
@@ -2792,6 +2855,15 @@ public:
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
     : member_expr_methods(type, member_id, source, memb)
   {
+#ifndef NDEBUG /* only check consistency in non-Release builds */
+    assert(
+      source->type->type_id == type2t::struct_id ||
+      source->type->type_id == type2t::union_id);
+    auto *data = dynamic_cast<const struct_union_data *>(source->type.get());
+    assert(data);
+    /* internally asserts consistency conditions */
+    data->get_component_number(memb);
+#endif
   }
   member2t(const member2t &ref) = default;
 

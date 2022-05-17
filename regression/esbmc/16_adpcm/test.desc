@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 100
+--unwind 100 --no-library
 ^VERIFICATION SUCCESSFUL$

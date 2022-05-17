@@ -47,7 +47,7 @@ extern "C"
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
-
+#include <goto-programs/mark_decl_as_non_det.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -58,6 +58,7 @@ extern "C"
 #include <util/symbol.h>
 #include <util/time_stopping.h>
 #include <util/message/format.h>
+#include <util/message/fmt_message_handler.h>
 
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -65,6 +66,10 @@ extern "C"
 
 #ifdef ENABLE_OLD_FRONTEND
 #include <ansi-c/c_preprocess.h>
+#endif
+
+#ifdef ENABLE_GOTO_CONTRACTOR
+#include <goto-programs/goto_contractor.h>
 #endif
 
 #include <util/message/default_message.h>
@@ -229,6 +234,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   options.cmdline(cmdline);
   set_verbosity_msg(msg);
+
+  if(cmdline.isset("cex-output"))
+    options.set_option("cex-output", cmdline.getval("cex-output"));
 
   /* graphML generation options check */
   if(cmdline.isset("witness-output"))
@@ -424,6 +432,18 @@ int esbmc_parseoptionst::doit()
 {
   //seed rng
   srand(time(NULL));
+  // Configure msg output
+
+  if(cmdline.isset("file-output"))
+  {
+    FILE *f = fopen(cmdline.getval("file-output"), "w+");
+    out = f;
+    err = f;
+  }
+
+  std::shared_ptr<message_handlert> handler =
+    std::make_shared<fmt_message_handler>(out, err);
+  msg.add_message_handler(handler);
   //
   // Print a banner
   //
@@ -1312,7 +1332,7 @@ int esbmc_parseoptionst::do_forward_condition(
   case smt_convt::P_UNSATISFIABLE:
     msg.result(fmt::format(
       "\nSolution found by the forward condition; "
-      "all states are reachable (k = {:d}",
+      "all states are reachable (k = {:d})",
       k_step));
     return false;
 
@@ -1603,6 +1623,9 @@ bool esbmc_parseoptionst::process_goto_program(
       unwind_loops.run();
     }
 
+    if(options.get_bool_option("initialize-nondet-variables"))
+      mark_decl_as_non_det(context, goto_functions).run();
+
     // do partial inlining
     if(!cmdline.isset("no-inlining"))
     {
@@ -1612,14 +1635,28 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, options, ns, msg);
     }
 
-    if(cmdline.isset("interval-analysis"))
+    if(cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
+    {
       interval_analysis(goto_functions, ns);
+    }
 
     if(
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
       cmdline.isset("k-induction-parallel"))
     {
       goto_k_induction(goto_functions, msg);
+    }
+
+    if(cmdline.isset("goto-contractor"))
+    {
+#ifdef ENABLE_GOTO_CONTRACTOR
+      goto_contractor(goto_functions, msg);
+#else
+      msg.error(
+        "Current build does not support contractors. If ibex is installed, add "
+        "-DENABLE_IBEX = ON");
+      abort();
+#endif
     }
 
     if(cmdline.isset("termination"))
@@ -1841,9 +1878,10 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 
 void esbmc_parseoptionst::help()
 {
-  msg.status(
+  default_message dmsg;
+  dmsg.status(
     fmt::format("\n* * *           ESBMC {}          * * *", ESBMC_VERSION));
   std::ostringstream oss;
   oss << cmdline.cmdline_options;
-  msg.status(oss.str());
+  dmsg.status(oss.str());
 }
