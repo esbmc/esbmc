@@ -7,6 +7,7 @@
 #include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/type_byte_size.h>
 
 // Helpers extracted from z3_convt.
 
@@ -226,8 +227,8 @@ void smt_convt::set_to(const expr2tc &expr, bool value)
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
-  smt_astt side1 = convert_ast(eq.side_1);
-  smt_astt side2 = convert_ast(eq.side_2);
+  smt_astt side1 = convert_ast(eq.side_1); // LHS
+  smt_astt side2 = convert_ast(eq.side_2); // RHS
   side2->assign(this, side1);
 
   // Put that into the smt cache, thus preserving the value of the assigned symbols.
@@ -295,8 +296,26 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   case expr2t::constant_union_id:
-    msg.error("Post-parse union literals are deprecated and broken, sorry");
-    abort();
+  {
+    // Get size
+    const constant_union2t &cu = to_constant_union2t(expr);
+    const expr2tc &src_expr = cu.datatype_members.at(0);
+#ifndef NDEBUG
+    if(!cu.init_field.empty())
+    {
+      const union_type2t &ut = to_union_type(expr->type);
+      unsigned c = ut.get_component_number(cu.init_field);
+      /* Can only initialize unions by expressions of same type as init_field */
+      assert(src_expr->type == ut.members[c]);
+    }
+#endif
+    a = convert_ast(typecast2tc(
+      get_uint_type(type_byte_size_bits(expr->type).to_uint64()),
+      bitcast2tc(
+        get_uint_type(type_byte_size_bits(src_expr->type).to_uint64()),
+        src_expr)));
+    break;
+  }
   case expr2t::constant_array_id:
   case expr2t::constant_array_of_id:
   {
@@ -589,6 +608,27 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 #endif
 
       a = srcval->update(this, convert_ast(with.update_value), idx);
+    }
+    else if(is_union_type(expr))
+    {
+      uint64_t bits = type_byte_size_bits(expr->type).to_uint64();
+      const union_type2t &tu = to_union_type(expr->type);
+      assert(is_constant_string2t(with.update_field));
+      unsigned c =
+        tu.get_component_number(to_constant_string2t(with.update_field).value);
+      uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
+      expr2tc upd = bitcast2tc(
+        get_uint_type(mem_bits), typecast2tc(tu.members[c], with.update_value));
+      if(mem_bits < bits)
+        upd = concat2tc(
+          get_uint_type(bits),
+          extract2tc(
+            get_uint_type(bits - mem_bits),
+            with.source_value,
+            bits - 1,
+            mem_bits),
+          upd);
+      a = convert_ast(upd);
     }
     else
     {
@@ -973,7 +1013,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(
       !int_encoding &&
-      "Concatonate encountered in integer mode; unimplemented (and funky)");
+      "Concatenate encountered in integer mode; unimplemented (and funky)");
     a = mk_concat(args[0], args[1]);
     break;
   }
@@ -1184,6 +1224,13 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = mk_array_sort(d, r);
     break;
   }
+
+  case type2t::union_id:
+  {
+    result = mk_int_bv_sort(type_byte_size_bits(type).to_uint64());
+    break;
+  }
+
   default:
     msg.error(fmt::format(
       "Unexpected type ID {} reached SMT conversion", get_type_id(type)));
@@ -1312,7 +1359,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
       type2tc range = get_flattened_array_subtype(expr->type);
 
       // If this is an array of structs, we have a tuple array sym.
-      if(is_structure_type(range) || is_pointer_type(range))
+      if(is_tuple_ast_type(range))
         return tuple_api->mk_tuple_array_symbol(expr);
     }
 
@@ -1548,12 +1595,25 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
 smt_astt smt_convt::convert_member(const expr2tc &expr)
 {
   const member2t &member = to_member2t(expr);
-  unsigned int idx = -1;
+
+  // Special case unions: bitcast it to bv then convert it back to the
+  // requested member type
+  if(is_union_type(member.source_value))
+  {
+    BigInt size = type_byte_size_bits(member.source_value->type);
+    expr2tc to_bv =
+      bitcast2tc(get_uint_type(size.to_uint64()), member.source_value);
+    return convert_ast(bitcast2tc(
+      expr->type,
+      typecast2tc(
+        get_uint_type(type_byte_size_bits(expr->type).to_uint64()), to_bv)));
+  }
 
   assert(
     is_struct_type(member.source_value) ||
     is_pointer_type(member.source_value));
-  idx = get_member_name_field(member.source_value->type, member.member);
+  unsigned int idx =
+    get_member_name_field(member.source_value->type, member.member);
 
   smt_astt src = convert_ast(member.source_value);
   return src->project(this, idx);
@@ -1942,8 +2002,10 @@ type2tc smt_convt::flatten_array_type(const type2tc &type)
 
   while(is_array_type(to_array_type(type_rec).subtype))
   {
-    arr_size =
-      mul2tc(arr_size1->type, to_array_type(type_rec).array_size, arr_size);
+    arr_size = mul2tc(
+      arr_size1->type,
+      to_array_type(to_array_type(type_rec).subtype).array_size,
+      arr_size);
     type_rec = to_array_type(type_rec).subtype;
   }
   simplify(arr_size);
@@ -2066,7 +2128,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
   case expr2t::with_id:
   {
     // This will be converted
-    with2t with = to_with2t(res);
+    const with2t &with = to_with2t(res);
     expr2tc update_val = with.update_value;
 
     if(
@@ -2076,6 +2138,19 @@ expr2tc smt_convt::get(const expr2tc &expr)
       decompose_store_chain(expr, update_val);
     }
 
+    /* This function get() is only used to obtain assigned values to the RHS of
+     * SSA_step assignments in order to generate counter-examples. with2t
+     * expressions for these RHS are only generated during the transformations
+     * performed by symex_assign(), which from the counter-example's point of
+     * view behave like no-ops as the RHS of counter-example assignments should
+     * only show the concretely updated value in expressions of composite type.
+     * Thus, there is no need to construct the full with2t expression here,
+     * since it can't sensibly be interpreted anyways due to simplification
+     * during convert_ast().
+     *
+     * Thereby we also do not have to care about cases when src->type and the
+     * constructed with2t's source's type differ, e.g., arrays of differing
+     * sizes would be constructed for regression/esbmc/loop_unroll_incr_true. */
     return get(update_val);
   }
 
@@ -2172,11 +2247,40 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
     return get_by_value(type, get_bv(a, is_signedbv_type(type)));
 
   case type2t::floatbv_id:
+    if(int_encoding)
+    {
+      /* TODO: how to retrieve an floatbv from a rational or algebraic real
+       * number in a meaningful way? */
+      return expr2tc();
+    }
     return constant_floatbv2tc(fp_api->get_fpbv(a));
 
   case type2t::struct_id:
   case type2t::pointer_id:
     return tuple_api->tuple_get(type, a);
+
+  case type2t::union_id:
+  {
+    expr2tc uint_rep =
+      get_by_ast(get_uint_type(type_byte_size_bits(type).to_uint64()), a);
+    std::vector<expr2tc> members;
+    /* TODO: this violates the assumption in the rest of ESBMC that
+     *       constant_union2t only have at most 1 member initializer.
+     *       Maybe it makes sense to go for one of the largest ones instead of
+     *       all members? */
+    for(const type2tc &member_type : to_union_type(type).members)
+    {
+      expr2tc cast = bitcast2tc(
+        member_type,
+        typecast2tc(
+          get_uint_type(type_byte_size_bits(member_type).to_uint64()),
+          uint_rep));
+      simplify(cast);
+      members.push_back(cast);
+    }
+    return constant_union2tc(
+      type, "" /* TODO: which field assigned last? */, members);
+  }
 
   default:
     msg.error(fmt::format(
@@ -2194,6 +2298,7 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
+  case type2t::union_id:
     return get_by_ast(expr->type, convert_ast(expr));
 
   case type2t::array_id:
@@ -2222,7 +2327,7 @@ expr2tc smt_convt::get_array(const expr2tc &expr)
   if(w > 10)
     w = 10;
 
-  const array_type2t &ar = to_array_type(flatten_array_type(expr->type));
+  array_type2t ar = to_array_type(flatten_array_type(expr->type));
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
   type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
   std::vector<expr2tc> fields;

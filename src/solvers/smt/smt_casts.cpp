@@ -573,6 +573,15 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
 
+  if(
+    int_encoding && is_floatbv_type(cast.from->type) &&
+    is_floatbv_type(cast.type))
+  {
+    // When using --ir mode and --floatbv, we ignore the fp-to-fp typecasting
+    // and the just encode the original fp term using real mode
+    return convert_ast(cast.from);
+  }
+
   if(cast.type == cast.from->type)
     return convert_ast(cast.from);
 

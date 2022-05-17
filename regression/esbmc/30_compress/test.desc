@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 4 --no-unwinding-assertions
+--unwind 4 --no-unwinding-assertions --no-library
 ^VERIFICATION SUCCESSFUL$

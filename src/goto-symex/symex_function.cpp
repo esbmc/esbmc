@@ -390,22 +390,23 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
   /* Internal check that all symbols are actually of 'code' type (modulo the
    * guard) */
-  for(const auto &elem : l)
-  {
+  auto maybe_called_symbol_is_code [[gnu::unused]] = [this](const auto &elem) {
     const guardt &guard = elem.first;
     const symbol2tc &sym = elem.second;
     if(!guard.is_false() && !is_code_type(sym))
     {
-      bool known_internal_error = guard.is_true();
+      bool known_called = guard.is_true();
       msg.print(
-        known_internal_error ? VerbosityLevel::Error : VerbosityLevel::Status,
+        known_called ? VerbosityLevel::Error : VerbosityLevel::Status,
         fmt::format(
           "non-code call target '{}' generated at {}",
           sym->thename.as_string()));
-      if(known_internal_error)
-        abort();
+      if(known_called)
+        return false;
     }
-  }
+    return true;
+  };
+  assert(std::all_of(l.begin(), l.end(), maybe_called_symbol_is_code));
 
   // Store.
   for(auto &it : l)

@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--function bool_literal --contract contract.sol
+^VERIFICATION FAILED$

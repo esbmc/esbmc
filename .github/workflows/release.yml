@@ -20,7 +20,7 @@ jobs:
       - name: Extract Clang 11
         run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
       - name: Setup boolector
-        run: git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
+        run: git clone --depth=1 --branch=3.2.1 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j4 && make install
       - name: Setup Z3
         run: wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.9/z3-4.8.9-x64-ubuntu-16.04.zip && unzip z3-4.8.9-x64-ubuntu-16.04.zip && mv z3-4.8.9-x64-ubuntu-16.04/ z3
       - name: Get current folder and files
@@ -34,7 +34,7 @@ jobs:
           name: release-linux
           path: ./build/ESBMC-Linux.sh
 
- 
+
   build-macos:
     name: Build Darwin Release
     runs-on: macos-latest
@@ -47,7 +47,7 @@ jobs:
       - name: Extract Clang 11
         run: tar xf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-apple-darwin clang
       - name: Setup boolector
-        run: git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
+        run: git clone --depth=1 --branch=3.2.1 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j4 && make install
       - name: Setup Z3
         run: brew install z3
       - name: Get current folder and files
@@ -102,7 +102,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_DIR=C:/deps/clang/clang -DClang_DIR=C:/deps/clang/clang -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc143-mt-x64-1_78.dll;C:/deps/boost_program_options-vc143-mt-x64-1_78.dll" -DENABLE_SOLIDITY_FRONTEND=On    
+        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_DIR=C:/deps/clang/clang -DClang_DIR=C:/deps/clang/clang -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc143-mt-x64-1_79.dll;C:/deps/boost_program_options-vc143-mt-x64-1_79.dll" -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On
     - name: Build ESBMC
       run: |
         cd build
@@ -124,7 +124,7 @@ jobs:
         uses: actions/download-artifact@v1
         with:
           name: release-linux
-          path: ./     
+          path: ./
       - name: Download Macos Build
         uses: actions/download-artifact@v1
         with:
@@ -156,16 +156,6 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./ESBMC-Linux.sh
           asset_name: ESBMC-Linux.sh
-          asset_content_type: text/x-shellscript
-      - name: Upload Release Asset (ARM64/Linux)
-        id: upload-release-asset-arm64
-        uses: actions/upload-release-asset@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ESBMC-aarch64.sh
-          asset_name: ESBMC-aarch64.sh
           asset_content_type: text/x-shellscript
       - name: Upload Release Asset (Darwin)
         id: upload-release-asset-macos
