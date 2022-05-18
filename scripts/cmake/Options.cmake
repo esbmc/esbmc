@@ -33,6 +33,7 @@ option(ENABLE_Z3 "Use Z3 solver (default: OFF)" OFF)
 option(ENABLE_MATHSAT "Use MathSAT solver (default: OFF)" OFF)
 option(ENABLE_YICES "Use Yices solver (default: OFF)" OFF)
 option(ENABLE_CVC4 "Use CVC4 solver (default: OFF)" OFF)
+option(ENABLE_BITWUZLA "Use Bitwuzla solver (default: OFF)" OFF)
 
 #############################
 # OTHERS
