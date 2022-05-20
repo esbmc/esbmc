@@ -466,7 +466,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   if(symbol.static_lifetime && !symbol.is_extern && !vd.hasInit())
   {
     // Initialize with zero value, if the symbol has initial value,
-    // it will be add later on this method
+    // it will be added later on in this method
     symbol.value = gen_zero(t, true);
     symbol.value.zero_initializer(true);
   }
