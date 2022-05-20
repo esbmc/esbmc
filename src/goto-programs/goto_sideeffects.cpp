@@ -675,13 +675,13 @@ void goto_convertt::remove_function_call(
 
     new_base_name += '_';
     new_base_name += id2string(symbol.name);
-    new_base_name += "$" + std::to_string(++temporary_counter);
+    new_base_name += "$" + std::to_string(++tmp_symbol.counter);
 
     new_symbol.name = new_base_name;
     new_symbol.mode = symbol.mode;
   }
 
-  new_symbol.id = tmp_symbol_prefix + id2string(new_symbol.name);
+  new_symbol.id = tmp_symbol.prefix + id2string(new_symbol.name);
   new_name(new_symbol);
 
   {
@@ -726,9 +726,9 @@ void goto_convertt::remove_cpp_new(
 
   symbolt new_symbol;
 
-  new_symbol.name = "new_ptr$" + std::to_string(++temporary_counter);
+  new_symbol.name = "new_ptr$" + std::to_string(++tmp_symbol.counter);
   new_symbol.type = expr.type();
-  new_symbol.id = tmp_symbol_prefix + id2string(new_symbol.name);
+  new_symbol.id = tmp_symbol.prefix + id2string(new_symbol.name);
 
   new_name(new_symbol);
 
