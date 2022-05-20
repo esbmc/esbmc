@@ -38,6 +38,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_domain.h>
 #include <goto-programs/interval_analysis.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
@@ -353,6 +354,16 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", false);
   }
 
+  if(cmdline.isset("domain-partition-smt"))
+  {
+    options.set_option("domain-partition-smt", true);
+    if(cmdline.isset("domain-partition-depth"))
+    {
+      options.set_option(
+        "domain-partition-depth", cmdline.getval("domain-partition-depth"));
+    }
+  }
+
   if(cmdline.isset("overflow-check"))
   {
     options.set_option("disable-inductive-step", true);
@@ -419,6 +430,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
 int esbmc_parseoptionst::doit()
 {
+  //seed rng
+  srand(time(NULL));
   // Configure msg output
 
   if(cmdline.isset("file-output"))
@@ -431,6 +444,8 @@ int esbmc_parseoptionst::doit()
   std::shared_ptr<message_handlert> handler =
     std::make_shared<fmt_message_handler>(out, err);
   msg.add_message_handler(handler);
+  //seed rng
+  srand(time(NULL));
   //
   // Print a banner
   //
@@ -502,6 +517,10 @@ int esbmc_parseoptionst::doit()
     return 0;
 
   // do actual BMC
+  // goto_functions is a public field defined in this class.
+  // opts is a local variable defined above, this is the command line options
+  // context is field defined in the language_uit subclass. This includes includes the context of the symbols from the original source code. This can be used for diagnostics and output
+  // msg is a field, defined in the language_uit subclass. This is used to write output
   bmct bmc(goto_functions, opts, context, msg);
 
   return do_bmc(bmc);
@@ -1405,6 +1424,7 @@ bool esbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
   return false;
 }
 
+// returns true if there is an error
 bool esbmc_parseoptionst::get_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -1443,11 +1463,30 @@ bool esbmc_parseoptionst::get_goto_program(
           return true;
       }
 
+      /* msg.status(fmt::format("Context {}", this->context.size())); */
+
+      //context is set here
       // Typecheking (old frontend) or adjust (clang frontend)
       if(typecheck())
         return true;
+
+      /* msg.status(fmt::format( */
+      /*   "Context {}", this->context.size())); // created half of the symbols */
       if(final())
         return true;
+
+      /* msg.status(fmt::format("Context {}", this->context.size())); */
+
+      //context variable is ready to use here
+      /* msg.status(fmt::format("{}", context.symbol_base_map.size())); */
+      /* auto &sym_map = context.symbol_base_map; */
+      /* for(auto it = sym_map.begin(); it != sym_map.end(); it++) */
+      /* { */
+      /*   msg.status(fmt::format( */
+      /*     "context {} {}", */
+      /*     it->first, */
+      /*     it->second)); //maps between original sumbol names and internal symbol names?? */
+      /* } */
 
       // we no longer need any parse trees or language files
       clear_parse();
@@ -1467,6 +1506,7 @@ bool esbmc_parseoptionst::get_goto_program(
       // Ahem
       migrate_namespace_lookup = new namespacet(context);
 
+      // convert context file to goto program
       goto_convert(context, options, goto_functions, msg);
     }
 
@@ -1478,7 +1518,10 @@ bool esbmc_parseoptionst::get_goto_program(
     msg.status(str.str());
 
     fine_timet process_start = current_time();
-    if(process_goto_program(options, goto_functions))
+    if(
+      process_goto_program(
+        options,
+        goto_functions)) // modify the goto program. Add pointer checks and stuff
       return true;
     fine_timet process_stop = current_time();
     std::ostringstream str2;
@@ -1623,7 +1666,103 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_termination(goto_functions, msg);
     }
 
-    goto_check(ns, options, goto_functions, msg);
+    /* if(cmdline.isset("domain-partition-goto")) */
+    /* { */
+    /*   std::vector<expr2tc> free_vars = get_free_vars_main(goto_functions, msg); */
+    /*   print_free_vars(free_vars, msg); */
+
+    /*   irep_idt main_idt("c:@F@main"); */
+    /*   goto_domain_split_numeric( */
+    /*     goto_functions.function_map.at(main_idt).body, */
+    /*     to_symbol2t(free_vars.front()), */
+    /*     1000, */
+    /*     true, */
+    /*     msg); */
+    /* } */
+
+    /* msg.status(fmt::format("{}", vars.size())); */
+
+    //print out candidate variables
+    // is it easier to perform domain partitiong at the SMT level, where its clearer
+    // how often variables are being used??
+    /* if(cmdline.isset("domain-partitioning")) */
+    /* { */
+    /*   //do domain paritiong here */
+    /*   auto &funmap = goto_functions.function_map; */
+
+    /*   //list functions code */
+    /*   /1* std::vector<irep_idt> idts; *1/ */
+    /*   /1* for(auto const &f : funmap) *1/ */
+    /*   /1* { *1/ */
+    /*   /1*   idts.push_back(f.first); *1/ */
+    /*   /1*   msg.status(f.first.as_string()); *1/ */
+    /*   /1* } *1/ */
+
+    /*   irep_idt main_idt( */
+    /*     "c:@F@main"); // domain split on a variable in the main function */
+
+    /*   auto &main = funmap.at(main_idt); */
+
+    /*   if(main.body_available) */
+    /*   { */
+    /*     goto_programt &body = main.body; */
+
+    /*     goto_domain_split_numeric(body, 1000, true, msg); */
+
+    /*     /1* body.dump(); *1/ */
+
+    /*     /1* goto_functions.update(); *1/ */
+    /*     /1* auto &ins = body.instructions; *1/ */
+
+    /*     /1* /2* std::vector<expr2tc> vars; *2/ *1/ */
+
+    /*     /1* auto i = ins.begin(); *1/ */
+    /*     /1* for(; i != ins.end(); i++) *1/ */
+    /*     /1* { *1/ */
+    /*     /1*   msg.status(i->code->pretty()); *1/ */
+    /*     /1*   /2* msg.status("running"); *2/ *1/ */
+    /*     /1*   /2* if(i->code->expr_id == 9) *2/ *1/ */
+    /*     /1*   /2* { *2/ *1/ */
+    /*     /1*   /2* } *2/ *1/ */
+    /*     /1* } *1/ */
+    /*     /1* /2* expr2tc var = i->code; // choose first variable instead *2/ *1/ */
+    /*     /1* //choose randomly *1/ */
+    /*     /1* // Should I choose from my variables or the generated variables?? *1/ */
+    /*     /1* expr2tc var = vars[rand() % vars.size()]; *1/ */
+    /*     /1* /2* code_decl_data &v = to_code_decl2t(var); *2/ *1/ */
+
+    /*     /1* msg.status(fmt::format("RV {}", var->pretty())); *1/ */
+
+    /*     /1* //TODO: loop over body to find correction insertion location. *1/ */
+    /*     /1* //create and domain splitting condition insert condition *1/ */
+    /*     /1* const expr2tc c1000 = constant_int2tc(get_int32_type(), 1000); *1/ */
+    /*     /1* const lessthan2tc cond(var, c1000); *1/ */
+
+    /*     /1* goto_programt tmp_e(msg); *1/ */
+    /*     /1* goto_programt::targett e = tmp_e.add_instruction(ASSUME); *1/ */
+    /*     /1* /2* goto_programt::targett e = main.body.add_instruction(ASSUME); *2/ *1/ */
+    /*     /1* e->guard = static_cast<expr2tc>(cond); *1/ */
+    /*     /1* e->inductive_step_instruction = false; *1/ */
+    /*     /1* e->inductive_assertion = false; *1/ */
+    /*     /1* e->location.comment("domain-partition"); *1/ */
+
+    /*     /1* i++; *1/ */
+    /*     /1* main.body.insert_swap(i, tmp_e); *1/ */
+
+    /*     /1* /2* goto_programt dest(message_handler); *2/ *1/ */
+    /*     /1* assume_cond(loop_cond, dest, tmp_head->location); *1/ */
+
+    /*     /1* goto_function.body.insert_swap(tmp_head, dest); *1/ */
+    /*     /1* main.body.destructive_append(tmp_e); *1/ */
+    /*     //find what this variable is converted into in smt representation?? */
+    /*     //apply domain partition here? */
+    /*     //maybe apply domain partitioning at the smt level */
+    /*     //we can split equation in two and add two different clauses. */
+    /*   } */
+    /* } */
+
+    goto_check(
+      ns, options, goto_functions, msg); //check for null-pointers and stuff
 
     // show it?
     if(cmdline.isset("show-goto-value-sets"))

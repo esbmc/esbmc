@@ -37,19 +37,32 @@ public:
   virtual smt_convt::resultt run(std::shared_ptr<symex_target_equationt> &eq);
   virtual ~bmct() = default;
 
+  //domain splitting conditions
+  std::vector<expr2tc> dsc;
+
 protected:
   const contextt &context;
   namespacet ns;
   const messaget &msg;
-  std::shared_ptr<smt_convt> runtime_solver;
-  std::shared_ptr<reachability_treet> symex;
+  std::shared_ptr<smt_convt>
+    runtime_solver; //converts from interal ESBMC to smt
+  std::shared_ptr<reachability_treet> symex; //jumps between reachable states
   virtual smt_convt::resultt run_decision_procedure(
     std::shared_ptr<smt_convt> &smt_conv,
     std::shared_ptr<symex_target_equationt> &eq);
 
+  //run run_decision_procedure on domain paritioned program
+  smt_convt::resultt
+  run_decision_procedure_dp(std::shared_ptr<symex_target_equationt> &eq);
+
   virtual void do_cbmc(
     std::shared_ptr<smt_convt> &smt_conv,
     std::shared_ptr<symex_target_equationt> &eq);
+
+  virtual void do_cbmc_dp(
+    std::shared_ptr<smt_convt> &smt_conv,
+    std::shared_ptr<symex_target_equationt> &eq,
+    int index);
 
   virtual void show_program(std::shared_ptr<symex_target_equationt> &eq);
   virtual void report_success();
