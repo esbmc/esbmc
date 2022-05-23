@@ -1448,7 +1448,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     typet t = initializer.type();
 
-    /* A compound literals is an LValue that has associated static or automatic
+    /* A compound literal is an LValue that has associated static or automatic
      * storage, depending on whether it appears in file or block scope.
      * Therefore, in C, for instance a pointer to it can be taken and used
      * within the same block without restrictions, e.g.
@@ -1494,7 +1494,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     else
     {
       assert(cl.static_lifetime);
-      /* Symbols appearing in file scope do not need a declaration:
+      /* Symbols appearing in file scope do not need a declaration.
        * clang_c_main::static_lifetime_init() takes care of the initialization.
        */
     }
