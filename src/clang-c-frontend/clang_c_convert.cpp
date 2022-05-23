@@ -1483,6 +1483,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if(current_block)
     {
+      /* The underlying storage is automatic here, i.e., local. In order for
+       * it to be recognized as being local in ESBMC, it requires a declaration,
+       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one. */
       code_declt decl(new_expr);
       decl.operands().push_back(initializer);
 
@@ -1491,7 +1494,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     else
     {
       assert(cl.static_lifetime);
-      /* Compound expressions appearing in file scope do not need a declaration:
+      /* Symbols appearing in file scope do not need a declaration:
        * clang_c_main::static_lifetime_init() takes care of the initialization.
        */
     }
