@@ -1487,7 +1487,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
     else
     {
-      /* XXX fbrausse: do we need to record the declaration on the top-level? */
+      assert(cl.static_lifetime);
+      /* Compound expressions appearing in file scope do not need a declaration:
+       * clang_c_main::static_lifetime_init() takes care of the initialization.
+       */
     }
 
     break;
