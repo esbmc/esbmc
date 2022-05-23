@@ -1463,11 +1463,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     /* "cl" stands for "compound literal", but that is too long for possibly
      * frequent copies of the symbol's name and id. */
-    symbolt &cl = anon_symbol.new_symbol(context, initializer.type(), "cl$");
+    std::string module_name =
+      get_modulename_from_path(location.file().as_string());
+    symbolt &cl =
+      anon_symbol.new_symbol(context, initializer.type(), module_name + "$cl$");
     /* mimic get_default_symbol() w/o setting id and name as that's already
      * taken care of by anon_symbol.new_symbol() above */
     cl.mode = "C";
-    cl.module = get_modulename_from_path(location.file().as_string());
+    cl.module = module_name;
     cl.location = location;
     cl.type = t;
 
