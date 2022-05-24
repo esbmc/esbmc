@@ -1461,13 +1461,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
      * corresponding type. Thus, we introduce a new symbol to represent it.
      */
 
-    /* "cl" stands for "compound literal", but that is too long for possibly
-     * frequent copies of the symbol's name and id. */
-    std::string module_name =
-      get_modulename_from_path(location.file().as_string());
-    symbolt &cl = anon_symbol.new_symbol(context, t, module_name + "$cl$");
+    /* Give the symbol a recognizable name to show in the counter-example */
+    std::string path = location.file().as_string();
+    std::string name_prefix =
+      path + ":" + location.get_line().as_string() + "$compound-literal$";
+    symbolt &cl = anon_symbol.new_symbol(context, t, name_prefix);
     /* .name and .id have already been assigned by new_symbol() above */
-    get_default_symbol(cl, module_name, t, cl.name, cl.id, location);
+    get_default_symbol(
+      cl, get_modulename_from_path(path), t, cl.name, cl.id, location);
 
     cl.static_lifetime = compound.isFileScope();
     cl.is_extern = false;
