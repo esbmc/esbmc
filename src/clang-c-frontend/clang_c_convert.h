@@ -64,6 +64,8 @@ public:
   static void
   gen_typecast_to_union(exprt &dest, const typet &type, const messaget &msg);
 
+  std::string get_decl_name(const clang::NamedDecl &nd);
+
 protected:
   clang::ASTContext *ASTContext;
   contextt &context;
@@ -90,6 +92,9 @@ protected:
   virtual bool get_var(const clang::VarDecl &vd, exprt &new_expr);
 
   virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
+
+  virtual bool
+  get_function_body(const clang::FunctionDecl &fd, exprt &new_expr);
 
   bool get_function_params(const clang::ParmVarDecl &pd, exprt &param);
 

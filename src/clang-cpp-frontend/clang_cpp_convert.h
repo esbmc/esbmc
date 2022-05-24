@@ -28,6 +28,9 @@ protected:
 
   bool get_function(const clang::FunctionDecl &fd, exprt &new_expr) override;
 
+  bool
+  get_function_body(const clang::FunctionDecl &fd, exprt &new_expr) override;
+
   bool get_struct_union_class(const clang::RecordDecl &rd) override;
 
   bool get_var(const clang::VarDecl &vd, exprt &new_expr) override;
@@ -56,6 +59,9 @@ protected:
   bool get_expr(const clang::Stmt &stmt, exprt &new_expr) override;
 
   bool search_this_map(const std::size_t address, this_mapt::iterator &this_it);
+
+  void
+  build_member_from_component(const clang::FunctionDecl &fd, exprt &component);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
