@@ -1465,14 +1465,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
      * frequent copies of the symbol's name and id. */
     std::string module_name =
       get_modulename_from_path(location.file().as_string());
-    symbolt &cl =
-      anon_symbol.new_symbol(context, initializer.type(), module_name + "$cl$");
-    /* mimic get_default_symbol() w/o setting id and name as that's already
-     * taken care of by anon_symbol.new_symbol() above */
-    cl.mode = "C";
-    cl.module = module_name;
-    cl.location = location;
-    cl.type = t;
+    symbolt &cl = anon_symbol.new_symbol(context, t, module_name + "$cl$");
+    /* .name and .id have already been assigned by new_symbol() above */
+    get_default_symbol(cl, module_name, t, cl.name, cl.id, location);
 
     cl.static_lifetime = compound.isFileScope();
     cl.is_extern = false;
@@ -2794,10 +2789,10 @@ bool clang_c_convertert::get_atomic_expr(
 
 void clang_c_convertert::get_default_symbol(
   symbolt &symbol,
-  std::string module_name,
+  irep_idt module_name,
   typet type,
-  std::string name,
-  std::string id,
+  irep_idt name,
+  irep_idt id,
   locationt location)
 {
   symbol.mode = "C";
