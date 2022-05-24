@@ -129,10 +129,10 @@ protected:
 
   void get_default_symbol(
     symbolt &symbol,
-    std::string module_name,
+    irep_idt module_name,
     typet type,
-    std::string base_name,
-    std::string unique_name,
+    irep_idt base_name,
+    irep_idt unique_name,
     locationt location);
 
   void
