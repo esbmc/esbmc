@@ -31,6 +31,10 @@ protected:
   bool
   get_function_body(const clang::FunctionDecl &fd, exprt &new_expr) override;
 
+  bool get_function_this_pointer_param(
+    const clang::CXXMethodDecl &fd,
+    code_typet::argumentst &params);
+
   bool get_struct_union_class(const clang::RecordDecl &rd) override;
 
   bool get_var(const clang::VarDecl &vd, exprt &new_expr) override;
