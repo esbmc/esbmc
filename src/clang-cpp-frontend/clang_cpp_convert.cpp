@@ -705,6 +705,54 @@ bool clang_cpp_convertert::get_function_body(
   return false;
 }
 
+bool clang_cpp_convertert::get_function_this_pointer_param(
+  const clang::CXXMethodDecl &cxxmd,
+  code_typet::argumentst &params)
+{
+  // Parse this pointer
+  code_typet::argumentt this_param;
+  if(get_type(cxxmd.getThisType(), this_param.type()))
+    return true;
+
+  locationt location_begin;
+  get_location_from_decl(cxxmd, location_begin);
+
+  std::string id, name;
+  get_decl_name(cxxmd, name, id);
+
+  this_param.cmt_base_name("this");
+  this_param.cmt_identifier(id);
+
+  // Add to the list of params
+  params[0] = this_param;
+
+  // If the method is not defined, we don't need to add it's parameter
+  // to the context, they will never be used
+  if(!cxxmd.isDefined())
+    return false;
+
+  symbolt param_symbol;
+  get_default_symbol(
+    param_symbol,
+    get_modulename_from_path(location_begin.file().as_string()),
+    this_param.type(),
+    name,
+    id,
+    location_begin);
+
+  param_symbol.lvalue = true;
+  param_symbol.is_parameter = true;
+  param_symbol.file_local = true;
+
+  // Save the method address and name of this pointer on the this pointer map
+  std::size_t address = reinterpret_cast<std::size_t>(cxxmd.getFirstDecl());
+  this_map[address] = std::pair<std::string, typet>(
+    param_symbol.name.as_string(), this_param.type());
+
+  move_symbol_to_context(param_symbol);
+  return false;
+}
+
 template <typename SpecializationDecl>
 bool clang_cpp_convertert::get_template_decl_specialization(
   const SpecializationDecl *D,
