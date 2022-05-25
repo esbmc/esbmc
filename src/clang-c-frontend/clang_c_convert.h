@@ -96,7 +96,11 @@ protected:
   virtual bool
   get_function_body(const clang::FunctionDecl &fd, exprt &new_expr);
 
-  bool get_function_params(const clang::ParmVarDecl &pd, exprt &param);
+  bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
+
+  virtual bool get_function_params(
+    const clang::FunctionDecl &fd,
+    code_typet::argumentst &params);
 
   virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
 
