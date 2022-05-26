@@ -32,11 +32,6 @@ Author: Daniel Kroening, kroening@kroening.com
 // global data, horrible
 unsigned int dereferencet::invalid_counter = 0;
 
-static inline bool is_non_scalar_expr(const expr2tc &e)
-{
-  return is_member2t(e) || is_index2t(e) || (is_if2t(e) && !is_scalar_type(e));
-}
-
 static inline const array_type2t get_arr_type(const expr2tc &expr)
 {
   return (is_array_type(expr))
@@ -423,59 +418,6 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     return result;
   }
 
-  if(is_non_scalar_expr(expr))
-  {
-    expr2tc res;
-    if(is_member2t(expr))
-    {
-      scalar_step_list.push_front(expr);
-      res = dereference_expr_nonscalar(
-        to_member2t(expr).source_value, guard, mode, scalar_step_list);
-      scalar_step_list.pop_front();
-    }
-    else if(is_index2t(expr))
-    {
-      dereference_expr(to_index2t(expr).index, guard, dereferencet::READ);
-      scalar_step_list.push_front(expr);
-      res = dereference_expr_nonscalar(
-        to_index2t(expr).source_value, guard, mode, scalar_step_list);
-      scalar_step_list.pop_front();
-    }
-    else if(is_if2t(expr))
-    {
-      guardt g1 = guard, g2 = guard;
-      if2t &theif = to_if2t(expr);
-      g1.add(theif.cond);
-      g2.add(not2tc(theif.cond));
-
-      scalar_step_list.push_front(theif.true_value);
-      expr2tc res1 = dereference_expr_nonscalar(
-        theif.true_value, g1, mode, scalar_step_list);
-      scalar_step_list.pop_front();
-
-      scalar_step_list.push_front(theif.false_value);
-      expr2tc res2 = dereference_expr_nonscalar(
-        theif.false_value, g2, mode, scalar_step_list);
-      scalar_step_list.pop_front();
-
-      if(is_nil_expr(res1))
-        res1 = theif.true_value;
-      if(is_nil_expr(res2))
-        res2 = theif.true_value;
-
-      if2tc fin(res1->type, theif.cond, res1, res2);
-      res = fin;
-    }
-    else
-    {
-      msg.error(fmt::format(
-        "Unexpected expression in dereference_expr_nonscalar\n{}", *expr));
-      abort();
-    }
-
-    return res;
-  }
-
   if(is_typecast2t(expr))
   {
     // Just blast straight through
@@ -483,11 +425,70 @@ expr2tc dereferencet::dereference_expr_nonscalar(
       to_typecast2t(expr).from, guard, mode, scalar_step_list);
   }
 
+  if(is_member2t(expr))
+  {
+    scalar_step_list.push_front(expr);
+    expr2tc res = dereference_expr_nonscalar(
+      to_member2t(expr).source_value, guard, mode, scalar_step_list);
+    scalar_step_list.pop_front();
+    return res;
+  }
+
+  if(is_index2t(expr))
+  {
+    dereference_expr(to_index2t(expr).index, guard, dereferencet::READ);
+    scalar_step_list.push_front(expr);
+    expr2tc res = dereference_expr_nonscalar(
+      to_index2t(expr).source_value, guard, mode, scalar_step_list);
+    scalar_step_list.pop_front();
+    return res;
+  }
+
+  if(is_if2t(expr) && !is_scalar_type(expr))
+  {
+    guardt g1 = guard, g2 = guard;
+    if2t &theif = to_if2t(expr);
+    g1.add(theif.cond);
+    g2.add(not2tc(theif.cond));
+
+    scalar_step_list.push_front(theif.true_value);
+    expr2tc res1 =
+      dereference_expr_nonscalar(theif.true_value, g1, mode, scalar_step_list);
+    scalar_step_list.pop_front();
+
+    scalar_step_list.push_front(theif.false_value);
+    expr2tc res2 =
+      dereference_expr_nonscalar(theif.false_value, g2, mode, scalar_step_list);
+    scalar_step_list.pop_front();
+
+    if(is_nil_expr(res1))
+      res1 = theif.true_value;
+    if(is_nil_expr(res2))
+      res2 = theif.true_value;
+
+    expr2tc fin = if2tc(res1->type, theif.cond, res1, res2);
+    return fin;
+  }
+
+  if(is_constant_union2t(expr))
+  {
+    constant_union2t &u = to_constant_union2t(expr);
+    assert(u.datatype_members.size() == 1);
+    assert(mode != WRITE);
+    scalar_step_list.push_front(expr);
+    expr2tc res = dereference_expr_nonscalar(
+      u.datatype_members.front(), guard, mode, scalar_step_list);
+    scalar_step_list.pop_front();
+    return res;
+  }
+
   // there should be no sudden transition back to scalars, except through
   // dereferences. Return nil to indicate that there was no dereference at
   // the bottom of this.
-  assert(
-    !is_scalar_type(expr) && (is_constant_expr(expr) || is_symbol2t(expr)));
+  assert(!is_scalar_type(expr));
+  assert(is_constant_expr(expr) || is_symbol2t(expr));
+  assert(!has_dereference(expr));
+
   return expr2tc();
 }
 
