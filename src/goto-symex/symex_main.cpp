@@ -580,7 +580,7 @@ void goto_symext::run_intrinsic(
     for(const auto &item : internal_deref_items)
     {
       assert(
-        item.object->expr_id == expr2t::expr_ids::symbol_id &&
+        is_symbol2t(item.object) &&
         "__ESBMC_init_var only works for variables");
 
       // Get the length of the type. This will propagate an exception for dynamic/infinite
