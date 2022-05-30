@@ -423,6 +423,17 @@ expr2tc add2t::do_simplify() const
     if(side_1 == side_2)
       return shl2tc(type, side_1, from_integer(1, type));
 
+  // X + ~X -> -1
+  if(is_symbol2t(Side_1) && is_bitnot2t(Side_2))
+    std::swap(Side_1, Side_2);
+
+  // ~X + X -> -1
+  if(is_bitnot2t(Side_1) && is_symbol2t(Side_2))
+  {
+    if(to_symbol2t(Side_1) == to_symbol2t(to_bitnot2t(Side_2).value))
+      return constant_int2tc(Side_1->type, -1);
+  }
+
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if(!is_nil_expr(res))
     return res;
