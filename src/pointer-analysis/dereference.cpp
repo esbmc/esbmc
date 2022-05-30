@@ -473,6 +473,9 @@ expr2tc dereferencet::dereference_expr_nonscalar(
   if(is_constant_union2t(expr))
   {
     constant_union2t &u = to_constant_union2t(expr);
+    /* In the frontend (until the SMT counter-example), constant union
+     * expressions should have a single initializer expression, see also the
+     * comment for constant_union2t in <irep2/itep2_expr.h>. */
     assert(u.datatype_members.size() == 1);
     assert(mode != WRITE);
     scalar_step_list.push_front(expr);
