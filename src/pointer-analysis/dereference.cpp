@@ -998,21 +998,21 @@ void dereferencet::build_reference_rec(
   {
     const union_type2t &uni_type = to_union_type(value->type);
     assert(uni_type.members.size() != 0);
-    auto union_total_size = type_byte_size(value->type).to_uint64();
+    BigInt union_total_size = type_byte_size(value->type);
     // Let's find a member with the biggest size
-    int selected_member_index;
-    for(auto i = 0; i < to_union_type(value->type).members.size(); i++)
-    {
-      if(
-        type_byte_size(to_union_type(value->type).members[i]).to_uint64() ==
-        union_total_size)
+    size_t selected_member_index = SIZE_MAX;
+    for(size_t i = 0; i < uni_type.members.size(); i++)
+      if(type_byte_size(uni_type.members[i]) == union_total_size)
       {
         selected_member_index = i;
         break;
       }
-    }
+    assert(selected_member_index < SIZE_MAX);
 
-    value = member2tc(uni_type.members[selected_member_index], value, uni_type.member_names[selected_member_index]);
+    value = member2tc(
+      uni_type.members[selected_member_index],
+      value,
+      uni_type.member_names[selected_member_index]);
     build_reference_rec(value, offset, type, guard, mode, alignment);
     break;
   }
