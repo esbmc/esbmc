@@ -22,6 +22,11 @@ protected:
 
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
 
+  /**
+   *  Get reference to declared variabales or functions, e.g:
+   *   - getting the callee for CXXConstructExpr
+   *   - getting the object for DeclRefExpr
+   */
   bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
 
   bool get_type(const clang::QualType &type, typet &new_type) override;
@@ -30,6 +35,9 @@ protected:
 
   bool get_function(const clang::FunctionDecl &fd, exprt &new_expr) override;
 
+  /**
+   *  Get reference for constructor callsite
+   */
   bool get_constructor_call(
     const clang::CXXConstructExpr &constructor_call,
     exprt &new_expr);
@@ -37,10 +45,21 @@ protected:
   bool
   get_function_body(const clang::FunctionDecl &fd, exprt &new_expr) override;
 
+  /**
+   *  Get function params for C++
+   *  contains parsing routines specific to C++ class member functions
+   */
   bool get_function_params(
     const clang::FunctionDecl &fd,
     code_typet::argumentst &params) override;
 
+  /**
+   *  Add implicit `this' when parsing C++ class member functions, e.g:
+   *  class t1 { int i; t1(){i = 1} };
+   *  The implicit `this' within the constructor is represented by symbol:
+   *   - t1() symbol.type:   void (t1*)
+   *   - t1() symbol.value:  { t1->i = 1; }
+   */
   bool get_function_this_pointer_param(
     const clang::CXXMethodDecl &fd,
     code_typet::argumentst &params);
@@ -71,8 +90,6 @@ protected:
     exprt &new_expr);
 
   bool get_expr(const clang::Stmt &stmt, exprt &new_expr) override;
-
-  bool search_this_map(const std::size_t address, this_mapt::iterator &this_it);
 
   void
   build_member_from_component(const clang::FunctionDecl &fd, exprt &component);

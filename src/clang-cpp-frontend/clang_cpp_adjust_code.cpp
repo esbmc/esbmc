@@ -170,6 +170,7 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
         side_effect_expr_function_callt &init =
           to_side_effect_expr_function_call(rhs);
 
+        // Get lhs
         init.arguments().push_back(address_of_exprt(code_decl.lhs()));
 
         // Now convert the side_effect into an expression
