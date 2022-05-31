@@ -566,7 +566,7 @@ void goto_symext::run_intrinsic(
   else if(has_prefix(symname, "c:@F@__ESBMC_init_var"))
   {
     assert(
-      func_call.operands.size() == 1 && "Wrong __ESBMC_init_var signature");
+      func_call.operands.size() == 1 && "Called __ESBMC_init_var(void *) with the wrong number of parameters.");
     auto &ex_state = art.get_cur_state();
     if(ex_state.cur_state->guard.is_false())
       return;
@@ -589,12 +589,12 @@ void goto_symext::run_intrinsic(
       {
         type_byte_size(item.object->type).to_int64();
       }
-      catch(array_type2t::dyn_sized_array_excp *e)
+      catch(const array_type2t::dyn_sized_array_excp &e)
       {
         msg.error("__ESBMC_init_var does not support VLAs");
         abort();
       }
-      catch(array_type2t::inf_sized_array_excp *e)
+      catch(const array_type2t::inf_sized_array_excp &e)
       {
         msg.error("__ESBMC_init_var does not support infinite-length arrays");
         abort();
