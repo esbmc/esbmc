@@ -1362,12 +1362,6 @@ void dereferencet::construct_from_dyn_struct_offset(
       construct_from_array(field, new_offset, type, guard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
     }
-    else if(is_union_type(it))
-    {
-      // Try to resolve this recursively
-      build_reference_rec(field, new_offset, type, guard, mode, alignment);
-      extract_list.emplace_back(field_guard, field);
-    }
     else if(
       access_sz > it->get_width() &&
       type->get_width() != config.ansi_c.char_width)
