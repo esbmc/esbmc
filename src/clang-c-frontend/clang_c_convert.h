@@ -75,9 +75,11 @@ protected:
   symbol_generator anon_symbol;
 
   unsigned int current_scope_var_num;
-  /* During get_expr(), which also transforms blocks/scopes, this represents
-   * the latest opened blocks from the top-level. A nullptr 'current_block'
-   * thus means file scope. */
+  /**
+   *  During get_expr(), which also transforms blocks/scopes, this represents
+   *  the latest opened blocks from the top-level. A nullptr 'current_block'
+   *  thus means file scope.
+   */
   code_blockt *current_block;
 
   clang::SourceManager *sm;
@@ -87,6 +89,10 @@ protected:
   bool convert_builtin_types();
   bool convert_top_level_decl();
 
+  /**
+   *  Since this class is inherited by clang-cpp-frontend,
+   *  some get_* functions are made `virtual' to deal with clang CXX declarations
+   */
   virtual bool get_decl(const clang::Decl &decl, exprt &new_expr);
 
   virtual bool get_var(const clang::VarDecl &vd, exprt &new_expr);
@@ -96,11 +102,19 @@ protected:
   virtual bool
   get_function_body(const clang::FunctionDecl &fd, exprt &new_expr);
 
-  bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
-
+  /**
+   *  Parse function parameters
+   *  This function simply contains a loop to populate the code argument list
+   *  and calls get_function_body to parse each individual parameter.
+   */
   virtual bool get_function_params(
     const clang::FunctionDecl &fd,
     code_typet::argumentst &params);
+
+  /**
+   *  Parse each individual parameter of the function
+   */
+  bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
 
   virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
 

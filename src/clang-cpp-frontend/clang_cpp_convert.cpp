@@ -610,7 +610,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
 
     this_mapt::iterator it;
-    if(!search_this_map(address, it))
+    if(this_map.find(address) == this_map.end())
     {
       msg.error(fmt::format(
         "Pointer `this' for method {} was not added to scope",
@@ -697,7 +697,7 @@ void clang_cpp_convertert::build_member_from_component(
   std::size_t address = reinterpret_cast<std::size_t>(fd.getFirstDecl());
 
   this_mapt::iterator it;
-  if(!search_this_map(address, it))
+  if(this_map.find(address) == this_map.end())
   {
     msg.error(fmt::format(
       "Pointer `this' for method {} was not added to scope",
@@ -876,17 +876,6 @@ bool clang_cpp_convertert::get_template_decl(
       return true;
 
   return false;
-}
-
-bool clang_cpp_convertert::search_this_map(
-  const std::size_t address,
-  this_mapt::iterator &this_it)
-{
-  this_it = this_map.find(address);
-  if(this_it == this_map.end())
-    return false;
-
-  return true;
 }
 
 bool clang_cpp_convertert::get_decl_ref(
