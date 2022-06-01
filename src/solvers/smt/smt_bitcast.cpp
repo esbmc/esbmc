@@ -46,7 +46,7 @@ flatten_to_bitvector_rec(const expr2tc &new_expr, const messaget &msg)
     return expr;
   }
 
-  // If it is an array, concat every member into a big bitvector
+  // If it is a struct, concat all members into a big bitvector
   // TODO: this is similar to concat array elements, should we merge them?
   if(is_struct_type(new_expr))
   {
