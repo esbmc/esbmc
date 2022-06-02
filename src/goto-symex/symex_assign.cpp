@@ -148,22 +148,17 @@ void goto_symext::symex_assign(
   const code_assign2t &code = to_code_assign2t(code_assign);
 
   // Sanity check: if the target has zero size, then we've ended up assigning
-  // to/from a C++ POD class with no fields. The rest of the model checker isn't
-  // rated for dealing with this concept; perform a NOP.
-  try
+  // to/from either a C++ POD class with no fields or an empty C struct or
+  // union. The rest of the model checker isn't rated for dealing with this
+  // concept; perform a NOP.
+  /* TODO: either we support empty classes/structs/unions, or we don't. */
+  if(is_structure_type(code.target->type))
   {
-    if(is_struct_type(code.target->type))
-    {
-      const struct_type2t &t2 =
-        static_cast<const struct_type2t &>(*code.target->type);
+    const struct_union_data &t2 =
+      static_cast<const struct_union_data &>(*code.target->type);
 
-      if(!t2.members.size())
-        return;
-    }
-  }
-  catch(array_type2t::dyn_sized_array_excp *foo)
-  {
-    delete foo;
+    if(t2.members.empty())
+      return;
   }
 
   expr2tc original_lhs = code.target;

@@ -1,0 +1,5 @@
+CORE
+main.c
+
+dereference failure: accessed expired variable pointer
+^VERIFICATION FAILED$

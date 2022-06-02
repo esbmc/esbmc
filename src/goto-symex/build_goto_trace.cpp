@@ -96,7 +96,7 @@ void build_goto_trace(
           goto_trace_step.value =
             build_rhs(smt_conv, SSA_step.original_rhs, msg);
       }
-      catch(type2t::symbolic_type_excp *e)
+      catch(const type2t::symbolic_type_excp &e)
       {
         // Don't add this assignment to the cex if we couldn't build the rhs value
         continue;

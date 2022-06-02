@@ -687,7 +687,7 @@ expr2tc boolector_convt::get_array_elem(
   // want to catch if the conversion fails
   const btor_smt_ast *ast = dynamic_cast<const btor_smt_ast *>(array);
   if(ast == nullptr)
-    throw new type2t::symbolic_type_excp();
+    throw type2t::symbolic_type_excp();
 
   uint32_t size;
   char **indicies, **values;

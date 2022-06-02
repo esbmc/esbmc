@@ -32,11 +32,6 @@ Author: Daniel Kroening, kroening@kroening.com
 // global data, horrible
 unsigned int dereferencet::invalid_counter = 0;
 
-static inline bool is_non_scalar_expr(const expr2tc &e)
-{
-  return is_member2t(e) || is_index2t(e) || (is_if2t(e) && !is_scalar_type(e));
-}
-
 static inline const array_type2t get_arr_type(const expr2tc &expr)
 {
   return (is_array_type(expr))
@@ -423,59 +418,6 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     return result;
   }
 
-  if(is_non_scalar_expr(expr))
-  {
-    expr2tc res;
-    if(is_member2t(expr))
-    {
-      scalar_step_list.push_front(expr);
-      res = dereference_expr_nonscalar(
-        to_member2t(expr).source_value, guard, mode, scalar_step_list);
-      scalar_step_list.pop_front();
-    }
-    else if(is_index2t(expr))
-    {
-      dereference_expr(to_index2t(expr).index, guard, dereferencet::READ);
-      scalar_step_list.push_front(expr);
-      res = dereference_expr_nonscalar(
-        to_index2t(expr).source_value, guard, mode, scalar_step_list);
-      scalar_step_list.pop_front();
-    }
-    else if(is_if2t(expr))
-    {
-      guardt g1 = guard, g2 = guard;
-      if2t &theif = to_if2t(expr);
-      g1.add(theif.cond);
-      g2.add(not2tc(theif.cond));
-
-      scalar_step_list.push_front(theif.true_value);
-      expr2tc res1 = dereference_expr_nonscalar(
-        theif.true_value, g1, mode, scalar_step_list);
-      scalar_step_list.pop_front();
-
-      scalar_step_list.push_front(theif.false_value);
-      expr2tc res2 = dereference_expr_nonscalar(
-        theif.false_value, g2, mode, scalar_step_list);
-      scalar_step_list.pop_front();
-
-      if(is_nil_expr(res1))
-        res1 = theif.true_value;
-      if(is_nil_expr(res2))
-        res2 = theif.true_value;
-
-      if2tc fin(res1->type, theif.cond, res1, res2);
-      res = fin;
-    }
-    else
-    {
-      msg.error(fmt::format(
-        "Unexpected expression in dereference_expr_nonscalar\n{}", *expr));
-      abort();
-    }
-
-    return res;
-  }
-
   if(is_typecast2t(expr))
   {
     // Just blast straight through
@@ -483,11 +425,73 @@ expr2tc dereferencet::dereference_expr_nonscalar(
       to_typecast2t(expr).from, guard, mode, scalar_step_list);
   }
 
+  if(is_member2t(expr))
+  {
+    scalar_step_list.push_front(expr);
+    expr2tc res = dereference_expr_nonscalar(
+      to_member2t(expr).source_value, guard, mode, scalar_step_list);
+    scalar_step_list.pop_front();
+    return res;
+  }
+
+  if(is_index2t(expr))
+  {
+    dereference_expr(to_index2t(expr).index, guard, dereferencet::READ);
+    scalar_step_list.push_front(expr);
+    expr2tc res = dereference_expr_nonscalar(
+      to_index2t(expr).source_value, guard, mode, scalar_step_list);
+    scalar_step_list.pop_front();
+    return res;
+  }
+
+  if(is_if2t(expr) && !is_scalar_type(expr))
+  {
+    guardt g1 = guard, g2 = guard;
+    if2t &theif = to_if2t(expr);
+    g1.add(theif.cond);
+    g2.add(not2tc(theif.cond));
+
+    scalar_step_list.push_front(theif.true_value);
+    expr2tc res1 =
+      dereference_expr_nonscalar(theif.true_value, g1, mode, scalar_step_list);
+    scalar_step_list.pop_front();
+
+    scalar_step_list.push_front(theif.false_value);
+    expr2tc res2 =
+      dereference_expr_nonscalar(theif.false_value, g2, mode, scalar_step_list);
+    scalar_step_list.pop_front();
+
+    if(is_nil_expr(res1))
+      res1 = theif.true_value;
+    if(is_nil_expr(res2))
+      res2 = theif.true_value;
+
+    expr2tc fin = if2tc(res1->type, theif.cond, res1, res2);
+    return fin;
+  }
+
+  if(is_constant_union2t(expr))
+  {
+    constant_union2t &u = to_constant_union2t(expr);
+    /* In the frontend (until the SMT counter-example), constant union
+     * expressions should have a single initializer expression, see also the
+     * comment for constant_union2t in <irep2/itep2_expr.h>. */
+    assert(u.datatype_members.size() == 1);
+    assert(mode != WRITE);
+    scalar_step_list.push_front(expr);
+    expr2tc res = dereference_expr_nonscalar(
+      u.datatype_members.front(), guard, mode, scalar_step_list);
+    scalar_step_list.pop_front();
+    return res;
+  }
+
   // there should be no sudden transition back to scalars, except through
   // dereferences. Return nil to indicate that there was no dereference at
   // the bottom of this.
-  assert(
-    !is_scalar_type(expr) && (is_constant_expr(expr) || is_symbol2t(expr)));
+  assert(!is_scalar_type(expr));
+  assert(is_constant_expr(expr) || is_symbol2t(expr));
+  assert(!has_dereference(expr));
+
   return expr2tc();
 }
 
@@ -685,7 +689,7 @@ expr2tc dereferencet::build_reference_to(
 
   value = object;
 
-  // Produce a guard that the dererferenced pointer points at this object.
+  // Produce a guard that the dereferenced pointer points at this object.
   type2tc ptr_type = type2tc(new pointer_type2t(object->type));
   address_of2tc obj_ptr(ptr_type, object);
   pointer_guard = same_object2tc(deref_expr, obj_ptr);
@@ -992,11 +996,23 @@ void dereferencet::build_reference_rec(
   case flag_src_union | flag_dst_scalar | flag_is_dyn_offs:
   case flag_src_union | flag_dst_struct | flag_is_dyn_offs:
   {
-    // Just perform an access to the first element thing.
     const union_type2t &uni_type = to_union_type(value->type);
     assert(uni_type.members.size() != 0);
-    value = member2tc(uni_type.members[0], value, uni_type.member_names[0]);
+    BigInt union_total_size = type_byte_size(value->type);
+    // Let's find a member with the biggest size
+    size_t selected_member_index = SIZE_MAX;
+    for(size_t i = 0; i < uni_type.members.size(); i++)
+      if(type_byte_size(uni_type.members[i]) == union_total_size)
+      {
+        selected_member_index = i;
+        break;
+      }
+    assert(selected_member_index < SIZE_MAX);
 
+    value = member2tc(
+      uni_type.members[selected_member_index],
+      value,
+      uni_type.member_names[selected_member_index]);
     build_reference_rec(value, offset, type, guard, mode, alignment);
     break;
   }
@@ -1293,7 +1309,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   // if we are accessing the struct using a byte, we can ignore alignment
   // rules, so convert the struct to bv and dispatch it to
   // construct_from_dyn_offset
-  if(type->get_width() == 8)
+  if(type->get_width() == config.ansi_c.char_width)
   {
     value = bitcast2tc(get_uint_type(value->type->get_width()), value);
     return construct_from_dyn_offset(value, offset, type);
@@ -1341,12 +1357,14 @@ void dereferencet::construct_from_dyn_struct_offset(
         field, new_offset, type, guard, alignment, mode, &failed_container);
       extract_list.emplace_back(field_guard, field);
     }
-    else if(is_array_type(it) || is_union_type(it))
+    else if(is_array_type(it))
     {
       construct_from_array(field, new_offset, type, guard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
     }
-    else if((access_sz > it->get_width()) && (type->get_width() != 8))
+    else if(
+      access_sz > it->get_width() &&
+      type->get_width() != config.ansi_c.char_width)
     {
       guardt newguard(guard);
       newguard.add(field_guard);
@@ -1378,13 +1396,8 @@ void dereferencet::construct_from_dyn_struct_offset(
   // Build up the new value, switching on the field guard, with the failed
   // symbol at the base.
   expr2tc new_value = failed_container;
-  for(std::list<std::pair<expr2tc, expr2tc>>::const_iterator it =
-        extract_list.begin();
-      it != extract_list.end();
-      it++)
-  {
-    new_value = if2tc(type, it->first, it->second, new_value);
-  }
+  for(const auto &it : extract_list)
+    new_value = if2tc(type, it.first, it.second, new_value);
 
   value = new_value;
 }

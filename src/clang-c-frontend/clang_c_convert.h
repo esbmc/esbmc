@@ -6,7 +6,9 @@
 
 #include <util/context.h>
 #include <util/namespace.h>
+#include <util/std_code.h>
 #include <util/std_types.h>
+#include <util/symbol_generator.h>
 
 // Forward dec, to avoid bringing in clang headers
 namespace clang
@@ -68,8 +70,13 @@ protected:
   namespacet ns;
   std::vector<std::unique_ptr<clang::ASTUnit>> &ASTs;
   const messaget &msg;
+  symbol_generator anon_symbol;
 
   unsigned int current_scope_var_num;
+  /* During get_expr(), which also transforms blocks/scopes, this represents
+   * the latest opened blocks from the top-level. A nullptr 'current_block'
+   * thus means file scope. */
+  code_blockt *current_block;
 
   clang::SourceManager *sm;
 
@@ -122,10 +129,10 @@ protected:
 
   void get_default_symbol(
     symbolt &symbol,
-    std::string module_name,
+    irep_idt module_name,
     typet type,
-    std::string base_name,
-    std::string unique_name,
+    irep_idt base_name,
+    irep_idt unique_name,
     locationt location);
 
   void
