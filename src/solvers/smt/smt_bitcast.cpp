@@ -46,6 +46,9 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
     return expr;
   }
 
+  if(new_expr->type->get_width() == 0)
+    return constant_int2tc(get_uint_type(0), BigInt(0));
+
   // If it is a struct, concat all members into a big bitvector
   // TODO: this is similar to concat array elements, should we merge them?
   if(is_struct_type(new_expr))
