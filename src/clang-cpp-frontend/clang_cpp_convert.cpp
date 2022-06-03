@@ -1,4 +1,5 @@
 // Remove warnings from Clang headers
+#include <iterator>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -19,7 +20,7 @@
 #include <util/expr_util.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
-#include <fmt/core.h>
+#include <iostream> // TODO: replace with fmt
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -223,7 +224,7 @@ bool clang_cpp_convertert::get_function(
 
 bool clang_cpp_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
-  // Only convert RecordDecl not depending on a template parameter
+  // Only convert RecordDecl not depending on a template parameter?
   if(rd.isDependentContext())
     return false;
 
@@ -279,7 +280,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   if(cxxrd == nullptr)
     return false;
 
-  // [Q: base class as in C++ inheritance?]
+  // Parse bases - [Q: base class as in C++ inheritance?]
   for(const auto &decl : cxxrd->bases())
   {
     assert(
@@ -287,7 +288,14 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     assert(decl.isVirtual());
   }
 
+  // TODO: replace with fmt
+  std::cerr << "RecordDecl has "
+            << std::distance(
+                 std::cbegin(recordd.fields()), std::cend(recordd.fields()))
+            << " methods" << std::endl;
+
   // Iterate over the declarations stored in this context
+  // [Q: what about cxxrd->methods()?]
   for(const auto &decl : cxxrd->decls())
   {
     // Fields were already added
@@ -335,7 +343,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   switch(stmt.getStmtClass())
   {
   case clang::Stmt::CXXReinterpretCastExprClass:
-  // TODO: ReinterpretCast should actually generate a bitcast
+    // TODO: ReinterpretCast should actually generate a bitcast
   case clang::Stmt::CXXFunctionalCastExprClass:
   case clang::Stmt::CXXStaticCastExprClass:
   case clang::Stmt::CXXConstCastExprClass:
@@ -612,9 +620,10 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     this_mapt::iterator it;
     if(!search_this_map(address, it))
     {
-      msg.error(fmt::format(
-        "Pointer `this' for method {} was not added to scope",
-        clang_c_convertert::get_decl_name(*current_functionDecl)));
+      // TODO: replace with fmt
+      std::cerr << "Pointer `this' for method "
+                << clang_c_convertert::get_decl_name(*current_functionDecl)
+                << " was not added to scope" << std::endl;
       abort();
     }
 
@@ -699,9 +708,9 @@ void clang_cpp_convertert::build_member_from_component(
   this_mapt::iterator it;
   if(!search_this_map(address, it))
   {
-    msg.error(fmt::format(
-      "Pointer `this' for method {} was not added to scope",
-      clang_c_convertert::get_decl_name(fd)));
+    std::cerr << "Pointer `this' for method "
+              << clang_c_convertert::get_decl_name(fd)
+              << " was not added to scope" << std::endl;
     abort();
   }
 
@@ -758,8 +767,7 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   std::string id, name;
   get_decl_name(cxxmd, name, id);
 
-  //this_param.cmt_base_name("this");
-  this_param.cmt_base_name(name);
+  this_param.cmt_base_name("this");
   this_param.cmt_identifier(id);
 
   // Add to the list of params
@@ -806,6 +814,13 @@ bool clang_cpp_convertert::get_function_params(
   // C functions
   if(!fd.isCXXClassMember() || cxxmd.isStatic())
     return clang_c_convertert::get_function_params(fd, params);
+
+#if 0
+  //[TODO-Q: can't we just push? do we have to reserve?]
+  // Resize the size we'll be iterating on
+  // + 1 for the this pointer arg
+  params.resize(1 + fd.parameters().size());
+#endif
 
   // Add this pointer to first arg
   if(get_function_this_pointer_param(cxxmd, params))
@@ -927,8 +942,9 @@ bool clang_cpp_convertert::get_decl_ref(
 
   default:
   {
-    msg.error(fmt::format(
-      "Conversion of unsupported clang decl ref: {}", decl.getDeclKindName()));
+    // TODO: replace with fmt
+    std::cout << "Conversion of unsupported clang decl ref: ";
+    std::cout << decl.getDeclKindName() << std::endl;
     assert(!"add more cases...");
     return true;
   }

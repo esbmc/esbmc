@@ -4,5 +4,3 @@ target_include_directories(clangcppfrontend
     PRIVATE ${CLANG_INCLUDE_DIRS}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-
-target_link_libraries(clangcppfrontend fmt::fmt)
