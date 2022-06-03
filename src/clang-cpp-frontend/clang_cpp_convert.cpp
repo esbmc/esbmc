@@ -18,7 +18,6 @@
 #include <util/expr_util.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
-#include <iostream> // TODO: replace with fmt
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -213,7 +212,7 @@ bool clang_cpp_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
 {
-  // Only convert instantiated functions/methods not depending on a template parameter
+  // Only convert instantiated functions/methods not depending on template
   if(fd.isDependentContext())
     return false;
 
@@ -224,7 +223,8 @@ bool clang_cpp_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
   // Only convert RecordDecl not depending on a template parameter?
   if(rd.isDependentContext())
-    return false;
+    assert(
+      !"Come back and continue - Got template parameter dependent RecordDecl, just return false?");
 
   return clang_c_convertert::get_struct_union_class(rd);
 }
@@ -286,11 +286,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     assert(decl.isVirtual());
   }
 
-  // TODO: replace with fmt
-  std::cerr << "RecordDecl has "
-            << std::distance(
-                 std::cbegin(recordd.fields()), std::cend(recordd.fields()))
-            << " methods" << std::endl;
   // Iterate over the declarations stored in this context
   // [TODO-Q: also covers cxxrd->methods()?]
   for(const auto &decl : cxxrd->decls())
@@ -629,13 +624,12 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     std::size_t address =
       reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
 
+    assert(!"come back and continue - Got this expr");
+
     this_mapt::iterator it;
     if(!search_this_map(address, it))
     {
-      // TODO: replace with fmt
-      std::cerr << "Pointer `this' for method "
-                << clang_c_convertert::get_decl_name(*current_functionDecl)
-                << " was not added to scope" << std::endl;
+      msg.error("Pointer `this' was not added to scope");
       abort();
     }
 
@@ -654,54 +648,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   }
 
   new_expr.location() = location;
-  return false;
-}
-
-void clang_cpp_convertert::build_member_from_component(
-  const clang::FunctionDecl &fd,
-  exprt &component)
-{
-  // Add this pointer as first argument
-  std::size_t address = reinterpret_cast<std::size_t>(fd.getFirstDecl());
-
-  this_mapt::iterator it;
-  if(!search_this_map(address, it))
-  {
-    std::cerr << "Pointer `this' for method "
-              << clang_c_convertert::get_decl_name(fd)
-              << " was not added to scope" << std::endl;
-    abort();
-  }
-
-  member_exprt member(
-    symbol_exprt(it->second.first, it->second.second),
-    component.name(),
-    component.type());
-
-  component.swap(member);
-}
-
-bool clang_cpp_convertert::get_function_body(
-  const clang::FunctionDecl &fd,
-  exprt &new_expr)
-{
-  // do nothing if function body doesn't exist
-  if(!fd.hasBody())
-    return false;
-
-  // Parse body
-  if(clang_c_convertert::get_function_body(fd, new_expr))
-    return true;
-
-  code_blockt &body = to_code_block(to_code(new_expr));
-
-  // if it's a constructor, check for initializers
-  if(fd.getKind() == clang::Decl::CXXConstructor)
-  {
-    assert(!"got ctor");
-    assert(body.has_operands());
-  }
-
   return false;
 }
 

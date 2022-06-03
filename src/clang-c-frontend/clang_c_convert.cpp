@@ -224,6 +224,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       // We don't need the exprt, it will be automatically added to the
       // context
       exprt dummy_decl;
+      printf("Converting symbol %u\n", ctr);
       if(ctr == 10)
       {
         printf("converting class symbol\n");
@@ -514,8 +515,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
 bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 {
-  // Don't convert if implicit, unless it's a constructor
-  if(fd.isImplicit() && (fd.getKind() != clang::Decl::CXXConstructor))
+  // Don't convert if clang thinks that the functions was implicitly converted
+  if(fd.isImplicit())
     return false;
 
   // If the function is not defined but this is not the definition, skip it
@@ -551,6 +552,9 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 
   std::string id, name;
   get_decl_name(fd, name, id);
+
+  if(name == "c:@F@main")
+    printf("Got main function decl\n");
 
   symbolt symbol;
   get_default_symbol(
@@ -588,27 +592,16 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   // We need: a type, a name, and an optional body
   if(fd.hasBody())
   {
-    if(get_function_body(fd, added_symbol.value))
+    exprt body_exprt;
+    if(get_expr(*fd.getBody(), body_exprt))
       return true;
+
+    added_symbol.value = body_exprt;
   }
 
   // Restore old functionDecl
   current_functionDecl = old_functionDecl;
 
-  return false;
-}
-
-bool clang_c_convertert::get_function_body(
-  const clang::FunctionDecl &fd,
-  exprt &new_expr)
-{
-  assert(fd.hasBody());
-
-  exprt body_exprt;
-  if(get_expr(*fd.getBody(), body_exprt))
-    return true;
-
-  new_expr = body_exprt;
   return false;
 }
 
@@ -2829,7 +2822,7 @@ void clang_c_convertert::get_default_symbol(
   symbol.id = id;
 }
 
-std::string clang_c_convertert::get_decl_name(const clang::NamedDecl &nd)
+static std::string get_decl_name(const clang::NamedDecl &nd)
 {
   if(const clang::IdentifierInfo *identifier = nd.getIdentifier())
     return identifier->getName().str();
@@ -2856,7 +2849,7 @@ void clang_c_convertert::get_decl_name(
   std::string &name,
   std::string &id)
 {
-  id = name = get_decl_name(nd);
+  id = name = ::get_decl_name(nd);
 
   switch(nd.getKind())
   {
@@ -2949,7 +2942,7 @@ void clang_c_convertert::get_start_location_from_stmt(
   std::string function_name;
 
   if(current_functionDecl)
-    function_name = get_decl_name(*current_functionDecl);
+    function_name = ::get_decl_name(*current_functionDecl);
 
   clang::PresumedLoc PLoc;
   get_presumed_location(stmt.getSourceRange().getBegin(), PLoc);
@@ -2966,7 +2959,7 @@ void clang_c_convertert::get_final_location_from_stmt(
   std::string function_name;
 
   if(current_functionDecl)
-    function_name = get_decl_name(*current_functionDecl);
+    function_name = ::get_decl_name(*current_functionDecl);
 
   clang::PresumedLoc PLoc;
   get_presumed_location(stmt.getSourceRange().getEnd(), PLoc);
@@ -2987,7 +2980,7 @@ void clang_c_convertert::get_location_from_decl(
     const clang::FunctionDecl &funcd =
       static_cast<const clang::FunctionDecl &>(*decl.getDeclContext());
 
-    function_name = get_decl_name(funcd);
+    function_name = ::get_decl_name(funcd);
   }
 
   clang::PresumedLoc PLoc;
