@@ -753,48 +753,6 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   return false;
 }
 
-bool clang_cpp_convertert::get_function_params(
-  const clang::FunctionDecl &fd,
-  code_typet::argumentst &params)
-{
-  // On C++, all methods have an implicit reference to the
-  // class of the object
-  const clang::CXXMethodDecl &cxxmd =
-    static_cast<const clang::CXXMethodDecl&>(fd);
-
-  // If it's a C-style function, fallback to C mode
-  // Static methods don't have the this arg and can be handled as
-  // C functions
-  if(!fd.isCXXClassMember() || cxxmd.isStatic())
-    return clang_c_convertert::get_function_params(fd, params);
-
-#if 0
-  //[TODO-Q: can't we just push? do we have to reserve?]
-  // Resize the size we'll be iterating on
-  // + 1 for the this pointer arg
-  params.resize(1 + fd.parameters().size());
-#endif
-
-  // Add this pointer to first arg
-  if(get_function_this_pointer_param(cxxmd, params))
-    return true;
-
-  // TODO: replace the loop with get_function_params
-  // Parse other args
-  for (std::size_t i = 0; i < fd.parameters().size(); ++i)
-  {
-    code_typet::argumentt param;
-    if(get_function_param(*fd.parameters()[i], param))
-      return true;
-
-    // All args are added shifted by one position, because
-    // of the this pointer (first arg)
-    params[i+1].swap(param);
-  }
-
-  return false;
-}
-
 template <typename SpecializationDecl>
 bool clang_cpp_convertert::get_template_decl_specialization(
   const SpecializationDecl *D,
