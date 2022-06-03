@@ -25,17 +25,11 @@ class t3
 public:
   int i;
 
-  t3(int x);
-
-  int get_i()
-  {
-    return i;
-  }
+  t3();
 };
 
-t3::t3(int x)
+t3::t3() : i(3)
 {
-  i = x;
 }
 
 int main()
@@ -46,19 +40,10 @@ int main()
   t2 instance2;
   assert(instance2.i == 2);
 
-  t3 instance3(3);
-  assert(instance3.i == 3);
-
-  t3 instance4(4);
-  assert(instance4.i == 4);
-
-  t3 instance5(5);
-  assert(instance5.get_i() == 5);
-
-  t3 instance6(6);
-  assert(instance6.get_i() == 6);
-
   t2 *p = new t2;
   assert(p->i == 2);
   delete p;
+
+  t3 instance3;
+  assert(instance3.i == 3);
 }
