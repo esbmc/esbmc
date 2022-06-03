@@ -22,17 +22,11 @@ protected:
 
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
 
-  bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
-
   bool get_type(const clang::QualType &type, typet &new_type) override;
 
   bool get_type(const clang::Type &the_type, typet &new_type) override;
 
   bool get_function(const clang::FunctionDecl &fd, exprt &new_expr) override;
-
-  bool get_constructor_call(
-    const clang::CXXConstructExpr &constructor_call,
-    exprt &new_expr);
 
   bool
   get_function_body(const clang::FunctionDecl &fd, exprt &new_expr) override;

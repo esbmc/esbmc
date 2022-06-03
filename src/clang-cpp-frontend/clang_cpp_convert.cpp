@@ -1,5 +1,4 @@
 // Remove warnings from Clang headers
-#include <iterator>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -13,7 +12,6 @@
 #include <clang/AST/Type.h>
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
-#include <clang/AST/ParentMapContext.h>
 #pragma GCC diagnostic pop
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
@@ -280,7 +278,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   if(cxxrd == nullptr)
     return false;
 
-  // Parse bases - [Q: base class as in C++ inheritance?]
+  // Parse bases - [TODO-Q: what's this for? inheritance?]
   for(const auto &decl : cxxrd->bases())
   {
     assert(
@@ -293,14 +291,14 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
             << std::distance(
                  std::cbegin(recordd.fields()), std::cend(recordd.fields()))
             << " methods" << std::endl;
-
   // Iterate over the declarations stored in this context
-  // [Q: what about cxxrd->methods()?]
+  // [TODO-Q: also covers cxxrd->methods()?]
   for(const auto &decl : cxxrd->decls())
   {
     // Fields were already added
     if(decl->getKind() == clang::Decl::Field)
       continue;
+    //assert(!"already added??");
 
     struct_typet::componentt comp;
 
@@ -331,6 +329,16 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
         assert(!"come back and continue - got static method");
     }
   }
+
+  /*
+  // Iterate over method members
+  for(const auto *decl : cxxrd->methods())
+  {
+    exprt dummy;
+    if(get_decl(*decl, dummy))
+      return true;
+  }
+  */
 
   return false;
 }
@@ -590,21 +598,25 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::CXXConstructExprClass:
   {
-    const clang::CXXConstructExpr &cxxc =
+    assert(!"come back and continue - Constructor call");
+    // Reference to a declared construstor
+    const clang::CXXConstructExpr &ctr_call =
       static_cast<const clang::CXXConstructExpr &>(stmt);
 
-    // Avoid materializing a temporary for an elidable copy/move constructor.
-    if(cxxc.isElidable() && !cxxc.requiresZeroInitialization())
+    if(ctr_call.getNumArgs() != 0)
     {
-      const clang::MaterializeTemporaryExpr *mt =
-        llvm::dyn_cast<clang::MaterializeTemporaryExpr>(cxxc.getArg(0));
-
-      if(mt != nullptr)
-        assert(!"come back and continue - got copy/move elison");
+      // TODO: currently only supporting zero-argument implicit default constructors.
+      assert(
+        !"come back and continue - got user defined ctor, need side effect?");
     }
-
-    if(get_constructor_call(cxxc, new_expr))
-      return true;
+    else
+    {
+      // no additional annotation for zero-arg constructor
+      typet t;
+      if(get_type(ctr_call.getType(), t))
+        return true;
+      new_expr = gen_zero(t);
+    }
 
     break;
   }
@@ -642,68 +654,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   }
 
   new_expr.location() = location;
-  return false;
-}
-
-bool clang_cpp_convertert::get_constructor_call(
-  const clang::CXXConstructExpr &constructor_call,
-  exprt &new_expr)
-{
-  // Get constructor call
-  exprt callee_decl;
-  if(get_decl_ref(*constructor_call.getConstructor(), callee_decl))
-    return true;
-
-  // Get type
-  typet type;
-  if(get_type(constructor_call.getType(), type))
-    return true;
-
-  side_effect_expr_function_callt call;
-  call.function() = callee_decl;
-  call.type() = type;
-
-  // Try to get the object that this constructor is constructing
-  auto it = ASTContext->getParents(constructor_call).begin();
-
-  exprt object;
-  const clang::Decl *objectDecl = it->get<clang::Decl>();
-  if(objectDecl != nullptr)
-  {
-    if(get_decl_ref(*objectDecl, object))
-      return true;
-  }
-  else
-  {
-    assert(!"come back and continue - got objectDecl null");
-  }
-
-  call.arguments().push_back(object);
-
-  // Do args
-  for(const clang::Expr *arg : constructor_call.arguments())
-  {
-    exprt single_arg;
-    if(get_expr(*arg, single_arg))
-      return true;
-
-    call.arguments().push_back(single_arg);
-  }
-
-  call.set("constructor", 1);
-
-  // Now, if we built a new object, then we must build a temporary
-  // object around it
-  if(objectDecl != nullptr)
-  {
-    new_expr.swap(call);
-  }
-  else
-  {
-    assert(
-      !"come back and continue - got new objectDecl, what about side_effect?");
-  }
-
   return false;
 }
 
@@ -748,14 +698,8 @@ bool clang_cpp_convertert::get_function_body(
   // if it's a constructor, check for initializers
   if(fd.getKind() == clang::Decl::CXXConstructor)
   {
-    const clang::CXXConstructorDecl &cxxcd =
-      static_cast<const clang::CXXConstructorDecl &>(fd);
-
-    if(cxxcd.init_begin() != cxxcd.init_end())
-    {
-      assert(!"got ctor initializers");
-      assert(body.has_operands());
-    }
+    assert(!"got ctor");
+    assert(body.has_operands());
   }
 
   return false;
@@ -816,7 +760,7 @@ bool clang_cpp_convertert::get_function_params(
   // On C++, all methods have an implicit reference to the
   // class of the object
   const clang::CXXMethodDecl &cxxmd =
-    static_cast<const clang::CXXMethodDecl &>(fd);
+    static_cast<const clang::CXXMethodDecl&>(fd);
 
   // If it's a C-style function, fallback to C mode
   // Static methods don't have the this arg and can be handled as
@@ -837,7 +781,7 @@ bool clang_cpp_convertert::get_function_params(
 
   // TODO: replace the loop with get_function_params
   // Parse other args
-  for(std::size_t i = 0; i < fd.parameters().size(); ++i)
+  for (std::size_t i = 0; i < fd.parameters().size(); ++i)
   {
     code_typet::argumentt param;
     if(get_function_param(*fd.parameters()[i], param))
@@ -845,7 +789,7 @@ bool clang_cpp_convertert::get_function_params(
 
     // All args are added shifted by one position, because
     // of the this pointer (first arg)
-    params[i + 1].swap(param);
+    params[i+1].swap(param);
   }
 
   return false;
@@ -911,58 +855,4 @@ bool clang_cpp_convertert::search_this_map(
     return false;
 
   return true;
-}
-
-bool clang_cpp_convertert::get_decl_ref(
-  const clang::Decl &decl,
-  exprt &new_expr)
-{
-  std::string name, id;
-  typet type;
-
-  switch(decl.getKind())
-  {
-  case clang::Decl::Var:
-  {
-    const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(decl);
-
-    get_decl_name(vd, name, id);
-
-    if(get_type(vd.getType(), type))
-      return true;
-
-    break;
-  }
-  case clang::Decl::CXXConstructor:
-  {
-    const clang::FunctionDecl &fd =
-      static_cast<const clang::FunctionDecl &>(decl);
-
-    get_decl_name(fd, name, id);
-
-    if(get_type(fd.getType(), type))
-      return true;
-
-    if(get_function_params(fd, to_code_type(type).arguments()))
-      return true;
-
-    break;
-  }
-
-  default:
-  {
-    // TODO: replace with fmt
-    std::cout << "Conversion of unsupported clang decl ref: ";
-    std::cout << decl.getDeclKindName() << std::endl;
-    assert(!"add more cases...");
-    return true;
-  }
-  }
-
-  new_expr = exprt("symbol", type);
-  new_expr.identifier(id);
-  new_expr.cmt_lvalue(true);
-  new_expr.name(name);
-
-  return false;
 }
