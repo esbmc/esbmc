@@ -212,7 +212,7 @@ bool clang_cpp_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
 {
-  // Only convert instantiated functions/methods not depending on template
+  // Only convert instantiated functions/methods
   if(fd.isDependentContext())
     return false;
 
@@ -221,10 +221,9 @@ bool clang_cpp_convertert::get_function(
 
 bool clang_cpp_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
-  // Only convert RecordDecl not depending on a template parameter?
+  // Only convert instantiated functions/methods
   if(rd.isDependentContext())
-    assert(
-      !"Come back and continue - Got template parameter dependent RecordDecl, just return false?");
+    return false;
 
   return clang_c_convertert::get_struct_union_class(rd);
 }
@@ -278,62 +277,12 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   if(cxxrd == nullptr)
     return false;
 
-  // Parse bases - [TODO-Q: what's this for? inheritance?]
-  for(const auto &decl : cxxrd->bases())
-  {
-    assert(
-      !"come back and continue - got bases in get_struct_union_class_fields");
-    assert(decl.isVirtual());
-  }
-
-  // Iterate over the declarations stored in this context
-  // [TODO-Q: also covers cxxrd->methods()?]
-  for(const auto &decl : cxxrd->decls())
-  {
-    // Fields were already added
-    if(decl->getKind() == clang::Decl::Field)
-      continue;
-    //assert(!"already added??");
-
-    struct_typet::componentt comp;
-
-    if(
-      const clang::FunctionTemplateDecl *ftd =
-        llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
-    {
-      assert(!"come back and continue - got a tempalte function");
-      assert(ftd->isThisDeclarationADefinition());
-    }
-    else
-    {
-      if(get_decl(*decl, comp))
-        return true;
-    }
-
-    // This means that we probably just parsed nested class,
-    // don't add it to the class
-    if(comp.is_code() && to_code(comp).statement() == "skip")
-      continue;
-
-    if(
-      const clang::CXXMethodDecl *cxxmd =
-        llvm::dyn_cast<clang::CXXMethodDecl>(decl))
-    {
-      // Add only if it isn't static
-      if(!cxxmd->isStatic())
-        assert(!"come back and continue - got static method");
-    }
-  }
-
-  /*
-  // Iterate over method members
   for(const auto *decl : cxxrd->methods())
   {
     exprt dummy;
     if(get_decl(*decl, dummy))
       return true;
   }
-  */
 
   return false;
 }
@@ -593,7 +542,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::CXXConstructExprClass:
   {
-    assert(!"come back and continue - Constructor call");
     // Reference to a declared construstor
     const clang::CXXConstructExpr &ctr_call =
       static_cast<const clang::CXXConstructExpr &>(stmt);
@@ -613,33 +561,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       new_expr = gen_zero(t);
     }
 
-    break;
-  }
-
-  case clang::Stmt::CXXThisExprClass:
-  {
-    const clang::CXXThisExpr &this_expr =
-      static_cast<const clang::CXXThisExpr &>(stmt);
-
-    std::size_t address =
-      reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
-
-    assert(!"come back and continue - Got this expr");
-
-    this_mapt::iterator it;
-    if(!search_this_map(address, it))
-    {
-      msg.error("Pointer `this' was not added to scope");
-      abort();
-    }
-
-    typet this_type;
-    if(get_type(this_expr.getType(), this_type))
-      return true;
-
-    assert(this_type == it->second.second);
-
-    new_expr = symbol_exprt(it->second.first, it->second.second);
     break;
   }
 
@@ -700,15 +621,4 @@ bool clang_cpp_convertert::get_template_decl(
       return true;
 
   return false;
-}
-
-bool clang_cpp_convertert::search_this_map(
-  const std::size_t address,
-  this_mapt::iterator &this_it)
-{
-  this_it = this_map.find(address);
-  if(this_it == this_map.end())
-    return false;
-
-  return true;
 }
