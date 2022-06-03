@@ -123,7 +123,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   {
     const clang::ParmVarDecl &param =
       static_cast<const clang::ParmVarDecl &>(decl);
-    return get_function_param(param, new_expr);
+    return get_function_params(param, new_expr);
   }
 
   // Declaration of functions
@@ -570,8 +570,14 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
-  if(get_function_params(fd, type.arguments()))
-    return true;
+  for(auto const &pdecl : fd.parameters())
+  {
+    code_typet::argumentt param;
+    if(get_function_params(*pdecl, param))
+      return true;
+
+    type.arguments().push_back(param);
+  }
 
   // Apparently, if the type has no arguments, we assume ellipsis
   if(!type.arguments().size())
@@ -607,25 +613,6 @@ bool clang_c_convertert::get_function_body(
 }
 
 bool clang_c_convertert::get_function_params(
-  const clang::FunctionDecl &fd,
-  code_typet::argumentst &params)
-{
-  if(!fd.parameters().size()) // return if no parameter
-    return false;
-
-  for(auto const &pdecl : fd.parameters())
-  {
-    code_typet::argumentt param;
-    if(get_function_param(*pdecl, param))
-      return true;
-
-    params.push_back(param);
-  }
-
-  return false;
-}
-
-bool clang_c_convertert::get_function_param(
   const clang::ParmVarDecl &pd,
   exprt &param)
 {
