@@ -215,7 +215,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       static_cast<const clang::TranslationUnitDecl &>(decl);
 
     msg.debug(fmt::format(
-      "TranslationUnit has a total of {} top-level declarations",
+      "TranslationUnit has a total of {} declarations",
       std::distance(std::cbegin(tu.decls()), std::cend(tu.decls()))));
     static unsigned ctr = 0;
     for(auto const &decl : tu.decls())
