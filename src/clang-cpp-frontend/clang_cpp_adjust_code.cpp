@@ -1,17 +1,5 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 
-void convert_expression_to_code(exprt &expr)
-{
-  if(expr.is_code())
-    return;
-
-  codet code("expression");
-  code.location() = expr.location();
-  code.move_to_operands(expr);
-
-  expr.swap(code);
-}
-
 void clang_cpp_adjust::adjust_ifthenelse(codet &code)
 {
   // In addition to the C syntax, C++ also allows a declaration
@@ -138,52 +126,4 @@ void clang_cpp_adjust::adjust_for(codet &code)
   }
   else
     clang_c_adjust::adjust_for(code);
-}
-
-void clang_cpp_adjust::adjust_decl_block(codet &code)
-{
-  codet new_block("decl-block");
-
-  Forall_operands(it, code)
-  {
-    if(it->is_code() && (it->statement() == "skip"))
-      continue;
-
-    code_declt &code_decl = to_code_decl(to_code(*it));
-
-    if(code_decl.operands().size() == 2)
-    {
-      exprt &rhs = code_decl.rhs();
-      if(
-        rhs.id() == "sideeffect" && rhs.statement() == "function_call" &&
-        rhs.get_bool("constructor"))
-      {
-        // turn struct BLAH bleh = BLAH() into two instructions:
-        // struct BLAH bleh;
-        // BLAH(&bleh);
-
-        // First, create new decl without rhs
-        code_declt object(code_decl.lhs());
-        new_block.copy_to_operands(object);
-
-        // Get rhs
-        side_effect_expr_function_callt &init =
-          to_side_effect_expr_function_call(rhs);
-
-        init.arguments().push_back(address_of_exprt(code_decl.lhs()));
-
-        // Now convert the side_effect into an expression
-        convert_expression_to_code(init);
-
-        // and copy to new_block
-        new_block.copy_to_operands(init);
-
-        continue;
-      }
-    }
-
-    new_block.copy_to_operands(code_decl);
-  }
-
-  code.swap(new_block);
 }

@@ -666,10 +666,19 @@ bool clang_cpp_convertert::get_constructor_call(
   // Try to get the object that this constructor is constructing
   auto it = ASTContext->getParents(constructor_call).begin();
 
-  //exprt object;
+  exprt object;
   const clang::Decl *objectDecl = it->get<clang::Decl>();
+  if(objectDecl != nullptr)
+  {
+    if(get_decl_ref(*objectDecl, object))
+      return true;
+  }
+  else
+  {
+    assert(!"come back and continue - got objectDecl null");
+  }
 
-  //call.arguments().push_back(object);
+  call.arguments().push_back(object);
 
   // Do args
   for(const clang::Expr *arg : constructor_call.arguments())

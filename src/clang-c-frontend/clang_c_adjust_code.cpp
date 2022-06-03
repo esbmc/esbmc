@@ -38,18 +38,10 @@ void clang_c_adjust::adjust_code(codet &code)
   else if(statement == "function_call")
   {
   }
-  else if(statement == "decl-block")
-    adjust_decl_block(code);
   else
   {
     adjust_operands(code);
   }
-}
-
-void clang_c_adjust::adjust_decl_block(codet &code)
-{
-  Forall_operands(it, code)
-    adjust_expr(*it);
 }
 
 void clang_c_adjust::adjust_decl(codet &code)
