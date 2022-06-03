@@ -387,9 +387,9 @@ private:
     const expr2tc &byte_array,
     expr2tc offset_bits,
     const guardt &guard);
-  void wrap_in_scalar_step_list(
-    expr2tc &value,
-    std::list<expr2tc> *scalar_step_list,
+  expr2tc wrap_in_scalar_step_list(
+    const expr2tc &value,
+    const std::list<expr2tc> &scalar_step_list,
     const guardt &guard);
   void dereference_failure(
     const std::string &error_class,
