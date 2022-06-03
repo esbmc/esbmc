@@ -217,14 +217,22 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     msg.debug(fmt::format(
       "TranslationUnit has a total of {} top-level declarations",
       std::distance(std::cbegin(tu.decls()), std::cend(tu.decls()))));
+    static unsigned ctr = 0;
     for(auto const &decl : tu.decls())
     {
       // This is a global declaration (variable, function, struct, etc)
       // We don't need the exprt, it will be automatically added to the
       // context
       exprt dummy_decl;
+      if(ctr == 10)
+      {
+        printf("converting class symbol\n");
+      }
+
       if(get_decl(*decl, dummy_decl))
         return true;
+
+      ctr++;
     }
 
     break;
@@ -507,8 +515,6 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 {
   // Don't convert if implicit, unless it's a constructor
-  // A compiler-generated default constructor is considered implicit, but we have
-  // to parse it.
   if(fd.isImplicit() && (fd.getKind() != clang::Decl::CXXConstructor))
     return false;
 
@@ -594,7 +600,7 @@ bool clang_c_convertert::get_function_body(
 
   exprt body_exprt;
   if(get_expr(*fd.getBody(), body_exprt))
-    return true; // return true if failing to parse function body
+    return true;
 
   new_expr = body_exprt;
   return false;
@@ -611,7 +617,7 @@ bool clang_c_convertert::get_function_params(
   {
     code_typet::argumentt param;
     if(get_function_param(*pdecl, param))
-      return true; // return true if failling to parse a parameter
+      return true;
 
     params.push_back(param);
   }

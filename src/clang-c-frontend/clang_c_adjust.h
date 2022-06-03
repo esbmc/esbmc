@@ -42,9 +42,6 @@ protected:
   void adjust_symbol(exprt &expr);
   void adjust_comma(exprt &expr);
   void adjust_builtin_va_arg(exprt &expr);
-  /**
-   * For class instantiation in C++, we need to adjust the side-effect of constructor
-   */
   virtual void adjust_decl_block(codet &code);
 
   void adjust_function_call_arguments(side_effect_expr_function_callt &expr);
