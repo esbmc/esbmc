@@ -1,18 +1,31 @@
 #include <cassert>
-class t3
+class t2
 {
 public:
   int i;
 
-  t3();
+  t2() : i(2)
+  {
+  }
 };
-
-t3::t3() : i(3)
-{
-}
 
 int main()
 {
-  t3 instance3;
-  assert(instance3.i == 3);
+  t2 *p = new t2;
+  assert(p->i == 2);
+  delete p;
 }
+
+#if 0
+Symbol......: t2::t2(this)
+Pretty name.:
+Module......: main
+Base name...: t2
+Mode........: cpp
+Type........: auto (struct t2 *) -> constructor
+Value.......: {
+  this->i = 2;
+}
+Flags.......:
+Location....: file Constructor1-4/main.cpp line 7
+#endif
