@@ -341,35 +341,13 @@ void dereferencet::dereference_addrof_expr(
 void dereferencet::dereference_deref(expr2tc &expr, guardt &guard, modet mode)
 {
   assert(is_dereference2t(expr));
-  if(1)
-  {
-    dereference2t &deref = to_dereference2t(expr);
-    // first make sure there are no dereferences in there
-    dereference_expr(deref.value, guard, dereferencet::READ);
+  dereference2t &deref = to_dereference2t(expr);
+  // first make sure there are no dereferences in there
+  dereference_expr(deref.value, guard, dereferencet::READ);
 
-    expr2tc tmp_obj = deref.value;
-    expr2tc result = dereference(tmp_obj, deref.type, guard, mode, expr2tc());
-    expr = result;
-  }
-  else
-  {
-    // This is an index applied to a pointer, which is essentially a dereference
-    // with an offset.
-    assert(is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value));
-    std::list<expr2tc> scalar_step_list;
-    assert(
-      (is_scalar_type(expr) || is_code_type(expr)) &&
-      "Can't dereference to a nonscalar type");
-    index2t &idx = to_index2t(expr);
-
-    // first make sure there are no dereferences in there
-    dereference_expr(idx.index, guard, dereferencet::READ);
-    dereference_expr(idx.source_value, guard, mode);
-
-    add2tc tmp(idx.source_value->type, idx.source_value, idx.index);
-    // Result discarded.
-    expr = dereference(tmp, tmp->type, guard, mode, expr2tc());
-  }
+  expr2tc tmp_obj = deref.value;
+  expr2tc result = dereference(tmp_obj, deref.type, guard, mode, expr2tc());
+  expr = result;
 }
 
 expr2tc dereferencet::dereference_expr_nonscalar(
