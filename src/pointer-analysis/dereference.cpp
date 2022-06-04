@@ -379,9 +379,32 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 {
   if(is_dereference2t(expr))
   {
+    // Check that either the base type that these steps are applied to matches
+    // the type of the object we're wrapping in these steps. It's a type error
+    // if there isn't a match.
+    type2tc base_of_steps_type =
+      (*scalar_step_list.front()->get_sub_expr(0))->type;
+    base_of_steps_type = ns.follow(base_of_steps_type);
+
+    expr2tc size_check_expr = expr;
+    if(dereference_type_compare(size_check_expr, base_of_steps_type))
+    {
+      // We can just reconstruct this.
+      for(expr2tc tmp : scalar_step_list)
+      {
+        *tmp->get_sub_expr_nc(0) = size_check_expr;
+        size_check_expr = tmp;
+      }
+    }
+    else
+    {
+      // We can't reconstruct this. The base types are incompatible.
+      bad_base_type_failure(
+        guard, get_type_id(*expr->type), get_type_id(*base_of_steps_type));
+      return expr2tc();
+    }
+
     // Determine offset accumulated to this point (in bits)
-    expr2tc size_check_expr =
-      wrap_in_scalar_step_list(expr, scalar_step_list, guard);
     expr2tc offset_to_scalar = compute_pointer_offset_bits(size_check_expr);
     simplify(offset_to_scalar);
 
@@ -2151,38 +2174,6 @@ void dereferencet::bounds_check(
   guardt tmp_guard1(guard);
   tmp_guard1.add(is_in_bounds);
   dereference_failure("array bounds", "array bounds violated", tmp_guard1);
-}
-
-expr2tc dereferencet::wrap_in_scalar_step_list(
-  const expr2tc &value,
-  const std::list<expr2tc> &scalar_step_list,
-  const guardt &guard)
-{
-  // Check that either the base type that these steps are applied to matches
-  // the type of the object we're wrapping in these steps. It's a type error
-  // if there isn't a match.
-  type2tc base_of_steps_type =
-    (*scalar_step_list.front()->get_sub_expr(0))->type;
-  base_of_steps_type = ns.follow(base_of_steps_type);
-
-  expr2tc accuml = value;
-  if(dereference_type_compare(accuml, base_of_steps_type))
-  {
-    // We can just reconstruct this.
-    for(expr2tc tmp : scalar_step_list)
-    {
-      *tmp->get_sub_expr_nc(0) = accuml;
-      accuml = tmp;
-    }
-    return accuml;
-  }
-  else
-  {
-    // We can't reconstruct this. The base types are incompatible.
-    bad_base_type_failure(
-      guard, get_type_id(*value->type), get_type_id(*base_of_steps_type));
-    return expr2tc();
-  }
 }
 
 bool dereferencet::check_code_access(
