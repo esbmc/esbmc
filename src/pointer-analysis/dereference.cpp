@@ -379,6 +379,10 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 {
   if(is_dereference2t(expr))
   {
+    /* The first expression we're called with is index2t, member2t or non-scalar
+     * if2t. That expression is at the end of scalar_step_list. */
+    assert(!scalar_step_list.empty());
+
     // Check that either the base type that these steps are applied to matches
     // the type of the object we're wrapping in these steps. It's a type error
     // if there isn't a match.
