@@ -396,29 +396,6 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     return result;
   }
 
-  if(is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
-  {
-    assert(0);
-    index2t &index = to_index2t(expr);
-
-    // Determine offset accumulated to this point (computed in bytes)
-    expr2tc size_check_expr =
-      wrap_in_scalar_step_list(expr, scalar_step_list, guard);
-    expr2tc offset_to_scalar = compute_pointer_offset_bits(size_check_expr);
-    simplify(offset_to_scalar);
-
-    // first make sure there are no dereferences in there
-    dereference_expr(index.source_value, guard, dereferencet::READ);
-    dereference_expr(index.index, guard, dereferencet::READ);
-
-    add2tc tmp(index.source_value->type, index.source_value, index.index);
-
-    const type2tc &to_type = scalar_step_list.back()->type;
-
-    expr2tc result = dereference(tmp, to_type, guard, mode, offset_to_scalar);
-    return result;
-  }
-
   if(is_typecast2t(expr))
   {
     // Just blast straight through
