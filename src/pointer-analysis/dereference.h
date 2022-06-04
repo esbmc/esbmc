@@ -277,15 +277,6 @@ private:
   virtual void
   dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode);
 
-  /** Interpret an actual dereference (or pointer-index) expression. First
-   *  dereferences the pointer expression, then dereferences the pointer itself,
-   *  and stores the result in 'expr'.
-   *  @param expr The expression we're going to be dereferencing.
-   *  @param guard Guard of this expression being evaluated.
-   *  @param mode The manner iin which the result of this deref is accessed.
-   */
-  virtual void dereference_deref(expr2tc &expr, guardt &guard, modet mode);
-
   /** Interpret an expression that accesses a nonscalar type. This means that
    *  it's an index or member (or some other glue expr) on top of a dereference
    *  that evaluates to an array or struct. This code collects all of these

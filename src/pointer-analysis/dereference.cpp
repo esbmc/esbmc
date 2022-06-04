@@ -171,8 +171,20 @@ void dereferencet::dereference_expr(expr2tc &expr, guardt &guard, modet mode)
     break;
 
   case expr2t::dereference_id:
-    dereference_deref(expr, guard, mode);
+  {
+    /* Interpret an actual dereference expression. First dereferences the
+     * pointer expression, then dereferences the pointer itself, and stores the
+     * result in 'expr'. */
+    assert(is_dereference2t(expr));
+    dereference2t &deref = to_dereference2t(expr);
+    // first make sure there are no dereferences in there
+    dereference_expr(deref.value, guard, dereferencet::READ);
+
+    expr2tc tmp_obj = deref.value;
+    expr2tc result = dereference(tmp_obj, deref.type, guard, mode, expr2tc());
+    expr = result;
     break;
+  }
 
   case expr2t::index_id:
   case expr2t::member_id:
@@ -336,18 +348,6 @@ void dereferencet::dereference_addrof_expr(
   // arithmetic that contains another dereference. So we need to re-deref this
   // new expression.
   dereference_expr(expr, guard, mode);
-}
-
-void dereferencet::dereference_deref(expr2tc &expr, guardt &guard, modet mode)
-{
-  assert(is_dereference2t(expr));
-  dereference2t &deref = to_dereference2t(expr);
-  // first make sure there are no dereferences in there
-  dereference_expr(deref.value, guard, dereferencet::READ);
-
-  expr2tc tmp_obj = deref.value;
-  expr2tc result = dereference(tmp_obj, deref.type, guard, mode, expr2tc());
-  expr = result;
 }
 
 expr2tc dereferencet::dereference_expr_nonscalar(
