@@ -351,7 +351,7 @@ void dereferencet::dereference_addrof_expr(
 }
 
 expr2tc dereferencet::dereference_expr_nonscalar(
-  expr2tc &expr,
+  const expr2tc &expr,
   guardt &guard,
   modet mode,
   std::list<expr2tc> &scalar_step_list)
@@ -392,7 +392,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     expr2tc offset_to_scalar = compute_pointer_offset_bits(size_check_expr);
     simplify(offset_to_scalar);
 
-    dereference2t &deref = to_dereference2t(expr);
+    dereference2t deref = to_dereference2t(expr);
     // first make sure there are no dereferences in there
     dereference_expr(deref.value, guard, dereferencet::READ);
 
@@ -421,10 +421,11 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 
   if(is_index2t(expr))
   {
-    dereference_expr(to_index2t(expr).index, guard, dereferencet::READ);
-    scalar_step_list.push_front(expr);
+    index2tc index = to_index2t(expr);
+    dereference_expr(index->index, guard, dereferencet::READ);
+    scalar_step_list.push_front(index);
     expr2tc res = dereference_expr_nonscalar(
-      to_index2t(expr).source_value, guard, mode, scalar_step_list);
+      index->source_value, guard, mode, scalar_step_list);
     scalar_step_list.pop_front();
     return res;
   }
@@ -432,7 +433,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
   if(is_if2t(expr) && !is_scalar_type(expr))
   {
     guardt g1 = guard, g2 = guard;
-    if2t &theif = to_if2t(expr);
+    const if2t &theif = to_if2t(expr);
     g1.add(theif.cond);
     g2.add(not2tc(theif.cond));
 
@@ -457,7 +458,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 
   if(is_constant_union2t(expr))
   {
-    constant_union2t &u = to_constant_union2t(expr);
+    const constant_union2t &u = to_constant_union2t(expr);
     /* In the frontend (until the SMT counter-example), constant union
      * expressions should have a single initializer expression, see also the
      * comment for constant_union2t in <irep2/itep2_expr.h>. */
