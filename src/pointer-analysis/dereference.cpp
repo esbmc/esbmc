@@ -340,7 +340,8 @@ void dereferencet::dereference_addrof_expr(
 
 void dereferencet::dereference_deref(expr2tc &expr, guardt &guard, modet mode)
 {
-  if(is_dereference2t(expr))
+  assert(is_dereference2t(expr));
+  if(1)
   {
     dereference2t &deref = to_dereference2t(expr);
     // first make sure there are no dereferences in there
