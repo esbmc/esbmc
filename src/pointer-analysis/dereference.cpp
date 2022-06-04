@@ -432,6 +432,8 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 
   if(is_if2t(expr) && !is_scalar_type(expr))
   {
+    assert(0);
+
     guardt g1 = guard, g2 = guard;
     const if2t &theif = to_if2t(expr);
     g1.add(theif.cond);
