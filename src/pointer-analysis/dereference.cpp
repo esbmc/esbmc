@@ -398,6 +398,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 
   if(is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
   {
+    assert(0);
     index2t &index = to_index2t(expr);
 
     // Determine offset accumulated to this point (computed in bytes)
