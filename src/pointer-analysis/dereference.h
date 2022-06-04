@@ -291,7 +291,7 @@ private:
    *         to build a scalar access to an aggregate type.
    */
   virtual expr2tc dereference_expr_nonscalar(
-    expr2tc &dest,
+    const expr2tc &dest,
     guardt &guard,
     modet mode,
     std::list<expr2tc> &scalar_step_list);
