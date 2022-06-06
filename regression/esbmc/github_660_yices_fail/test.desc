@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--ir --yices
+^VERIFICATION FAILED$

@@ -711,30 +711,21 @@ expr2tc bitwuzla_convt::get_array_elem(
 {
   const bitw_smt_ast *ast = dynamic_cast<const bitw_smt_ast *>(array);
   if(ast == nullptr)
-    throw new type2t::symbolic_type_excp();
+    throw type2t::symbolic_type_excp();
 
   size_t size;
   BitwuzlaTerm **indicies, **values, *default_value;
   bitwuzla_get_array_value(
     bitw, ast->a, &indicies, &values, &size, &default_value);
 
-  BigInt val = 0;
   if(size > 0)
-  {
     for(size_t i = 0; i < size; i++)
     {
       const char *index_str = bitwuzla_get_bv_value(bitw, indicies[i]);
       auto idx = string2integer(index_str, 2);
       if(idx == index)
-      {
-        const char *value_str = bitwuzla_get_bv_value(bitw, values[i]);
-        val = binary2integer(value_str, is_signedbv_type(subtype));
-        break;
-      }
+        return get_by_ast(subtype, new_ast(values[i], convert_sort(subtype)));
     }
-
-    return get_by_value(subtype, val);
-  }
 
   return gen_zero(subtype);
 }

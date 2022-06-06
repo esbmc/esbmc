@@ -144,10 +144,10 @@ unsigned int array_type2t::get_width() const
   // Two edge cases: the array can have infinite size, or it can have a dynamic
   // size that's determined by the solver.
   if(size_is_infinite)
-    throw new inf_sized_array_excp();
+    throw inf_sized_array_excp();
 
   if(array_size->expr_id != expr2t::constant_int_id)
-    throw new dyn_sized_array_excp(array_size);
+    throw dyn_sized_array_excp(array_size);
 
   // Otherwise, we can multiply the size of the subtype by the number of elements.
   unsigned int sub_width = subtype->get_width();
@@ -384,7 +384,7 @@ unsigned int pointer_type2t::get_width() const
 
 unsigned int empty_type2t::get_width() const
 {
-  throw new symbolic_type_excp();
+  throw symbolic_type_excp();
 }
 
 unsigned int symbol_type2t::get_width() const
@@ -433,7 +433,7 @@ unsigned int floatbv_type2t::get_width() const
 
 unsigned int code_data::get_width() const
 {
-  throw new symbolic_type_excp();
+  throw symbolic_type_excp();
 }
 
 unsigned int string_type2t::get_width() const

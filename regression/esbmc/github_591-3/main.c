@@ -1,0 +1,13 @@
+#include <assert.h>
+#include <string.h>
+int main()
+{
+  int z, *q;
+  {
+    int *p = &(int){0};
+    memcpy(p, &z, sizeof(z));
+    assert(*p == z);
+    q = p;
+  }
+  assert(*q == z);
+}

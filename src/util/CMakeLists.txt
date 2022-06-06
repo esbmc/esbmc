@@ -21,11 +21,12 @@ add_library(util_esbmc xml_irep.cpp xml.cpp
         string_container.cpp options.cpp c_misc.cpp
         simplify_expr.cpp dstring.cpp simplify_expr2.cpp
         simplify_utils.cpp string2array.cpp time_stopping.cpp symbol.cpp
+        symbol_generator.cpp
         type_eq.cpp guard.cpp array_name.cpp union_find.cpp
         std_types.cpp std_code.cpp format_constant.cpp
         irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp
         signal_catcher.cpp migrate.cpp show_symbol_table.cpp
-        type_byte_size.cpp
+        type_byte_size.cpp goto_expr_factory.cpp
         string_constant.cpp c_types.cpp ieee_float.cpp c_qualifiers.cpp
         c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp
         )

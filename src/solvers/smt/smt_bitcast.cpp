@@ -2,7 +2,7 @@
 #include <util/type_byte_size.h>
 
 static expr2tc
-flatten_to_bitvector_rec(const expr2tc &new_expr, const messaget &msg)
+flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
 {
   // Easy case, no need to concat anything
   if(is_number_type(new_expr))
@@ -31,14 +31,14 @@ flatten_to_bitvector_rec(const expr2tc &new_expr, const messaget &msg)
     // First element
     expr2tc expr = index2tc(
       arraytype.subtype, new_expr, constant_int2tc(index_type2(), sz - 1));
-    expr = flatten_to_bitvector_rec(expr, msg);
+    expr = flatten_to_bitvector(expr, msg);
 
     // Concat elements if there are more than 1
     for(int i = sz - 2; i >= 0; i--)
     {
       expr2tc tmp = index2tc(
         arraytype.subtype, new_expr, constant_int2tc(index_type2(), i));
-      tmp = flatten_to_bitvector_rec(tmp, msg);
+      tmp = flatten_to_bitvector(tmp, msg);
       type2tc res_type =
         get_uint_type(expr->type->get_width() + tmp->type->get_width());
       expr = concat2tc(res_type, expr, tmp);
@@ -47,7 +47,10 @@ flatten_to_bitvector_rec(const expr2tc &new_expr, const messaget &msg)
     return expr;
   }
 
-  // If it is an array, concat every member into a big bitvector
+  if(new_expr->type->get_width() == 0)
+    return constant_int2tc(get_uint_type(0), BigInt(0));
+
+  // If it is a struct, concat all members into a big bitvector
   // TODO: this is similar to concat array elements, should we merge them?
   if(is_struct_type(new_expr))
   {
@@ -58,14 +61,14 @@ flatten_to_bitvector_rec(const expr2tc &new_expr, const messaget &msg)
     // Iterate over each member and flatten them
     expr2tc expr = member2tc(
       structtype.members[sz - 1], new_expr, structtype.member_names[sz - 1]);
-    expr = flatten_to_bitvector_rec(expr, msg);
+    expr = flatten_to_bitvector(expr, msg);
 
     // Concat elements if there are more than 1
     for(int i = sz - 2; i >= 0; i--)
     {
       expr2tc tmp =
         member2tc(structtype.members[i], new_expr, structtype.member_names[i]);
-      tmp = flatten_to_bitvector_rec(tmp, msg);
+      tmp = flatten_to_bitvector(tmp, msg);
       type2tc res_type =
         get_uint_type(expr->type->get_width() + tmp->type->get_width());
       expr = concat2tc(res_type, expr, tmp);
@@ -78,13 +81,6 @@ flatten_to_bitvector_rec(const expr2tc &new_expr, const messaget &msg)
     "Unrecognized type {} when flattening to bytes",
     get_type_id(*new_expr->type)));
   abort();
-}
-
-static expr2tc
-flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
-{
-  const expr2tc concated_expr = flatten_to_bitvector_rec(new_expr, msg);
-  return concated_expr;
 }
 
 smt_astt smt_convt::convert_bitcast(const expr2tc &expr)

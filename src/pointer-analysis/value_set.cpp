@@ -621,7 +621,7 @@ void value_sett::get_value_set_rec(
             if(!is_nil_type(subtype))
             {
               if(is_empty_type(subtype))
-                throw new type2t::symbolic_type_excp();
+                throw type2t::symbolic_type_excp();
 
               // Potentially rename,
               const type2tc renamed = ns.follow(subtype);
@@ -639,13 +639,13 @@ void value_sett::get_value_set_rec(
           is_const = false;
         }
       }
-      catch(array_type2t::dyn_sized_array_excp *e)
+      catch(const array_type2t::dyn_sized_array_excp &e)
       { // Nondet'ly sized.
       }
-      catch(array_type2t::inf_sized_array_excp *e)
+      catch(const array_type2t::inf_sized_array_excp &e)
       {
       }
-      catch(type2t::symbolic_type_excp *e)
+      catch(const type2t::symbolic_type_excp &e)
       {
         // This vastly annoying piece of code is making operations on void
         // pointers, or worse. If a void pointer, treat the multiplier of the
@@ -825,7 +825,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         has_const_index_offset = true;
       }
     }
-    catch(array_type2t::dyn_sized_array_excp *e)
+    catch(const array_type2t::dyn_sized_array_excp &e)
     {
       // Not a constant index offset then.
     }
@@ -1040,31 +1040,43 @@ void value_sett::assign(
       const type2tc &subtype = *c_it;
       const irep_idt &name = member_names[i];
 
-      // ignore methods
-      if(is_code_type(subtype))
-        continue;
+        // ignore methods
+        if(is_code_type(subtype))
+          continue;
 
-      member2tc lhs_member(subtype, lhs, name);
+        member2tc lhs_member(subtype, lhs, name);
 
-      expr2tc rhs_member;
-      if(is_unknown2t(rhs))
-      {
-        rhs_member = unknown2tc(subtype);
-      }
-      else if(is_invalid2t(rhs))
-      {
-        rhs_member = invalid2tc(subtype);
-      }
-      else
-      {
-        assert(
-          base_type_eq(rhs->type, lhs_type, ns) ||
-          is_subclass_of(lhs_type, rhs->type, ns));
-        expr2tc rhs_member = make_member(rhs, name);
+        expr2tc rhs_member;
+        if(is_unknown2t(rhs))
+        {
+          rhs_member = unknown2tc(subtype);
+        }
+        else if(is_invalid2t(rhs))
+        {
+          rhs_member = invalid2tc(subtype);
+        }
+        else
+        {
+          assert(
+            base_type_eq(rhs->type, lhs_type, ns) ||
+            is_subclass_of(lhs_type, rhs->type, ns));
+          expr2tc rhs_member = make_member(rhs, name);
 
-        // XXX -- shouldn't this be one level of indentation up?
-        assign(lhs_member, rhs_member, add_to_sets);
+          // XXX -- shouldn't this be one level of indentation up?
+          assign(lhs_member, rhs_member, add_to_sets);
+        }
       }
+    }
+    else
+    {
+      /* types do not agree, this can happen during dereferences like this:
+       *   struct S { int x; } a;
+       *   int b;
+       *   a = *(struct S *)&b;
+       * and is caught as a dereference_failure by build_reference_to().
+       *
+       * Thus, we ignore this value-set assignment request here.
+       */
     }
     return;
   }

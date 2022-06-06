@@ -34,7 +34,9 @@ clang_c_convertert::clang_c_convertert(
     ns(context),
     ASTs(_ASTs),
     msg(msg),
+    anon_symbol("clang_c_convertert::"),
     current_scope_var_num(1),
+    current_block(nullptr),
     sm(nullptr),
     current_functionDecl(nullptr)
 {
@@ -325,7 +327,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     for(const auto &attr : attrs)
     {
       if(attr->getKind() == clang::attr::Packed)
-        t.set("packed", "true");
+        t.set("packed", true);
 
       if(attr->getKind() == clang::attr::Aligned)
       {
@@ -466,7 +468,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   if(symbol.static_lifetime && !symbol.is_extern && !vd.hasInit())
   {
     // Initialize with zero value, if the symbol has initial value,
-    // it will be add later on this method
+    // it will be added later on in this method
     symbol.value = gen_zero(t, true);
     symbol.value.zero_initializer(true);
   }
@@ -994,6 +996,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       new_type = unsignedbv_typet(n);
     }
 
+    new_type.set("#extint", true);
     break;
   }
   case clang::Type::ExtVector:
@@ -1465,7 +1468,55 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if(get_expr(*compound.getInitializer(), initializer))
       return true;
 
-    new_expr = initializer;
+    typet t = initializer.type();
+
+    /* A compound literal is an LValue that has associated static or automatic
+     * storage, depending on whether it appears in file or block scope.
+     * Therefore, in C, for instance a pointer to it can be taken and used
+     * within the same block without restrictions, e.g.
+     *
+     *   int *p = &(int){0}, x = 42;
+     *   memcpy(p, &x, sizeof(int));
+     *   assert(*p == 42);
+     *
+     * It has the same semantics as an non-anonymous variable of the
+     * corresponding type. Thus, we introduce a new symbol to represent it.
+     */
+
+    /* Give the symbol a recognizable name to show in the counter-example */
+    std::string path = location.file().as_string();
+    std::string name_prefix =
+      path + ":" + location.get_line().as_string() + "$compound-literal$";
+    symbolt &cl = anon_symbol.new_symbol(context, t, name_prefix);
+    /* .name and .id have already been assigned by new_symbol() above */
+    get_default_symbol(
+      cl, get_modulename_from_path(path), t, cl.name, cl.id, location);
+
+    cl.static_lifetime = compound.isFileScope();
+    cl.is_extern = false;
+    cl.file_local = true;
+    cl.value = initializer;
+
+    new_expr = symbol_expr(cl);
+
+    if(current_block)
+    {
+      /* The underlying storage is automatic here, i.e., local. In order for
+       * it to be recognized as being local in ESBMC, it requires a declaration,
+       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one. */
+      code_declt decl(new_expr);
+      decl.operands().push_back(initializer);
+
+      current_block->operands().push_back(decl);
+    }
+    else
+    {
+      assert(cl.static_lifetime);
+      /* Symbols appearing in file scope do not need a declaration.
+       * clang_c_main::static_lifetime_init() takes care of the initialization.
+       */
+    }
+
     break;
   }
 
@@ -1808,7 +1859,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CompoundStmt &compound_stmt =
       static_cast<const clang::CompoundStmt &>(stmt);
 
-    code_blockt block;
+    code_blockt block, *old_block = current_block;
+    current_block = &block;
     for(auto const &stmt : compound_stmt.body())
     {
       exprt statement;
@@ -1826,6 +1878,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     block.end_location(location_end);
 
     new_expr = block;
+    current_block = old_block;
     break;
   }
 
@@ -2821,10 +2874,10 @@ bool clang_c_convertert::get_atomic_expr(
 
 void clang_c_convertert::get_default_symbol(
   symbolt &symbol,
-  std::string module_name,
+  irep_idt module_name,
   typet type,
-  std::string name,
-  std::string id,
+  irep_idt name,
+  irep_idt id,
   locationt location)
 {
   symbol.mode = "C";

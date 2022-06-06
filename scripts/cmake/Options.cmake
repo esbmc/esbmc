@@ -23,6 +23,7 @@ option(ENABLE_REGRESSION "Add Regressions Tests (default: OFF)" OFF)
 option(ENABLE_COVERAGE "Generate Coverage Report (default: OFF)" OFF)
 option(ENABLE_OLD_FRONTEND "Enable flex/bison language frontend (default: OFF)" OFF)
 option(ENABLE_SOLIDITY_FRONTEND "Enable Solidity language frontend (default: OFF)" OFF)
+option(ENABLE_GOTO_CONTRACTOR "Enable IBEX in the build (default: OFF)" OFF)
 
 #############################
 # SOLVERS
@@ -32,6 +33,7 @@ option(ENABLE_Z3 "Use Z3 solver (default: OFF)" OFF)
 option(ENABLE_MATHSAT "Use MathSAT solver (default: OFF)" OFF)
 option(ENABLE_YICES "Use Yices solver (default: OFF)" OFF)
 option(ENABLE_CVC4 "Use CVC4 solver (default: OFF)" OFF)
+option(ENABLE_BITWUZLA "Use Bitwuzla solver (default: OFF)" OFF)
 
 #############################
 # OTHERS

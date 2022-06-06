@@ -89,7 +89,7 @@ expr2tc expr2t::simplify() const
     else
       return tmp;
   }
-  catch(array_type2t::dyn_sized_array_excp *e)
+  catch(const array_type2t::dyn_sized_array_excp &e)
   {
     // Pretty much anything in any expression could be fouled up by there
     // being a dynamically sized array somewhere in there. In this circumstance,
@@ -1788,7 +1788,7 @@ expr2tc typecast2t::do_simplify() const
 
       return expr2tc();
     }
-    catch(array_type2t::dyn_sized_array_excp *e)
+    catch(const array_type2t::dyn_sized_array_excp &e)
     {
       // Something crazy, and probably C++ based, occurred. Don't attempt to
       // simplify.

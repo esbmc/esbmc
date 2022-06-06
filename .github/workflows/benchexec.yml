@@ -1,18 +1,24 @@
 name: Run Benchexec (SV-Comp)
-on: 
+on:
   workflow_dispatch:
     inputs:
       strategy:
-        description: 'Which Strategy to use? (incr, kinduction, falsi). THIS IS BEING IGNORED!'     
+        description: 'Which Strategy to use? (incr, kinduction, falsi). THIS IS BEING IGNORED!'
         required: true
         default: 'incr'
+      timeout:
+        description: 'Timeout for each benchmarks (in seconds)'
+        required: true
+        default: '10'
+
 
 jobs:
-
   build-linux:
     name: Build Linux Release
     runs-on: ubuntu-20.04
     steps:
+      - name: Small test
+        run: echo ${{ github.event.inputs.timeout }}
       - name: Checkout code
         uses: actions/checkout@master
       - name: Install Dependencies
@@ -23,21 +29,20 @@ jobs:
         run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
       - name: Setup boolector
         run: git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
-      - name: Setup Z3
-        run: wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.9/z3-4.8.9-x64-ubuntu-16.04.zip && unzip z3-4.8.9-x64-ubuntu-16.04.zip && mv z3-4.8.9-x64-ubuntu-16.04/ z3
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release
       - name: Build ESBMC
         run: cd build && cmake --build .
       - uses: actions/upload-artifact@v1
         with:
           name: release-linux
           path: ./build/src/esbmc/esbmc
-        
+
   run-benchexec:
     runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
+    timeout-minutes: 2880
     needs: build-linux
     steps:
       - name: Download Linux Build
@@ -47,17 +52,17 @@ jobs:
           path: ./
       - name: Run Benchexec
         env:
-          USER_PASS: ${{ secrets.USER_PASSWORD }}
+          TIMEOUT: ${{ inputs.timeout }}
         run: |
-          echo $USER_PASS | sudo -S rm -rf $HOME/current-run
-          mkdir $HOME/current-run
-          cp ./esbmc $HOME/current-run
-          cd $HOME/current-run
+          rm -rf $HOME/output-action 
+          mkdir $HOME/output-action
+          cp ./esbmc $HOME/output-action
+          cd $HOME/output-action
           cp $HOME/esbmc-wrapper.py .
           cp $HOME/esbmc-kind.xml .
           chmod +x ./esbmc
-          echo $USER_PASS | sudo -S docker exec -i benchexec-rafael /bin/bash -c "cd /tool/current-run; benchexec --no-container --numOfThreads 23 ./esbmc-kind.xml"
+          benchexec -o ../output/ -N 24 ./esbmc-kind.xml --read-only-dir / --overlay-dir /home --no-container -T ${{ github.event.inputs.timeout }}
       - uses: actions/upload-artifact@v1
         with:
           name: benchexec-result
-          path: /home/rafaelsa/current-run
+          path: /home/vm/output-action

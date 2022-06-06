@@ -687,30 +687,35 @@ expr2tc boolector_convt::get_array_elem(
   // want to catch if the conversion fails
   const btor_smt_ast *ast = dynamic_cast<const btor_smt_ast *>(array);
   if(ast == nullptr)
-    throw new type2t::symbolic_type_excp();
+    throw type2t::symbolic_type_excp();
 
   uint32_t size;
   char **indicies, **values;
   boolector_array_assignment(btor, ast->a, &indicies, &values, &size);
 
-  BigInt val = 0;
-  if(size > 0)
-  {
-    for(uint32_t i = 0; i < size; i++)
-    {
-      auto idx = string2integer(indicies[i], 2);
-      if(idx == index)
-      {
-        val = binary2integer(values[i], is_signedbv_type(subtype));
-        break;
-      }
-    }
+  expr2tc ret = gen_zero(subtype);
 
-    boolector_free_array_assignment(btor, indicies, values, size);
-    return get_by_value(subtype, val);
+  for(uint32_t i = 0; i < size; i++)
+  {
+    auto idx = string2integer(indicies[i], 2);
+    if(idx == index)
+    {
+      BigInt val = binary2integer(values[i], is_signedbv_type(subtype));
+      /* Boolector only supports BVs in arrays, but for instance unions also
+       * get encoded as BVs, so we need to distinguish whether it is a simple
+       * BV or a more complex type, which get_by_value() does not handle.
+       * In the simple type case we can avoid the overhead of constructing new
+       * SMT nodes and sort conversion. */
+      if(is_bv_type(subtype))
+        ret = get_by_value(subtype, val);
+      else
+        ret = get_by_ast(subtype, mk_smt_bv(val, convert_sort(subtype)));
+      break;
+    }
   }
 
-  return gen_zero(subtype);
+  boolector_free_array_assignment(btor, indicies, values, size);
+  return ret;
 }
 
 smt_astt boolector_convt::overflow_arith(const expr2tc &expr)

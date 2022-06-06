@@ -6,6 +6,10 @@ if(ENABLE_SOLIDITY_FRONTEND)
   set(SOLIDITY_FRONTEND_TARGETS solidityfrontend)
 endif()
 
+if(ENABLE_GOTO_CONTRACTOR)
+  set(GOTO_CONTRACTOR_TARGETS gotocontractor)
+endif()
+
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
   COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/buildidobj.py ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -28,7 +32,7 @@ target_include_directories(esbmc
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
 
-target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} clangcfrontend
+target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${GOTO_CONTRACTOR_TARGETS} clangcfrontend
   clangcppfrontend symex pointeranalysis langapi util_esbmc bigint
   solvers clibs default_message gotoalgorithms nlohmann_json::nlohmann_json ${Boost_LIBRARIES})
 

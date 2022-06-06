@@ -358,6 +358,9 @@ public:
     if(int_encoding)
       return mk_int_sort();
 
+    if(width == 0)
+      width = 1;
+
     return mk_bv_sort(width);
   }
 

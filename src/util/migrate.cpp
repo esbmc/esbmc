@@ -334,7 +334,8 @@ type2tc migrate_type(const typet &type)
     return type2tc(new string_type2t(iwidth));
   }
 
-  assert(0 && fmt::format("{}", type).c_str());
+  default_message msg;
+  msg.error(fmt::format("{}", type));
   abort();
 }
 
@@ -533,6 +534,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
 
     char *endatptr, *endexmptr;
     level1_num = strtol(atstr.c_str(), &endatptr, 10);
+    // assertion could fail due to invalid symbol identifier.
     assert(endatptr != atstr.c_str());
     thread_num = strtol(exmstr.c_str(), &endexmptr, 10);
     assert(endexmptr != exmstr.c_str());
@@ -2027,7 +2029,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else
   {
-    assert(0 && fmt::format("{}\nmigrate expr failed", expr).c_str());
+    default_message msg;
+    msg.error(fmt::format("{}\nmigrate expr failed", expr));
+    abort();
   }
 }
 
@@ -2223,7 +2227,8 @@ typet migrate_type_back(const type2tc &ref)
     return ret;
   }
   default:
-    assert(0 && "Unrecognized type in migrate_type_back");
+    default_message msg;
+    msg.error("Unrecognized type in migrate_type_back");
     abort();
   }
 }
@@ -2848,7 +2853,9 @@ exprt migrate_expr_back(const expr2tc &ref)
     }
     else
     {
-      assert(0 && "Invalid operand to overflow2t when backmigrating");
+      default_message msg;
+      msg.error("Invalid operand to overflow2t when backmigrating");
+      abort();
     }
     return theexpr;
   }
@@ -3019,7 +3026,9 @@ exprt migrate_expr_back(const expr2tc &ref)
       theexpr.statement("postdecrement");
       break;
     default:
-      assert(0 && "Unexpected side effect type when back-converting");
+      default_message msg;
+      msg.error("Unexpected side effect type when back-converting");
+      abort();
     }
 
     return theexpr;
@@ -3247,7 +3256,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     return back;
   }
   default:
-    assert(0 && "Unrecognized expr in migrate_expr_back");
+    default_message msg;
+    msg.error("Unrecognized expr in migrate_expr_back");
     abort();
   }
 }

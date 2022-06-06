@@ -34,7 +34,7 @@ jobs:
           name: release-linux
           path: ./build/ESBMC-Linux.sh
 
- 
+
   build-macos:
     name: Build Darwin Release
     runs-on: macos-latest
@@ -124,7 +124,7 @@ jobs:
         uses: actions/download-artifact@v1
         with:
           name: release-linux
-          path: ./     
+          path: ./
       - name: Download Macos Build
         uses: actions/download-artifact@v1
         with:

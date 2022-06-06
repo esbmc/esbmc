@@ -227,8 +227,8 @@ void smt_convt::set_to(const expr2tc &expr, bool value)
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
-  smt_astt side1 = convert_ast(eq.side_1);
-  smt_astt side2 = convert_ast(eq.side_2);
+  smt_astt side1 = convert_ast(eq.side_1); // LHS
+  smt_astt side2 = convert_ast(eq.side_2); // RHS
   side2->assign(this, side1);
 
   // Put that into the smt cache, thus preserving the value of the assigned symbols.
@@ -1355,7 +1355,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
       type2tc range = get_flattened_array_subtype(expr->type);
 
       // If this is an array of structs, we have a tuple array sym.
-      if(is_structure_type(range) || is_pointer_type(range))
+      if(is_tuple_ast_type(range))
         return tuple_api->mk_tuple_array_symbol(expr);
     }
 
@@ -2242,6 +2242,12 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
     return get_by_value(type, get_bv(a, is_signedbv_type(type)));
 
   case type2t::floatbv_id:
+    if(int_encoding)
+    {
+      /* TODO: how to retrieve an floatbv from a rational or algebraic real
+       * number in a meaningful way? */
+      return expr2tc();
+    }
     return constant_floatbv2tc(fp_api->get_fpbv(a));
 
   case type2t::struct_id:
@@ -2709,6 +2715,13 @@ expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
   }
 
   default:;
+  }
+
+  if(options.get_bool_option("non-supported-models-as-zero"))
+  {
+    msg.warning(fmt::format(
+      "Can't generate one for type {}. Returning zero", get_type_id(type)));
+    return gen_zero(type);
   }
 
   msg.error(fmt::format("Can't generate one for type {}", get_type_id(type)));

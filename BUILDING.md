@@ -60,6 +60,16 @@ macOS:
 tar xJf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-apple-darwin clang11
 ```
 
+## Preparing the Solidity frontend
+
+We developed a solidity frontend for the efficient SMT-based context-bounded model checker (ESBMC). ESBMC-solidity is a permissively licensed open-source context-bounded model checker to verify Solidity smart contracts. It can verify both predefined safety properties (e.g., bounds check, overflow, underflow) and user-defined program assertions automatically.
+
+In order to verify Solidity smart contract, ESBMC should be built with the option:
+
+```
+-DENABLE_SOLIDITY_FRONTEND=On
+```
+
 ## Setting Up Solvers
 
 ESBMC relies on SMT solvers to reason about formulae in its back-end.

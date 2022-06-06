@@ -10,10 +10,12 @@ set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 function(add_esbmc_regression_test folder modes test)
     set(test_name "regression/${folder}/${test}")
     add_test(NAME ${test_name}
-            COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
-            --tool=${ESBMC_BIN} --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder} --modes ${modes} --file=${test})
-    set_tests_properties(${test_name} PROPERTIES
-            SKIP_RETURN_CODE 10)
+             COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
+                     --tool=${ESBMC_BIN}
+                     --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
+                     --modes ${modes}
+                     --file=${test})
+    set_tests_properties(${test_name} PROPERTIES SKIP_RETURN_CODE 10)
 endfunction()
 
 
@@ -24,14 +26,32 @@ function(add_esbmc_regression folder modes)
     endforeach()
 endfunction()
 
+# conditionally enable regression suites based on configured support
+if(ENABLE_BITWUZLA)
+    set(REGRESSIONS_BITWUZLA bitwuzla)
+endif()
+if(ENABLE_SOLIDITY_FRONTEND)
+    set(REGRESSIONS_SOLIDITY esbmc-solidity)
+endif()
+if(ENABLE_GOTO_CONTRACTOR)
+    set(REGRESSIONS_GOTO_CONTRACTOR goto-contractor)
+endif()
+
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)
-    set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc esbmc-solidity cbmc cstd llvm floats floats-regression k-induction k-induction-parallel nonz3 bitwuzla incremental-smt extensions)
+    set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc ${REGRESSIONS_SOLIDITY}
+                    cbmc cstd llvm floats floats-regression
+                    k-induction k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
+                    incremental-smt esbmc-cpp11)
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
-    set(REGRESSIONS esbmc cbmc cstd llvm floats  k-induction extensions)
+    set(REGRESSIONS esbmc cbmc cstd llvm floats k-induction esbmc-cpp11)
 else()
-    set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc esbmc-solidity esbmc-old cbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith k-induction-parallel nonz3 bitwuzla incremental-smt extensions)
+    set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc ${REGRESSIONS_SOLIDITY}
+                    esbmc-old cbmc cstd llvm floats floats-regression
+                    k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith
+                    k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
+                    incremental-smt esbmc-cpp11 ${REGRESSIONS_GOTO_CONTRACTOR})
 endif()
 
 foreach(regression IN LISTS REGRESSIONS)

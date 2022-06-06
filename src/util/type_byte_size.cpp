@@ -47,7 +47,7 @@ BigInt type_byte_size_default(const type2tc &type, const BigInt &defaultval)
   {
     return type_byte_size(type);
   }
-  catch(array_type2t::dyn_sized_array_excp *e)
+  catch(const array_type2t::dyn_sized_array_excp &e)
   {
     return defaultval;
   }
@@ -118,12 +118,12 @@ BigInt type_byte_size_bits(const type2tc &type)
     // reasonably return anything anyway, so throw.
     const array_type2t &t2 = to_array_type(type);
     if(t2.size_is_infinite)
-      throw new array_type2t::inf_sized_array_excp();
+      throw array_type2t::inf_sized_array_excp();
 
     expr2tc arrsize = t2.array_size;
     simplify(arrsize);
     if(!is_constant_int2t(arrsize))
-      throw new array_type2t::dyn_sized_array_excp(arrsize);
+      throw array_type2t::dyn_sized_array_excp(arrsize);
 
     BigInt subsize = type_byte_size_bits(t2.subtype);
     const constant_int2t &arrsize_int = to_constant_int2t(arrsize);

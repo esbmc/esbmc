@@ -67,6 +67,10 @@ extern "C"
 #include <ansi-c/c_preprocess.h>
 #endif
 
+#ifdef ENABLE_GOTO_CONTRACTOR
+#include <goto-programs/goto_contractor.h>
+#endif
+
 #include <util/message/default_message.h>
 
 enum PROCESS_TYPE
@@ -1590,14 +1594,28 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, options, ns, msg);
     }
 
-    if(cmdline.isset("interval-analysis"))
+    if(cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
+    {
       interval_analysis(goto_functions, ns);
+    }
 
     if(
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
       cmdline.isset("k-induction-parallel"))
     {
       goto_k_induction(goto_functions, msg);
+    }
+
+    if(cmdline.isset("goto-contractor"))
+    {
+#ifdef ENABLE_GOTO_CONTRACTOR
+      goto_contractor(goto_functions, msg);
+#else
+      msg.error(
+        "Current build does not support contractors. If ibex is installed, add "
+        "-DENABLE_IBEX = ON");
+      abort();
+#endif
     }
 
     if(cmdline.isset("termination"))
