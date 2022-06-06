@@ -353,8 +353,19 @@ void clang_c_adjust::adjust_float_arith(exprt &expr)
 {
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size() == 2);
+  auto t = ns.follow(expr.type());
 
-  if(ns.follow(expr.type()).is_floatbv())
+  // first we should check if the type itself is a float
+  bool need_float_adjust = t.is_floatbv();
+
+  /** if type is not a float then we should check if it is a vector
+   * this is needed because a operation such as {0.1, 0.2} + 1
+   * needs to use the float version
+   */
+  if(!need_float_adjust && t.is_vector())
+    need_float_adjust = to_vector_type(t).subtype().is_floatbv();
+
+  if(need_float_adjust)
   {
     // And change id
     if(expr.id() == "+")
@@ -373,6 +384,10 @@ void clang_c_adjust::adjust_float_arith(exprt &expr)
     {
       expr.id("ieee_div");
     }
+
+    // BUG: setting rounding_mode breaks migration
+    if(t.is_vector())
+      return;
 
     // Add rounding mode
     expr.set(
@@ -405,7 +420,7 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
   expr.type() = typet("pointer");
 
   // turn &array into &(array[0])
-  if(op.type().is_array() || op.type().is_incomplete_array())
+  if(is_array_like(op.type()))
   {
     index_exprt index;
     index.array() = op;
@@ -426,7 +441,7 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
 
   const typet op_type = ns.follow(op.type());
 
-  if(op_type.is_array() || op_type.is_incomplete_array())
+  if(is_array_like(op_type))
   {
     // *a is the same as a[0]
     deref.id("index");
@@ -656,7 +671,7 @@ void clang_c_adjust::adjust_function_call_arguments(
       // don't know type, just do standard conversion
 
       const typet &type = ns.follow(op.type());
-      if(type.is_array() || type.is_incomplete_array())
+      if(is_array_like(type))
         gen_typecast(ns, op, pointer_typet(empty_typet()));
     }
   }

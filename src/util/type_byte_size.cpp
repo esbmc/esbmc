@@ -94,6 +94,24 @@ BigInt type_byte_size_bits(const type2tc &type)
     // TODO: Strings of wchar will return the wrong result here
     return to_string_type(type).width * config.ansi_c.char_width;
 
+  case type2t::vector_id:
+  {
+    // Attempt to compute constant array offset. If we can't, we can't
+    // reasonably return anything anyway, so throw.
+    const vector_type2t &t2 = to_vector_type(type);
+    if(t2.size_is_infinite)
+      throw new array_type2t::inf_sized_array_excp();
+
+    expr2tc arrsize = t2.array_size;
+    simplify(arrsize);
+    if(!is_constant_int2t(arrsize))
+      throw new array_type2t::dyn_sized_array_excp(arrsize);
+
+    BigInt subsize = type_byte_size_bits(t2.subtype);
+    const constant_int2t &arrsize_int = to_constant_int2t(arrsize);
+    return subsize * arrsize_int.value;
+  }
+
   case type2t::array_id:
   {
     // Attempt to compute constant array offset. If we can't, we can't

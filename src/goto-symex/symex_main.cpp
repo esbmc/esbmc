@@ -505,6 +505,79 @@ void goto_symext::run_intrinsic(
     // Perform overflow check and assign it to the return object
     symex_assign(code_assign2tc(func_call.ret, expr2tc(new overflow2t(op))));
   }
+  else if(has_prefix(symname, "c:@F@__ESBMC_convertvector"))
+  {
+    assert(
+      func_call.operands.size() == 1 &&
+      "Wrong __ESBMC_convertvector signature");
+    auto &ex_state = art.get_cur_state();
+    if(ex_state.cur_state->guard.is_false())
+      return;
+
+    auto t = func_call.ret->type;
+    assert(t->type_id == type2t::type_ids::vector_id);
+    auto subtype = to_vector_type(t).subtype;
+
+    // v should be a vector
+    expr2tc v = func_call.operands[0];
+    ex_state.get_active_state().level2.rename(v);
+    assert(v->expr_id == expr2t::expr_ids::constant_vector_id);
+
+    // Create new vector
+    std::vector<expr2tc> members;
+    for(const auto &x : to_constant_vector2t(v).datatype_members)
+    {
+      // Create a typecast call
+      auto typecast = typecast2tc(subtype, x);
+      members.push_back(typecast);
+    }
+    constant_vector2tc result(func_call.ret->type, members);
+    expr2tc ret_ref = func_call.ret;
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
+  }
+  else if(has_prefix(symname, "c:@F@__ESBMC_shufflevector"))
+  {
+    assert(
+      func_call.operands.size() >= 2 &&
+      "Wrong __ESBMC_shufflevector signature");
+    auto &ex_state = art.get_cur_state();
+    if(ex_state.cur_state->guard.is_false())
+      return;
+
+    expr2tc v1 = func_call.operands[0];
+    expr2tc v2 = func_call.operands[1];
+    ex_state.get_active_state().level2.rename(v1);
+    ex_state.get_active_state().level2.rename(v2);
+
+    // V1 and V2 should have the same type
+    assert(
+      v1->type == v2->type &&
+      v1->expr_id == expr2t::expr_ids::constant_vector_id);
+    auto v1_size = (long int)to_constant_vector2t(v1).datatype_members.size();
+
+    std::vector<expr2tc> members;
+    for(long unsigned int i = 2; i < func_call.operands.size(); i++)
+    {
+      expr2tc e = func_call.operands[i];
+      ex_state.get_active_state().level2.rename(e);
+
+      auto index = to_constant_int2t(e).value.to_int64();
+      if(index == -1)
+      {
+        // TODO: nondet_value
+        members.push_back(to_constant_vector2t(v1).datatype_members[0]);
+      }
+      auto vec =
+        index < v1_size ? to_constant_vector2t(v1) : to_constant_vector2t(v2);
+      index = index % v1_size;
+      members.push_back(vec.datatype_members[index]);
+    }
+    constant_vector2tc result(func_call.ret->type, members);
+    expr2tc ret_ref = func_call.ret;
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
+  }
   else if(has_prefix(symname, "c:@F@__ESBMC_atomic_load"))
   {
     assert(

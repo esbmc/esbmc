@@ -1014,6 +1014,43 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     new_type.set("#extint", true);
     break;
   }
+  case clang::Type::ExtVector:
+  {
+    // NOTE: some bitshift operations with classic vectors are parsed as this
+    //   e.g vsi << 2 becomes ExtVector
+    //       vsi << vsi2 becomes Vector
+    const clang::ExtVectorType &vec =
+      static_cast<const clang::ExtVectorType &>(the_type);
+
+    typet the_type;
+    if(get_type(vec.getElementType(), the_type))
+      return true;
+
+    new_type = vector_typet(
+      the_type,
+      constant_exprt(
+        integer2binary(vec.getNumElements(), bv_width(int_type())),
+        integer2string(vec.getNumElements()),
+        int_type()));
+    break;
+  }
+  case clang::Type::Vector:
+  {
+    const clang::VectorType &vec =
+      static_cast<const clang::VectorType &>(the_type);
+
+    typet the_type;
+    if(get_type(vec.getElementType(), the_type))
+      return true;
+
+    new_type = vector_typet(
+      the_type,
+      constant_exprt(
+        integer2binary(vec.getNumElements(), bv_width(int_type())),
+        integer2string(vec.getNumElements()),
+        int_type()));
+    break;
+  }
 
   default:
     std::ostringstream oss;
@@ -1624,6 +1661,64 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::ConvertVectorExprClass:
+  {
+    // TODO: Creating a fake call that is a passthrough should be simpler
+    const clang::ConvertVectorExpr &convertVector =
+      static_cast<const clang::ConvertVectorExpr &>(stmt);
+
+    side_effect_expr_function_callt fake_call;
+    code_typet t;
+    if(get_type(convertVector.getType(), t.return_type()))
+      return true;
+
+    assert(t.return_type().is_vector());
+    fake_call.type() = t;
+
+    exprt e;
+    if(get_expr(*convertVector.getSrcExpr(), e))
+      return true;
+
+    t.arguments().push_back(code_typet::argumentt(e.type()));
+    fake_call.arguments().push_back(e);
+
+    fake_call.function() = symbol_exprt("c:@F@__ESBMC_convertvector", t);
+    fake_call.function().name("__ESBMC_convertvector");
+    new_expr.swap(fake_call);
+    return false;
+  }
+
+  // A shufflevector statement
+  case clang::Stmt::ShuffleVectorExprClass:
+  {
+    // TODO: Creating a fake call that is a passthrough should be simpler
+    const clang::ShuffleVectorExpr &shuffle =
+      static_cast<const clang::ShuffleVectorExpr &>(stmt);
+
+    side_effect_expr_function_callt fake_call;
+    code_typet t;
+    if(get_type(shuffle.getType(), t.return_type()))
+      return true;
+
+    assert(t.return_type().is_vector());
+    fake_call.type() = t;
+
+    for(unsigned j = 0; j < shuffle.getNumSubExprs(); j++)
+    {
+      exprt e;
+      if(get_expr(*shuffle.getExpr(j), e))
+        return true;
+
+      t.arguments().push_back(code_typet::argumentt(e.type()));
+      fake_call.arguments().push_back(e);
+    }
+
+    fake_call.function() = symbol_exprt("c:@F@__ESBMC_shufflevector", t);
+    fake_call.function().name("__ESBMC_shufflevector");
+    new_expr.swap(fake_call);
+    return false;
+  }
+
   // An initialize statement, such as int a[3] = {1, 2, 3}
   case clang::Stmt::InitListExprClass:
   {
@@ -1637,7 +1732,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     exprt inits;
 
     // Structs/unions/arrays put the initializer on operands
-    if(t.is_struct() || t.is_union() || t.is_array())
+    if(t.is_struct() || t.is_union() || t.is_array() || t.is_vector())
     {
       // Initializer everything to zero, even pads
       // TODO: should we initialize pads with nondet values?
@@ -1662,9 +1757,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         typet elem_type;
         if(t.is_struct() || t.is_union())
           elem_type = to_struct_union_type(t).components()[i].type();
-        else
+        else if(t.is_array())
           elem_type = to_array_type(t).subtype();
-
+        else
+          elem_type = to_vector_type(t).subtype();
         gen_typecast(ns, init, elem_type);
         inits.operands().at(i) = init;
       }
@@ -2271,6 +2367,8 @@ bool clang_c_convertert::get_cast_expr(
     gen_typecast_to_union(expr, type);
     break;
 
+  case clang::CK_VectorSplat:
+    break;
   default:
   {
     std::ostringstream oss;
