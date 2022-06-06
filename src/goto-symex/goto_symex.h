@@ -390,15 +390,16 @@ protected:
   bool run_next_function_ptr_target(bool first);
 
   /**
-   *  Run an intrinsic, something prefixed with __ESBMC.
+   *  Tries to run an intrinsic, something prefixed with __ESBMC.
    *  This looks through a set of intrinsic functions that are implemented in
    *  ESBMC, and calls the appropriate one. Examples include starting a thread,
    *  ending a thread, switching to another thread.
    *  @param call Function call being performed.
    *  @param art Reachability tree we're operating on.
    *  @param symname Name of intrinsic we're calling.
+   *  @return true if a function was called, false otherwise
    */
-  void run_intrinsic(
+  bool run_intrinsic(
     const code_function_call2t &call,
     reachability_treet &art,
     const std::string &symname);

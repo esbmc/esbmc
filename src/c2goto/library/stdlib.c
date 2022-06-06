@@ -9,23 +9,19 @@
 #undef getenv
 
 short atexit_index = 0;
-void (*atexit_func[32])();
+__attribute__((annotate("__ESBMC_inf_size"))) void (*__ESBMC_atexit_func[1])();
 
-void __atexit_handler()
+void __ESBMC_atexit_handler()
 {
 __ESBMC_HIDE:;
   for(short i = atexit_index - 1; i >= 0; --i)
-    atexit_func[i]();
+    __ESBMC_atexit_func[i]();
 }
 
 int atexit(void (*func)(void))
 {
 __ESBMC_HIDE:;
-  // Max of 32 functions can be registered
-  if(atexit_index == 32)
-    return 1;
-
-  atexit_func[atexit_index] = func;
+  __ESBMC_atexit_func[atexit_index] = func;
   ++atexit_index;
   return 0;
 }
@@ -34,13 +30,13 @@ __ESBMC_HIDE:;
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void exit(int status)
 {
-  __atexit_handler();
+  __ESBMC_atexit_handler();
   __ESBMC_assume(0);
 }
 
 void abort(void)
 {
-  __atexit_handler();
+  __ESBMC_atexit_handler();
   __ESBMC_assume(0);
 }
 
