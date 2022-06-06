@@ -373,8 +373,8 @@ void goto_symext::symex_assert()
     return;
 
   // Don't convert if it's an user provided assertion and we're running in
-  // no assertion mode or forward condition
-  if(cur_state->source.pc->location.user_provided() && no_assertions)
+  // no assertion mode, forward condition or user called __ESBMC_disable
+  if((cur_state->source.pc->location.user_provided() && no_assertions) || !assertions_enabled_step)
     return;
 
   std::string msg = cur_state->source.pc->location.comment().as_string();
@@ -682,7 +682,15 @@ void goto_symext::run_intrinsic(
 
       symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
     }
-
+  }
+  else if(has_prefix(symname, "c:@F@__ESBMC_enable"))
+  {
+    assertions_enabled_step = true;
+    return;
+  }
+  else if(has_prefix(symname, "c:@F@__ESBMC_disable"))
+  {
+    assertions_enabled_step = false;
     return;
   }
   else
