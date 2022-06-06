@@ -1019,26 +1019,23 @@ void value_sett::assign(
 
   if(is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
-
-    // Assign the values of all members of the rhs thing to the lhs. It's
-    // sort-of-valid for the right hand side to be a superclass of the subclass,
-    // in which case there are some fields not common between them, so we
-    // iterate over the superclasses members.
-    const std::vector<type2tc> &members = (is_struct_type(rhs->type))
-                                            ? to_struct_type(rhs->type).members
-                                            : to_union_type(rhs->type).members;
-    const std::vector<irep_idt> &member_names =
-      (is_struct_type(rhs->type)) ? to_struct_type(rhs->type).member_names
-                                  : to_union_type(rhs->type).member_names;
-
-    unsigned int i = 0;
-    for(std::vector<type2tc>::const_iterator c_it = members.begin();
-        c_it != members.end();
-        c_it++, i++)
-
+    if(lhs_type->type_id == rhs->type->type_id)
     {
-      const type2tc &subtype = *c_it;
-      const irep_idt &name = member_names[i];
+      /* either both union or both struct */
+      assert(lhs_type->type_id == rhs->type->type_id);
+
+      // Assign the values of all members of the rhs thing to the lhs. It's
+      // sort-of-valid for the right hand side to be a superclass of the subclass,
+      // in which case there are some fields not common between them, so we
+      // iterate over the superclasses members.
+      auto *rhs_data = static_cast<const struct_union_data *>(rhs->type.get());
+      const std::vector<type2tc> &members = rhs_data->members;
+      const std::vector<irep_idt> &member_names = rhs_data->member_names;
+
+      for(size_t i = 0; i < members.size(); i++)
+      {
+        const type2tc &subtype = members[i];
+        const irep_idt &name = member_names[i];
 
         // ignore methods
         if(is_code_type(subtype))
