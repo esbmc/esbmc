@@ -412,11 +412,6 @@ protected:
     std::list<exprt> &dest);
 
   // some built-in functions
-  void do_abort(
-    const exprt &lhs,
-    const exprt &rhs,
-    const exprt::operandst &arguments,
-    goto_programt &dest);
   void do_atomic_begin(
     const exprt &lhs,
     const exprt &rhs,

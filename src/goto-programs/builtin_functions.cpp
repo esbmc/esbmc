@@ -432,25 +432,6 @@ void goto_convertt::do_exit(
   t_a->location = function.location();
 }
 
-void goto_convertt::do_abort(
-  const exprt &,
-  const exprt &function,
-  const exprt::operandst &arguments,
-  goto_programt &dest)
-{
-  if(arguments.size() != 0)
-  {
-    err_location(function);
-    throw "abort expected to have no arguments";
-  }
-
-  // same as assume(false)
-
-  goto_programt::targett t_a = dest.add_instruction(ASSUME);
-  t_a->guard = gen_false_expr();
-  t_a->location = function.location();
-}
-
 void goto_convertt::do_free(
   const exprt &lhs,
   const exprt &function,
