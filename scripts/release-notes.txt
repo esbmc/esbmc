@@ -1,13 +1,14 @@
 Release Notes of the ESBMC model checker
 
 *** Version 6.10
-* Lots of bugs cases relating unions have been fixed
+* Lots of bugs related to unions have been fixed"
 * Compound Literals are now supported
-*  _ExtInt struct fields now have proper padding and alignment
+* _ExtInt struct fields now have proper padding and alignment
 * A bug where the size of 3-dimensional arrays was being not being computed correctly has been solved
 * A new intrinsic for stack allocation has been added: __ESBMC_alloca
 * The Solidity frontend now has support for: bool literal and while
-* New options have been added: file-output and cex-output
+* New options have been added: --file-output, --cex-output, --initialize-nondet-variables, and --non-supported-models-as-zero
+* A new experimental optimization for intervals contraction was added: --goto-contractor. More details about this optimization at: https://arxiv.org/pdf/2012.11245.pdf 
 
 *** Version 6.9
 * Fixed a bug where Z3 bv were not encoded correctly for signed numbers
