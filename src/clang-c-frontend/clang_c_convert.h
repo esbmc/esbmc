@@ -9,6 +9,7 @@
 #include <util/std_code.h>
 #include <util/std_types.h>
 #include <util/symbol_generator.h>
+#include <unordered_map>
 
 // Forward dec, to avoid bringing in clang headers
 namespace clang
@@ -63,6 +64,14 @@ public:
  */
   static void
   gen_typecast_to_union(exprt &dest, const typet &type, const messaget &msg);
+  void set_symbols_to_add(std::vector<symbolt> &v)
+  {
+    symbols_to_add = v;
+  }
+  std::vector<symbolt> get_symbols_to_add()
+  {
+    return symbols_to_add;
+  }
 
 protected:
   clang::ASTContext *ASTContext;
@@ -183,6 +192,9 @@ protected:
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
 
   void gen_typecast_to_union(exprt &dest, const typet &type);
+  bool foo(const clang::VarDecl &vd, symbolt symbol, exprt &new_expr);
+  bool skip_extern_symbol(const symbolt symbol);
+  std::vector<symbolt> symbols_to_add;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
