@@ -1,5 +1,4 @@
 CORE
 main.c
 --compact-trace  --force-malloc-success
-^\s*assertion deref.v != value
 ^VERIFICATION FAILED$

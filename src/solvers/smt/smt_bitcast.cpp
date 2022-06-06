@@ -21,8 +21,9 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
       is_constant_int2t(arraytype.array_size) &&
       "Can't flatten array with unbounded size");
 
+    auto array_for_ref = arraytype.array_size;
     // Iterate over each element and flatten them
-    const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
+    const constant_int2t &intref = to_constant_int2t(array_for_ref);
     assert(intref.value > 0);
 
     int sz = intref.value.to_uint64();
@@ -210,7 +211,8 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
       type2tc subtype = arr_type.subtype;
 
       // We shouldn't have any bit left behind
-      assert(new_from->type->get_width() % subtype->get_width() == 0);
+      // This will not work for FAMs!
+      //assert(new_from->type->get_width() % subtype->get_width() == 0);
       unsigned int num_el = new_from->type->get_width() / subtype->get_width();
 
       std::vector<expr2tc> elems;
