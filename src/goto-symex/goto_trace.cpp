@@ -291,7 +291,7 @@ void violation_graphml_goto_trace(
         violation_edge.thread_id = std::to_string(step.thread_nr);
 
         // Due to we reporting the memory leak happening at the end of main's
-        // scope, CPA is not able to validate our witness, so let's not add the
+        // scope, CPA is unable to validate our witness, so let's not add the
         // start_line attribute
         if(!options.get_bool_option("memory-cleanup-check"))
           violation_edge.start_line = get_line_number(
