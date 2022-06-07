@@ -64,7 +64,7 @@ public:
   static void
   gen_typecast_to_union(exprt &dest, const typet &type, const messaget &msg);
 
-  std::string get_decl_name(const clang::NamedDecl &nd);
+  static std::string get_decl_name(const clang::NamedDecl &nd);
 
 protected:
   clang::ASTContext *ASTContext;

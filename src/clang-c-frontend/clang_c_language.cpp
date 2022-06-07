@@ -278,7 +278,7 @@ bool clang_c_languaget::preprocess(
 bool clang_c_languaget::final(contextt &context, const messaget &msg)
 {
   add_cprover_library(context, msg, this);
-  // add __ESBMC__main symbol
+  // adds __ESBMC__main symbol
   return clang_main(context, msg);
 }
 

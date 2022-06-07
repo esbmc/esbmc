@@ -214,9 +214,6 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::TranslationUnitDecl &tu =
       static_cast<const clang::TranslationUnitDecl &>(decl);
 
-    msg.debug(fmt::format(
-      "TranslationUnit has a total of {} top-level declarations",
-      std::distance(std::cbegin(tu.decls()), std::cend(tu.decls()))));
     for(auto const &decl : tu.decls())
     {
       // This is a global declaration (variable, function, struct, etc)
@@ -362,9 +359,6 @@ bool clang_c_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &recordd,
   struct_union_typet &type)
 {
-  msg.debug(fmt::format(
-    "RecordDecl has {} fields",
-    std::distance(std::cbegin(recordd.fields()), std::cend(recordd.fields()))));
   // First, parse the fields
   for(auto const *field : recordd.fields())
   {
