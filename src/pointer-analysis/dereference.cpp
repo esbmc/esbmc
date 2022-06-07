@@ -192,10 +192,7 @@ void dereferencet::dereference_expr(expr2tc &expr, guardt &guard, modet mode)
     // The result of this expression should be scalar: we're transitioning
     // from a scalar result to a nonscalar result.
 
-    std::list<expr2tc> scalar_step_list;
-    expr2tc res =
-      dereference_expr_nonscalar(expr, guard, mode, scalar_step_list);
-    assert(scalar_step_list.size() == 0); // Should finish empty.
+    expr2tc res = dereference_expr_nonscalar(expr, guard, mode, expr);
 
     // If a dereference successfully occurred, replace expr at this level.
     // XXX -- explain this better.
@@ -351,35 +348,26 @@ void dereferencet::dereference_addrof_expr(
 }
 
 expr2tc dereferencet::dereference_expr_nonscalar(
-  const expr2tc &expr,
+  expr2tc &expr,
   guardt &guard,
   modet mode,
-  std::list<expr2tc> &scalar_step_list)
+  const expr2tc &base)
 {
   if(is_dereference2t(expr))
   {
     /* The first expression we're called with is index2t, member2t or non-scalar
-     * if2t. That expression (or one of its branches in case of if2t) is at the
-     * end of scalar_step_list. */
-    assert(!scalar_step_list.empty());
+     * if2t. Thus, expr differs from base. */
+    assert(expr != base);
 
     // Check that either the base type that these steps are applied to matches
     // the type of the object we're wrapping in these steps. It's a type error
     // if there isn't a match.
-    type2tc base_of_steps_type =
-      (*scalar_step_list.front()->get_sub_expr(0))->type;
-    assert(base_of_steps_type == expr->type);
-    base_of_steps_type = ns.follow(base_of_steps_type);
+    // assert((*scalar_step_list.front()->get_sub_expr(0))->type == expr->type);
+    type2tc base_of_steps_type = ns.follow(expr->type);
 
-    expr2tc size_check_expr = expr;
-    if(dereference_type_compare(size_check_expr, base_of_steps_type))
+    if(dereference_type_compare(expr, base_of_steps_type))
     {
       // We can just reconstruct this.
-      for(expr2tc tmp : scalar_step_list)
-      {
-        *tmp->get_sub_expr_nc(0) = size_check_expr;
-        size_check_expr = tmp;
-      }
     }
     else
     {
@@ -390,14 +378,14 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     }
 
     // Determine offset accumulated to this point (in bits)
-    expr2tc offset_to_scalar = compute_pointer_offset_bits(size_check_expr);
+    expr2tc offset_to_scalar = compute_pointer_offset_bits(base);
     simplify(offset_to_scalar);
 
-    dereference2t deref = to_dereference2t(expr);
+    dereference2t &deref = to_dereference2t(expr);
     // first make sure there are no dereferences in there
     dereference_expr(deref.value, guard, dereferencet::READ);
 
-    const type2tc &to_type = scalar_step_list.back()->type;
+    const type2tc &to_type = base->type;
 
     expr2tc result =
       dereference(deref.value, to_type, guard, mode, offset_to_scalar);
@@ -408,27 +396,23 @@ expr2tc dereferencet::dereference_expr_nonscalar(
   {
     // Just blast straight through
     return dereference_expr_nonscalar(
-      to_typecast2t(expr).from, guard, mode, scalar_step_list);
+      to_typecast2t(expr).from, guard, mode, base);
   }
 
   if(is_member2t(expr))
   {
-    const member2t &memb = to_member2t(expr);
-    scalar_step_list.push_front(expr);
-    expr2tc res = dereference_expr_nonscalar(
-      memb.source_value, guard, mode, scalar_step_list);
-    scalar_step_list.pop_front();
+    member2t &memb = to_member2t(expr);
+    expr2tc res =
+      dereference_expr_nonscalar(memb.source_value, guard, mode, base);
     return res;
   }
 
   if(is_index2t(expr))
   {
-    index2tc index = to_index2t(expr);
-    dereference_expr(index->index, guard, dereferencet::READ);
-    scalar_step_list.push_front(index);
-    expr2tc res = dereference_expr_nonscalar(
-      index->source_value, guard, mode, scalar_step_list);
-    scalar_step_list.pop_front();
+    index2t &index = to_index2t(expr);
+    dereference_expr(index.index, guard, dereferencet::READ);
+    expr2tc res =
+      dereference_expr_nonscalar(index.source_value, guard, mode, base);
     return res;
   }
 
@@ -437,19 +421,14 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     assert(0);
 
     guardt g1 = guard, g2 = guard;
-    const if2t &theif = to_if2t(expr);
+    if2t &theif = to_if2t(expr);
     g1.add(theif.cond);
     g2.add(not2tc(theif.cond));
 
-    scalar_step_list.push_front(theif.true_value);
-    expr2tc res1 =
-      dereference_expr_nonscalar(theif.true_value, g1, mode, scalar_step_list);
-    scalar_step_list.pop_front();
+    expr2tc res1 = dereference_expr_nonscalar(theif.true_value, g1, mode, base);
 
-    scalar_step_list.push_front(theif.false_value);
     expr2tc res2 =
-      dereference_expr_nonscalar(theif.false_value, g2, mode, scalar_step_list);
-    scalar_step_list.pop_front();
+      dereference_expr_nonscalar(theif.false_value, g2, mode, base);
 
     if(is_nil_expr(res1))
       res1 = theif.true_value;
@@ -462,16 +441,14 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 
   if(is_constant_union2t(expr))
   {
-    const constant_union2t &u = to_constant_union2t(expr);
+    constant_union2t &u = to_constant_union2t(expr);
     /* In the frontend (until the SMT counter-example), constant union
      * expressions should have a single initializer expression, see also the
      * comment for constant_union2t in <irep2/itep2_expr.h>. */
     assert(u.datatype_members.size() == 1);
     assert(mode != WRITE);
-    scalar_step_list.push_front(expr);
-    expr2tc res = dereference_expr_nonscalar(
-      u.datatype_members.front(), guard, mode, scalar_step_list);
-    scalar_step_list.pop_front();
+    expr2tc res =
+      dereference_expr_nonscalar(u.datatype_members.front(), guard, mode, base);
     return res;
   }
 
