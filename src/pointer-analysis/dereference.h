@@ -284,9 +284,9 @@ private:
    *  that we can directly build a reference to the field this expr wants. This
    *  means that we don't have to build any intermediate struct or array
    *  references, which is beneficial.
-   *  @param dest The expression that we're dereferencing.
+   *  @param dest The expression that we're resolving dereferences in.
    *  @param guard Guard of this expression being evaluated.
-   *  @param mode The manner iin which the result of this deref is accessed.
+   *  @param mode The manner in which the result of this deref is accessed.
    *  @param scalar_step_list A list in which we're accumulating the exprs used
    *         to build a scalar access to an aggregate type.
    */
