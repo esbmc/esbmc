@@ -764,6 +764,9 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   std::string id, name;
   get_decl_name(cxxmd, name, id);
 
+  name = "this";
+  id += name;
+
   //this_param.cmt_base_name("this");
   this_param.cmt_base_name(name);
   this_param.cmt_identifier(id);
@@ -792,7 +795,7 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   // Save the method address and name of this pointer on the this pointer map
   std::size_t address = reinterpret_cast<std::size_t>(cxxmd.getFirstDecl());
   this_map[address] = std::pair<std::string, typet>(
-    param_symbol.name.as_string(), this_param.type());
+    param_symbol.id.as_string(), this_param.type());
 
   move_symbol_to_context(param_symbol);
   return false;
