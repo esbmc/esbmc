@@ -368,6 +368,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     // if there isn't a match.
     type2tc base_of_steps_type =
       (*scalar_step_list.front()->get_sub_expr(0))->type;
+    assert(base_of_steps_type == expr->type);
     base_of_steps_type = ns.follow(base_of_steps_type);
 
     expr2tc size_check_expr = expr;
