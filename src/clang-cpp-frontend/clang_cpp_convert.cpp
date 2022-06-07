@@ -820,6 +820,9 @@ bool clang_cpp_convertert::get_function_params(
   if(get_function_this_pointer_param(cxxmd, params))
     return true;
 
+  // reserve space for `this' pointer and params
+  params.resize(1 + fd.parameters().size());
+
   // TODO: replace the loop with get_function_params
   // Parse other args
   for(std::size_t i = 0; i < fd.parameters().size(); ++i)
