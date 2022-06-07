@@ -20,12 +20,13 @@ void goto_contractort::get_constraints(goto_functionst goto_functions)
   {
     if(ins.is_assert())
       constraint = create_constraint_from_expr2t(ins.guard);
-    else if(ins.is_function_call())
-      if(
-        to_symbol2t(to_code_function_call2t(ins.code).function)
+    else if(
+      ins.is_function_call() &&
+      is_symbol2t(to_code_function_call2t(ins.code).function) &&
+      to_symbol2t(to_code_function_call2t(ins.code).function)
           .get_symbol_name() == "c:@F@__VERIFIER_assert")
-        constraint = create_constraint_from_expr2t(
-          to_code_function_call2t(ins.code).operands[0]);
+      constraint = create_constraint_from_expr2t(
+        to_code_function_call2t(ins.code).operands[0]);
   }
 }
 
