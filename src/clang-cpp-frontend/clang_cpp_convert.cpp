@@ -279,12 +279,10 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   if(cxxrd == nullptr)
     return false;
 
-  // [Q: base class as in C++ inheritance?]
-  for(const auto &decl : cxxrd->bases())
+  if(cxxrd->bases().begin() != cxxrd->bases().end())
   {
-    assert(
-      !"come back and continue - got bases in get_struct_union_class_fields");
-    assert(decl.isVirtual());
+    msg.error(fmt::format("inheritance is not supported in {}", __func__));
+    abort();
   }
 
   // Iterate over the declarations stored in this context
@@ -300,8 +298,9 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       const clang::FunctionTemplateDecl *ftd =
         llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
     {
-      assert(!"come back and continue - got a tempalte function");
       assert(ftd->isThisDeclarationADefinition());
+      msg.error(fmt::format("template is not supported in {}", __func__));
+      abort();
     }
     else
     {
@@ -320,7 +319,11 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     {
       // Add only if it isn't static
       if(!cxxmd->isStatic())
-        assert(!"come back and continue - got static method");
+      {
+        msg.error(
+          fmt::format("static method is not supported in {}", __func__));
+        abort();
+      }
     }
   }
 
@@ -592,7 +595,11 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         llvm::dyn_cast<clang::MaterializeTemporaryExpr>(cxxc.getArg(0));
 
       if(mt != nullptr)
-        assert(!"come back and continue - got copy/move elison");
+      {
+        msg.error(
+          fmt::format("elidable copy/move is not supported in {}", __func__));
+        abort();
+      }
     }
 
     if(get_constructor_call(cxxc, new_expr))
@@ -609,7 +616,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     std::size_t address =
       reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
 
-    this_mapt::iterator it;
+    this_mapt::iterator it = this_map.find(address);
     if(this_map.find(address) == this_map.end())
     {
       msg.error(fmt::format(
@@ -682,8 +689,8 @@ bool clang_cpp_convertert::get_constructor_call(
   }
   else
   {
-    assert(
-      !"come back and continue - got new objectDecl, what about side_effect?");
+    msg.error(fmt::format("temporary is not supported in {}", __func__));
+    abort();
   }
 
   return false;
@@ -725,8 +732,6 @@ bool clang_cpp_convertert::get_function_body(
   if(clang_c_convertert::get_function_body(fd, new_expr))
     return true;
 
-  code_blockt &body = to_code_block(to_code(new_expr));
-
   // if it's a constructor, check for initializers
   if(fd.getKind() == clang::Decl::CXXConstructor)
   {
@@ -735,8 +740,9 @@ bool clang_cpp_convertert::get_function_body(
 
     if(cxxcd.init_begin() != cxxcd.init_end())
     {
-      assert(!"got ctor initializers");
-      assert(body.has_operands());
+      msg.error(
+        fmt::format("initializer list is not supported in {}", __func__));
+      abort();
     }
   }
 
@@ -918,8 +924,7 @@ bool clang_cpp_convertert::get_decl_ref(
   {
     msg.error(fmt::format(
       "Conversion of unsupported clang decl ref: {}", decl.getDeclKindName()));
-    assert(!"add more cases...");
-    return true;
+    abort();
   }
   }
 

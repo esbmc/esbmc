@@ -16,6 +16,7 @@ public:
   virtual ~clang_cpp_convertert() = default;
 
 protected:
+  // this_map contains key-value pairs in the form of <method address, <identifier, type>>
   typedef std::unordered_map<std::size_t, std::pair<std::string, typet>>
     this_mapt;
   this_mapt this_map;
