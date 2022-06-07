@@ -413,9 +413,10 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 
   if(is_member2t(expr))
   {
+    const member2t &memb = to_member2t(expr);
     scalar_step_list.push_front(expr);
     expr2tc res = dereference_expr_nonscalar(
-      to_member2t(expr).source_value, guard, mode, scalar_step_list);
+      memb.source_value, guard, mode, scalar_step_list);
     scalar_step_list.pop_front();
     return res;
   }
