@@ -1724,11 +1724,11 @@ static expr2tc simplify_relations(
   else if(is_pointer_type(simplied_side_1) || is_pointer_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      [](const expr2tc &c) -> bool
-    { return is_symbol2t(c) && (to_symbol2t(c).get_symbol_name() == "NULL"); };
+      [](const expr2tc &c) -> bool {
+      return is_symbol2t(c) && (to_symbol2t(c).get_symbol_name() == "NULL");
+    };
 
-    std::function<int &(expr2tc &)> get_value = [](expr2tc &) -> int &
-    {
+    std::function<int &(expr2tc &)> get_value = [](expr2tc &) -> int & {
       int &&z = 0;
       return z;
     };
