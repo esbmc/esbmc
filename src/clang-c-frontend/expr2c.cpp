@@ -2223,6 +2223,33 @@ std::string expr2ct::convert(const exprt &src, unsigned &precedence)
     if(src.operands().size() != 1)
       return convert_norep(src, precedence);
 
+    /* Special case for `*(p+i)`: this construct could either already be in the
+     * source or it was created artificially by the frontend for `p[i]`, see
+     * clang_c_adjust::adjust_index() and also Github issue #725. As those
+     * expressions are semantically indistinguishable and also supported by
+     * verifiers, choose to print the succint form `p[i]` in all cases. */
+    if(src.op0().id() == "+")
+    {
+      const exprt &add = src.op0();
+      assert(add.operands().size() == 2);
+      const exprt *ptr = nullptr, *idx = nullptr;
+      auto categorize = [&](const exprt &e){
+        const irep_idt &tid = e.type().id();
+        if(tid == "pointer")
+          ptr = &e;
+        else if(tid == "signedbv" || tid == "unsignedbv")
+          idx = &e;
+      };
+      categorize(add.op0());
+      categorize(add.op1());
+      if(ptr && idx)
+      {
+        exprt subst("index", src.type());
+        subst.copy_to_operands(*ptr, *idx);
+        return convert_index(subst, precedence = 16);
+      }
+    }
+
     return convert_unary(src, "*", precedence = 15);
   }
 
