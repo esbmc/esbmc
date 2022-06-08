@@ -598,6 +598,13 @@ bool goto_symext::run_intrinsic(
     return true;
   }
 
+  if(symname == "c:@F@__ESBMC_exit_program")
+  {
+    finish_formula();
+    cur_state->guard.make_false();
+    return true;
+  }
+
   if(symname == "c:@F@__ESBMC_sync_fetch_and_add")
   {
     // Already modelled in builtin_libs

@@ -21,22 +21,23 @@ __ESBMC_HIDE:;
 
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
-void exit(int)
+void exit(int status)
 {
 __ESBMC_HIDE:;
+  (void)status;
   for(int i = atexit_index - 1; i >= 0; --i)
     __ESBMC_atexit_func[i]();
-  __ESBMC_assume(0);
+  __ESBMC_exit_program();
 }
 
 void abort(void)
 {
-  __ESBMC_assume(0);
+  __ESBMC_exit_program();
 }
 
 void _Exit(int exit_code)
 {
-  __ESBMC_assume(0);
+  __ESBMC_exit_program();
 }
 #pragma clang diagnostic pop
 
