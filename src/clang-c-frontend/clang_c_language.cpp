@@ -293,7 +293,6 @@ _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_yield();
 void __ESBMC_atomic_begin();
 void __ESBMC_atomic_end();
-void __ESBMC_atexit_handler();
 
 int __ESBMC_abs(int);
 long int __ESBMC_labs(long int);

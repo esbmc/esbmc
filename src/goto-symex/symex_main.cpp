@@ -610,12 +610,6 @@ bool goto_symext::run_intrinsic(
     return false;
   }
 
-  if(symname == "c:@F@__ESBMC_atexit_handler")
-  {
-    // Already modelled in builtin_libs
-    return false;
-  }
-
   std::ostringstream oss;
   oss << "Function call to non-intrinsic prefixed with __ESBMC";
   oss << " (fatal)\nThe name in question: " << symname;

@@ -8,15 +8,8 @@
 #undef atol
 #undef getenv
 
-short atexit_index = 0;
+int atexit_index = 0;
 __attribute__((annotate("__ESBMC_inf_size"))) void (*__ESBMC_atexit_func[1])();
-
-void __ESBMC_atexit_handler()
-{
-__ESBMC_HIDE:;
-  for(short i = atexit_index - 1; i >= 0; --i)
-    __ESBMC_atexit_func[i]();
-}
 
 int atexit(void (*func)(void))
 {
@@ -28,9 +21,11 @@ __ESBMC_HIDE:;
 
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
-void exit(int status)
+void exit(int)
 {
-  __ESBMC_atexit_handler();
+__ESBMC_HIDE:;
+  for(int i = atexit_index - 1; i >= 0; --i)
+    __ESBMC_atexit_func[i]();
   __ESBMC_assume(0);
 }
 
