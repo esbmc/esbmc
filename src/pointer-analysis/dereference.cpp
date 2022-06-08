@@ -362,7 +362,6 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     // Check that either the base type that these steps are applied to matches
     // the type of the object we're wrapping in these steps. It's a type error
     // if there isn't a match.
-    // assert((*scalar_step_list.front()->get_sub_expr(0))->type == expr->type);
     type2tc base_of_steps_type = ns.follow(expr->type);
 
     if(dereference_type_compare(expr, base_of_steps_type))
@@ -400,12 +399,8 @@ expr2tc dereferencet::dereference_expr_nonscalar(
   }
 
   if(is_member2t(expr))
-  {
-    member2t &memb = to_member2t(expr);
-    expr2tc res =
-      dereference_expr_nonscalar(memb.source_value, guard, mode, base);
-    return res;
-  }
+    return dereference_expr_nonscalar(
+      to_member2t(expr).source_value, guard, mode, base);
 
   if(is_index2t(expr))
   {

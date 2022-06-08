@@ -279,19 +279,26 @@ private:
 
   /** Interpret an expression that accesses a nonscalar type. This means that
    *  it's an index or member (or some other glue expr) on top of a dereference
-   *  that evaluates to an array or struct. This code collects all of these
-   *  expressions into a list, and supplies it to other dereference code, so
-   *  that we can directly build a reference to the field this expr wants. This
-   *  means that we don't have to build any intermediate struct or array
-   *  references, which is beneficial.
-   *  @param dest The expression that we're resolving dereferences in.
+   *  that evaluates to an array or struct. This code tracks all of these
+   *  index/member expressions, and supplies it to other dereference code, so
+   *  that we can directly build a reference to the field this expr wants by
+   *  the offset selected by the `base` expression. This means that we don't
+   *  have to build any intermediate struct or array references, which is
+   *  beneficial.
+   *
+   *  Note that `expr` is modified in order to remove dereferences such as for
+   *  `array[*ptr]`. On success the result of the member/index chain `base` with
+   *  a dereference at the end is returned. Otherwise the empty expr2tc() is
+   *  returned to indicate that there was no dereference at the end of the
+   *  index/member chain.
+   *
+   *  @param expr The expression that we're resolving dereferences in.
    *  @param guard Guard of this expression being evaluated.
    *  @param mode The manner in which the result of this deref is accessed.
-   *  @param scalar_step_list A list in which we're accumulating the exprs used
-   *         to build a scalar access to an aggregate type.
+   *  @param base The expression matching the initial `expr` in this recursion.
    */
   virtual expr2tc dereference_expr_nonscalar(
-    expr2tc &dest,
+    expr2tc &expr,
     guardt &guard,
     modet mode,
     const expr2tc &base);
