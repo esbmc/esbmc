@@ -17,6 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 #include <util/std_expr.h>
 #include <util/message/default_message.h>
+#include <util/prefix.h>
 
 void symex_target_equationt::debug_print_step(const SSA_stept &step) const
 {
@@ -226,7 +227,16 @@ void symex_target_equationt::convert_internal_step(
 
   if(step.is_assert())
   {
-    step.cond_ast = smt_conv.imply_ast(assumpt_ast, step.cond_ast);
+    // HACK: we need to check for memory leak when a program terminates with an assume(0)
+    // An assume(0) means that every path from the point on will be removed from execution
+    // in practice, it means that every guard with be false, including guards that check
+    // for memory leak. So the hack is to always force memory leak check, despite of the
+    smt_astt the_assumpt = assumpt_ast;
+    if(config.options.get_bool_option("memory-leak-check") &&
+       has_prefix(step.comment, "dereference failure: forgotten memory:"))
+      the_assumpt = smt_conv.convert_ast(gen_true_expr());
+
+    step.cond_ast = smt_conv.imply_ast(the_assumpt, step.cond_ast);
     assertions.push_back(smt_conv.invert_ast(step.cond_ast));
   }
   else if(step.is_assume())
