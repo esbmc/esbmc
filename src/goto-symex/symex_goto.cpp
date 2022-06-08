@@ -140,6 +140,17 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     new_state_pc = goto_target; // goto target instruction
     state_pc = cur_state->source.pc;
     state_pc++; // next instruction
+
+    // skip dead instructions
+    if(new_guard_true)
+      while(state_pc != goto_target && !state_pc->is_target())
+        ++state_pc;
+
+    if(state_pc == goto_target)
+    {
+      cur_state->source.pc = goto_target;
+      return; // nothing else to do
+    }
   }
   else
   {
