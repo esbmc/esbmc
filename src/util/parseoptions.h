@@ -32,6 +32,7 @@ public:
 protected:
   // Path to esbmc binary
   boost::filesystem::path executable_path;
+
 private:
   bool exception_occured;
 };

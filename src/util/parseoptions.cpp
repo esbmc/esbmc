@@ -24,8 +24,7 @@ parseoptions_baset::parseoptions_baset(
   int argc,
   const char **argv,
   const messaget &msg)
-  : cmdline(msg),
-  executable_path(argv[0])
+  : cmdline(msg), executable_path(argv[0])
 {
   exception_occured = cmdline.parse(argc, argv, opts);
 }
