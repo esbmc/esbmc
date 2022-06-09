@@ -363,14 +363,9 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     // the type of the object we're wrapping in these steps. It's a type error
     // if there isn't a match.
     type2tc base_of_steps_type = ns.follow(expr->type);
-
-    if(dereference_type_compare(expr, base_of_steps_type))
+    if(!dereference_type_compare(expr, base_of_steps_type))
     {
-      // We can just reconstruct this.
-    }
-    else
-    {
-      // We can't reconstruct this. The base types are incompatible.
+      // The base types are incompatible.
       bad_base_type_failure(
         guard, get_type_id(*expr->type), get_type_id(*base_of_steps_type));
       return expr2tc();
@@ -384,11 +379,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     // first make sure there are no dereferences in there
     dereference_expr(deref.value, guard, dereferencet::READ);
 
-    const type2tc &to_type = base->type;
-
-    expr2tc result =
-      dereference(deref.value, to_type, guard, mode, offset_to_scalar);
-    return result;
+    return dereference(deref.value, base->type, guard, mode, offset_to_scalar);
   }
 
   if(is_typecast2t(expr))
@@ -406,9 +397,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
   {
     index2t &index = to_index2t(expr);
     dereference_expr(index.index, guard, dereferencet::READ);
-    expr2tc res =
-      dereference_expr_nonscalar(index.source_value, guard, mode, base);
-    return res;
+    return dereference_expr_nonscalar(index.source_value, guard, mode, base);
   }
 
   if(is_constant_union2t(expr))
@@ -419,9 +408,8 @@ expr2tc dereferencet::dereference_expr_nonscalar(
      * comment for constant_union2t in <irep2/itep2_expr.h>. */
     assert(u.datatype_members.size() == 1);
     assert(mode != WRITE);
-    expr2tc res =
-      dereference_expr_nonscalar(u.datatype_members.front(), guard, mode, base);
-    return res;
+    return dereference_expr_nonscalar(
+      u.datatype_members.front(), guard, mode, base);
   }
 
   // there should be no sudden transition back to scalars, except through
