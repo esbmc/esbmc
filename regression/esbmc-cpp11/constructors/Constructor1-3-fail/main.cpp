@@ -13,5 +13,5 @@ public:
 int main()
 {
   t2 instance2;
-  assert(instance2.i == 1);
+  assert(instance2.i == 0);
 }

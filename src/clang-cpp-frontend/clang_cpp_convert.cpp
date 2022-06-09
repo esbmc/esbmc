@@ -762,8 +762,7 @@ bool clang_cpp_convertert::get_function_body(
           }
           else
           {
-            msg.error(
-              fmt::format("Unsupported initializer in {}", __func__));
+            msg.error(fmt::format("Unsupported initializer in {}", __func__));
             abort();
           }
 
@@ -778,8 +777,8 @@ bool clang_cpp_convertert::get_function_body(
         }
         else
         {
-          msg.error(
-            fmt::format("Base class initializer is not supported in {}", __func__));
+          msg.error(fmt::format(
+            "Base class initializer is not supported in {}", __func__));
           abort();
         }
 
@@ -794,9 +793,7 @@ bool clang_cpp_convertert::get_function_body(
 
       // Insert at the beginning of the body
       body.operands().insert(
-        body.operands().begin(),
-        initializers.begin(),
-        initializers.end());
+        body.operands().begin(), initializers.begin(), initializers.end());
     }
   }
 
@@ -966,8 +963,7 @@ bool clang_cpp_convertert::get_decl_ref(
   }
   case clang::Decl::Field:
   {
-    const clang::FieldDecl &fd =
-      static_cast<const clang::FieldDecl&>(decl);
+    const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(decl);
 
     get_decl_name(fd, name, id);
 
