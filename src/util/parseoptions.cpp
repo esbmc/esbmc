@@ -17,13 +17,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/parseoptions.h>
 #include <util/signal_catcher.h>
 #include <boost/program_options.hpp>
+#include <boost/program_options.hpp>
 
 parseoptions_baset::parseoptions_baset(
   const struct group_opt_templ *opts,
   int argc,
   const char **argv,
   const messaget &msg)
-  : cmdline(msg)
+  : cmdline(msg),
+  executable_path(argv[0])
 {
   exception_occured = cmdline.parse(argc, argv, opts);
 }
