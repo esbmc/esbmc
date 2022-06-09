@@ -690,7 +690,7 @@ expr2tc boolector_convt::get_array_elem(
     throw type2t::symbolic_type_excp();
 
   uint32_t size;
-  char **indicies, **values;
+  char **indicies = nullptr, **values = nullptr;
   boolector_array_assignment(btor, ast->a, &indicies, &values, &size);
 
   expr2tc ret = gen_zero(subtype);
