@@ -12,6 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <string>
 #include <util/cmdline.h>
+#include <boost/filesystem.hpp>
 
 class parseoptions_baset
 {
@@ -28,6 +29,9 @@ public:
   virtual int main();
   virtual ~parseoptions_baset() = default;
 
+protected:
+  // Path to esbmc binary
+  boost::filesystem::path executable_path;
 private:
   bool exception_occured;
 };
