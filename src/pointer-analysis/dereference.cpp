@@ -411,29 +411,6 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     return res;
   }
 
-  if(is_if2t(expr) && !is_scalar_type(expr))
-  {
-    assert(0);
-
-    guardt g1 = guard, g2 = guard;
-    if2t &theif = to_if2t(expr);
-    g1.add(theif.cond);
-    g2.add(not2tc(theif.cond));
-
-    expr2tc res1 = dereference_expr_nonscalar(theif.true_value, g1, mode, base);
-
-    expr2tc res2 =
-      dereference_expr_nonscalar(theif.false_value, g2, mode, base);
-
-    if(is_nil_expr(res1))
-      res1 = theif.true_value;
-    if(is_nil_expr(res2))
-      res2 = theif.true_value;
-
-    expr2tc fin = if2tc(res1->type, theif.cond, res1, res2);
-    return fin;
-  }
-
   if(is_constant_union2t(expr))
   {
     constant_union2t &u = to_constant_union2t(expr);
