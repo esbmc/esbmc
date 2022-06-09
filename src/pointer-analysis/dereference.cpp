@@ -452,29 +452,32 @@ expr2tc dereferencet::dereference(
   // now build big case split
   // only "good" objects
 
-  expr2tc value;
+  /* Fallback if dereference failes entirely: to make this a valid formula,
+   * return a failed symbol, so that this assignment gets a well typed free
+   * value. */
+  expr2tc value = make_failed_symbol(type);
 
-  for(value_setst::valuest::const_iterator it = points_to_set.begin();
-      it != points_to_set.end();
-      it++)
+  for(const expr2tc &target : points_to_set)
   {
     expr2tc new_value, pointer_guard;
 
     new_value = build_reference_to(
-      *it, mode, src, type, guard, lexical_offset, pointer_guard);
+      target, mode, src, type, guard, lexical_offset, pointer_guard);
 
-    if(!is_nil_expr(new_value))
+    if(is_nil_expr(new_value))
+      continue;
+
+    if(!dereference_type_compare(new_value, type))
     {
-      if(is_nil_expr(value))
-      {
-        value = new_value;
-      }
-      else
-      {
-        // Chain a big if-then-else case.
-        value = if2tc(type, pointer_guard, new_value, value);
-      }
+      bad_base_type_failure(
+        guard, get_type_id(*type), get_type_id(*new_value->type));
+      continue;
     }
+
+    assert(!is_nil_expr(pointer_guard));
+
+    // Chain a big if-then-else case.
+    value = if2tc(type, pointer_guard, new_value, value);
   }
 
   if(mode == INTERNAL)
@@ -482,13 +485,6 @@ expr2tc dereferencet::dereference(
     // Deposit internal values with the caller, then clear.
     dereference_callback.dump_internal_state(internal_items);
     internal_items.clear();
-  }
-  else if(is_nil_expr(value))
-  {
-    // Dereference failed entirely; various assertions will explode later down
-    // the line. To make this a valid formula though, return a failed symbol,
-    // so that this assignment gets a well typed free value.
-    value = make_failed_symbol(type);
   }
 
   return value;
@@ -538,6 +534,30 @@ bool dereferencet::dereference_type_compare(
       object = typecast2tc(dereference_type, object);
       return true;
     }
+  }
+
+  if(is_code_type(object) && is_code_type(dereference_type))
+  {
+#if 1
+    return true;
+#else /* fails (correctly so?) for some of the 01_pthread_* cases which pass a
+       * function with signature incompatible to that expected by
+       * pthread_create() */
+    const code_type2t &ot = to_code_type(object->type);
+    const code_type2t &dt = to_code_type(dereference_type);
+    if(ot.arguments.size() != dt.arguments.size())
+      return false;
+    /* arguments could be derived */
+    for(size_t i = 0; i < ot.arguments.size(); i++)
+    {
+      expr2tc dummy = gen_zero(ot.arguments[i]);
+      if(!dereference_type_compare(dummy, dt.arguments[i]))
+        return false;
+    }
+    /* return value could be derived */
+    expr2tc dummy = gen_zero(ot.ret_type);
+    return dereference_type_compare(dummy, dt.ret_type);
+#endif
   }
 
   // check for struct prefixes
