@@ -981,6 +981,15 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
   insert(dest, unknown, BigInt(0));
 }
 
+static bool has_sideeffect(const expr2tc &e)
+{
+  if(is_sideeffect2t(e))
+    return true;
+  bool r = false;
+  e->foreach_operand([&r](const expr2tc &e) { r |= has_sideeffect(e); });
+  return r;
+}
+
 void value_sett::assign(
   const expr2tc &lhs,
   const expr2tc &rhs,
@@ -1005,6 +1014,28 @@ void value_sett::assign(
     assign(lhs, xchg_sym, add_to_sets);
 
     erase(xchg_sym->get_symbol_name());
+    return;
+  }
+
+  if(is_if2t(lhs))
+  {
+    /* In case the lhs is an if-expression that means either side could be
+     * assigned to (exclusively). We model this by recording assignments to
+     * both sides, however one of these assignments is guaranteed to be the
+     * identity.
+     */
+    const if2t &ifref = to_if2t(lhs);
+    assert(!has_sideeffect(ifref.cond));
+    assert(!has_sideeffect(ifref.true_value));
+    assert(!has_sideeffect(ifref.false_value));
+    assign(
+      ifref.true_value,
+      if2tc(ifref.type, ifref.cond, rhs, ifref.true_value),
+      add_to_sets);
+    assign(
+      ifref.false_value,
+      if2tc(ifref.type, ifref.cond, ifref.false_value, rhs),
+      add_to_sets);
     return;
   }
 
