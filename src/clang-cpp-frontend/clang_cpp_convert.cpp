@@ -703,7 +703,7 @@ void clang_cpp_convertert::build_member_from_component(
   // Add this pointer as first argument
   std::size_t address = reinterpret_cast<std::size_t>(fd.getFirstDecl());
 
-  this_mapt::iterator it;
+  this_mapt::iterator it = this_map.find(address);
   if(this_map.find(address) == this_map.end())
   {
     msg.error(fmt::format(
@@ -732,11 +732,11 @@ bool clang_cpp_convertert::get_function_body(
   if(clang_c_convertert::get_function_body(fd, new_expr))
     return true;
 
+  code_blockt &body = to_code_block(to_code(new_expr));
+
   // if it's a constructor, check for initializers
   if(fd.getKind() == clang::Decl::CXXConstructor)
   {
-    code_blockt &body = to_code_block(to_code(new_expr));
-
     const clang::CXXConstructorDecl &cxxcd =
       static_cast<const clang::CXXConstructorDecl &>(fd);
 
@@ -783,6 +783,13 @@ bool clang_cpp_convertert::get_function_body(
           abort();
         }
 
+        // Convert to code and insert side-effect in the operands list
+        // Essentially we convert an initializer to assignment, e.g:
+        // t1() : i(2){ }
+        // is converted to
+        // t1() { this->i = 2; }
+        convert_expression_to_code(initializer);
+        initializers.push_back(initializer);
       }
 
       // Insert at the beginning of the body
@@ -790,7 +797,6 @@ bool clang_cpp_convertert::get_function_body(
         body.operands().begin(),
         initializers.begin(),
         initializers.end());
-      assert(!"Done operands?");
     }
   }
 
@@ -963,29 +969,8 @@ bool clang_cpp_convertert::get_decl_ref(
     const clang::FieldDecl &fd =
       static_cast<const clang::FieldDecl&>(decl);
 
-    // TODO: move the switch case to another function
-    // Get prefix and name, based on the linkage type
-    std::string name, prefix, fd_mode_prefix;
-    switch(getDeclLanguageLinkage(fd))
-    {
-      case clang::CXXLanguageLinkage:
-      {
-        fd_mode_prefix = "cpp::";
-        get_prefix(fd, prefix);
-        get_field_name(fd, name);
-        break;
-      }
-      default:
-      {
-        msg.error(fmt::format(
-          "Unsupported CXX linkage spec: {}", clang_c_convertert::getDeclLanguageLinkage(fd)));
-        fd.dumpColor();
-        abort();
-        return true;
-      }
-    }
+    get_decl_name(fd, name, id);
 
-    id = fd_mode_prefix + prefix + name;
     if(get_type(fd.getType(), type))
       return true;
 
