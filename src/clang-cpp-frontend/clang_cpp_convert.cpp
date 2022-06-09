@@ -735,14 +735,62 @@ bool clang_cpp_convertert::get_function_body(
   // if it's a constructor, check for initializers
   if(fd.getKind() == clang::Decl::CXXConstructor)
   {
+    code_blockt &body = to_code_block(to_code(new_expr));
+
     const clang::CXXConstructorDecl &cxxcd =
       static_cast<const clang::CXXConstructorDecl &>(fd);
 
+    // Parse the initializers, if any
     if(cxxcd.init_begin() != cxxcd.init_end())
     {
-      msg.error(
-        fmt::format("initializer list is not supported in {}", __func__));
-      abort();
+      // Resize the number of operands
+      exprt::operandst initializers;
+      initializers.reserve(cxxcd.getNumCtorInitializers());
+
+      for(auto init : cxxcd.inits())
+      {
+        exprt initializer;
+
+        if(!init->isBaseInitializer())
+        {
+          exprt lhs;
+          if(init->isMemberInitializer())
+          {
+            // parsing non-static member initializer
+            if(get_decl_ref(*init->getMember(), lhs))
+              return true;
+          }
+          else
+          {
+            msg.error(
+              fmt::format("Unsupported initializer in {}", __func__));
+            abort();
+          }
+
+          build_member_from_component(fd, lhs);
+
+          exprt rhs;
+          if(get_expr(*init->getInit(), rhs))
+            return true;
+
+          initializer = side_effect_exprt("assign", lhs.type());
+          initializer.copy_to_operands(lhs, rhs);
+        }
+        else
+        {
+          msg.error(
+            fmt::format("Base class initializer is not supported in {}", __func__));
+          abort();
+        }
+
+      }
+
+      // Insert at the beginning of the body
+      body.operands().insert(
+        body.operands().begin(),
+        initializers.begin(),
+        initializers.end());
+      assert(!"Done operands?");
     }
   }
 
@@ -910,6 +958,39 @@ bool clang_cpp_convertert::get_decl_ref(
 
     break;
   }
+  case clang::Decl::Field:
+  {
+    const clang::FieldDecl &fd =
+      static_cast<const clang::FieldDecl&>(decl);
+
+    // TODO: move the switch case to another function
+    // Get prefix and name, based on the linkage type
+    std::string name, prefix, fd_mode_prefix;
+    switch(getDeclLanguageLinkage(fd))
+    {
+      case clang::CXXLanguageLinkage:
+      {
+        fd_mode_prefix = "cpp::";
+        get_prefix(fd, prefix);
+        get_field_name(fd, name);
+        break;
+      }
+      default:
+      {
+        msg.error(fmt::format(
+          "Unsupported CXX linkage spec: {}", clang_c_convertert::getDeclLanguageLinkage(fd)));
+        fd.dumpColor();
+        abort();
+        return true;
+      }
+    }
+
+    id = fd_mode_prefix + prefix + name;
+    if(get_type(fd.getType(), type))
+      return true;
+
+    break;
+  }
   case clang::Decl::CXXConstructor:
   {
     const clang::FunctionDecl &fd =
@@ -930,6 +1011,7 @@ bool clang_cpp_convertert::get_decl_ref(
   {
     msg.error(fmt::format(
       "Conversion of unsupported clang decl ref: {}", decl.getDeclKindName()));
+    decl.dumpColor();
     abort();
   }
   }
