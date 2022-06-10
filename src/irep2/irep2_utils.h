@@ -315,7 +315,7 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
   }
 
   case type2t::pointer_id:
-    return symbol2tc(pointer_type2(), "NULL");
+    return symbol2tc(type, "NULL");
 
   case type2t::struct_id:
   {
