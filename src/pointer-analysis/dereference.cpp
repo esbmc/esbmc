@@ -455,7 +455,13 @@ expr2tc dereferencet::dereference(
   /* Fallback if dereference failes entirely: to make this a valid formula,
    * return a failed symbol, so that this assignment gets a well typed free
    * value. */
-  expr2tc value = make_failed_symbol(type);
+  bool is_nonexhaustive = false;
+  for(const expr2tc &target : points_to_set)
+    is_nonexhaustive |= is_unknown2t(target) || is_invalid2t(target);
+
+  expr2tc value;
+  if(is_nonexhaustive)
+    value = make_failed_symbol(type);
 
   for(const expr2tc &target : points_to_set)
   {
@@ -479,7 +485,10 @@ expr2tc dereferencet::dereference(
     }
 
     // Chain a big if-then-else case.
-    value = if2tc(type, pointer_guard, new_value, value);
+    if(is_nil_expr(value))
+      value = new_value;
+    else
+      value = if2tc(type, pointer_guard, new_value, value);
   }
 
   if(mode == INTERNAL)
@@ -488,6 +497,8 @@ expr2tc dereferencet::dereference(
     dereference_callback.dump_internal_state(internal_items);
     internal_items.clear();
   }
+  else if(is_nil_expr(value))
+    value = make_failed_symbol(type);
 
   return value;
 }
