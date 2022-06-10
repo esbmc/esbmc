@@ -467,14 +467,16 @@ expr2tc dereferencet::dereference(
     if(is_nil_expr(new_value))
       continue;
 
+    assert(!is_nil_expr(pointer_guard));
+
     if(!dereference_type_compare(new_value, type))
     {
+      guardt new_guard(guard);
+      new_guard.add(pointer_guard);
       bad_base_type_failure(
-        guard, get_type_id(*type), get_type_id(*new_value->type));
+        new_guard, get_type_id(*type), get_type_id(*new_value->type));
       continue;
     }
-
-    assert(!is_nil_expr(pointer_guard));
 
     // Chain a big if-then-else case.
     value = if2tc(type, pointer_guard, new_value, value);
