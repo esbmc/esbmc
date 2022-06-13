@@ -42,7 +42,9 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 #include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
+#include <thread>
 
+static bool bmc_interrupted = false;
 bmct::bmct(
   goto_functionst &funcs,
   optionst &opts,
@@ -137,6 +139,24 @@ void bmct::error_trace(
   msg.result(oss.str());
 }
 
+void printAliveMessage(const messaget &msg)
+{
+  std::stringstream ss;
+  fine_timet sat_start = current_time();
+
+  while(!bmc_interrupted)
+  {
+    fine_timet sat_stop = current_time();
+
+    ss << "ESBMC is still alive.\n";
+    ss << "Total time:" << sat_stop - sat_start << "\n";
+    ss << "Press Ctrl-C to terminate ESBMC.\n";
+    msg.status(ss.str());
+    ss.str("");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+}
+
 smt_convt::resultt bmct::run_decision_procedure(
   std::shared_ptr<smt_convt> &smt_conv,
   std::shared_ptr<symex_target_equationt> &eq)
@@ -175,10 +195,13 @@ smt_convt::resultt bmct::run_decision_procedure(
 
   std::stringstream ss;
   ss << "Solving with solver " << smt_conv->solver_text();
+  std::thread t1(printAliveMessage, msg);
   msg.status(ss.str());
 
   fine_timet sat_start = current_time();
   smt_convt::resultt dec_result = smt_conv->dec_solve();
+  bmc_interrupted = true;
+  t1.join();
   fine_timet sat_stop = current_time();
 
   // output runtime
