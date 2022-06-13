@@ -452,15 +452,19 @@ expr2tc dereferencet::dereference(
   // now build big case split
   // only "good" objects
 
-  /* Fallback if dereference failes entirely: to make this a valid formula,
-   * return a failed symbol, so that this assignment gets a well typed free
-   * value. */
-  bool is_nonexhaustive = false;
+  /* If the value-set contains unknown or invalid, we cannot be sure it contains
+   * all possible values and we have to add a fallback symbol in case all guards
+   * evaluate to false. On the other hand when it is exhaustive, we only need to
+   * encode (n-1) guards for the n values in the if-then-else chain below. This
+   * is done by leaving 'value' initially empty.
+   *
+   * XXX fbrausse: get_value_set() should compute this information */
+  bool known_exhaustive = true;
   for(const expr2tc &target : points_to_set)
-    is_nonexhaustive |= is_unknown2t(target) || is_invalid2t(target);
+    known_exhaustive &= !(is_unknown2t(target) || is_invalid2t(target));
 
   expr2tc value;
-  if(is_nonexhaustive)
+  if(!known_exhaustive)
     value = make_failed_symbol(type);
 
   for(const expr2tc &target : points_to_set)
@@ -498,7 +502,12 @@ expr2tc dereferencet::dereference(
     internal_items.clear();
   }
   else if(is_nil_expr(value))
+  {
+    /* Fallback if dereference failes entirely: to make this a valid formula,
+     * return a failed symbol, so that this assignment gets a well typed free
+     * value. */
     value = make_failed_symbol(type);
+  }
 
   return value;
 }
@@ -550,28 +559,7 @@ bool dereferencet::dereference_type_compare(
   }
 
   if(is_code_type(object) && is_code_type(dereference_type))
-  {
-#if 1
     return true;
-#else /* fails (correctly so?) for some of the 01_pthread_* cases which pass a
-       * function with signature incompatible to that expected by
-       * pthread_create() */
-    const code_type2t &ot = to_code_type(object->type);
-    const code_type2t &dt = to_code_type(dereference_type);
-    if(ot.arguments.size() != dt.arguments.size())
-      return false;
-    /* arguments could be derived */
-    for(size_t i = 0; i < ot.arguments.size(); i++)
-    {
-      expr2tc dummy = gen_zero(ot.arguments[i]);
-      if(!dereference_type_compare(dummy, dt.arguments[i]))
-        return false;
-    }
-    /* return value could be derived */
-    expr2tc dummy = gen_zero(ot.ret_type);
-    return dereference_type_compare(dummy, dt.ret_type);
-#endif
-  }
 
   // check for struct prefixes
 
