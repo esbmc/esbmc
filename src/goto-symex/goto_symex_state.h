@@ -207,9 +207,6 @@ public:
      */
     unsigned int va_index;
 
-    /** Record the entry guard of the function */
-    guardt entry_guard;
-
     /** Record if the function body is hidden */
     bool hidden;
 
