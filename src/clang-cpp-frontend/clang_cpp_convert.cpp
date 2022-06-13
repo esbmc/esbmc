@@ -13,6 +13,7 @@
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/AST/ParentMapContext.h>
+#include <llvm/Support/raw_os_ostream.h>
 #pragma GCC diagnostic pop
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
@@ -951,26 +952,9 @@ bool clang_cpp_convertert::get_decl_ref(
   switch(decl.getKind())
   {
   case clang::Decl::Var:
-  {
-    const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(decl);
-
-    get_decl_name(vd, name, id);
-
-    if(get_type(vd.getType(), type))
-      return true;
-
-    break;
-  }
   case clang::Decl::Field:
   {
-    const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(decl);
-
-    get_decl_name(fd, name, id);
-
-    if(get_type(fd.getType(), type))
-      return true;
-
-    break;
+    return clang_c_convertert::get_decl_ref(decl, new_expr);
   }
   case clang::Decl::CXXConstructor:
   {
@@ -990,10 +974,16 @@ bool clang_cpp_convertert::get_decl_ref(
 
   default:
   {
-    msg.error(fmt::format(
-      "Conversion of unsupported clang decl ref: {}", decl.getDeclKindName()));
-    decl.dumpColor();
-    abort();
+    // If there is an unsupported clang decl, first try to forward it to clang_c_convertert::get_decl_ref.
+    // It might be already handled there.
+    std::ostringstream oss;
+    llvm::raw_os_ostream ross(oss);
+    ross << "Conversion of unsupported clang decl ref for: "
+         << decl.getDeclKindName() << "\n";
+    decl.dump(ross);
+    ross.flush();
+    msg.error(oss.str());
+    return true;
   }
   }
 
