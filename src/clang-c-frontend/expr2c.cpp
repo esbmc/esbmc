@@ -2022,6 +2022,73 @@ std::string expr2ct::convert_extract(const exprt &src)
          std::to_string(lower) + ")";
 }
 
+/* Checks whether the expression `e` is one performing pointer-arithmetic, that
+ * is, addition/subtraction of an integer-typed expression to/from a
+ * pointer-typed expression.
+ *
+ * If so, `true` is returned and `ptr` holds the address of the inner-most
+ * pointer-typed expression while `idx` gets assigned a (newly constructed, in
+ * case of multiple levels of pointer-typed expressions) expression that
+ * corresponds to the index into `*ptr`.
+ *
+ * Note, just a pointer-typed symbol (or constant) is not recognized as pointer-
+ * arithmetic.
+ */
+static bool is_pointer_arithmetic(const exprt &e, const exprt *&ptr, exprt &idx)
+{
+  if(e.type().id() != "pointer")
+    return false;
+
+  ptr = &e;
+
+  /* a pointer-typed arithmetic (+ or -) expression cannot be unary in the C
+   * language */
+  assert(!(e.id() == "unary+" || (e.id() == "+" && e.operands().size() == 1)));
+  assert(!(e.id() == "unary-" || (e.id() == "-" && e.operands().size() == 1)));
+
+  if(e.id() == "+" || e.id() == "-")
+  {
+    assert(e.operands().size() == 2);
+    const exprt *p = nullptr, *i = nullptr;
+    auto categorize = [&p, &i](const exprt &e) {
+      const irep_idt &tid = e.type().id();
+      if(tid == "pointer")
+        p = &e;
+      else if(tid == "signedbv" || tid == "unsignedbv")
+        i = &e;
+    };
+    categorize(e.op0());
+    categorize(e.op1());
+    if(p && i)
+    {
+      if(e.id() == "-")
+        assert(i == &e.op1());
+      exprt j;
+      if(is_pointer_arithmetic(*p, p, j))
+      {
+        auto is_unsigned = [](const exprt &e) {
+          return e.type().id() == "unsignedbv";
+        };
+        const char *type =
+          is_unsigned(j) || is_unsigned(*i) ? "unsignedbv" : "signedbv";
+        idx = exprt(e.id(), typet(type));
+        idx.copy_to_operands(j, *i);
+      }
+      else if(e.id() == "-")
+      {
+        idx = exprt("unary-", i->type());
+        idx.copy_to_operands(*i);
+      }
+      else
+        idx = *i;
+      ptr = p;
+      return true;
+    }
+  }
+
+  return false;
+}
+
 std::string expr2ct::convert(const exprt &src, unsigned &precedence)
 {
   precedence = 16;
@@ -2223,31 +2290,19 @@ std::string expr2ct::convert(const exprt &src, unsigned &precedence)
     if(src.operands().size() != 1)
       return convert_norep(src, precedence);
 
-    /* Special case for `*(p+i)`: this construct could either already be in the
-     * source or it was created artificially by the frontend for `p[i]`, see
-     * clang_c_adjust::adjust_index() and also Github issue #725. As those
-     * expressions are semantically indistinguishable and also supported by
-     * verifiers, choose to print the succint form `p[i]` in all cases. */
-    if(src.op0().id() == "+")
+    /* Special case for `*(p+i)` and `*(p-i)`: these constructs could either
+     * already be in the source or it was created artificially by the frontend
+     * for `p[i]`, see clang_c_adjust::adjust_index() and also Github issue
+     * #725. As those expressions are semantically indistinguishable and also
+     * supported by verifiers, choose to print the succint form `p[i]` in all
+     * cases. */
+    exprt idx;
+    const exprt *ptr;
+    if(is_pointer_arithmetic(src.op0(), ptr, idx))
     {
-      const exprt &add = src.op0();
-      assert(add.operands().size() == 2);
-      const exprt *ptr = nullptr, *idx = nullptr;
-      auto categorize = [&](const exprt &e){
-        const irep_idt &tid = e.type().id();
-        if(tid == "pointer")
-          ptr = &e;
-        else if(tid == "signedbv" || tid == "unsignedbv")
-          idx = &e;
-      };
-      categorize(add.op0());
-      categorize(add.op1());
-      if(ptr && idx)
-      {
-        exprt subst("index", src.type());
-        subst.copy_to_operands(*ptr, *idx);
-        return convert_index(subst, precedence = 16);
-      }
+      exprt subst("index", src.type());
+      subst.copy_to_operands(*ptr, idx);
+      return convert_index(subst, precedence = 16);
     }
 
     return convert_unary(src, "*", precedence = 15);
