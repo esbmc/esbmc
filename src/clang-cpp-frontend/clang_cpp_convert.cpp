@@ -974,15 +974,16 @@ bool clang_cpp_convertert::get_decl_ref(
 
   default:
   {
-    // If there is an unsupported clang decl, first try to forward it to clang_c_convertert::get_decl_ref.
-    // It might be already handled there.
+    // Cases not handled above are unknown clang decls; we print an warning.
+    // It might be possible to support them either here or in clang_c_frontend::get_decl_ref()
+    // depending on whether they are C++-specific or not.
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
     ross << "Conversion of unsupported clang decl ref for: "
          << decl.getDeclKindName() << "\n";
     decl.dump(ross);
     ross.flush();
-    msg.error(oss.str());
+    msg.warning(oss.str());
     return true;
   }
   }
