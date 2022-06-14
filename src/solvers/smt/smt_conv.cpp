@@ -299,7 +299,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     // Get size
     const constant_union2t &cu = to_constant_union2t(expr);
-    const expr2tc &src_expr = cu.datatype_members.at(0);
+    const std::vector<expr2tc> &dt_memb = cu.datatype_members;
+    expr2tc src_expr =
+      dt_memb.empty() ? gen_zero(get_uint_type(0)) : dt_memb[0];
 #ifndef NDEBUG
     if(!cu.init_field.empty())
     {
