@@ -1,6 +1,25 @@
 #include <solvers/smt/smt_conv.h>
 #include <util/type_byte_size.h>
 
+template <typename Extract>
+static std::pair<size_t, expr2tc>
+flatten_tree(size_t start, size_t n, const Extract &extract)
+{
+  assert(n);
+  if(n > 1)
+  {
+    auto a = flatten_tree(start, n / 2, extract);
+    auto b = flatten_tree(start + n / 2, n - n / 2, extract);
+    size_t sz = a.first + b.first;
+    return {sz, concat2tc(get_uint_type(sz), a.second, b.second)};
+  }
+  else
+  {
+    expr2tc e = extract(start);
+    return {type_byte_size_bits(e->type).to_uint64(), e};
+  }
+}
+
 static expr2tc
 flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
 {
@@ -27,23 +46,16 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
 
     int sz = intref.value.to_uint64();
 
-    // First element
-    expr2tc expr = index2tc(
-      arraytype.subtype, new_expr, constant_int2tc(index_type2(), sz - 1));
-    expr = flatten_to_bitvector(expr, msg);
+    auto extract = [&](size_t i) -> expr2tc {
+      return flatten_to_bitvector(
+        index2tc(
+          arraytype.subtype,
+          new_expr,
+          constant_int2tc(index_type2(), sz - i - 1)),
+        msg);
+    };
 
-    // Concat elements if there are more than 1
-    for(int i = sz - 2; i >= 0; i--)
-    {
-      expr2tc tmp = index2tc(
-        arraytype.subtype, new_expr, constant_int2tc(index_type2(), i));
-      tmp = flatten_to_bitvector(tmp, msg);
-      type2tc res_type =
-        get_uint_type(expr->type->get_width() + tmp->type->get_width());
-      expr = concat2tc(res_type, expr, tmp);
-    }
-
-    return expr;
+    return flatten_tree(0, sz, extract).second;
   }
 
   if(new_expr->type->get_width() == 0)
