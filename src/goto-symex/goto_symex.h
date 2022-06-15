@@ -239,7 +239,10 @@ protected:
    *  @param expr Expression that must always be true.
    *  @param msg Textual message explaining assertion.
    */
-  virtual void claim(const expr2tc &expr, const std::string &msg);
+  virtual void claim(
+    const expr2tc &expr,
+    const std::string &msg,
+    goto_assertions::goto_assertion_mode mode);
 
   /**
    *  Perform an assertion.
@@ -882,10 +885,12 @@ protected:
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
+
   /**
-   * Check whether assertions are enabled in the current step
+   * Check which assertions are enabled in the current step
    */
-  bool assertions_enabled_step = true; 
+  goto_assertions::goto_assertion_mode assertion_mode =
+    goto_assertions::ALL_MODES;
 
   const messaget &msg;
 

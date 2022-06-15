@@ -68,6 +68,7 @@ void goto_program_dereferencet::dereference_failure(
       t->location = dereference_location;
       t->location.property(property);
       t->location.comment("dereference failure: " + msg);
+      t->assert_mode = goto_assertions::POINTER_SAFETY;
     }
   }
 }

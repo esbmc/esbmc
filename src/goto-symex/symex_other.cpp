@@ -74,7 +74,8 @@ void goto_symext::symex_decl(const expr2tc code)
     // check whether the stack size has been reached.
     claim(
       (cur_state->top().process_stack_size(code2, stack_limit)),
-      "Stack limit property was violated when declaring " + pretty_name);
+      "Stack limit property was violated when declaring " + pretty_name,
+      goto_assertions::OTHER);
   }
 
   const code_decl2t &decl_code = to_code_decl2t(code2);

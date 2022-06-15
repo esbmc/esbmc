@@ -605,6 +605,7 @@ void goto_convertt::do_function_call_symbol(
     t->location.user_provided(true);
     t->location.property("assertion");
     t->location.comment(description);
+    t->assert_mode = goto_assertions::USER;
 
     if(lhs.is_not_nil())
     {
@@ -627,6 +628,7 @@ void goto_convertt::do_function_call_symbol(
     t->location = function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
+    t->assert_mode = goto_assertions::USER;
 
     if(lhs.is_not_nil())
     {
@@ -727,6 +729,7 @@ void goto_convertt::do_function_call_symbol(
     t->location.user_provided(true);
     t->location.property("assertion");
     t->location.comment(description);
+    t->assert_mode = goto_assertions::USER;
     // we ignore any LHS
   }
   else if(config.ansi_c.target.is_freebsd() && base_name == "__assert")
@@ -752,6 +755,7 @@ void goto_convertt::do_function_call_symbol(
     t->location.user_provided(true);
     t->location.property("assertion");
     t->location.comment(description);
+    t->assert_mode = goto_assertions::USER;
     // we ignore any LHS
   }
   else if(base_name == "_wassert")
@@ -776,6 +780,7 @@ void goto_convertt::do_function_call_symbol(
     t->location.user_provided(true);
     t->location.property("assertion");
     t->location.comment(description);
+    t->assert_mode = goto_assertions::USER;
     // we ignore any LHS
   }
   else if(base_name == "operator new")

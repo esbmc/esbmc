@@ -310,7 +310,10 @@ void goto_symext::symex_free(const expr2tc &expr)
       expr2tc offset = item.offset;
       expr2tc eq = equality2tc(offset, gen_ulong(0));
       g.guard_expr(eq);
-      claim(eq, "Operand of free must have zero pointer offset");
+      claim(
+        eq,
+        "Operand of free must have zero pointer offset",
+        goto_assertions::POINTER_SAFETY);
 
       // Check if we are not freeing an dynamic object allocated using alloca
       for(auto const &a : allocad)
@@ -324,7 +327,10 @@ void goto_symext::symex_free(const expr2tc &expr)
         {
           expr2tc noteq = notequal2tc(alloc_obj, item.object);
           g.guard_expr(noteq);
-          claim(noteq, "dereference failure: invalid pointer freed");
+          claim(
+            noteq,
+            "dereference failure: invalid pointer freed",
+            goto_assertions::POINTER_SAFETY);
         }
       }
     }
@@ -918,7 +924,10 @@ void goto_symext::intrinsic_memset(
         expr2tc eq = equality2tc(offs, gen_zero(offs->type));
         curguard.guard_expr(eq);
         if(!options.get_bool_option("no-pointer-check"))
-          claim(eq, "Memset of full-object-size must have zero offset");
+          claim(
+            eq,
+            "Memset of full-object-size must have zero offset",
+            goto_assertions::POINTER_SAFETY);
       }
       else if(is_struct_type(item.object->type) && is_constant_int2t(size))
       {
@@ -983,7 +992,8 @@ void goto_symext::intrinsic_memset(
         if(!options.get_bool_option("no-pointer-check"))
           claim(
             or_accuml,
-            "Unaligned, cross-field or other non-field-based memset?");
+            "Unaligned, cross-field or other non-field-based memset?",
+            goto_assertions::POINTER_SAFETY);
         for(const auto &ref : out_list)
         {
           guardt newguard(curguard);

@@ -74,7 +74,10 @@ unsigned goto_symext::argument_assignments(
     // if you run out of actual arguments there was a mismatch
     if(it1 == arguments.end())
     {
-      claim(gen_false_expr(), "function call: not enough arguments");
+      claim(
+        gen_false_expr(),
+        "function call: not enough arguments",
+        goto_assertions::OTHER);
       return UINT_MAX;
     }
 
@@ -218,7 +221,10 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   {
     if(!no_unwinding_assertions)
     {
-      claim(gen_false_expr(), "recursion unwinding assertion");
+      claim(
+        gen_false_expr(),
+        "recursion unwinding assertion",
+        goto_assertions::OTHER);
     }
     else
     {
@@ -605,7 +611,8 @@ void goto_symext::symex_return(const expr2tc &code)
       // check whether the stack size has been reached.
       claim(
         (cur_state->top().process_stack_size(e, stack_limit)),
-        "Stack limit property was violated");
+        "Stack limit property was violated",
+        goto_assertions::OTHER);
     });
   }
 
