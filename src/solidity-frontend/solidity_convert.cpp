@@ -789,6 +789,37 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
     switch(type_name)
     {
     case SolidityGrammar::ElementaryTypeNameT::UINT8:
+    case SolidityGrammar::ElementaryTypeNameT::UINT16:
+    case SolidityGrammar::ElementaryTypeNameT::UINT24:
+    case SolidityGrammar::ElementaryTypeNameT::UINT32:
+    case SolidityGrammar::ElementaryTypeNameT::UINT40:
+    case SolidityGrammar::ElementaryTypeNameT::UINT48:
+    case SolidityGrammar::ElementaryTypeNameT::UINT56:
+    case SolidityGrammar::ElementaryTypeNameT::UINT64:
+    case SolidityGrammar::ElementaryTypeNameT::UINT72:
+    case SolidityGrammar::ElementaryTypeNameT::UINT80:
+    case SolidityGrammar::ElementaryTypeNameT::UINT88:
+    case SolidityGrammar::ElementaryTypeNameT::UINT96:
+    case SolidityGrammar::ElementaryTypeNameT::UINT104:
+    case SolidityGrammar::ElementaryTypeNameT::UINT112:
+    case SolidityGrammar::ElementaryTypeNameT::UINT120:
+    case SolidityGrammar::ElementaryTypeNameT::UINT128:
+    case SolidityGrammar::ElementaryTypeNameT::UINT136:
+    case SolidityGrammar::ElementaryTypeNameT::UINT144:
+    case SolidityGrammar::ElementaryTypeNameT::UINT152:
+    case SolidityGrammar::ElementaryTypeNameT::UINT160:
+    case SolidityGrammar::ElementaryTypeNameT::UINT168:
+    case SolidityGrammar::ElementaryTypeNameT::UINT176:
+    case SolidityGrammar::ElementaryTypeNameT::UINT184:
+    case SolidityGrammar::ElementaryTypeNameT::UINT192:
+    case SolidityGrammar::ElementaryTypeNameT::UINT200:
+    case SolidityGrammar::ElementaryTypeNameT::UINT208:
+    case SolidityGrammar::ElementaryTypeNameT::UINT216:
+    case SolidityGrammar::ElementaryTypeNameT::UINT224:
+    case SolidityGrammar::ElementaryTypeNameT::UINT232:
+    case SolidityGrammar::ElementaryTypeNameT::UINT240:
+    case SolidityGrammar::ElementaryTypeNameT::UINT248:
+    case SolidityGrammar::ElementaryTypeNameT::UINT256:
     {
       if(convert_integer_literal(literal, the_value, new_expr))
         return true;
@@ -1400,6 +1431,39 @@ bool solidity_convertert::get_array_to_pointer_type(
   return false;
 }
 
+bool get_elementary_type_name_uint(
+  SolidityGrammar::ElementaryTypeNameT &type,
+  typet &out)
+{
+  std::map<SolidityGrammar::ElementaryTypeNameT, unsigned int> uintSizeMap = {
+    {SolidityGrammar::UINT8, 8},     {SolidityGrammar::UINT16, 16},
+    {SolidityGrammar::UINT24, 24},   {SolidityGrammar::UINT32, 32},
+    {SolidityGrammar::UINT40, 40},   {SolidityGrammar::UINT48, 48},
+    {SolidityGrammar::UINT56, 56},   {SolidityGrammar::UINT64, 64},
+    {SolidityGrammar::UINT72, 72},   {SolidityGrammar::UINT80, 80},
+    {SolidityGrammar::UINT88, 88},   {SolidityGrammar::UINT96, 96},
+    {SolidityGrammar::UINT104, 104}, {SolidityGrammar::UINT112, 112},
+    {SolidityGrammar::UINT120, 120}, {SolidityGrammar::UINT128, 128},
+    {SolidityGrammar::UINT136, 136}, {SolidityGrammar::UINT144, 144},
+    {SolidityGrammar::UINT152, 152}, {SolidityGrammar::UINT160, 160},
+    {SolidityGrammar::UINT168, 168}, {SolidityGrammar::UINT176, 176},
+    {SolidityGrammar::UINT184, 184}, {SolidityGrammar::UINT192, 192},
+    {SolidityGrammar::UINT200, 200}, {SolidityGrammar::UINT208, 208},
+    {SolidityGrammar::UINT216, 216}, {SolidityGrammar::UINT224, 224},
+    {SolidityGrammar::UINT232, 232}, {SolidityGrammar::UINT240, 240},
+    {SolidityGrammar::UINT248, 248}, {SolidityGrammar::UINT256, 256},
+  };
+
+  if(!uintSizeMap.count(type))
+    return true;
+
+  out = uint_type(uintSizeMap.at(type));
+  std::string c_type = "uint" + std::to_string(uintSizeMap.at(type));
+  out.set("#cpp_type", c_type);
+
+  return false;
+}
+
 bool solidity_convertert::get_elementary_type_name(
   const nlohmann::json &type_name,
   typet &new_type)
@@ -1414,10 +1478,40 @@ bool solidity_convertert::get_elementary_type_name(
   {
   // rule unsigned-integer-type
   case SolidityGrammar::ElementaryTypeNameT::UINT8:
+  case SolidityGrammar::ElementaryTypeNameT::UINT16:
+  case SolidityGrammar::ElementaryTypeNameT::UINT24:
+  case SolidityGrammar::ElementaryTypeNameT::UINT32:
+  case SolidityGrammar::ElementaryTypeNameT::UINT40:
+  case SolidityGrammar::ElementaryTypeNameT::UINT48:
+  case SolidityGrammar::ElementaryTypeNameT::UINT56:
+  case SolidityGrammar::ElementaryTypeNameT::UINT64:
+  case SolidityGrammar::ElementaryTypeNameT::UINT72:
+  case SolidityGrammar::ElementaryTypeNameT::UINT80:
+  case SolidityGrammar::ElementaryTypeNameT::UINT88:
+  case SolidityGrammar::ElementaryTypeNameT::UINT96:
+  case SolidityGrammar::ElementaryTypeNameT::UINT104:
+  case SolidityGrammar::ElementaryTypeNameT::UINT112:
+  case SolidityGrammar::ElementaryTypeNameT::UINT120:
+  case SolidityGrammar::ElementaryTypeNameT::UINT128:
+  case SolidityGrammar::ElementaryTypeNameT::UINT136:
+  case SolidityGrammar::ElementaryTypeNameT::UINT144:
+  case SolidityGrammar::ElementaryTypeNameT::UINT152:
+  case SolidityGrammar::ElementaryTypeNameT::UINT160:
+  case SolidityGrammar::ElementaryTypeNameT::UINT168:
+  case SolidityGrammar::ElementaryTypeNameT::UINT176:
+  case SolidityGrammar::ElementaryTypeNameT::UINT184:
+  case SolidityGrammar::ElementaryTypeNameT::UINT192:
+  case SolidityGrammar::ElementaryTypeNameT::UINT200:
+  case SolidityGrammar::ElementaryTypeNameT::UINT208:
+  case SolidityGrammar::ElementaryTypeNameT::UINT216:
+  case SolidityGrammar::ElementaryTypeNameT::UINT224:
+  case SolidityGrammar::ElementaryTypeNameT::UINT232:
+  case SolidityGrammar::ElementaryTypeNameT::UINT240:
+  case SolidityGrammar::ElementaryTypeNameT::UINT248:
+  case SolidityGrammar::ElementaryTypeNameT::UINT256:
   {
-    new_type = unsigned_char_type();
-    c_type = "unsigned_char";
-    new_type.set("#cpp_type", c_type);
+    if(get_elementary_type_name_uint(type, new_type))
+      return true;
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::BOOL:
