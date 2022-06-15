@@ -1225,10 +1225,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   switch(stmt.getStmtClass())
   {
-  /*
-       The following enum values are the the expr of a program,
-       defined on the Expr class
-    */
+  //The following enum values are the the expr of a program,
+  //defined on the Expr class
 
   // Objects that are implicit defined on the code syntax.
   // One example is the gcc ternary operator, which can be:
@@ -1256,6 +1254,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if(get_decl_ref(dcl, new_expr))
       return true;
+
+    // if type is lvalue ref, convert to dereference subtree
+    if(is_lvalue_reference(dcl))
+      assert(!"TODO - convert to dereference subtree");
 
     break;
   }
@@ -3115,4 +3117,19 @@ clang_c_convertert::get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt)
   }
 
   return nullptr;
+}
+
+bool clang_c_convertert::is_lvalue_reference(const clang::Decl &d)
+{
+  if(const auto *nd = llvm::dyn_cast<clang::ValueDecl>(&d))
+  {
+    const clang::QualType &q_type = nd->getType();
+    const clang::Type &the_type = *q_type.getTypePtrOrNull();
+    if(the_type.getTypeClass() == clang::Type::LValueReference)
+    {
+      return true;
+    }
+  }
+
+  return false;
 }
