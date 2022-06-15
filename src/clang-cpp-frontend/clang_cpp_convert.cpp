@@ -159,13 +159,15 @@ bool clang_cpp_convertert::get_type(
   {
   case clang::Type::LValueReference:
   {
-    assert(!"cool");
     const clang::LValueReferenceType &lvrt =
       static_cast<const clang::LValueReferenceType &>(the_type);
 
-    if(get_type(lvrt.getPointeeTypeAsWritten(), new_type))
+    // an lvalue reference is converted to a pointer typet subtree
+    typet sub_type;
+    if(get_type(lvrt.getPointeeTypeAsWritten(), sub_type))
       return true;
 
+    new_type = gen_pointer_type(sub_type);
     break;
   }
 
