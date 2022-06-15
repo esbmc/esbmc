@@ -1,9 +1,10 @@
 #include <solvers/smt/smt_conv.h>
 #include <util/type_byte_size.h>
 
-namespace {
-
-struct flattened {
+namespace
+{
+struct flattened
+{
   size_t size;
   expr2tc expr;
 };
@@ -17,7 +18,7 @@ static flattened flatten_tree(size_t start, size_t n, const Extract &extract)
     flattened a = flatten_tree(start, n / 2, extract);
     flattened b = flatten_tree(start + n / 2, n - n / 2, extract);
     size_t sz = a.size + b.size;
-    return flattened {sz, concat2tc(get_uint_type(sz), a.expr, b.expr)};
+    return flattened{sz, concat2tc(get_uint_type(sz), a.expr, b.expr)};
   }
   else
     return extract(start);
