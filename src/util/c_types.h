@@ -18,6 +18,7 @@ type2tc index_type2();
 typet int_type();
 type2tc int_type2();
 typet uint_type();
+typet uint_type(unsigned int);
 type2tc uint_type2();
 typet int128_type();
 type2tc int128_type2();
