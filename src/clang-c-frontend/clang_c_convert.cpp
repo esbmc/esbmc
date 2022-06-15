@@ -560,6 +560,11 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   std::string id, name;
   get_decl_name(fd, name, id);
 
+  if (id == "c:@F@function#&I#")
+  {
+    printf("Got function\n");
+  }
+
   symbolt symbol;
   get_default_symbol(
     symbol,
@@ -972,17 +977,6 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       static_cast<const clang::TypeOfType &>(the_type);
 
     if(get_type(toft.desugar(), new_type))
-      return true;
-
-    break;
-  }
-
-  case clang::Type::LValueReference:
-  {
-    const clang::LValueReferenceType &lvrt =
-      static_cast<const clang::LValueReferenceType &>(the_type);
-
-    if(get_type(lvrt.getPointeeTypeAsWritten(), new_type))
       return true;
 
     break;

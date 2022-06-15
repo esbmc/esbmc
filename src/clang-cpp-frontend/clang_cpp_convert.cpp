@@ -157,6 +157,18 @@ bool clang_cpp_convertert::get_type(
 {
   switch(the_type.getTypeClass())
   {
+  case clang::Type::LValueReference:
+  {
+    assert(!"cool");
+    const clang::LValueReferenceType &lvrt =
+      static_cast<const clang::LValueReferenceType &>(the_type);
+
+    if(get_type(lvrt.getPointeeTypeAsWritten(), new_type))
+      return true;
+
+    break;
+  }
+
   case clang::Type::SubstTemplateTypeParm:
   {
     const clang::SubstTemplateTypeParmType &substmpltt =
