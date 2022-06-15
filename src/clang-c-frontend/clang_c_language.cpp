@@ -318,6 +318,8 @@ unsigned __ESBMC_alloc_size[1];
 // Get object size
 unsigned __ESBMC_get_object_size(const void *);
 
+// Modular Verification Framework
+void __ESBMC_set_assert_mode(int);
 
 _Bool __ESBMC_is_little_endian();
 

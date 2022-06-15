@@ -18,6 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/location.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
+#include <goto-programs/goto_assert_mode.h>
 
 #define forall_goto_program_instructions(it, program)                          \
   for(goto_programt::instructionst::const_iterator it =                        \
@@ -109,6 +110,9 @@ public:
 
     //! guard for gotos, assume, assert
     expr2tc guard;
+
+    //! assert mode
+    goto_assertions::goto_assertion_mode assert_mode = goto_assertions::OTHER;
 
     //! the target for gotos and for start_thread nodes
     typedef std::list<class instructiont>::iterator targett;

@@ -170,6 +170,7 @@ void goto_convertt::convert_label(const code_labelt &code, goto_programt &dest)
     t->location.property("error label");
     t->location.comment("error label");
     t->location.user_provided(true);
+    t->assert_mode = goto_assertions::USER;
 
     target = t;
     dest.destructive_append(tmp);

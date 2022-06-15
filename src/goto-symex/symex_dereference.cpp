@@ -20,7 +20,8 @@ void symex_dereference_statet::dereference_failure(
 {
   expr2tc g = guard.as_expr();
   goto_symex.replace_dynamic_allocation(g);
-  goto_symex.claim(not2tc(g), "dereference failure: " + msg);
+  goto_symex.claim(
+    not2tc(g), "dereference failure: " + msg, goto_assertions::POINTER_SAFETY);
 }
 
 bool symex_dereference_statet::has_failed_symbol(

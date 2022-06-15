@@ -60,7 +60,10 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
   return false;
 }
 
-void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
+void goto_symext::claim(
+  const expr2tc &claim_expr,
+  const std::string &msg,
+  goto_assertions::goto_assertion_mode mode)
 {
   // Convert asserts in assumes, if it's not the last loop iteration
   // also, don't convert assertions added by the bidirectional search
@@ -73,6 +76,13 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
       return;
     }
   }
+
+  this->msg.debug(fmt::format(
+    "Adding Assertion. Intruction type: {}. Current mode: {}",
+    assertion_mode,
+    mode));
+  if(!goto_assertions::is_mode_enabled(assertion_mode, mode))
+    return;
 
   // Can happen when evaluating certain special intrinsics. Gulp.
   if(cur_state->guard.is_false())
@@ -373,8 +383,9 @@ void goto_symext::symex_assert()
     return;
 
   // Don't convert if it's an user provided assertion and we're running in
-  // no assertion mode or forward condition
-  if(cur_state->source.pc->location.user_provided() && no_assertions)
+  // no assertion mode, forward condition or user called __ESBMC_disable
+  //const goto_programt::instructiont &instruction = *cur_state->source.pc;
+  if((cur_state->source.pc->location.user_provided() && no_assertions))
     return;
 
   std::string msg = cur_state->source.pc->location.comment().as_string();
@@ -389,7 +400,7 @@ void goto_symext::symex_assert()
   dereference(tmp, dereferencet::READ);
   replace_dynamic_allocation(tmp);
 
-  claim(tmp, msg);
+  claim(tmp, msg, instruction.assert_mode);
 }
 
 void goto_symext::run_intrinsic(
@@ -561,6 +572,16 @@ void goto_symext::run_intrinsic(
   else if(has_prefix(symname, "c:@F@__ESBMC_sync_fetch_and_add"))
   {
     // Already modelled in builtin_libs
+    return;
+  }
+  else if(has_prefix(symname, "c:@F@__ESBMC_set_assert_mode"))
+  {
+    expr2tc op1 = func_call.operands[0];
+    cur_state->rename(op1);
+    assert(is_constant_int2t(op1));
+    assertion_mode =
+      (goto_assertions::goto_assertion_mode)to_constant_int2t(op1)
+        .value.to_int64();
     return;
   }
   else
