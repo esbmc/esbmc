@@ -45,13 +45,11 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
     assert(intref.value > 0);
 
     int sz = intref.value.to_uint64();
+    type2tc idx = index_type2();
 
     auto extract = [&](size_t i) -> expr2tc {
       return flatten_to_bitvector(
-        index2tc(
-          arraytype.subtype,
-          new_expr,
-          constant_int2tc(index_type2(), sz - i - 1)),
+        index2tc(arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)),
         msg);
     };
 
@@ -70,52 +68,23 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
     int sz = structtype.members.size();
 
     // Iterate over each member and flatten them
-    expr2tc expr = member2tc(
-      structtype.members[sz - 1], new_expr, structtype.member_names[sz - 1]);
-    expr = flatten_to_bitvector(expr, msg);
 
-    // Concat elements if there are more than 1
-    for(int i = sz - 2; i >= 0; i--)
-    {
-      expr2tc tmp =
-        member2tc(structtype.members[i], new_expr, structtype.member_names[i]);
-      tmp = flatten_to_bitvector(tmp, msg);
-      type2tc res_type =
-        get_uint_type(expr->type->get_width() + tmp->type->get_width());
-      expr = concat2tc(res_type, expr, tmp);
-    }
+    auto extract = [&](size_t i) {
+      return flatten_to_bitvector(
+        member2tc(
+          structtype.members[sz - i - 1],
+          new_expr,
+          structtype.member_names[sz - i - 1]),
+        msg);
+    };
 
-    return expr;
+    return flatten_tree(0, sz, extract).second;
   }
 
   if(is_union_type(new_expr))
   {
-    bool big_endian =
-      config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
-
-    expr2tc expr = byte_extract2tc(
-      get_uint8_type(),
-      new_expr,
-      constant_int2tc(index_type2(), 0),
-      big_endian);
-    expr = flatten_to_bitvector(expr, msg);
-
-    // Concat elements if there are more than 1
-    BigInt size = type_byte_size(new_expr->type);
-    for(int i = 1; i < size; i++)
-    {
-      expr2tc tmp = byte_extract2tc(
-        get_uint8_type(),
-        new_expr,
-        constant_int2tc(index_type2(), i),
-        big_endian);
-      tmp = flatten_to_bitvector(tmp, msg);
-      type2tc res_type =
-        get_uint_type(expr->type->get_width() + tmp->type->get_width());
-      expr = concat2tc(res_type, expr, tmp);
-    }
-
-    return expr;
+    size_t sz = type_byte_size_bits(new_expr->type).to_uint64();
+    return extract2tc(get_uint_type(sz), new_expr, sz - 1, 0);
   }
 
   msg.error(fmt::format(
