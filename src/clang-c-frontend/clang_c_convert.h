@@ -206,6 +206,8 @@ protected:
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
 
   void gen_typecast_to_union(exprt &dest, const typet &type);
+
+  bool is_lvalue_reference(const clang::Decl &d);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
