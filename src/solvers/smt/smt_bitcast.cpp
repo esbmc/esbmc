@@ -1,24 +1,29 @@
 #include <solvers/smt/smt_conv.h>
 #include <util/type_byte_size.h>
 
+namespace {
+
+struct flattened {
+  size_t size;
+  expr2tc expr;
+};
+
 template <typename Extract>
-static std::pair<size_t, expr2tc>
-flatten_tree(size_t start, size_t n, const Extract &extract)
+static flattened flatten_tree(size_t start, size_t n, const Extract &extract)
 {
   assert(n);
   if(n > 1)
   {
-    auto a = flatten_tree(start, n / 2, extract);
-    auto b = flatten_tree(start + n / 2, n - n / 2, extract);
-    size_t sz = a.first + b.first;
-    return {sz, concat2tc(get_uint_type(sz), a.second, b.second)};
+    flattened a = flatten_tree(start, n / 2, extract);
+    flattened b = flatten_tree(start + n / 2, n - n / 2, extract);
+    size_t sz = a.size + b.size;
+    return flattened {sz, concat2tc(get_uint_type(sz), a.expr, b.expr)};
   }
   else
-  {
-    expr2tc e = extract(start);
-    return {type_byte_size_bits(e->type).to_uint64(), e};
-  }
+    return extract(start);
 }
+
+} /* end anonymous namespace */
 
 static expr2tc
 flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
@@ -46,14 +51,18 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
 
     int sz = intref.value.to_uint64();
     type2tc idx = index_type2();
+    size_t subtype_sz = type_byte_size_bits(arraytype.subtype).to_uint64();
 
-    auto extract = [&](size_t i) -> expr2tc {
-      return flatten_to_bitvector(
-        index2tc(arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)),
-        msg);
+    auto extract = [&](size_t i) {
+      return flattened{
+        subtype_sz,
+        flatten_to_bitvector(
+          index2tc(
+            arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)),
+          msg)};
     };
 
-    return flatten_tree(0, sz, extract).second;
+    return flatten_tree(0, sz, extract).expr;
   }
 
   if(new_expr->type->get_width() == 0)
@@ -69,16 +78,15 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
 
     // Iterate over each member and flatten them
 
-    auto extract = [&](size_t i) {
-      return flatten_to_bitvector(
-        member2tc(
-          structtype.members[sz - i - 1],
-          new_expr,
-          structtype.member_names[sz - i - 1]),
-        msg);
+    auto extract = [&](size_t i) -> flattened {
+      const type2tc &type = structtype.members[sz - i - 1];
+      return flattened{
+        type_byte_size_bits(type).to_uint64(),
+        flatten_to_bitvector(
+          member2tc(type, new_expr, structtype.member_names[sz - i - 1]), msg)};
     };
 
-    return flatten_tree(0, sz, extract).second;
+    return flatten_tree(0, sz, extract).expr;
   }
 
   if(is_union_type(new_expr))
