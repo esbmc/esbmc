@@ -1257,7 +1257,18 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // if type is lvalue ref, convert to dereference subtree
     if(is_lvalue_reference(dcl))
-      assert(!"TODO - convert to dereference subtree");
+    {
+      // get type and make a dereference subtree
+      typet deref_type = new_expr.type().subtype();
+      exprt deref_expr = exprt("dereference", deref_type);
+      // the original subtree will be the operand of dereference subtree
+      deref_expr.move_to_operands(new_expr);
+
+      new_expr.swap(deref_expr);
+
+      // add location node
+      new_expr.location() = location;
+    }
 
     break;
   }
