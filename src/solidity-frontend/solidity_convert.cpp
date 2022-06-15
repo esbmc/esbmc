@@ -12,6 +12,8 @@
 #include <util/message/format.h>
 #include <fstream>
 
+int DEBUG_COUNTER = 0;
+
 solidity_convertert::solidity_convertert(
   contextt &_context,
   nlohmann::json &_ast_json,
@@ -272,8 +274,16 @@ bool solidity_convertert::get_var_decl(
     nlohmann::json init_value =
       is_state_var ? ast_node["value"] : ast_node["initialValue"];
 
+    nlohmann::json literal_type = nullptr;
+    if(
+      SolidityGrammar::get_expression_t(init_value) ==
+      SolidityGrammar::ExpressionT::Literal)
+    {
+      literal_type = ast_node["typeDescriptions"];
+    }
+
     exprt val;
-    if(get_expr(init_value, val))
+    if(get_expr(init_value, literal_type, val))
       return true;
 
     solidity_gen_typecast(ns, val, t);
@@ -712,6 +722,14 @@ bool solidity_convertert::get_statement(
 
 bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 {
+  return get_expr(expr, nullptr, new_expr);
+}
+
+bool solidity_convertert::get_expr(
+  const nlohmann::json &expr,
+  const nlohmann::json &expr_common_type,
+  exprt &new_expr)
+{
   // For rule expression
   // We need to do location settings to match clang C's number of times to set the locations when recurring
   locationt location;
@@ -726,6 +744,8 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
   {
   case SolidityGrammar::ExpressionT::BinaryOperatorClass:
   {
+    printf("%d: BinaryOperatorClass ", DEBUG_COUNTER++);
+    msg.status(expr_common_type.dump(2));
     if(get_binary_operator_expr(expr, new_expr))
       return true;
 
@@ -821,7 +841,9 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
     case SolidityGrammar::ElementaryTypeNameT::UINT248:
     case SolidityGrammar::ElementaryTypeNameT::UINT256:
     {
-      if(convert_integer_literal(literal, the_value, new_expr))
+      printf("%d: LITERAL ", DEBUG_COUNTER++);
+      msg.status(expr_common_type.dump(2));
+      if(convert_integer_literal(expr_common_type, the_value, new_expr))
         return true;
       break;
     }
@@ -895,13 +917,14 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
     // wrap it in an ImplicitCastExpr to perform conversion of ArrayToPointerDecay
     nlohmann::json implicit_cast_expr =
       make_implicit_cast_expr(expr["baseExpression"], "ArrayToPointerDecay");
+
     exprt array;
     if(get_expr(implicit_cast_expr, array))
       return true;
 
     // 3. get the position index
     exprt pos;
-    if(get_expr(expr["indexExpression"], pos))
+    if(get_expr(expr["indexExpression"], expr["typeDescriptions"], pos))
       return true;
 
     new_expr = index_exprt(array, pos, t);
@@ -931,18 +954,26 @@ bool solidity_convertert::get_binary_operator_expr(
   exprt lhs, rhs;
   if(expr.contains("leftHandSide"))
   {
+    nlohmann::json literalType = expr["leftHandSide"]["typeDescriptions"];
+    printf("%d:  get_binary_operator_expr ASS ", DEBUG_COUNTER++);
+    msg.status(literalType.dump(2));
     if(get_expr(expr["leftHandSide"], lhs))
       return true;
 
-    if(get_expr(expr["rightHandSide"], rhs))
+    if(get_expr(expr["rightHandSide"], literalType, rhs))
       return true;
   }
   else if(expr.contains("leftExpression"))
   {
-    if(get_expr(expr["leftExpression"], lhs))
+    nlohmann::json commonType = expr["commonType"];
+    printf("%d:  get_binary_operator_expr BO LEFT ", DEBUG_COUNTER++);
+    msg.status(commonType.dump(2));
+    if(get_expr(expr["leftExpression"], commonType, lhs))
       return true;
+    printf("%d:  get_binary_operator_expr BO LEFT ", DEBUG_COUNTER++);
+    msg.status(commonType.dump(2));
 
-    if(get_expr(expr["rightExpression"], rhs))
+    if(get_expr(expr["rightExpression"], commonType, rhs))
       return true;
   }
   else
