@@ -505,7 +505,19 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     if(get_expr(*vd.getInit(), val))
       return true;
 
-    gen_typecast(ns, val, t);
+    if (is_lvalue_reference(vd))
+    {
+      // We have converted lvalue reference to pointer in a declaration statement with initialisation.
+      // As a result, generate address_of to match the pointer type.
+      exprt result_expr = exprt("address_of", t);
+      result_expr.move_to_operands(val);
+      val.swap(result_expr);
+    }
+    else
+    {
+      // just typecast to match the type of LHS
+      gen_typecast(ns, val, t);
+    }
 
     added_symbol.value = val;
     decl.operands().push_back(val);
