@@ -51,7 +51,7 @@ else()
                     esbmc-old cbmc cstd llvm floats floats-regression
                     k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith
                     k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
-                    incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors ${REGRESSIONS_GOTO_CONTRACTOR})
+                    incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors esbmc-cpp11/reference ${REGRESSIONS_GOTO_CONTRACTOR})
 endif()
 
 foreach(regression IN LISTS REGRESSIONS)
