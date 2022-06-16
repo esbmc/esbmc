@@ -46,20 +46,10 @@ void show_symbol_table_plain(
       std::string type_str, value_str;
 
       if(s.type.is_not_nil())
-      {
-        out << "@@ Printing type for: " << s.id.c_str() << "\n";
-        out << s.type.pretty(0) << "\n";
-        out << "@@ Done printing type for: " << s.id.c_str() << "\n";
         p->from_type(s.type, type_str, ns);
-      }
 
       if(s.value.is_not_nil())
-      {
-        out << "@@ Printing value for: " << s.id.c_str() << "\n";
-        out << s.value.pretty(0) << "\n";
-        out << "@@ Done printing value for: " << s.id.c_str() << "\n";
         p->from_expr(s.value, value_str, ns);
-      }
 
       out << "Symbol......: " << s.id << "\n";
       out << "Module......: " << s.module << "\n";
