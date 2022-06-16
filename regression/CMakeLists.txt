@@ -58,7 +58,7 @@ else()
                     cbmc cstd llvm floats floats-regression
                     k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith
                     k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
-                    incremental-smt esbmc-cpp11/cpp esbmc-cpp11/cbmc-constructors 
+                    incremental-smt esbmc-cpp11/cpp esbmc-cpp11/cbmc-constructors esbmc-cpp11/reference
                     ${REGRESSIONS_GOTO_CONTRACTOR} ${REGRESSIONS_JIMPLE})
 endif()
 
