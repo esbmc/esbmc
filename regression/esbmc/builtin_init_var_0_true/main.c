@@ -5,7 +5,7 @@ int main() {
   v = 0;
 
   assert(v == 0);
-  __ESBMC_init_var(&v);
+  __ESBMC_init_object(&v);
   __ESBMC_assume(v > 0);
   assert(v > 0);
 }
