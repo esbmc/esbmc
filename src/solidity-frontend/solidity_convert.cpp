@@ -727,7 +727,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 
 bool solidity_convertert::get_expr(
   const nlohmann::json &expr,
-  const nlohmann::json &expr_common_type,
+  const nlohmann::json &literal_type,
   exprt &new_expr)
 {
   // For rule expression
@@ -744,8 +744,6 @@ bool solidity_convertert::get_expr(
   {
   case SolidityGrammar::ExpressionT::BinaryOperatorClass:
   {
-    printf("%d: BinaryOperatorClass ", DEBUG_COUNTER++);
-    msg.status(expr_common_type.dump(2));
     if(get_binary_operator_expr(expr, new_expr))
       return true;
 
@@ -841,9 +839,10 @@ bool solidity_convertert::get_expr(
     case SolidityGrammar::ElementaryTypeNameT::UINT248:
     case SolidityGrammar::ElementaryTypeNameT::UINT256:
     {
-      printf("%d: LITERAL ", DEBUG_COUNTER++);
-      msg.status(expr_common_type.dump(2));
-      if(convert_integer_literal(expr_common_type, the_value, new_expr))
+      if(convert_integer_literal(
+           literal_type == nullptr ? literal : literal_type,
+           the_value,
+           new_expr))
         return true;
       break;
     }
@@ -955,8 +954,7 @@ bool solidity_convertert::get_binary_operator_expr(
   if(expr.contains("leftHandSide"))
   {
     nlohmann::json literalType = expr["leftHandSide"]["typeDescriptions"];
-    printf("%d:  get_binary_operator_expr ASS ", DEBUG_COUNTER++);
-    msg.status(literalType.dump(2));
+
     if(get_expr(expr["leftHandSide"], lhs))
       return true;
 
@@ -966,12 +964,9 @@ bool solidity_convertert::get_binary_operator_expr(
   else if(expr.contains("leftExpression"))
   {
     nlohmann::json commonType = expr["commonType"];
-    printf("%d:  get_binary_operator_expr BO LEFT ", DEBUG_COUNTER++);
-    msg.status(commonType.dump(2));
+
     if(get_expr(expr["leftExpression"], commonType, lhs))
       return true;
-    printf("%d:  get_binary_operator_expr BO LEFT ", DEBUG_COUNTER++);
-    msg.status(commonType.dump(2));
 
     if(get_expr(expr["rightExpression"], commonType, rhs))
       return true;
