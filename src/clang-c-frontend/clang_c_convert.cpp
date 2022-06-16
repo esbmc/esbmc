@@ -506,7 +506,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     if(get_expr(*vd.getInit(), val))
       return true;
 
-    if (is_lvalue_reference(vd))
+    if(is_lvalue_reference(vd))
     {
       // We have converted lvalue reference to pointer in a declaration statement with initialisation.
       // As a result, generate address_of to match the pointer type.
@@ -1496,6 +1496,27 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       exprt single_arg;
       if(get_expr(*arg, single_arg))
         return true;
+
+      // if argument is lvalue ref, convert to address_of subtree
+      if(const auto *stmt = llvm::dyn_cast<clang::Stmt>(arg))
+      {
+        if(stmt->getStmtClass() == clang::Stmt::DeclRefExprClass)
+        {
+          const clang::DeclRefExpr &decl =
+            static_cast<const clang::DeclRefExpr &>(*stmt);
+          const clang::Decl &dcl =
+            static_cast<const clang::Decl &>(*decl.getDecl());
+          if(is_lvalue_reference(dcl))
+          {
+            // we have converted lvalue ref to a dereference subtree
+            // To make it a function argument, we need to wrap it in a "&(.)" expresson
+            typet addrof_type = single_arg.operands().at(0).type();
+            exprt addrof_expr = exprt("address_of", addrof_type);
+            addrof_expr.operands().push_back(single_arg);
+            single_arg.swap(addrof_expr);
+          }
+        }
+      }
 
       call.arguments().push_back(single_arg);
     }
