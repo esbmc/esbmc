@@ -563,10 +563,10 @@ void goto_symext::run_intrinsic(
     // Already modelled in builtin_libs
     return;
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_init_var"))
+  else if(has_prefix(symname, "c:@F@__ESBMC_init_object"))
   {
     assert(
-      func_call.operands.size() == 1 && "Wrong __ESBMC_init_var signature");
+      func_call.operands.size() == 1 && "Wrong __ESBMC_init_object signature");
     auto &ex_state = art.get_cur_state();
     if(ex_state.cur_state->guard.is_false())
       return;
@@ -581,7 +581,7 @@ void goto_symext::run_intrinsic(
     {
       assert(
         is_symbol2t(item.object) &&
-        "__ESBMC_init_var only works for variables");
+        "__ESBMC_init_object only works for variables");
 
       // Get the length of the type. This will propagate an exception for dynamic/infinite
       // sized arrays (as expected)
@@ -591,12 +591,12 @@ void goto_symext::run_intrinsic(
       }
       catch(array_type2t::dyn_sized_array_excp *e)
       {
-        msg.error("__ESBMC_init_var does not support VLAs");
+        msg.error("__ESBMC_init_object does not support VLAs");
         abort();
       }
       catch(array_type2t::inf_sized_array_excp *e)
       {
-        msg.error("__ESBMC_init_var does not support infinite-length arrays");
+        msg.error("__ESBMC_init_object does not support infinite-length arrays");
         abort();
       }
       expr2tc val = sideeffect2tc(
