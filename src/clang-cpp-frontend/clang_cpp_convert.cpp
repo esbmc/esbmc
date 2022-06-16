@@ -170,7 +170,6 @@ bool clang_cpp_convertert::get_type(
     new_type = gen_pointer_type(sub_type);
     break;
   }
-
   case clang::Type::SubstTemplateTypeParm:
   {
     const clang::SubstTemplateTypeParmType &substmpltt =

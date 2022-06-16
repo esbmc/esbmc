@@ -982,6 +982,17 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     break;
   }
 
+  case clang::Type::LValueReference:
+  {
+    const clang::LValueReferenceType &lvrt =
+      static_cast<const clang::LValueReferenceType &>(the_type);
+
+    if(get_type(lvrt.getPointeeTypeAsWritten(), new_type))
+      return true;
+
+    break;
+  }
+
   case clang::Type::MacroQualified:
   {
     const clang::MacroQualifiedType &macro =
