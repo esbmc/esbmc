@@ -560,9 +560,9 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   std::string id, name;
   get_decl_name(fd, name, id);
 
-  if(id == "c:@F@function#&I#")
+  if(id == "c:@F@main#")
   {
-    printf("Got function\n");
+    printf("Got main\n");
   }
 
   symbolt symbol;
