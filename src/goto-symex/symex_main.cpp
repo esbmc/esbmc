@@ -596,7 +596,8 @@ void goto_symext::run_intrinsic(
       }
       catch(array_type2t::inf_sized_array_excp *e)
       {
-        msg.error("__ESBMC_init_object does not support infinite-length arrays");
+        msg.error(
+          "__ESBMC_init_object does not support infinite-length arrays");
         abort();
       }
       expr2tc val = sideeffect2tc(
