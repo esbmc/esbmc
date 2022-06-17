@@ -533,6 +533,17 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     type, thename, target_level, level1_num, level2_num, thread_num, node_num));
 }
 
+void migrate_expr2(
+  const exprt &expr,
+  expr2tc &new_expr_ref,
+  const contextt &context)
+{
+  // Initial namespace
+  namespacet tmp(context);
+  migrate_namespace_lookup = &tmp;
+  migrate_expr(expr, new_expr_ref);
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   type2tc type;

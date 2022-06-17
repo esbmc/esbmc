@@ -8,6 +8,7 @@
 #include <irep2/irep2.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
+#include <util/context.h>
 
 // Don't ask
 class namespacet;
@@ -15,6 +16,10 @@ extern namespacet *migrate_namespace_lookup;
 
 type2tc migrate_type(const typet &type);
 void migrate_expr(const exprt &expr, expr2tc &new_expr);
+void migrate_expr2(
+  const exprt &expr,
+  expr2tc &new_expr,
+  const contextt &context);
 
 typet migrate_type_back(const type2tc &ref);
 exprt migrate_expr_back(const expr2tc &ref);

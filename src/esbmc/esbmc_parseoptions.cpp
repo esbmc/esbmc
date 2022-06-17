@@ -41,6 +41,7 @@ extern "C"
 #include <goto-programs/interval_analysis.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
+#include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_skip.h>
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/set_claims.h>
@@ -1684,6 +1685,21 @@ bool esbmc_parseoptionst::process_goto_program(
       return true;
     }
 
+    if(cmdline.isset("output-goto"))
+    {
+      msg.status("Writing GOTO program to file");
+      std::string fullname = cmdline.args[0];
+      // ! assume correct filename
+      size_t lastindex = fullname.find_last_of(".");
+      std::string gbfname = fullname.substr(0, lastindex) + ".goto";
+      std::ofstream oss(gbfname, std::ios::binary);
+      if(write_goto_binary(oss, context, goto_functions))
+      {
+        msg.error("fail to generate goto binary file");
+        abort();
+      };
+      return true;
+    }
     // show it?
     if(
       cmdline.isset("goto-functions-too") ||
