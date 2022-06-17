@@ -275,8 +275,16 @@ void violation_graphml_goto_trace(
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
 
+  std::string prev_assignment;
+  std::string program_file = options.get_option("input-file");
+  size_t prev_stack_size = 0;
+  std::string prev_scope;
+
   for(const auto &step : goto_trace.steps)
   {
+    if(step.pc->location.is_nil())
+      continue;
+
     switch(step.type)
     {
     case goto_trace_stept::ASSERT:
@@ -309,7 +317,44 @@ void violation_graphml_goto_trace(
         step.pc->is_assign() || step.pc->is_return() ||
         (step.pc->is_other() && is_nil_expr(step.lhs)))
       {
+        // An empty scope means global scope, we can skip them since witness
+        // validators don't understand it
+        std::string cur_scope = step.pc->location.function().as_string();
+        if(cur_scope.empty())
+          continue;
+
         std::string assignment = get_formated_assignment(ns, step, msg);
+
+        // Let's not repeat ourselves
+        if(assignment == prev_assignment)
+          continue;
+        prev_assignment = assignment;
+
+        // Stack size changed, either we entered a function or we exited it
+        if(step.stack_trace.size() != prev_stack_size)
+        {
+          std::string cur_scope = step.pc->location.function().as_string();
+          nodet *func_node = new nodet();
+          edget func_edge(prev_node, func_node);
+
+          // We entered a function, create a enter_function node
+          if(step.stack_trace.size() > prev_stack_size)
+            func_edge.enter_function = cur_scope;
+          else
+            // We exited a function, create a return_from_function node
+            func_edge.return_from_function = prev_scope;
+
+          graph.edges.push_back(func_edge);
+
+          prev_scope = cur_scope;
+          prev_stack_size = step.stack_trace.size();
+          prev_node = graph.edges.back().to_node;
+        }
+
+        if(
+          program_file.find(step.pc->location.get_file().as_string()) ==
+          std::string::npos)
+          continue;
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
