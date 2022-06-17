@@ -15,6 +15,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"parse-tree-only", NULL, "only show parse tree"},
     {"parse-tree-too", NULL, "show parse tree and verify"},
     {"goto-functions-only", NULL, "only show goto program"},
+    {"output-goto", NULL, "writing goto program to binary file"},
     {"goto-functions-too", NULL, "show goto program and verify"},
     {"program-only", NULL, "only show program expression"},
     {"program-too", NULL, "show program expression and verify"},

@@ -24,6 +24,10 @@ void convert(const goto_programt::instructiont &instruction, irept &irep)
 
   irep.guard(migrate_expr_back(instruction.guard));
 
+  // Initial irep.statement
+  exprt tmp = migrate_expr_back(instruction.code);
+  irep.statement(tmp.statement());
+
   if(!instruction.targets.empty())
   {
     irept tgts;
@@ -48,10 +52,19 @@ void convert(const goto_programt::instructiont &instruction, irept &irep)
   }
 }
 
-void convert(const irept &irep, goto_programt::instructiont &instruction)
+void convert(
+  const irept &irep,
+  goto_programt::instructiont &instruction,
+  const contextt &context)
 {
-  migrate_expr(static_cast<const exprt &>(irep.code()), instruction.code);
-  migrate_expr(static_cast<const exprt &>(irep.guard()), instruction.guard);
+  // Initial statement
+  exprt tmp = static_cast<const exprt &>(irep.code());
+  tmp.statement(irep_idt(irep.statement().as_string()));
+  migrate_expr2(tmp, instruction.code, context);
+  // migrate_expr(static_cast<const exprt &>(irep.code()), instruction.code);
+  migrate_expr2(
+    static_cast<const exprt &>(irep.guard()), instruction.guard, context);
+  // migrate_expr(static_cast<const exprt &>(irep.guard()), instruction.guard);
   instruction.function = irep.function_irep().id();
   instruction.location = static_cast<const locationt &>(irep.location());
   instruction.type =
@@ -78,7 +91,7 @@ void convert(const goto_programt &program, irept &irep)
   irep.hide(program.hide);
 }
 
-void convert(const irept &irep, goto_programt &program)
+void convert(const irept &irep, goto_programt &program, const contextt &context)
 {
   assert(irep.id() == "goto-program");
 
@@ -91,7 +104,7 @@ void convert(const irept &irep, goto_programt &program)
   for(auto const &it : subs)
   {
     program.instructions.emplace_back();
-    convert(it, program.instructions.back());
+    convert(it, program.instructions.back(), context);
 
     number_targets_list.emplace_back();
     const irept &targets = it.targets();
