@@ -115,8 +115,6 @@ simple_shell_unescape(const char *s, const messaget &msg, const char *var)
   return split;
 }
 
-std::string verification_file;
-
 cmdlinet::~cmdlinet()
 {
   clear();
@@ -225,10 +223,8 @@ bool cmdlinet::parse(
   }
 
   if(vm.count("input-file"))
-  {
     args = vm["input-file"].as<std::vector<std::string>>();
-    verification_file = args.back();
-  }
+
   for(auto &it : vm)
   {
     std::list<std::string> res;

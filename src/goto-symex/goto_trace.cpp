@@ -22,8 +22,6 @@
 #include <ostream>
 #include <util/message/default_message.h>
 
-extern std::string verification_file;
-
 void goto_tracet::output(
   const class namespacet &ns,
   std::ostream &out,
@@ -269,7 +267,10 @@ void violation_graphml_goto_trace(
   const messaget &msg)
 {
   grapht graph(grapht::VIOLATION);
-  graph.verified_file = verification_file;
+  graph.verified_file = options.get_option("input-file");
+
+  msg.status(
+    fmt::format("Generating Violation Witness for: {}", graph.verified_file));
 
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
@@ -290,7 +291,7 @@ void violation_graphml_goto_trace(
         edget violation_edge(prev_node, violation_node);
         violation_edge.thread_id = std::to_string(step.thread_nr);
         violation_edge.start_line = get_line_number(
-          verification_file,
+          graph.verified_file,
           std::atoi(step.pc->location.get_line().c_str()),
           options);
 
@@ -317,7 +318,7 @@ void violation_graphml_goto_trace(
         new_edge.thread_id = std::to_string(step.thread_nr);
         new_edge.assumption = assignment;
         new_edge.start_line = get_line_number(
-          verification_file,
+          graph.verified_file,
           std::atoi(step.pc->location.get_line().c_str()),
           options);
 
@@ -342,7 +343,9 @@ void correctness_graphml_goto_trace(
   const messaget &msg)
 {
   grapht graph(grapht::CORRECTNESS);
-  graph.verified_file = verification_file;
+  graph.verified_file = options.get_option("input-file");
+  msg.status(
+    fmt::format("Generating Correctness Witness for: {}", graph.verified_file));
 
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
@@ -356,7 +359,7 @@ void correctness_graphml_goto_trace(
       continue;
 
     std::string invariant = get_invariant(
-      verification_file,
+      graph.verified_file,
       std::atoi(step.pc->location.get_line().c_str()),
       options);
 
@@ -367,7 +370,7 @@ void correctness_graphml_goto_trace(
     edget *new_edge = new edget();
     std::string function = step.pc->location.get_function().c_str();
     new_edge->start_line = get_line_number(
-      verification_file,
+      graph.verified_file,
       std::atoi(step.pc->location.get_line().c_str()),
       options);
     new_node->invariant = invariant;
