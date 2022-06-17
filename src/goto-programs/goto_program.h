@@ -382,6 +382,7 @@ public:
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(instruction.loop_number, loop_number);
+      std::swap(instruction.assert_mode, assert_mode);
     }
 
     //! A globally unique number to identify a program location.

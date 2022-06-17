@@ -574,14 +574,26 @@ void goto_symext::run_intrinsic(
     // Already modelled in builtin_libs
     return;
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_set_assert_mode"))
+  else if(has_prefix(symname, "c:@F@__ESBMC_enable_assert_mode"))
   {
     expr2tc op1 = func_call.operands[0];
     cur_state->rename(op1);
     assert(is_constant_int2t(op1));
-    assertion_mode =
+    goto_assertions::enable_mode(
+      assertion_mode,
       (goto_assertions::goto_assertion_mode)to_constant_int2t(op1)
-        .value.to_int64();
+        .value.to_int64());
+    return;
+  }
+  else if(has_prefix(symname, "c:@F@__ESBMC_disable_assert_mode"))
+  {
+    expr2tc op1 = func_call.operands[0];
+    cur_state->rename(op1);
+    assert(is_constant_int2t(op1));
+    goto_assertions::disable_mode(
+      assertion_mode,
+      (goto_assertions::goto_assertion_mode)to_constant_int2t(op1)
+        .value.to_int64());
     return;
   }
   else

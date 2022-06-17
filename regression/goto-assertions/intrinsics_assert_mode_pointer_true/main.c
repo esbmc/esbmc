@@ -1,5 +1,5 @@
 int main() {
-    __ESBMC_set_assert_mode(1);
+    __ESBMC_disable_assert_mode(2);
     int *a;
     *a;    
 }

@@ -31,4 +31,13 @@ inline bool is_mode_enabled(const goto_assertion_mode &assertions, char mode)
   return (mode & assertions) != 0;
 };
 
+inline void disable_mode(goto_assertion_mode &assertions, char mode)
+{
+  assertions = (goto_assertion_mode)(assertions & ~mode);
+}
+
+inline void enable_mode(goto_assertion_mode &assertions, char mode)
+{
+  assertions = (goto_assertion_mode)(assertions | mode);
+}
 } // namespace goto_assertions
