@@ -1700,6 +1700,7 @@ bool esbmc_parseoptionst::process_goto_program(
       };
       return true;
     }
+
     // show it?
     if(
       cmdline.isset("goto-functions-too") ||

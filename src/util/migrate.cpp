@@ -538,7 +538,7 @@ void migrate_expr2(
   expr2tc &new_expr_ref,
   const contextt &context)
 {
-  // Initial namespace
+  // Initialize namespacet pointer
   namespacet tmp(context);
   migrate_namespace_lookup = &tmp;
   migrate_expr(expr, new_expr_ref);
@@ -2944,6 +2944,7 @@ exprt migrate_expr_back(const expr2tc &ref)
   {
     const code_goto2t &ref2 = to_code_goto2t(ref);
     exprt codeexpr("code", code_typet());
+    codeexpr.statement(irep_idt("goto"));
     codeexpr.set("destination", ref2.target);
     return codeexpr;
   }
@@ -2951,7 +2952,7 @@ exprt migrate_expr_back(const expr2tc &ref)
   {
     const code_asm2t &ref2 = to_code_asm2t(ref);
     exprt codeexpr("code", migrate_type_back(ref2.type));
-    codeexpr.statement("asm");
+    codeexpr.statement(irep_idt("asm"));
     // Don't actually set a piece of assembly as the operand here; it serves
     // no purpose.
     codeexpr.operands().resize(1);
