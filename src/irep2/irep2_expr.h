@@ -1378,24 +1378,6 @@ public:
   typedef esbmct::expr2t_traits_notype<exception_list_field> traits;
 };
 
-class concat_data : public expr2t
-{
-public:
-  concat_data(const type2tc &t, expr2t::expr_ids id, std::vector<expr2tc> d)
-    : expr2t(t, id), data_items(std::move(d))
-  {
-  }
-  concat_data(const concat_data &ref) = default;
-
-  std::vector<expr2tc> data_items;
-
-  // Type mangling:
-  typedef esbmct::
-    field_traits<std::vector<expr2tc>, concat_data, &concat_data::data_items>
-      data_items_field;
-  typedef esbmct::expr2t_traits<data_items_field> traits;
-};
-
 class extract_data : public expr2t
 {
 public:
@@ -3516,6 +3498,7 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** @extends bit_2ops */
 class concat2t : public concat_expr_methods
 {
 public:
