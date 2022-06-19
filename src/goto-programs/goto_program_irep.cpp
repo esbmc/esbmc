@@ -24,10 +24,6 @@ void convert(const goto_programt::instructiont &instruction, irept &irep)
 
   irep.guard(migrate_expr_back(instruction.guard));
 
-  // Initial irep.statement
-  exprt tmp = migrate_expr_back(instruction.code);
-  irep.statement(tmp.statement());
-
   if(!instruction.targets.empty())
   {
     irept tgts;
@@ -57,14 +53,10 @@ void convert(
   goto_programt::instructiont &instruction,
   const contextt &context)
 {
-  // Initial statement
-  exprt tmp = static_cast<const exprt &>(irep.code());
-  tmp.statement(irep_idt(irep.statement().as_string()));
-  migrate_expr2(tmp, instruction.code, context);
-  // migrate_expr(static_cast<const exprt &>(irep.code()), instruction.code);
+  migrate_expr2(
+    static_cast<const exprt &>(irep.code()), instruction.code, context);
   migrate_expr2(
     static_cast<const exprt &>(irep.guard()), instruction.guard, context);
-  // migrate_expr(static_cast<const exprt &>(irep.guard()), instruction.guard);
   instruction.function = irep.function_irep().id();
   instruction.location = static_cast<const locationt &>(irep.location());
   instruction.type =

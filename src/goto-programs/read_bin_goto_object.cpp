@@ -107,8 +107,7 @@ bool read_bin_goto_object(
     if(it == functions.function_map.end())
       functions.function_map.emplace(fname, message_handler);
     goto_functiont &f = functions.function_map.at(fname);
-    convert(t,f.body,context);
-    //convert(t, f.body);
+    convert(t, f.body, context);
     f.body_available = f.body.instructions.size() > 0;
   }
 

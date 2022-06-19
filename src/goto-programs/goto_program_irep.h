@@ -15,14 +15,12 @@ Date: May 2007
 #include <util/context.h>
 
 void convert(const goto_programt::instructiont &instruction, irept &irep);
-// void convert(const irept &irep, goto_programt::instructiont &instruction);
 void convert(
   const irept &irep,
   goto_programt::instructiont &instruction,
   const contextt &context);
 
 void convert(const goto_programt &program, irept &irep);
-// void convert(const irept &irep, goto_programt &program);
 void convert(
   const irept &irep,
   goto_programt &program,
