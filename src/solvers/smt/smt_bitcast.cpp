@@ -9,19 +9,50 @@ struct flattened
   expr2tc expr;
 };
 
+/**
+ * Constructs the tree-like concatenation of expressions from a sequence.
+ *
+ * Invokes `extract` for each index in [start,start+n) and concatenates the
+ * results to one expression, which is is returned in the `.expr` member along
+ * with its size in bits (an implementation detail). The expression forms a
+ * binary tree of minimal height with the `extract(i)` expressions at its
+ * leaves and `concat2t` expressions otherwise.
+ *
+ * For each valid index `i` in the above range, `extract(i)` should return a
+ * `flattened` object containing the `i`ths sub-expression to concatenate.
+ * In particular, the sub-expression should already be flattened by, e.g.,
+ * `flatten_to_bitvector()` below.
+ *
+ * @param start   The initial index to invoke `extract` for
+ * @param n       The number of successive elements to extract starting at
+ *                `start`; note: n > 0 only
+ * @param extract Callback to invoke for each valid index
+ *
+ * @return A `flattened` object containing an expression corresponding to the
+ *         concatenation (in order, from `start` to `start+n-1`) of the
+ *         `extract` results and its size
+ */
 template <typename Extract>
 static flattened flatten_tree(size_t start, size_t n, const Extract &extract)
 {
   assert(n);
-  if(n > 1)
-  {
-    flattened a = flatten_tree(start, n / 2, extract);
-    flattened b = flatten_tree(start + n / 2, n - n / 2, extract);
-    size_t sz = a.size + b.size;
-    return flattened{sz, concat2tc(get_uint_type(sz), a.expr, b.expr)};
-  }
-  else
+  if(n == 1)
     return extract(start);
+
+  /* here, n > 1: recursively build 2 sub-expressions to concatenate, both of
+   * similar depth logarithmic in n to avoid a stack overflow in convert_ast()
+   * down the line when n is large, for instance in #732 case 2.
+   *
+   * We are returning the size along with the expression in order to avoid
+   * unnecessarily re-computing it in this recursion by calling
+   * type_byte_size_bits() on the exprs for both branches: both results are
+   * already known and available. When `extract` operates on an array, its
+   * subtype's size indeed only needs to be computed once, regardless of `n`.
+   */
+  flattened a = flatten_tree(start, n / 2, extract);
+  flattened b = flatten_tree(start + n / 2, n - n / 2, extract);
+  size_t sz = a.size + b.size;
+  return flattened{sz, concat2tc(get_uint_type(sz), a.expr, b.expr)};
 }
 
 } /* end anonymous namespace */
@@ -50,7 +81,7 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
     const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
     assert(intref.value > 0);
 
-    int sz = intref.value.to_uint64();
+    size_t sz = intref.value.to_uint64();
     type2tc idx = index_type2();
     size_t subtype_sz = type_byte_size_bits(arraytype.subtype).to_uint64();
 
@@ -75,11 +106,11 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
   {
     const struct_type2t &structtype = to_struct_type(new_expr->type);
 
-    int sz = structtype.members.size();
+    size_t sz = structtype.members.size();
 
     // Iterate over each member and flatten them
 
-    auto extract = [&](size_t i) -> flattened {
+    auto extract = [&](size_t i) {
       const type2tc &type = structtype.members[sz - i - 1];
       return flattened{
         type_byte_size_bits(type).to_uint64(),
