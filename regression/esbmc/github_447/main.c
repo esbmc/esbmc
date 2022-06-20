@@ -13,7 +13,7 @@ int foo() {
 }
 
 int loop_init() {
-	//__ESBMC_init_var(&arr);
+	//__ESBMC_init_object(&arr);
 	int a = foo();
 	while (a > 1)
 		a = a / 2;
