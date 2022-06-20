@@ -143,6 +143,11 @@ protected:
     const nlohmann::json &bool_literal,
     std::string the_value,
     exprt &dest);
+
+private:
+  bool get_elementary_type_name_uint(
+    SolidityGrammar::ElementaryTypeNameT &type,
+    typet &out);
 };
 
 #endif /* SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_ */

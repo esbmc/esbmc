@@ -1481,7 +1481,7 @@ bool solidity_convertert::get_array_to_pointer_type(
  * @return true iff population failed
  * @return false iff population was successful
  */
-bool get_elementary_type_name_uint(
+bool solidity_convertert::get_elementary_type_name_uint(
   SolidityGrammar::ElementaryTypeNameT &type,
   typet &out)
 {
@@ -1505,7 +1505,7 @@ bool get_elementary_type_name_uint(
   };
 
   if(!uintSizeMap.count(type))
-    return true;
+    assert(!"Size map missing for uint");
 
   out = uint_type(uintSizeMap.at(type));
   std::string c_type = "uint" + std::to_string(uintSizeMap.at(type));
