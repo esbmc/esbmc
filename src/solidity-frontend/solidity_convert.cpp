@@ -1490,30 +1490,12 @@ bool solidity_convertert::get_elementary_type_name_uint(
   SolidityGrammar::ElementaryTypeNameT &type,
   typet &out)
 {
-  std::map<SolidityGrammar::ElementaryTypeNameT, unsigned int> uintSizeMap = {
-    {SolidityGrammar::UINT8, 8},     {SolidityGrammar::UINT16, 16},
-    {SolidityGrammar::UINT24, 24},   {SolidityGrammar::UINT32, 32},
-    {SolidityGrammar::UINT40, 40},   {SolidityGrammar::UINT48, 48},
-    {SolidityGrammar::UINT56, 56},   {SolidityGrammar::UINT64, 64},
-    {SolidityGrammar::UINT72, 72},   {SolidityGrammar::UINT80, 80},
-    {SolidityGrammar::UINT88, 88},   {SolidityGrammar::UINT96, 96},
-    {SolidityGrammar::UINT104, 104}, {SolidityGrammar::UINT112, 112},
-    {SolidityGrammar::UINT120, 120}, {SolidityGrammar::UINT128, 128},
-    {SolidityGrammar::UINT136, 136}, {SolidityGrammar::UINT144, 144},
-    {SolidityGrammar::UINT152, 152}, {SolidityGrammar::UINT160, 160},
-    {SolidityGrammar::UINT168, 168}, {SolidityGrammar::UINT176, 176},
-    {SolidityGrammar::UINT184, 184}, {SolidityGrammar::UINT192, 192},
-    {SolidityGrammar::UINT200, 200}, {SolidityGrammar::UINT208, 208},
-    {SolidityGrammar::UINT216, 216}, {SolidityGrammar::UINT224, 224},
-    {SolidityGrammar::UINT232, 232}, {SolidityGrammar::UINT240, 240},
-    {SolidityGrammar::UINT248, 248}, {SolidityGrammar::UINT256, 256},
-  };
-
-  if(!uintSizeMap.count(type))
+  if(!SolidityGrammar::uintSizeMap.count(type))
     assert(!"Size map missing for uint");
 
-  out = uint_type(uintSizeMap.at(type));
-  std::string c_type = "uint" + std::to_string(uintSizeMap.at(type));
+  out = uint_type(SolidityGrammar::uintSizeMap.at(type));
+  std::string c_type =
+    "uint" + std::to_string(SolidityGrammar::uintSizeMap.at(type));
   out.set("#cpp_type", c_type);
 
   return false;
