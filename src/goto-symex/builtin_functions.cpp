@@ -316,7 +316,10 @@ void goto_symext::symex_free(const expr2tc &expr)
       expr2tc offset = item.offset;
       expr2tc eq = equality2tc(offset, gen_ulong(0));
       g.guard_expr(eq);
-      claim(eq, "Operand of free must have zero pointer offset");
+      claim(
+        eq,
+        "Operand of free must have zero pointer offset",
+        goto_assertions::POINTER_SAFETY);
 
       // Check if we are not freeing an dynamic object allocated using alloca
       for(auto const &a : allocad)
@@ -330,7 +333,10 @@ void goto_symext::symex_free(const expr2tc &expr)
         {
           expr2tc noteq = notequal2tc(alloc_obj, item.object);
           g.guard_expr(noteq);
-          claim(noteq, "dereference failure: invalid pointer freed");
+          claim(
+            noteq,
+            "dereference failure: invalid pointer freed",
+            goto_assertions::POINTER_SAFETY);
         }
       }
     }
@@ -1274,7 +1280,7 @@ void goto_symext::intrinsic_memset(
 
       auto false_expr = gen_false_expr();
       guard.guard_expr(false_expr);
-      claim(false_expr, error_msg);
+      claim(false_expr, error_msg, goto_assertions::POINTER_SAFETY);
       continue;
     }
 
@@ -1291,7 +1297,7 @@ void goto_symext::intrinsic_memset(
         number_of_bytes);
 
       guard.add(gen_false_expr());
-      claim(gen_false_expr(), error_msg);
+      claim(gen_false_expr(), error_msg, goto_assertions::POINTER_SAFETY);
       continue;
     }
 
@@ -1315,7 +1321,7 @@ void goto_symext::intrinsic_memset(
     same_object2tc obj(arg0, null_sym);
     not2tc null_check(same_object2tc(arg0, null_sym));
     ex_state.cur_state->guard.guard_expr(null_check);
-    claim(null_check, " dereference failure: NULL pointer");
+    claim(null_check, " dereference failure: NULL pointer", goto_assertions::POINTER_SAFETY);
   }
 
   expr2tc ret_ref = func_call.ret;

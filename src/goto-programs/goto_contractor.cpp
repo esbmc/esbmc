@@ -17,8 +17,17 @@ void goto_contractort::get_constraints(goto_functionst goto_functions)
 {
   auto function = goto_functions.function_map.find("c:@F@main");
   for(const auto &ins : function->second.body.instructions)
+  {
     if(ins.is_assert())
       constraint = create_constraint_from_expr2t(ins.guard);
+    else if(
+      ins.is_function_call() &&
+      is_symbol2t(to_code_function_call2t(ins.code).function) &&
+      to_symbol2t(to_code_function_call2t(ins.code).function)
+          .get_symbol_name() == "c:@F@__VERIFIER_assert")
+      constraint = create_constraint_from_expr2t(
+        to_code_function_call2t(ins.code).operands[0]);
+  }
 }
 
 void goto_contractort::get_intervals(goto_functionst goto_functions)
@@ -94,8 +103,6 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
 
 void goto_contractort::insert_assume(goto_functionst goto_functions)
 {
-  message_handler.status("Inserting assumes.. ");
-
   loopst loop;
   for(auto &function_loop : function_loops)
     loop = function_loop;
@@ -186,21 +193,21 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
   ibex::NumConstraint *c;
   if(
     is_arith_expr(expr) || is_constant_number(expr) || is_symbol2t(expr) ||
-    is_notequal2t(expr))
+    is_notequal2t(expr) || is_equality2t(expr))
   {
     message_handler.status("Expression is complex, skipping this assert");
     return nullptr;
   }
 
   std::shared_ptr<relation_data> rel;
-  rel = std::dynamic_pointer_cast<relation_data>(expr);
+  rel = std::dynamic_pointer_cast<relation_data>(get_base_object(expr));
 
   ibex::Function *f, *g;
   f = create_function_from_expr2t(rel->side_1);
   g = create_function_from_expr2t(rel->side_2);
   if(f == nullptr || g == nullptr)
     return nullptr;
-  switch(expr->expr_id)
+  switch(get_base_object(expr)->expr_id)
   {
   case expr2t::expr_ids::greaterthanequal_id:
     c = new ibex::NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars));
@@ -213,9 +220,6 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
     break;
   case expr2t::expr_ids::lessthan_id:
     c = new ibex::NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
-    break;
-  case expr2t::expr_ids::equality_id:
-    c = new ibex::NumConstraint(*vars, (*f)(*vars) = (*g)(*vars));
     break;
   default:
     return nullptr;
@@ -319,53 +323,13 @@ bool goto_contractort::initialize_main_function_loops()
     {
       const messaget msg;
       goto_loopst goto_loops(it->first, goto_functions, it->second, msg);
-      auto function_loops = goto_loops.get_loops();
-      this->function_loops = function_loops;
+      this->function_loops = goto_loops.get_loops();
     }
   }
   goto_functions.update();
   return true;
 }
 
-//TODO: rewrite this function
-void goto_contractort::monotonicity_check()
-{
-  loopst loop;
-  for(auto &function_loop : function_loops)
-    loop = function_loop;
-
-  auto it = loop.get_original_loop_head();
-  while(it != loop.get_original_loop_exit())
-  {
-    if(it->is_assign())
-    {
-      auto index = map.find(
-        to_symbol2t(to_code_assign2t(it->code).target).get_symbol_name());
-      if(index == CspMap::NOT_FOUND)
-      {
-        it++;
-        continue;
-      }
-      to_code_assign2t(it->code);
-
-      auto source = to_code_assign2t(it->code).source;
-      switch(source->expr_id)
-      {
-      case expr2t::expr_ids::add_id:
-      case expr2t::expr_ids::mul_id:
-        map.decreasing[index] = true;
-        break;
-      case expr2t::expr_ids::sub_id:
-      case expr2t::expr_ids::div_id:
-        map.increasing[index] = true;
-        break;
-      default:
-        break;
-      }
-    }
-    it++;
-  }
-}
 const ibex::Interval &vart::getInterval() const
 {
   return interval;

@@ -60,14 +60,10 @@ public:
   static constexpr int MAX_VAR = 10;
   static constexpr int NOT_FOUND = -1;
 
-  bool decreasing[MAX_VAR], increasing[MAX_VAR];
-
   std::map<std::string, vart> var_map;
 
   CspMap()
   {
-    for(int i = 0; i < MAX_VAR; i++)
-      decreasing[i] = increasing[i] = false;
   }
   size_t add_var(const std::string &name, const symbol2t &symbol)
   {
@@ -157,7 +153,7 @@ public:
     {
       vars = new ibex::Variable(CspMap::MAX_VAR);
       message_handler.status(
-        "1/5 - Parsing asserts to create CSP Constraints.");
+        "1/4 - Parsing asserts to create CSP Constraints.");
       get_constraints(_goto_functions);
       if(constraint == nullptr)
       {
@@ -165,17 +161,15 @@ public:
           "Constraint expression not supported. Aborting goto-contractor");
         return;
       }
-      message_handler.status("2/5 - Checking if loop is monotone.");
-      monotonicity_check();
 
       message_handler.status(
-        "3/5 - Parsing assumes to set values for variables intervals.");
+        "2/4 - Parsing assumes to set values for variables intervals.");
       get_intervals(_goto_functions);
 
-      message_handler.status("4/5 - Applying contractor.");
+      message_handler.status("3/4 - Applying contractor.");
       contractor();
 
-      message_handler.status("5/5 - Inserting assumes.");
+      message_handler.status("4/4 - Inserting assumes.");
       insert_assume(_goto_functions);
     }
   }
@@ -187,7 +181,7 @@ private:
   /// map is where the variable references and intervals are stored.
   CspMap map;
   /// constraint is where the constraint for CSP will be stored.
-  ibex::NumConstraint *constraint;
+  ibex::NumConstraint *constraint = nullptr;
 
   unsigned number_of_functions = 0;
 
@@ -247,7 +241,6 @@ private:
  * from frama-c eva plugin
  * @param functionst
  */
-  void monotonicity_check();
 };
 
 #endif //ESBMC_GOTO_CONTRACTOR_H

@@ -91,7 +91,7 @@ bool goto_symext::symex_throw()
         const std::string &msg = "Throwing an exception of type " +
                                  exceptions_thrown.begin()->as_string() +
                                  " but there is not catch for it.";
-        claim(gen_false_expr(), msg);
+        claim(gen_false_expr(), msg, goto_assertions::OTHER);
         return true;
       }
     }
@@ -191,7 +191,7 @@ bool goto_symext::symex_throw()
       const std::string &msg = "Throwing an exception of type " +
                                exceptions_thrown.begin()->as_string() +
                                " but there is not catch for it.";
-      claim(gen_false_expr(), msg);
+      claim(gen_false_expr(), msg, goto_assertions::OTHER);
       // Ensure no further execution along this path.
       cur_state->guard.make_false();
     }
@@ -358,7 +358,7 @@ int goto_symext::handle_throw_decl(
         for(const auto &s_it1 : except->throw_list_set)
           msg += "\n   - " + std::string(s_it1.c_str());
 
-        claim(gen_false_expr(), msg);
+        claim(gen_false_expr(), msg, goto_assertions::OTHER);
         return 0;
       }
 
@@ -392,7 +392,7 @@ bool goto_symext::handle_rethrow(
     }
 
     const std::string &msg = "Trying to re-throw without last exception.";
-    claim(gen_false_expr(), msg);
+    claim(gen_false_expr(), msg, goto_assertions::OTHER);
     return true;
   }
   return false;

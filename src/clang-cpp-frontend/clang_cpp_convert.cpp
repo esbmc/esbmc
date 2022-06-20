@@ -18,6 +18,7 @@
 #include <util/expr_util.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/message/format.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -277,11 +278,52 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   if(cxxrd == nullptr)
     return false;
 
-  for(const auto *decl : cxxrd->methods())
+  if(cxxrd->bases().begin() != cxxrd->bases().end())
   {
-    exprt dummy;
-    if(get_decl(*decl, dummy))
-      return true;
+    msg.error(fmt::format("inheritance is not supported in {}", __func__));
+    abort();
+  }
+
+  // Iterate over the declarations stored in this context
+  for(const auto &decl : cxxrd->decls())
+  {
+    // Fields were already added
+    if(decl->getKind() == clang::Decl::Field)
+      continue;
+
+    struct_typet::componentt comp;
+
+    if(
+      const clang::FunctionTemplateDecl *ftd =
+        llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
+    {
+      assert(ftd->isThisDeclarationADefinition());
+      msg.error(fmt::format("template is not supported in {}", __func__));
+      abort();
+    }
+    else
+    {
+      if(get_decl(*decl, comp))
+        return true;
+    }
+
+    // This means that we probably just parsed nested class,
+    // don't add it to the class
+    if(comp.is_code() && to_code(comp).statement() == "skip")
+      continue;
+
+    if(
+      const clang::CXXMethodDecl *cxxmd =
+        llvm::dyn_cast<clang::CXXMethodDecl>(decl))
+    {
+      // Add only if it isn't static
+      if(!cxxmd->isStatic())
+      {
+        msg.error(
+          fmt::format("static method is not supported in {}", __func__));
+        abort();
+      }
+    }
   }
 
   return false;
@@ -548,17 +590,33 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if(ctr_call.getNumArgs() != 0)
     {
-      // TODO: currently only supporting zero-argument implicit default constructors.
-      assert(
-        !"come back and continue - got user defined ctor, need side effect?");
+      return true;
     }
-    else
+
+    
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::CXXThisExprClass:
+  {
+    const clang::CXXThisExpr &this_expr =
+      static_cast<const clang::CXXThisExpr &>(stmt);
+
+    std::size_t address =
+      reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
+
+    this_mapt::iterator it = this_map.find(address);
+    if(this_map.find(address) == this_map.end())
     {
+      /*
       // no additional annotation for zero-arg constructor
       typet t;
       if(get_type(ctr_call.getType(), t))
         return true;
       new_expr = gen_zero(t);
+      */return true;
     }
 
     break;
@@ -569,6 +627,203 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   }
 
   new_expr.location() = location;
+  return false;
+}
+
+bool clang_cpp_convertert::get_constructor_call(
+  const clang::CXXConstructExpr &constructor_call,
+  exprt &new_expr)
+{
+  /*
+  // Get constructor call
+  exprt callee_decl;
+  if(get_decl_ref(*constructor_call.getConstructor(), callee_decl))
+    return true;
+
+  // Get type
+  typet type;
+  if(get_type(constructor_call.getType(), type))
+    return true;
+
+  side_effect_expr_function_callt call;
+  call.function() = callee_decl;
+  call.type() = type;
+
+  // Try to get the object that this constructor is constructing
+  auto it = ASTContext->getParents(constructor_call).begin();
+
+  //exprt object;
+  const clang::Decl *objectDecl = it->get<clang::Decl>();
+
+  //call.arguments().push_back(object);
+
+  // Do args
+  for(const clang::Expr *arg : constructor_call.arguments())
+  {
+    exprt single_arg;
+    if(get_expr(*arg, single_arg))
+      return true;
+
+    call.arguments().push_back(single_arg);
+  }
+
+  call.set("constructor", 1);
+
+  // Now, if we built a new object, then we must build a temporary
+  // object around it
+  if(objectDecl != nullptr)
+  {
+    new_expr.swap(call);
+  }
+  else
+  {
+    msg.error(fmt::format("temporary is not supported in {}", __func__));
+    abort();
+  }
+*/
+  return false;
+}
+
+void clang_cpp_convertert::build_member_from_component(
+  const clang::FunctionDecl &fd,
+  exprt &component)
+{
+  // Add this pointer as first argument
+  std::size_t address = reinterpret_cast<std::size_t>(fd.getFirstDecl());
+
+  this_mapt::iterator it;
+  if(this_map.find(address) == this_map.end())
+  {
+    
+    abort();
+  }
+
+  member_exprt member(
+    symbol_exprt(it->second.first, it->second.second),
+    component.name(),
+    component.type());
+
+  component.swap(member);
+}
+
+bool clang_cpp_convertert::get_function_body(
+  const clang::FunctionDecl &fd,
+  exprt &new_expr)
+{
+  // do nothing if function body doesn't exist
+  if(!fd.hasBody())
+    return false;
+/*
+  // Parse body
+  if(clang_c_convertert::get_function_body(fd, new_expr))
+    return true;
+*/
+  // if it's a constructor, check for initializers
+  if(fd.getKind() == clang::Decl::CXXConstructor)
+  {
+    const clang::CXXConstructorDecl &cxxcd =
+      static_cast<const clang::CXXConstructorDecl &>(fd);
+
+    if(cxxcd.init_begin() != cxxcd.init_end())
+    {
+      msg.error(
+        fmt::format("initializer list is not supported in {}", __func__));
+      abort();
+    }
+  }
+
+  return false;
+}
+
+bool clang_cpp_convertert::get_function_this_pointer_param(
+  const clang::CXXMethodDecl &cxxmd,
+  code_typet::argumentst &params)
+{
+  // Parse this pointer
+  code_typet::argumentt this_param;
+  if(get_type(cxxmd.getThisType(), this_param.type()))
+    return true;
+
+  locationt location_begin;
+  get_location_from_decl(cxxmd, location_begin);
+
+  std::string id, name;
+  get_decl_name(cxxmd, name, id);
+
+  name = "this";
+  id += name;
+
+  //this_param.cmt_base_name("this");
+  this_param.cmt_base_name(name);
+  this_param.cmt_identifier(id);
+
+  // Add to the list of params
+  params.push_back(this_param);
+
+  // If the method is not defined, we don't need to add it's parameter
+  // to the context, they will never be used
+  if(!cxxmd.isDefined())
+    return false;
+
+  symbolt param_symbol;
+  get_default_symbol(
+    param_symbol,
+    get_modulename_from_path(location_begin.file().as_string()),
+    this_param.type(),
+    name,
+    id,
+    location_begin);
+
+  param_symbol.lvalue = true;
+  param_symbol.is_parameter = true;
+  param_symbol.file_local = true;
+
+  // Save the method address and name of this pointer on the this pointer map
+  std::size_t address = reinterpret_cast<std::size_t>(cxxmd.getFirstDecl());
+  this_map[address] = std::pair<std::string, typet>(
+    param_symbol.id.as_string(), this_param.type());
+
+  move_symbol_to_context(param_symbol);
+  return false;
+}
+
+bool clang_cpp_convertert::get_function_params(
+  const clang::FunctionDecl &fd,
+  code_typet::argumentst &params)
+{
+  /*
+  // On C++, all methods have an implicit reference to the
+  // class of the object
+  const clang::CXXMethodDecl &cxxmd =
+    static_cast<const clang::CXXMethodDecl &>(fd);
+
+  // If it's a C-style function, fallback to C mode
+  // Static methods don't have the this arg and can be handled as
+  // C functions
+  if(!fd.isCXXClassMember() || cxxmd.isStatic())
+    return clang_c_convertert::get_function_params(fd, params);
+
+  // Add this pointer to first arg
+  if(get_function_this_pointer_param(cxxmd, params))
+    return true;
+
+  // reserve space for `this' pointer and params
+  params.resize(1 + fd.parameters().size());
+
+  // TODO: replace the loop with get_function_params
+  // Parse other args
+  for(std::size_t i = 0; i < fd.parameters().size(); ++i)
+  {
+    code_typet::argumentt param;
+    if(get_function_param(*fd.parameters()[i], param))
+      return true;
+
+    // All args are added shifted by one position, because
+    // of the this pointer (first arg)
+    params[i + 1].swap(param);
+  }
+  */
+
   return false;
 }
 
@@ -619,6 +874,58 @@ bool clang_cpp_convertert::get_template_decl(
     if(get_template_decl_specialization(
          Child, DumpExplicitInst, !D->isCanonicalDecl(), new_expr))
       return true;
+
+  return false;
+}
+
+bool clang_cpp_convertert::get_decl_ref(
+  const clang::Decl &decl,
+  exprt &new_expr)
+{
+  std::string name, id;
+  typet type;
+
+  switch(decl.getKind())
+  {
+  case clang::Decl::Var:
+  {
+    const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(decl);
+
+    get_decl_name(vd, name, id);
+
+    if(get_type(vd.getType(), type))
+      return true;
+
+    break;
+  }
+  case clang::Decl::CXXConstructor:
+  {
+    const clang::FunctionDecl &fd =
+      static_cast<const clang::FunctionDecl &>(decl);
+
+    get_decl_name(fd, name, id);
+
+    if(get_type(fd.getType(), type))
+      return true;
+
+    if(get_function_params(fd, to_code_type(type).arguments()))
+      return true;
+
+    break;
+  }
+
+  default:
+  {
+    msg.error(fmt::format(
+      "Conversion of unsupported clang decl ref: {}", decl.getDeclKindName()));
+    abort();
+  }
+  }
+
+  new_expr = exprt("symbol", type);
+  new_expr.identifier(id);
+  new_expr.cmt_lvalue(true);
+  new_expr.name(name);
 
   return false;
 }

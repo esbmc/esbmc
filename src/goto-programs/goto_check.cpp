@@ -81,7 +81,8 @@ protected:
     const std::string &comment,
     const std::string &property,
     const locationt &location,
-    const guardt &guard);
+    const guardt &guard,
+    const goto_assertions::goto_assertion_mode mode = goto_assertions::OTHER);
 
   goto_programt new_code;
   std::set<expr2tc> assertions;
@@ -119,7 +120,8 @@ void goto_checkt::div_by_zero_check(
     "division by zero",
     "division-by-zero",
     loc,
-    guard);
+    guard,
+    goto_assertions::ARITHMETIC_SAFETY);
 }
 
 void goto_checkt::float_overflow_check(
@@ -178,7 +180,8 @@ void goto_checkt::float_overflow_check(
       "arithmetic overflow on floating-point " + get_expr_id(expr),
       "overflow",
       loc,
-      guard);
+      guard,
+      goto_assertions::ARITHMETIC_SAFETY);
   }
   else if(is_ieee_add2t(expr) || is_ieee_sub2t(expr) || is_ieee_mul2t(expr))
   {
@@ -197,7 +200,8 @@ void goto_checkt::float_overflow_check(
       "arithmetic overflow on floating-point " + get_expr_id(expr),
       "overflow",
       loc,
-      guard);
+      guard,
+      goto_assertions::ARITHMETIC_SAFETY);
   }
 }
 
@@ -229,7 +233,8 @@ void goto_checkt::overflow_check(
     "arithmetic overflow on " + get_expr_id(expr),
     "overflow",
     loc,
-    guard);
+    guard,
+    goto_assertions::ARITHMETIC_SAFETY);
 }
 
 void goto_checkt::nan_check(
@@ -249,7 +254,13 @@ void goto_checkt::nan_check(
   expr2tc isnan = expr2tc(new isnan2t(expr));
   make_not(isnan);
 
-  add_guarded_claim(isnan, "NaN on " + get_expr_id(expr), "NaN", loc, guard);
+  add_guarded_claim(
+    isnan,
+    "NaN on " + get_expr_id(expr),
+    "NaN",
+    loc,
+    guard,
+    goto_assertions::ARITHMETIC_SAFETY);
 }
 
 void goto_checkt::pointer_rel_check(
@@ -272,7 +283,12 @@ void goto_checkt::pointer_rel_check(
 
     same_object2tc same_object(side_1, side_2);
     add_guarded_claim(
-      same_object, "Same object violation", "pointer", loc, guard);
+      same_object,
+      "Same object violation",
+      "pointer",
+      loc,
+      guard,
+      goto_assertions::POINTER_SAFETY);
   }
 }
 
@@ -345,7 +361,13 @@ void goto_checkt::bounds_check(
   assert(!is_nil_expr(zero));
 
   greaterthanequal2tc lower(the_index, zero);
-  add_guarded_claim(lower, name + " lower bound", "array bounds", loc, guard);
+  add_guarded_claim(
+    lower,
+    name + " lower bound",
+    "array bounds",
+    loc,
+    guard,
+    goto_assertions::ARRAY_SAFETY);
 
   assert(is_array_type(t) || is_string_type(t) || is_vector_type(t));
 
@@ -387,7 +409,13 @@ void goto_checkt::bounds_check(
   // Cast size to index type
   typecast2tc casted_size(the_index->type, array_size);
   lessthan2tc upper(the_index, casted_size);
-  add_guarded_claim(upper, name + " upper bound", "array bounds", loc, guard);
+  add_guarded_claim(
+    upper,
+    name + " upper bound",
+    "array bounds",
+    loc,
+    guard,
+    goto_assertions::ARRAY_SAFETY);
 }
 
 void goto_checkt::add_guarded_claim(
@@ -395,7 +423,8 @@ void goto_checkt::add_guarded_claim(
   const std::string &comment,
   const std::string &property,
   const locationt &location,
-  const guardt &guard)
+  const guardt &guard,
+  const goto_assertions::goto_assertion_mode mode)
 {
   expr2tc e = expr;
 
@@ -417,6 +446,7 @@ void goto_checkt::add_guarded_claim(
     t->location = location;
     t->location.comment(comment);
     t->location.property(property);
+    t->assert_mode = mode;
   }
 }
 

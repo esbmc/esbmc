@@ -108,7 +108,7 @@ void goto_programt::instructiont::output_instruction(
     if(is_assume())
       out << "ASSUME ";
     else
-      out << "ASSERT ";
+      out << "ASSERT(" << assert_mode << ") ";
 
     {
       out << from_expr(ns, identifier, guard, msg);

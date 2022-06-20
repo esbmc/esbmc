@@ -64,6 +64,7 @@ public:
  */
   static void
   gen_typecast_to_union(exprt &dest, const typet &type, const messaget &msg);
+
   void set_symbols_to_add(std::vector<symbolt> &v)
   {
     symbols_to_add = v;
@@ -72,6 +73,9 @@ public:
   {
     return symbols_to_add;
   }
+
+  static std::string get_decl_name(const clang::NamedDecl &nd);
+
 
 protected:
   clang::ASTContext *ASTContext;

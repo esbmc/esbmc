@@ -324,11 +324,14 @@ void execution_statet::symex_assign(
     analyze_assign(code);
 }
 
-void execution_statet::claim(const expr2tc &expr, const std::string &msg)
+void execution_statet::claim(
+  const expr2tc &expr,
+  const std::string &msg,
+  goto_assertions::goto_assertion_mode mode)
 {
   pre_goto_guard = guardt();
 
-  goto_symext::claim(expr, msg);
+  goto_symext::claim(expr, msg, mode);
 
   if(threads_state.size() >= thread_cswitch_threshold)
     analyze_read(expr);
@@ -1273,14 +1276,15 @@ std::shared_ptr<execution_statet> schedule_execution_statet::clone() const
 
 void schedule_execution_statet::claim(
   const expr2tc &expr,
-  const std::string &msg)
+  const std::string &msg,
+  goto_assertions::goto_assertion_mode)
 {
   unsigned int tmp_total, tmp_remaining;
 
   tmp_total = total_claims;
   tmp_remaining = remaining_claims;
 
-  execution_statet::claim(expr, msg);
+  execution_statet::claim(expr, msg, goto_assertions::OTHER);
 
   tmp_total = total_claims - tmp_total;
   tmp_remaining = remaining_claims - tmp_remaining;

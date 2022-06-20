@@ -239,7 +239,10 @@ protected:
    *  @param expr Expression that must always be true.
    *  @param msg Textual message explaining assertion.
    */
-  virtual void claim(const expr2tc &expr, const std::string &msg);
+  virtual void claim(
+    const expr2tc &expr,
+    const std::string &msg,
+    goto_assertions::goto_assertion_mode mode);
 
   /**
    *  Perform an assertion.
@@ -886,6 +889,12 @@ protected:
    * Check whether assertions are enabled in the current step
    */
   bool assertions_enabled_step = true; 
+
+  /**
+   * Check which assertions are enabled in the current step
+   */
+  goto_assertions::goto_assertion_mode assertion_mode =
+    goto_assertions::ALL_MODES;
 
   const messaget &msg;
 
