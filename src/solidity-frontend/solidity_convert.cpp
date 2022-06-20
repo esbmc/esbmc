@@ -1051,6 +1051,11 @@ bool solidity_convertert::get_binary_operator_expr(
     new_expr = exprt("mod", t);
     break;
   }
+  case SolidityGrammar::ExpressionT::BO_LAnd:
+  {
+    new_expr = exprt("and", t);
+    break;
+  }
   default:
   {
     assert(!"Unimplemented binary operator");
