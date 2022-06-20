@@ -10,8 +10,7 @@
  * leaves and `concat2t` expressions otherwise.
  *
  * For each valid index `i` in the above range, `extract(i)` should return the
- * `i`ths sub-expression to concatenate. In particular, the sub-expression
- * should already be flattened by, e.g., `flatten_to_bitvector()` below.
+ * `i`ths sub-expression to concatenate.
  *
  * @param start   The initial index to invoke `extract` for
  * @param n       The number of successive elements to extract starting at
@@ -22,7 +21,7 @@
  *         `start` to `start+n-1`) of the `extract` results and its size
  */
 template <typename Extract>
-static expr2tc flatten_tree(size_t start, size_t n, const Extract &extract)
+static expr2tc concat_tree(size_t start, size_t n, const Extract &extract)
 {
   assert(n);
   if(n == 1)
@@ -40,8 +39,8 @@ static expr2tc flatten_tree(size_t start, size_t n, const Extract &extract)
    * `n`. However, I've not been able to measure performance benefits as the
    * dynamic allocations `extract` usually performs dwarf the size computation.
    */
-  expr2tc a = flatten_tree(start, n / 2, extract);
-  expr2tc b = flatten_tree(start + n / 2, n - n / 2, extract);
+  expr2tc a = concat_tree(start, n / 2, extract);
+  expr2tc b = concat_tree(start + n / 2, n - n / 2, extract);
   size_t sz = type_byte_size_bits(a->type).to_uint64() +
               type_byte_size_bits(b->type).to_uint64();
   return concat2tc(get_uint_type(sz), a, b);
@@ -75,12 +74,13 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
     type2tc idx = index_type2();
 
     auto extract = [&](size_t i) {
+      /* The sub-expression should be flattened as well */
       return flatten_to_bitvector(
         index2tc(arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)),
         msg);
     };
 
-    return flatten_tree(0, sz, extract);
+    return concat_tree(0, sz, extract);
   }
 
   if(new_expr->type->get_width() == 0)
@@ -97,6 +97,7 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
     // Iterate over each member and flatten them
 
     auto extract = [&](size_t i) {
+      /* The sub-expression should be flattened as well */
       return flatten_to_bitvector(
         member2tc(
           structtype.members[sz - i - 1],
@@ -105,7 +106,7 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
         msg);
     };
 
-    return flatten_tree(0, sz, extract);
+    return concat_tree(0, sz, extract);
   }
 
   if(is_union_type(new_expr))
