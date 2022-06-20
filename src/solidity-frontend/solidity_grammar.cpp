@@ -470,6 +470,10 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr, bool uo_pre)
       assert(!"Unsupported - UO_PostDec");
     }
   }
+  else if(expr["operator"] == "&&")
+  {
+    return BO_LAnd;
+  }
   else
   {
     assert(!((fmt::format(
@@ -494,6 +498,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(BO_NE)
     ENUM_TO_STR(BO_EQ)
     ENUM_TO_STR(BO_Rem)
+    ENUM_TO_STR(BO_LAnd)
     ENUM_TO_STR(UnaryOperatorClass)
     ENUM_TO_STR(UO_PreDec)
     ENUM_TO_STR(UO_PreInc)
