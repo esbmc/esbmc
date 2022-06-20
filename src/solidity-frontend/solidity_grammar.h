@@ -83,6 +83,8 @@ enum ElementaryTypeNameT
   UINT248,
   UINT256,
 
+  INT_LITERAL,
+
   // rule bool
   BOOL,
 

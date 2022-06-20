@@ -272,14 +272,14 @@ bool solidity_convertert::get_var_decl(
     nlohmann::json init_value =
       is_state_var ? ast_node["value"] : ast_node["initialValue"];
 
-    nlohmann::json literal_type = nullptr;
+    nlohmann::json int_literal_type = nullptr;
     if(
       SolidityGrammar::get_expression_t(init_value) ==
       SolidityGrammar::ExpressionT::Literal)
-      literal_type = ast_node["typeDescriptions"];
+      int_literal_type = ast_node["typeDescriptions"];
 
     exprt val;
-    if(get_expr(init_value, literal_type, val))
+    if(get_expr(init_value, int_literal_type, val))
       return true;
 
     solidity_gen_typecast(ns, val, t);
@@ -735,7 +735,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
  * the solidity expression grammar
  * 
  * @param expr The expression that is to be converted to the IR
- * @param literal_type Type information ast to create the the literal 
+ * @param int_literal_type Type information ast to create the the literal 
  * type in the IR (only needed for when the expression is a literal)
  * @param new_expr Out parameter to hold the conversion
  * @return true iff the conversion has failed
@@ -743,7 +743,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
  */
 bool solidity_convertert::get_expr(
   const nlohmann::json &expr,
-  const nlohmann::json &literal_type,
+  const nlohmann::json &int_literal_type,
   exprt &new_expr)
 {
   // For rule expression
@@ -822,43 +822,10 @@ bool solidity_convertert::get_expr(
 
     switch(type_name)
     {
-    case SolidityGrammar::ElementaryTypeNameT::UINT8:
-    case SolidityGrammar::ElementaryTypeNameT::UINT16:
-    case SolidityGrammar::ElementaryTypeNameT::UINT24:
-    case SolidityGrammar::ElementaryTypeNameT::UINT32:
-    case SolidityGrammar::ElementaryTypeNameT::UINT40:
-    case SolidityGrammar::ElementaryTypeNameT::UINT48:
-    case SolidityGrammar::ElementaryTypeNameT::UINT56:
-    case SolidityGrammar::ElementaryTypeNameT::UINT64:
-    case SolidityGrammar::ElementaryTypeNameT::UINT72:
-    case SolidityGrammar::ElementaryTypeNameT::UINT80:
-    case SolidityGrammar::ElementaryTypeNameT::UINT88:
-    case SolidityGrammar::ElementaryTypeNameT::UINT96:
-    case SolidityGrammar::ElementaryTypeNameT::UINT104:
-    case SolidityGrammar::ElementaryTypeNameT::UINT112:
-    case SolidityGrammar::ElementaryTypeNameT::UINT120:
-    case SolidityGrammar::ElementaryTypeNameT::UINT128:
-    case SolidityGrammar::ElementaryTypeNameT::UINT136:
-    case SolidityGrammar::ElementaryTypeNameT::UINT144:
-    case SolidityGrammar::ElementaryTypeNameT::UINT152:
-    case SolidityGrammar::ElementaryTypeNameT::UINT160:
-    case SolidityGrammar::ElementaryTypeNameT::UINT168:
-    case SolidityGrammar::ElementaryTypeNameT::UINT176:
-    case SolidityGrammar::ElementaryTypeNameT::UINT184:
-    case SolidityGrammar::ElementaryTypeNameT::UINT192:
-    case SolidityGrammar::ElementaryTypeNameT::UINT200:
-    case SolidityGrammar::ElementaryTypeNameT::UINT208:
-    case SolidityGrammar::ElementaryTypeNameT::UINT216:
-    case SolidityGrammar::ElementaryTypeNameT::UINT224:
-    case SolidityGrammar::ElementaryTypeNameT::UINT232:
-    case SolidityGrammar::ElementaryTypeNameT::UINT240:
-    case SolidityGrammar::ElementaryTypeNameT::UINT248:
-    case SolidityGrammar::ElementaryTypeNameT::UINT256:
+    case SolidityGrammar::ElementaryTypeNameT::INT_LITERAL:
     {
-      if(convert_integer_literal(
-           literal_type == nullptr ? literal : literal_type,
-           the_value,
-           new_expr))
+      assert(int_literal_type != nullptr);
+      if(convert_integer_literal(int_literal_type, the_value, new_expr))
         return true;
       break;
     }
