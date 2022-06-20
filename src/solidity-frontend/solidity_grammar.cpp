@@ -186,9 +186,13 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   }
   else if(typeString.find("int_const") != std::string::npos)
   {
-    // For Literal, their typeString is like "int_const 100".
-    // TODO: Fix me! For simplicity, we assume everything is unsigned int.
-    return UINT256;
+    /**
+     * For Literal, their typeString is like "int_const 100".
+     * There is no additional type info (bitsize, signed/unsigned),
+     * This means it will require additional type info from the parent
+     * expr to create an internal type.
+     */
+    return INT_LITERAL;
   }
   else
   {
@@ -237,6 +241,7 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
     ENUM_TO_STR(UINT240)
     ENUM_TO_STR(UINT248)
     ENUM_TO_STR(UINT256)
+    ENUM_TO_STR(INT_LITERAL)
     ENUM_TO_STR(BOOL)
     ENUM_TO_STR(ElementaryTypeNameTError)
   default:
