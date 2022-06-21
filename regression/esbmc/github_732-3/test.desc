@@ -1,0 +1,4 @@
+CORE
+main.c
+-DRANGE_CHECK_ERROR --no-align-check
+^VERIFICATION SUCCESSFUL$

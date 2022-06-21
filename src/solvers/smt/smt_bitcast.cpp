@@ -1,6 +1,51 @@
 #include <solvers/smt/smt_conv.h>
 #include <util/type_byte_size.h>
 
+/**
+ * Constructs the tree-like concatenation of expressions from a sequence.
+ *
+ * Invokes `extract` for each index in [start,start+n) and concatenates the
+ * results to one expression, which is is returned. The expression forms a
+ * binary tree of minimal height with the `extract(i)` expressions at its
+ * leaves and `concat2t` expressions otherwise.
+ *
+ * For each valid index `i` in the above range, `extract(i)` should return the
+ * `i`ths sub-expression to concatenate.
+ *
+ * @param start   The initial index to invoke `extract` for
+ * @param n       The number of successive elements to extract starting at
+ *                `start`; note: n > 0 only
+ * @param extract Callback to invoke for each valid index
+ *
+ * @return An expression corresponding to the concatenation (in order, from
+ *         `start` to `start+n-1`) of the `extract` results and its size
+ */
+template <typename Extract>
+static expr2tc concat_tree(size_t start, size_t n, const Extract &extract)
+{
+  assert(n);
+  if(n == 1)
+    return extract(start);
+
+  /* here, n > 1: recursively build 2 sub-expressions to concatenate, both of
+   * similar depth logarithmic in n to avoid a stack overflow in convert_ast()
+   * down the line when n is large, for instance in #732 case 2.
+   *
+   * We could also return the size along with the expression in order to
+   * avoid unnecessarily re-computing it in this recursion by calling
+   * type_byte_size_bits() on the exprs for both branches: both results are
+   * already known and available. When `extract` operates on an array, its
+   * subtype's size indeed only would need to be computed once, regardless of
+   * `n`. However, I've not been able to measure performance benefits as the
+   * dynamic allocations `extract` usually performs dwarf the size computation.
+   */
+  expr2tc a = concat_tree(start, n / 2, extract);
+  expr2tc b = concat_tree(start + n / 2, n - n / 2, extract);
+  size_t sz = type_byte_size_bits(a->type).to_uint64() +
+              type_byte_size_bits(b->type).to_uint64();
+  return concat2tc(get_uint_type(sz), a, b);
+}
+
 static expr2tc
 flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
 {
@@ -25,25 +70,17 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
     const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
     assert(intref.value > 0);
 
-    int sz = intref.value.to_uint64();
+    size_t sz = intref.value.to_uint64();
+    type2tc idx = index_type2();
 
-    // First element
-    expr2tc expr = index2tc(
-      arraytype.subtype, new_expr, constant_int2tc(index_type2(), sz - 1));
-    expr = flatten_to_bitvector(expr, msg);
+    auto extract = [&](size_t i) {
+      /* The sub-expression should be flattened as well */
+      return flatten_to_bitvector(
+        index2tc(arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)),
+        msg);
+    };
 
-    // Concat elements if there are more than 1
-    for(int i = sz - 2; i >= 0; i--)
-    {
-      expr2tc tmp = index2tc(
-        arraytype.subtype, new_expr, constant_int2tc(index_type2(), i));
-      tmp = flatten_to_bitvector(tmp, msg);
-      type2tc res_type =
-        get_uint_type(expr->type->get_width() + tmp->type->get_width());
-      expr = concat2tc(res_type, expr, tmp);
-    }
-
-    return expr;
+    return concat_tree(0, sz, extract);
   }
 
   if(new_expr->type->get_width() == 0)
@@ -55,55 +92,27 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
   {
     const struct_type2t &structtype = to_struct_type(new_expr->type);
 
-    int sz = structtype.members.size();
+    size_t sz = structtype.members.size();
 
     // Iterate over each member and flatten them
-    expr2tc expr = member2tc(
-      structtype.members[sz - 1], new_expr, structtype.member_names[sz - 1]);
-    expr = flatten_to_bitvector(expr, msg);
 
-    // Concat elements if there are more than 1
-    for(int i = sz - 2; i >= 0; i--)
-    {
-      expr2tc tmp =
-        member2tc(structtype.members[i], new_expr, structtype.member_names[i]);
-      tmp = flatten_to_bitvector(tmp, msg);
-      type2tc res_type =
-        get_uint_type(expr->type->get_width() + tmp->type->get_width());
-      expr = concat2tc(res_type, expr, tmp);
-    }
+    auto extract = [&](size_t i) {
+      /* The sub-expression should be flattened as well */
+      return flatten_to_bitvector(
+        member2tc(
+          structtype.members[sz - i - 1],
+          new_expr,
+          structtype.member_names[sz - i - 1]),
+        msg);
+    };
 
-    return expr;
+    return concat_tree(0, sz, extract);
   }
 
   if(is_union_type(new_expr))
   {
-    bool big_endian =
-      config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
-
-    expr2tc expr = byte_extract2tc(
-      get_uint8_type(),
-      new_expr,
-      constant_int2tc(index_type2(), 0),
-      big_endian);
-    expr = flatten_to_bitvector(expr, msg);
-
-    // Concat elements if there are more than 1
-    BigInt size = type_byte_size(new_expr->type);
-    for(int i = 1; i < size; i++)
-    {
-      expr2tc tmp = byte_extract2tc(
-        get_uint8_type(),
-        new_expr,
-        constant_int2tc(index_type2(), i),
-        big_endian);
-      tmp = flatten_to_bitvector(tmp, msg);
-      type2tc res_type =
-        get_uint_type(expr->type->get_width() + tmp->type->get_width());
-      expr = concat2tc(res_type, expr, tmp);
-    }
-
-    return expr;
+    size_t sz = type_byte_size_bits(new_expr->type).to_uint64();
+    return extract2tc(get_uint_type(sz), new_expr, sz - 1, 0);
   }
 
   msg.error(fmt::format(
