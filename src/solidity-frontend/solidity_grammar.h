@@ -4,7 +4,6 @@
 #include <map>
 #include <string>
 #include <nlohmann/json.hpp>
-#include <set>
 
 // Anything auxiliary means it's not in Solidity grammar, but we need it to work with
 // ESBMC's irept
@@ -101,24 +100,7 @@ enum ElementaryTypeNameT
 };
 ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name);
 const char *elementary_type_name_to_str(ElementaryTypeNameT type);
-static std::map<ElementaryTypeNameT, unsigned int> uintSizeMap = {
-  {UINT8, 8},     {SolidityGrammar::UINT16, 16},
-  {UINT24, 24},   {SolidityGrammar::UINT32, 32},
-  {UINT40, 40},   {SolidityGrammar::UINT48, 48},
-  {UINT56, 56},   {SolidityGrammar::UINT64, 64},
-  {UINT72, 72},   {SolidityGrammar::UINT80, 80},
-  {UINT88, 88},   {SolidityGrammar::UINT96, 96},
-  {UINT104, 104}, {SolidityGrammar::UINT112, 112},
-  {UINT120, 120}, {SolidityGrammar::UINT128, 128},
-  {UINT136, 136}, {SolidityGrammar::UINT144, 144},
-  {UINT152, 152}, {SolidityGrammar::UINT160, 160},
-  {UINT168, 168}, {SolidityGrammar::UINT176, 176},
-  {UINT184, 184}, {SolidityGrammar::UINT192, 192},
-  {UINT200, 200}, {SolidityGrammar::UINT208, 208},
-  {UINT216, 216}, {SolidityGrammar::UINT224, 224},
-  {UINT232, 232}, {SolidityGrammar::UINT240, 240},
-  {UINT248, 248}, {SolidityGrammar::UINT256, 256},
-};
+unsigned int uint_type_name_to_size(ElementaryTypeNameT);
 
 // rule parameter-list
 enum ParameterListT

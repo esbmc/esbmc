@@ -8,6 +8,7 @@ Author: Kunjian Song, kunjian.song@postgrad.manchester.ac.uk
 
 #include <solidity-frontend/solidity_grammar.h>
 #include <fmt/core.h>
+#include <set>
 
 #define ENUM_TO_STR(s)                                                         \
   case s:                                                                      \
@@ -17,25 +18,30 @@ Author: Kunjian Song, kunjian.song@postgrad.manchester.ac.uk
 
 namespace SolidityGrammar
 {
-std::set<std::string> uintTypeStringSet = {
-  "uint8",   "uint16",  "uint24",  "uint32",  "uint40",  "uint48",  "uint56",
-  "uint64",  "uint72",  "uint80",  "uint88",  "uint96",  "uint104", "uint112",
-  "uint120", "uint128", "uint136", "uint144", "uint152", "uint160", "uint168",
-  "uint176", "uint184", "uint192", "uint200", "uint208", "uint216", "uint224",
-  "uint232", "uint240", "uint248", "uint256",
+const std::unordered_map<std::string, ElementaryTypeNameT>
+  uint_string_to_type_map = {
+    {"uint8", UINT8},     {"uint16", UINT16},   {"uint24", UINT24},
+    {"uint32", UINT32},   {"uint40", UINT40},   {"uint48", UINT48},
+    {"uint56", UINT56},   {"uint64", UINT64},   {"uint72", UINT72},
+    {"uint80", UINT80},   {"uint88", UINT88},   {"uint96", UINT96},
+    {"uint104", UINT104}, {"uint112", UINT112}, {"uint120", UINT120},
+    {"uint128", UINT128}, {"uint136", UINT136}, {"uint144", UINT144},
+    {"uint152", UINT152}, {"uint160", UINT160}, {"uint168", UINT168},
+    {"uint176", UINT176}, {"uint184", UINT184}, {"uint192", UINT192},
+    {"uint200", UINT200}, {"uint208", UINT208}, {"uint216", UINT216},
+    {"uint224", UINT224}, {"uint232", UINT232}, {"uint240", UINT240},
+    {"uint248", UINT248}, {"uint256", UINT256},
 };
-std::map<std::string, ElementaryTypeNameT> uintStringToTypeMap = {
-  {"uint8", UINT8},     {"uint16", UINT16},   {"uint24", UINT24},
-  {"uint32", UINT32},   {"uint40", UINT40},   {"uint48", UINT48},
-  {"uint56", UINT56},   {"uint64", UINT64},   {"uint72", UINT72},
-  {"uint80", UINT80},   {"uint88", UINT88},   {"uint96", UINT96},
-  {"uint104", UINT104}, {"uint112", UINT112}, {"uint120", UINT120},
-  {"uint128", UINT128}, {"uint136", UINT136}, {"uint144", UINT144},
-  {"uint152", UINT152}, {"uint160", UINT160}, {"uint168", UINT168},
-  {"uint176", UINT176}, {"uint184", UINT184}, {"uint192", UINT192},
-  {"uint200", UINT200}, {"uint208", UINT208}, {"uint216", UINT216},
-  {"uint224", UINT224}, {"uint232", UINT232}, {"uint240", UINT240},
-  {"uint248", UINT248}, {"uint256", UINT256},
+
+const std::unordered_map<ElementaryTypeNameT, unsigned int> uint_size_map = {
+  {UINT8, 8},     {UINT16, 16},   {UINT24, 24},   {UINT32, 32},
+  {UINT40, 40},   {UINT48, 48},   {UINT56, 56},   {UINT64, 64},
+  {UINT72, 72},   {UINT80, 80},   {UINT88, 88},   {UINT96, 96},
+  {UINT104, 104}, {UINT112, 112}, {UINT120, 120}, {UINT128, 128},
+  {UINT136, 136}, {UINT144, 144}, {UINT152, 152}, {UINT160, 160},
+  {UINT168, 168}, {UINT176, 176}, {UINT184, 184}, {UINT192, 192},
+  {UINT200, 200}, {UINT208, 208}, {UINT216, 216}, {UINT224, 224},
+  {UINT232, 232}, {UINT240, 240}, {UINT248, 248}, {UINT256, 256},
 };
 // rule contract-body-element
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
@@ -87,7 +93,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     // for AST node that contains ["typeName"]["typeDescriptions"]
     std::string typeString = type_name["typeString"].get<std::string>();
 
-    if(uintTypeStringSet.count(typeString) || typeString == "bool")
+    if(uint_string_to_type_map.count(typeString) || typeString == "bool")
     {
       // For state var declaration,
       return ElementaryTypeName;
@@ -176,9 +182,11 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   std::string typeString = type_name["typeString"].get<std::string>();
   // rule unsigned-integer-type
 
-  if(typeString.substr(0, 4) == "uint" && uintStringToTypeMap.count(typeString))
+  if(
+    typeString.substr(0, 4) == "uint" &&
+    uint_string_to_type_map.count(typeString))
   {
-    return uintStringToTypeMap[typeString];
+    return uint_string_to_type_map.at(typeString);
   }
   else if(typeString == "bool")
   {
@@ -250,6 +258,14 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
     return "UNKNOWN";
   }
   }
+}
+
+unsigned int uint_type_name_to_size(ElementaryTypeNameT type)
+{
+  if(!uint_size_map.count(type))
+    assert(!"Size map missing for type");
+
+  return uint_size_map.at(type);
 }
 
 // rule parameter-list
