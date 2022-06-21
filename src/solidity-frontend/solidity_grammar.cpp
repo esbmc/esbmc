@@ -262,9 +262,6 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
 
 unsigned int uint_type_name_to_size(ElementaryTypeNameT type)
 {
-  if(!uint_size_map.count(type))
-    assert(!"Size map missing for type");
-
   return uint_size_map.at(type);
 }
 
