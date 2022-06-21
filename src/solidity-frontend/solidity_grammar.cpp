@@ -188,11 +188,11 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   {
     return uint_string_to_type_map.at(typeString);
   }
-  else if(typeString == "bool")
+  if(typeString == "bool")
   {
     return BOOL;
   }
-  else if(typeString.find("int_const") != std::string::npos)
+  if(typeString.find("int_const") != std::string::npos)
   {
     /**
      * For Literal, their typeString is like "int_const 100".
@@ -202,14 +202,12 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
      */
     return INT_LITERAL;
   }
-  else
-  {
-    assert(!((fmt::format(
-                "Got elementary-type-name typeString={}. Unsupported "
-                "elementary-type-name type",
-                type_name["typeString"].get<std::string>()))
-               .c_str()));
-  }
+
+  assert(!((fmt::format(
+              "Got elementary-type-name typeString={}. Unsupported "
+              "elementary-type-name type",
+              type_name["typeString"].get<std::string>()))
+             .c_str()));
   return ElementaryTypeNameTError;
 }
 
