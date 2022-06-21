@@ -111,11 +111,6 @@ typet uint_type()
   return unsignedbv_typet(config.ansi_c.int_width);
 }
 
-typet uint_type(unsigned int size)
-{
-  return unsignedbv_typet(size);
-}
-
 type2tc uint_type2()
 {
   return get_uint_type(config.ansi_c.int_width);
