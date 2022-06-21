@@ -1688,11 +1688,8 @@ bool esbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("output-goto"))
     {
       msg.status("Writing GOTO program to file");
-      std::string fullname = cmdline.args[0];
-      // ! assume correct filename
-      size_t lastindex = fullname.find_last_of(".");
-      std::string gbfname = fullname.substr(0, lastindex) + ".goto";
-      std::ofstream oss(gbfname, std::ios::binary);
+      std::ofstream oss(
+        cmdline.getval("output-goto"), std::ios::out | std::ios::binary);
       if(write_goto_binary(oss, context, goto_functions))
       {
         msg.error("fail to generate goto binary file");
