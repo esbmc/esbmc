@@ -1457,13 +1457,8 @@ bool solidity_convertert::get_elementary_type_name_uint(
   SolidityGrammar::ElementaryTypeNameT &type,
   typet &out)
 {
-  if(!SolidityGrammar::uintSizeMap.count(type))
-    assert(!"Size map missing for uint");
-
-  out = unsignedbv_typet(SolidityGrammar::uintSizeMap.at(type));
-  std::string c_type =
-    "uint" + std::to_string(SolidityGrammar::uintSizeMap.at(type));
-  out.set("#cpp_type", c_type);
+  const unsigned int uint_size = SolidityGrammar::uint_type_name_to_size(type);
+  out = unsignedbv_typet(uint_size);
 
   return false;
 }
