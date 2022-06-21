@@ -85,7 +85,7 @@ To help the Reviewing, PRs **must**:
 - Link an issue.
 - Add a summary of the changes.
 - Explain how to test/evaluate the changes.
-- Have acceptance tests for it (if applicable)
+- Have acceptance tests for it (if applicable).
 - Compile the changes on top of the master.
 - Never do a merge commit (always rebase).
 
@@ -94,6 +94,16 @@ Also, PRs should:
 - Add notes (TODO, note, etc.) pointing where new features or bugs could be fixed.
 - Commit messages should contains tags based on the modules that it changes, e.g. [symex] improved __ESBMC_assert intrinsic
 - Commits pointing to the issue number
+
+### Merging Pull Requests
+
+To merge a PR, it must:
+1. Pass the CI
+1. Have the approval of at least two reviewers. Note that there is one main exception
+   here: If nobody replies to the PR in a 1 week frame then the PR can be self-reviewed
+   and merged
+1. If another reviewer has put a comment, then it must be addressed before merged.
+   Exceptions of this rule are in the Reviewing section
 
 ### Reviewing
 
@@ -112,15 +122,15 @@ Also, always check what is the **scope** of the PR. Avoid asking changes that go
 
 1. Does the code Follow the Standards defined in this document?
 1. Is the CI complaining? If so, is it because of the PR? If not, 
-   then this shouldn't block the merge (although it should be fixed asap)
-   . When this happens, one reviewer must manually compile and confirm 
+   then this shouldn't block the merge (although it should be fixed asap). 
+   When this happens, one reviewer must manually compile and confirm 
    that it is working.
 1. Check if the functionality is tested
 1. On WiP PRs, if the contributor asked for a review, ask for the author to put a to-do list
 
 ### Code Review
 
-1.Review each code line, paying extra attention to corner cases
+1. Review each code line, paying extra attention to corner cases
 1. If any changes are workarounds, see that it has an issue attached to it.
 1. The established way of doing things should be maintained. To change the established way, an issue must be created and the current PR shouldn't be put on hold.
 1. Check if the commit history is clean.
@@ -190,7 +200,7 @@ if(...) foo();
 Name the function based on what you expect it to do: `make_sandwich(vector<string> &igredients)`
 
 ### New functionalities should work as “passes” on the parsing tree, GOTO and SSA
-This means that if you want to use a new analysis on the frontend (tree), cfg (GOTO), or symex (SSA) you should wrap it in an LLVM-like pass (see loop_unroll.h) for an example. 
+This means that if you want to use a new analysis on the frontend (tree), cfg (GOTO), or symex (SSA) you should wrap it in an LLVM-like pass. See loop_unroll.h for an example. 
 
 ### Ensure that new functionalities works with `--no-simplify`
 The simplification algorithm cuts down expressions, this means that your code could construct an SMT formula that would create an invalid SMT formula if not for it. This is needed because if there is a bug in the simplifier module, it should be easy to fix
