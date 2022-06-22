@@ -165,6 +165,9 @@ void add_padding(struct_typet &type, const namespacet &ns)
         it != components.end();
         it++)
     {
+      if(it->type().get_bool("#bitfield"))
+        assert(!it->type().width().empty());
+
       if(
         it->type().get_bool("#bitfield") &&
         string2integer(it->type().width().as_string()) != 0)
