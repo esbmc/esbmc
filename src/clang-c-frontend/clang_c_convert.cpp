@@ -154,11 +154,22 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     struct_union_typet::componentt comp(id, name, t);
     if(fd.isBitField())
     {
-      exprt width;
-      if(get_expr(*fd.getBitWidth(), width))
+      /* According to the C standard, the bitfield width shall be an integer
+       * constant expression (C11 6.7.2.1/4), which the compiler can evaluate
+       * (C11 6.6/2) */
+      clang::Expr::EvalResult result;
+      if(!fd.getBitWidth()->EvaluateAsInt(result, *ASTContext))
+      {
+        msg.error("Clang could not calculate bitfield width");
+        std::ostringstream oss;
+        llvm::raw_os_ostream ross(oss);
+        fd.getBitWidth()->dump(ross, *ASTContext);
+        ross.flush();
+        msg.error(oss.str());
         return true;
+      }
 
-      comp.type().width(width.cformat());
+      comp.type().width(integer2string(result.Val.getInt().getSExtValue()));
       comp.type().set("#bitfield", true);
       comp.type().subtype() = t;
       comp.set_is_unnamed_bitfield(fd.isUnnamedBitfield());
