@@ -165,16 +165,19 @@ void add_padding(struct_typet &type, const namespacet &ns)
         it != components.end();
         it++)
     {
-      if(it->type().get_bool("#bitfield"))
-        assert(!it->type().width().empty());
+      bool is_bitfield = it->type().get_bool("#bitfield");
+      bool is_extint = it->type().get_bool("#extint");
+      irep_idt width = it->type().width();
 
-      if(
-        it->type().get_bool("#bitfield") &&
-        string2integer(it->type().width().as_string()) != 0)
+      /* Bitfields and _ExtInt need their width set. */
+      assert(!(is_bitfield || is_extint) || !width.empty());
+
+      size_t w = string2integer(width.as_string()).to_uint64();
+
+      if(is_bitfield && w != 0)
       {
         // count the bits
-        bit_field_bits +=
-          string2integer(it->type().width().as_string()).to_uint64();
+        bit_field_bits += w;
       }
       else if(bit_field_bits != 0)
       {
@@ -190,15 +193,13 @@ void add_padding(struct_typet &type, const namespacet &ns)
       }
 
       // Pad out extints that arent in bitfields
-      if(it->type().get_bool("#extint") && !it->type().get_bool("#bitfield"))
+      if(is_extint && !is_bitfield)
       {
         assert(bit_field_bits == 0);
 
         // Pad to nearest multiple of representation width
         const std::size_t repr_bytes = ext_int_representation_bytes(it->type());
         const std::size_t repr_bits = repr_bytes * config.ansi_c.char_width;
-        const std::size_t w =
-          string2integer(it->type().width().as_string()).to_uint64();
 
         const std::size_t unaligned_bits = w % repr_bits;
         const std::size_t pad = unaligned_bits ? repr_bits - unaligned_bits : 0;
