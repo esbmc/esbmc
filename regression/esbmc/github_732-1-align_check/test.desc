@@ -1,0 +1,5 @@
+CORE
+main.c
+
+dereference failure: .* alignment
+^VERIFICATION FAILED$
