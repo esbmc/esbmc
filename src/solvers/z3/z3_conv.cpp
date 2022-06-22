@@ -58,6 +58,12 @@ z3_convt::z3_convt(
   Z3_set_error_handler(z3_ctx, error_handler);
 }
 
+z3_convt::~z3_convt()
+{
+  // delete ASTs before destructing z3_ctx: this speeds up the latter, see #752
+  delete_all_asts();
+}
+
 void z3_convt::push_ctx()
 {
   smt_convt::push_ctx();

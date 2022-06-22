@@ -41,6 +41,7 @@ extern "C"
 #include <goto-programs/interval_analysis.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
+#include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_skip.h>
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/set_claims.h>
@@ -1681,6 +1682,19 @@ bool esbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("show-loops"))
     {
       show_loop_numbers(goto_functions, msg);
+      return true;
+    }
+
+    if(cmdline.isset("output-goto"))
+    {
+      msg.status("Writing GOTO program to file");
+      std::ofstream oss(
+        cmdline.getval("output-goto"), std::ios::out | std::ios::binary);
+      if(write_goto_binary(oss, context, goto_functions))
+      {
+        msg.error("fail to generate goto binary file");
+        abort();
+      };
       return true;
     }
 

@@ -29,6 +29,8 @@ public:
   void dump() const override;
 };
 
+/* Be sure to not make smt_convt a *virtual* base class: our dtor ~z3_convt()
+ * erases all smt_asts early. */
 class z3_convt : public smt_convt,
                  public tuple_iface,
                  public array_iface,
@@ -36,7 +38,7 @@ class z3_convt : public smt_convt,
 {
 public:
   z3_convt(const namespacet &ns, const optionst &options, const messaget &msg);
-  ~z3_convt() override = default;
+  ~z3_convt() override;
 
 public:
   void push_ctx() override;
