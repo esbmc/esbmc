@@ -182,9 +182,7 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   std::string typeString = type_name["typeString"].get<std::string>();
   // rule unsigned-integer-type
 
-  if(
-    typeString.substr(0, 4) == "uint" &&
-    uint_string_to_type_map.count(typeString))
+  if(uint_string_to_type_map.count(typeString))
   {
     return uint_string_to_type_map.at(typeString);
   }
