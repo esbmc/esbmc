@@ -7,7 +7,7 @@ $LLVM_DEST = "C:\deps\clang"
 Invoke-WebRequest $URL -OutFile $LLVM_ZIP
 Expand-Archive -LiteralPath $LLVM_ZIP -DestinationPath $LLVM_DEST
 
-$Z3 = "https://github.com/Z3Prover/z3/releases/download/z3-4.8.9/z3-4.8.9-x64-win.zip"
+$Z3 = "https://www.dropbox.com/s/w1722iclf8rr9o0/z3.zip?dl=1"
 $Z3_ZIP = "z3.zip"
 $Z3_DEST = "C:\deps"
 
