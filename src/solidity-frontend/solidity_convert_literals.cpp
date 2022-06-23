@@ -21,19 +21,12 @@ bool solidity_convertert::convert_integer_literal(
     type.is_unsignedbv() || type.is_signedbv()); // for "_x=100", false || true
 
   exprt the_val;
-  if(type.is_unsignedbv())
-  {
-    // extract the value: unsigned
-    BigInt z_ext_value = string2integer(the_value);
-    the_val = constant_exprt(
-      integer2binary(z_ext_value, bv_width(type)),
-      integer2string(z_ext_value),
-      type);
-  }
-  else
-  {
-    assert(!"Unimplemented - Got signed type. Add sigend bv conversion");
-  }
+  // extract the value: unsigned
+  BigInt z_ext_value = string2integer(the_value);
+  the_val = constant_exprt(
+    integer2binary(z_ext_value, bv_width(type)),
+    integer2string(z_ext_value),
+    type);
 
   dest.swap(the_val);
   return false;

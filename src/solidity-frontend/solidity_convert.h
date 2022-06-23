@@ -67,7 +67,10 @@ protected:
     const nlohmann::json &expr_common_type,
     exprt &new_expr);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
-  bool get_unary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
+  bool get_unary_operator_expr(
+    const nlohmann::json &expr,
+    const nlohmann::json &int_literal_type,
+    exprt &new_expr);
   bool get_cast_expr(const nlohmann::json &cast_expr, exprt &new_expr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
@@ -146,6 +149,9 @@ protected:
 
 private:
   bool get_elementary_type_name_uint(
+    SolidityGrammar::ElementaryTypeNameT &type,
+    typet &out);
+  bool get_elementary_type_name_int(
     SolidityGrammar::ElementaryTypeNameT &type,
     typet &out);
 };
