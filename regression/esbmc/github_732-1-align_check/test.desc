@@ -1,5 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 
-dereference failure: .* alignment
-^VERIFICATION FAILED$
+^VERIFICATION SUCCESSFUL$
