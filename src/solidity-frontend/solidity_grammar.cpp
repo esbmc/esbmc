@@ -43,6 +43,28 @@ const std::unordered_map<ElementaryTypeNameT, unsigned int> uint_size_map = {
   {UINT200, 200}, {UINT208, 208}, {UINT216, 216}, {UINT224, 224},
   {UINT232, 232}, {UINT240, 240}, {UINT248, 248}, {UINT256, 256},
 };
+const std::map<std::string, ElementaryTypeNameT> int_string_to_type_map = {
+  {"int8", INT8},     {"int16", INT16},   {"int24", INT24},
+  {"int32", INT32},   {"int40", INT40},   {"int48", INT48},
+  {"int56", INT56},   {"int64", INT64},   {"int72", INT72},
+  {"int80", INT80},   {"int88", INT88},   {"int96", INT96},
+  {"int104", INT104}, {"int112", INT112}, {"int120", INT120},
+  {"int128", INT128}, {"int136", INT136}, {"int144", INT144},
+  {"int152", INT152}, {"int160", INT160}, {"int168", INT168},
+  {"int176", INT176}, {"int184", INT184}, {"int192", INT192},
+  {"int200", INT200}, {"int208", INT208}, {"int216", INT216},
+  {"int224", INT224}, {"int232", INT232}, {"int240", INT240},
+  {"int248", INT248}, {"int256", INT256},
+};
+const std::map<ElementaryTypeNameT, unsigned int> int_size_map = {
+  {INT8, 8},     {INT16, 16},   {INT24, 24},   {INT32, 32},   {INT40, 40},
+  {INT48, 48},   {INT56, 56},   {INT64, 64},   {INT72, 72},   {INT80, 80},
+  {INT88, 88},   {INT96, 96},   {INT104, 104}, {INT112, 112}, {INT120, 120},
+  {INT128, 128}, {INT136, 136}, {INT144, 144}, {INT152, 152}, {INT160, 160},
+  {INT168, 168}, {INT176, 176}, {INT184, 184}, {INT192, 192}, {INT200, 200},
+  {INT208, 208}, {INT216, 216}, {INT224, 224}, {INT232, 232}, {INT240, 240},
+  {INT248, 248}, {INT256, 256},
+};
 // rule contract-body-element
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
 {
@@ -93,7 +115,9 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     // for AST node that contains ["typeName"]["typeDescriptions"]
     std::string typeString = type_name["typeString"].get<std::string>();
 
-    if(uint_string_to_type_map.count(typeString) || typeString == "bool")
+    if(
+      uint_string_to_type_map.count(typeString) ||
+      int_string_to_type_map.count(typeString) || typeString == "bool")
     {
       // For state var declaration,
       return ElementaryTypeName;
@@ -186,6 +210,10 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   {
     return uint_string_to_type_map.at(typeString);
   }
+  if(int_string_to_type_map.count(typeString))
+  {
+    return int_string_to_type_map.at(typeString);
+  }
   if(typeString == "bool")
   {
     return BOOL;
@@ -246,6 +274,38 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
     ENUM_TO_STR(UINT248)
     ENUM_TO_STR(UINT256)
     ENUM_TO_STR(INT_LITERAL)
+    ENUM_TO_STR(INT8)
+    ENUM_TO_STR(INT16)
+    ENUM_TO_STR(INT24)
+    ENUM_TO_STR(INT32)
+    ENUM_TO_STR(INT40)
+    ENUM_TO_STR(INT48)
+    ENUM_TO_STR(INT56)
+    ENUM_TO_STR(INT64)
+    ENUM_TO_STR(INT72)
+    ENUM_TO_STR(INT80)
+    ENUM_TO_STR(INT88)
+    ENUM_TO_STR(INT96)
+    ENUM_TO_STR(INT104)
+    ENUM_TO_STR(INT112)
+    ENUM_TO_STR(INT120)
+    ENUM_TO_STR(INT128)
+    ENUM_TO_STR(INT136)
+    ENUM_TO_STR(INT144)
+    ENUM_TO_STR(INT152)
+    ENUM_TO_STR(INT160)
+    ENUM_TO_STR(INT168)
+    ENUM_TO_STR(INT176)
+    ENUM_TO_STR(INT184)
+    ENUM_TO_STR(INT192)
+    ENUM_TO_STR(INT200)
+    ENUM_TO_STR(INT208)
+    ENUM_TO_STR(INT216)
+    ENUM_TO_STR(INT224)
+    ENUM_TO_STR(INT232)
+    ENUM_TO_STR(INT240)
+    ENUM_TO_STR(INT248)
+    ENUM_TO_STR(INT256)
     ENUM_TO_STR(BOOL)
     ENUM_TO_STR(ElementaryTypeNameTError)
   default:
@@ -259,6 +319,11 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
 unsigned int uint_type_name_to_size(ElementaryTypeNameT type)
 {
   return uint_size_map.at(type);
+}
+
+unsigned int int_type_name_to_size(ElementaryTypeNameT type)
+{
+  return int_size_map.at(type);
 }
 
 // rule parameter-list
@@ -426,7 +491,35 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   return ExpressionTError;
 }
 
-ExpressionT get_expr_operator_t(const nlohmann::json &expr, bool uo_pre)
+ExpressionT get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre)
+{
+  if(expr["operator"] == "--")
+  {
+    if(uo_pre)
+      return UO_PreDec;
+
+    assert(!"Unsupported - UO_PostDec");
+  }
+  if(expr["operator"] == "++")
+  {
+    if(uo_pre)
+      return UO_PreInc;
+
+    assert(!"Unsupported - UO_PostDec");
+  }
+  if(expr["operator"] == "-")
+  {
+    return UO_Minus;
+  }
+  assert(!((fmt::format(
+              "Got expression operator={}. Unsupported expression operator",
+              expr["operator"].get<std::string>()))
+             .c_str()));
+
+  return ExpressionTError; // make some old compilers happy
+}
+
+ExpressionT get_expr_operator_t(const nlohmann::json &expr)
 {
   if(expr["operator"] == "=")
   {
@@ -460,27 +553,9 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr, bool uo_pre)
   {
     return BO_Rem;
   }
-  else if(expr["operator"] == "--")
+  else if(expr["operator"] == "&&")
   {
-    if(uo_pre)
-    {
-      return UO_PreDec;
-    }
-    else
-    {
-      assert(!"Unsupported - UO_PostDec");
-    }
-  }
-  else if(expr["operator"] == "++")
-  {
-    if(uo_pre)
-    {
-      return UO_PreInc;
-    }
-    else
-    {
-      assert(!"Unsupported - UO_PostDec");
-    }
+    return BO_LAnd;
   }
   else if(expr["operator"] == "&&")
   {
@@ -514,6 +589,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(UnaryOperatorClass)
     ENUM_TO_STR(UO_PreDec)
     ENUM_TO_STR(UO_PreInc)
+    ENUM_TO_STR(UO_Minus)
     ENUM_TO_STR(DeclRefExprClass)
     ENUM_TO_STR(Literal)
     ENUM_TO_STR(CallExprClass)

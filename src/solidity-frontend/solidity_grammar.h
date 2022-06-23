@@ -83,6 +83,39 @@ enum ElementaryTypeNameT
   UINT256,
 
   INT_LITERAL,
+  // rule signed-integer-type
+  INT8,
+  INT16,
+  INT24,
+  INT32,
+  INT40,
+  INT48,
+  INT56,
+  INT64,
+  INT72,
+  INT80,
+  INT88,
+  INT96,
+  INT104,
+  INT112,
+  INT120,
+  INT128,
+  INT136,
+  INT144,
+  INT152,
+  INT160,
+  INT168,
+  INT176,
+  INT184,
+  INT192,
+  INT200,
+  INT208,
+  INT216,
+  INT224,
+  INT232,
+  INT240,
+  INT248,
+  INT256,
 
   // rule bool
   BOOL,
@@ -101,6 +134,9 @@ enum ElementaryTypeNameT
 ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name);
 const char *elementary_type_name_to_str(ElementaryTypeNameT type);
 unsigned int uint_type_name_to_size(ElementaryTypeNameT);
+
+unsigned int uint_type_name_to_size(ElementaryTypeNameT);
+unsigned int int_type_name_to_size(ElementaryTypeNameT);
 
 // rule parameter-list
 enum ParameterListT
@@ -160,6 +196,7 @@ enum ExpressionT
   UnaryOperatorClass,
   UO_PreDec,
   UO_PreInc,
+  UO_Minus,
 
   // rule identifier
   DeclRefExprClass,
@@ -182,7 +219,9 @@ enum ExpressionT
   ExpressionTError
 };
 ExpressionT get_expression_t(const nlohmann::json &expr);
-ExpressionT get_expr_operator_t(const nlohmann::json &expr, bool uo_pre = true);
+ExpressionT get_expr_operator_t(const nlohmann::json &expr);
+ExpressionT
+get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre = true);
 const char *expression_to_str(ExpressionT type);
 
 // rule variable-declaration-statement
