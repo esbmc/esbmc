@@ -273,9 +273,17 @@ bool solidity_convertert::get_var_decl(
       is_state_var ? ast_node["value"] : ast_node["initialValue"];
 
     nlohmann::json int_literal_type = nullptr;
-    if(
-      SolidityGrammar::get_expression_t(init_value) ==
-      SolidityGrammar::ExpressionT::Literal)
+
+    auto expr_type = SolidityGrammar::get_expression_t(init_value);
+    bool expr_is_literal = expr_type == SolidityGrammar::Literal;
+    bool expr_is_un_op = expr_type == SolidityGrammar::UnaryOperatorClass;
+
+    auto subexpr = init_value["subExpression"];
+    bool subexpr_is_literal = subexpr == nullptr
+                                ? false
+                                : SolidityGrammar::get_expression_t(subexpr) ==
+                                    SolidityGrammar::Literal;
+    if(expr_is_literal || (expr_is_un_op && subexpr_is_literal))
       int_literal_type = ast_node["typeDescriptions"];
 
     exprt val;
@@ -467,7 +475,7 @@ bool solidity_convertert::get_block(
   get_start_location_from_stmt(block, location);
 
   SolidityGrammar::BlockT type = SolidityGrammar::get_block_t(block);
-  msg.debug(fmt::format(
+  msg.status(fmt::format(
     "	@@@ got Block: SolidityGrammar::BlockT::{}",
     SolidityGrammar::block_to_str(type)));
 
@@ -492,7 +500,7 @@ bool solidity_convertert::get_block(
       _block.operands().push_back(statement);
       ++ctr;
     }
-    msg.debug(fmt::format(" \t@@@ CompoundStmt has {} statements", ctr));
+    msg.status(fmt::format(" \t@@@ CompoundStmt has {} statements", ctr));
 
     locationt location_end;
     get_final_location_from_stmt(block, location_end);
@@ -569,7 +577,7 @@ bool solidity_convertert::get_statement(
       decls.operands().push_back(single_decl);
       ++ctr;
     }
-    msg.debug(fmt::format(" \t@@@ DeclStmt group has {} decls", ctr));
+    msg.status(fmt::format(" \t@@@ DeclStmt group has {} decls", ctr));
 
     new_expr = decls;
     break;
@@ -752,7 +760,7 @@ bool solidity_convertert::get_expr(
   get_start_location_from_stmt(expr, location);
 
   SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
-  msg.debug(fmt::format(
+  msg.status(fmt::format(
     "	@@@ got Expr: SolidityGrammar::ExpressionT::{}",
     SolidityGrammar::expression_to_str(type)));
 
@@ -767,7 +775,7 @@ bool solidity_convertert::get_expr(
   }
   case SolidityGrammar::ExpressionT::UnaryOperatorClass:
   {
-    if(get_unary_operator_expr(expr, new_expr))
+    if(get_unary_operator_expr(expr, int_literal_type, new_expr))
       return true;
     break;
   }
@@ -819,6 +827,9 @@ bool solidity_convertert::get_expr(
     const nlohmann::json &literal = expr["typeDescriptions"];
     SolidityGrammar::ElementaryTypeNameT type_name =
       SolidityGrammar::get_elementary_type_name_t(literal);
+    msg.status(fmt::format(
+      "	@@@ got Literal: SolidityGrammar::ElementaryTypeNameT::{}",
+      SolidityGrammar::elementary_type_name_to_str(type_name)));
 
     switch(type_name)
     {
@@ -876,7 +887,7 @@ bool solidity_convertert::get_expr(
       call.arguments().push_back(single_arg);
       ++num_args;
     }
-    msg.debug(fmt::format("  @@ num_args={}", num_args));
+    msg.status(fmt::format("  @@ num_args={}", num_args));
 
     // 4. Convert call arguments
     new_expr = call;
@@ -967,7 +978,7 @@ bool solidity_convertert::get_binary_operator_expr(
   // 3. Convert opcode
   SolidityGrammar::ExpressionT opcode =
     SolidityGrammar::get_expr_operator_t(expr);
-  msg.debug(fmt::format(
+  msg.status(fmt::format(
     "	@@@ got binop.getOpcode: SolidityGrammar::{}",
     SolidityGrammar::expression_to_str(opcode)));
   switch(opcode)
@@ -1040,26 +1051,28 @@ bool solidity_convertert::get_binary_operator_expr(
 
 bool solidity_convertert::get_unary_operator_expr(
   const nlohmann::json &expr,
+  const nlohmann::json &int_literal_type,
   exprt &new_expr)
 {
-  // 1. get type
+  // TODO: Fix me! Currently just support prefix == true,e.g. pre-increment
+  assert(expr["prefix"]);
+
+  // 1. get UnaryOperation opcode
+  SolidityGrammar::ExpressionT opcode =
+    SolidityGrammar::get_unary_expr_operator_t(expr, expr["prefix"]);
+  msg.status(fmt::format(
+    "	@@@ got uniop.getOpcode: SolidityGrammar::{}",
+    SolidityGrammar::expression_to_str(opcode)));
+
+  // 2. get type
   typet uniop_type;
-  assert(
-    expr
-      ["prefix"]); // TODO: Fix me! Currently just support prefix == true,e.g. pre-increment
   if(get_type_description(expr["typeDescriptions"], uniop_type))
     return true;
 
-  // 2. get subexpr
+  // 3. get subexpr
   exprt unary_sub;
-  if(get_expr(expr["subExpression"], unary_sub))
+  if(get_expr(expr["subExpression"], int_literal_type, unary_sub))
     return true;
-  // 3. get UnaryOperation opcode
-  SolidityGrammar::ExpressionT opcode =
-    SolidityGrammar::get_expr_operator_t(expr, expr["prefix"]);
-  msg.debug(fmt::format(
-    "	@@@ got uniop.getOpcode: SolidityGrammar::{}",
-    SolidityGrammar::expression_to_str(opcode)));
 
   switch(opcode)
   {
@@ -1071,6 +1084,11 @@ bool solidity_convertert::get_unary_operator_expr(
   case SolidityGrammar::ExpressionT::UO_PreInc:
   {
     new_expr = side_effect_exprt("preincrement", uniop_type);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::UO_Minus:
+  {
+    new_expr = exprt("unary-", uniop_type);
     break;
   }
   default:
@@ -1357,7 +1375,7 @@ bool solidity_convertert::get_type_description(
   }
   default:
   {
-    msg.debug(fmt::format(
+    msg.status(fmt::format(
       "	@@@ got type name=SolidityGrammar::TypeNameT::{}",
       SolidityGrammar::type_name_to_str(type)));
     assert(!"Unimplemented type in rule type-name");
@@ -1463,6 +1481,23 @@ bool solidity_convertert::get_elementary_type_name_uint(
   return false;
 }
 
+/**
+ * @brief Populate the out `typet` parameter with the int type specified by type parameter
+ * 
+ * @param type The type of the int to be poulated 
+ * @param out The variable that holds the resulting type
+ * @return false iff population was successful
+ */
+bool solidity_convertert::get_elementary_type_name_int(
+  SolidityGrammar::ElementaryTypeNameT &type,
+  typet &out)
+{
+  const unsigned int int_size = SolidityGrammar::int_type_name_to_size(type);
+  out = signedbv_typet(int_size);
+
+  return false;
+}
+
 bool solidity_convertert::get_elementary_type_name(
   const nlohmann::json &type_name,
   typet &new_type)
@@ -1513,6 +1548,47 @@ bool solidity_convertert::get_elementary_type_name(
       return true;
     break;
   }
+  case SolidityGrammar::ElementaryTypeNameT::INT8:
+  case SolidityGrammar::ElementaryTypeNameT::INT16:
+  case SolidityGrammar::ElementaryTypeNameT::INT24:
+  case SolidityGrammar::ElementaryTypeNameT::INT32:
+  case SolidityGrammar::ElementaryTypeNameT::INT40:
+  case SolidityGrammar::ElementaryTypeNameT::INT48:
+  case SolidityGrammar::ElementaryTypeNameT::INT56:
+  case SolidityGrammar::ElementaryTypeNameT::INT64:
+  case SolidityGrammar::ElementaryTypeNameT::INT72:
+  case SolidityGrammar::ElementaryTypeNameT::INT80:
+  case SolidityGrammar::ElementaryTypeNameT::INT88:
+  case SolidityGrammar::ElementaryTypeNameT::INT96:
+  case SolidityGrammar::ElementaryTypeNameT::INT104:
+  case SolidityGrammar::ElementaryTypeNameT::INT112:
+  case SolidityGrammar::ElementaryTypeNameT::INT120:
+  case SolidityGrammar::ElementaryTypeNameT::INT128:
+  case SolidityGrammar::ElementaryTypeNameT::INT136:
+  case SolidityGrammar::ElementaryTypeNameT::INT144:
+  case SolidityGrammar::ElementaryTypeNameT::INT152:
+  case SolidityGrammar::ElementaryTypeNameT::INT160:
+  case SolidityGrammar::ElementaryTypeNameT::INT168:
+  case SolidityGrammar::ElementaryTypeNameT::INT176:
+  case SolidityGrammar::ElementaryTypeNameT::INT184:
+  case SolidityGrammar::ElementaryTypeNameT::INT192:
+  case SolidityGrammar::ElementaryTypeNameT::INT200:
+  case SolidityGrammar::ElementaryTypeNameT::INT208:
+  case SolidityGrammar::ElementaryTypeNameT::INT216:
+  case SolidityGrammar::ElementaryTypeNameT::INT224:
+  case SolidityGrammar::ElementaryTypeNameT::INT232:
+  case SolidityGrammar::ElementaryTypeNameT::INT240:
+  case SolidityGrammar::ElementaryTypeNameT::INT248:
+  case SolidityGrammar::ElementaryTypeNameT::INT256:
+  {
+    if(get_elementary_type_name_int(type, new_type))
+      return true;
+    break;
+  }
+  case SolidityGrammar::ElementaryTypeNameT::INT_LITERAL:
+  {
+    break;
+  }
   case SolidityGrammar::ElementaryTypeNameT::BOOL:
   {
     new_type = bool_type();
@@ -1522,7 +1598,7 @@ bool solidity_convertert::get_elementary_type_name(
   }
   default:
   {
-    msg.debug(fmt::format(
+    msg.status(fmt::format(
       "	@@@ Got elementary-type-name={}",
       SolidityGrammar::elementary_type_name_to_str(type)));
     assert(!"Unimplemented type in rule elementary-type-name");
