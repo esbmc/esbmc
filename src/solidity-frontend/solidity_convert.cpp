@@ -475,7 +475,7 @@ bool solidity_convertert::get_block(
   get_start_location_from_stmt(block, location);
 
   SolidityGrammar::BlockT type = SolidityGrammar::get_block_t(block);
-  msg.status(fmt::format(
+  msg.debug(fmt::format(
     "	@@@ got Block: SolidityGrammar::BlockT::{}",
     SolidityGrammar::block_to_str(type)));
 
@@ -827,7 +827,7 @@ bool solidity_convertert::get_expr(
     const nlohmann::json &literal = expr["typeDescriptions"];
     SolidityGrammar::ElementaryTypeNameT type_name =
       SolidityGrammar::get_elementary_type_name_t(literal);
-    msg.status(fmt::format(
+    msg.debug(fmt::format(
       "	@@@ got Literal: SolidityGrammar::ElementaryTypeNameT::{}",
       SolidityGrammar::elementary_type_name_to_str(type_name)));
 
@@ -1060,7 +1060,7 @@ bool solidity_convertert::get_unary_operator_expr(
   // 1. get UnaryOperation opcode
   SolidityGrammar::ExpressionT opcode =
     SolidityGrammar::get_unary_expr_operator_t(expr, expr["prefix"]);
-  msg.status(fmt::format(
+  msg.debug(fmt::format(
     "	@@@ got uniop.getOpcode: SolidityGrammar::{}",
     SolidityGrammar::expression_to_str(opcode)));
 
@@ -1375,7 +1375,7 @@ bool solidity_convertert::get_type_description(
   }
   default:
   {
-    msg.status(fmt::format(
+    msg.debug(fmt::format(
       "	@@@ got type name=SolidityGrammar::TypeNameT::{}",
       SolidityGrammar::type_name_to_str(type)));
     assert(!"Unimplemented type in rule type-name");
@@ -1598,7 +1598,7 @@ bool solidity_convertert::get_elementary_type_name(
   }
   default:
   {
-    msg.status(fmt::format(
+    msg.debug(fmt::format(
       "	@@@ Got elementary-type-name={}",
       SolidityGrammar::elementary_type_name_to_str(type)));
     assert(!"Unimplemented type in rule elementary-type-name");
