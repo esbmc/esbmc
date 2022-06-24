@@ -180,9 +180,7 @@ void goto_symext::dereference(expr2tc &expr, dereferencet::modet mode)
   cur_state->top().level1.rename(expr);
 
   guardt guard;
-  switch(mode)
-  {
-  case dereferencet::FREE:
+  if(is_free(mode))
   {
     expr2tc tmp = expr;
     while(is_typecast2t(tmp))
@@ -195,10 +193,7 @@ void goto_symext::dereference(expr2tc &expr, dereferencet::modet mode)
 
     dereference.dereference_expr(tmp, guard, dereferencet::FREE);
     expr = tmp;
-    break;
   }
-
-  default:
+  else
     dereference.dereference_expr(expr, guard, mode);
-  }
 }
