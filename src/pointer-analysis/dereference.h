@@ -332,6 +332,11 @@ private:
    *  returned to indicate that there was no dereference at the end of the
    *  index/member chain.
    *
+   *  A dereference at the end of the chain may be performed with
+   *  `mode.unaligned` set even if `mode` as passed to this function does not
+   *  have it. This happens in case `expr` refers to a member of a packed
+   *  structure.
+   *
    *  @param expr The expression that we're resolving dereferences in.
    *  @param guard Guard of this expression being evaluated.
    *  @param mode The manner in which the result of this deref is accessed.
@@ -446,7 +451,8 @@ private:
     const expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard);
+    const guardt &guard,
+    modet mode);
   void check_alignment(
     unsigned long minwidth,
     const expr2tc &&offset,

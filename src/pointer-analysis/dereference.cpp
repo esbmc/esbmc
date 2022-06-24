@@ -355,6 +355,25 @@ void dereferencet::dereference_addrof_expr(
   dereference_expr(expr, guard, mode);
 }
 
+static bool is_aligned_member(const expr2tc &expr)
+{
+  if(!is_member2t(expr))
+    return false;
+
+  const expr2tc &structure = to_member2t(expr).source_value;
+  auto *ty = static_cast<const struct_union_data *>(structure->type.get());
+
+  /* non-packed structures have all members aligned */
+  if(!ty->packed)
+    return true;
+
+  /* Very (too?) conservative approach: all members of packed structures are to
+   * be accessed in a known-unaligned way. Note, that's not true for GCC/Clang:
+   * if they can prove some member is always aligned, they'll use the faster
+   * instructions on aligned pointers. */
+  return false;
+}
+
 expr2tc dereferencet::dereference_expr_nonscalar(
   expr2tc &expr,
   guardt &guard,
@@ -398,8 +417,22 @@ expr2tc dereferencet::dereference_expr_nonscalar(
   }
 
   if(is_member2t(expr))
-    return dereference_expr_nonscalar(
-      to_member2t(expr).source_value, guard, mode, base);
+  {
+    member2t &member = to_member2t(expr);
+    expr2tc &structure = member.source_value;
+    if(
+      !options.get_bool_option("no-align-check") && !mode.unaligned &&
+      !is_aligned_member(expr))
+    {
+      auto *t = static_cast<const struct_union_data *>(structure->type.get());
+      msg.warning(fmt::format(
+        "WARNING: not checking alignment for access to packed {} {}",
+        get_type_id(*structure->type),
+        t->name.as_string()));
+      mode.unaligned = true;
+    }
+    return dereference_expr_nonscalar(structure, guard, mode, base);
+  }
 
   if(is_index2t(expr))
   {
@@ -722,7 +755,7 @@ expr2tc dereferencet::build_reference_to(
   }
   else
   {
-    check_data_obj_access(value, final_offset, type, tmp_guard);
+    check_data_obj_access(value, final_offset, type, tmp_guard, mode);
   }
 
   simplify(final_offset);
@@ -2179,7 +2212,8 @@ void dereferencet::check_data_obj_access(
   const expr2tc &value,
   const expr2tc &src_offset,
   const type2tc &type,
-  const guardt &guard)
+  const guardt &guard,
+  modet mode)
 {
   assert(!is_array_type(value));
 
@@ -2205,8 +2239,10 @@ void dereferencet::check_data_obj_access(
       "pointer dereference", "Access to object out of bounds", tmp_guard);
   }
 
-  // Also, if if it's a scalar, check that the access being made is aligned.
-  if(is_scalar_type(type))
+  /* Also, if if it's a scalar and the access is not performed in an unaligned
+   * manner (e.g. for __attribute__((packed)) structures),
+   * check that the access being made is aligned. */
+  if(is_scalar_type(type) && !mode.unaligned)
     check_alignment(access_sz, std::move(offset), guard);
 }
 
