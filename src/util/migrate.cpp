@@ -148,10 +148,7 @@ type2tc migrate_type(const typet &type)
     if(name.as_string() == "")
       name = type.get("name"); // C++
 
-    irep_idt ispacked = type.get("packed");
-    bool packed = false;
-    if(ispacked.as_string() == "true")
-      packed = true;
+    bool packed = type.get_bool("packed");
 
     struct_type2t *s =
       new struct_type2t(members, names, pretty_names, name, packed);
@@ -1881,7 +1878,7 @@ typet migrate_type_back(const type2tc &ref)
     thetype.components() = comps;
     thetype.set("tag", irep_idt(ref2.name));
     if(ref2.packed)
-      thetype.set("packed", irep_idt("true"));
+      thetype.set("packed", true);
     return std::move(thetype);
   }
   case type2t::union_id:
