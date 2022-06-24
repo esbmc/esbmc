@@ -272,8 +272,14 @@ bool solidity_convertert::get_var_decl(
     nlohmann::json init_value =
       is_state_var ? ast_node["value"] : ast_node["initialValue"];
 
+    nlohmann::json int_literal_type = nullptr;
+    if(
+      SolidityGrammar::get_expression_t(init_value) ==
+      SolidityGrammar::ExpressionT::Literal)
+      int_literal_type = ast_node["typeDescriptions"];
+
     exprt val;
-    if(get_expr(init_value, val))
+    if(get_expr(init_value, int_literal_type, val))
       return true;
 
     solidity_gen_typecast(ns, val, t);
@@ -710,7 +716,35 @@ bool solidity_convertert::get_statement(
   return false;
 }
 
+/**
+ * @brief Populate the out parameter with the expression based on 
+ * the solidity expression grammar
+ * 
+ * @param expr The expression ast is to be converted to the IR
+ * @param new_expr Out parameter to hold the conversion
+ * @return true iff the conversion has failed
+ * @return false iff the conversion was successful
+ */
 bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
+{
+  return get_expr(expr, nullptr, new_expr);
+}
+
+/**
+ * @brief Populate the out parameter with the expression based on 
+ * the solidity expression grammar
+ * 
+ * @param expr The expression that is to be converted to the IR
+ * @param int_literal_type Type information ast to create the the literal 
+ * type in the IR (only needed for when the expression is a literal)
+ * @param new_expr Out parameter to hold the conversion
+ * @return true iff the conversion has failed
+ * @return false iff the conversion was successful
+ */
+bool solidity_convertert::get_expr(
+  const nlohmann::json &expr,
+  const nlohmann::json &int_literal_type,
+  exprt &new_expr)
 {
   // For rule expression
   // We need to do location settings to match clang C's number of times to set the locations when recurring
@@ -788,9 +822,10 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 
     switch(type_name)
     {
-    case SolidityGrammar::ElementaryTypeNameT::UINT8:
+    case SolidityGrammar::ElementaryTypeNameT::INT_LITERAL:
     {
-      if(convert_integer_literal(literal, the_value, new_expr))
+      assert(int_literal_type != nullptr);
+      if(convert_integer_literal(int_literal_type, the_value, new_expr))
         return true;
       break;
     }
@@ -864,13 +899,14 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
     // wrap it in an ImplicitCastExpr to perform conversion of ArrayToPointerDecay
     nlohmann::json implicit_cast_expr =
       make_implicit_cast_expr(expr["baseExpression"], "ArrayToPointerDecay");
+
     exprt array;
     if(get_expr(implicit_cast_expr, array))
       return true;
 
     // 3. get the position index
     exprt pos;
-    if(get_expr(expr["indexExpression"], pos))
+    if(get_expr(expr["indexExpression"], expr["typeDescriptions"], pos))
       return true;
 
     new_expr = index_exprt(array, pos, t);
@@ -900,18 +936,22 @@ bool solidity_convertert::get_binary_operator_expr(
   exprt lhs, rhs;
   if(expr.contains("leftHandSide"))
   {
+    nlohmann::json literalType = expr["leftHandSide"]["typeDescriptions"];
+
     if(get_expr(expr["leftHandSide"], lhs))
       return true;
 
-    if(get_expr(expr["rightHandSide"], rhs))
+    if(get_expr(expr["rightHandSide"], literalType, rhs))
       return true;
   }
   else if(expr.contains("leftExpression"))
   {
-    if(get_expr(expr["leftExpression"], lhs))
+    nlohmann::json commonType = expr["commonType"];
+
+    if(get_expr(expr["leftExpression"], commonType, lhs))
       return true;
 
-    if(get_expr(expr["rightExpression"], rhs))
+    if(get_expr(expr["rightExpression"], commonType, rhs))
       return true;
   }
   else
@@ -976,6 +1016,11 @@ bool solidity_convertert::get_binary_operator_expr(
   case SolidityGrammar::ExpressionT::BO_Rem:
   {
     new_expr = exprt("mod", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_LAnd:
+  {
+    new_expr = exprt("and", t);
     break;
   }
   default:
@@ -1400,6 +1445,24 @@ bool solidity_convertert::get_array_to_pointer_type(
   return false;
 }
 
+/**
+ * @brief Populate the out `typet` parameter with the uint type specified by type parameter
+ * 
+ * @param type The type of the uint to be poulated 
+ * @param out The variable that holds the resulting type
+ * @return true iff population failed
+ * @return false iff population was successful
+ */
+bool solidity_convertert::get_elementary_type_name_uint(
+  SolidityGrammar::ElementaryTypeNameT &type,
+  typet &out)
+{
+  const unsigned int uint_size = SolidityGrammar::uint_type_name_to_size(type);
+  out = unsignedbv_typet(uint_size);
+
+  return false;
+}
+
 bool solidity_convertert::get_elementary_type_name(
   const nlohmann::json &type_name,
   typet &new_type)
@@ -1414,10 +1477,40 @@ bool solidity_convertert::get_elementary_type_name(
   {
   // rule unsigned-integer-type
   case SolidityGrammar::ElementaryTypeNameT::UINT8:
+  case SolidityGrammar::ElementaryTypeNameT::UINT16:
+  case SolidityGrammar::ElementaryTypeNameT::UINT24:
+  case SolidityGrammar::ElementaryTypeNameT::UINT32:
+  case SolidityGrammar::ElementaryTypeNameT::UINT40:
+  case SolidityGrammar::ElementaryTypeNameT::UINT48:
+  case SolidityGrammar::ElementaryTypeNameT::UINT56:
+  case SolidityGrammar::ElementaryTypeNameT::UINT64:
+  case SolidityGrammar::ElementaryTypeNameT::UINT72:
+  case SolidityGrammar::ElementaryTypeNameT::UINT80:
+  case SolidityGrammar::ElementaryTypeNameT::UINT88:
+  case SolidityGrammar::ElementaryTypeNameT::UINT96:
+  case SolidityGrammar::ElementaryTypeNameT::UINT104:
+  case SolidityGrammar::ElementaryTypeNameT::UINT112:
+  case SolidityGrammar::ElementaryTypeNameT::UINT120:
+  case SolidityGrammar::ElementaryTypeNameT::UINT128:
+  case SolidityGrammar::ElementaryTypeNameT::UINT136:
+  case SolidityGrammar::ElementaryTypeNameT::UINT144:
+  case SolidityGrammar::ElementaryTypeNameT::UINT152:
+  case SolidityGrammar::ElementaryTypeNameT::UINT160:
+  case SolidityGrammar::ElementaryTypeNameT::UINT168:
+  case SolidityGrammar::ElementaryTypeNameT::UINT176:
+  case SolidityGrammar::ElementaryTypeNameT::UINT184:
+  case SolidityGrammar::ElementaryTypeNameT::UINT192:
+  case SolidityGrammar::ElementaryTypeNameT::UINT200:
+  case SolidityGrammar::ElementaryTypeNameT::UINT208:
+  case SolidityGrammar::ElementaryTypeNameT::UINT216:
+  case SolidityGrammar::ElementaryTypeNameT::UINT224:
+  case SolidityGrammar::ElementaryTypeNameT::UINT232:
+  case SolidityGrammar::ElementaryTypeNameT::UINT240:
+  case SolidityGrammar::ElementaryTypeNameT::UINT248:
+  case SolidityGrammar::ElementaryTypeNameT::UINT256:
   {
-    new_type = unsigned_char_type();
-    c_type = "unsigned_char";
-    new_type.set("#cpp_type", c_type);
+    if(get_elementary_type_name_uint(type, new_type))
+      return true;
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::BOOL:

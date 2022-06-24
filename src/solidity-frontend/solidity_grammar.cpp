@@ -8,6 +8,7 @@ Author: Kunjian Song, kunjian.song@postgrad.manchester.ac.uk
 
 #include <solidity-frontend/solidity_grammar.h>
 #include <fmt/core.h>
+#include <set>
 
 #define ENUM_TO_STR(s)                                                         \
   case s:                                                                      \
@@ -17,6 +18,31 @@ Author: Kunjian Song, kunjian.song@postgrad.manchester.ac.uk
 
 namespace SolidityGrammar
 {
+const std::unordered_map<std::string, ElementaryTypeNameT>
+  uint_string_to_type_map = {
+    {"uint8", UINT8},     {"uint16", UINT16},   {"uint24", UINT24},
+    {"uint32", UINT32},   {"uint40", UINT40},   {"uint48", UINT48},
+    {"uint56", UINT56},   {"uint64", UINT64},   {"uint72", UINT72},
+    {"uint80", UINT80},   {"uint88", UINT88},   {"uint96", UINT96},
+    {"uint104", UINT104}, {"uint112", UINT112}, {"uint120", UINT120},
+    {"uint128", UINT128}, {"uint136", UINT136}, {"uint144", UINT144},
+    {"uint152", UINT152}, {"uint160", UINT160}, {"uint168", UINT168},
+    {"uint176", UINT176}, {"uint184", UINT184}, {"uint192", UINT192},
+    {"uint200", UINT200}, {"uint208", UINT208}, {"uint216", UINT216},
+    {"uint224", UINT224}, {"uint232", UINT232}, {"uint240", UINT240},
+    {"uint248", UINT248}, {"uint256", UINT256},
+};
+
+const std::unordered_map<ElementaryTypeNameT, unsigned int> uint_size_map = {
+  {UINT8, 8},     {UINT16, 16},   {UINT24, 24},   {UINT32, 32},
+  {UINT40, 40},   {UINT48, 48},   {UINT56, 56},   {UINT64, 64},
+  {UINT72, 72},   {UINT80, 80},   {UINT88, 88},   {UINT96, 96},
+  {UINT104, 104}, {UINT112, 112}, {UINT120, 120}, {UINT128, 128},
+  {UINT136, 136}, {UINT144, 144}, {UINT152, 152}, {UINT160, 160},
+  {UINT168, 168}, {UINT176, 176}, {UINT184, 184}, {UINT192, 192},
+  {UINT200, 200}, {UINT208, 208}, {UINT216, 216}, {UINT224, 224},
+  {UINT232, 232}, {UINT240, 240}, {UINT248, 248}, {UINT256, 256},
+};
 // rule contract-body-element
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
 {
@@ -65,21 +91,19 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
   if(type_name.contains("typeString"))
   {
     // for AST node that contains ["typeName"]["typeDescriptions"]
-    if(type_name["typeString"] == "uint8" || type_name["typeString"] == "bool")
+    std::string typeString = type_name["typeString"].get<std::string>();
+
+    if(uint_string_to_type_map.count(typeString) || typeString == "bool")
     {
       // For state var declaration,
       return ElementaryTypeName;
     }
-    else if(
-      type_name["typeString"].get<std::string>().find("int_const") !=
-      std::string::npos)
+    else if(typeString.find("int_const") != std::string::npos)
     {
       // For Literal, their typeString is like "int_const 100".
       return ElementaryTypeName;
     }
-    else if(
-      type_name["typeString"].get<std::string>().find("function") !=
-      std::string::npos)
+    else if(typeString.find("function") != std::string::npos)
     {
       // FunctionToPointer decay in CallExpr when making a function call
       return Pointer;
@@ -155,31 +179,33 @@ const char *type_name_to_str(TypeNameT type)
 // rule elementary-type-name
 ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
 {
+  std::string typeString = type_name["typeString"].get<std::string>();
   // rule unsigned-integer-type
-  if(type_name["typeString"] == "uint8")
+
+  if(uint_string_to_type_map.count(typeString))
   {
-    return UINT8;
+    return uint_string_to_type_map.at(typeString);
   }
-  else if(type_name["typeString"] == "bool")
+  if(typeString == "bool")
   {
     return BOOL;
   }
-  else if(
-    type_name["typeString"].get<std::string>().find("int_const") !=
-    std::string::npos)
+  if(typeString.find("int_const") != std::string::npos)
   {
-    // For Literal, their typeString is like "int_const 100".
-    // TODO: Fix me! For simplicity, we assume everything is unsigned int.
-    return UINT8;
+    /**
+     * For Literal, their typeString is like "int_const 100".
+     * There is no additional type info (bitsize, signed/unsigned),
+     * This means it will require additional type info from the parent
+     * expr to create an internal type.
+     */
+    return INT_LITERAL;
   }
-  else
-  {
-    assert(!((fmt::format(
-                "Got elementary-type-name typeString={}. Unsupported "
-                "elementary-type-name type",
-                type_name["typeString"].get<std::string>()))
-               .c_str()));
-  }
+
+  assert(!((fmt::format(
+              "Got elementary-type-name typeString={}. Unsupported "
+              "elementary-type-name type",
+              type_name["typeString"].get<std::string>()))
+             .c_str()));
   return ElementaryTypeNameTError;
 }
 
@@ -188,6 +214,38 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
   switch(type)
   {
     ENUM_TO_STR(UINT8)
+    ENUM_TO_STR(UINT16)
+    ENUM_TO_STR(UINT24)
+    ENUM_TO_STR(UINT32)
+    ENUM_TO_STR(UINT40)
+    ENUM_TO_STR(UINT48)
+    ENUM_TO_STR(UINT56)
+    ENUM_TO_STR(UINT64)
+    ENUM_TO_STR(UINT72)
+    ENUM_TO_STR(UINT80)
+    ENUM_TO_STR(UINT88)
+    ENUM_TO_STR(UINT96)
+    ENUM_TO_STR(UINT104)
+    ENUM_TO_STR(UINT112)
+    ENUM_TO_STR(UINT120)
+    ENUM_TO_STR(UINT128)
+    ENUM_TO_STR(UINT136)
+    ENUM_TO_STR(UINT144)
+    ENUM_TO_STR(UINT152)
+    ENUM_TO_STR(UINT160)
+    ENUM_TO_STR(UINT168)
+    ENUM_TO_STR(UINT176)
+    ENUM_TO_STR(UINT184)
+    ENUM_TO_STR(UINT192)
+    ENUM_TO_STR(UINT200)
+    ENUM_TO_STR(UINT208)
+    ENUM_TO_STR(UINT216)
+    ENUM_TO_STR(UINT224)
+    ENUM_TO_STR(UINT232)
+    ENUM_TO_STR(UINT240)
+    ENUM_TO_STR(UINT248)
+    ENUM_TO_STR(UINT256)
+    ENUM_TO_STR(INT_LITERAL)
     ENUM_TO_STR(BOOL)
     ENUM_TO_STR(ElementaryTypeNameTError)
   default:
@@ -196,6 +254,11 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
     return "UNKNOWN";
   }
   }
+}
+
+unsigned int uint_type_name_to_size(ElementaryTypeNameT type)
+{
+  return uint_size_map.at(type);
 }
 
 // rule parameter-list
@@ -419,6 +482,10 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr, bool uo_pre)
       assert(!"Unsupported - UO_PostDec");
     }
   }
+  else if(expr["operator"] == "&&")
+  {
+    return BO_LAnd;
+  }
   else
   {
     assert(!((fmt::format(
@@ -443,6 +510,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(BO_NE)
     ENUM_TO_STR(BO_EQ)
     ENUM_TO_STR(BO_Rem)
+    ENUM_TO_STR(BO_LAnd)
     ENUM_TO_STR(UnaryOperatorClass)
     ENUM_TO_STR(UO_PreDec)
     ENUM_TO_STR(UO_PreInc)

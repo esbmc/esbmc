@@ -24,7 +24,7 @@ bool solidity_convertert::convert_integer_literal(
   if(type.is_unsignedbv())
   {
     // extract the value: unsigned
-    unsigned z_ext_value = std::stoul(the_value, nullptr);
+    BigInt z_ext_value = string2integer(the_value);
     the_val = constant_exprt(
       integer2binary(z_ext_value, bv_width(type)),
       integer2string(z_ext_value),

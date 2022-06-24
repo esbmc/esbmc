@@ -62,6 +62,10 @@ protected:
       new_expr); // For Solidity's mutually inclusive: rule block and rule statement
   bool get_statement(const nlohmann::json &block, exprt &new_expr);
   bool get_expr(const nlohmann::json &expr, exprt &new_expr);
+  bool get_expr(
+    const nlohmann::json &expr,
+    const nlohmann::json &expr_common_type,
+    exprt &new_expr);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_unary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_cast_expr(const nlohmann::json &cast_expr, exprt &new_expr);
@@ -139,6 +143,11 @@ protected:
     const nlohmann::json &bool_literal,
     std::string the_value,
     exprt &dest);
+
+private:
+  bool get_elementary_type_name_uint(
+    SolidityGrammar::ElementaryTypeNameT &type,
+    typet &out);
 };
 
 #endif /* SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_ */

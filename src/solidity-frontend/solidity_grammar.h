@@ -49,7 +49,40 @@ const char *type_name_to_str(TypeNameT type);
 enum ElementaryTypeNameT
 {
   // rule unsigned-integer-type
-  UINT8 = 0,
+  UINT8,
+  UINT16,
+  UINT24,
+  UINT32,
+  UINT40,
+  UINT48,
+  UINT56,
+  UINT64,
+  UINT72,
+  UINT80,
+  UINT88,
+  UINT96,
+  UINT104,
+  UINT112,
+  UINT120,
+  UINT128,
+  UINT136,
+  UINT144,
+  UINT152,
+  UINT160,
+  UINT168,
+  UINT176,
+  UINT184,
+  UINT192,
+  UINT200,
+  UINT208,
+  UINT216,
+  UINT224,
+  UINT232,
+  UINT240,
+  UINT248,
+  UINT256,
+
+  INT_LITERAL,
 
   // rule bool
   BOOL,
@@ -67,6 +100,7 @@ enum ElementaryTypeNameT
 };
 ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name);
 const char *elementary_type_name_to_str(ElementaryTypeNameT type);
+unsigned int uint_type_name_to_size(ElementaryTypeNameT);
 
 // rule parameter-list
 enum ParameterListT
@@ -120,6 +154,7 @@ enum ExpressionT
   BO_NE,     // !=
   BO_EQ,     // ==
   BO_Rem,    // %
+  BO_LAnd,   // &&
 
   // UnaryOperator
   UnaryOperatorClass,
