@@ -516,7 +516,7 @@ ExpressionT get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre)
               expr["operator"].get<std::string>()))
              .c_str()));
 
-  return ExpressionTError; // make some old compilers happy
+  return ExpressionTError;
 }
 
 ExpressionT get_expr_operator_t(const nlohmann::json &expr)
@@ -552,10 +552,6 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr)
   else if(expr["operator"] == "%")
   {
     return BO_Rem;
-  }
-  else if(expr["operator"] == "&&")
-  {
-    return BO_LAnd;
   }
   else if(expr["operator"] == "&&")
   {
