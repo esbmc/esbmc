@@ -199,13 +199,53 @@ public:
   virtual ~dereferencet() = default;
 
   /** The different ways in which a pointer may be accessed. */
-  typedef enum
+  struct modet
   {
-    READ,     /// The result of the expression is only read.
-    WRITE,    /// The result of the expression will be written to.
-    FREE,     /// The referred to object will be freed.
-    INTERNAL, /// Calling code only wants the internal value-set data.
-  } modet;
+    enum : unsigned
+    {
+      READ,     /// The result of the expression is only read.
+      WRITE,    /// The result of the expression will be written to.
+      FREE,     /// The referred to object will be freed.
+      INTERNAL, /// Calling code only wants the internal value-set data.
+    } op : 2;
+
+    /**
+     * Whether the access is performed in a non-standard, known-unaligned way
+     * as for, e.g., structures annotated with `__attribute__((packed))`.
+     */
+    unsigned unaligned : 1;
+
+    /* Intentionally provide no comparison operators in order to avoid counter-
+     * intuitive results when comparing, e.g., an unaligned mode with one of
+     * the (!unaligned) dereferencet::(READ|WRITE|FREE|INTERNAL) constants.
+     *
+     * For that the below predicates exist. */
+
+    friend bool is_read(const modet &m)
+    {
+      return m.op == READ;
+    }
+
+    friend bool is_write(const modet &m)
+    {
+      return m.op == WRITE;
+    }
+
+    friend bool is_free(const modet &m)
+    {
+      return m.op == FREE;
+    }
+
+    friend bool is_internal(const modet &m)
+    {
+      return m.op == INTERNAL;
+    }
+  };
+
+  static const constexpr modet READ = {modet::READ, false};
+  static const constexpr modet WRITE = {modet::WRITE, false};
+  static const constexpr modet FREE = {modet::FREE, false};
+  static const constexpr modet INTERNAL = {modet::INTERNAL, false};
 
   /** Take an expression and dereference it.
    *  This will descend through the whole of the expression given, and

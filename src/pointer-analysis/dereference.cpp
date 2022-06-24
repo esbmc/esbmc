@@ -32,6 +32,14 @@ Author: Daniel Kroening, kroening@kroening.com
 // global data, horrible
 unsigned int dereferencet::invalid_counter = 0;
 
+/* Remove these definitions when we switch to require >= C++17 */
+#if __cplusplus < 201703L
+const dereferencet::modet dereferencet::READ;
+const dereferencet::modet dereferencet::WRITE;
+const dereferencet::modet dereferencet::FREE;
+const dereferencet::modet dereferencet::INTERNAL;
+#endif
+
 static inline const array_type2t get_arr_type(const expr2tc &expr)
 {
   return (is_array_type(expr))
@@ -407,7 +415,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
      * expressions should have a single initializer expression, see also the
      * comment for constant_union2t in <irep2/itep2_expr.h>. */
     assert(u.datatype_members.size() == 1);
-    assert(mode != WRITE);
+    assert(!is_write(mode));
     return dereference_expr_nonscalar(
       u.datatype_members.front(), guard, mode, base);
   }
@@ -495,7 +503,7 @@ expr2tc dereferencet::dereference(
       value = if2tc(type, pointer_guard, new_value, value);
   }
 
-  if(mode == INTERNAL)
+  if(is_internal(mode))
   {
     // Deposit internal values with the caller, then clear.
     dereference_callback.dump_internal_state(internal_items);
@@ -613,7 +621,7 @@ expr2tc dereferencet::build_reference_to(
   const expr2tc &root_object = o.get_root_object();
   const expr2tc &object = o.object;
 
-  if(is_null_object2t(root_object) && mode != FREE && mode != INTERNAL)
+  if(is_null_object2t(root_object) && !is_free(mode) && !is_internal(mode))
   {
     type2tc nullptrtype = type2tc(new pointer_type2t(type));
     symbol2tc null_ptr(nullptrtype, "NULL");
@@ -629,7 +637,7 @@ expr2tc dereferencet::build_reference_to(
     // solver will only get confused.
     return value;
   }
-  if(is_null_object2t(root_object) && (mode == FREE || mode == INTERNAL))
+  if(is_null_object2t(root_object) && (is_free(mode) || is_internal(mode)))
   {
     // Freeing NULL is completely legit according to C
     return value;
@@ -649,7 +657,7 @@ expr2tc dereferencet::build_reference_to(
   valid_check(object, tmp_guard, mode);
 
   // Don't do anything further if we're freeing things
-  if(mode == FREE)
+  if(is_free(mode))
     return expr2tc();
 
   // Value set tracking emits objects with some cruft built on top of them.
@@ -691,7 +699,7 @@ expr2tc dereferencet::build_reference_to(
   // If we're in internal mode, collect all of our data into one struct, insert
   // it into the list of internal data, and then bail. The caller does not want
   // to have a reference built at all.
-  if(mode == INTERNAL)
+  if(is_internal(mode))
   {
     dereference_callbackt::internal_item internal;
     internal.object = value;
@@ -734,7 +742,7 @@ void dereferencet::deref_invalid_ptr(
   const guardt &guard,
   modet mode)
 {
-  if(mode == INTERNAL)
+  if(is_internal(mode))
     // The caller just wants a list of references -- ensuring that the correct
     // assertions fire is a problem for something or someone else
     return;
@@ -746,7 +754,7 @@ void dereferencet::deref_invalid_ptr(
   std::string foo;
 
   // Adjust error message and test depending on the context
-  if(mode == FREE)
+  if(is_free(mode))
   {
     // You're allowed to free NULL.
     symbol2tc null_ptr(type2tc(new pointer_type2t(get_empty_type())), "NULL");
@@ -1177,14 +1185,14 @@ void dereferencet::construct_from_const_struct_offset(
       // middle. Which might be an error -- reading from it definitely is,
       // but we might write to it in the course of memset.
       value = expr2tc();
-      if(mode == WRITE)
+      if(is_write(mode))
       {
         // This write goes to an invalid symbol, but no assertion is encoded,
         // so it's entirely safe.
       }
       else
       {
-        assert(mode == READ);
+        assert(is_read(mode));
         // Oh dear. Encode a failure assertion.
         dereference_failure(
           "pointer dereference",
@@ -1985,7 +1993,7 @@ void dereferencet::valid_check(
   {
     // always valid, but can't write
 
-    if(mode == WRITE)
+    if(is_write(mode))
     {
       dereference_failure(
         "pointer dereference", "write access to string constant", guard);
@@ -2004,7 +2012,7 @@ void dereferencet::valid_check(
          to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
     {
       // This is an invalid object; if we're in read or write mode, that's an error.
-      if(mode == READ || mode == WRITE)
+      if(is_read(mode) || is_write(mode))
         dereference_failure("pointer dereference", "invalid pointer", guard);
       return;
     }
@@ -2020,14 +2028,14 @@ void dereferencet::valid_check(
       guardt tmp_guard(guard);
       tmp_guard.add(not_valid_expr);
 
-      std::string foo = (mode == FREE) ? "invalidated dynamic object freed"
-                                       : "invalidated dynamic object";
+      std::string foo = is_free(mode) ? "invalidated dynamic object freed"
+                                      : "invalidated dynamic object";
       dereference_failure("pointer dereference", foo, tmp_guard);
     }
     else
     {
       // Not dynamic; if we're in free mode, that's an error.
-      if(mode == FREE)
+      if(is_free(mode))
       {
         dereference_failure(
           "pointer dereference", "free() of non-dynamic memory", guard);
@@ -2146,7 +2154,7 @@ bool dereferencet::check_code_access(
     return false;
   }
 
-  if(mode != READ)
+  if(!is_read(mode))
   {
     dereference_failure(
       "Code separation", "Program code accessed in write or free mode", guard);
