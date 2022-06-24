@@ -57,8 +57,10 @@ if(ENABLE_Z3)
     # Install dll for Windows
     if(WIN32)
         find_file(Z3_DLL libz3.dll HINTS ${Z3_DIR} $ENV{HOME}/z3 PATH_SUFFIXES lib bin)
-        message(STATUS "Windows will install ${Z3_DLL}")
-        install(FILES ${Z3_DLL} DESTINATION bin)
+        if(NOT Z3_DLL STREQUAL "Z3_DLL-NOTFOUND")
+            message(STATUS "Windows will install ${Z3_DLL}")
+            install(FILES ${Z3_DLL} DESTINATION bin)
+        endif()
     endif()
     
     set(ESBMC_ENABLE_z3 1 PARENT_SCOPE)
