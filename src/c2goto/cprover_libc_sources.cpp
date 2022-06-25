@@ -84,7 +84,7 @@ public:
 
 const std::string *internal_libc_header_dir()
 {
-  return config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE
+  return configt::get_instance()->ansi_c.lib == configt::ansi_ct::libt::LIB_NONE
            ? nullptr
            : &internal_libc.header_dir();
 }

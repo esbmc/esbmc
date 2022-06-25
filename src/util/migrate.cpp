@@ -82,7 +82,8 @@ type2tc migrate_type(const typet &type)
   if(type.id() == "c_enum" || type.id() == "incomplete_c_enum")
   {
     // 6.7.2.2.3 of C99 says enumeration values shall have "int" types.
-    signedbv_type2t *s = new signedbv_type2t(config.ansi_c.int_width);
+    signedbv_type2t *s =
+      new signedbv_type2t(configt::get_instance()->ansi_c.int_width);
     return type2tc(s);
   }
 
@@ -1386,7 +1387,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     type = migrate_type(expr.type());
 
     uint64_t thewidth = type->get_width();
-    type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
+    type2tc inttype(
+      new unsignedbv_type2t(configt::get_instance()->ansi_c.int_width));
     new_expr_ref = expr2tc(new constant_int2t(inttype, BigInt(thewidth)));
   }
   else if(expr.id() == "same-object")

@@ -43,7 +43,7 @@ void convert_float_literal(const std::string &src, exprt &dest)
     dest.type().set("#cpp_type", "double");
   }
 
-  if(config.ansi_c.use_fixed_for_float)
+  if(configt::get_instance()->ansi_c.use_fixed_for_float)
   {
     unsigned width = atoi(dest.type().width().c_str());
     unsigned fraction_bits;

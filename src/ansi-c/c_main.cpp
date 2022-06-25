@@ -63,7 +63,9 @@ bool c_main(
   irep_idt main_symbol;
 
   // find main symbol
-  std::string themain = config.main.empty() ? standard_main : config.main;
+  std::string themain = configt::get_instance()->main.empty()
+                          ? standard_main
+                          : configt::get_instance()->main;
 
   std::list<irep_idt> matches;
 

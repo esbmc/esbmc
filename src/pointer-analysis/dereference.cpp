@@ -1257,7 +1257,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   // if we are accessing the struct using a byte, we can ignore alignment
   // rules, so convert the struct to bv and dispatch it to
   // construct_from_dyn_offset
-  if(type->get_width() == config.ansi_c.char_width)
+  if(type->get_width() == configt::get_instance()->ansi_c.char_width)
   {
     value = bitcast2tc(get_uint_type(value->type->get_width()), value);
     return construct_from_dyn_offset(value, offset, type);
@@ -1312,7 +1312,7 @@ void dereferencet::construct_from_dyn_struct_offset(
     }
     else if(
       access_sz > it->get_width() &&
-      type->get_width() != config.ansi_c.char_width)
+      type->get_width() != configt::get_instance()->ansi_c.char_width)
     {
       guardt newguard(guard);
       newguard.add(field_guard);
@@ -1322,7 +1322,7 @@ void dereferencet::construct_from_dyn_struct_offset(
       // resolve to a failed deref symbol.
     }
     else if(
-      alignment >= config.ansi_c.word_size &&
+      alignment >= configt::get_instance()->ansi_c.word_size &&
       it->get_width() == type->get_width())
     {
       // This is fully aligned, just pull it out and possibly cast,
@@ -1358,7 +1358,9 @@ void dereferencet::construct_from_dyn_offset(
   expr2tc orig_value = value;
 
   // Else, in the case of a scalar access at the bottom,
-  assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
+  assert(
+    configt::get_instance()->ansi_c.endianess !=
+    configt::ansi_ct::NO_ENDIANESS);
   assert(is_scalar_type(value));
 
   // If source and dest types match, then this access either is a direct hit
@@ -1810,8 +1812,8 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
     subtype = get_uint8_type(); //XXX signedness of chars
   }
 
-  bool is_big_endian =
-    config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+  bool is_big_endian = configt::get_instance()->ansi_c.endianess ==
+                       configt::ansi_ct::IS_BIG_ENDIAN;
 
   // Calculating how many bytes are occupied by each array index
   unsigned int bytes_per_index = subtype->get_width() / 8;

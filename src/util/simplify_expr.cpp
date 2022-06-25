@@ -2552,7 +2552,7 @@ bool simplify_exprt::sort_and_join(exprt &expr)
 bool simplify_exprt::simplify_unary_minus(exprt &expr)
 {
   if(
-    config.options.get_bool_option("int-encoding") &&
+    configt::get_instance()->options.get_bool_option("int-encoding") &&
     !expr.type().is_fixedbv() && !expr.type().is_floatbv() &&
     !expr.type().is_signedbv())
     // Never simplify a unary minus if we're using integer encoding. The SMT

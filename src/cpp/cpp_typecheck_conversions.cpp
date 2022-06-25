@@ -138,13 +138,13 @@ bool cpp_typecheckt::standard_conversion_integral_promotion(
   qual_from.read(expr.type());
 
   typet int_type("signedbv");
-  int_type.width(config.ansi_c.int_width);
+  int_type.width(configt::get_instance()->ansi_c.int_width);
   qual_from.write(int_type);
 
   if(expr.type().id() == "signedbv")
   {
     unsigned width = to_signedbv_type(expr.type()).get_width();
-    if(width >= config.ansi_c.int_width)
+    if(width >= configt::get_instance()->ansi_c.int_width)
       return false;
     new_expr = expr;
     new_expr.make_typecast(int_type);
@@ -154,10 +154,10 @@ bool cpp_typecheckt::standard_conversion_integral_promotion(
   if(expr.type().id() == "unsignedbv")
   {
     unsigned width = to_unsignedbv_type(expr.type()).get_width();
-    if(width >= config.ansi_c.int_width)
+    if(width >= configt::get_instance()->ansi_c.int_width)
       return false;
     new_expr = expr;
-    if(width == config.ansi_c.int_width)
+    if(width == configt::get_instance()->ansi_c.int_width)
       int_type.id("unsignedbv");
     new_expr.make_typecast(int_type);
     return true;
@@ -187,7 +187,7 @@ bool cpp_typecheckt::standard_conversion_floating_point_promotion(
 
   unsigned width = bv_width(expr.type());
 
-  if(width != config.ansi_c.single_width)
+  if(width != configt::get_instance()->ansi_c.single_width)
     return false;
 
   c_qualifierst qual_from;

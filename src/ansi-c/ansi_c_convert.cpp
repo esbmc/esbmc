@@ -356,7 +356,7 @@ void ansi_c_convertt::convert_type(typet &type, c_storage_spect &c_storage_spec)
   else if(type.id() == "c_enum" || type.id() == "incomplete_c_enum")
   {
     // add width
-    type.width(config.ansi_c.int_width);
+    type.width(configt::get_instance()->ansi_c.int_width);
   }
   else if(type.id() == "void")
   {

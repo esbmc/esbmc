@@ -96,19 +96,19 @@ std::string expr2ct::convert_rec(
     bool is_signed = src.id() == "signedbv";
     std::string sign_str = is_signed ? "signed " : "unsigned ";
 
-    if(width == config.ansi_c.int_width)
+    if(width == configt::get_instance()->ansi_c.int_width)
       return q + sign_str + "int" + d;
 
-    if(width == config.ansi_c.long_int_width)
+    if(width == configt::get_instance()->ansi_c.long_int_width)
       return q + sign_str + "long int" + d;
 
-    if(width == config.ansi_c.char_width)
+    if(width == configt::get_instance()->ansi_c.char_width)
       return q + sign_str + "char" + d;
 
-    if(width == config.ansi_c.short_int_width)
+    if(width == configt::get_instance()->ansi_c.short_int_width)
       return q + sign_str + "short int" + d;
 
-    if(width == config.ansi_c.long_long_int_width)
+    if(width == configt::get_instance()->ansi_c.long_long_int_width)
       return q + sign_str + "long long int" + d;
 
     return q + sign_str + "_ExtInt(" + std::to_string(width.to_uint64()) + ")" +
@@ -118,11 +118,11 @@ std::string expr2ct::convert_rec(
   {
     BigInt width = string2integer(src.width().as_string());
 
-    if(width == config.ansi_c.single_width)
+    if(width == configt::get_instance()->ansi_c.single_width)
       return q + "float" + d;
-    if(width == config.ansi_c.double_width)
+    if(width == configt::get_instance()->ansi_c.double_width)
       return q + "double" + d;
-    else if(width == config.ansi_c.long_double_width)
+    else if(width == configt::get_instance()->ansi_c.long_double_width)
       return q + "long double" + d;
   }
   else if(src.id() == "struct")

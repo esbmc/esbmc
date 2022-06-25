@@ -162,7 +162,7 @@ unsigned int array_type2t::get_width() const
 
 unsigned int pointer_type2t::get_width() const
 {
-  return config.ansi_c.pointer_width;
+  return configt::get_instance()->ansi_c.pointer_width;
 }
 
 unsigned int empty_type2t::get_width() const

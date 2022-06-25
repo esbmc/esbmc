@@ -202,7 +202,8 @@ inline expr2tc gen_false_expr()
 
 inline expr2tc gen_ulong(unsigned long val)
 {
-  constant_int2tc v(get_uint_type(config.ansi_c.word_size), BigInt(val));
+  constant_int2tc v(
+    get_uint_type(configt::get_instance()->ansi_c.word_size), BigInt(val));
   return v;
 }
 

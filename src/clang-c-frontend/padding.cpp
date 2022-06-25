@@ -27,7 +27,8 @@ static std::size_t ext_int_representation_bytes(const typet &type)
   const std::size_t bits = string2integer(type.width().as_string()).to_uint64();
 
   std::size_t result;
-  for(result = 1; bits > result * config.ansi_c.char_width; result *= 2)
+  for(result = 1; bits > result * configt::get_instance()->ansi_c.char_width;
+      result *= 2)
     ;
 
   return result;
@@ -176,10 +177,11 @@ void add_padding(struct_typet &type, const namespacet &ns)
       else if(bit_field_bits != 0)
       {
         // not on a byte-boundary?
-        if((bit_field_bits % config.ansi_c.char_width) != 0)
+        if((bit_field_bits % configt::get_instance()->ansi_c.char_width) != 0)
         {
-          const std::size_t pad = config.ansi_c.char_width -
-                                  bit_field_bits % config.ansi_c.char_width;
+          const std::size_t pad =
+            configt::get_instance()->ansi_c.char_width -
+            bit_field_bits % configt::get_instance()->ansi_c.char_width;
           it = pad_bit_field(components, it, pad);
         }
 
@@ -193,7 +195,8 @@ void add_padding(struct_typet &type, const namespacet &ns)
 
         // Pad to nearest multiple of representation width
         const std::size_t repr_bytes = ext_int_representation_bytes(it->type());
-        const std::size_t repr_bits = repr_bytes * config.ansi_c.char_width;
+        const std::size_t repr_bits =
+          repr_bytes * configt::get_instance()->ansi_c.char_width;
         const std::size_t w =
           string2integer(it->type().width().as_string()).to_uint64();
 
@@ -204,10 +207,11 @@ void add_padding(struct_typet &type, const namespacet &ns)
     }
 
     // Add padding at the end?
-    if((bit_field_bits % config.ansi_c.char_width) != 0)
+    if((bit_field_bits % configt::get_instance()->ansi_c.char_width) != 0)
     {
       const std::size_t pad =
-        config.ansi_c.char_width - bit_field_bits % config.ansi_c.char_width;
+        configt::get_instance()->ansi_c.char_width -
+        bit_field_bits % configt::get_instance()->ansi_c.char_width;
       pad_bit_field(components, components.end(), pad);
     }
   }
@@ -244,8 +248,9 @@ void add_padding(struct_typet &type, const namespacet &ns)
 
         std::size_t w = string2integer(it_type.width().as_string()).to_uint64();
         bit_field_bits += w;
-        const std::size_t bytes = bit_field_bits / config.ansi_c.char_width;
-        bit_field_bits %= config.ansi_c.char_width;
+        const std::size_t bytes =
+          bit_field_bits / configt::get_instance()->ansi_c.char_width;
+        bit_field_bits %= configt::get_instance()->ansi_c.char_width;
         offset += bytes;
         continue;
       }
@@ -275,7 +280,7 @@ void add_padding(struct_typet &type, const namespacet &ns)
       {
         const BigInt pad_bytes = a - displacement;
         const std::size_t pad_bits =
-          (pad_bytes * config.ansi_c.char_width).to_uint64();
+          (pad_bytes * configt::get_instance()->ansi_c.char_width).to_uint64();
         it = pad(components, it, pad_bits);
         offset += pad_bytes;
       }
@@ -296,8 +301,9 @@ void add_padding(struct_typet &type, const namespacet &ns)
         w += string2integer(pad_field->type().width().as_string()).to_uint64();
       }
 
-      assert(w % (a.to_uint64() * config.ansi_c.char_width) == 0);
-      offset += w / config.ansi_c.char_width;
+      assert(
+        w % (a.to_uint64() * configt::get_instance()->ansi_c.char_width) == 0);
+      offset += w / configt::get_instance()->ansi_c.char_width;
       continue;
     }
 
@@ -326,7 +332,8 @@ void add_padding(struct_typet &type, const namespacet &ns)
     if(displacement != 0)
     {
       BigInt pad_bytes = max_alignment - displacement;
-      std::size_t pad_bits = (pad_bytes * config.ansi_c.char_width).to_uint64();
+      std::size_t pad_bits =
+        (pad_bytes * configt::get_instance()->ansi_c.char_width).to_uint64();
       pad(components, components.end(), pad_bits);
     }
   }
@@ -334,7 +341,8 @@ void add_padding(struct_typet &type, const namespacet &ns)
 
 void add_padding(union_typet &type, const namespacet &ns)
 {
-  BigInt max_alignment_bits = alignment(type, ns) * config.ansi_c.char_width;
+  BigInt max_alignment_bits =
+    alignment(type, ns) * configt::get_instance()->ansi_c.char_width;
   BigInt size_bits = 0;
 
   // check per component, and ignore those without fixed size
@@ -348,7 +356,7 @@ void add_padding(union_typet &type, const namespacet &ns)
   if(type.get_bool("packed"))
   {
     // The size needs to be a multiple of 1 char only.
-    max_alignment_bits = config.ansi_c.char_width;
+    max_alignment_bits = configt::get_instance()->ansi_c.char_width;
   }
 
   // The size must be a multiple of the alignment, or

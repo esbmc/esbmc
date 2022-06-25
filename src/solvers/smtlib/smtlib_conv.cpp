@@ -127,10 +127,10 @@ smtlib_convt::smtlib_convt(
     (options.get_bool_option("int-encoding")) ? "QF_AUFLIRA" : "QF_AUFBV";
 
   // We may be being instructed to just output to a file.
-  cmd = config.options.get_option("output");
+  cmd = configt::get_instance()->options.get_option("output");
   if(cmd != "")
   {
-    if(config.options.get_option("smtlib-solver-prog") != "")
+    if(configt::get_instance()->options.get_option("smtlib-solver-prog") != "")
     {
       msg.error("Can't solve SMTLIB output and write to a file, sorry");
       abort();
@@ -160,7 +160,7 @@ smtlib_convt::smtlib_convt(
 
   int inpipe[2], outpipe[2];
 
-  cmd = config.options.get_option("smtlib-solver-prog");
+  cmd = configt::get_instance()->options.get_option("smtlib-solver-prog");
   if(cmd == "")
   {
     msg.error("Must specify an smtlib solver program in smtlib mode");

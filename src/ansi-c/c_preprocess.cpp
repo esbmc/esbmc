@@ -308,14 +308,15 @@ int configure_and_run_cpp(
 {
   int ret;
 
-  if(config.ansi_c.word_size == 16)
+  if(configt::get_instance()->ansi_c.word_size == 16)
     setup_cpp_defs(cpp_defines_16);
-  else if(config.ansi_c.word_size == 32)
+  else if(configt::get_instance()->ansi_c.word_size == 32)
     setup_cpp_defs(cpp_defines_32);
-  else if(config.ansi_c.word_size == 64)
+  else if(configt::get_instance()->ansi_c.word_size == 64)
     setup_cpp_defs(cpp_defines_64);
   else
-    std::cerr << "Bad word size " << config.ansi_c.word_size << std::endl;
+    std::cerr << "Bad word size " << configt::get_instance()->ansi_c.word_size
+              << std::endl;
 
   setup_cpp_defs(cpp_normal_defs);
   setup_cpp_defs(platform_defs);
@@ -324,14 +325,14 @@ int configure_and_run_cpp(
   if(is_cpp)
     setup_cpp_defs(cpp_cpp_defs);
 
-  if(config.options.get_bool_option("deadlock-check"))
+  if(configt::get_instance()->options.get_bool_option("deadlock-check"))
   {
     record_define("pthread_mutex_lock=pthread_mutex_lock_check");
     record_define("pthread_mutex_unlock=pthread_mutex_unlock_check");
     record_define("pthread_cond_wait=pthread_cond_wait_check");
     record_define("pthread_join=pthread_join_switch");
   }
-  else if(config.options.get_bool_option("lock-order-check"))
+  else if(configt::get_instance()->options.get_bool_option("lock-order-check"))
   {
     record_define("pthread_join=pthread_join_noswitch");
     record_define("pthread_mutex_lock=pthread_mutex_lock_nocheck");
@@ -346,10 +347,10 @@ int configure_and_run_cpp(
     record_define("pthread_cond_wait=pthread_cond_wait_nocheck");
   }
 
-  for(auto const &it : config.ansi_c.defines)
+  for(auto const &it : configt::get_instance()->ansi_c.defines)
     record_define(it.c_str());
 
-  for(auto const &it : config.ansi_c.include_paths)
+  for(auto const &it : configt::get_instance()->ansi_c.include_paths)
     record_include(it.c_str());
 
   record_include("/usr/include");

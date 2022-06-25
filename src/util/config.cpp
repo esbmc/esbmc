@@ -8,10 +8,20 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <algorithm>
 #include <regex>
+#include <thread>
 
 #include <util/config.h>
 
-configt config;
+configt *configt::config = nullptr;
+std::mutex configt::instance_mutex;
+
+configt *configt::get_instance()
+{
+  std::lock_guard<std::mutex> lock(instance_mutex);
+  if(config == nullptr)
+    config = new configt();
+  return config;
+}
 
 void configt::ansi_ct::set_data_model(enum data_model dm)
 {

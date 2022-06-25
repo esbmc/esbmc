@@ -337,7 +337,8 @@ expr2tc constant_string2t::to_array() const
   // Null terminator is implied.
   contents.push_back(expr2tc(new constant_int2t(type, BigInt(0))));
 
-  unsignedbv_type2t *len_type = new unsignedbv_type2t(config.ansi_c.int_width);
+  unsignedbv_type2t *len_type =
+    new unsignedbv_type2t(configt::get_instance()->ansi_c.int_width);
   type2tc len_tp(len_type);
   constant_int2t *len_val = new constant_int2t(len_tp, BigInt(contents.size()));
   expr2tc len_val_ref(len_val);
@@ -395,7 +396,9 @@ void with2t::assert_consistency() const
   {
     assert(is_bv_type(update_field->type));
     assert(is_bv_type(update_value->type));
-    assert(update_value->type->get_width() == config.ansi_c.char_width);
+    assert(
+      update_value->type->get_width() ==
+      configt::get_instance()->ansi_c.char_width);
   }
   else
   {

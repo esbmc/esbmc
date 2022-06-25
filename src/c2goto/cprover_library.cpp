@@ -129,7 +129,7 @@ void add_cprover_library(
   const messaget &message_handler,
   const languaget *c_language)
 {
-  if(config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
+  if(configt::get_instance()->ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
     return;
 
   contextt new_ctx(message_handler), store_ctx(message_handler);
@@ -138,7 +138,7 @@ void add_cprover_library(
   std::list<irep_idt> to_include;
   const buffer *clib;
 
-  switch(config.ansi_c.word_size)
+  switch(configt::get_instance()->ansi_c.word_size)
   {
   case 16:
     message_handler.warning(
@@ -149,13 +149,14 @@ void add_cprover_library(
   case 64:
     break;
   default:
-    message_handler.error(
-      fmt::format("No C library for bitwidth {}", config.ansi_c.word_size));
+    message_handler.error(fmt::format(
+      "No C library for bitwidth {}",
+      configt::get_instance()->ansi_c.word_size));
     abort();
   }
 
-  clib =
-    &clibs[!config.ansi_c.use_fixed_for_float][config.ansi_c.word_size == 64];
+  clib = &clibs[!configt::get_instance()->ansi_c.use_fixed_for_float]
+               [configt::get_instance()->ansi_c.word_size == 64];
 
   if(clib->size == 0)
   {

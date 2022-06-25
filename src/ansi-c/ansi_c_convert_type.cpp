@@ -191,7 +191,9 @@ void ansi_c_convert_typet::write(typet &type)
     else
     {
       if(char_cnt)
-        type.id(config.ansi_c.char_is_unsigned ? "unsignedbv" : "signedbv");
+        type.id(
+          configt::get_instance()->ansi_c.char_is_unsigned ? "unsignedbv"
+                                                           : "signedbv");
       else
         type.id("signedbv");
     }
@@ -229,7 +231,7 @@ void ansi_c_convert_typet::write(typet &type)
         throw 0;
       }
 
-      width = config.ansi_c.short_int_width;
+      width = configt::get_instance()->ansi_c.short_int_width;
     }
     else if(char_cnt)
     {
@@ -240,19 +242,19 @@ void ansi_c_convert_typet::write(typet &type)
         throw 0;
       }
 
-      width = config.ansi_c.char_width;
+      width = configt::get_instance()->ansi_c.char_width;
     }
     else if(long_cnt == 0)
     {
-      width = config.ansi_c.int_width;
+      width = configt::get_instance()->ansi_c.int_width;
     }
     else if(long_cnt == 1)
     {
-      width = config.ansi_c.long_int_width;
+      width = configt::get_instance()->ansi_c.long_int_width;
     }
     else if(long_cnt == 2)
     {
-      width = config.ansi_c.long_long_int_width;
+      width = configt::get_instance()->ansi_c.long_long_int_width;
     }
     else
     {

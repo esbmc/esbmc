@@ -51,7 +51,9 @@ bool clang_main(contextt &context, const messaget &message_handler)
 {
   irep_idt main_symbol;
 
-  std::string main = (config.main != "") ? config.main : "main";
+  std::string main = (configt::get_instance()->main != "")
+                       ? configt::get_instance()->main
+                       : "main";
 
   // find main symbol
   std::list<irep_idt> matches;

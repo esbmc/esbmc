@@ -44,26 +44,26 @@ void goto_factory::config_environment(
   optionst o)
 {
   messaget msg;
-  config.set(c, msg);
+  configt::get_instance()->set(c, msg);
 
   switch(arch)
   {
   case goto_factory::Architecture::BIT_16:
-    config.ansi_c.set_data_model(configt::LP32);
+    configt::get_instance()->ansi_c.set_data_model(configt::LP32);
     break;
 
   case goto_factory::Architecture::BIT_32:
-    config.ansi_c.set_data_model(configt::ILP32);
+    configt::get_instance()->ansi_c.set_data_model(configt::ILP32);
     break;
 
   case goto_factory::Architecture::BIT_64:
-    config.ansi_c.set_data_model(configt::LP64);
+    configt::get_instance()->ansi_c.set_data_model(configt::LP64);
     break;
   default:
     break;
   }
 
-  config.options = o;
+  configt::get_instance()->options = o;
 }
 
 goto_functionst goto_factory::get_goto_functions(

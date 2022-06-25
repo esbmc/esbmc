@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_UTIL_CONFIG_H
 #define CPROVER_UTIL_CONFIG_H
 
+#include <mutex>
 #include <util/cmdline.h>
 #include <util/options.h>
 
@@ -141,8 +142,23 @@ public:
   static std::string this_operating_system();
 
   static triple host();
-};
 
-extern configt config;
+  // Singleton definition
+  configt(configt &other) = delete;
+  ~configt()
+  {
+    // Since this is a singleton, it should only be called once
+    delete config;
+  }
+  void operator=(const configt &) = delete;
+  static configt *get_instance();
+
+protected:
+  configt()
+  {
+  }
+  static configt *config;
+  static std::mutex instance_mutex;
+};
 
 #endif

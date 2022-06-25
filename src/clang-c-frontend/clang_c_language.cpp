@@ -54,21 +54,24 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   compiler_args.push_back(tmp_dir);
 
   // Append mode arg
-  switch(config.ansi_c.word_size)
+  switch(configt::get_instance()->ansi_c.word_size)
   {
   case 16:
   case 32:
   case 64:
-    compiler_args.emplace_back("-m" + std::to_string(config.ansi_c.word_size));
+    compiler_args.emplace_back(
+      "-m" + std::to_string(configt::get_instance()->ansi_c.word_size));
     break;
 
   default:
     msg.error(
-      fmt::format("Unknown word size: {}\n", config.ansi_c.word_size).c_str());
+      fmt::format(
+        "Unknown word size: {}\n", configt::get_instance()->ansi_c.word_size)
+        .c_str());
     abort();
   }
 
-  if(config.options.get_bool_option("deadlock-check"))
+  if(configt::get_instance()->options.get_bool_option("deadlock-check"))
   {
     compiler_args.emplace_back("-Dpthread_join=pthread_join_switch");
     compiler_args.emplace_back("-Dpthread_mutex_lock=pthread_mutex_lock_check");
@@ -76,7 +79,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
       "-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_check");
   }
-  else if(config.options.get_bool_option("lock-order-check"))
+  else if(configt::get_instance()->options.get_bool_option("lock-order-check"))
   {
     compiler_args.emplace_back("-Dpthread_join=pthread_join_noswitch");
     compiler_args.emplace_back(
@@ -97,32 +100,33 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
 
-  for(auto const &def : config.ansi_c.defines)
+  for(auto const &def : configt::get_instance()->ansi_c.defines)
     compiler_args.push_back("-D" + def);
 
   if(msg.get_verbosity() >= VerbosityLevel::Debug)
     compiler_args.emplace_back("-v");
 
   compiler_args.emplace_back("-target");
-  compiler_args.emplace_back(config.ansi_c.target.to_string());
+  compiler_args.emplace_back(
+    configt::get_instance()->ansi_c.target.to_string());
 
-  std::string sysroot = config.options.get_option("sysroot");
+  std::string sysroot = configt::get_instance()->options.get_option("sysroot");
   if(!sysroot.empty())
     compiler_args.push_back("--sysroot=" + sysroot);
 
-  for(const auto &dir : config.ansi_c.idirafter_paths)
+  for(const auto &dir : configt::get_instance()->ansi_c.idirafter_paths)
   {
     compiler_args.push_back("-idirafter");
     compiler_args.push_back(dir);
   }
 
-  for(auto const &inc : config.ansi_c.include_paths)
+  for(auto const &inc : configt::get_instance()->ansi_c.include_paths)
     compiler_args.push_back("-I" + inc);
 
-  for(auto const &inc : config.ansi_c.forces)
+  for(auto const &inc : configt::get_instance()->ansi_c.forces)
     compiler_args.push_back("-f" + inc);
 
-  for(auto const &inc : config.ansi_c.warnings)
+  for(auto const &inc : configt::get_instance()->ansi_c.warnings)
     compiler_args.push_back("-W" + inc);
 
   compiler_args.emplace_back("-D__builtin_sadd_overflow=__ESBMC_overflow_sadd");
@@ -169,7 +173,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
 
-  if(config.ansi_c.target.is_macos())
+  if(configt::get_instance()->ansi_c.target.is_macos())
   {
     compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
     compiler_args.push_back("-D_SECURE__STRING_H_");
@@ -178,7 +182,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.push_back("-Wno-deprecated-register");
   }
 
-  if(config.ansi_c.target.is_windows_abi())
+  if(configt::get_instance()->ansi_c.target.is_windows_abi())
   {
     compiler_args.push_back("-D_INC_TIME_INL");
     compiler_args.push_back("-D__CRT__NO_INLINE");

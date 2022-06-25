@@ -729,7 +729,9 @@ void goto_convertt::do_function_call_symbol(
     t->location.comment(description);
     // we ignore any LHS
   }
-  else if(config.ansi_c.target.is_freebsd() && base_name == "__assert")
+  else if(
+    configt::get_instance()->ansi_c.target.is_freebsd() &&
+    base_name == "__assert")
   {
     /* This is FreeBSD, taking 4 arguments: __func__, __FILE__, __LINE__, #e */
 

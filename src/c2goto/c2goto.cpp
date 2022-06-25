@@ -60,9 +60,9 @@ public:
   {
     goto_functionst goto_functions;
 
-    if(config.set(cmdline, msg))
+    if(configt::get_instance()->set(cmdline, msg))
       return 1;
-    config.options.cmdline(cmdline);
+    configt::get_instance()->options.cmdline(cmdline);
     msg.set_verbosity(VerbosityLevel::Result);
 
     if(!cmdline.isset("output"))

@@ -224,7 +224,7 @@ static inline guardt merge_state_guards(
 {
   // adjust guard, even using guards from unreachable states. This helps to
   // shrink the state guard if the incoming edge is from a path that was
-  // truncated by config.unwind, config.depth or an assume-false instruction.
+  // truncated by configt::get_instance()->unwind, configt::get_instance()->depth or an assume-false instruction.
 
   // Note when an unreachable state contributes its guard, merging it in is
   // optional, since the formula already implies the unreachable guard is
@@ -413,7 +413,9 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
 
 void goto_symext::loop_bound_exceeded(const expr2tc &guard)
 {
-  if(partial_loops && !config.options.get_bool_option("termination"))
+  if(
+    partial_loops &&
+    !configt::get_instance()->options.get_bool_option("termination"))
     return;
 
   const irep_idt &loop_id = cur_state->source.pc->location.loopid();

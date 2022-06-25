@@ -302,35 +302,35 @@ c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
 
   if(type.id() == "signedbv")
   {
-    if(width <= config.ansi_c.char_width)
+    if(width <= configt::get_instance()->ansi_c.char_width)
       return CHAR;
-    else if(width <= config.ansi_c.int_width)
+    else if(width <= configt::get_instance()->ansi_c.int_width)
       return INT;
-    else if(width <= config.ansi_c.long_int_width)
+    else if(width <= configt::get_instance()->ansi_c.long_int_width)
       return LONG;
-    else if(width <= config.ansi_c.long_long_int_width)
+    else if(width <= configt::get_instance()->ansi_c.long_long_int_width)
       return LONGLONG;
   }
   else if(type.id() == "unsignedbv")
   {
-    if(width <= config.ansi_c.char_width)
+    if(width <= configt::get_instance()->ansi_c.char_width)
       return UCHAR;
-    else if(width <= config.ansi_c.int_width)
+    else if(width <= configt::get_instance()->ansi_c.int_width)
       return UINT;
-    else if(width <= config.ansi_c.long_int_width)
+    else if(width <= configt::get_instance()->ansi_c.long_int_width)
       return ULONG;
-    else if(width <= config.ansi_c.long_long_int_width)
+    else if(width <= configt::get_instance()->ansi_c.long_long_int_width)
       return ULONGLONG;
   }
   else if(type.is_bool())
     return BOOL;
   else if(type.id() == "floatbv" || type.id() == "fixedbv")
   {
-    if(width <= config.ansi_c.single_width)
+    if(width <= configt::get_instance()->ansi_c.single_width)
       return SINGLE;
-    else if(width <= config.ansi_c.double_width)
+    else if(width <= configt::get_instance()->ansi_c.double_width)
       return DOUBLE;
-    else if(width <= config.ansi_c.long_double_width)
+    else if(width <= configt::get_instance()->ansi_c.long_double_width)
       return LONGDOUBLE;
   }
   else if(type.id() == "pointer")
@@ -361,15 +361,15 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
     signedbv_type2tc signed_type = type;
     unsigned width = signed_type->width;
 
-    if(width <= config.ansi_c.char_width)
+    if(width <= configt::get_instance()->ansi_c.char_width)
       return CHAR;
-    else if(width <= config.ansi_c.int_width)
+    else if(width <= configt::get_instance()->ansi_c.int_width)
       return INT;
-    else if(width <= config.ansi_c.long_int_width)
+    else if(width <= configt::get_instance()->ansi_c.long_int_width)
       return LONG;
-    else if(width <= config.ansi_c.long_long_int_width)
+    else if(width <= configt::get_instance()->ansi_c.long_long_int_width)
       return LONGLONG;
-    if(width <= config.ansi_c.int_128_width)
+    if(width <= configt::get_instance()->ansi_c.int_128_width)
       return INT128;
   }
   else if(is_unsignedbv_type(type))
@@ -377,15 +377,15 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
     unsignedbv_type2tc unsigned_type = type;
     unsigned width = unsigned_type->width;
 
-    if(width <= config.ansi_c.char_width)
+    if(width <= configt::get_instance()->ansi_c.char_width)
       return UCHAR;
-    else if(width <= config.ansi_c.int_width)
+    else if(width <= configt::get_instance()->ansi_c.int_width)
       return UINT;
-    else if(width <= config.ansi_c.long_int_width)
+    else if(width <= configt::get_instance()->ansi_c.long_int_width)
       return ULONG;
-    else if(width <= config.ansi_c.long_long_int_width)
+    else if(width <= configt::get_instance()->ansi_c.long_long_int_width)
       return ULONGLONG;
-    if(width <= config.ansi_c.int_128_width)
+    if(width <= configt::get_instance()->ansi_c.int_128_width)
       return UINT128;
   }
   else if(is_bool_type(type))
@@ -394,11 +394,11 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
   {
     fixedbv_type2tc fixedbv_type = type;
     unsigned width = fixedbv_type->width;
-    if(width <= config.ansi_c.single_width)
+    if(width <= configt::get_instance()->ansi_c.single_width)
       return SINGLE;
-    else if(width <= config.ansi_c.double_width)
+    else if(width <= configt::get_instance()->ansi_c.double_width)
       return DOUBLE;
-    else if(width <= config.ansi_c.long_double_width)
+    else if(width <= configt::get_instance()->ansi_c.long_double_width)
       return LONGDOUBLE;
   }
   else if(is_pointer_type(type))

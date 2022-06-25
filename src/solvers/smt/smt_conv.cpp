@@ -75,8 +75,10 @@ smt_convt::smt_convt(
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
 
-  members.push_back(get_uint_type(config.ansi_c.pointer_width));
-  members.push_back(get_uint_type(config.ansi_c.pointer_width));
+  members.push_back(
+    get_uint_type(configt::get_instance()->ansi_c.pointer_width));
+  members.push_back(
+    get_uint_type(configt::get_instance()->ansi_c.pointer_width));
   names.emplace_back("pointer_object");
   names.emplace_back("pointer_offset");
 
@@ -90,8 +92,10 @@ smt_convt::smt_convt(
 
   members.clear();
   names.clear();
-  members.push_back(get_uint_type(config.ansi_c.pointer_width));
-  members.push_back(get_uint_type(config.ansi_c.pointer_width));
+  members.push_back(
+    get_uint_type(configt::get_instance()->ansi_c.pointer_width));
+  members.push_back(
+    get_uint_type(configt::get_instance()->ansi_c.pointer_width));
   names.emplace_back("start");
   names.emplace_back("end");
   addr_space_type = {members, names, names, "addr_space_type"};
@@ -100,7 +104,8 @@ smt_convt::smt_convt(
 
   addr_space_data.emplace_back();
 
-  machine_ptr = type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width));
+  machine_ptr = type2tc(
+    new unsignedbv_type2t(configt::get_instance()->ansi_c.pointer_width));
 
   // Pick a modelling array to shoehorn initialization data into. Because
   // we don't yet have complete data for whether pointers are dynamic or not,
@@ -348,7 +353,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       // Domain sort may be mesed with:
       smt_sortt domain = mk_int_bv_sort(
-        int_encoding ? config.ansi_c.int_width
+        int_encoding ? configt::get_instance()->ansi_c.int_width
                      : calculate_array_domain_width(arr));
 
       a = tuple_array_create_despatch(flat_expr, domain);
@@ -1186,7 +1191,8 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
   {
     const string_type2t &str_type = to_string_type(type);
     constant_int2tc width(
-      get_uint_type(config.ansi_c.int_width), BigInt(str_type.width));
+      get_uint_type(configt::get_instance()->ansi_c.int_width),
+      BigInt(str_type.width));
     type2tc new_type(new array_type2t(get_uint8_type(), width, false));
     result = convert_sort(new_type);
     break;
@@ -1715,7 +1721,7 @@ expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
 
   smt_sortt s = convert_sort(arr_sort);
   size_t domain_width = s->get_domain_width();
-  if(domain_width == config.ansi_c.int_width)
+  if(domain_width == configt::get_instance()->ansi_c.int_width)
     return idx;
 
   // Otherwise, we need to extract the lower bits out of this.
@@ -1753,7 +1759,7 @@ unsigned long smt_convt::calculate_array_domain_width(const array_type2t &arr)
     return size_to_bit_width(thesize->value.to_uint64());
   }
 
-  return config.ansi_c.word_size;
+  return configt::get_instance()->ansi_c.word_size;
 }
 
 type2tc smt_convt::make_array_domain_type(const array_type2t &arr)
@@ -1763,7 +1769,7 @@ type2tc smt_convt::make_array_domain_type(const array_type2t &arr)
   {
     // Normal array, work out what the domain sort is.
     if(int_encoding)
-      return get_uint_type(config.ansi_c.int_width);
+      return get_uint_type(configt::get_instance()->ansi_c.int_width);
 
     return get_uint_type(calculate_array_domain_width(arr));
   }
@@ -2644,8 +2650,9 @@ smt_astt smt_ast::update(
   expr2tc index;
   if(is_nil_expr(idx_expr))
   {
-    size_t dom_width =
-      ctx->int_encoding ? config.ansi_c.int_width : sort->get_domain_width();
+    size_t dom_width = ctx->int_encoding
+                         ? configt::get_instance()->ansi_c.int_width
+                         : sort->get_domain_width();
     index = constant_int2tc(unsignedbv_type2tc(dom_width), BigInt(idx));
   }
   else

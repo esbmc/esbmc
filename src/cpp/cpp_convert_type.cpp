@@ -339,20 +339,22 @@ void cpp_convert_typet::write(typet &type)
     if(unsigned_cnt)
     {
       type.id("unsignedbv");
-      type.width(config.ansi_c.char_width);
+      type.width(configt::get_instance()->ansi_c.char_width);
       type.set("#cpp_type", "unsigned_char");
     }
     else if(signed_cnt)
     {
       type.id("signedbv");
-      type.width(config.ansi_c.char_width);
+      type.width(configt::get_instance()->ansi_c.char_width);
       type.set("#cpp_type", "signed_char");
     }
     else
     {
-      type.id(config.ansi_c.char_is_unsigned ? "unsignedbv" : "signedbv");
+      type.id(
+        configt::get_instance()->ansi_c.char_is_unsigned ? "unsignedbv"
+                                                         : "signedbv");
       type.set("#cpp_type", "char");
-      type.width(config.ansi_c.char_width);
+      type.width(configt::get_instance()->ansi_c.char_width);
     }
   }
   else if(wchar_t_cnt)
@@ -366,7 +368,7 @@ void cpp_convert_typet::write(typet &type)
       throw "illegal type modifier for wchar_t";
 
     type.id("signedbv");
-    type.width(config.ansi_c.wchar_t_width);
+    type.width(configt::get_instance()->ansi_c.wchar_t_width);
     type.set("#cpp_type", "wchar_t");
   }
   else
@@ -392,7 +394,7 @@ void cpp_convert_typet::write(typet &type)
         type.set("#cpp_type", "signed_short_int");
       }
 
-      type.width(config.ansi_c.short_int_width);
+      type.width(configt::get_instance()->ansi_c.short_int_width);
     }
     else if(int8_cnt)
     {
@@ -488,7 +490,7 @@ void cpp_convert_typet::write(typet &type)
         type.id("signedbv");
       }
 
-      type.width(config.ansi_c.int_width);
+      type.width(configt::get_instance()->ansi_c.int_width);
     }
     else if(long_cnt == 1)
     {
@@ -503,7 +505,7 @@ void cpp_convert_typet::write(typet &type)
         type.id("signedbv");
       }
 
-      type.width(config.ansi_c.long_int_width);
+      type.width(configt::get_instance()->ansi_c.long_int_width);
     }
     else if(long_cnt == 2)
     {
@@ -518,7 +520,7 @@ void cpp_convert_typet::write(typet &type)
         type.id("signedbv");
       }
 
-      type.width(config.ansi_c.long_long_int_width);
+      type.width(configt::get_instance()->ansi_c.long_long_int_width);
     }
     else
       throw "illegal combination of type modifiers";
@@ -548,7 +550,7 @@ void cpp_convert_plain_type(typet &type)
   {
     // add width -- we use int, but the standard
     // doesn't guarantee that
-    type.width(config.ansi_c.int_width);
+    type.width(configt::get_instance()->ansi_c.int_width);
   }
   else
   {

@@ -192,7 +192,7 @@ uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
 static std::string format_target()
 {
   const char *endian = nullptr;
-  switch(config.ansi_c.endianess)
+  switch(configt::get_instance()->ansi_c.endianess)
   {
   case configt::ansi_ct::IS_LITTLE_ENDIAN:
     endian = "little";
@@ -206,7 +206,7 @@ static std::string format_target()
   }
   assert(endian);
   const char *lib = nullptr;
-  switch(config.ansi_c.lib)
+  switch(configt::get_instance()->ansi_c.lib)
   {
   case configt::ansi_ct::LIB_NONE:
     lib = "system";
@@ -218,15 +218,15 @@ static std::string format_target()
   assert(lib);
   return fmt::format(
     "{}-bit {}-endian {} with {} libc",
-    config.ansi_c.word_size,
+    configt::get_instance()->ansi_c.word_size,
     endian,
-    config.ansi_c.target.to_string(),
+    configt::get_instance()->ansi_c.target.to_string(),
     lib);
 }
 
 void esbmc_parseoptionst::get_command_line_options(optionst &options)
 {
-  if(config.set(cmdline, msg))
+  if(configt::get_instance()->set(cmdline, msg))
   {
     exit(1);
   }
@@ -415,7 +415,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
-  config.options = options;
+  configt::get_instance()->options = options;
 }
 
 int esbmc_parseoptionst::doit()
@@ -439,8 +439,8 @@ int esbmc_parseoptionst::doit()
     "ESBMC version {} {}-bit {} {}",
     ESBMC_VERSION,
     sizeof(void *) * 8,
-    config.this_architecture(),
-    config.this_operating_system()));
+    configt::get_instance()->this_architecture(),
+    configt::get_instance()->this_operating_system()));
 
   if(cmdline.isset("version"))
     return 0;

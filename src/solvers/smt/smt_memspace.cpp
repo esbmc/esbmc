@@ -160,7 +160,9 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     type2tc inttype = machine_ptr;
     constant_int2tc constant(inttype, type_size);
 
-    if(non_ptr_op->type->get_width() < config.ansi_c.pointer_width)
+    if(
+      non_ptr_op->type->get_width() <
+      configt::get_instance()->ansi_c.pointer_width)
       non_ptr_op = typecast2tc(machine_ptr, non_ptr_op);
 
     expr2tc mul = mul2tc(inttype, non_ptr_op, constant);
@@ -290,7 +292,8 @@ smt_astt smt_convt::convert_identifier_pointer(
   if(addr_space_data.back().find(obj_num) == addr_space_data.back().end())
   {
     // Fetch a size.
-    type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.word_size));
+    type2tc ptr_loc_type(
+      new unsignedbv_type2t(configt::get_instance()->ansi_c.word_size));
     expr2tc size;
     try
     {
@@ -397,7 +400,7 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   type2tc arrtype(new array_type2t(get_bool_type(), expr2tc(), true));
   symbol2tc allocarr(arrtype, dyn_info_arr_name);
   constant_int2tc objid(
-    get_uint_type(config.ansi_c.int_width), BigInt(obj_num));
+    get_uint_type(configt::get_instance()->ansi_c.int_width), BigInt(obj_num));
   index2tc idx(get_bool_type(), allocarr, objid);
   equality2tc dyn_eq(idx, gen_false_expr());
   assert_expr(dyn_eq);
@@ -537,7 +540,9 @@ void smt_convt::init_addr_space_array()
   constant_int2tc zero_ptr_int(ptr_int_type, BigInt(0));
   constant_int2tc one_ptr_int(ptr_int_type, BigInt(1));
   BigInt allones(
-    (config.ansi_c.pointer_width == 32) ? 0xFFFFFFFF : 0xFFFFFFFFFFFFFFFFULL);
+    (configt::get_instance()->ansi_c.pointer_width == 32)
+      ? 0xFFFFFFFF
+      : 0xFFFFFFFFFFFFFFFFULL);
   constant_int2tc obj1_end_const(ptr_int_type, allones);
 
   symbol2tc obj0_start(ptr_int_type, "__ESBMC_ptr_obj_start_0");

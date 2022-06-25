@@ -193,7 +193,8 @@ public:
       msg(msg)
   {
     is_big_endian =
-      (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+      (configt::get_instance()->ansi_c.endianess ==
+       configt::ansi_ct::IS_BIG_ENDIAN);
   }
 
   virtual ~dereferencet() = default;
@@ -248,7 +249,7 @@ private:
    *  individually. */
   static unsigned invalid_counter;
   /** Whether or not we're operating in a big endian environment. Value for this
-   *  is taken from config.ansi_c.endianness. */
+   *  is taken from configt::get_instance()->ansi_c.endianness. */
   bool is_big_endian;
   /** List of internal state items -- these contain all the data of interest
    *  to build_reference_to, but in INTERNAL mode we skip the construction

@@ -39,7 +39,7 @@ bool language_uit::parse(const std::string &filename)
     return true;
   }
 
-  if(config.options.get_bool_option("old-frontend"))
+  if(configt::get_instance()->options.get_bool_option("old-frontend"))
   {
     mode = get_old_frontend_mode(mode);
     if(mode == -1)
@@ -76,14 +76,15 @@ bool language_uit::parse(const std::string &filename)
   {
     language.set_func_name(_cmdline.vm["function"].as<std::string>());
 
-    if(config.options.get_option("contract") == "")
+    if(configt::get_instance()->options.get_option("contract") == "")
     {
       msg.error("Please set the smart contract source file.");
       return true;
     }
     else
     {
-      language.set_smart_contract_source(config.options.get_option("contract"));
+      language.set_smart_contract_source(
+        configt::get_instance()->options.get_option("contract"));
     }
   }
 #endif

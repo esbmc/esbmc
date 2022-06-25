@@ -236,7 +236,7 @@ void reachability_treet::switch_to_next_execution_state()
     }
     else
     {
-      if(config.options.get_bool_option("print-stack-traces"))
+      if(configt::get_instance()->options.get_bool_option("print-stack-traces"))
         print_ileave_trace();
       has_complete_formula = true;
     }

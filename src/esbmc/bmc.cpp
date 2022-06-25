@@ -146,7 +146,9 @@ smt_convt::resultt bmct::run_decision_procedure(
   if(!options.get_bool_option("int-encoding"))
   {
     logic = "bit-vector";
-    logic += (!config.ansi_c.use_fixed_for_float) ? "/floating-point " : " ";
+    logic += (!configt::get_instance()->ansi_c.use_fixed_for_float)
+               ? "/floating-point "
+               : " ";
     logic += "arithmetic";
   }
   else
@@ -205,14 +207,14 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
 {
   unsigned int count = 1;
   std::ostringstream oss;
-  if(config.options.get_bool_option("ssa-symbol-table"))
+  if(configt::get_instance()->options.get_bool_option("ssa-symbol-table"))
     ::show_symbol_table_plain(ns, oss, msg);
 
   languagest languages(ns, MODE_C, msg);
 
   oss << "\nProgram constraints: \n";
 
-  bool sliced = config.options.get_bool_option("ssa-sliced");
+  bool sliced = configt::get_instance()->options.get_bool_option("ssa-sliced");
 
   for(auto const &it : eq->SSA_steps)
   {
@@ -389,10 +391,10 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 
     if(res == smt_convt::P_SATISFIABLE)
     {
-      if(config.options.get_bool_option("smt-model"))
+      if(configt::get_instance()->options.get_bool_option("smt-model"))
         runtime_solver->print_model();
 
-      if(config.options.get_bool_option("bidirectional"))
+      if(configt::get_instance()->options.get_bool_option("bidirectional"))
         bidirectional_search(runtime_solver, eq);
     }
 

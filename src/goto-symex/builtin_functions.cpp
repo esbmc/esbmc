@@ -637,7 +637,8 @@ void goto_symext::intrinsic_get_thread_state(
     (art.get_cur_state().threads_state[tid].thread_ended) ? 1 : 0;
 
   // Reuse threadid
-  constant_int2tc flag_expr(get_uint_type(config.ansi_c.int_width), flags);
+  constant_int2tc flag_expr(
+    get_uint_type(configt::get_instance()->ansi_c.int_width), flags);
   symex_assign(code_assign2tc(call.ret, flag_expr), true);
 }
 

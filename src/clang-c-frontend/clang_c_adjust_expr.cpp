@@ -764,7 +764,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       typet t = expr.type();
 
       constant_exprt infl_expr;
-      if(config.ansi_c.use_fixed_for_float)
+      if(configt::get_instance()->ansi_c.use_fixed_for_float)
       {
         // We saturate to the biggest value
         BigInt value = power(2, bv_width(t) - 1) - 1;
@@ -787,7 +787,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       typet t = expr.type();
 
       constant_exprt nan_expr;
-      if(config.ansi_c.use_fixed_for_float)
+      if(configt::get_instance()->ansi_c.use_fixed_for_float)
       {
         BigInt value = 0;
         nan_expr = constant_exprt(

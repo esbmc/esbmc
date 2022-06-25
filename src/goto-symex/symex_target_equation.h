@@ -31,9 +31,11 @@ public:
   symex_target_equationt(const namespacet &_ns, const messaget &msg)
     : ns(_ns), msg(msg)
   {
-    debug_print = config.options.get_bool_option("symex-ssa-trace");
-    ssa_trace = config.options.get_bool_option("ssa-trace");
-    ssa_smt_trace = config.options.get_bool_option("ssa-smt-trace");
+    debug_print =
+      configt::get_instance()->options.get_bool_option("symex-ssa-trace");
+    ssa_trace = configt::get_instance()->options.get_bool_option("ssa-trace");
+    ssa_smt_trace =
+      configt::get_instance()->options.get_bool_option("ssa-smt-trace");
   }
 
   // assignment to a variable - must be symbol

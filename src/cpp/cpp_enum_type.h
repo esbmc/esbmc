@@ -18,7 +18,7 @@ class cpp_enum_typet : public typet
 public:
   cpp_enum_typet() : typet("c_enum")
   {
-    set("width", config.ansi_c.int_width);
+    set("width", configt::get_instance()->ansi_c.int_width);
   }
 
   const irep_idt &get_name() const

@@ -24,8 +24,9 @@ void string2array(const exprt &src, exprt &dest)
   bool char_is_unsigned = char_type.is_unsignedbv();
 
   exprt size("constant", typet("signedbv"));
-  size.type().width(config.ansi_c.int_width);
-  size.value(integer2binary(string_size, config.ansi_c.int_width));
+  size.type().width(configt::get_instance()->ansi_c.int_width);
+  size.value(
+    integer2binary(string_size, configt::get_instance()->ansi_c.int_width));
 
   dest = exprt("constant", typet("array"));
   dest.type().subtype() = char_type;

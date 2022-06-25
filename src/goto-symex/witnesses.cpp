@@ -555,7 +555,8 @@ void _create_graph_node(
 
   xmlnodet pArchitecture;
   pArchitecture.add("<xmlattr>.key", "architecture");
-  pArchitecture.put_value(std::to_string(config.ansi_c.word_size) + "bit");
+  pArchitecture.put_value(
+    std::to_string(configt::get_instance()->ansi_c.word_size) + "bit");
   graphnode.add_child("data", pArchitecture);
 
   xmlnodet pProgramFile;

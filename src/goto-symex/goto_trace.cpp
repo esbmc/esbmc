@@ -135,7 +135,9 @@ void counterexample_value(
     out << " = " << from_expr(ns, "", value, msg);
 
     // Don't print the bit-vector if we're running on integer/real mode
-    if(is_constant_expr(value) && !config.options.get_bool_option("ir"))
+    if(
+      is_constant_expr(value) &&
+      !configt::get_instance()->options.get_bool_option("ir"))
     {
       std::string binary_value = "";
       if(is_bv_type(value))

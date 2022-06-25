@@ -71,43 +71,52 @@ void convert_integer_literal(const std::string &src, exprt &dest)
   ((signed ? !is_unsigned : (is_unsigned || is_hex_or_oct_or_bin)) &&          \
    (power(2, signed ? width - 1 : width) > value_abs))
 
-  if(FITS(config.ansi_c.int_width, true) && long_cnt == 0) // int
+  if(
+    FITS(configt::get_instance()->ansi_c.int_width, true) &&
+    long_cnt == 0) // int
   {
-    type.width(config.ansi_c.int_width);
+    type.width(configt::get_instance()->ansi_c.int_width);
     cpp_type = "signed_int";
   }
-  else if(FITS(config.ansi_c.int_width, false) && long_cnt == 0) // unsigned int
+  else if(
+    FITS(configt::get_instance()->ansi_c.int_width, false) &&
+    long_cnt == 0) // unsigned int
   {
-    type.width(config.ansi_c.int_width);
+    type.width(configt::get_instance()->ansi_c.int_width);
     cpp_type = "unsigned_int";
   }
-  else if(FITS(config.ansi_c.long_int_width, true) && long_cnt != 2) // long int
+  else if(
+    FITS(configt::get_instance()->ansi_c.long_int_width, true) &&
+    long_cnt != 2) // long int
   {
-    type.width(config.ansi_c.long_int_width);
+    type.width(configt::get_instance()->ansi_c.long_int_width);
     cpp_type = "signed_long_int";
   }
   else if(
-    FITS(config.ansi_c.long_int_width, false) &&
+    FITS(configt::get_instance()->ansi_c.long_int_width, false) &&
     long_cnt != 2) // unsigned long int
   {
-    type.width(config.ansi_c.long_int_width);
+    type.width(configt::get_instance()->ansi_c.long_int_width);
     cpp_type = "unsigned_long_int";
   }
-  else if(FITS(config.ansi_c.long_long_int_width, true)) // long long int
+  else if(FITS(
+            configt::get_instance()->ansi_c.long_long_int_width,
+            true)) // long long int
   {
-    type.width(config.ansi_c.long_long_int_width);
+    type.width(configt::get_instance()->ansi_c.long_long_int_width);
     cpp_type = "signed_long_long_int";
   }
   else if(FITS(
-            config.ansi_c.long_long_int_width, false)) // unsigned long long int
+            configt::get_instance()->ansi_c.long_long_int_width,
+            false)) // unsigned long long int
   {
-    type.width(config.ansi_c.long_long_int_width);
+    type.width(configt::get_instance()->ansi_c.long_long_int_width);
     cpp_type = "unsigned_long_long_int";
   }
   else
   {
     // Way too large. Should consider issuing a warning.
-    type.width(config.ansi_c.long_long_int_width);
+    type.width(configt::get_instance()->ansi_c.long_long_int_width);
 
     if(is_unsigned)
       cpp_type = "unsigned_long_long_int";

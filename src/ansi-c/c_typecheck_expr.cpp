@@ -1299,7 +1299,7 @@ void c_typecheck_baset::do_special_functions(
       typet t = expr.type();
 
       constant_exprt infl_expr;
-      if(config.ansi_c.use_fixed_for_float)
+      if(configt::get_instance()->ansi_c.use_fixed_for_float)
       {
         // We saturate to the biggest value
         BigInt value = power(2, bv_width(t) - 1) - 1;
@@ -1324,7 +1324,7 @@ void c_typecheck_baset::do_special_functions(
       typet t = expr.type();
 
       constant_exprt nan_expr;
-      if(config.ansi_c.use_fixed_for_float)
+      if(configt::get_instance()->ansi_c.use_fixed_for_float)
       {
         BigInt value = 0;
         nan_expr = constant_exprt(
@@ -1567,7 +1567,7 @@ void c_typecheck_baset::do_special_functions(
     else if(identifier == CPROVER_PREFIX "floatbv_mode")
     {
       exprt new_expr;
-      if(config.ansi_c.use_fixed_for_float)
+      if(configt::get_instance()->ansi_c.use_fixed_for_float)
         new_expr = false_exprt();
       else
         new_expr = true_exprt();
@@ -1821,7 +1821,8 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
       typet pointer_diff_type;
 
       pointer_diff_type = typet("signedbv");
-      pointer_diff_type.width(config.ansi_c.pointer_diff_width);
+      pointer_diff_type.width(
+        configt::get_instance()->ansi_c.pointer_diff_width);
 
       expr.type() = pointer_diff_type;
       return;

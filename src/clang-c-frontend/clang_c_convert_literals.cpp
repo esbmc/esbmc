@@ -156,7 +156,7 @@ bool clang_c_convertert::convert_float_literal(
   std::string value_string;
 
   // Fixed bvs
-  if(config.ansi_c.use_fixed_for_float)
+  if(configt::get_instance()->ansi_c.use_fixed_for_float)
   {
     // If it's +oo or -oo, we can't parse it
     if(val.isInfinity())

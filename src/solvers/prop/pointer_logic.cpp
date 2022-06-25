@@ -92,7 +92,8 @@ expr2tc pointer_logict::object_rec(
     BigInt index = offset / size;
     BigInt rest = offset % size;
 
-    type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
+    type2tc inttype(
+      new unsignedbv_type2t(configt::get_instance()->ansi_c.int_width));
     index2tc newindex(arrtype.subtype, src, constant_int2tc(inttype, index));
 
     return object_rec(rest, pointer_type, newindex);

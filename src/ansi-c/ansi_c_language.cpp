@@ -158,7 +158,7 @@ bool ansi_c_languaget::parse(
   //ansi_c_parser.set_message_handler(&message_handler);
   ansi_c_parser.grammar = ansi_c_parsert::LANGUAGE;
 
-  if(config.ansi_c.target.is_windows_abi())
+  if(configt::get_instance()->ansi_c.target.is_windows_abi())
     ansi_c_parser.mode = ansi_c_parsert::MSC;
   else
     ansi_c_parser.mode = ansi_c_parsert::GCC;

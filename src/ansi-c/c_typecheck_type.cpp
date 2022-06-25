@@ -119,7 +119,7 @@ void c_typecheck_baset::typecheck_array_type(array_typet &type)
   bool size_is_unsigned = (size.type().id() == "unsignedbv");
 
   typet integer_type(size_is_unsigned ? "unsignedbv" : "signedbv");
-  integer_type.width(config.ansi_c.int_width);
+  integer_type.width(configt::get_instance()->ansi_c.int_width);
 
   implicit_typecast(size, integer_type);
 
