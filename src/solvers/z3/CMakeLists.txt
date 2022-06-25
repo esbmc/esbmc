@@ -33,12 +33,12 @@ if(ENABLE_Z3)
 
     message(STATUS "Using Z3 at: ${Z3_LIB}")
     string(REGEX MATCH "(Z3 )?([0-9]+.[0-9]+.[0-9]+.[0-9]+)"  REGEX_OUTPUT ${Z3_VERSION})
-    set(Z3_VERSION "${CMAKE_MATCH_2}")  
+    set(Z3_VERSION "${CMAKE_MATCH_2}")
     message(STATUS "Z3 version: ${Z3_VERSION}")
     if(Z3_VERSION VERSION_LESS Z3_MIN_VERSION)
         message(FATAL_ERROR "Expected version ${Z3_MIN_VERSION} or greater")
     endif()
-    
+
 
     add_library(solverz3 z3_conv.cpp)
     target_include_directories(solverz3
@@ -56,11 +56,13 @@ if(ENABLE_Z3)
 
     # Install dll for Windows
     if(WIN32)
-        find_file(Z3_DLL libz3.dll HINTS ${Z3_DIR} $ENV{HOME}/z3 PATH_SUFFIXES lib bin)
+      find_file(Z3_DLL libz3.dll HINTS ${Z3_DIR} $ENV{HOME}/z3 PATH_SUFFIXES lib bin)
+      if(NOT Z3_DLL STREQUAL "Z3_DLL-NOTFOUND")
         message(STATUS "Windows will install ${Z3_DLL}")
         install(FILES ${Z3_DLL} DESTINATION bin)
+      endif()
     endif()
-    
+
     set(ESBMC_ENABLE_z3 1 PARENT_SCOPE)
     set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} z3" PARENT_SCOPE)
 endif()
