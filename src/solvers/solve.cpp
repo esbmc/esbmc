@@ -107,7 +107,7 @@ static const solver_creator &pick_solver(
   abort();
 }
 
-smt_convt *create_solver_factory(
+smt_convt *create_solver(
   std::string solver_name,
   const namespacet &ns,
   const optionst &options,
