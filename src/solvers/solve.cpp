@@ -6,6 +6,8 @@
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 
+#include <unordered_map>
+
 solver_creator create_new_smtlib_solver;
 solver_creator create_new_z3_solver;
 solver_creator create_new_minisat_solver;
@@ -15,10 +17,7 @@ solver_creator create_new_mathsat_solver;
 solver_creator create_new_yices_solver;
 solver_creator create_new_bitwuzla_solver;
 
-static const struct {
-  std::string name;
-  solver_creator *create;
-} esbmc_solvers[] = {
+static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
   {"smtlib", create_new_smtlib_solver},
 #ifdef Z3
   {"z3", create_new_z3_solver},
@@ -43,39 +42,28 @@ static const struct {
 #endif
 };
 
-static const std::string list_of_all_solvers[] = {
-  "z3",
+static const std::string all_solvers[] = {
   "smtlib",
+  "z3",
   "minisat",
   "boolector",
-  "mathsat",
   "cvc",
+  "mathsat",
   "yices",
   "bitwuzla"};
 
-static const unsigned int total_num_of_solvers =
-  sizeof(list_of_all_solvers) / sizeof(std::string);
-
-static const unsigned int esbmc_num_solvers =
-  sizeof(esbmc_solvers) / sizeof(*esbmc_solvers);
-
 static smt_convt *create_solver(
-  const std::string &&the_solver,
+  const std::string &the_solver,
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
   fp_convt **fp_api,
-  const messaget &msg [[gnu::unused]])
+  const messaget &msg)
 {
-  for(const auto &esbmc_solver : esbmc_solvers)
-  {
-    if(the_solver == esbmc_solver.name)
-    {
-      return esbmc_solver.create(
-        options, ns, tuple_api, array_api, fp_api, msg);
-    }
-  }
+  auto it = esbmc_solvers.find(the_solver);
+  if(it != esbmc_solvers.end())
+    return it->second(options, ns, tuple_api, array_api, fp_api, msg);
 
   msg.error(fmt::format(
     "The {} solver has not been built into this version of ESBMC, sorry",
@@ -83,26 +71,24 @@ static smt_convt *create_solver(
   abort();
 }
 
-static const std::string pick_default_solver(const messaget &msg)
+static std::string pick_default_solver(const messaget &msg)
 {
 #ifdef BOOLECTOR
   msg.status("No solver specified; defaulting to Boolector");
   return "boolector";
 #else
-  // Pick whatever's first in the list.
-  if(esbmc_num_solvers == 1)
+  // Pick whatever's first in the list except for the smtlib solver
+  for(const std::string &name : all_solvers)
   {
-    msg.error(
-      "No solver backends built into ESBMC; please either build "
-      "some in, or explicitly configure the smtlib backend");
-    abort();
+    if(name == "smtlib" || !esbmc_solvers.count(name))
+      continue;
+    msg.status(fmt::format("No solver specified; defaulting to {}", name));
+    return name;
   }
-  else
-  {
-    msg.status(fmt::format(
-      "No solver specified; defaulting to {}", esbmc_solvers[1].name));
-    return esbmc_solvers[1].name;
-  }
+  msg.error(
+    "No solver backends built into ESBMC; please either build "
+    "some in, or explicitly configure the smtlib backend");
+  abort();
 #endif
 }
 
@@ -114,12 +100,10 @@ static smt_convt *pick_solver(
   fp_convt **fp_api,
   const messaget &msg)
 {
-  unsigned int i;
   std::string the_solver;
 
-  for(i = 0; i < total_num_of_solvers; i++)
-  {
-    if(options.get_bool_option(list_of_all_solvers[i]))
+  for(const std::string &name : all_solvers)
+    if(options.get_bool_option(name))
     {
       if(the_solver != "")
       {
@@ -127,15 +111,14 @@ static smt_convt *pick_solver(
         abort();
       }
 
-      the_solver = list_of_all_solvers[i];
+      the_solver = name;
     }
-  }
 
   if(the_solver == "")
     the_solver = pick_default_solver(msg);
 
   return create_solver(
-    std::move(the_solver), options, ns, tuple_api, array_api, fp_api, msg);
+    the_solver, options, ns, tuple_api, array_api, fp_api, msg);
 }
 
 smt_convt *create_solver_factory1(
@@ -152,7 +135,7 @@ smt_convt *create_solver_factory1(
     return pick_solver(ns, options, tuple_api, array_api, fp_api, msg);
 
   return create_solver(
-    std::move(solver_name), options, ns, tuple_api, array_api, fp_api, msg);
+    solver_name, options, ns, tuple_api, array_api, fp_api, msg);
 }
 
 smt_convt *create_solver_factory(
