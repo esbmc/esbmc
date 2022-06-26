@@ -16,7 +16,7 @@ typedef smt_convt *(solver_creator)(
   const messaget &msg);
 
 smt_convt *create_solver_factory(
-  const std::string &solver_name,
+  std::string solver_name,
   const namespacet &ns,
   const optionst &options,
   const messaget &msg);
