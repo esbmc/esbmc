@@ -34,7 +34,7 @@
  *  from the solver.
  *
  *  To do that, the user must allocate a solver converter object, which extends
- *  the class smt_convt. Current, create_solver_factory will do this, in the
+ *  the class smt_convt. Current, create_solver() will do this, in the
  *  factory-pattern manner (ish). Each solver converter implements all the
  *  abstract methods of smt_convt. When handed an expression to convert,
  *  smt_convt deconstructs it into a series of function applications, which it
@@ -79,7 +79,7 @@
  *
  *  @see smt_convt
  *  @see symex_target_equationt
- *  @see create_solver_factory
+ *  @see create_solver
  *  @see smt_convt::mk_func_app
  */
 
