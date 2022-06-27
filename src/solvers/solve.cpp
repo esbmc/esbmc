@@ -73,7 +73,7 @@ static std::string pick_default_solver(const messaget &msg)
 #endif
 }
 
-static const solver_creator &pick_solver(
+static solver_creator &pick_solver(
   std::string &solver_name,
   const optionst &options,
   const messaget &msg)
@@ -117,7 +117,7 @@ smt_convt *create_solver(
   array_iface *array_api = nullptr;
   fp_convt *fp_api = nullptr;
 
-  const solver_creator &factory = pick_solver(solver_name, options, msg);
+  solver_creator &factory = pick_solver(solver_name, options, msg);
   smt_convt *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api, msg);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
