@@ -169,6 +169,14 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
         return true;
       }
 
+      /* TODO: remove this recursive call. `width` is not used. However, there
+       * are side-effects that cause re-ordering in the GOTO for pthread_lib.c
+       * and that also negatively affect Boolector run times, see #764. These
+       * should be investigated before removing it. */
+      exprt width;
+      if(get_expr(*fd.getBitWidth(), width))
+        return true;
+
       comp.type().width(integer2string(result.Val.getInt().getSExtValue()));
       comp.type().set("#bitfield", true);
       comp.type().subtype() = t;
