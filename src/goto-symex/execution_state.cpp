@@ -83,7 +83,6 @@ execution_statet::execution_statet(
   preserved_paths.emplace_back();
   cur_state = &threads_state.front();
   cur_state->global_guard.make_true();
-  cur_state->global_guard.add(get_guard_identifier());
 
   atomic_numbers.push_back(0);
 
@@ -683,7 +682,6 @@ bool execution_statet::is_cur_state_guard_false(const expr2tc &guard)
 void execution_statet::execute_guard()
 {
   node_id = node_count++;
-  expr2tc guard_expr = get_guard_identifier();
   expr2tc parent_guard;
 
   // Parent guard of this context switch - if a assign/claim/assume, just use
@@ -705,16 +703,12 @@ void execution_statet::execute_guard()
     return;
   }
 
-  // Rename value, allows its use in other renamed exprs
-  state_level2->make_assignment(guard_expr, expr2tc(), expr2tc());
-
   // Truth of this guard implies the parent is true.
   state_level2->rename(parent_guard);
   do_simplify(parent_guard);
-  implies2tc assumpt(guard_expr, parent_guard);
 
   target->assumption(
-    guardt().as_expr(), assumpt, get_active_state().source, first_loop);
+    guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
 
   // Check to see whether or not the state guard is false, indicating we've
   // found an unviable interleaving. However don't do this if we didn't
