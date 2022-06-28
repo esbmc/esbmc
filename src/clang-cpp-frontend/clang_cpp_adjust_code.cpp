@@ -151,6 +151,29 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
 
     code_declt &code_decl = to_code_decl(to_code(*it));
 
+    // adjust lvalue reference
+    if(code_decl.get_bool("reference"))
+    {
+      // deal with lvalue reference decl-block
+      // convert `int &r = g;` into `int *r = &g;`
+      // where operand0 refers to `*r` and operand1 refers `&g`
+
+      // operand0 refers to lvalue reference. It must be a pointer type.
+      // If it's on RHS (i.e. operand1), it is a DeclExprRef which will be adjusted
+      // by a different routine.
+      exprt &lhs = code_decl.lhs();
+      assert(lhs.type().is_pointer());
+
+      // convert operand1 to address_of subtree
+      // We have converted lvalue reference to pointer in a declaration statement with initialisation.
+      // As a result, generate address_of to match the pointer type.
+      exprt &rhs = code_decl.rhs();
+      exprt result_expr = exprt("address_of", rhs.type());
+      result_expr.copy_to_operands(rhs.op0());
+      rhs.swap(result_expr);
+    }
+
+    // adjust constructor
     if(code_decl.operands().size() == 2)
     {
       exprt &rhs = code_decl.rhs();

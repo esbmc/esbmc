@@ -159,10 +159,11 @@ bool clang_cpp_convertert::get_type(
   {
   case clang::Type::LValueReference:
   {
+    // lvalue reference case:
+    // an lvalue reference is converted to a pointer typet subtree
     const clang::LValueReferenceType &lvrt =
       static_cast<const clang::LValueReferenceType &>(the_type);
 
-    // an lvalue reference is converted to a pointer typet subtree
     typet sub_type;
     if(get_type(lvrt.getPointeeTypeAsWritten(), sub_type))
       return true;
@@ -693,6 +694,7 @@ bool clang_cpp_convertert::get_constructor_call(
     call.arguments().push_back(single_arg);
   }
 
+  // set "constructor" node for adjuster
   call.set("constructor", 1);
 
   // Now, if we built a new object, then we must build a temporary

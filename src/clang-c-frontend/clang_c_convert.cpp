@@ -506,22 +506,17 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     if(get_expr(*vd.getInit(), val))
       return true;
 
-    if(is_lvalue_reference(vd))
-    {
-      // We have converted lvalue reference to pointer in a declaration statement with initialisation.
-      // As a result, generate address_of to match the pointer type.
-      exprt result_expr = exprt("address_of", t);
-      result_expr.move_to_operands(val);
-      val.swap(result_expr);
-    }
-    else
-    {
-      // just typecast to match the type of LHS
-      gen_typecast(ns, val, t);
-    }
+    // just typecast to match the type of LHS
+    gen_typecast(ns, val, t);
 
     added_symbol.value = val;
     decl.operands().push_back(val);
+
+    if(is_lvalue_reference(vd))
+    {
+      // mark the subtree for adjuster to convert lvalue reference decl-block
+      decl.set("reference", 1);
+    }
   }
 
   decl.location() = location_begin;
@@ -571,6 +566,11 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 
   std::string id, name;
   get_decl_name(fd, name, id);
+
+  if(id == "c:@F@main#")
+  {
+    printf("Got main\n");
+  }
 
   symbolt symbol;
   get_default_symbol(
@@ -1243,7 +1243,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   switch(stmt.getStmtClass())
   {
-  //The following enum values are the the expr of a program,
+  //The following enum values are the expr of a program,
   //defined on the Expr class
 
   // Objects that are implicit defined on the code syntax.
@@ -1276,6 +1276,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // if type is lvalue ref, convert to dereference subtree
     if(is_lvalue_reference(dcl))
     {
+      // mark the subtree for adjuster to convert lvalue reference DeclRefExpr
+      printf("@@ Mark the irep and move conversion to adjuster\n");
+      /*
       // get type and make a dereference subtree
       typet deref_type = new_expr.type().subtype();
       exprt deref_expr = exprt("dereference", deref_type);
@@ -1286,6 +1289,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
       // add location node
       new_expr.location() = location;
+      */
     }
 
     break;
@@ -1503,12 +1507,15 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             static_cast<const clang::Decl &>(*decl.getDecl());
           if(is_lvalue_reference(dcl))
           {
+            printf("@@ Mark the irep and move conversion to adjuster\n");
+            /*
             // we have converted lvalue ref to a dereference subtree
-            // To make it a function argument, we need to wrap it in a "&(.)" expresson
+            // To make it a function argument, we need to wrap it in a "&(.)" expression
             typet addrof_type = single_arg.operands().at(0).type();
             exprt addrof_expr = exprt("address_of", addrof_type);
             addrof_expr.operands().push_back(single_arg);
             single_arg.swap(addrof_expr);
+            */
           }
         }
       }
@@ -3174,11 +3181,9 @@ bool clang_c_convertert::is_lvalue_reference(const clang::Decl &d)
   if(const auto *nd = llvm::dyn_cast<clang::ValueDecl>(&d))
   {
     const clang::QualType &q_type = nd->getType();
-    const clang::Type &the_type = *q_type.getTypePtrOrNull();
-    if(the_type.getTypeClass() == clang::Type::LValueReference)
-    {
-      return true;
-    }
+    const clang::Type &the_type =
+      *q_type.getTypePtrOrNull(); // TODO: check nullptr before dereferencing???
+    return the_type.getTypeClass() == clang::Type::LValueReference;
   }
 
   return false;
