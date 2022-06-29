@@ -17,7 +17,7 @@ public:
 
 bool crypto_hash::operator<(const crypto_hash h2) const
 {
-  if(memcmp(hash, h2.hash, CRYPTO_HASH_SIZE) < 0)
+  if(memcmp(hash, h2.hash, sizeof(hash)) < 0)
     return true;
 
   return false;
