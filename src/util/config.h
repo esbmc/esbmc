@@ -82,6 +82,7 @@ public:
 
 #undef dm
 
+  std::string language = "";
   struct ansi_ct
   {
     // for ANSI-C

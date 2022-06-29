@@ -49,6 +49,8 @@ bool language_uit::parse(const std::string &filename)
     }
   }
 
+  config.language = mode_table[mode].name;
+
   // Check that it opens
   std::ifstream infile(filename.c_str());
   if(!infile)
