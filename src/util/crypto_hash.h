@@ -12,7 +12,7 @@ public:
   std::shared_ptr<crypto_hash_private> p_crypto;
   unsigned int hash[5];
 
-  bool operator<(const crypto_hash h2) const;
+  bool operator<(const crypto_hash &h2) const;
 
   std::string to_string() const;
 
