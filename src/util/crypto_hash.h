@@ -6,8 +6,6 @@
 
 class crypto_hash_private;
 
-#define CRYPTO_HASH_SIZE 32
-
 class crypto_hash
 {
 public:
