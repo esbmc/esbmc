@@ -15,7 +15,7 @@ public:
   boost::uuids::detail::sha1 s;
 };
 
-bool crypto_hash::operator<(const crypto_hash h2) const
+bool crypto_hash::operator<(const crypto_hash &h2) const
 {
   if(memcmp(hash, h2.hash, sizeof(hash)) < 0)
     return true;
