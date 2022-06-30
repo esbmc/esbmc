@@ -82,6 +82,7 @@ public:
 
 #undef dm
 
+  // For frontend language name
   std::string language = "";
   struct ansi_ct
   {
