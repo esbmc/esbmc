@@ -412,8 +412,6 @@ exprt jimple_virtual_invoke::to_exprt(
   return block;
 }
 
-#include <iostream>
-
 exprt jimple_newarray::to_exprt(
   contextt &ctx,
   const std::string &class_name,
@@ -434,16 +432,6 @@ exprt jimple_newarray::to_exprt(
   if(alloc_type.is_nil())
     alloc_type = char_type();
 
-  /*
-  if(alloc_type.id() == "symbol")
-    alloc_type = ns.follow(alloc_type);
-*/
-  if(alloc_size.type() != uint_type())
-  {
-    //alloc_size.make_typecast(uint_type());
-    //simplify(alloc_size);
-  }
-
   // Create a function call for allocation
   code_function_callt call;
   auto alloca_symbol = get_allocation_function();
@@ -451,13 +439,6 @@ exprt jimple_newarray::to_exprt(
   symbolt &added_symbol = *ctx.move_symbol_to_context(alloca_symbol);
 
   call.function() = symbol_expr(added_symbol);
-  //call.function().dump();
-  //call.function().return_type().cmt_type(alloc_type);
-  //call.function().cmt_size(alloc_size);
-  //call.function().type() = pointer_typet(empty_typet());
-
-  //call.function().return_type() = pointer_typet(empty_typet());
-  //call.type() = base_type.is_pointer() ? base_type.subtype().type() : base_type.type();
 
   // LHS of call is the tmp var
   call.lhs() = symbol_expr(tmp_added_symbol);
