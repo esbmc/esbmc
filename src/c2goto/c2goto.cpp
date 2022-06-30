@@ -96,6 +96,4 @@ int main(int argc, const char **argv)
   return parseopt.main();
 }
 
-const mode_table_et mode_table[] = {
-  LANGAPI_MODE_CLANG_C,
-  LANGAPI_MODE_END};
+const mode_table_et mode_table[] = {LANGAPI_MODE_CLANG_C, LANGAPI_MODE_END};
