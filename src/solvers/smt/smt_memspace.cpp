@@ -427,7 +427,8 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     expr2tc e = or1;
     if(current_valid_objects_sym)
     {
-      expr2tc cond = index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j));
+      expr2tc cond =
+        index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j));
       e = implies2tc(cond, e);
     }
 
