@@ -423,7 +423,15 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     lessthan2tc lt1(end_i, start_j);
     greaterthan2tc gt1(start_i, end_j);
     or2tc or1(lt1, gt1);
-    assert_expr(or1);
+
+    expr2tc e = or1;
+    if(current_valid_objects_sym)
+    {
+      expr2tc cond = index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j));
+      e = implies2tc(cond, e);
+    }
+
+    assert_expr(e);
   }
 }
 

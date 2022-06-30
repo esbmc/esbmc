@@ -1387,13 +1387,15 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
   }
   case expr2t::symbol_id:
   {
+    const symbol2t &sym = to_symbol2t(expr);
+    std::string name = sym.get_symbol_name();
+    if(sym.thename == "c:@__ESBMC_alloc")
+      current_valid_objects_sym = expr;
+
     // Special case for tuple symbols
     if(is_tuple_ast_type(expr))
-    {
-      const symbol2t &sym = to_symbol2t(expr);
       return tuple_api->mk_tuple_symbol(
         sym.get_symbol_name(), convert_sort(sym.type));
-    }
 
     if(is_array_type(expr))
     {
@@ -1406,9 +1408,6 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     }
 
     // Just a normal symbol. Possibly an array symbol.
-    const symbol2t &sym = to_symbol2t(expr);
-    std::string name = sym.get_symbol_name();
-
     smt_sortt sort = convert_sort(sym.type);
 
     if(is_array_type(expr))

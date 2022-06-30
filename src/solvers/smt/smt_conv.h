@@ -842,6 +842,7 @@ public:
    *  the nubmer of bytes allocated. In a list to support pushing and
    *  popping. */
   std::list<std::map<unsigned, unsigned>> addr_space_data;
+  expr2tc current_valid_objects_sym;
 
   // XXX - push-pop will break here.
   typedef std::map<std::string, smt_astt> renumber_mapt;
