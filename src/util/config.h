@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/cmdline.h>
 #include <util/options.h>
+#include <langapi/mode.h>
 
 #ifndef GNUC_PREREQ
 #if defined(__GNUC__) && defined(__GNUC_MINOR__) && defined(__GNUC_PATCHLEVEL__)
@@ -82,8 +83,9 @@ public:
 
 #undef dm
 
-  // For frontend language name
-  std::string language = "";
+  // Language the frontend has been parsing
+  language_idt language = language_idt::NONE;
+
   struct ansi_ct
   {
     // for ANSI-C

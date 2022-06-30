@@ -12,9 +12,9 @@
 #include <util/message/message.h>
 
 const mode_table_et mode_table[] = {
-  LANGAPI_HAVE_MODE_CLANG_C,
-  LANGAPI_HAVE_MODE_CLANG_CPP,
-  LANGAPI_HAVE_MODE_END}; // This is the simplest way to have this
+  LANGAPI_MODE_CLANG_C,
+  LANGAPI_MODE_CLANG_CPP,
+  LANGAPI_MODE_END}; // This is the simplest way to have this
 
 void goto_factory::create_file_from_istream(
   std::istream &c_inputstream,
