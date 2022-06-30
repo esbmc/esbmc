@@ -1277,7 +1277,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if(is_lvalue_reference(dcl))
     {
       // mark the subtree for adjuster to convert lvalue reference DeclRefExpr
-      printf("@@ Mark the irep and move conversion to adjuster\n");
+      new_expr.set("reference", 1);
       /*
       // get type and make a dereference subtree
       typet deref_type = new_expr.type().subtype();
