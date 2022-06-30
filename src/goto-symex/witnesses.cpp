@@ -738,7 +738,7 @@ bool is_valid_witness_step(
   const goto_trace_stept &step,
   const messaget &msg)
 {
-  languagest languages(ns, "C", msg);
+  languagest languages(ns, language_idt::C, msg);
   std::string lhsexpr;
   languages.from_expr(migrate_expr_back(step.lhs), lhsexpr);
   std::string location = step.pc->location.to_string();
@@ -754,7 +754,7 @@ bool is_valid_witness_expr(
   const irep_container<expr2t> &exp,
   const messaget &msg)
 {
-  languagest languages(ns, "C", msg);
+  languagest languages(ns, language_idt::C, msg);
   std::string value;
   languages.from_expr(migrate_expr_back(exp), value);
   return (value.find("__ESBMC") & value.find("stdin") & value.find("stdout") &

@@ -208,7 +208,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
   if(config.options.get_bool_option("ssa-symbol-table"))
     ::show_symbol_table_plain(ns, oss, msg);
 
-  languagest languages(ns, MODE_C, msg);
+  languagest languages(ns, language_idt::C, msg);
 
   oss << "\nProgram constraints: \n";
 

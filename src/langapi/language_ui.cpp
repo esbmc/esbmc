@@ -31,7 +31,8 @@ bool language_uit::parse()
 
 bool language_uit::parse(const std::string &filename)
 {
-  int mode = get_mode_filename(filename);
+  language_idt lang = language_id_by_path(filename);
+  int mode = get_mode(lang);
 
   if(mode < 0)
   {
@@ -49,7 +50,7 @@ bool language_uit::parse(const std::string &filename)
     }
   }
 
-  config.language = mode_table[mode].name;
+  config.language = lang;
 
   // Check that it opens
   std::ifstream infile(filename.c_str());
@@ -74,7 +75,7 @@ bool language_uit::parse(const std::string &filename)
   msg.status("Parsing", filename);
 
 #ifdef ENABLE_SOLIDITY_FRONTEND
-  if(mode == get_mode("Solidity AST"))
+  if(mode == get_mode(language_idt::SOLIDITY))
   {
     language.set_func_name(_cmdline.vm["function"].as<std::string>());
 

@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_LANGUAGES_H
 #define CPROVER_LANGUAGES_H
 
+#include <langapi/mode.h>
 #include <util/language.h>
 
 class languagest
@@ -28,7 +29,7 @@ public:
 
   // constructor / destructor
 
-  languagest(const namespacet &_ns, const char *mode, const messaget &msg);
+  languagest(const namespacet &_ns, language_idt lang, const messaget &msg);
   virtual ~languagest();
 
 protected:
