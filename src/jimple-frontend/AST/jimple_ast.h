@@ -15,6 +15,7 @@ Description: This interface will define every method that needs to
 #include <util/std_types.h>
 #include <util/c_types.h>
 #include <nlohmann/json.hpp>
+#include <util/message/format.h>
 
 // For json parsing
 using json = nlohmann::json;
@@ -58,9 +59,9 @@ protected:
    * should convert it to Jimple.
    * By using C mode, we don't have to worry about typecast and
    * primitives for now.
-   * 
+   *
    * We still need to create every intrinsic type and variable for JVM
-   * 
+   *
    * @return an initialized symbolt
    */
   static symbolt create_jimple_symbolt(
@@ -82,11 +83,11 @@ protected:
 
   /**
    * @brief Create a temporary variable to be used
-   * 
+   *
    * @param t type of the variable
    * @param class_name class package to the variable
    * @param function_name function where the variable is going to be created
-   * @return symbolt 
+   * @return symbolt
    */
   static symbolt get_temp_symbol(
     const typet &t,
@@ -97,7 +98,7 @@ protected:
 
     std::string id, name;
     id = get_symbol_name(
-      class_name, function_name, "return_value$tmp$" + counter++);
+      class_name, function_name, fmt::format("return_value$tmp${}", counter++));
     name = "return_value$tmp$";
     name += counter;
     auto tmp_symbol =
@@ -112,11 +113,11 @@ protected:
 
   /**
    * @brief Get the allocation function symbol
-   * 
+   *
    * This is going to be the function to be called
    * for `new` and `newarray` calls
-   * 
-   * @return symbolt 
+   *
+   * @return symbolt
    */
   static symbolt get_allocation_function()
   {
@@ -136,11 +137,11 @@ protected:
 
   /**
    * @brief Get the esbmc_get_object_size symbol
-   * 
+   *
    * This is going to be the function to be called
    * for `lengthof`
-   * 
-   * @return symbolt 
+   *
+   * @return symbolt
    */
   static symbolt get_lengthof_function()
   {
@@ -160,14 +161,14 @@ protected:
 
   /**
    * @brief Get the unique method name
-   * 
+   *
    * This is the full id for the method,
-   * 
+   *
    * In jimple this will mean `class_name:function_name`
-   * 
-   * @param class_name 
-   * @param function_name 
-   * @return std::string 
+   *
+   * @param class_name
+   * @param function_name
+   * @return std::string
    */
   static std::string
   get_method_name(std::string class_name, std::string function_name)
@@ -179,13 +180,13 @@ protected:
 
   /**
    * @brief Get the symbol name id
-   * 
+   *
    * Note: Jimple is already in SSA form
-   * 
-   * @param class_name 
-   * @param function_name 
-   * @param symbol 
-   * @return std::string 
+   *
+   * @param class_name
+   * @param function_name
+   * @param symbol
+   * @return std::string
    */
   static std::string get_symbol_name(
     std::string class_name,
