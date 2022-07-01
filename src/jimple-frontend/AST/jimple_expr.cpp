@@ -219,8 +219,6 @@ exprt jimple_lengthof::to_exprt(
   const std::string &function_name) const
 {
   auto expr = from->to_exprt(ctx, class_name, function_name);
-  auto tmp_symbol = get_temp_symbol(uint_type(), class_name, function_name);
-  symbolt &tmp_added_symbol = *ctx.move_symbol_to_context(tmp_symbol);
 
   // Create a function call for allocation
   code_function_callt call;
