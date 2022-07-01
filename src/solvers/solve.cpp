@@ -95,6 +95,9 @@ static solver_creator &pick_solver(
   }
 
   if(solver_name == "")
+    solver_name = options.get_option("default-solver");
+
+  if(solver_name == "")
     solver_name = pick_default_solver(msg);
 
   auto it = esbmc_solvers.find(solver_name);
