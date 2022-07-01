@@ -422,9 +422,9 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     // Previous assertions ensure start < end for all objs.
     lessthan2tc lt1(end_i, start_j);
     greaterthan2tc gt1(start_i, end_j);
-    or2tc or1(lt1, gt1);
+    or2tc no_overlap(lt1, gt1);
 
-    expr2tc e = or1;
+    expr2tc e = no_overlap;
 
     /* If a `__ESBMC_alloc` has already been seen, we use it to make the address
      * space constraints on all objects except NULL (j == 0) and INVALID
@@ -439,9 +439,9 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
      */
     if(j && current_valid_objects_sym)
     {
-      expr2tc cond =
+      expr2tc alive =
         index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j));
-      e = implies2tc(cond, e);
+      e = implies2tc(alive, e);
     }
 
     assert_expr(e);
