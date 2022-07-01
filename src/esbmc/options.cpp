@@ -1,5 +1,6 @@
 #include <esbmc/esbmc_parseoptions.h>
 #include <fstream>
+#include <solvers/solver_config.h>
 #include <util/cmdline.h>
 
 const struct group_opt_templ all_cmd_options[] = {
@@ -175,6 +176,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"bv", NULL, "use solver with bit-vector arithmetic"},
     {"ir", NULL, "use solver with integer/real arithmetic"},
     {"smtlib", NULL, "use SMT lib format"},
+    {"default-solver",
+     boost::program_options::value<std::string>()->value_name("<solver>"),
+     "override default solver used if no concrete one is specified"
+#ifdef BOOLECTOR
+     " (Boolector)"
+#endif
+    },
     {"non-supported-models-as-zero",
      NULL,
      "if ESBMC can't extract a type/expression from the solver, then the value "
