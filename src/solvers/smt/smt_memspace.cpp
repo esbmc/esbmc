@@ -425,6 +425,18 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     or2tc or1(lt1, gt1);
 
     expr2tc e = or1;
+
+    /* If a `__ESBMC_alloc` has already been seen, we use it to make the address
+     * space constraints on all objects except INVALID (j == 1) dependent on
+     * whether the object is still alive:
+     *   (__ESBMC_alloc[j] == true) => (i_end < j_start || i_start > j_end)
+     * In case the object j was free'd, it no longer restricts the addresses of
+     * the new object i.
+     *
+     * XXXfbrausse: This is crucially relies on the fact that the current
+     * version of the __ESBMC_alloc symbol stored in `current_valid_objects_sym`
+     * is the one this new object i gets registered with.
+     */
     if(current_valid_objects_sym)
     {
       expr2tc cond =

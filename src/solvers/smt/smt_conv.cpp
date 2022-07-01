@@ -1388,7 +1388,12 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
   case expr2t::symbol_id:
   {
     const symbol2t &sym = to_symbol2t(expr);
-    std::string name = sym.get_symbol_name();
+
+    /* The `__ESBMC_alloc` symbol is required for finalize_pointer_chain() to
+     * work, see #775. We should actually ensure here, that this is the version
+     * of the symbol active when smt_memspace allocates the new object.
+     *
+     * XXXfbrausse: How can we ensure this? */
     if(sym.thename == "c:@__ESBMC_alloc")
       current_valid_objects_sym = expr;
 
@@ -1408,6 +1413,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     }
 
     // Just a normal symbol. Possibly an array symbol.
+    std::string name = sym.get_symbol_name();
     smt_sortt sort = convert_sort(sym.type);
 
     if(is_array_type(expr))

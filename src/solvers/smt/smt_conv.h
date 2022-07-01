@@ -842,6 +842,9 @@ public:
    *  the nubmer of bytes allocated. In a list to support pushing and
    *  popping. */
   std::list<std::map<unsigned, unsigned>> addr_space_data;
+
+  /** Holds the `__ESBMC_alloc` symbol convert_terminal() was last invoked with.
+   */
   expr2tc current_valid_objects_sym;
 
   // XXX - push-pop will break here.
