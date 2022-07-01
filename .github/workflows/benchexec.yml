@@ -10,6 +10,10 @@ on:
         description: 'Timeout for each benchmarks (in seconds)'
         required: true
         default: '10'
+      options:
+        description: 'Command-line flags to pass via ESBMC_OPTS'
+        required: false
+        default: ''
 
 
 jobs:
@@ -53,6 +57,7 @@ jobs:
       - name: Run Benchexec
         env:
           TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
         run: |
           rm -rf $HOME/output-action 
           mkdir $HOME/output-action
