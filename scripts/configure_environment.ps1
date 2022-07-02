@@ -4,14 +4,14 @@ $URL = "https://sourceforge.net/projects/esbmc-deps/files/clang.zip/download"
 $LLVM_ZIP = "clang.zip"
 $LLVM_DEST = "C:\deps\clang"
 
-Invoke-WebRequest $URL -OutFile $LLVM_ZIP
+Invoke-WebRequest $URL -OutFile $LLVM_ZIP -UserAgent [Microsoft.PowerShell.Commands.PSUserAgent]::FireFox
 Expand-Archive -LiteralPath $LLVM_ZIP -DestinationPath $LLVM_DEST
 
 $Z3 = "https://sourceforge.net/projects/esbmc-deps/files/z3.zip/download"
 $Z3_ZIP = "z3.zip"
 $Z3_DEST = "C:\deps"
 
-Invoke-WebRequest $Z3 -OutFile $Z3_ZIP
+Invoke-WebRequest $Z3 -OutFile $Z3_ZIP -UserAgent [Microsoft.PowerShell.Commands.PSUserAgent]::FireFox
 Expand-Archive -LiteralPath $Z3_ZIP -DestinationPath $Z3_DEST
 
 ls C:\vcpkg\installed\x64-windows\bin\
