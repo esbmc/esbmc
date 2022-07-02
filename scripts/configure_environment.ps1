@@ -1,13 +1,13 @@
 # Download and extract prebuilt LLVM+Clang for Windows
 
-$URL = "https://www.dropbox.com/s/z1gyschfa46yj6e/clang.zip?dl=1"
+$URL = "https://sourceforge.net/projects/esbmc-deps/files/clang.zip/download"
 $LLVM_ZIP = "clang.zip"
 $LLVM_DEST = "C:\deps\clang"
 
 Invoke-WebRequest $URL -OutFile $LLVM_ZIP
 Expand-Archive -LiteralPath $LLVM_ZIP -DestinationPath $LLVM_DEST
 
-$Z3 = "https://www.dropbox.com/s/w1722iclf8rr9o0/z3.zip?dl=1"
+$Z3 = "https://sourceforge.net/projects/esbmc-deps/files/z3.zip/download"
 $Z3_ZIP = "z3.zip"
 $Z3_DEST = "C:\deps"
 
