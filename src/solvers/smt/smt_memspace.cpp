@@ -294,8 +294,7 @@ smt_astt smt_convt::convert_identifier_pointer(
     expr2tc size;
     try
     {
-      uint64_t type_size = expr->type->get_width() / 8;
-      size = constant_int2tc(ptr_loc_type, BigInt(type_size));
+      size = constant_int2tc(ptr_loc_type, type_byte_size(expr->type));
     }
     catch(const array_type2t::dyn_sized_array_excp &e)
     {
