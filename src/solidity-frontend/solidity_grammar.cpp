@@ -228,6 +228,10 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
      */
     return INT_LITERAL;
   }
+  if(typeString.find("literal_string") == 0)
+  {
+    return STRING_LITERAL;
+  }
 
   assert(!((fmt::format(
               "Got elementary-type-name typeString={}. Unsupported "
@@ -307,6 +311,7 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
     ENUM_TO_STR(INT248)
     ENUM_TO_STR(INT256)
     ENUM_TO_STR(BOOL)
+    ENUM_TO_STR(STRING_LITERAL)
     ENUM_TO_STR(ElementaryTypeNameTError)
   default:
   {

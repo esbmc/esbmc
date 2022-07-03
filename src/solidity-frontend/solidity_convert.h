@@ -146,6 +146,10 @@ protected:
     const nlohmann::json &bool_literal,
     std::string the_value,
     exprt &dest);
+  bool convert_string_literal(
+    const nlohmann::json &string_literal,
+    std::string the_value,
+    exprt &dest);
 
 private:
   bool get_elementary_type_name_uint(
