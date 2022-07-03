@@ -10,6 +10,10 @@ on:
         description: 'Timeout for each benchmarks (in seconds)'
         required: true
         default: '10'
+      options:
+        description: 'Command-line flags to pass via ESBMC_OPTS'
+        required: false
+        default: ''
 
 
 jobs:
@@ -29,10 +33,12 @@ jobs:
         run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
       - name: Setup boolector
         run: git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.2 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
+      - name: Setup Z3
+        run: wget https://github.com/fbrausse/esbmc/raw/_assets/z3-ea2a84332513a7823e8e5c96f039fd048cb43dc5-Ubuntu20.04.zip && unzip z3-ea2a84332513a7823e8e5c96f039fd048cb43dc5-Ubuntu20.04.zip && mv release/ z3
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3
       - name: Build ESBMC
         run: cd build && cmake --build .
       - uses: actions/upload-artifact@v1
@@ -53,6 +59,7 @@ jobs:
       - name: Run Benchexec
         env:
           TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
         run: |
           rm -rf $HOME/output-action 
           mkdir $HOME/output-action

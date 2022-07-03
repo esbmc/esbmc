@@ -36,6 +36,9 @@ endif()
 if(ENABLE_GOTO_CONTRACTOR)
     set(REGRESSIONS_GOTO_CONTRACTOR goto-contractor)
 endif()
+if(ENABLE_OLD_FRONTEND)
+    set(REGRESSIONS_OLD_FRONTEND esbmc-old)
+endif()
 
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)
@@ -48,7 +51,8 @@ elseif(WIN32)
     set(REGRESSIONS esbmc cbmc cstd llvm floats k-induction)
 else()
     set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc ${REGRESSIONS_SOLIDITY}
-                    esbmc-old cbmc cstd llvm floats floats-regression
+                    ${REGRESSIONS_OLD_FRONTEND}
+                    cbmc cstd llvm floats floats-regression
                     k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith
                     k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
                     incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors ${REGRESSIONS_GOTO_CONTRACTOR})
