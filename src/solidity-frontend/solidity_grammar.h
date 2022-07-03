@@ -123,6 +123,8 @@ enum ElementaryTypeNameT
   // TODO: rule address
   // TODO: rule address payable
   // TODO: rule string
+  STRING,
+  STRING_LITERAL,
   // TODO: rule bytes
   // TODO: rule signed-integer-type
   // TODO: rule e

@@ -60,6 +60,24 @@ bool solidity_convertert::convert_bool_literal(
 
 // TODO: Character literal
 // TODO: String literal
+bool solidity_convertert::convert_string_literal(
+  const nlohmann::json &string_literal,
+  std::string the_value,
+  exprt &dest)
+{
+  size_t string_size = the_value.size();
+  typet type = array_typet(
+    signed_char_type(),
+    constant_exprt(
+      integer2binary(string_size, bv_width(int_type())),
+      integer2string(string_size),
+      int_type()));
+
+  string_constantt string(the_value, type);
+  dest.swap(string);
+
+  return false;
+}
 // TODO: Float literal.
 //    - Note: Currently Solidity does NOT support floating point data types or fp arithmetic.
 //      Everything is done in fixed-point arithmetic as of Solidity compiler v0.8.6.

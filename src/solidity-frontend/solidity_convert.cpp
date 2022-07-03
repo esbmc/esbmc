@@ -846,6 +846,12 @@ bool solidity_convertert::get_expr(
         return true;
       break;
     }
+    case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
+    {
+      if(convert_string_literal(literal, the_value, new_expr))
+        return true;
+      break;
+    }
     default:
       assert(!"Literal not implemented");
     }
@@ -1594,6 +1600,10 @@ bool solidity_convertert::get_elementary_type_name(
     new_type = bool_type();
     c_type = "bool";
     new_type.set("#cpp_type", c_type);
+    break;
+  }
+  case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
+  {
     break;
   }
   default:
