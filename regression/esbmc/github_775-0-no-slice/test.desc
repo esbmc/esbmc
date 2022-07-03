@@ -1,0 +1,4 @@
+CORE
+main.c
+--32 --force-malloc-success --no-slice
+^VERIFICATION FAILED$
