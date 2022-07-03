@@ -117,7 +117,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
 
     if(
       uint_string_to_type_map.count(typeString) ||
-      int_string_to_type_map.count(typeString) || typeString == "bool")
+      int_string_to_type_map.count(typeString) || typeString == "bool" ||
+      typeString == "string")
     {
       // For state var declaration,
       return ElementaryTypeName;
@@ -232,6 +233,10 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   {
     return STRING_LITERAL;
   }
+  if(typeString == "string")
+  {
+    return STRING;
+  }
 
   assert(!((fmt::format(
               "Got elementary-type-name typeString={}. Unsupported "
@@ -312,6 +317,7 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
     ENUM_TO_STR(INT256)
     ENUM_TO_STR(BOOL)
     ENUM_TO_STR(STRING_LITERAL)
+    ENUM_TO_STR(STRING)
     ENUM_TO_STR(ElementaryTypeNameTError)
   default:
   {

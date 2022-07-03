@@ -1514,6 +1514,9 @@ bool solidity_convertert::get_elementary_type_name(
   SolidityGrammar::ElementaryTypeNameT type =
     SolidityGrammar::get_elementary_type_name_t(type_name);
 
+  msg.debug(fmt::format(
+    "	@@@ got ElementaryType: SolidityGrammar::ElementaryTypeNameT::{}", type));
+
   switch(type)
   {
   // rule unsigned-integer-type
@@ -1602,8 +1605,16 @@ bool solidity_convertert::get_elementary_type_name(
     new_type.set("#cpp_type", c_type);
     break;
   }
-  case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
+  case SolidityGrammar::ElementaryTypeNameT::STRING:
   {
+    size_t value_length = 128;
+
+    new_type = array_typet(
+      signed_char_type(),
+      constant_exprt(
+        integer2binary(value_length, bv_width(int_type())),
+        integer2string(value_length),
+        int_type()));
     break;
   }
   default:
