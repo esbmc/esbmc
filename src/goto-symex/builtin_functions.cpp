@@ -296,11 +296,11 @@ void goto_symext::track_new_pointer(
     expr2tc o_addr = o.obj;
     expr2tc o_start = typecast2tc(pointer_type2(), o_addr);
     expr2tc o_size = dynamic_size2tc(o_addr);
-    expr2tc o_end = add2tc(
-      pointer_type2(), o_start, typecast2tc(pointer_type2(), o_size));
+    expr2tc o_end =
+      add2tc(pointer_type2(), o_start, typecast2tc(pointer_type2(), o_size));
 
-    expr2tc o_disjoint = or2tc(
-      lessthanequal2tc(end, o_start), greaterthanequal2tc(start, o_end));
+    expr2tc o_disjoint =
+      or2tc(lessthanequal2tc(end, o_start), greaterthanequal2tc(start, o_end));
 
     expr2tc o_valid = valid_object2tc(o_addr);
     expr2tc cond = implies2tc(o_valid, o_disjoint);
