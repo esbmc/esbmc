@@ -372,9 +372,6 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   greaterthan2tc wraparound(end_sym, start_sym);
   assert_expr(or2tc(zeroeq, wraparound));
 
-  // Generate address space layout constraints.
-  finalize_pointer_chain(obj_num);
-
   addr_space_data.back()[obj_num] = 0; // XXX -- nothing uses this data?
 
   membs.clear();
@@ -403,40 +400,6 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   assert_expr(dyn_eq);
 
   return ptr_val;
-}
-
-void smt_convt::finalize_pointer_chain(unsigned int objnum)
-{
-  type2tc inttype = machine_ptr;
-  unsigned int num_ptrs = addr_space_data.back().size();
-  if(num_ptrs == 0)
-    return;
-
-  std::stringstream start1, end1;
-  start1 << "__ESBMC_ptr_obj_start_" << objnum;
-  end1 << "__ESBMC_ptr_obj_end_" << objnum;
-  symbol2tc start_i(inttype, start1.str());
-  symbol2tc end_i(inttype, end1.str());
-
-  for(unsigned int j = 0; j < objnum; j++)
-  {
-    // Obj1 is designed to overlap
-    if(j == 1)
-      continue;
-
-    std::stringstream startj, endj;
-    startj << "__ESBMC_ptr_obj_start_" << j;
-    endj << "__ESBMC_ptr_obj_end_" << j;
-    symbol2tc start_j(inttype, startj.str());
-    symbol2tc end_j(inttype, endj.str());
-
-    // Formula: (i_end < j_start) || (i_start > j_end)
-    // Previous assertions ensure start < end for all objs.
-    lessthan2tc lt1(end_i, start_j);
-    greaterthan2tc gt1(start_i, end_j);
-    or2tc or1(lt1, gt1);
-    assert_expr(or1);
-  }
 }
 
 smt_astt smt_convt::convert_addr_of(const expr2tc &expr)

@@ -664,10 +664,6 @@ public:
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
   std::string get_cur_addrspace_ident();
-  /** Create and assert address space constraints on the given object ID
-   *  number. Essentially, this asserts that all the objects to date don't
-   *  overlap with /this/ one. */
-  void finalize_pointer_chain(unsigned int obj_num);
 
   /** Typecast data to bools */
   smt_astt convert_typecast_to_bool(const typecast2t &cast);

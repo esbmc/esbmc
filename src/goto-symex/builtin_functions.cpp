@@ -250,7 +250,7 @@ void goto_symext::track_new_pointer(
   type2tc sz_sym_type =
     type2tc(new array_type2t(uint_type2(), expr2tc(), true));
   symbol2tc sz_sym(sz_sym_type, alloc_size_arr_name);
-  index2tc sz_index_expr(get_bool_type(), sz_sym, ptr_obj);
+  index2tc sz_index_expr(uint_type2(), sz_sym, ptr_obj);
 
   expr2tc object_size_exp;
   if(is_nil_expr(size))
@@ -271,6 +271,45 @@ void goto_symext::track_new_pointer(
   }
 
   symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true);
+
+  /* Encode address space layout constraints as the assumption that this new
+   * dynamic object and all other dynamic objects in existence do not have
+   * overlapping addresses at this point.
+   *
+   * We need the start and end addresses as well as validity of each object and
+   * get those from the ptr_obj, the recorded dynamic_memory, the __ESBMC_alloc
+   * and the __ESBMC_alloc_size arrays.
+   *
+   * Let [s,e) be the address range of this newly tracked object. For all
+   * *other* dynamically allocated objects o with addresses in [os,oe) assume:
+   *
+   *   valid(o) => (e <= os \/ s >= oe)
+   */
+  expr2tc addr = to_pointer_object2t(ptr_obj).ptr_obj;
+  expr2tc start = typecast2tc(pointer_type2(), addr);
+  expr2tc end = add2tc(
+    pointer_type2(), start, typecast2tc(pointer_type2(), object_size_exp));
+
+  expr2tc addr_disjoint = gen_true_expr();
+  for(const allocated_obj &o : dynamic_memory)
+  {
+    expr2tc o_addr = o.obj;
+    expr2tc o_start = typecast2tc(pointer_type2(), o_addr);
+    expr2tc o_size = dynamic_size2tc(o_addr);
+    expr2tc o_end = add2tc(
+      pointer_type2(), o_start, typecast2tc(pointer_type2(), o_size));
+
+    expr2tc o_disjoint = or2tc(
+      lessthanequal2tc(end, o_start), greaterthanequal2tc(start, o_end));
+
+    expr2tc o_valid = valid_object2tc(o_addr);
+    expr2tc cond = implies2tc(o_valid, o_disjoint);
+    o.alloc_guard.guard_expr(cond);
+    addr_disjoint = and2tc(addr_disjoint, cond);
+  }
+
+  replace_dynamic_allocation(addr_disjoint);
+  assume(addr_disjoint);
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
