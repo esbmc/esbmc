@@ -743,7 +743,7 @@ protected:
   void track_new_pointer(
     const expr2tc &ptr_obj,
     const type2tc &new_type,
-    const expr2tc &size = expr2tc());
+    const expr2tc &realloc_size = expr2tc());
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
   /** Symbolic implementation of c++'s delete. */

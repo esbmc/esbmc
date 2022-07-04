@@ -224,7 +224,7 @@ expr2tc goto_symext::symex_mem(
 void goto_symext::track_new_pointer(
   const expr2tc &ptr_obj,
   const type2tc &new_type,
-  const expr2tc &size)
+  const expr2tc &realloc_size)
 {
   // Also update all the accounting data.
 
@@ -253,7 +253,7 @@ void goto_symext::track_new_pointer(
   index2tc sz_index_expr(uint_type2(), sz_sym, ptr_obj);
 
   expr2tc object_size_exp;
-  if(is_nil_expr(size))
+  if(is_nil_expr(realloc_size))
   {
     try
     {
@@ -267,7 +267,7 @@ void goto_symext::track_new_pointer(
   }
   else
   {
-    object_size_exp = size;
+    object_size_exp = realloc_size;
   }
 
   symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true);
@@ -303,6 +303,11 @@ void goto_symext::track_new_pointer(
       or2tc(lessthanequal2tc(end, o_start), greaterthanequal2tc(start, o_end));
 
     expr2tc o_valid = valid_object2tc(o_addr);
+    /* If this is a "new" pointer tracked from symex_realloc(), make sure that
+     * it is not assumed to be disjoint with itself. */
+    if(!is_nil_expr(realloc_size))
+      o_valid = and2tc(o_valid, not2tc(same_object2tc(o_addr, addr)));
+
     expr2tc cond = implies2tc(o_valid, o_disjoint);
     o.alloc_guard.guard_expr(cond);
     addr_disjoint = and2tc(addr_disjoint, cond);
