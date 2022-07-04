@@ -242,11 +242,6 @@ void goto_symext::track_new_pointer(
   truth = gen_true_expr();
   symex_assign(code_assign2tc(valid_index_expr, truth), true);
 
-  symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
-  index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
-  expr2tc falseity = gen_false_expr();
-  symex_assign(code_assign2tc(dealloc_index_expr, falseity), true);
-
   type2tc sz_sym_type =
     type2tc(new array_type2t(uint_type2(), expr2tc(), true));
   symbol2tc sz_sym(sz_sym_type, alloc_size_arr_name);
@@ -330,16 +325,11 @@ void goto_symext::symex_free(const expr2tc &expr)
     }
   }
 
-  // Clear the alloc bit, and set the deallocated bit.
+  // Clear the alloc bit.
   type2tc sym_type =
     type2tc(new array_type2t(get_bool_type(), expr2tc(), true));
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), code.operand);
   dereference(ptr_obj, dereferencet::READ);
-
-  symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
-  index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
-  expr2tc truth = gen_true_expr();
-  symex_assign(code_assign2tc(dealloc_index_expr, truth), true);
 
   symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
   index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);

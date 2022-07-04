@@ -81,8 +81,6 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "bool __ESBMC_alloc[__CPROVER::constant_infinity_uint];" << std::endl;
   out << "unsigned __ESBMC_alloc_size[__CPROVER::constant_infinity_uint];"
       << std::endl;
-  out << "bool __ESBMC_deallocated[__CPROVER::constant_infinity_uint];"
-      << std::endl;
   out << "bool __ESBMC_is_dynamic[__CPROVER::constant_infinity_uint];"
       << std::endl;
 

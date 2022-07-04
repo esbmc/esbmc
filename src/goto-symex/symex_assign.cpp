@@ -74,7 +74,6 @@ goto_symext::goto_symext(
 
   valid_ptr_arr_name = "c:@__ESBMC_alloc";
   alloc_size_arr_name = "c:@__ESBMC_alloc_size";
-  deallocd_arr_name = "c:@__ESBMC_deallocated";
   dyn_info_arr_name = "c:@__ESBMC_is_dynamic";
 
   symbolt sym;
@@ -119,7 +118,6 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
 
   valid_ptr_arr_name = sym.valid_ptr_arr_name;
   alloc_size_arr_name = sym.alloc_size_arr_name;
-  deallocd_arr_name = sym.deallocd_arr_name;
   dyn_info_arr_name = sym.dyn_info_arr_name;
 
   dynamic_memory = sym.dynamic_memory;

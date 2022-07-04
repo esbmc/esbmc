@@ -309,9 +309,6 @@ __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_alloc[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_deallocated[1];
-
-__attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_is_dynamic[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
