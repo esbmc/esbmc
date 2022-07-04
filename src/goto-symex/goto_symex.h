@@ -507,15 +507,15 @@ protected:
    *  the wrong place.
    *  @param expr Expression we're replacing the contents of.
    */
-  void replace_dynamic_allocation(expr2tc &expr);
-  void default_replace_dynamic_allocation(expr2tc &expr);
+  void replace_dynamic_allocation(expr2tc &expr) const;
+  void default_replace_dynamic_allocation(expr2tc &expr) const;
 
   /**
    *  Decide if symbol is valid or not.
    *  i.e., whether it's live or not.
    *  @return True if symbol is valid.
    */
-  bool is_valid_object(const symbolt &symbol);
+  bool is_valid_object(const symbolt &symbol) const;
 
   /**
    *  Make symbolic assignment.
@@ -739,11 +739,24 @@ protected:
   /** Wrapper around for alloca and malloc. */
   expr2tc
   symex_mem(const bool is_malloc, const expr2tc &lhs, const sideeffect2t &code);
+
   /** Pointer modelling update function */
-  void track_new_pointer(
+  void update_pointer_tracking(const expr2tc &ptr_obj, const expr2tc &size);
+
+  /* Encode address space layout constraints as the assumption that this new
+   * dynamic object and all other dynamic objects in existence do not have
+   * overlapping addresses at this point.
+   */
+  expr2tc dynamic_addresses_disjoint_from_new(
     const expr2tc &ptr_obj,
-    const type2tc &new_type,
-    const expr2tc &realloc_size = expr2tc());
+    const expr2tc &size) const;
+  /* Same as above, but for realloc'ed objects, not new ones. */
+  expr2tc dynamic_addresses_disjoint_from_realloc(
+    const std::list<std::pair<expr2tc, expr2tc>> &tgts_guards,
+    const expr2tc &size) const;
+
+  void track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type);
+
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
   /** Symbolic implementation of c++'s delete. */

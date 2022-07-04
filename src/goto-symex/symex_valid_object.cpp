@@ -28,7 +28,7 @@ static const expr2tc *get_object(const expr2tc &expr)
   return nullptr;
 }
 
-void goto_symext::replace_dynamic_allocation(expr2tc &expr)
+void goto_symext::replace_dynamic_allocation(expr2tc &expr) const
 {
   if(is_nil_expr(expr))
     return;
@@ -84,7 +84,7 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
   }
 }
 
-bool goto_symext::is_valid_object(const symbolt &symbol)
+bool goto_symext::is_valid_object(const symbolt &symbol) const
 {
   if(symbol.static_lifetime)
     return true; // global

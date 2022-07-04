@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <irep2/irep2.h>
 #include <util/std_expr.h>
 
-void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
+void goto_symext::default_replace_dynamic_allocation(expr2tc &expr) const
 {
   expr->Foreach_operand([this](expr2tc &e) {
     if(!is_nil_expr(e))

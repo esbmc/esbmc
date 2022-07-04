@@ -103,7 +103,9 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
 
   // Install pointer modelling data into the relevant arrays.
   pointer_object2tc ptr_obj(pointer_type2(), result);
-  track_new_pointer(ptr_obj, type2tc(), realloc_size);
+  update_pointer_tracking(ptr_obj, realloc_size);
+  assume(dynamic_addresses_disjoint_from_realloc(
+    result_list, typecast2tc(pointer_type2(), realloc_size)));
 
   symex_assign(code_assign2tc(lhs, result), true);
 }
@@ -221,13 +223,10 @@ expr2tc goto_symext::symex_mem(
   return rhs_addrof->ptr_obj;
 }
 
-void goto_symext::track_new_pointer(
+void goto_symext::update_pointer_tracking(
   const expr2tc &ptr_obj,
-  const type2tc &new_type,
-  const expr2tc &realloc_size)
+  const expr2tc &size)
 {
-  // Also update all the accounting data.
-
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   type2tc sym_type =
     type2tc(new array_type2t(get_bool_type(), expr2tc(), true));
@@ -251,70 +250,113 @@ void goto_symext::track_new_pointer(
     type2tc(new array_type2t(uint_type2(), expr2tc(), true));
   symbol2tc sz_sym(sz_sym_type, alloc_size_arr_name);
   index2tc sz_index_expr(uint_type2(), sz_sym, ptr_obj);
+  symex_assign(code_assign2tc(sz_index_expr, size), true);
+}
 
-  expr2tc object_size_exp;
-  if(is_nil_expr(realloc_size))
-  {
-    try
-    {
-      BigInt object_size = type_byte_size(new_type);
-      object_size_exp = constant_int2tc(uint_type2(), object_size.to_uint64());
-    }
-    catch(const array_type2t::dyn_sized_array_excp &e)
-    {
-      object_size_exp = typecast2tc(uint_type2(), e.size);
-    }
-  }
-  else
-  {
-    object_size_exp = realloc_size;
-  }
+static expr2tc addresses_disjoint(
+  const expr2tc &start,
+  const expr2tc &size,
+  const expr2tc &other_addr,
+  const expr2tc &other_guard)
+{
+  expr2tc end = add2tc(pointer_type2(), start, size);
 
-  symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true);
+  expr2tc o_start = typecast2tc(pointer_type2(), other_addr);
+  expr2tc o_size = dynamic_size2tc(other_addr);
+  expr2tc o_end =
+    add2tc(pointer_type2(), o_start, typecast2tc(pointer_type2(), o_size));
 
-  /* Encode address space layout constraints as the assumption that this new
-   * dynamic object and all other dynamic objects in existence do not have
-   * overlapping addresses at this point.
-   *
-   * We need the start and end addresses as well as validity of each object and
+  expr2tc o_disjoint =
+    or2tc(lessthanequal2tc(end, o_start), greaterthanequal2tc(start, o_end));
+
+  expr2tc o_valid = and2tc(other_guard, valid_object2tc(other_addr));
+  expr2tc cond = implies2tc(o_valid, o_disjoint);
+  return cond;
+}
+
+expr2tc goto_symext::dynamic_addresses_disjoint_from_new(
+  const expr2tc &ptr_obj,
+  const expr2tc &size) const
+{
+  /* We need the start and end addresses as well as validity of each object and
    * get those from the ptr_obj, the recorded dynamic_memory, the __ESBMC_alloc
    * and the __ESBMC_alloc_size arrays.
    *
    * Let [s,e) be the address range of this newly tracked object. For all
-   * *other* dynamically allocated objects o with addresses in [os,oe) assume:
+   * *other* dynamically allocated objects o with addresses in [os,oe) build
+   * conjunction of
    *
    *   valid(o) => (e <= os \/ s >= oe)
    */
   expr2tc addr = to_pointer_object2t(ptr_obj).ptr_obj;
   expr2tc start = typecast2tc(pointer_type2(), addr);
-  expr2tc end = add2tc(
-    pointer_type2(), start, typecast2tc(pointer_type2(), object_size_exp));
 
   expr2tc addr_disjoint = gen_true_expr();
   for(const allocated_obj &o : dynamic_memory)
   {
-    expr2tc o_addr = o.obj;
-    expr2tc o_start = typecast2tc(pointer_type2(), o_addr);
-    expr2tc o_size = dynamic_size2tc(o_addr);
-    expr2tc o_end =
-      add2tc(pointer_type2(), o_start, typecast2tc(pointer_type2(), o_size));
-
-    expr2tc o_disjoint =
-      or2tc(lessthanequal2tc(end, o_start), greaterthanequal2tc(start, o_end));
-
-    expr2tc o_valid = valid_object2tc(o_addr);
-    /* If this is a "new" pointer tracked from symex_realloc(), make sure that
-     * it is not assumed to be disjoint with itself. */
-    if(!is_nil_expr(realloc_size))
-      o_valid = and2tc(o_valid, not2tc(same_object2tc(o_addr, addr)));
-
-    expr2tc cond = implies2tc(o_valid, o_disjoint);
-    o.alloc_guard.guard_expr(cond);
+    expr2tc cond =
+      addresses_disjoint(start, size, o.obj, o.alloc_guard.as_expr());
     addr_disjoint = and2tc(addr_disjoint, cond);
   }
 
   replace_dynamic_allocation(addr_disjoint);
-  assume(addr_disjoint);
+  return addr_disjoint;
+}
+
+expr2tc goto_symext::dynamic_addresses_disjoint_from_realloc(
+  const std::list<std::pair<expr2tc, expr2tc>> &tgts_guards,
+  const expr2tc &size) const
+{
+  /* The expression corresponding to realloc's result is an if-then-else chain
+   *
+   *   guard ? tgt : guard' ? tgt' : [...] : guard'' ? tgt'' : tgt'''
+   *
+   * (note the missing guard''').
+   *
+   * Build a huge conjunction of implications over each dynamic object o:
+   *
+   *   (guard /\ !same_object(tgt, o)) => (addresses of tgt and o are disjoint)
+   */
+
+  expr2tc conj = gen_true_expr();
+  for(const auto &tg : tgts_guards)
+  {
+    const expr2tc &tgt_addr = tg.first;
+    const expr2tc &guard = tg.second;
+    expr2tc start = typecast2tc(pointer_type2(), tgt_addr);
+    for(const allocated_obj &o : dynamic_memory)
+    {
+      expr2tc o_disjoint =
+        addresses_disjoint(start, size, o.obj, o.alloc_guard.as_expr());
+      /* Make sure that it is not assumed to be disjoint with itself. */
+      expr2tc cond = and2tc(guard, not2tc(same_object2tc(tgt_addr, o.obj)));
+      conj = and2tc(conj, implies2tc(cond, o_disjoint));
+    }
+  }
+
+  replace_dynamic_allocation(conj);
+  return conj;
+}
+
+void goto_symext::track_new_pointer(
+  const expr2tc &ptr_obj,
+  const type2tc &new_type)
+{
+  // Update all the accounting data.
+  expr2tc object_size_exp;
+  try
+  {
+    BigInt object_size = type_byte_size(new_type);
+    object_size_exp = constant_int2tc(uint_type2(), object_size);
+  }
+  catch(const array_type2t::dyn_sized_array_excp &e)
+  {
+    object_size_exp = typecast2tc(uint_type2(), e.size);
+  }
+
+  update_pointer_tracking(ptr_obj, object_size_exp);
+  assume(dynamic_addresses_disjoint_from_new(
+    ptr_obj, typecast2tc(pointer_type2(), object_size_exp)));
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
