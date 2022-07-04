@@ -9,9 +9,9 @@ void steal_addr_space(size_t n)
 
 int main()
 {
-	size_t MiB = 1ULL << 20;
-	/* 16 * 256 MiB = 4 GiB */
-	for (int i=0; i<16; i++)
-		steal_addr_space(256 * MiB);
+	size_t GiB = 1ULL << 30;
+	/* 2 * 2 GiB = 4 GiB */
+	for (int i=0; i<2; i++)
+		steal_addr_space(2 * GiB);
 	assert(0);
 }
