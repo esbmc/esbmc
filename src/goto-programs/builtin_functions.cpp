@@ -319,10 +319,6 @@ void goto_convertt::do_cpp_new(
   valid_expr.copy_to_operands(lhs);
   exprt neg_valid_expr = gen_not(valid_expr);
 
-  exprt deallocated_expr("deallocated_object", typet("bool"));
-  deallocated_expr.copy_to_operands(lhs);
-  exprt neg_deallocated_expr = gen_not(deallocated_expr);
-
   exprt pointer_offset_expr("pointer_offset", pointer_type());
   pointer_offset_expr.copy_to_operands(lhs);
 
@@ -352,12 +348,6 @@ void goto_convertt::do_cpp_new(
   assign = code_assignt(valid_expr, true_exprt());
   migrate_expr(assign, t_s_a->code);
   t_s_a->location = rhs.find_location();
-
-  //now set deallocated bit
-  goto_programt::targett t_d_i = dest.add_instruction(ASSIGN);
-  codet tmp = code_assignt(deallocated_expr, false_exprt());
-  migrate_expr(tmp, t_d_i->code);
-  t_d_i->location = rhs.find_location();
 
   // run initializer
   dest.destructive_append(tmp_initializer);

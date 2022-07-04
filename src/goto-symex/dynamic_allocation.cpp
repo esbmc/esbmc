@@ -24,6 +24,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 
   if(is_valid_object2t(expr))
   {
+    /* alloc */
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
     const valid_object2t &obj = to_valid_object2t(expr);
 
@@ -37,6 +38,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
   }
   else if(is_invalid_pointer2t(expr))
   {
+    /* (!valid /\ dynamic) \/ invalid */
     const invalid_pointer2t &ptr = to_invalid_pointer2t(expr);
 
     pointer_object2tc obj_expr(pointer_type2(), ptr.ptr_obj);
@@ -65,7 +67,6 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     type2tc ptr_type = type2tc(new pointer_type2t(get_empty_type()));
     symbol2tc invalid_object(ptr_type, "INVALID");
     equality2tc isinvalid(ptr.ptr_obj, invalid_object);
-    not2tc notinvalid(isinvalid);
 
     and2tc is_not_bad_ptr(notindex, is_dyn);
     or2tc is_valid_ptr(is_not_bad_ptr, isinvalid);
@@ -74,16 +75,17 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
   }
   else if(is_deallocated_obj2t(expr))
   {
+    /* !alloc */
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
     const deallocated_obj2t &obj = to_deallocated_obj2t(expr);
 
     pointer_object2tc obj_expr(pointer_type2(), obj.value);
 
     expr2tc alloc_arr_2;
-    migrate_expr(symbol_expr(ns.lookup(deallocd_arr_name)), alloc_arr_2);
+    migrate_expr(symbol_expr(ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
 
     index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
-    expr = index_expr;
+    expr = not2tc(index_expr);
   }
   else if(is_dynamic_size2t(expr))
   {
