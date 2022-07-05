@@ -221,49 +221,7 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
     REQUIRE_FALSE(f.label == "label");
   }
 
-  GIVEN("An assignment statement")
-  {
-    std::istringstream file(R"json({
-    "object": "SetVariable",
-    "name": "x",
-    "value": {"expr_type": "constant",
-              "value": "10"}
-})json");
-    nlohmann::json j;
-    file >> j;
 
-    jimple_assignment f;
-    j.get_to(f);
-
-    //REQUIRE(f.variable == "x");
-    //REQUIRE_FALSE(f.variable == "y");
-  }
-
-  GIVEN("An identity statement")
-  {
-    std::istringstream file(R"json({
-    "object": "identity",
-    "identifier": "this",
-    "name": "r0",
-    "type": {"identifier": "int",
-             "dimensions": 0,
-             "mode": "basic"}
-})json");
-    nlohmann::json j;
-    file >> j;
-
-    jimple_identity f;
-    j.get_to(f);
-
-    REQUIRE(f.local_name == "r0");
-    REQUIRE_FALSE(f.local_name == "r1");
-    REQUIRE(f.at_identifier == "this");
-    REQUIRE_FALSE(f.at_identifier == "");
-    REQUIRE(f.type.name == "int");
-    REQUIRE_FALSE(f.type.name == "void");
-    REQUIRE(f.type.dimensions == 0);
-    REQUIRE_FALSE(f.type.dimensions == 1);
-  }
 }
 
 SCENARIO("AST initialization from JSON (expressions)", "[jimple-frontend]")
