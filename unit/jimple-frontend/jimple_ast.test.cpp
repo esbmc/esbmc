@@ -220,8 +220,6 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
     REQUIRE(f.label == "label2");
     REQUIRE_FALSE(f.label == "label");
   }
-
-
 }
 
 SCENARIO("AST initialization from JSON (expressions)", "[jimple-frontend]")
