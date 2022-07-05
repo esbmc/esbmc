@@ -76,12 +76,12 @@ languaget *new_solidity_language(const messaget &msg);
   {                                                                            \
     language_idt::CPP, &new_cpp_language                                       \
   }
-#define LANGAPI_MODE_JIMPLE                                               \
+#define LANGAPI_MODE_JIMPLE                                                    \
   {                                                                            \
     language_idt::JIMPLE, &new_jimple_language                                 \
   }
 
-#define LANGAPI_MODE_END                                                  \
+#define LANGAPI_MODE_END                                                       \
   {                                                                            \
     language_idt::NONE, NULL                                                   \
   }
