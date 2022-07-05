@@ -8,6 +8,7 @@
 #include <irep2/irep2_utils.h>
 #include <util/type_byte_size.h>
 #include <util/message/default_message.h>
+#include <algorithm>
 
 expr2tc expr2t::do_simplify() const
 {
@@ -415,6 +416,197 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
 
 expr2tc add2t::do_simplify() const
 {
+  auto Side_1 = side_1;
+  auto Side_2 = side_2;
+
+  // X + X --> X << 1
+  if(is_symbol2t(side_1) && is_symbol2t(side_2))
+    if(side_1 == side_2)
+      return shl2tc(type, side_1, from_integer(1, type));
+
+  // (A + 1) + ~B --> A - B
+  if(is_bitnot2t(Side_1) && is_add2t(Side_2))
+    std::swap(Side_1, Side_2);
+
+  if(is_add2t(Side_1) && is_bitnot2t(Side_2))
+  {
+    if(
+      is_constant_int2t(to_add2t(Side_1).side_2) &&
+      to_constant_int2t(to_add2t(Side_1).side_2).value == 1)
+    {
+      auto B = to_bitnot2t(Side_2).value;
+      auto new_operand = sub2tc(Side_1->type, to_add2t(Side_2).side_1, B);
+      return new_operand;
+    }
+  }
+
+  auto simplify_2 = [](const expr2tc &e, const expr2tc &f) -> expr2tc {
+    if(is_bitnot2t(e))
+    {
+      auto B = to_bitnot2t(e).value;
+      auto new_operand = sub2tc(e->type, f, B);
+      return new_operand;
+    }
+    if(is_bitnot2t(f))
+    {
+      auto B = to_bitnot2t(f).value;
+      auto new_operand = sub2tc(f->type, e, B);
+      return new_operand;
+    }
+    return expr2tc();
+  };
+
+  // (~B + A) + 1 --> A - B
+
+  if(
+    is_add2t(side_1) && is_constant_int2t(side_2) &&
+    to_constant_int2t(side_2).value == 1)
+  {
+    auto new_operand =
+      simplify_2(to_add2t(side_1).side_1, to_add2t(side_1).side_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(
+    is_add2t(side_2) && is_constant_int2t(side_2) &&
+    to_constant_int2t(side_1).value == 1)
+  {
+    auto new_operand =
+      simplify_2(to_add2t(side_2).side_1, to_add2t(side_2).side_2);
+    if(new_operand)
+      return new_operand;
+  }
+
+  // (A + ~B) + 1 --> A - B
+  if(
+    is_add2t(side_2) && is_constant_int2t(side_1) &&
+    to_constant_int2t(side_1).value == 1)
+  {
+    auto new_operand =
+      simplify_2(to_add2t(side_2).side_1, to_add2t(side_2).side_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(
+    is_add2t(side_1) && is_constant_int2t(side_2) &&
+    to_constant_int2t(side_2).value == 1)
+  {
+    auto new_operand =
+      simplify_2(to_add2t(side_1).side_1, to_add2t(side_1).side_2);
+    if(new_operand)
+      return new_operand;
+  }
+
+  // ~B + (A + 1) --> A - B
+  if(is_add2t(side_1) && is_bitnot2t(side_2))
+  {
+    auto new_operand =
+      simplify_2(to_add2t(side_1).side_1, to_add2t(side_1).side_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(is_add2t(side_2) && is_bitnot2t(side_1))
+  {
+    auto new_operand =
+      simplify_2(to_add2t(side_2).side_1, to_add2t(side_2).side_2);
+    if(new_operand)
+      return new_operand;
+  }
+
+  // ~B + (1 + A) --> A - B
+  if(is_add2t(side_1) && is_bitnot2t(side_2))
+  {
+    auto new_operand =
+      simplify_2(to_add2t(side_1).side_1, to_add2t(side_1).side_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(is_add2t(side_2) && is_bitnot2t(side_1))
+  {
+    auto new_operand =
+      simplify_2(to_add2t(side_2).side_1, to_add2t(side_2).side_2);
+    if(new_operand)
+      return new_operand;
+  }
+
+  auto simplify_3 = [](const expr2tc &e, const expr2tc &f) -> expr2tc {
+    if(is_sub2t(e))
+    {
+      auto sidecheck_1 = to_sub2t(e).side_1;
+      auto sidecheck_2 = to_sub2t(e).side_2;
+      if(is_symbol2t(sidecheck_1) && is_symbol2t(sidecheck_2))
+      {
+        if(sidecheck_2 == e)
+          return sidecheck_1;
+      }
+    }
+    else if(is_sub2t(f))
+    {
+      auto sidecheck_1 = to_sub2t(f).side_1;
+      auto sidecheck_2 = to_sub2t(f).side_2;
+      if(is_symbol2t(sidecheck_1) && is_symbol2t(sidecheck_2))
+        if(to_symbol2t(sidecheck_2) == to_symbol2t(f))
+          return sidecheck_1;
+    }
+    return expr2tc();
+  };
+
+  // X + (Y - X) -> Y
+  if(is_add2t(side_1) && is_sub2t(side_2))
+  {
+    auto new_operand =
+      simplify_3(to_add2t(side_1).side_1, to_add2t(side_1).side_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(is_add2t(side_2) && is_sub2t(side_1))
+  {
+    auto new_operand =
+      simplify_3(to_add2t(side_2).side_1, to_add2t(side_2).side_2);
+    if(new_operand)
+      return new_operand;
+  }
+
+  // (Y - X) + X -> Y
+  if(is_sub2t(side_1) && is_sub2t(side_2))
+  {
+    auto new_operand =
+      simplify_3(to_sub2t(side_1).side_1, to_sub2t(side_1).side_2);
+    if(new_operand)
+      return new_operand;
+  }
+  if(is_sub2t(side_2) && is_sub2t(side_1))
+  {
+    auto new_operand =
+      simplify_3(to_sub2t(side_2).side_1, to_sub2t(side_2).side_2);
+    if(new_operand)
+      return new_operand;
+  }
+
+  // X + ~X -> -1
+  if(is_symbol2t(Side_1) && is_bitnot2t(Side_2))
+    std::swap(Side_1, Side_2);
+
+  // ~X + X -> -1
+  if(is_bitnot2t(Side_1) && is_symbol2t(Side_2))
+  {
+    if(to_symbol2t(Side_1) == to_symbol2t(to_bitnot2t(Side_2).value))
+      return constant_int2tc(Side_1->type, -1);
+  }
+
+  // X+0 -> X
+  // 0+X -> X
+
+  if(
+    is_sub2t(Side_1) && is_constant_int2t(Side_2) &&
+    to_constant_int2t(Side_2).value == 0)
+    std::swap(Side_1, Side_2);
+
+  if(
+    is_add2t(Side_1) && is_constant_int2t(Side_2) &&
+    to_constant_int2t(Side_2).value == 0)
+    return Side_1;
+
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if(!is_nil_expr(res))
     return res;
