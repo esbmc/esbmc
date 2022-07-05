@@ -274,6 +274,47 @@ static expr2tc addresses_disjoint(
   return cond;
 }
 
+static expr2tc remove_null_invalid(const expr2tc &e)
+{
+  if(is_if2t(e))
+  {
+    const if2t &i = to_if2t(e);
+    expr2tc t = remove_null_invalid(i.true_value);
+    expr2tc f = remove_null_invalid(i.false_value);
+    if(t && f)
+      return if2tc(i.type, i.cond, t, f);
+    return t ? t : f;
+  }
+
+  if(is_address_of2t(e))
+  {
+    const address_of2t &a = to_address_of2t(e);
+    expr2tc o = remove_null_invalid(a.ptr_obj);
+    if(o)
+      return address_of2tc(to_pointer_type(a.type).subtype, o);
+    return o;
+  }
+
+  if(is_symbol2t(e))
+  {
+    const symbol2t &s = to_symbol2t(e);
+    if(s.thename == "NULL" || s.thename == "INVALID")
+      return expr2tc();
+    return e;
+  }
+
+  if(is_typecast2t(e))
+  {
+    const typecast2t &t = to_typecast2t(e);
+    expr2tc f = remove_null_invalid(t.from);
+    if(f)
+      return typecast2tc(t.type, f, t.rounding_mode);
+    return f;
+  }
+
+  return e;
+}
+
 expr2tc goto_symext::dynamic_addresses_disjoint_from_new(
   const expr2tc &ptr_obj,
   const expr2tc &size) const
@@ -288,14 +329,18 @@ expr2tc goto_symext::dynamic_addresses_disjoint_from_new(
    *
    *   valid(o) => (e <= os \/ s >= oe)
    */
-  expr2tc addr = to_pointer_object2t(ptr_obj).ptr_obj;
+  expr2tc addr = remove_null_invalid(to_pointer_object2t(ptr_obj).ptr_obj);
+  assert(addr);
   expr2tc start = typecast2tc(pointer_type2(), addr);
 
   expr2tc addr_disjoint = gen_true_expr();
   for(const allocated_obj &o : dynamic_memory)
   {
+    expr2tc o_addr = remove_null_invalid(o.obj);
+    if(!o_addr)
+      continue;
     expr2tc cond =
-      addresses_disjoint(start, size, o.obj, o.alloc_guard.as_expr());
+      addresses_disjoint(start, size, o_addr, o.alloc_guard.as_expr());
     addr_disjoint = and2tc(addr_disjoint, cond);
   }
 
@@ -321,13 +366,18 @@ expr2tc goto_symext::dynamic_addresses_disjoint_from_realloc(
   expr2tc conj = gen_true_expr();
   for(const auto &tg : tgts_guards)
   {
-    const expr2tc &tgt_addr = tg.first;
+    expr2tc tgt_addr = remove_null_invalid(tg.first);
+    if(!tgt_addr)
+      continue;
     const expr2tc &guard = tg.second;
     expr2tc start = typecast2tc(pointer_type2(), tgt_addr);
     for(const allocated_obj &o : dynamic_memory)
     {
+      expr2tc o_addr = remove_null_invalid(o.obj);
+      if(!o_addr)
+        continue;
       expr2tc o_disjoint =
-        addresses_disjoint(start, size, o.obj, o.alloc_guard.as_expr());
+        addresses_disjoint(start, size, o_addr, o.alloc_guard.as_expr());
       /* Make sure that it is not assumed to be disjoint with itself. */
       expr2tc cond = and2tc(guard, not2tc(same_object2tc(tgt_addr, o.obj)));
       conj = and2tc(conj, implies2tc(cond, o_disjoint));
