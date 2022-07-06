@@ -98,7 +98,7 @@ static solver_creator &pick_solver(
     solver_name = options.get_option("default-solver");
 
   if(solver_name == "")
-    solver_name = pick_default_solver(msg);
+    solver_name = pick_default_solver();
 
   auto it = esbmc_solvers.find(solver_name);
   if(it != esbmc_solvers.end())
@@ -153,7 +153,7 @@ smt_convt *create_solver(
     ctx->set_array_iface(new array_convt(ctx));
 
   if(fp_api == nullptr || fp_to_bv)
-    ctx->set_fp_conv(new fp_convt(ctx, msg));
+    ctx->set_fp_conv(new fp_convt(ctx));
   else
     ctx->set_fp_conv(fp_api);
 

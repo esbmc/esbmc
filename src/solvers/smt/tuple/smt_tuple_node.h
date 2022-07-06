@@ -17,7 +17,7 @@ public:
     smt_convt *_ctx,
     const namespacet &_ns,
     const messaget &msg)
-    : ctx(_ctx), ns(_ns), array_conv(_ctx), msg(msg)
+    : ctx(_ctx), ns(_ns), array_conv(_ctx)
   {
   }
 
