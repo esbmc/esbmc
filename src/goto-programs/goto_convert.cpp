@@ -44,7 +44,7 @@ void goto_convertt::finish_gotos(goto_programt &dest)
       if(l_it == targets.labels.end())
       {
         message_handler.error(
-          fmt::format("goto label {} not found\n{}", goto_label, *i.code));
+          "goto label {} not found\n{}", goto_label, *i.code);
         abort();
       }
 

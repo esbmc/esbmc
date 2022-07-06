@@ -248,7 +248,7 @@ void execution_statet::symex_step(reachability_treet &art)
 
   if(options.get_bool_option("show-symex-value-sets"))
   {
-    msg.status("");
+    log_status("");
     state.value_set.dump();
   }
 
@@ -1130,7 +1130,7 @@ void execution_statet::print_stack_traces(unsigned int indent) const
         << "\n";
     it->print_stack_trace(indent + 2, oss);
     oss << "\n";
-    msg.status(oss.str());
+    log_status(oss.str());
   }
 }
 

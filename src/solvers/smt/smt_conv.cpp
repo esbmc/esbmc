@@ -1163,8 +1163,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   default:
-    log_error(fmt::format(
-      "Couldn't convert expression in unrecognised format\n{}", *expr));
+    log_error(
+      "Couldn't convert expression in unrecognised format\n{}", *expr);
     abort();
   }
 
@@ -1276,8 +1276,8 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
   }
 
   default:
-    log_error(fmt::format(
-      "Unexpected type ID {} reached SMT conversion", get_type_id(type)));
+    log_error(
+      "Unexpected type ID {} reached SMT conversion", get_type_id(type));
     abort();
   }
 
@@ -1424,7 +1424,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
 
   default:
     log_error(
-      fmt::format("Converting unrecognized terminal expr to SMT\n{}", *expr));
+     "Converting unrecognized terminal expr to SMT\n{}", *expr);
     abort();
   }
 }
@@ -2337,15 +2337,15 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   default:
     if(!options.get_bool_option("non-supported-models-as-zero"))
     {
-      log_error(fmt::format(
-        "Unimplemented type'd expression ({}) in smt get", type->type_id));
+      log_error(
+        "Unimplemented type'd expression ({}) in smt get", type->type_id);
       abort();
     }
     else
     {
-      msg.warning(fmt::format(
+      log_warning(
         "Unimplemented type'd expression ({}) in smt get. Returning zero!",
-        type->type_id));
+        type->type_id);
       return gen_zero(type);
     }
   }
@@ -2373,16 +2373,16 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
   default:
     if(!options.get_bool_option("non-supported-models-as-zero"))
     {
-      log_error(fmt::format(
+      log_error(
         "Unimplemented type'd expression ({}) in smt get",
-        expr->type->type_id));
+        expr->type->type_id);
       abort();
     }
     else
     {
-      msg.warning(fmt::format(
+      log_warning(
         "Unimplemented type'd expression ({}) in smt get. Returning zero!",
-        expr->type->type_id));
+        expr->type->type_id);
       return gen_zero(expr->type);
     }
   }
@@ -2729,14 +2729,14 @@ smt_astt smt_ast::project(
 
 void smt_convt::dump_smt()
 {
-  log_error(fmt::format("SMT dump not implemented for {}", solver_text()));
+  log_error("SMT dump not implemented for {}", solver_text());
   abort();
 }
 
 void smt_convt::print_model()
 {
   log_error(
-    fmt::format("SMT model printing not implemented for {}", solver_text()));
+    "SMT model printing not implemented for {}", solver_text());
   abort();
 }
 
@@ -2779,12 +2779,12 @@ expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
 
   if(options.get_bool_option("non-supported-models-as-zero"))
   {
-    msg.warning(fmt::format(
-      "Can't generate one for type {}. Returning zero", get_type_id(type)));
+    log_warning(
+      "Can't generate one for type {}. Returning zero", get_type_id(type));
     return gen_zero(type);
   }
 
-  log_error(fmt::format("Can't generate one for type {}", get_type_id(type)));
+  log_error("Can't generate one for type {}", get_type_id(type));
   abort();
 }
 

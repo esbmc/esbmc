@@ -20,7 +20,7 @@ void show_loop_numbers(const goto_programt &goto_program)
     {
       unsigned loop_id = instruction.loop_number;
 
-      msg.debug(fmt::format("Loop {}:\n {}\n", loop_id, instruction.location));
+      log_debug("Loop {}:\n {}\n", loop_id, instruction.location);
     }
   }
 }

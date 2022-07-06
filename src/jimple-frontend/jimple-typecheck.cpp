@@ -11,14 +11,14 @@ bool jimple_languaget::typecheck(
   const std::string &,
   const messaget &msg)
 {
-  msg.status(
-    fmt::format("Converting Jimple module {} to GOTO", root.class_name));
+  log_status(
+   "Converting Jimple module {} to GOTO", root.class_name);
 
   contextt new_context(msg);
   jimple_converter converter(context, root, msg);
   if(converter.convert())
   {
-    log_error(fmt::format("Failed to convert module {}", root.class_name));
+    log_error("Failed to convert module {}", root.class_name);
     return true;
   }
 

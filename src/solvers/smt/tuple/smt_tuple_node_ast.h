@@ -60,7 +60,7 @@ public:
   void dump() const override
   {
 
-    msg.debug(fmt::format("name {}", name));
+    log_debug("name {}", name);
     for(auto const &e : elements)
       e->dump();
   }

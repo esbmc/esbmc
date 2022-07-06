@@ -85,7 +85,7 @@ public:
   virtual void dump() const
   {
     default_message lmsg;
-    lmsg.debug("Chosen solver doesn't support printing the AST\n");
+    llog_debug("Chosen solver doesn't support printing the AST\n");
   }
 
 protected:

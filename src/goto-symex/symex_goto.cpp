@@ -453,7 +453,7 @@ bool goto_symext::get_unwind(
     this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
   if(!options.get_bool_option("quiet"))
   {
-    msg.status(fmt::format(
+    log_status(
       stop_unwind ? "Not unwinding "
                   : "Unwinding "
                     "loop {} {} {} {} {}",
@@ -461,7 +461,7 @@ bool goto_symext::get_unwind(
       " iteration ",
       integer2string(unwind),
       " ",
-      cur_state->source.pc->location.as_string()));
+      cur_state->source.pc->location.as_string());
   }
 
   return stop_unwind;

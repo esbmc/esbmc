@@ -1278,7 +1278,7 @@ void cvc_convt::dump_smt()
   auto const &assertions = smt.getAssertions();
   for(auto const &a : assertions)
     a.printAst(oss, 0);
-  msg.debug(oss.str());
+  log_debug(oss.str());
 }
 
 void cvc_smt_ast::dump() const
@@ -1286,5 +1286,5 @@ void cvc_smt_ast::dump() const
 
   std::ostringstream oss;
   a.printAst(oss, 0);
-  msg.debug(oss.str());
+  log_debug(oss.str());
 }

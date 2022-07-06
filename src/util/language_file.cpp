@@ -46,7 +46,7 @@ bool language_filest::parse()
 
     languaget &language = *(it.second.language);
 
-    if(language.parse(it.first, msg))
+    if(language.parse(it.first))
     {
       log_error("Parsing of " + it.first + " failed");
       return true;
@@ -92,7 +92,7 @@ bool language_filest::typecheck(contextt &context)
   for(auto &it : filemap)
   {
     if(it.second.modules.empty())
-      if(it.second.language->typecheck(context, "", msg))
+      if(it.second.language->typecheck(context, ""))
         return true;
   }
 
@@ -117,7 +117,7 @@ bool language_filest::final(contextt &context)
   for(auto &it : filemap)
   {
     if(languages.insert(it.second.language->id()).second)
-      if(it.second.language->final(context, msg))
+      if(it.second.language->final(context))
         return true;
   }
 #endif
@@ -191,9 +191,9 @@ bool language_filest::typecheck_module(
 
   // type check it
 
-  msg.status("Type-checking " + module.name);
+  log_status("Type-checking " + module.name);
 
-  if(module.file->language->typecheck(context, module.name, msg))
+  if(module.file->language->typecheck(context, module.name))
   {
     module.in_progress = false;
     return true;

@@ -273,9 +273,9 @@ smt_astt bitblast_convt::mk_func_app(
     break;
   }
   default:
-    log_error(fmt::format(
+    log_error(
       "Unimplemented SMT function \"{}\" in bitblast convt",
-      smt_func_name_table[f]));
+      smt_func_name_table[f]);
     abort();
   }
 
@@ -313,7 +313,7 @@ smt_sort *bitblast_convt::mk_sort(smt_sort_kind k, ...)
     break;
   default:
     log_error(
-      fmt::format("Unimplemented SMT sort {} in bitblaster conversion", k));
+     "Unimplemented SMT sort {} in bitblaster conversion", k);
     abort();
   }
 
@@ -381,8 +381,8 @@ smt_astt bitblast_convt::mk_smt_symbol(const std::string &name, smt_sortt sort)
     break;
   }
   default:
-    log_error(fmt::format(
-      "Unimplemented symbol type {} in bitblast symbol creation", sort->id));
+    log_error(
+      "Unimplemented symbol type {} in bitblast symbol creation", sort->id);
     abort();
   }
 
@@ -438,7 +438,7 @@ bitblast_convt::mk_ast_equality(smt_astt _a, smt_astt _b, smt_sortt ressort)
   }
   default:
     log_error(
-      fmt::format("Invalid sort {} for equality in bitblast", a->sort->id));
+     "Invalid sort {} for equality in bitblast", a->sort->id);
     abort();
   }
 }

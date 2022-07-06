@@ -6,7 +6,7 @@
 
 void error_handler(const char *msg)
 {
-  assert(0 && fmt::format("Boolector error encountered\n{}", msg).c_str());
+  log_error("Boolector error encountered\n{}", msg);
   abort();
 }
 

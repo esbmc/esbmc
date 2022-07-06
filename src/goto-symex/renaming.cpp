@@ -247,7 +247,7 @@ void renaming::renaming_levelt::get_original_name(
     return;
 
   default:
-    log_error(fmt::format("get_original_nameing to invalid level {}", lev));
+    log_error("get_original_nameing to invalid level {}", lev);
     abort();
   }
 }
@@ -291,7 +291,7 @@ void renaming::level2t::dump() const
 
   std::ostringstream oss;
   print(oss, msg);
-  msg.debug(oss.str());
+  log_debug(oss.str());
 }
 
 void renaming::level2t::make_assignment(

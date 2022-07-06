@@ -37,7 +37,7 @@ bool goto_symext::get_unwind_recursion(
       (k_induction || inductive_step) &&
       !options.get_bool_option("disable-inductive-step"))
     {
-      msg.warning(
+      log_warning(
         "**** WARNING: k-induction does not support recursion yet. "
         "Disabling inductive step");
 
@@ -53,7 +53,7 @@ bool goto_symext::get_unwind_recursion(
     if(this_loop_max_unwind != 0)
       msg += " (" + integer2string(this_loop_max_unwind) + " max)";
 
-    this->msg.status(msg);
+    this->log_status(msg);
   }
 
   return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
@@ -198,7 +198,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   {
     if(has_prefix(identifier.as_string(), "symex::invalid_object"))
     {
-      msg.warning("WARNING: function ptr call with no target, ");
+      log_warning("WARNING: function ptr call with no target, ");
       cur_state->source.pc++;
       return;
     }
@@ -234,9 +234,9 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 
   if(!goto_function.body_available)
   {
-    msg.warning(fmt::format(
+    log_warning(
       "**** WARNING: no body for function {}",
-      get_pretty_name(identifier.as_string())));
+      get_pretty_name(identifier.as_string()));
 
     /* TODO: if it is a C function with no prototype, assert/claim that all
      *       calls to this function have the same number of parameters and that
@@ -336,10 +336,10 @@ get_function_list(const expr2tc &expr)
   if(is_typecast2t(expr))
     return get_function_list(to_typecast2t(expr).from, msg);
 
-  log_error(fmt::format(
+  log_error(
     "Unexpected irep id {} {}",
     get_expr_id(expr),
-    " in function ptr dereference"));
+    " in function ptr dereference");
   // So, the function may point at something invalid. If that's the case,
   // wait for a solve-time pointer validity assertion to detect that. Return
   // nothing to call right now.
@@ -379,9 +379,9 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   {
     // Emit warning; perform no function call behaviour. Increment PC
     // XXX jmorse - no location information any more.
-    msg.status(fmt::format(
+    log_status(
       "No target candidate for function call {}",
-      from_expr(ns, "", call.function, msg)));
+      from_expr(ns, "", call.function, msg));
     cur_state->source.pc++;
     return;
   }
@@ -398,9 +398,9 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
       bool known_called = guard.is_true();
       msg.print(
         known_called ? VerbosityLevel::Error : VerbosityLevel::Status,
-        fmt::format(
+
           "non-code call target '{}' generated at {}",
-          sym->thename.as_string()));
+          sym->thename.as_string());
       if(known_called)
         return false;
     }
@@ -419,8 +419,8 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
     if(fit == goto_functions.function_map.end() || !fit->second.body_available)
     {
-      msg.warning(
-        fmt::format("**** WARNING: no body for function {}", pretty_name));
+      log_warning(
+        "**** WARNING: no body for function {}", pretty_name);
 
       continue; // XXX, find out why this fires on SV-COMP 14 benchmark
       // 32_7a_cilled_true_linux-3.8-rc1-drivers--ata--pata_legacy.ko-main.cil.out.c

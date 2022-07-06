@@ -363,7 +363,7 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
   }
 
 
-  log_error(fmt::format("Can't generate zero for type {}", get_type_id(type)));
+  log_error("Can't generate zero for type {}", get_type_id(type));
   abort();
 }
 
@@ -397,7 +397,7 @@ inline expr2tc gen_one(const type2tc &type)
   }
 
 
-  log_error(fmt::format("Can't generate one for type {}", get_type_id(type)));
+  log_error("Can't generate one for type {}", get_type_id(type));
   abort();
 }
 

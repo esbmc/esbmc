@@ -314,8 +314,8 @@ void goto_convert_functionst::rename_types(
       else
       {
         // And if we fail
-        message_handler.error(fmt::format(
-          "Can't resolve type symbol {} at symbol squashing time", ident));
+        message_handler.error(
+          "Can't resolve type symbol {} at symbol squashing time", ident);
         abort();
       }
     }

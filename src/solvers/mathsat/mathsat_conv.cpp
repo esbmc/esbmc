@@ -31,7 +31,7 @@ void mathsat_convt::check_msat_error(msat_term &r) const
   if(MSAT_ERROR_TERM(r))
   {
     log_error("Error creating SMT ");
-    log_error(fmt::format("Error text: \"{}\"", msat_last_error_message(env)));
+    log_error("Error text: \"{}\"", msat_last_error_message(env));
     abort();
   }
 }
@@ -910,7 +910,7 @@ void mathsat_smt_ast::dump() const
   auto convt = dynamic_cast<const mathsat_convt *>(context);
   assert(convt != nullptr);
 
-  msg.debug(msat_to_smtlib2(convt->env, a));
+  log_debug(msat_to_smtlib2(convt->env, a));
 }
 
 void mathsat_convt::dump_smt()
@@ -920,7 +920,7 @@ void mathsat_convt::dump_smt()
     msat_get_asserted_formulas(env, &num_of_asserted);
 
   for(unsigned i = 0; i < num_of_asserted; i++)
-    msg.status(msat_to_smtlib2(env, asserted_formulas[i]));
+    log_status(msat_to_smtlib2(env, asserted_formulas[i]));
 
   msat_free(asserted_formulas);
 }

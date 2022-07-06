@@ -49,8 +49,7 @@ public:
   // type check a module in the currently parsed file
   virtual bool typecheck(
     contextt &context,
-    const std::string &module,
-    const messaget &msg) = 0;
+    const std::string &module) = 0;
 
   // language id / description
   virtual std::string id() const
@@ -77,7 +76,7 @@ public:
 
   // constructor / destructor
 
-  explicit languaget() : msg(msg)
+  explicit languaget()
   {
   }
   virtual ~languaget() = default;

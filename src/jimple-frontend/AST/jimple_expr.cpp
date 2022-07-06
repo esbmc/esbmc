@@ -161,7 +161,7 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
   }
 
 
-  log_error(fmt::format("Unexpected expr type: {}", expr_type));
+  log_error("Unexpected expr type: {}", expr_type);
   abort();
 }
 

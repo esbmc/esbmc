@@ -104,10 +104,10 @@ simple_shell_unescape(const char *s, const char *var)
   done:
     if(mode)
     {
-      msg.warning(fmt::format(
+      log_warning(
         "cannot parse environment variable {}: unfinished {}, ignoring...",
         var,
-        mode));
+        mode);
       return {};
     }
     split.emplace_back(std::move(arg));
@@ -205,7 +205,7 @@ bool cmdlinet::parse(
   {
     boost::program_options::store(
       boost::program_options::command_line_parser(
-        simple_shell_unescape(getenv("ESBMC_OPTS"), msg, "ESBMC_OPTS"))
+        simple_shell_unescape(getenv("ESBMC_OPTS"), "ESBMC_OPTS"))
         .options(all_cmdline_options)
         .run(),
       vm);
@@ -218,7 +218,7 @@ bool cmdlinet::parse(
   }
   catch(std::exception &e)
   {
-    log_error(fmt::format("ESBMC error: {}", e.what()));
+    log_error("ESBMC error: {}", e.what());
     return true;
   }
 

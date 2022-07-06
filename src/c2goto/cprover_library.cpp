@@ -150,7 +150,7 @@ void add_cprover_library(
     break;
   default:
     message_handler.error(
-      fmt::format("No C library for bitwidth {}", config.ansi_c.word_size));
+      "No C library for bitwidth {}", config.ansi_c.word_size);
     abort();
   }
 

@@ -449,7 +449,7 @@ void goto_symext::intrinsic_switch_to(
   if(!is_constant_int2t(num))
   {
     log_error(
-      fmt::format("Can't switch to non-constant thread id no\n{}", *num));
+      "Can't switch to non-constant thread id no\n{}", *num);
     abort();
   }
 
@@ -543,7 +543,7 @@ void goto_symext::intrinsic_spawn_thread(
     (k_induction || inductive_step) &&
     !options.get_bool_option("disable-inductive-step"))
   {
-    msg.warning(
+    log_warning(
       "WARNING: k-induction does not support concurrency yet. "
       "Disabling inductive step");
 
@@ -565,13 +565,13 @@ void goto_symext::intrinsic_spawn_thread(
   if(it == art.goto_functions.function_map.end())
   {
     log_error(
-      fmt::format("Spawning thread \"{}{}", symname, "\": symbol not found"));
+      "Spawning thread \"{}{}", symname, "\": symbol not found");
     abort();
   }
 
   if(!it->second.body_available)
   {
-    log_error(fmt::format("Spawning thread \"{}{}", symname, "\": no body"));
+    log_error("Spawning thread \"{}{}", symname, "\": no body");
     abort();
   }
 

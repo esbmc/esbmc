@@ -313,7 +313,7 @@ void interval_domaint::dump() const
 
   std::ostringstream oss;
   output(oss);
-  msg.debug(oss.str());
+  log_debug(oss.str());
 }
 expr2tc interval_domaint::make_expression(const expr2tc &expr) const
 {

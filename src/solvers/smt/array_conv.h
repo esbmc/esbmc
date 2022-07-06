@@ -80,7 +80,7 @@ public:
   void dump() const override
   {
 
-    msg.debug(fmt::format("name: {}", symname));
+    log_debug("name: {}", symname);
     for(auto const &e : array_fields)
       e->dump();
   }

@@ -29,12 +29,12 @@ void show_claims(
       const irep_idt &comment = instruction.location.comment();
       const irep_idt description = (comment == "" ? "assertion" : comment);
 
-      msg.status(fmt::format(
+      log_status(
         "Claim {}:\n  {}\n  {}\n  {}\n",
         count,
         instruction.location,
         description,
-        from_expr(ns, identifier, instruction.guard, msg)));
+        from_expr(ns, identifier, instruction.guard, msg));
     }
   }
 }

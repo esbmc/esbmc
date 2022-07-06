@@ -33,7 +33,7 @@ public:
   void dump() const
   {
 
-    msg.debug(this->to_string());
+    log_debug(this->to_string());
   }
 
   /**

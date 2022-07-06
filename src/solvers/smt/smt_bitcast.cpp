@@ -115,9 +115,9 @@ flatten_to_bitvector(const expr2tc &new_expr)
     return extract2tc(get_uint_type(sz), new_expr, sz - 1, 0);
   }
 
-  log_error(fmt::format(
+  log_error(
     "Unrecognized type {} when flattening to bytes",
-    get_type_id(*new_expr->type)));
+    get_type_id(*new_expr->type));
   abort();
 }
 
