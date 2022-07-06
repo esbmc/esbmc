@@ -39,7 +39,7 @@ public:
 
   smt_convt *ctx;
   const namespacet &ns;
-  const messaget &msg;
+
 };
 
 #endif

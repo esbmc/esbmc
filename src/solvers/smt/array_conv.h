@@ -19,7 +19,7 @@
 #include <set>
 #include <solvers/smt/smt_conv.h>
 #include <irep2/irep2.h>
-#include <util/message/default_message.h>
+
 
 static inline bool is_unbounded_array(const smt_sort *s)
 {
@@ -79,7 +79,7 @@ public:
 
   void dump() const override
   {
-    default_message msg;
+
     msg.debug(fmt::format("name: {}", symname));
     for(auto const &e : array_fields)
       e->dump();
@@ -233,13 +233,13 @@ public:
   void execute_new_updates();
   void apply_new_selects();
 
-  inline array_ast *new_ast(smt_sortt _s, const messaget &msg)
+  inline array_ast *new_ast(smt_sortt _s)
   {
     return new array_ast(this, ctx, _s, msg);
   }
 
   inline array_ast *
-  new_ast(smt_sortt _s, const std::vector<smt_astt> &_a, const messaget &msg)
+  new_ast(smt_sortt _s, const std::vector<smt_astt> &_a)
   {
     return new array_ast(this, ctx, _s, _a, msg);
   }

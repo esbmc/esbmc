@@ -29,13 +29,13 @@ public:
 
   // constructor / destructor
 
-  languagest(const namespacet &_ns, language_idt lang, const messaget &msg);
+  languagest(const namespacet &_ns, language_idt lang);
   virtual ~languagest();
 
 protected:
   const namespacet &ns;
   languaget *language;
-  const messaget &msg;
+
 };
 
 #endif

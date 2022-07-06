@@ -31,7 +31,7 @@ protected:
     &ast_json; // json for Solidity AST. Use vector for multiple contracts
   const std::string &sol_func;      // Solidity function to be verified
   const std::string &contract_path; //smart contract source file
-  const messaget &msg;
+
   std::string absolute_path;
   std::string contract_contents = "";
   int global_scope_id; // scope id of "ContractDefinition"

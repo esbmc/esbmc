@@ -5,8 +5,8 @@
 #include <util/expr_util.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
-#include <util/message/format.h>
-#include <util/message/default_message.h>
+
+
 
 void jimple_constant::from_json(const json &j)
 {
@@ -160,8 +160,8 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
     return std::make_shared<jimple_virtual_member>(c);
   }
 
-  default_message msg;
-  msg.error(fmt::format("Unexpected expr type: {}", expr_type));
+
+  log_error(fmt::format("Unexpected expr type: {}", expr_type));
   abort();
 }
 

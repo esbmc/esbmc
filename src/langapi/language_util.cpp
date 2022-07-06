@@ -76,13 +76,13 @@ std::string from_type(
   return result;
 }
 
-std::string from_expr(const exprt &expr, const messaget &msg)
+std::string from_expr(const exprt &expr)
 {
   contextt context(msg);
   return from_expr(namespacet(context), "", expr, msg);
 }
 
-std::string from_type(const typet &type, const messaget &msg)
+std::string from_type(const typet &type)
 {
   contextt context(msg);
   return from_type(namespacet(context), "", type, msg);

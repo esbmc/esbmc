@@ -61,6 +61,6 @@ void clang_c_convertert::gen_typecast_to_union(
    * however... we should prevent any funny things to happen */
   std::ostringstream oss;
   oss << "Couldn't map type " << e.type().pretty_name() << " into the union";
-  msg.error(oss.str());
+  log_error(oss.str());
   abort();
 }

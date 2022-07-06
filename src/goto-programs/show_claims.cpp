@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/xml.h>
 #include <util/xml_irep.h>
-#include <util/message/format.h>
+
 
 void show_claims(
   const namespacet &ns,

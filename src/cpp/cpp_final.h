@@ -10,8 +10,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_CPP_FINAL_H
 
 #include <util/context.h>
-#include <util/message/message.h>
+#include <util/message.h>
 
-bool cpp_final(contextt &context, const messaget &message_handler);
+bool cpp_final(contextt &context);
 
 #endif

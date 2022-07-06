@@ -6,7 +6,7 @@
 #include <util/prefix.h>
 #include <util/simplify_expr.h>
 #include <util/type_byte_size.h>
-#include <util/message/format.h>
+
 #include <message/default_message.h>
 
 // File for old irep -> new irep conversions.
@@ -325,8 +325,8 @@ type2tc migrate_type(const typet &type)
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
     return type2tc(new string_type2t(iwidth));
   }
-  default_message msg;
-  msg.error(fmt::format("{}", type));
+
+  log_error(fmt::format("{}", type));
   abort();
 }
 
@@ -1860,8 +1860,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else
   {
-    default_message msg;
-    msg.error(fmt::format("{}\nmigrate expr failed", expr));
+
+    log_error(fmt::format("{}\nmigrate expr failed", expr));
     abort();
   }
 }
@@ -2052,8 +2052,8 @@ typet migrate_type_back(const type2tc &ref)
     return ret;
   }
   default:
-    default_message msg;
-    msg.error("Unrecognized type in migrate_type_back");
+
+    log_error("Unrecognized type in migrate_type_back");
     abort();
   }
 }
@@ -2678,8 +2678,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     }
     else
     {
-      default_message msg;
-      msg.error("Invalid operand to overflow2t when backmigrating");
+
+      log_error("Invalid operand to overflow2t when backmigrating");
       abort();
     }
     return theexpr;
@@ -2851,8 +2851,8 @@ exprt migrate_expr_back(const expr2tc &ref)
       theexpr.statement("postdecrement");
       break;
     default:
-      default_message msg;
-      msg.error("Unexpected side effect type when back-converting");
+
+      log_error("Unexpected side effect type when back-converting");
       abort();
     }
 
@@ -3082,8 +3082,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     return back;
   }
   default:
-    default_message msg;
-    msg.error("Unrecognized expr in migrate_expr_back");
+
+    log_error("Unrecognized expr in migrate_expr_back");
     abort();
   }
 }

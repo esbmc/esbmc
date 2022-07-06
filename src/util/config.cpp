@@ -57,7 +57,7 @@ static const eregex MIPS("mips(64|isa64|isa64sb1)?(r[0-9]+)?(el|le)?.*");
 static const eregex POWERPC("(ppc|powerpc)(64)?(le)?");
 
 static configt::ansi_ct::endianesst
-arch_endianness(const std::string &arch, const messaget &msg)
+arch_endianness(const std::string &arch)
 {
   if(std::regex_match(arch, X86) || arch == "riscv32" || arch == "riscv64")
     return configt::ansi_ct::IS_LITTLE_ENDIAN;
@@ -73,7 +73,7 @@ arch_endianness(const std::string &arch, const messaget &msg)
                            : configt::ansi_ct::IS_BIG_ENDIAN;
   if(arch == "none")
     return configt::ansi_ct::NO_ENDIANESS;
-  msg.error("unknown arch '" + arch + "', cannot determine endianness\n");
+  log_error("unknown arch '" + arch + "', cannot determine endianness\n");
   abort();
 }
 
@@ -97,7 +97,7 @@ std::string configt::triple::to_string() const
   return arch + "-" + vendor + "-" + os + (flavor.empty() ? "" : "-" + flavor);
 }
 
-bool configt::set(const cmdlinet &cmdline, const messaget &msg)
+bool configt::set(const cmdlinet &cmdline)
 {
   if(cmdline.isset("function"))
     main = cmdline.getval("function");
@@ -119,7 +119,7 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
 
   if(cmdline.isset("floatbv") && cmdline.isset("fixedbv"))
   {
-    msg.error("Can't set both floatbv and fixedbv modes");
+    log_error("Can't set both floatbv and fixedbv modes");
     return true;
   }
 
@@ -166,7 +166,7 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
 
   if(req_target > 1)
   {
-    msg.error(
+    log_error(
       "only at most one target can be specified via "
       "--i386-{win32,macos,linux}, --ppc-macos and --no-arch\n");
     return true;
@@ -181,7 +181,7 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
 
   if(have_16 + have_32 + have_64 > 1)
   {
-    msg.error("Only one of --16, --32 and --64 is supported");
+    log_error("Only one of --16, --32 and --64 is supported");
     return true;
   }
 
@@ -196,7 +196,7 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
 
   if(cmdline.isset("little-endian") && cmdline.isset("big-endian"))
   {
-    msg.error("Can't set both little and big endian modes");
+    log_error("Can't set both little and big endian modes");
     return true;
   }
 

@@ -3,7 +3,7 @@
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
-#include <util/message/message.h>
+#include <util/message.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
@@ -47,7 +47,7 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
-bool clang_main(contextt &context, const messaget &message_handler)
+bool clang_main(contextt &context)
 {
   irep_idt main_symbol;
 

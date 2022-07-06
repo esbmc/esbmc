@@ -9,7 +9,7 @@
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
 #include <irep2/irep2_utils.h>
-#include <util/message/message.h>
+#include <util/message.h>
 #include <util/namespace.h>
 #include <util/threeval.h>
 
@@ -819,7 +819,7 @@ public:
   const namespacet &ns;
   /* Options contain all the parameters set by the user to run ESBMC */
   const optionst &options;
-  const messaget &msg;
+
 
   bool ptr_foo_inited;
 
@@ -869,7 +869,7 @@ public:
 };
 
 // Define here to enable inlining
-inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s, const messaget &msg)
+inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s)
   : sort(s), context(ctx), _msg(msg)
 {
   assert(sort != nullptr);

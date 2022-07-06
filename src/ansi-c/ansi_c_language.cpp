@@ -95,7 +95,7 @@ static void internal_additions(std::string &code)
     "\n";
 }
 
-ansi_c_languaget::ansi_c_languaget(const messaget &msg) : languaget(msg)
+ansi_c_languaget::ansi_c_languaget() : languaget(msg)
 {
 }
 
@@ -203,7 +203,7 @@ bool ansi_c_languaget::typecheck(
   return false;
 }
 
-bool ansi_c_languaget::final(contextt &context, const messaget &message_handler)
+bool ansi_c_languaget::final(contextt &context)
 {
   if(c_final(context, message_handler))
     return true;
@@ -218,7 +218,7 @@ void ansi_c_languaget::show_parse(std::ostream &out)
   parse_tree.output(out);
 }
 
-languaget *new_ansi_c_language(const messaget &msg)
+languaget *new_ansi_c_language()
 {
   return new ansi_c_languaget(msg);
 }

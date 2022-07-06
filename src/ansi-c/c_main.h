@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_C_MAIN_H
 
 #include <util/context.h>
-#include <util/message/message.h>
+#include <util/message.h>
 #include <util/std_code.h>
 #include <iostream>
 

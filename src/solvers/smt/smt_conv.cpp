@@ -1163,7 +1163,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   default:
-    msg.error(fmt::format(
+    log_error(fmt::format(
       "Couldn't convert expression in unrecognised format\n{}", *expr));
     abort();
   }
@@ -1276,7 +1276,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
   }
 
   default:
-    msg.error(fmt::format(
+    log_error(fmt::format(
       "Unexpected type ID {} reached SMT conversion", get_type_id(type)));
     abort();
   }
@@ -1423,7 +1423,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
   }
 
   default:
-    msg.error(
+    log_error(
       fmt::format("Converting unrecognized terminal expr to SMT\n{}", *expr));
     abort();
   }
@@ -2220,7 +2220,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
     {
       if(extracting_from_array_tuple_is_error)
       {
-        msg.error(
+        log_error(
           "Fetching array elements inside tuples currently "
           "unimplemented, sorry");
         abort();
@@ -2337,7 +2337,7 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   default:
     if(!options.get_bool_option("non-supported-models-as-zero"))
     {
-      msg.error(fmt::format(
+      log_error(fmt::format(
         "Unimplemented type'd expression ({}) in smt get", type->type_id));
       abort();
     }
@@ -2373,7 +2373,7 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
   default:
     if(!options.get_bool_option("non-supported-models-as-zero"))
     {
-      msg.error(fmt::format(
+      log_error(fmt::format(
         "Unimplemented type'd expression ({}) in smt get",
         expr->type->type_id));
       abort();
@@ -2445,7 +2445,7 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
 
   if(!is_constant_int2t(size))
   {
-    msg.error("Non-constant sized array of type constant_array_of2t");
+    log_error("Non-constant sized array of type constant_array_of2t");
     abort();
   }
 
@@ -2723,19 +2723,19 @@ smt_astt smt_ast::project(
   smt_convt *ctx [[maybe_unused]],
   unsigned int idx [[maybe_unused]]) const
 {
-  _msg.error("Projecting from non-tuple based AST");
+  _log_error("Projecting from non-tuple based AST");
   abort();
 }
 
 void smt_convt::dump_smt()
 {
-  msg.error(fmt::format("SMT dump not implemented for {}", solver_text()));
+  log_error(fmt::format("SMT dump not implemented for {}", solver_text()));
   abort();
 }
 
 void smt_convt::print_model()
 {
-  msg.error(
+  log_error(
     fmt::format("SMT model printing not implemented for {}", solver_text()));
   abort();
 }
@@ -2784,55 +2784,55 @@ expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
     return gen_zero(type);
   }
 
-  msg.error(fmt::format("Can't generate one for type {}", get_type_id(type)));
+  log_error(fmt::format("Can't generate one for type {}", get_type_id(type)));
   abort();
 }
 
 smt_sortt smt_convt::mk_bool_sort()
 {
-  msg.error("Chosen solver doesn't support boolean sorts");
+  log_error("Chosen solver doesn't support boolean sorts");
   abort();
 }
 
 smt_sortt smt_convt::mk_real_sort()
 {
-  msg.error("Chosen solver doesn't support real sorts");
+  log_error("Chosen solver doesn't support real sorts");
   abort();
 }
 
 smt_sortt smt_convt::mk_int_sort()
 {
-  msg.error("Chosen solver doesn't support integer sorts");
+  log_error("Chosen solver doesn't support integer sorts");
   abort();
 }
 
 smt_sortt smt_convt::mk_bv_sort(std::size_t)
 {
-  msg.error("Chosen solver doesn't support bit vector sorts");
+  log_error("Chosen solver doesn't support bit vector sorts");
   abort();
 }
 
 smt_sortt smt_convt::mk_fbv_sort(std::size_t)
 {
-  msg.error("Chosen solver doesn't support bit vector sorts");
+  log_error("Chosen solver doesn't support bit vector sorts");
   abort();
 }
 
 smt_sortt smt_convt::mk_array_sort(smt_sortt, smt_sortt)
 {
-  msg.error("Chosen solver doesn't support array sorts");
+  log_error("Chosen solver doesn't support array sorts");
   abort();
 }
 
 smt_sortt smt_convt::mk_bvfp_sort(std::size_t, std::size_t)
 {
-  msg.error("Chosen solver doesn't support bit vector sorts");
+  log_error("Chosen solver doesn't support bit vector sorts");
   abort();
 }
 
 smt_sortt smt_convt::mk_bvfp_rm_sort()
 {
-  msg.error("Chosen solver doesn't support bit vector sorts");
+  log_error("Chosen solver doesn't support bit vector sorts");
   abort();
 }
 

@@ -17,7 +17,7 @@ Author:
 class clang_cpp_languaget : public clang_c_languaget
 {
 public:
-  bool final(contextt &context, const messaget &message_handler) override;
+  bool final(contextt &context) override;
 
   bool typecheck(
     contextt &context,
@@ -37,20 +37,20 @@ public:
   bool from_type(const typet &type, std::string &code, const namespacet &ns)
     override;
 
-  languaget *new_language(const messaget &msg) const override
+  languaget *new_language() const override
   {
     return new clang_cpp_languaget(msg);
   }
 
   // constructor, destructor
   ~clang_cpp_languaget() override = default;
-  explicit clang_cpp_languaget(const messaget &msg);
+  explicit clang_cpp_languaget();
 
 protected:
   std::string internal_additions() override;
   void force_file_type() override;
 };
 
-languaget *new_clang_cpp_language(const messaget &msg);
+languaget *new_clang_cpp_language();
 
 #endif

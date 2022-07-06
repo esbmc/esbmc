@@ -22,12 +22,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <clang-cpp-frontend/expr2cpp.h>
 #include <regex>
 
-languaget *new_clang_cpp_language(const messaget &msg)
+languaget *new_clang_cpp_language()
 {
   return new clang_cpp_languaget(msg);
 }
 
-clang_cpp_languaget::clang_cpp_languaget(const messaget &msg)
+clang_cpp_languaget::clang_cpp_languaget()
   : clang_c_languaget(msg)
 {
 }

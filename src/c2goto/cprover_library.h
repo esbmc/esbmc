@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_ANSI_C_CPROVER_LIBRARY_H
 
 #include <util/context.h>
-#include <util/message/message.h>
+#include <util/message.h>
 
 class languaget;
 

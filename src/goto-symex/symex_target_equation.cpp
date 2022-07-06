@@ -16,11 +16,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/std_expr.h>
-#include <util/message/default_message.h>
+
 
 void symex_target_equationt::debug_print_step(const SSA_stept &step) const
 {
-  default_message msg;
+
   std::ostringstream oss;
   step.output(ns, oss, msg);
   msg.debug(oss.str());
@@ -259,7 +259,7 @@ void symex_target_equationt::short_output(std::ostream &out, bool show_ignored)
 
 void symex_target_equationt::SSA_stept::dump() const
 {
-  default_message msg;
+
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss, msg);
   msg.debug(oss.str());
@@ -534,7 +534,7 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
     res1 == smt_convt::P_ERROR || res1 == smt_convt::P_SMTLIB ||
     res2 == smt_convt::P_ERROR || res2 == smt_convt::P_SMTLIB)
   {
-    msg.error("Solver returned error while asking question");
+    log_error("Solver returned error while asking question");
     abort();
   }
   else if(res1 == smt_convt::P_SATISFIABLE && res2 == smt_convt::P_SATISFIABLE)

@@ -161,7 +161,7 @@ smt_astt tuple_sym_smt_ast::select(
   smt_convt *ctx [[maybe_unused]],
   const expr2tc &idx [[maybe_unused]]) const
 {
-  _msg.error("Select operation applied to tuple");
+  _log_error("Select operation applied to tuple");
   abort();
 }
 

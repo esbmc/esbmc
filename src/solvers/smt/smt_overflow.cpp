@@ -146,7 +146,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   }
 
   default:
-    msg.error("unexpected overflow_arith operand");
+    log_error("unexpected overflow_arith operand");
     abort();
   }
 
@@ -165,7 +165,7 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
 
   if(ocast.bits >= width || ocast.bits == 0)
   {
-    msg.error("SMT conversion: overflow-typecast got wrong number of bits");
+    log_error("SMT conversion: overflow-typecast got wrong number of bits");
     abort();
   }
 

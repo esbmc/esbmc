@@ -8,8 +8,8 @@
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
-#include <util/message/format.h>
-#include <util/message/default_message.h>
+
+
 
 /*************************** Base type2t definitions **************************/
 
@@ -106,7 +106,7 @@ std::string type2t::pretty(unsigned int indent) const
 
 void type2t::dump() const
 {
-  default_message msg;
+
   msg.debug(pretty(0));
 }
 

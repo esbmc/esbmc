@@ -1,6 +1,6 @@
 #include <util/c_types.h>
 #include <cvc_conv.h>
-#include <util/message/default_message.h>
+
 
 #define new_ast new_solver_ast<cvc_smt_ast>
 
@@ -1273,7 +1273,7 @@ smt_sortt cvc_convt::mk_fpbv_rm_sort()
 
 void cvc_convt::dump_smt()
 {
-  default_message msg;
+
   std::ostringstream oss;
   auto const &assertions = smt.getAssertions();
   for(auto const &a : assertions)
@@ -1283,7 +1283,7 @@ void cvc_convt::dump_smt()
 
 void cvc_smt_ast::dump() const
 {
-  default_message msg;
+
   std::ostringstream oss;
   a.printAst(oss, 0);
   msg.debug(oss.str());

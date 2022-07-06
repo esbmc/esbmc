@@ -4,7 +4,7 @@
 #include <sstream>
 #include <yices_conv.h>
 #include <assert.h>
-#include <util/message/default_message.h>
+
 // From yices 2.3 (I think) various API calls have had new non-binary
 // operand versions added. The maintainers have chosen to break backwards
 // compatibility in the process by moving the old functions to new names, and
@@ -73,7 +73,7 @@ void yices_convt::push_ctx()
       yices_print_error(f.file());
       msg.insert_file_contents(VerbosityLevel::Error, f.file());
     }
-    msg.error("Error pushing yices context");
+    log_error("Error pushing yices context");
     abort();
   }
 }
@@ -89,7 +89,7 @@ void yices_convt::pop_ctx()
       yices_print_error(f.file());
       msg.insert_file_contents(VerbosityLevel::Error, f.file());
     }
-    msg.error("Error poping yices context");
+    log_error("Error poping yices context");
     abort();
   }
 
@@ -670,7 +670,7 @@ smt_astt yices_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt yices_convt::mk_isint(smt_astt)
 {
-  msg.error(
+  log_error(
     "Yices does not support an is-integer operation on reals, "
     "therefore certain casts and operations don't work, sorry");
   abort();
@@ -798,7 +798,7 @@ bool yices_convt::get_bool(smt_astt a)
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
   if(yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val))
   {
-    msg.error("Can't get boolean value from Yices");
+    log_error("Can't get boolean value from Yices");
     abort();
   }
 
@@ -1165,7 +1165,7 @@ smt_sortt yices_convt::mk_bvfp_rm_sort()
 
 void yices_smt_ast::dump() const
 {
-  default_message msg;
+
   auto f = msg.get_temp_file();
   yices_pp_term(f.file(), a, 80, 10, 0);
   yices_pp_type(f.file(), to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);

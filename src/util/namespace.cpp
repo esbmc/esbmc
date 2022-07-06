@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cassert>
 #include <cstring>
 #include <util/namespace.h>
-#include <util/message/format.h>
-#include <util/message/default_message.h>
+
+
 
 unsigned namespacet::get_max(const std::string &prefix) const
 {

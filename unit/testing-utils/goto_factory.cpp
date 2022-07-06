@@ -9,7 +9,7 @@
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_skip.h>
 #include <util/cmdline.h>
-#include <util/message/message.h>
+#include <util/message.h>
 
 const mode_table_et mode_table[] = {
   LANGAPI_MODE_CLANG_C,

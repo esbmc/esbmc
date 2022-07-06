@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/goto_functions.h>
 #include <util/context.h>
-#include <util/message/message.h>
+#include <util/message.h>
 #include <util/options.h>
 
 bool read_goto_binary_array(

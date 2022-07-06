@@ -23,17 +23,17 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <clang-c-frontend/expr2c.h>
 #include <sstream>
 #include <util/c_link.h>
-#include <util/message/format.h>
+
 #include <util/filesystem.h>
 
 #include <ac_config.h>
 
-languaget *new_clang_c_language(const messaget &msg)
+languaget *new_clang_c_language()
 {
   return new clang_c_languaget(msg);
 }
 
-clang_c_languaget::clang_c_languaget(const messaget &msg) : languaget(msg)
+clang_c_languaget::clang_c_languaget() : languaget(msg)
 {
   // Build the compile arguments
   build_compiler_args(clang_headers_path());
@@ -63,7 +63,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     break;
 
   default:
-    msg.error(
+    log_error(
       fmt::format("Unknown word size: {}\n", config.ansi_c.word_size).c_str());
     abort();
   }
@@ -205,7 +205,7 @@ void clang_c_languaget::force_file_type()
   compiler_args.push_back("c");
 }
 
-bool clang_c_languaget::parse(const std::string &path, const messaget &msg)
+bool clang_c_languaget::parse(const std::string &path)
 {
   // preprocessing
 
@@ -275,7 +275,7 @@ bool clang_c_languaget::preprocess(
   return false;
 }
 
-bool clang_c_languaget::final(contextt &context, const messaget &msg)
+bool clang_c_languaget::final(contextt &context)
 {
   add_cprover_library(context, msg, this);
   // adds __ESBMC__main symbol

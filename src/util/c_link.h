@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_C_LINK_H
 
 #include <util/context.h>
-#include <util/message/message.h>
+#include <util/message.h>
 
 bool c_link(
   contextt &context,

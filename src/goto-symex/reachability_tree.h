@@ -19,7 +19,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <unordered_map>
 #include <unordered_set>
 #include <util/crypto_hash.h>
-#include <util/message/message.h>
+#include <util/message.h>
 #include <util/options.h>
 
 /**
@@ -253,11 +253,11 @@ public:
   {
   public:
     dfs_position(const reachability_treet &rt);
-    dfs_position(const std::string &&filename, const messaget &msg);
-    bool write_to_file(const std::string &&filename, const messaget &msg) const;
+    dfs_position(const std::string &&filename);
+    bool write_to_file(const std::string &&filename) const;
 
   protected:
-    bool read_from_file(const std::string &&filename, const messaget &msg);
+    bool read_from_file(const std::string &&filename);
 
   public:
     struct dfs_state

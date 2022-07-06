@@ -9,13 +9,13 @@ Description: This interface will define every method that needs to
 #ifndef ESBMC_JIMPLE_AST_H
 #define ESBMC_JIMPLE_AST_H
 
-#include <util/message/default_message.h>
+
 #include <util/expr.h>
 #include <util/context.h>
 #include <util/std_types.h>
 #include <util/c_types.h>
 #include <nlohmann/json.hpp>
-#include <util/message/format.h>
+
 
 // For json parsing
 using json = nlohmann::json;
@@ -32,7 +32,7 @@ public:
    */
   void dump() const
   {
-    default_message msg;
+
     msg.debug(this->to_string());
   }
 

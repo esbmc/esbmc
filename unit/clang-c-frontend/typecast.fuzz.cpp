@@ -24,14 +24,14 @@
 #include "../testing-utils/util_irep.h"
 #include <sstream>
 #include <stddef.h>
-#include <util/message/default_message.h>
+
 #include <clang-c-frontend/clang_c_convert.h>
 
 namespace
 {
 void gen_typecast_to_union(exprt &dest, const typet &type)
 {
-  default_message msg;
+
   clang_c_convertert::gen_typecast_to_union(dest, type, msg);
 }
 } // namespace

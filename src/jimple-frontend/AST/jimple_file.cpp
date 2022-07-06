@@ -1,8 +1,8 @@
 #include <map>
 #include <fstream>
 #include <jimple-frontend/AST/jimple_file.h>
-#include <util/message/default_message.h>
-#include <util/message/format.h>
+
+
 #include <util/std_code.h>
 #include <util/expr_util.h>
 
@@ -79,8 +79,8 @@ void jimple_file::from_json(const json &j)
     }
     else
     {
-      default_message msg;
-      msg.error(fmt::format("Unsupported object: {}", content_type));
+
+      log_error(fmt::format("Unsupported object: {}", content_type));
       abort();
     }
     body.push_back(to_add);

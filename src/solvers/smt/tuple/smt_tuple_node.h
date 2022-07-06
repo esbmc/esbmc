@@ -48,7 +48,7 @@ public:
   smt_convt *ctx;
   const namespacet &ns;
   array_convt array_conv;
-  const messaget &msg;
+
 };
 
 #endif

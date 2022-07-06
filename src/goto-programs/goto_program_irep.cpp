@@ -122,7 +122,7 @@ void convert(const irept &irep, goto_programt &program)
 
       if(fit == program.instructions.end())
       {
-        program.msg.error(
+        program.log_error(
           "Warning: could not resolve target link "
           "during irep->goto_program translation.");
         abort();

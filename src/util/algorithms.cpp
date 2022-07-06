@@ -1,5 +1,5 @@
 #include <util/algorithms.h>
-#include <util/message/message.h>
+#include <util/message.h>
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/remove_skip.h>
 bool goto_functions_algorithm::run()

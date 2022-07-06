@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <vector>
 #include <map>
 #include <boost/program_options.hpp>
-#include <util/message/message.h>
+#include <util/message.h>
 
 /* WORKAROUND: On *BSD macOS the include of some system headers
  * makes the definition of isset as a macro, which conflicts with
@@ -47,13 +47,13 @@ public:
   argst args;
   boost::program_options::variables_map vm;
   boost::program_options::options_description cmdline_options;
-  cmdlinet(const messaget &msg) : msg(msg)
+  cmdlinet()
   {
   }
   ~cmdlinet();
   typedef std::map<std::string, std::list<std::string>> options_mapt;
   options_mapt options_map;
-  const messaget &msg;
+
 };
 
 #endif

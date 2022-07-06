@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <set>
 #include <util/context.h>
-#include <util/message/message.h>
+#include <util/message.h>
 
 class language_modulet
 {
@@ -52,7 +52,7 @@ public:
   typedef std::map<std::string, language_modulet> modulemapt;
   modulemapt modulemap;
 
-  explicit language_filest(const messaget &msg) : msg(msg)
+  explicit language_filest()
   {
   }
 
@@ -78,7 +78,7 @@ public:
   }
 
 protected:
-  const messaget &msg;
+
   bool typecheck_module(contextt &context, language_modulet &module);
 
   bool typecheck_module(contextt &context, const std::string &module);

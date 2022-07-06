@@ -4,7 +4,7 @@
 
 #include <jimple-frontend/jimple-language.h>
 #include <jimple-frontend/jimple-converter.h>
-#include <util/message/format.h>
+
 
 bool jimple_languaget::typecheck(
   contextt &context,
@@ -18,7 +18,7 @@ bool jimple_languaget::typecheck(
   jimple_converter converter(context, root, msg);
   if(converter.convert())
   {
-    msg.error(fmt::format("Failed to convert module {}", root.class_name));
+    log_error(fmt::format("Failed to convert module {}", root.class_name));
     return true;
   }
 

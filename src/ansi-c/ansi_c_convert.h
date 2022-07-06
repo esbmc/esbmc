@@ -28,7 +28,7 @@ bool ansi_c_convert(
 class ansi_c_convertt : public message_streamt
 {
 public:
-  ansi_c_convertt(const std::string &_module, const messaget &_message_handler)
+  ansi_c_convertt(const std::string &_module)
     : message_streamt(_message_handler), module(_module)
   {
   }

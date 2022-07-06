@@ -63,7 +63,7 @@ std::ostream &operator<<(std::ostream &, goto_program_instruction_typet);
 class goto_programt
 {
 public:
-  const messaget &msg;
+
   /*! \brief copy constructor
       \param[in] src an empty goto program
   */
@@ -571,7 +571,7 @@ public:
   }
 
   //! Constructor
-  explicit goto_programt(const messaget &msg) : msg(msg), hide(false)
+  explicit goto_programt() : hide(false)
   {
   }
   virtual ~goto_programt() = default;

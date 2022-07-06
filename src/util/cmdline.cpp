@@ -11,12 +11,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/cmdline.h>
 #include <sstream>
-#include <util/message/format.h>
+
 
 /* Parses 's' according to a simple interpretation of shell rules, taking only
  * whitespace and the characters ', " and \ into account. */
 static std::vector<std::string>
-simple_shell_unescape(const char *s, const messaget &msg, const char *var)
+simple_shell_unescape(const char *s, const char *var)
 {
   static const char WHITE[] = " \t\r\n\f\v";
 
@@ -96,7 +96,7 @@ simple_shell_unescape(const char *s, const messaget &msg, const char *var)
         }
         break;
       case ESC:
-        msg.error("Arrived at an unreachable place");
+        log_error("Arrived at an unreachable place");
         abort();
       }
       arg.push_back(*s++);
@@ -218,7 +218,7 @@ bool cmdlinet::parse(
   }
   catch(std::exception &e)
   {
-    msg.error(fmt::format("ESBMC error: {}", e.what()));
+    log_error(fmt::format("ESBMC error: {}", e.what()));
     return true;
   }
 

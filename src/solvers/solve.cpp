@@ -52,7 +52,7 @@ static const std::string all_solvers[] = {
   "yices",
   "bitwuzla"};
 
-static std::string pick_default_solver(const messaget &msg)
+static std::string pick_default_solver()
 {
 #ifdef BOOLECTOR
   msg.status("No solver specified; defaulting to Boolector");
@@ -66,7 +66,7 @@ static std::string pick_default_solver(const messaget &msg)
     msg.status(fmt::format("No solver specified; defaulting to {}", name));
     return name;
   }
-  msg.error(
+  log_error(
     "No solver backends built into ESBMC; please either build "
     "some in, or explicitly configure the smtlib backend");
   abort();
@@ -86,7 +86,7 @@ static solver_creator &pick_solver(
       {
         if(solver_name != "")
         {
-          msg.error("Please only specify one solver");
+          log_error("Please only specify one solver");
           abort();
         }
 
@@ -104,7 +104,7 @@ static solver_creator &pick_solver(
   if(it != esbmc_solvers.end())
     return *it->second;
 
-  msg.error(fmt::format(
+  log_error(fmt::format(
     "The {} solver has not been built into this version of ESBMC, sorry",
     solver_name));
   abort();

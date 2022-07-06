@@ -28,9 +28,9 @@ public:
     std::ostream &outstream,
     const messaget &msg);
 
-  bool parse(const std::string &path, const messaget &msg) override;
+  bool parse(const std::string &path) override;
 
-  bool final(contextt &context, const messaget &msg) override;
+  bool final(contextt &context) override;
 
   bool typecheck(
     contextt &context,
@@ -52,14 +52,14 @@ public:
   bool from_type(const typet &type, std::string &code, const namespacet &ns)
     override;
 
-  languaget *new_language(const messaget &msg) const override
+  languaget *new_language() const override
   {
     return new clang_c_languaget(msg);
   }
 
   // constructor, destructor
   ~clang_c_languaget() override = default;
-  explicit clang_c_languaget(const messaget &msg);
+  explicit clang_c_languaget();
 
 protected:
   virtual std::string internal_additions();
@@ -72,6 +72,6 @@ protected:
   std::vector<std::unique_ptr<clang::ASTUnit>> ASTs;
 };
 
-languaget *new_clang_c_language(const messaget &msg);
+languaget *new_clang_c_language();
 
 #endif

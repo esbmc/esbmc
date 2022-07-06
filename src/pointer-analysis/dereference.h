@@ -297,7 +297,7 @@ private:
   std::list<dereference_callbackt::internal_item> internal_items;
   /** Flag for discarding all assertions encoded. */
   bool block_assertions;
-  const messaget &msg;
+
 
   /** Interpret an expression that modifies the guard. i.e., an 'if' or a
    *  piece of logic that can be short-circuited.

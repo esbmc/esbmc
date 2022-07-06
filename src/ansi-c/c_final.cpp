@@ -59,7 +59,7 @@ void c_finalize_expression(
       c_finalize_expression(context, *it, message_handler);
 }
 
-bool c_final(contextt &context, const messaget &message_handler)
+bool c_final(contextt &context)
 {
   add_cprover_library(context, message_handler);
 

@@ -16,8 +16,8 @@ static void error_handler(Z3_context c, Z3_error_code e)
   oss << "Z3 error " << e << " encountered"
       << "\n";
   oss << Z3_get_error_msg(c, e);
-  default_message msg;
-  msg.error(oss.str());
+
+  log_error(oss.str());
   abort();
 }
 
@@ -103,14 +103,14 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
   z3::sort ty = t.get_sort();
   if(!ty.is_datatype())
   {
-    msg.error("argument must be a tuple");
+    log_error("argument must be a tuple");
     abort();
   }
 
   std::size_t num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
   if(i >= num_fields)
   {
-    msg.error("invalid tuple update, index is too big");
+    log_error("invalid tuple update, index is too big");
     abort();
   }
 
@@ -139,14 +139,14 @@ z3::expr z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
   z3::sort ty = t.get_sort();
   if(!ty.is_datatype())
   {
-    msg.error("Z3 conversion: argument must be a tuple");
+    log_error("Z3 conversion: argument must be a tuple");
     abort();
   }
 
   size_t num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
   if(i >= num_fields)
   {
-    msg.error("Z3 conversion: invalid tuple select, index is too large");
+    log_error("Z3 conversion: invalid tuple select, index is too large");
     abort();
   }
 
@@ -1196,7 +1196,7 @@ bool z3_convt::get_bool(smt_astt a)
     res = false;
     break;
   default:
-    msg.error("Can't get boolean value from Z3");
+    log_error("Can't get boolean value from Z3");
     abort();
   }
 
@@ -1276,7 +1276,7 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
 
 void z3_smt_ast::dump() const
 {
-  default_message msg;
+
   std::ostringstream oss;
   oss << Z3_ast_to_string(a.ctx(), a) << "\n";
   oss << "sort is " << Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a))
@@ -1296,7 +1296,7 @@ void z3_convt::dump_smt()
   else
   {
     // print to screen
-    default_message msg;
+
     std::ostringstream oss;
     print_smt_formulae(oss);
     msg.debug(oss.str());

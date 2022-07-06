@@ -9,9 +9,9 @@
 #include <util/ieee_float.h>
 #include <util/prefix.h>
 #include <util/std_code.h>
-#include <util/message/format.h>
 
-clang_c_adjust::clang_c_adjust(contextt &_context, const messaget &msg)
+
+clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context)), msg(msg)
 {
 }
@@ -220,7 +220,7 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
     }
     else
     {
-      msg.error(fmt::format(
+      log_error(fmt::format(
         "unknown side effect: {} at {}", statement, expr.location()));
       abort();
     }
@@ -494,7 +494,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
   }
   else
   {
-    msg.error(fmt::format(
+    log_error(fmt::format(
       "sizeof operator expects zero or one operand, "
       "but got{}",
       expr.operands().size()));
@@ -505,7 +505,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
 
   if(new_expr.is_nil())
   {
-    msg.error(fmt::format("type has no size, {}", type.name()));
+    log_error(fmt::format("type has no size, {}", type.name()));
     abort();
   }
 
@@ -524,7 +524,7 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(s == nullptr)
     {
-      msg.error(fmt::format("type symbol `{}' not found", identifier));
+      log_error(fmt::format("type symbol `{}' not found", identifier));
       abort();
     }
 
@@ -532,7 +532,7 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(!symbol.is_type)
     {
-      msg.error(fmt::format("expected type symbol, but got\n{}", symbol));
+      log_error(fmt::format("expected type symbol, but got\n{}", symbol));
       abort();
     }
 
@@ -734,7 +734,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     {
       if(expr.arguments().size() != 2)
       {
-        msg.error(fmt::format("same_object expects two operands\n{}", expr));
+        log_error(fmt::format("same_object expects two operands\n{}", expr));
         abort();
       }
 
@@ -746,7 +746,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     {
       if(expr.arguments().size() != 1)
       {
-        msg.error(fmt::format("pointer_offset expects one argument\n{}", expr));
+        log_error(fmt::format("pointer_offset expects one argument\n{}", expr));
         abort();
       }
 
@@ -758,7 +758,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     {
       if(expr.arguments().size() != 1)
       {
-        msg.error(fmt::format("pointer_object expects one argument\n{}", expr));
+        log_error(fmt::format("pointer_object expects one argument\n{}", expr));
         abort();
       }
 

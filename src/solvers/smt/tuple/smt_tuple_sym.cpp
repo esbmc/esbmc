@@ -86,7 +86,7 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
   }
   if(!is_constant_int2t(arr_type.array_size))
   {
-    msg.error("Non-constant sized array of type constant_array_of2t");
+    log_error("Non-constant sized array of type constant_array_of2t");
     abort();
   }
 
@@ -117,7 +117,7 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
 
 expr2tc smt_tuple_sym_flattener::tuple_get(const type2tc &, smt_astt)
 {
-  msg.error(
+  log_error(
     "Fetching tuples from tuple-sym-flattener without the concrete symbol "
     "is currently not implemented, returning empty expression...");
   return expr2tc();

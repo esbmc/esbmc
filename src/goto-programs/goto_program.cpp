@@ -9,11 +9,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-programs/goto_program.h>
 #include <iomanip>
 #include <langapi/language_util.h>
-#include <util/message/default_message.h>
+
 
 void goto_programt::instructiont::dump() const
 {
-  default_message msg;
+
   std::ostringstream oss;
   output_instruction(*migrate_namespace_lookup, "", oss, msg);
   msg.debug(oss.str());
@@ -497,7 +497,7 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
 
 void goto_programt::dump() const
 {
-  default_message msg;
+
   std::ostringstream oss;
   output(*migrate_namespace_lookup, "", oss);
   msg.debug(oss.str());

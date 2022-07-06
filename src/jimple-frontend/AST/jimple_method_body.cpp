@@ -4,7 +4,7 @@
 #include <memory>
 #include <util/std_code.h>
 #include <util/expr_util.h>
-#include <util/message/format.h>
+
 
 exprt jimple_full_method_body::to_exprt(
   contextt &ctx,

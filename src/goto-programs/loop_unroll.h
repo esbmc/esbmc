@@ -2,7 +2,7 @@
 #define ESBMC_GOTO_ALGORITHMS_H
 
 #include <util/algorithms.h>
-#include <util/message/message.h>
+#include <util/message.h>
 
 /**
  * @brief This is the base class that unroll

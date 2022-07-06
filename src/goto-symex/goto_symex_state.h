@@ -109,7 +109,7 @@ public:
     unsigned int thread_id;
     variable_name_sett local_variables;
 
-    explicit goto_statet(const goto_symex_statet &s, const messaget &msg)
+    explicit goto_statet(const goto_symex_statet &s)
       : num_instructions(s.num_instructions),
         level2_ptr(s.level2.clone()),
         level2(*level2_ptr),
@@ -142,7 +142,7 @@ public:
     ~goto_statet() = default;
 
   protected:
-    const messaget &msg;
+
   };
 
   /**
@@ -478,7 +478,7 @@ public:
 
   /** Namespace to work with. */
   const namespacet &ns;
-  const messaget &msg;
+
 
   /** Map of what pointer values have been realloc'd, and what their new
    *  realloc number is. No need for special consideration when merging states

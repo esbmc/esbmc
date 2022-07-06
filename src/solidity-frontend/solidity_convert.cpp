@@ -9,7 +9,7 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <regex>
-#include <util/message/format.h>
+
 #include <fstream>
 
 solidity_convertert::solidity_convertert(

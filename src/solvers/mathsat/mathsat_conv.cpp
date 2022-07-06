@@ -30,8 +30,8 @@ void mathsat_convt::check_msat_error(msat_term &r) const
 {
   if(MSAT_ERROR_TERM(r))
   {
-    msg.error("Error creating SMT ");
-    msg.error(fmt::format("Error text: \"{}\"", msat_last_error_message(env)));
+    log_error("Error creating SMT ");
+    log_error(fmt::format("Error text: \"{}\"", msat_last_error_message(env)));
     abort();
   }
 }
@@ -114,7 +114,7 @@ bool mathsat_convt::get_bool(smt_astt a)
     res = false;
   else
   {
-    msg.error("Boolean model value is neither true or false");
+    log_error("Boolean model value is neither true or false");
     abort();
   }
 
@@ -170,7 +170,7 @@ ieee_floatt mathsat_convt::get_fpbv(smt_astt a)
   size_t ew, sw;
   if(!msat_is_fp_type(env, to_solver_smt_sort<msat_type>(a->sort)->s, &ew, &sw))
   {
-    msg.error("Non FP type passed to mathsat_convt::get_exp_width");
+    log_error("Non FP type passed to mathsat_convt::get_exp_width");
     abort();
   }
 
@@ -905,7 +905,7 @@ mathsat_smt_ast::mathsat_smt_ast(
 
 void mathsat_smt_ast::dump() const
 {
-  default_message msg;
+
   // We need to get the env
   auto convt = dynamic_cast<const mathsat_convt *>(context);
   assert(convt != nullptr);

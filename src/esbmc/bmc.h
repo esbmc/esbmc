@@ -40,7 +40,7 @@ public:
 protected:
   const contextt &context;
   namespacet ns;
-  const messaget &msg;
+
   std::shared_ptr<smt_convt> runtime_solver;
   std::shared_ptr<reachability_treet> symex;
   virtual smt_convt::resultt run_decision_procedure(

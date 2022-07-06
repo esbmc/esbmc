@@ -47,7 +47,7 @@ static expr2tc concat_tree(size_t start, size_t n, const Extract &extract)
 }
 
 static expr2tc
-flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
+flatten_to_bitvector(const expr2tc &new_expr)
 {
   // Easy case, no need to concat anything
   if(is_number_type(new_expr))
@@ -115,7 +115,7 @@ flatten_to_bitvector(const expr2tc &new_expr, const messaget &msg)
     return extract2tc(get_uint_type(sz), new_expr, sz - 1, 0);
   }
 
-  msg.error(fmt::format(
+  log_error(fmt::format(
     "Unrecognized type {} when flattening to bytes",
     get_type_id(*new_expr->type)));
   abort();

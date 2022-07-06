@@ -1,12 +1,12 @@
 #include <assert.h>
 #include <jimple-frontend/jimple-language.h>
-#include <util/message/format.h>
+
 #include <c2goto/cprover_library.h>
-languaget *new_jimple_language(const messaget &msg)
+languaget *new_jimple_language()
 {
   return new jimple_languaget(msg);
 }
-bool jimple_languaget::final(contextt &context, const messaget &msg)
+bool jimple_languaget::final(contextt &context)
 {
   msg.status("Adding cprover library");
   add_cprover_library(context, msg);
@@ -139,7 +139,7 @@ void jimple_languaget::setup_main(contextt &context)
   symbolt *s = context.find_symbol(main_symbol);
   if(s == nullptr)
   {
-    msg.error("No main method");
+    log_error("No main method");
     abort();
     return; // give up, no main
   }
@@ -148,7 +148,7 @@ void jimple_languaget::setup_main(contextt &context)
   // check if it has a body
   if(symbol.value.is_nil())
   {
-    msg.error("Empty body for main");
+    log_error("Empty body for main");
     abort();
   }
 
@@ -184,7 +184,7 @@ void jimple_languaget::setup_main(contextt &context)
 
   if(context.move(new_symbol))
   {
-    msg.error("main already defined by another language module");
+    log_error("main already defined by another language module");
     return;
   }
 

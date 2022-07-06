@@ -1,6 +1,6 @@
 #include <boolector_conv.h>
 #include <cstring>
-#include <util/message/format.h>
+
 
 #define new_ast new_solver_ast<btor_smt_ast>
 
@@ -33,7 +33,7 @@ boolector_convt::boolector_convt(
 {
   if(options.get_bool_option("int-encoding"))
   {
-    msg.error("Boolector does not support integer encoding mode");
+    log_error("Boolector does not support integer encoding mode");
     abort();
   }
 
@@ -517,13 +517,13 @@ smt_astt boolector_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt boolector_convt::mk_smt_int(const BigInt &theint [[maybe_unused]])
 {
-  ::boolector_convt::msg.error("Boolector can't create integer sorts");
+  ::boolector_convt::log_error("Boolector can't create integer sorts");
   abort();
 }
 
 smt_astt boolector_convt::mk_smt_real(const std::string &str [[maybe_unused]])
 {
-  msg.error("Boolector can't create Real sorts");
+  log_error("Boolector can't create Real sorts");
   abort();
 }
 
@@ -579,7 +579,7 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     break;
 
   default:
-    msg.error("Unknown type for symbol");
+    log_error("Unknown type for symbol");
     abort();
   }
 
@@ -658,7 +658,7 @@ bool boolector_convt::get_bool(smt_astt a)
     res = false;
     break;
   default:
-    msg.error("Can't get boolean value from Boolector");
+    log_error("Can't get boolean value from Boolector");
     abort();
   }
 
@@ -802,7 +802,7 @@ void boolector_convt::dump_smt()
 
 void btor_smt_ast::dump() const
 {
-  default_message msg;
+
   auto f = msg.get_temp_file();
   boolector_dump_smt2_node(boolector_get_btor(a), f.file(), a);
   msg.insert_file_contents(VerbosityLevel::Debug, f.file());
