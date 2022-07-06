@@ -15,6 +15,6 @@ void show_loop_numbers(
   const goto_functionst &goto_functions,
   const messaget &msg);
 
-void show_loop_numbers(const goto_programt &goto_program, const messaget &msg);
+void show_loop_numbers(const goto_programt &goto_program);
 
 #endif

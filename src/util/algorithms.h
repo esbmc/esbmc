@@ -8,7 +8,7 @@
               to be reasoned: containers, CFG, goto-programs, loops.
 
               The idea is that we don't need to look over a million
-              of lines in the flow of esbmc when we only want to do 
+              of lines in the flow of esbmc when we only want to do
               a small analysis.
 \*******************************************************************/
 
@@ -18,7 +18,7 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loopst.h>
 #include <goto-programs/goto_loops.h>
-#include <util/message/message.h>
+#include <util/message.h>
 /**
  * @brief Base interface to run an algorithm in esbmc
  */
@@ -31,7 +31,7 @@ public:
 
   /**
    * @brief Executes the algorithm
-   * 
+   *
    * @return success of the algorithm
    */
   virtual bool run() = 0;
@@ -39,7 +39,7 @@ public:
   /**
    * @brief Says wether the algorithm is a plain analysis
    * or if it also changes the structure
-   * 
+   *
    */
   bool has_sideeffect()
   {

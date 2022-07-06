@@ -9,7 +9,7 @@
 #include <util/goto_expr_factory.h>
 #include <goto-programs/goto_functions.h>
 #include <util/algorithms.h>
-#include <util/message/message.h>
+#include <util/message.h>
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/remove_skip.h>
 #include <goto-programs/goto_functions.h>

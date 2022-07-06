@@ -38,7 +38,7 @@ bool language_filest::parse()
 
     if(!infile)
     {
-      msg.error("Failed to open " + it.first);
+      log_error("Failed to open " + it.first);
       return true;
     }
 
@@ -48,7 +48,7 @@ bool language_filest::parse()
 
     if(language.parse(it.first, msg))
     {
-      msg.error("Parsing of " + it.first + " failed");
+      log_error("Parsing of " + it.first + " failed");
       return true;
     }
 
@@ -148,7 +148,7 @@ bool language_filest::typecheck_module(
 
   if(it == modulemap.end())
   {
-    msg.error("found no file that provides module " + module);
+    log_error("found no file that provides module " + module);
     return true;
   }
 
@@ -168,7 +168,7 @@ bool language_filest::typecheck_module(
 
   if(module.in_progress)
   {
-    msg.error("circular dependency in " + module.name);
+    log_error("circular dependency in " + module.name);
     return true;
   }
 
@@ -226,11 +226,11 @@ void language_filest::typecheck_virtual_methods(contextt &context)
 
           if(member_function->value.is_nil())
           {
-            msg.error(
+            log_error(
               member_function->location.as_string() +
               ": The virtual method isn't pure virtual and hasn't a "
               "method implementation ");
-            msg.error("CONVERSION ERROR");
+            log_error("CONVERSION ERROR");
             abort();
           }
         }

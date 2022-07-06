@@ -1,6 +1,6 @@
 #include <bitwuzla_conv.h>
 #include <cstring>
-#include <util/message/format.h>
+
 
 #define new_ast new_solver_ast<bitw_smt_ast>
 
@@ -547,13 +547,13 @@ smt_astt bitwuzla_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt bitwuzla_convt::mk_smt_int(const BigInt &theint [[maybe_unused]])
 {
-  msg.error("ESBMC can't create integer sorts with Bitwuzla yet");
+  log_error("ESBMC can't create integer sorts with Bitwuzla yet");
   abort();
 }
 
 smt_astt bitwuzla_convt::mk_smt_real(const std::string &str [[maybe_unused]])
 {
-  msg.error("ESBMC can't create real sorts with Bitwuzla yet");
+  log_error("ESBMC can't create real sorts with Bitwuzla yet");
   abort();
 }
 
@@ -605,7 +605,7 @@ bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     break;
 
   default:
-    msg.error("Unknown type for symbol");
+    log_error("Unknown type for symbol");
     abort();
   }
 
@@ -690,7 +690,7 @@ bool bitwuzla_convt::get_bool(smt_astt a)
     res = false;
     break;
   default:
-    msg.error("Can't get boolean value from Bitwuzla");
+    log_error("Can't get boolean value from Bitwuzla");
     abort();
   }
   return res;
@@ -821,7 +821,7 @@ void bitwuzla_convt::dump_smt()
 
 void bitw_smt_ast::dump() const
 {
-  default_message msg;
+
   auto f = msg.get_temp_file();
   bitwuzla_term_dump(a, "smt2", f.file());
   msg.insert_file_contents(VerbosityLevel::Debug, f.file());

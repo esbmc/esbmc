@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <util/language.h>
 #include <util/language_file.h>
-#include <util/message/message.h>
+#include <util/message.h>
 #include <util/parseoptions.h>
 
 class language_uit
@@ -20,7 +20,7 @@ public:
   language_filest language_files;
   contextt context;
 
-  language_uit(const cmdlinet &__cmdline, messaget &msg);
+  language_uit(const cmdlinet &__cmdline);
   virtual ~language_uit() = default;
 
   virtual bool parse();

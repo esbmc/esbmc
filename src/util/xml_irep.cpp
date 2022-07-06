@@ -1,15 +1,15 @@
 /*******************************************************************\
- 
+
 Module:
- 
+
 Author: Daniel Kroening
- 
+
   Date: November 2005
- 
+
 \*******************************************************************/
 
 #include <util/xml_irep.h>
-#include <util/message/format.h>
+
 
 void convert(const irept &irep, xmlt &xml)
 {
@@ -37,7 +37,7 @@ void convert(const irept &irep, xmlt &xml)
   }
 }
 
-void convert(const xmlt &xml, irept &irep, const messaget &msg)
+void convert(const xmlt &xml, irept &irep)
 {
   irep.id("nil");
   xmlt::elementst::const_iterator it = xml.elements.begin();
@@ -69,7 +69,7 @@ void convert(const xmlt &xml, irept &irep, const messaget &msg)
     }
     else
       // Should not happen
-      msg.error(
+      log_error(
         fmt::format("Unknown sub found ({}); malformed xml?", it->name));
   }
 }

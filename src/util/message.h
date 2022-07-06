@@ -34,25 +34,13 @@ enum class VerbosityLevel : char
   Debug     // messages that are only useful if you need to debug.
 };
 
-namespace {
-/**
-   * @brief Prints a message
-   * @param message string to be printed
-   */
-void log_print(VerbosityLevel v, const std::string &message) {
-  fmt::print(stdout, "{}\n", message);
-}
-}
+
 // Macro to generate log functions
 #define log_message(name, verbosity)                                           \
   template <typename Arg, typename... Args>                                    \
   static inline void log_##name(Arg &&arg, Args &&...args)                     \
   {                                                                            \
-    log_print(verbosity, std::forward<Arg>(arg));                              \
-                                                                               \
-    using expander = int[];                                                    \
-    (void)expander{0, (log_print(verbosity, std::forward<Args>(args)), 0)...}; \
-    log_println(verbosity);                                                    \
+                                                                                \
   }
 
 log_message(error, VerbosityLevel::Error);

@@ -10,9 +10,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/xml.h>
 #include <util/xml_irep.h>
-#include <util/message/format.h>
 
-void show_loop_numbers(const goto_programt &goto_program, const messaget &msg)
+
+void show_loop_numbers(const goto_programt &goto_program)
 {
   for(const auto &instruction : goto_program.instructions)
   {

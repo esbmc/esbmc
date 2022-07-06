@@ -17,14 +17,14 @@
 #include <clang-c-frontend/typecast.h>
 #include <util/type.h>
 #include <util/expr_util.h>
-#include <util/message/default_message.h>
+
 // ******************** TESTS ********************
 
 namespace
 {
 void gen_typecast_to_union(exprt &dest, const typet &type)
 {
-  default_message msg;
+
   clang_c_convertert::gen_typecast_to_union(dest, type, msg);
 }
 } // namespace

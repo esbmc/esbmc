@@ -7,7 +7,7 @@
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
 #include <util/type_byte_size.h>
-#include <util/message/default_message.h>
+
 
 expr2tc expr2t::do_simplify() const
 {
@@ -909,7 +909,7 @@ expr2tc member2t::do_simplify() const
        * field is in the constant union /isn't/ the field we're selecting from
        * it. So don't simplify it, because we can't. */
       // This can be the default, because base_type will not print anything
-      default_message msg;
+
       if(
         !is_pointer_type(type) &&
         !base_type_eq(type, s->type, namespacet(contextt(msg))))

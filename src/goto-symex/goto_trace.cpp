@@ -20,7 +20,7 @@
 #include <util/arith_tools.h>
 #include <util/std_types.h>
 #include <ostream>
-#include <util/message/default_message.h>
+
 
 void goto_tracet::output(
   const class namespacet &ns,
@@ -33,7 +33,7 @@ void goto_tracet::output(
 
 void goto_trace_stept::dump() const
 {
-  default_message msg;
+
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss, msg);
   msg.debug(oss.str());

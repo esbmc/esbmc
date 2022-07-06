@@ -51,7 +51,7 @@ public:
   }
 
   void
-  initialize(const namespacet &ns, locationt l, const messaget &msg) override
+  initialize(const namespacet &ns, locationt l) override
   {
     value_set = new value_sett(ns, msg);
     value_set->clear();

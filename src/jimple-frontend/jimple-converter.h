@@ -9,7 +9,7 @@
 class jimple_converter
 {
 public:
-  jimple_converter(contextt &_context, jimple_file &_ASTs, const messaget &msg)
+  jimple_converter(contextt &_context, jimple_file &_ASTs)
     : context(_context), AST(_ASTs), msg(msg)
   {
   }
@@ -18,7 +18,7 @@ public:
 protected:
   contextt &context;
   const jimple_file &AST;
-  const messaget &msg;
+
 };
 
 #endif //ESBMC_JIMPLE_CONVERTER_H

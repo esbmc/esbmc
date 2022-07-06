@@ -12,7 +12,7 @@
 #include <irep2/irep2_utils.h>
 #include <util/std_types.h>
 #include <util/type_byte_size.h>
-#include <util/message/format.h>
+
 
 BigInt member_offset(const type2tc &type, const irep_idt &member)
 {

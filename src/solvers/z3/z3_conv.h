@@ -12,7 +12,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/smt/smt_conv.h>
 #include <z3++.h>
 #include <fstream>
-#include <util/message/default_message.h>
+
 
 class z3_smt_ast : public solver_smt_ast<z3::expr>
 {
@@ -37,7 +37,7 @@ class z3_convt : public smt_convt,
                  public fp_convt
 {
 public:
-  z3_convt(const namespacet &ns, const optionst &options, const messaget &msg);
+  z3_convt(const namespacet &ns, const optionst &options);
   ~z3_convt() override;
 
 public:

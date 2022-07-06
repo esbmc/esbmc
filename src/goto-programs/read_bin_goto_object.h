@@ -1,11 +1,11 @@
 /*******************************************************************\
- 
+
 Module: Read goto object files.
- 
+
 Author: CM Wintersteiger
- 
+
 Date: May 2007
- 
+
 \*******************************************************************/
 
 #ifndef READ_BIN_GOTO_OBJECT_H_
@@ -13,7 +13,7 @@ Date: May 2007
 
 #include <goto-programs/goto_functions.h>
 #include <util/context.h>
-#include <util/message/message.h>
+#include <util/message.h>
 
 /** Parses `in`. If failing to do so, a message is printed to `msg_hndlr`.
  *  @return true on error, false on success */

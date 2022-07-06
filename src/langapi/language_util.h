@@ -29,9 +29,9 @@ inline std::string from_expr(
   return from_expr(ns, identifier, migrate_expr_back(expr), msg);
 }
 
-std::string from_expr(const exprt &expr, const messaget &msg);
+std::string from_expr(const exprt &expr);
 
-inline std::string from_expr(const expr2tc &expr, const messaget &msg)
+inline std::string from_expr(const expr2tc &expr)
 {
   return from_expr(migrate_expr_back(expr), msg);
 }
@@ -51,9 +51,9 @@ inline std::string from_type(
   return from_type(ns, identifier, migrate_type_back(type), msg);
 }
 
-std::string from_type(const typet &type, const messaget &msg);
+std::string from_type(const typet &type);
 
-inline std::string from_type(const type2tc &type, const messaget &msg)
+inline std::string from_type(const type2tc &type)
 {
   return from_type(migrate_type_back(type), msg);
 }

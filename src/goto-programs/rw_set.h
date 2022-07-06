@@ -88,7 +88,7 @@ protected:
   const namespacet &ns;
   value_setst &value_sets;
   const goto_programt::const_targett target;
-  const messaget &msg;
+
 
   void assign(const exprt &lhs, const exprt &rhs);
 

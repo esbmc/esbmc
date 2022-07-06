@@ -2,8 +2,8 @@
 #define UTIL_IREP2_UTILS_H_
 
 #include <util/c_types.h>
-#include <util/message/default_message.h>
-#include <util/message/format.h>
+
+
 #include <irep2/irep2_expr.h>
 #include <util/migrate.h>
 
@@ -362,8 +362,8 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
     break;
   }
 
-  default_message msg;
-  msg.error(fmt::format("Can't generate zero for type {}", get_type_id(type)));
+
+  log_error(fmt::format("Can't generate zero for type {}", get_type_id(type)));
   abort();
 }
 
@@ -396,8 +396,8 @@ inline expr2tc gen_one(const type2tc &type)
     break;
   }
 
-  default_message msg;
-  msg.error(fmt::format("Can't generate one for type {}", get_type_id(type)));
+
+  log_error(fmt::format("Can't generate one for type {}", get_type_id(type)));
   abort();
 }
 

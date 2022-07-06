@@ -78,7 +78,7 @@ bool goto_symext::symex_throw()
       << exceptions_thrown.begin()->as_string() << " at file "
       << instruction.location.file() << " line " << instruction.location.line()
       << "\n";
-  msg.error(oss.str());
+  log_error(oss.str());
   // We check before iterate over the throw list to save time:
   // If there is no catch, we return an error
   if(!stack_catch.size())

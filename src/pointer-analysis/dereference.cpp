@@ -637,7 +637,7 @@ expr2tc dereferencet::build_reference_to(
 
   if(!is_object_descriptor2t(what))
   {
-    msg.error(fmt::format("unknown points-to: {}", get_expr_id(what)));
+    log_error(fmt::format("unknown points-to: {}", get_expr_id(what)));
     abort();
   }
 
@@ -851,12 +851,12 @@ void dereferencet::build_reference_rec(
     oss << "\n";
     oss << "(It isn't allowed by C anyway)";
     oss << "\n";
-    msg.error(oss.str());
+    log_error(oss.str());
     abort();
   }
   else
   {
-    msg.error(
+    log_error(
       fmt::format("Unrecognized dest type during dereference\n{}", *type));
     abort();
   }
@@ -871,7 +871,7 @@ void dereferencet::build_reference_rec(
     flags |= flag_src_array;
   else
   {
-    msg.error(fmt::format(
+    log_error(fmt::format(
       "Unrecognized src type during dereference\n{}", *value->type));
     abort();
   }
@@ -1000,7 +1000,7 @@ void dereferencet::build_reference_rec(
 
   // No scope for constructing references to arrays
   default:
-    msg.error("Unrecognized input to build_reference_rec");
+    log_error("Unrecognized input to build_reference_rec");
     abort();
   }
 }
@@ -1589,7 +1589,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
   oss << "Unexpectedly " << get_type_id(value->type) << " type'd";
   oss << " argument to construct_struct_ref"
       << "\n";
-  msg.error(oss.str());
+  log_error(oss.str());
   abort();
 }
 

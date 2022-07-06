@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/location.h>
 #include <util/prefix.h>
-#include <util/message/default_message.h>
+
 
 void goto_convertt::convert_function_call(
   const code_function_callt &function_call,
@@ -175,7 +175,7 @@ void goto_convertt::do_function_call_dereference(
 
 void goto_functionst::dump() const
 {
-  default_message msg;
+
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
   msg.debug(oss.str());

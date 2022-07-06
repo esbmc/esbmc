@@ -47,7 +47,7 @@ bool cpp_languaget::preprocess(
   return c_preprocess(path, outstream, true, message_handler);
 }
 
-cpp_languaget::cpp_languaget(const messaget &msg) : languaget(msg)
+cpp_languaget::cpp_languaget() : languaget(msg)
 {
 }
 
@@ -187,7 +187,7 @@ bool cpp_languaget::typecheck(
   return c_link(context, new_context, message_handler, module);
 }
 
-bool cpp_languaget::final(contextt &context, const messaget &message_handler)
+bool cpp_languaget::final(contextt &context)
 {
   if(cpp_final(context, message_handler))
     return true;
@@ -245,7 +245,7 @@ void cpp_languaget::show_parse(std::ostream &out, const cpp_itemt &item)
     out << "UNKNOWN: " << item << std::endl;
 }
 
-languaget *new_cpp_language(const messaget &msg)
+languaget *new_cpp_language()
 {
   return new cpp_languaget(msg);
 }

@@ -22,7 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/type_byte_size.h>
 
 static const std::string &
-get_string_constant(const exprt &expr, const messaget &msg)
+get_string_constant(const exprt &expr)
 {
   if(expr.id() == "typecast" && expr.operands().size() == 1)
     return get_string_constant(expr.op0(), msg);
@@ -31,7 +31,7 @@ get_string_constant(const exprt &expr, const messaget &msg)
     !expr.is_address_of() || expr.operands().size() != 1 ||
     !expr.op0().is_index() || expr.op0().operands().size() != 2)
   {
-    msg.error(fmt::format("expected string constant, but got:\n{}", expr));
+    log_error(fmt::format("expected string constant, but got:\n{}", expr));
     abort();
   }
 

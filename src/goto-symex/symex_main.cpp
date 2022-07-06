@@ -53,7 +53,7 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
   }
   catch(runtime_encoded_equationt::dual_unsat_exception &e)
   {
-    this->msg.error(
+    this->log_error(
       "This solver was unable to check this expression. Please try it with "
       "another solver");
   }
@@ -348,7 +348,7 @@ void goto_symext::symex_step(reachability_treet &art)
     oss << "GOTO instruction type " << instruction.type;
     oss << " not handled in goto_symext::symex_step"
         << "\n";
-    msg.error(oss.str());
+    log_error(oss.str());
     abort();
   }
 }
@@ -664,12 +664,12 @@ void goto_symext::run_intrinsic(
       }
       catch(array_type2t::dyn_sized_array_excp *e)
       {
-        msg.error("__ESBMC_init_object does not support VLAs");
+        log_error("__ESBMC_init_object does not support VLAs");
         abort();
       }
       catch(array_type2t::inf_sized_array_excp *e)
       {
-        msg.error(
+        log_error(
           "__ESBMC_init_object does not support infinite-length arrays");
         abort();
       }
@@ -694,7 +694,7 @@ void goto_symext::run_intrinsic(
     oss << "\n(NB: the C spec reserves the __ prefix for the compiler"
            " and environment)\n";
 
-    msg.error(oss.str());
+    log_error(oss.str());
     abort();
   }
 }

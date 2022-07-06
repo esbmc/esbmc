@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/typecheck.h>
-#include <util/message/format.h>
+
 
 bool typecheckt::typecheck_main()
 {

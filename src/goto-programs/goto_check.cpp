@@ -19,7 +19,7 @@
 class goto_checkt
 {
 public:
-  goto_checkt(const namespacet &_ns, optionst &_options, const messaget &msg)
+  goto_checkt(const namespacet &_ns, optionst &_options)
     : ns(_ns),
       options(_options),
       new_code(msg),

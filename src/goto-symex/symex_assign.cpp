@@ -270,7 +270,7 @@ void goto_symext::symex_assign_rec(
   }
   else
   {
-    msg.error(fmt::format("assignment to {} not handled", get_expr_id(lhs)));
+    log_error(fmt::format("assignment to {} not handled", get_expr_id(lhs)));
     abort();
   }
 }

@@ -451,7 +451,7 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
   /** Returns the size of the object
-   * 
+   *
    * If the object is invalid, then this function will return 0
    */
   void intrinsic_get_object_size(
@@ -882,7 +882,7 @@ protected:
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
 
-  const messaget &msg;
+
 
   friend void build_goto_symex_classes();
 };

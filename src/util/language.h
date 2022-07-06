@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdio>
 #include <set>
 #include <util/context.h>
-#include <util/message/message.h>
+#include <util/message.h>
 #include <util/namespace.h>
 
 class languaget
@@ -20,7 +20,7 @@ class languaget
 public:
   // parse file
 
-  virtual bool parse(const std::string &path, const messaget &msg) = 0;
+  virtual bool parse(const std::string &path) = 0;
 
   // add external dependencies of a given module to set
 
@@ -35,7 +35,7 @@ public:
   }
 
   // final adjustments, e.g., initialization and call to main()
-  virtual bool final(contextt &, const messaget &)
+  virtual bool final(contextt &)
   {
     return false;
   }
@@ -73,11 +73,11 @@ public:
   virtual bool
   from_type(const typet &type, std::string &code, const namespacet &ns) = 0;
 
-  virtual languaget *new_language(const messaget &msg) const = 0;
+  virtual languaget *new_language() const = 0;
 
   // constructor / destructor
 
-  explicit languaget(const messaget &msg) : msg(msg)
+  explicit languaget() : msg(msg)
   {
   }
   virtual ~languaget() = default;
@@ -95,7 +95,7 @@ public:
 #endif
 
 protected:
-  const messaget &msg;
+
   // function name for verification that requires this information before GOTO conversion phase.
   std::string func_name = "";
 #ifdef ENABLE_SOLIDITY_FRONTEND

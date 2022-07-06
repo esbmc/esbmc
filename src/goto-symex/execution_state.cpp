@@ -65,7 +65,7 @@ execution_statet::execution_statet(
     goto_functions.function_map.find("__ESBMC_main");
   if(it == goto_functions.function_map.end())
   {
-    msg.error("main symbol not found; please set an entry point");
+    log_error("main symbol not found; please set an entry point");
     abort();
   }
 
@@ -224,11 +224,11 @@ void execution_statet::symex_step(reachability_treet &art)
 #if !(defined(__arm__) || defined(__aarch64__))
     __asm__("int $3");
 #else
-    msg.error("Can't trap on ARM, sorry");
+    log_error("Can't trap on ARM, sorry");
     abort();
 #endif
 #else
-    msg.error("Can't trap on windows, sorry");
+    log_error("Can't trap on windows, sorry");
     abort();
 #endif
   }
@@ -630,7 +630,7 @@ void execution_statet::restore_last_paths()
       options.get_bool_option("no-goto-merge") &&
       cur_state->top().goto_state_map[loc].size() != 0)
     {
-      msg.error(
+      log_error(
         "There are goto statements that shouldn't be merged at this point");
       abort();
     }
@@ -1140,7 +1140,7 @@ void execution_statet::switch_to_monitor()
   {
     if(!mon_thread_warning)
     {
-      msg.error(
+      log_error(
         "Switching to ended monitor; you need to increase its "
         "context or prefix bound");
 

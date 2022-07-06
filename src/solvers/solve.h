@@ -5,7 +5,7 @@
 #include <string>
 #include <util/config.h>
 #include <util/namespace.h>
-#include <util/message/message.h>
+#include <util/message.h>
 
 typedef smt_convt *(solver_creator)(
   const optionst &options,

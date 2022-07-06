@@ -3,7 +3,7 @@
 
 #include <string>
 #include <util/expr.h>
-#include <util/message/message.h>
+#include <util/message.h>
 #include <vector>
 #include <istream>
 

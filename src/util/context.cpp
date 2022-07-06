@@ -7,8 +7,8 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/context.h>
-#include <util/message/default_message.h>
-#include <util/message/format.h>
+
+
 
 bool contextt::add(const symbolt &symbol)
 {
@@ -73,7 +73,7 @@ void contextt::erase_symbol(irep_idt name)
   symbolst::iterator it = symbols.find(name);
   if(it == symbols.end())
   {
-    msg.error("Couldn't find symbol to erase");
+    log_error("Couldn't find symbol to erase");
     abort();
   }
 
@@ -125,7 +125,7 @@ symbolt *contextt::move_symbol_to_context(symbolt &symbol)
   {
     if(move(symbol, s))
     {
-      msg.error(fmt::format(
+      log_error(fmt::format(
         "Couldn't add symbol {} to symbol table\n{}", symbol.name, symbol));
       abort();
     }

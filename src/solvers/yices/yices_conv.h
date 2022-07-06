@@ -18,7 +18,7 @@ public:
     if(a == NULL_TERM)
     {
       yices_print_error(stderr);
-      msg.error("Error creating yices term");
+      log_error("Error creating yices term");
       abort();
     }
   }

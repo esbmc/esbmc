@@ -20,19 +20,19 @@ Module: Solidity AST module
 #include <clang-c-frontend/expr2c.h>
 #include <util/c_link.h>
 
-languaget *new_solidity_language(const messaget &msg)
+languaget *new_solidity_language()
 {
   return new solidity_languaget(msg);
 }
 
-std::string solidity_languaget::get_temp_file(const messaget &msg)
+std::string solidity_languaget::get_temp_file()
 {
   // Create a temp file for clang-tool
   // needed to convert intrinsics
   auto p = boost::filesystem::temp_directory_path();
   if(!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
   {
-    msg.error("Can't find temporary directory (needed to convert intrinsics)");
+    log_error("Can't find temporary directory (needed to convert intrinsics)");
     abort();
   }
 
@@ -41,7 +41,7 @@ std::string solidity_languaget::get_temp_file(const messaget &msg)
   boost::filesystem::create_directory(p);
   if(!boost::filesystem::is_directory(p))
   {
-    msg.error(
+    log_error(
       "Can't create temporary directory (needed to convert intrinsics)");
     abort();
   }
@@ -56,12 +56,12 @@ std::string solidity_languaget::get_temp_file(const messaget &msg)
   return p.string();
 }
 
-solidity_languaget::solidity_languaget(const messaget &msg)
+solidity_languaget::solidity_languaget()
   : clang_c_languaget(msg)
 {
 }
 
-bool solidity_languaget::parse(const std::string &path, const messaget &msg)
+bool solidity_languaget::parse(const std::string &path)
 {
   // prepare temp file
   temp_path = get_temp_file(msg);
@@ -144,7 +144,7 @@ void solidity_languaget::show_parse(std::ostream &)
   assert(!"come back and continue - solidity_languaget::show_parse");
 }
 
-bool solidity_languaget::final(contextt &context, const messaget &msg)
+bool solidity_languaget::final(contextt &context)
 {
   add_cprover_library(context, msg);
   return clang_main(context, msg);

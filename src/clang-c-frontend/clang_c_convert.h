@@ -63,7 +63,7 @@ public:
  * @param msg  Message object
  */
   static void
-  gen_typecast_to_union(exprt &dest, const typet &type, const messaget &msg);
+  gen_typecast_to_union(exprt &dest, const typet &type);
 
   static std::string get_decl_name(const clang::NamedDecl &nd);
 
@@ -72,7 +72,6 @@ protected:
   contextt &context;
   namespacet ns;
   std::vector<std::unique_ptr<clang::ASTUnit>> &ASTs;
-  const messaget &msg;
   irep_idt mode;
   symbol_generator anon_symbol;
 
