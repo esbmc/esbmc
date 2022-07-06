@@ -20,10 +20,9 @@ public:
 
 protected:
   bool slice_assumes;
-  std::function<bool(const symbol2t &)> add_to_deps;
 
-  bool
-  get_symbols(const expr2tc &expr, std::function<bool(const symbol2t &)> fn);
+  template <bool Add>
+  bool get_symbols(const expr2tc &expr);
 
   void slice(symex_target_equationt::SSA_stept &SSA_step);
   void slice_assume(symex_target_equationt::SSA_stept &SSA_step);
