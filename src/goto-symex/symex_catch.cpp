@@ -205,7 +205,7 @@ bool goto_symext::symex_throw()
     oss << "*** Caught by catch(" << catch_name << ") at file "
         << (*catch_insn)->location.file() << " line "
         << (*catch_insn)->location.line() << "\n";
-    msg.status(oss.str());
+    log_status(oss.str());
   }
 
   return true;

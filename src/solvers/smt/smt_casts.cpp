@@ -632,6 +632,6 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     abort();
   }
 
-  log_error(fmt::format("Typecast for unexpected type\n{}", *expr));
+  log_error("Typecast for unexpected type\n{}", *expr);
   abort();
 }

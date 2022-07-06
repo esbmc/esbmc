@@ -55,7 +55,7 @@ static const std::string all_solvers[] = {
 static std::string pick_default_solver()
 {
 #ifdef BOOLECTOR
-  msg.status("No solver specified; defaulting to Boolector");
+  log_status("No solver specified; defaulting to Boolector");
   return "boolector";
 #else
   // Pick whatever's first in the list except for the smtlib solver
@@ -63,7 +63,7 @@ static std::string pick_default_solver()
   {
     if(name == "smtlib" || !esbmc_solvers.count(name))
       continue;
-    msg.status(fmt::format("No solver specified; defaulting to {}", name));
+    log_status("No solver specified; defaulting to {}", name);
     return name;
   }
   log_error(
@@ -104,9 +104,9 @@ static solver_creator &pick_solver(
   if(it != esbmc_solvers.end())
     return *it->second;
 
-  log_error(fmt::format(
+  log_error(
     "The {} solver has not been built into this version of ESBMC, sorry",
-    solver_name));
+    solver_name);
   abort();
 }
 

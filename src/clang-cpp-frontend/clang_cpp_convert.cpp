@@ -283,7 +283,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
 
   if(cxxrd->bases().begin() != cxxrd->bases().end())
   {
-    log_error(fmt::format("inheritance is not supported in {}", __func__));
+    log_error("inheritance is not supported in {}", __func__);
     abort();
   }
 
@@ -301,7 +301,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
         llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
     {
       assert(ftd->isThisDeclarationADefinition());
-      log_error(fmt::format("template is not supported in {}", __func__));
+      log_error("template is not supported in {}", __func__);
       abort();
     }
     else
@@ -323,7 +323,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       if(!cxxmd->isStatic())
       {
         log_error(
-          fmt::format("static method is not supported in {}", __func__));
+          "static method is not supported in {}", __func__);
         abort();
       }
     }
@@ -599,7 +599,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if(mt != nullptr)
       {
         log_error(
-          fmt::format("elidable copy/move is not supported in {}", __func__));
+         "elidable copy/move is not supported in {}", __func__);
         abort();
       }
     }
@@ -621,9 +621,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     this_mapt::iterator it = this_map.find(address);
     if(this_map.find(address) == this_map.end())
     {
-      log_error(fmt::format(
+      log_error(
         "Pointer `this' for method {} was not added to scope",
-        clang_c_convertert::get_decl_name(*current_functionDecl)));
+        clang_c_convertert::get_decl_name(*current_functionDecl));
       abort();
     }
 
@@ -691,7 +691,7 @@ bool clang_cpp_convertert::get_constructor_call(
   }
   else
   {
-    log_error(fmt::format("temporary is not supported in {}", __func__));
+    log_error("temporary is not supported in {}", __func__);
     abort();
   }
 
@@ -708,9 +708,9 @@ void clang_cpp_convertert::build_member_from_component(
   this_mapt::iterator it = this_map.find(address);
   if(this_map.find(address) == this_map.end())
   {
-    log_error(fmt::format(
+    log_error(
       "Pointer `this' for method {} was not added to scope",
-      clang_c_convertert::get_decl_name(fd)));
+      clang_c_convertert::get_decl_name(fd));
     abort();
   }
 
@@ -764,7 +764,7 @@ bool clang_cpp_convertert::get_function_body(
           }
           else
           {
-            log_error(fmt::format("Unsupported initializer in {}", __func__));
+            log_error("Unsupported initializer in {}", __func__);
             abort();
           }
 
@@ -779,8 +779,8 @@ bool clang_cpp_convertert::get_function_body(
         }
         else
         {
-          log_error(fmt::format(
-            "Base class initializer is not supported in {}", __func__));
+          log_error(
+            "Base class initializer is not supported in {}", __func__);
           abort();
         }
 
@@ -984,7 +984,7 @@ bool clang_cpp_convertert::get_decl_ref(
          << decl.getDeclKindName() << "\n";
     decl.dump(ross);
     ross.flush();
-    msg.warning(oss.str());
+    log_warning(oss.str());
     return true;
   }
   }

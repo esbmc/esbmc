@@ -31,7 +31,7 @@ get_string_constant(const exprt &expr)
     !expr.is_address_of() || expr.operands().size() != 1 ||
     !expr.op0().is_index() || expr.op0().operands().size() != 2)
   {
-    log_error(fmt::format("expected string constant, but got:\n{}", expr));
+    log_error("expected string constant, but got:\n{}", expr);
     abort();
   }
 

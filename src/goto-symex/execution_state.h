@@ -170,7 +170,7 @@ public:
     if(tid >= thread_start_data.size())
     {
       log_error(
-        fmt::format("Setting thread data for nonexistant thread {}", tid));
+       "Setting thread data for nonexistant thread {}", tid);
       abort();
     }
 
@@ -183,7 +183,7 @@ public:
     if(tid >= thread_start_data.size())
     {
       log_error(
-        fmt::format("Setting thread data for nonexistant thread {}", tid));
+        "Setting thread data for nonexistant thread {}", tid);
       abort();
     }
 

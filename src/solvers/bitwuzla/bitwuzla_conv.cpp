@@ -6,7 +6,7 @@
 
 void bitwuzla_error_handler(const char *msg)
 {
-  assert(0 && fmt::format("Bitwuzla error encountered\n{}", msg).c_str());
+  log_error("Bitwuzla error encountered\n{}", msg);
   abort();
 }
 

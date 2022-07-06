@@ -420,7 +420,7 @@ void value_sett::get_value_set_rec(
       return;
 
     default:
-      log_error(fmt::format("Unexpected side-effect: {}", *expr));
+      log_error("Unexpected side-effect: {}", *expr);
       abort();
     }
   }
@@ -646,9 +646,9 @@ void value_sett::get_value_set_rec(
         }
         else
         {
-          log_error(fmt::format(
+          log_error(
             "Pointer arithmetic on type where we can't determine size\n{}",
-            *subtype));
+            *subtype);
           abort();
         }
       }
@@ -1289,7 +1289,7 @@ void value_sett::assign_rec(
   }
   else
   {
-    throw std::runtime_error(fmt::format("assign NYI: `{}'", get_expr_id(lhs)));
+    throw std::runtime_error("assign NYI: `{}'", get_expr_id(lhs));
   }
 }
 
@@ -1494,7 +1494,7 @@ void value_sett::dump() const
 
   std::ostringstream oss;
   output(oss);
-  msg.debug(oss.str());
+  log_debug(oss.str());
 }
 
 void value_sett::obj_numbering_ref(unsigned int num)

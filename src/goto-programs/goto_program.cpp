@@ -16,7 +16,7 @@ void goto_programt::instructiont::dump() const
 
   std::ostringstream oss;
   output_instruction(*migrate_namespace_lookup, "", oss, msg);
-  msg.debug(oss.str());
+  log_debug(oss.str());
 }
 
 void goto_programt::instructiont::output_instruction(
@@ -500,7 +500,7 @@ void goto_programt::dump() const
 
   std::ostringstream oss;
   output(*migrate_namespace_lookup, "", oss);
-  msg.debug(oss.str());
+  log_debug(oss.str());
 }
 
 void goto_programt::get_decl_identifiers(

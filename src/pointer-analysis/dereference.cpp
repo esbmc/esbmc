@@ -417,10 +417,10 @@ expr2tc dereferencet::dereference_expr_nonscalar(
       !is_aligned_member(expr))
     {
       auto *t = static_cast<const struct_union_data *>(structure->type.get());
-      msg.warning(fmt::format(
+      log_warning(
         "WARNING: not checking alignment for access to packed {} {}",
         get_type_id(*structure->type),
-        t->name.as_string()));
+        t->name.as_string());
       mode.unaligned = true;
     }
     return dereference_expr_nonscalar(structure, guard, mode, base);
@@ -637,7 +637,7 @@ expr2tc dereferencet::build_reference_to(
 
   if(!is_object_descriptor2t(what))
   {
-    log_error(fmt::format("unknown points-to: {}", get_expr_id(what)));
+    log_error("unknown points-to: {}", get_expr_id(what));
     abort();
   }
 
@@ -857,7 +857,7 @@ void dereferencet::build_reference_rec(
   else
   {
     log_error(
-      fmt::format("Unrecognized dest type during dereference\n{}", *type));
+     "Unrecognized dest type during dereference\n{}", *type);
     abort();
   }
 
@@ -871,8 +871,8 @@ void dereferencet::build_reference_rec(
     flags |= flag_src_array;
   else
   {
-    log_error(fmt::format(
-      "Unrecognized src type during dereference\n{}", *value->type));
+    log_error(
+      "Unrecognized src type during dereference\n{}", *value->type);
     abort();
   }
 

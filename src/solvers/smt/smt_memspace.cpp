@@ -501,7 +501,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     return convert_ast(tmp);
   }
 
-  log_error(fmt::format("Unrecognized address_of operand:\n{}", *expr));
+  log_error("Unrecognized address_of operand:\n{}", *expr);
   abort();
 }
 

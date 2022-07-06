@@ -326,7 +326,7 @@ type2tc migrate_type(const typet &type)
     return type2tc(new string_type2t(iwidth));
   }
 
-  log_error(fmt::format("{}", type));
+  log_error("{}", type);
   abort();
 }
 
@@ -1628,9 +1628,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else
     {
-      assert(
-        0 && fmt::format("Unexpected side-effect statement: ", expr.statement())
-               .c_str());
+      log_error("Unexpected side-effect statement: ", expr.statement());
+      abort();
     }
 
     new_expr_ref =
@@ -1861,7 +1860,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   else
   {
 
-    log_error(fmt::format("{}\nmigrate expr failed", expr));
+    log_error("{}\nmigrate expr failed", expr);
     abort();
   }
 }

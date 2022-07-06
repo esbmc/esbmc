@@ -12,7 +12,7 @@ pattern_checker::pattern_checker(
 bool pattern_checker::do_pattern_check()
 {
   // TODO: add more functions here to perform more pattern-based checks
-  msg.status(fmt::format("Checking function {} ...", target_func.c_str()));
+  log_status("Checking function {} ...", target_func.c_str());
 
   unsigned index = 0;
   for(nlohmann::json::const_iterator itr = ast_nodes.begin();
@@ -49,7 +49,7 @@ void pattern_checker::check_authorization_through_tx_origin(
   const nlohmann::json &body_stmt = func["body"]["statements"];
   msg.progress(
     "  - Pattern-based checking: SWC-115 Authorization through tx.origin");
-  msg.debug("statements in function body array ... \n");
+  log_debug("statements in function body array ... \n");
 
   unsigned index = 0;
 
@@ -57,7 +57,7 @@ void pattern_checker::check_authorization_through_tx_origin(
       itr != body_stmt.end();
       ++itr, ++index)
   {
-    msg.status(fmt::format(" checking function body stmt {}", index));
+    log_status(" checking function body stmt {}", index);
     if(itr->contains("nodeType"))
     {
       if((*itr)["nodeType"].get<std::string>() == "ExpressionStatement")

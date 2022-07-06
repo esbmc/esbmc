@@ -47,7 +47,7 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
 
 void contextt::dump() const
 {
-  msg.debug("\nSymbols:");
+  log_debug("\nSymbols:");
   // Do assignments based on "value".
   foreach_operand([](const symbolt &s) { s.dump(); });
 }
@@ -125,8 +125,8 @@ symbolt *contextt::move_symbol_to_context(symbolt &symbol)
   {
     if(move(symbol, s))
     {
-      log_error(fmt::format(
-        "Couldn't add symbol {} to symbol table\n{}", symbol.name, symbol));
+      log_error(
+        "Couldn't add symbol {} to symbol table\n{}", symbol.name, symbol);
       abort();
     }
   }

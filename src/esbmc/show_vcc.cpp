@@ -68,14 +68,14 @@ void bmct::show_vcc(std::shared_ptr<symex_target_equationt> &eq)
   {
     std::ostringstream oss;
     show_vcc(oss, eq);
-    msg.status(oss.str());
+    log_status(oss.str());
   }
 
   else
   {
     std::ofstream out(filename.c_str());
     if(!out)
-      log_error(fmt::format("failed to open {}", filename));
+      log_error("failed to open {}", filename);
     else
       show_vcc(out, eq);
   }

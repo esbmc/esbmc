@@ -8,11 +8,11 @@ languaget *new_jimple_language()
 }
 bool jimple_languaget::final(contextt &context)
 {
-  msg.status("Adding cprover library");
+  log_status("Adding cprover library");
   add_cprover_library(context, msg);
 
   add_intrinsics(context);
-  msg.status("Adding __ESBMC_main");
+  log_status("Adding __ESBMC_main");
   setup_main(context);
   return false;
 }

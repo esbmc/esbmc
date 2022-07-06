@@ -140,7 +140,7 @@ smtlib_convt::smtlib_convt(
     out_stream = fopen(cmd.c_str(), "w");
     if(!out_stream)
     {
-      log_error(fmt::format("Failed to open \"{}\"", cmd));
+      log_error("Failed to open \"{}\"", cmd);
       abort();
     }
 
@@ -478,9 +478,9 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
 
   if(smtlib_output->token == TOK_KW_ERROR)
   {
-    log_error(fmt::format(
+    log_error(
       "Error from smtlib solver when fetching literal value: \"{}\"",
-      smtlib_output->data));
+      smtlib_output->data);
     abort();
   }
 
@@ -558,9 +558,9 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
 
   if(smtlib_output->token == TOK_KW_ERROR)
   {
-    log_error(fmt::format(
+    log_error(
       "Error from smtlib solver when fetching literal value: \"{}\"",
-      smtlib_output->data));
+      smtlib_output->data);
     abort();
   }
   else if(smtlib_output->token != 0)
@@ -708,9 +708,9 @@ bool smtlib_convt::get_bool(smt_astt a)
 
   if(smtlib_output->token == TOK_KW_ERROR)
   {
-    log_error(fmt::format(
+    log_error(
       "Error from smtlib solver when fetching literal value: \"{}\"",
-      smtlib_output->data));
+      smtlib_output->data);
     abort();
   }
   else if(smtlib_output->token != 0)
@@ -919,8 +919,7 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 
 int smtliberror(int startsym [[maybe_unused]], const std::string &error)
 {
-  assert(
-    0 && fmt::format("SMTLIB response parsing error: \"{}\"", error).c_str());
+  log_error("SMTLIB response parsing error: \"{}\"", error);
   abort();
 }
 

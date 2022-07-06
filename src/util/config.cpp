@@ -203,7 +203,7 @@ bool configt::set(const cmdlinet &cmdline)
   ansi_c.endianess = cmdline.isset("little-endian") ? ansi_ct::IS_LITTLE_ENDIAN
                      : cmdline.isset("big-endian")
                        ? ansi_ct::IS_BIG_ENDIAN
-                       : arch_endianness(ansi_c.target.arch, msg);
+                       : arch_endianness(ansi_c.target.arch);
 
   ansi_c.lib = ansi_c.target.arch == "none" || cmdline.isset("no-library")
                  ? ansi_ct::LIB_NONE

@@ -50,26 +50,26 @@ void convert(const xmlt &xml, irept &irep)
     else if(it->name == "named_sub")
     {
       irept r;
-      convert(*it, r, msg);
+      convert(*it, r);
       std::string named_name = it->get_attribute("name");
       irep.move_to_named_sub(named_name, r);
     }
     else if(it->name == "sub")
     {
       irept r;
-      convert(*it, r, msg);
+      convert(*it, r);
       irep.move_to_sub(r);
     }
     else if(it->name == "comment")
     {
       irept r;
-      convert(*it, r, msg);
+      convert(*it, r);
       std::string named_name = it->get_attribute("name");
       irep.move_to_named_sub(named_name, r);
     }
     else
       // Should not happen
       log_error(
-        fmt::format("Unknown sub found ({}); malformed xml?", it->name));
+        "Unknown sub found ({}); malformed xml?", it->name);
   }
 }

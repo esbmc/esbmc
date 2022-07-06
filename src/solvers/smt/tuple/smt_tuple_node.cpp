@@ -187,7 +187,7 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
           "sorry");
         abort();
       }
-      msg.warning(
+      log_warning(
         "Fetching array elements inside tuples currently unimplemented, "
         "returning empty expression...");
       res = expr2tc();

@@ -107,7 +107,7 @@ std::string type2t::pretty(unsigned int indent) const
 void type2t::dump() const
 {
 
-  msg.debug(pretty(0));
+  log_debug(pretty(0));
 }
 
 size_t type2t::crc() const
@@ -277,23 +277,19 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
 
   if(!count)
   {
-    assert(
-      0 &&
-      fmt::format(
+    log_error(
         "Looking up index of nonexistant member \"{}\" in struct/union \"{}\"",
         comp,
-        name)
-        .c_str());
+        name);
+    abort();
   }
   else if(count > 1)
   {
-    assert(
-      0 &&
-      fmt::format(
+    log_error(
         "Name \"{}\" matches more than one member\" in struct/union \"{}\"",
         comp,
-        name)
-        .c_str());
+        name);
+    abort();
   }
 
   abort();

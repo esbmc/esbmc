@@ -495,7 +495,7 @@ void reachability_treet::print_ileave_trace() const
   message_handler.status("Context switch trace for interleaving:");
   for(it = execution_states.begin(); it != execution_states.end(); it++, i++)
   {
-    message_handler.status(fmt::format("Context switch point {}", i));
+    message_handler.status("Context switch point {}", i);
     (*it)->print_stack_traces(4);
   }
 }

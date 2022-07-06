@@ -47,7 +47,7 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
       // incremental verification succeeded
       return true;
     }
-    this->msg.status("Incremental verification returned unknown");
+    this->log_status("Incremental verification returned unknown");
     // incremental verification returned unknown
     return false;
   }

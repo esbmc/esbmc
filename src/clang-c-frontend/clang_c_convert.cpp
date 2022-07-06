@@ -3108,7 +3108,7 @@ void clang_c_convertert::get_decl_name(
       llvm::raw_os_ostream ross(oss);
       nd.dump(ross);
       ross.flush();
-      log_error(fmt::format("Declaration has an empty name:\n{}", oss.str()));
+      log_error("Declaration has an empty name:\n{}", oss.str());
       abort();
     }
   }

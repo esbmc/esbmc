@@ -67,7 +67,7 @@ public:
   /*! \brief copy constructor
       \param[in] src an empty goto program
   */
-  inline goto_programt(const goto_programt &src) : msg(src.msg)
+  inline goto_programt(const goto_programt &src)
   {
     // CBMC didn't permit copy-construction, instead requiring calling
     // copy_from instead. While explicit is better than implicit though,

@@ -23,7 +23,7 @@ void symex_target_equationt::debug_print_step(const SSA_stept &step) const
 
   std::ostringstream oss;
   step.output(ns, oss, msg);
-  msg.debug(oss.str());
+  log_debug(oss.str());
 }
 
 void symex_target_equationt::assignment(
@@ -174,7 +174,7 @@ void symex_target_equationt::convert_internal_step(
   {
     std::ostringstream oss;
     step.output(ns, oss, msg);
-    msg.status(oss.str());
+    log_status(oss.str());
   }
 
   step.guard_ast = smt_conv.convert_ast(step.guard);
@@ -262,7 +262,7 @@ void symex_target_equationt::SSA_stept::dump() const
 
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss, msg);
-  msg.debug(oss.str());
+  log_debug(oss.str());
 }
 
 void symex_target_equationt::SSA_stept::output(
@@ -368,12 +368,12 @@ void symex_target_equationt::check_for_duplicate_assigns() const
   {
     if(it->second != 1)
     {
-      msg.status(
-        fmt::format("Symbol \"{}\" appears {} times", it->first, it->second));
+      log_status(
+        "Symbol \"{}\" appears {} times", it->first, it->second);
     }
   }
 
-  msg.status(fmt::format("Checked {} insns", i));
+  log_status("Checked {} insns", i);
 }
 
 unsigned int symex_target_equationt::clear_assertions()

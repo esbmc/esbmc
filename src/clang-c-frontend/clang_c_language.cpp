@@ -64,7 +64,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
 
   default:
     log_error(
-      fmt::format("Unknown word size: {}\n", config.ansi_c.word_size).c_str());
+      "Unknown word size: {}\n", config.ansi_c.word_size);
     abort();
   }
 

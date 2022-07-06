@@ -80,7 +80,7 @@ void jimple_file::from_json(const json &j)
     else
     {
 
-      log_error(fmt::format("Unsupported object: {}", content_type));
+      log_error("Unsupported object: {}", content_type);
       abort();
     }
     body.push_back(to_add);
