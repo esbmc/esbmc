@@ -10,16 +10,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_TYPECHECK_H
 
 #include <util/expr.h>
-#include <util/message/message_stream.h>
 
-class typecheckt : public message_streamt
+class typecheckt
 {
 public:
-  typecheckt(const messaget &_message_handler)
-    : message_streamt(_message_handler)
+  typecheckt()
   {
   }
-  ~typecheckt() override = default;
+  ~typecheckt() = default;
 
 protected:
   // main function -- overload this one

@@ -10,8 +10,7 @@ bool goto_functions_algorithm::run()
     runOnFunction(*it);
     if(it->second.body_available)
     {
-      const messaget msg;
-      goto_loopst goto_loops(it->first, goto_functions, it->second, msg);
+      goto_loopst goto_loops(it->first, goto_functions, it->second);
       auto function_loops = goto_loops.get_loops();
       number_of_loops += function_loops.size();
       if(function_loops.size())

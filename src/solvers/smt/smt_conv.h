@@ -142,7 +142,7 @@ public:
   smt_astt
   new_solver_ast(typename the_solver_ast::solver_ast_type ast, smt_sortt sort)
   {
-    return new the_solver_ast(this, ast, sort, msg);
+    return new the_solver_ast(this, ast, sort);
   }
 
   /** Primary constructor. After construction, smt_post_init must be called
@@ -152,8 +152,7 @@ public:
    *  @param _options Provide all the needed parameters to configure the solver. */
   smt_convt(
     const namespacet &_ns,
-    const optionst &_options,
-    const messaget &msg);
+    const optionst &_options);
 
   virtual ~smt_convt() = default;
 
@@ -870,7 +869,7 @@ public:
 
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s)
-  : sort(s), context(ctx), _msg(msg)
+  : sort(s), context(ctx)
 {
   assert(sort != nullptr);
   ctx->live_asts.push_back(this);

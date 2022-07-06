@@ -76,8 +76,7 @@ flatten_to_bitvector(const expr2tc &new_expr)
     auto extract = [&](size_t i) {
       /* The sub-expression should be flattened as well */
       return flatten_to_bitvector(
-        index2tc(arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)),
-        msg);
+        index2tc(arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)));
     };
 
     return concat_tree(0, sz, extract);
@@ -102,8 +101,7 @@ flatten_to_bitvector(const expr2tc &new_expr)
         member2tc(
           structtype.members[sz - i - 1],
           new_expr,
-          structtype.member_names[sz - i - 1]),
-        msg);
+          structtype.member_names[sz - i - 1]));
     };
 
     return concat_tree(0, sz, extract);
@@ -136,7 +134,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
     // Converting from struct/array to fp, we simply convert it to bv and use
     // the bv to fp method to do the job for us
     if(is_struct_type(new_from) || is_array_type(new_from))
-      new_from = flatten_to_bitvector(new_from, msg);
+      new_from = flatten_to_bitvector(new_from);
 
     // from bitvectors should go through the fp api
     if(is_bv_type(new_from) || is_union_type(new_from))
@@ -149,7 +147,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
       return fp_api->mk_from_fp_to_bv(convert_ast(from));
 
     if(is_struct_type(from) || is_array_type(from))
-      return convert_ast(flatten_to_bitvector(from, msg));
+      return convert_ast(flatten_to_bitvector(from));
 
     if(is_union_type(from))
       return convert_ast(from);
@@ -167,7 +165,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
     // Converting from array to struct, we convert it to bv and use the bv to
     // struct method to do the job for us
     if(is_array_type(new_from))
-      new_from = flatten_to_bitvector(new_from, msg);
+      new_from = flatten_to_bitvector(new_from);
 
     if(is_bv_type(new_from) || is_union_type(new_from))
     {
@@ -206,7 +204,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
     // Converting from struct to array, we convert it to bv and use the bv to
     // struct method to do the job for us
     if(is_struct_type(new_from))
-      new_from = flatten_to_bitvector(new_from, msg);
+      new_from = flatten_to_bitvector(new_from);
 
     if(is_bv_type(new_from) || is_union_type(new_from))
     {

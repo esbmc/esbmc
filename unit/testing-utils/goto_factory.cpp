@@ -110,7 +110,7 @@ goto_functionst goto_factory::get_goto_functions(
 
 cmdlinet goto_factory::get_default_cmdline(const std::string filename)
 {
-  const messaget msg;
+
   cmdlinet cmdline(msg);
   cmdline.args.push_back(filename);
   return cmdline;
