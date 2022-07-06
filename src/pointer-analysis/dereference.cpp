@@ -32,14 +32,6 @@ Author: Daniel Kroening, kroening@kroening.com
 // global data, horrible
 unsigned int dereferencet::invalid_counter = 0;
 
-/* Remove these definitions when we switch to require >= C++17 */
-#if __cplusplus < 201703L
-const dereferencet::modet dereferencet::READ;
-const dereferencet::modet dereferencet::WRITE;
-const dereferencet::modet dereferencet::FREE;
-const dereferencet::modet dereferencet::INTERNAL;
-#endif
-
 static inline const array_type2t get_arr_type(const expr2tc &expr)
 {
   return (is_array_type(expr))
