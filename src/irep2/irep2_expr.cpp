@@ -366,8 +366,8 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
   else if(is_code_type(a))
   {
     assert(is_code_type(b));
-    const code_type2t &at [[gnu::unused]] = to_code_type(a);
-    const code_type2t &bt [[gnu::unused]] = to_code_type(b);
+    const code_type2t &at [[maybe_unused]] = to_code_type(a);
+    const code_type2t &bt [[maybe_unused]] = to_code_type(b);
     assert(at.arguments == bt.arguments);
     assert(at.ret_type == bt.ret_type);
     /* don't compare argument names, they could be empty on one side */

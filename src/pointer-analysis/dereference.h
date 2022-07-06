@@ -136,7 +136,7 @@ public:
    *  optimisation expansion in the future, it isn't currently used by anything.
    *  @param expr An expression to be renamed
    */
-  virtual void rename(expr2tc &expr [[gnu::unused]])
+  virtual void rename(expr2tc &expr [[maybe_unused]])
   {
   }
 
@@ -148,7 +148,7 @@ public:
   };
 
   virtual void dump_internal_state(const std::list<struct internal_item> &data
-                                   [[gnu::unused]])
+                                   [[maybe_unused]])
   {
   }
 

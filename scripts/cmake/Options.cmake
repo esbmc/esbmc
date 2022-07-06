@@ -53,8 +53,8 @@ set(ESBMC_CLANG_HEADERS_BUNDLED "detect" CACHE STRING "Bundle the Clang resource
 set(OVERRIDE_CLANG_HEADER_DIR "")
 set(Clang_DIR "${LLVM_DIR}" CACHE STRING "Clang Directory (if not set, this will be set to the LLVM_DIR")
 
-# Demand C++14
-set (CMAKE_CXX_STANDARD 14)
+# Demand C++17
+set (CMAKE_CXX_STANDARD 17)
 
 # Used by try_compile
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

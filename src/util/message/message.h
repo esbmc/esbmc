@@ -71,7 +71,7 @@ public:
    */
   virtual unsigned progress(
     const std::string &message,
-    double progress [[gnu::unused]] = -1,
+    double progress [[maybe_unused]] = -1,
     const std::string location = "") const
   {
     print(VerbosityLevel::Progress, message, location);
@@ -85,8 +85,8 @@ public:
    * @param progress new progress status
    */
   virtual void update_progress(
-    unsigned index [[gnu::unused]],
-    double progress [[gnu::unused]]) const
+    unsigned index [[maybe_unused]],
+    double progress [[maybe_unused]]) const
   {
   }
   /**

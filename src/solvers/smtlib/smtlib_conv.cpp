@@ -100,7 +100,7 @@ extern sexpr *smtlib_output;
 smt_convt *create_new_smtlib_solver(
   const optionst &options,
   const namespacet &ns,
-  tuple_iface **tuple_api [[gnu::unused]],
+  tuple_iface **tuple_api [[maybe_unused]],
   array_iface **array_api,
   fp_convt **fp_api,
   const messaget &msg)
@@ -821,7 +821,7 @@ smt_astt smtlib_convt::mk_smt_bool(bool val)
 smt_astt smtlib_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
-  smt_sortt array_subtype [[gnu::unused]])
+  smt_sortt array_subtype [[maybe_unused]])
 {
   return mk_smt_symbol(name, s);
 }
@@ -853,7 +853,7 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return a;
 }
 
-smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type [[gnu::unused]])
+smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type [[maybe_unused]])
 {
   msg.error("Attempted to make struct type in smtlib conversion");
   abort();
@@ -917,7 +917,7 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
   return ast;
 }
 
-int smtliberror(int startsym [[gnu::unused]], const std::string &error)
+int smtliberror(int startsym [[maybe_unused]], const std::string &error)
 {
   assert(
     0 && fmt::format("SMTLIB response parsing error: \"{}\"", error).c_str());

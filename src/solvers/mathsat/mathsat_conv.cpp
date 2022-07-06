@@ -39,7 +39,7 @@ void mathsat_convt::check_msat_error(msat_term &r) const
 smt_convt *create_new_mathsat_solver(
   const optionst &options,
   const namespacet &ns,
-  tuple_iface **tuple_api [[gnu::unused]],
+  tuple_iface **tuple_api [[maybe_unused]],
   array_iface **array_api,
   fp_convt **fp_api,
   const messaget &msg)
@@ -773,7 +773,7 @@ smt_astt mathsat_convt::mk_smt_bool(bool val)
 smt_astt mathsat_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
-  smt_sortt array_subtype [[gnu::unused]])
+  smt_sortt array_subtype [[maybe_unused]])
 {
   return mk_smt_symbol(name, s);
 }
