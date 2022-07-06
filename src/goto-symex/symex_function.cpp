@@ -390,7 +390,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
   /* Internal check that all symbols are actually of 'code' type (modulo the
    * guard) */
-  auto maybe_called_symbol_is_code [[gnu::unused]] = [this](const auto &elem) {
+  auto maybe_called_symbol_is_code [[maybe_unused]] = [this](const auto &elem) {
     const guardt &guard = elem.first;
     const symbol2tc &sym = elem.second;
     if(!guard.is_false() && !is_code_type(sym))

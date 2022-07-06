@@ -279,7 +279,7 @@ bool goto_symext::unexpected_handler()
 }
 
 void goto_symext::update_throw_target(
-  goto_symex_statet::exceptiont *except [[gnu::unused]],
+  goto_symex_statet::exceptiont *except [[maybe_unused]],
   goto_programt::const_targett target,
   const expr2tc &code)
 {

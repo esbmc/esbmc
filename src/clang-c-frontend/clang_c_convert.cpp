@@ -1042,10 +1042,10 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     break;
   }
 
-  case clang::Type::ExtInt:
+  case clang::Type::BitInt:
   {
-    const clang::ExtIntType &eit =
-      static_cast<const clang::ExtIntType &>(the_type);
+    const clang::BitIntType &eit =
+      static_cast<const clang::BitIntType &>(the_type);
 
     const unsigned n = eit.getNumBits();
     if(eit.isSigned())

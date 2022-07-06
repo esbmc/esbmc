@@ -1161,7 +1161,7 @@ std::string expr2ct::convert_union(const exprt &src, unsigned &precedence)
     return convert_norep(src, precedence);
 
   const exprt::operandst &operands = src.operands();
-  const irep_idt &init [[gnu::unused]] = src.component_name();
+  const irep_idt &init [[maybe_unused]] = src.component_name();
 
   if(operands.size() == 1)
   {

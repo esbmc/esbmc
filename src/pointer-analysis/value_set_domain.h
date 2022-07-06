@@ -45,7 +45,7 @@ public:
   }
 
   void
-  output(const namespacet &ns [[gnu::unused]], std::ostream &out) const override
+  output(const namespacet &ns [[maybe_unused]], std::ostream &out) const override
   {
     value_set->output(out);
   }
@@ -62,7 +62,7 @@ public:
   transform(const namespacet &ns, locationt from_l, locationt to_l) override;
 
   void get_reference_set(
-    const namespacet &ns [[gnu::unused]],
+    const namespacet &ns [[maybe_unused]],
     const expr2tc &expr,
     value_setst::valuest &dest) override
   {

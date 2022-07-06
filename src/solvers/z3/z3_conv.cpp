@@ -902,7 +902,7 @@ smt_astt z3_convt::mk_smt_bool(bool val)
 smt_astt z3_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
-  smt_sortt array_subtype [[gnu::unused]])
+  smt_sortt array_subtype [[maybe_unused]])
 {
   return mk_smt_symbol(name, s);
 }
@@ -1213,7 +1213,7 @@ BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
 
   // Not a numeral? Let's not try to convert it
   std::string bin;
-  bool is_numeral [[gnu::unused]] = e.as_binary(bin);
+  bool is_numeral [[maybe_unused]] = e.as_binary(bin);
   assert(is_numeral);
   /* 'bin' contains the ascii representation of the bit-vector, msb-first,
    * no leading zeroes; zero-extend if possible */

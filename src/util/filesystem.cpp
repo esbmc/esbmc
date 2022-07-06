@@ -18,7 +18,7 @@ tmp_path::~tmp_path()
 {
   if(_keep)
     return;
-  uintmax_t removed [[gnu::unused]] = boost::filesystem::remove_all(_path);
+  uintmax_t removed [[maybe_unused]] = boost::filesystem::remove_all(_path);
   assert(removed >= 1 && "expected to remove temp path");
 }
 

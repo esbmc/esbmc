@@ -13,7 +13,7 @@ void error_handler(const char *msg)
 smt_convt *create_new_boolector_solver(
   const optionst &options,
   const namespacet &ns,
-  tuple_iface **tuple_api [[gnu::unused]],
+  tuple_iface **tuple_api [[maybe_unused]],
   array_iface **array_api,
   fp_convt **fp_api,
   const messaget &msg)
@@ -515,13 +515,13 @@ smt_astt boolector_convt::mk_select(smt_astt a, smt_astt b)
     a->sort->get_range_sort());
 }
 
-smt_astt boolector_convt::mk_smt_int(const BigInt &theint [[gnu::unused]])
+smt_astt boolector_convt::mk_smt_int(const BigInt &theint [[maybe_unused]])
 {
   ::boolector_convt::msg.error("Boolector can't create integer sorts");
   abort();
 }
 
-smt_astt boolector_convt::mk_smt_real(const std::string &str [[gnu::unused]])
+smt_astt boolector_convt::mk_smt_real(const std::string &str [[maybe_unused]])
 {
   msg.error("Boolector can't create Real sorts");
   abort();
@@ -544,7 +544,7 @@ smt_astt boolector_convt::mk_smt_bool(bool val)
 smt_astt boolector_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
-  smt_sortt array_subtype [[gnu::unused]])
+  smt_sortt array_subtype [[maybe_unused]])
 {
   return mk_smt_symbol(name, s);
 }

@@ -30,7 +30,7 @@ static class
   }
 
   template <typename F>
-  void foreach_libc_libm_(F &&f [[gnu::unused]])
+  void foreach_libc_libm_(F &&f [[maybe_unused]])
   {
 #define ESBMC_FLAIL(body, size, ...) f(body, size, libc + "/" #__VA_ARGS__);
 #include <libc.h>
