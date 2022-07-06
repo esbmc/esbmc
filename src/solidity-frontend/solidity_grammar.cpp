@@ -118,7 +118,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     if(
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
-      typeString == "string")
+      typeString == "string" || typeString.find("literal_string") == 0 ||
+      typeString == "string storage ref" || typeString == "string memory")
     {
       // For state var declaration,
       return ElementaryTypeName;
@@ -233,7 +234,9 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   {
     return STRING_LITERAL;
   }
-  if(typeString == "string")
+  if(
+    typeString == "string" || typeString == "string storage ref" ||
+    typeString == "string memory")
   {
     return STRING;
   }
