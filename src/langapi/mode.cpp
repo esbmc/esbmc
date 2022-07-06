@@ -131,5 +131,5 @@ int get_mode_filename(const std::string &filename)
 
 languaget *new_language(language_idt lang)
 {
-  return mode_table[get_mode(lang)].new_language(msg);
+  return mode_table[get_mode(lang)].new_language();
 }
