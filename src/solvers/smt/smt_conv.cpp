@@ -63,9 +63,8 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
 
 smt_convt::smt_convt(
   const namespacet &_ns,
-  const optionst &_options,
-  const messaget &msg)
-  : ctx_level(0), boolean_sort(nullptr), ns(_ns), options(_options), msg(msg)
+  const optionst &_options)
+  : ctx_level(0), boolean_sort(nullptr), ns(_ns), options(_options)
 {
   int_encoding = options.get_bool_option("int-encoding");
   tuple_api = nullptr;
@@ -2723,7 +2722,7 @@ smt_astt smt_ast::project(
   smt_convt *ctx [[maybe_unused]],
   unsigned int idx [[maybe_unused]]) const
 {
-  _log_error("Projecting from non-tuple based AST");
+  log_error("Projecting from non-tuple based AST");
   abort();
 }
 

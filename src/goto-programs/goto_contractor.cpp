@@ -321,7 +321,7 @@ bool goto_contractort::initialize_main_function_loops()
     runOnFunction(*it);
     if(it->second.body_available)
     {
-      const messaget msg;
+
       goto_loopst goto_loops(it->first, goto_functions, it->second, msg);
       this->function_loops = goto_loops.get_loops();
     }

@@ -44,9 +44,8 @@ public:
   array_ast(
     array_convt *actx,
     smt_convt *ctx,
-    const smt_sort *_s,
-    const messaget &msg)
-    : smt_ast(ctx, _s, msg), symname(""), array_ctx(actx)
+    const smt_sort *_s)
+    : smt_ast(ctx, _s), symname(""), array_ctx(actx)
   {
   }
 
@@ -54,9 +53,8 @@ public:
     array_convt *actx,
     smt_convt *ctx,
     const smt_sort *_s,
-    std::vector<smt_astt> _a,
-    const messaget &msg)
-    : smt_ast(ctx, _s, msg),
+    std::vector<smt_astt> _a)
+    : smt_ast(ctx, _s),
       symname(""),
       array_fields(std::move(_a)),
       array_ctx(actx)
@@ -235,13 +233,13 @@ public:
 
   inline array_ast *new_ast(smt_sortt _s)
   {
-    return new array_ast(this, ctx, _s, msg);
+    return new array_ast(this, ctx, _s);
   }
 
   inline array_ast *
   new_ast(smt_sortt _s, const std::vector<smt_astt> &_a)
   {
-    return new array_ast(this, ctx, _s, _a, msg);
+    return new array_ast(this, ctx, _s, _a);
   }
 
   void push_array_ctx() override;
