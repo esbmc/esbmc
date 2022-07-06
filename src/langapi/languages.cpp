@@ -11,11 +11,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 languagest::languagest(
   const namespacet &_ns,
-  language_idt lang,
-  const messaget &msg)
-  : ns(_ns), msg(msg)
+  language_idt lang)
+  : ns(_ns)
 {
-  language = new_language(lang, msg);
+  language = new_language(lang);
 }
 
 languagest::~languagest()

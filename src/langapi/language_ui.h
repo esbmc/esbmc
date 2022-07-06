@@ -39,7 +39,6 @@ public:
 
 protected:
   const cmdlinet &_cmdline;
-  messaget &msg;
 };
 
 #endif

@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void show_symbol_table_plain(
   const namespacet &ns,
-  std::ostream &out,
-  const messaget &msg);
+  std::ostream &out);
 
 #endif // CPROVER_SHOW_SYMBOL_TABLE_H

@@ -10,7 +10,7 @@ Maintainers:
 \*******************************************************************/
 #pragma once
 
-#include <fmt/format.h>
+//#include <fmt/format.h>
 
 /**
    * @brief Verbosity refers to the max level

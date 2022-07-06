@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/show_symbol_table.h>
 
 language_uit::language_uit(const cmdlinet &__cmdline)
-  : language_files(msg), context(msg), _cmdline(__cmdline), msg(msg)
+  : _cmdline(__cmdline)
 {
 }
 
@@ -69,7 +69,7 @@ bool language_uit::parse(const std::string &filename)
 
   language_filet &lf = result.first->second;
   lf.filename = filename;
-  lf.language = mode_table[mode].new_language(msg);
+  lf.language = mode_table[mode].new_language();
   languaget &language = *lf.language;
 
   log_status("Parsing", filename);
@@ -91,7 +91,7 @@ bool language_uit::parse(const std::string &filename)
   }
 #endif
 
-  if(language.parse(filename, msg))
+  if(language.parse(filename))
   {
     log_error("PARSING ERROR");
     return true;
@@ -137,5 +137,5 @@ void language_uit::show_symbol_table_xml_ui()
 
 void language_uit::show_symbol_table_plain(std::ostream &out)
 {
-  ::show_symbol_table_plain(namespacet(context), out, msg);
+  ::show_symbol_table_plain(namespacet(context), out);
 }
