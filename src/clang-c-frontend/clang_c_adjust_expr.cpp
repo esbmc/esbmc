@@ -12,7 +12,7 @@
 
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
-  : context(_context), ns(namespacet(context)), msg(msg)
+  : context(_context), ns(namespacet(context))
 {
 }
 
