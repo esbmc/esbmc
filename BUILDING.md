@@ -8,7 +8,22 @@ It is recommended that the RAM should be 6 GB at least.
 
 Before starting, note that ESBMC is mainly distributed under the terms of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), so please make sure to read it carefully.
 
-## Installing Dependencies
+## Dependency overview
+
+| package   | required | minimum version | recommended version |
+|-----------|----------|-----------------|---------------------|
+| clang     | yes      | 11.0.0          |                     |
+| boost     | yes      | 1.77            |                     |
+| Boolector | no       | 2.3.2           |                     |
+| CVC4      | no       | 1.8             |                     |
+| MathSAT   | no       | 5.5.4           |                     |
+| Yices     | no       | 2.6.1           |                     |
+| Z3        | no       | 4.8.9           | 4.8.18              |
+| Bitwuzla  | no       | smtcomp-2021    |                     |
+
+The version requirements are usually pretty stable, but can change between releases.
+
+## Installing build tools and basic dependencies
 
 We need to install some dependencies before moving into next steps.
 
