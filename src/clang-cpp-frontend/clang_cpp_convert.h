@@ -12,7 +12,6 @@ public:
   clang_cpp_convertert(
     contextt &_context,
     std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
-    const messaget &msg,
     irep_idt _mode);
   virtual ~clang_cpp_convertert() = default;
 
