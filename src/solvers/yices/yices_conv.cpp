@@ -64,9 +64,7 @@ void yices_convt::push_ctx()
 
   if(res != 0)
   {
-    {
-      yices_print_error(messaget_state::err);
-    }
+    yices_print_error(messaget::state.err);
     log_error("Error pushing yices context");
     abort();
   }
@@ -78,9 +76,7 @@ void yices_convt::pop_ctx()
 
   if(res != 0)
   {
-    {
-      yices_print_error(messaget_state::err);
-    }
+    yices_print_error(messaget::state.err);
     log_error("Error poping yices context");
     abort();
   }
@@ -1103,7 +1099,7 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
 
 void yices_convt::print_model()
 {
-  yices_print_model(messaget_state::out, yices_get_model(yices_ctx, 1));
+  yices_print_model(messaget::state.out, yices_get_model(yices_ctx, 1));
 }
 
 smt_sortt yices_convt::mk_bool_sort()
@@ -1155,7 +1151,6 @@ smt_sortt yices_convt::mk_bvfp_rm_sort()
 
 void yices_smt_ast::dump() const
 {
-  yices_pp_term(messaget_state::out, a, 80, 10, 0);
-  yices_pp_type(
-    messaget_state::out, to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
+  yices_pp_term(messaget::state.out, a, 80, 10, 0);
+  yices_pp_type(messaget::state.out, to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
 }

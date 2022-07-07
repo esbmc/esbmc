@@ -790,17 +790,17 @@ boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 void boolector_convt::dump_smt()
 {
-  boolector_dump_smt2(btor, messaget_state::out);
+  boolector_dump_smt2(btor, messaget::state.out);
 }
 
 void btor_smt_ast::dump() const
 {
-  boolector_dump_smt2_node(boolector_get_btor(a), messaget_state::out, a);
+  boolector_dump_smt2_node(boolector_get_btor(a), messaget::state.out, a);
 }
 
 void boolector_convt::print_model()
 {
-  boolector_print_model(btor, const_cast<char *>("smt2"), messaget_state::out);
+  boolector_print_model(btor, const_cast<char *>("smt2"), messaget::state.out);
 }
 
 smt_sortt boolector_convt::mk_bool_sort()

@@ -22,7 +22,7 @@ if(ENABLE_BITWUZLA)
     target_include_directories(solverbitw
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solverbitw message message fmt::fmt Bitwuzla::bitwuzla)
+    target_link_libraries(solverbitw fmt::fmt Bitwuzla::bitwuzla)
 
     target_link_libraries(solvers INTERFACE solverbitw)
 

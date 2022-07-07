@@ -109,10 +109,10 @@ void esbmc_parseoptionst::set_verbosity_msg()
       v = VerbosityLevel::Debug;
   }
 
-  messaget_state::verbosity = v;
+  messaget::state.verbosity = v;
 }
 
-extern "C" uint8_t *esbmc_version_string;
+extern "C" const uint8_t *const esbmc_version_string;
 
 uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
 {
@@ -420,8 +420,8 @@ int esbmc_parseoptionst::doit()
     FILE *f = fopen(cmdline.getval("file-output"), "w+");
     out = f;
     err = f;
-    messaget_state::out = f;
-    messaget_state::err = f;
+    messaget::state.err = f;
+    messaget::state.out = f;
   }
   //
   // Print a banner
@@ -1747,5 +1747,5 @@ void esbmc_parseoptionst::help()
   log_status("\n* * *           ESBMC {}          * * *", ESBMC_VERSION);
   std::ostringstream oss;
   oss << cmdline.cmdline_options;
-  log_status(oss.str());
+  log_status("{}", oss.str());
 }

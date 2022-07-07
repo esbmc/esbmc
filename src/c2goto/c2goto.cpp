@@ -61,7 +61,7 @@ public:
     if(config.set(cmdline))
       return 1;
     config.options.cmdline(cmdline);
-    messaget_state::verbosity = VerbosityLevel::Result;
+    messaget::state.verbosity = VerbosityLevel::Result;
 
     if(!cmdline.isset("output"))
     {
