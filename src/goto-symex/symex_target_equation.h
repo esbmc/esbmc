@@ -159,7 +159,6 @@ public:
     void short_output(
       const namespacet &ns,
       std::ostream &out,
-      const messaget &msg,
       bool show_ignored = false) const;
     void dump() const;
   };

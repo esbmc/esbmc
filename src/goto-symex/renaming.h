@@ -27,8 +27,7 @@ public:
   //  appear to honour the following friend directive?
   static void get_original_name(
     expr2tc &expr,
-    symbol2t::renaming_level lev,
-    const messaget &msg);
+    symbol2t::renaming_level lev);
   friend void build_goto_symex_classes();
 };
 
@@ -118,7 +117,7 @@ public:
 
   void get_original_name(expr2tc &expr) const override
   {
-    renaming_levelt::get_original_name(expr, symbol2t::level0, msg);
+    renaming_levelt::get_original_name(expr, symbol2t::level0);
   }
 
   unsigned int current_number(const irep_idt &name) const;
@@ -246,7 +245,7 @@ public:
 
   void get_original_name(expr2tc &expr) const override
   {
-    renaming_levelt::get_original_name(expr, symbol2t::level1, msg);
+    renaming_levelt::get_original_name(expr, symbol2t::level1);
   }
 
   struct valuet

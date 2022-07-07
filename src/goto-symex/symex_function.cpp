@@ -53,7 +53,7 @@ bool goto_symext::get_unwind_recursion(
     if(this_loop_max_unwind != 0)
       msg += " (" + integer2string(this_loop_max_unwind) + " max)";
 
-    this->log_status(msg);
+    log_status(msg);
   }
 
   return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
@@ -312,11 +312,11 @@ get_function_list(const expr2tc &expr)
     not2tc notguardexpr(guardexpr);
 
     // Get sub items, them iterate over adding the relevant guard
-    l1 = get_function_list(ifexpr.true_value, msg);
+    l1 = get_function_list(ifexpr.true_value);
     for(auto &it : l1)
       it.first.add(guardexpr);
 
-    l2 = get_function_list(ifexpr.false_value, msg);
+    l2 = get_function_list(ifexpr.false_value);
     for(auto &it : l2)
       it.first.add(notguardexpr);
 
@@ -334,7 +334,7 @@ get_function_list(const expr2tc &expr)
   }
 
   if(is_typecast2t(expr))
-    return get_function_list(to_typecast2t(expr).from, msg);
+    return get_function_list(to_typecast2t(expr).from);
 
   log_error(
     "Unexpected irep id {} {}",
@@ -381,12 +381,12 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     // XXX jmorse - no location information any more.
     log_status(
       "No target candidate for function call {}",
-      from_expr(ns, "", call.function, msg));
+      from_expr(ns, "", call.function));
     cur_state->source.pc++;
     return;
   }
 
-  std::list<std::pair<guardt, symbol2tc>> l = get_function_list(func_ptr, msg);
+  std::list<std::pair<guardt, symbol2tc>> l = get_function_list(func_ptr);
 
   /* Internal check that all symbols are actually of 'code' type (modulo the
    * guard) */
@@ -395,14 +395,17 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     const symbol2tc &sym = elem.second;
     if(!guard.is_false() && !is_code_type(sym))
     {
-      bool known_called = guard.is_true();
-      msg.print(
-        known_called ? VerbosityLevel::Error : VerbosityLevel::Status,
 
-          "non-code call target '{}' generated at {}",
-          sym->thename.as_string());
-      if(known_called)
+      if(guard.is_true())
+      {
+        log_error(   "non-code call target '{}' generated at {}",
+                    sym->thename.as_string());
         return false;
+      }
+
+      log_status(   "non-code call target '{}' generated at {}",
+                sym->thename.as_string());
+
     }
     return true;
   };
@@ -435,7 +438,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     cur_state->top().cur_function_ptr_targets.emplace_back(
       fit->second.body.instructions.begin(), it.second);
 
-    goto_state_list.emplace_back(*cur_state, msg);
+    goto_state_list.emplace_back(*cur_state);
     statet::goto_statet &new_state = goto_state_list.back();
     expr2tc guardexpr = it.first.as_expr();
     cur_state->rename(guardexpr);
@@ -468,7 +471,7 @@ bool goto_symext::run_next_function_ptr_target(bool first)
     statet::goto_state_listt &goto_state_list =
       cur_state->top()
         .goto_state_map[cur_state->top().function_ptr_combine_target];
-    goto_state_list.emplace_back(*cur_state, msg);
+    goto_state_list.emplace_back(*cur_state);
   }
 
   // Take one function ptr target out of the list and jump to it. A previously
@@ -595,7 +598,7 @@ void goto_symext::symex_return(const expr2tc &code)
   statet::goto_state_listt &goto_state_list =
     cur_state->top().goto_state_map[cur_state->top().end_of_function];
 
-  goto_state_list.emplace_back(*cur_state, msg);
+  goto_state_list.emplace_back(*cur_state);
 
   // check whether the stack limit and return
   // value optimization have been activated.

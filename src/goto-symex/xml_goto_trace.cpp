@@ -73,9 +73,9 @@ void convert(
       if(!is_nil_expr(step.value))
       {
         value_string =
-          from_expr(ns, identifier, migrate_expr_back(step.value), msg);
+          from_expr(ns, identifier, migrate_expr_back(step.value));
         type_string =
-          from_type(ns, identifier, migrate_type_back(step.value->type), msg);
+          from_type(ns, identifier, migrate_type_back(step.value->type));
       }
 
       const symbolt *symbol = ns.lookup(identifier);
@@ -86,7 +86,7 @@ void convert(
         base_name = symbol->name;
         display_name = symbol->name;
         if(type_string == "")
-          type_string = from_type(ns, identifier, symbol->type, msg);
+          type_string = from_type(ns, identifier, symbol->type);
 
         xml_assignment.new_element("mode").data =
           xmlt::escape(id2string(symbol->mode));

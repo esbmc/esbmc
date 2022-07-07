@@ -4,8 +4,7 @@
 
 expr2tc build_lhs(
   std::shared_ptr<smt_convt> &smt_conv,
-  const expr2tc &lhs,
-  const messaget &msg)
+  const expr2tc &lhs)
 {
   if(is_nil_expr(lhs))
     return lhs;
@@ -20,7 +19,7 @@ expr2tc build_lhs(
 
     // Build new source value, it might be an index, in case of
     // multidimensional arrays
-    expr2tc new_source_value = build_lhs(smt_conv, index.source_value, msg);
+    expr2tc new_source_value = build_lhs(smt_conv, index.source_value);
     expr2tc new_value = smt_conv->get(index.index);
     new_lhs = index2tc(new_lhs->type, new_source_value, new_value);
     break;
@@ -38,20 +37,19 @@ expr2tc build_lhs(
     break;
   }
 
-  renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0, msg);
+  renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
   return new_lhs;
 }
 
 expr2tc build_rhs(
   std::shared_ptr<smt_convt> &smt_conv,
-  const expr2tc &rhs,
-  const messaget &msg)
+  const expr2tc &rhs)
 {
   if(is_nil_expr(rhs) || is_constant_expr(rhs))
     return rhs;
 
   auto new_rhs = smt_conv->get(rhs);
-  renaming::renaming_levelt::get_original_name(new_rhs, symbol2t::level0, msg);
+  renaming::renaming_levelt::get_original_name(new_rhs, symbol2t::level0);
   return new_rhs;
 }
 
@@ -86,15 +84,15 @@ void build_goto_trace(
 
     if(SSA_step.is_assignment())
     {
-      goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs, msg);
+      goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
 
       try
       {
         if(is_nil_expr(SSA_step.original_rhs))
-          goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs, msg);
+          goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
         else
           goto_trace_step.value =
-            build_rhs(smt_conv, SSA_step.original_rhs, msg);
+            build_rhs(smt_conv, SSA_step.original_rhs);
       }
       catch(const type2t::symbolic_type_excp &e)
       {
@@ -135,7 +133,7 @@ void build_successful_goto_trace(
   {
     if(
       (it->is_assert() || it->is_assume()) &&
-      (is_valid_witness_expr(ns, it->lhs, msg)))
+      (is_valid_witness_expr(ns, it->lhs)))
     {
       // When building the correctness witness, we only care about
       // asserts and assumes

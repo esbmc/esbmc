@@ -90,8 +90,7 @@ public:
 
   void output(
     const class namespacet &ns,
-    std::ostream &out,
-    const messaget &msg) const;
+    std::ostream &out) const;
   void dump() const;
 
   goto_trace_stept() : step_nr(0), thread_nr(0), guard(false)
@@ -115,8 +114,7 @@ public:
 
   void output(
     const class namespacet &ns,
-    std::ostream &out,
-    const messaget &msg) const;
+    std::ostream &out) const;
 };
 
 void show_goto_trace_gui(

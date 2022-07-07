@@ -76,8 +76,7 @@ void reachability_treet::setup_for_new_explore()
       permanent_context,
       options,
       &schedule_total_claims,
-      &schedule_remaining_claims,
-      message_handler));
+      &schedule_remaining_claims));
   }
   else
   {
@@ -88,8 +87,7 @@ void reachability_treet::setup_for_new_explore()
       this,
       targ,
       permanent_context,
-      options,
-      message_handler));
+      options));
     schedule_target = nullptr;
   }
 
@@ -342,18 +340,16 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
 }
 
 reachability_treet::dfs_position::dfs_position(
-  const std::string &&filename,
-  const messaget &msg)
+  const std::string &&filename)
 {
-  read_from_file(std::move(filename), msg);
+  read_from_file(std::move(filename));
 }
 
 const uint32_t reachability_treet::dfs_position::file_magic =
   0x4543484B; //'ECHK'
 
 bool reachability_treet::dfs_position::write_to_file(
-  const std::string &&filename,
-  const messaget &msg) const
+  const std::string &&filename) const
 {
   uint8_t buffer[8192];
   reachability_treet::dfs_position::file_hdr hdr;
@@ -420,8 +416,7 @@ fail:
 }
 
 bool reachability_treet::dfs_position::read_from_file(
-  const std::string &&filename,
-  const messaget &msg)
+  const std::string &&filename)
 {
   reachability_treet::dfs_position::file_hdr hdr;
   reachability_treet::dfs_position::file_entry entry;

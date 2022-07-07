@@ -22,9 +22,8 @@ Author: Daniel Kroening, kroening@kroening.com
 goto_symex_statet::goto_symex_statet(
   renaming::level2t &l2,
   value_sett &vs,
-  const namespacet &_ns,
-  const messaget &msg)
-  : level2(l2), value_set(vs), ns(_ns), msg(msg)
+  const namespacet &_ns)
+  : level2(l2), value_set(vs), ns(_ns)
 {
   use_value_set = true;
   num_instructions = 0;
@@ -35,9 +34,8 @@ goto_symex_statet::goto_symex_statet(
 goto_symex_statet::goto_symex_statet(
   const goto_symex_statet &state,
   renaming::level2t &l2,
-  value_sett &vs,
-  const messaget &msg)
-  : level2(l2), value_set(vs), ns(state.ns), msg(msg)
+  value_sett &vs)
+  : level2(l2), value_set(vs), ns(state.ns)
 {
   *this = state;
 }
@@ -209,7 +207,7 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
   {
     // update value sets
     expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
-    level2.get_original_name(l1_rhs, msg);
+    level2.get_original_name(l1_rhs);
 
     value_set.assign(l1_lhs, l1_rhs);
   }
@@ -389,8 +387,8 @@ void goto_symex_statet::get_original_name(expr2tc &expr) const
 
   if(is_symbol2t(expr))
   {
-    level2.get_original_name(expr, msg);
-    top().level1.get_original_name(expr, msg);
+    level2.get_original_name(expr);
+    top().level1.get_original_name(expr);
   }
 }
 
@@ -429,7 +427,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent, std::ostream &os)
   {
     os << spaces << "Next instruction to be executed:"
        << "\n";
-    source.pc->output_instruction(ns, "", os, msg);
+    source.pc->output_instruction(ns, "", os);
   }
 }
 

@@ -251,14 +251,14 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("git-hash"))
   {
-    msg.result("{}", esbmc_version_string);
+    log_result("{}", esbmc_version_string);
     exit(0);
   }
 
   if(cmdline.isset("list-solvers"))
   {
     // Generated for us by autoconf,
-    msg.result("Available solvers: {}", ESBMC_AVAILABLE_SOLVERS);
+    log_result("Available solvers: {}", ESBMC_AVAILABLE_SOLVERS);
     exit(0);
   }
 
@@ -778,7 +778,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Check if a solution was found by the base case
     if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
     {
-      msg.result(
+      log_result(
         "\nBug found by the base case (k = {})\nVERIFICATION FAILED",
         bc_solution);
       return true;
@@ -791,7 +791,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
       if(bc_finished && (bc_solution != max_k_step))
       {
-        msg.result(
+        log_result(
           "\nSolution found by the forward condition; "
           "all states are reachable (k = {:d})\n"
           "VERIFICATION SUCCESSFUL",
@@ -807,7 +807,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
       if(bc_finished && (bc_solution != max_k_step))
       {
-        msg.result(
+        log_result(
           "\nSolution found by the inductive step "
           "(k = {:d})\n"
           "VERIFICATION SUCCESSFUL",
@@ -817,7 +817,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     }
 
     // Couldn't find a bug or a proof for the current deepth
-    msg.result("\nVERIFICATION UNKNOWN");
+    log_result("\nVERIFICATION UNKNOWN");
     return false;
   }
 
@@ -1263,11 +1263,11 @@ int esbmc_parseoptionst::do_base_case(
     break;
 
   case smt_convt::P_SATISFIABLE:
-    msg.result("\nBug found (k = {:d})", k_step);
+    log_result("\nBug found (k = {:d})", k_step);
     return true;
 
   default:
-    msg.result("Unknown BMC result");
+    log_result("Unknown BMC result");
     abort();
   }
 
@@ -1314,14 +1314,14 @@ int esbmc_parseoptionst::do_forward_condition(
     break;
 
   case smt_convt::P_UNSATISFIABLE:
-    msg.result(
+    log_result(
       "\nSolution found by the forward condition; "
       "all states are reachable (k = {:d})",
       k_step);
     return false;
 
   default:
-    msg.result("Unknown BMC result");
+    log_result("Unknown BMC result");
     abort();
   }
 
@@ -1364,14 +1364,14 @@ int esbmc_parseoptionst::do_inductive_step(
     break;
 
   case smt_convt::P_UNSATISFIABLE:
-    msg.result(
+    log_result(
       "\nSolution found by the inductive step "
       "(k = {:d})",
       k_step);
     return false;
 
   default:
-    msg.result("Unknown BMC result\n");
+    log_result("Unknown BMC result\n");
     abort();
   }
 
@@ -1633,7 +1633,7 @@ bool esbmc_parseoptionst::process_goto_program(
       value_set_analysis(goto_functions);
       std::ostringstream oss;
       show_value_sets(goto_functions, value_set_analysis, oss);
-      msg.result(oss.str());
+      log_result(oss.str());
       return true;
     }
 

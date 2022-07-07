@@ -201,14 +201,13 @@ void renaming::level2t::coveredinbees(
 
 void renaming::renaming_levelt::get_original_name(
   expr2tc &expr,
-  symbol2t::renaming_level lev,
-  const messaget &msg)
+  symbol2t::renaming_level lev)
 {
   if(is_nil_expr(expr))
     return;
 
-  expr->Foreach_operand([&lev, &msg](expr2tc &e) {
-    renaming_levelt::get_original_name(e, lev, msg);
+  expr->Foreach_operand([&lev](expr2tc &e) {
+    renaming_levelt::get_original_name(e, lev);
   });
 
   if(!is_symbol2t(expr))
@@ -274,7 +273,7 @@ void renaming::level2t::print(std::ostream &out) const
     if(!is_nil_expr(current_name.second.constant))
     {
       out << from_expr(
-               *migrate_namespace_lookup, "", current_name.second.constant, msg)
+               *migrate_namespace_lookup, "", current_name.second.constant)
           << "\n";
     }
     else
@@ -290,7 +289,7 @@ void renaming::level2t::dump() const
 {
 
   std::ostringstream oss;
-  print(oss, msg);
+  print(oss);
   log_debug(oss.str());
 }
 
