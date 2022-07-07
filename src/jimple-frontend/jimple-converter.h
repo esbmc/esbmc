@@ -10,7 +10,7 @@ class jimple_converter
 {
 public:
   jimple_converter(contextt &_context, jimple_file &_ASTs)
-    : context(_context), AST(_ASTs), msg(msg)
+    : context(_context), AST(_ASTs)
   {
   }
   bool convert();

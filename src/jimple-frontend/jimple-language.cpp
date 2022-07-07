@@ -78,7 +78,7 @@ static void
 add_global_static_variable(contextt &ctx, const typet t, std::string name)
 {
   // TODO: Maybe they should be part of Jimple context?
-  std::string id = fmt::format("c:@{}", name);
+  std::string id = "c:@" + name;
   symbolt symbol;
   symbol.mode = "C";
   symbol.type = std::move(t);

@@ -98,7 +98,7 @@ protected:
 
     std::string id, name;
     id = get_symbol_name(
-      class_name, function_name, fmt::format("return_value$tmp${}", counter++));
+      class_name, function_name, "return_value$tmp$" + std::to_string(counter++));
     name = "return_value$tmp$";
     name += counter;
     auto tmp_symbol =
