@@ -1152,5 +1152,6 @@ smt_sortt yices_convt::mk_bvfp_rm_sort()
 void yices_smt_ast::dump() const
 {
   yices_pp_term(messaget::state.out, a, 80, 10, 0);
-  yices_pp_type(messaget::state.out, to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
+  yices_pp_type(
+    messaget::state.out, to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
 }
