@@ -809,17 +809,17 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 void bitwuzla_convt::dump_smt()
 {
-  bitwuzla_dump_formula(bitw, "smt2", messaget_state::out);
+  bitwuzla_dump_formula(bitw, "smt2", messaget::state.out);
 }
 
 void bitw_smt_ast::dump() const
 {
-  bitwuzla_term_dump(a, "smt2", messaget_state::out);
+  bitwuzla_term_dump(a, "smt2", messaget::state.out);
 }
 
 void bitwuzla_convt::print_model()
 {
-  bitwuzla_print_model(bitw, "smt2", messaget_state::out);
+  bitwuzla_print_model(bitw, "smt2", messaget::state.out);
 }
 
 smt_sortt bitwuzla_convt::mk_bool_sort()

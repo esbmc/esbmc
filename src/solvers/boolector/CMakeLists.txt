@@ -22,7 +22,7 @@ if(ENABLE_BOOLECTOR)
     target_include_directories(solverbtor
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solverbtor Boolector::boolector message fmt::fmt)
+    target_link_libraries(solverbtor Boolector::boolector fmt::fmt)
 
     target_link_libraries(solvers INTERFACE solverbtor)
 

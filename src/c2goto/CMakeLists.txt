@@ -98,5 +98,5 @@ target_include_directories(clibs
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
-target_link_libraries(clibs c2gotoheaders fmt::fmt)
+target_link_libraries(clibs c2gotoheaders fmt::fmt filesystem)
 set_target_properties(clibs PROPERTIES PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/libc.h;${CMAKE_CURRENT_BINARY_DIR}/libm.h")
