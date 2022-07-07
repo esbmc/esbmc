@@ -22,7 +22,7 @@ class cpp_declarator_convertert
 {
 public:
   cpp_declarator_convertert(class cpp_typecheckt &_cpp_typecheck);
-
+  std::ostringstream str;
   bool is_typedef;
   bool is_template;
   bool is_template_argument;

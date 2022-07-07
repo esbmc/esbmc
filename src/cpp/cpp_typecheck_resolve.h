@@ -30,7 +30,7 @@ public:
     const wantt want,
     const cpp_typecheck_fargst &fargs,
     bool fail_with_exception = true);
-
+  std::ostringstream str;
   // Returns the scope as a side-effect as 'current_scope'.
   // Should really return explicitly.
   cpp_scopet &resolve_scope(

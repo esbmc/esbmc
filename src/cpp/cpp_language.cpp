@@ -46,7 +46,7 @@ bool cpp_languaget::preprocess(
   return c_preprocess(path, outstream, true);
 }
 
-cpp_languaget::cpp_languaget() : languaget(msg)
+cpp_languaget::cpp_languaget()
 {
 }
 
@@ -244,7 +244,7 @@ void cpp_languaget::show_parse(std::ostream &out, const cpp_itemt &item)
 
 languaget *new_cpp_language()
 {
-  return new cpp_languaget(msg);
+  return new cpp_languaget();
 }
 
 bool cpp_languaget::from_expr(

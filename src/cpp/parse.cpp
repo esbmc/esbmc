@@ -34,7 +34,6 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
-#include <util/message/verbosity.h>
 
 //#define DEBUG
 
@@ -295,9 +294,9 @@ bool Parser::SyntaxError()
         message += t[i].text;
       }
 
-    message += "'";
+    message += "'\nLocation{}";
 
-    parser->print(VerbosityLevel::Error, message, location);
+    log_error(message, location.to_string());
   }
 
   return bool(++number_of_errors < MaxErrors);
@@ -6113,13 +6112,13 @@ bool Parser::rTryStatement(codet &statement)
       if(has_catch_ellipsis)
       {
         std::string message =
-          "‘...’ handler must be the last handler for its try block";
+          "‘...’ handler must be the last handler for its try block\nLocation: {}";
 
         locationt location;
         location.set_file(op.filename);
         location.set_line(i2string(op.line_no));
 
-        parser->print(VerbosityLevel::Error, message, location);
+        log_error(message, location.to_string());
         return false;
       }
 
