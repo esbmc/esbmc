@@ -51,8 +51,8 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
 public:
   c2goto_parseopt(int argc, const char **argv)
-    : parseoptions_baset(c2goto_options, argc, argv, msg),
-      language_uit(cmdline, msg)
+    : parseoptions_baset(c2goto_options, argc, argv),
+      language_uit(cmdline)
   {
   }
 
@@ -60,10 +60,10 @@ public:
   {
     goto_functionst goto_functions;
 
-    if(config.set(cmdline, msg))
+    if(config.set(cmdline))
       return 1;
     config.options.cmdline(cmdline);
-    msg.set_verbosity(VerbosityLevel::Result);
+    messaget_state::verbosity = VerbosityLevel::Result;
 
     if(!cmdline.isset("output"))
     {
@@ -92,7 +92,7 @@ public:
 int main(int argc, const char **argv)
 {
 
-  c2goto_parseopt parseopt(argc, argv, msg);
+  c2goto_parseopt parseopt(argc, argv);
   return parseopt.main();
 }
 

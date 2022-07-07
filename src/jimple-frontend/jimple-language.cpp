@@ -4,12 +4,12 @@
 #include <c2goto/cprover_library.h>
 languaget *new_jimple_language()
 {
-  return new jimple_languaget(msg);
+  return new jimple_languaget();
 }
 bool jimple_languaget::final(contextt &context)
 {
   log_status("Adding cprover library");
-  add_cprover_library(context, msg);
+  add_cprover_library(context);
 
   add_intrinsics(context);
   log_status("Adding __ESBMC_main");

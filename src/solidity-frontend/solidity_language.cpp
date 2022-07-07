@@ -68,7 +68,7 @@ bool solidity_languaget::parse(const std::string &path)
 
   // get AST nodes of ESBMC intrinsics and the dummy main
   // populate ASTs inherited from parent class
-  clang_c_languaget::parse(temp_path, msg);
+  clang_c_languaget::parse(temp_path);
 
   // Process AST json file
   std::ifstream ast_json_file_stream(path);
@@ -104,7 +104,7 @@ bool solidity_languaget::convert_intrinsics(
   contextt &context,
   const messaget &msg)
 {
-  clang_c_convertert converter(context, ASTs, msg, "C");
+  clang_c_convertert converter(context, ASTs, "C");
   if(converter.convert())
     return true;
   return false;
@@ -117,15 +117,15 @@ bool solidity_languaget::typecheck(
 {
   contextt new_context(msg);
   convert_intrinsics(
-    new_context, msg); // Add ESBMC and TACAS intrinsic symbols to the context
+    new_context); // Add ESBMC and TACAS intrinsic symbols to the context
   msg.progress("Done conversion of intrinsics...");
 
   solidity_convertert converter(
-    new_context, ast_json, func_name, smart_contract, msg);
+    new_context, ast_json, func_name, smart_contract);
   if(converter.convert()) // Add Solidity symbols to the context
     return true;
 
-  clang_c_adjust adjuster(new_context, msg);
+  clang_c_adjust adjuster(new_context);
   if(adjuster.adjust())
     return true;
 
@@ -146,8 +146,8 @@ void solidity_languaget::show_parse(std::ostream &)
 
 bool solidity_languaget::final(contextt &context)
 {
-  add_cprover_library(context, msg);
-  return clang_main(context, msg);
+  add_cprover_library(context);
+  return clang_main(context);
 }
 
 std::string solidity_languaget::temp_c_file()

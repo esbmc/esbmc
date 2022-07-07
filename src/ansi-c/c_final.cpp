@@ -56,19 +56,19 @@ void c_finalize_expression(
 
   if(expr.has_operands())
     Forall_operands(it, expr)
-      c_finalize_expression(context, *it, message_handler);
+      c_finalize_expression(context, *it);
 }
 
 bool c_final(contextt &context)
 {
-  add_cprover_library(context, message_handler);
+  add_cprover_library(context);
 
   try
   {
     context.Foreach_operand([&context, &message_handler](symbolt &s) {
       if(s.mode == "C")
       {
-        c_finalize_expression(context, s.value, message_handler);
+        c_finalize_expression(context, s.value);
       }
     });
   }
