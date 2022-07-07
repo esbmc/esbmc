@@ -107,10 +107,11 @@ symbolt &cpp_declarator_convertert::convert(
 
       if(s == nullptr)
       {
-        cpp_typecheck.err_location(declarator.name());
-        cpp_typecheck.str << "member `" << base_name << "' not found in scope `"
+        err_location(declarator.name());
+        str << "member `" << base_name << "' not found in scope `"
                           << scope->identifier << "'";
-        throw 0;
+        log_error(str.str());
+        abort();
       }
     }
 
@@ -132,9 +133,10 @@ symbolt &cpp_declarator_convertert::convert(
 
       if(symbol_expr.id() != "type" || symbol_expr.type().id() != "symbol")
       {
-        cpp_typecheck.err_location(name.location());
-        cpp_typecheck.str << "error: expected type";
-        throw 0;
+        err_location(name.location());
+        str << "error: expected type";
+        log_error(str.str());
+        abort();
       }
 
       irep_idt identifier = symbol_expr.type().identifier();
@@ -170,8 +172,8 @@ symbolt &cpp_declarator_convertert::convert(
     final_type.id() == "code" &&
     to_code_type(final_type).return_type().id() == "constructor")
   {
-    cpp_typecheck.err_location(declarator.name().location());
-    cpp_typecheck.str << "function must have return type";
+    err_location(declarator.name().location());
+    str << "function must have return type";
     throw 0;
   }
 
@@ -244,13 +246,13 @@ void cpp_declarator_convertert::combine_types(
           // The 'this' argument of virtual functions mismatches
           if(i != 0 || !symbol_code_type.get_bool("#is_virtual"))
           {
-            cpp_typecheck.err_location(location);
-            cpp_typecheck.str << "symbol `" << symbol.name << "': argument "
+            err_location(location);
+            str << "symbol `" << symbol.name << "': argument "
                               << (i + 1) << " type mismatch" << std::endl;
-            cpp_typecheck.str << "previous type: "
+            str << "previous type: "
                               << cpp_typecheck.to_string(symbol_argument.type())
                               << std::endl;
-            cpp_typecheck.str << "new type: "
+            str << "new type: "
                               << cpp_typecheck.to_string(decl_argument.type());
             throw 0;
           }
@@ -278,12 +280,12 @@ void cpp_declarator_convertert::combine_types(
     return; // ok
   }
 
-  cpp_typecheck.err_location(location);
-  cpp_typecheck.str << "symbol `" << symbol.name
+  err_location(location);
+  str << "symbol `" << symbol.name
                     << "' already declared with different type" << std::endl;
-  cpp_typecheck.str << "previous type: " << cpp_typecheck.to_string(symbol.type)
+  str << "previous type: " << cpp_typecheck.to_string(symbol.type)
                     << std::endl;
-  cpp_typecheck.str << "new type: " << cpp_typecheck.to_string(final_type);
+  str << "new type: " << cpp_typecheck.to_string(final_type);
   throw 0;
 }
 
@@ -330,14 +332,14 @@ void cpp_declarator_convertert::handle_initializer(
   else
   {
 #if 0
-    cpp_typecheck.err_location(declarator.name());
+    err_location(declarator.name());
 
     if(is_code)
-      cpp_typecheck.str << "body of function `"
+      str << "body of function `"
                         << symbol.display_name()
                         << "' has already been defined";
     else
-      cpp_typecheck.str << "symbol `"
+      str << "symbol `"
                         << symbol.display_name()
                         << "' already has an initializer";
 
@@ -423,7 +425,7 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
         }
         else if(storage_spec.is_extern())
         {
-          cpp_typecheck.err_location(storage_spec);
+          err_location(storage_spec);
           throw "external storage not permitted here";
         }
       }
@@ -454,8 +456,8 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
 
       if(!id.is_class() && !id.is_enum())
       {
-        cpp_typecheck.err_location(new_symbol->location);
-        cpp_typecheck.str << "`" << base_name << "' already in scope";
+        err_location(new_symbol->location);
+        str << "`" << base_name << "' already in scope";
         throw 0;
       }
     }
@@ -526,7 +528,7 @@ void cpp_declarator_convertert::main_function_rules(const symbolt &symbol)
   {
     if(symbol.type.id() != "code")
     {
-      cpp_typecheck.err_location(symbol.location);
+      err_location(symbol.location);
       throw "main must be function";
     }
 
@@ -535,7 +537,7 @@ void cpp_declarator_convertert::main_function_rules(const symbolt &symbol)
 
     if(return_type != int_type())
     {
-      cpp_typecheck.err_location(symbol.location);
+      err_location(symbol.location);
       throw "main must return int";
     }
   }

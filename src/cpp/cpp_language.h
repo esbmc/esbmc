@@ -49,7 +49,7 @@ public:
 
   languaget *new_language() const override
   {
-    return new cpp_languaget(msg);
+    return new cpp_languaget();
   }
 
 protected:
