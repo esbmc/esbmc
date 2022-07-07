@@ -328,7 +328,8 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         {
           err_location(new_symbol.location);
           str << "function `" << new_symbol.name << "' defined twice";
-          error();
+          log_error(str.str());
+          abort();
         }
         else
         {
@@ -381,7 +382,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
               err_location(new_symbol.value);
               str << "symbol `" << new_symbol.name
                   << "' already has an initial value";
-              warning();
+              log_warning(str.str());
             }
           }
         }

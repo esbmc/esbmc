@@ -47,7 +47,7 @@ public:
 
   languaget *new_language() const override
   {
-    return new ansi_c_languaget(msg);
+    return new ansi_c_languaget();
   }
 
   std::string id() const override

@@ -15,7 +15,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/parser.h>
 
-#include <util/message/fmt_message_handler.h>
 
 typedef enum
 {

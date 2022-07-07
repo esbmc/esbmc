@@ -63,3 +63,8 @@ public:
   static inline auto error_output = stderr;
   static inline auto standard_output = stdout;
 };
+
+// TODO: Eventually this will be removed
+#ifdef ENABLE_OLD_FRONTEND
+#define err_location(E) (E).location().dump();
+#endif

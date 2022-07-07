@@ -8,12 +8,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/c_final.h>
 #include <c2goto/cprover_library.h>
-#include <util/message/message_stream.h>
 
 void c_finalize_expression(
   const contextt &context,
   exprt &expr)
 {
+  std::ostringstream str;
   if(expr.id() == "symbol")
   {
     if(expr.type().id() == "incomplete_array")
@@ -22,9 +22,8 @@ void c_finalize_expression(
 
       if(s == nullptr)
       {
-        message_streamt message_stream(message_handler);
-        message_stream.str << "failed to find symbol " << expr.identifier();
-        log_error();
+        str << "failed to find symbol " << expr.identifier();
+        log_error(str.str());
         throw 0;
       }
 
@@ -34,20 +33,18 @@ void c_finalize_expression(
         expr.type() = symbol.type;
       else if(symbol.type.id() == "incomplete_array")
       {
-        message_streamt message_stream(message_handler);
-        message_stream.err_location(symbol.location);
-        message_stream.str << "symbol `" << symbol.name
+        symbol.location.dump();
+        str << "symbol `" << symbol.name
                            << "' has incomplete type";
-        log_error();
+        log_error(str.str());
         throw 0;
       }
       else
       {
-        message_streamt message_stream(message_handler);
-        message_stream.err_location(symbol.location);
-        message_stream.str << "symbol `" << symbol.name
+       symbol.location.dump();
+        str << "symbol `" << symbol.name
                            << "' has unexpected type";
-        log_error();
+        log_error(str.str());
         throw 0;
       }
     }
@@ -64,7 +61,7 @@ bool c_final(contextt &context)
 
   try
   {
-    context.Foreach_operand([&context, &message_handler](symbolt &s) {
+    context.Foreach_operand([&context](symbolt &s) {
       if(s.mode == "C")
       {
         c_finalize_expression(context, s.value);

@@ -39,7 +39,7 @@ public:
   virtual void convert_type(typet &type);
 
   virtual void convert_type(typet &type, c_storage_spect &c_storage_spec);
-
+  std::ostringstream str;
 protected:
   virtual void convert_code(codet &code);
 

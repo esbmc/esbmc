@@ -19,7 +19,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <util/config.h>
 #include <util/i2string.h>
-#include <util/message/message_stream.h>
 
 extern "C"
 {
@@ -191,6 +190,7 @@ bool c_preprocess(
   char out_file_buf[32], stderr_file_buf[32];
   pid_t pid;
   int fd, status;
+  std::ostringstream str;
 
   sprintf(out_file_buf, "/tmp/ESBMC_XXXXXX");
   fd = mkstemp(out_file_buf);
@@ -226,8 +226,8 @@ bool c_preprocess(
     }
 
     std::ifstream stderr_input(stderr_file_buf);
-    message_stream.str << stderr_input.rdbuf();
-    message_stream.status();
+    str << stderr_input.rdbuf();
+    log_status(str.str());
 
     std::ifstream output_input(out_file_buf);
     outstream << output_input.rdbuf();
