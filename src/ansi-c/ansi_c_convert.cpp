@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/ansi_c_declaration.h>
 #include <util/config.h>
 #include <util/std_types.h>
+#include <util/message.h>
 
 void ansi_c_convertt::convert(ansi_c_parse_treet &ansi_c_parse_tree)
 {

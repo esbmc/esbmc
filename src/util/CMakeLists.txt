@@ -37,6 +37,6 @@ target_include_directories(util_esbmc
         PRIVATE ${Boost_INCLUDE_DIRS}
         )
 
-target_link_libraries(util_esbmc irep2 fmt::fmt ${Boost_LIBRARIES})
+target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt ${Boost_LIBRARIES})
 
 target_link_libraries(algorithms gotoprograms)

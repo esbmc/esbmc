@@ -12,6 +12,7 @@ Maintainers:
 
 #include <cstdio>
 #include <fmt/format.h>
+#include <util/message/format.h>
 #include <util/location.h>
 
 /**
