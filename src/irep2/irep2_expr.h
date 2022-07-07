@@ -1804,6 +1804,10 @@ public:
     unsigned int node = 0)
     : symbol_expr_methods(type, symbol_id, init, lev, l1, l2, trd, node)
   {
+    /* At some point in the past, symbols named "NULL" and "0" were equivalent.
+     * The symbol called "0" should no longer be created for uniformity reasons.
+     * Confirm that here, since support for it has been removed from smt_convt.
+     * No other reason to disallow "0" as a symbol. */
     assert(init != "0");
   }
 
