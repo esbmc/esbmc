@@ -211,7 +211,7 @@ void ansi_c_convertt::convert_type(typet &type)
 
 void ansi_c_convertt::convert_type(typet &type, c_storage_spect &c_storage_spec)
 {
-  ansi_c_convert_typet ansi_c_convert_type(get_message_handler());
+  ansi_c_convert_typet ansi_c_convert_type;
 
   ansi_c_convert_type.read(type);
   ansi_c_convert_type.write(type);
@@ -377,20 +377,20 @@ bool ansi_c_convert(
 
   catch(int e)
   {
-    ansi_c_convert.error();
+    abort();
   }
 
   catch(const char *e)
   {
-    ansi_c_convert.error(e);
+    log_error(e);
   }
 
   catch(const std::string &e)
   {
-    ansi_c_convert.error(e);
+    log_error(e);
   }
 
-  return ansi_c_convert.get_error_found();
+  return false;
 }
 
 bool ansi_c_convert(
@@ -406,18 +406,18 @@ bool ansi_c_convert(
 
   catch(int e)
   {
-    ansi_c_convert.error();
+    abort();
   }
 
   catch(const char *e)
   {
-    ansi_c_convert.error(e);
+   log_error(e);
   }
 
   catch(const std::string &e)
   {
-    ansi_c_convert.error(e);
+    log_error(e);
   }
 
-  return ansi_c_convert.get_error_found();
+  return false;
 }

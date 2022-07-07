@@ -29,6 +29,8 @@ public:
   {
   }
 
+  std::ostringstream str;
+
   ~c_typecheck_baset() override = default;
 
   void typecheck() override = 0;
@@ -47,8 +49,8 @@ protected:
   void replace_symbol(irept &symbol);
 
   // overload to use language specific syntax
-  std::string to_string(const exprt &expr) override;
-  std::string to_string(const typet &type) override;
+  std::string to_string(const exprt &expr) ;
+  std::string to_string(const typet &type) ;
 
   //
   // service functions

@@ -12,14 +12,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_storage_spec.h>
 #include <util/c_qualifiers.h>
 #include <util/c_types.h>
-#include <util/message/message_stream.h>
 
-class ansi_c_convert_typet : public message_streamt
+class ansi_c_convert_typet
 {
 public:
   unsigned unsigned_cnt, signed_cnt, char_cnt, int_cnt, short_cnt, long_cnt,
     double_cnt, float_cnt, bool_cnt, int8_cnt, int16_cnt, int32_cnt, int64_cnt,
     ptr32_cnt, ptr64_cnt;
+
+  std::ostringstream str;
 
   // storage spec
   c_storage_spect c_storage_spec;

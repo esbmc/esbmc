@@ -376,7 +376,7 @@ void c_typecheck_baset::typecheck_ifthenelse(codet &code)
   if(cond.id() == "sideeffect" && cond.statement() == "assign")
   {
     err_location(cond);
-    warning("warning: assignment in if condition");
+    log_warning("warning: assignment in if condition");
   }
 
   implicit_typecast_bool(cond);

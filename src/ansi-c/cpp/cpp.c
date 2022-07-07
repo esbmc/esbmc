@@ -173,7 +173,7 @@ record_define(const char *value)
        struct initar *it;
 
        if ((it = malloc(sizeof(struct initar))) == NULL)
-               error("couldn't apply -D %s", optarg);
+              log_error("couldn't apply -D %s", optarg);
        it->type = 'D';
        it->str = strdup(value);
        it->next = initar;
@@ -187,7 +187,7 @@ record_include(const char *fname)
        struct incs *w, *w2;
 
        if ((w = calloc(sizeof(struct incs), 1)) == NULL)
-               error("couldn't apply -I %s", optarg);
+              log_error("couldn't apply -I %s", optarg);
        w->dir = strdup(fname);
        w2 = incdir[SYSINC];
 

@@ -450,7 +450,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   if(expr.operands().size() != 1)
   {
     err_location(expr);
-    error("typecast operator expects one operand");
+   log_error("typecast operator expects one operand");
     throw 0;
   }
 
@@ -749,7 +749,7 @@ void c_typecheck_baset::typecheck_expr_ptrmember(exprt &expr)
   if(expr.operands().size() != 1)
   {
     err_location(expr);
-    error("ptrmember operator expects one operand");
+   log_error("ptrmember operator expects one operand");
     throw 0;
   }
 
@@ -783,7 +783,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
   if(expr.operands().size() != 1)
   {
     err_location(expr);
-    error("member operator expects one operand");
+   log_error("member operator expects one operand");
     throw 0;
   }
 
@@ -863,7 +863,7 @@ void c_typecheck_baset::typecheck_expr_trinary(exprt &expr)
   if(operands.size() != 3)
   {
     err_location(expr);
-    error("Boolean operator ?: expects three operands");
+   log_error("Boolean operator ?: expects three operands");
     throw 0;
   }
 
@@ -922,7 +922,7 @@ void c_typecheck_baset::typecheck_side_effect_gcc_conditional_expression(
   if(operands.size() != 2)
   {
     err_location(expr);
-    error("gcc conditional_expr expects two operands");
+   log_error("gcc conditional_expr expects two operands");
     throw 0;
   }
 
@@ -948,7 +948,7 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
   if(expr.operands().size() != 1)
   {
     err_location(expr);
-    error("unary operator & expects one operand");
+   log_error("unary operator & expects one operand");
     throw 0;
   }
 
@@ -1018,7 +1018,7 @@ void c_typecheck_baset::typecheck_expr_dereference(exprt &expr)
     if(op_type.subtype().id() == "empty")
     {
       err_location(expr);
-      error("operand of unary * is a void * pointer");
+     log_error("operand of unary * is a void * pointer");
       throw 0;
     }
 
@@ -1082,7 +1082,7 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
     {
       err_location(op0);
       std::string msg = "warning: `" + to_string(op0) + "' is constant";
-      warning(msg);
+      log_warning(msg);
     }
 
     if(
@@ -1158,7 +1158,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
 
       err_location(f_op);
       str << "function `" << identifier << "' is not declared";
-      warning();
+      log_warning(str.str());
     }
   }
 
@@ -1642,7 +1642,7 @@ void c_typecheck_baset::typecheck_function_call_arguments(
         op.statement() == "assign" && !op.type().is_bool())
       {
         err_location(expr);
-        warning("assignment where Boolean argument is expected");
+        log_warning("assignment where Boolean argument is expected");
       }
 
       implicit_typecast(op, op_type);
@@ -1923,7 +1923,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
   {
     err_location(expr);
     std::string msg = "warning: `" + to_string(op0) + "' is constant";
-    warning(msg);
+    log_warning(msg);
   }
 
   if(statement == "assign")
