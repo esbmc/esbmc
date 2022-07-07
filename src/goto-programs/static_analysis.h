@@ -81,7 +81,7 @@ public:
   typedef goto_programt::const_targett locationt;
 
   static_analysis_baset(const namespacet &_ns)
-    : ns(_ns), msg(msg), initialized(false)
+    : ns(_ns), initialized(false)
   {
   }
 
@@ -223,7 +223,7 @@ class static_analysist : public static_analysis_baset
 public:
   // constructor
   static_analysist(const namespacet &_ns)
-    : static_analysis_baset(_ns, msg)
+    : static_analysis_baset(_ns)
   {
   }
 
@@ -288,7 +288,7 @@ protected:
 
   void generate_state(locationt l) override
   {
-    state_map[l].initialize(ns, l, msg);
+    state_map[l].initialize(ns, l);
   }
 
   void get_reference_set(

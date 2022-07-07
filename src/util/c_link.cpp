@@ -48,10 +48,8 @@ public:
   c_linkt(
     contextt &_context,
     contextt &_new_context,
-    std::string _module,
-    const messaget &_message_handler)
-    : typecheckt(_message_handler),
-      context(_context),
+    std::string _module)
+    : context(_context),
       new_context(_new_context),
       module(std::move(_module)),
       ns(_context, _new_context),
@@ -72,8 +70,8 @@ protected:
   void move(symbolt &new_symbol);
 
   // overload to use language specific syntax
-  std::string to_string(const exprt &expr) override;
-  std::string to_string(const typet &type) override;
+  std::string to_string(const exprt &expr) ;
+  std::string to_string(const typet &type) ;
 
   contextt &context;
   contextt &new_context;
@@ -102,8 +100,8 @@ void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)
 {
   if(new_symbol.is_type != in_context.is_type)
   {
-    str << "class conflict on symbol `" << in_context.name << "'";
-    throw 0;
+    log_error("class conflict on symbol `{}'",in_context.name);
+    abort();
   }
 
   if(new_symbol.is_type)
@@ -168,7 +166,7 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
 
   if(is_code_in_context != is_code_new_symbol)
   {
-    err_location(new_symbol.location);
+    std::ostringstream str;
     str << "error: conflicting definition for symbol \"" << in_context.name
         << "\""
         << "\n";
@@ -176,7 +174,8 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
     str << "Module: " << in_context.module << "\n";
     str << "new definition: " << to_string(new_symbol.type) << "\n";
     str << "Module: " << new_symbol.module;
-    throw 0;
+    log_error(str.str());
+    abort();
   }
 
   if(is_code_in_context)
@@ -202,20 +201,22 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       else if(base_type_eq(in_context.type, new_symbol.type, ns))
       {
         // keep the one in in_context -- libraries come last!
+        std::ostringstream str;
         str << "warning: function `" << in_context.name << "' in module `"
             << new_symbol.module << "' is shadowed by a definition in module `"
             << in_context.module << "'";
-        warning();
+        log_warning(str.str());
       }
       else
       {
-        err_location(new_symbol.value);
+        std::ostringstream str;
         str << "error: duplicate definition of function `" << in_context.name
             << "'"
             << "\n";
         str << "In module `" << in_context.module << "' and module `"
-            << new_symbol.module << "'";
-        throw 0;
+            << new_symbol.module << "'\n";
+        str << "Location: " << new_symbol.value.location();
+        log_error(str.str());
       }
     }
   }
@@ -268,15 +269,16 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
 #endif
       else
       {
-        err_location(new_symbol.location);
+        std::ostringstream str;
         str << "error: conflicting definition for variable `" << in_context.name
             << "'"
             << "\n";
         str << "old definition: " << to_string(in_context.type) << "\n";
         str << "Module: " << in_context.module << "\n";
         str << "new definition: " << to_string(new_symbol.type) << "\n";
-        str << "Module: " << new_symbol.module;
-        throw 0;
+        str << "Module: " << new_symbol.module << "\n";
+        str << "Location: " << new_symbol.location;
+        log_error(str.str());
       }
     }
 
@@ -290,7 +292,7 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       }
       else if(!base_type_eq(in_context.value, new_symbol.value, ns))
       {
-        err_location(new_symbol.value);
+        std::ostringstream str;
         str << "error: conflicting initializers for variable `"
             << in_context.name << "'"
             << "\n";
@@ -298,7 +300,8 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
         str << "Module: " << in_context.module << "\n";
         str << "new value: " << to_string(new_symbol.value) << "\n";
         str << "Module: " << new_symbol.module;
-        throw 0;
+        log_error(str.str());
+        abort();
       }
     }
   }
@@ -355,9 +358,8 @@ void c_linkt::move(symbolt &new_symbol)
 bool c_link(
   contextt &context,
   contextt &new_context,
-  const messaget &message_handler,
   const std::string &module)
 {
-  c_linkt c_link(context, new_context, module, message_handler);
+  c_linkt c_link(context, new_context, module);
   return c_link.typecheck_main();
 }

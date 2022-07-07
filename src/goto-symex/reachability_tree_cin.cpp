@@ -8,7 +8,7 @@ int reachability_treet::get_ileave_direction_from_user() const
   unsigned int tid;
 
   if(get_cur_state().get_active_state().guard.is_false())
-    message_handler.status(
+    log_status(
       "This trace's guard is false; it will not be evaulated.");
 
   // First of all, are there actually any valid context switch targets?
@@ -22,16 +22,16 @@ int reachability_treet::get_ileave_direction_from_user() const
   if(tid == get_cur_state().threads_state.size())
     return get_cur_state().threads_state.size();
 
-  message_handler.status(
+  log_status(
     "Context switch point encountered; please select a thread to run");
-  message_handler.status("Current thread states:");
+  log_status("Current thread states:");
   execution_states.back()->print_stack_traces(4);
 
-  while(message_handler.status("Input: "), std::getline(std::cin, input))
+  while(log_status("Input: "), std::getline(std::cin, input))
   {
     if(input == "b")
     {
-      message_handler.status("Back unimplemented");
+      log_status("Back unimplemented");
     }
     else if(input == "q")
     {
@@ -49,11 +49,11 @@ int reachability_treet::get_ileave_direction_from_user() const
       tid = strtol(start, &end, 10);
       if(start == end)
       {
-        message_handler.status("Not a valid input");
+        log_status("Not a valid input");
       }
       else if(tid >= get_cur_state().threads_state.size())
       {
-        message_handler.status("Number out of range");
+        log_status("Number out of range");
       }
       else
       {
@@ -65,7 +65,7 @@ int reachability_treet::get_ileave_direction_from_user() const
 
   if(std::cin.eof())
   {
-    message_handler.status("");
+    log_status("");
     exit(1);
   }
 

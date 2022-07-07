@@ -25,30 +25,8 @@ void goto_convert(
   goto_programt &dest,
   const messaget &message_handler)
 {
-  goto_convertt goto_convert(context, options, message_handler);
-
-  try
-  {
-    goto_convert.goto_convert(code, dest);
-  }
-
-  catch(int)
-  {
-    goto_convert.error();
-  }
-
-  catch(const char *e)
-  {
-    goto_convert.error(e);
-  }
-
-  catch(const std::string &e)
-  {
-    goto_convert.error(e);
-  }
-
-  if(goto_convert.get_error_found())
-    throw 0;
+  goto_convertt goto_convert(context, options);
+  goto_convert.goto_convert(code, dest);
 }
 
 void goto_convert(
@@ -62,7 +40,7 @@ void goto_convert(
   if(s == nullptr)
     throw "failed to find main symbol";
 
-  message_handler.status(
+  log_status(
     "goto_convert : start converting symbol table to goto functions ");
   ::goto_convert(to_code(s->value), context, options, dest, message_handler);
 }

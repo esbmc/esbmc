@@ -20,12 +20,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
+#include <util/message.h>
 
 static const std::string &
 get_string_constant(const exprt &expr)
 {
   if(expr.id() == "typecast" && expr.operands().size() == 1)
-    return get_string_constant(expr.op0(), msg);
+    return get_string_constant(expr.op0());
 
   if(
     !expr.is_address_of() || expr.operands().size() != 1 ||
@@ -122,14 +123,14 @@ void goto_convertt::do_atomic_begin(
 {
   if(lhs.is_not_nil())
   {
-    err_location(lhs);
-    throw "atomic_begin does not expect an LHS";
+    log_error("atomic_begin does not expect an LHS");
+    abort();
   }
 
   if(arguments.size() != 0)
   {
-    err_location(function);
-    throw "atomic_begin takes zero argument";
+    log_error("atomic_begin takes zero argument");
+    abort();
   }
 
   // We should allow a context switch to happen before synchronization points.
@@ -151,14 +152,14 @@ void goto_convertt::do_atomic_end(
 {
   if(lhs.is_not_nil())
   {
-    err_location(lhs);
-    throw "atomic_end does not expect an LHS";
+    log_error("atomic_end does not expect an LHS");
+    abort();
   }
 
   if(!arguments.empty())
   {
-    err_location(function);
-    throw "atomic_end takes no arguments";
+    log_error("atomic_end takes no arguments");
+    abort();
   }
 
   goto_programt::targett t = dest.add_instruction(ATOMIC_END);
@@ -271,7 +272,7 @@ void goto_convertt::do_cpp_new(
   }
 
   // grab initializer
-  goto_programt tmp_initializer(get_message_handler());
+  goto_programt tmp_initializer;
   cpp_new_initializer(lhs, rhs, tmp_initializer);
 
   exprt alloc_size;
@@ -411,8 +412,8 @@ void goto_convertt::do_exit(
 {
   if(arguments.size() != 1)
   {
-    err_location(function);
-    throw "exit expected to have one argument";
+    log_error("exit expected to have one argument");
+    abort();
   }
 
   // same as assume(false)
@@ -430,8 +431,8 @@ void goto_convertt::do_abort(
 {
   if(arguments.size() != 0)
   {
-    err_location(function);
-    throw "abort expected to have no arguments";
+    log_error("abort expected to have no arguments");
+    abort();
   }
 
   // same as assume(false)
@@ -449,8 +450,8 @@ void goto_convertt::do_free(
 {
   if(lhs.is_not_nil())
   {
-    err_location(function);
-    throw "free is expected not to have LHS";
+    log_error("free is expected not to have LHS");
+    abort();
   }
 
   // preserve the call
@@ -507,15 +508,14 @@ void goto_convertt::do_function_call_symbol(
   const symbolt *symbol = ns.lookup(identifier);
   if(!symbol)
   {
-    err_location(function);
-    throw "error: function `" + id2string(identifier) + "' not found";
+    log_error("error: function `" + id2string(identifier) + "' not found");
+    abort();
   }
 
   if(!symbol->type.is_code())
   {
-    err_location(function);
-    throw "error: function `" + id2string(identifier) +
-      "' type mismatch: expected code";
+    log_error("error: function `" + id2string(identifier) +
+      "' type mismatch: expected code");
   }
 
   // If the symbol is not nil, i.e., the user defined the expected behaviour of
@@ -543,8 +543,8 @@ void goto_convertt::do_function_call_symbol(
   {
     if(arguments.size() != 1)
     {
-      err_location(function);
-      throw "`" + id2string(base_name) + "' expected to have one argument";
+      log_error("`" + id2string(base_name) + "' expected to have one argument");
+      abort();
     }
 
     if(options.get_bool_option("no-assertions") && !is_assume)
@@ -571,8 +571,8 @@ void goto_convertt::do_function_call_symbol(
 
     if(lhs.is_not_nil())
     {
-      err_location(function);
-      throw id2string(base_name) + " expected not to have LHS";
+      log_error(id2string(base_name) + " expected not to have LHS");
+      abort();
     }
   }
   else if(base_name == "__ESBMC_assert")
@@ -581,8 +581,8 @@ void goto_convertt::do_function_call_symbol(
     // 2 arguments --> Normal assertion + MSG
     if(arguments.size() > 2)
     {
-      err_location(function);
-      throw "`" + id2string(base_name) + "' expected to have two arguments";
+      log_error("`" + id2string(base_name) + "' expected to have two arguments");
+      abort();
     }
 
     if(options.get_bool_option("no-assertions"))
@@ -594,7 +594,7 @@ void goto_convertt::do_function_call_symbol(
     const std::string &description =
       arguments.size() == 1
         ? "ESBMC assertion"
-        : get_string_constant(arguments[1], message_handler);
+        : get_string_constant(arguments[1]);
     t->location = function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
@@ -602,8 +602,8 @@ void goto_convertt::do_function_call_symbol(
 
     if(lhs.is_not_nil())
     {
-      err_location(function);
-      throw id2string(base_name) + " expected not to have LHS";
+      log_error(id2string(base_name) + " expected not to have LHS");
+      abort();
     }
   }
   else if(
@@ -612,8 +612,8 @@ void goto_convertt::do_function_call_symbol(
   {
     if(!arguments.empty())
     {
-      err_location(function);
-      throw "`" + id2string(base_name) + "' expected to have no arguments";
+      log_error("`" + id2string(base_name) + "' expected to have no arguments");
+      abort();
     }
 
     goto_programt::targett t = dest.add_instruction(ASSERT);
@@ -624,8 +624,8 @@ void goto_convertt::do_function_call_symbol(
 
     if(lhs.is_not_nil())
     {
-      err_location(function);
-      throw "`" + id2string(base_name) + "' expected not to have LHS";
+      log_error("`" + id2string(base_name) + "' expected not to have LHS");
+      abort();
     }
 
     // __VERIFIER_error has abort() semantics, even if no assertions
@@ -704,13 +704,13 @@ void goto_convertt::do_function_call_symbol(
 
     if(arguments.size() != 4)
     {
-      err_location(function);
-      throw "`" + id2string(base_name) + "' expected to have four arguments";
+      log_error("`" + id2string(base_name) + "' expected to have four arguments");
+      abort();
     }
 
     const irep_idt description =
       "assertion " +
-      id2string(get_string_constant(arguments[0], message_handler));
+      id2string(get_string_constant(arguments[0]));
 
     if(options.get_bool_option("no-assertions"))
       return;
@@ -729,13 +729,13 @@ void goto_convertt::do_function_call_symbol(
 
     if(arguments.size() != 4)
     {
-      err_location(function);
-      throw "`" + id2string(base_name) + "' expected to have four arguments";
+      log_error("`" + id2string(base_name) + "' expected to have four arguments");
+      abort();
     }
 
     const irep_idt description =
       "assertion " +
-      id2string(get_string_constant(arguments[3], message_handler));
+      id2string(get_string_constant(arguments[3]));
 
     if(options.get_bool_option("no-assertions"))
       return;
@@ -754,12 +754,12 @@ void goto_convertt::do_function_call_symbol(
 
     if(arguments.size() != 3)
     {
-      err_location(function);
-      throw "`" + id2string(base_name) + "' expected to have three arguments";
+      log_error("`" + id2string(base_name) + "' expected to have three arguments");
+      abort();
     }
 
     const std::string description =
-      "assertion " + get_string_constant(arguments[0], message_handler);
+      "assertion " + get_string_constant(arguments[0]);
 
     if(options.get_bool_option("no-assertions"))
       return;
@@ -799,8 +799,8 @@ void goto_convertt::do_function_call_symbol(
 
     if(arguments.size() != 1)
     {
-      err_location(function);
-      throw "`" + id2string(base_name) + "' expected to have one argument";
+      log_error("`" + id2string(base_name) + "' expected to have one argument");
+      abort();
     }
 
     exprt list_arg = make_va_list(arguments[0]);
@@ -832,8 +832,8 @@ void goto_convertt::do_function_call_symbol(
   {
     if(arguments.size() != 2)
     {
-      err_location(function);
-      throw "`" + id2string(base_name) + "' expected to have two arguments";
+      log_error("`" + id2string(base_name) + "' expected to have two arguments");
+      abort();
     }
 
     exprt dest_expr = make_va_list(arguments[0]);
@@ -841,8 +841,8 @@ void goto_convertt::do_function_call_symbol(
 
     if(!is_lvalue(dest_expr))
     {
-      err_location(dest_expr);
-      throw "va_copy argument expected to be lvalue";
+      log_error("va_copy argument expected to be lvalue");
+      abort();
     }
 
     goto_programt::targett t = dest.add_instruction(ASSIGN);
@@ -856,8 +856,8 @@ void goto_convertt::do_function_call_symbol(
     // parameter argument.
     if(arguments.size() != 2)
     {
-      err_location(function);
-      throw "`" + id2string(base_name) + "' expected to have two arguments";
+      log_error("`" + id2string(base_name) + "' expected to have two arguments");
+      abort();
     }
 
     exprt dest_expr = make_va_list(arguments[0]);
@@ -866,8 +866,8 @@ void goto_convertt::do_function_call_symbol(
 
     if(!is_lvalue(dest_expr))
     {
-      err_location(dest_expr);
-      throw "va_start argument expected to be lvalue";
+      log_error("va_start argument expected to be lvalue");
+      abort();
     }
 
     goto_programt::targett t = dest.add_instruction(ASSIGN);
@@ -880,16 +880,16 @@ void goto_convertt::do_function_call_symbol(
     // Invalidates the argument. We do so by setting it to NULL.
     if(arguments.size() != 1)
     {
-      err_location(function);
-      throw "`" + id2string(base_name) + "' expected to have one argument";
+      log_error("`" + id2string(base_name) + "' expected to have one argument");
+      abort();
     }
 
     exprt dest_expr = make_va_list(arguments[0]);
 
     if(!is_lvalue(dest_expr))
     {
-      err_location(dest_expr);
-      throw "va_end argument expected to be lvalue";
+      log_error("va_end argument expected to be lvalue");
+      abort();
     }
 
     // our __builtin_va_list is a pointer

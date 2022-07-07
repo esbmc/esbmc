@@ -42,10 +42,9 @@ public:
   goto_convert_functionst(
     contextt &_context,
     optionst &_options,
-    goto_functionst &_functions,
-    const messaget &_message_handler);
+    goto_functionst &_functions);
 
-  ~goto_convert_functionst() override = default;
+  ~goto_convert_functionst() = default;
 
 protected:
   goto_functionst &functions;

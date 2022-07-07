@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/typecheck.h>
-
+#include <util/message.h>
 
 bool typecheckt::typecheck_main()
 {
@@ -18,18 +18,20 @@ bool typecheckt::typecheck_main()
 
   catch(int e)
   {
-    error("{}", e);
+    log_error("{}", e);
+    abort();
   }
 
   catch(const char *e)
   {
-    error(e);
+    log_error(e);
+    abort();
   }
 
   catch(const std::string &e)
   {
-    error(e);
+    log_error(e);
   }
 
-  return error_found;
+  return false;
 }

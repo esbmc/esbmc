@@ -29,7 +29,7 @@ public:
   class SSA_stept;
 
   symex_target_equationt(const namespacet &_ns)
-    : ns(_ns), msg(msg)
+    : ns(_ns)
   {
     debug_print = config.options.get_bool_option("symex-ssa-trace");
     ssa_trace = config.options.get_bool_option("ssa-trace");

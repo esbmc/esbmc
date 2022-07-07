@@ -20,8 +20,7 @@ public:
   parseoptions_baset(
     const struct group_opt_templ *opts,
     int argc,
-    const char **argv,
-    const messaget &msg);
+    const char **argv);
 
   cmdlinet cmdline;
   virtual void help();

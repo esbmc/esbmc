@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/goto_functions.h>
 #include <unordered_set>
-#include <util/message/message_stream.h>
 #include <util/std_types.h>
 
 // do a full inlining
@@ -37,16 +36,14 @@ void goto_partial_inline(
   const messaget &message_handler,
   unsigned _smallfunc_limit = 0);
 
-class goto_inlinet : public message_streamt
+class goto_inlinet
 {
 public:
   goto_inlinet(
     goto_functionst &_goto_functions,
     optionst &_options,
-    const namespacet &_ns,
-    const messaget &_message_handler)
-    : message_streamt(_message_handler),
-      smallfunc_limit(0),
+    const namespacet &_ns)
+    : smallfunc_limit(0),
       goto_functions(_goto_functions),
       options(_options),
       ns(_ns)

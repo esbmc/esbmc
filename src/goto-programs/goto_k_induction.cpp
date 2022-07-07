@@ -6,23 +6,21 @@
 #include <util/std_expr.h>
 
 void goto_k_induction(
-  goto_functionst &goto_functions,
-  const messaget &message_handler)
+  goto_functionst &goto_functions)
 {
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
-      goto_k_inductiont(it->first, goto_functions, it->second, message_handler);
+      goto_k_inductiont(it->first, goto_functions, it->second);
 
   goto_functions.update();
 }
 
 void goto_termination(
-  goto_functionst &goto_functions,
-  const messaget &message_handler)
+  goto_functionst &goto_functions)
 {
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
-      goto_k_inductiont(it->first, goto_functions, it->second, message_handler);
+      goto_k_inductiont(it->first, goto_functions, it->second);
   goto_functions.update();
 
   auto function = goto_functions.function_map.find("__ESBMC_main");
@@ -42,7 +40,7 @@ void goto_termination(
   assert(it != function->second.body.instructions.end());
 
   // Create an assert(0)
-  goto_programt dest(message_handler);
+  goto_programt dest;
   goto_programt::targett t = dest.add_instruction(ASSERT);
   t->guard = gen_false_expr();
   t->inductive_step_instruction = true;
@@ -198,7 +196,7 @@ void goto_k_inductiont::make_nondet_assign(
 {
   auto const &loop_vars = loop.get_modified_loop_vars();
 
-  goto_programt dest(message_handler);
+  goto_programt dest;
   for(auto const &lhs : loop_vars)
   {
     // do not assign nondeterministic value to pointers if we assume
@@ -283,7 +281,7 @@ void goto_k_inductiont::assume_loop_entry_cond_before_loop(
     if(is_true(loop_cond) || is_false(loop_cond))
       return;
 
-    goto_programt dest(message_handler);
+    goto_programt dest;
     assume_cond(loop_cond, dest, tmp_head->location);
 
     goto_function.body.insert_swap(tmp_head, dest);
@@ -317,7 +315,7 @@ void goto_k_inductiont::assume_cond(
   goto_programt &dest,
   const locationt &loc)
 {
-  goto_programt tmp_e(message_handler);
+  goto_programt tmp_e;
   goto_programt::targett e = tmp_e.add_instruction(ASSUME);
   e->inductive_step_instruction = true;
   e->guard = cond;

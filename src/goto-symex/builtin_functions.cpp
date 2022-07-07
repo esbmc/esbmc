@@ -924,7 +924,7 @@ void goto_symext::intrinsic_memset(
 
         // We now have a list of types and offsets we might resolve to.
         symex_dereference_statet sds(*this, *cur_state);
-        dereferencet dereference(ns, new_context, options, sds, msg);
+        dereferencet dereference(ns, new_context, options, sds);
         dereference.set_block_assertions();
         for(const auto &cur_type : in_list)
         {

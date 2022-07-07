@@ -26,9 +26,8 @@ void show_loop_numbers(const goto_programt &goto_program)
 }
 
 void show_loop_numbers(
-  const goto_functionst &goto_functions,
-  const messaget &msg)
+  const goto_functionst &goto_functions)
 {
   for(const auto &it : goto_functions.function_map)
-    show_loop_numbers(it.second.body, msg);
+    show_loop_numbers(it.second.body);
 }

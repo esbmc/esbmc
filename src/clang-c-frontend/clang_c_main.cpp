@@ -276,7 +276,7 @@ bool clang_main(contextt &context)
 
   if(context.move(new_symbol))
   {
-    message_handler.error("main already defined by another language module");
+    log_error("main already defined by another language module");
     return true;
   }
 

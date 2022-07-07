@@ -31,15 +31,13 @@ class goto_functiont
 public:
   goto_programt body;
   code_typet type;
-  bool body_available;
+  bool body_available = false;
 
   // The set of functions that have been inlined into this one. Necessary to
   // make symex renaming work.
   std::set<std::string> inlined_funcs;
 
-  goto_functiont() : body_available(false)
-  {
-  }
+  goto_functiont() = default;
 
   /// update the function member in each instruction
   /// \param function_id: the `function_id` used for assigning empty function
@@ -56,6 +54,7 @@ public:
   typedef std::map<irep_idt, goto_functiont> function_mapt;
   function_mapt function_map;
 
+  goto_functionst() {}
   ~goto_functionst() = default;
   void clear()
   {

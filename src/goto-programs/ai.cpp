@@ -39,7 +39,7 @@ void ai_baset::output(
 
         abstract_state_before(i_it)->output(out);
         out << "\n";
-        i_it->output_instruction(*migrate_namespace_lookup, "", out, msg);
+        i_it->output_instruction(*migrate_namespace_lookup, "", out);
         out << "\n";
       }
     }

@@ -17,8 +17,7 @@ void show_claims(
   const namespacet &ns,
   const irep_idt &identifier,
   const goto_programt &goto_program,
-  unsigned &count,
-  const messaget &msg)
+  unsigned &count)
 {
   for(const auto &instruction : goto_program.instructions)
   {
@@ -34,7 +33,7 @@ void show_claims(
         count,
         instruction.location,
         description,
-        from_expr(ns, identifier, instruction.guard, msg));
+        from_expr(ns, identifier, instruction.guard));
     }
   }
 }
@@ -45,16 +44,15 @@ void show_claims(
   const messaget &msg)
 {
   unsigned count = 0;
-  show_claims(ns, "", goto_program, count, msg);
+  show_claims(ns, "", goto_program, count);
 }
 
 void show_claims(
   const namespacet &ns,
-  const goto_functionst &goto_functions,
-  const messaget &msg)
+  const goto_functionst &goto_functions)
 {
   unsigned count = 0;
 
   for(const auto &it : goto_functions.function_map)
-    show_claims(ns, it.first, it.second.body, count, msg);
+    show_claims(ns, it.first, it.second.body, count);
 }

@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 /* forward declarations */
 class languaget;
-class messaget;
 
 enum class language_idt : int
 {

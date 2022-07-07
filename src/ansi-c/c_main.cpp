@@ -81,7 +81,7 @@ bool c_main(
 
   if(matches.empty())
   {
-    message_handler.error("main symbol `" + themain + "' not found");
+    log_error("main symbol `" + themain + "' not found");
     return true; // give up
   }
 
@@ -89,11 +89,11 @@ bool c_main(
   {
     messaget message(message_handler);
     if(matches.size() == 2)
-      message_handler.error(
+      log_error(
         "warning: main symbol `" + themain + "' is ambiguous");
     else
     {
-      message_handler.error("main symbol `" + themain + " is ambiguous");
+      log_error("main symbol `" + themain + " is ambiguous");
       return true;
     }
   }
@@ -321,7 +321,7 @@ bool c_main(
 
   if(context.move(new_symbol))
   {
-    message_handler.error("main already defined by another language module");
+    log_error("main already defined by another language module");
     return true;
   }
 

@@ -99,12 +99,12 @@ void add_bundled_library_sources(
     /* Next, extract (if not already done) and process every libc/libm file. */
     internal_libc.foreach_libc_libm([&](const std::string &path) {
       languaget *l = c_language.new_language(message_handler);
-      message_handler.status("file " + path + ": Parsing");
+      log_status("file " + path + ": Parsing");
       if(
         l->parse(path, message_handler) ||
         l->typecheck(context, path, message_handler))
       {
-        message_handler.error("error processing internal libc source " + path);
+        log_error("error processing internal libc source " + path);
         abort();
       }
       delete l;

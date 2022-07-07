@@ -206,7 +206,7 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 
   if(interactive_ileaves && tid != user_tid)
   {
-    message_handler.error(
+    log_error(
       "Ileave code selected different thread from user choice");
     abort();
   }
@@ -492,10 +492,10 @@ void reachability_treet::print_ileave_trace() const
   std::list<std::shared_ptr<execution_statet>>::const_iterator it;
   int i = 0;
 
-  message_handler.status("Context switch trace for interleaving:");
+  log_status("Context switch trace for interleaving:");
   for(it = execution_states.begin(); it != execution_states.end(); it++, i++)
   {
-    message_handler.status("Context switch point {}", i);
+    log_status("Context switch point {}", i);
     (*it)->print_stack_traces(4);
   }
 }
@@ -507,7 +507,7 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   if(ex.DFS_traversed.at(tid) == true)
   {
     if(!quiet)
-      message_handler.status(
+      log_status(
         "Thread unschedulable as it's already been explored");
     return false;
   }
@@ -515,21 +515,21 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   if(ex.threads_state.at(tid).call_stack.empty())
   {
     if(!quiet)
-      message_handler.status("Thread unschedulable due to empty call stack");
+      log_status("Thread unschedulable due to empty call stack");
     return false;
   }
 
   if(ex.threads_state.at(tid).thread_ended)
   {
     if(!quiet)
-      message_handler.status("That thread has ended");
+      log_status("That thread has ended");
     return false;
   }
 
 #if 0
   if (por && !ex.is_thread_mpor_schedulable(tid)) {
     if (!quiet)
-      message_handler.status("Thread unschedulable due to POR");
+      log_status("Thread unschedulable due to POR");
     return false;
   }
 #endif
@@ -537,7 +537,7 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   if(ex.tid_is_set && ex.monitor_tid == tid)
   {
     if(!quiet)
-      message_handler.status("Can't context switch to a monitor thread");
+      log_status("Can't context switch to a monitor thread");
     return false;
   }
 
@@ -698,7 +698,7 @@ void reachability_treet::save_checkpoint(const std::string &&) const
 #if 0
   reachability_treet::dfs_position pos(*this);
   if (pos.write_to_file(fname))
-    message_handler.error("Couldn't save checkpoint; continuing" << "\n");
+    log_error("Couldn't save checkpoint; continuing" << "\n");
 #endif
 
   abort();

@@ -14,7 +14,6 @@ Date: June 2006
 #include <langapi/mode.h>
 #include <util/base_type.h>
 #include <util/irep_serialization.h>
-#include <util/message/message_stream.h>
 #include <util/namespace.h>
 #include <util/symbol_serialization.h>
 
@@ -24,10 +23,9 @@ bool read_bin_goto_object(
   std::istream &in,
   const std::string &filename,
   contextt &context,
-  goto_functionst &functions,
-  const messaget &message_handler)
+  goto_functionst &functions)
 {
-  message_streamt message_stream(message_handler);
+  std::ostringstream str;
 
   {
     char hdr[4];
@@ -42,18 +40,17 @@ bool read_bin_goto_object(
       if(hdr[0] == 0x7f && hdr[1] == 'E' && hdr[2] == 'L' && hdr[3] == 'F')
       {
         if(filename != "")
-          message_stream.str << "Sorry, but I can't read ELF binary `"
+          str << "Sorry, but I can't read ELF binary `"
                              << filename << "'";
         else
-          message_stream.str << "Sorry, but I can't read ELF binaries";
+          str << "Sorry, but I can't read ELF binaries";
       }
       else
-        message_stream.str << "`" << filename << "' is not a goto-binary."
+        str << "`" << filename << "' is not a goto-binary."
                            << "\n";
 
-      message_stream.error();
-
-      return true;
+      log_error(str.str());
+      abort();
     }
   }
 
@@ -67,11 +64,10 @@ bool read_bin_goto_object(
 
     if(version != BINARY_VERSION)
     {
-      message_stream.str
-        << "The input was compiled with a different version of "
-        << "goto-cc, please recompile";
-      message_stream.warning();
-      return true;
+      str << "The input was compiled with a different version of "
+          << "goto-cc, please recompile";
+      log_error(str.str());
+      abort();
     }
   }
 
@@ -91,7 +87,7 @@ bool read_bin_goto_object(
       // the function types.
       auto it = functions.function_map.find(symbol.id);
       if(it == functions.function_map.end())
-        functions.function_map.emplace(symbol.id, message_handler);
+        functions.function_map.emplace(symbol.id, goto_functiont());
       functions.function_map.at(symbol.id).type = to_code_type(symbol.type);
     }
     context.add(symbol);
@@ -107,7 +103,7 @@ bool read_bin_goto_object(
     gfconverter.convert(in, t);
     auto it = functions.function_map.find(fname);
     if(it == functions.function_map.end())
-      functions.function_map.emplace(fname, message_handler);
+      functions.function_map.emplace(fname, goto_functiont());
     goto_functiont &f = functions.function_map.at(fname);
     convert(t, f.body);
     f.body_available = f.body.instructions.size() > 0;

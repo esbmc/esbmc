@@ -4,7 +4,6 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_loops.h>
 #include <util/guard.h>
-#include <util/message/message_stream.h>
 #include <irep2/irep2_expr.h>
 
 void goto_k_induction(
@@ -21,13 +20,11 @@ public:
   goto_k_inductiont(
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
-    goto_functiont &_goto_function,
-    const messaget &_message_handler)
+    goto_functiont &_goto_function)
     : goto_loopst(
         _function_name,
         _goto_functions,
-        _goto_function,
-        _message_handler)
+        _goto_function)
   {
     if(function_loops.size())
       goto_k_induction();

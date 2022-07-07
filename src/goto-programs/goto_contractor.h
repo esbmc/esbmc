@@ -152,24 +152,24 @@ public:
     if(!function_loops.empty())
     {
       vars = new ibex::Variable(CspMap::MAX_VAR);
-      message_handler.status(
+      log_status(
         "1/4 - Parsing asserts to create CSP Constraints.");
       get_constraints(_goto_functions);
       if(constraint == nullptr)
       {
-        message_handler.status(
+        log_status(
           "Constraint expression not supported. Aborting goto-contractor");
         return;
       }
 
-      message_handler.status(
+      log_status(
         "2/4 - Parsing assumes to set values for variables intervals.");
       get_intervals(_goto_functions);
 
-      message_handler.status("3/4 - Applying contractor.");
+      log_status("3/4 - Applying contractor.");
       contractor();
 
-      message_handler.status("4/4 - Inserting assumes.");
+      log_status("4/4 - Inserting assumes.");
       insert_assume(_goto_functions);
     }
   }
