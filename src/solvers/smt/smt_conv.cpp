@@ -102,13 +102,6 @@ smt_convt::smt_convt(
 
   machine_ptr = type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width));
 
-  // Pick a modelling array to shoehorn initialization data into. Because
-  // we don't yet have complete data for whether pointers are dynamic or not,
-  // this is the one modelling array that absolutely _has_ to be initialized
-  // to false for each element, which is going to be shoved into
-  // convert_identifier_pointer.
-  dyn_info_arr_name = "__ESBMC_is_dynamic&0#1";
-
   ptr_foo_inited = false;
 }
 

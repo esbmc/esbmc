@@ -822,10 +822,6 @@ public:
   const messaget &msg;
 
   bool ptr_foo_inited;
-  /** Full name of the '__ESBMC_is_dynamic' modelling array. The memory space
-   *  stuff may make some assertions using it, see the discussion in the
-   *  constructor. */
-  std::string dyn_info_arr_name;
 
   smt_astt null_ptr_ast;
   smt_astt invalid_ptr_ast;
