@@ -47,13 +47,13 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
       // incremental verification succeeded
       return true;
     }
-    this->log_status("Incremental verification returned unknown");
+    log_status("Incremental verification returned unknown");
     // incremental verification returned unknown
     return false;
   }
   catch(runtime_encoded_equationt::dual_unsat_exception &e)
   {
-    this->log_error(
+    log_error(
       "This solver was unable to check this expression. Please try it with "
       "another solver");
   }

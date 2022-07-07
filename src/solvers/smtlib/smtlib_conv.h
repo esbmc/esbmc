@@ -160,7 +160,7 @@ public:
     const smt_sort *s,
     smt_func_kind k,
     const messaget &msg)
-    : smt_ast(ctx, s, msg), kind(k)
+    : smt_ast(ctx, s), kind(k)
   {
   }
   ~smtlib_smt_ast() override = default;

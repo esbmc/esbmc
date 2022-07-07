@@ -49,8 +49,7 @@ public:
     contextt &_new_context,
     const goto_functionst &goto_functions,
     std::shared_ptr<symex_targett> _target,
-    optionst &opts,
-    const messaget &msg);
+    optionst &opts);
   goto_symext(const goto_symext &sym);
   goto_symext &operator=(const goto_symext &sym);
 

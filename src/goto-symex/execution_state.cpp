@@ -34,19 +34,16 @@ execution_statet::execution_statet(
   std::shared_ptr<symex_targett> _target,
   contextt &context,
   std::shared_ptr<ex_state_level2t> l2init,
-  optionst &options,
-  const messaget &message_handler)
+  optionst &options)
   : goto_symext(
       ns,
       context,
       goto_functions,
       std::move(_target),
-      options,
-      message_handler),
+      options),
     owning_rt(art),
     state_level2(std::move(l2init)),
-    global_value_set(ns, message_handler),
-    message_handler(message_handler)
+    global_value_set(ns)
 {
   art1 = owning_rt;
   CS_number = 0;
@@ -72,7 +69,7 @@ execution_statet::execution_statet(
   const goto_programt *goto_program = &(it->second.body);
 
   // Initialize initial thread state
-  goto_symex_statet state(*state_level2, global_value_set, ns, msg);
+  goto_symex_statet state(*state_level2, global_value_set, ns);
   state.initialize(
     (*goto_program).instructions.begin(),
     (*goto_program).instructions.end(),
@@ -124,8 +121,7 @@ execution_statet::execution_statet(const execution_statet &ex)
     owning_rt(ex.owning_rt),
     state_level2(
       std::dynamic_pointer_cast<ex_state_level2t>(ex.state_level2->clone())),
-    global_value_set(ex.global_value_set),
-    message_handler(ex.message_handler)
+    global_value_set(ex.global_value_set)
 {
   *this = ex;
 
@@ -134,7 +130,7 @@ execution_statet::execution_statet(const execution_statet &ex)
   std::vector<goto_symex_statet>::const_iterator it;
   for(it = ex.threads_state.begin(); it != ex.threads_state.end(); it++)
   {
-    goto_symex_statet state(*it, *state_level2, global_value_set, msg);
+    goto_symex_statet state(*it, *state_level2, global_value_set);
     threads_state.push_back(state);
   }
 
@@ -255,8 +251,8 @@ void execution_statet::symex_step(reachability_treet &art)
   if(symex_trace || options.get_bool_option("show-symex-value-sets"))
   {
     std::ostringstream oss;
-    state.source.pc->output_instruction(ns, "", oss, msg, false);
-    msg.result(oss.str());
+    state.source.pc->output_instruction(ns, "", oss, false);
+    log_result(oss.str());
   }
 
   switch(instruction.type)
@@ -503,7 +499,7 @@ void execution_statet::preserve_last_paths()
   // Add the current path to the set of paths to be preserved. Don't do this
   // if the current guard is false, though.
   if(!ls.guard.is_false() || !is_cur_state_guard_false(ls.guard.as_expr()))
-    pp.push_back(std::make_pair(ls.source.pc, goto_statet(ls, msg)));
+    pp.push_back(std::make_pair(ls.source.pc, goto_statet(ls)));
 
   // Now then -- was it a goto? And did we actually branch to it? Detect this
   // by examining how the guard has changed: if there's no change, then the
@@ -635,7 +631,7 @@ void execution_statet::restore_last_paths()
       abort();
     }
     // Create a fresh new goto_statet to be merged in at the target insn
-    cur_state->top().goto_state_map[loc].emplace_back(*cur_state, msg);
+    cur_state->top().goto_state_map[loc].emplace_back(*cur_state);
     // Get ref to it
     auto &new_gs = *cur_state->top().goto_state_map[loc].begin();
 
@@ -729,7 +725,7 @@ void execution_statet::execute_guard()
 
 unsigned int execution_statet::add_thread(const goto_programt *prog)
 {
-  goto_symex_statet new_state(*state_level2, global_value_set, ns, msg);
+  goto_symex_statet new_state(*state_level2, global_value_set, ns);
   new_state.initialize(
     prog->instructions.begin(),
     prog->instructions.end(),
@@ -776,7 +772,7 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
   preserved_paths[thread_nr].push_back(std::make_pair(
-    prog->instructions.begin(), goto_statet(threads_state[thread_nr], msg)));
+    prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
 
   return threads_state.size() - 1; // thread ID, zero based
 }

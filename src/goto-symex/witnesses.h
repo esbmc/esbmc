@@ -140,8 +140,7 @@ void create_node_node(nodet &node, xmlnodet &nodenode);
  */
 bool is_valid_witness_step(
   const namespacet &ns,
-  const goto_trace_stept &step,
-  const messaget &msg);
+  const goto_trace_stept &step);
 
 /**
  * If the current step is an assignment, this function
@@ -150,16 +149,14 @@ bool is_valid_witness_step(
  */
 std::string get_formated_assignment(
   const namespacet &ns,
-  const goto_trace_stept &step,
-  const messaget &msg);
+  const goto_trace_stept &step);
 
 /**
  *
  */
 bool is_valid_witness_expr(
   const namespacet &ns,
-  const irep_container<expr2t> &exp,
-  const messaget &msg);
+  const irep_container<expr2t> &exp);
 
 /**
  *

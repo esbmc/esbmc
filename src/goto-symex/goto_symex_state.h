@@ -55,8 +55,7 @@ public:
   goto_symex_statet(
     renaming::level2t &l2,
     value_sett &vs,
-    const namespacet &_ns,
-    const messaget &msg);
+    const namespacet &_ns);
 
   /**
    *  Copy constructor.
@@ -71,8 +70,7 @@ public:
   goto_symex_statet(
     const goto_symex_statet &state,
     renaming::level2t &l2,
-    value_sett &vs,
-    const messaget &msg);
+    value_sett &vs);
 
   goto_symex_statet(goto_symex_statet const &) = default;
 
@@ -116,8 +114,7 @@ public:
         value_set(s.value_set),
         guard(s.guard),
         thread_id(s.source.thread_nr),
-        local_variables(s.top().local_variables),
-        msg(msg)
+        local_variables(s.top().local_variables)
     {
     }
 
@@ -128,8 +125,7 @@ public:
         value_set(s.value_set),
         guard(s.guard),
         thread_id(s.thread_id),
-        local_variables(s.local_variables),
-        msg(s.msg)
+        local_variables(s.local_variables)
     {
     }
 

@@ -70,8 +70,7 @@ public:
    *  @param _target Symex target to receive assigns/asserts/etc in trace.
    *  @param context Context we'll be working in.
    *  @param l2init Initial level2t state (blank).
-   *  @param options Options we're going to operate with.
-   *  @param message_handler Message object to collect errors/warnings
+   *  @param options Options we're going to operate with.s
    */
   execution_statet(
     const goto_functionst &goto_functions,
@@ -80,8 +79,7 @@ public:
     std::shared_ptr<symex_targett> _target,
     contextt &context,
     std::shared_ptr<ex_state_level2t> l2init,
-    optionst &options,
-    const messaget &message_handler);
+    optionst &options);
 
   /**
    *  Default copy constructor.
@@ -560,8 +558,6 @@ public:
   bool mon_from_tid;
   /** Have we warned of an ended monitor thread already?. */
   bool mon_thread_warning;
-  /** Message handler object */
-  const messaget &message_handler;
   /** Minimum number of threads to exist to consider a context switch.
    *  In certain special cases, such as LTL checking, various pieces of
    *  code and information are bunged into seperate threads which aren't
@@ -629,8 +625,7 @@ public:
     reachability_treet *art,
     std::shared_ptr<symex_targett> _target,
     contextt &context,
-    optionst &options,
-    const messaget &_message_handler)
+    optionst &options)
     : execution_statet(
         goto_functions,
         ns,
@@ -641,8 +636,7 @@ public:
           ? std::shared_ptr<state_hashing_level2t>(
               new state_hashing_level2t(*this))
           : std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
-        options,
-        _message_handler){};
+        options){};
 
   dfs_execution_statet(const dfs_execution_statet &ref) = default;
   std::shared_ptr<execution_statet> clone() const override;
@@ -666,8 +660,7 @@ public:
     contextt &context,
     optionst &options,
     unsigned int *ptotal_claims,
-    unsigned int *premaining_claims,
-    const messaget &_message_handler)
+    unsigned int *premaining_claims)
     : execution_statet(
         goto_functions,
         ns,
@@ -675,8 +668,7 @@ public:
         std::move(_target),
         context,
         std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
-        options,
-        _message_handler)
+        options)
   {
     this->ptotal_claims = ptotal_claims;
     this->premaining_claims = premaining_claims;

@@ -639,13 +639,12 @@ const std::regex
 void reformat_assignment_array(
   const namespacet &ns,
   const goto_trace_stept &step,
-  std::string &assignment,
-  const messaget &msg)
+  std::string &assignment)
 {
   std::regex re{R"(((-?[0-9]+(.[0-9]+)?)))"};
   using reg_itr = std::regex_token_iterator<std::string::iterator>;
   BigInt pos = 0;
-  std::string lhs = from_expr(ns, "", step.lhs, msg);
+  std::string lhs = from_expr(ns, "", step.lhs);
   std::string assignment_array = "";
   for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
       it != end;)
@@ -665,12 +664,11 @@ const std::regex regex_structs(
 void reformat_assignment_structs(
   const namespacet &ns,
   const goto_trace_stept &step,
-  std::string &assignment,
-  const messaget &msg)
+  std::string &assignment)
 {
   std::regex re{R"((((.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?))+)))"};
   using reg_itr = std::regex_token_iterator<std::string::iterator>;
-  std::string lhs = from_expr(ns, "", step.lhs, msg);
+  std::string lhs = from_expr(ns, "", step.lhs);
   std::string assignment_struct = "";
   for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
       it != end;)
@@ -709,24 +707,23 @@ void check_replace_invalid_assignment(std::string &assignment)
 /* */
 std::string get_formated_assignment(
   const namespacet &ns,
-  const goto_trace_stept &step,
-  const messaget &msg)
+  const goto_trace_stept &step)
 {
   std::string assignment = "";
   if(
     !is_nil_expr(step.value) && is_constant_expr(step.value) &&
-    is_valid_witness_step(ns, step, msg))
+    is_valid_witness_step(ns, step))
   {
-    assignment += from_expr(ns, "", step.lhs, msg);
+    assignment += from_expr(ns, "", step.lhs);
     assignment += " = ";
-    assignment += from_expr(ns, "", step.value, msg);
+    assignment += from_expr(ns, "", step.value);
     assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
     if(std::regex_match(assignment, regex_array))
-      reformat_assignment_array(ns, step, assignment, msg);
+      reformat_assignment_array(ns, step, assignment);
     else if(std::regex_match(assignment, regex_structs))
-      reformat_assignment_structs(ns, step, assignment, msg);
+      reformat_assignment_structs(ns, step, assignment);
     check_replace_invalid_assignment(assignment);
   }
   return assignment;
@@ -735,10 +732,9 @@ std::string get_formated_assignment(
 /* */
 bool is_valid_witness_step(
   const namespacet &ns,
-  const goto_trace_stept &step,
-  const messaget &msg)
+  const goto_trace_stept &step)
 {
-  languagest languages(ns, language_idt::C, msg);
+  languagest languages(ns, language_idt::C);
   std::string lhsexpr;
   languages.from_expr(migrate_expr_back(step.lhs), lhsexpr);
   std::string location = step.pc->location.to_string();
@@ -751,10 +747,9 @@ bool is_valid_witness_step(
 /* */
 bool is_valid_witness_expr(
   const namespacet &ns,
-  const irep_container<expr2t> &exp,
-  const messaget &msg)
+  const irep_container<expr2t> &exp)
 {
-  languagest languages(ns, language_idt::C, msg);
+  languagest languages(ns, language_idt::C);
   std::string value;
   languages.from_expr(migrate_expr_back(exp), value);
   return (value.find("__ESBMC") & value.find("stdin") & value.find("stdout") &
