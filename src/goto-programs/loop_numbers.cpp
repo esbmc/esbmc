@@ -8,6 +8,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/loop_numbers.h>
 #include <util/i2string.h>
+#include <util/message.h>
+#include <util/message/format.h>
 #include <util/xml.h>
 #include <util/xml_irep.h>
 

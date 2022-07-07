@@ -7,6 +7,8 @@
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/ieee_float.h>
+#include <util/message.h>
+#include <util/message/format.h>
 #include <util/prefix.h>
 #include <util/std_code.h>
 

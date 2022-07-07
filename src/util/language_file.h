@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <set>
 #include <util/context.h>
-#include <util/message.h>
 
 class language_modulet
 {

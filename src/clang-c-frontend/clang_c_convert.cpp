@@ -21,6 +21,7 @@
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
+#include <util/message.h>
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>

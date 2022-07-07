@@ -7,6 +7,8 @@
 #include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/message.h>
+#include <util/message/format.h>
 #include <util/type_byte_size.h>
 
 // Helpers extracted from z3_convt.

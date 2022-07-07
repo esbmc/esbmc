@@ -18,6 +18,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
+#include <util/message.h>
+#include <util/message/format.h>
 #include <util/prefix.h>
 #include <util/simplify_expr.h>
 #include <util/std_code.h>

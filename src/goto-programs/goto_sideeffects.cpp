@@ -11,6 +11,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
+#include <util/message.h>
+#include <util/message/format.h>
 #include <util/rename.h>
 #include <util/std_expr.h>
 

@@ -7,6 +7,8 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/context.h>
+#include <util/message.h>
+#include <util/message/format.h>
 
 bool contextt::add(const symbolt &symbol)
 {

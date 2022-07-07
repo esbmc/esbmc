@@ -512,7 +512,7 @@ smt_astt boolector_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt boolector_convt::mk_smt_int(const BigInt &theint [[maybe_unused]])
 {
-  ::boolector_convt::log_error("Boolector can't create integer sorts");
+  log_error("Boolector can't create integer sorts");
   abort();
 }
 
@@ -790,19 +790,17 @@ boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 void boolector_convt::dump_smt()
 {
-  boolector_dump_smt2(btor, messaget_state::standard_output);
+  boolector_dump_smt2(btor, messaget_state::out);
 }
 
 void btor_smt_ast::dump() const
 {
-  boolector_dump_smt2_node(
-    boolector_get_btor(a), messaget_state::standard_output, a);
+  boolector_dump_smt2_node(boolector_get_btor(a), messaget_state::out, a);
 }
 
 void boolector_convt::print_model()
 {
-  boolector_print_model(
-    btor, const_cast<char *>("smt2"), messaget_state::standard_output);
+  boolector_print_model(btor, const_cast<char *>("smt2"), messaget_state::out);
 }
 
 smt_sortt boolector_convt::mk_bool_sort()
