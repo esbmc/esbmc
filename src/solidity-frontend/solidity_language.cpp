@@ -22,7 +22,7 @@ Module: Solidity AST module
 
 languaget *new_solidity_language()
 {
-  return new solidity_languaget(msg);
+  return new solidity_languaget;
 }
 
 std::string solidity_languaget::get_temp_file()
@@ -57,14 +57,14 @@ std::string solidity_languaget::get_temp_file()
 }
 
 solidity_languaget::solidity_languaget()
-  : clang_c_languaget(msg)
+  : clang_c_languaget
 {
 }
 
 bool solidity_languaget::parse(const std::string &path)
 {
   // prepare temp file
-  temp_path = get_temp_file(msg);
+  temp_path = get_temp_file;
 
   // get AST nodes of ESBMC intrinsics and the dummy main
   // populate ASTs inherited from parent class
@@ -113,10 +113,10 @@ bool solidity_languaget::typecheck(
   contextt &context,
   const std::string &module)
 {
-  contextt new_context(msg);
+  contextt new_context;
   convert_intrinsics(
     new_context); // Add ESBMC and TACAS intrinsic symbols to the context
-  msg.progress("Done conversion of intrinsics...");
+  log_progress("Done conversion of intrinsics...");
 
   solidity_convertert converter(
     new_context, ast_json, func_name, smart_contract);
@@ -130,7 +130,6 @@ bool solidity_languaget::typecheck(
   if(c_link(
        context,
        new_context,
-       msg,
        module)) // also populates language_uit::context
     return true;
 

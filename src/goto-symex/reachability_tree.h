@@ -69,7 +69,6 @@ public:
    *  @param ns Namespace to operate in
    *  @param target Target to listen in on assigns/asserts/assumes. Is cloned.
    *  @param context Context to operate in.
-   *  @param message_handler Message object for symex errors/warnings/info
    */
   reachability_treet(
     goto_functionst &goto_functions,

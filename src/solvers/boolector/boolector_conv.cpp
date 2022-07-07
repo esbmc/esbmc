@@ -6,7 +6,7 @@
 
 void error_handler(const char *msg)
 {
-  log_error("Boolector error encountered\n{}");
+  log_error("Boolector error encountered\n{}", msg);
   abort();
 }
 
@@ -793,24 +793,21 @@ boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 void boolector_convt::dump_smt()
 {
-  auto f = msg.get_temp_file();
-  boolector_dump_smt2(btor, f.file());
-  msg.insert_file_contents(VerbosityLevel::Debug, f.file());
+  boolector_dump_smt2(btor, messaget_state::standard_output);
+
 }
 
 void btor_smt_ast::dump() const
 {
 
-  auto f = msg.get_temp_file();
-  boolector_dump_smt2_node(boolector_get_btor(a), f.file(), a);
-  msg.insert_file_contents(VerbosityLevel::Debug, f.file());
+  boolector_dump_smt2_node(boolector_get_btor(a), messaget_state::standard_output, a);
+
 }
 
 void boolector_convt::print_model()
 {
-  auto f = msg.get_temp_file();
-  boolector_print_model(btor, const_cast<char *>("smt2"), f.file());
-  msg.insert_file_contents(VerbosityLevel::Status, f.file());
+  boolector_print_model(btor, const_cast<char *>("smt2"), messaget_state::standard_output);
+
 }
 
 smt_sortt boolector_convt::mk_bool_sort()

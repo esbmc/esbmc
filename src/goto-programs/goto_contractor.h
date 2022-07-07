@@ -15,7 +15,6 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loopst.h>
-#include <util/message/message_stream.h>
 #include <util/std_types.h>
 #include <ibex.h>
 #include <ibex/ibex_Interval.h>
@@ -139,7 +138,6 @@ public:
    * Third, applying the contractor.
    * Fourth, inserting assumes in the program to reflect the contracted intervals.
    * @param _goto_functions
-   * @param _message_handler
    */
   goto_contractort(
     goto_functionst &_goto_functions)

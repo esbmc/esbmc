@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 bool cpp_final(contextt &context)
 {
-  add_cprover_library(context, message_handler);
+  add_cprover_library(context);
 
   return false;
 }

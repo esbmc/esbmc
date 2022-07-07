@@ -43,7 +43,7 @@ public:
 
   languaget *new_language() const override
   {
-    return new solidity_languaget(msg);
+    return new solidity_languaget();
   }
 
   // constructor, destructor
