@@ -21,10 +21,9 @@ void ansi_c_typecheckt::typecheck()
 bool ansi_c_typecheck(
   ansi_c_parse_treet &ansi_c_parse_tree,
   contextt &context,
-  const std::string &module,
-  const messaget &message_handler)
+  const std::string &module)
 {
   ansi_c_typecheckt ansi_c_typecheck(
-    ansi_c_parse_tree, context, module, message_handler);
+    ansi_c_parse_tree, context, module);
   return ansi_c_typecheck.typecheck_main();
 }

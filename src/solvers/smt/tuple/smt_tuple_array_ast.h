@@ -13,9 +13,8 @@ public:
   array_sym_smt_ast(
     smt_convt *ctx,
     smt_sortt s,
-    const std::string &_name,
-    const messaget &msg)
-    : tuple_sym_smt_ast(ctx, s, _name, msg)
+    const std::string &_name)
+    : tuple_sym_smt_ast(ctx, s, _name)
   {
   }
   virtual ~array_sym_smt_ast() = default;

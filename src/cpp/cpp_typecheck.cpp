@@ -78,8 +78,7 @@ void cpp_typecheckt::typecheck()
 bool cpp_typecheck(
   cpp_parse_treet &cpp_parse_tree,
   contextt &context,
-  const std::string &module,
-  const messaget &message_handler)
+  const std::string &module)
 {
   cpp_typecheckt cpp_typecheck(
     cpp_parse_tree, context, module, message_handler);

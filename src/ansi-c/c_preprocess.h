@@ -16,7 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 bool c_preprocess(
   const std::string &path,
   std::ostream &outstream,
-  bool is_cpp,
-  const messaget &message_handler);
+  bool is_cpp);
 
 #endif

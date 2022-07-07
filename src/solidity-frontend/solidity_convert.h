@@ -18,8 +18,7 @@ public:
     contextt &_context,
     nlohmann::json &_ast_json,
     const std::string &_sol_func,
-    const std::string &_contract_path,
-    const messaget &msg);
+    const std::string &_contract_path);
   virtual ~solidity_convertert() = default;
 
   bool convert();

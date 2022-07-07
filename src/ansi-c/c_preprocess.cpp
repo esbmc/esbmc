@@ -186,20 +186,17 @@ void setup_cpp_defs(const char **defs)
 bool c_preprocess(
   const std::string &path,
   std::ostream &outstream,
-  bool is_cpp,
-  const messaget &message_handler)
+  bool is_cpp)
 {
   char out_file_buf[32], stderr_file_buf[32];
   pid_t pid;
   int fd, status;
 
-  message_streamt message_stream(message_handler);
-
   sprintf(out_file_buf, "/tmp/ESBMC_XXXXXX");
   fd = mkstemp(out_file_buf);
   if(fd < 0)
   {
-    message_stream.error("Couldn't open preprocessing output file");
+    log_error("Couldn't open preprocessing output file");
     return true;
   }
   close(fd);
@@ -208,7 +205,7 @@ bool c_preprocess(
   fd = mkstemp(stderr_file_buf);
   if(fd < 0)
   {
-    message_stream.error("Couldn't open preprocessing stderr file");
+    log_error("Couldn't open preprocessing stderr file");
     return true;
   }
 
@@ -224,7 +221,7 @@ bool c_preprocess(
       ;
     if((foo) < 0)
     {
-      message_stream.error("Failed to wait for preprocessing process");
+      log_error("Failed to wait for preprocessing process");
       return true;
     }
 
@@ -239,7 +236,7 @@ bool c_preprocess(
     unlink(out_file_buf);
     if(!WIFEXITED(status) || WEXITSTATUS(status) != 0)
     {
-      message_stream.error("Preprocessing failed");
+      log_error("Preprocessing failed");
       return true;
     }
 
@@ -284,7 +281,7 @@ bool c_preprocess(
   ret = configure_and_run_cpp(out_file_buf, path, cpp_windows_defs, is_cpp);
   if(ret != 0)
   {
-    message_stream.error("Preprocessor returned an error");
+    log_error("Preprocessor returned an error");
     return true;
   }
 

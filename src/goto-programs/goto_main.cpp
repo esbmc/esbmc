@@ -22,8 +22,7 @@ void goto_convert(
   const codet &code,
   contextt &context,
   optionst &options,
-  goto_programt &dest,
-  const messaget &message_handler)
+  goto_programt &dest)
 {
   goto_convertt goto_convert(context, options);
   goto_convert.goto_convert(code, dest);
@@ -32,8 +31,7 @@ void goto_convert(
 void goto_convert(
   contextt &context,
   optionst &options,
-  goto_programt &dest,
-  const messaget &message_handler)
+  goto_programt &dest)
 {
   // find main symbol
   const symbolt *s = context.find_symbol("__ESBMC_main");
@@ -42,5 +40,5 @@ void goto_convert(
 
   log_status(
     "goto_convert : start converting symbol table to goto functions ");
-  ::goto_convert(to_code(s->value), context, options, dest, message_handler);
+  ::goto_convert(to_code(s->value), context, options, dest);
 }

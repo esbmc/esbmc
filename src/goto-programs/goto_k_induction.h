@@ -7,12 +7,10 @@
 #include <irep2/irep2_expr.h>
 
 void goto_k_induction(
-  goto_functionst &goto_functions,
-  const messaget &message_handler);
+  goto_functionst &goto_functions);
 
 void goto_termination(
-  goto_functionst &goto_functions,
-  const messaget &message_handler);
+  goto_functionst &goto_functions);
 
 class goto_k_inductiont : public goto_loopst
 {

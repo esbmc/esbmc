@@ -50,7 +50,7 @@ smt_tuple_sym_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
     name2 += ".";
 
   assert(s->id != SMT_SORT_ARRAY);
-  return new tuple_sym_smt_ast(ctx, s, name2, msg);
+  return new tuple_sym_smt_ast(ctx, s, name2);
 }
 
 smt_astt smt_tuple_sym_flattener::mk_tuple_array_symbol(const expr2tc &expr)
@@ -59,7 +59,7 @@ smt_astt smt_tuple_sym_flattener::mk_tuple_array_symbol(const expr2tc &expr)
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + "[]";
   smt_sortt sort = ctx->convert_sort(sym.type);
-  return new array_sym_smt_ast(ctx, sort, name, msg);
+  return new array_sym_smt_ast(ctx, sort, name);
 }
 
 smt_astt smt_tuple_sym_flattener::tuple_array_create(

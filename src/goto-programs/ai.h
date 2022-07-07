@@ -83,8 +83,7 @@ public:
 
   virtual void output(
     const goto_functionst &goto_functions,
-    std::ostream &out,
-    const messaget &msg) const;
+    std::ostream &out) const;
 
 protected:
   // overload to add a factory

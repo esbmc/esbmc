@@ -12,8 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void c_finalize_expression(
   const contextt &context,
-  exprt &expr,
-  const messaget &message_handler)
+  exprt &expr)
 {
   if(expr.id() == "symbol")
   {
@@ -25,7 +24,7 @@ void c_finalize_expression(
       {
         message_streamt message_stream(message_handler);
         message_stream.str << "failed to find symbol " << expr.identifier();
-        message_stream.error();
+        log_error();
         throw 0;
       }
 
@@ -39,7 +38,7 @@ void c_finalize_expression(
         message_stream.err_location(symbol.location);
         message_stream.str << "symbol `" << symbol.name
                            << "' has incomplete type";
-        message_stream.error();
+        log_error();
         throw 0;
       }
       else
@@ -48,7 +47,7 @@ void c_finalize_expression(
         message_stream.err_location(symbol.location);
         message_stream.str << "symbol `" << symbol.name
                            << "' has unexpected type";
-        message_stream.error();
+        log_error();
         throw 0;
       }
     }

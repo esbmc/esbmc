@@ -41,10 +41,9 @@ smt_convt *create_new_mathsat_solver(
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
   array_iface **array_api,
-  fp_convt **fp_api,
-  const messaget &msg)
+  fp_convt **fp_api)
 {
-  mathsat_convt *conv = new mathsat_convt(ns, options, msg);
+  mathsat_convt *conv = new mathsat_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
@@ -52,11 +51,10 @@ smt_convt *create_new_mathsat_solver(
 
 mathsat_convt::mathsat_convt(
   const namespacet &ns,
-  const optionst &options,
-  const messaget &msg)
-  : smt_convt(ns, options, msg),
+  const optionst &options)
+  : smt_convt(ns, options),
     array_iface(false, false),
-    fp_convt(this, msg),
+    fp_convt(this),
     use_fp_api(false)
 {
   cfg = msat_parse_config(mathsat_config);
@@ -894,9 +892,8 @@ mathsat_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 mathsat_smt_ast::mathsat_smt_ast(
   smt_convt *ctx,
   msat_term _t,
-  const smt_sort *_s,
-  const messaget &msg)
-  : solver_smt_ast<msat_term>(ctx, _t, _s, msg)
+  const smt_sort *_s)
+  : solver_smt_ast<msat_term>(ctx, _t, _s)
 {
   auto convt = dynamic_cast<const mathsat_convt *>(context);
   assert(convt != nullptr);

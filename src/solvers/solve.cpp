@@ -75,8 +75,7 @@ static std::string pick_default_solver()
 
 static solver_creator &pick_solver(
   std::string &solver_name,
-  const optionst &options,
-  const messaget &msg)
+  const optionst &options)
 {
   if(solver_name == "")
   {
@@ -113,15 +112,14 @@ static solver_creator &pick_solver(
 smt_convt *create_solver(
   std::string solver_name,
   const namespacet &ns,
-  const optionst &options,
-  const messaget &msg)
+  const optionst &options)
 {
   tuple_iface *tuple_api = nullptr;
   array_iface *array_api = nullptr;
   fp_convt *fp_api = nullptr;
 
-  solver_creator &factory = pick_solver(solver_name, options, msg);
-  smt_convt *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api, msg);
+  solver_creator &factory = pick_solver(solver_name, options);
+  smt_convt *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");
@@ -134,13 +132,13 @@ smt_convt *create_solver(
     ctx->set_tuple_iface(tuple_api);
   // Use the node flattener if specified
   else if(node_flat)
-    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns, msg));
+    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
   // Use the symbol flattener if specified
   else if(sym_flat)
-    ctx->set_tuple_iface(new smt_tuple_sym_flattener(ctx, ns, msg));
+    ctx->set_tuple_iface(new smt_tuple_sym_flattener(ctx, ns));
   // Default: node flattener
   else
-    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns, msg));
+    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
 
   // Pick an array flattener to use. Again, pick the solver native one by
   // default, or the one specified, or if none of the above then use the built

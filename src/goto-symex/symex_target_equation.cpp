@@ -394,8 +394,7 @@ unsigned int symex_target_equationt::clear_assertions()
 
 runtime_encoded_equationt::runtime_encoded_equationt(
   const namespacet &_ns,
-  smt_convt &_conv,
-  const messaget &msg)
+  smt_convt &_conv)
   : symex_target_equationt(_ns), conv(_conv)
 {
   assert_vec_list.emplace_back();

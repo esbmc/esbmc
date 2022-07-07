@@ -12,8 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-programs/goto_functions.h>
 
 void show_loop_numbers(
-  const goto_functionst &goto_functions,
-  const messaget &msg);
+  const goto_functionst &goto_functions);
 
 void show_loop_numbers(const goto_programt &goto_program);
 

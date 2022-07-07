@@ -23,11 +23,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 bool cpp_languaget::preprocess(
   const std::string &path,
-  std::ostream &outstream,
-  const messaget &message_handler)
+  std::ostream &outstream)
 {
   if(path == "")
-    return c_preprocess("", outstream, true, message_handler);
+    return c_preprocess("", outstream, true);
 
   // check extension
 
@@ -44,7 +43,7 @@ bool cpp_languaget::preprocess(
     return false;
   }
 
-  return c_preprocess(path, outstream, true, message_handler);
+  return c_preprocess(path, outstream, true);
 }
 
 cpp_languaget::cpp_languaget() : languaget(msg)
@@ -131,8 +130,7 @@ void cpp_languaget::internal_additions(std::ostream &out)
 }
 
 bool cpp_languaget::parse(
-  const std::string &path,
-  const messaget &message_handler)
+  const std::string &path)
 {
   // store the path
 
@@ -144,7 +142,7 @@ bool cpp_languaget::parse(
 
   internal_additions(o_preprocessed);
 
-  if(preprocess(path, o_preprocessed, message_handler))
+  if(preprocess(path, o_preprocessed))
     return true;
 
   std::istringstream i_preprocessed(o_preprocessed.str());
@@ -176,22 +174,21 @@ bool cpp_languaget::parse(
 
 bool cpp_languaget::typecheck(
   contextt &context,
-  const std::string &module,
-  const messaget &message_handler)
+  const std::string &module)
 {
   contextt new_context(message_handler);
 
-  if(cpp_typecheck(cpp_parse_tree, new_context, module, message_handler))
+  if(cpp_typecheck(cpp_parse_tree, new_context, module))
     return true;
 
-  return c_link(context, new_context, message_handler, module);
+  return c_link(context, new_context, module);
 }
 
 bool cpp_languaget::final(contextt &context)
 {
-  if(cpp_final(context, message_handler))
+  if(cpp_final(context))
     return true;
-  if(c_main(context, "main", message_handler))
+  if(c_main(context, "main"))
     return true;
 
   return false;

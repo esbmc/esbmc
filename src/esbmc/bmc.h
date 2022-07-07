@@ -25,8 +25,7 @@ public:
   bmct(
     goto_functionst &funcs,
     optionst &opts,
-    contextt &_context,
-    const messaget &_message_handler);
+    contextt &_context);
 
   optionst &options;
 

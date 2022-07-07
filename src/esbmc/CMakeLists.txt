@@ -36,7 +36,7 @@ target_include_directories(esbmc
 )
 
 target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS} clangcfrontend
-  clangcppfrontend symex pointeranalysis langapi util_esbmc bigint
-  solvers clibs default_message gotoalgorithms ${Boost_LIBRARIES})
+  clangcppfrontend filesystem symex pointeranalysis langapi util_esbmc bigint
+  solvers clibs gotoalgorithms ${Boost_LIBRARIES})
 
 install(TARGETS esbmc DESTINATION bin)

@@ -221,7 +221,6 @@ public:
 
 private:
   smt_convt *ctx;
-  const messaget &_msg;
 
   void unpack(
     smt_astt &src,

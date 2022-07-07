@@ -39,8 +39,6 @@ typedef dstring_hash irep_id_hash;
   for(irept::named_subt::iterator it = (irep).begin(); it != (irep).end(); it++)
 
 class typet;
-class
-  messaget; // This forward decl is needed because locationt (which is an irep) is used inside messaget
 
 class irept
 {

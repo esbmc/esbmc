@@ -16,8 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 bool c_main(
   contextt &context,
-  const std::string &standard_main,
-  const messaget &message_handler);
+  const std::string &standard_main);
 
 void static_lifetime_init(const contextt &context, codet &dest);
 

@@ -3,9 +3,8 @@
 
 pattern_checker::pattern_checker(
   const nlohmann::json &_ast_nodes,
-  const std::string &_target_func,
-  const messaget &msg)
-  : ast_nodes(_ast_nodes), target_func(_target_func), msg(msg)
+  const std::string &_target_func)
+  : ast_nodes(_ast_nodes), target_func(_target_func)
 {
 }
 

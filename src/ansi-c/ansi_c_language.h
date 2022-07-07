@@ -17,22 +17,19 @@ class ansi_c_languaget : public languaget
 public:
   virtual bool preprocess(
     const std::string &path,
-    std::ostream &outstream,
-    const messaget &message_handler);
+    std::ostream &outstream);
 
   bool parse(const std::string &path) override;
 
   bool typecheck(
     contextt &context,
-    const std::string &module,
-    const messaget &message_handler) override;
+    const std::string &module) override;
 
   bool final(contextt &context) override;
 
   virtual bool merge_context(
     contextt &dest,
     contextt &src,
-    const messaget &message_handler,
     const std::string &module) const;
 
   void show_parse(std::ostream &out) override;

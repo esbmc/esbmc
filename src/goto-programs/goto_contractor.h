@@ -25,8 +25,7 @@
 #include <util/type_byte_size.h>
 
 void goto_contractor(
-  goto_functionst &goto_functions,
-  const messaget &message_handler);
+  goto_functionst &goto_functions);
 
 class vart
 {
@@ -143,11 +142,9 @@ public:
    * @param _message_handler
    */
   goto_contractort(
-    goto_functionst &_goto_functions,
-    const messaget &_message_handler)
+    goto_functionst &_goto_functions)
     : goto_functions_algorithm(_goto_functions, true)
   {
-    message_handler = _message_handler;
     initialize_main_function_loops();
     if(!function_loops.empty())
     {
@@ -188,7 +185,6 @@ private:
   typedef std::list<loopst> function_loopst;
   function_loopst function_loops;
 
-  messaget message_handler;
 
   /// \Function get_constraint is a function that will go through each asert
   /// in the program and parse it from ESBMC expression to an IBEX expression

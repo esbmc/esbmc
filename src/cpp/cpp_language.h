@@ -17,20 +17,17 @@ class cpp_languaget : public languaget
 public:
   virtual bool preprocess(
     const std::string &path,
-    std::ostream &outstream,
-    const messaget &message_handler);
+    std::ostream &outstream);
 
   bool parse(const std::string &path) override;
 
   bool typecheck(
     contextt &context,
-    const std::string &module,
-    const messaget &message_handler) override;
+    const std::string &module) override;
 
   bool merge_context(
     contextt &dest,
     contextt &src,
-    const messaget &message_handler,
     const std::string &module,
     class replace_symbolt &replace_symbol) const;
 

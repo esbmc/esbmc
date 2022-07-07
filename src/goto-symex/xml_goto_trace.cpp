@@ -18,8 +18,7 @@ Author: Daniel Kroening
 void convert(
   const namespacet &ns,
   const goto_tracet &goto_trace,
-  xmlt &xml,
-  const messaget &msg)
+  xmlt &xml)
 {
   xml = xmlt("goto_trace");
 

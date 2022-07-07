@@ -454,8 +454,7 @@ void goto_inline(
 void goto_inline(
   goto_functionst &goto_functions,
   optionst &options,
-  const namespacet &ns,
-  const messaget &message_handler)
+  const namespacet &ns)
 {
   goto_inlinet goto_inline(goto_functions, options, ns);
 
@@ -482,7 +481,6 @@ void goto_partial_inline(
   goto_functionst &goto_functions,
   optionst &options,
   const namespacet &ns,
-  const messaget &message_handler,
   unsigned _smallfunc_limit)
 {
   goto_inlinet goto_inline(goto_functions, options, ns);

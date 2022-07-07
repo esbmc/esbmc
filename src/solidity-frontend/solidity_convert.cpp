@@ -16,14 +16,12 @@ solidity_convertert::solidity_convertert(
   contextt &_context,
   nlohmann::json &_ast_json,
   const std::string &_sol_func,
-  const std::string &_contract_path,
-  const messaget &msg)
+  const std::string &_contract_path)
   : context(_context),
     ns(context),
     ast_json(_ast_json),
     sol_func(_sol_func),
     contract_path(_contract_path),
-    msg(msg),
     global_scope_id(0),
     current_scope_var_num(1),
     current_functionDecl(nullptr),

@@ -18,8 +18,7 @@ Date: June 2003
 void goto_convert(
   contextt &context,
   optionst &options,
-  goto_functionst &functions,
-  const messaget &message_handler);
+  goto_functionst &functions);
 
 class goto_convert_functionst : public goto_convertt
 {

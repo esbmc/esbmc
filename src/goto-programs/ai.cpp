@@ -20,8 +20,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void ai_baset::output(
   const goto_functionst &goto_functions,
-  std::ostream &out,
-  const messaget &msg) const
+  std::ostream &out) const
 {
   forall_goto_functions(f_it, goto_functions)
   {

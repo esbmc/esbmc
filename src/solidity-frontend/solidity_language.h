@@ -25,8 +25,7 @@ public:
 
   bool typecheck(
     contextt &context,
-    const std::string &module,
-    const messaget &msg) override;
+    const std::string &module) override;
 
   std::string id() const override
   {
