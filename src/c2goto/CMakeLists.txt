@@ -15,7 +15,7 @@ target_include_directories(c2goto
     )
 target_link_libraries(c2goto 
   clangcfrontend gotoprograms langapi util_esbmc irep2 c2gotoheaders
-  default_message ${Boost_LIBRARIES})
+  filesystem ${Boost_LIBRARIES})
 set_target_properties(c2goto PROPERTIES
   PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libc.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libm.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/headers/libc_hdr.h")
 

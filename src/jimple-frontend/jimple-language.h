@@ -15,7 +15,7 @@ Author: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
 class jimple_languaget : public languaget
 {
 public:
-  jimple_languaget() : languaget(msg)
+  jimple_languaget()
   {
   }
   bool parse(const std::string &path) override;
@@ -25,8 +25,7 @@ public:
   // AST -> GOTO
   bool typecheck(
     contextt &context,
-    const std::string &module,
-    const messaget &msg) override;
+    const std::string &module) override;
 
   std::string id() const override
   {
@@ -49,7 +48,7 @@ public:
 
   virtual languaget *new_language() const override
   {
-    return new jimple_languaget(msg);
+    return new jimple_languaget();
   }
 
   jimple_file root;

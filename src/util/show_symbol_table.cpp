@@ -19,8 +19,7 @@ void show_symbol_table_xml_ui()
 
 void show_symbol_table_plain(
   const namespacet &ns,
-  std::ostream &out,
-  const messaget &msg)
+  std::ostream &out)
 {
   out << "\n"
       << "Symbols:"
@@ -29,7 +28,7 @@ void show_symbol_table_plain(
   out << "\n";
 
   ns.get_context().foreach_operand_in_order(
-    [&out, &ns, &msg](const symbolt &s) {
+    [&out, &ns](const symbolt &s) {
       int mode;
 
       if(s.mode == "")
