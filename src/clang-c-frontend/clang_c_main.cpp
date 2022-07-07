@@ -70,19 +70,17 @@ bool clang_main(contextt &context)
 
   if(matches.empty())
   {
-    messaget message(message_handler);
-    message.error("main symbol `" + main + "' not found");
+    log_error("main symbol `" + main + "' not found");
     return true; // give up
   }
 
   if(matches.size() >= 2)
   {
-    messaget message(message_handler);
     if(matches.size() == 2)
-      message.error("warning: main symbol `" + main + "' is ambiguous");
+      log_error("warning: main symbol `" + main + "' is ambiguous");
     else
     {
-      message.error("main symbol `" + main + "' is ambiguous");
+      log_error("main symbol `" + main + "' is ambiguous");
       return true;
     }
   }

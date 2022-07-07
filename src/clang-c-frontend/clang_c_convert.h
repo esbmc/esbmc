@@ -46,7 +46,6 @@ public:
   clang_c_convertert(
     contextt &_context,
     std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
-    const messaget &msg,
     irep_idt _mode);
   virtual ~clang_c_convertert() = default;
 
@@ -206,7 +205,6 @@ protected:
 
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
 
-  void gen_typecast_to_union(exprt &dest, const typet &type);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

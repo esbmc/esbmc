@@ -9,7 +9,7 @@
 class clang_c_adjust
 {
 public:
-  clang_c_adjust(contextt &_context);
+  explicit clang_c_adjust(contextt &_context);
   virtual ~clang_c_adjust() = default;
 
   bool adjust();

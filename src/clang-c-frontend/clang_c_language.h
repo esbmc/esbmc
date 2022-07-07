@@ -25,8 +25,7 @@ class clang_c_languaget : public languaget
 public:
   virtual bool preprocess(
     const std::string &path,
-    std::ostream &outstream,
-    const messaget &msg);
+    std::ostream &outstream);
 
   bool parse(const std::string &path) override;
 
@@ -34,8 +33,7 @@ public:
 
   bool typecheck(
     contextt &context,
-    const std::string &module,
-    const messaget &msg) override;
+    const std::string &module) override;
 
   std::string id() const override
   {
@@ -54,7 +52,7 @@ public:
 
   languaget *new_language() const override
   {
-    return new clang_c_languaget(msg);
+    return new clang_c_languaget();
   }
 
   // constructor, destructor
