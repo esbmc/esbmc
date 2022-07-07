@@ -14,7 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <vector>
 #include <map>
 #include <boost/program_options.hpp>
-#include <util/message.h>
 
 /* WORKAROUND: On *BSD macOS the include of some system headers
  * makes the definition of isset as a macro, which conflicts with

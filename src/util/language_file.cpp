@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <util/language.h>
 #include <util/language_file.h>
+#include <util/message.h>
 #include <util/std_types.h>
 
 language_filet::~language_filet()

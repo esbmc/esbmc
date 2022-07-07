@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <langapi/mode.h>
 #include <memory>
 #include <util/i2string.h>
+#include <util/message.h>
 #include <util/show_symbol_table.h>
 
 language_uit::language_uit(const cmdlinet &__cmdline) : _cmdline(__cmdline)

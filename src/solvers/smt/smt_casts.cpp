@@ -2,6 +2,8 @@
 #include <sstream>
 #include <util/base_type.h>
 #include <util/expr_util.h>
+#include <util/message.h>
+#include <util/message/format.h>
 
 smt_astt smt_convt::convert_typecast_to_bool(const typecast2t &cast)
 {

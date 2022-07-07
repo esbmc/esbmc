@@ -6,6 +6,8 @@
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
+#include <util/message.h>
+#include <util/message/format.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
 

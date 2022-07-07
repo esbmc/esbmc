@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <regex>
 
 #include <util/config.h>
+#include <util/message.h>
 
 configt config;
 

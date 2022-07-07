@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdlib>
 #include <util/i2string.h>
 #include <util/irep.h>
+#include <util/message.h>
 
 irept nil_rep_storage;
 

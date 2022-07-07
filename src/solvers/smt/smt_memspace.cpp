@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <sstream>
 #include <solvers/smt/smt_conv.h>
+#include <util/message/format.h>
 #include <util/type_byte_size.h>
 
 /** @file smt_memspace.cpp

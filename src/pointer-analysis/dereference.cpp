@@ -22,6 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
+#include <util/message/format.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/pretty.h>

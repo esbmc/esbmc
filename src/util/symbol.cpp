@@ -7,6 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/location.h>
+#include <util/message.h>
 #include <util/symbol.h>
 
 symbolt::symbolt()

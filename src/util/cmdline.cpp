@@ -8,9 +8,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <cstdlib>
+#include <sstream>
 
 #include <util/cmdline.h>
-#include <sstream>
+#include <util/message.h>
 
 /* Parses 's' according to a simple interpretation of shell rules, taking only
  * whitespace and the characters ', " and \ into account. */

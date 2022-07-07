@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <sstream>
 #include <clang-c-frontend/clang_c_convert.h>
+#include <util/message.h>
 
 void gen_typecast(const namespacet &ns, exprt &dest, const typet &type)
 {

@@ -1,6 +1,7 @@
 #include <util/c_types.h>
 #include <util/config.h>
 #include <irep2/irep2_utils.h>
+#include <util/message/format.h>
 #include <util/migrate.h>
 #include <util/namespace.h>
 #include <util/prefix.h>
