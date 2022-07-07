@@ -550,8 +550,7 @@ void smt_convt::init_addr_space_array()
   null_ptr_ast = convert_ast(null_ptr_tuple);
   invalid_ptr_ast = convert_ast(invalid_ptr_tuple);
 
-  // Give value to '0', 'NULL', 'INVALID' symbols
-  assert_expr(equality2tc(symbol2tc(pointer_struct, "0"), null_ptr_tuple));
+  // Give value to 'NULL', 'INVALID' symbols
   assert_expr(equality2tc(symbol2tc(pointer_struct, "NULL"), null_ptr_tuple));
   assert_expr(
     equality2tc(symbol2tc(pointer_struct, "INVALID"), invalid_ptr_tuple));
