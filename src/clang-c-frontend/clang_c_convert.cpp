@@ -7,6 +7,7 @@
 #include <clang/AST/ParentMapContext.h>
 #include <clang/AST/QualTypeNames.h>
 #include <clang/AST/Type.h>
+#include <clang/Basic/Version.inc>
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <llvm/Support/raw_os_ostream.h>
@@ -1042,10 +1043,16 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     break;
   }
 
-  case clang::Type::ExtInt:
+#if CLANG_VERSION_MAJOR < 14
+#define BITINT_TAG clang::Type::ExtInt
+#define BITINT_TYPE clang::ExtIntType
+#else
+#define BITINT_TAG clang::Type::BitInt
+#define BITINT_TYPE clang::BitIntType
+#endif
+  case BITINT_TAG:
   {
-    const clang::ExtIntType &eit =
-      static_cast<const clang::ExtIntType &>(the_type);
+    const BITINT_TYPE &eit = static_cast<const BITINT_TYPE &>(the_type);
 
     const unsigned n = eit.getNumBits();
     if(eit.isSigned())
@@ -1059,6 +1066,8 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     new_type.set("#extint", true);
     break;
   }
+#undef BITINT_TAG
+#undef BITINT_TYPE
 
   default:
     std::ostringstream oss;
