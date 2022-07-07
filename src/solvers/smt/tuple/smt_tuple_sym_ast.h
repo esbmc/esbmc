@@ -18,9 +18,8 @@ public:
   tuple_sym_smt_ast(
     smt_convt *ctx,
     smt_sortt s,
-    std::string _name,
-    const messaget &msg)
-    : smt_ast(ctx, s, msg), name(std::move(_name))
+    std::string _name)
+    : smt_ast(ctx, s), name(std::move(_name))
   {
   }
   ~tuple_sym_smt_ast() override = default;

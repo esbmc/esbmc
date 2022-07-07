@@ -105,7 +105,7 @@ smt_convt *create_new_smtlib_solver(
   fp_convt **fp_api,
   const messaget &msg)
 {
-  smtlib_convt *conv = new smtlib_convt(ns, options, msg);
+  smtlib_convt *conv = new smtlib_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
@@ -113,11 +113,10 @@ smt_convt *create_new_smtlib_solver(
 
 smtlib_convt::smtlib_convt(
   const namespacet &_ns,
-  const optionst &_options,
-  const messaget &msg)
-  : smt_convt(_ns, _options, msg),
+  const optionst &_options)
+  : smt_convt(_ns, _options),
     array_iface(false, false),
-    fp_convt(this, msg)
+    fp_convt(this)
 
 {
   temp_sym_count.push_back(1);
@@ -790,7 +789,7 @@ void smtlib_convt::assert_ast(smt_astt a)
 smt_astt smtlib_convt::mk_smt_int(const BigInt &theint)
 {
   smt_sortt s = mk_int_sort();
-  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_INT, msg);
+  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_INT);
   a->intval = theint;
   return a;
 }
@@ -798,14 +797,14 @@ smt_astt smtlib_convt::mk_smt_int(const BigInt &theint)
 smt_astt smtlib_convt::mk_smt_real(const std::string &str)
 {
   smt_sortt s = mk_real_sort();
-  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_REAL, msg);
+  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_REAL);
   a->realval = str;
   return a;
 }
 
 smt_astt smtlib_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
-  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_BVINT, msg);
+  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_BVINT);
   a->intval = theint;
   return a;
 }
@@ -813,7 +812,7 @@ smt_astt smtlib_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 smt_astt smtlib_convt::mk_smt_bool(bool val)
 {
   smtlib_smt_ast *a =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BOOL, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BOOL);
   a->boolval = val;
   return a;
 }
@@ -828,7 +827,7 @@ smt_astt smtlib_convt::mk_array_symbol(
 
 smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
-  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_SYMBOL, msg);
+  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_SYMBOL);
   a->symname = name;
 
   symbol_tablet::iterator it = symbol_table.find(name);
@@ -863,7 +862,7 @@ smt_astt
 smtlib_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   smt_sortt s = mk_bv_sort(high - low + 1);
-  smtlib_smt_ast *n = new smtlib_smt_ast(this, s, SMT_FUNC_EXTRACT, msg);
+  smtlib_smt_ast *n = new smtlib_smt_ast(this, s, SMT_FUNC_EXTRACT);
   n->extract_high = high;
   n->extract_low = low;
   n->args.push_back(a);
@@ -899,7 +898,7 @@ smt_astt smtlib_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 
 smt_astt smtlib_convt::mk_concat(smt_astt a, smt_astt b)
 {
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_CONCAT, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_CONCAT);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -910,7 +909,7 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
   assert(cond->sort->id == SMT_SORT_BOOL);
   assert(t->sort->get_data_width() == f->sort->get_data_width());
 
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, t->sort, SMT_FUNC_ITE, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, t->sort, SMT_FUNC_ITE);
   ast->args.push_back(cond);
   ast->args.push_back(t);
   ast->args.push_back(f);
@@ -936,7 +935,7 @@ smt_astt smtlib_convt::mk_add(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   assert(a->sort->id == b->sort->id);
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_ADD, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_ADD);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -947,7 +946,7 @@ smt_astt smtlib_convt::mk_bvadd(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVADD, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVADD);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -958,7 +957,7 @@ smt_astt smtlib_convt::mk_sub(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   assert(a->sort->id == b->sort->id);
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_SUB, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_SUB);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -969,7 +968,7 @@ smt_astt smtlib_convt::mk_bvsub(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVSUB, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVSUB);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -980,7 +979,7 @@ smt_astt smtlib_convt::mk_mul(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   assert(a->sort->id == b->sort->id);
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_MUL, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_MUL);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -991,7 +990,7 @@ smt_astt smtlib_convt::mk_bvmul(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVMUL, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVMUL);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1002,7 +1001,7 @@ smt_astt smtlib_convt::mk_mod(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   assert(a->sort->id == b->sort->id);
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_MOD, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_MOD);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1013,7 +1012,7 @@ smt_astt smtlib_convt::mk_bvsmod(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVSMOD, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVSMOD);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1024,7 +1023,7 @@ smt_astt smtlib_convt::mk_bvumod(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVUMOD, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVUMOD);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1035,7 +1034,7 @@ smt_astt smtlib_convt::mk_div(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   assert(a->sort->id == b->sort->id);
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_DIV, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_DIV);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1046,7 +1045,7 @@ smt_astt smtlib_convt::mk_bvsdiv(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVSDIV, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVSDIV);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1057,7 +1056,7 @@ smt_astt smtlib_convt::mk_bvudiv(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVUDIV, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVUDIV);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1068,7 +1067,7 @@ smt_astt smtlib_convt::mk_shl(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   assert(a->sort->id == b->sort->id);
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_SHL, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_SHL);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1079,7 +1078,7 @@ smt_astt smtlib_convt::mk_bvshl(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVSHL, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVSHL);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1090,7 +1089,7 @@ smt_astt smtlib_convt::mk_bvashr(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVASHR, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVASHR);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1101,7 +1100,7 @@ smt_astt smtlib_convt::mk_bvlshr(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVLSHR, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVLSHR);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1110,7 +1109,7 @@ smt_astt smtlib_convt::mk_bvlshr(smt_astt a, smt_astt b)
 smt_astt smtlib_convt::mk_neg(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_NEG, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_NEG);
   ast->args.push_back(a);
   return ast;
 }
@@ -1118,7 +1117,7 @@ smt_astt smtlib_convt::mk_neg(smt_astt a)
 smt_astt smtlib_convt::mk_bvneg(smt_astt a)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNEG, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNEG);
   ast->args.push_back(a);
   return ast;
 }
@@ -1126,7 +1125,7 @@ smt_astt smtlib_convt::mk_bvneg(smt_astt a)
 smt_astt smtlib_convt::mk_bvnot(smt_astt a)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNOT, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNOT);
   ast->args.push_back(a);
   return ast;
 }
@@ -1136,7 +1135,7 @@ smt_astt smtlib_convt::mk_bvnxor(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNXOR, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNXOR);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1147,7 +1146,7 @@ smt_astt smtlib_convt::mk_bvnor(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNOR, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNOR);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1158,7 +1157,7 @@ smt_astt smtlib_convt::mk_bvnand(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNAND, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNAND);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1169,7 +1168,7 @@ smt_astt smtlib_convt::mk_bvxor(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVXOR, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVXOR);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1180,7 +1179,7 @@ smt_astt smtlib_convt::mk_bvor(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVOR, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVOR);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1191,7 +1190,7 @@ smt_astt smtlib_convt::mk_bvand(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVAND, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVAND);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1201,7 +1200,7 @@ smt_astt smtlib_convt::mk_implies(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_IMPLIES, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_IMPLIES);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1211,7 +1210,7 @@ smt_astt smtlib_convt::mk_xor(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_XOR, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_XOR);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1221,7 +1220,7 @@ smt_astt smtlib_convt::mk_or(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_OR, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_OR);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1231,7 +1230,7 @@ smt_astt smtlib_convt::mk_and(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_AND, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_AND);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1241,7 +1240,7 @@ smt_astt smtlib_convt::mk_not(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_NOT, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_NOT);
   ast->args.push_back(a);
   return ast;
 }
@@ -1251,7 +1250,7 @@ smt_astt smtlib_convt::mk_lt(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_LT, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_LT);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1263,7 +1262,7 @@ smt_astt smtlib_convt::mk_bvult(smt_astt a, smt_astt b)
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVULT, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVULT);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1275,7 +1274,7 @@ smt_astt smtlib_convt::mk_bvslt(smt_astt a, smt_astt b)
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVSLT, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVSLT);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1286,7 +1285,7 @@ smt_astt smtlib_convt::mk_gt(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_GT, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_GT);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1298,7 +1297,7 @@ smt_astt smtlib_convt::mk_bvugt(smt_astt a, smt_astt b)
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVUGT, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVUGT);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1310,7 +1309,7 @@ smt_astt smtlib_convt::mk_bvsgt(smt_astt a, smt_astt b)
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVUGT, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVUGT);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1321,7 +1320,7 @@ smt_astt smtlib_convt::mk_le(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_LTE, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_LTE);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1333,7 +1332,7 @@ smt_astt smtlib_convt::mk_bvule(smt_astt a, smt_astt b)
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVULTE, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVULTE);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1345,7 +1344,7 @@ smt_astt smtlib_convt::mk_bvsle(smt_astt a, smt_astt b)
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVSLTE, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVSLTE);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1356,7 +1355,7 @@ smt_astt smtlib_convt::mk_ge(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_GTE, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_GTE);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1368,7 +1367,7 @@ smt_astt smtlib_convt::mk_bvuge(smt_astt a, smt_astt b)
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVUGTE, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVUGTE);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1380,7 +1379,7 @@ smt_astt smtlib_convt::mk_bvsge(smt_astt a, smt_astt b)
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVSGTE, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BVSGTE);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1390,7 +1389,7 @@ smt_astt smtlib_convt::mk_eq(smt_astt a, smt_astt b)
 {
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_EQ, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_EQ);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1402,7 +1401,7 @@ smt_astt smtlib_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
   assert(a->sort->get_domain_width() == b->sort->get_data_width());
   assert(
     a->sort->get_range_sort()->get_data_width() == c->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_STORE, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_STORE);
   ast->args.push_back(a);
   ast->args.push_back(b);
   ast->args.push_back(c);
@@ -1413,7 +1412,7 @@ smt_astt smtlib_convt::mk_select(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_ARRAY);
   assert(a->sort->get_domain_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, b->sort, SMT_FUNC_SELECT, msg);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, b->sort, SMT_FUNC_SELECT);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1423,7 +1422,7 @@ smt_astt smtlib_convt::mk_real2int(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_REAL);
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, a->sort, SMT_FUNC_REAL2INT, msg);
+    new smtlib_smt_ast(this, a->sort, SMT_FUNC_REAL2INT);
   ast->args.push_back(a);
   return ast;
 }
@@ -1432,7 +1431,7 @@ smt_astt smtlib_convt::mk_int2real(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_INT);
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, a->sort, SMT_FUNC_INT2REAL, msg);
+    new smtlib_smt_ast(this, a->sort, SMT_FUNC_INT2REAL);
   ast->args.push_back(a);
   return ast;
 }
@@ -1441,7 +1440,7 @@ smt_astt smtlib_convt::mk_isint(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_IS_INT, msg);
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_IS_INT);
   ast->args.push_back(a);
   return ast;
 }

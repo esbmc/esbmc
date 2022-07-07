@@ -65,7 +65,7 @@ tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
   tuple_node_smt_ast *result_sym =
-    new tuple_node_smt_ast(flat, ctx, sort, name, _msg);
+    new tuple_node_smt_ast(flat, ctx, sort, name);
 
   const_cast<tuple_node_smt_ast *>(true_val)->make_free(ctx);
   const_cast<tuple_node_smt_ast *>(false_val)->make_free(ctx);
@@ -143,7 +143,7 @@ smt_astt tuple_node_smt_ast::update(
 
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
   tuple_node_smt_ast *result =
-    new tuple_node_smt_ast(flat, ctx, sort, name, _msg);
+    new tuple_node_smt_ast(flat, ctx, sort, name);
   result->elements = elements;
   result->make_free(ctx);
   result->elements[idx] = value;
@@ -155,7 +155,7 @@ smt_astt tuple_node_smt_ast::select(
   smt_convt *ctx [[maybe_unused]],
   const expr2tc &idx [[maybe_unused]]) const
 {
-  _log_error("Select operation applied to tuple");
+  log_error("Select operation applied to tuple");
   abort();
 }
 

@@ -15,7 +15,7 @@ smt_astt smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
   name += ".";
 
   tuple_node_smt_ast *result = new tuple_node_smt_ast(
-    *this, ctx, ctx->convert_sort(structdef->type), name, msg);
+    *this, ctx, ctx->convert_sort(structdef->type), name);
   result->elements.resize(structdef->get_num_sub_exprs());
 
   for(unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
@@ -40,7 +40,7 @@ smt_astt smt_tuple_node_flattener::tuple_fresh(smt_sortt s, std::string name)
     return array_conv.mk_array_symbol(name, s, subtype);
   }
 
-  return new tuple_node_smt_ast(*this, ctx, s, name, msg);
+  return new tuple_node_smt_ast(*this, ctx, s, name);
 }
 
 smt_astt

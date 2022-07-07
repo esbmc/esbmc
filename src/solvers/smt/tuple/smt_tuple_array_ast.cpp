@@ -92,7 +92,7 @@ smt_astt array_sym_smt_ast::update(
   }
 
   std::string name = ctx->mk_fresh_name("tuple_array_update::") + ".";
-  tuple_sym_smt_astt result = new array_sym_smt_ast(ctx, sort, name, _msg);
+  tuple_sym_smt_astt result = new array_sym_smt_ast(ctx, sort, name);
 
   // Iterate over all members. They are _all_ indexed and updated.
   unsigned int i = 0;
@@ -124,7 +124,7 @@ smt_astt array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 
   std::string name = ctx->mk_fresh_name("tuple_array_select::") + ".";
   tuple_sym_smt_astt result =
-    new tuple_sym_smt_ast(ctx, result_sort, name, _msg);
+    new tuple_sym_smt_ast(ctx, result_sort, name);
 
   unsigned int i = 0;
   for(auto const &it : data.members)
@@ -167,7 +167,7 @@ smt_astt array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
     // This is a struct within a struct, so just generate the name prefix of
     // the internal struct being projected.
     sym_name = sym_name + ".";
-    return new array_sym_smt_ast(ctx, s, sym_name, _msg);
+    return new array_sym_smt_ast(ctx, s, sym_name);
   }
 
   // This is a normal variable, so create a normal symbol of its name.
