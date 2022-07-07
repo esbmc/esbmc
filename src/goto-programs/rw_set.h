@@ -57,8 +57,7 @@ public:
   rw_sett(
     const namespacet &_ns,
     value_setst &_value_sets,
-    goto_programt::const_targett _target,
-    const messaget &msg)
+    goto_programt::const_targett _target)
     : ns(_ns), value_sets(_value_sets), target(_target)
   {
   }

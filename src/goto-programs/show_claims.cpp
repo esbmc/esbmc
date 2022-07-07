@@ -40,8 +40,7 @@ void show_claims(
 
 void show_claims(
   const namespacet &ns,
-  const goto_programt &goto_program,
-  const messaget &msg)
+  const goto_programt &goto_program)
 {
   unsigned count = 0;
   show_claims(ns, "", goto_program, count);

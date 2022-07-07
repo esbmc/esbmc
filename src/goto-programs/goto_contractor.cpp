@@ -5,10 +5,9 @@
 #include <goto-programs/goto_contractor.h>
 
 void goto_contractor(
-  goto_functionst &goto_functions,
-  const messaget &message_handler)
+  goto_functionst &goto_functions)
 {
-  goto_contractort gotoContractort(goto_functions, message_handler);
+  goto_contractort gotoContractort(goto_functions);
 
   goto_functions.update();
 }

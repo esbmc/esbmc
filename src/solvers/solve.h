@@ -12,13 +12,11 @@ typedef smt_convt *(solver_creator)(
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
-  fp_convt **fp_api,
-  const messaget &msg);
+  fp_convt **fp_api);
 
 smt_convt *create_solver(
   std::string solver_name,
   const namespacet &ns,
-  const optionst &options,
-  const messaget &msg);
+  const optionst &options);
 
 #endif

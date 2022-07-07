@@ -185,8 +185,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 void goto_convert(
   contextt &context,
   optionst &options,
-  goto_functionst &functions,
-  const messaget &message_handler)
+  goto_functionst &functions)
 {
   goto_convert_functionst goto_convert_functions(
     context, options, functions);

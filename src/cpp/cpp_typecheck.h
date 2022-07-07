@@ -27,8 +27,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 bool cpp_typecheck(
   cpp_parse_treet &cpp_parse_tree,
   contextt &context,
-  const std::string &module,
-  const messaget &message_handler);
+  const std::string &module);
 
 class cpp_typecast_rank
 {
@@ -104,9 +103,8 @@ public:
   cpp_typecheckt(
     cpp_parse_treet &_cpp_parse_tree,
     contextt &_context,
-    const std::string &_module,
-    const messaget &message_handler)
-    : c_typecheck_baset(_context, _module, message_handler),
+    const std::string &_module)
+    : c_typecheck_baset(_context, _module),
       cpp_parse_tree(_cpp_parse_tree),
       template_counter(0),
       anon_counter(0),

@@ -15,12 +15,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void show_claims(
   const namespacet &ns,
-  const goto_functionst &goto_functions,
-  const messaget &msg);
+  const goto_functionst &goto_functions);
 
 void show_claims(
   const namespacet &ns,
-  const goto_programt &goto_program,
-  const messaget &msg);
+  const goto_programt &goto_program);
 
 #endif

@@ -43,8 +43,7 @@ void goto_factory::config_environment(
   cmdlinet c,
   optionst o)
 {
-  messaget msg;
-  config.set(c, msg);
+  config.set(c);
 
   switch(arch)
   {
@@ -141,18 +140,17 @@ bool goto_factory::parse(language_uit &l)
 
 goto_functionst goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
 {
-  messaget msg;
   goto_functionst goto_functions;
-  language_uit lui(cmd, msg);
+  language_uit lui(cmd);
   if(!goto_factory::parse(lui))
     return goto_functions;
 
   migrate_namespace_lookup = new namespacet(lui.context);
 
-  goto_convert(lui.context, opts, goto_functions, msg);
+  goto_convert(lui.context, opts, goto_functions);
 
   namespacet ns(lui.context);
-  goto_check(ns, opts, goto_functions, msg);
+  goto_check(ns, opts, goto_functions);
   // remove skips
   remove_skip(goto_functions);
 

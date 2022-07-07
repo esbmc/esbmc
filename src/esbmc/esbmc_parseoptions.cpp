@@ -58,7 +58,6 @@ extern "C"
 #include <util/symbol.h>
 #include <util/time_stopping.h>
 
-#include <util/message/fmt_message_handler.h>
 
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -101,7 +100,7 @@ void timeout_handler(int)
 }
 #endif
 
-void esbmc_parseoptionst::set_verbosity_msg(messaget &message)
+void esbmc_parseoptionst::set_verbosity_msg()
 {
   VerbosityLevel v = VerbosityLevel::Status;
 
@@ -114,7 +113,7 @@ void esbmc_parseoptionst::set_verbosity_msg(messaget &message)
       v = VerbosityLevel::Debug;
   }
 
-  message.set_verbosity(v);
+  messaget_state::verbosity = v;
 }
 
 extern "C" uint8_t *esbmc_version_string;
@@ -216,24 +215,24 @@ static std::string format_target()
     break;
   }
   assert(lib);
-  return fmt::format(
-    "{}-bit {}-endian {} with {} libc",
-    config.ansi_c.word_size,
-    endian,
-    config.ansi_c.target.to_string(),
-    lib);
+  std::ostringstream oss;
+  oss << config.ansi_c.word_size << "-bit "
+    << endian << "-endian "
+    << config.ansi_c.target.to_string() << " with "
+    << lib << "libc";
+  return oss.str();
 }
 
 void esbmc_parseoptionst::get_command_line_options(optionst &options)
 {
-  if(config.set(cmdline, msg))
+  if(config.set(cmdline))
   {
     exit(1);
   }
   log_status("Target: {}", format_target());
 
   options.cmdline(cmdline);
-  set_verbosity_msg(msg);
+  set_verbosity_msg();
 
   if(cmdline.isset("cex-output"))
     options.set_option("cex-output", cmdline.getval("cex-output"));
@@ -427,11 +426,9 @@ int esbmc_parseoptionst::doit()
     FILE *f = fopen(cmdline.getval("file-output"), "w+");
     out = f;
     err = f;
+    messaget_state::error_output = f;
+    messaget_state::standard_output = f;
   }
-
-  std::shared_ptr<message_handlert> handler =
-    std::make_shared<fmt_message_handler>(out, err);
-  msg.add_message_handler(handler);
   //
   // Print a banner
   //
@@ -492,7 +489,7 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, goto_functions, msg);
+    show_claims(ns, goto_functions);
     return 0;
   }
 
@@ -503,7 +500,7 @@ int esbmc_parseoptionst::doit()
     return 0;
 
   // do actual BMC
-  bmct bmc(goto_functions, opts, context, msg);
+  bmct bmc(goto_functions, opts, context);
 
   return do_bmc(bmc);
 }
@@ -582,7 +579,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     if(cmdline.isset("show-claims"))
     {
       const namespacet ns(context);
-      show_claims(ns, goto_functions, msg);
+      show_claims(ns, goto_functions);
       return 0;
     }
 
@@ -843,7 +840,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a bug
     for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, opts, context, msg);
+      bmct bmc(goto_functions, opts, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
       log_status("*** Checking base case, k = {:d}\n", k_step);
@@ -948,7 +945,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a proof
     for(BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, opts, context, msg);
+      bmct bmc(goto_functions, opts, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
       log_status(
@@ -1016,7 +1013,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a proof
     for(BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, opts, context, msg);
+      bmct bmc(goto_functions, opts, context);
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -1082,7 +1079,7 @@ int esbmc_parseoptionst::doit_k_induction()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, goto_functions, msg);
+    show_claims(ns, goto_functions);
     return 0;
   }
 
@@ -1126,7 +1123,7 @@ int esbmc_parseoptionst::doit_falsification()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, goto_functions, msg);
+    show_claims(ns, goto_functions);
     return 0;
   }
 
@@ -1165,7 +1162,7 @@ int esbmc_parseoptionst::doit_incremental()
   {
     const namespacet ns(context);
     std::ostringstream oss;
-    show_claims(ns, goto_functions, msg);
+    show_claims(ns, goto_functions);
     return 0;
   }
 
@@ -1206,7 +1203,7 @@ int esbmc_parseoptionst::doit_termination()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, goto_functions, msg);
+    show_claims(ns, goto_functions);
     return 0;
   }
 
@@ -1250,7 +1247,7 @@ int esbmc_parseoptionst::do_base_case(
   opts.set_option("no-unwinding-assertions", true);
   opts.set_option("partial-loops", false);
 
-  bmct bmc(goto_functions, opts, context, msg);
+  bmct bmc(goto_functions, opts, context);
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -1296,7 +1293,7 @@ int esbmc_parseoptionst::do_forward_condition(
   // Turn assertions off
   opts.set_option("no-assertions", true);
 
-  bmct bmc(goto_functions, opts, context, msg);
+  bmct bmc(goto_functions, opts, context);
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -1352,7 +1349,7 @@ int esbmc_parseoptionst::do_inductive_step(
   opts.set_option("no-unwinding-assertions", true);
   opts.set_option("partial-loops", true);
 
-  bmct bmc(goto_functions, opts, context, msg);
+  bmct bmc(goto_functions, opts, context);
   bmc.options.set_option("unwind", integer2string(k_step));
 
   log_status("*** Checking inductive step, k = {:d}", k_step);
@@ -1468,7 +1465,7 @@ bool esbmc_parseoptionst::get_goto_program(
 
       log_status("Generating GOTO Program");
 
-      goto_convert(context, options, goto_functions, msg);
+      goto_convert(context, options, goto_functions);
     }
 
     fine_timet parse_stop = current_time();
@@ -1531,7 +1528,7 @@ void esbmc_parseoptionst::preprocessing()
     }
 #ifdef ENABLE_OLD_FRONTEND
     std::ostringstream oss;
-    if(c_preprocess(filename, oss, false, msg))
+    if(c_preprocess(filename, oss, false))
       log_error("PREPROCESSING ERROR");
     log_status(oss.str());
 #endif
@@ -1556,7 +1553,7 @@ bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
 {
   for(const auto &arg : _cmdline.args)
   {
-    if(::read_goto_binary(arg, context, goto_functions, msg))
+    if(::read_goto_binary(arg, context, goto_functions))
     {
       log_error("Failed to open `" + arg + "'");
       return true;
@@ -1590,9 +1587,9 @@ bool esbmc_parseoptionst::process_goto_program(
     if(!cmdline.isset("no-inlining"))
     {
       if(cmdline.isset("full-inlining"))
-        goto_inline(goto_functions, options, ns, msg);
+        goto_inline(goto_functions, options, ns);
       else
-        goto_partial_inline(goto_functions, options, ns, msg);
+        goto_partial_inline(goto_functions, options, ns);
     }
 
     if(cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
@@ -1604,13 +1601,13 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
       cmdline.isset("k-induction-parallel"))
     {
-      goto_k_induction(goto_functions, msg);
+      goto_k_induction(goto_functions);
     }
 
     if(cmdline.isset("goto-contractor"))
     {
 #ifdef ENABLE_GOTO_CONTRACTOR
-      goto_contractor(goto_functions, msg);
+      goto_contractor(goto_functions);
 #else
       log_error(
         "Current build does not support contractors. If ibex is installed, add "
@@ -1621,15 +1618,15 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if(cmdline.isset("termination"))
     {
-      goto_termination(goto_functions, msg);
+      goto_termination(goto_functions);
     }
 
-    goto_check(ns, options, goto_functions, msg);
+    goto_check(ns, options, goto_functions);
 
     // show it?
     if(cmdline.isset("show-goto-value-sets"))
     {
-      value_set_analysist value_set_analysis(ns, msg);
+      value_set_analysist value_set_analysis(ns);
       value_set_analysis(goto_functions);
       std::ostringstream oss;
       show_value_sets(goto_functions, value_set_analysis, oss);
@@ -1670,10 +1667,10 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       log_status("Adding Data Race Checks");
 
-      value_set_analysist value_set_analysis(ns, msg);
+      value_set_analysist value_set_analysis(ns);
       value_set_analysis(goto_functions);
 
-      add_race_assertions(value_set_analysis, context, goto_functions, msg);
+      add_race_assertions(value_set_analysis, context, goto_functions);
 
       value_set_analysis.update(goto_functions);
     }
@@ -1681,7 +1678,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // show it?
     if(cmdline.isset("show-loops"))
     {
-      show_loop_numbers(goto_functions, msg);
+      show_loop_numbers(goto_functions);
       return true;
     }
 
@@ -1755,10 +1752,9 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 
 void esbmc_parseoptionst::help()
 {
-  default_message dmsg;
-  dlog_status(
+  log_status(
     "\n* * *           ESBMC {}          * * *", ESBMC_VERSION);
   std::ostringstream oss;
   oss << cmdline.cmdline_options;
-  dlog_status(oss.str());
+  log_status(oss.str());
 }

@@ -15,8 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void c_finalize_expression(
   const contextt &context,
-  exprt &expr,
-  const messaget &message_handler);
+  exprt &expr);
 
 bool c_final(contextt &context);
 

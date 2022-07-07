@@ -62,7 +62,7 @@ smt_tuple_node_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
     name2 += ".";
 
   assert(s->id != SMT_SORT_ARRAY);
-  return new tuple_node_smt_ast(*this, ctx, s, name2, msg);
+  return new tuple_node_smt_ast(*this, ctx, s, name2);
 }
 
 smt_astt smt_tuple_node_flattener::mk_tuple_array_symbol(const expr2tc &expr)

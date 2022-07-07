@@ -26,10 +26,9 @@ smt_convt *create_new_z3_solver(
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
-  fp_convt **fp_api,
-  const messaget &msg)
+  fp_convt **fp_api)
 {
-  z3_convt *conv = new z3_convt(ns, options, msg);
+  z3_convt *conv = new z3_convt(ns, options);
   *tuple_api = static_cast<tuple_iface *>(conv);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
@@ -38,11 +37,10 @@ smt_convt *create_new_z3_solver(
 
 z3_convt::z3_convt(
   const namespacet &_ns,
-  const optionst &_options,
-  const messaget &msg)
-  : smt_convt(_ns, _options, msg),
+  const optionst &_options)
+  : smt_convt(_ns, _options),
     array_iface(true, true),
-    fp_convt(this, msg),
+    fp_convt(this),
     z3_ctx(),
     solver((z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "solve-eqs") &
             z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "smt"))

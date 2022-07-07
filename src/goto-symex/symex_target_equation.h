@@ -228,8 +228,7 @@ public:
 
   runtime_encoded_equationt(
     const namespacet &_ns,
-    smt_convt &conv,
-    const messaget &msg);
+    smt_convt &conv);
 
   void push_ctx() override;
   void pop_ctx() override;

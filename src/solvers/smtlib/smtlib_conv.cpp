@@ -102,8 +102,7 @@ smt_convt *create_new_smtlib_solver(
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
   array_iface **array_api,
-  fp_convt **fp_api,
-  const messaget &msg)
+  fp_convt **fp_api)
 {
   smtlib_convt *conv = new smtlib_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);

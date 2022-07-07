@@ -20,9 +20,8 @@ class c_typecheck_baset : public typecheckt, protected namespacet
 public:
   c_typecheck_baset(
     contextt &_context,
-    const std::string &_module,
-    const messaget &_message_handler)
-    : typecheckt(_message_handler),
+    const std::string &_module)
+    :
       namespacet(_context),
       context(_context),
       module(_module),

@@ -6,7 +6,7 @@
 
 void bitwuzla_error_handler(const char *msg)
 {
-  log_error("Bitwuzla error encountered\n{}", msg);
+  log_error("Bitwuzla error encountered\n{}");
   abort();
 }
 
@@ -15,10 +15,9 @@ smt_convt *create_new_bitwuzla_solver(
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
   array_iface **array_api,
-  fp_convt **fp_api,
-  const messaget &msg)
+  fp_convt **fp_api)
 {
-  bitwuzla_convt *conv = new bitwuzla_convt(ns, options, msg);
+  bitwuzla_convt *conv = new bitwuzla_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
@@ -26,9 +25,8 @@ smt_convt *create_new_bitwuzla_solver(
 
 bitwuzla_convt::bitwuzla_convt(
   const namespacet &ns,
-  const optionst &options,
-  const messaget &msg)
-  : smt_convt(ns, options, msg), array_iface(true, true), fp_convt(this, msg)
+  const optionst &options)
+  : smt_convt(ns, options), array_iface(true, true), fp_convt(this)
 {
   bitw = bitwuzla_new();
   bitwuzla_set_option(bitw, BITWUZLA_OPT_PRODUCE_MODELS, 1);

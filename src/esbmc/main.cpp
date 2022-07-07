@@ -26,7 +26,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 int main(int argc, const char **argv)
 {
-  messaget msg;
-  esbmc_parseoptionst parseoptions(argc, argv, msg);
+  esbmc_parseoptionst parseoptions(argc, argv);
   return parseoptions.main();
 }

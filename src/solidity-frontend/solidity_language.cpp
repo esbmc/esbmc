@@ -101,8 +101,7 @@ bool solidity_languaget::parse(const std::string &path)
 }
 
 bool solidity_languaget::convert_intrinsics(
-  contextt &context,
-  const messaget &msg)
+  contextt &context)
 {
   clang_c_convertert converter(context, ASTs, "C");
   if(converter.convert())
@@ -112,8 +111,7 @@ bool solidity_languaget::convert_intrinsics(
 
 bool solidity_languaget::typecheck(
   contextt &context,
-  const std::string &module,
-  const messaget &msg)
+  const std::string &module)
 {
   contextt new_context(msg);
   convert_intrinsics(

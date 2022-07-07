@@ -12,8 +12,7 @@ class smt_tuple_sym_flattener : public tuple_iface
 public:
   smt_tuple_sym_flattener(
     smt_convt *_ctx,
-    const namespacet &_ns,
-    const messaget &msg)
+    const namespacet &_ns)
     : ctx(_ctx), ns(_ns)
   {
   }

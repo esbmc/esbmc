@@ -25,8 +25,8 @@ public:
   void help() override;
 
   esbmc_parseoptionst(int argc, const char **argv)
-    : parseoptions_baset(all_cmd_options, argc, argv, msg),
-      language_uit(cmdline, msg)
+    : parseoptions_baset(all_cmd_options, argc, argv),
+      language_uit(cmdline)
   {
   }
 
@@ -73,7 +73,7 @@ protected:
 
   bool set_claims(goto_functionst &goto_functions);
 
-  void set_verbosity_msg(messaget &message);
+  void set_verbosity_msg();
 
   uint64_t read_time_spec(const char *str);
   uint64_t read_mem_spec(const char *str);

@@ -37,7 +37,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/location.h>
-#include <util/message/message_stream.h>
 
 #include <util/migrate.h>
 #include <util/show_symbol_table.h>
@@ -46,9 +45,8 @@ Authors: Daniel Kroening, kroening@kroening.com
 bmct::bmct(
   goto_functionst &funcs,
   optionst &opts,
-  contextt &_context,
-  const messaget &_message_handler)
-  : options(opts), context(_context), ns(context), msg(_message_handler)
+  contextt &_context)
+  : options(opts), context(_context), ns(context)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -56,16 +54,15 @@ bmct::bmct(
   if(options.get_bool_option("smt-during-symex"))
   {
     runtime_solver =
-      std::shared_ptr<smt_convt>(create_solver("", ns, options, msg));
+      std::shared_ptr<smt_convt>(create_solver("", ns, options));
 
     symex = std::make_shared<reachability_treet>(
       funcs,
       ns,
       options,
       std::shared_ptr<runtime_encoded_equationt>(
-        new runtime_encoded_equationt(ns, *runtime_solver, msg)),
-      _context,
-      _message_handler);
+        new runtime_encoded_equationt(ns, *runtime_solver)),
+      _context);
   }
   else
   {
@@ -74,9 +71,8 @@ bmct::bmct(
       ns,
       options,
       std::shared_ptr<symex_target_equationt>(
-        new symex_target_equationt(ns, msg)),
-      _context,
-      _message_handler);
+        new symex_target_equationt(ns)),
+      _context);
   }
 }
 
@@ -98,7 +94,7 @@ void bmct::successful_trace()
     goto_tracet goto_trace;
     log_status("Building successful trace");
     /* build_successful_goto_trace(eq, ns, goto_trace); */
-    correctness_graphml_goto_trace(options, ns, goto_trace, msg);
+    correctness_graphml_goto_trace(options, ns, goto_trace);
   }
 }
 
@@ -118,22 +114,22 @@ void bmct::error_trace(
     is_compact_trace = false;
 
   goto_tracet goto_trace;
-  build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace, msg);
+  build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace);
 
   std::string output_file = options.get_option("cex-output");
   if(output_file != "")
   {
     std::ofstream out(output_file);
-    show_goto_trace(out, ns, goto_trace, msg);
+    show_goto_trace(out, ns, goto_trace);
   }
 
   std::string witness_output = options.get_option("witness-output");
   if(witness_output != "")
-    violation_graphml_goto_trace(options, ns, goto_trace, msg);
+    violation_graphml_goto_trace(options, ns, goto_trace);
 
   std::ostringstream oss;
   oss << "\nCounterexample:\n";
-  show_goto_trace(oss, ns, goto_trace, msg);
+  show_goto_trace(oss, ns, goto_trace);
   log_result(oss.str());
 }
 
@@ -206,9 +202,9 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
   unsigned int count = 1;
   std::ostringstream oss;
   if(config.options.get_bool_option("ssa-symbol-table"))
-    ::show_symbol_table_plain(ns, oss, msg);
+    ::show_symbol_table_plain(ns, oss);
 
-  languagest languages(ns, language_idt::C, msg);
+  languagest languages(ns, language_idt::C);
 
   oss << "\nProgram constraints: \n";
 
@@ -245,7 +241,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
     }
     else if(it.is_renumber())
     {
-      oss << "renumber: " << from_expr(ns, "", it.lhs, msg) << "\n";
+      oss << "renumber: " << from_expr(ns, "", it.lhs) << "\n";
     }
 
     if(!migrate_expr_back(it.guard).is_true())
@@ -458,7 +454,7 @@ void bmct::bidirectional_search(
     assert(fit != symex->goto_functions.function_map.end());
 
     // Find function loops
-    goto_loopst loops(f.function, symex->goto_functions, fit->second, msg);
+    goto_loopst loops(f.function, symex->goto_functions, fit->second);
 
     if(!loops.get_loops().size())
       continue;
@@ -501,7 +497,7 @@ void bmct::bidirectional_search(
 
       expr2tc new_lhs = ssait.original_lhs;
       renaming::renaming_levelt::get_original_name(
-        new_lhs, symbol2t::level0, msg);
+        new_lhs, symbol2t::level0);
 
       if(all_loop_vars.find(new_lhs) == all_loop_vars.end())
         continue;
@@ -521,8 +517,8 @@ void bmct::bidirectional_search(
       if(is_array_type(it.second.first) || is_pointer_type(it.second.first))
         return;
 
-      auto lhs = build_lhs(smt_conv, it.second.first, msg);
-      auto value = build_rhs(smt_conv, it.second.second, msg);
+      auto lhs = build_lhs(smt_conv, it.second.first);
+      auto value = build_rhs(smt_conv, it.second.second);
 
       // Add lhs and rhs to the list of new constraints
       equalities.push_back(equality2tc(lhs, value));
@@ -667,7 +663,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     if(!options.get_bool_option("smt-during-symex"))
     {
       runtime_solver =
-        std::shared_ptr<smt_convt>(create_solver("", ns, options, msg));
+        std::shared_ptr<smt_convt>(create_solver("", ns, options));
     }
 
     return run_decision_procedure(runtime_solver, eq);

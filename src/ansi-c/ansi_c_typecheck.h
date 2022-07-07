@@ -15,8 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 bool ansi_c_typecheck(
   ansi_c_parse_treet &parse_tree,
   contextt &context,
-  const std::string &module,
-  const messaget &message_handler);
+  const std::string &module);
 
 class ansi_c_typecheckt : public c_typecheck_baset
 {
@@ -24,9 +23,8 @@ public:
   ansi_c_typecheckt(
     ansi_c_parse_treet &_parse_tree,
     contextt &_context,
-    const std::string &_module,
-    const messaget &_message_handler)
-    : c_typecheck_baset(_context, _module, _message_handler),
+    const std::string &_module)
+    : c_typecheck_baset(_context, _module),
       parse_tree(_parse_tree)
   {
   }

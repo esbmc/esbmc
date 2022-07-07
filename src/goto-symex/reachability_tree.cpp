@@ -29,13 +29,11 @@ reachability_treet::reachability_treet(
   const namespacet &ns,
   optionst &opts,
   std::shared_ptr<symex_targett> target,
-  contextt &context,
-  const messaget &_message_handler)
+  contextt &context)
   : goto_functions(goto_functions),
     permanent_context(context),
     ns(ns),
-    options(opts),
-    message_handler(_message_handler)
+    options(opts)
 {
   // Put a few useful symbols in the symbol table.
   symbolt sym;

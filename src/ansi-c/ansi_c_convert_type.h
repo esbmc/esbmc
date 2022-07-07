@@ -34,8 +34,7 @@ public:
 
   std::list<typet> other;
 
-  ansi_c_convert_typet(const messaget &_message_handler)
-    : message_streamt(_message_handler)
+  ansi_c_convert_typet()
   {
   }
 

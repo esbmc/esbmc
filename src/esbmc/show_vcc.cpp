@@ -21,7 +21,7 @@ void bmct::show_vcc(
 {
   out << "\nVERIFICATION CONDITIONS:\n\n";
 
-  languagest languages(ns, language_idt::C, msg);
+  languagest languages(ns, language_idt::C);
 
   for(symex_target_equationt::SSA_stepst::iterator it = eq->SSA_steps.begin();
       it != eq->SSA_steps.end();
