@@ -9,6 +9,7 @@ Author: Kunjian Song, kunjian.song@postgrad.manchester.ac.uk
 #include <solidity-frontend/solidity_grammar.h>
 #include <fmt/core.h>
 #include <set>
+#include <util/message.h>
 
 #define ENUM_TO_STR(s)                                                         \
   case s:                                                                      \
@@ -85,7 +86,7 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
     log_error(
                 "Got contract-body-element nodeType={}. Unsupported "
                 "contract-body-element type",
-                element["nodeType"].get<std::string>())
+                element["nodeType"].get<std::string>());
     abort();
   }
   return ContractBodyElementTError;
@@ -160,7 +161,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       log_error(
                   "Got type-name typeString={}. Unsupported type-name type",
-                  type_name["typeString"].get<std::string>())
+                  type_name["typeString"].get<std::string>());
       abort();
     }
   }
@@ -175,7 +176,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       log_error(
                   "Got type-name nodeType={}. Unsupported type-name type",
-                  type_name["nodeType"].get<std::string>())
+                  type_name["nodeType"].get<std::string>());
       abort();
     }
   }
@@ -624,7 +625,7 @@ VarDeclStmtT get_var_decl_stmt_t(const nlohmann::json &stmt)
     log_error(
                 "Got expression nodeType={}. Unsupported "
                 "variable-declaration-statement operator",
-                stmt["nodeType"].get<std::string>())
+                stmt["nodeType"].get<std::string>());
     abort();
   }
   return VarDeclStmtTError; // make some old compilers happy
@@ -692,7 +693,7 @@ ImplicitCastTypeT get_implicit_cast_type_t(std::string cast)
   }
   else
   {
-    log_error("Got implicit cast type={}. Unsupported case type", cast.c_str()));
+    log_error("Got implicit cast type={}. Unsupported case type", cast.c_str());
     abort();
   }
 
