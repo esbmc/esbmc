@@ -433,7 +433,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
 
   std::string symbol_name, out;
 
-  if(is_index2t(obj.ptr_obj))
+  if(is_index2t(obj.ptr_obj) || is_member2t(obj.ptr_obj))
   {
     // This might be a composite index/member/blah chain
     expr2tc offs = compute_pointer_offset(obj.ptr_obj);
@@ -441,17 +441,6 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
 
     address_of2tc addrof(obj.type, base);
     smt_astt a = convert_ast(addrof);
-    return a->update(this, convert_ast(offs), 1);
-  }
-
-  if(is_member2t(obj.ptr_obj))
-  {
-    expr2tc offs = compute_pointer_offset(obj.ptr_obj);
-    expr2tc base = get_base_object(obj.ptr_obj);
-
-    address_of2tc addr(obj.type, base);
-
-    smt_astt a = convert_ast(addr);
 
     // Update pointer offset to offset to that field.
     return a->update(this, convert_ast(offs), 1);
