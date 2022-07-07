@@ -73,7 +73,7 @@ public:
 static inline void
 print(VerbosityLevel lvl, std::string_view msg, const locationt &loc)
 {
-  messaget_state::logln(lvl, loc.get_file(), loc.get_line(), "{}\n", msg);
+  messaget_state::logln(lvl, loc.get_file(), loc.get_line(), "{}", msg);
 }
 
 // Macro to generate log functions
