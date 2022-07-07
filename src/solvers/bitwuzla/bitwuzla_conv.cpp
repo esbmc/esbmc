@@ -6,7 +6,7 @@
 
 void bitwuzla_error_handler(const char *msg)
 {
-  log_error("Bitwuzla error encountered\n{}");
+  log_error("Bitwuzla error encountered\n{}", msg);
   abort();
 }
 
@@ -812,24 +812,17 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 void bitwuzla_convt::dump_smt()
 {
-  auto f = msg.get_temp_file();
-  bitwuzla_dump_formula(bitw, "smt2", f.file());
-  msg.insert_file_contents(VerbosityLevel::Debug, f.file());
+  bitwuzla_dump_formula(bitw, "smt2", messaget_state::standard_output);
 }
 
 void bitw_smt_ast::dump() const
 {
-
-  auto f = msg.get_temp_file();
-  bitwuzla_term_dump(a, "smt2", f.file());
-  msg.insert_file_contents(VerbosityLevel::Debug, f.file());
+  bitwuzla_term_dump(a, "smt2", messaget_state::standard_output);
 }
 
 void bitwuzla_convt::print_model()
 {
-  auto f = msg.get_temp_file();
-  bitwuzla_print_model(bitw, "smt2", f.file());
-  msg.insert_file_contents(VerbosityLevel::Status, f.file());
+  bitwuzla_print_model(bitw, "smt2", messaget_state::standard_output);
 }
 
 smt_sortt bitwuzla_convt::mk_bool_sort()

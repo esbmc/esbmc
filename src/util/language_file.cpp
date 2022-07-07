@@ -67,7 +67,7 @@ bool language_filest::typecheck(contextt &context)
   for(filemapt::iterator it=filemap.begin();
       it!=filemap.end(); it++)
   {
-    if(it->second.language->interfaces(context, *get_message_handler()))
+    if(it->second.language->interfaces(context))
       return true;
   }
 #endif
@@ -131,7 +131,7 @@ bool language_filest::interfaces(contextt &)
   for(filemapt::iterator it=filemap.begin();
       it!=filemap.end(); it++)
   {
-    if(it->second.language->interfaces(context, *get_message_handler()))
+    if(it->second.language->interfaces(context))
       return true;
   }
 #endif

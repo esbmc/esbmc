@@ -108,7 +108,7 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
 
   auto loop_exit = loop.get_original_loop_exit();
 
-  goto_programt dest(message_handler);
+  goto_programt dest;
 
   auto goto_function = goto_functions.function_map.find("c:@F@main")->second;
 
@@ -119,7 +119,7 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
     {
       auto lb = create_value_expr(var.second.getInterval().lb(), int_type2());
       auto cond = create_greaterthanequal_relation(X, lb);
-      goto_programt tmp_e(message_handler);
+      goto_programt tmp_e;
       goto_programt::targett e = tmp_e.add_instruction(ASSUME);
       e->inductive_step_instruction = false;
       e->guard = cond;
@@ -128,7 +128,7 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
 
       auto ub = create_value_expr(var.second.getInterval().ub(), int_type2());
       auto cond2 = create_lessthanequal_relation(X, ub);
-      goto_programt tmp_e2(message_handler);
+      goto_programt tmp_e2;
       goto_programt::targett e2 = tmp_e2.add_instruction(ASSUME);
       e2->inductive_step_instruction = false;
       e2->guard = cond2;

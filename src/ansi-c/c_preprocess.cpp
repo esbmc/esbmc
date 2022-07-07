@@ -264,16 +264,13 @@ bool c_preprocess(
 bool c_preprocess(
   const std::string &path,
   std::ostream &outstream,
-  bool is_cpp,
-  message_handlert &message_handler)
+  bool is_cpp)
 {
   int err, ret;
   char out_file_buf[288], tmpdir[256];
 
   // For Windows, we can't fork and run the preprocessor in a seperate process.
   // Instead, just run it within the existing ESBMC process.
-
-  message_streamt message_stream(message_handler);
 
   GetTempPath(sizeof(tmpdir), tmpdir);
   GetTempFileName(tmpdir, "bmc", 0, out_file_buf);
