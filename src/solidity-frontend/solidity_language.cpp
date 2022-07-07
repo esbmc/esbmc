@@ -57,14 +57,13 @@ std::string solidity_languaget::get_temp_file()
 }
 
 solidity_languaget::solidity_languaget()
-  : clang_c_languaget
 {
 }
 
 bool solidity_languaget::parse(const std::string &path)
 {
   // prepare temp file
-  temp_path = get_temp_file;
+  temp_path = get_temp_file();
 
   // get AST nodes of ESBMC intrinsics and the dummy main
   // populate ASTs inherited from parent class

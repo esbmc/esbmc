@@ -1114,7 +1114,6 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
   case BITINT_TAG:
   {
     const BITINT_TYPE &eit = static_cast<const BITINT_TYPE &>(the_type);
-
     const unsigned n = eit.getNumBits();
     if(eit.isSigned())
       new_type = signedbv_typet(n);
