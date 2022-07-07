@@ -107,7 +107,8 @@ void jimple_full_method_body::from_json(const json &stmts)
       break;
     }
     default:
-      throw fmt::format("Unknown type {}", stmt);
+      log_error("Unknown type {}", stmt);
+      abort();
     }
     members.push_back(std::move(to_add));
   }
