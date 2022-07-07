@@ -8,7 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/i2string.h>
 #include <util/parser.h>
-#include <util/message/verbosity.h>
+#include <util/message.h>
 
 #ifdef _WIN32
 int isatty(int f)

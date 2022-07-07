@@ -183,14 +183,12 @@ public:
     const namespacet &_ns,
     contextt &_new_context,
     const optionst &_options,
-    dereference_callbackt &_dereference_callback,
-    const messaget &msg)
+    dereference_callbackt &_dereference_callback)
     : ns(_ns),
       new_context(_new_context),
       options(_options),
       dereference_callback(_dereference_callback),
-      block_assertions(false),
-      msg(msg)
+      block_assertions(false)
   {
     is_big_endian =
       (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);

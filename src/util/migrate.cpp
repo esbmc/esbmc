@@ -7,8 +7,6 @@
 #include <util/simplify_expr.h>
 #include <util/type_byte_size.h>
 
-#include <message/default_message.h>
-
 // File for old irep -> new irep conversions.
 
 // Due to the sins of the fathers, we need to have a namespace available during

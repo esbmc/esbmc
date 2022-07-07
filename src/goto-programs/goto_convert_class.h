@@ -15,22 +15,20 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <stack>
 #include <util/expr_util.h>
 #include <util/guard.h>
-#include <util/message/message_stream.h>
 #include <util/namespace.h>
 #include <util/options.h>
 #include <util/symbol_generator.h>
 #include <util/std_code.h>
 
-class goto_convertt : public message_streamt
+class goto_convertt
 {
 public:
   void goto_convert(const codet &code, goto_programt &dest);
 
   goto_convertt(
     contextt &_context,
-    optionst &_options,
-    const messaget &_message_handler)
-    : message_streamt(_message_handler),
+    optionst &_options)
+    :
       context(_context),
       options(_options),
       ns(_context),
@@ -38,7 +36,7 @@ public:
   {
   }
 
-  ~goto_convertt() override = default;
+  ~goto_convertt() = default;
 
 protected:
   contextt &context;

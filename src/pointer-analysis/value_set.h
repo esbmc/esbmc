@@ -61,7 +61,6 @@ public:
   value_sett(const namespacet &_ns)
     : location_number(0),
       ns(_ns),
-      msg(msg),
       xchg_name("value_sett::__ESBMC_xchg_ptr"),
       xchg_num(0)
   {
@@ -71,7 +70,6 @@ public:
     : location_number(ref.location_number),
       values(ref.values),
       ns(ref.ns),
-      msg(ref.msg),
       xchg_name("value_sett::__ESBMC_xchg_ptr"),
       xchg_num(0)
   {

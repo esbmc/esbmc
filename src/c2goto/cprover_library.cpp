@@ -149,7 +149,7 @@ void add_cprover_library(
   case 64:
     break;
   default:
-    message_handler.error(
+    log_error(
       "No C library for bitwidth {}", config.ansi_c.word_size);
     abort();
   }
@@ -161,7 +161,7 @@ void add_cprover_library(
   {
     if(c_language)
       return add_bundled_library_sources(context, message_handler, *c_language);
-    message_handler.error("error: Zero-lengthed internal C library");
+    log_error("error: Zero-lengthed internal C library");
     abort();
   }
 
@@ -218,7 +218,7 @@ void add_cprover_library(
   if(c_link(context, store_ctx, message_handler, "<built-in-library>"))
   {
     // Merging failed
-    message_handler.error("Failed to merge C library");
+    log_error("Failed to merge C library");
     abort();
   }
 }

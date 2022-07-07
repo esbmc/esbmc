@@ -422,7 +422,6 @@ public:
       const class namespacet &ns,
       const irep_idt &identifier,
       std::ostream &out,
-      const messaget &msg,
       bool show_location = true) const;
   };
 
@@ -571,7 +570,7 @@ public:
   }
 
   //! Constructor
-  explicit goto_programt() : hide(false)
+  goto_programt() : hide(false)
   {
   }
   virtual ~goto_programt() = default;

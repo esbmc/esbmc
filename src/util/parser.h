@@ -7,7 +7,7 @@
 #include <vector>
 #include <istream>
 
-class parsert : public messaget
+class parsert
 {
 public:
   std::istream *in;
@@ -31,7 +31,7 @@ public:
     clear();
   }
 
-  ~parsert() override = default;
+  ~parsert() = default;
   parsert(const parsert &obj) = delete;
   parsert &operator=(const parsert &rhs) = delete;
 

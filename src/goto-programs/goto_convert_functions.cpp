@@ -23,9 +23,8 @@ Date: June 2003
 goto_convert_functionst::goto_convert_functionst(
   contextt &_context,
   optionst &_options,
-  goto_functionst &_functions,
-  const messaget &_message_handler)
-  : goto_convertt(_context, _options, _message_handler), functions(_functions)
+  goto_functionst &_functions)
+  : goto_convertt(_context, _options), functions(_functions)
 {
 }
 
@@ -104,7 +103,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   auto it = functions.function_map.find(identifier);
   if(it == functions.function_map.end())
-    functions.function_map.emplace(identifier, message_handler);
+    functions.function_map.emplace(identifier, goto_functiont());
   goto_functiont &f = functions.function_map.at(identifier);
   f.type = to_code_type(symbol.type);
   f.body_available = symbol.value.is_not_nil();
@@ -114,8 +113,8 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   if(!symbol.value.is_code())
   {
-    err_location(symbol.value);
-    throw "got invalid code for function `" + id2string(identifier) + "'";
+    log_error("got invalid code for function `" + id2string(identifier) + "'");
+    abort();
   }
 
   const codet &code = to_code(symbol.value);
@@ -129,7 +128,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     end_location.make_nil();
 
   // add "end of function"
-  goto_programt tmp_end_function(get_message_handler());
+  goto_programt tmp_end_function;
   goto_programt::targett end_function = tmp_end_function.add_instruction();
   end_function->type = END_FUNCTION;
   end_function->location = end_location;
@@ -190,31 +189,10 @@ void goto_convert(
   const messaget &message_handler)
 {
   goto_convert_functionst goto_convert_functions(
-    context, options, functions, message_handler);
+    context, options, functions);
 
-  try
-  {
     goto_convert_functions.thrash_type_symbols();
     goto_convert_functions.goto_convert();
-  }
-
-  catch(int)
-  {
-    goto_convert_functions.error();
-  }
-
-  catch(const char *e)
-  {
-    goto_convert_functions.error(e);
-  }
-
-  catch(const std::string &e)
-  {
-    goto_convert_functions.error(e);
-  }
-
-  if(goto_convert_functions.get_error_found())
-    throw 0;
 }
 
 void goto_convert_functionst::collect_type(
@@ -314,7 +292,7 @@ void goto_convert_functionst::rename_types(
       else
       {
         // And if we fail
-        message_handler.error(
+        log_error(
           "Can't resolve type symbol {} at symbol squashing time", ident);
         abort();
       }

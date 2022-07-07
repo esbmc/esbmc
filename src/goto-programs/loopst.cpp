@@ -73,7 +73,7 @@ void loopst::dump() const
   std::ostringstream oss;
   output_to(oss);
   log_debug(oss.str());
-  dump_loop_vars(msg);
+  dump_loop_vars();
 }
 
 void loopst::dump_loop_vars() const

@@ -73,11 +73,11 @@ BigInt type_byte_size_bits(const type2tc &type)
     return 0;
 
   case type2t::symbol_id:
-    log_error("Symbolic type id in type_byte_size\n{}", *type).c_str();
+    log_error("Symbolic type id in type_byte_size\n{}", *type);
     abort();
 
   case type2t::cpp_name_id:
-    log_error("C++ symbolic type id in type_byte_size\n{}", *type).c_str();
+    log_error("C++ symbolic type id in type_byte_size\n{}", *type);
     abort();
 
   case type2t::bool_id:
@@ -260,8 +260,8 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
     return gen_ulong(0);
   }
 
-  throw std::runtime_error(
-    "compute_pointer_offset, unexpected irep:\n{}", expr->pretty());
+  log_error("compute_pointer_offset, unexpected irep:\n{}", expr->pretty());
+  abort();
 }
 
 expr2tc compute_pointer_offset(const expr2tc &expr)

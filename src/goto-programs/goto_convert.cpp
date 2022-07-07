@@ -43,7 +43,7 @@ void goto_convertt::finish_gotos(goto_programt &dest)
 
       if(l_it == targets.labels.end())
       {
-        message_handler.error(
+        log_error(
           "goto label {} not found\n{}", goto_label, *i.code);
         abort();
       }
@@ -56,7 +56,7 @@ void goto_convertt::finish_gotos(goto_programt &dest)
       auto unwind_to_size = label_stack.size();
       if(unwind_to_size < goto_stack.size())
       {
-        goto_programt destructor_code(dest.msg);
+        goto_programt destructor_code;
         unwind_destructor_stack(
           i.location, unwind_to_size, destructor_code, goto_stack);
         dest.destructive_insert(it.first, destructor_code);
@@ -66,8 +66,8 @@ void goto_convertt::finish_gotos(goto_programt &dest)
     }
     else
     {
-      err_location(migrate_expr_back(i.code));
-      throw "finish_gotos: unexpected goto";
+      log_error("finish_gotos: unexpected goto");
+      abort();
     }
   }
 
@@ -146,13 +146,12 @@ void goto_convertt::convert_label(const code_labelt &code, goto_programt &dest)
 {
   if(code.operands().size() != 1)
   {
-    err_location(code);
-    throw "label statement expected to have one operand";
+    log_error("label statement expected to have one operand");
   }
 
   // grab the label
   const irep_idt &label = code.get_label();
-  goto_programt tmp(get_message_handler());
+  goto_programt tmp;
 
   convert(to_code(code.op0()), tmp);
 
@@ -190,11 +189,11 @@ void goto_convertt::convert_switch_case(
 {
   if(code.operands().size() != 2)
   {
-    err_location(code);
-    throw "switch-case statement expected to have two operands";
+    log_error("switch-case statement expected to have two operands");
+    abort();
   }
 
-  goto_programt tmp(get_message_handler());
+  goto_programt tmp;
   convert(code.code(), tmp);
 
   goto_programt::targett target = tmp.instructions.begin();
@@ -369,12 +368,12 @@ void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
   std::vector<irep_idt> exception_list;
 
   // add a SKIP target for the end of everything
-  goto_programt end(get_message_handler());
+  goto_programt end;
   goto_programt::targett end_target = end.add_instruction();
   end_target->make_skip();
 
   // the first operand is the 'try' block
-  goto_programt tmp(get_message_handler());
+  goto_programt tmp;
   convert(to_code(code.op0()), tmp);
   dest.destructive_append(tmp);
 
@@ -446,8 +445,8 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 1)
   {
-    err_location(code);
-    message_handler.error("expression statement takes one operand\n");
+
+    log_error("expression statement takes one operand\n");
     abort();
   }
 
@@ -484,7 +483,7 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
   // Remove side effect
   if(has_sideeffect(size))
   {
-    goto_programt sideeffects(get_message_handler());
+    goto_programt sideeffects;
     remove_sideeffects(size, sideeffects);
     dest.destructive_append(sideeffects);
     return true;
@@ -586,8 +585,8 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 1 && code.operands().size() != 2)
   {
-    err_location(code);
-    throw "decl statement takes one or two operands";
+    log_error("decl statement takes one or two operands");
+    abort();
   }
 
   // We might change the symbol
@@ -596,8 +595,8 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   exprt &var = new_code.op0();
   if(!var.is_symbol())
   {
-    err_location(var);
-    throw "decl statement expects symbol as first operand";
+    log_error("decl statement expects symbol as first operand");
+    abort();
   }
 
   const irep_idt &identifier = var.identifier();
@@ -643,7 +642,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   if(!initializer.is_nil())
   {
-    goto_programt sideeffects(get_message_handler());
+    goto_programt sideeffects;
     remove_sideeffects(initializer, sideeffects);
     dest.destructive_append(sideeffects);
 
@@ -686,8 +685,8 @@ void goto_convertt::convert_assign(
 {
   if(code.operands().size() != 2)
   {
-    err_location(code);
-    throw "assignment statement takes two operands";
+    log_error("assignment statement takes two operands");
+    abort();
   }
 
   exprt lhs = code.lhs(), rhs = code.rhs();
@@ -698,8 +697,8 @@ void goto_convertt::convert_assign(
   {
     if(rhs.operands().size() != 2)
     {
-      err_location(rhs);
-      throw "function_call sideeffect takes two operands";
+      log_error("function_call sideeffect takes two operands");
+      abort();
     }
 
     Forall_operands(it, rhs)
@@ -1008,8 +1007,8 @@ void goto_convertt::convert_init(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 2)
   {
-    err_location(code);
-    throw "init statement takes two operands";
+    log_error("init statement takes two operands");
+    abort();
   }
 
   // make it an assignment
@@ -1023,8 +1022,7 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 1)
   {
-    err_location(code);
-    throw "cpp_delete statement takes one operand";
+    log_error("cpp_delete statement takes one operand");
   }
 
   exprt tmp_op = code.op0();
@@ -1086,8 +1084,8 @@ void goto_convertt::convert_assert(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 1)
   {
-    err_location(code);
-    throw "assert statement takes one operand";
+    log_error("assert statement takes one operand");
+    abort();
   }
 
   exprt cond = code.op0();
@@ -1126,8 +1124,8 @@ void goto_convertt::convert_assume(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 1)
   {
-    err_location(code);
-    throw "assume statement takes one operand";
+    log_error("assume statement takes one operand");
+    abort();
   }
 
   exprt op = code.op0();
@@ -1152,8 +1150,8 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 4)
   {
-    err_location(code);
-    throw "for takes four operands";
+    log_error("for takes four operands");
+    abort();
   }
 
   // turn for(A; c; B) { P } into
@@ -1174,7 +1172,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   exprt tmp = code.op1();
 
   exprt cond = tmp;
-  goto_programt sideeffects(get_message_handler());
+  goto_programt sideeffects;
 
   remove_sideeffects(cond, sideeffects);
 
@@ -1185,16 +1183,16 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   goto_programt::targett u = sideeffects.instructions.begin();
 
   // do the v label
-  goto_programt tmp_v(get_message_handler());
+  goto_programt tmp_v;
   goto_programt::targett v = tmp_v.add_instruction();
 
   // do the z label
-  goto_programt tmp_z(get_message_handler());
+  goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction(SKIP);
   z->location = code.location();
 
   // do the x label
-  goto_programt tmp_x(get_message_handler());
+  goto_programt tmp_x;
   if(code.op2().is_nil())
   {
     tmp_x.add_instruction(SKIP);
@@ -1223,11 +1221,11 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   v->location = cond.location();
 
   // do the w label
-  goto_programt tmp_w(get_message_handler());
+  goto_programt tmp_w;
   convert(to_code(code.op3()), tmp_w);
 
   // y: goto u;
-  goto_programt tmp_y(get_message_handler());
+  goto_programt tmp_y;
   goto_programt::targett y = tmp_y.add_instruction();
   y->make_goto(u);
   y->guard = gen_true_expr();
@@ -1248,8 +1246,8 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 2)
   {
-    err_location(code);
-    throw "while takes two operands";
+    log_error("while takes two operands");
+    abort();
   }
 
   exprt tmp = code.op0();
@@ -1267,19 +1265,19 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   break_continue_targetst old_targets(targets);
 
   // do the z label
-  goto_programt tmp_z(get_message_handler());
+  goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
   z->location = location;
 
-  goto_programt tmp_branch(get_message_handler());
+  goto_programt tmp_branch;
   generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
 
   // do the v label
   goto_programt::targett v = tmp_branch.instructions.begin();
 
   // do the y label
-  goto_programt tmp_y(get_message_handler());
+  goto_programt tmp_y;
   goto_programt::targett y = tmp_y.add_instruction();
 
   // set the targets
@@ -1287,7 +1285,7 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   targets.set_continue(y);
 
   // do the x label
-  goto_programt tmp_x(get_message_handler());
+  goto_programt tmp_x;
   convert(to_code(code.op1()), tmp_x);
 
   // y: if(c) goto v;
@@ -1308,8 +1306,8 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 2)
   {
-    err_location(code);
-    throw "dowhile takes two operands";
+    log_error("dowhile takes two operands");
+    abort();
   }
 
   // save location
@@ -1317,7 +1315,7 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
 
   exprt cond = code.op0();
 
-  goto_programt sideeffects(get_message_handler());
+  goto_programt sideeffects;
   remove_sideeffects(cond, sideeffects);
 
   //    do P while(c);
@@ -1331,11 +1329,11 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   break_continue_targetst old_targets(targets);
 
   // do the y label
-  goto_programt tmp_y(get_message_handler());
+  goto_programt tmp_y;
   goto_programt::targett y = tmp_y.add_instruction();
 
   // do the z label
-  goto_programt tmp_z(get_message_handler());
+  goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
   z->location = code.location();
@@ -1352,7 +1350,7 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   targets.set_continue(x);
 
   // do the w label
-  goto_programt tmp_w(get_message_handler());
+  goto_programt tmp_w;
   convert(to_code(code.op1()), tmp_w);
   goto_programt::targett w = tmp_w.instructions.begin();
 
@@ -1427,14 +1425,14 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
 
   exprt argument = code.op0();
 
-  goto_programt sideeffects(get_message_handler());
+  goto_programt sideeffects;
   remove_sideeffects(argument, sideeffects);
 
   // save break/default/cases targets
   break_switch_targetst old_targets(targets);
 
   // do the z label
-  goto_programt tmp_z(get_message_handler());
+  goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
   z->location = code.location();
@@ -1444,10 +1442,10 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
   targets.set_default(z);
   targets.cases.clear();
 
-  goto_programt tmp(get_message_handler());
+  goto_programt tmp;
   convert(to_code_switch(code).body(), tmp);
 
-  goto_programt tmp_cases(get_message_handler());
+  goto_programt tmp_cases;
 
   for(auto &it : targets.cases)
   {
@@ -1490,8 +1488,8 @@ void goto_convertt::convert_break(const code_breakt &code, goto_programt &dest)
 {
   if(!targets.break_set)
   {
-    err_location(code);
-    throw "break without target";
+    log_error("break without target");
+    abort();
   }
 
   // need to process destructor stack
@@ -1508,14 +1506,14 @@ void goto_convertt::convert_return(
 {
   if(!targets.return_set)
   {
-    err_location(code);
-    throw "return without target";
+    log_error("return without target");
+    abort();
   }
 
   code_returnt new_code(code);
   if(new_code.has_return_value())
   {
-    goto_programt sideeffects(get_message_handler());
+    goto_programt sideeffects;
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
 
@@ -1528,15 +1526,15 @@ void goto_convertt::convert_return(
     }
   }
 
-  goto_programt dummy(get_message_handler());
+  goto_programt dummy;
   unwind_destructor_stack(code.location(), 0, dummy);
 
   if(targets.has_return_value)
   {
     if(!new_code.has_return_value())
     {
-      err_location(new_code);
-      throw "function must return value";
+      log_error("function must return value");
+      abort();
     }
 
     // Now add a return node to set the return value.
@@ -1551,8 +1549,8 @@ void goto_convertt::convert_return(
       new_code.has_return_value() &&
       new_code.return_value().type().id() != "empty")
     {
-      err_location(new_code);
-      throw "function must not return value";
+      log_error("function must not return value");
+      abort();
     }
   }
 
@@ -1568,8 +1566,8 @@ void goto_convertt::convert_continue(
 {
   if(!targets.continue_set)
   {
-    err_location(code);
-    throw "continue without target";
+    log_error("continue without target");
+    abort();
   }
 
   // need to process destructor stack
@@ -1603,8 +1601,8 @@ void goto_convertt::convert_atomic_begin(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 0)
   {
-    err_location(code);
-    throw "atomic_begin expects no operands";
+    log_error("atomic_begin expects no operands");
+    abort();
   }
 
   copy(code, ATOMIC_BEGIN, dest);
@@ -1614,8 +1612,8 @@ void goto_convertt::convert_atomic_end(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 0)
   {
-    err_location(code);
-    throw "atomic_end expects no operands";
+   log_error("atomic_end expects no operands");
+   abort();
   }
 
   copy(code, ATOMIC_END, dest);
@@ -1632,7 +1630,7 @@ void goto_convertt::generate_ifthenelse(
   if(true_case.instructions.empty() && false_case.instructions.empty())
   {
     // hmpf. Useless branch.
-    goto_programt tmp_z(get_message_handler());
+    goto_programt tmp_z;
     goto_programt::targett z = tmp_z.add_instruction();
     z->make_skip();
     goto_programt::targett v = dest.add_instruction();
@@ -1726,16 +1724,16 @@ void goto_convertt::generate_ifthenelse(
   // z: ;
 
   // do the x label
-  goto_programt tmp_x(get_message_handler());
+  goto_programt tmp_x;
   goto_programt::targett x = tmp_x.add_instruction();
 
   // do the z label
-  goto_programt tmp_z(get_message_handler());
+  goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
 
   // y: Q;
-  goto_programt tmp_y(get_message_handler());
+  goto_programt tmp_y;
   goto_programt::targett y;
   if(has_else)
   {
@@ -1744,12 +1742,12 @@ void goto_convertt::generate_ifthenelse(
   }
 
   // v: if(!c) goto z/y;
-  goto_programt tmp_v(get_message_handler());
+  goto_programt tmp_v;
   generate_conditional_branch(
     gen_not(guard), has_else ? y : z, location, tmp_v);
 
   // w: P;
-  goto_programt tmp_w(get_message_handler());
+  goto_programt tmp_w;
   tmp_w.swap(true_case);
 
   // x: goto z;
@@ -1775,8 +1773,8 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
 
   if(code.operands().size() != 2 && code.operands().size() != 3)
   {
-    err_location(code);
-    throw "ifthenelse takes two or three operands";
+    log_error("ifthenelse takes two or three operands");
+    abort();
   }
 
   bool has_else = code.operands().size() == 3 && !code.op2().is_nil();
@@ -1802,10 +1800,10 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
   }
 
   // convert 'then'-branch
-  goto_programt tmp_op1(get_message_handler());
+  goto_programt tmp_op1;
   convert(to_code(code.op1()), tmp_op1);
 
-  goto_programt tmp_op2(get_message_handler());
+  goto_programt tmp_op2;
 
   if(has_else)
     convert(to_code(code.op2()), tmp_op2);
@@ -1861,7 +1859,7 @@ void goto_convertt::generate_conditional_branch(
   // if(guard) goto target; else goto next;
   // next: skip;
 
-  goto_programt tmp(get_message_handler());
+  goto_programt tmp;
   goto_programt::targett target_false = tmp.add_instruction();
   target_false->make_skip();
 

@@ -11,6 +11,7 @@ Maintainers:
 #pragma once
 
 //#include <fmt/format.h>
+#include <util/location.h>
 
 /**
    * @brief Verbosity refers to the max level
@@ -33,6 +34,8 @@ enum class VerbosityLevel : char
   Status,   // all kinds of esbmc is doing that may be useful to the user
   Debug     // messages that are only useful if you need to debug.
 };
+
+static inline void print(VerbosityLevel, const std::string&, const locationt&) {}
 
 
 // Macro to generate log functions

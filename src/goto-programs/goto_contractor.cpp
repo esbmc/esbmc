@@ -165,7 +165,7 @@ void goto_contractort::contractor()
   oss << "\n\t- Domains (after): " << X;
   map.update_intervals(X);
 
-  message_handler.status(oss.str());
+  log_status(oss.str());
 }
 
 ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
@@ -181,7 +181,7 @@ ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
   case ibex::LT:
     return ibex::GEQ;
   default:
-    message_handler.status("cant process equal");
+    log_status("cant process equal");
     break;
   }
   return ibex::GEQ;
@@ -195,7 +195,7 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
     is_arith_expr(expr) || is_constant_number(expr) || is_symbol2t(expr) ||
     is_notequal2t(expr) || is_equality2t(expr))
   {
-    message_handler.status("Expression is complex, skipping this assert");
+    log_status("Expression is complex, skipping this assert");
     return nullptr;
   }
 
@@ -280,7 +280,7 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
     }
     else
     {
-      message_handler.error("ERROR: MAX VAR SIZE REACHED");
+      log_error("ERROR: MAX VAR SIZE REACHED");
       return nullptr;
     }
     break;

@@ -77,18 +77,18 @@ void value_sett::output(std::ostream &out) const
 
       // Display invalid / unknown objects as just that,
       if(is_invalid2t(o) || is_unknown2t(o))
-        result = from_expr(ns, identifier, o, msg);
+        result = from_expr(ns, identifier, o);
       else
       {
         // Everything else, display as a triple of <object, offset, type>.
-        result = "<" + from_expr(ns, identifier, o, msg) + ", ";
+        result = "<" + from_expr(ns, identifier, o) + ", ";
 
         if(o_it->second.offset_is_set)
           result += integer2string(o_it->second.offset) + "";
         else
           result += "*";
 
-        result += ", " + from_type(ns, identifier, o->type, msg);
+        result += ", " + from_type(ns, identifier, o->type);
 
         result += ">";
       }
@@ -1289,7 +1289,7 @@ void value_sett::assign_rec(
   }
   else
   {
-    throw std::runtime_error("assign NYI: `{}'", get_expr_id(lhs));
+    throw std::runtime_error("assign NYI: `{}'" + get_expr_id(lhs));
   }
 }
 
@@ -1434,8 +1434,9 @@ void value_sett::apply_code(const expr2tc &code)
   }
   else
   {
-    throw std::runtime_error(
-      fmt::format("{}\nvalue_sett: unexpected statement", *code));
+    std::ostringstream str;
+    str << code << "\nvalue_sett: unexpected statement";
+    throw std::runtime_error(str.str());
   }
 }
 

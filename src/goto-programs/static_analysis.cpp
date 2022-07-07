@@ -88,7 +88,7 @@ void static_analysis_baset::output(
 
     get_state(i_it).output(ns, out);
     out << "\n";
-    i_it->output_instruction(ns, identifier, out, msg);
+    i_it->output_instruction(ns, identifier, out);
     out << "\n";
   }
 }

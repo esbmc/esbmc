@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/language.h>
 #include <langapi/mode.h>
-#include <message/default_message.h>
 
 #include "show_symbol_table.h"
 
@@ -42,7 +41,7 @@ void show_symbol_table_plain(
           throw "symbol " + id2string(s.name) + " has unknown mode";
       }
 
-      std::unique_ptr<languaget> p(mode_table[mode].new_language(msg));
+      std::unique_ptr<languaget> p(mode_table[mode].new_language());
       std::string type_str, value_str;
 
       if(s.type.is_not_nil())
