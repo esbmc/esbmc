@@ -296,7 +296,6 @@ private:
   /** Flag for discarding all assertions encoded. */
   bool block_assertions;
 
-
   /** Interpret an expression that modifies the guard. i.e., an 'if' or a
    *  piece of logic that can be short-circuited.
    *  @param expr The expression that we're looking for dereferences in.

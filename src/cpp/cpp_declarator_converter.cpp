@@ -109,7 +109,7 @@ symbolt &cpp_declarator_convertert::convert(
       {
         err_location(declarator.name());
         str << "member `" << base_name << "' not found in scope `"
-                          << scope->identifier << "'";
+            << scope->identifier << "'";
         log_error(str.str());
         abort();
       }
@@ -247,13 +247,12 @@ void cpp_declarator_convertert::combine_types(
           if(i != 0 || !symbol_code_type.get_bool("#is_virtual"))
           {
             err_location(location);
-            str << "symbol `" << symbol.name << "': argument "
-                              << (i + 1) << " type mismatch" << std::endl;
+            str << "symbol `" << symbol.name << "': argument " << (i + 1)
+                << " type mismatch" << std::endl;
             str << "previous type: "
-                              << cpp_typecheck.to_string(symbol_argument.type())
-                              << std::endl;
+                << cpp_typecheck.to_string(symbol_argument.type()) << std::endl;
             str << "new type: "
-                              << cpp_typecheck.to_string(decl_argument.type());
+                << cpp_typecheck.to_string(decl_argument.type());
             throw 0;
           }
         }
@@ -281,10 +280,9 @@ void cpp_declarator_convertert::combine_types(
   }
 
   err_location(location);
-  str << "symbol `" << symbol.name
-                    << "' already declared with different type" << std::endl;
-  str << "previous type: " << cpp_typecheck.to_string(symbol.type)
-                    << std::endl;
+  str << "symbol `" << symbol.name << "' already declared with different type"
+      << std::endl;
+  str << "previous type: " << cpp_typecheck.to_string(symbol.type) << std::endl;
   str << "new type: " << cpp_typecheck.to_string(final_type);
   throw 0;
 }

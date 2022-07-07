@@ -90,9 +90,7 @@ const std::string *internal_libc_header_dir()
            : &internal_libc.header_dir();
 }
 
-void add_bundled_library_sources(
-  contextt &context,
-  const languaget &c_language)
+void add_bundled_library_sources(contextt &context, const languaget &c_language)
 {
   /* First extract headers (if not already done) */
   if(internal_libc_header_dir())
@@ -100,9 +98,7 @@ void add_bundled_library_sources(
     internal_libc.foreach_libc_libm([&](const std::string &path) {
       languaget *l = c_language.new_language();
       log_status("file " + path + ": Parsing");
-      if(
-        l->parse(path) ||
-        l->typecheck(context, path))
+      if(l->parse(path) || l->typecheck(context, path))
       {
         log_error("error processing internal libc source " + path);
         abort();

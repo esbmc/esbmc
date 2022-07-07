@@ -73,9 +73,8 @@ static std::string pick_default_solver()
 #endif
 }
 
-static solver_creator &pick_solver(
-  std::string &solver_name,
-  const optionst &options)
+static solver_creator &
+pick_solver(std::string &solver_name, const optionst &options)
 {
   if(solver_name == "")
   {

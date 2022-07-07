@@ -1430,8 +1430,7 @@ bool solidity_convertert::get_func_decl_ref_type(
   }
   default:
   {
-    log_debug(
-      "	@@@ Got type={}", SolidityGrammar::func_decl_ref_to_str(type));
+    log_debug("	@@@ Got type={}", SolidityGrammar::func_decl_ref_to_str(type));
     assert(!"Unimplemented type in auxiliary type to convert function call");
     return true;
   }

@@ -99,8 +99,7 @@ bool solidity_languaget::parse(const std::string &path)
   return false;
 }
 
-bool solidity_languaget::convert_intrinsics(
-  contextt &context)
+bool solidity_languaget::convert_intrinsics(contextt &context)
 {
   clang_c_convertert converter(context, ASTs, "C");
   if(converter.convert())
@@ -108,9 +107,7 @@ bool solidity_languaget::convert_intrinsics(
   return false;
 }
 
-bool solidity_languaget::typecheck(
-  contextt &context,
-  const std::string &module)
+bool solidity_languaget::typecheck(contextt &context, const std::string &module)
 {
   contextt new_context;
   convert_intrinsics(

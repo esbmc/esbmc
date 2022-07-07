@@ -123,8 +123,7 @@ smt_astt array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   smt_sortt result_sort = ctx->convert_sort(array_type.subtype);
 
   std::string name = ctx->mk_fresh_name("tuple_array_select::") + ".";
-  tuple_sym_smt_astt result =
-    new tuple_sym_smt_ast(ctx, result_sort, name);
+  tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, result_sort, name);
 
   unsigned int i = 0;
   for(auto const &it : data.members)

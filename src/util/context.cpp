@@ -8,8 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/context.h>
 
-
-
 bool contextt::add(const symbolt &symbol)
 {
   std::pair<symbolst::iterator, bool> result =

@@ -45,10 +45,7 @@ public:
 class c_linkt : public typecheckt
 {
 public:
-  c_linkt(
-    contextt &_context,
-    contextt &_new_context,
-    std::string _module)
+  c_linkt(contextt &_context, contextt &_new_context, std::string _module)
     : context(_context),
       new_context(_new_context),
       module(std::move(_module)),
@@ -70,8 +67,8 @@ protected:
   void move(symbolt &new_symbol);
 
   // overload to use language specific syntax
-  std::string to_string(const exprt &expr) ;
-  std::string to_string(const typet &type) ;
+  std::string to_string(const exprt &expr);
+  std::string to_string(const typet &type);
 
   contextt &context;
   contextt &new_context;
@@ -100,7 +97,7 @@ void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)
 {
   if(new_symbol.is_type != in_context.is_type)
   {
-    log_error("class conflict on symbol `{}'",in_context.name);
+    log_error("class conflict on symbol `{}'", in_context.name);
     abort();
   }
 
@@ -355,10 +352,7 @@ void c_linkt::move(symbolt &new_symbol)
 }
 } /* end anonymous namespace */
 
-bool c_link(
-  contextt &context,
-  contextt &new_context,
-  const std::string &module)
+bool c_link(contextt &context, contextt &new_context, const std::string &module)
 {
   c_linkt c_link(context, new_context, module);
   return c_link.typecheck_main();

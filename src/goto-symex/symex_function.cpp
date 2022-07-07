@@ -395,17 +395,16 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     const symbol2tc &sym = elem.second;
     if(!guard.is_false() && !is_code_type(sym))
     {
-
       if(guard.is_true())
       {
-        log_error(   "non-code call target '{}' generated at {}",
-                    sym->thename.as_string());
+        log_error(
+          "non-code call target '{}' generated at {}",
+          sym->thename.as_string());
         return false;
       }
 
-      log_status(   "non-code call target '{}' generated at {}",
-                sym->thename.as_string());
-
+      log_status(
+        "non-code call target '{}' generated at {}", sym->thename.as_string());
     }
     return true;
   };
@@ -422,8 +421,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
     if(fit == goto_functions.function_map.end() || !fit->second.body_available)
     {
-      log_warning(
-        "**** WARNING: no body for function {}", pretty_name);
+      log_warning("**** WARNING: no body for function {}", pretty_name);
 
       continue; // XXX, find out why this fires on SV-COMP 14 benchmark
       // 32_7a_cilled_true_linux-3.8-rc1-drivers--ata--pata_legacy.ko-main.cil.out.c

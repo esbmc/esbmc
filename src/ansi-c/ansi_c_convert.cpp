@@ -393,9 +393,7 @@ bool ansi_c_convert(
   return false;
 }
 
-bool ansi_c_convert(
-  exprt &expr,
-  const std::string &module)
+bool ansi_c_convert(exprt &expr, const std::string &module)
 {
   ansi_c_convertt ansi_c_convert(module);
 
@@ -411,7 +409,7 @@ bool ansi_c_convert(
 
   catch(const char *e)
   {
-   log_error(e);
+    log_error(e);
   }
 
   catch(const std::string &e)

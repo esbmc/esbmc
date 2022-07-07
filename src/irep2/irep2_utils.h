@@ -3,7 +3,6 @@
 
 #include <util/c_types.h>
 
-
 #include <irep2/irep2_expr.h>
 #include <util/migrate.h>
 
@@ -362,7 +361,6 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
     break;
   }
 
-
   log_error("Can't generate zero for type {}", get_type_id(type));
   abort();
 }
@@ -395,7 +393,6 @@ inline expr2tc gen_one(const type2tc &type)
   default:
     break;
   }
-
 
   log_error("Can't generate one for type {}", get_type_id(type));
   abort();

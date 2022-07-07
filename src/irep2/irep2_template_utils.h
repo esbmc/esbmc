@@ -10,8 +10,6 @@
 #include <util/migrate.h>
 #include <util/std_types.h>
 
-
-
 std::string type_to_string(const bool &thebool, int);
 
 std::string type_to_string(const sideeffect_data::allockind &data, int);

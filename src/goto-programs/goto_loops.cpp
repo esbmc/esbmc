@@ -135,8 +135,7 @@ void goto_loopst::get_modified_variables(
 
     if(it == goto_functions.function_map.end())
     {
-      log_error(
-        "failed to find `{}' in function_map", id2string(identifier));
+      log_error("failed to find `{}' in function_map", id2string(identifier));
       abort();
     }
 

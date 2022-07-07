@@ -22,8 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/type_byte_size.h>
 #include <util/message.h>
 
-static const std::string &
-get_string_constant(const exprt &expr)
+static const std::string &get_string_constant(const exprt &expr)
 {
   if(expr.id() == "typecast" && expr.operands().size() == 1)
     return get_string_constant(expr.op0());
@@ -514,7 +513,8 @@ void goto_convertt::do_function_call_symbol(
 
   if(!symbol->type.is_code())
   {
-    log_error("error: function `" + id2string(identifier) +
+    log_error(
+      "error: function `" + id2string(identifier) +
       "' type mismatch: expected code");
   }
 
@@ -581,7 +581,8 @@ void goto_convertt::do_function_call_symbol(
     // 2 arguments --> Normal assertion + MSG
     if(arguments.size() > 2)
     {
-      log_error("`" + id2string(base_name) + "' expected to have two arguments");
+      log_error(
+        "`" + id2string(base_name) + "' expected to have two arguments");
       abort();
     }
 
@@ -591,10 +592,9 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t = dest.add_instruction(ASSERT);
     migrate_expr(arguments[0], t->guard);
 
-    const std::string &description =
-      arguments.size() == 1
-        ? "ESBMC assertion"
-        : get_string_constant(arguments[1]);
+    const std::string &description = arguments.size() == 1
+                                       ? "ESBMC assertion"
+                                       : get_string_constant(arguments[1]);
     t->location = function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
@@ -704,13 +704,13 @@ void goto_convertt::do_function_call_symbol(
 
     if(arguments.size() != 4)
     {
-      log_error("`" + id2string(base_name) + "' expected to have four arguments");
+      log_error(
+        "`" + id2string(base_name) + "' expected to have four arguments");
       abort();
     }
 
     const irep_idt description =
-      "assertion " +
-      id2string(get_string_constant(arguments[0]));
+      "assertion " + id2string(get_string_constant(arguments[0]));
 
     if(options.get_bool_option("no-assertions"))
       return;
@@ -729,13 +729,13 @@ void goto_convertt::do_function_call_symbol(
 
     if(arguments.size() != 4)
     {
-      log_error("`" + id2string(base_name) + "' expected to have four arguments");
+      log_error(
+        "`" + id2string(base_name) + "' expected to have four arguments");
       abort();
     }
 
     const irep_idt description =
-      "assertion " +
-      id2string(get_string_constant(arguments[3]));
+      "assertion " + id2string(get_string_constant(arguments[3]));
 
     if(options.get_bool_option("no-assertions"))
       return;
@@ -754,7 +754,8 @@ void goto_convertt::do_function_call_symbol(
 
     if(arguments.size() != 3)
     {
-      log_error("`" + id2string(base_name) + "' expected to have three arguments");
+      log_error(
+        "`" + id2string(base_name) + "' expected to have three arguments");
       abort();
     }
 
@@ -832,7 +833,8 @@ void goto_convertt::do_function_call_symbol(
   {
     if(arguments.size() != 2)
     {
-      log_error("`" + id2string(base_name) + "' expected to have two arguments");
+      log_error(
+        "`" + id2string(base_name) + "' expected to have two arguments");
       abort();
     }
 
@@ -856,7 +858,8 @@ void goto_convertt::do_function_call_symbol(
     // parameter argument.
     if(arguments.size() != 2)
     {
-      log_error("`" + id2string(base_name) + "' expected to have two arguments");
+      log_error(
+        "`" + id2string(base_name) + "' expected to have two arguments");
       abort();
     }
 

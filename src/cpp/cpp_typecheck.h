@@ -118,8 +118,8 @@ public:
 
   // overload to use C++ syntax
 
-  std::string to_string(const typet &type) ;
-  std::string to_string(const exprt &expr) ;
+  std::string to_string(const typet &type);
+  std::string to_string(const exprt &expr);
 
   friend class cpp_typecheck_resolvet;
   friend class cpp_declarator_convertert;

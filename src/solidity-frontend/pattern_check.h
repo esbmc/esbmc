@@ -35,7 +35,6 @@ public:
 protected:
   const nlohmann::json &ast_nodes;
   const std::string target_func; // function to be verified
-
 };
 
 #endif /* SOLIDITY_FRONTEND_PATTERN_CHECK_H_ */

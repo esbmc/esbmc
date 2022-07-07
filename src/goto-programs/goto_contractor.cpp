@@ -4,8 +4,7 @@
 
 #include <goto-programs/goto_contractor.h>
 
-void goto_contractor(
-  goto_functionst &goto_functions)
+void goto_contractor(goto_functionst &goto_functions)
 {
   goto_contractort gotoContractort(goto_functions);
 
@@ -320,7 +319,6 @@ bool goto_contractort::initialize_main_function_loops()
     runOnFunction(*it);
     if(it->second.body_available)
     {
-
       goto_loopst goto_loops(it->first, goto_functions, it->second, msg);
       this->function_loops = goto_loops.get_loops();
     }

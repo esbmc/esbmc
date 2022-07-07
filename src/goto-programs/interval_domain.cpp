@@ -16,7 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
 
-
 void interval_domaint::output(std::ostream &out) const
 {
   if(bottom)
@@ -310,7 +309,6 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
 
 void interval_domaint::dump() const
 {
-
   std::ostringstream oss;
   output(oss);
   log_debug(oss.str());

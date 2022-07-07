@@ -21,9 +21,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/config.h>
 #include <util/replace_symbol.h>
 
-bool cpp_languaget::preprocess(
-  const std::string &path,
-  std::ostream &outstream)
+bool cpp_languaget::preprocess(const std::string &path, std::ostream &outstream)
 {
   if(path == "")
     return c_preprocess("", outstream, true);
@@ -129,8 +127,7 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "}" << std::endl;
 }
 
-bool cpp_languaget::parse(
-  const std::string &path)
+bool cpp_languaget::parse(const std::string &path)
 {
   // store the path
 
@@ -172,9 +169,7 @@ bool cpp_languaget::parse(
   return result;
 }
 
-bool cpp_languaget::typecheck(
-  contextt &context,
-  const std::string &module)
+bool cpp_languaget::typecheck(contextt &context, const std::string &module)
 {
   contextt new_context;
 

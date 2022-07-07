@@ -1,7 +1,6 @@
 #include <bitwuzla_conv.h>
 #include <cstring>
 
-
 #define new_ast new_solver_ast<bitw_smt_ast>
 
 void bitwuzla_error_handler(const char *msg)
@@ -23,9 +22,7 @@ smt_convt *create_new_bitwuzla_solver(
   return conv;
 }
 
-bitwuzla_convt::bitwuzla_convt(
-  const namespacet &ns,
-  const optionst &options)
+bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   : smt_convt(ns, options), array_iface(true, true), fp_convt(this)
 {
   bitw = bitwuzla_new();

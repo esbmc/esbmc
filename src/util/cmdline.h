@@ -53,7 +53,6 @@ public:
   ~cmdlinet();
   typedef std::map<std::string, std::list<std::string>> options_mapt;
   options_mapt options_map;
-
 };
 
 #endif

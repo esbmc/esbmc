@@ -10,7 +10,6 @@
 #include <util/prefix.h>
 #include <util/std_code.h>
 
-
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
 {
@@ -220,8 +219,7 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
     }
     else
     {
-      log_error(
-        "unknown side effect: {} at {}", statement, expr.location());
+      log_error("unknown side effect: {} at {}", statement, expr.location());
       abort();
     }
   }

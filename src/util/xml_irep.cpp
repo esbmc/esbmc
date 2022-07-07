@@ -10,7 +10,6 @@ Author: Daniel Kroening
 
 #include <util/xml_irep.h>
 
-
 void convert(const irept &irep, xmlt &xml)
 {
   if(irep.id() != "nil")
@@ -69,7 +68,6 @@ void convert(const xmlt &xml, irept &irep)
     }
     else
       // Should not happen
-      log_error(
-        "Unknown sub found ({}); malformed xml?", it->name);
+      log_error("Unknown sub found ({}); malformed xml?", it->name);
   }
 }

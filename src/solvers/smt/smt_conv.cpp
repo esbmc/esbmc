@@ -61,9 +61,7 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
   return get_member_name_field(t, str.value);
 }
 
-smt_convt::smt_convt(
-  const namespacet &_ns,
-  const optionst &_options)
+smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   : ctx_level(0), boolean_sort(nullptr), ns(_ns), options(_options)
 {
   int_encoding = options.get_bool_option("int-encoding");
@@ -1162,8 +1160,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   default:
-    log_error(
-      "Couldn't convert expression in unrecognised format\n{}", *expr);
+    log_error("Couldn't convert expression in unrecognised format\n{}", *expr);
     abort();
   }
 
@@ -1422,8 +1419,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
   }
 
   default:
-    log_error(
-     "Converting unrecognized terminal expr to SMT\n{}", *expr);
+    log_error("Converting unrecognized terminal expr to SMT\n{}", *expr);
     abort();
   }
 }
@@ -2373,8 +2369,7 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
     if(!options.get_bool_option("non-supported-models-as-zero"))
     {
       log_error(
-        "Unimplemented type'd expression ({}) in smt get",
-        expr->type->type_id);
+        "Unimplemented type'd expression ({}) in smt get", expr->type->type_id);
       abort();
     }
     else
@@ -2734,8 +2729,7 @@ void smt_convt::dump_smt()
 
 void smt_convt::print_model()
 {
-  log_error(
-    "SMT model printing not implemented for {}", solver_text());
+  log_error("SMT model printing not implemented for {}", solver_text());
   abort();
 }
 

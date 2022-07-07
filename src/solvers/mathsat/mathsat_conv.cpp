@@ -49,9 +49,7 @@ smt_convt *create_new_mathsat_solver(
   return conv;
 }
 
-mathsat_convt::mathsat_convt(
-  const namespacet &ns,
-  const optionst &options)
+mathsat_convt::mathsat_convt(const namespacet &ns, const optionst &options)
   : smt_convt(ns, options),
     array_iface(false, false),
     fp_convt(this),
@@ -902,7 +900,6 @@ mathsat_smt_ast::mathsat_smt_ast(
 
 void mathsat_smt_ast::dump() const
 {
-
   // We need to get the env
   auto convt = dynamic_cast<const mathsat_convt *>(context);
   assert(convt != nullptr);

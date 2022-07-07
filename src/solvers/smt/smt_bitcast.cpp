@@ -46,8 +46,7 @@ static expr2tc concat_tree(size_t start, size_t n, const Extract &extract)
   return concat2tc(get_uint_type(sz), a, b);
 }
 
-static expr2tc
-flatten_to_bitvector(const expr2tc &new_expr)
+static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
 {
   // Easy case, no need to concat anything
   if(is_number_type(new_expr))
@@ -75,8 +74,8 @@ flatten_to_bitvector(const expr2tc &new_expr)
 
     auto extract = [&](size_t i) {
       /* The sub-expression should be flattened as well */
-      return flatten_to_bitvector(
-        index2tc(arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)));
+      return flatten_to_bitvector(index2tc(
+        arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)));
     };
 
     return concat_tree(0, sz, extract);
@@ -97,11 +96,10 @@ flatten_to_bitvector(const expr2tc &new_expr)
 
     auto extract = [&](size_t i) {
       /* The sub-expression should be flattened as well */
-      return flatten_to_bitvector(
-        member2tc(
-          structtype.members[sz - i - 1],
-          new_expr,
-          structtype.member_names[sz - i - 1]));
+      return flatten_to_bitvector(member2tc(
+        structtype.members[sz - i - 1],
+        new_expr,
+        structtype.member_names[sz - i - 1]));
     };
 
     return concat_tree(0, sz, extract);

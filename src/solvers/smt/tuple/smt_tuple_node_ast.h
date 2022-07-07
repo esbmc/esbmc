@@ -3,7 +3,6 @@
 
 #include <solvers/smt/smt_conv.h>
 
-
 class tuple_node_smt_ast;
 typedef const tuple_node_smt_ast *tuple_node_smt_astt;
 
@@ -58,7 +57,6 @@ public:
 
   void dump() const override
   {
-
     log_debug("name {}", name);
     for(auto const &e : elements)
       e->dump();

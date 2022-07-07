@@ -9,8 +9,6 @@
 #include <util/migrate.h>
 #include <util/std_types.h>
 
-
-
 /*************************** Base type2t definitions **************************/
 
 static const char *type_names[] = {
@@ -106,7 +104,6 @@ std::string type2t::pretty(unsigned int indent) const
 
 void type2t::dump() const
 {
-
   log_debug(pretty(0));
 }
 
@@ -278,17 +275,17 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
   if(!count)
   {
     log_error(
-        "Looking up index of nonexistant member \"{}\" in struct/union \"{}\"",
-        comp,
-        name);
+      "Looking up index of nonexistant member \"{}\" in struct/union \"{}\"",
+      comp,
+      name);
     abort();
   }
   else if(count > 1)
   {
     log_error(
-        "Name \"{}\" matches more than one member\" in struct/union \"{}\"",
-        comp,
-        name);
+      "Name \"{}\" matches more than one member\" in struct/union \"{}\"",
+      comp,
+      name);
     abort();
   }
 

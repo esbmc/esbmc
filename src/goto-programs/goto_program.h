@@ -63,7 +63,6 @@ std::ostream &operator<<(std::ostream &, goto_program_instruction_typet);
 class goto_programt
 {
 public:
-
   /*! \brief copy constructor
       \param[in] src an empty goto program
   */

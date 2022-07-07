@@ -2,7 +2,6 @@
 #include <util/std_code.h>
 #include <util/expr_util.h>
 
-
 exprt jimple_class_field::to_exprt(
   contextt &ctx,
   const std::string &,

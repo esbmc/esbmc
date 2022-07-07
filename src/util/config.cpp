@@ -56,8 +56,7 @@ static const eregex ARM("(arm|thumb|aarch64c?)(eb|_be)?");
 static const eregex MIPS("mips(64|isa64|isa64sb1)?(r[0-9]+)?(el|le)?.*");
 static const eregex POWERPC("(ppc|powerpc)(64)?(le)?");
 
-static configt::ansi_ct::endianesst
-arch_endianness(const std::string &arch)
+static configt::ansi_ct::endianesst arch_endianness(const std::string &arch)
 {
   if(std::regex_match(arch, X86) || arch == "riscv32" || arch == "riscv64")
     return configt::ansi_ct::IS_LITTLE_ENDIAN;

@@ -187,11 +187,10 @@ void goto_convert(
   optionst &options,
   goto_functionst &functions)
 {
-  goto_convert_functionst goto_convert_functions(
-    context, options, functions);
+  goto_convert_functionst goto_convert_functions(context, options, functions);
 
-    goto_convert_functions.thrash_type_symbols();
-    goto_convert_functions.goto_convert();
+  goto_convert_functions.thrash_type_symbols();
+  goto_convert_functions.goto_convert();
 }
 
 void goto_convert_functionst::collect_type(

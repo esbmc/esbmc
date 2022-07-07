@@ -1,7 +1,6 @@
 #include <boolector_conv.h>
 #include <cstring>
 
-
 #define new_ast new_solver_ast<btor_smt_ast>
 
 void error_handler(const char *msg)
@@ -23,9 +22,7 @@ smt_convt *create_new_boolector_solver(
   return conv;
 }
 
-boolector_convt::boolector_convt(
-  const namespacet &ns,
-  const optionst &options)
+boolector_convt::boolector_convt(const namespacet &ns, const optionst &options)
   : smt_convt(ns, options), array_iface(true, true), fp_convt(this)
 
 {
@@ -794,20 +791,18 @@ boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 void boolector_convt::dump_smt()
 {
   boolector_dump_smt2(btor, messaget_state::standard_output);
-
 }
 
 void btor_smt_ast::dump() const
 {
-
-  boolector_dump_smt2_node(boolector_get_btor(a), messaget_state::standard_output, a);
-
+  boolector_dump_smt2_node(
+    boolector_get_btor(a), messaget_state::standard_output, a);
 }
 
 void boolector_convt::print_model()
 {
-  boolector_print_model(btor, const_cast<char *>("smt2"), messaget_state::standard_output);
-
+  boolector_print_model(
+    btor, const_cast<char *>("smt2"), messaget_state::standard_output);
 }
 
 smt_sortt boolector_convt::mk_bool_sort()

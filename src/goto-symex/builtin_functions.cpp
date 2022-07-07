@@ -448,8 +448,7 @@ void goto_symext::intrinsic_switch_to(
   const expr2tc &num = call.operands[0];
   if(!is_constant_int2t(num))
   {
-    log_error(
-      "Can't switch to non-constant thread id no\n{}", *num);
+    log_error("Can't switch to non-constant thread id no\n{}", *num);
     abort();
   }
 
@@ -564,8 +563,7 @@ void goto_symext::intrinsic_spawn_thread(
     art.goto_functions.function_map.find(symname);
   if(it == art.goto_functions.function_map.end())
   {
-    log_error(
-      "Spawning thread \"{}{}", symname, "\": symbol not found");
+    log_error("Spawning thread \"{}{}", symname, "\": symbol not found");
     abort();
   }
 

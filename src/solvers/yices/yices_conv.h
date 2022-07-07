@@ -7,10 +7,7 @@
 class yices_smt_ast : public solver_smt_ast<term_t>
 {
 public:
-  yices_smt_ast(
-    smt_convt *ctx,
-    term_t _t,
-    const smt_sort *_s)
+  yices_smt_ast(smt_convt *ctx, term_t _t, const smt_sort *_s)
     : solver_smt_ast<term_t>(ctx, _t, _s)
   {
     // Detect term errors
@@ -46,9 +43,7 @@ class yices_convt : public smt_convt,
                     public fp_convt
 {
 public:
-  yices_convt(
-    const namespacet &ns,
-    const optionst &options);
+  yices_convt(const namespacet &ns, const optionst &options);
   ~yices_convt() override;
 
   resultt dec_solve() override;

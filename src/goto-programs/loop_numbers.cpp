@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/xml.h>
 #include <util/xml_irep.h>
 
-
 void show_loop_numbers(const goto_programt &goto_program)
 {
   for(const auto &instruction : goto_program.instructions)
@@ -25,8 +24,7 @@ void show_loop_numbers(const goto_programt &goto_program)
   }
 }
 
-void show_loop_numbers(
-  const goto_functionst &goto_functions)
+void show_loop_numbers(const goto_functionst &goto_functions)
 {
   for(const auto &it : goto_functions.function_map)
     show_loop_numbers(it.second.body);

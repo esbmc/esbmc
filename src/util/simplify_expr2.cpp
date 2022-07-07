@@ -8,7 +8,6 @@
 #include <irep2/irep2_utils.h>
 #include <util/type_byte_size.h>
 
-
 expr2tc expr2t::do_simplify() const
 {
   return expr2tc();

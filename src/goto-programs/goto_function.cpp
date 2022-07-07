@@ -16,7 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/location.h>
 #include <util/prefix.h>
 
-
 void goto_convertt::convert_function_call(
   const code_function_callt &function_call,
   goto_programt &dest)
@@ -71,8 +70,7 @@ void goto_convertt::do_function_call(
   }
   else
   {
-    log_error(
-      "unexpected function argument: {}", new_function.id_string());
+    log_error("unexpected function argument: {}", new_function.id_string());
     abort();
   }
 }
@@ -174,7 +172,6 @@ void goto_convertt::do_function_call_dereference(
 
 void goto_functionst::dump() const
 {
-
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
   log_debug(oss.str());

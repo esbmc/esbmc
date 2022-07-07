@@ -6,8 +6,6 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-
-
 void jimple_constant::from_json(const json &j)
 {
   j.at("value").get_to(value);
@@ -159,7 +157,6 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
     c.from_json(j);
     return std::make_shared<jimple_virtual_member>(c);
   }
-
 
   log_error("Unexpected expr type: {}", expr_type);
   abort();

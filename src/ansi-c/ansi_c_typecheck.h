@@ -24,8 +24,7 @@ public:
     ansi_c_parse_treet &_parse_tree,
     contextt &_context,
     const std::string &_module)
-    : c_typecheck_baset(_context, _module),
-      parse_tree(_parse_tree)
+    : c_typecheck_baset(_context, _module), parse_tree(_parse_tree)
   {
   }
 

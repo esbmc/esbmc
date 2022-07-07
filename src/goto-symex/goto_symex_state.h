@@ -138,7 +138,6 @@ public:
     ~goto_statet() = default;
 
   protected:
-
   };
 
   /**
@@ -474,7 +473,6 @@ public:
 
   /** Namespace to work with. */
   const namespacet &ns;
-
 
   /** Map of what pointer values have been realloc'd, and what their new
    *  realloc number is. No need for special consideration when merging states

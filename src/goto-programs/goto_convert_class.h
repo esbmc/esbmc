@@ -25,11 +25,8 @@ class goto_convertt
 public:
   void goto_convert(const codet &code, goto_programt &dest);
 
-  goto_convertt(
-    contextt &_context,
-    optionst &_options)
-    :
-      context(_context),
+  goto_convertt(contextt &_context, optionst &_options)
+    : context(_context),
       options(_options),
       ns(_context),
       tmp_symbol("goto_convertt::")

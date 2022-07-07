@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/location.h>
 #include <util/symbol.h>
 
-
 symbolt::symbolt()
 {
   clear();
@@ -49,7 +48,6 @@ void symbolt::swap(symbolt &b)
 
 void symbolt::dump() const
 {
-
   std::ostringstream oss;
   show(oss);
   log_debug(oss.str());

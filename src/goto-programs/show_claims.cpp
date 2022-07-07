@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/xml.h>
 #include <util/xml_irep.h>
 
-
 void show_claims(
   const namespacet &ns,
   const irep_idt &identifier,
@@ -38,17 +37,13 @@ void show_claims(
   }
 }
 
-void show_claims(
-  const namespacet &ns,
-  const goto_programt &goto_program)
+void show_claims(const namespacet &ns, const goto_programt &goto_program)
 {
   unsigned count = 0;
   show_claims(ns, "", goto_program, count);
 }
 
-void show_claims(
-  const namespacet &ns,
-  const goto_functionst &goto_functions)
+void show_claims(const namespacet &ns, const goto_functionst &goto_functions)
 {
   unsigned count = 0;
 

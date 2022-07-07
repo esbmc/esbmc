@@ -284,9 +284,8 @@ exprt cpp_typecheck_resolvet::convert_template_argument(
     if(e2.is_nil() || e2.type().is_nil())
     {
       location.dump();
-      str
-        << "internal error: template parameter without instance:" << std::endl
-        << identifier << std::endl;
+      str << "internal error: template parameter without instance:" << std::endl
+          << identifier << std::endl;
       log_error(str.str());
       throw 0;
     }
@@ -888,8 +887,7 @@ exprt cpp_typecheck_resolvet::do_builtin(
   else if(base_name == "current_scope")
   {
     dest = exprt("constant", typet("empty"));
-    str << "Scope in location " << location << ": "
-                      << original_scope->prefix;
+    str << "Scope in location " << location << ": " << original_scope->prefix;
     log_warning(str.str());
   }
   else if(base_name == "context")
@@ -1502,9 +1500,8 @@ exprt cpp_typecheck_resolvet::resolve(
       if(cpp_typecheck.cpp_scopes.current_scope().is_root_scope())
         str << " in root scope";
       else
-        str << " in scope `"
-                          << cpp_typecheck.cpp_scopes.current_scope().prefix
-                          << "'";
+        str << " in scope `" << cpp_typecheck.cpp_scopes.current_scope().prefix
+            << "'";
     }
 
     //cpp_typecheck.cpp_scopes.get_root_scope().print(std::cout);
@@ -1634,14 +1631,14 @@ exprt cpp_typecheck_resolvet::resolve(
     {
       err_location(location);
       str << "found no match for symbol `" << base_name
-                        << "', candidates are:" << std::endl;
+          << "', candidates are:" << std::endl;
       show_identifiers(base_name, identifiers, str);
     }
     else
     {
       err_location(location);
       str << "symbol `" << base_name
-                        << "' does not uniquely resolve:" << std::endl;
+          << "' does not uniquely resolve:" << std::endl;
       show_identifiers(base_name, new_identifiers, str);
     }
 
@@ -1652,8 +1649,7 @@ exprt cpp_typecheck_resolvet::resolve(
 
       for(const auto &operand : fargs.operands)
       {
-        str << "  " << cpp_typecheck.to_string(operand.type())
-                          << std::endl;
+        str << "  " << cpp_typecheck.to_string(operand.type()) << std::endl;
       }
     }
 
@@ -1677,7 +1673,7 @@ exprt cpp_typecheck_resolvet::resolve(
       err_location(location);
 
       str << "error: expected expression, but got type `"
-                        << cpp_typecheck.to_string(result.type()) << "'";
+          << cpp_typecheck.to_string(result.type()) << "'";
 
       throw 0;
     }
@@ -1692,7 +1688,7 @@ exprt cpp_typecheck_resolvet::resolve(
       err_location(location);
 
       str << "error: expected type, but got expression `"
-                        << cpp_typecheck.to_string(result) << "'";
+          << cpp_typecheck.to_string(result) << "'";
 
       throw 0;
     }
@@ -2160,8 +2156,7 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
   if(template_scope == nullptr)
   {
     err_location(location);
-    str << "template identifier: " << template_identifier
-                      << std::endl;
+    str << "template identifier: " << template_identifier << std::endl;
     throw "function template instantiation error";
   }
 

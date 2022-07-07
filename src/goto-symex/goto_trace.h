@@ -88,9 +88,7 @@ public:
   std::string format_string;
   std::list<expr2tc> output_args;
 
-  void output(
-    const class namespacet &ns,
-    std::ostream &out) const;
+  void output(const class namespacet &ns, std::ostream &out) const;
   void dump() const;
 
   goto_trace_stept() : step_nr(0), thread_nr(0), guard(false)
@@ -112,9 +110,7 @@ public:
     steps.clear();
   }
 
-  void output(
-    const class namespacet &ns,
-    std::ostream &out) const;
+  void output(const class namespacet &ns, std::ostream &out) const;
 };
 
 void show_goto_trace_gui(

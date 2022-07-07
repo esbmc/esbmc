@@ -13,7 +13,6 @@
 #include <util/std_types.h>
 #include <util/type_byte_size.h>
 
-
 BigInt member_offset(const type2tc &type, const irep_idt &member)
 {
   return member_offset_bits(type, member) / 8;

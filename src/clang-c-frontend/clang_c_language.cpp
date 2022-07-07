@@ -63,8 +63,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     break;
 
   default:
-    log_error(
-      "Unknown word size: {}\n", config.ansi_c.word_size);
+    log_error("Unknown word size: {}\n", config.ansi_c.word_size);
     abort();
   }
 
@@ -236,9 +235,7 @@ bool clang_c_languaget::parse(const std::string &path)
   return false;
 }
 
-bool clang_c_languaget::typecheck(
-  contextt &context,
-  const std::string &module)
+bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
 {
   contextt new_context;
 
@@ -262,9 +259,7 @@ void clang_c_languaget::show_parse(std::ostream &)
     (*translation_unit).getASTContext().getTranslationUnitDecl()->dump();
 }
 
-bool clang_c_languaget::preprocess(
-  const std::string &,
-  std::ostream &)
+bool clang_c_languaget::preprocess(const std::string &, std::ostream &)
 {
 // TODO: Check the preprocess situation.
 #if 0
@@ -275,7 +270,7 @@ bool clang_c_languaget::preprocess(
 
 bool clang_c_languaget::final(contextt &context)
 {
-  add_cprover_library(context,  this);
+  add_cprover_library(context, this);
   // adds __ESBMC__main symbol
   return clang_main(context);
 }

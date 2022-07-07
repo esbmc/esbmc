@@ -10,10 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iomanip>
 #include <langapi/language_util.h>
 
-
 void goto_programt::instructiont::dump() const
 {
-
   std::ostringstream oss;
   output_instruction(*migrate_namespace_lookup, "", oss);
   log_debug(oss.str());
@@ -496,7 +494,6 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
 
 void goto_programt::dump() const
 {
-
   std::ostringstream oss;
   output(*migrate_namespace_lookup, "", oss);
   log_debug(oss.str());

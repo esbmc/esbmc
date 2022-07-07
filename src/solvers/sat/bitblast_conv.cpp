@@ -312,8 +312,7 @@ smt_sort *bitblast_convt::mk_sort(smt_sort_kind k, ...)
     s = new bitblast_smt_sort(k);
     break;
   default:
-    log_error(
-     "Unimplemented SMT sort {} in bitblaster conversion", k);
+    log_error("Unimplemented SMT sort {} in bitblaster conversion", k);
     abort();
   }
 
@@ -437,8 +436,7 @@ bitblast_convt::mk_ast_equality(smt_astt _a, smt_astt _b, smt_sortt ressort)
     abort();
   }
   default:
-    log_error(
-     "Invalid sort {} for equality in bitblast", a->sort->id);
+    log_error("Invalid sort {} for equality in bitblast", a->sort->id);
     abort();
   }
 }

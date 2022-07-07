@@ -8,8 +8,7 @@ int reachability_treet::get_ileave_direction_from_user() const
   unsigned int tid;
 
   if(get_cur_state().get_active_state().guard.is_false())
-    log_status(
-      "This trace's guard is false; it will not be evaulated.");
+    log_status("This trace's guard is false; it will not be evaulated.");
 
   // First of all, are there actually any valid context switch targets?
   for(tid = 0; tid < get_cur_state().threads_state.size(); tid++)
@@ -22,8 +21,7 @@ int reachability_treet::get_ileave_direction_from_user() const
   if(tid == get_cur_state().threads_state.size())
     return get_cur_state().threads_state.size();
 
-  log_status(
-    "Context switch point encountered; please select a thread to run");
+  log_status("Context switch point encountered; please select a thread to run");
   log_status("Current thread states:");
   execution_states.back()->print_stack_traces(4);
 

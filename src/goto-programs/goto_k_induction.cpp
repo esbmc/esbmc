@@ -5,8 +5,7 @@
 #include <util/i2string.h>
 #include <util/std_expr.h>
 
-void goto_k_induction(
-  goto_functionst &goto_functions)
+void goto_k_induction(goto_functionst &goto_functions)
 {
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
@@ -15,8 +14,7 @@ void goto_k_induction(
   goto_functions.update();
 }
 
-void goto_termination(
-  goto_functionst &goto_functions)
+void goto_termination(goto_functionst &goto_functions)
 {
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)

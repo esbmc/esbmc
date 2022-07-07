@@ -11,8 +11,6 @@
 #include <util/migrate.h>
 #include <util/std_types.h>
 
-
-
 template <typename T>
 class register_irep_methods;
 

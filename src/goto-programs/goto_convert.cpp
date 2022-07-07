@@ -43,8 +43,7 @@ void goto_convertt::finish_gotos(goto_programt &dest)
 
       if(l_it == targets.labels.end())
       {
-        log_error(
-          "goto label {} not found\n{}", goto_label, *i.code);
+        log_error("goto label {} not found\n{}", goto_label, *i.code);
         abort();
       }
 
@@ -445,7 +444,6 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 1)
   {
-
     log_error("expression statement takes one operand\n");
     abort();
   }
@@ -1612,8 +1610,8 @@ void goto_convertt::convert_atomic_end(const codet &code, goto_programt &dest)
 {
   if(code.operands().size() != 0)
   {
-   log_error("atomic_end expects no operands");
-   abort();
+    log_error("atomic_end expects no operands");
+    abort();
   }
 
   copy(code, ATOMIC_END, dest);

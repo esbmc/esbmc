@@ -856,8 +856,7 @@ void dereferencet::build_reference_rec(
   }
   else
   {
-    log_error(
-     "Unrecognized dest type during dereference\n{}", *type);
+    log_error("Unrecognized dest type during dereference\n{}", *type);
     abort();
   }
 
@@ -871,8 +870,7 @@ void dereferencet::build_reference_rec(
     flags |= flag_src_array;
   else
   {
-    log_error(
-      "Unrecognized src type during dereference\n{}", *value->type);
+    log_error("Unrecognized src type during dereference\n{}", *value->type);
     abort();
   }
 

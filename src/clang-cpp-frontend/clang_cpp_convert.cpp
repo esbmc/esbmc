@@ -321,8 +321,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       // Add only if it isn't static
       if(!cxxmd->isStatic())
       {
-        log_error(
-          "static method is not supported in {}", __func__);
+        log_error("static method is not supported in {}", __func__);
         abort();
       }
     }
@@ -597,8 +596,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
       if(mt != nullptr)
       {
-        log_error(
-         "elidable copy/move is not supported in {}", __func__);
+        log_error("elidable copy/move is not supported in {}", __func__);
         abort();
       }
     }
@@ -778,8 +776,7 @@ bool clang_cpp_convertert::get_function_body(
         }
         else
         {
-          log_error(
-            "Base class initializer is not supported in {}", __func__);
+          log_error("Base class initializer is not supported in {}", __func__);
           abort();
         }
 

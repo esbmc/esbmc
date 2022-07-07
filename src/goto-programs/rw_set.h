@@ -87,7 +87,6 @@ protected:
   value_setst &value_sets;
   const goto_programt::const_targett target;
 
-
   void assign(const exprt &lhs, const exprt &rhs);
 
   void read_write_rec(

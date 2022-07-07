@@ -47,9 +47,7 @@ public:
   }
 
   // type check a module in the currently parsed file
-  virtual bool typecheck(
-    contextt &context,
-    const std::string &module) = 0;
+  virtual bool typecheck(contextt &context, const std::string &module) = 0;
 
   // language id / description
   virtual std::string id() const
@@ -94,7 +92,6 @@ public:
 #endif
 
 protected:
-
   // function name for verification that requires this information before GOTO conversion phase.
   std::string func_name = "";
 #ifdef ENABLE_SOLIDITY_FRONTEND

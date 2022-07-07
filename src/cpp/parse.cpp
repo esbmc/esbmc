@@ -6112,7 +6112,8 @@ bool Parser::rTryStatement(codet &statement)
       if(has_catch_ellipsis)
       {
         std::string message =
-          "‘...’ handler must be the last handler for its try block\nLocation: {}";
+          "‘...’ handler must be the last handler for its try block\nLocation: "
+          "{}";
 
         locationt location;
         location.set_file(op.filename);

@@ -33,9 +33,7 @@ smt_convt *create_new_yices_solver(
   return conv;
 }
 
-yices_convt::yices_convt(
-  const namespacet &ns,
-  const optionst &options)
+yices_convt::yices_convt(const namespacet &ns, const optionst &options)
   : smt_convt(ns, options), array_iface(false, false), fp_convt(this)
 {
   yices_init();
@@ -1105,8 +1103,8 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
 
 void yices_convt::print_model()
 {
-  yices_print_model(messaget_state::standard_output, yices_get_model(yices_ctx, 1));
-
+  yices_print_model(
+    messaget_state::standard_output, yices_get_model(yices_ctx, 1));
 }
 
 smt_sortt yices_convt::mk_bool_sort()
@@ -1158,8 +1156,11 @@ smt_sortt yices_convt::mk_bvfp_rm_sort()
 
 void yices_smt_ast::dump() const
 {
-
   yices_pp_term(messaget_state::standard_output, a, 80, 10, 0);
-  yices_pp_type(messaget_state::standard_output, to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
-
+  yices_pp_type(
+    messaget_state::standard_output,
+    to_solver_smt_sort<type_t>(sort)->s,
+    80,
+    10,
+    0);
 }

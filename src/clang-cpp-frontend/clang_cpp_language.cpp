@@ -71,8 +71,7 @@ bool clang_cpp_languaget::typecheck(
   return false;
 }
 
-bool clang_cpp_languaget::final(
-  contextt &context)
+bool clang_cpp_languaget::final(contextt &context)
 {
   add_cprover_library(context);
   return clang_main(context);

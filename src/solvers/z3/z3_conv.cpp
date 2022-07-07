@@ -35,9 +35,7 @@ smt_convt *create_new_z3_solver(
   return conv;
 }
 
-z3_convt::z3_convt(
-  const namespacet &_ns,
-  const optionst &_options)
+z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
   : smt_convt(_ns, _options),
     array_iface(true, true),
     fp_convt(this),
@@ -1274,7 +1272,6 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
 
 void z3_smt_ast::dump() const
 {
-
   std::ostringstream oss;
   oss << Z3_ast_to_string(a.ctx(), a) << "\n";
   oss << "sort is " << Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a))

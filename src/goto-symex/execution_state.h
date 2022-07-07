@@ -167,8 +167,7 @@ public:
   {
     if(tid >= thread_start_data.size())
     {
-      log_error(
-       "Setting thread data for nonexistant thread {}", tid);
+      log_error("Setting thread data for nonexistant thread {}", tid);
       abort();
     }
 
@@ -180,8 +179,7 @@ public:
   {
     if(tid >= thread_start_data.size())
     {
-      log_error(
-        "Setting thread data for nonexistant thread {}", tid);
+      log_error("Setting thread data for nonexistant thread {}", tid);
       abort();
     }
 

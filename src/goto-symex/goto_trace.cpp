@@ -21,10 +21,7 @@
 #include <util/std_types.h>
 #include <ostream>
 
-
-void goto_tracet::output(
-  const class namespacet &ns,
-  std::ostream &out) const
+void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
 {
   for(const auto &step : steps)
     step.output(ns, out);
@@ -32,15 +29,12 @@ void goto_tracet::output(
 
 void goto_trace_stept::dump() const
 {
-
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
   log_debug(oss.str());
 }
 
-void goto_trace_stept::output(
-  const namespacet &ns,
-  std::ostream &out) const
+void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
 {
   out << "*** ";
 
@@ -264,8 +258,7 @@ void violation_graphml_goto_trace(
   grapht graph(grapht::VIOLATION);
   graph.verified_file = options.get_option("input-file");
 
-  log_status(
-    "Generating Violation Witness for: {}", graph.verified_file);
+  log_status("Generating Violation Witness for: {}", graph.verified_file);
 
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
@@ -338,8 +331,7 @@ void correctness_graphml_goto_trace(
 {
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = options.get_option("input-file");
-  log_status(
-  "Generating Correctness Witness for: {}", graph.verified_file);
+  log_status("Generating Correctness Witness for: {}", graph.verified_file);
 
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
