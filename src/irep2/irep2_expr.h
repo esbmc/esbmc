@@ -1804,6 +1804,7 @@ public:
     unsigned int node = 0)
     : symbol_expr_methods(type, symbol_id, init, lev, l1, l2, trd, node)
   {
+    assert(init != "0");
   }
 
   symbol2t(const symbol2t &ref) = default;

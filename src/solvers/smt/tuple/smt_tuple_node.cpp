@@ -48,7 +48,7 @@ smt_tuple_node_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
 {
   // Because this tuple flattening doesn't join tuples through the symbol
   // table, there are some special names that need to be intercepted.
-  if(name == "0" || name == "NULL")
+  if(name == "NULL")
     return ctx->null_ptr_ast;
 
   if(name == "INVALID")

@@ -249,7 +249,7 @@ smt_astt smt_convt::convert_identifier_pointer(
   if(is_symbol2t(expr))
   {
     const symbol2t &sym = to_symbol2t(expr);
-    if(sym.thename == "NULL" || sym.thename == "0")
+    if(sym.thename == "NULL")
     {
       // For null, other pieces of code will have already initialized its
       // value, so we can just refer to a symbol.
