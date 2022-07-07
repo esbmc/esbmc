@@ -32,9 +32,8 @@ public:
     smt_tuple_node_flattener &f,
     smt_convt *ctx,
     smt_sortt s,
-    std::string _name,
-    const messaget &msg)
-    : smt_ast(ctx, s, msg), name(std::move(_name)), flat(f)
+    std::string _name)
+    : smt_ast(ctx, s), name(std::move(_name)), flat(f)
   {
   }
   ~tuple_node_smt_ast() override = default;
