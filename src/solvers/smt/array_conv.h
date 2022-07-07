@@ -20,7 +20,6 @@
 #include <solvers/smt/smt_conv.h>
 #include <irep2/irep2.h>
 
-
 static inline bool is_unbounded_array(const smt_sort *s)
 {
   if(s->id != SMT_SORT_ARRAY)
@@ -41,10 +40,7 @@ class array_ast : public smt_ast
 public:
 #define array_downcast(x) static_cast<const array_ast *>(x)
 
-  array_ast(
-    array_convt *actx,
-    smt_convt *ctx,
-    const smt_sort *_s)
+  array_ast(array_convt *actx, smt_convt *ctx, const smt_sort *_s)
     : smt_ast(ctx, _s), symname(""), array_ctx(actx)
   {
   }
@@ -77,7 +73,6 @@ public:
 
   void dump() const override
   {
-
     log_debug("name: {}", symname);
     for(auto const &e : array_fields)
       e->dump();
@@ -236,8 +231,7 @@ public:
     return new array_ast(this, ctx, _s);
   }
 
-  inline array_ast *
-  new_ast(smt_sortt _s, const std::vector<smt_astt> &_a)
+  inline array_ast *new_ast(smt_sortt _s, const std::vector<smt_astt> &_a)
   {
     return new array_ast(this, ctx, _s, _a);
   }

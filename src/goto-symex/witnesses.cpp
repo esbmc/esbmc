@@ -705,9 +705,8 @@ void check_replace_invalid_assignment(std::string &assignment)
 }
 
 /* */
-std::string get_formated_assignment(
-  const namespacet &ns,
-  const goto_trace_stept &step)
+std::string
+get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
 {
   std::string assignment = "";
   if(
@@ -730,9 +729,7 @@ std::string get_formated_assignment(
 }
 
 /* */
-bool is_valid_witness_step(
-  const namespacet &ns,
-  const goto_trace_stept &step)
+bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
 {
   languagest languages(ns, language_idt::C);
   std::string lhsexpr;

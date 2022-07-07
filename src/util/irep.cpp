@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/irep.h>
 
-
 irept nil_rep_storage;
 
 #ifdef SHARING
@@ -20,7 +19,6 @@ const irept::dt empty_d;
 
 void irept::dump() const
 {
-
   log_debug(pretty(0));
 }
 

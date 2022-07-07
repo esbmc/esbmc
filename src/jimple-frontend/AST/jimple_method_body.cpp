@@ -5,7 +5,6 @@
 #include <util/std_code.h>
 #include <util/expr_util.h>
 
-
 exprt jimple_full_method_body::to_exprt(
   contextt &ctx,
   const std::string &class_name,

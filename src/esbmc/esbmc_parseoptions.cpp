@@ -58,7 +58,6 @@ extern "C"
 #include <util/symbol.h>
 #include <util/time_stopping.h>
 
-
 #ifndef _WIN32
 #include <sys/wait.h>
 #endif
@@ -70,8 +69,6 @@ extern "C"
 #ifdef ENABLE_GOTO_CONTRACTOR
 #include <goto-programs/goto_contractor.h>
 #endif
-
-
 
 enum PROCESS_TYPE
 {
@@ -90,7 +87,6 @@ struct resultt
 #ifndef _WIN32
 void timeout_handler(int)
 {
-
   log_error("Timed out");
   // Unfortunately some highly useful pieces of code hook themselves into
   // aexit and attempt to free some memory. That doesn't really make sense to
@@ -216,10 +212,8 @@ static std::string format_target()
   }
   assert(lib);
   std::ostringstream oss;
-  oss << config.ansi_c.word_size << "-bit "
-    << endian << "-endian "
-    << config.ansi_c.target.to_string() << " with "
-    << lib << "libc";
+  oss << config.ansi_c.word_size << "-bit " << endian << "-endian "
+      << config.ansi_c.target.to_string() << " with " << lib << "libc";
   return oss.str();
 }
 
@@ -891,8 +885,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         {
           // Invalid size read.
           log_error("Short read communicating with kinduction parent");
-          log_error(
-            "Size {}, expected {}", read_size, sizeof(resultt));
+          log_error("Size {}, expected {}", read_size, sizeof(resultt));
 
           abort();
         }
@@ -948,8 +941,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bmct bmc(goto_functions, opts, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      log_status(
-        "*** Checking forward condition, k = {:d}", k_step);
+      log_status("*** Checking forward condition, k = {:d}", k_step);
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -1752,8 +1744,7 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 
 void esbmc_parseoptionst::help()
 {
-  log_status(
-    "\n* * *           ESBMC {}          * * *", ESBMC_VERSION);
+  log_status("\n* * *           ESBMC {}          * * *", ESBMC_VERSION);
   std::ostringstream oss;
   oss << cmdline.cmdline_options;
   log_status(oss.str());

@@ -177,8 +177,7 @@ void goto_symext::dereference(expr2tc &expr, dereferencet::modet mode)
 {
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
 
-  dereferencet dereference(
-    ns, new_context, options, symex_dereference_state);
+  dereferencet dereference(ns, new_context, options, symex_dereference_state);
 
   // needs to be renamed to level 1
   assert(!cur_state->call_stack.empty());

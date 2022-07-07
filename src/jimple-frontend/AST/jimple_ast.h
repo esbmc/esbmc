@@ -9,13 +9,11 @@ Description: This interface will define every method that needs to
 #ifndef ESBMC_JIMPLE_AST_H
 #define ESBMC_JIMPLE_AST_H
 
-
 #include <util/expr.h>
 #include <util/context.h>
 #include <util/std_types.h>
 #include <util/c_types.h>
 #include <nlohmann/json.hpp>
-
 
 // For json parsing
 using json = nlohmann::json;
@@ -32,7 +30,6 @@ public:
    */
   void dump() const
   {
-
     log_debug(this->to_string());
   }
 
@@ -98,7 +95,9 @@ protected:
 
     std::string id, name;
     id = get_symbol_name(
-      class_name, function_name, "return_value$tmp$" + std::to_string(counter++));
+      class_name,
+      function_name,
+      "return_value$tmp$" + std::to_string(counter++));
     name = "return_value$tmp$";
     name += counter;
     auto tmp_symbol =

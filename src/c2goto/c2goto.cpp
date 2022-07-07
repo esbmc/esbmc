@@ -9,7 +9,6 @@
 #include <irep2/irep2.h>
 #include <util/parseoptions.h>
 
-
 const struct group_opt_templ c2goto_options[] = {
   {"Basic Usage",
    {{"input-file",
@@ -51,8 +50,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
 public:
   c2goto_parseopt(int argc, const char **argv)
-    : parseoptions_baset(c2goto_options, argc, argv),
-      language_uit(cmdline)
+    : parseoptions_baset(c2goto_options, argc, argv), language_uit(cmdline)
   {
   }
 
@@ -91,7 +89,6 @@ public:
 
 int main(int argc, const char **argv)
 {
-
   c2goto_parseopt parseopt(argc, argv);
   return parseopt.main();
 }

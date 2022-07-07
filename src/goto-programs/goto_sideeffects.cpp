@@ -54,10 +54,10 @@ void goto_convertt::remove_sideeffects(
   {
     if(!expr.is_boolean())
     {
-      log_error(expr.id_string() + " must be Boolean, but got " + expr.pretty());
+      log_error(
+        expr.id_string() + " must be Boolean, but got " + expr.pretty());
       abort();
     }
-
 
     exprt tmp;
 
@@ -80,7 +80,6 @@ void goto_convertt::remove_sideeffects(
         log_error(expr.id().as_string() + " takes boolean operands only");
         abort();
       }
-
 
       if(expr.is_and())
       {
@@ -531,8 +530,8 @@ void goto_convertt::remove_pre(
     else
     {
       std::ostringstream str;
-      str <<  "no constant one of type " + op_type.to_string() << "\n";
-      str <<  "Location: " << expr.location();
+      str << "no constant one of type " + op_type.to_string() << "\n";
+      str << "Location: " << expr.location();
       log_error(str.str());
       abort();
     }
@@ -572,9 +571,9 @@ void goto_convertt::remove_post(
   {
     std::ostringstream str;
     str << statement << " takes one argument";
-      str <<  "Location: " << expr.location();
-      log_error(str.str());
-      abort();
+    str << "Location: " << expr.location();
+    log_error(str.str());
+    abort();
   }
 
   exprt rhs;
@@ -622,8 +621,8 @@ void goto_convertt::remove_post(
     else
     {
       std::ostringstream str;
-    str << "no constant one of type " + op_type.to_string();
-      str <<  "Location: " << expr.location();
+      str << "no constant one of type " + op_type.to_string();
+      str << "Location: " << expr.location();
       log_error(str.str());
       abort();
     }

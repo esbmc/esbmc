@@ -97,8 +97,7 @@ void goto_inlinet::parameter_assignments(
 
           str << "function call: argument `" << identifier
               << "' type mismatch: got "
-              << from_type(ns, identifier, it1->type())
-              << ", expected "
+              << from_type(ns, identifier, it1->type()) << ", expected "
               << from_type(ns, identifier, arg_type);
           log_error(str.str());
           abort();
@@ -192,8 +191,10 @@ void goto_inlinet::expand_function_call(
   // look it up
   if(function.id() != "symbol")
   {
-    log_error("function_call expects symbol as function operand, "
-          "but got `"+function.id_string()+"'");
+    log_error(
+      "function_call expects symbol as function operand, "
+      "but got `" +
+      function.id_string() + "'");
     abort();
   }
 
@@ -439,8 +440,7 @@ void goto_inline(
 
     dest.copy_from(it->second.body);
   }
-    goto_inline.goto_inline(dest);
-
+  goto_inline.goto_inline(dest);
 
   // clean up
   for(auto &it : goto_functions.function_map)
@@ -458,15 +458,14 @@ void goto_inline(
 {
   goto_inlinet goto_inline(goto_functions, options, ns);
 
-    // find main
-    goto_functionst::function_mapt::iterator it =
-      goto_functions.function_map.find("__ESBMC_main");
+  // find main
+  goto_functionst::function_mapt::iterator it =
+    goto_functions.function_map.find("__ESBMC_main");
 
-    if(it == goto_functions.function_map.end())
-      return;
+  if(it == goto_functions.function_map.end())
+    return;
 
-    goto_inline.goto_inline(it->second.body);
-
+  goto_inline.goto_inline(it->second.body);
 
   // clean up
   for(auto &it : goto_functions.function_map)
@@ -487,11 +486,11 @@ void goto_partial_inline(
 
   goto_inline.smallfunc_limit = _smallfunc_limit;
 
-    for(auto &it : goto_functions.function_map)
-    {
-      goto_inline.inlined_funcs.clear();
-      if(it.second.body_available)
-        goto_inline.goto_inline_rec(it.second.body, false);
-      it.second.inlined_funcs = goto_inline.inlined_funcs;
-    }
+  for(auto &it : goto_functions.function_map)
+  {
+    goto_inline.inlined_funcs.clear();
+    if(it.second.body_available)
+      goto_inline.goto_inline_rec(it.second.body, false);
+    it.second.inlined_funcs = goto_inline.inlined_funcs;
+  }
 }

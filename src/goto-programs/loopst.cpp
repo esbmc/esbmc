@@ -1,6 +1,5 @@
 #include <goto-programs/loopst.h>
 
-
 const loopst::loop_varst &loopst::get_modified_loop_vars() const
 {
   return modified_loop_vars;
@@ -69,7 +68,6 @@ void loopst::output_loop_vars_to(std::ostream &oss) const
 
 void loopst::dump() const
 {
-
   std::ostringstream oss;
   output_to(oss);
   log_debug(oss.str());

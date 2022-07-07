@@ -2,7 +2,6 @@
 #include <fstream>
 #include <jimple-frontend/AST/jimple_file.h>
 
-
 #include <util/std_code.h>
 #include <util/expr_util.h>
 
@@ -79,7 +78,6 @@ void jimple_file::from_json(const json &j)
     }
     else
     {
-
       log_error("Unsupported object: {}", content_type);
       abort();
     }

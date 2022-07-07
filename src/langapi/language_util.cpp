@@ -10,10 +10,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <langapi/mode.h>
 #include <memory>
 
-std::string from_expr(
-  const namespacet &ns,
-  const irep_idt &identifier,
-  const exprt &expr)
+std::string
+from_expr(const namespacet &ns, const irep_idt &identifier, const exprt &expr)
 {
   int mode;
 
@@ -42,10 +40,8 @@ std::string from_expr(
   return result;
 }
 
-std::string from_type(
-  const namespacet &ns,
-  const irep_idt &identifier,
-  const typet &type)
+std::string
+from_type(const namespacet &ns, const irep_idt &identifier, const typet &type)
 {
   int mode;
 

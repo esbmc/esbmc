@@ -18,15 +18,12 @@ bool ansi_c_convert(
   ansi_c_parse_treet &ansi_c_parse_tree,
   const std::string &module);
 
-bool ansi_c_convert(
-  exprt &expr,
-  const std::string &module);
+bool ansi_c_convert(exprt &expr, const std::string &module);
 
 class ansi_c_convertt
 {
 public:
-  ansi_c_convertt(const std::string &_module)
-    : module(_module)
+  ansi_c_convertt(const std::string &_module) : module(_module)
   {
   }
 
@@ -40,6 +37,7 @@ public:
 
   virtual void convert_type(typet &type, c_storage_spect &c_storage_spec);
   std::ostringstream str;
+
 protected:
   virtual void convert_code(codet &code);
 

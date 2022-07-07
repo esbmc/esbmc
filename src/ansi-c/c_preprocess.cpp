@@ -182,10 +182,7 @@ void setup_cpp_defs(const char **defs)
 #include <sys/wait.h>
 #include <unistd.h>
 
-bool c_preprocess(
-  const std::string &path,
-  std::ostream &outstream,
-  bool is_cpp)
+bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
 {
   char out_file_buf[32], stderr_file_buf[32];
   pid_t pid;
@@ -261,10 +258,7 @@ bool c_preprocess(
 
 #include <io.h>
 
-bool c_preprocess(
-  const std::string &path,
-  std::ostream &outstream,
-  bool is_cpp)
+bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
 {
   int err, ret;
   char out_file_buf[288], tmpdir[256];

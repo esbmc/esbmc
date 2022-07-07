@@ -35,7 +35,6 @@ public:
 protected:
   const namespacet &ns;
   languaget *language;
-
 };
 
 #endif

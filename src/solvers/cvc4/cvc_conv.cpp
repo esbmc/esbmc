@@ -1,7 +1,6 @@
 #include <util/c_types.h>
 #include <cvc_conv.h>
 
-
 #define new_ast new_solver_ast<cvc_smt_ast>
 
 smt_convt *create_new_cvc_solver(
@@ -17,9 +16,7 @@ smt_convt *create_new_cvc_solver(
   return conv;
 }
 
-cvc_convt::cvc_convt(
-  const namespacet &ns,
-  const optionst &options)
+cvc_convt::cvc_convt(const namespacet &ns, const optionst &options)
   : smt_convt(ns, options),
     array_iface(false, false),
     fp_convt(this),
@@ -1271,7 +1268,6 @@ smt_sortt cvc_convt::mk_fpbv_rm_sort()
 
 void cvc_convt::dump_smt()
 {
-
   std::ostringstream oss;
   auto const &assertions = smt.getAssertions();
   for(auto const &a : assertions)
@@ -1281,7 +1277,6 @@ void cvc_convt::dump_smt()
 
 void cvc_smt_ast::dump() const
 {
-
   std::ostringstream oss;
   a.printAst(oss, 0);
   log_debug(oss.str());

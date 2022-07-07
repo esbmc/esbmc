@@ -15,10 +15,7 @@ Author: Daniel Kroening
 #include <util/i2string.h>
 #include <util/xml_irep.h>
 
-void convert(
-  const namespacet &ns,
-  const goto_tracet &goto_trace,
-  xmlt &xml)
+void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
 {
   xml = xmlt("goto_trace");
 
@@ -71,8 +68,7 @@ void convert(
 
       if(!is_nil_expr(step.value))
       {
-        value_string =
-          from_expr(ns, identifier, migrate_expr_back(step.value));
+        value_string = from_expr(ns, identifier, migrate_expr_back(step.value));
         type_string =
           from_type(ns, identifier, migrate_type_back(step.value->type));
       }

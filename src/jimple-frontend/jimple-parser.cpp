@@ -2,7 +2,6 @@
 #include <jimple-frontend/AST/jimple_file.h>
 #include <jimple-frontend/jimple-language.h>
 
-
 void jimple_languaget::show_parse(std::ostream &out)
 {
   out << root.to_string();

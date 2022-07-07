@@ -9,8 +9,6 @@
 #include <util/migrate.h>
 #include <util/std_types.h>
 
-
-
 static const char *expr_names[] = {
   "constant_int",
   "constant_fixedbv",
@@ -259,7 +257,6 @@ std::string expr2t::pretty(unsigned int indent) const
 
 void expr2t::dump() const
 {
-
   log_debug(pretty(0));
 }
 

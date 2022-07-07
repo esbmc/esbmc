@@ -124,9 +124,7 @@ static void ingest_symbol(
   deps.erase(name);
 }
 
-void add_cprover_library(
-  contextt &context,
-  const languaget *c_language)
+void add_cprover_library(contextt &context, const languaget *c_language)
 {
   if(config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
     return;
@@ -148,8 +146,7 @@ void add_cprover_library(
   case 64:
     break;
   default:
-    log_error(
-      "No C library for bitwidth {}", config.ansi_c.word_size);
+    log_error("No C library for bitwidth {}", config.ansi_c.word_size);
     abort();
   }
 
@@ -164,8 +161,7 @@ void add_cprover_library(
     abort();
   }
 
-  if(read_goto_binary_array(
-       clib->start, clib->size, new_ctx, goto_functions))
+  if(read_goto_binary_array(clib->start, clib->size, new_ctx, goto_functions))
     abort();
 
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {

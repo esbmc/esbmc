@@ -40,14 +40,13 @@ bool read_bin_goto_object(
       if(hdr[0] == 0x7f && hdr[1] == 'E' && hdr[2] == 'L' && hdr[3] == 'F')
       {
         if(filename != "")
-          str << "Sorry, but I can't read ELF binary `"
-                             << filename << "'";
+          str << "Sorry, but I can't read ELF binary `" << filename << "'";
         else
           str << "Sorry, but I can't read ELF binaries";
       }
       else
         str << "`" << filename << "' is not a goto-binary."
-                           << "\n";
+            << "\n";
 
       log_error(str.str());
       abort();

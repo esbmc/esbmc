@@ -15,22 +15,16 @@ Author: Daniel Kroening, kroening@kroening.com
 class ansi_c_languaget : public languaget
 {
 public:
-  virtual bool preprocess(
-    const std::string &path,
-    std::ostream &outstream);
+  virtual bool preprocess(const std::string &path, std::ostream &outstream);
 
   bool parse(const std::string &path) override;
 
-  bool typecheck(
-    contextt &context,
-    const std::string &module) override;
+  bool typecheck(contextt &context, const std::string &module) override;
 
   bool final(contextt &context) override;
 
-  virtual bool merge_context(
-    contextt &dest,
-    contextt &src,
-    const std::string &module) const;
+  virtual bool
+  merge_context(contextt &dest, contextt &src, const std::string &module) const;
 
   void show_parse(std::ostream &out) override;
 

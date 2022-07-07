@@ -10,10 +10,7 @@ typedef const array_sym_smt_ast *array_sym_smt_astt;
 class array_sym_smt_ast : public tuple_sym_smt_ast
 {
 public:
-  array_sym_smt_ast(
-    smt_convt *ctx,
-    smt_sortt s,
-    const std::string &_name)
+  array_sym_smt_ast(smt_convt *ctx, smt_sortt s, const std::string &_name)
     : tuple_sym_smt_ast(ctx, s, _name)
   {
   }

@@ -55,9 +55,7 @@ void static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
-bool c_main(
-  contextt &context,
-  const std::string &standard_main)
+bool c_main(contextt &context, const std::string &standard_main)
 {
   irep_idt main_symbol;
 
@@ -87,8 +85,7 @@ bool c_main(
   if(matches.size() >= 2)
   {
     if(matches.size() == 2)
-      log_error(
-        "warning: main symbol `" + themain + "' is ambiguous");
+      log_error("warning: main symbol `" + themain + "' is ambiguous");
     else
     {
       log_error("main symbol `" + themain + " is ambiguous");

@@ -23,17 +23,13 @@ class ASTUnit;
 class clang_c_languaget : public languaget
 {
 public:
-  virtual bool preprocess(
-    const std::string &path,
-    std::ostream &outstream);
+  virtual bool preprocess(const std::string &path, std::ostream &outstream);
 
   bool parse(const std::string &path) override;
 
   bool final(contextt &context) override;
 
-  bool typecheck(
-    contextt &context,
-    const std::string &module) override;
+  bool typecheck(contextt &context, const std::string &module) override;
 
   std::string id() const override
   {

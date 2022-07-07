@@ -673,7 +673,6 @@ public:
   /** Namespace for looking up types against. */
   const namespacet &ns;
 
-
   irep_idt xchg_name;
   unsigned long xchg_num;
 };

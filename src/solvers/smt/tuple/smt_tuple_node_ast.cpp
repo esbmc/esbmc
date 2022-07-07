@@ -142,8 +142,7 @@ smt_astt tuple_node_smt_ast::update(
     "structure");
 
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
-  tuple_node_smt_ast *result =
-    new tuple_node_smt_ast(flat, ctx, sort, name);
+  tuple_node_smt_ast *result = new tuple_node_smt_ast(flat, ctx, sort, name);
   result->elements = elements;
   result->make_free(ctx);
   result->elements[idx] = value;

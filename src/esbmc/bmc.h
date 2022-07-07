@@ -22,10 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class bmct
 {
 public:
-  bmct(
-    goto_functionst &funcs,
-    optionst &opts,
-    contextt &_context);
+  bmct(goto_functionst &funcs, optionst &opts, contextt &_context);
 
   optionst &options;
 

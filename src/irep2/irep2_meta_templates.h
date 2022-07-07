@@ -13,8 +13,6 @@
 #include <util/migrate.h>
 #include <util/std_types.h>
 
-
-
 namespace esbmct
 {
 template <typename... Args>

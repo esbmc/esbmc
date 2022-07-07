@@ -150,9 +150,7 @@ public:
    *
    *  @param _ns Namespace for looking up the type of certain symbols.
    *  @param _options Provide all the needed parameters to configure the solver. */
-  smt_convt(
-    const namespacet &_ns,
-    const optionst &_options);
+  smt_convt(const namespacet &_ns, const optionst &_options);
 
   virtual ~smt_convt() = default;
 
@@ -819,7 +817,6 @@ public:
   /* Options contain all the parameters set by the user to run ESBMC */
   const optionst &options;
 
-
   bool ptr_foo_inited;
 
   smt_astt null_ptr_ast;
@@ -868,8 +865,7 @@ public:
 };
 
 // Define here to enable inlining
-inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s)
-  : sort(s), context(ctx)
+inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)
 {
   assert(sort != nullptr);
   ctx->live_asts.push_back(this);

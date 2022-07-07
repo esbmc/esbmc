@@ -128,8 +128,6 @@ public:
   }
 
 protected:
-
-
 private:
   symbolst symbols;
   ordered_symbolst ordered_symbols;

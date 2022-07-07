@@ -84,9 +84,9 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   else
   {
     log_error(
-                "Got contract-body-element nodeType={}. Unsupported "
-                "contract-body-element type",
-                element["nodeType"].get<std::string>());
+      "Got contract-body-element nodeType={}. Unsupported "
+      "contract-body-element type",
+      element["nodeType"].get<std::string>());
     abort();
   }
   return ContractBodyElementTError;
@@ -160,8 +160,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     else
     {
       log_error(
-                  "Got type-name typeString={}. Unsupported type-name type",
-                  type_name["typeString"].get<std::string>());
+        "Got type-name typeString={}. Unsupported type-name type",
+        type_name["typeString"].get<std::string>());
       abort();
     }
   }
@@ -175,8 +175,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     else
     {
       log_error(
-                  "Got type-name nodeType={}. Unsupported type-name type",
-                  type_name["nodeType"].get<std::string>());
+        "Got type-name nodeType={}. Unsupported type-name type",
+        type_name["nodeType"].get<std::string>());
       abort();
     }
   }
@@ -243,9 +243,9 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   }
 
   log_error(
-              "Got elementary-type-name typeString={}. Unsupported "
-              "elementary-type-name type",
-              type_name["typeString"].get<std::string>());
+    "Got elementary-type-name typeString={}. Unsupported "
+    "elementary-type-name type",
+    type_name["typeString"].get<std::string>());
   abort();
 }
 
@@ -380,8 +380,8 @@ BlockT get_block_t(const nlohmann::json &block)
   else
   {
     log_error(
-                "Got block nodeType={}. Unsupported block type",
-                block["nodeType"].get<std::string>());
+      "Got block nodeType={}. Unsupported block type",
+      block["nodeType"].get<std::string>());
     abort();
   }
   return BlockTError;
@@ -436,8 +436,8 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   else
   {
     log_error(
-                "Got statement nodeType={}. Unsupported statement type",
-                stmt["nodeType"].get<std::string>());
+      "Got statement nodeType={}. Unsupported statement type",
+      stmt["nodeType"].get<std::string>());
     abort();
   }
   return StatementTError;
@@ -497,8 +497,9 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   }
   else
   {
-    log_error("Got expression nodeType={}. Unsupported expression type",
-                expr["nodeType"].get<std::string>());
+    log_error(
+      "Got expression nodeType={}. Unsupported expression type",
+      expr["nodeType"].get<std::string>());
     abort();
   }
   return ExpressionTError;
@@ -524,9 +525,9 @@ ExpressionT get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre)
   {
     return UO_Minus;
   }
- log_error(
-              "Got expression operator={}. Unsupported expression operator",
-              expr["operator"].get<std::string>());
+  log_error(
+    "Got expression operator={}. Unsupported expression operator",
+    expr["operator"].get<std::string>());
 
   abort();
 }
@@ -572,8 +573,8 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr)
   else
   {
     log_error(
-                "Got expression operator={}. Unsupported expression operator",
-                expr["operator"].get<std::string>());
+      "Got expression operator={}. Unsupported expression operator",
+      expr["operator"].get<std::string>());
     abort();
   }
 
@@ -623,9 +624,9 @@ VarDeclStmtT get_var_decl_stmt_t(const nlohmann::json &stmt)
   else
   {
     log_error(
-                "Got expression nodeType={}. Unsupported "
-                "variable-declaration-statement operator",
-                stmt["nodeType"].get<std::string>());
+      "Got expression nodeType={}. Unsupported "
+      "variable-declaration-statement operator",
+      stmt["nodeType"].get<std::string>());
     abort();
   }
   return VarDeclStmtTError; // make some old compilers happy

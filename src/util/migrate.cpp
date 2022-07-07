@@ -1857,7 +1857,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else
   {
-
     log_error("{}\nmigrate expr failed", expr);
     abort();
   }
@@ -2675,7 +2674,6 @@ exprt migrate_expr_back(const expr2tc &ref)
     }
     else
     {
-
       log_error("Invalid operand to overflow2t when backmigrating");
       abort();
     }

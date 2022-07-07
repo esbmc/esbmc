@@ -61,8 +61,7 @@ public:
  * @param type Union type
  * @param msg  Message object
  */
-  static void
-  gen_typecast_to_union(exprt &dest, const typet &type);
+  static void gen_typecast_to_union(exprt &dest, const typet &type);
 
   static std::string get_decl_name(const clang::NamedDecl &nd);
 
@@ -204,7 +203,6 @@ protected:
   const clang::Decl *get_DeclContext_from_Stmt(const clang::Stmt &stmt);
 
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
-
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

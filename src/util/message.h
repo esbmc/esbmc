@@ -35,15 +35,15 @@ enum class VerbosityLevel : char
   Debug     // messages that are only useful if you need to debug.
 };
 
-static inline void print(VerbosityLevel, const std::string&, const locationt&) {}
-
+static inline void print(VerbosityLevel, const std::string &, const locationt &)
+{
+}
 
 // Macro to generate log functions
 #define log_message(name, verbosity)                                           \
   template <typename Arg, typename... Args>                                    \
   static inline void log_##name(Arg &&arg, Args &&...args)                     \
   {                                                                            \
-                                                                                \
   }
 
 log_message(error, VerbosityLevel::Error);

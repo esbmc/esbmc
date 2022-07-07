@@ -25,9 +25,7 @@ public:
   //  protected:
   //  XXX: should leave protected enabled, but g++ 5.4 on ubuntu 16.04 does not
   //  appear to honour the following friend directive?
-  static void get_original_name(
-    expr2tc &expr,
-    symbol2t::renaming_level lev);
+  static void get_original_name(expr2tc &expr, symbol2t::renaming_level lev);
   friend void build_goto_symex_classes();
 };
 

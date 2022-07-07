@@ -4,8 +4,6 @@
 #include <util/migrate.h>
 #include <util/prefix.h>
 
-
-
 unsigned renaming::level2t::current_number(const expr2tc &symbol) const
 {
   return current_number(name_record(to_symbol2t(symbol)));
@@ -206,9 +204,8 @@ void renaming::renaming_levelt::get_original_name(
   if(is_nil_expr(expr))
     return;
 
-  expr->Foreach_operand([&lev](expr2tc &e) {
-    renaming_levelt::get_original_name(e, lev);
-  });
+  expr->Foreach_operand(
+    [&lev](expr2tc &e) { renaming_levelt::get_original_name(e, lev); });
 
   if(!is_symbol2t(expr))
     return;
@@ -287,7 +284,6 @@ void renaming::level2t::print(std::ostream &out) const
 
 void renaming::level2t::dump() const
 {
-
   std::ostringstream oss;
   print(oss);
   log_debug(oss.str());

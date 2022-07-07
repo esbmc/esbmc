@@ -2,9 +2,7 @@
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/witnesses.h>
 
-expr2tc build_lhs(
-  std::shared_ptr<smt_convt> &smt_conv,
-  const expr2tc &lhs)
+expr2tc build_lhs(std::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
 {
   if(is_nil_expr(lhs))
     return lhs;
@@ -41,9 +39,7 @@ expr2tc build_lhs(
   return new_lhs;
 }
 
-expr2tc build_rhs(
-  std::shared_ptr<smt_convt> &smt_conv,
-  const expr2tc &rhs)
+expr2tc build_rhs(std::shared_ptr<smt_convt> &smt_conv, const expr2tc &rhs)
 {
   if(is_nil_expr(rhs) || is_constant_expr(rhs))
     return rhs;
@@ -90,8 +86,7 @@ void build_goto_trace(
         if(is_nil_expr(SSA_step.original_rhs))
           goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
         else
-          goto_trace_step.value =
-            build_rhs(smt_conv, SSA_step.original_rhs);
+          goto_trace_step.value = build_rhs(smt_conv, SSA_step.original_rhs);
       }
       catch(const type2t::symbolic_type_excp &e)
       {

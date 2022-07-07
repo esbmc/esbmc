@@ -23,8 +23,7 @@
 #include <irep2/irep2.h>
 #include <util/type_byte_size.h>
 
-void goto_contractor(
-  goto_functionst &goto_functions);
+void goto_contractor(goto_functionst &goto_functions);
 
 class vart
 {
@@ -139,16 +138,14 @@ public:
    * Fourth, inserting assumes in the program to reflect the contracted intervals.
    * @param _goto_functions
    */
-  goto_contractort(
-    goto_functionst &_goto_functions)
+  goto_contractort(goto_functionst &_goto_functions)
     : goto_functions_algorithm(_goto_functions, true)
   {
     initialize_main_function_loops();
     if(!function_loops.empty())
     {
       vars = new ibex::Variable(CspMap::MAX_VAR);
-      log_status(
-        "1/4 - Parsing asserts to create CSP Constraints.");
+      log_status("1/4 - Parsing asserts to create CSP Constraints.");
       get_constraints(_goto_functions);
       if(constraint == nullptr)
       {
@@ -182,7 +179,6 @@ private:
 
   typedef std::list<loopst> function_loopst;
   function_loopst function_loops;
-
 
   /// \Function get_constraint is a function that will go through each asert
   /// in the program and parse it from ESBMC expression to an IBEX expression

@@ -17,10 +17,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 #include <util/std_expr.h>
 
-
 void symex_target_equationt::debug_print_step(const SSA_stept &step) const
 {
-
   std::ostringstream oss;
   step.output(ns, oss);
   log_debug(oss.str());
@@ -259,7 +257,6 @@ void symex_target_equationt::short_output(std::ostream &out, bool show_ignored)
 
 void symex_target_equationt::SSA_stept::dump() const
 {
-
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
   log_debug(oss.str());
@@ -310,8 +307,7 @@ void symex_target_equationt::SSA_stept::output(
     out << comment << "\n";
 
   if(config.options.get_bool_option("ssa-guards"))
-    out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard))
-        << "\n";
+    out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << "\n";
 }
 
 void symex_target_equationt::SSA_stept::short_output(
@@ -366,8 +362,7 @@ void symex_target_equationt::check_for_duplicate_assigns() const
   {
     if(it->second != 1)
     {
-      log_status(
-        "Symbol \"{}\" appears {} times", it->first, it->second);
+      log_status("Symbol \"{}\" appears {} times", it->first, it->second);
     }
   }
 

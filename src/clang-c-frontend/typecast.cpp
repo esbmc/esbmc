@@ -29,10 +29,7 @@ void gen_typecast_arithmetic(const namespacet &ns, exprt &expr)
   c_typecast.implicit_typecast_arithmetic(expr);
 }
 
-
-void clang_c_convertert::gen_typecast_to_union(
-  exprt &e,
-  const typet &t)
+void clang_c_convertert::gen_typecast_to_union(exprt &e, const typet &t)
 {
   // If RHS is already of same union type, don't do anything
   if(e.type() == t.type())

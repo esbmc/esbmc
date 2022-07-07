@@ -15,15 +15,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 class cpp_languaget : public languaget
 {
 public:
-  virtual bool preprocess(
-    const std::string &path,
-    std::ostream &outstream);
+  virtual bool preprocess(const std::string &path, std::ostream &outstream);
 
   bool parse(const std::string &path) override;
 
-  bool typecheck(
-    contextt &context,
-    const std::string &module) override;
+  bool typecheck(contextt &context, const std::string &module) override;
 
   bool merge_context(
     contextt &dest,

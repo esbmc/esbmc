@@ -18,7 +18,6 @@ protected:
   contextt &context;
   namespacet ns;
 
-
   void adjust_symbol(symbolt &symbol);
   void adjust_type(typet &type);
 

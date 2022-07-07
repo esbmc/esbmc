@@ -86,17 +86,13 @@ public:
   {
     log_debug("Chosen solver doesn't support printing the AST\n");
   }
-
 };
 
 template <typename solver_ast>
 class solver_smt_ast : public smt_ast
 {
 public:
-  solver_smt_ast(
-    smt_convt *ctx,
-    solver_ast _a,
-    smt_sortt s)
+  solver_smt_ast(smt_convt *ctx, solver_ast _a, smt_sortt s)
     : smt_ast(ctx, s), a(_a)
   {
   }

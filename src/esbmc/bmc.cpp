@@ -42,10 +42,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
 
-bmct::bmct(
-  goto_functionst &funcs,
-  optionst &opts,
-  contextt &_context)
+bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
 {
   interleaving_number = 0;
@@ -53,8 +50,7 @@ bmct::bmct(
 
   if(options.get_bool_option("smt-during-symex"))
   {
-    runtime_solver =
-      std::shared_ptr<smt_convt>(create_solver("", ns, options));
+    runtime_solver = std::shared_ptr<smt_convt>(create_solver("", ns, options));
 
     symex = std::make_shared<reachability_treet>(
       funcs,
@@ -70,8 +66,7 @@ bmct::bmct(
       funcs,
       ns,
       options,
-      std::shared_ptr<symex_target_equationt>(
-        new symex_target_equationt(ns)),
+      std::shared_ptr<symex_target_equationt>(new symex_target_equationt(ns)),
       _context);
   }
 }
@@ -377,8 +372,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
   do
   {
     if(++interleaving_number > 1)
-      log_status(
-        "*** Thread interleavings {} ***", interleaving_number);
+      log_status("*** Thread interleavings {} ***", interleaving_number);
 
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
@@ -496,8 +490,7 @@ void bmct::bidirectional_search(
         continue;
 
       expr2tc new_lhs = ssait.original_lhs;
-      renaming::renaming_levelt::get_original_name(
-        new_lhs, symbol2t::level0);
+      renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
 
       if(all_loop_vars.find(new_lhs) == all_loop_vars.end())
         continue;

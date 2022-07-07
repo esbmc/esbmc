@@ -127,8 +127,7 @@ bool ansi_c_languaget::preprocess(
   return c_preprocess(path, outstream, false);
 }
 
-bool ansi_c_languaget::parse(
-  const std::string &path)
+bool ansi_c_languaget::parse(const std::string &path)
 {
   // store the path
 
@@ -182,9 +181,7 @@ bool ansi_c_languaget::parse(
   return result;
 }
 
-bool ansi_c_languaget::typecheck(
-  contextt &context,
-  const std::string &module)
+bool ansi_c_languaget::typecheck(contextt &context, const std::string &module)
 {
   if(ansi_c_convert(parse_tree, module))
     return true;

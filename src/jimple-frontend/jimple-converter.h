@@ -18,7 +18,6 @@ public:
 protected:
   contextt &context;
   const jimple_file &AST;
-
 };
 
 #endif //ESBMC_JIMPLE_CONVERTER_H

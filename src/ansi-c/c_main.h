@@ -14,9 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_code.h>
 #include <iostream>
 
-bool c_main(
-  contextt &context,
-  const std::string &standard_main);
+bool c_main(contextt &context, const std::string &standard_main);
 
 void static_lifetime_init(const contextt &context, codet &dest);
 

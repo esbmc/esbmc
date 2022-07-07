@@ -80,8 +80,7 @@ bool cpp_typecheck(
   contextt &context,
   const std::string &module)
 {
-  cpp_typecheckt cpp_typecheck(
-    cpp_parse_tree, context, module);
+  cpp_typecheckt cpp_typecheck(cpp_parse_tree, context, module);
   return cpp_typecheck.typecheck_main();
 }
 

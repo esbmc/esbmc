@@ -13,9 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/context.h>
 #include <util/message.h>
 
-void c_finalize_expression(
-  const contextt &context,
-  exprt &expr);
+void c_finalize_expression(const contextt &context, exprt &expr);
 
 bool c_final(contextt &context);
 

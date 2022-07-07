@@ -13,7 +13,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <z3++.h>
 #include <fstream>
 
-
 class z3_smt_ast : public solver_smt_ast<z3::expr>
 {
 public:

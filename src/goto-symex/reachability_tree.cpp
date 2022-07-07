@@ -80,12 +80,7 @@ void reachability_treet::setup_for_new_explore()
   {
     targ = target_template->clone();
     s = reinterpret_cast<execution_statet *>(new dfs_execution_statet(
-      goto_functions,
-      ns,
-      this,
-      targ,
-      permanent_context,
-      options));
+      goto_functions, ns, this, targ, permanent_context, options));
     schedule_target = nullptr;
   }
 
@@ -202,8 +197,7 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 
   if(interactive_ileaves && tid != user_tid)
   {
-    log_error(
-      "Ileave code selected different thread from user choice");
+    log_error("Ileave code selected different thread from user choice");
     abort();
   }
 
@@ -337,8 +331,7 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
   ileaves = 0;  // Can use this depending on a future refactor.
 }
 
-reachability_treet::dfs_position::dfs_position(
-  const std::string &&filename)
+reachability_treet::dfs_position::dfs_position(const std::string &&filename)
 {
   read_from_file(std::move(filename));
 }
@@ -500,8 +493,7 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   if(ex.DFS_traversed.at(tid) == true)
   {
     if(!quiet)
-      log_status(
-        "Thread unschedulable as it's already been explored");
+      log_status("Thread unschedulable as it's already been explored");
     return false;
   }
 

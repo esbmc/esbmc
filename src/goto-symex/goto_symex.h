@@ -881,8 +881,6 @@ protected:
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
 
-
-
   friend void build_goto_symex_classes();
 };
 

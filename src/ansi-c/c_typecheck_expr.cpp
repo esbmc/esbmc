@@ -450,7 +450,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   if(expr.operands().size() != 1)
   {
     err_location(expr);
-   log_error("typecast operator expects one operand");
+    log_error("typecast operator expects one operand");
     throw 0;
   }
 
@@ -749,7 +749,7 @@ void c_typecheck_baset::typecheck_expr_ptrmember(exprt &expr)
   if(expr.operands().size() != 1)
   {
     err_location(expr);
-   log_error("ptrmember operator expects one operand");
+    log_error("ptrmember operator expects one operand");
     throw 0;
   }
 
@@ -783,7 +783,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
   if(expr.operands().size() != 1)
   {
     err_location(expr);
-   log_error("member operator expects one operand");
+    log_error("member operator expects one operand");
     throw 0;
   }
 
@@ -863,7 +863,7 @@ void c_typecheck_baset::typecheck_expr_trinary(exprt &expr)
   if(operands.size() != 3)
   {
     err_location(expr);
-   log_error("Boolean operator ?: expects three operands");
+    log_error("Boolean operator ?: expects three operands");
     throw 0;
   }
 
@@ -922,7 +922,7 @@ void c_typecheck_baset::typecheck_side_effect_gcc_conditional_expression(
   if(operands.size() != 2)
   {
     err_location(expr);
-   log_error("gcc conditional_expr expects two operands");
+    log_error("gcc conditional_expr expects two operands");
     throw 0;
   }
 
@@ -948,7 +948,7 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
   if(expr.operands().size() != 1)
   {
     err_location(expr);
-   log_error("unary operator & expects one operand");
+    log_error("unary operator & expects one operand");
     throw 0;
   }
 
@@ -1018,7 +1018,7 @@ void c_typecheck_baset::typecheck_expr_dereference(exprt &expr)
     if(op_type.subtype().id() == "empty")
     {
       err_location(expr);
-     log_error("operand of unary * is a void * pointer");
+      log_error("operand of unary * is a void * pointer");
       throw 0;
     }
 

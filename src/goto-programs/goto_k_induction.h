@@ -6,11 +6,9 @@
 #include <util/guard.h>
 #include <irep2/irep2_expr.h>
 
-void goto_k_induction(
-  goto_functionst &goto_functions);
+void goto_k_induction(goto_functionst &goto_functions);
 
-void goto_termination(
-  goto_functionst &goto_functions);
+void goto_termination(goto_functionst &goto_functions);
 
 class goto_k_inductiont : public goto_loopst
 {
@@ -19,10 +17,7 @@ public:
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
     goto_functiont &_goto_function)
-    : goto_loopst(
-        _function_name,
-        _goto_functions,
-        _goto_function)
+    : goto_loopst(_function_name, _goto_functions, _goto_function)
   {
     if(function_loops.size())
       goto_k_induction();
