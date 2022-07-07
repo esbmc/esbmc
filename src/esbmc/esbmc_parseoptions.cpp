@@ -420,8 +420,8 @@ int esbmc_parseoptionst::doit()
     FILE *f = fopen(cmdline.getval("file-output"), "w+");
     out = f;
     err = f;
-    messaget_state::error_output = f;
-    messaget_state::standard_output = f;
+    messaget_state::out = f;
+    messaget_state::err = f;
   }
   //
   // Print a banner

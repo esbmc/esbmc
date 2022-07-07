@@ -5,3 +5,4 @@ add_library(cppfrontend ${CMAKE_CURRENT_BINARY_DIR}/scanner.cpp cpp_id.cpp cpp_l
 target_include_directories(cppfrontend
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
+target_link_libraries(cppfrontend PUBLIC fmt::fmt)

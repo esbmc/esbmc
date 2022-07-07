@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iostream>
 #include <util/arith_tools.h>
 #include <util/config.h>
+#include <util/message.h>
 
 void ansi_c_convert_typet::read(const typet &type)
 {
