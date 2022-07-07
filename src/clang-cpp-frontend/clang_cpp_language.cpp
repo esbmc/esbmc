@@ -24,11 +24,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 languaget *new_clang_cpp_language()
 {
-  return new clang_cpp_languaget(msg);
+  return new clang_cpp_languaget();
 }
 
 clang_cpp_languaget::clang_cpp_languaget()
-  : clang_c_languaget(msg)
 {
 }
 
@@ -54,31 +53,29 @@ std::string clang_cpp_languaget::internal_additions()
 
 bool clang_cpp_languaget::typecheck(
   contextt &context,
-  const std::string &module,
-  const messaget &message_handler)
+  const std::string &module)
 {
-  contextt new_context(message_handler);
+  contextt new_context;
 
-  clang_cpp_convertert converter(new_context, ASTs, message_handler, "C++");
+  clang_cpp_convertert converter(new_context, ASTs, "C++");
   if(converter.convert())
     return true;
 
-  clang_cpp_adjust adjuster(new_context, message_handler);
+  clang_cpp_adjust adjuster(new_context);
   if(adjuster.adjust())
     return true;
 
-  if(c_link(context, new_context, message_handler, module))
+  if(c_link(context, new_context, module))
     return true;
 
   return false;
 }
 
 bool clang_cpp_languaget::final(
-  contextt &context,
-  const messaget &message_handler)
+  contextt &context)
 {
-  add_cprover_library(context, message_handler);
-  return clang_main(context, message_handler);
+  add_cprover_library(context);
+  return clang_main(context);
 }
 
 bool clang_cpp_languaget::from_expr(

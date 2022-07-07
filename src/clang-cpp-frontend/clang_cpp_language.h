@@ -21,8 +21,7 @@ public:
 
   bool typecheck(
     contextt &context,
-    const std::string &module,
-    const messaget &message_handler) override;
+    const std::string &module) override;
 
   std::string id() const override
   {
@@ -39,7 +38,7 @@ public:
 
   languaget *new_language() const override
   {
-    return new clang_cpp_languaget(msg);
+    return new clang_cpp_languaget();
   }
 
   // constructor, destructor

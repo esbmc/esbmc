@@ -2,7 +2,7 @@
 #include <util/c_sizeof.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
-  : clang_c_adjust(_context, msg)
+  : clang_c_adjust(_context)
 {
 }
 
