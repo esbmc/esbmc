@@ -125,7 +125,7 @@ void bmct::error_trace(
   std::ostringstream oss;
   oss << "\nCounterexample:\n";
   show_goto_trace(oss, ns, goto_trace);
-  log_result(oss.str());
+  log_result("{}",oss.str());
 }
 
 smt_convt::resultt bmct::run_decision_procedure(
