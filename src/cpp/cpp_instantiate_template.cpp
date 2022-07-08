@@ -87,7 +87,7 @@ void cpp_typecheckt::show_instantiation_stack(std::ostream &out)
       s_it != instantiation_stack.end();
       s_it++)
   {
-    const symbolt &symbol = lookup(s_it->identifier);
+    const symbolt &symbol = *lookup(s_it->identifier);
     out << "instantiating `" << symbol.name << "' with <";
 
     forall_expr(a_it, s_it->full_template_args.arguments())
@@ -112,14 +112,14 @@ const symbolt *cpp_typecheckt::is_template_instantiated(
   // Check whether the instance already exists. The 'template_instances' irep
   // contains a list of already instantiated patterns, and the symbol names
   // where the resulting thing is.
-  const symbolt &template_symbol = lookup(template_symbol_name);
+  const symbolt &template_symbol = *lookup(template_symbol_name);
   const irept &instances = template_symbol.value.find("template_instances");
   if(!instances.is_nil())
   {
     if(instances.get(template_pattern_name) != "")
     {
       // It has already been instantianted! Look up the symbol.
-      const symbolt &symb = lookup(instances.get(template_pattern_name));
+      const symbolt &symb = *lookup(instances.get(template_pattern_name));
 
       // continue if the type is incomplete only -- it might now be complete(?).
       if(symb.type.id() != "incomplete_struct" || symb.value.is_not_nil())
@@ -432,7 +432,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
     convert(new_decl);
 
     symbolt &new_symb =
-      const_cast<symbolt &>(lookup(new_decl.type().identifier()));
+      const_cast<symbolt &>(*lookup(new_decl.type().identifier()));
 
     // Mark template as instantiated before instantiating template methods,
     // as they might then go and instantiate recursively.
@@ -557,7 +557,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
   const irep_idt &new_sym_name = new_decl.declarators()[0].identifier();
   mark_template_instantiated(template_symbol.id, subscope_name, new_sym_name);
-  return lookup(new_sym_name);
+  return *lookup(new_sym_name);
 }
 
 void cpp_typecheckt::put_template_args_in_scope(
@@ -624,7 +624,7 @@ void cpp_typecheckt::put_template_arg_into_scope(
   }
 
   // Find declaration of that templated type.
-  const symbolt &orig_symbol = lookup(templ_param_id);
+  const symbolt &orig_symbol = *lookup(templ_param_id);
 
   // Construct a new, concrete type symbol, with the base name as the templated
   // type name, and with the current scopes prefix.

@@ -48,8 +48,8 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
   {
     const std::map<irep_idt, exprt> &value_map = cit->second;
 
-    const symbolt &late_cast_symb = namespacet(context).lookup(cit->first);
-    const symbolt &vt_symb_type = namespacet(context).lookup(
+    const symbolt &late_cast_symb = *namespacet(context).lookup(cit->first);
+    const symbolt &vt_symb_type = *namespacet(context).lookup(
       "virtual_table::" + late_cast_symb.id.as_string());
 
     symbolt vt_symb_var;

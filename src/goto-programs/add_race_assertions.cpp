@@ -78,7 +78,7 @@ void w_guardst::add_initialization(goto_programt &goto_program) const
 
   for(const auto &w_guard : w_guards)
   {
-    exprt symbol = symbol_expr(ns.lookup(w_guard));
+    exprt symbol = symbol_expr(*ns.lookup(w_guard));
     expr2tc new_sym;
     migrate_expr(symbol, new_sym);
 

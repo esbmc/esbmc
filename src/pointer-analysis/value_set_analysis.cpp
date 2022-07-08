@@ -57,7 +57,7 @@ void value_set_analysist::add_vars(const goto_programt &goto_program)
 
       if(e_it == entry_cache.end())
       {
-        const symbolt &symbol = ns.lookup(*l_it);
+        const symbolt &symbol = *ns.lookup(*l_it);
 
         std::list<value_sett::entryt> &entries = entry_cache[*l_it];
         get_entries(symbol, entries);
@@ -128,7 +128,7 @@ void value_set_analysist::add_vars(const goto_functionst &goto_functions)
 
       for(auto const &l_it : locals)
       {
-        const symbolt &symbol = ns.lookup(l_it);
+        const symbolt &symbol = *ns.lookup(l_it);
 
         std::list<value_sett::entryt> entries;
         get_entries(symbol, entries);

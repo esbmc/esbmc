@@ -30,14 +30,18 @@ bool goto_program_dereferencet::has_failed_symbol(
       to_symbol2t(expr).thename == "INVALID")
       return false;
 
-    const symbolt &ptr_symbol = ns.lookup(migrate_expr_back(expr));
+    const symbolt &ptr_symbol = *ns.lookup(migrate_expr_back(expr));
 
     const irep_idt &failed_symbol = ptr_symbol.type.failed_symbol();
 
     if(failed_symbol == "")
       return false;
 
-    return !ns.lookup(failed_symbol, symbol);
+    const symbolt *s = ns.lookup(failed_symbol);
+    if(!s)
+      return false;
+    symbol = s;
+    return true;
   }
 
   return false;

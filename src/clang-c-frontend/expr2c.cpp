@@ -21,9 +21,9 @@ Author: Daniel Kroening, kroening@kroening.com
 std::string expr2ct::id_shorthand(const exprt &expr) const
 {
   const irep_idt &identifier = expr.identifier();
-  const symbolt *symbol;
+  const symbolt *symbol = ns.lookup(identifier);
 
-  if(!ns.lookup(identifier, symbol))
+  if(symbol)
     return id2string(symbol->name);
 
   std::string sh = id2string(identifier);
@@ -1538,8 +1538,8 @@ std::string expr2ct::convert_code_decl(const codet &src, unsigned indent)
 
   std::string dest = indent_str(indent);
 
-  const symbolt *symbol = NULL;
-  if(!ns.lookup(to_symbol_expr(src.op0()).get_identifier(), symbol))
+  const symbolt *symbol = ns.lookup(to_symbol_expr(src.op0()).get_identifier());
+  if(symbol)
   {
     if(
       symbol->file_local &&

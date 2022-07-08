@@ -43,8 +43,8 @@ void rw_sett::read_write_rec(
   {
     const symbol_exprt &symbol_expr = to_symbol_expr(expr);
 
-    const symbolt *symbol;
-    if(!ns.lookup(symbol_expr.get_identifier(), symbol))
+    const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
+    if(symbol)
     {
       if(!symbol->static_lifetime /*&& expr.type().id()=="pointer"*/)
       {

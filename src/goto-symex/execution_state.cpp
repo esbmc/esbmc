@@ -842,8 +842,8 @@ void execution_statet::get_expr_globals(
                 i2string(get_active_state().top().level1.thread_id))
       return;
 
-    const symbolt *symbol;
-    if(ns.lookup(name, symbol))
+    const symbolt *symbol = ns.lookup(name);
+    if(!symbol)
       return;
 
     if(

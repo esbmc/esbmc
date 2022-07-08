@@ -55,7 +55,7 @@ public:
     return as_string()[i];
   }
 
-  // warning! the address returned is not stable
+  // the address returned is guaranteed to be stable
   inline const char *c_str() const
   {
     return as_string().c_str();

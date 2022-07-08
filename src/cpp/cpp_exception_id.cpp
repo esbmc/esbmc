@@ -46,7 +46,7 @@ void cpp_exception_list_rec(
     irep_idt identifier = src.identifier();
 
     // We must check if is a derived class
-    typet type = ns.lookup(identifier).type;
+    typet type = ns.lookup(identifier)->type;
 
     if(
       type.id() == "struct" &&

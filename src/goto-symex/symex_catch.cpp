@@ -214,8 +214,8 @@ bool goto_symext::symex_throw()
 bool goto_symext::terminate_handler()
 {
   // We must look on the context if the user included exception lib
-  const symbolt *tmp;
-  bool is_included = ns.lookup("std::terminate()", tmp);
+  const symbolt *tmp = ns.lookup("std::terminate()");
+  bool is_included = !tmp;
 
   // If it do, we must call the terminate function:
   // It'll call the current function handler
@@ -247,8 +247,8 @@ bool goto_symext::unexpected_handler()
     return false;
 
   // We must look on the context if the user included exception lib
-  const symbolt *tmp;
-  bool is_included = ns.lookup("std::unexpected()", tmp);
+  const symbolt *tmp = ns.lookup("std::unexpected()");
+  bool is_included = !tmp;
 
   // If it do, we must call the unexpected function:
   // It'll call the current function handler

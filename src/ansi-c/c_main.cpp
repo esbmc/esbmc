@@ -136,8 +136,8 @@ bool c_main(
     {
       namespacet ns(context);
 
-      const symbolt &argc_symbol = ns.lookup("argc'");
-      const symbolt &argv_symbol = ns.lookup("argv'");
+      const symbolt &argc_symbol = *ns.lookup("argc'");
+      const symbolt &argv_symbol = *ns.lookup("argv'");
 
       {
         // assume argc is at least one
@@ -176,7 +176,7 @@ bool c_main(
 
       if(arguments.size() == 3)
       {
-        const symbolt &envp_size_symbol = ns.lookup("envp_size'");
+        const symbolt &envp_size_symbol = *ns.lookup("envp_size'");
         // assume envp_size is at most MAX-1
         BigInt max;
 
@@ -216,8 +216,8 @@ bool c_main(
 
       if(arguments.size() == 3)
       {
-        const symbolt &envp_symbol = ns.lookup("envp'");
-        const symbolt &envp_size_symbol = ns.lookup("envp_size'");
+        const symbolt &envp_symbol = *ns.lookup("envp'");
+        const symbolt &envp_size_symbol = *ns.lookup("envp_size'");
 
         // assume envp[envp_size] is NULL
         exprt null("constant", envp_symbol.type.subtype());
@@ -271,7 +271,7 @@ bool c_main(
         // do we need envp?
         if(arguments.size() == 3)
         {
-          const symbolt &envp_symbol = ns.lookup("envp'");
+          const symbolt &envp_symbol = *ns.lookup("envp'");
           exprt &op2 = operands[2];
 
           const exprt &arg2 = arguments[2];

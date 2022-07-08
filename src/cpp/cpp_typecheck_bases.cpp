@@ -35,7 +35,7 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
       throw 0;
     }
 
-    const symbolt &base_symbol = lookup(base_symbol_expr.type());
+    const symbolt &base_symbol = *lookup(base_symbol_expr.type());
 
     if(
       base_symbol.type.id() == "incomplete_struct" ||
@@ -151,7 +151,7 @@ void cpp_typecheckt::add_base_components(
     else if(access == "protected" && sub_access != "private")
       sub_access = "protected";
 
-    const symbolt &symb = lookup(it->type().identifier());
+    const symbolt &symb = *lookup(it->type().identifier());
 
     bool is_virtual = it->get_bool("virtual");
 

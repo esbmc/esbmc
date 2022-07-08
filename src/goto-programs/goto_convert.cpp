@@ -861,11 +861,12 @@ void goto_convertt::break_globals2assignments_rec(
     if(identifier.empty())
       return;
 
-    const symbolt &symbol = ns.lookup(identifier);
+    const symbolt *symbol = ns.lookup(identifier);
+    assert(symbol);
 
     if(
       !(identifier == "__ESBMC_alloc" || identifier == "__ESBMC_alloc_size") &&
-      (symbol.static_lifetime || symbol.type.is_dynamic_set()))
+      (symbol->static_lifetime || symbol->type.is_dynamic_set()))
     {
       // make new assignment to temp for each global symbol
       symbolt &new_symbol = new_tmp_symbol(rhs.type());
@@ -892,8 +893,9 @@ void goto_convertt::break_globals2assignments_rec(
   else if(rhs.id() == "symbol")
   {
     const irep_idt &identifier = rhs.identifier();
-    const symbolt &symbol = ns.lookup(identifier);
-    if(symbol.static_lifetime || symbol.type.is_dynamic_set())
+    const symbolt *symbol = ns.lookup(identifier);
+    assert(symbol);
+    if(symbol->static_lifetime || symbol->type.is_dynamic_set())
     {
       // make new assignment to temp for each global symbol
       symbolt &new_symbol = new_tmp_symbol(rhs.type());
@@ -938,13 +940,14 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
   if(expr.id() == "symbol")
   {
     const irep_idt &identifier = expr.identifier();
-    const symbolt &symbol = ns.lookup(identifier);
+    const symbolt *symbol = ns.lookup(identifier);
+    assert(symbol);
 
     if(identifier == "__ESBMC_alloc" || identifier == "__ESBMC_alloc_size")
     {
       return 0;
     }
-    if(symbol.static_lifetime || symbol.type.is_dynamic_set())
+    if(symbol->static_lifetime || symbol->type.is_dynamic_set())
     {
       return 1;
     }
@@ -975,13 +978,14 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
   if(is_symbol2t(expr))
   {
     irep_idt identifier = to_symbol2t(expr).get_symbol_name();
-    const symbolt &symbol = ns.lookup(identifier);
+    const symbolt *symbol = ns.lookup(identifier);
+    assert(symbol);
 
     if(identifier == "__ESBMC_alloc" || identifier == "__ESBMC_alloc_size")
     {
       return 0;
     }
-    if(symbol.static_lifetime || symbol.type.is_dynamic_set())
+    if(symbol->static_lifetime || symbol->type.is_dynamic_set())
     {
       return 1;
     }

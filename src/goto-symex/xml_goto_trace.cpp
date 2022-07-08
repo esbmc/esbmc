@@ -78,10 +78,10 @@ void convert(
           from_type(ns, identifier, migrate_type_back(step.value->type), msg);
       }
 
-      const symbolt *symbol;
+      const symbolt *symbol = ns.lookup(identifier);
       irep_idt base_name, display_name;
 
-      if(!ns.lookup(identifier, symbol))
+      if(symbol)
       {
         base_name = symbol->name;
         display_name = symbol->name;

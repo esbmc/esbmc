@@ -22,9 +22,9 @@ std::string from_expr(
     mode = 0;
   else
   {
-    const symbolt *symbol;
+    const symbolt *symbol = ns.lookup(identifier);
 
-    if(ns.lookup(identifier, symbol))
+    if(!symbol)
       mode = 0;
     else if(symbol->mode == "")
       mode = 0;
@@ -55,9 +55,9 @@ std::string from_type(
     mode = 0;
   else
   {
-    const symbolt *symbol;
+    const symbolt *symbol = ns.lookup(identifier);
 
-    if(ns.lookup(identifier, symbol))
+    if(!symbol)
       mode = 0;
     else if(symbol->mode == "")
       mode = 0;

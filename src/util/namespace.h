@@ -18,16 +18,12 @@ Author: Daniel Kroening, kroening@kroening.com
 class namespacet
 {
 public:
-  const symbolt &lookup(const irep_idt &name) const;
-
-  const symbolt &lookup(const irept &irep) const
+  const symbolt *lookup(const irep_idt &name) const;
+  const symbolt *lookup(const irept &irep) const
   {
     return lookup(irep.identifier());
   }
 
-  virtual ~namespacet() = default;
-
-  virtual bool lookup(const irep_idt &name, const symbolt *&symbol) const;
   void follow_symbol(irept &irep) const;
 
   const typet &follow(const typet &src) const;
@@ -51,12 +47,6 @@ public:
   {
     context1 = &_context1;
     context2 = &_context2;
-  }
-
-  namespacet(const contextt *_context1, const contextt *_context2)
-  {
-    context1 = _context1;
-    context2 = _context2;
   }
 
   unsigned get_max(const std::string &prefix) const;

@@ -31,7 +31,7 @@ bool cpp_typecheckt::find_parent(
 {
   forall_irep(bit, symb.type.find("bases").get_sub())
   {
-    if(lookup(bit->type().identifier()).name == base_name)
+    if(lookup(bit->type().identifier())->name == base_name)
     {
       identifier = bit->type().identifier();
       return true;
@@ -593,7 +593,7 @@ void cpp_typecheckt::typecheck_expr_address_of(exprt &expr)
   {
     // we take the address of the method.
     assert(expr.op0().id() == "member");
-    exprt symb = cpp_symbol_expr(lookup(expr.op0().component_name()));
+    exprt symb = cpp_symbol_expr(*lookup(expr.op0().component_name()));
     exprt address("address_of", typet("pointer"));
     address.copy_to_operands(symb);
     address.type().subtype() = symb.type();
@@ -955,12 +955,12 @@ void cpp_typecheckt::typecheck_expr_member(
 
   typet op_type = op0.type();
   // Follow symbolic types up until the last one.
-  while(lookup(op_type.identifier()).type.id() == "symbol")
-    op_type = lookup(op_type.identifier()).type;
+  while(lookup(op_type.identifier())->type.id() == "symbol")
+    op_type = lookup(op_type.identifier())->type;
 
   const irep_idt &struct_identifier = to_symbol_type(op_type).get_identifier();
 
-  const symbolt &struct_symbol = lookup(struct_identifier);
+  const symbolt &struct_symbol = *lookup(struct_identifier);
 
   if(
     struct_symbol.type.id() == "incomplete_struct" ||
@@ -1021,7 +1021,7 @@ void cpp_typecheckt::typecheck_expr_member(
         symbol_expr.type().get("return_type") == "constructor")
       {
         err_location(expr);
-        str << "error: member `" << lookup(symbol_expr.identifier()).name
+        str << "error: member `" << lookup(symbol_expr.identifier())->name
             << "' is a constructor";
         throw 0;
       }
@@ -1369,7 +1369,7 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
 
     // If the object on typeid is a null pointer we must
     // throw a bad_typeid exception
-    symbolt pointer_symbol = lookup(arguments.identifier());
+    symbolt pointer_symbol = *lookup(arguments.identifier());
 
     if(pointer_symbol.value.value() == "NULL")
     {
@@ -1379,8 +1379,8 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
       irep_idt bad_typeid_identifier = "std::tag.bad_typeid";
 
       // We must check if the user included typeinfo
-      const symbolt *bad_typeid_symbol;
-      bool is_included = lookup(bad_typeid_identifier, bad_typeid_symbol);
+      const symbolt *bad_typeid_symbol = lookup(bad_typeid_identifier);
+      bool is_included = !bad_typeid_symbol;
 
       if(is_included)
         throw "Error: must #include <typeinfo> before using typeid";
@@ -1402,7 +1402,7 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
     if(arguments.type().id() == "incomplete_array")
     {
       err_location(arguments.location());
-      str << "storage size of ‘" << lookup(arguments.identifier()).name;
+      str << "storage size of ‘" << lookup(arguments.identifier())->name;
       str << "’ isn’t known\n";
       throw 0;
     }
@@ -1891,7 +1891,7 @@ void cpp_typecheckt::typecheck_method_application(
   exprt member_expr;
   member_expr.swap(expr.function());
 
-  const symbolt &symbol = lookup(member_expr.component_name());
+  const symbolt &symbol = *lookup(member_expr.component_name());
 
   // build new function expression
   exprt new_function(cpp_symbol_expr(symbol));
@@ -1975,8 +1975,8 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
       //Array
       else if(expr.op0().type().subtype().identifier() != "")
       {
-        const symbolt *symbol;
-        bool is_included = lookup(expr.op0().op0().identifier(), symbol);
+        const symbolt *symbol = lookup(expr.op0().op0().identifier());
+        bool is_included = !symbol;
 
         if(expr.op1().has_operands())
         {

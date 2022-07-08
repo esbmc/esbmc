@@ -244,7 +244,7 @@ void cpp_typecheckt::do_not_typechecked()
         cpp_declaratort declarator;
         declarator.location() = sym->location;
         default_assignop_value(
-          lookup(sym->type.get("#member_name")), declarator);
+          *lookup(sym->type.get("#member_name")), declarator);
         sym->value.swap(declarator.value());
         convert_function(*sym);
         cont = true;

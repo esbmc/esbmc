@@ -37,61 +37,36 @@ unsigned namespacet::get_max(const std::string &prefix) const
   return m;
 }
 
-bool namespacet::lookup(const irep_idt &name, const symbolt *&symbol) const
+const symbolt *namespacet::lookup(const irep_idt &name) const
 {
-  const symbolt *s = nullptr;
+  const symbolt *s = context1->find_symbol(name);
 
-  s = context1->find_symbol(name);
-  if(s != nullptr)
-  {
-    symbol = s;
-    return false;
-  }
-
-  if(context2 != nullptr)
-  {
+  if(s == nullptr && context2 != nullptr)
     s = context2->find_symbol(name);
-    if(s != nullptr)
-    {
-      symbol = s;
-      return false;
-    }
-  }
 
-  return true;
-}
-
-const symbolt &namespacet::lookup(const irep_idt &name) const
-{
-  const symbolt *symbol;
-  if(lookup(name, symbol))
-  {
-    assert(
-      0 && fmt::format("Failed to find symbol {} not found", id2string(name))
-             .c_str());
-  }
-  return *symbol;
+  return s;
 }
 
 void namespacet::follow_symbol(irept &irep) const
 {
   while(irep.id() == "symbol")
   {
-    const symbolt &symbol = lookup(irep);
+    const symbolt *symbol = lookup(irep);
+    assert(symbol);
 
-    if(symbol.is_type)
+    if(symbol->is_type)
     {
-      if(symbol.type.is_nil())
+      if(symbol->type.is_nil())
         return;
 
-      irep = symbol.type;
+      irep = symbol->type;
     }
     else
     {
-      if(symbol.value.is_nil())
+      if(symbol->value.is_nil())
         return;
 
-      irep = symbol.value;
+      irep = symbol->value;
     }
   }
 }
@@ -101,14 +76,15 @@ const typet &namespacet::follow(const typet &src) const
   if(!src.is_symbol())
     return src;
 
-  const symbolt *symbol = &lookup(src);
+  const symbolt *symbol = lookup(src);
 
   // let's hope it's not cyclic...
   while(true)
   {
+    assert(symbol);
     assert(symbol->is_type);
     if(!symbol->type.is_symbol())
       return symbol->type;
-    symbol = &lookup(symbol->type);
+    symbol = lookup(symbol->type);
   }
 }

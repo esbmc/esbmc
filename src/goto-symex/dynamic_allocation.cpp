@@ -31,7 +31,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     pointer_object2tc obj_expr(pointer_type2(), obj.value);
 
     expr2tc alloc_arr_2;
-    migrate_expr(symbol_expr(ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
+    migrate_expr(symbol_expr(*ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
 
     index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
     expr = index_expr;
@@ -44,7 +44,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     pointer_object2tc obj_expr(pointer_type2(), ptr.ptr_obj);
 
     expr2tc alloc_arr_2;
-    migrate_expr(symbol_expr(ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
+    migrate_expr(symbol_expr(*ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
 
     index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
     not2tc notindex(index_expr);
@@ -57,7 +57,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     // objects.
 
     expr2tc sym_2;
-    migrate_expr(symbol_expr(ns.lookup(dyn_info_arr_name)), sym_2);
+    migrate_expr(symbol_expr(*ns.lookup(dyn_info_arr_name)), sym_2);
 
     pointer_object2tc ptr_obj(pointer_type2(), ptr.ptr_obj);
     index2tc is_dyn(get_bool_type(), sym_2, ptr_obj);
@@ -82,7 +82,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     pointer_object2tc obj_expr(pointer_type2(), obj.value);
 
     expr2tc alloc_arr_2;
-    migrate_expr(symbol_expr(ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
+    migrate_expr(symbol_expr(*ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
 
     index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
     expr = not2tc(index_expr);
@@ -96,7 +96,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     pointer_object2tc obj_expr(pointer_type2(), size.value);
 
     expr2tc alloc_arr_2;
-    migrate_expr(symbol_expr(ns.lookup(alloc_size_arr_name)), alloc_arr_2);
+    migrate_expr(symbol_expr(*ns.lookup(alloc_size_arr_name)), alloc_arr_2);
 
     index2tc index_expr(uint_type2(), alloc_arr_2, obj_expr);
     expr = index_expr;

@@ -2042,7 +2042,7 @@ void dereferencet::valid_check(
       return;
     }
 
-    const symbolt &sym = ns.lookup(to_symbol2t(symbol).thename);
+    const symbolt &sym = *ns.lookup(to_symbol2t(symbol).thename);
     if(has_prefix(sym.id.as_string(), "symex_dynamic::"))
     {
       // Assert thtat it hasn't (nondeterministically) been invalidated.
@@ -2102,7 +2102,7 @@ void dereferencet::bounds_check(
   if(
     !is_constant_array2t(expr) &&
     has_prefix(
-      ns.lookup(to_symbol2t(expr).thename).id.as_string(), "symex_dynamic::"))
+      ns.lookup(to_symbol2t(expr).thename)->id.as_string(), "symex_dynamic::"))
   {
     // Construct a dynamic_size irep.
     address_of2tc addrof(expr->type, expr);

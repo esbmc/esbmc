@@ -436,14 +436,14 @@ convert_operand_pair(const exprt &expr, expr2tc &arg1, expr2tc &arg2)
 
 expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
 {
-  const symbolt *sym;
+  const symbolt *sym = migrate_namespace_lookup->lookup(init);
   symbol2t::renaming_level target_level;
   unsigned int level1_num = 0, thread_num = 0, node_num = 0, level2_num = 0;
 
   const std::string &thestr = init.as_string();
   // If this is an existing symbol name, then we're not renamed at all. Can't
   // rely on @ and ! symbols in the string "sadly".
-  if(migrate_namespace_lookup->lookup(init, sym) == false)
+  if(sym)
   {
     // This is a level0 name.
 

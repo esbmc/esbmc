@@ -220,13 +220,14 @@ void language_filest::typecheck_virtual_methods(contextt &context)
           component.get_bool("is_virtual") &&
           !(component.get_bool("is_pure_virtual")))
         {
-          const symbolt &member_function =
+          const symbolt *member_function =
             namespacet(context).lookup(component.get_name());
+          assert(member_function);
 
-          if(member_function.value.is_nil())
+          if(member_function->value.is_nil())
           {
             msg.error(
-              member_function.location.as_string() +
+              member_function->location.as_string() +
               ": The virtual method isn't pure virtual and hasn't a "
               "method implementation ");
             msg.error("CONVERSION ERROR");
