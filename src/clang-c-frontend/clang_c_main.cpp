@@ -126,8 +126,8 @@ bool clang_main(contextt &context, const messaget &message_handler)
     {
       namespacet ns(context);
 
-      const symbolt &argc_symbol = ns.lookup("argc'");
-      const symbolt &argv_symbol = ns.lookup("argv'");
+      const symbolt &argc_symbol = *ns.lookup("argc'");
+      const symbolt &argv_symbol = *ns.lookup("argv'");
 
       // assume argc is at least one
       exprt one = from_integer(1, argc_symbol.type);
@@ -199,8 +199,8 @@ bool clang_main(contextt &context, const messaget &message_handler)
 
       if(arguments.size() == 3)
       {
-        const symbolt &envp_symbol = ns.lookup("envp'");
-        const symbolt &envp_size_symbol = ns.lookup("envp_size'");
+        const symbolt &envp_symbol = *ns.lookup("envp'");
+        const symbolt &envp_size_symbol = *ns.lookup("envp_size'");
 
         exprt envp_ge(">=", bool_type());
         envp_ge.copy_to_operands(symbol_expr(envp_size_symbol), one);

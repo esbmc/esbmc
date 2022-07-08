@@ -94,7 +94,7 @@ codet cpp_typecheckt::cpp_destructor(
     // there is always a destructor for non-PODs
     assert(dtor_name != "");
 
-    const symbolt &symb = lookup(struct_type.name());
+    const symbolt &symb = *lookup(struct_type.name());
 
     irept cpp_name("cpp-name");
 

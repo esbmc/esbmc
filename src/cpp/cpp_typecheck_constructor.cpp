@@ -247,7 +247,7 @@ void cpp_typecheckt::default_cpctor(
     assert(parent_it->id() == "base");
     assert(parent_it->get("type") == "symbol");
 
-    const symbolt &parsymb = lookup(parent_it->type().identifier());
+    const symbolt &parsymb = *lookup(parent_it->type().identifier());
 
     if(cpp_is_pod(parsymb.type))
       copy_parent(location, parsymb.name, arg_name, block);
@@ -289,9 +289,9 @@ void cpp_typecheckt::default_cpctor(
       cppname.move_to_sub(name);
 
       const symbolt &virtual_table_symbol_type =
-        namespacet(context).lookup(mem_it->type().subtype().identifier());
+        *namespacet(context).lookup(mem_it->type().subtype().identifier());
 
-      const symbolt &virtual_table_symbol_var = namespacet(context).lookup(
+      const symbolt &virtual_table_symbol_var = *namespacet(context).lookup(
         virtual_table_symbol_type.id.as_string() + "@" + symbol.id.as_string());
 
       exprt var = symbol_expr(virtual_table_symbol_var);
@@ -437,7 +437,7 @@ void cpp_typecheckt::default_assignop_value(
     assert(parent_it->id() == "base");
     assert(parent_it->get("type") == "symbol");
 
-    const symbolt &symb = lookup(parent_it->type().identifier());
+    const symbolt &symb = *lookup(parent_it->type().identifier());
 
     copy_parent(location, symb.name, arg_name, block);
   }
@@ -562,7 +562,7 @@ void cpp_typecheckt::check_member_initializers(
         if(type.id() != "symbol")
           continue;
 
-        const symbolt &symb = lookup(type.identifier());
+        const symbolt &symb = *lookup(type.identifier());
         if(symb.type.id() != "struct")
           break;
 
@@ -602,7 +602,7 @@ void cpp_typecheckt::check_member_initializers(
 
           // check for a indirect parent
           irep_idt identifier = parent_it->type().identifier();
-          const symbolt &isymb = lookup(identifier);
+          const symbolt &isymb = *lookup(identifier);
           const typet &type = isymb.type;
           assert(type.id() == "struct");
           const irept &ibase = type.find("bases");
@@ -665,7 +665,7 @@ void cpp_typecheckt::full_member_initialization(
 
     while(!vbases.empty())
     {
-      const symbolt &symb = lookup(vbases.front());
+      const symbolt &symb = *lookup(vbases.front());
       if(!cpp_is_pod(symb.type))
       {
         // default initializer
@@ -691,7 +691,7 @@ void cpp_typecheckt::full_member_initialization(
     assert(parent_it->id() == "base");
     assert(parent_it->get("type") == "symbol");
 
-    const symbolt &ctorsymb = lookup(parent_it->type().identifier());
+    const symbolt &ctorsymb = *lookup(parent_it->type().identifier());
 
     if(cpp_is_pod(ctorsymb.type))
       continue;
@@ -751,7 +751,7 @@ void cpp_typecheckt::full_member_initialization(
 
       // initialize the indirect parent
       irep_idt identifier = parent_it->type().identifier();
-      const symbolt &isymb = lookup(identifier);
+      const symbolt &isymb = *lookup(identifier);
       const typet &type = isymb.type;
       assert(type.id() == "struct");
       const irept &ibase = type.find("bases");
@@ -820,9 +820,9 @@ void cpp_typecheckt::full_member_initialization(
       cppname.move_to_sub(name);
 
       const symbolt &virtual_table_symbol_type =
-        lookup(mem_it->type().subtype().identifier());
+        *lookup(mem_it->type().subtype().identifier());
 
-      const symbolt &virtual_table_symbol_var = lookup(
+      const symbolt &virtual_table_symbol_var = *lookup(
         virtual_table_symbol_type.id.as_string() + "@" +
         struct_type.name().as_string());
 
@@ -1062,9 +1062,9 @@ void cpp_typecheckt::dtor(
       cppname.move_to_sub(name);
 
       const symbolt &virtual_table_symbol_type =
-        namespacet(context).lookup(cit->type().subtype().identifier());
+        *namespacet(context).lookup(cit->type().subtype().identifier());
 
-      const symbolt &virtual_table_symbol_var = namespacet(context).lookup(
+      const symbolt &virtual_table_symbol_var = *namespacet(context).lookup(
         virtual_table_symbol_type.id.as_string() + "@" + symb.id.as_string());
 
       exprt var = symbol_expr(virtual_table_symbol_var);
@@ -1126,7 +1126,7 @@ void cpp_typecheckt::dtor(
   {
     assert(bit->id() == "base");
     assert(bit->type().id() == "symbol");
-    const symbolt &psymb = lookup(bit->type().identifier());
+    const symbolt &psymb = *lookup(bit->type().identifier());
 
     exprt object("dereference");
     object.operands().emplace_back("cpp-this");

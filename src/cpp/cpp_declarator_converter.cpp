@@ -138,7 +138,7 @@ symbolt &cpp_declarator_convertert::convert(
       }
 
       irep_idt identifier = symbol_expr.type().identifier();
-      const symbolt &symb = cpp_typecheck.lookup(identifier);
+      const symbolt &symb = *cpp_typecheck.lookup(identifier);
       const typet &type = symb.type;
       assert(type.id() == "struct");
 

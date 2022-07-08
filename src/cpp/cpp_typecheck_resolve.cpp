@@ -115,7 +115,7 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     assert(e.id() == "template_function_instance");
 
     const symbolt &template_symbol =
-      cpp_typecheck.lookup(e.type().get("#template"));
+      *cpp_typecheck.lookup(e.type().get("#template"));
 
     const cpp_template_args_tct &template_args =
       to_cpp_template_args_tc(e.type().find("#template_arguments"));
@@ -247,7 +247,7 @@ void cpp_typecheck_resolvet::disambiguate_copy_constructor(
     // template flag.
     const irep_idt &name =
       (it->id() == "symbol") ? it->identifier() : it->component_name();
-    const symbolt &sym = cpp_typecheck.lookup(name);
+    const symbolt &sym = *cpp_typecheck.lookup(name);
     if(sym.value.get("#speculative_template") == "1")
       it = identifiers.erase(it);
     else
@@ -266,7 +266,7 @@ exprt cpp_typecheck_resolvet::convert_template_argument(
     // No. In that case, see whether we've picked up the template argument from
     // the instantiation scope, which will mean it has a type attached.
 
-    const symbolt &sym = cpp_typecheck.lookup(identifier.identifier);
+    const symbolt &sym = *cpp_typecheck.lookup(identifier.identifier);
     exprt e2;
     if(sym.is_type)
     {
@@ -315,7 +315,7 @@ exprt cpp_typecheck_resolvet::convert_identifier(
     // a regular struct or union member
 
     const symbolt &class_symbol =
-      cpp_typecheck.lookup(identifier.class_identifier);
+      *cpp_typecheck.lookup(identifier.class_identifier);
 
     assert(
       class_symbol.type.id() == "struct" || class_symbol.type.id() == "union");
@@ -414,7 +414,7 @@ exprt cpp_typecheck_resolvet::convert_identifier(
       {
         // this has to be a method
         if(identifier.is_method)
-          e = cpp_symbol_expr(cpp_typecheck.lookup(identifier.identifier));
+          e = cpp_symbol_expr(*cpp_typecheck.lookup(identifier.identifier));
         else
           e.make_nil();
       }
@@ -422,7 +422,7 @@ exprt cpp_typecheck_resolvet::convert_identifier(
   }
   else
   {
-    const symbolt &symbol = cpp_typecheck.lookup(identifier.identifier);
+    const symbolt &symbol = *cpp_typecheck.lookup(identifier.identifier);
 
     if(symbol.is_type)
     {
@@ -448,7 +448,7 @@ exprt cpp_typecheck_resolvet::convert_identifier(
 
       while(followed_type.id() == "symbol")
       {
-        typet tmp = cpp_typecheck.lookup(followed_type).type;
+        typet tmp = cpp_typecheck.lookup(followed_type)->type;
         followed_type = tmp;
         constant |= followed_type.cmt_constant();
       }
@@ -526,7 +526,7 @@ void cpp_typecheck_resolvet::filter(
   for(auto it : old_set)
   {
     // OK; what kind of template are we dealing with here...
-    const symbolt &sym = cpp_typecheck.lookup(it->identifier);
+    const symbolt &sym = *cpp_typecheck.lookup(it->identifier);
     if(sym.type.type().id() == "struct")
       id_set.insert(it);
   }
@@ -733,14 +733,14 @@ void cpp_typecheck_resolvet::make_constructors(
     {
       cpp_save_scopet cpp_saved_scope(cpp_typecheck.cpp_scopes);
       cpp_typecheck.cpp_scopes.set_scope(struct_type.name());
-      const symbolt &the_sym = cpp_typecheck.lookup(struct_type.name());
+      const symbolt &the_sym = *cpp_typecheck.lookup(struct_type.name());
 
       cpp_scopest::id_sett id_set;
       cpp_typecheck.cpp_scopes.get_ids(the_sym.name, id_set, true);
 
       for(auto it : id_set)
       {
-        const symbolt &sub_sym = cpp_typecheck.lookup(it->identifier);
+        const symbolt &sub_sym = *cpp_typecheck.lookup(it->identifier);
 
         // Pick out member expressions that are constructors
         if(
@@ -1060,7 +1060,7 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
   {
     const irep_idt id = it->identifier;
 
-    const symbolt &s = cpp_typecheck.lookup(id);
+    const symbolt &s = *cpp_typecheck.lookup(id);
     if(!s.type.get_bool("is_template"))
       continue;
 
@@ -1088,7 +1088,7 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
   assert(primary_templates.size() == 1);
 
   const symbolt &primary_template_symbol =
-    cpp_typecheck.lookup(*primary_templates.begin());
+    *cpp_typecheck.lookup(*primary_templates.begin());
 
   // We typecheck the template arguments in the context
   // of the original scope!
@@ -1116,7 +1116,7 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
   for(auto it : id_set)
   {
     const irep_idt id = it->identifier;
-    const symbolt &s = cpp_typecheck.lookup(id);
+    const symbolt &s = *cpp_typecheck.lookup(id);
 
     irep_idt specialization_of = s.type.get("specialization_of");
     if(specialization_of == "")
@@ -1260,7 +1260,7 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
       match = zero_distance_matches.at(0);
   }
 
-  const symbolt &choice = cpp_typecheck.lookup(match.id);
+  const symbolt &choice = *cpp_typecheck.lookup(match.id);
 
   // build instance
   const symbolt &instance = cpp_typecheck.instantiate_template(
@@ -1357,7 +1357,7 @@ void cpp_typecheck_resolvet::show_identifiers(
 
       if(id_expr.type().get_bool("is_template"))
       {
-        out << cpp_typecheck.lookup(to_symbol_expr(id_expr)).name;
+        out << cpp_typecheck.lookup(to_symbol_expr(id_expr))->name;
       }
       else if(id_expr.type().id() == "code")
       {
@@ -1393,20 +1393,20 @@ void cpp_typecheck_resolvet::show_identifiers(
 
       if(id_expr.id() == "symbol")
       {
-        const symbolt &symbol = cpp_typecheck.lookup(to_symbol_expr(id_expr));
+        const symbolt &symbol = *cpp_typecheck.lookup(to_symbol_expr(id_expr));
         out << " (" << symbol.location << ")";
       }
       else if(id_expr.id() == "member")
       {
-        const symbolt *symbol;
-        bool found = cpp_typecheck.lookup(id_expr.component_name(), symbol);
+        const symbolt *symbol = cpp_typecheck.lookup(id_expr.component_name());
+        bool found = !symbol;
         if(!found)
           out << " (" << symbol->location << ")";
       }
       else if(id_expr.id() == "template_function_instance")
       {
         const symbolt &symbol =
-          cpp_typecheck.lookup(id_expr.type().get("#template"));
+          *cpp_typecheck.lookup(id_expr.type().get("#template"));
         out << " (" << symbol.location << ")";
       }
     }
@@ -1523,7 +1523,7 @@ exprt cpp_typecheck_resolvet::resolve(
     for(auto it : id_set)
     {
       const irep_idt id = it->identifier;
-      const symbolt &s = cpp_typecheck.lookup(id);
+      const symbolt &s = *cpp_typecheck.lookup(id);
       assert(s.type.get_bool("is_template"));
       if(to_cpp_declaration(s.type).is_class_template())
         have_classes = true;
@@ -1551,7 +1551,7 @@ exprt cpp_typecheck_resolvet::resolve(
       {
         const irep_idt id = it->identifier;
 
-        const symbolt &s = cpp_typecheck.lookup(id);
+        const symbolt &s = *cpp_typecheck.lookup(id);
         if(!s.type.get_bool("is_template"))
           continue;
 
@@ -1905,7 +1905,7 @@ bool cpp_typecheck_resolvet::guess_template_args(
         // Does the argument type we're dealing with already have assigned
         // template arguments in its type?
         symbolt &s = const_cast<symbolt &>(
-          cpp_typecheck.lookup(desired_type.identifier()));
+          *cpp_typecheck.lookup(desired_type.identifier()));
         exprt &template_arguments = const_cast<exprt &>(
           static_cast<const exprt &>(s.type.find("#template_arguments")));
 
@@ -1929,7 +1929,7 @@ bool cpp_typecheck_resolvet::guess_template_args(
             if(parent.id_class == cpp_idt::ROOT_SCOPE)
               break;
 
-            const symbolt &s2 = cpp_typecheck.lookup(parent.identifier);
+            const symbolt &s2 = *cpp_typecheck.lookup(parent.identifier);
 
             const exprt &template_arguments2 =
               static_cast<const exprt &>(s2.type.find("#template_arguments"));
@@ -2130,7 +2130,7 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
 
   irep_idt template_identifier = to_symbol_expr(expr).get_identifier();
 
-  const symbolt &template_symbol = cpp_typecheck.lookup(template_identifier);
+  const symbolt &template_symbol = *cpp_typecheck.lookup(template_identifier);
 
   // alright, set up template arguments as 'unassigned'
 
@@ -2245,7 +2245,7 @@ void cpp_typecheck_resolvet::apply_template_args(
   if(expr.id() != "symbol")
     return; // templates are always symbols
 
-  const symbolt &template_symbol = cpp_typecheck.lookup(expr.identifier());
+  const symbolt &template_symbol = *cpp_typecheck.lookup(expr.identifier());
 
   if(!template_symbol.type.get_bool("is_template"))
     return;
@@ -2308,9 +2308,9 @@ void cpp_typecheck_resolvet::apply_template_args(
       // do we have an object?
       if(fargs.has_object)
         type_symb =
-          cpp_typecheck.lookup(fargs.operands.begin()->type().identifier());
+          *cpp_typecheck.lookup(fargs.operands.begin()->type().identifier());
       else
-        type_symb = cpp_typecheck.lookup(original_scope->class_identifier);
+        type_symb = *cpp_typecheck.lookup(original_scope->class_identifier);
 
       assert(type_symb.type.id() == "struct");
 
@@ -2440,7 +2440,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
       if(id.is_member)
       {
         struct_typet struct_type = static_cast<const struct_typet &>(
-          cpp_typecheck.lookup(id.class_identifier).type);
+          cpp_typecheck.lookup(id.class_identifier)->type);
         const exprt pcomp = struct_type.get_component(identifier);
         assert(pcomp.is_not_nil());
         assert(pcomp.is_type());
@@ -2454,7 +2454,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
 
       while(true)
       {
-        const symbolt &symbol = cpp_typecheck.lookup(identifier);
+        const symbolt &symbol = *cpp_typecheck.lookup(identifier);
         assert(symbol.is_type);
 
         // todo? maybe do enum here, too?
@@ -2475,7 +2475,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
     }
     else if(id.id_class == cpp_scopet::TEMPLATE)
     {
-      const symbolt symbol = cpp_typecheck.lookup(id.identifier);
+      const symbolt &symbol = *cpp_typecheck.lookup(id.identifier);
       if(symbol.type.get("type") == "struct")
         new_set.insert(&id);
     }
@@ -2496,7 +2496,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
         {
           irep_idt identifier = type.identifier();
 
-          const symbolt &symbol = cpp_typecheck.lookup(identifier);
+          const symbolt &symbol = *cpp_typecheck.lookup(identifier);
           assert(symbol.is_type);
 
           if(symbol.type.id() == "symbol")

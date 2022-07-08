@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_types.h>
 #include <util/typecheck.h>
 
-class c_typecheck_baset : public typecheckt, public namespacet
+class c_typecheck_baset : public typecheckt, protected namespacet
 {
 public:
   c_typecheck_baset(

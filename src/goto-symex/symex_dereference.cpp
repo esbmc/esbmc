@@ -35,14 +35,19 @@ bool symex_dereference_statet::has_failed_symbol(
       to_symbol2t(expr).thename == "INVALID")
       return false;
 
-    const symbolt &ptr_symbol = goto_symex.ns.lookup(to_symbol2t(expr).thename);
+    const symbolt &ptr_symbol =
+      *goto_symex.ns.lookup(to_symbol2t(expr).thename);
 
     const irep_idt &failed_symbol = ptr_symbol.type.failed_symbol();
 
     if(failed_symbol == "")
       return false;
 
-    return !goto_symex.ns.lookup(failed_symbol, symbol);
+    const symbolt *s = goto_symex.ns.lookup(failed_symbol);
+    if(!s)
+      return false;
+    symbol = s;
+    return true;
   }
 
   return false;

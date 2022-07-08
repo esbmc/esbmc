@@ -504,8 +504,8 @@ void goto_convertt::do_function_call_symbol(
   // lookup symbol
   const irep_idt &identifier = function.identifier();
 
-  const symbolt *symbol;
-  if(ns.lookup(identifier, symbol))
+  const symbolt *symbol = ns.lookup(identifier);
+  if(!symbol)
   {
     err_location(function);
     throw "error: function `" + id2string(identifier) + "' not found";

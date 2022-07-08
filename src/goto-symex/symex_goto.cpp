@@ -359,7 +359,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
       continue;
 
     // changed!
-    const symbolt &symbol = ns.lookup(variable.base_name);
+    const symbolt &symbol = *ns.lookup(variable.base_name);
 
     type2tc type = migrate_type(symbol.type);
 

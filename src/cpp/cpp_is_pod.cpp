@@ -83,7 +83,7 @@ bool cpp_typecheckt::cpp_is_pod(const typet &type) const
   }
   else if(type.id() == "symbol")
   {
-    const symbolt &symb = lookup(type.identifier());
+    const symbolt &symb = *lookup(type.identifier());
     assert(symb.is_type);
     return cpp_is_pod(symb.type);
   }

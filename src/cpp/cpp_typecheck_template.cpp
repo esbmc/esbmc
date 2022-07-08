@@ -82,7 +82,7 @@ void cpp_typecheckt::typecheck_class_template(cpp_declarationt &declaration)
       // It is ok to be share the name if it's an specialization
       if(declaration.get_specialization_of() == "")
       {
-        const symbolt &previous = lookup((*id_set.begin())->identifier);
+        const symbolt &previous = *lookup((*id_set.begin())->identifier);
         if(previous.id != symbol_name || id_set.size() > 1)
         {
           err_location(cpp_name.location());
@@ -482,7 +482,7 @@ void cpp_typecheckt::convert_class_template_specialization(
     cpp_scopest::id_sett::iterator next = it;
     next++;
 
-    if(lookup((*it)->identifier).type.find("specialization_of").is_not_nil())
+    if(lookup((*it)->identifier)->type.find("specialization_of").is_not_nil())
       id_set.erase(it);
 
     it = next;
@@ -595,7 +595,7 @@ void cpp_typecheckt::convert_template_function_or_member_specialization(
       str << "template function `" << base_name << "' is ambiguous";
     }
 
-    const symbolt &template_symbol = lookup((*id_set.begin())->identifier);
+    const symbolt &template_symbol = *lookup((*id_set.begin())->identifier);
 
     cpp_template_args_tct template_args = typecheck_template_args(
       declaration.location(),

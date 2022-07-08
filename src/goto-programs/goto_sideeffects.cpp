@@ -669,16 +669,17 @@ void goto_convertt::remove_function_call(
   if(expr.op0().is_symbol())
   {
     const irep_idt &identifier = expr.op0().identifier();
-    const symbolt &symbol = ns.lookup(identifier);
+    const symbolt *symbol = ns.lookup(identifier);
+    assert(symbol);
 
     std::string new_base_name = id2string(new_symbol.name);
 
     new_base_name += '_';
-    new_base_name += id2string(symbol.name);
+    new_base_name += id2string(symbol->name);
     new_base_name += "$" + std::to_string(++tmp_symbol.counter);
 
     new_symbol.name = new_base_name;
-    new_symbol.mode = symbol.mode;
+    new_symbol.mode = symbol->mode;
   }
 
   new_symbol.id = tmp_symbol.prefix + id2string(new_symbol.name);

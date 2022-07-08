@@ -182,7 +182,7 @@ std::string expr2cppt::convert_rec(
   {
     const irep_idt &identifier = src.identifier();
 
-    const symbolt &symbol = ns.lookup(identifier);
+    const symbolt &symbol = *ns.lookup(identifier);
 
     if(symbol.type.id() == "struct" || symbol.type.id() == "incomplete_struct")
     {

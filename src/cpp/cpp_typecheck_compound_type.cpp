@@ -584,7 +584,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
           to_code_type(component.type()).arguments()[0].type());
 
         late_cast.op0() =
-          symbol_expr(namespacet(context).lookup(args[0].cmt_identifier()));
+          symbol_expr(*namespacet(context).lookup(args[0].cmt_identifier()));
 
         if(
           code_type.return_type().id() != "empty" &&
@@ -600,7 +600,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
           for(unsigned i = 1; i < args.size(); i++)
           {
             expr_call.arguments().push_back(symbol_expr(
-              namespacet(context).lookup(args[i].cmt_identifier())));
+              *namespacet(context).lookup(args[i].cmt_identifier())));
           }
 
           code_returnt code_return;
@@ -619,7 +619,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
           for(unsigned i = 1; i < args.size(); i++)
           {
             code_func.arguments().push_back(symbol_expr(
-              namespacet(context).lookup(args[i].cmt_identifier())));
+              *namespacet(context).lookup(args[i].cmt_identifier())));
           }
 
           func_symb.value = code_func;
@@ -1401,10 +1401,11 @@ void cpp_typecheckt::add_anonymous_members_to_scope(
 
     if(struct_union_component.get_anonymous())
     {
-      const symbolt &symbol =
+      const symbolt *symbol =
         lookup(struct_union_component.type().get("identifier"));
-      // recrusive call
-      add_anonymous_members_to_scope(symbol);
+      assert(symbol);
+      // recursive call
+      add_anonymous_members_to_scope(*symbol);
     }
     else
     {
@@ -1582,7 +1583,7 @@ bool cpp_typecheckt::check_component_access(
         return false; // ok
 
       const struct_typet &scope_struct =
-        to_struct_type(lookup(pscope->identifier).type);
+        to_struct_type(lookup(pscope->identifier)->type);
 
       if(subtype_typecast(struct_type, scope_struct))
         return false; // ok
@@ -1629,7 +1630,7 @@ void cpp_typecheckt::get_bases(
     assert(it->get("type") == "symbol");
 
     const struct_typet &base =
-      to_struct_type(lookup(it->type().identifier()).type);
+      to_struct_type(lookup(it->type().identifier())->type);
 
     set_bases.insert(base.name());
     get_bases(base, set_bases);
@@ -1651,7 +1652,7 @@ void cpp_typecheckt::get_virtual_bases(
     assert(it->get("type") == "symbol");
 
     const struct_typet &base =
-      to_struct_type(lookup(it->type().identifier()).type);
+      to_struct_type(lookup(it->type().identifier())->type);
 
     if(it->get_bool("virtual"))
       vbases.push_back(base.name());

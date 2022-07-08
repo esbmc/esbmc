@@ -293,8 +293,7 @@ void goto_convert_functionst::rename_types(
       return;
     }
 
-    const symbolt *sym;
-    if(!ns.lookup(type.identifier(), sym))
+    if(ns.lookup(type.identifier()))
     {
       // If we can just look up the current type symbol, use that.
       type2 = ns.follow((typet &)type);
@@ -306,7 +305,7 @@ void goto_convert_functionst::rename_types(
         cur_name_sym.module.as_string() + type.identifier().as_string();
 
       // Try looking that up.
-      if(!ns.lookup(irep_idt(ident), sym))
+      if(ns.lookup(irep_idt(ident)))
       {
         irept tmptype = type;
         tmptype.identifier(irep_idt(ident));

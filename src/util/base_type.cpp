@@ -15,11 +15,9 @@ void base_type(type2tc &type, const namespacet &ns)
 {
   if(is_symbol_type(type))
   {
-    const symbolt *symbol;
+    const symbolt *symbol = ns.lookup(to_symbol_type(type).symbol_name);
 
-    if(
-      !ns.lookup(to_symbol_type(type).symbol_name, symbol) && symbol->is_type &&
-      !symbol->type.is_nil())
+    if(symbol && symbol->is_type && !symbol->type.is_nil())
     {
       type = migrate_type(symbol->type);
       base_type(type, ns); // recursive call
@@ -46,11 +44,9 @@ void base_type(typet &type, const namespacet &ns)
 {
   if(type.id() == "symbol")
   {
-    const symbolt *symbol;
+    const symbolt *symbol = ns.lookup(type.identifier());
 
-    if(
-      !ns.lookup(type.identifier(), symbol) && symbol->is_type &&
-      !symbol->type.is_nil())
+    if(symbol && symbol->is_type && !symbol->type.is_nil())
     {
       type = symbol->type;
       base_type(type, ns); // recursive call
@@ -116,23 +112,25 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
 
   if(is_symbol_type(type1))
   {
-    const symbolt &symbol = ns.lookup(to_symbol_type(type1).symbol_name);
+    const symbolt *symbol = ns.lookup(to_symbol_type(type1).symbol_name);
+    assert(symbol);
 
-    if(!symbol.is_type)
-      throw "symbol " + id2string(symbol.name) + " is not a type";
+    if(!symbol->is_type)
+      throw "symbol " + id2string(symbol->name) + " is not a type";
 
-    type2tc tmp = migrate_type(symbol.type);
+    type2tc tmp = migrate_type(symbol->type);
     return base_type_eq_rec(tmp, type2);
   }
 
   if(is_symbol_type(type2))
   {
-    const symbolt &symbol = ns.lookup(to_symbol_type(type2).symbol_name);
+    const symbolt *symbol = ns.lookup(to_symbol_type(type2).symbol_name);
+    assert(symbol);
 
-    if(!symbol.is_type)
-      throw "symbol " + id2string(symbol.name) + " is not a type";
+    if(!symbol->is_type)
+      throw "symbol " + id2string(symbol->name) + " is not a type";
 
-    type2tc tmp = migrate_type(symbol.type);
+    type2tc tmp = migrate_type(symbol->type);
     return base_type_eq_rec(type1, tmp);
   }
 
@@ -252,22 +250,24 @@ bool base_type_eqt::base_type_eq_rec(const typet &type1, const typet &type2)
 
   if(type1.id() == "symbol")
   {
-    const symbolt &symbol = ns.lookup(type1.identifier());
+    const symbolt *symbol = ns.lookup(type1.identifier());
+    assert(symbol);
 
-    if(!symbol.is_type)
-      throw "symbol " + id2string(symbol.name) + " is not a type";
+    if(!symbol->is_type)
+      throw "symbol " + id2string(symbol->name) + " is not a type";
 
-    return base_type_eq_rec(symbol.type, type2);
+    return base_type_eq_rec(symbol->type, type2);
   }
 
   if(type2.id() == "symbol")
   {
-    const symbolt &symbol = ns.lookup(type2.identifier());
+    const symbolt *symbol = ns.lookup(type2.identifier());
+    assert(symbol);
 
-    if(!symbol.is_type)
-      throw "symbol " + id2string(symbol.name) + " is not a type";
+    if(!symbol->is_type)
+      throw "symbol " + id2string(symbol->name) + " is not a type";
 
-    return base_type_eq_rec(type1, symbol.type);
+    return base_type_eq_rec(type1, symbol->type);
   }
 
   if(type1.id() != type2.id())
@@ -453,8 +453,8 @@ static bool is_subclass_of_rec(
   const std::string &subname,
   const namespacet &ns)
 {
-  const symbolt *symbol = nullptr;
-  if(!ns.lookup(supername, symbol))
+  const symbolt *symbol = ns.lookup(supername);
+  if(symbol)
   {
     // look at the list of bases; see if the subclass name is a base of this
     // object. Currently, old-irep.

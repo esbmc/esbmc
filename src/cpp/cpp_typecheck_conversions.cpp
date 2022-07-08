@@ -1306,8 +1306,8 @@ bool cpp_typecheckt::dynamic_typecast(
     irep_idt badcast_identifier = "std::tag.bad_cast";
 
     // We must check if the user included typeinfo
-    const symbolt *bad_cast_symbol;
-    bool is_included = lookup(badcast_identifier, bad_cast_symbol);
+    const symbolt *bad_cast_symbol = lookup(badcast_identifier);
+    bool is_included = !bad_cast_symbol;
 
     if(is_included)
       throw "Error: must #include <typeinfo>. Bad_cast throw";
@@ -1372,11 +1372,11 @@ bool cpp_typecheckt::dynamic_typecast(
         symbolt t;
         if(e.identifier() != "")
         {
-          t = lookup(e.identifier());
+          t = *lookup(e.identifier());
         }
         else if(e.op0().identifier() != "") // Array
         {
-          t = lookup(e.op0().identifier());
+          t = *lookup(e.op0().identifier());
         }
         else
           return false;

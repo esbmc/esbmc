@@ -254,7 +254,7 @@ codet cpp_typecheckt::cpp_constructor(
     {
       // Alas, we need to add a type.
       function_call.add("#this_expr") = object;
-      const symbolt &sym = lookup(object.identifier());
+      const symbolt &sym = *lookup(object.identifier());
       function_call.add("#this_expr").type() = sym.type;
     }
     else

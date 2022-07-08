@@ -207,9 +207,9 @@ void show_goto_trace_gui(
 
       std::string value_string = from_expr(ns, identifier, step.value, msg);
 
-      const symbolt *symbol;
+      const symbolt *symbol = ns.lookup(identifier);
       irep_idt base_name;
-      if(!ns.lookup(identifier, symbol))
+      if(symbol)
         base_name = symbol->name;
 
       out << "TRACE"

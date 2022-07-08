@@ -45,7 +45,7 @@ bool goto_symext::get_unwind_recursion(
       options.set_option("disable-inductive-step", true);
     }
 
-    const symbolt &symbol = ns.lookup(identifier);
+    const symbolt &symbol = *ns.lookup(identifier);
 
     std::string msg = "Unwinding recursion " + id2string(symbol.name) +
                       " iteration " + integer2string(unwind);
