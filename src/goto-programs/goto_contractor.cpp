@@ -319,7 +319,7 @@ bool goto_contractort::initialize_main_function_loops()
     runOnFunction(*it);
     if(it->second.body_available)
     {
-      goto_loopst goto_loops(it->first, goto_functions, it->second, msg);
+      goto_loopst goto_loops(it->first, goto_functions, it->second);
       this->function_loops = goto_loops.get_loops();
     }
   }

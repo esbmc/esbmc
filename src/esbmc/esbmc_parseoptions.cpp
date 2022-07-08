@@ -619,7 +619,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         {
           // Invalid size read.
           log_error("Short read communicating with kinduction children");
-          log_error("Size {}, expected {}", read, sizeof(resultt));
+          log_error("Size {}, expected {}", read_size, sizeof(resultt));
           abort();
         }
       }
