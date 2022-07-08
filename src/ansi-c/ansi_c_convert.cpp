@@ -384,11 +384,13 @@ bool ansi_c_convert(
   catch(const char *e)
   {
     log_error(e);
+    abort();
   }
 
   catch(const std::string &e)
   {
     log_error(e);
+    abort();
   }
 
   return false;
@@ -411,11 +413,13 @@ bool ansi_c_convert(exprt &expr, const std::string &module)
   catch(const char *e)
   {
     log_error(e);
+    abort();
   }
 
   catch(const std::string &e)
   {
     log_error(e);
+    abort();
   }
 
   return false;
