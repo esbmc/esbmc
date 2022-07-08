@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/message/format.h>
 #include <util/message/default_message.h>
 
-unsigned get_max(const std::string &prefix, const contextt *context)
+static unsigned get_max(const std::string &prefix, const contextt *context)
 {
   unsigned max_nr = 0;
 

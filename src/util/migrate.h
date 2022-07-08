@@ -11,7 +11,7 @@
 
 // Don't ask
 class namespacet;
-extern namespacet *migrate_namespace_lookup;
+extern const namespacet *migrate_namespace_lookup;
 
 type2tc migrate_type(const typet &type);
 void migrate_expr(const exprt &expr, expr2tc &new_expr);
