@@ -147,7 +147,6 @@ protected:
     std::string the_value,
     exprt &dest);
   bool convert_string_literal(
-    const nlohmann::json &string_literal,
     std::string the_value,
     exprt &dest);
 

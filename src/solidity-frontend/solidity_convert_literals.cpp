@@ -59,9 +59,15 @@ bool solidity_convertert::convert_bool_literal(
 }
 
 // TODO: Character literal
-// TODO: String literal
+/**
+ * @brief Converts the string literal to a string_constt
+ * 
+ * @param the_value the value of the literal
+ * @param dest return reference
+ * @return true Only if the function fails
+ * @return false Only if the function successfully converts the literal
+ */
 bool solidity_convertert::convert_string_literal(
-  const nlohmann::json &string_literal,
   std::string the_value,
   exprt &dest)
 {
@@ -72,7 +78,7 @@ bool solidity_convertert::convert_string_literal(
       integer2binary(string_size, bv_width(int_type())),
       integer2string(string_size),
       int_type()));
-
+  // TODO: Handle null terminator byte
   string_constantt string(the_value, type);
   dest.swap(string);
 
