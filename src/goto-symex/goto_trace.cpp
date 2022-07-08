@@ -36,8 +36,6 @@ void goto_trace_stept::dump() const
 
 void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
 {
-  out << "*** ";
-
   switch(type)
   {
   case goto_trace_stept::ASSERT:

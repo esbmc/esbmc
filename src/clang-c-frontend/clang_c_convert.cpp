@@ -271,8 +271,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
 
-    ross << "**** ERROR: ";
-    ross << "Unrecognized / unimplemented clang declaration "
+    ross << "unrecognized / unimplemented clang declaration "
          << decl.getDeclKindName() << "\n";
     decl.dump(ross);
     ross.flush();

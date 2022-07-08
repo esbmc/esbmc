@@ -38,8 +38,7 @@ bool goto_symext::get_unwind_recursion(
       !options.get_bool_option("disable-inductive-step"))
     {
       log_warning(
-        "**** WARNING: k-induction does not support recursion yet. "
-        "Disabling inductive step");
+        "k-induction does not support recursion yet. Disabling inductive step");
 
       // Disable inductive step on recursion
       options.set_option("disable-inductive-step", true);
@@ -235,8 +234,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   if(!goto_function.body_available)
   {
     log_warning(
-      "**** WARNING: no body for function {}",
-      get_pretty_name(identifier.as_string()));
+      "no body for function {}", get_pretty_name(identifier.as_string()));
 
     /* TODO: if it is a C function with no prototype, assert/claim that all
      *       calls to this function have the same number of parameters and that
@@ -421,7 +419,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
     if(fit == goto_functions.function_map.end() || !fit->second.body_available)
     {
-      log_warning("**** WARNING: no body for function {}", pretty_name);
+      log_warning("no body for function {}", pretty_name);
 
       continue; // XXX, find out why this fires on SV-COMP 14 benchmark
       // 32_7a_cilled_true_linux-3.8-rc1-drivers--ata--pata_legacy.ko-main.cil.out.c

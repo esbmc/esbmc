@@ -436,23 +436,7 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("version"))
     return 0;
 
-  //
-  // unwinding of transition systems
-  //
-
-  if(cmdline.isset("module") || cmdline.isset("gen-interface"))
-
-  {
-    log_error(
-      "This version has no support for "
-      " hardware modules.");
-    return 1;
-  }
-
-  //
   // command line options
-  //
-
   if(cmdline.isset("preprocess"))
   {
     preprocessing();
@@ -641,7 +625,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
         else
         {
-          log_warning("**** WARNING: Base case process crashed.");
+          log_warning("base case process crashed.");
           bc_finished = fc_finished = is_finished = true;
         }
       }
@@ -661,7 +645,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
         else
         {
-          log_warning("**** WARNING: Forward condition process crashed.");
+          log_warning("forward condition process crashed.");
           fc_finished = bc_finished = is_finished = true;
         }
       }
@@ -681,7 +665,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
         else
         {
-          log_warning("**** WARNING: Inductive step process crashed.");
+          log_warning("inductive step process crashed.");
           is_finished = bc_finished = fc_finished = true;
         }
       }
@@ -837,7 +821,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bmct bmc(goto_functions, opts, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      log_status("*** Checking base case, k = {:d}\n", k_step);
+      log_status("Checking base case, k = {:d}\n", k_step);
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -941,7 +925,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bmct bmc(goto_functions, opts, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      log_status("*** Checking forward condition, k = {:d}", k_step);
+      log_status("Checking forward condition, k = {:d}", k_step);
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -1009,7 +993,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      log_status("*** Checking inductive step, k = {:d}", k_step);
+      log_status("Checking inductive step, k = {:d}", k_step);
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -1243,7 +1227,7 @@ int esbmc_parseoptionst::do_base_case(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  log_status("*** Checking base case, k = {:d}", k_step);
+  log_status("Checking base case, k = {:d}", k_step);
   switch(do_bmc(bmc))
   {
   case smt_convt::P_UNSATISFIABLE:
@@ -1289,7 +1273,7 @@ int esbmc_parseoptionst::do_forward_condition(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  log_status("*** Checking forward condition, k = {:d}", k_step);
+  log_status("Checking forward condition, k = {:d}", k_step);
   auto res = do_bmc(bmc);
 
   // Restore the no assertion flag, before checking the other steps
@@ -1344,7 +1328,7 @@ int esbmc_parseoptionst::do_inductive_step(
   bmct bmc(goto_functions, opts, context);
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  log_status("*** Checking inductive step, k = {:d}", k_step);
+  log_status("Checking inductive step, k = {:d}", k_step);
   switch(do_bmc(bmc))
   {
   case smt_convt::P_SATISFIABLE:
