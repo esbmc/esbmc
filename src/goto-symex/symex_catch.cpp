@@ -74,11 +74,12 @@ bool goto_symext::symex_throw()
 
   // Log
   std::ostringstream oss;
-  oss << "*** Exception thrown of type "
+  oss << "Exception thrown of type "
       << exceptions_thrown.begin()->as_string() << " at file "
       << instruction.location.file() << " line " << instruction.location.line()
       << "\n";
   log_error(oss.str());
+
   // We check before iterate over the throw list to save time:
   // If there is no catch, we return an error
   if(!stack_catch.size())
@@ -202,7 +203,7 @@ bool goto_symext::symex_throw()
   // Log
   {
     std::ostringstream oss;
-    oss << "*** Caught by catch(" << catch_name << ") at file "
+    oss << "Caught by catch(" << catch_name << ") at file "
         << (*catch_insn)->location.file() << " line "
         << (*catch_insn)->location.line() << "\n";
     log_status(oss.str());

@@ -32,7 +32,7 @@ void ai_baset::output(const goto_functionst &goto_functions, std::ostream &out)
 
       forall_goto_program_instructions(i_it, f_it->second.body)
       {
-        out << "**** " << i_it->location_number << " " << i_it->location
+        out << i_it->location_number << " " << i_it->location
             << "\n";
 
         abstract_state_before(i_it)->output(out);

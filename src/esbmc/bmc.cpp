@@ -372,7 +372,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
   do
   {
     if(++interleaving_number > 1)
-      log_status("*** Thread interleavings {} ***", interleaving_number);
+      log_status("Thread interleavings {}", interleaving_number);
 
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
