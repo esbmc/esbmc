@@ -1450,7 +1450,7 @@ bool esbmc_parseoptionst::get_goto_program(
       {
         std::ostringstream oss;
         show_symbol_table_plain(oss);
-        log_status(oss.str());
+        log_status("{}", oss.str());
         if(cmdline.isset("symbol-table-only"))
           return true;
       }
