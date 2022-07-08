@@ -848,7 +848,7 @@ bool solidity_convertert::get_expr(
     }
     case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
     {
-      if(convert_string_literal(literal, the_value, new_expr))
+      if(convert_string_literal(the_value, new_expr))
         return true;
       break;
     }
