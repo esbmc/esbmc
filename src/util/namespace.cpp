@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/message/format.h>
 #include <util/message/default_message.h>
 
-static unsigned get_max(const std::string &prefix, const contextt *context)
+unsigned namespacet::get_max(const std::string &prefix) const
 {
   unsigned max_nr = 0;
 
@@ -24,27 +24,9 @@ static unsigned get_max(const std::string &prefix, const contextt *context)
   return max_nr;
 }
 
-unsigned namespacet::get_max(const std::string &prefix) const
-{
-  unsigned m = 0;
-
-  if(context1 != nullptr)
-    m = std::max(m, ::get_max(prefix, context1));
-
-  if(context2 != nullptr)
-    m = std::max(m, ::get_max(prefix, context2));
-
-  return m;
-}
-
 const symbolt *namespacet::lookup(const irep_idt &name) const
 {
-  const symbolt *s = context1->find_symbol(name);
-
-  if(s == nullptr && context2 != nullptr)
-    s = context2->find_symbol(name);
-
-  return s;
+  return context->find_symbol(name);
 }
 
 void namespacet::follow_symbol(irept &irep) const

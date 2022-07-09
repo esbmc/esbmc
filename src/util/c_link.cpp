@@ -18,6 +18,30 @@ Author: Daniel Kroening, kroening@kroening.com
 
 namespace
 {
+class merged_namespacet : public namespacet
+{
+  namespacet second;
+
+public:
+  merged_namespacet(const contextt &primary, const contextt &secondary)
+    : namespacet(primary), second(secondary)
+  {
+  }
+
+  unsigned get_max(const std::string &prefix) const override
+  {
+    return std::max(namespacet::get_max(prefix), second.get_max(prefix));
+  }
+
+  const symbolt *lookup(const irep_idt &name) const override
+  {
+    const symbolt *s = namespacet::lookup(name);
+    if(!s)
+      s = second.lookup(name);
+    return s;
+  }
+};
+
 class c_linkt : public typecheckt
 {
 public:
@@ -54,7 +78,7 @@ protected:
   contextt &context;
   contextt &new_context;
   std::string module;
-  namespacet ns;
+  merged_namespacet ns;
 
   typedef std::unordered_set<irep_idt, irep_id_hash> known_modulest;
   known_modulest known_modules;
