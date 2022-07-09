@@ -20,16 +20,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/xml.h>
 #include <util/expr.h>
 
-// This is a stand-in for std::make_unique, which isn't part of the standard
-// library until C++14.  When we move to C++14, we should do a find-and-replace
-// on this to use std::make_unique instead.
-
-template <typename T, typename... Ts>
-static inline std::unique_ptr<T> util_make_unique(Ts &&...ts)
-{
-  return std::unique_ptr<T>(new T(std::forward<Ts>(ts)...));
-}
-
 /// The basic interface of an abstract interpreter.  This should be enough
 /// to create, run and query an abstract interpreter.
 // don't use me -- I am just a base class
@@ -211,12 +201,12 @@ public:
     typename state_mapt::const_iterator it = state_map.find(t);
     if(it == state_map.end())
     {
-      std::unique_ptr<statet> d = util_make_unique<domainT>();
+      std::unique_ptr<statet> d = std::make_unique<domainT>();
       assert(d->is_bottom());
       return d;
     }
 
-    return util_make_unique<domainT>(it->second);
+    return std::make_unique<domainT>(it->second);
   }
 
   void clear() override
@@ -262,7 +252,7 @@ protected:
 
   std::unique_ptr<statet> make_temporary_state(const statet &s) override
   {
-    return util_make_unique<domainT>(static_cast<const domainT &>(s));
+    return std::make_unique<domainT>(static_cast<const domainT &>(s));
   }
 
   void fixedpoint(const goto_functionst &goto_functions, const namespacet &ns)
