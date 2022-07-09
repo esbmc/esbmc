@@ -13,12 +13,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 
-// second: true <=> not found
-
 class namespacet
 {
 public:
-  const symbolt *lookup(const irep_idt &name) const;
+  virtual const symbolt *lookup(const irep_idt &name) const;
   const symbolt *lookup(const irept &irep) const
   {
     return lookup(irep.identifier());
@@ -37,27 +35,21 @@ public:
 
   namespacet() = delete;
 
-  namespacet(const contextt &_context)
+  virtual ~namespacet() = default;
+
+  namespacet(const contextt &_context) : context(&_context)
   {
-    context1 = &_context;
-    context2 = nullptr;
   }
 
-  namespacet(const contextt &_context1, const contextt &_context2)
-  {
-    context1 = &_context1;
-    context2 = &_context2;
-  }
-
-  unsigned get_max(const std::string &prefix) const;
+  virtual unsigned get_max(const std::string &prefix) const;
 
   const contextt &get_context() const
   {
-    return *context1;
+    return *context;
   }
 
 protected:
-  const contextt *context1, *context2;
+  const contextt *context;
 };
 
 #endif
