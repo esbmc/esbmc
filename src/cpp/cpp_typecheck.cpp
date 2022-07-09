@@ -82,40 +82,6 @@ bool cpp_typecheck(
   return cpp_typecheck.typecheck_main();
 }
 
-bool cpp_typecheck(
-  exprt &expr,
-  const messaget &message_handler,
-  const namespacet &ns)
-{
-  contextt context(message_handler);
-  cpp_parse_treet cpp_parse_tree;
-
-  cpp_typecheckt cpp_typecheck(
-    cpp_parse_tree, context, ns.get_context(), "", message_handler);
-
-  try
-  {
-    cpp_typecheck.typecheck_expr(expr);
-  }
-
-  catch(int e)
-  {
-    cpp_typecheck.error();
-  }
-
-  catch(const char *e)
-  {
-    cpp_typecheck.error(e);
-  }
-
-  catch(const std::string &e)
-  {
-    cpp_typecheck.error(e);
-  }
-
-  return cpp_typecheck.get_error_found();
-}
-
 void cpp_typecheckt::static_initialization()
 {
   code_blockt block_sini; // Static Initialization Block

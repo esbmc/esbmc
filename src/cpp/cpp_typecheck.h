@@ -30,11 +30,6 @@ bool cpp_typecheck(
   const std::string &module,
   const messaget &message_handler);
 
-bool cpp_typecheck(
-  exprt &expr,
-  const messaget &message_handler,
-  const namespacet &ns);
-
 class cpp_typecast_rank
 {
 public:
@@ -112,20 +107,6 @@ public:
     const std::string &_module,
     const messaget &message_handler)
     : c_typecheck_baset(_context, _module, message_handler),
-      cpp_parse_tree(_cpp_parse_tree),
-      template_counter(0),
-      anon_counter(0),
-      disable_access_control(false)
-  {
-  }
-
-  cpp_typecheckt(
-    cpp_parse_treet &_cpp_parse_tree,
-    contextt &_context1,
-    const contextt &_context2,
-    const std::string &_module,
-    const messaget &message_handler)
-    : c_typecheck_baset(_context1, _context2, _module, message_handler),
       cpp_parse_tree(_cpp_parse_tree),
       template_counter(0),
       anon_counter(0),
