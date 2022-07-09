@@ -97,7 +97,7 @@ bool read_bin_goto_object(
     context.add(symbol);
   }
 
-  migrate_namespace_lookup = new namespacet(context);
+  assert(migrate_namespace_lookup);
 
   count = irepconverter.read_long(in);
   for(unsigned i = 0; i < count; i++)
