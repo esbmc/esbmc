@@ -30,19 +30,6 @@ public:
   {
   }
 
-  c_typecheck_baset(
-    contextt &_context1,
-    const contextt &_context2,
-    const std::string &_module,
-    const messaget &_message_handler)
-    : typecheckt(_message_handler),
-      namespacet(_context1, _context2),
-      context(_context1),
-      module(_module),
-      mode("C")
-  {
-  }
-
   ~c_typecheck_baset() override = default;
 
   void typecheck() override = 0;
