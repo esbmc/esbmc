@@ -3176,6 +3176,7 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** @extends code_decl_data */
 class code_dead2t : public code_dead_expr_methods
 {
 public:

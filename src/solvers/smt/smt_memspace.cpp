@@ -214,6 +214,11 @@ void smt_convt::renumber_symbol_address(
     // object number, and nondeterministically pick the new value.
 
     unsigned int new_obj_num = pointer_logic.back().get_free_obj_num();
+    printf("\ninit-ptr-obj new for:\n");
+    sym.dump();
+    printf("  guard:\n");
+    guard->dump();
+
     smt_astt output = init_pointer_obj(new_obj_num, new_size);
 
     // Now merge with the old value for all future address-of's
@@ -224,6 +229,11 @@ void smt_convt::renumber_symbol_address(
   {
     // Newly bumped pointer. Still needs a new number though.
     unsigned int obj_num = pointer_logic.back().get_free_obj_num();
+    printf("\ninit-ptr-obj bumped:\n");
+    sym.dump();
+    printf("  guard:\n");
+    guard->dump();
+
     smt_astt output = init_pointer_obj(obj_num, new_size);
 
     // Store in renumbered store.
@@ -316,6 +326,8 @@ smt_astt smt_convt::convert_identifier_pointer(
       // pointer leads to invalidness, because there's no size to think about.
       size = constant_int2tc(ptr_loc_type, BigInt(1));
     }
+    printf("\ninit-ptr-obj identifier '%s':\n", symbol.c_str());
+    expr->dump();
 
     smt_astt output = init_pointer_obj(obj_num, size);
     smt_astt args[2];
