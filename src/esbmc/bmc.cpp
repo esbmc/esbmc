@@ -150,8 +150,7 @@ smt_convt::resultt bmct::run_decision_procedure(
   fine_timet encode_stop = current_time();
 
   log_status(
-    "Encoding to solver time: {}s",
-    time2string(encode_stop - encode_start));
+    "Encoding to solver time: {}s", time2string(encode_stop - encode_start));
 
   if(
     options.get_bool_option("smt-formula-too") ||
@@ -170,8 +169,7 @@ smt_convt::resultt bmct::run_decision_procedure(
 
   // output runtime
   log_status(
-    "Runtime decision procedure: {}s",
-    time2string(sat_stop - sat_start));
+    "Runtime decision procedure: {}s", time2string(sat_stop - sat_start));
 
   return dec_result;
 }
