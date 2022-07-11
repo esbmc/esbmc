@@ -150,7 +150,7 @@ protected:
 
   bool get_cast_expr(const clang::CastExpr &cast, exprt &new_expr);
 
-  void get_default_symbol(
+  virtual void get_default_symbol(
     symbolt &symbol,
     irep_idt module_name,
     typet type,
