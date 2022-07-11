@@ -33,8 +33,6 @@ public:
   {
   }
 
-  ~goto_convertt() = default;
-
 protected:
   contextt &context;
   optionst &options;

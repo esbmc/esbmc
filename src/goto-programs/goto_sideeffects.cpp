@@ -57,7 +57,7 @@ void goto_convertt::remove_sideeffects(
     if(!expr.is_boolean())
     {
       log_error(
-        expr.id_string() + " must be Boolean, but got " + expr.pretty());
+        "{} must be Boolean, but got {}", expr.id_string(), expr.pretty());
       abort();
     }
 
@@ -79,7 +79,7 @@ void goto_convertt::remove_sideeffects(
 
       if(!op.is_boolean())
       {
-        log_error(expr.id().as_string() + " takes boolean operands only");
+        log_error("{} takes boolean operands only", expr.id().as_string());
         abort();
       }
 
@@ -435,7 +435,7 @@ void goto_convertt::remove_assignment(
       std::ostringstream str;
       str << statement << " not yet supported\n";
       str << "Location: " << expr.location();
-      log_error(str.str());
+      log_error("{}", str.str());
       abort();
     }
 
@@ -483,7 +483,7 @@ void goto_convertt::remove_pre(
     std::ostringstream str;
     str << statement << " takes one argument\n";
     str << "Location: " << expr.location();
-    log_error(str.str());
+    log_error("{}", str.str());
     abort();
   }
 
@@ -574,7 +574,7 @@ void goto_convertt::remove_post(
     std::ostringstream str;
     str << statement << " takes one argument";
     str << "Location: " << expr.location();
-    log_error(str.str());
+    log_error("{}", str.str());
     abort();
   }
 

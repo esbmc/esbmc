@@ -1415,7 +1415,7 @@ bool esbmc_parseoptionst::get_goto_program(
         languaget &language = *language_files.filemap.begin()->second.language;
         std::ostringstream oss;
         language.show_parse(oss);
-        log_status(oss.str());
+        log_status("{}", oss.str());
         if(cmdline.isset("parse-tree-only"))
           return true;
       }
@@ -1445,32 +1445,27 @@ bool esbmc_parseoptionst::get_goto_program(
     }
 
     fine_timet parse_stop = current_time();
-    std::ostringstream str;
-    str << "GOTO program creation time: ";
-    output_time(parse_stop - parse_start, str);
-    str << "s";
-    log_status(str.str());
+    log_status(
+      "GOTO program creation time: {}s", time2string(parse_stop - parse_start));
 
     fine_timet process_start = current_time();
     if(process_goto_program(options, goto_functions))
       return true;
     fine_timet process_stop = current_time();
-    std::ostringstream str2;
-    str2 << "GOTO program processing time: ";
-    output_time(process_stop - process_start, str2);
-    str2 << "s";
-    log_status(str2.str());
+    log_status(
+      "GOTO program processing time: {}s",
+      time2string(process_stop - process_start));
   }
 
   catch(const char *e)
   {
-    log_error(e);
+    log_error("{}", e);
     return true;
   }
 
   catch(const std::string &e)
   {
-    log_error(e);
+    log_error("{}", e);
     return true;
   }
 
@@ -1506,17 +1501,17 @@ void esbmc_parseoptionst::preprocessing()
     std::ostringstream oss;
     if(c_preprocess(filename, oss, false))
       log_error("PREPROCESSING ERROR");
-    log_status(oss.str());
+    log_status("{}", oss.str());
 #endif
   }
   catch(const char *e)
   {
-    log_error(e);
+    log_error("{}", e);
   }
 
   catch(const std::string &e)
   {
-    log_error(e);
+    log_error("{}", e);
   }
 
   catch(std::bad_alloc &)
@@ -1531,7 +1526,7 @@ bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
   {
     if(::read_goto_binary(arg, context, goto_functions))
     {
-      log_error("Failed to open `" + arg + "'");
+      log_error("Failed to open `{}'", arg);
       return true;
     }
   }
@@ -1606,7 +1601,7 @@ bool esbmc_parseoptionst::process_goto_program(
       value_set_analysis(goto_functions);
       std::ostringstream oss;
       show_value_sets(goto_functions, value_set_analysis, oss);
-      log_result(oss.str());
+      log_result("{}", oss.str());
       return true;
     }
 
@@ -1665,7 +1660,7 @@ bool esbmc_parseoptionst::process_goto_program(
         cmdline.getval("output-goto"), std::ios::out | std::ios::binary);
       if(write_goto_binary(oss, context, goto_functions))
       {
-        log_error("fail to generate goto binary file");
+        log_error("Failed to generate goto binary file"); // TODO: explain why
         abort();
       };
       return true;
@@ -1678,7 +1673,7 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       std::ostringstream oss;
       goto_functions.output(ns, oss);
-      log_status(oss.str());
+      log_status("{}", oss.str());
       if(cmdline.isset("goto-functions-only"))
         return true;
     }
@@ -1686,13 +1681,13 @@ bool esbmc_parseoptionst::process_goto_program(
 
   catch(const char *e)
   {
-    log_error(e);
+    log_error("{}", e);
     return true;
   }
 
   catch(const std::string &e)
   {
-    log_error(e);
+    log_error("{}", e);
     return true;
   }
 

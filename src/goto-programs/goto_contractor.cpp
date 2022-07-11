@@ -163,7 +163,7 @@ void goto_contractort::contractor()
   oss << "\n\t- Domains (after): " << X;
   map.update_intervals(X);
 
-  log_status(oss.str());
+  log_status("{}", oss.str());
 }
 
 ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)

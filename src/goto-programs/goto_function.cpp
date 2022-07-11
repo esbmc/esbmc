@@ -174,7 +174,7 @@ void goto_functionst::dump() const
 {
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
-  log_debug(oss.str());
+  log_debug("{}", oss.str());
 }
 
 void goto_functionst::output(const namespacet &ns, std::ostream &out) const

@@ -99,7 +99,7 @@ void goto_inlinet::parameter_assignments(
               << "' type mismatch: got "
               << from_type(ns, identifier, it1->type()) << ", expected "
               << from_type(ns, identifier, arg_type);
-          log_error(str.str());
+          log_error("{}", str.str());
           abort();
         }
       }
@@ -192,9 +192,8 @@ void goto_inlinet::expand_function_call(
   if(function.id() != "symbol")
   {
     log_error(
-      "function_call expects symbol as function operand, "
-      "but got `" +
-      function.id_string() + "'");
+      "function_call expects symbol as function operand, but got `{}'",
+      function.id_string());
     abort();
   }
 
@@ -225,7 +224,7 @@ void goto_inlinet::expand_function_call(
     std::ostringstream str;
     str << "failed to find function `" << identifier << "'\n";
     str << "Location: " << function.location();
-    log_error(str.str());
+    log_error("{}", str.str());
     abort();
   }
 
@@ -305,7 +304,7 @@ void goto_inlinet::expand_function_call(
       std::ostringstream str;
       str << "no body for function `" << identifier << "'\n";
       str << "Location: " << function.location();
-      log_warning(str.str());
+      log_warning("{}", str.str());
     }
 
     goto_programt tmp;

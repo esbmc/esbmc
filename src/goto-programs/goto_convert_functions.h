@@ -43,8 +43,6 @@ public:
     optionst &_options,
     goto_functionst &_functions);
 
-  ~goto_convert_functionst() = default;
-
 protected:
   goto_functionst &functions;
 

@@ -22,7 +22,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
-#include <util/message.h>
 
 static const std::string &get_string_constant(const exprt &expr)
 {
@@ -509,15 +508,15 @@ void goto_convertt::do_function_call_symbol(
   const symbolt *symbol = ns.lookup(identifier);
   if(!symbol)
   {
-    log_error("error: function `" + id2string(identifier) + "' not found");
+    log_error("error: function `{}' not found", id2string(identifier));
     abort();
   }
 
   if(!symbol->type.is_code())
   {
     log_error(
-      "error: function `" + id2string(identifier) +
-      "' type mismatch: expected code");
+      "error: function `{}' type mismatch: expected code",
+      id2string(identifier));
   }
 
   // If the symbol is not nil, i.e., the user defined the expected behaviour of
@@ -545,7 +544,7 @@ void goto_convertt::do_function_call_symbol(
   {
     if(arguments.size() != 1)
     {
-      log_error("`" + id2string(base_name) + "' expected to have one argument");
+      log_error("`{}' expected to have one argument", id2string(base_name));
       abort();
     }
 
@@ -573,7 +572,7 @@ void goto_convertt::do_function_call_symbol(
 
     if(lhs.is_not_nil())
     {
-      log_error(id2string(base_name) + " expected not to have LHS");
+      log_error("{} expected not to have LHS", id2string(base_name));
       abort();
     }
   }
@@ -584,7 +583,7 @@ void goto_convertt::do_function_call_symbol(
     if(arguments.size() > 2)
     {
       log_error(
-        "`" + id2string(base_name) + "' expected to have two arguments");
+        "`{}' expected to have two arguments", id2string(base_name));
       abort();
     }
 
@@ -604,7 +603,7 @@ void goto_convertt::do_function_call_symbol(
 
     if(lhs.is_not_nil())
     {
-      log_error(id2string(base_name) + " expected not to have LHS");
+      log_error("{} expected not to have LHS", id2string(base_name));
       abort();
     }
   }
@@ -614,7 +613,7 @@ void goto_convertt::do_function_call_symbol(
   {
     if(!arguments.empty())
     {
-      log_error("`" + id2string(base_name) + "' expected to have no arguments");
+      log_error("`{}' expected to have no arguments", id2string(base_name));
       abort();
     }
 
@@ -626,7 +625,7 @@ void goto_convertt::do_function_call_symbol(
 
     if(lhs.is_not_nil())
     {
-      log_error("`" + id2string(base_name) + "' expected not to have LHS");
+      log_error("`{}' expected not to have LHS", id2string(base_name));
       abort();
     }
 
@@ -706,8 +705,7 @@ void goto_convertt::do_function_call_symbol(
 
     if(arguments.size() != 4)
     {
-      log_error(
-        "`" + id2string(base_name) + "' expected to have four arguments");
+      log_error("`{}' expected to have four arguments", id2string(base_name));
       abort();
     }
 
@@ -731,8 +729,7 @@ void goto_convertt::do_function_call_symbol(
 
     if(arguments.size() != 4)
     {
-      log_error(
-        "`" + id2string(base_name) + "' expected to have four arguments");
+      log_error("`{}' expected to have four arguments", id2string(base_name));
       abort();
     }
 
@@ -756,8 +753,7 @@ void goto_convertt::do_function_call_symbol(
 
     if(arguments.size() != 3)
     {
-      log_error(
-        "`" + id2string(base_name) + "' expected to have three arguments");
+      log_error("`{}' expected to have three arguments", id2string(base_name));
       abort();
     }
 
@@ -802,7 +798,7 @@ void goto_convertt::do_function_call_symbol(
 
     if(arguments.size() != 1)
     {
-      log_error("`" + id2string(base_name) + "' expected to have one argument");
+      log_error("`{}' expected to have one argument", id2string(base_name));
       abort();
     }
 
@@ -835,8 +831,7 @@ void goto_convertt::do_function_call_symbol(
   {
     if(arguments.size() != 2)
     {
-      log_error(
-        "`" + id2string(base_name) + "' expected to have two arguments");
+      log_error("`{}' expected to have two arguments", id2string(base_name));
       abort();
     }
 
@@ -860,8 +855,7 @@ void goto_convertt::do_function_call_symbol(
     // parameter argument.
     if(arguments.size() != 2)
     {
-      log_error(
-        "`" + id2string(base_name) + "' expected to have two arguments");
+      log_error("`{}' expected to have two arguments", id2string(base_name));
       abort();
     }
 
@@ -885,7 +879,7 @@ void goto_convertt::do_function_call_symbol(
     // Invalidates the argument. We do so by setting it to NULL.
     if(arguments.size() != 1)
     {
-      log_error("`" + id2string(base_name) + "' expected to have one argument");
+      log_error("`{}' expected to have one argument", id2string(base_name));
       abort();
     }
 
