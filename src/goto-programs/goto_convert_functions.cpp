@@ -113,7 +113,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   if(!symbol.value.is_code())
   {
-    log_error("got invalid code for function `" + id2string(identifier) + "'");
+    log_error("got invalid code for function `{}'", id2string(identifier));
     abort();
   }
 

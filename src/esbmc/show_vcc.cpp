@@ -68,7 +68,7 @@ void bmct::show_vcc(std::shared_ptr<symex_target_equationt> &eq)
   {
     std::ostringstream oss;
     show_vcc(oss, eq);
-    log_status(oss.str());
+    log_status("{}", oss.str());
   }
 
   else

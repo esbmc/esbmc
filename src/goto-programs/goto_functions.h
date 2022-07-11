@@ -37,8 +37,6 @@ public:
   // make symex renaming work.
   std::set<std::string> inlined_funcs;
 
-  goto_functiont() = default;
-
   /// update the function member in each instruction
   /// \param function_id: the `function_id` used for assigning empty function
   ///   members
@@ -54,10 +52,6 @@ public:
   typedef std::map<irep_idt, goto_functiont> function_mapt;
   function_mapt function_map;
 
-  goto_functionst()
-  {
-  }
-  ~goto_functionst() = default;
   void clear()
   {
     function_map.clear();
