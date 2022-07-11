@@ -132,7 +132,7 @@ class smt_convt
 {
 public:
   /* NOTE: I've made this horrible so we remember that there is an
-   * even uglier implementation that just returns an empty 
+   * even uglier implementation that just returns an empty
    * look at where this variable is used for more info :) */
   bool extracting_from_array_tuple_is_error = false;
   /** Shorthand for a vector of smt_ast's */
@@ -148,7 +148,7 @@ public:
   /** Primary constructor. After construction, smt_post_init must be called
    *  before the object is used as a solver converter.
    *
-   *  @param _ns Namespace for looking up the type of certain symbols. 
+   *  @param _ns Namespace for looking up the type of certain symbols.
    *  @param _options Provide all the needed parameters to configure the solver. */
   smt_convt(
     const namespacet &_ns,
@@ -649,13 +649,6 @@ public:
   void assert_expr(const expr2tc &e);
   /** Convert constant_array2tc's and constant_array_of2tc's */
   smt_astt array_create(const expr2tc &expr);
-  /** Convert constant_vector2tc's */
-  smt_astt array_create(const constant_vector2tc &expr);
-  smt_astt array_create(
-    const expr2tc &expr,
-    bool is_infinite,
-    const expr2tc &size,
-    const std::vector<expr2tc> &members);
 
   /** Initialize tracking data for the address space records. This also sets
    *  up the symbols / addresses of 'NULL', '0', and the invalid pointer */
