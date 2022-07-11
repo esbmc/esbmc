@@ -350,7 +350,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::constant_vector_id:
   {
-    a = array_create(static_cast<constant_vector2tc>(expr));
+    a = array_create(expr);
     break;
   }
   case expr2t::constant_array_id:
@@ -2411,12 +2411,21 @@ const struct_union_data &smt_convt::get_type_def(const type2tc &type) const
            : dynamic_cast<const struct_union_data &>(*type.get());
 }
 
-smt_astt smt_convt::array_create(
-  const expr2tc &expr,
-  bool is_infinite,
-  const expr2tc &size,
-  const std::vector<expr2tc> &members)
+smt_astt smt_convt::array_create(const expr2tc &expr)
 {
+  if(is_constant_array_of2t(expr))
+    return convert_array_of_prep(expr);
+  // Check size
+
+  bool is_vector = is_vector_type(expr);
+  auto size = is_vector ? to_vector_type(expr->type).array_size
+                        : to_array_type(expr->type).array_size;
+  bool is_infinite = is_vector ? to_vector_type(expr->type).size_is_infinite
+                               : to_array_type(expr->type).size_is_infinite;
+  assert(is_constant_array2t(expr) || is_constant_vector2t(expr));
+  auto members = is_vector ? to_constant_vector2t(expr).datatype_members
+                           : to_constant_array2t(expr).datatype_members;
+
   // Handle constant array expressions: these don't have tuple type and so
   // don't need funky handling, but we need to create a fresh new symbol and
   // repeatedly store the desired data into it, to create an SMT array
@@ -2453,32 +2462,6 @@ smt_astt smt_convt::array_create(
   }
 
   return newsym_ast;
-}
-
-smt_astt smt_convt::array_create(const constant_vector2tc &expr)
-{
-  const vector_type2t &arr_type = to_vector_type(expr->type);
-  return array_create(
-    expr,
-    arr_type.size_is_infinite,
-    arr_type.array_size,
-    expr->datatype_members);
-}
-
-smt_astt smt_convt::array_create(const expr2tc &expr)
-{
-  if(is_constant_array_of2t(expr))
-    return convert_array_of_prep(expr);
-  // Check size
-  const array_type2t &arr_type = to_array_type(expr->type);
-
-  assert(is_constant_array2t(expr));
-  const constant_array2t &array = to_constant_array2t(expr);
-  return array_create(
-    expr,
-    arr_type.size_is_infinite,
-    arr_type.array_size,
-    array.datatype_members);
 }
 
 smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
