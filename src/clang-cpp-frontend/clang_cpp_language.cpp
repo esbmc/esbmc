@@ -24,11 +24,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 languaget *new_clang_cpp_language()
 {
-  return new clang_cpp_languaget();
-}
-
-clang_cpp_languaget::clang_cpp_languaget()
-{
+  return new clang_cpp_languaget;
 }
 
 void clang_cpp_languaget::force_file_type()

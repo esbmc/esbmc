@@ -52,8 +52,6 @@ void clang_c_convertert::gen_typecast_to_union(exprt &e, const typet &t)
 
   /* We should never reach here since clang frontend already checks for this
    * however... we should prevent any funny things to happen */
-  std::ostringstream oss;
-  oss << "Couldn't map type " << e.type().pretty_name() << " into the union";
-  log_error(oss.str());
+  log_error("Couldn't map type {} into the union", e.type().pretty_name());
   abort();
 }

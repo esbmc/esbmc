@@ -73,12 +73,11 @@ bool goto_symext::symex_throw()
   last_throw = const_cast<goto_programt::instructiont *>(&instruction);
 
   // Log
-  std::ostringstream oss;
-  oss << "Exception thrown of type "
-      << exceptions_thrown.begin()->as_string() << " at file "
-      << instruction.location.file() << " line " << instruction.location.line()
-      << "\n";
-  log_error(oss.str());
+  log_error(
+    "Exception thrown of type {} at file {} line {}",
+    exceptions_thrown.begin()->as_string(),
+    instruction.location.file(),
+    instruction.location.line());
 
   // We check before iterate over the throw list to save time:
   // If there is no catch, we return an error
