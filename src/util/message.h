@@ -46,21 +46,27 @@ struct messaget
     {
       fmt::print(f, std::forward<Args>(args)...);
       fmt::print(f, "\n");
-      if(flush_log)
-        fflush(f);
     }
 
   public:
     VerbosityLevel verbosity;
     FILE *out;
     FILE *err;
-    bool flush_log;
 
     FILE *target(VerbosityLevel lvl) const
     {
       return lvl > verbosity                ? nullptr
              : lvl == VerbosityLevel::Error ? err
                                             : out;
+    }
+
+    void set_flushln() const
+    {
+/* Win32 interprets _IOLBF as _IOFBF (and then chokes on size=0) */
+#if !defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
+      setvbuf(out, NULL, _IOLBF, 0);
+      setvbuf(err, NULL, _IOLBF, 0);
+#endif
     }
 
     template <typename File, typename Line, typename... Args>
@@ -79,7 +85,7 @@ struct messaget
       (void)file;
       (void)line;
     }
-  } state = {VerbosityLevel::Status, stdout, stderr, false};
+  } state = {VerbosityLevel::Status, stdout, stderr};
 };
 
 static inline void
