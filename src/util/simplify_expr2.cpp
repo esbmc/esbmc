@@ -820,7 +820,7 @@ expr2tc with2t::do_simplify() const
     if(index.value.is_negative())
       return expr2tc();
 
-    if(index.as_ulong() >= array.datatype_members.size())
+    if(index.value >= array.datatype_members.size())
       return expr2tc();
 
     constant_array2tc arr = array;
