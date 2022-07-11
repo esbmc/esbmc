@@ -2417,9 +2417,11 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
     return convert_array_of_prep(expr);
   // Check size
   assert(is_constant_array2t(expr) || is_constant_vector2t(expr));
-  auto data = std::dynamic_pointer_cast<array_data>(expr);
-  auto size = data->array_size;
-  bool is_infinite = data->size_is_infinite;
+  expr2tc size = is_vector_type(expr) ? to_vector_type(expr->type).array_size
+                                      : to_array_type(expr->type).array_size;
+  bool is_infinite = is_vector_type(expr)
+                       ? to_vector_type(expr->type).size_is_infinite
+                       : to_array_type(expr->type).size_is_infinite;
   auto members = is_vector_type(expr)
                    ? to_constant_vector2t(expr).datatype_members
                    : to_constant_array2t(expr).datatype_members;
