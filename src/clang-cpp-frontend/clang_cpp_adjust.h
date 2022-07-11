@@ -6,7 +6,7 @@
 class clang_cpp_adjust : public clang_c_adjust
 {
 public:
-  clang_cpp_adjust(contextt &_context);
+  explicit clang_cpp_adjust(contextt &_context);
   virtual ~clang_cpp_adjust() = default;
 
   void adjust_ifthenelse(codet &code) override;

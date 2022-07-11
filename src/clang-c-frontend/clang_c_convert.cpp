@@ -166,7 +166,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
         llvm::raw_os_ostream ross(oss);
         fd.getBitWidth()->dump(ross, *ASTContext);
         ross.flush();
-        log_error(oss.str());
+        log_error("{}", oss.str());
         return true;
       }
 
@@ -275,7 +275,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
          << decl.getDeclKindName() << "\n";
     decl.dump(ross);
     ross.flush();
-    log_error(oss.str());
+    log_error("{}", oss.str());
     return true;
   }
 
@@ -413,7 +413,7 @@ bool clang_c_convertert::get_struct_union_class_fields(
             llvm::raw_os_ostream ross(oss);
             aattr.getAlignmentType()->getType()->dump(ross, *ASTContext);
             ross.flush();
-            log_error(oss.str());
+            log_error("{}", oss.str());
             return true;
           }
         }
@@ -1173,7 +1173,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     ross << the_type.getTypeClassName() << "\n";
     the_type.dump(ross, *ASTContext);
     ross.flush();
-    log_error(oss.str());
+    log_error("{}", oss.str());
     return true;
   }
 
@@ -1312,7 +1312,7 @@ bool clang_c_convertert::get_builtin_type(
          << "\n";
     bt.dump(ross, *ASTContext);
     ross.flush();
-    log_error(oss.str());
+    log_error("{}", oss.str());
     return true;
   }
   }
@@ -1485,7 +1485,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       llvm::raw_os_ostream ross(oss);
       offset.dump(ross, *ASTContext);
       ross.flush();
-      log_error(oss.str());
+      log_error("{}", oss.str());
       return true;
     }
 
@@ -2277,7 +2277,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       llvm::raw_os_ostream ross(oss);
       stmt.dump(ross, *ASTContext);
       ross.flush();
-      log_error(oss.str());
+      log_error("{}", oss.str());
       return true;
 
       exprt target;
@@ -2317,7 +2317,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
            << "\n";
       ret.dump(ross, *ASTContext);
       ross.flush();
-      log_error(oss.str());
+      log_error("{}", oss.str());
       return true;
     }
 
@@ -2372,7 +2372,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
          << "\n";
     stmt.dump(ross, *ASTContext);
     ross.flush();
-    log_error(oss.str());
+    log_error("{}", oss.str());
     return true;
   }
   }
@@ -2420,7 +2420,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
        << "\n";
   d.dump(ross);
   ross.flush();
-  log_error(oss.str());
+  log_error("{}", oss.str());
   return true;
 }
 
@@ -2491,7 +2491,7 @@ bool clang_c_convertert::get_cast_expr(
          << "\n";
     cast.dump(ross, *ASTContext);
     ross.flush();
-    log_error(oss.str());
+    log_error("{}", oss.str());
     return true;
   }
   }
@@ -2568,7 +2568,7 @@ bool clang_c_convertert::get_unary_operator_expr(
          << "\n";
     uniop.dump(ross, *ASTContext);
     ross.flush();
-    log_error(oss.str());
+    log_error("{}", oss.str());
     return true;
   }
   }
@@ -2758,7 +2758,7 @@ bool clang_c_convertert::get_compound_assign_expr(
          << "\n";
     compop.dump(ross, *ASTContext);
     ross.flush();
-    log_error(oss.str());
+    log_error("{}", oss.str());
     return true;
   }
   }
@@ -2924,7 +2924,7 @@ bool clang_c_convertert::get_atomic_expr(
     llvm::raw_os_ostream ross(oss);
     atm.dump(ross, *ASTContext);
     ross.flush();
-    log_error(oss.str());
+    log_error("{}", oss.str());
     return true;
   }
 
@@ -3122,7 +3122,7 @@ void clang_c_convertert::get_decl_name(
   ross << "Unable to generate the USR for:\n";
   nd.dump(ross);
   ross.flush();
-  log_error(oss.str());
+  log_error("{}", oss.str());
   abort();
 }
 

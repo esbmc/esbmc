@@ -36,12 +36,8 @@ public:
 
   languaget *new_language() const override
   {
-    return new clang_cpp_languaget();
+    return new clang_cpp_languaget;
   }
-
-  // constructor, destructor
-  ~clang_cpp_languaget() override = default;
-  explicit clang_cpp_languaget();
 
 protected:
   std::string internal_additions() override;

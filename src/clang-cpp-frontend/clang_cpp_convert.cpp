@@ -977,11 +977,10 @@ bool clang_cpp_convertert::get_decl_ref(
     // depending on whether they are C++-specific or not.
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
-    ross << "Conversion of unsupported clang decl ref for: "
-         << decl.getDeclKindName() << "\n";
     decl.dump(ross);
     ross.flush();
-    log_warning(oss.str());
+    log_warning("Conversion of unsupported clang decl ref for: {}\n{}",
+      decl.getDeclKindName(), oss.str());
     return true;
   }
   }
