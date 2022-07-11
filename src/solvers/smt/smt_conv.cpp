@@ -350,7 +350,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::constant_vector_id:
   {
-    a = array_create((constant_vector2tc)expr);
+    a = array_create(static_cast<constant_vector2tc>(expr));
     break;
   }
   case expr2t::constant_array_id:
