@@ -995,3 +995,19 @@ bool clang_cpp_convertert::get_decl_ref(
 
   return false;
 }
+
+void clang_cpp_convertert::get_default_symbol(
+  symbolt &symbol,
+  irep_idt module_name,
+  typet type,
+  irep_idt name,
+  irep_idt id,
+  locationt location)
+{
+  symbol.mode = "C++";
+  symbol.module = module_name;
+  symbol.location = std::move(location);
+  symbol.type = std::move(type);
+  symbol.name = name;
+  symbol.id = id;
+}
