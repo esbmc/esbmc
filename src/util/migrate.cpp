@@ -748,14 +748,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       members.push_back(new_ref);
     }
 
-    expr2t *a;
     if(
       (expr.id() == irept::id_constant && expr.type().id() == typet::t_array) ||
       expr.id() == typet::t_array)
-      a = new constant_array2t(type, members);
+      new_expr_ref = constant_array2tc(type, members);
     else
-      a = new constant_vector2t(type, members);
-    new_expr_ref = expr2tc(a);
+      new_expr_ref = constant_vector2tc(type, members);
   }
   else if(expr.id() == exprt::arrayof)
   {
