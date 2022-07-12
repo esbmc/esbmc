@@ -96,14 +96,13 @@ BigInt type_byte_size_bits(const type2tc &type)
 
   case type2t::vector_id:
   {
-    // Attempt to compute constant array offset. If we can't, we can't
-    // reasonably return anything anyway, so throw.
     const vector_type2t &t2 = to_vector_type(type);
     if(t2.size_is_infinite)
       throw new array_type2t::inf_sized_array_excp();
 
     expr2tc arrsize = t2.array_size;
     simplify(arrsize);
+
     if(!is_constant_int2t(arrsize))
       throw new array_type2t::dyn_sized_array_excp(arrsize);
 
