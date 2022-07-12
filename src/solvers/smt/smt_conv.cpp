@@ -240,7 +240,16 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   if(cache_result != smt_cache.end())
     return (cache_result->ast);
 
-  // Vectors!
+  /* Vectors!
+   *
+   * Here we need special attention for Vectors, because of the way
+   * they are encoded, an vector expression can reach here with binary
+   * operations that weren't done.
+   *
+   * The simplification module take care of all the operations, but if
+   * for some reason we would like to run ESBMC without simplifications
+   * then we need to apply it here.
+  */
   if(is_vector_type(expr))
   {
     if(is_neg2t(expr))
