@@ -59,7 +59,7 @@ bool clang_cpp_languaget::typecheck(
 {
   contextt new_context(message_handler);
 
-  clang_cpp_convertert converter(new_context, ASTs, message_handler);
+  clang_cpp_convertert converter(new_context, ASTs, message_handler, "C++");
   if(converter.convert())
     return true;
 

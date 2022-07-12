@@ -12,7 +12,8 @@ public:
   clang_cpp_convertert(
     contextt &_context,
     std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
-    const messaget &msg);
+    const messaget &msg,
+    const char *_mode);
   virtual ~clang_cpp_convertert() = default;
 
 protected:
@@ -94,16 +95,6 @@ protected:
 
   void
   build_member_from_component(const clang::FunctionDecl &fd, exprt &component);
-
-  void get_default_symbol(
-    symbolt &symbol,
-    irep_idt module_name,
-    typet type,
-    irep_idt name,
-    irep_idt id,
-    locationt location) override;
-
-  static constexpr const char *mode = "C++";
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

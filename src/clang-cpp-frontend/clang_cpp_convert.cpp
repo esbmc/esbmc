@@ -25,8 +25,9 @@
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
-  const messaget &msg)
-  : clang_c_convertert(_context, _ASTs, msg)
+  const messaget &msg,
+  const char *_mode)
+  : clang_c_convertert(_context, _ASTs, msg, _mode)
 {
 }
 
@@ -994,20 +995,4 @@ bool clang_cpp_convertert::get_decl_ref(
   new_expr.name(name);
 
   return false;
-}
-
-void clang_cpp_convertert::get_default_symbol(
-  symbolt &symbol,
-  irep_idt module_name,
-  typet type,
-  irep_idt name,
-  irep_idt id,
-  locationt location)
-{
-  symbol.mode = mode;
-  symbol.module = module_name;
-  symbol.location = std::move(location);
-  symbol.type = std::move(type);
-  symbol.name = name;
-  symbol.id = id;
 }

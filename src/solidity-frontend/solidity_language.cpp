@@ -104,7 +104,7 @@ bool solidity_languaget::convert_intrinsics(
   contextt &context,
   const messaget &msg)
 {
-  clang_c_convertert converter(context, ASTs, msg);
+  clang_c_convertert converter(context, ASTs, msg, "C");
   if(converter.convert())
     return true;
   return false;
