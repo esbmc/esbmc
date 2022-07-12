@@ -7,7 +7,7 @@
 class fp_convt
 {
 public:
-  fp_convt(smt_convt *_ctx);
+  explicit fp_convt(smt_convt *_ctx);
   virtual ~fp_convt() = default;
 
   /** Create a floating point bitvector

@@ -58,7 +58,7 @@ class value_sett
 {
 public:
   /** Primary constructor. Does approximately nothing non-standard. */
-  value_sett(const namespacet &_ns)
+  explicit value_sett(const namespacet &_ns)
     : location_number(0),
       ns(_ns),
       xchg_name("value_sett::__ESBMC_xchg_ptr"),
@@ -66,7 +66,7 @@ public:
   {
   }
 
-  explicit value_sett(const value_sett &ref)
+  value_sett(const value_sett &ref)
     : location_number(ref.location_number),
       values(ref.values),
       ns(ref.ns),

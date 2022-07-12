@@ -41,12 +41,8 @@ public:
 
   languaget *new_language() const override
   {
-    return new solidity_languaget();
+    return new solidity_languaget;
   }
-
-  // constructor, destructor
-  ~solidity_languaget() override = default;
-  explicit solidity_languaget();
 
   bool convert_intrinsics(contextt &context);
 

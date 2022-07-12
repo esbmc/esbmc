@@ -51,10 +51,6 @@ public:
   typedef std::map<std::string, language_modulet> modulemapt;
   modulemapt modulemap;
 
-  explicit language_filest()
-  {
-  }
-
   void clear_files()
   {
     filemap.clear();

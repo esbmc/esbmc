@@ -128,7 +128,6 @@ public:
     return symbols.size();
   }
 
-protected:
 private:
   symbolst symbols;
   ordered_symbolst ordered_symbols;

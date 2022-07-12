@@ -15,9 +15,6 @@ Author: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
 class jimple_languaget : public languaget
 {
 public:
-  jimple_languaget()
-  {
-  }
   bool parse(const std::string &path) override;
 
   bool final(contextt &context) override;
@@ -46,7 +43,7 @@ public:
 
   virtual languaget *new_language() const override
   {
-    return new jimple_languaget();
+    return new jimple_languaget;
   }
 
   jimple_file root;
