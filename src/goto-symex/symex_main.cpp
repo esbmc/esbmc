@@ -344,11 +344,9 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   default:
-    std::ostringstream oss;
-    oss << "GOTO instruction type " << instruction.type;
-    oss << " not handled in goto_symext::symex_step"
-        << "\n";
-    log_error(oss.str());
+    log_error(
+      "GOTO instruction type {} not handled in goto_symext::symex_step",
+      instruction.type);
     abort();
   }
 }
@@ -688,13 +686,11 @@ void goto_symext::run_intrinsic(
   }
   else
   {
-    std::ostringstream oss;
-    oss << "Function call to non-intrinsic prefixed with __ESBMC";
-    oss << " (fatal)\nThe name in question: " << symname;
-    oss << "\n(NB: the C spec reserves the __ prefix for the compiler"
-           " and environment)\n";
-
-    log_error(oss.str());
+    log_error(
+      "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
+      "The name in question: {}\n"
+      "(NB: the C spec reserves the __ prefix for the compiler and environment)",
+      symname);
     abort();
   }
 }

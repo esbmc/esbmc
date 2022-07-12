@@ -73,7 +73,7 @@ static configt::ansi_ct::endianesst arch_endianness(const std::string &arch)
                            : configt::ansi_ct::IS_BIG_ENDIAN;
   if(arch == "none")
     return configt::ansi_ct::NO_ENDIANESS;
-  log_error("unknown arch '" + arch + "', cannot determine endianness\n");
+  log_error("unknown arch '{}', cannot determine endianness", arch);
   abort();
 }
 

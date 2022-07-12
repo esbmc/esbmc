@@ -24,13 +24,14 @@ bool typecheckt::typecheck_main()
 
   catch(const char *e)
   {
-    log_error(e);
+    log_error("{}", e);
     abort();
   }
 
   catch(const std::string &e)
   {
-    log_error(e);
+    log_error("{}", e);
+    abort();
   }
 
   return false;

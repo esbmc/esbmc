@@ -21,7 +21,7 @@ void symex_target_equationt::debug_print_step(const SSA_stept &step) const
 {
   std::ostringstream oss;
   step.output(ns, oss);
-  log_debug(oss.str());
+  log_debug("{}", oss.str());
 }
 
 void symex_target_equationt::assignment(
@@ -172,7 +172,7 @@ void symex_target_equationt::convert_internal_step(
   {
     std::ostringstream oss;
     step.output(ns, oss);
-    log_status(oss.str());
+    log_status("{}", oss.str());
   }
 
   step.guard_ast = smt_conv.convert_ast(step.guard);
@@ -259,7 +259,7 @@ void symex_target_equationt::SSA_stept::dump() const
 {
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
-  log_debug(oss.str());
+  log_debug("{}", oss.str());
 }
 
 void symex_target_equationt::SSA_stept::output(

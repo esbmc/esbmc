@@ -565,13 +565,13 @@ void goto_symext::intrinsic_spawn_thread(
     art.goto_functions.function_map.find(symname);
   if(it == art.goto_functions.function_map.end())
   {
-    log_error("Spawning thread \"{}{}", symname, "\": symbol not found");
+    log_error("Spawning thread \"{}\": symbol not found", symname);
     abort();
   }
 
   if(!it->second.body_available)
   {
-    log_error("Spawning thread \"{}{}", symname, "\": no body");
+    log_error("Spawning thread \"{}\": no body", symname);
     abort();
   }
 

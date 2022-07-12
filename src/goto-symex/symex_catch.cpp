@@ -200,13 +200,11 @@ bool goto_symext::symex_throw()
   }
 
   // Log
-  {
-    std::ostringstream oss;
-    oss << "Caught by catch(" << catch_name << ") at file "
-        << (*catch_insn)->location.file() << " line "
-        << (*catch_insn)->location.line() << "\n";
-    log_status(oss.str());
-  }
+  log_status(
+    "Caught by catch({}) at file {} line {}",
+    catch_name,
+    (*catch_insn)->location.file(),
+    (*catch_insn)->location.line());
 
   return true;
 }

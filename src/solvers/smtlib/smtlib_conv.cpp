@@ -445,10 +445,7 @@ smt_convt::resultt smtlib_convt::dec_solve()
   }
   else if(smtlib_output->token == TOK_KW_ERROR)
   {
-    std::ostringstream oss;
-    oss << "SMTLIB solver returned error: \"" << smtlib_output->data << "\""
-        << "\n";
-    log_error(oss.str());
+    log_error("SMTLIB solver returned error: \"{}\"", smtlib_output->data);
     return smt_convt::P_ERROR;
   }
   else

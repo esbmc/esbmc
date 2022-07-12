@@ -904,7 +904,7 @@ void mathsat_smt_ast::dump() const
   auto convt = dynamic_cast<const mathsat_convt *>(context);
   assert(convt != nullptr);
 
-  log_debug(msat_to_smtlib2(convt->env, a));
+  log_debug("{}", msat_to_smtlib2(convt->env, a));
 }
 
 void mathsat_convt::dump_smt()
@@ -914,7 +914,7 @@ void mathsat_convt::dump_smt()
     msat_get_asserted_formulas(env, &num_of_asserted);
 
   for(unsigned i = 0; i < num_of_asserted; i++)
-    log_status(msat_to_smtlib2(env, asserted_formulas[i]));
+    log_status("{}", msat_to_smtlib2(env, asserted_formulas[i]));
 
   msat_free(asserted_formulas);
 }

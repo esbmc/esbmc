@@ -683,7 +683,7 @@ void reachability_treet::save_checkpoint(const std::string &&) const
 #if 0
   reachability_treet::dfs_position pos(*this);
   if (pos.write_to_file(fname))
-    log_error("Couldn't save checkpoint; continuing" << "\n");
+    log_error("Couldn't save checkpoint; continuing");
 #endif
 
   abort();

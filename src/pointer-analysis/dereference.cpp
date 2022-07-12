@@ -847,12 +847,9 @@ void dereferencet::build_reference_rec(
     flags |= flag_dst_scalar;
   else if(is_array_type(type) || is_string_type(type))
   {
-    std::ostringstream oss;
-    oss << "Can't construct rvalue reference to array type during dereference";
-    oss << "\n";
-    oss << "(It isn't allowed by C anyway)";
-    oss << "\n";
-    log_error(oss.str());
+    log_error(
+      "Can't construct rvalue reference to array type during dereference\n"
+      "(It isn't allowed by C anyway)\n");
     abort();
   }
   else
@@ -1584,11 +1581,9 @@ void dereferencet::construct_struct_ref_from_const_offset(
       "Memory model", "Object accessed with illegal offset", guard);
     return;
   }
-  std::ostringstream oss;
-  oss << "Unexpectedly " << get_type_id(value->type) << " type'd";
-  oss << " argument to construct_struct_ref"
-      << "\n";
-  log_error(oss.str());
+  log_error(
+    "Unexpectedly {} type'd argument to construct_struct_ref",
+    get_type_id(value->type));
   abort();
 }
 

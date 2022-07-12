@@ -164,15 +164,17 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
 
   if(is_code_in_context != is_code_new_symbol)
   {
-    std::ostringstream str;
-    str << "error: conflicting definition for symbol \"" << in_context.name
-        << "\""
-        << "\n";
-    str << "old definition: " << to_string(in_context.type) << "\n";
-    str << "Module: " << in_context.module << "\n";
-    str << "new definition: " << to_string(new_symbol.type) << "\n";
-    str << "Module: " << new_symbol.module;
-    log_error(str.str());
+    log_error(
+      "error: conflicting definition for symbol \"{}\"\n"
+      "old definition: {}\n"
+      "Module: {}\n"
+      "new definition: {}\n"
+      "Module: {}",
+      in_context.name,
+      to_string(in_context.type),
+      in_context.module,
+      to_string(new_symbol.type),
+      new_symbol.module);
     abort();
   }
 
@@ -199,22 +201,22 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       else if(base_type_eq(in_context.type, new_symbol.type, ns))
       {
         // keep the one in in_context -- libraries come last!
-        std::ostringstream str;
-        str << "warning: function `" << in_context.name << "' in module `"
-            << new_symbol.module << "' is shadowed by a definition in module `"
-            << in_context.module << "'";
-        log_warning(str.str());
+        log_warning(
+          "warning: function `{}' in module `{}' "
+          "is shadowed by a definition in module `{}'",
+          in_context.name,
+          new_symbol.module,
+          in_context.module);
       }
       else
       {
-        std::ostringstream str;
-        str << "error: duplicate definition of function `" << in_context.name
-            << "'"
-            << "\n";
-        str << "In module `" << in_context.module << "' and module `"
-            << new_symbol.module << "'\n";
-        str << "Location: " << new_symbol.value.location();
-        log_error(str.str());
+        log_error(
+          "error: duplicate definition of function `{}'\n"
+          "In module `{}' and module `{}'\n"
+          "Location: {}",
+          in_context.name,
+          in_context.module,
+          new_symbol.value.location());
       }
     }
   }
@@ -267,16 +269,19 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
 #endif
       else
       {
-        std::ostringstream str;
-        str << "error: conflicting definition for variable `" << in_context.name
-            << "'"
-            << "\n";
-        str << "old definition: " << to_string(in_context.type) << "\n";
-        str << "Module: " << in_context.module << "\n";
-        str << "new definition: " << to_string(new_symbol.type) << "\n";
-        str << "Module: " << new_symbol.module << "\n";
-        str << "Location: " << new_symbol.location;
-        log_error(str.str());
+        log_error(
+          "error: conflicting definition for variable `{}'\n"
+          "old definition: {}\n"
+          "Module: {}\n"
+          "new definition: {}\n"
+          "Module: {}\n"
+          "Location: {}",
+          in_context.name,
+          to_string(in_context.type),
+          in_context.module,
+          to_string(new_symbol.type),
+          new_symbol.module,
+          new_symbol.location);
       }
     }
 
@@ -290,15 +295,17 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       }
       else if(!base_type_eq(in_context.value, new_symbol.value, ns))
       {
-        std::ostringstream str;
-        str << "error: conflicting initializers for variable `"
-            << in_context.name << "'"
-            << "\n";
-        str << "old value: " << to_string(in_context.value) << "\n";
-        str << "Module: " << in_context.module << "\n";
-        str << "new value: " << to_string(new_symbol.value) << "\n";
-        str << "Module: " << new_symbol.module;
-        log_error(str.str());
+        log_error(
+          "error: conflicting initializers for variable `{}'\n"
+          "old value: {}\n"
+          "Module: {}\n"
+          "new value: {}\n"
+          "Module: {}",
+          in_context.name,
+          to_string(in_context.value),
+          in_context.module,
+          to_string(new_symbol.value),
+          new_symbol.module);
         abort();
       }
     }
