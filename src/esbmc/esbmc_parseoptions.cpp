@@ -436,6 +436,16 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("version"))
     return 0;
 
+  // unwinding of transition systems
+
+  if(cmdline.isset("module") || cmdline.isset("gen-interface"))
+  {
+    log_error(
+      "This version has no support for "
+      " hardware modules.");
+    return 1;
+  }
+
   // command line options
   if(cmdline.isset("preprocess"))
   {
