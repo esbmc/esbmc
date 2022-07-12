@@ -172,5 +172,14 @@ pre-defined types:
 
 bool is_number(const typet &type);
 // rational, real, integer, complex, unsignedbv, signedbv, floatbv
+/**
+ * @brief Returns wether the type behaves similarly to an array
+ *
+ * This is mainly used for DRY, e.g. checking for vector and array types.
+ *
+ * @param type
+ * @return true
+ * @return false
+ */
 bool is_array_like(const typet &type);
 #endif
