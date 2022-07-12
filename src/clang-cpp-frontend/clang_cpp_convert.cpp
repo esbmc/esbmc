@@ -1004,7 +1004,7 @@ void clang_cpp_convertert::get_default_symbol(
   irep_idt id,
   locationt location)
 {
-  symbol.mode = "C++";
+  symbol.mode = mode;
   symbol.module = module_name;
   symbol.location = std::move(location);
   symbol.type = std::move(type);

@@ -102,6 +102,8 @@ protected:
     irep_idt name,
     irep_idt id,
     locationt location) override;
+
+  static constexpr const char *mode = "C++";
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

@@ -991,9 +991,6 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if(get_type(lvrt.getPointeeTypeAsWritten(), sub_type))
       return true;
 
-    // Special case, pointers to structs/unions/classes must not
-    // have a copy of it, but a reference to the type
-    // TODO: classes
     if(sub_type.is_struct() || sub_type.is_union())
     {
       struct_union_typet t = to_struct_union_type(sub_type);
@@ -2867,7 +2864,7 @@ void clang_c_convertert::get_default_symbol(
   irep_idt id,
   locationt location)
 {
-  symbol.mode = "C";
+  symbol.mode = mode;
   symbol.module = module_name;
   symbol.location = std::move(location);
   symbol.type = std::move(type);
