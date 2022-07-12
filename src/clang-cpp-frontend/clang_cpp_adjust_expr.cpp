@@ -14,10 +14,6 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   {
     adjust_new(expr);
   }
-  else if (statement == "assign")
-  {
-    assert(!"cool"); // see clang_c_adjust::adjust_side_effect_assignment
-  }
   else
     clang_c_adjust::adjust_side_effect(expr);
 }

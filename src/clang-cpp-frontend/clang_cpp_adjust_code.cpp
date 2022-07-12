@@ -183,7 +183,7 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
         continue;
       }
 
-      if (lhs.type().get_bool("#reference"))
+      if(lhs.type().get_bool("#reference"))
       {
         // adjust rhs to address_off:
         // `int &r = g;` is turned into `int &r = &g;`
@@ -192,7 +192,6 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
         rhs.swap(result_expr);
       }
     }
-
 
     new_block.copy_to_operands(code_decl);
   }
