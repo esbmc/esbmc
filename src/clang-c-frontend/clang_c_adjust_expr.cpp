@@ -184,6 +184,15 @@ void clang_c_adjust::adjust_symbol(exprt &expr)
       tmp.location() = expr.location();
       expr.swap(tmp);
     }
+
+    if(expr.type().get_bool("#reference")) // lvalue reference
+    {
+      // r is an lvalue ref.
+      // turn `r = 1;` into `*r = 1;`
+      dereference_exprt tmp(expr, expr.type());
+      tmp.location() = expr.location();
+      expr.swap(tmp);
+    }
   }
 }
 

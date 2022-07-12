@@ -812,6 +812,13 @@ public:
     operands().resize(1);
   }
 
+  explicit dereference_exprt(const exprt &op, const typet &tp)
+    : exprt(exprt::deref, tp.subtype())
+  {
+    //operands().resize(1);
+    copy_to_operands(op);
+  }
+
   dereference_exprt() : exprt(exprt::deref)
   {
     operands().resize(1);
