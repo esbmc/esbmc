@@ -51,7 +51,7 @@ void symbolt::dump() const
 {
   std::ostringstream oss;
   show(oss);
-  log_debug(oss.str());
+  log_debug("{}", oss.str());
 }
 
 void symbolt::show(std::ostream &out) const

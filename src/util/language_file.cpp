@@ -39,7 +39,7 @@ bool language_filest::parse()
 
     if(!infile)
     {
-      log_error("Failed to open " + it.first);
+      log_error("Failed to open {}", it.first);
       return true;
     }
 
@@ -49,7 +49,7 @@ bool language_filest::parse()
 
     if(language.parse(it.first))
     {
-      log_error("Parsing of " + it.first + " failed");
+      log_error("Parsing of {} failed", it.first);
       return true;
     }
 
@@ -149,7 +149,7 @@ bool language_filest::typecheck_module(
 
   if(it == modulemap.end())
   {
-    log_error("found no file that provides module " + module);
+    log_error("found no file that provides module {}", module);
     return true;
   }
 
@@ -169,7 +169,7 @@ bool language_filest::typecheck_module(
 
   if(module.in_progress)
   {
-    log_error("circular dependency in " + module.name);
+    log_error("circular dependency in {}", module.name);
     return true;
   }
 
@@ -192,7 +192,7 @@ bool language_filest::typecheck_module(
 
   // type check it
 
-  log_status("Type-checking " + module.name);
+  log_status("Type-checking {}", module.name);
 
   if(module.file->language->typecheck(context, module.name))
   {

@@ -8,7 +8,7 @@ int reachability_treet::get_ileave_direction_from_user() const
   unsigned int tid;
 
   if(get_cur_state().get_active_state().guard.is_false())
-    log_status("This trace's guard is false; it will not be evaulated.");
+    log_status("This trace's guard is false; it will not be evaluated.");
 
   // First of all, are there actually any valid context switch targets?
   for(tid = 0; tid < get_cur_state().threads_state.size(); tid++)

@@ -17,7 +17,7 @@ bool jimple_languaget::parse(const std::string &path)
 
   catch(std::exception &e)
   {
-    log_error(e.what());
+    log_error("{}", e.what());
     return true;
   }
 

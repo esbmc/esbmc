@@ -12,12 +12,7 @@
 
 static void error_handler(Z3_context c, Z3_error_code e)
 {
-  std::ostringstream oss;
-  oss << "Z3 error " << e << " encountered"
-      << "\n";
-  oss << Z3_get_error_msg(c, e);
-
-  log_error(oss.str());
+  log_error("Z3 error {} encountered", Z3_get_error_msg(c, e));
   abort();
 }
 
@@ -1272,11 +1267,10 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
 
 void z3_smt_ast::dump() const
 {
-  std::ostringstream oss;
-  oss << Z3_ast_to_string(a.ctx(), a) << "\n";
-  oss << "sort is " << Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a))
-      << "\n";
-  log_debug(oss.str());
+  log_debug(
+    "{}\nsort is {}",
+    Z3_ast_to_string(a.ctx(), a),
+    Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a)));
 }
 
 void z3_convt::dump_smt()
@@ -1294,7 +1288,7 @@ void z3_convt::dump_smt()
 
     std::ostringstream oss;
     print_smt_formulae(oss);
-    log_debug(oss.str());
+    log_debug("{}", oss.str());
   }
 }
 
@@ -1372,7 +1366,7 @@ smt_astt z3_convt::mk_smt_fpbv_neg(smt_astt op)
 
 void z3_convt::print_model()
 {
-  log_status(Z3_model_to_string(z3_ctx, solver.get_model()));
+  log_status("{}", Z3_model_to_string(z3_ctx, solver.get_model()));
 }
 
 smt_sortt z3_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)

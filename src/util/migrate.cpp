@@ -1627,7 +1627,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else
     {
-      log_error("Unexpected side-effect statement: ", expr.statement());
+      log_error("Unexpected side-effect statement: {}", expr.statement());
       abort();
     }
 

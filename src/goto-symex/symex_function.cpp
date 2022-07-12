@@ -52,7 +52,7 @@ bool goto_symext::get_unwind_recursion(
     if(this_loop_max_unwind != 0)
       msg += " (" + integer2string(this_loop_max_unwind) + " max)";
 
-    log_status(msg);
+    log_status("{}", msg);
   }
 
   return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
@@ -107,11 +107,11 @@ unsigned goto_symext::argument_assignments(
         }
         else
         {
-          std::ostringstream oss;
-          oss << "function call: argument \"" << id2string(identifier)
-              << "\" type mismatch: got " << get_type_id((*it1)->type)
-              << ", expected " << get_type_id(arg_type) << '\n';
-          log_error(oss.str());
+          log_error(
+            "function call: argument \"{}\" type mismatch: got {}, expected {}",
+            id2string(identifier),
+            get_type_id((*it1)->type),
+            get_type_id(arg_type));
           abort();
         }
       }
@@ -203,8 +203,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     }
 
     log_error(
-      "failed to find `" + get_pretty_name(identifier.as_string()) +
-      "' in function_map");
+      "failed to find `{}' in function_map",
+      get_pretty_name(identifier.as_string()));
     abort();
   }
 
@@ -335,9 +335,8 @@ get_function_list(const expr2tc &expr)
     return get_function_list(to_typecast2t(expr).from);
 
   log_error(
-    "Unexpected irep id {} {}",
-    get_expr_id(expr),
-    " in function ptr dereference");
+    "Unexpected irep id {} in function ptr dereference",
+    get_expr_id(expr));
   // So, the function may point at something invalid. If that's the case,
   // wait for a solve-time pointer validity assertion to detect that. Return
   // nothing to call right now.
@@ -355,10 +354,8 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   // merge.
   if(is_nil_expr(call.function))
   {
-    std::ostringstream oss;
-    oss << "Function pointer call with no targets; irep: ";
-    oss << call.pretty(0) << "\n";
-    log_error(oss.str());
+    log_error(
+      "Function pointer call with no targets; irep: {}", call.pretty(0));
     abort();
   }
 

@@ -257,7 +257,7 @@ std::string expr2t::pretty(unsigned int indent) const
 
 void expr2t::dump() const
 {
-  log_debug(pretty(0));
+  log_debug("{}", pretty(0));
 }
 
 template <>

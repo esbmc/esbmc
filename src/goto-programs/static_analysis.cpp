@@ -372,7 +372,7 @@ void static_analysis_baset::do_function_call_rec(
   }
   else
   {
-    log_error("unexpected function_call argument: ", get_expr_id(function));
+    log_error("unexpected function_call argument: {}", get_expr_id(function));
     abort();
   }
 }

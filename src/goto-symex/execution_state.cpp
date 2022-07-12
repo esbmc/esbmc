@@ -247,7 +247,7 @@ void execution_statet::symex_step(reachability_treet &art)
   {
     std::ostringstream oss;
     state.source.pc->output_instruction(ns, "", oss, false);
-    log_result(oss.str());
+    log_result("{}", oss.str());
   }
 
   switch(instruction.type)
@@ -1121,7 +1121,7 @@ void execution_statet::print_stack_traces(unsigned int indent) const
         << "\n";
     it->print_stack_trace(indent + 2, oss);
     oss << "\n";
-    log_status(oss.str());
+    log_status("{}", oss.str());
   }
 }
 
