@@ -725,9 +725,9 @@ bool solidity_convertert::get_statement(
 }
 
 /**
- * @brief Populate the out parameter with the expression based on 
+ * @brief Populate the out parameter with the expression based on
  * the solidity expression grammar
- * 
+ *
  * @param expr The expression ast is to be converted to the IR
  * @param new_expr Out parameter to hold the conversion
  * @return true iff the conversion has failed
@@ -739,11 +739,11 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 }
 
 /**
- * @brief Populate the out parameter with the expression based on 
+ * @brief Populate the out parameter with the expression based on
  * the solidity expression grammar
- * 
+ *
  * @param expr The expression that is to be converted to the IR
- * @param int_literal_type Type information ast to create the the literal 
+ * @param int_literal_type Type information ast to create the the literal
  * type in the IR (only needed for when the expression is a literal)
  * @param new_expr Out parameter to hold the conversion
  * @return true iff the conversion has failed
@@ -1471,8 +1471,8 @@ bool solidity_convertert::get_array_to_pointer_type(
 
 /**
  * @brief Populate the out `typet` parameter with the uint type specified by type parameter
- * 
- * @param type The type of the uint to be poulated 
+ *
+ * @param type The type of the uint to be poulated
  * @param out The variable that holds the resulting type
  * @return true iff population failed
  * @return false iff population was successful
@@ -1489,8 +1489,8 @@ bool solidity_convertert::get_elementary_type_name_uint(
 
 /**
  * @brief Populate the out `typet` parameter with the int type specified by type parameter
- * 
- * @param type The type of the int to be poulated 
+ *
+ * @param type The type of the int to be poulated
  * @param out The variable that holds the resulting type
  * @return false iff population was successful
  */
@@ -1956,7 +1956,7 @@ void solidity_convertert::get_default_symbol(
   std::string id,
   locationt location)
 {
-  symbol.mode = "C";
+  symbol.mode = mode;
   symbol.module = module_name;
   symbol.location = std::move(location);
   symbol.type = std::move(type);

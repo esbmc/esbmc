@@ -148,6 +148,8 @@ protected:
     exprt &dest);
   bool convert_string_literal(std::string the_value, exprt &dest);
 
+  static constexpr const char *mode = "C";
+
 private:
   bool get_elementary_type_name_uint(
     SolidityGrammar::ElementaryTypeNameT &type,
