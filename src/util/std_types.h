@@ -649,6 +649,14 @@ public:
 
 const string_typet &to_string_type(const typet &type);
 
+/**
+ * @brief This type maps the vectors
+ *
+ * Vectors have similar access operations of arrays,
+ * however they can also do arithmetic between integers
+ * floats, and other vector (of the same size)
+ *
+ */
 class vector_typet : public typet
 {
 public:
