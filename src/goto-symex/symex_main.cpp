@@ -689,7 +689,8 @@ void goto_symext::run_intrinsic(
     log_error(
       "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
       "The name in question: {}\n"
-      "(NB: the C spec reserves the __ prefix for the compiler and environment)",
+      "(NB: the C spec reserves the __ prefix for the compiler and "
+      "environment)",
       symname);
     abort();
   }

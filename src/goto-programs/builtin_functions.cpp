@@ -582,8 +582,7 @@ void goto_convertt::do_function_call_symbol(
     // 2 arguments --> Normal assertion + MSG
     if(arguments.size() > 2)
     {
-      log_error(
-        "`{}' expected to have two arguments", id2string(base_name));
+      log_error("`{}' expected to have two arguments", id2string(base_name));
       abort();
     }
 

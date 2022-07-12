@@ -335,8 +335,7 @@ get_function_list(const expr2tc &expr)
     return get_function_list(to_typecast2t(expr).from);
 
   log_error(
-    "Unexpected irep id {} in function ptr dereference",
-    get_expr_id(expr));
+    "Unexpected irep id {} in function ptr dereference", get_expr_id(expr));
   // So, the function may point at something invalid. If that's the case,
   // wait for a solve-time pointer validity assertion to detect that. Return
   // nothing to call right now.
