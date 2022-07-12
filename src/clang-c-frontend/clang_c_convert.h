@@ -46,7 +46,8 @@ public:
   clang_c_convertert(
     contextt &_context,
     std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
-    const messaget &msg);
+    const messaget &msg,
+    const char *_mode);
   virtual ~clang_c_convertert() = default;
 
   bool convert();
@@ -72,6 +73,7 @@ protected:
   namespacet ns;
   std::vector<std::unique_ptr<clang::ASTUnit>> &ASTs;
   const messaget &msg;
+  const char *mode;
   symbol_generator anon_symbol;
 
   unsigned int current_scope_var_num;
@@ -150,7 +152,7 @@ protected:
 
   bool get_cast_expr(const clang::CastExpr &cast, exprt &new_expr);
 
-  virtual void get_default_symbol(
+  void get_default_symbol(
     symbolt &symbol,
     irep_idt module_name,
     typet type,
@@ -206,8 +208,6 @@ protected:
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
 
   void gen_typecast_to_union(exprt &dest, const typet &type);
-
-  static constexpr const char *mode = "C";
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

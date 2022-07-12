@@ -29,12 +29,14 @@
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
-  const messaget &msg)
+  const messaget &msg,
+  const char *_mode)
   : ASTContext(nullptr),
     context(_context),
     ns(context),
     ASTs(_ASTs),
     msg(msg),
+    mode(_mode),
     anon_symbol("clang_c_convertert::"),
     current_scope_var_num(1),
     current_block(nullptr),

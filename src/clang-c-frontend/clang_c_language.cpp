@@ -243,7 +243,7 @@ bool clang_c_languaget::typecheck(
 {
   contextt new_context(msg);
 
-  clang_c_convertert converter(new_context, ASTs, msg);
+  clang_c_convertert converter(new_context, ASTs, msg, "C");
   if(converter.convert())
     return true;
 
