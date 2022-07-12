@@ -56,10 +56,6 @@ std::string solidity_languaget::get_temp_file()
   return p.string();
 }
 
-solidity_languaget::solidity_languaget()
-{
-}
-
 bool solidity_languaget::parse(const std::string &path)
 {
   // prepare temp file

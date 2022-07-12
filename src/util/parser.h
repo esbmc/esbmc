@@ -31,7 +31,6 @@ public:
     clear();
   }
 
-  ~parsert() = default;
   parsert(const parsert &obj) = delete;
   parsert &operator=(const parsert &rhs) = delete;
 

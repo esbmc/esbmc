@@ -2,10 +2,12 @@
 #include <jimple-frontend/jimple-language.h>
 
 #include <c2goto/cprover_library.h>
+
 languaget *new_jimple_language()
 {
-  return new jimple_languaget();
+  return new jimple_languaget;
 }
+
 bool jimple_languaget::final(contextt &context)
 {
   log_status("Adding cprover library");
@@ -16,6 +18,7 @@ bool jimple_languaget::final(contextt &context)
   setup_main(context);
   return false;
 }
+
 bool jimple_languaget::from_type(
   const typet &,
   std::string &,
@@ -25,6 +28,7 @@ bool jimple_languaget::from_type(
   assert(!"Not implemented yet");
   return false;
 }
+
 bool jimple_languaget::from_expr(
   const exprt &,
   std::string &,

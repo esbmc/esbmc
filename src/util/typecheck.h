@@ -14,18 +14,14 @@ Author: Daniel Kroening, kroening@kroening.com
 class typecheckt
 {
 public:
-  typecheckt()
-  {
-  }
-  ~typecheckt() = default;
+  virtual ~typecheckt() = default;
+
+  // call that one
+  bool typecheck_main();
 
 protected:
-  // main function -- overload this one
+  // main function -- override this one
   virtual void typecheck() = 0;
-
-public:
-  // call that one
-  virtual bool typecheck_main();
 };
 
 #endif

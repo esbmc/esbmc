@@ -71,11 +71,6 @@ public:
 
   virtual languaget *new_language() const = 0;
 
-  // constructor / destructor
-
-  explicit languaget()
-  {
-  }
   virtual ~languaget() = default;
 
   inline void set_func_name(const std::string _path)
