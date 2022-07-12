@@ -353,7 +353,8 @@ void goto_convertt::remove_assignment(
       std::ostringstream str;
       str << statement << " takes two arguments\n";
       str << "Location: " << expr.location();
-      throw 0;
+      log_error(str.str());
+      abort();
     }
 
     exprt rhs;
