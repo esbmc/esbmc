@@ -648,8 +648,7 @@ expr2tc modulus2t::do_simplify() const
   {
     std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
       [](type2tc t, expr2tc e1, expr2tc e2) { return modulus2tc(t, e1, e2); };
-    return distribute_vector_operation(
-      op, simplied_side_1, simplied_side_2);
+    return distribute_vector_operation(op, simplied_side_1, simplied_side_2);
   }
 
   if(is_bv_type(type))
