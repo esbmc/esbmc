@@ -401,7 +401,6 @@ inline expr2tc gen_one(const type2tc &type)
   abort();
 }
 
-
 /**
    * @brief Distribute the functor `func` over op1 and op2
    * at least one of those must be a vector
@@ -477,7 +476,7 @@ inline expr2tc distribute_vector_operation(
   }
 }
 
-  /**
+/**
    * @brief Distribute the functor `func` over op1 and op2
    * at least one of those must be a vector
    *
@@ -540,7 +539,8 @@ inline expr2tc distribute_vector_operation(
   for(size_t i = 0; i < to_constant_int2t(vector_length).as_ulong(); i++)
   {
     BigInt position(i);
-    type2tc vector_type = to_vector_type(is_vector_type(op1->type) ? op1->type : op2->type).subtype;
+    type2tc vector_type =
+      to_vector_type(is_vector_type(op1->type) ? op1->type : op2->type).subtype;
     expr2tc local_op1 = op1;
     if(is_vector_type(op1->type))
     {
@@ -578,8 +578,7 @@ inline expr2tc distribute_vector_operation(
       to_add = div2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::modulus_id:
-      to_add =
-        modulus2tc(vector_type, local_op1, local_op2);
+      to_add = modulus2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::add_id:
       to_add = add2tc(vector_type, local_op1, local_op2);
@@ -588,32 +587,25 @@ inline expr2tc distribute_vector_operation(
       to_add = shl2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::bitxor_id:
-      to_add =
-        bitxor2tc(vector_type, local_op1, local_op2);
+      to_add = bitxor2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::bitor_id:
-      to_add =
-        bitor2tc(vector_type, local_op1, local_op2);
+      to_add = bitor2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::bitand_id:
-      to_add =
-        bitand2tc(vector_type, local_op1, local_op2);
+      to_add = bitand2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::ieee_add_id:
-      to_add = ieee_add2tc(
-        vector_type, local_op1, local_op2, rm);
+      to_add = ieee_add2tc(vector_type, local_op1, local_op2, rm);
       break;
     case expr2t::ieee_div_id:
-      to_add = ieee_div2tc(
-        vector_type, local_op1, local_op2, rm);
+      to_add = ieee_div2tc(vector_type, local_op1, local_op2, rm);
       break;
     case expr2t::ieee_sub_id:
-      to_add = ieee_sub2tc(
-        vector_type, local_op1, local_op2, rm);
+      to_add = ieee_sub2tc(vector_type, local_op1, local_op2, rm);
       break;
     case expr2t::ieee_mul_id:
-      to_add = ieee_mul2tc(
-        vector_type, local_op1, local_op2, rm);
+      to_add = ieee_mul2tc(vector_type, local_op1, local_op2, rm);
       break;
     default:
       assert(0 && "Unsupported operation for Vector");

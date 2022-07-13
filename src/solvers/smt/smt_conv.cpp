@@ -254,13 +254,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     if(is_neg2t(expr))
     {
-      return convert_ast(distribute_vector_operation(
-        expr->expr_id, to_neg2t(expr).value));
+      return convert_ast(
+        distribute_vector_operation(expr->expr_id, to_neg2t(expr).value));
     }
     if(is_bitnot2t(expr))
     {
-      return convert_ast(distribute_vector_operation(
-        expr->expr_id, to_bitnot2t(expr).value));
+      return convert_ast(
+        distribute_vector_operation(expr->expr_id, to_bitnot2t(expr).value));
     }
 
     std::shared_ptr<ieee_arith_2ops> ops;
@@ -280,8 +280,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     std::shared_ptr<bit_2ops> bit;
     bit = std::dynamic_pointer_cast<bit_2ops>(expr);
     if(bit)
-      return convert_ast(distribute_vector_operation(
-        bit->expr_id, bit->side_1, bit->side_2));
+      return convert_ast(
+        distribute_vector_operation(bit->expr_id, bit->side_1, bit->side_2));
   }
 
   std::vector<smt_astt> args;
