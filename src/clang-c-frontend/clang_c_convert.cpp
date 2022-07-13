@@ -30,7 +30,7 @@ clang_c_convertert::clang_c_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
   const messaget &msg,
-  const char *_mode)
+  irep_idt _mode)
   : ASTContext(nullptr),
     context(_context),
     ns(context),
