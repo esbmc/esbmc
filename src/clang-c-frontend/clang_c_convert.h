@@ -47,7 +47,7 @@ public:
     contextt &_context,
     std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
     const messaget &msg,
-    const char *_mode);
+    irep_idt _mode);
   virtual ~clang_c_convertert() = default;
 
   bool convert();
@@ -73,7 +73,7 @@ protected:
   namespacet ns;
   std::vector<std::unique_ptr<clang::ASTUnit>> &ASTs;
   const messaget &msg;
-  const char *mode;
+  irep_idt mode;
   symbol_generator anon_symbol;
 
   unsigned int current_scope_var_num;

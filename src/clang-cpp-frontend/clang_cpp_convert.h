@@ -13,7 +13,7 @@ public:
     contextt &_context,
     std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
     const messaget &msg,
-    const char *_mode);
+    irep_idt _mode);
   virtual ~clang_cpp_convertert() = default;
 
 protected:
