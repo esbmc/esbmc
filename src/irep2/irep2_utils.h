@@ -540,7 +540,7 @@ inline expr2tc distribute_vector_operation(
   for(size_t i = 0; i < to_constant_int2t(vector_length).as_ulong(); i++)
   {
     BigInt position(i);
-
+    type2tc vector_type = to_vector_type(is_vector_type(op1->type) ? op1->type : op2->type).subtype;
     expr2tc local_op1 = op1;
     if(is_vector_type(op1->type))
     {
@@ -554,7 +554,7 @@ inline expr2tc distribute_vector_operation(
     if(op2 && is_vector_type(op2->type))
     {
       local_op2 = index2tc(
-        to_vector_type(op1->type).subtype,
+        to_vector_type(op2->type).subtype,
         op2,
         constant_int2tc(get_uint32_type(), position));
     }
@@ -563,57 +563,57 @@ inline expr2tc distribute_vector_operation(
     switch(id)
     {
     case expr2t::neg_id:
-      to_add = neg2tc(to_vector_type(op1->type).subtype, local_op1);
+      to_add = neg2tc(vector_type, local_op1);
       break;
     case expr2t::bitnot_id:
-      to_add = bitnot2tc(to_vector_type(op1->type).subtype, local_op1);
+      to_add = bitnot2tc(vector_type, local_op1);
       break;
     case expr2t::sub_id:
-      to_add = sub2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      to_add = sub2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::mul_id:
-      to_add = mul2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      to_add = mul2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::div_id:
-      to_add = div2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      to_add = div2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::modulus_id:
       to_add =
-        modulus2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+        modulus2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::add_id:
-      to_add = add2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      to_add = add2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::shl_id:
-      to_add = shl2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+      to_add = shl2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::bitxor_id:
       to_add =
-        bitxor2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+        bitxor2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::bitor_id:
       to_add =
-        bitor2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+        bitor2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::bitand_id:
       to_add =
-        bitand2tc(to_vector_type(op1->type).subtype, local_op1, local_op2);
+        bitand2tc(vector_type, local_op1, local_op2);
       break;
     case expr2t::ieee_add_id:
       to_add = ieee_add2tc(
-        to_vector_type(op1->type).subtype, local_op1, local_op2, rm);
+        vector_type, local_op1, local_op2, rm);
       break;
     case expr2t::ieee_div_id:
       to_add = ieee_div2tc(
-        to_vector_type(op1->type).subtype, local_op1, local_op2, rm);
+        vector_type, local_op1, local_op2, rm);
       break;
     case expr2t::ieee_sub_id:
       to_add = ieee_sub2tc(
-        to_vector_type(op1->type).subtype, local_op1, local_op2, rm);
+        vector_type, local_op1, local_op2, rm);
       break;
     case expr2t::ieee_mul_id:
       to_add = ieee_mul2tc(
-        to_vector_type(op1->type).subtype, local_op1, local_op2, rm);
+        vector_type, local_op1, local_op2, rm);
       break;
     default:
       assert(0 && "Unsupported operation for Vector");
