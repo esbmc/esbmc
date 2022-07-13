@@ -1511,8 +1511,8 @@ bool solidity_convertert::get_elementary_type_name(
   SolidityGrammar::ElementaryTypeNameT type =
     SolidityGrammar::get_elementary_type_name_t(type_name);
 
-  msg.debug(fmt::format(
-    "	@@@ got ElementaryType: SolidityGrammar::ElementaryTypeNameT::{}", type));
+  log_debug(
+    "	@@@ got ElementaryType: SolidityGrammar::ElementaryTypeNameT::{}", type);
 
   switch(type)
   {
