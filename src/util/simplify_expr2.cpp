@@ -367,7 +367,7 @@ struct Addtor
     {
       std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
         [](type2tc t, expr2tc e1, expr2tc e2) { return add2tc(t, e1, e2); };
-      return vector_type2t::distribute_operation(op, op1, op2);
+      return distribute_vector_operation(op, op1, op2);
     }
 
     if(is_constant(op1))
@@ -464,7 +464,7 @@ struct Subtor
     {
       std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
         [](type2tc t, expr2tc e1, expr2tc e2) { return sub2tc(t, e1, e2); };
-      return vector_type2t::distribute_operation(op, op1, op2);
+      return distribute_vector_operation(op, op1, op2);
     }
 
     if(is_constant(op1))
@@ -518,7 +518,7 @@ struct Multor
     {
       std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
         [](type2tc t, expr2tc e1, expr2tc e2) { return mul2tc(t, e1, e2); };
-      return vector_type2t::distribute_operation(op, op1, op2);
+      return distribute_vector_operation(op, op1, op2);
     }
 
     if(is_constant(op1))
@@ -578,7 +578,7 @@ struct Divtor
     {
       std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
         [](type2tc t, expr2tc e1, expr2tc e2) { return div2tc(t, e1, e2); };
-      return vector_type2t::distribute_operation(op, op1, op2);
+      return distribute_vector_operation(op, op1, op2);
     }
 
     if(is_constant(op2))
@@ -648,7 +648,7 @@ expr2tc modulus2t::do_simplify() const
   {
     std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
       [](type2tc t, expr2tc e1, expr2tc e2) { return modulus2tc(t, e1, e2); };
-    return vector_type2t::distribute_operation(
+    return distribute_vector_operation(
       op, simplied_side_1, simplied_side_2);
   }
 
@@ -1412,7 +1412,7 @@ expr2tc bitand2t::do_simplify() const
   {
     std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
       [](type2tc t, expr2tc e1, expr2tc e2) { return bitand2tc(t, e1, e2); };
-    return vector_type2t::distribute_operation(op, side_1, side_2);
+    return distribute_vector_operation(op, side_1, side_2);
   }
 
   return do_bit_munge_operation<bitand2t>(op, type, side_1, side_2);
@@ -1429,7 +1429,7 @@ expr2tc bitor2t::do_simplify() const
   {
     std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
       [](type2tc t, expr2tc e1, expr2tc e2) { return bitor2tc(t, e1, e2); };
-    return vector_type2t::distribute_operation(op, side_1, side_2);
+    return distribute_vector_operation(op, side_1, side_2);
   }
 
   return do_bit_munge_operation<bitor2t>(op, type, side_1, side_2);
@@ -1446,7 +1446,7 @@ expr2tc bitxor2t::do_simplify() const
   {
     std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
       [](type2tc t, expr2tc e1, expr2tc e2) { return bitxor2tc(t, e1, e2); };
-    return vector_type2t::distribute_operation(op, side_1, side_2);
+    return distribute_vector_operation(op, side_1, side_2);
   }
 
   return do_bit_munge_operation<bitxor2t>(op, type, side_1, side_2);
@@ -1463,7 +1463,7 @@ expr2tc bitnand2t::do_simplify() const
   {
     std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
       [](type2tc t, expr2tc e1, expr2tc e2) { return bitnand2tc(t, e1, e2); };
-    return vector_type2t::distribute_operation(op, side_1, side_2);
+    return distribute_vector_operation(op, side_1, side_2);
   }
 
   return do_bit_munge_operation<bitnand2t>(op, type, side_1, side_2);
@@ -1480,7 +1480,7 @@ expr2tc bitnor2t::do_simplify() const
   {
     std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
       [](type2tc t, expr2tc e1, expr2tc e2) { return bitnor2tc(t, e1, e2); };
-    return vector_type2t::distribute_operation(op, side_1, side_2);
+    return distribute_vector_operation(op, side_1, side_2);
   }
 
   return do_bit_munge_operation<bitnor2t>(op, type, side_1, side_2);
@@ -1497,7 +1497,7 @@ expr2tc bitnxor2t::do_simplify() const
   {
     std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
       [](type2tc t, expr2tc e1, expr2tc e2) { return bitnxor2tc(t, e1, e2); };
-    return vector_type2t::distribute_operation(op, side_1, side_2);
+    return distribute_vector_operation(op, side_1, side_2);
   }
 
   return do_bit_munge_operation<bitnxor2t>(op, type, side_1, side_2);
@@ -1534,7 +1534,7 @@ expr2tc shl2t::do_simplify() const
   {
     std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
       [](type2tc t, expr2tc e1, expr2tc e2) { return shl2tc(t, e1, e2); };
-    return vector_type2t::distribute_operation(op, side_1, side_2);
+    return distribute_vector_operation(op, side_1, side_2);
   }
 
   return do_bit_munge_operation<shl2t>(op, type, side_1, side_2);
@@ -1550,7 +1550,7 @@ expr2tc lshr2t::do_simplify() const
   {
     std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
       [](type2tc t, expr2tc e1, expr2tc e2) { return lshr2tc(t, e1, e2); };
-    return vector_type2t::distribute_operation(op, side_1, side_2);
+    return distribute_vector_operation(op, side_1, side_2);
   }
 
   return do_bit_munge_operation<lshr2t>(op, type, side_1, side_2);
@@ -1567,7 +1567,7 @@ expr2tc ashr2t::do_simplify() const
   {
     std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
       [](type2tc t, expr2tc e1, expr2tc e2) { return ashr2tc(t, e1, e2); };
-    return vector_type2t::distribute_operation(op, side_1, side_2);
+    return distribute_vector_operation(op, side_1, side_2);
   }
 
   return do_bit_munge_operation<ashr2t>(op, type, side_1, side_2);
@@ -2000,7 +2000,7 @@ struct Equalitytor
     {
       std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
         [](type2tc, expr2tc e1, expr2tc e2) { return equality2tc(e1, e2); };
-      return vector_type2t::distribute_operation(op, op1, op2);
+      return distribute_vector_operation(op, op1, op2);
     }
 
     if(is_constant(op1) && is_constant(op2))
@@ -2658,7 +2658,7 @@ struct IEEE_addtor
         [rm](type2tc t, expr2tc e1, expr2tc e2) {
           return ieee_add2tc(t, e1, e2, rm);
         };
-      return vector_type2t::distribute_operation(op, op1, op2);
+      return distribute_vector_operation(op, op1, op2);
     }
 
     // Two constants? Simplify to result of the addition
@@ -2705,7 +2705,7 @@ struct IEEE_subtor
         [rm](type2tc t, expr2tc e1, expr2tc e2) {
           return ieee_sub2tc(t, e1, e2, rm);
         };
-      return vector_type2t::distribute_operation(op, op1, op2);
+      return distribute_vector_operation(op, op1, op2);
     }
     // Two constants? Simplify to result of the subtraction
     if(is_constant(op1) && is_constant(op2))
@@ -2751,7 +2751,7 @@ struct IEEE_multor
         [rm](type2tc t, expr2tc e1, expr2tc e2) {
           return ieee_mul2tc(t, e1, e2, rm);
         };
-      return vector_type2t::distribute_operation(op, op1, op2);
+      return distribute_vector_operation(op, op1, op2);
     }
 
     // Two constants? Simplify to result of the multiplication
@@ -2797,7 +2797,7 @@ struct IEEE_divtor
         [rm](type2tc t, expr2tc e1, expr2tc e2) {
           return ieee_div2tc(t, e1, e2, rm);
         };
-      return vector_type2t::distribute_operation(op, op1, op2);
+      return distribute_vector_operation(op, op1, op2);
     }
     // Two constants? Simplify to result of the division
     if(is_constant(op1) && is_constant(op2))
