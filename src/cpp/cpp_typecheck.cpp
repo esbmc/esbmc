@@ -41,6 +41,10 @@ std::string cpp_typecheckt::to_string(const typet &type)
 
 void cpp_typecheckt::convert(cpp_itemt &item)
 {
+  // top-level conversion function:
+  // the conversion modifies the originial cpp_itemt
+  // dumping cpp_itemt contents before and after conversion give different results
+
   if(item.is_declaration())
     convert(to_cpp_declaration(item));
   else if(item.is_linkage_spec())

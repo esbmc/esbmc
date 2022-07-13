@@ -25,7 +25,6 @@ codet cpp_typecheckt::cpp_constructor(
   follow_symbol(tmp_type);
 
   assert(!is_reference(tmp_type));
-
   if(tmp_type.id() == "array")
   {
     // We allow only one operand and it must be tagged with '#array_ini'.
@@ -148,6 +147,12 @@ codet cpp_typecheckt::cpp_constructor(
       assign.location() = location;
       assign.copy_to_operands(object_tc, operands_tc.front());
       typecheck_side_effect_assignment(assign);
+      if (new_code.operands().size() == 1)
+      {
+        // remove zombie operands
+        if (new_code.operands().front().id() == "")
+          new_code.operands().clear();
+      }
       new_code.move_to_operands(assign);
     }
     else
@@ -315,6 +320,7 @@ codet cpp_typecheckt::cpp_constructor(
 
   codet nil;
   nil.make_nil();
+
   return nil;
 }
 
