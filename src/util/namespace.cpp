@@ -11,8 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/namespace.h>
 #include <util/message.h>
 
-
-
 unsigned namespacet::get_max(const std::string &prefix) const
 {
   unsigned max_nr = 0;
