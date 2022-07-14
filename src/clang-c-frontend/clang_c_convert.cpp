@@ -447,23 +447,30 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     return true;
 
   // Check if we annotated it to be have an infinity size
+  bool no_slice = false;
   if(vd.hasAttrs())
   {
     for(auto const &attr : vd.getAttrs())
     {
       if(const auto *a = llvm::dyn_cast<clang::AnnotateAttr>(attr))
       {
-        if(a->getAnnotation().str() == "__ESBMC_inf_size")
+        const std::string &name = a->getAnnotation().str();
+        if(name == "__ESBMC_inf_size")
         {
           assert(t.is_array());
           t.size(exprt("infinity", uint_type()));
         }
+        else if(name == "__ESBMC_no_slice")
+          no_slice = true;
       }
     }
   }
 
   std::string id, name;
   get_decl_name(vd, name, id);
+
+  if(no_slice)
+    config.no_slice_names.emplace(id);
 
   locationt location_begin;
   get_location_from_decl(vd, location_begin);
