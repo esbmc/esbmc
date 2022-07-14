@@ -385,6 +385,13 @@ public:
 const index_exprt &to_index_expr(const exprt &expr);
 index_exprt &to_index_expr(exprt &expr);
 
+extern inline const unary_exprt &to_unary_expr(const exprt &expr)
+{
+  const unary_exprt &ret = static_cast<const unary_exprt &>(expr);
+  assert(ret.operands().size() == 1); // unary must have one operand
+  return ret;
+}
+
 class array_of_exprt : public exprt
 {
 public:

@@ -109,6 +109,7 @@ protected:
   void
   remove_function_call(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_new(exprt &expr, goto_programt &dest, bool result_is_used);
+  void remove_cpp_delete(exprt &expr, goto_programt &dest);
   void remove_temporary_object(exprt &expr, goto_programt &dest);
   void remove_statement_expression(
     exprt &expr,

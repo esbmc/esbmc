@@ -105,6 +105,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   auto it = functions.function_map.find(identifier);
   if(it == functions.function_map.end())
     functions.function_map.emplace(identifier, message_handler);
+
   goto_functiont &f = functions.function_map.at(identifier);
   f.type = to_code_type(symbol.type);
   f.body_available = symbol.value.is_not_nil();
