@@ -170,6 +170,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.push_back("-U__BLOCKS__");
     compiler_args.push_back("-Wno-nullability-completeness");
     compiler_args.push_back("-Wno-deprecated-register");
+    compiler_args.push_back("-U__SOFTFP__");
   }
 
   if(config.ansi_c.target.is_windows_abi())
