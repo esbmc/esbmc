@@ -149,12 +149,12 @@ const struct group_opt_templ all_cmd_options[] = {
     {"unroll-loops", NULL, ""},
     {"no-slice", NULL, "do not remove unused equations"},
     {"no-slice-name",
-     boost::program_options::value<std::vector<std::string>>()
-       ->value_name("name"),
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "name"),
      "disable slicing for all symbols generated with the given name"},
     {"no-slice-id",
-     boost::program_options::value<std::vector<std::string>>()
-       ->value_name("id"),
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "id"),
      "disable slicing for the symbol with the given id"},
     {"initialize-nondet-variables",
      NULL,
