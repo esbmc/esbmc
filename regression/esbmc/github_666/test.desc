@@ -1,4 +1,4 @@
 CORE
 no_slice.c
---json-options-input config.json
+
 ^VERIFICATION FAILED$
