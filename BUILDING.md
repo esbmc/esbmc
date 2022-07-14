@@ -10,16 +10,16 @@ Before starting, note that ESBMC is mainly distributed under the terms of the [A
 
 ## Dependency overview
 
-| package   | required | minimum version | recommended version |
-|-----------|----------|-----------------|---------------------|
-| clang     | yes      | 11.0.0          | latest              |
-| boost     | yes      | 1.77            | latest              |
-| Boolector | no       | 3.2.2           | 3.2.2               |
-| CVC4      | no       | 1.8             | 1.8                 |
-| MathSAT   | no       | 5.5.4           |                     |
-| Yices     | no       | 2.6.1           |                     |
-| Z3        | no       | 4.8.9           | 4.8.18              |
-| Bitwuzla  | no       | smtcomp-2021    |                     |
+| package   | required | minimum version |
+|-----------|----------|-----------------|
+| clang     | yes      | 11.0.0          |
+| boost     | yes      | 1.77            |
+| Boolector | no       | 3.2.2           |
+| CVC4      | no       | 1.8             |
+| MathSAT   | no       | 5.5.4           |
+| Yices     | no       | 2.6.1           |
+| Z3        | no       | 4.8.9           |
+| Bitwuzla  | no       | smtcomp-2021    |
 
 The version requirements are usually pretty stable, but can change between releases.
 
