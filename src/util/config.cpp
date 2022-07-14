@@ -115,6 +115,18 @@ bool configt::set(const cmdlinet &cmdline)
     return true;
   }
 
+  if(cmdline.isset("no-slice-name"))
+  {
+    const std::list<std::string> &args = cmdline.get_values("no-slice-name");
+    no_slice_names = {begin(args), end(args)};
+  }
+
+  if(cmdline.isset("no-slice-id"))
+  {
+    const std::list<std::string> &args = cmdline.get_values("no-slice-id");
+    no_slice_ids = {begin(args), end(args)};
+  }
+
   ansi_c.use_fixed_for_float = cmdline.isset("fixedbv");
 
   // this is the default

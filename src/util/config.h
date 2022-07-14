@@ -1,6 +1,7 @@
 #ifndef CPROVER_UTIL_CONFIG_H
 #define CPROVER_UTIL_CONFIG_H
 
+#include <unordered_set>
 #include <util/cmdline.h>
 #include <util/options.h>
 #include <langapi/mode.h>
@@ -128,6 +129,8 @@ public:
   } ansi_c;
 
   std::string main;
+  std::unordered_set<std::string> no_slice_names;
+  std::unordered_set<std::string> no_slice_ids;
 
   bool set(const cmdlinet &cmdline);
 

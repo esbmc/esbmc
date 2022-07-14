@@ -1,6 +1,9 @@
 #include <goto-symex/slice.h>
 
-symex_slicet::symex_slicet(bool assume) : ignored(0), slice_assumes(assume)
+symex_slicet::symex_slicet(
+  bool assume,
+  std::function<bool(const symbol2t &)> no_slice)
+  : ignored(0), slice_assumes(assume), no_slice(std::move(no_slice))
 {
 }
 
@@ -10,7 +13,7 @@ bool symex_slicet::get_symbols(const expr2tc &expr)
   bool res = false;
   expr->foreach_operand([this, &res](const expr2tc &e) {
     if(!is_nil_expr(e))
-      res = get_symbols<Add>(e) || res;
+      res |= get_symbols<Add>(e);
     return res;
   });
 
@@ -21,7 +24,7 @@ bool symex_slicet::get_symbols(const expr2tc &expr)
   if constexpr(Add)
     res |= depends.insert(s.get_symbol_name()).second;
   else
-    res |= depends.find(s.get_symbol_name()) != depends.end();
+    res |= no_slice(s) || depends.find(s.get_symbol_name()) != depends.end();
   return res;
 }
 
@@ -122,9 +125,12 @@ void symex_slicet::slice_renumber(symex_target_equationt::SSA_stept &SSA_step)
   // Don't collect the symbol; this insn has no effect on dependencies.
 }
 
-BigInt slice(std::shared_ptr<symex_target_equationt> &eq, bool slice_assumes)
+BigInt slice(
+  std::shared_ptr<symex_target_equationt> &eq,
+  bool slice_assumes,
+  std::function<bool(const symbol2t &)> no_slice)
 {
-  symex_slicet symex_slice(slice_assumes);
+  symex_slicet symex_slice(slice_assumes, std::move(no_slice));
   symex_slice.slice(eq);
   return symex_slice.ignored;
 }
