@@ -288,6 +288,8 @@ void goto_convertt::remove_sideeffects(
       remove_pre(expr, dest, result_is_used);
     else if(statement == "cpp_new" || statement == "cpp_new[]")
       remove_cpp_new(expr, dest, result_is_used);
+    else if(statement == "cpp_delete" || statement == "cpp_delete[]")
+      remove_cpp_delete(expr, dest);
     else if(statement == "temporary_object")
       remove_temporary_object(expr, dest);
     else if(statement == "nondet")
@@ -760,6 +762,20 @@ void goto_convertt::remove_cpp_new(
     expr.make_nil();
 
   convert(call, dest);
+}
+
+void goto_convertt::remove_cpp_delete(exprt &expr, goto_programt &dest)
+{
+  assert(expr.operands().size() == 1); // cpp_delete expects one operand
+
+  codet tmp(expr.statement());
+  tmp.location() = expr.location();
+  tmp.copy_to_operands(to_unary_expr(expr).op0());
+  tmp.set("destructor", expr.find("destructor"));
+
+  convert_cpp_delete(tmp, dest);
+
+  expr.make_nil();
 }
 
 void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
