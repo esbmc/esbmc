@@ -147,10 +147,10 @@ codet cpp_typecheckt::cpp_constructor(
       assign.location() = location;
       assign.copy_to_operands(object_tc, operands_tc.front());
       typecheck_side_effect_assignment(assign);
-      if (new_code.operands().size() == 1)
+      if(new_code.operands().size() == 1)
       {
         // remove zombie operands
-        if (new_code.operands().front().id() == "")
+        if(new_code.operands().front().id() == "")
           new_code.operands().clear();
       }
       new_code.move_to_operands(assign);
