@@ -570,10 +570,28 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   {
     fine_timet slice_start = current_time();
     BigInt ignored;
-    if(!options.get_bool_option("no-slice"))
-      ignored = slice(eq, options.get_bool_option("slice-assumes"));
-    else
+    if(options.get_bool_option("no-slice"))
       ignored = simple_slice(eq);
+    else
+    {
+      struct
+      {
+        const std::unordered_set<std::string> &names, &ids;
+
+        bool operator()(const symbol2t &sym) const
+        {
+          return names.count(sym.thename.as_string()) ||
+                 ids.count(sym.get_symbol_name());
+        }
+      } no_slice_symbol = {
+        config.no_slice_names,
+        config.no_slice_ids,
+      };
+
+      ignored =
+        slice(eq, options.get_bool_option("slice-assumes"), no_slice_symbol);
+    }
+
     fine_timet slice_stop = current_time();
 
     log_status(
