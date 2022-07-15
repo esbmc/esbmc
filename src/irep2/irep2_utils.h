@@ -416,7 +416,7 @@ inline expr2tc distribute_vector_operation(
   expr2tc op2)
 {
   assert(is_constant_vector2t(op1) || is_constant_vector2t(op2));
-    /*
+  /*
    * If both op1 and op2 are vectors the resulting value
    * would be the operation over each member
    *
@@ -431,7 +431,7 @@ inline expr2tc distribute_vector_operation(
    * { add(op1[0], op2[0]), add(op1[1], op2[1]), ...}
    * {2,3,4,5}
    */
-    if(is_constant_vector2t(op1) && is_constant_vector2t(op2))
+  if(is_constant_vector2t(op1) && is_constant_vector2t(op2))
   {
     constant_vector2tc vec1(op1);
     constant_vector2tc vec2(op2);
