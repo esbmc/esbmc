@@ -1131,9 +1131,10 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
   }
 #undef BITINT_TAG
 #undef BITINT_TYPE
+
   case clang::Type::ExtVector:
   {
-    // NOTE: some bitshift operations with classic vectors are parsed as this
+    // NOTE: some bitshift operations with 'clang::Type::ExtVector' vectors are parsed as this
     //   e.g vsi << 2 becomes ExtVector
     //       vsi << vsi2 becomes Vector
     const clang::ExtVectorType &vec =
