@@ -1974,14 +1974,9 @@ typet migrate_type_back(const type2tc &ref)
 
     vector_typet thetype;
     thetype.subtype() = migrate_type_back(ref2.subtype);
-    if(ref2.size_is_infinite)
-    {
-      thetype.set("size", "infinity");
-    }
-    else
-    {
-      thetype.size() = migrate_expr_back(ref2.array_size);
-    }
+    assert(!ref2.size_is_infinite);
+    thetype.size() = migrate_expr_back(ref2.array_size);
+
 
     return std::move(thetype);
   }
