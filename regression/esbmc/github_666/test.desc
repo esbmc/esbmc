@@ -1,4 +1,6 @@
 CORE
 no_slice.c
 
+\bfoo = 42\b
+\bfoo = 15\b
 ^VERIFICATION FAILED$
