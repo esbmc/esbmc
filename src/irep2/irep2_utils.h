@@ -478,7 +478,7 @@ inline expr2tc distribute_vector_operation(
 }
 
 /**
-   * @brief Distribute the functor `func` over op1 and op2
+   * @brief Distribute a function between one or two operands,
    * at least one of those must be a vector
    *
    * @param id the id for the operation
