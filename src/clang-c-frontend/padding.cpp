@@ -106,7 +106,7 @@ static struct_typet::componentst::iterator pad_bit_field(
 
   std::string index = std::to_string(where - components.begin());
   struct_typet::componentt component(
-    "bit_field_pad$" + index, "anon_bit_field_pad$" + index, padding_type);
+    "anon_bit_field_pad$" + index, "anon_bit_field_pad$" + index, padding_type);
 
   component.type().set("#bitfield", true);
   component.set_is_padding(true);
@@ -139,7 +139,7 @@ static struct_typet::componentst::iterator pad(
 
   std::string index = std::to_string(where - components.begin());
   struct_typet::componentt component(
-    "pad$" + index, "anon_pad$" + index, padding_type);
+    "anon_pad$" + index, "anon_pad$" + index, padding_type);
 
   component.set_is_padding(true);
   return std::next(components.insert(where, component));
