@@ -365,8 +365,9 @@ struct Addtor
     // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-        [](type2tc t, expr2tc e1, expr2tc e2) { return add2tc(t, e1, e2); };
+      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+        return add2tc(t, e1, e2);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -462,8 +463,9 @@ struct Subtor
     // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-        [](type2tc t, expr2tc e1, expr2tc e2) { return sub2tc(t, e1, e2); };
+      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+        return sub2tc(t, e1, e2);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -516,8 +518,9 @@ struct Multor
     // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-        [](type2tc t, expr2tc e1, expr2tc e2) { return mul2tc(t, e1, e2); };
+      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+        return mul2tc(t, e1, e2);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -576,8 +579,9 @@ struct Divtor
     // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-        [](type2tc t, expr2tc e1, expr2tc e2) { return div2tc(t, e1, e2); };
+      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+        return div2tc(t, e1, e2);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -646,8 +650,9 @@ expr2tc modulus2t::do_simplify() const
     is_constant_vector2t(simplied_side_1) ||
     is_constant_vector2t(simplied_side_2))
   {
-    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-      [](type2tc t, expr2tc e1, expr2tc e2) { return modulus2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return modulus2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, simplied_side_1, simplied_side_2);
   }
 
@@ -1408,8 +1413,9 @@ expr2tc bitand2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-      [](type2tc t, expr2tc e1, expr2tc e2) { return bitand2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return bitand2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1425,8 +1431,9 @@ expr2tc bitor2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-      [](type2tc t, expr2tc e1, expr2tc e2) { return bitor2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return bitor2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1442,8 +1449,9 @@ expr2tc bitxor2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-      [](type2tc t, expr2tc e1, expr2tc e2) { return bitxor2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return bitxor2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1459,8 +1467,9 @@ expr2tc bitnand2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-      [](type2tc t, expr2tc e1, expr2tc e2) { return bitnand2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return bitnand2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1476,8 +1485,9 @@ expr2tc bitnor2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-      [](type2tc t, expr2tc e1, expr2tc e2) { return bitnor2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return bitnor2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1493,8 +1503,9 @@ expr2tc bitnxor2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-      [](type2tc t, expr2tc e1, expr2tc e2) { return bitnxor2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return bitnxor2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1530,8 +1541,9 @@ expr2tc shl2t::do_simplify() const
 
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-      [](type2tc t, expr2tc e1, expr2tc e2) { return shl2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return shl2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1546,8 +1558,9 @@ expr2tc lshr2t::do_simplify() const
 
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-      [](type2tc t, expr2tc e1, expr2tc e2) { return lshr2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return lshr2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1563,8 +1576,9 @@ expr2tc ashr2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-      [](type2tc t, expr2tc e1, expr2tc e2) { return ashr2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return ashr2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1996,8 +2010,9 @@ struct Equalitytor
     // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-        [](type2tc, expr2tc e1, expr2tc e2) { return equality2tc(e1, e2); };
+      auto op = [](type2tc, expr2tc e1, expr2tc e2) {
+        return equality2tc(e1, e2);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -2652,10 +2667,9 @@ struct IEEE_addtor
     // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-        [rm](type2tc t, expr2tc e1, expr2tc e2) {
-          return ieee_add2tc(t, e1, e2, rm);
-        };
+      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+        return ieee_add2tc(t, e1, e2, rm);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -2699,10 +2713,9 @@ struct IEEE_subtor
     // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-        [rm](type2tc t, expr2tc e1, expr2tc e2) {
-          return ieee_sub2tc(t, e1, e2, rm);
-        };
+      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+        return ieee_sub2tc(t, e1, e2, rm);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
     // Two constants? Simplify to result of the subtraction
@@ -2745,10 +2758,9 @@ struct IEEE_multor
     // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-        [rm](type2tc t, expr2tc e1, expr2tc e2) {
-          return ieee_mul2tc(t, e1, e2, rm);
-        };
+      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+        return ieee_mul2tc(t, e1, e2, rm);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -2791,10 +2803,9 @@ struct IEEE_divtor
   {
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-        [rm](type2tc t, expr2tc e1, expr2tc e2) {
-          return ieee_div2tc(t, e1, e2, rm);
-        };
+      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+        return ieee_div2tc(t, e1, e2, rm);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
     // Two constants? Simplify to result of the division
