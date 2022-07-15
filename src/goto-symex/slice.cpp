@@ -1,10 +1,39 @@
 #include <goto-symex/slice.h>
 
-symex_slicet::symex_slicet(
-  bool assume,
-  std::function<bool(const symbol2t &)> no_slice)
-  : ignored(0), slice_assumes(assume), no_slice(std::move(no_slice))
+namespace
 {
+class symex_slicet
+{
+public:
+  explicit symex_slicet(bool assume);
+  void slice(std::shared_ptr<symex_target_equationt> &eq);
+
+  typedef std::unordered_set<std::string> symbol_sett;
+  symbol_sett depends;
+  BigInt ignored;
+
+protected:
+  bool slice_assumes;
+
+  template <bool Add>
+  bool get_symbols(const expr2tc &expr);
+
+  void slice(symex_target_equationt::SSA_stept &SSA_step);
+  void slice_assume(symex_target_equationt::SSA_stept &SSA_step);
+  void slice_assignment(symex_target_equationt::SSA_stept &SSA_step);
+  void slice_renumber(symex_target_equationt::SSA_stept &SSA_step);
+};
+
+} /* end anonymous namespace */
+
+symex_slicet::symex_slicet(bool assume) : ignored(0), slice_assumes(assume)
+{
+}
+
+static bool no_slice(const symbol2t &sym)
+{
+  return config.no_slice_names.count(sym.thename.as_string()) ||
+         config.no_slice_ids.count(sym.get_symbol_name());
 }
 
 template <bool Add>
@@ -125,17 +154,7 @@ void symex_slicet::slice_renumber(symex_target_equationt::SSA_stept &SSA_step)
   // Don't collect the symbol; this insn has no effect on dependencies.
 }
 
-BigInt slice(
-  std::shared_ptr<symex_target_equationt> &eq,
-  bool slice_assumes,
-  std::function<bool(const symbol2t &)> no_slice)
-{
-  symex_slicet symex_slice(slice_assumes, std::move(no_slice));
-  symex_slice.slice(eq);
-  return symex_slice.ignored;
-}
-
-BigInt simple_slice(std::shared_ptr<symex_target_equationt> &eq)
+static BigInt simple_slice(std::shared_ptr<symex_target_equationt> &eq)
 {
   BigInt ignored = 0;
 
@@ -161,4 +180,16 @@ BigInt simple_slice(std::shared_ptr<symex_target_equationt> &eq)
     }
 
   return ignored;
+}
+
+BigInt slice(std::shared_ptr<symex_target_equationt> &eq)
+{
+  const optionst &opts = config.options;
+
+  if(opts.get_bool_option("no-slice"))
+    return simple_slice(eq);
+
+  symex_slicet symex_slice(opts.get_bool_option("slice-assumes"));
+  symex_slice.slice(eq);
+  return symex_slice.ignored;
 }
