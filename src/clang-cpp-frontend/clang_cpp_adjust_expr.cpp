@@ -14,6 +14,10 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   {
     adjust_new(expr);
   }
+  else if(statement=="cpp_delete" || statement=="cpp_delete[]")
+  {
+    assert(!"cool");
+  }
   else
     clang_c_adjust::adjust_side_effect(expr);
 }
