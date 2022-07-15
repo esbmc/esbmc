@@ -495,28 +495,80 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     symbol.value.zero_initializer(true);
   }
 
-  // We have to add the symbol before converting the initial assignment
-  // because we might have something like 'int x = x + 1;' which is
-  // completely wrong but allowed by the language
-  symbolt &added_symbol = *move_symbol_to_context(symbol);
-
-  code_declt decl(symbol_expr(added_symbol));
-
-  if(vd.hasInit())
+  symbolt *added_symbol = nullptr;
+  if(symbol.static_lifetime && vd.hasInit())
   {
+    /* Static symbols can't refer to themselves in the initializer (which the
+     * 'else' case handles) as it would not be constant then.
+     *
+     * We need to get the initializer first, since it can contain compound
+     * literals (with their own initialization) that this variable here is
+     * initialized to:
+     *
+     * int x = (int){5};
+     *
+     * This creates a new symbol for the compound literal, and x's initializer
+     * should point to that (already initialized) symbol. As
+     * static_lifetime_init() expects the symbols to be initialized in the order
+     * they are put into the context, by getting the RHS first, we avoid first
+     * initializing 'x' and then the compound literal symbol, which would be
+     * wrong.
+     */
+
+    /* Since this is in static storage context, pretend that any surrounding
+     * block does not exist in order to force declarations by the RHS to appear
+     * in file scope as well. Technically, this is not fully correct, as the
+     * initialization of x in
+     *
+     * void f() {
+     *   static int x = 42;
+     * }
+     *
+     * should only occur the first time f() is run, but for C this makes no
+     * difference as x cannot be accessed outside of f() anyway and the
+     * initializer can't have side-effects (it's a constant expression). */
+    code_blockt *orig = current_block;
+    current_block = nullptr;
     exprt val;
-    if(get_expr(*vd.getInit(), val))
+    bool r = get_expr(*vd.getInit(), val);
+    current_block = orig;
+    if(r)
       return true;
 
+    added_symbol = move_symbol_to_context(symbol);
     gen_typecast(ns, val, t);
+    added_symbol->value = val;
 
-    added_symbol.value = val;
+    code_declt decl(symbol_expr(*added_symbol));
+    decl.location() = location_begin;
     decl.operands().push_back(val);
+
+    new_expr = decl;
   }
+  else
+  {
+    // We have to add the symbol before converting the initial assignment
+    // because we might have something like 'int x = x + 1;' which is
+    // completely wrong but allowed by the language
+    added_symbol = move_symbol_to_context(symbol);
 
-  decl.location() = location_begin;
+    code_declt decl(symbol_expr(*added_symbol));
+    decl.location() = location_begin;
 
-  new_expr = decl;
+    if(vd.hasInit())
+    {
+      exprt val;
+      if(get_expr(*vd.getInit(), val))
+        return true;
+
+      gen_typecast(ns, val, t);
+
+      added_symbol->value = val;
+      decl.operands().push_back(val);
+    }
+
+    new_expr = decl;
+  }
   return false;
 }
 
@@ -1535,14 +1587,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     get_default_symbol(
       cl, get_modulename_from_path(path), t, cl.name, cl.id, location);
 
-    cl.static_lifetime = compound.isFileScope();
+    cl.static_lifetime = !current_block || compound.isFileScope();
     cl.is_extern = false;
     cl.file_local = true;
     cl.value = initializer;
 
     new_expr = symbol_expr(cl);
 
-    if(current_block)
+    if(!cl.static_lifetime)
     {
       /* The underlying storage is automatic here, i.e., local. In order for
        * it to be recognized as being local in ESBMC, it requires a declaration,
@@ -1554,7 +1606,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
     else
     {
-      assert(cl.static_lifetime);
       /* Symbols appearing in file scope do not need a declaration.
        * clang_c_main::static_lifetime_init() takes care of the initialization.
        */
