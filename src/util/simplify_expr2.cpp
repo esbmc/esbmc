@@ -836,7 +836,7 @@ expr2tc with2t::do_simplify() const
     if(index.value.is_negative())
       return expr2tc();
 
-    if(index.as_ulong() >= vec.datatype_members.size())
+    if(index.value >= vec.datatype_members.size())
       return expr2tc();
 
     constant_vector2tc vec2 = vec;
@@ -1048,11 +1048,10 @@ expr2tc index2t::do_simplify() const
     if(idx.value.is_negative())
       return expr2tc();
 
-    unsigned long the_idx = idx.as_ulong();
-    if(the_idx >= arr.datatype_members.size())
+    if(idx.value >= arr.datatype_members.size())
       return expr2tc();
 
-    return arr.datatype_members[the_idx];
+    return arr.datatype_members[idx.as_ulong()];
   }
 
   if(is_constant_string2t(src) && is_constant_int2t(new_index))
