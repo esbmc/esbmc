@@ -481,7 +481,7 @@ inline expr2tc distribute_vector_operation(
    * @brief Distribute the functor `func` over op1 and op2
    * at least one of those must be a vector
    *
-   * @param airth_id the id for the operation
+   * @param id the id for the operation
    * @param op1 the first operand
    * @param op2 the second operand
    * @param rm rounding mode (for ieee)
