@@ -21,6 +21,7 @@
 #include <util/message.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/destructor.h>
 #include <fmt/core.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
@@ -553,6 +554,44 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXDeleteExprClass:
+  {
+    const clang::CXXDeleteExpr &de =
+      static_cast<const clang::CXXDeleteExpr &>(stmt);
+
+    if(de.isArrayFormAsWritten())
+      new_expr = side_effect_exprt("cpp_delete[]", empty_typet());
+    else
+      new_expr = side_effect_exprt("cpp_delete", empty_typet());
+
+    exprt arg;
+    if(get_expr(*de.getArgument(), arg))
+      return true;
+
+    new_expr.move_to_operands(arg);
+
+    // If it is a struct/union/class, get the destructor
+    if(de.getDestroyedType()->getAsCXXRecordDecl())
+    {
+      typet destt;
+      if(get_type(de.getDestroyedType(), destt))
+        return true;
+
+      // TODO: Move to adjust
+      code_function_callt destructor = get_destructor(ns, destt);
+      if(destructor.is_not_nil())
+      {
+        exprt new_object("new_object", destt);
+        new_object.cmt_lvalue(true);
+
+        destructor.arguments().push_back(new_object);
+        new_expr.set("destructor", destructor);
+      }
+    }
+
+    break;
+  }
+
   case clang::Stmt::CXXPseudoDestructorExprClass:
   {
     new_expr = exprt("pseudo_destructor");
@@ -689,8 +728,9 @@ bool clang_cpp_convertert::get_constructor_call(
   }
   else
   {
-    log_error("temporary is not supported in {}", __func__);
-    abort();
+    new_expr = side_effect_exprt("temporary_object", type);
+    convert_expression_to_code(call);
+    new_expr.initializer(call);
   }
 
   return false;
