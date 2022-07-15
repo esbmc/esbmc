@@ -521,6 +521,7 @@ public:
         p1 || (is_bv_type(t) == is_bv_type(v2->type) &&
                t->get_width() == v2->type->get_width()));
     }
+    // TODO: Add consistency checks for vectors
 #endif
   }
   arith_2ops(const arith_2ops &ref) = default;
