@@ -350,7 +350,7 @@ void goto_convertt::remove_assignment(
 
     if(statement == "assign+")
     {
-      if(expr_has_float(expr))
+      if(expr_has_floatbv(expr))
       {
         rhs.id("ieee_add");
       }
@@ -361,7 +361,7 @@ void goto_convertt::remove_assignment(
     }
     else if(statement == "assign-")
     {
-      if(expr_has_float(expr))
+      if(expr_has_floatbv(expr))
       {
         rhs.id("ieee_sub");
       }
@@ -372,7 +372,7 @@ void goto_convertt::remove_assignment(
     }
     else if(statement == "assign*")
     {
-      if(expr_has_float(expr))
+      if(expr_has_floatbv(expr))
       {
         rhs.id("ieee_mul");
       }
@@ -383,7 +383,7 @@ void goto_convertt::remove_assignment(
     }
     else if(statement == "assign_div")
     {
-      if(expr_has_float(expr))
+      if(expr_has_floatbv(expr))
       {
         rhs.id("ieee_div");
       }

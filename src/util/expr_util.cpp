@@ -297,7 +297,7 @@ exprt make_binary(const exprt &expr)
   return previous;
 }
 
-bool expr_has_float(const exprt &src)
+bool expr_has_floatbv(const exprt &src)
 {
   auto t = src.type();
   return t.is_vector() ? to_vector_type(t).subtype().is_floatbv()
