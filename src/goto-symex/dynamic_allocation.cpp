@@ -31,7 +31,9 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     pointer_object2tc obj_expr(pointer_type2(), obj.value);
 
     expr2tc alloc_arr_2;
-    migrate_expr(symbol_expr(*ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
+    const symbolt * tmp_symbol_ptr = ns.lookup(valid_ptr_arr_name);
+    assert(tmp_symbol_ptr);
+    migrate_expr(symbol_expr(*tmp_symbol_ptr), alloc_arr_2);
 
     index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
     expr = index_expr;
