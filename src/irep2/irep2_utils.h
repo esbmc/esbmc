@@ -410,8 +410,9 @@ inline expr2tc gen_one(const type2tc &type)
    * @param op2 the second operand
    * @return expr2tc with the resulting vector
    */
+  template <typename Func>
 inline expr2tc distribute_vector_operation(
-  std::function<expr2tc(type2tc, expr2tc, expr2tc)> func,
+  Func func,
   expr2tc op1,
   expr2tc op2)
 {
