@@ -114,7 +114,7 @@ type2tc migrate_type(const typet &type)
     expr2tc size((expr2t *)nullptr);
 
     assert(
-      type.find((typet::a_size).id() != "infinity") &&
+      (type.find(typet::a_size).id() != "infinity") &&
       "Vector type has a constant size\n"
       "Please, refer to: "
       "https://clang.llvm.org/docs/"
