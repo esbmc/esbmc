@@ -404,6 +404,9 @@ inline expr2tc gen_one(const type2tc &type)
 /**
    * @brief Distribute the functor `func` over op1 and op2
    * at least one of those must be a vector
+   * 
+   * Here, if one of the operands is `nil` then func must
+   * support an operation between the vector subtype and nil
    *
    * @param func the functor operation e.g add, sub, mul
    * @param op1 the first operand
