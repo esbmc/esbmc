@@ -2427,8 +2427,10 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
   // Check size
   assert(is_constant_array2t(expr) || is_constant_vector2t(expr));
   expr2tc size = std::static_pointer_cast<array_data>(expr->type)->array_size;
-  bool is_infinite = std::static_pointer_cast<array_data>(expr->type)->size_is_infinite;
-  auto members =  std::static_pointer_cast<constant_datatype_data>(expr)->datatype_members;
+  bool is_infinite =
+    std::static_pointer_cast<array_data>(expr->type)->size_is_infinite;
+  auto members =
+    std::static_pointer_cast<constant_datatype_data>(expr)->datatype_members;
 
   // Handle constant array expressions: these don't have tuple type and so
   // don't need funky handling, but we need to create a fresh new symbol and
