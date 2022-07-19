@@ -18,6 +18,9 @@ jobs:
     container: rafaelsamenezes/esbmc-ci:clang11
     steps:
     - uses: actions/checkout@v2
+    - run: apt update  # Only for Docker jobs
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@v1.2
     - name: Fix dubious ownership
       run: git config --global --add safe.directory /__w/esbmc/esbmc
     - name: Configure CMake
@@ -33,6 +36,11 @@ jobs:
     container: rafaelsamenezes/esbmc-ci:clang11
     steps:
     - uses: actions/checkout@v2
+    - run: apt update  # Only for Docker jobs
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+    - name: Fix dubious ownership
+      run: git config --global --add safe.directory /__w/esbmc/esbmc
     - name: Configure CMake
       run: mkdir build && cd build && CC=/workspace/clang/bin/clang CXX=/workspace/clang/bin/clang++ cmake .. -GNinja -DENABLE_CLANG_TIDY=On -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang
     - name: Run tests
@@ -44,6 +52,9 @@ jobs:
     container: rafaelsamenezes/esbmc-ci:clang11
     steps:
     - uses: actions/checkout@v2
+    - run: apt update  # Only for Docker jobs
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@v1.2
     - name: Fix dubious ownership
       run: git config --global --add safe.directory /__w/esbmc/esbmc
     - name: Configure CMake
