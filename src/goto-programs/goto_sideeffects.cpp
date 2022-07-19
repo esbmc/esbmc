@@ -14,6 +14,11 @@ void goto_convertt::make_temp_symbol(exprt &expr, goto_programt &dest)
 
   symbolt &new_symbol = new_tmp_symbol(expr.type());
 
+  // declare this symbol first
+  code_declt decl(symbol_expr(new_symbol));
+  decl.location() = location;
+  convert_decl(decl, dest);
+
   code_assignt assignment;
   assignment.lhs() = symbol_expr(new_symbol);
   assignment.rhs() = expr;
@@ -61,6 +66,9 @@ void goto_convertt::remove_sideeffects(
       // ID_or
       tmp = false_exprt();
 
+    // Make sure we do not lose the location in tmp
+    tmp.location() = expr.location();
+
     exprt::operandst &ops = expr.operands();
 
     // start with last one
@@ -68,6 +76,10 @@ void goto_convertt::remove_sideeffects(
         ++it)
     {
       exprt &op = *it;
+
+      // This is a hack for now. We need to solve this properly by
+      // correctly tracking all locations through all GOTO transformations
+      op.location() = expr.location();
 
       if(!op.is_boolean())
       {
@@ -77,17 +89,26 @@ void goto_convertt::remove_sideeffects(
 
       if(expr.is_and())
       {
-        if_exprt if_e(op, tmp, false_exprt());
+        // We need to reacord the location of the newly generated expression
+        exprt false_expr = false_exprt();
+        false_expr.location() = op.location();
+        if_exprt if_e(op, tmp, false_expr);
+        if_e.location() = op.location();
         tmp.swap(if_e);
       }
       else // ID_or
       {
-        if_exprt if_e(op, true_exprt(), tmp);
+        // We need to reacord the location of the newly generated expression
+        exprt true_expr = true_exprt();
+        true_expr.location() = op.location();
+        if_exprt if_e(op, true_expr, tmp);
+        if_e.location() = op.location();
         tmp.swap(if_e);
       }
     }
 
     expr.swap(tmp);
+    expr.location() = tmp.location();
 
     remove_sideeffects(expr, dest, result_is_used);
     return;
@@ -110,7 +131,7 @@ void goto_convertt::remove_sideeffects(
     if(!if_expr.cond().is_boolean())
       throw "first argument of `if' must be boolean, but got ";
 
-    const locationt location = expr.location();
+    const locationt location = expr.op0().location();
 
     goto_programt tmp_true;
     remove_sideeffects(if_expr.true_case(), tmp_true, result_is_used);
@@ -121,6 +142,11 @@ void goto_convertt::remove_sideeffects(
     if(result_is_used)
     {
       symbolt &new_symbol = new_tmp_symbol(expr.type());
+
+      // declare this symbol first
+      code_declt decl(symbol_expr(new_symbol));
+      decl.location() = location;
+      convert_decl(decl, dest);
 
       code_assignt assignment_true;
       assignment_true.lhs() = symbol_expr(new_symbol);
@@ -671,7 +697,7 @@ void goto_convertt::remove_function_call(
 
   symbolt new_symbol;
 
-  new_symbol.name = "return_value$";
+  new_symbol.name = "__ESBMC_return_value_";
   new_symbol.type = expr.type();
   new_symbol.location = expr.location();
 
@@ -697,7 +723,7 @@ void goto_convertt::remove_function_call(
 
     if(options.get_bool_option("symex-ssa-trace-as-c"))
       new_base_name = "dynamic_" + std::to_string(temporary_counter) + "_array";
-
+    
     new_symbol.name = new_base_name;
     new_symbol.mode = symbol->mode;
   }
@@ -837,6 +863,7 @@ void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
     assignment.reserve_operands(2);
     assignment.copy_to_operands(symbol_expr(new_symbol));
     assignment.move_to_operands(expr.op0());
+    assignment.location() = expr.location();
 
     goto_programt tmp_program;
     convert(assignment, tmp_program);
