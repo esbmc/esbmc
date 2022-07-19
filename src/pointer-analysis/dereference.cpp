@@ -2223,8 +2223,7 @@ void dereferencet::bounds_check(
   // Report these as assertions; they'll be simplified away if they're constant
 
   guardt tmp_guard1(guard);
-  if(!options.get_bool_option("symex-ssa-trace-as-c"))
-    tmp_guard1.add(is_in_bounds);
+  tmp_guard1.add(is_in_bounds);
   dereference_failure("array bounds", "array bounds violated", tmp_guard1);
 }
 
@@ -2298,8 +2297,7 @@ void dereferencet::check_data_obj_access(
   if(!options.get_bool_option("no-bounds-check"))
   {
     guardt tmp_guard = guard;
-    if(!options.get_bool_option("symex-ssa-trace-as-c"))
-      tmp_guard.add(gt);
+    tmp_guard.add(gt);
     dereference_failure(
       "pointer dereference", "Access to object out of bounds", tmp_guard);
   }
