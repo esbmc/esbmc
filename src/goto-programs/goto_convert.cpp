@@ -306,6 +306,7 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   goto_programt::targett throw_decl_instruction = dest.add_instruction();
   codet c("code");
   c.set_statement("throw-decl");
+  c.location() = expr.location();
 
   // the THROW_DECL instruction is annotated with a list of IDs,
   // one per target
@@ -487,14 +488,20 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
   // We have to replace the symbol by a temporary, because it might
   // change its value in the future
   // Don't create a symbol for temporary symbols
-  if(size.identifier().as_string().find("tmp$") == std::string::npos)
+  if(size.identifier().as_string().find("__ESBMC_tmp_") == std::string::npos)
   {
     // Old size symbol
     exprt old_size = size;
 
     // Replace the size by a new variable, to avoid wrong results
     // when the symbol used to create the VLA is changed
-    size = symbol_expr(new_tmp_symbol(size.type()));
+    symbolt size_sym = new_tmp_symbol(size.type());
+    size = symbol_expr(size_sym);
+
+    // declare this symbol first
+    code_declt decl(symbol_expr(size_sym));
+    decl.location() = old_size.location();
+    convert_decl(decl, dest);
 
     codet assignment("assign");
     assignment.reserve_operands(2);
@@ -865,6 +872,12 @@ void goto_convertt::break_globals2assignments_rec(
       // make new assignment to temp for each global symbol
       symbolt &new_symbol = new_tmp_symbol(rhs.type());
       new_symbol.static_lifetime = true;
+
+      // declare this symbol first
+      code_declt decl(symbol_expr(new_symbol));
+      decl.location() = location;
+      convert_decl(decl, dest);
+
       equality_exprt eq_expr;
       irept irep;
       new_symbol.to_irep(irep);
@@ -894,6 +907,12 @@ void goto_convertt::break_globals2assignments_rec(
       // make new assignment to temp for each global symbol
       symbolt &new_symbol = new_tmp_symbol(rhs.type());
       new_symbol.static_lifetime = true;
+
+      // declare this symbol first
+      code_declt decl(symbol_expr(new_symbol));
+      decl.location() = location;
+      convert_decl(decl, dest);
+
       equality_exprt eq_expr;
       irept irep;
       new_symbol.to_irep(irep);
@@ -1213,7 +1232,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   migrate_expr(cond, tmp_cond);
   tmp_cond = not2tc(tmp_cond);
   v->guard = tmp_cond;
-  v->location = cond.location();
+  v->location = code.location();
 
   // do the w label
   goto_programt tmp_w;
@@ -1263,13 +1282,14 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
-  z->location = location;
+  z->location = code.location();
 
   goto_programt tmp_branch;
   generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
 
   // do the v label
   goto_programt::targett v = tmp_branch.instructions.begin();
+  v->location = code.location();
 
   // do the y label
   goto_programt tmp_y;
@@ -1939,7 +1959,7 @@ void goto_convertt::generate_conditional_branch(
     goto_programt::targett t_false = dest.add_instruction();
     t_false->make_goto(target_false);
     t_false->guard = gen_true_expr();
-    t_false->location = guard.location();
+    t_false->location = location;
 
     return;
   }
@@ -1957,12 +1977,12 @@ void goto_convertt::generate_conditional_branch(
   goto_programt::targett t_true = dest.add_instruction();
   t_true->make_goto(target_true);
   migrate_expr(cond, t_true->guard);
-  t_true->location = guard.location();
+  t_true->location = location;
 
   goto_programt::targett t_false = dest.add_instruction();
   t_false->make_goto(target_false);
   t_false->guard = gen_true_expr();
-  t_false->location = guard.location();
+  t_false->location = location;
 }
 
 symbolt &goto_convertt::new_tmp_symbol(const typet &type)
