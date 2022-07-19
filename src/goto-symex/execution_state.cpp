@@ -16,6 +16,8 @@
 #include <util/string2array.h>
 #include <vector>
 
+#include <goto-symex/execution_trace.h>
+
 unsigned int execution_statet::node_count = 0;
 unsigned int execution_statet::dynamic_counter = 0;
 
@@ -291,6 +293,20 @@ void execution_statet::symex_step(reachability_treet &art)
     break;
   default:
     goto_symext::symex_step(art);
+  }
+
+  if(options.get_bool_option("symex-ssa-trace-as-c"))
+  {
+    c_instructiont c_instr(instruction);
+    // This instruction is inside the loop. Hence, need to increment the loop depth
+    if(c_instr.type == GOTO && c_instr.loop_number > 0)
+    {
+      c_instr.set_loop_depth(
+        cur_state->loop_iterations[c_instr.loop_number].to_uint64());
+    }
+    instructions_to_c.push_back(c_instr);
+    std::string fun_name = c_instr.location.get_function().c_str();
+    functions_to_c[fun_name].push_back(c_instr);
   }
 }
 
