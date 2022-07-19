@@ -684,12 +684,11 @@ public:
   {
     return (exprt &)add(a_size);
   }
-
 };
 
 inline const vector_typet &to_vector_type(const typet &type)
- {
-    assert(type.id() == typet::t_vector);
-    return static_cast<const vector_typet &>(type);
-  }
+{
+  assert(type.id() == typet::t_vector);
+  return static_cast<const vector_typet &>(type);
+}
 #endif
