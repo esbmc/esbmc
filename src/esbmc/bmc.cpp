@@ -42,11 +42,17 @@
 #include <goto-symex/witnesses.h>
 
 #include <goto-symex/execution_trace.h>
-#include <clang-c-frontend/expr2ccode.h>
 
-#include <iostream>
-
+// Declaring the extern vars for the symex-execution-trace translation.
+// This is an initial temporary solution which will be redesigned later.
 std::vector<c_instructiont> instructions_to_c;
+std::map<std::string, std::vector<c_instructiont>> functions_to_c;
+unsigned int function_call_num = 0;
+unsigned int label_num = 0;
+std::map<std::string, type2tc> alive_vars;
+std::vector<std::string> declared_types;
+std::map<std::string, unsigned int> fun_call_nums;
+
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -631,9 +637,29 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
   if(options.get_bool_option("symex-ssa-trace-as-c"))
   {
-    for(c_instructiont it : instructions_to_c)
+    insert_static_declarations(instructions_to_c, ns);
+    inline_function_calls(instructions_to_c, symex->goto_functions);
+    assign_returns(instructions_to_c);
+    merge_decl_assign_pairs(instructions_to_c);
+    assign_dynamic_sizes(instructions_to_c);
+    const std::string &filename = options.get_option("output");
+    if(!filename.empty())
     {
-      std::cerr << it.convert_to_c(ns) << "\n";
+      // Outputting all the intructions now
+      std::ofstream out(filename.c_str());
+      if(out)
+      {
+        bool inside_main = false;
+        out << "void run_execution_trace(int argc, char *argv[])\n";
+        out << "{\n";
+
+        // Converting the instructions
+        for(c_instructiont it : instructions_to_c)
+          out << it.convert_to_c(ns) << "\n";
+
+        out << "}\n";
+        out.close();
+      }
     }
   }
 
