@@ -9,6 +9,8 @@ jobs:
     container: rafaelsamenezes/esbmc-ci:clang11
     steps:
     - uses: actions/checkout@v2
+    - name: Fix dubious ownership
+      run: git config --global --add safe.directory /__w/esbmc/esbmc
     - name: Configure CMake
       run: mkdir build && cd build && CC=/workspace/clang/bin/clang CXX=/workspace/clang/bin/clang++ cmake .. -GNinja  -DCMAKE_BUILD_TYPE=Sanitizer -DSANITIZER_TYPE=ASAN -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DENABLE_JIMPLE_FRONTEND=On -DENABLE_SOLIDITY_FRONTEND=On
     - name: Build ESBMC
