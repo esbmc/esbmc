@@ -66,12 +66,12 @@ protected:
 
   std::string convert_array_member_value(const exprt &src, unsigned precedence);
 
-  std::string convert_member(const exprt &src, unsigned precedence);
+  virtual std::string convert_member(const exprt &src, unsigned precedence);
 
   std::string
   convert_pointer_object_has_type(const exprt &src, unsigned precedence);
 
-  std::string convert_array_of(const exprt &src, unsigned precedence);
+  virtual std::string convert_array_of(const exprt &src, unsigned precedence);
 
   std::string convert_trinary(
     const exprt &src,
@@ -124,7 +124,7 @@ protected:
   convert_code_switch_case(const code_switch_caset &src, unsigned indent);
   std::string convert_code_asm(const codet &src, unsigned indent);
   std::string convert_code_assign(const codet &src, unsigned indent);
-  std::string convert_code_free(const codet &src, unsigned indent);
+  virtual std::string convert_code_free(const codet &src, unsigned indent);
   std::string convert_code_init(const codet &src, unsigned indent);
   std::string convert_code_ifthenelse(const codet &src, unsigned indent);
   std::string convert_code_for(const codet &src, unsigned indent);
@@ -140,7 +140,7 @@ protected:
   std::string convert_code_break(const codet &src, unsigned indent);
   std::string convert_code_switch(const codet &src, unsigned indent);
   std::string convert_code_continue(const codet &src, unsigned indent);
-  std::string convert_code_decl(const codet &src, unsigned indent);
+  virtual std::string convert_code_decl(const codet &src, unsigned indent);
   std::string convert_code_decl_block(const codet &src, unsigned indent);
   std::string convert_code_dead(const codet &src, unsigned indent);
   std::string
@@ -154,8 +154,8 @@ protected:
   std::string convert_function_call(const exprt &src, unsigned &precedence);
   virtual std::string convert_malloc(const exprt &src, unsigned &precedence);
   std::string convert_realloc(const exprt &src, unsigned &precedence);
-  std::string convert_alloca(const exprt &src, unsigned &precedence);
-  std::string convert_nondet(const exprt &src, unsigned &precedence);
+  virtual std::string convert_alloca(const exprt &src, unsigned &precedence);
+  virtual std::string convert_nondet(const exprt &src, unsigned &precedence);
   std::string
   convert_statement_expression(const exprt &src, unsigned &precedence);
 
@@ -175,7 +175,7 @@ protected:
     const exprt::operandst &operands,
     const struct_union_typet::componentst &components);
   virtual std::string convert_struct(const exprt &src, unsigned &precedence);
-  std::string convert_union(const exprt &src, unsigned &precedence);
+  virtual std::string convert_union(const exprt &src, unsigned &precedence);
   std::string convert_array(const exprt &src, unsigned &precedence);
   std::string convert_array_list(const exprt &src, unsigned &precedence);
 };

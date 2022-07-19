@@ -42,13 +42,37 @@ protected:
     const c_qualifierst &qualifiers,
     const std::string &declarator) override;
 
+  std::string convert_struct_union_body(
+    const exprt &src,
+    const exprt::operandst &operands,
+    const struct_union_typet::componentst &components);
+  std::string convert_struct(const exprt &src, unsigned &precedence) override;
+  std::string convert_union(const exprt &src, unsigned &precedence) override;
+
   std::string convert_code_printf(const codet &src, unsigned indent) override;
+  std::string convert_code_free(const codet &src, unsigned indent) override;
   std::string convert_malloc(const exprt &src, unsigned &precedence) override;
+  std::string convert_alloca(const exprt &src, unsigned &precedence) override;
   std::string convert_symbol(const exprt &src, unsigned &precedence) override;
-  
+
+  std::string convert_member(const exprt &src, unsigned precedence) override;
+
+  std::string convert_code_decl(const codet &src, unsigned indent) override;
   std::string convert(const exprt &src, unsigned &precedence) override;
 
   std::string convert_same_object(const exprt &src, unsigned &precedence);
+  std::string convert_pointer_offset(const exprt &src, unsigned &precedence);
+  std::string convert_infinity(const exprt &src, unsigned &precedence);
+  std::string convert_dynamic_size(const exprt &src, unsigned &precedence);
+
+  std::string convert_ieee_div(const exprt &src, unsigned &precedence);
+  std::string convert_ieee_mul(const exprt &src, unsigned &precedence);
+  std::string convert_ieee_add(const exprt &src, unsigned &precedence);
+  std::string convert_ieee_sub(const exprt &src, unsigned &precedence);
+
+  std::string convert_nondet(const exprt &src, unsigned &precedence) override;
+
+  std::string convert_array_of(const exprt &src, unsigned precedence) override;
 
 private:
   std::string convert_from_ssa_form(const std::string symbol);
