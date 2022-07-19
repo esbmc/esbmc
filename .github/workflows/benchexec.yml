@@ -19,26 +19,15 @@ on:
 jobs:
   build-linux:
     name: Build Linux Release
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
+    container: rafaelsamenezes/esbmc-ci:clang11
     steps:
       - name: Small test
         run: echo ${{ github.event.inputs.timeout }}
       - name: Checkout code
         uses: actions/checkout@master
-      - name: Install Dependencies
-        run: sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev
-      - name: Download Clang 11
-        run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
-      - name: Extract Clang 11
-        run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
-      - name: Setup boolector
-        run: git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.2 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
-      - name: Setup Z3
-        run: wget https://github.com/fbrausse/esbmc/raw/_assets/z3-ea2a84332513a7823e8e5c96f039fd048cb43dc5-Ubuntu20.04.zip && unzip z3-ea2a84332513a7823e8e5c96f039fd048cb43dc5-Ubuntu20.04.zip && mv release/ z3
-      - name: Get current folder and files
-        run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3
       - name: Build ESBMC
         run: cd build && cmake --build .
       - uses: actions/upload-artifact@v1
@@ -61,7 +50,7 @@ jobs:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
         run: |
-          rm -rf $HOME/output-action 
+          rm -rf $HOME/output-action
           mkdir $HOME/output-action
           cp ./esbmc $HOME/output-action
           cd $HOME/output-action
