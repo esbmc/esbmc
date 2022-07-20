@@ -48,10 +48,10 @@ if(APPLE)
     set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc ${REGRESSIONS_SOLIDITY}
                     cbmc cstd llvm floats floats-regression ${REGRESSIONS_JIMPLE}
                     k-induction k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
-                    incremental-smt esbmc-cpp11 extensions)
+                    incremental-smt esbmc-cpp11/cpp esbmc-cpp11/cbmc-constructors  extensions)
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
-    set(REGRESSIONS esbmc cbmc cstd llvm floats k-induction ${REGRESSIONS_JIMPLE})
+    set(REGRESSIONS esbmc cbmc cstd llvm floats k-induction ${REGRESSIONS_JIMPLE} extensions)
 else()
     set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc ${REGRESSIONS_SOLIDITY}
                     ${REGRESSIONS_OLD_FRONTEND}
@@ -59,7 +59,7 @@ else()
                     k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith
                     k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
                     incremental-smt esbmc-cpp11/cpp esbmc-cpp11/cbmc-constructors
-                    ${REGRESSIONS_GOTO_CONTRACTOR} ${REGRESSIONS_JIMPLE})
+                    ${REGRESSIONS_GOTO_CONTRACTOR} ${REGRESSIONS_JIMPLE} extensions)
 endif()
 
 foreach(regression IN LISTS REGRESSIONS)
