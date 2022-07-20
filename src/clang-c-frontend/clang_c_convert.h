@@ -118,7 +118,8 @@ protected:
    */
   bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
 
-  virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
+  virtual bool
+  get_struct_union_class(const clang::RecordDecl &recordd, bool complete);
 
   virtual bool get_struct_union_class_fields(
     const clang::RecordDecl &recordd,
@@ -128,9 +129,11 @@ protected:
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
-  virtual bool get_type(const clang::QualType &type, typet &new_type);
+  virtual bool
+  get_type(const clang::QualType &type, typet &new_type, bool complete);
 
-  virtual bool get_type(const clang::Type &the_type, typet &new_type);
+  virtual bool
+  get_type(const clang::Type &the_type, typet &new_type, bool complete);
 
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
 

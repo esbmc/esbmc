@@ -148,7 +148,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(decl);
 
     typet t;
-    if(get_type(fd.getType(), t))
+    if(get_type(fd.getType(), t, true))
       return true;
 
     std::string id, name;
@@ -196,7 +196,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       static_cast<const clang::IndirectFieldDecl &>(decl);
 
     typet t;
-    if(get_type(fd.getType(), t))
+    if(get_type(fd.getType(), t, true))
       return true;
 
     std::string id, name;
@@ -225,7 +225,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::RecordDecl &record =
       static_cast<const clang::RecordDecl &>(decl);
 
-    if(get_struct_union_class(record))
+    if(get_struct_union_class(record, true))
       return true;
 
     break;
@@ -285,7 +285,9 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
-bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
+bool clang_c_convertert::get_struct_union_class(
+  const clang::RecordDecl &rd,
+  bool complete)
 {
   if(rd.isInterface())
   {
@@ -298,46 +300,54 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context. See next comment
-  if(context.find_symbol(id) != nullptr)
+  symbolt *s = context.find_symbol(id);
+  if(!s)
+  {
+    struct_union_typet t;
+    if(rd.isUnion())
+      t = union_typet();
+    else
+      t = struct_typet();
+    t.tag(name);
+    t.incomplete(true);
+
+    locationt location_begin;
+    get_location_from_decl(rd, location_begin);
+
+    symbolt symbol;
+    get_default_symbol(
+      symbol,
+      get_modulename_from_path(location_begin.file().as_string()),
+      t,
+      name,
+      id,
+      location_begin);
+
+    std::string symbol_name = symbol.id.as_string();
+    symbol.is_type = true;
+
+    // We have to add the struct/union/class to the context before converting its
+    // fields because there might be recursive struct/union/class (pointers) and
+    // the code at get_type, case clang::Type::Record, needs to find the correct
+    // type (itself). Note that the type is incomplete at this stage, it doesn't
+    // contain the fields, which are added to the symbol later on this method.
+    s = move_symbol_to_context(symbol);
+  }
+
+  /* Get the symbol's type to continue the conversion - unless it's already
+   * complete or a complete one is not requested (i.e., a symbolic type will
+   * suffice, thereby avoiding infinite recursion) */
+  struct_union_typet &t = to_struct_union_type(s->type);
+  if(!t.incomplete() || !complete)
     return false;
-
-  struct_union_typet t;
-  if(rd.isUnion())
-    t = union_typet();
-  else
-    t = struct_typet();
-  t.tag(name);
-
-  locationt location_begin;
-  get_location_from_decl(rd, location_begin);
-
-  symbolt symbol;
-  get_default_symbol(
-    symbol,
-    get_modulename_from_path(location_begin.file().as_string()),
-    t,
-    name,
-    id,
-    location_begin);
-
-  std::string symbol_name = symbol.id.as_string();
-  symbol.is_type = true;
-
-  // We have to add the struct/union/class to the context before converting its
-  // fields because there might be recursive struct/union/class (pointers) and
-  // the code at get_type, case clang::Type::Record, needs to find the correct
-  // type (itself). Note that the type is incomplete at this stage, it doesn't
-  // contain the fields, which are added to the symbol later on this method.
-  move_symbol_to_context(symbol);
 
   // Don't continue to parse if it doesn't have a complete definition
   // Try to get the definition
-  clang::RecordDecl *rd_def = rd.getDefinition();
+  clang::RecordDecl *rd_def =
+    static_cast<const clang::RecordDecl *>(rd.getCanonicalDecl())
+      ->getDefinition();
   if(!rd_def)
     return false;
-
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
 
   if(get_struct_union_class_fields(*rd_def, t))
     return true;
@@ -373,7 +383,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   else
     add_padding(to_struct_type(t), ns);
 
-  added_symbol.type = t;
+  t.remove(irept::a_incomplete);
   return false;
 }
 
@@ -446,7 +456,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 {
   // Get type
   typet t;
-  if(get_type(vd.getType(), t))
+  if(get_type(vd.getType(), t, true))
     return true;
 
   // Check if we annotated it to be have an infinity size
@@ -599,7 +609,7 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   code_typet type;
 
   // Return type
-  if(get_type(fd.getReturnType(), type.return_type()))
+  if(get_type(fd.getReturnType(), type.return_type(), true))
     return true;
 
   if(fd.isVariadic())
@@ -692,7 +702,7 @@ bool clang_c_convertert::get_function_param(
   exprt &param)
 {
   typet param_type;
-  if(get_type(pd.getOriginalType(), param_type))
+  if(get_type(pd.getOriginalType(), param_type, true))
     return true;
 
   if(param_type.is_array())
@@ -754,10 +764,11 @@ bool clang_c_convertert::get_function_param(
 
 bool clang_c_convertert::get_type(
   const clang::QualType &q_type,
-  typet &new_type)
+  typet &new_type,
+  bool complete)
 {
   const clang::Type &the_type = *q_type.getTypePtrOrNull();
-  if(get_type(the_type, new_type))
+  if(get_type(the_type, new_type, complete))
     return true;
 
   if(q_type.isConstQualified())
@@ -772,7 +783,10 @@ bool clang_c_convertert::get_type(
   return false;
 }
 
-bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
+bool clang_c_convertert::get_type(
+  const clang::Type &the_type,
+  typet &new_type,
+  bool complete)
 {
   switch(the_type.getTypeClass())
   {
@@ -794,7 +808,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::ParenType &pt =
       static_cast<const clang::ParenType &>(the_type);
 
-    if(get_type(pt.getInnerType(), new_type))
+    if(get_type(pt.getInnerType(), new_type, true))
       return true;
 
     break;
@@ -808,7 +822,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::QualType &pointee = pt.getPointeeType();
 
     typet sub_type;
-    if(get_type(pointee, sub_type))
+    if(get_type(pointee, sub_type, false))
       return true;
 
     // Special case, pointers to structs/unions/classes must not
@@ -830,7 +844,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::DecayedType &pt =
       static_cast<const clang::DecayedType &>(the_type);
 
-    if(get_type(pt.getDecayedType(), new_type))
+    if(get_type(pt.getDecayedType(), new_type, false))
       return true;
 
     break;
@@ -852,7 +866,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     }
 
     typet the_type;
-    if(get_type(arr.getElementType(), the_type))
+    if(get_type(arr.getElementType(), the_type, true))
       return true;
 
     new_type = array_typet(
@@ -871,7 +885,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       static_cast<const clang::IncompleteArrayType &>(the_type);
 
     typet sub_type;
-    if(get_type(arr.getElementType(), sub_type))
+    if(get_type(arr.getElementType(), sub_type, true))
       return true;
 
     new_type = array_typet(sub_type, gen_one(index_type()));
@@ -892,7 +906,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
         return true;
 
       typet subtype;
-      if(get_type(arr.getElementType(), subtype))
+      if(get_type(arr.getElementType(), subtype, true))
         return true;
 
       new_type = array_typet(subtype, size_expr);
@@ -916,7 +930,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::QualType ret_type = func.getReturnType();
 
     typet return_type;
-    if(get_type(ret_type, return_type))
+    if(get_type(ret_type, return_type, true))
       return true;
 
     type.return_type() = return_type;
@@ -924,7 +938,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     for(auto const &ptype : func.getParamTypes())
     {
       typet param_type;
-      if(get_type(ptype, param_type))
+      if(get_type(ptype, param_type, true))
         return true;
 
       type.arguments().emplace_back(param_type);
@@ -949,7 +963,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::QualType ret_type = func.getReturnType();
 
     typet return_type;
-    if(get_type(ret_type, return_type))
+    if(get_type(ret_type, return_type, true))
       return true;
 
     type.return_type() = return_type;
@@ -971,7 +985,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     clang::QualType q_typedef_type =
       pt.getDecl()->getUnderlyingType().getCanonicalType();
 
-    if(get_type(q_typedef_type, new_type))
+    if(get_type(q_typedef_type, new_type, complete))
       return true;
 
     break;
@@ -979,17 +993,21 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
   case clang::Type::Record:
   {
-    const clang::RecordDecl &rd =
-      *(static_cast<const clang::RecordType &>(the_type)).getDecl();
-
-    if(get_struct_union_class(rd))
-      return true;
+    const clang::RecordType *rt =
+      &static_cast<const clang::RecordType &>(the_type);
+    const clang::RecordDecl &rd = *rt->getDecl();
 
     std::string id, name;
     get_decl_name(rd, name, id);
 
-    symbolt &s = *context.find_symbol(id);
-    new_type = s.type;
+    if(get_struct_union_class(rd, complete))
+      return true;
+
+    if(complete)
+      new_type = context.find_symbol(id)->type;
+    else
+      new_type = symbol_typet(id);
+
     break;
   }
 
@@ -1004,7 +1022,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::ElaboratedType &et =
       static_cast<const clang::ElaboratedType &>(the_type);
 
-    if(get_type(et.getNamedType(), new_type))
+    if(get_type(et.getNamedType(), new_type, complete))
       return true;
     break;
   }
@@ -1014,7 +1032,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::TypeOfExprType &tofe =
       static_cast<const clang::TypeOfExprType &>(the_type);
 
-    if(get_type(tofe.desugar(), new_type))
+    if(get_type(tofe.desugar(), new_type, complete))
       return true;
 
     break;
@@ -1025,7 +1043,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::TypeOfType &toft =
       static_cast<const clang::TypeOfType &>(the_type);
 
-    if(get_type(toft.desugar(), new_type))
+    if(get_type(toft.desugar(), new_type, complete))
       return true;
 
     break;
@@ -1037,7 +1055,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       static_cast<const clang::LValueReferenceType &>(the_type);
 
     typet sub_type;
-    if(get_type(lvrt.getPointeeTypeAsWritten(), sub_type))
+    if(get_type(lvrt.getPointeeTypeAsWritten(), sub_type, false))
       return true;
 
     if(sub_type.is_struct() || sub_type.is_union())
@@ -1056,7 +1074,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::MacroQualifiedType &macro =
       static_cast<const clang::MacroQualifiedType &>(the_type);
 
-    if(get_type(macro.desugar(), new_type))
+    if(get_type(macro.desugar(), new_type, complete))
       return true;
 
     break;
@@ -1067,7 +1085,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::AttributedType &att =
       static_cast<const clang::AttributedType &>(the_type);
 
-    if(get_type(att.desugar(), new_type))
+    if(get_type(att.desugar(), new_type, complete))
       return true;
 
     break;
@@ -1078,7 +1096,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::DecltypeType &dt =
       static_cast<const clang::DecltypeType &>(the_type);
 
-    if(get_type(dt.getUnderlyingType(), new_type))
+    if(get_type(dt.getUnderlyingType(), new_type, complete))
       return true;
 
     break;
@@ -1090,7 +1108,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       static_cast<const clang::AtomicType &>(the_type);
 
     // FIXME: we need some representation of atomic types in irep2
-    if(get_type(dt.getValueType(), new_type))
+    if(get_type(dt.getValueType(), new_type, complete))
       return true;
 
     break;
@@ -1100,7 +1118,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
   {
     const clang::AutoType &at = static_cast<const clang::AutoType &>(the_type);
 
-    if(get_type(at.desugar(), new_type))
+    if(get_type(at.desugar(), new_type, complete))
       return true;
 
     break;
@@ -1141,7 +1159,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       static_cast<const clang::ExtVectorType &>(the_type);
 
     typet the_type;
-    if(get_type(vec.getElementType(), the_type))
+    if(get_type(vec.getElementType(), the_type, true))
       return true;
 
     new_type = vector_typet(
@@ -1158,7 +1176,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       static_cast<const clang::VectorType &>(the_type);
 
     typet the_type;
-    if(get_type(vec.getElementType(), the_type))
+    if(get_type(vec.getElementType(), the_type, true))
       return true;
 
     new_type = vector_typet(
@@ -1458,7 +1476,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::ArraySubscriptExpr &>(stmt);
 
     typet t;
-    if(get_type(arr.getType(), t))
+    if(get_type(arr.getType(), t, true))
       return true;
 
     exprt array;
@@ -1520,21 +1538,15 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       assert(unary.getKind() == clang::UETT_SizeOf);
 
       typet t;
-      if(get_type(unary.getType(), t))
+      if(get_type(unary.getType(), t, true))
         return true;
 
       new_expr = exprt("sizeof", t);
     }
 
     typet size_type;
-    if(get_type(unary.getTypeOfArgument(), size_type))
+    if(get_type(unary.getTypeOfArgument(), size_type, true))
       return true;
-
-    if(size_type.is_struct() || size_type.is_union())
-    {
-      struct_union_typet t = to_struct_union_type(size_type);
-      size_type = symbol_typet("tag-" + t.tag().as_string());
-    }
 
     new_expr.set("#c_sizeof_type", size_type);
     break;
@@ -1555,7 +1567,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     typet type;
-    if(get_type(function_call.getType(), type))
+    if(get_type(function_call.getType(), type, true))
       return true;
 
     side_effect_expr_function_callt call;
@@ -1671,7 +1683,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::StmtExpr &>(stmt);
 
     typet t;
-    if(get_type(stmtExpr.getType(), t))
+    if(get_type(stmtExpr.getType(), t, true))
       return true;
 
     exprt subStmt;
@@ -1691,7 +1703,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::GNUNullExpr &>(stmt);
 
     typet t;
-    if(get_type(gnun.getType(), t))
+    if(get_type(gnun.getType(), t, true))
       return true;
 
     new_expr = gen_zero(t);
@@ -1743,7 +1755,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     typet t;
-    if(get_type(ternary_if.getType(), t))
+    if(get_type(ternary_if.getType(), t, true))
       return true;
 
     exprt if_expr("if", t);
@@ -1768,7 +1780,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     typet t;
-    if(get_type(ternary_if.getType(), t))
+    if(get_type(ternary_if.getType(), t, true))
       return true;
 
     side_effect_exprt gcc_ternary("gcc_conditional_expression", t);
@@ -1786,7 +1798,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     side_effect_expr_function_callt fake_call;
     code_typet t;
-    if(get_type(convertVector.getType(), t.return_type()))
+    if(get_type(convertVector.getType(), t.return_type(), true))
       return true;
 
     assert(t.return_type().is_vector());
@@ -1814,7 +1826,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     side_effect_expr_function_callt fake_call;
     code_typet t;
-    if(get_type(shuffle.getType(), t.return_type()))
+    if(get_type(shuffle.getType(), t.return_type(), true))
       return true;
 
     assert(t.return_type().is_vector());
@@ -1843,10 +1855,13 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::InitListExpr &>(stmt);
 
     typet t;
-    if(get_type(init_stmt.getType(), t))
+    if(get_type(init_stmt.getType(), t, true))
       return true;
 
     exprt inits;
+
+    /* need a complete type for initialization */
+    assert(!t.incomplete());
 
     // Structs/unions/arrays put the initializer on operands
     if(t.is_struct() || t.is_union() || t.is_array() || t.is_vector())
@@ -1909,7 +1924,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::ImplicitValueInitExpr &>(stmt);
 
     typet t;
-    if(get_type(init_stmt.getType(), t))
+    if(get_type(init_stmt.getType(), t, true))
       return true;
 
     new_expr = gen_zero(t);
@@ -1936,7 +1951,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     typet t;
-    if(get_type(vaa.getType(), t))
+    if(get_type(vaa.getType(), t, true))
       return true;
 
     exprt vaa_expr("builtin_va_arg", t);
@@ -2326,7 +2341,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
 
     typet return_type;
-    if(get_type(current_functionDecl->getReturnType(), return_type))
+    if(get_type(current_functionDecl->getReturnType(), return_type, true))
       return true;
 
     code_returnt ret_expr;
@@ -2407,7 +2422,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
     get_decl_name(*nd, name, id);
 
     typet type;
-    if(get_type(nd->getType(), type))
+    if(get_type(nd->getType(), type, false))
       return true;
 
     new_expr = exprt("symbol", type);
@@ -2437,7 +2452,7 @@ bool clang_c_convertert::get_cast_expr(
     return true;
 
   typet type;
-  if(get_type(cast.getType(), type))
+  if(get_type(cast.getType(), type, true))
     return true;
 
   switch(cast.getCastKind())
@@ -2509,7 +2524,7 @@ bool clang_c_convertert::get_unary_operator_expr(
   exprt &new_expr)
 {
   typet uniop_type;
-  if(get_type(uniop.getType(), uniop_type))
+  if(get_type(uniop.getType(), uniop_type, true))
     return true;
 
   exprt unary_sub;
@@ -2594,7 +2609,7 @@ bool clang_c_convertert::get_binary_operator_expr(
     return true;
 
   typet t;
-  if(get_type(binop.getType(), t))
+  if(get_type(binop.getType(), t, true))
     return true;
 
   switch(binop.getOpcode())
@@ -2775,7 +2790,7 @@ bool clang_c_convertert::get_compound_assign_expr(
   if(get_expr(*compop.getRHS(), rhs))
     return true;
 
-  if(get_type(compop.getType(), new_expr.type()))
+  if(get_type(compop.getType(), new_expr.type(), true))
     return true;
 
   if(!lhs.type().is_pointer())
@@ -2794,7 +2809,7 @@ bool clang_c_convertert::get_atomic_expr(
 
   // Get the type
   code_typet t;
-  if(get_type(atm.getType(), t.return_type()))
+  if(get_type(atm.getType(), t.return_type(), true))
     return true;
   fake_call.type() = t;
 

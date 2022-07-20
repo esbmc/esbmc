@@ -539,6 +539,16 @@ void clang_c_adjust::adjust_type(typet &type)
     if(symbol.is_macro)
       type = symbol.type; // overwrite
   }
+  else if(type.id() == "struct" && type.incomplete())
+  {
+    type.id("incomplete_struct");
+    type.remove(irept::a_incomplete);
+  }
+  else if(type.id() == "union" && type.incomplete())
+  {
+    type.id("incomplete_union");
+    type.remove(irept::a_incomplete);
+  }
 }
 
 void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)

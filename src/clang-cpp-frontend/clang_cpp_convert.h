@@ -31,9 +31,11 @@ protected:
    */
   bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
 
-  bool get_type(const clang::QualType &type, typet &new_type) override;
+  bool get_type(const clang::QualType &type, typet &new_type, bool complete)
+    override;
 
-  bool get_type(const clang::Type &the_type, typet &new_type) override;
+  bool get_type(const clang::Type &the_type, typet &new_type, bool complete)
+    override;
 
   bool get_function(const clang::FunctionDecl &fd, exprt &new_expr) override;
 
@@ -66,7 +68,8 @@ protected:
     const clang::CXXMethodDecl &fd,
     code_typet::argumentst &params);
 
-  bool get_struct_union_class(const clang::RecordDecl &rd) override;
+  bool
+  get_struct_union_class(const clang::RecordDecl &rd, bool complete) override;
 
   bool get_var(const clang::VarDecl &vd, exprt &new_expr) override;
 

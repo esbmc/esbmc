@@ -18,7 +18,7 @@ bool clang_c_convertert::convert_character_literal(
   exprt &dest)
 {
   typet type;
-  if(get_type(char_literal.getType(), type))
+  if(get_type(char_literal.getType(), type, true))
     return true;
 
   dest = constant_exprt(
@@ -34,7 +34,7 @@ bool clang_c_convertert::convert_string_literal(
   exprt &dest)
 {
   typet type;
-  if(get_type(string_literal.getType(), type))
+  if(get_type(string_literal.getType(), type, true))
     return true;
 
   string_constantt string(string_literal.getBytes().str(), type);
@@ -48,7 +48,7 @@ bool clang_c_convertert::convert_integer_literal(
   exprt &dest)
 {
   typet type;
-  if(get_type(integer_literal.getType(), type))
+  if(get_type(integer_literal.getType(), type, true))
     return true;
 
   assert(type.is_unsignedbv() || type.is_signedbv());
@@ -134,7 +134,7 @@ bool clang_c_convertert::convert_float_literal(
   exprt &dest)
 {
   typet type;
-  if(get_type(floating_literal.getType(), type))
+  if(get_type(floating_literal.getType(), type, true))
     return true;
 
   // Get the value and convert it to string
