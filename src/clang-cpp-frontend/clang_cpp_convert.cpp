@@ -705,7 +705,7 @@ bool clang_cpp_convertert::get_constructor_call(
 
   exprt object;
   const clang::Decl *objectDecl = it->get<clang::Decl>();
-  if (!objectDecl)
+  if(!objectDecl)
   {
     // initialization with "new" keyword
     object = exprt("new_object", type);
