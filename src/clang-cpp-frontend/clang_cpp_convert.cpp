@@ -720,18 +720,9 @@ bool clang_cpp_convertert::get_constructor_call(
 
   call.set("constructor", 1);
 
-  // Now, if we built a new object, then we must build a temporary
-  // object around it
-  if(objectDecl != nullptr)
-  {
-    new_expr.swap(call);
-  }
-  else
-  {
-    new_expr = side_effect_exprt("temporary_object", type);
-    convert_expression_to_code(call);
-    new_expr.initializer(call);
-  }
+  // We don't build a temporary obejct around it.
+  // We follow the old cpp frontend to just add the ctor function call.
+  new_expr.swap(call);
 
   return false;
 }
