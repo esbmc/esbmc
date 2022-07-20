@@ -740,6 +740,10 @@ void goto_convertt::remove_cpp_new(
   goto_programt &dest,
   bool result_is_used)
 {
+  // For side effect with 'cpp_new' statement, expr refers to the side effect that
+  // contains an initializer. Technically, this function converts the cpp_new side effect
+  // and replaces it with a new symbol if `result_is_used` is true. It does NOT simply remove
+  // the side effect node in the exprt tree.
   codet call;
 
   symbolt new_symbol;
@@ -756,7 +760,7 @@ void goto_convertt::remove_cpp_new(
 
   call = code_assignt(symbol_expr(new_symbol), expr);
 
-  if(result_is_used)
+  if(result_is_used) // e.g. used to construct an assignment 'code_assignt'
     expr = symbol_expr(new_symbol);
   else
     expr.make_nil();
