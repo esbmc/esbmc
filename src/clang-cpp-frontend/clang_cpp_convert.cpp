@@ -703,15 +703,10 @@ bool clang_cpp_convertert::get_constructor_call(
   // Try to get the object that this constructor is constructing
   auto it = ASTContext->getParents(constructor_call).begin();
 
-  exprt object;
+  //exprt object;
   const clang::Decl *objectDecl = it->get<clang::Decl>();
-  if(!objectDecl)
-  {
-    // initialization with "new" keyword
-    object = exprt("new_object", type);
-    object.cmt_lvalue(true);
-    call.arguments().push_back(object);
-  }
+
+  //call.arguments().push_back(object);
 
   // Do args
   for(const clang::Expr *arg : constructor_call.arguments())
@@ -733,7 +728,6 @@ bool clang_cpp_convertert::get_constructor_call(
   }
   else
   {
-    // initialization with "new" keyword
     new_expr = side_effect_exprt("temporary_object", type);
     convert_expression_to_code(call);
     new_expr.initializer(call);
