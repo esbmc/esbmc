@@ -660,7 +660,7 @@ void goto_convertt::remove_function_call(
   {
     assert(expr.operands().size() == 2);
     code_function_callt call;
-    call.function() = expr.op0(); // the function symbol
+    call.function() = expr.op0();             // the function symbol
     call.arguments() = expr.op1().operands(); // function arguments
     call.location() = expr.location();
     call.lhs().make_nil();
