@@ -704,7 +704,7 @@ bool clang_cpp_convertert::get_constructor_call(
   auto it = ASTContext->getParents(constructor_call).begin();
 
   const clang::Decl *objectDecl = it->get<clang::Decl>();
-  if (!objectDecl)
+  if(!objectDecl)
   {
     address_of_exprt tmp_expr;
     tmp_expr.type() = pointer_typet();
