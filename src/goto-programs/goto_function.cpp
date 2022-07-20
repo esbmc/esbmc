@@ -169,6 +169,12 @@ void goto_functionst::dump() const
   log_debug("{}", oss.str());
 }
 
+size_t goto_functionst::get_function_map_size()
+{
+  printf("function_map size: %lu\n", function_map.size());
+  return function_map.size();
+}
+
 void goto_functionst::output(const namespacet &ns, std::ostream &out) const
 {
   for(const auto &it : function_map)

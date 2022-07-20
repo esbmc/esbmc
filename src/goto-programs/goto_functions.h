@@ -41,6 +41,7 @@ class goto_functionst
 public:
   typedef std::map<irep_idt, goto_functiont> function_mapt;
   function_mapt function_map;
+  size_t get_function_map_size();
 
   void clear()
   {
