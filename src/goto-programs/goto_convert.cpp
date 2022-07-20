@@ -612,6 +612,9 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   exprt initializer = nil_exprt();
   if(new_code.operands().size() == 2)
   {
+    // Example of an codet decl statement with 2 operands is:
+    // "t2 *p = new t2;" where the op0 refers to the RHS pointer symbol
+    // and op1 refers to the LHS size effect (initializer)
     initializer = new_code.op1();
 
     // just resize the vector, this will get rid of op1
@@ -634,6 +637,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   if(!initializer.is_nil())
   {
     goto_programt sideeffects;
+    // the side effect is not just removed. Actually, it's converted and removed.
     remove_sideeffects(initializer, sideeffects);
     dest.destructive_append(sideeffects);
 
