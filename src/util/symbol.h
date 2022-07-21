@@ -22,6 +22,9 @@ public:
   // global use
   bool is_type, is_macro, is_parameter;
 
+  // Used by the linker
+  bool odr_override;
+
   // ANSI-C
   bool lvalue, static_lifetime, file_local, is_extern;
 

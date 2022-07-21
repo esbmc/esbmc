@@ -12,7 +12,7 @@ void symbolt::clear()
   value.make_nil();
   location.make_nil();
   lvalue = static_lifetime = file_local = is_extern = is_type = is_parameter =
-    is_macro = false;
+    is_macro = odr_override = false;
   id = module = name = mode = "";
 }
 
@@ -33,6 +33,7 @@ void symbolt::swap(symbolt &b)
   SYM_SWAP2(is_type);
   SYM_SWAP2(is_macro);
   SYM_SWAP2(is_parameter);
+  SYM_SWAP2(odr_override);
   SYM_SWAP2(lvalue);
   SYM_SWAP2(static_lifetime);
   SYM_SWAP2(file_local);
@@ -72,6 +73,8 @@ void symbolt::show(std::ostream &out) const
     out << " extern";
   if(is_macro)
     out << " macro";
+  if(odr_override)
+    out << " odr-override";
 
   out << "\n";
   out << "Location....: " << location << "\n";
@@ -110,6 +113,8 @@ void symbolt::to_irep(irept &dest) const
     dest.file_local(true);
   if(is_extern)
     dest.is_extern(true);
+  if(odr_override)
+    dest.odr_override(true);
 }
 
 void symbolt::from_irep(const irept &src)
@@ -126,6 +131,7 @@ void symbolt::from_irep(const irept &src)
   is_type = src.is_type();
   is_macro = src.is_macro();
   is_parameter = src.is_parameter();
+  odr_override = src.odr_override();
   lvalue = src.lvalue();
   static_lifetime = src.static_lifetime();
   file_local = src.file_local();
