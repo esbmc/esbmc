@@ -118,7 +118,8 @@ void c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
     irep_idt a = fst.type.id(), b = snd.type.id();
     return (a == "incomplete_struct" && b == "struct") ||
            (a == "incomplete_union" && b == "union") ||
-           (a == "incomplete_array" && b == "array");
+           (a == "incomplete_array" && b == "array") ||
+           (!fst.odr_override && snd.odr_override);
   };
 
   // check if it is the same -- use base_type_eq
