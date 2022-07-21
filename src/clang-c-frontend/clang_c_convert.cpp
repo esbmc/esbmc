@@ -116,7 +116,9 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::Var:
   {
     const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(decl);
-    return get_var(vd, new_expr);
+    if(get_var(vd, new_expr))
+      return true;
+    break;
   }
 
   // Declaration of function's parameter
@@ -124,7 +126,9 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   {
     const clang::ParmVarDecl &param =
       static_cast<const clang::ParmVarDecl &>(decl);
-    return get_function_param(param, new_expr);
+    if(get_function_param(param, new_expr))
+      return true;
+    break;
   }
 
   // Declaration of functions
@@ -137,7 +141,9 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     // In C++ mode, methods are initially parsed as function and
     // need to be added to the class scope
     exprt dummy;
-    return get_function(fd, dummy);
+    if(get_function(fd, dummy))
+      return true;
+    break;
   }
 
   // Field inside a struct/union
