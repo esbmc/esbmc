@@ -349,16 +349,18 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   // the code at get_type, case clang::Type::Record, needs to find the correct
   // type (itself). Note that the type is incomplete at this stage, it doesn't
   // contain the fields, which are added to the symbol later on this method.
-  move_symbol_to_context(symbol);
+  symbolt *s = move_symbol_to_context(symbol);
+
+  for_decl_annot(rd, [s](const std::string &annot) {
+    if(annot == "__ESBMC_ODR-override")
+      s->odr_override = true;
+  });
 
   // Don't continue to parse if it doesn't have a complete definition
   // Try to get the definition
   clang::RecordDecl *rd_def = rd.getDefinition();
   if(!rd_def)
     return false;
-
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
 
   // We have to add fields before methods as the fields are likely to be used
   // in the methods
@@ -397,7 +399,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     add_padding(to_struct_type(t), ns);
 
   t.location() = location_begin;
-  added_symbol.type = t;
+  s->type = t;
   return false;
 }
 
