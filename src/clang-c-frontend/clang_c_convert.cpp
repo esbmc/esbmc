@@ -293,6 +293,16 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
+template <typename Func>
+static void for_decl_annot(const clang::Decl &decl, Func func)
+{
+  if(!decl.hasAttrs())
+    return;
+  for(auto const &attr : decl.getAttrs())
+    if(const auto *a = llvm::dyn_cast<clang::AnnotateAttr>(attr))
+      func(a->getAnnotation().str());
+}
+
 bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
   if(rd.isInterface())
@@ -433,23 +443,15 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
   // Check if we annotated it to be have an infinity size
   bool no_slice = false;
-  if(vd.hasAttrs())
-  {
-    for(auto const &attr : vd.getAttrs())
+  for_decl_annot(vd, [&t,&no_slice](const std::string &annot) {
+    if(annot == "__ESBMC_inf_size")
     {
-      if(const auto *a = llvm::dyn_cast<clang::AnnotateAttr>(attr))
-      {
-        const std::string &name = a->getAnnotation().str();
-        if(name == "__ESBMC_inf_size")
-        {
-          assert(t.is_array());
-          t.size(exprt("infinity", uint_type()));
-        }
-        else if(name == "__ESBMC_no_slice")
-          no_slice = true;
-      }
+      assert(t.is_array());
+      t.size(exprt("infinity", uint_type()));
     }
-  }
+    else if(annot == "__ESBMC_no_slice")
+      no_slice = true;
+  });
 
   std::string id, name;
   get_decl_name(vd, name, id);
