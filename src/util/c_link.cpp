@@ -114,32 +114,22 @@ void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)
 
 void c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
 {
+  auto worse = [](const symbolt &fst, const symbolt &snd){
+    irep_idt a = fst.type.id(), b = snd.type.id();
+    return (a == "incomplete_struct" && b == "struct") ||
+           (a == "incomplete_union" && b == "union") ||
+           (a == "incomplete_array" && b == "array");
+  };
+
   // check if it is the same -- use base_type_eq
   if(!base_type_eq(in_context.type, new_symbol.type, ns))
   {
-    if(
-      in_context.type.id() == "incomplete_struct" &&
-      new_symbol.type.id() == "struct")
+    if(worse(in_context, new_symbol))
     {
       // replace old symbol
       in_context.type = new_symbol.type;
     }
-    else if(
-      in_context.type.id() == "struct" &&
-      new_symbol.type.id() == "incomplete_struct")
-    {
-      // ignore
-    }
-    else if(
-      ns.follow(in_context.type).id() == "incomplete_array" &&
-      ns.follow(new_symbol.type).is_array())
-    {
-      // store new type
-      in_context.type = new_symbol.type;
-    }
-    else if(
-      ns.follow(in_context.type).is_array() &&
-      ns.follow(new_symbol.type).id() == "incomplete_array")
+    else if(worse(new_symbol, in_context))
     {
       // ignore
     }
@@ -257,6 +247,15 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
         in_context.type = new_symbol.type;
       }
       else if(old_type.is_struct() && new_type.id() == "incomplete_struct")
+      {
+        // ignore
+      }
+      else if(old_type.id() == "incomplete_union" && new_type.is_union())
+      {
+        // store new type
+        in_context.type = new_symbol.type;
+      }
+      else if(old_type.is_union() && new_type.id() == "incomplete_union")
       {
         // ignore
       }
