@@ -96,6 +96,17 @@ unsigned goto_symext::argument_assignments(
         {
           rhs = typecast2tc(arg_type, rhs);
         }
+        else if(1)
+        {
+          static size_t unique_idx = 0;
+          type2tc ut = union_type2tc(
+            std::vector<type2tc>{ f_arg_type, f_rhs_type },
+            std::vector<irep_idt>{ "arg", "rhs" },
+            std::vector<irep_idt>{ "arg", "rhs" },
+            "__ESBMC_argument_assign_" + std::to_string(unique_idx++));
+          expr2tc un = constant_union2tc(ut, "rhs", std::vector<expr2tc>{ rhs });
+          rhs = member2tc(arg_type, un, "arg");
+        }
         else
         {
           log_error(
