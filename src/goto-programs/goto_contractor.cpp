@@ -21,6 +21,7 @@ void goto_contractort::get_constraints(goto_functionst goto_functions)
           .get_symbol_name() == "c:@F@__VERIFIER_assert")
       constraint = create_constraint_from_expr2t(
         to_code_function_call2t(ins.code).operands[0]);
+
   }
 }
 
@@ -74,7 +75,6 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
 
   value = to_constant_int2t(side2).as_long() * (neg ? -1 : 1);
 
-  //int index = map->find(symbol->get_symbol_name());
   if(map.find(symbol->get_symbol_name()) == CspMap::NOT_FOUND)
     return;
   switch(expr->expr_id)
@@ -98,8 +98,16 @@ void goto_contractort::parse_intervals(irep_container<expr2t> expr)
 void goto_contractort::insert_assume(goto_functionst goto_functions)
 {
   loopst loop;
+  unsigned int last_loc = 0;
   for(auto &function_loop : function_loops)
-    loop = function_loop;
+
+    if(
+      last_loc <
+      function_loop.get_original_loop_head()->location.line().get_no())
+    {
+      loop = function_loop;
+      last_loc = loop.get_original_loop_head()->location.line().get_no();
+    }
 
   auto loop_exit = loop.get_original_loop_exit();
 
@@ -112,14 +120,14 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
     symbol2tc X = var.second.getSymbol();
     if(var.second.isIntervalChanged())
     {
-      auto lb = create_value_expr(var.second.getInterval().lb(), int_type2());
+      /*auto lb = create_value_expr(var.second.getInterval().lb(), int_type2());
       auto cond = create_greaterthanequal_relation(X, lb);
       goto_programt tmp_e;
       goto_programt::targett e = tmp_e.add_instruction(ASSUME);
       e->inductive_step_instruction = false;
       e->guard = cond;
       e->location = loop_exit->location;
-      goto_function.body.destructive_insert(loop_exit, tmp_e);
+      goto_function.body.destructive_insert(loop_exit, tmp_e);*/
 
       auto ub = create_value_expr(var.second.getInterval().ub(), int_type2());
       auto cond2 = create_lessthanequal_relation(X, ub);
@@ -186,8 +194,13 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
 {
   ibex::NumConstraint *c;
   if(
-    is_arith_expr(expr) || is_constant_number(expr) || is_symbol2t(expr) ||
-    is_notequal2t(expr) || is_equality2t(expr))
+    is_arith_expr(get_base_object(expr)) ||
+    is_constant_number(get_base_object(expr)) ||
+    is_symbol2t(get_base_object(expr)) ||
+    is_notequal2t(get_base_object(expr)) ||
+    is_equality2t(get_base_object(expr)) ||
+    is_not2t(get_base_object(expr)) ||
+    is_modulus2t(get_base_object(expr)))
   {
     log_status("Expression is complex, skipping this assert");
     return nullptr;
