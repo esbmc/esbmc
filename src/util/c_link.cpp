@@ -124,8 +124,8 @@ void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)
 
 bool c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
 {
-  auto worse = [](const symbolt &fst, const symbolt &snd){
-    irep_idt a = fst.type.id(), b = snd.type.id();
+  auto worse = [this](const symbolt &fst, const symbolt &snd){
+    irep_idt a = ns.follow(fst.type).id(), b = ns.follow(snd.type).id();
     return (a == "incomplete_struct" && b == "struct") ||
            (a == "incomplete_union" && b == "union") ||
            (a == "incomplete_array" && b == "array") ||
