@@ -67,8 +67,8 @@ public:
 
 protected:
   void duplicate(symbolt &in_context, symbolt &new_symbol);
-  void duplicate_type(symbolt &in_context, symbolt &new_symbol);
-  void duplicate_symbol(symbolt &in_context, symbolt &new_symbol);
+  bool duplicate_type(symbolt &in_context, symbolt &new_symbol);
+  bool duplicate_symbol(symbolt &in_context, symbolt &new_symbol);
   void move(symbolt &new_symbol);
 
   // overload to use language specific syntax
@@ -86,6 +86,8 @@ protected:
   fix_symbolt symbol_fixer;
 
   unsigned type_counter;
+
+  bool context_needs_fixing = false;
 };
 
 std::string c_linkt::to_string(const exprt &expr)
@@ -106,13 +108,21 @@ void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)
     abort();
   }
 
-  if(new_symbol.is_type)
-    duplicate_type(in_context, new_symbol);
-  else
-    duplicate_symbol(in_context, new_symbol);
+  if(new_symbol.is_type && duplicate_type(in_context, new_symbol))
+  {
+    // symbol_fixer.insert(in_context.id, new_symbol.type);
+    context_needs_fixing = true;
+    fprintf(stderr, "c_link: context needs fixing for type %s\n", in_context.id.c_str());
+  }
+  else if(duplicate_symbol(in_context, new_symbol))
+  {
+    // symbol_fixer.insert(in_context.id, new_symbol.value);
+    context_needs_fixing = true;
+    fprintf(stderr, "c_link: context needs fixing for expr %s\n", in_context.id.c_str());
+  }
 }
 
-void c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
+bool c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
 {
   auto worse = [](const symbolt &fst, const symbolt &snd){
     irep_idt a = fst.type.id(), b = snd.type.id();
@@ -123,34 +133,37 @@ void c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
   };
 
   // check if it is the same -- use base_type_eq
-  if(!base_type_eq(in_context.type, new_symbol.type, ns))
+  if(base_type_eq(in_context.type, new_symbol.type, ns))
+    return false;
+
+  if(worse(in_context, new_symbol))
   {
-    if(worse(in_context, new_symbol))
-    {
-      // replace old symbol
-      in_context.type = new_symbol.type;
-    }
-    else if(worse(new_symbol, in_context))
-    {
-      // ignore
-    }
-    else
-    {
-      // rename, there are no type clashes in C
-      irep_idt old_identifier = new_symbol.id;
-
-      do
-      {
-        irep_idt new_identifier =
-          id2string(old_identifier) + "#link" + i2string(type_counter++);
-
-        new_symbol.id = new_identifier;
-      } while(context.move(new_symbol));
-    }
+    // replace old symbol
+    in_context.type = new_symbol.type;
+    return true;
   }
+
+  if(worse(new_symbol, in_context))
+  {
+    // ignore
+    return false;
+  }
+
+  // rename, there are no type clashes in C
+  irep_idt old_identifier = new_symbol.id;
+
+  do
+  {
+    irep_idt new_identifier =
+      id2string(old_identifier) + "#link" + i2string(type_counter++);
+
+    new_symbol.id = new_identifier;
+  } while(context.move(new_symbol));
+
+  return true;
 }
 
-void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
+bool c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
 {
   // see if it is a function or a variable
 
@@ -181,43 +194,48 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
 
     // care about code
 
-    if(!new_symbol.value.is_nil())
+    if(new_symbol.value.is_nil())
+      return false;
+
+    if(in_context.value.is_nil())
     {
-      if(in_context.value.is_nil())
-      {
-        // the one with body wins!
-        in_context.value.swap(new_symbol.value);
-        in_context.type.swap(new_symbol.type); // for argument identifiers
-      }
-      else if(in_context.type.inlined())
-      {
-        // ok
-      }
-      else if(base_type_eq(in_context.type, new_symbol.type, ns))
-      {
-        // keep the one in in_context -- libraries come last!
-        log_warning(
-          "warning: function `{}' in module `{}' "
-          "is shadowed by a definition in module `{}'",
-          in_context.name,
-          new_symbol.module,
-          in_context.module);
-      }
-      else
-      {
-        log_error(
-          "error: duplicate definition of function `{}'\n"
-          "In module `{}' and module `{}'\n"
-          "Location: {}",
-          in_context.name,
-          in_context.module,
-          new_symbol.value.location());
-      }
+      // the one with body wins!
+      fprintf(stderr, "c_link: overwriting empty %s in context\n", new_symbol.id.c_str());
+      // new_symbol.dump();
+      in_context.value.swap(new_symbol.value);
+      in_context.type.swap(new_symbol.type); // for argument identifiers
+      return false;
     }
+    if(in_context.type.inlined())
+    {
+      // ok
+      return false;
+    }
+    if(base_type_eq(in_context.type, new_symbol.type, ns))
+    {
+      // keep the one in in_context -- libraries come last!
+      log_warning(
+        "warning: function `{}' in module `{}' "
+        "is shadowed by a definition in module `{}'",
+        in_context.name,
+        new_symbol.module,
+        in_context.module);
+      return false;
+    }
+
+    log_error(
+      "error: duplicate definition of function `{}'\n"
+      "In module `{}' and module `{}'\n"
+      "Location: {}",
+      in_context.name,
+      in_context.module,
+      new_symbol.value.location());
+    abort();
   }
   else
   {
     // both are variables
+    bool changed = false;
 
     if(!base_type_eq(in_context.type, new_symbol.type, ns))
     {
@@ -228,11 +246,13 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       {
         // store new type
         in_context.type = new_symbol.type;
+        changed = true;
       }
       else if(old_type.is_pointer() && new_type.is_array())
       {
         // store new type
         in_context.type = new_symbol.type;
+        changed = true;
       }
       else if(old_type.is_array() && new_type.is_pointer())
       {
@@ -246,6 +266,7 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       {
         // store new type
         in_context.type = new_symbol.type;
+        changed = true;
       }
       else if(old_type.is_struct() && new_type.id() == "incomplete_struct")
       {
@@ -255,6 +276,7 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       {
         // store new type
         in_context.type = new_symbol.type;
+        changed = true;
       }
       else if(old_type.is_union() && new_type.id() == "incomplete_union")
       {
@@ -313,6 +335,8 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
         abort();
       }
     }
+
+    return changed;
   }
 }
 
@@ -369,6 +393,13 @@ void c_linkt::typecheck()
     symbol_fixer.fix_symbol(s);
     move(s);
   });
+
+  if(context_needs_fixing)
+    context.Foreach_operand([this](symbolt &s){
+      symbol_fixer.replace(s.type);
+      if(!s.is_type)
+        symbol_fixer.replace(s.value);
+    });
 }
 
 void c_linkt::move(symbolt &new_symbol)
