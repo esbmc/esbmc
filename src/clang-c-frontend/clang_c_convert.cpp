@@ -45,10 +45,7 @@ clang_c_convertert::clang_c_convertert(
 
 bool clang_c_convertert::convert()
 {
-  if(convert_top_level_decl())
-    return true;
-
-  return false;
+  return convert_top_level_decl();
 }
 
 bool clang_c_convertert::convert_builtin_types()
@@ -77,15 +74,18 @@ bool clang_c_convertert::convert_top_level_decl()
   for(auto const &translation_unit : ASTs)
   {
     // Update ASTContext as it changes for each source file
-    ASTContext = &(*translation_unit).getASTContext();
+    ASTContext = &translation_unit->getASTContext();
+
+    current_block = nullptr;
+    current_functionDecl = nullptr;
 
     // This is the whole translation unit. We don't represent it internally
     exprt dummy_decl;
     if(get_decl(*ASTContext->getTranslationUnitDecl(), dummy_decl))
       return true;
-  }
 
-  assert(current_functionDecl == nullptr);
+    assert(current_functionDecl == nullptr);
+  }
 
   return false;
 }
