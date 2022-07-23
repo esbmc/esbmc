@@ -38,12 +38,13 @@ typedef union __attribute__((annotate("__ESBMC_ODR-override")))
    unsigned long int tid;
 } pthread_t;
 
+#ifndef __have_pthread_attr_t
 typedef union __attribute__((annotate("__ESBMC_ODR-override")))
 {
   long int __align;
 } pthread_attr_t;
-
-
+# define __have_pthread_attr_t 1
+#endif
 
 typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
