@@ -29,8 +29,13 @@ public:
   const symbolt *lookup(const irep_idt &name) const override
   {
     const symbolt *s = namespacet::lookup(name);
+    const symbolt *t = second.lookup(name);
     if(!s)
-      s = second.lookup(name);
+      return t;
+    if(!t)
+      return s;
+    if(s->odr_override != t->odr_override)
+      return s->odr_override ? s : t;
     return s;
   }
 };
