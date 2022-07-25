@@ -575,7 +575,8 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   // A compiler-generated default constructor is considered implicit, but we have
   // to parse it.
   auto isContructorOrDestructor = [](const clang::FunctionDecl &fd) {
-    return fd.getKind() == clang::Decl::CXXConstructor || fd.getKind() == clang::Decl::CXXDestructor;
+    return fd.getKind() == clang::Decl::CXXConstructor ||
+           fd.getKind() == clang::Decl::CXXDestructor;
   };
 
   if(fd.isImplicit() && !isContructorOrDestructor(fd))
