@@ -76,7 +76,13 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc alloc_arr_2;
     migrate_expr(symbol_expr(*ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
 
-    expr = index2tc(get_bool_type(), alloc_arr_2, obj_expr);
+    if(is_symbol2t(obj.value))
+      expr = index2tc(get_bool_type(), alloc_arr_2, obj_expr);
+    else
+    {
+      index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
+      expr = not2tc(index_expr);
+    }
   }
   else if(is_dynamic_size2t(expr))
   {
