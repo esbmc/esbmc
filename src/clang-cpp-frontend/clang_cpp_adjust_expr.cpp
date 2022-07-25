@@ -17,15 +17,15 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else if(statement == "cpp_delete" || statement == "cpp_delete[]")
   {
-      code_function_callt destructor = get_destructor(ns, expr.type());
-      if(destructor.is_not_nil())
-      {
-        exprt new_object("new_object", expr.type());
-        new_object.cmt_lvalue(true);
+    code_function_callt destructor = get_destructor(ns, expr.type());
+    if(destructor.is_not_nil())
+    {
+      exprt new_object("new_object", expr.type());
+      new_object.cmt_lvalue(true);
 
-        destructor.arguments().push_back(address_of_exprt(new_object));
-        expr.set("destructor", destructor);
-      }
+      destructor.arguments().push_back(address_of_exprt(new_object));
+      expr.set("destructor", destructor);
+    }
   }
   else if(statement == "temporary_object")
   {
