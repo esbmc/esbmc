@@ -335,7 +335,7 @@ expr2cppt::convert_code_cpp_delete(const exprt &src, unsigned indent)
 
   std::string tmp = convert(src.op0());
 
-  dest += tmp + ";\n";
+  dest += tmp + ";";
 
   return dest;
 }
@@ -344,16 +344,22 @@ std::string expr2cppt::convert(const exprt &src, unsigned &precedence)
 {
   if(src.id() == "cpp-this")
     return convert_cpp_this(src, precedence = 15);
+
   if(
     src.id() == "sideeffect" &&
     (src.statement() == "cpp_new" || src.statement() == "cpp_new[]"))
     return convert_cpp_new(src, precedence = 15);
-  else if(src.id() == "unassigned")
+
+  if(src.id() == "cpp_delete" || src.id() == "cpp_delete[]")
+    return convert_code_cpp_delete(src, precedence = 0);
+
+  if(src.id() == "unassigned")
     return "?";
-  else if(src.id() == "pod_constructor")
+
+  if(src.id() == "pod_constructor")
     return "pod_constructor";
-  else
-    return expr2ct::convert(src, precedence);
+
+  return expr2ct::convert(src, precedence);
 }
 
 std::string expr2cppt::convert_code(const codet &src, unsigned indent)
