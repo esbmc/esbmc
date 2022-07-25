@@ -1,5 +1,6 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/c_sizeof.h>
+#include <util/destructor.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)
@@ -16,7 +17,15 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else if(statement == "cpp_delete" || statement == "cpp_delete[]")
   {
-    // nothing
+      code_function_callt destructor = get_destructor(ns, expr.type());
+      if(destructor.is_not_nil())
+      {
+        exprt new_object("new_object", expr.type());
+        new_object.cmt_lvalue(true);
+
+        destructor.arguments().push_back(address_of_exprt(new_object));
+        expr.set("destructor", destructor);
+      }
   }
   else if(statement == "temporary_object")
   {
