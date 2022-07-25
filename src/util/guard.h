@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Guard Data Structure
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_GUARD_H
 #define CPROVER_GUARD_H
 

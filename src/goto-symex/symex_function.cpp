@@ -1,12 +1,3 @@
-/*******************************************************************\
-
-   Module: Symbolic Execution of ANSI-C
-
-   Author: Daniel Kroening, kroening@kroening.com Lucas Cordeiro,
-     lcc08r@ecs.soton.ac.uk
-
-\*******************************************************************/
-
 #include <algorithm>
 #include <cassert>
 #include <goto-symex/execution_state.h>

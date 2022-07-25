@@ -1,18 +1,3 @@
-/*******************************************************************\
- Module: Symbol Generator
- Author: Franz Brauße (interface)
-
- Description: This is a simple encapsulation of the contextt::move()
-              functionality provided for registering a *new* symbol
-              (as opposed to a potentially existing one) with a
-              context.
-
-              At time of creation, it is used to generate temporary
-              symbols in the goto_convertt class and by the
-              clang_c_convertert class to obtain symbols representing
-              compound literals.
-\*******************************************************************/
-
 #ifndef ESBMC_UTIL_SYMBOL_GENERATOR_H
 #define ESBMC_UTIL_SYMBOL_GENERATOR_H
 

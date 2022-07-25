@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Symbolic Execution
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <cassert>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_symex_state.h>

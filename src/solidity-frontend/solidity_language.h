@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Solidity Language module
-
-Author: Kunjian Song, kunjian.song@postgrad.manchester.ac.uk
-
-\*******************************************************************/
-
 #ifndef SOLIDITY_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 #define SOLIDITY_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 

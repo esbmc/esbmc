@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Show the symbol table
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_SHOW_SYMBOL_TABLE_H
 #define CPROVER_SHOW_SYMBOL_TABLE_H
 

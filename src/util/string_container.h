@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Container for C-Strings
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef STRING_CONTAINER_H
 #define STRING_CONTAINER_H
 

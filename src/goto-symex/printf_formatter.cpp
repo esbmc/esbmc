@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: printf Formatting
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <goto-symex/printf_formatter.h>
 #include <sstream>
 #include <util/c_types.h>

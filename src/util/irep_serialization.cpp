@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module: binary irep conversions with hashing
-
-Author: CM Wintersteiger
-
-Date: May 2007
-
-\*******************************************************************/
-
 #include <sstream>
 #include <util/irep_serialization.h>
 

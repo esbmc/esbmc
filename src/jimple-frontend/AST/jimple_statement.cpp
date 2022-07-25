@@ -1,7 +1,3 @@
-//
-// Created by rafaelsamenezes on 22/09/2021.
-//
-
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>

@@ -1,11 +1,3 @@
-/*******************************************************************
- Module: GOTO Programs
-
- Author: Daniel Kroening, kroening@kroening.com Lucas Cordeiro,
- lcc08r@ecs.soton.ac.uk
-
- \*******************************************************************/
-
 #include <goto-programs/goto_check.h>
 #include <util/arith_tools.h>
 #include <util/array_name.h>

@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Options
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <cstdlib>
 #include <util/i2string.h>
 #include <util/options.h>

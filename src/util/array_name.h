@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Misc Utilities
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <util/expr.h>
 #include <irep2/irep2.h>
 #include <util/namespace.h>

@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #if defined(_WIN32)
 #define EX_OK 0
 #define EX_USAGE 1

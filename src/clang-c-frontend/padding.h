@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: ANSI-C Language Type Checking
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 /// \file
 /// ANSI-C Language Type Checking
 

@@ -1,12 +1,3 @@
-/*******************************************************************\
-
-Module: Symbolic Execution of ANSI-C
-
-Authors: Daniel Kroening, kroening@kroening.com
-         Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
-
-\*******************************************************************/
-
 #include <csignal>
 #include <sys/types.h>
 

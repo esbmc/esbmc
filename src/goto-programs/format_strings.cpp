@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Format String Parser
-
-Author: CM Wintersteiger
-
-\*******************************************************************/
-
 #include <cctype>
 #include <goto-programs/format_strings.h>
 

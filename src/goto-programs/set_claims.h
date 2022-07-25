@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Set claims
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_GOTO_PROGRAMS_SET_CLAIMS_H
 #define CPROVER_GOTO_PROGRAMS_SET_CLAIMS_H
 

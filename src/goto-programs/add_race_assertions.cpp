@@ -1,15 +1,3 @@
-/*******************************************************************\
-
-Module: Race Detection for Threaded Goto Programs
-
-Author: Daniel Kroening
-		Lucas Cordeiro (lcc08r@ecs.soton.ac.uk)
-
-Date: February 2006
-	  May 2010
-
-\*******************************************************************/
-
 #include <goto-programs/add_race_assertions.h>
 #include <goto-programs/remove_skip.h>
 #include <goto-programs/rw_set.h>

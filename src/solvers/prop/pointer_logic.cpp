@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Pointer Logic
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <cassert>
 #include <pointer_logic.h>
 #include <util/arith_tools.h>

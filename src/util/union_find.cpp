@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <util/union_find.h>
 
 void unsigned_union_find::make_union(unsigned j, unsigned k)

@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Goto Program Template
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_GOTO_PROGRAM_H
 #define CPROVER_GOTO_PROGRAM_H
 

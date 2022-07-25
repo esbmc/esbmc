@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Internal Representation
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <cassert>
 #include <cstdlib>
 #include <util/i2string.h>

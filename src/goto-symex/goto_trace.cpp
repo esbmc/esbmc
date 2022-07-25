@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-   Module: Traces of GOTO Programs
-
-   Author: Daniel Kroening
-
-   Date: July 2005
-
-\*******************************************************************/
-
 #include <cassert>
 #include <cstring>
 #include <goto-symex/goto_trace.h>

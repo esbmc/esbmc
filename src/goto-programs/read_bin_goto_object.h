@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module: Read goto object files.
-
-Author: CM Wintersteiger
-
-Date: May 2007
-
-\*******************************************************************/
-
 #ifndef READ_BIN_GOTO_OBJECT_H_
 #define READ_BIN_GOTO_OBJECT_H_
 

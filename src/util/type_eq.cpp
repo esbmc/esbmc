@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Type Checking
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <cassert>
 #include <util/type_eq.h>
 

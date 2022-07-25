@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Subgoal Documentation
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <clang-c-frontend/expr2c.h>
 #include <esbmc/document_subgoals.h>
 #include <fstream>

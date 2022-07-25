@@ -1,11 +1,3 @@
-/*******************************************************************\
-Module: Jimple AST Interface
-Author: Rafael Sá Menezes
-Date: September 2021
-Description: This interface will define every method that needs to
-  be implemented by every Jimple AST
-\*******************************************************************/
-
 #ifndef ESBMC_JIMPLE_AST_H
 #define ESBMC_JIMPLE_AST_H
 

@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Show Value Sets
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <pointer-analysis/show_value_sets.h>
 
 void show_value_sets(

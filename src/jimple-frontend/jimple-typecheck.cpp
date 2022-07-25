@@ -1,7 +1,3 @@
-//
-// Created by rafaelsamenezes on 23/09/2021.
-//
-
 #include <jimple-frontend/jimple-language.h>
 #include <jimple-frontend/jimple-converter.h>
 

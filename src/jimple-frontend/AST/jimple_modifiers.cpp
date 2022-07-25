@@ -1,7 +1,3 @@
-//
-// Created by rafaelsamenezes on 21/09/2021.
-//
-
 #include <jimple-frontend/AST/jimple_modifiers.h>
 void jimple_modifiers::from_json(const json &j)
 {

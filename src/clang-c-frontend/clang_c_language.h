@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Clang C Language Module
-
-Author:
-
-\*******************************************************************/
-
 #ifndef CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
 #define CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
 

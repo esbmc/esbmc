@@ -1,9 +1,3 @@
-/*******************************************************************\
-
-Module: Solidity AST module
-
-\*******************************************************************/
-
 // Remove warnings from Clang headers
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"

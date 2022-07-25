@@ -1,12 +1,3 @@
-/*******************************************************************\
-Module: Jimple Statements AST
-Author: Rafael Sá Menezes
-Date: September 2021
-Description: Jimple Statements definitions
-  They can represent a range of operations such as:
-  if/goto/assignments/etc..
-\*******************************************************************/
-
 #ifndef ESBMC_JIMPLE_STATEMENT_H
 #define ESBMC_JIMPLE_STATEMENT_H
 
@@ -39,7 +30,7 @@ public:
 
 /**
  * @brief A function call
- * 
+ *
  * foo(42);
  */
 class jimple_invoke : public jimple_statement
@@ -69,7 +60,7 @@ public:
 
 /**
  * @brief Return statement
- * 
+ *
  * return 42;
  */
 class jimple_return : public jimple_statement
@@ -85,7 +76,7 @@ class jimple_return : public jimple_statement
 
 /**
  * @brief A GOTO label
- * 
+ *
  * label1:
  *    ...
  */
@@ -105,7 +96,7 @@ public:
 
 /**
  * @brief Goto statement
- * 
+ *
  * goto label1;
  */
 class jimple_goto : public jimple_statement
@@ -123,7 +114,7 @@ public:
 
 /**
  * @brief An assignment statement
- * 
+ *
  * a = 42;
  */
 class jimple_assignment : public jimple_statement
@@ -158,7 +149,7 @@ public:
 
 /**
  * @brief An IF statement
- * 
+ *
  * if 2 > 4 goto label3;
  */
 class jimple_if : public jimple_statement
@@ -177,9 +168,9 @@ public:
 
 /**
  * @brief A throw statement
- * 
+ *
  * throw 0;
- * 
+ *
  */
 class jimple_throw : public jimple_statement
 {

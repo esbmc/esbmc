@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
-
-\*******************************************************************/
-
 /* Byte order includes, for context switch checkpoint files */
 #ifndef _WIN32
 #include <arpa/inet.h>

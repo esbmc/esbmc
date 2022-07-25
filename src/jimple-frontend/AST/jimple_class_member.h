@@ -1,11 +1,3 @@
-/*******************************************************************\
-Module: Jimple Class Member Interface
-Author: Rafael Sá Menezes
-Date: September 2021
-Description: This interface will hold anything 
-  that belongs to a Jimple class
-\*******************************************************************/
-
 #ifndef ESBMC_JIMPLE_CLASS_MEMBER_H
 #define ESBMC_JIMPLE_CLASS_MEMBER_H
 
@@ -32,14 +24,14 @@ public:
 
 /**
  * @brief A class (or interface) field of a Jimple file
- * 
+ *
  * example:
- * 
+ *
  * class Foo {
- *    
+ *
  *   public int a;
  * }
- * 
+ *
  */
 class jimple_class_field : public jimple_class_member
 {
@@ -60,15 +52,15 @@ public:
 
 /**
  * @brief A class (or interface) method of a Jimple file
- * 
+ *
  * example:
- * 
+ *
  * class Foo {
  *   public void jimple_method {
  *      do_stuff();
  *   }
  * }
- * 
+ *
  */
 class jimple_method : public jimple_class_member
 {

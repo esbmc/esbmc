@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Jimple Language
-
-Author: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
-
-\*******************************************************************/
-
 #pragma once
 
 #include <langapi/mode.h>

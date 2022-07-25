@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Solidity Language module
-
-Author: Kunjian Song, kunjian.song@postgrad.manchester.ac.uk
-
-\*******************************************************************/
-
 #include <solidity-frontend/solidity_grammar.h>
 #include <fmt/core.h>
 #include <set>

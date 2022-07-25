@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module: binary irep conversions with hashing
-
-Author: CM Wintersteiger
-
-Date: May 2007
-
-\*******************************************************************/
-
 #ifndef IREP_SERIALIZATION_H_
 #define IREP_SERIALIZATION_H_
 

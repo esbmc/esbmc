@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Clang C++ Language Module
-
-Author:
-
-\*******************************************************************/
-
 #ifndef CLANG_CPP_FRONTEND_CLANG_CPP_LANGUAGE_H_
 #define CLANG_CPP_FRONTEND_CLANG_CPP_LANGUAGE_H_
 

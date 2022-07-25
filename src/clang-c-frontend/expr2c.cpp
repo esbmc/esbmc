@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <clang-c-frontend/expr2c.h>
 #include <util/arith_tools.h>
 #include <util/c_misc.h>

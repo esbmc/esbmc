@@ -1,7 +1,3 @@
-//
-// Created by rafaelsamenezes on 23/09/2021.
-//
-
 #ifndef ESBMC_JIMPLE_CONVERTER_H
 #define ESBMC_JIMPLE_CONVERTER_H
 

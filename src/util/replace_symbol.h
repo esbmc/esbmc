@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_REPLACE_SYMBOL_H
 #define CPROVER_REPLACE_SYMBOL_H
 

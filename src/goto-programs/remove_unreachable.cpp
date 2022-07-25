@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Program Transformation
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <goto-programs/remove_unreachable.h>
 #include <set>
 #include <stack>

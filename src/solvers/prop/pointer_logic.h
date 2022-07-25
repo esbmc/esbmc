@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Pointer Logic
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_POINTER_LOGIC_H
 #define CPROVER_POINTER_LOGIC_H
 

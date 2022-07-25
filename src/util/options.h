@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Options
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_OPTIONS_H
 #define CPROVER_OPTIONS_H
 

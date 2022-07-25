@@ -1,12 +1,3 @@
-/*******************************************************************
- Module: goto_programt -> irep conversion
-
- Author: CM Wintersteiger
-
- Date: May 2007
-
-\*******************************************************************/
-
 #include <goto-programs/goto_program_irep.h>
 #include <util/i2string.h>
 

@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module: Read goto object files.
-
-Author: CM Wintersteiger
-
-Date: June 2006
-
-\*******************************************************************/
-
 #include <goto-programs/goto_function_serialization.h>
 #include <goto-programs/goto_program_irep.h>
 #include <goto-programs/read_bin_goto_object.h>

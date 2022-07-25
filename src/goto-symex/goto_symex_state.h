@@ -1,12 +1,3 @@
-/*******************************************************************\
-
-   Module: Symbolic Execution
-
-   Author: Daniel Kroening, kroening@kroening.com Lucas Cordeiro,
-     lcc08r@ecs.soton.ac.uk
-
-\*******************************************************************/
-
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 

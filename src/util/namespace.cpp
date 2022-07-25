@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Namespace
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <cassert>
 #include <cstring>
 #include <util/namespace.h>

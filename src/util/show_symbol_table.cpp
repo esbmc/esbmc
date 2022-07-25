@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Show the symbol table
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <memory>
 
 #include <util/language.h>

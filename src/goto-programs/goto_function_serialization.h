@@ -1,14 +1,3 @@
-/*******************************************************************\
- 
-Module: Convert goto functions into binary format and back (with irep
-        hashing).
- 
-Author: CM Wintersteiger
- 
-Date: May 2007
- 
-\*******************************************************************/
-
 #ifndef GOTO_FUNCTION_SERIALIZATION_H_
 #define GOTO_FUNCTION_SERIALIZATION_H_
 

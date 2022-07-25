@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Write GOTO binaries
-
-Author: CM Wintersteiger
-
-\*******************************************************************/
-
 #ifndef CPROVER_GOTO_PROGRAMS_WRITE_GOTO_BINARY_H_
 #define CPROVER_GOTO_PROGRAMS_WRITE_GOTO_BINARY_H_
 

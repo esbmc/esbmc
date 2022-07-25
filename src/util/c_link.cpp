@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: ANSI-C Linking
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <clang-c-frontend/expr2c.h>
 #include <unordered_set>
 #include <util/base_type.h>

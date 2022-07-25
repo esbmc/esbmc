@@ -1,10 +1,3 @@
-/*******************************************************************\
-Module: Jimple Modifier AST
-Author: Rafael Sá Menezes
-Date: September 2021
-Description: Jimple Modifiers holder
-\*******************************************************************/
-
 #ifndef ESBMC_JIMPLE_MODIFIERS_H
 #define ESBMC_JIMPLE_MODIFIERS_H
 
@@ -12,10 +5,10 @@ Description: Jimple Modifiers holder
 
 /**
  * @brief AST parsing for modifiers
- * 
+ *
  * This should hold every modifier e.g. final, private
  * and etc...
- * 
+ *
  * We will probably only care for Static and Native thought
  */
 class jimple_modifiers : public jimple_ast

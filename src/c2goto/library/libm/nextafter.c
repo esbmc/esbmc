@@ -1,12 +1,3 @@
-/*******************************************************************\
-
-Module: ANSI-C nextafter(x,y) for float, double on architectures where their
-        storage is the same as its endianness.
-
-Author: Franz Brauße, <franz.brausse@manchester.ac.uk>
-
-\*******************************************************************/
-
 #include <stdint.h>
 #include <fenv.h>
 #include <math.h>

@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Program Transformation
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <goto-programs/remove_skip.h>
 
 /// Determine whether the instruction is semantically equivalent to a skip

@@ -1,10 +1,3 @@
-/*******************************************************************\
-Module: Jimple Declaration class
-Author: Rafael Sá Menezes
-Date: September 2021
-Description: This class will hold any declaration statements
-\*******************************************************************/
-
 #ifndef ESBMC_JIMPLE_DECLARATION_H
 #define ESBMC_JIMPLE_DECLARATION_H
 
@@ -13,11 +6,11 @@ Description: This class will hold any declaration statements
 
 /**
  * @brief Class to hold declaration statements in Jimple
- * 
- * - int foo; 
- * - java.lang.String r0; 
+ *
+ * - int foo;
+ * - java.lang.String r0;
  * - etc...
- * 
+ *
  */
 class jimple_declaration : public jimple_method_field
 {

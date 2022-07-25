@@ -1,17 +1,3 @@
-/*******************************************************************\
- Module: Algorithm Interface
- Author: Rafael Sá Menezes
- Date: May 2021
-
- Description: The algorithm interface is to be used for
-              every kind of logic that uses a generic datastructure
-              to be reasoned: containers, CFG, goto-programs, loops.
-
-              The idea is that we don't need to look over a million
-              of lines in the flow of esbmc when we only want to do
-              a small analysis.
-\*******************************************************************/
-
 #ifndef ESBMC_ALGORITHM_H
 #define ESBMC_ALGORITHM_H
 

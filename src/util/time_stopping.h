@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module: Time Stopping
-
-Author: Daniel Kroening
-
-Date: February 2004
-
-\*******************************************************************/
-
 #ifndef CPROVER_TIME_STOPPING_H
 #define CPROVER_TIME_STOPPING_H
 

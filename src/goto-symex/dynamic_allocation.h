@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Symbolic Execution
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_DYNAMIC_ALLOCATION_H
 #define CPROVER_DYNAMIC_ALLOCATION_H
 

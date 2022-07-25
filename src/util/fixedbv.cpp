@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <util/arith_tools.h>
 #include <util/fixedbv.h>
 #include <util/std_types.h>

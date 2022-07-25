@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Show Claims
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <goto-programs/show_claims.h>
 #include <langapi/language_util.h>
 #include <util/i2string.h>
