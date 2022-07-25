@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Value Set
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <cassert>
 #include <langapi/language_util.h>
 #include <pointer-analysis/value_set.h>

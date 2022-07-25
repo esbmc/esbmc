@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Main Module
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <ac_config.h>
 
 #ifndef _WIN32

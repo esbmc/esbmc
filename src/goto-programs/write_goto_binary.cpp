@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Write GOTO binaries
-
-Author: CM Wintersteiger
-
-\*******************************************************************/
-
 #include <fstream>
 #include <goto-programs/goto_function_serialization.h>
 #include <goto-programs/write_goto_binary.h>

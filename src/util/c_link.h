@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: ANSI-C Linking
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_C_LINK_H
 #define CPROVER_C_LINK_H
 

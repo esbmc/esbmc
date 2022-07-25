@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Expression Representation
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <cassert>
 #include <cstdlib>
 #include <util/expr.h>

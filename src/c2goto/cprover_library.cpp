@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <ac_config.h>
 #include <boost/filesystem.hpp>
 #include <c2goto/cprover_library.h>

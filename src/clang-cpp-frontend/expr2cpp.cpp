@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@cs.cmu.edu
-
-\*******************************************************************/
-
 #include <cassert>
 #include <clang-c-frontend/expr2c.h>
 #include <clang-cpp-frontend/expr2cpp.h>

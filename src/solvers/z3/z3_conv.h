@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
-
-\*******************************************************************/
-
 #ifndef _ESBMC_SOLVERS_Z3_Z3_CONV_H
 #define _ESBMC_SOLVERS_Z3_Z3_CONV_H
 

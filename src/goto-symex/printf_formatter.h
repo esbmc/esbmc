@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: printf Formatting
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_PRINTF_FORMATTER
 #define CPROVER_PRINTF_FORMATTER
 

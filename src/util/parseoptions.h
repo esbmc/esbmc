@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef DBOX_PARSEOPTIONS_H
 
 #define DBOX_PARSEOPTIONS_H

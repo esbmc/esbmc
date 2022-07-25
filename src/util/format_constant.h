@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_FORMAT_CONSTANT_H
 #define CPROVER_FORMAT_CONSTANT_H
 

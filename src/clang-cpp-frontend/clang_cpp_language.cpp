@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: C++ Language Module
-
-Author: Daniel Kroening, kroening@cs.cmu.edu
-
-\*******************************************************************/
-
 // Remove warnings from Clang headers
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"

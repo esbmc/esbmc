@@ -1,10 +1,3 @@
-/*******************************************************************\
-Module: Jimple File AST
-Author: Rafael Sá Menezes
-Date: September 2021
-Description: Jimple File AST parser and holder
-\*******************************************************************/
-
 #ifndef ESBMC_JIMPLE_FILE_H
 #define ESBMC_JIMPLE_FILE_H
 
@@ -15,13 +8,13 @@ Description: Jimple File AST parser and holder
 
 /**
  * @brief Main AST for Class/Interface
- * 
+ *
  * Every Jimple file contains at most one Class/Interface, this class
  * will represent this.
  *
  * The file can:
  * - extend (or implement) another Class/Interface
- * - contain modifiers: public/private/static/etc... 
+ * - contain modifiers: public/private/static/etc...
  *   (see jimple_modifiers.hpp)
  * - contain methods and attributes.
  *

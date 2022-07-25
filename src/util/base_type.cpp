@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Base Type Computation
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <util/base_type.h>
 #include <irep2/irep2_utils.h>
 #include <util/std_types.h>

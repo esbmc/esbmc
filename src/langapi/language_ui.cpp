@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@cs.cmu.edu
-
-\*******************************************************************/
-
 #include <fstream>
 #include <langapi/language_ui.h>
 #include <langapi/mode.h>

@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <util/fixedbv.h>
 #include <util/format_constant.h>
 #include <util/ieee_float.h>

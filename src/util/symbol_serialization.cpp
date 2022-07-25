@@ -1,13 +1,3 @@
-/*******************************************************************\
- 
-Module: Symbol to binary conversions with irep hashing
- 
-Author: CM Wintersteiger
- 
-Date: May 2007
- 
-\*******************************************************************/
-
 #include <util/irep_serialization.h>
 #include <util/symbol_serialization.h>
 

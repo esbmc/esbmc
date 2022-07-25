@@ -1,7 +1,3 @@
-//
-// Created by rafaelsamenezes on 21/09/2021.
-//
-
 #ifndef ESBMC_JIMPLE_METHOD_BODY_H
 #define ESBMC_JIMPLE_METHOD_BODY_H
 
@@ -10,7 +6,7 @@
 
 /**
  * @brief A Jimple method declaration
- * 
+ *
  * Something such as: public void foo() { }
  */
 class jimple_method_body : public jimple_ast
@@ -42,7 +38,7 @@ public:
 
 /**
  * @brief A Jimple method definition
- * 
+ *
  * Something such as: public void foo();
  */
 class jimple_empty_method_body : public jimple_method_body
@@ -51,7 +47,7 @@ class jimple_empty_method_body : public jimple_method_body
 
 /**
  * @brief A Jimple method definition
- * 
+ *
  * Something such as: public void foo() { }
  */
 class jimple_full_method_body : public jimple_method_body

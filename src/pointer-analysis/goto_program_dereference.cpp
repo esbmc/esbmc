@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Dereferencing Operations on GOTO Programs
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <pointer-analysis/goto_program_dereference.h>
 #include <util/base_type.h>
 #include <irep2/irep2.h>

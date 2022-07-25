@@ -1,8 +1,3 @@
-/*******************************************************************\
-Module: Helper functions to generate GOTO expressions
-Author: Rafael Sá Menezes
-Date: March 2021
-\*******************************************************************/
 #pragma once
 
 #include "goto-symex/symex_target_equation.h"

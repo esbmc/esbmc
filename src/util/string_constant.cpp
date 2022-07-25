@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
 #include <util/c_types.h>

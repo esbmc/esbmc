@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: C++ Language Type Checking
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 /// \file
 /// C++ Language Type Checking
 

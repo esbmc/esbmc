@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_ANSI_C_C_QUALIFIERS_H
 #define CPROVER_ANSI_C_C_QUALIFIERS_H
 

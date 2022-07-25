@@ -1,12 +1,3 @@
-/*******************************************************************\
-
-   Module: Symbolic Execution
-
-   Author: Daniel Kroening, kroening@kroening.com Lucas Cordeiro,
-     lcc08r@ecs.soton.ac.uk
-
-\*******************************************************************/
-
 #include <cassert>
 #include <fstream>
 #include <goto-symex/goto_symex.h>

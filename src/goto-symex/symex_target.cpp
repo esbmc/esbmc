@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Symbolic Execution
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <goto-symex/symex_target.h>
 
 bool operator<(const symex_targett::sourcet &a, const symex_targett::sourcet &b)

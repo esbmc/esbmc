@@ -1,12 +1,3 @@
-/*******************************************************************\
-
-   Module:
-
-   Author: Ben YIU, yspb1g08@ecs.soton.ac.uk Lucas Cordeiro,
-     lcc08r@ecs.soton.ac.uk
-
-\*******************************************************************/
-
 #ifndef EXECUTION_STATE_H_
 #define EXECUTION_STATE_H_
 

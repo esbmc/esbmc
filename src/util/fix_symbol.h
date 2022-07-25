@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: ANSI-C Linking
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <util/context.h>
 #include <util/replace_symbol.h>
 

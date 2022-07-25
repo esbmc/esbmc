@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Value Set Propagation
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <cassert>
 #include <goto-programs/static_analysis.h>
 #include <memory>

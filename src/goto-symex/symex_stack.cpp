@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module: Symbolic Execution - Stack tracking
-
-Authors: Rafael Menezes and Lucas Cordeiro
-
-Date: April 2020
-
-\*******************************************************************/
-
 #include <cassert>
 #include <goto-symex/goto_symex.h>
 #include <util/expr_util.h>

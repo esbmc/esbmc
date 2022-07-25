@@ -1,7 +1,3 @@
-//
-// Created by Mohannad Aldughaim on 09/01/2022.
-//
-
 #ifndef ESBMC_GOTO_CONTRACTOR_H
 #define ESBMC_GOTO_CONTRACTOR_H
 

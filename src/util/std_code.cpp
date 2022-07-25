@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: 
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <util/std_code.h>
 
 code_blockt &codet::make_block()

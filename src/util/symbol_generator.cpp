@@ -1,4 +1,3 @@
-
 #include <util/i2string.h>
 #include <util/symbol_generator.h>
 

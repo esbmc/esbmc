@@ -1,7 +1,3 @@
-//
-// Created by Mohannad Aldughaim on 09/01/2022.
-//
-
 #include <goto-programs/goto_contractor.h>
 
 void goto_contractor(goto_functionst &goto_functions)

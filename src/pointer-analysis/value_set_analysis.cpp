@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Value Set Propagation
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <langapi/language_util.h>
 #include <pointer-analysis/value_set_analysis.h>
 #include <util/cprover_prefix.h>

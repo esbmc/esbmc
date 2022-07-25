@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Slicer for symex traces
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <goto-symex/slice.h>
 
 symex_slicet::symex_slicet(bool assume)

@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Abstract Interpretation
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 /// \file
 /// Abstract Interpretation Domain
 

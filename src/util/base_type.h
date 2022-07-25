@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Base Type Computation
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_BASE_TYPE_H
 #define CPROVER_BASE_TYPE_H
 

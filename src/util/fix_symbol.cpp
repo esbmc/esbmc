@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: ANSI-C Linking
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <util/fix_symbol.h>
 
 void fix_symbolt::fix_symbol(symbolt &symbol)

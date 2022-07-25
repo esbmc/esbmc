@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Interval Domain
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 /// \file
 /// Interval Domain
 

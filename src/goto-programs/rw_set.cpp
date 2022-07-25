@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module: Race Detection for Threaded Goto Programs
-
-Author: Daniel Kroening
-
-Date: February 2006
-
-\*******************************************************************/
-
 #include <goto-programs/rw_set.h>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <util/arith_tools.h>

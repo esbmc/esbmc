@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
-
-\*******************************************************************/
-
 #ifndef REACHABILITY_TREE_H_
 #define REACHABILITY_TREE_H_
 

@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Symbolic Execution
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <goto-symex/dynamic_allocation.h>
 #include <goto-symex/goto_symex.h>
 #include <util/std_expr.h>

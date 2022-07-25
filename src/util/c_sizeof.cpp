@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Conversion of sizeof Expressions
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <util/arith_tools.h>
 #include <util/c_sizeof.h>
 #include <util/c_types.h>

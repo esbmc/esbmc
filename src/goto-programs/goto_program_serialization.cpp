@@ -1,14 +1,3 @@
-/*******************************************************************\
- 
-Module: Convert goto programs to binary format and back (with irep
-        hashing)
- 
-Author: CM Wintersteiger
- 
-Date: May 2007
- 
-\*******************************************************************/
-
 #include <goto-programs/goto_program_irep.h>
 #include <goto-programs/goto_program_serialization.h>
 #include <sstream>

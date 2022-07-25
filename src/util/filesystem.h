@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: File operations
-
-Author: Rafael Menezes, rafael.sa.menezes@outlook.com
-
-\*******************************************************************/
-
 #pragma once
 
 #include <cstdio> /* FILE */

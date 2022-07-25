@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Show Value Sets
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_GOTO_PROGRAMS_SHOW_VALUE_SETS_H
 #define CPROVER_GOTO_PROGRAMS_SHOW_VALUE_SETS_H
 

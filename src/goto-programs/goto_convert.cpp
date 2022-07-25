@@ -1,12 +1,3 @@
-/*******************************************************************\
-
-Module: Program Transformation
-
-Author: Daniel Kroening, kroening@kroening.com
-		Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
-
-\*******************************************************************/
-
 #include <cassert>
 #include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>

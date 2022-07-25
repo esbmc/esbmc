@@ -1,5 +1,3 @@
-// Rafael Sá Menezes - 03/2021
-
 #include <util/goto_expr_factory.h>
 
 constant_int2tc create_value_expr(int value, type2tc type)

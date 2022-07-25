@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module: Goto Programs with Functions
-
-Author: Daniel Kroening
-
-Date: June 2003
-
-\*******************************************************************/
-
 #include <cassert>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>

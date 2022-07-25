@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Obtain the pretty name of a given code
-
-Author: Lucas Cordeiro, lucas.cordeiro@manchester.ac.uk
-
-\*******************************************************************/
-
 #ifndef CPROVER_UTIL_PRETTY_H
 #define CPROVER_UTIL_PRETTY_H
 

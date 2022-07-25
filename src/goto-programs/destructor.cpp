@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Destructor Calls
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <goto-programs/destructor.h>
 
 bool get_destructor(

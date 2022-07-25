@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Daniel Kroening
-
-  Date: November 2005
-
-\*******************************************************************/
-
 #include <util/xml_irep.h>
 
 void convert(const irept &irep, xmlt &xml)

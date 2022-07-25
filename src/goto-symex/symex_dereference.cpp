@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Symbolic Execution of ANSI-C
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
 #include <langapi/language_util.h>

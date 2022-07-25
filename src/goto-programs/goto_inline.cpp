@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Function Inlining
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <cassert>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/remove_skip.h>

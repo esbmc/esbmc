@@ -1,14 +1,3 @@
-/*******************************************************************\
- 
-Module: Convert goto programs to binary format and back (with 
-        irep hashing)
- 
-Author: CM Wintersteiger
- 
-Date: July 2006
- 
-\*******************************************************************/
-
 #ifndef GOTO_PROGRAM_SERIALIZATION_H_
 #define GOTO_PROGRAM_SERIALIZATION_H_
 

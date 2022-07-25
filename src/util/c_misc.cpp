@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: ANSI-C Misc Utilities
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <cstdio>
 #include <util/c_misc.h>
 

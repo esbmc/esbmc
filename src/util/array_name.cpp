@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Misc Utilities
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <util/array_name.h>
 #include <irep2/irep2_expr.h>
 

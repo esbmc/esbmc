@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Command Line Parsing
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_ESBMC_PARSEOPTIONS_H
 #define CPROVER_ESBMC_PARSEOPTIONS_H
 

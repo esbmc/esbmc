@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Set Claims
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <goto-programs/set_claims.h>
 #include <util/i2string.h>
 
