@@ -660,8 +660,8 @@ void goto_convertt::remove_function_call(
   {
     assert(expr.operands().size() == 2);
     code_function_callt call;
-    call.function() = expr.op0();             // the function symbol
-    call.arguments() = expr.op1().operands(); // function arguments
+    call.function() = expr.op0();
+    call.arguments() = expr.op1().operands();
     call.location() = expr.location();
     call.lhs().make_nil();
     convert_function_call(call, dest);
@@ -740,10 +740,10 @@ void goto_convertt::remove_cpp_new(
   goto_programt &dest,
   bool result_is_used)
 {
-  // For side effect with 'cpp_new' statement, expr refers to the side effect that
+  // For side effect with 'cpp_new' statement, `expr' refers to the side effect that
   // contains an initializer. Technically, this function converts the cpp_new side effect
-  // and replaces it with a new symbol if `result_is_used` is true. It does NOT simply remove
-  // the side effect node in the exprt tree.
+  // and replaces it with a new symbol if `result_is_used` is true. It's not just simply
+  // removing the side effect node in the exprt tree.
   codet call;
 
   symbolt new_symbol;

@@ -81,10 +81,6 @@ void goto_convert_functionst::add_return(
 void goto_convert_functionst::convert_function(symbolt &symbol)
 {
   irep_idt identifier = symbol.id;
-  if(
-    identifier.as_string() == "main()" ||
-    identifier.as_string() == "c:@F@main#")
-    printf("Got main\n");
 
   // Apply a SFINAE test: discard unused C++ templates.
   if(

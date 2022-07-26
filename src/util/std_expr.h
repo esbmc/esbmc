@@ -380,7 +380,7 @@ index_exprt &to_index_expr(exprt &expr);
 extern inline const unary_exprt &to_unary_expr(const exprt &expr)
 {
   const unary_exprt &ret = static_cast<const unary_exprt &>(expr);
-  assert(ret.operands().size() == 1); // unary must have one operand
+  assert(ret.operands().size() == 1);
   return ret;
 }
 

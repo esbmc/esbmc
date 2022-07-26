@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: Destructor Calls
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #ifndef CPROVER_GOTO_PROGRAMS_DESTRUCTOR_H
 #define CPROVER_GOTO_PROGRAMS_DESTRUCTOR_H
 
