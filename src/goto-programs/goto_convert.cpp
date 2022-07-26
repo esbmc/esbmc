@@ -614,7 +614,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   {
     // Example of an codet decl statement with 2 operands is:
     // "t2 *p = new t2;" where the op0 refers to the RHS pointer symbol
-    // and op1 refers to the LHS size effect (initializer)
+    // and op1 refers to the LHS side effect (initializer)
     initializer = new_code.op1();
 
     // just resize the vector, this will get rid of op1
