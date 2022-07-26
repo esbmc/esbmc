@@ -17,6 +17,9 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else if(statement == "cpp_delete" || statement == "cpp_delete[]")
   {
+    // adjust side effect node to explicitly call class destructor
+    // e.g. the adjustment here will add the following instruction in GOTO:
+    // FUNCTION_CALL:  ~t2(&(*p))
     code_function_callt destructor = get_destructor(ns, expr.type());
     if(destructor.is_not_nil())
     {

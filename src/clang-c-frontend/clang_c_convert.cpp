@@ -571,8 +571,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
 bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 {
-  // Don't convert if implicit, unless it's a constructor
-  // A compiler-generated default constructor is considered implicit, but we have
+  // Don't convert if implicit, unless it's a constructor or destructor
+  // A compiler-generated default ctor/dtor is considered implicit, but we have
   // to parse it.
   auto isContructorOrDestructor = [](const clang::FunctionDecl &fd) {
     return fd.getKind() == clang::Decl::CXXConstructor ||

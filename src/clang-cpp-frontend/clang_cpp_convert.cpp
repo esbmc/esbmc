@@ -558,10 +558,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXDeleteExpr &de =
       static_cast<const clang::CXXDeleteExpr &>(stmt);
 
-    if(de.isArrayFormAsWritten())
-      new_expr = side_effect_exprt("cpp_delete[]", empty_typet());
-    else
-      new_expr = side_effect_exprt("cpp_delete", empty_typet());
+    new_expr = de.isArrayFormAsWritten()
+                 ? side_effect_exprt("cpp_delete[]", empty_typet())
+                 : side_effect_exprt("cpp_delete", empty_typet());
 
     exprt arg;
     if(get_expr(*de.getArgument(), arg))
