@@ -76,6 +76,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "set the sysroot for the frontend"},
     {"force,f", boost::program_options::value<std::vector<std::string>>(), ""},
     {"preprocess", NULL, "stop after preprocessing"},
+    {"cache-asserts", NULL, "cache asserts that were already proven correct"},
     {"no-inlining", NULL, "disable inlining function calls"},
     {"full-inlining", NULL, "perform full inlining of function calls"},
     {"all-claims", NULL, "keep all claims"},

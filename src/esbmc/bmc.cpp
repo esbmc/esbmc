@@ -32,6 +32,7 @@
 #include <util/migrate.h>
 #include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
+#include <util/cache.h>
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -597,6 +598,12 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       result->remaining_claims,
       BigInt(eq->SSA_steps.size()) - ignored);
 
+    // CACHE
+    if(options.get_bool_option("cache-asserts"))
+    {
+     static auto cache = crc_assert_cache::create_empty_set();
+     crc_assert_cache(eq->SSA_steps, cache, options.get_bool_option("forward-condition")).run();
+    }
     if(options.get_bool_option("document-subgoals"))
     {
       std::ostringstream oss;
