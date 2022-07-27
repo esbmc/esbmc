@@ -601,8 +601,10 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     // CACHE
     if(options.get_bool_option("cache-asserts"))
     {
-     static auto cache = crc_assert_cache::create_empty_set();
-     crc_assert_cache(eq->SSA_steps, cache, options.get_bool_option("forward-condition")).run();
+      static auto cache = crc_assert_cache::create_empty_set();
+      crc_assert_cache(
+        eq->SSA_steps, cache, options.get_bool_option("forward-condition"))
+        .run();
     }
     if(options.get_bool_option("document-subgoals"))
     {
