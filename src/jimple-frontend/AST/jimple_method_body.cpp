@@ -50,7 +50,6 @@ void jimple_full_method_body::from_json(const json &stmts)
       std::string location_str;
       stmt.at("line").get_to(location_str);
       inner_location = std::stoi(location_str);
-      //log_debug("Setting location as: {}", inner_location);
       continue;
     }
     case statement::Identity:
