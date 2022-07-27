@@ -3,6 +3,9 @@ target_include_directories(algorithms
     PRIVATE ${Boost_INCLUDE_DIRS}
     )
 
+add_library(cache cache.cpp)
+target_link_libraries(cache algorithms)
+
 add_library(filesystem filesystem.cpp)
 target_include_directories(filesystem
     PRIVATE ${Boost_INCLUDE_DIRS}
