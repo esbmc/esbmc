@@ -72,7 +72,8 @@ public:
     Goto,          // goto 1;
     If,            // if <expr> goto <Label>
     Declaration,   // int a;
-    Throw          // throw <expr>
+    Throw,         // throw <expr>
+    Location       // Extra, reffers to the line number
   };
 
   std::vector<std::shared_ptr<jimple_method_field>> members;
@@ -89,7 +90,8 @@ private:
     {"Goto", statement::Goto},
     {"SetVariable", statement::Assignment},
     {"If", statement::If},
-    {"Throw", statement::Throw}};
+    {"Throw", statement::Throw},
+    {"Location", statement::Location}};
 
   std::map<statement, std::string> to_map = {
     {statement::Identity, "Identity"},
@@ -102,7 +104,8 @@ private:
     {statement::Assignment, "Assignment"},
     {statement::If, "If"},
     {statement::Declaration, "Declaration"},
-    {statement::Throw, "Throw"}};
+    {statement::Throw, "Throw"},
+    {statement::Location, "Location"}};
 };
 
 #endif //ESBMC_JIMPLE_METHOD_BODY_H

@@ -203,6 +203,10 @@ protected:
       l.set_function(function_name);
     return l;
   }
+
+public:
+  /// location of this instruction
+  int line_location = -1;
 };
 
 // These functions are used by nlohmann::json. Making it easier to
