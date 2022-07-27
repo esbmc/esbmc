@@ -1083,7 +1083,7 @@ void dereferencet::construct_from_array(
 
     if(!num_bytes)
     {
-      msg.debug("FAM detected, extracting the entire array on deref");
+      log_debug("FAM detected, extracting the entire array on deref");
       // Are we handling a FAM? Extract everything
       num_bytes = compute_num_bytes_to_extract(
         offset, type_byte_size_bits(value->type).to_uint64());
@@ -1199,7 +1199,7 @@ void dereferencet::construct_from_const_struct_offset(
       if(is_array_type(it))
       {
         // Array of size 0 in a struct, means FAM
-        msg.debug("FAM in deref");
+        log_debug("FAM in deref");
         // TODO: Check for allignment.
         // GET THE VALUES
         expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
@@ -1210,13 +1210,14 @@ void dereferencet::construct_from_const_struct_offset(
          * Global initializations are not handled by the goto_check
          * code, here we try to get the size of the value assigned for
          * it
-        */
+        *
+        /*
         if(is_symbol2t(value) && mode == READ)
         {
           auto fam = ns.lookup(to_symbol2t(value).thename);
           //assert(fam.is_struct());
           auto last_operand =
-            to_array_type(fam.value.operands().back().type()).size();
+            to_array_type(fam->value.operands().back().type()).size();
           BigInt size(
             to_constant_expr(last_operand).get_value().as_string().c_str(), 2);
           auto limit = size * type->get_width();
@@ -1232,6 +1233,7 @@ void dereferencet::construct_from_const_struct_offset(
               guard);
           }
         }
+        */
 
         // Extract.
         build_reference_rec(memb, new_offs, type, guard, mode);
@@ -1372,18 +1374,18 @@ void dereferencet::construct_from_dyn_struct_offset(
     {
       auto fam = ns.lookup(to_symbol2t(value).thename);
       auto last_operand =
-        to_array_type(fam.value.operands().back().type()).size();
+        to_array_type(fam->value.operands().back().type()).size();
       BigInt quantity(
         to_constant_expr(last_operand).get_value().as_string().c_str(), 2);
       auto base_type_width = type_byte_size_bits(to_array_type(it).subtype);
       field_size = quantity * base_type_width;
 
-      msg.debug(fmt::format(
+      log_debug(
         "Adding field size: {}, quantity: {}, base_type: {}, offs: {}",
         field_size,
         quantity,
         base_type_width,
-        offs));
+        offs);
     }
 
     // Round up to word size
@@ -2057,7 +2059,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   {
     /* 0 could mean that we are dealing with a FAM
      * we have to extract the entire byte_array */
-    msg.debug("Size of type returned 0. Is this an incomplete array?");
+    log_debug("Size of type returned 0. Is this an incomplete array?");
     num_bits = type_byte_size_bits(byte_array->type);
   }
   assert(num_bits.is_uint64());
@@ -2069,7 +2071,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   offset_bits = modulus2tc(offset_bits->type, offset_bits, gen_ulong(8));
   simplify(offset_bits);
 
-  msg.debug(fmt::format("New num_bytes: {}", num_bytes));
+  log_debug("New num_bytes: {}", num_bytes);
   return bitcast2tc(
     type,
     extract_bits_from_byte_array(
@@ -2304,19 +2306,19 @@ void dereferencet::check_data_obj_access(
     auto last = v.members.back();
     if(is_array_type(last) && !to_array_type(last).get_width())
     {
-      msg.debug("FAM in obj access");
+      log_debug("FAM in obj access");
       if(is_symbol2t(value))
       {
         auto fam = ns.lookup(to_symbol2t(value).thename);
         // Is FAM pointing to a static object?
-        if(!has_prefix(fam.id.as_string(), "symex_dynamic::"))
+        if(!has_prefix(fam->id.as_string(), "symex_dynamic::"))
         {
-          msg.debug("Skipping FAM check on obj access");
+          log_debug("Skipping FAM check on obj access");
           return;
         }
         else
         {
-          msg.debug("Dynamic memory for FAM");
+          log_debug("Dynamic memory for FAM");
         }
       }
     }

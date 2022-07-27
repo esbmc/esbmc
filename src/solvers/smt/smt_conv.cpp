@@ -1765,12 +1765,12 @@ expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
     if(index_value >= limit)
     {
       // TODO: Maybe we should propagate an invalid expression here?
-      msg.error(fmt::format(
+      log_error(
         "ESBMC encodes array domains by the nearest power of 2. "
         "Current array has a index limit of {}. \nArray: {}\nIndex: {}",
         limit,
         *arr_sort,
-        *idx));
+        *idx);
       abort();
     }
   }

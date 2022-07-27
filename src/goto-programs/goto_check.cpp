@@ -34,7 +34,6 @@ public:
 protected:
   const namespacet &ns;
   optionst &options;
-  const messaget &msg;
 
   void check(const expr2tc &expr, const locationt &location);
 
@@ -565,9 +564,9 @@ void goto_checkt::bounds_check(
       {
         // Lookup for FAM
         auto fam = ns.lookup(to_symbol2t(member.source_value).thename);
-
+        assert(fam);
         // If it is a dereference, lets check it later!
-        if(fam.value.is_dereference())
+        if(fam->value.is_dereference())
           return;
 
         // We can add the bound check then!
