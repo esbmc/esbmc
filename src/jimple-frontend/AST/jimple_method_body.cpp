@@ -12,13 +12,23 @@ exprt jimple_full_method_body::to_exprt(
 {
   code_blockt block;
   for(auto const &stmt : this->members)
-    block.operands().push_back(stmt->to_exprt(ctx, class_name, function_name));
+  {
+    auto expression = stmt->to_exprt(ctx, class_name, function_name);
+    auto l = jimple_ast::get_location(class_name, function_name);
+    if(stmt->line_location != -1)
+    {
+      l.set_line(stmt->line_location);
+    }
+    expression.location() = l;
+    block.operands().push_back(expression);
+  }
 
   return block;
 }
 
 void jimple_full_method_body::from_json(const json &stmts)
 {
+  int inner_location = -1;
   for(auto &stmt : stmts)
   {
     std::shared_ptr<jimple_method_field> to_add;
@@ -34,6 +44,14 @@ void jimple_full_method_body::from_json(const json &stmts)
       stmt.get_to(d);
       to_add = std::make_shared<jimple_declaration>(d);
       break;
+    }
+    case statement::Location:
+    {
+      std::string location_str;
+      stmt.at("line").get_to(location_str);
+      inner_location = std::stoi(location_str);
+      //log_debug("Setting location as: {}", inner_location);
+      continue;
     }
     case statement::Identity:
     {
@@ -109,6 +127,8 @@ void jimple_full_method_body::from_json(const json &stmts)
       log_error("Unknown type {}", stmt);
       abort();
     }
+
+    to_add->line_location = inner_location;
     members.push_back(std::move(to_add));
   }
 }
