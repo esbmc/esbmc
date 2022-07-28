@@ -41,7 +41,7 @@ void jimple_full_method_body::from_json(const json &stmts)
   /* In Jimple, locations are set through attributes and it
      * applied to every instruction after it:
      *
-     *  \/* 2  *\/
+     *  \* 2  \*  <--- Comment
      *  a = 3;
      *  b = 4;
      *
