@@ -205,7 +205,7 @@ protected:
   }
 
 public:
-  /// location of this instruction
+  /// instruction location
   int line_location = -1;
 };
 
