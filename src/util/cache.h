@@ -3,18 +3,23 @@
 #include <set>
 #include <util/algorithms.h>
 
-using crc_hash = unsigned long long;
-using crc_pair = std::pair<crc_hash, crc_hash>;
+// Helper definitions
+using crc_hash = size_t; // from irep2_meta_templates.h
+/**
+ * @brief This class stores all asserts conditions and guards
+ *        for a given SSA, if some pair was already added
+ *        then it will convert it to be a trivial case,
+ *        e.g. GUARD => COND ----> GUARD => 1
+ */
 class crc_assert_cache : public ssa_algorithm
 {
 public:
-  explicit crc_assert_cache(
+  using crc_pair = std::pair<crc_hash, crc_hash>;
+  crc_assert_cache(
     symex_target_equationt::SSA_stepst &steps,
     std::set<crc_pair> &crc_set,
-    bool is_forward_condition)
-    : ssa_algorithm(steps, true),
-      crc_set(crc_set),
-      is_forward_condition(is_forward_condition)
+    bool trivial_value)
+    : ssa_algorithm(steps, true), crc_set(crc_set), trivial_value(trivial_value)
   {
   }
 
@@ -32,7 +37,8 @@ public:
 
 protected:
   std::set<crc_pair> &crc_set;
-  bool is_forward_condition;
+  /// value to be set for  the COND
+  bool trivial_value;
 
 private:
   unsigned hits = 0;
