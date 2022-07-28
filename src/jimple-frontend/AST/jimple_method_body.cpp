@@ -10,16 +10,26 @@ exprt jimple_full_method_body::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {
+  /* This is a function body, so we create a `code_blockt` and
+     * populate it with all its statements (`this->members`) */
   code_blockt block;
+
+  // For each Jimple Statement
   for(auto const &stmt : this->members)
   {
+    // Generate the equivalent exprt of the jimple statement
     auto expression = stmt->to_exprt(ctx, class_name, function_name);
+
+    // Get a location for the class and this function
     auto l = jimple_ast::get_location(class_name, function_name);
+
+    // If the original line is known, then we set it
     if(stmt->line_location != -1)
-    {
       l.set_line(stmt->line_location);
-    }
+
     expression.location() = l;
+
+    // Add the expression into the block
     block.operands().push_back(expression);
   }
 
@@ -28,6 +38,16 @@ exprt jimple_full_method_body::to_exprt(
 
 void jimple_full_method_body::from_json(const json &stmts)
 {
+  /* In Jimple, locations are set through attributes and it
+     * applied to every instruction after it:
+     *
+     *  \/* 2  *\/
+     *  a = 3;
+     *  b = 4;
+     *
+     * This means that both statements came from line 2.
+     * To solve this, we threat the location as a Statement.
+     */
   int inner_location = -1;
   for(auto &stmt : stmts)
   {
@@ -47,9 +67,15 @@ void jimple_full_method_body::from_json(const json &stmts)
     }
     case statement::Location:
     {
+      /*
+         * After parsing the Jimple, the JSON will parse
+         * the location as a string and set it to the
+         * inner location (see comment above about inner_location)
+         */
       std::string location_str;
       stmt.at("line").get_to(location_str);
       inner_location = std::stoi(location_str);
+      // Location is not a real statement, continue to the next.
       continue;
     }
     case statement::Identity:
