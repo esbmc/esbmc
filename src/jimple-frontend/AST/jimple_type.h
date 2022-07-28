@@ -26,11 +26,14 @@ protected:
   typet get_base_type(const contextt &ctx) const;
   typet get_builtin_type() const;
 
-  // TODO: Support for matrix
   typet get_arr_type(const contextt &ctx) const
   {
     typet base = get_base_type(ctx);
-    return pointer_typet(base);
+    typet ptr_type = pointer_typet(base);
+    for(int i = 1; i < dimensions; i++)
+      ptr_type = pointer_typet(ptr_type);
+
+    return ptr_type;
   }
 
 private:
@@ -43,6 +46,7 @@ private:
   };
   BASE_TYPES bt;
   std::map<std::string, BASE_TYPES> from_map = {
+    /* Basic JVM types  */
     {"int", BASE_TYPES::INT},
     {"byte", BASE_TYPES::INT},
     {"char", BASE_TYPES::INT},
@@ -52,11 +56,14 @@ private:
     {"float", BASE_TYPES::INT},
     {"double", BASE_TYPES::INT},
     {"void", BASE_TYPES::_VOID},
-    {"Main", BASE_TYPES::INT}, // TODO: handle this properly
+    /* Basic Java classes that can work as primitive types */
+    {"java.lang.Integer", BASE_TYPES::INT},
     {"java.util.Random",
      BASE_TYPES::
        INT}, // We dont really care about the initialization of this mode
-    {"java.lang.String", BASE_TYPES::INT},         // TODO: handle this properly
+    {"java.lang.String", BASE_TYPES::INT}, // TODO: handle this properly
+    /* TODO: these are hacks and should be moved into an intrinsics class */
+    {"Main", BASE_TYPES::INT},                     // TODO: handle this properly
     {"java.lang.AssertionError", BASE_TYPES::INT}, // TODO: handle this properly
     {"java.lang.Runtime", BASE_TYPES::INT},        // TODO: handle this properly
     {"java.lang.Class", BASE_TYPES::INT},          // TODO: handle this properly

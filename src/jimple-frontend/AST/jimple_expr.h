@@ -240,6 +240,8 @@ public:
     return base_class == "org.sosy_lab.sv_benchmarks.Verifier";
   }
 
+  bool is_intrinsic_method = false;
+
 protected:
   // We need an unique name for each function
   std::string get_hash_name() const
