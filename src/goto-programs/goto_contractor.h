@@ -54,6 +54,7 @@ public:
   static constexpr int NOT_FOUND = -1;
 
   std::map<std::string, vart> var_map;
+  bool isemptyVector = false;
 
   CspMap()
   {
