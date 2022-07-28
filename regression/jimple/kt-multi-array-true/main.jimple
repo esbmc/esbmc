@@ -1,0 +1,663 @@
+{
+  "extends": "java.lang.Object",
+  "object": "Class",
+  "name": "MainKt",
+  "modifiers": [
+    "public",
+    "final"
+  ],
+  "content": [
+    {
+      "object": "Method",
+      "name": "tileColors",
+      "modifiers": [
+        "public",
+        "static",
+        "final"
+      ],
+      "content": [
+        {
+          "object": "Variable",
+          "name": "$stack11",
+          "type": {
+            "identifier": "java.lang.Integer",
+            "dimensions": 0
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "$stack14",
+          "type": {
+            "identifier": "java.lang.Integer",
+            "dimensions": 0
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "$stack17",
+          "type": {
+            "identifier": "java.lang.Integer",
+            "dimensions": 0
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "$stack20",
+          "type": {
+            "identifier": "java.lang.Integer",
+            "dimensions": 0
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "$stack23",
+          "type": {
+            "identifier": "java.lang.Integer",
+            "dimensions": 0
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "l2",
+          "type": {
+            "identifier": "java.lang.Integer",
+            "dimensions": 2
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "l8",
+          "type": {
+            "identifier": "int",
+            "dimensions": 0
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "l1",
+          "type": {
+            "identifier": "int",
+            "dimensions": 0
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "l4",
+          "type": {
+            "identifier": "int",
+            "dimensions": 0
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "$stack9",
+          "type": {
+            "identifier": "java.lang.Integer",
+            "dimensions": 1
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "$stack12",
+          "type": {
+            "identifier": "java.lang.Integer",
+            "dimensions": 1
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "$stack15",
+          "type": {
+            "identifier": "java.lang.Integer",
+            "dimensions": 1
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "$stack18",
+          "type": {
+            "identifier": "java.lang.Integer",
+            "dimensions": 1
+          }
+        },
+        {
+          "object": "Variable",
+          "name": "l5",
+          "type": {
+            "identifier": "java.lang.Integer",
+            "dimensions": 1
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "constant",
+            "value": "0"
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "l1"
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "newarray",
+            "type": {
+              "identifier": "java.lang.Integer",
+              "dimensions": 1
+            },
+            "size": {
+              "expr_type": "constant",
+              "value": "2"
+            }
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "l2"
+          }
+        },
+        {
+          "label_id": "label1",
+          "object": "Label",
+          "content": []
+        },
+        {
+          "goto": "label4",
+          "object": "If",
+          "expression": {
+            "rhs": {
+              "expr_type": "constant",
+              "value": "2"
+            },
+            "operator": ">=",
+            "expr_type": "binop",
+            "lhs": {
+              "expr_type": "symbol",
+              "value": "l1"
+            }
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "constant",
+            "value": "0"
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "l4"
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "newarray",
+            "type": {
+              "identifier": "java.lang.Integer",
+              "dimensions": 0
+            },
+            "size": {
+              "expr_type": "constant",
+              "value": "2"
+            }
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "l5"
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "symbol",
+            "value": "l1"
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "l8"
+          }
+        },
+        {
+          "label_id": "label2",
+          "object": "Label",
+          "content": []
+        },
+        {
+          "goto": "label3",
+          "object": "If",
+          "expression": {
+            "rhs": {
+              "expr_type": "constant",
+              "value": "2"
+            },
+            "operator": ">=",
+            "expr_type": "binop",
+            "lhs": {
+              "expr_type": "symbol",
+              "value": "l4"
+            }
+          }
+        },
+        {
+          "rhs": {
+            "base_class": "java.lang.Integer",
+            "expr_type": "static_invoke",
+            "method": "valueOf",
+            "parameters": [
+              {
+                "expr_type": "constant",
+                "value": "0"
+              }
+            ]
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "$stack23"
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "symbol",
+            "value": "$stack23"
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "array_index",
+            "index": {
+              "expr_type": "symbol",
+              "value": "l4"
+            },
+            "base": {
+              "expr_type": "symbol",
+              "value": "l5"
+            }
+          }
+        },
+        {
+          "rhs": {
+            "rhs": {
+              "expr_type": "constant",
+              "value": "1"
+            },
+            "operator": "+",
+            "expr_type": "binop",
+            "lhs": {
+              "expr_type": "symbol",
+              "value": "l4"
+            }
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "l4"
+          }
+        },
+        {
+          "goto": "label2",
+          "object": "Goto"
+        },
+        {
+          "label_id": "label3",
+          "object": "Label",
+          "content": []
+        },
+        {
+          "rhs": {
+            "expr_type": "symbol",
+            "value": "l5"
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "array_index",
+            "index": {
+              "expr_type": "symbol",
+              "value": "l8"
+            },
+            "base": {
+              "expr_type": "symbol",
+              "value": "l2"
+            }
+          }
+        },
+        {
+          "rhs": {
+            "rhs": {
+              "expr_type": "constant",
+              "value": "1"
+            },
+            "operator": "+",
+            "expr_type": "binop",
+            "lhs": {
+              "expr_type": "symbol",
+              "value": "l1"
+            }
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "l1"
+          }
+        },
+        {
+          "goto": "label1",
+          "object": "Goto"
+        },
+        {
+          "label_id": "label4",
+          "object": "Label",
+          "content": []
+        },
+        {
+          "rhs": {
+            "expr_type": "array_index",
+            "index": {
+              "expr_type": "constant",
+              "value": "0"
+            },
+            "base": {
+              "expr_type": "symbol",
+              "value": "l2"
+            }
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "$stack9"
+          }
+        },
+        {
+          "rhs": {
+            "base_class": "java.lang.Integer",
+            "expr_type": "static_invoke",
+            "method": "valueOf",
+            "parameters": [
+              {
+                "expr_type": "constant",
+                "value": "192"
+              }
+            ]
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "$stack11"
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "symbol",
+            "value": "$stack11"
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "array_index",
+            "index": {
+              "expr_type": "constant",
+              "value": "0"
+            },
+            "base": {
+              "expr_type": "symbol",
+                "value": "$stack9"
+            }
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "array_index",
+            "index": {
+              "expr_type": "constant",
+              "value": "0"
+            },
+            "base": {
+              "expr_type": "symbol",
+              "value": "l2"
+            }
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "$stack12"
+          }
+        },
+        {
+          "rhs": {
+            "base_class": "java.lang.Integer",
+            "expr_type": "static_invoke",
+            "method": "valueOf",
+            "parameters": [
+              {
+                "expr_type": "constant",
+                "value": "128"
+              }
+            ]
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "$stack14"
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "symbol",
+            "value": "$stack14"
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "array_index",
+            "index": {
+              "expr_type": "constant",
+              "value": "1"
+            },
+            "base": {
+              "expr_type": "symbol",
+              "value": "$stack12"
+            }
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "array_index",
+            "index": {
+              "expr_type": "constant",
+              "value": "1"
+            },
+            "base": {
+              "expr_type": "symbol",
+              "value": "l2"
+            }
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "$stack15"
+          }
+        },
+        {
+          "rhs": {
+            "base_class": "java.lang.Integer",
+            "expr_type": "static_invoke",
+            "method": "valueOf",
+            "parameters": [
+              {
+                "expr_type": "constant",
+                "value": "64"
+              }
+            ]
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "$stack17"
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "symbol",
+            "value": "$stack17"
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "array_index",
+            "index": {
+              "expr_type": "constant",
+              "value": "0"
+            },
+            "base": {
+              "expr_type": "symbol",
+              "value": "$stack15"
+            }
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "array_index",
+            "index": {
+              "expr_type": "constant",
+              "value": "1"
+            },
+            "base": {
+              "expr_type": "symbol",
+              "value": "l2"
+            }
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "$stack18"
+          }
+        },
+        {
+          "rhs": {
+            "base_class": "java.lang.Integer",
+            "expr_type": "static_invoke",
+            "method": "valueOf",
+            "parameters": [
+              {
+                "expr_type": "constant",
+                "value": "0"
+              }
+            ]
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "$stack20"
+          }
+        },
+        {
+          "rhs": {
+            "expr_type": "symbol",
+            "value": "$stack20"
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "array_index",
+            "index": {
+              "expr_type": "constant",
+              "value": "1"
+            },
+            "base": {
+              "expr_type": "symbol",
+              "value": "$stack18"
+            }
+          }
+        },
+        {
+          "object": "Return",
+          "value": {
+            "expr_type": "symbol",
+            "value": "l2"
+          }
+        }
+      ],
+      "type": {
+        "identifier": "java.lang.Integer",
+        "dimensions": 2
+      },
+      "parameters": []
+    },
+    {
+      "object": "Method",
+      "name": "main",
+      "modifiers": [
+        "public",
+        "static",
+        "final"
+      ],
+      "content": [
+        {
+          "base_class": "MainKt",
+          "object": "StaticInvoke",
+          "method": "tileColors",
+          "parameters": []
+        },
+        {
+          "object": "Return"
+        }
+      ],
+      "type": {
+        "identifier": "void",
+        "dimensions": 0
+      },
+      "parameters": []
+    },
+    {
+      "object": "Method",
+      "name": "main",
+      "modifiers": [
+        "public",
+        "static"
+      ],
+      "content": [
+        {
+          "object": "Variable",
+          "name": "args",
+          "type": {
+            "identifier": "java.lang.String",
+            "dimensions": 1
+          }
+        },
+        {
+          "rhs": {
+            "to": {
+              "identifier": "java.lang.String",
+              "dimensions": 1
+            },
+            "expr_type": "cast",
+            "from": {
+              "expr_type": "symbol",
+              "value": "@parameter0"
+            }
+          },
+          "object": "SetVariable",
+          "lhs": {
+            "expr_type": "symbol",
+            "value": "args"
+          }
+        },
+        {
+          "base_class": "MainKt",
+          "object": "StaticInvoke",
+          "method": "main",
+          "parameters": []
+        },
+        {
+          "object": "Return"
+        }
+      ],
+      "type": {
+        "identifier": "void",
+        "dimensions": 0
+      },
+      "parameters": [
+        {
+          "identifier": "java.lang.String",
+          "dimensions": 1
+        }
+      ]
+    }
+  ]
+}
