@@ -13,6 +13,6 @@ void crc_assert_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
   else
   {
     log_debug("Cache hits: {}", ++hits);
-    step.cond = constant_bool2tc(!is_forward_condition);
+    step.cond = constant_bool2tc(trivial_value);
   }
 }

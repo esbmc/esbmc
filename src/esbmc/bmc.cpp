@@ -598,12 +598,13 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       result->remaining_claims,
       BigInt(eq->SSA_steps.size()) - ignored);
 
-    // CACHE
+    // Run cache if user has specified the options
     if(options.get_bool_option("cache-asserts"))
     {
+      // Store the set between runs
       static auto cache = crc_assert_cache::create_empty_set();
       crc_assert_cache(
-        eq->SSA_steps, cache, options.get_bool_option("forward-condition"))
+        eq->SSA_steps, cache, !options.get_bool_option("forward-condition"))
         .run();
     }
     if(options.get_bool_option("document-subgoals"))
