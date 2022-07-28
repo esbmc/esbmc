@@ -38,13 +38,27 @@ bool is_padding(std::string tag)
 {
   std::smatch m;
   return std::regex_search(tag, m, std::regex("anon_pad\\$\\d+")) ||
-          std::regex_search(tag, m, std::regex("anon_bit_field_pad\\$\\d+"));
+          std::regex_search(tag, m, std::regex("\\$pad")) ||
+            std::regex_search(tag, m, std::regex("anon_bit_field_pad\\$\\d+"));
 }
 
 bool is_anonymous_member(std::string tag)
 {
   std::smatch m;
   return std::regex_search(tag, m, std::regex("anon\\$\\d+"));
+}
+
+// The following is a simple workaround to determine when a struct/union
+// type is defined using the "typedef" keyword since it changes
+// the type declaration syntax. This information is reflected only in the
+// type name in ESBMC irep. (Currently this info is not carried over from the 
+// Clang AST, and ideally we should introduce a separate 
+// attribute for this field.)
+bool is_typedef_struct_union(std::string tag)
+{
+  std::smatch m;
+  return !(std::regex_search(id2string(tag), m, std::regex("union[[:space:]]+.*")) ||
+            std::regex_search(id2string(tag), m, std::regex("struct[[:space:]]+.*")));
 }
 
 std::string
@@ -98,8 +112,10 @@ std::string expr2ccodet::convert_rec(
   {
     BigInt width = string2integer(src.width().as_string());
 
+    // We cannot have a signed type with a 1 bit width.
+    // So setting "sign_str" to "unsigned" to allow _ExtInt(1)
     bool is_signed = src.id() == "signedbv";
-    std::string sign_str = is_signed ? "signed " : "unsigned ";
+    std::string sign_str = (is_signed && width > 1) ? "signed " : "unsigned ";
 
     if(width == config.ansi_c.int_width)
       return q + sign_str + "int" + d;
@@ -144,8 +160,8 @@ std::string expr2ccodet::convert_rec(
 
     // Checking if the type has been already declared.
     // If true, then we only need to output the type's tag.
-    if(std::find(declared_types.begin(), declared_types.end(), id2string(tag)) !=
-        declared_types.end())
+    if(std::find(declared_types.begin(), declared_types.end(), 
+        id2string(tag)) != declared_types.end())
       return dest += " " + id2string(tag) + " " + declarator;
 
     // Adding this type to the list of declared types before continuing onto
@@ -154,73 +170,31 @@ std::string expr2ccodet::convert_rec(
     if(!is_anonymous)
       declared_types.push_back(id2string(tag));
 
-    // The following is a simple workaround to determine when a struct
-    // type is defined using the "typedef" keyword since it changes
-    // the type declaration syntax. This information is reflected only in the
-    // type name in ESBMC irep. (Currently this info is not carried over from the 
-    // Clang AST, and ideally we should introduce a separate attribute for 
-    // this field.)
-    std::smatch m;
-    if(std::regex_search(id2string(tag), m, std::regex("struct[[:space:]]+.*")))
+    // Different rules for typedefs. So check it first
+    if(is_typedef_struct_union(tag.as_string()))
+      return convert_struct_union_typedef(struct_type);
+
+    // Anonymous structs are always redeclared with all their members  
+    if(is_anonymous)
+      dest += "struct ";
+    else if(tag != "")
+      dest += " " + id2string(tag);
+
+    dest += " {";
+
+    for(const auto &component : struct_type.components())
     {
-      if(is_anonymous)
-        dest += "struct ";
-      else if(tag != "")
-        dest += " " + id2string(tag);
+      std::string comp_name = id2string(component.get_name());
+      if(is_padding(comp_name))
+        continue;
 
-      dest += " {";
-
-      for(const auto &component : struct_type.components())
-      {
-        std::string comp_name = id2string(component.get_name());
-        if(is_padding(comp_name))
-          continue;
-
-        dest += ' ';
-        dest += convert_rec(
-          component.type(), c_qualifierst(), comp_name);
-        dest += ';';
-      }
-
-      dest += " }";
-      //if(!is_anonymous_member(declarator))
-        dest += " " + declarator;
-    }
-    else
-    {
-      dest += "typedef struct";
-      dest += " {";
-
-      for(const auto &component : struct_type.components())
-      {
-        std::string comp_name = id2string(component.get_name());
-        if(is_padding(comp_name))
-          continue;
-
-        dest += ' ';
-        dest += convert_rec(
-          component.type(), c_qualifierst(), comp_name);
-        dest += ';';
-      }
-
-      dest += " }";
-      if(tag != "")
-        dest += " " + id2string(tag) + " ";
-
-      //if(declarator != "" && !is_anonymous_member(declarator))
-      if(declarator != "")
-        dest += ";\n" + id2string(tag) + " " + declarator;
+      dest += ' ';
+      dest += convert_rec(
+        component.type(), c_qualifierst(), comp_name);
+      dest += ';';
     }
 
-    return dest;
-  }
-  else if(src.id() == "incomplete_struct")
-  {
-    std::string dest = q + "struct";
-    const std::string &tag = src.tag().as_string();
-    if(tag != "")
-      dest += " " + tag;
-    dest += d;
+    dest += " }" + declarator;
     return dest;
   }
   else if(src.id() == "union")
@@ -233,8 +207,8 @@ std::string expr2ccodet::convert_rec(
 
     // Checking if the type has been already declared.
     // If true, then we only need to output the type's tag
-    if(std::find(declared_types.begin(), declared_types.end(), id2string(tag)) !=
-        declared_types.end())
+    if(std::find(declared_types.begin(), declared_types.end(), 
+        id2string(tag)) != declared_types.end())
       return dest += " " + id2string(tag) + " " + declarator;
 
     // Checking if the union type is anonymous. If the union is anonymous
@@ -247,62 +221,31 @@ std::string expr2ccodet::convert_rec(
     if(!is_anonymous)
       declared_types.push_back(id2string(tag));
 
-    // The following is a simple workaround to determine when a union
-    // type is defined using the "typedef" keyword since it changes
-    // the type declaration syntax. This information is reflected only in the
-    // type name in ESBMC irep. (Currently this info is not carried over from the 
-    // Clang AST, and ideally we should introduce a separate attribute for this field.)
-    std::smatch m;
-    if(std::regex_search(id2string(tag), m, std::regex("union[[:space:]]+.*")))
+    // Different rules for typedefs. So check it first
+    if(is_typedef_struct_union(tag.as_string()))
+      return convert_struct_union_typedef(union_type);
+
+    // Anonymous unions are always redeclared with all their members  
+    if(is_anonymous)
+      dest += "union ";
+    else if(tag != "")
+      dest += " " + id2string(tag);
+
+    dest += " {";
+
+    for(const auto &component : union_type.components())
     {
-      if(is_anonymous)
-        dest += "union ";
-      else if(tag != "")
-        dest += " " + id2string(tag);
+      std::string comp_name = id2string(component.get_name());
+      if(is_padding(comp_name))
+        continue;
 
-      dest += " {";
-
-      for(const auto &component : union_type.components())
-      {
-        std::string comp_name = id2string(component.get_name());
-        if(is_padding(comp_name))
-          continue;
-
-        dest += ' ';
-        dest += convert_rec(
-          component.type(), c_qualifierst(), id2string(component.get_name()));
-        dest += ';';
-      }
-
-      dest += " }";
-      //if(!is_anonymous_member(declarator))
-        dest += " " + declarator;
+      dest += ' ';
+      dest += convert_rec(
+        component.type(), c_qualifierst(), id2string(component.get_name()));
+      dest += ';';
     }
-    else
-    {
-      dest += "typedef union";
-      dest += " {";
 
-      for(const auto &component : union_type.components())
-      {
-        std::string comp_name = id2string(component.get_name());
-        if(is_padding(comp_name))
-          continue;
-
-        dest += ' ';
-        dest += convert_rec(
-          component.type(), c_qualifierst(), id2string(component.get_name()));
-        dest += ';';
-      }
-
-      dest += " }";
-      if(tag != "")
-        dest += " " + id2string(tag) + " ";
-
-      //if(declarator != "" && !is_anonymous_member(declarator))
-      if(declarator != "")
-        dest += ";\n" + id2string(tag) + " " + declarator;
-    }
+    dest += " }" + declarator;
     return dest;
   }
   else if(src.id() == "c_enum" || src.id() == "incomplete_c_enum")
@@ -313,6 +256,15 @@ std::string expr2ccodet::convert_rec(
     result += d;
     return result;
   }
+  else if(src.id() == "incomplete_struct")
+  {
+    std::string dest = q + "struct";
+    const std::string &tag = src.tag().as_string();
+    if(tag != "")
+      dest += " " + tag;
+    dest += d;
+    return dest;
+  }
   else if(src.id() == "pointer")
   {
     if(src.subtype().is_code())
@@ -322,7 +274,6 @@ std::string expr2ccodet::convert_rec(
       std::string dest = q + convert(return_type);
 
       // function "name"
-      //dest += " (*)";
       dest += " (*" + d + ")";
 
       // arguments
@@ -384,18 +335,6 @@ std::string expr2ccodet::convert_rec(
       dest += d;
       return dest;
     }
-/*
-    if(followed.id() == "union")
-    {
-      std::string dest = q;
-      const std::string &tag = followed.tag().as_string();
-      if(tag != "")
-        dest += " " + tag;
-      dest += d;
-      return dest;
-    }
-*/
-
     return convert_rec(ns.follow(src), new_qualifiers, declarator);
   }
   else if(src.is_code())
@@ -460,14 +399,7 @@ std::string expr2ccodet::convert_symbol(const exprt &src, unsigned &)
 {
   const irep_idt &id = src.identifier();
   std::string dest;
-/*
-  if(!fullname && ns_collision.find(id) == ns_collision.end())
-  {
-    dest = id_shorthand(src);
-  }
-  else
-    dest = id2string(id);
-*/
+  
   dest = id2string(id);
 
   if(src.id() == "next_symbol")
@@ -537,7 +469,6 @@ std::string expr2ccodet::convert(const exprt &src, unsigned &precedence)
 
   else if(src.id() == "infinity")
   {
-    //return convert_function(src, "INFINITY", precedence = 15);
     return convert_infinity(src, precedence = 15);
   }
 
@@ -937,6 +868,73 @@ std::string expr2ccodet::convert(const exprt &src, unsigned &precedence)
   return convert_norep(src, precedence);
 }
 
+std::string expr2ccodet::convert_struct_union_typedef(const typet &src)
+{
+  const struct_typet &struct_type = to_struct_type(src);
+
+  const irep_idt &tag = struct_type.tag().as_string();
+
+  // The following is a simple workaround to determine when a struct
+  // type is defined using the "typedef" keyword since it changes
+  // the type declaration syntax. This information is reflected only in the
+  // type name in ESBMC irep. (Currently this info is not carried over from the 
+  // Clang AST, and ideally we should introduce a separate attribute for 
+  // this field.)
+  std::string dest = "typedef ";
+  dest += src.id().as_string();
+  dest += " {";
+
+  for(const auto &component : struct_type.components())
+  {
+    std::string comp_name = id2string(component.get_name());
+    if(is_padding(comp_name))
+      continue;
+
+    dest += ' ';
+    dest += convert_rec(
+      component.type(), c_qualifierst(), comp_name);
+    dest += ';';
+  }
+
+  dest += " }";
+  if(tag != "")
+    dest += " " + id2string(tag) + " ";
+
+  return dest;
+}
+
+std::string expr2ccodet::convert_typecast(const exprt &src, unsigned &precedence)
+{
+  precedence = 14;
+
+  if(src.id() == "typecast" && src.operands().size() != 1)
+    return convert_norep(src, precedence);
+
+  // some special cases
+
+  const typet &type = ns.follow(src.type());
+
+  if(
+    type.id() == "pointer" &&
+    ns.follow(type.subtype()).id() == "empty" && // to (void *)?
+    src.op0().is_zero())
+    return "0";
+
+  std::string dest;
+  dest = "(" + convert(type) + ")";
+
+  std::string tmp = convert(src.op0(), precedence);
+
+  if(
+    src.op0().id() == "member" || src.op0().id() == "constant" ||
+    src.op0().id() == "symbol") // better fix precedence
+    dest += tmp;
+  else
+    dest += '(' + tmp + ')';
+
+  return dest;
+}
+
 std::string expr2ccodet::convert_code_decl(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 1 && src.operands().size() != 2)
@@ -962,20 +960,6 @@ std::string expr2ccodet::convert_code_decl(const codet &src, unsigned indent)
     if(symbol->type.is_code() && to_code_type(symbol->type).get_inlined())
       dest += "inline ";
   }
-
-/*
-  const typet &followed = ns.follow(src.op0().type());
-  if(followed.id() == "struct" || followed.id() == "union")
-  {
-    //const std::string &tag = followed.tag().as_string();
-    //if(tag != "")
-    //  dest += tag + " ";
-    //dest += declarator;
-    dest += convert_rec(src.op0().type(), c_qualifierst(), declarator);
-  }
-  else
-    dest += convert_rec(src.op0().type(), c_qualifierst(), declarator);
-*/
 
   dest += convert_rec(src.op0().type(), c_qualifierst(), declarator);
 
@@ -1013,13 +997,13 @@ std::string expr2ccodet::convert_union(const exprt &src, unsigned &precedence)
   const exprt::operandst &operands = src.operands();
   const irep_idt &init [[gnu::unused]] = src.component_name();
 
-
   if(operands.size() == 1)
   {
-    /* Initializer known */
+    // Initializer known
     assert(!init.empty());
 
-    std::string dest = "{ ";
+    std::string dest = "";
+    dest += "{ ";
 
     std::string tmp = convert(src.op0());
 
@@ -1034,8 +1018,8 @@ std::string expr2ccodet::convert_union(const exprt &src, unsigned &precedence)
   }
   else
   {
-    /* Initializer unknown, expect operands assigned to each member and convert
-     * all of them */
+    // Initializer unknown, expect operands assigned to each member and convert
+    // all of them
     assert(init.empty());
     return convert_struct_union_body(
       src, operands, to_union_type(full_type).components());
@@ -1052,14 +1036,12 @@ std::string expr2ccodet::convert_struct_union_body(
   assert(src.type().id() == "struct" || src.type().id() == "union");
 
   std::string dest;
-  //std::string dest = "(";
   if(src.type().id() == "struct")
   {
     const struct_typet &struct_type = to_struct_type(src.type());
     const irep_idt &tag = struct_type.tag().as_string();
     // Checking if we have an anonymous struct here before adding the tag
     std::smatch m;
-    //bool is_anonymous = std::regex_search(id2string(tag), m, std::regex("anonymous at"));
     if(!is_anonymous_tag(tag.as_string()))
       dest += "(" + tag.as_string() + ")";
   }
@@ -1069,11 +1051,9 @@ std::string expr2ccodet::convert_struct_union_body(
     const irep_idt &tag = union_type.tag().as_string();
     // Checking if we have an anonymous union here before adding the tag
     std::smatch m;
-    //bool is_anonymous = std::regex_search(id2string(tag), m, std::regex("anonymous at"));
     if(!is_anonymous_tag(tag.as_string()))
       dest += "(" + tag.as_string() + ")";
   }
-  //dest += ")";
 
   dest += "{ ";
 
@@ -1120,13 +1100,9 @@ std::string expr2ccodet::convert_struct_union_body(
     else
       newline = false;
 
-    //if(!is_anonymous_member(component.get_name().as_string()))
-    //{
-      dest += ".";
-      //dest += component.pretty_name().as_string();
-      dest += component.get_name().as_string();
-      dest += "=";
-    //}
+    dest += ".";
+    dest += component.get_name().as_string();
+    dest += "=";
     dest += tmp;
   }
 
@@ -1187,9 +1163,6 @@ std::string expr2ccodet::convert_member(const exprt &src, unsigned precedence)
     return convert_norep(src, precedence);
 
   dest += comp_expr.name().as_string();
-
-  //if(!is_anonymous_member(comp_expr.name().as_string()))
-  //  dest += comp_expr.pretty_name().as_string();
 
   return dest;
 }

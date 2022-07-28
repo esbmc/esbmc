@@ -46,7 +46,7 @@ protected:
   void get_symbols(const exprt &expr);
   std::string id_shorthand(const exprt &expr) const;
 
-  std::string convert_typecast(const exprt &src, unsigned &precedence);
+  virtual std::string convert_typecast(const exprt &src, unsigned &precedence);
 
   std::string convert_bitcast(const exprt &src, unsigned &precedence);
 

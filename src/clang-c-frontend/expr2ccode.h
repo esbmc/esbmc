@@ -1,4 +1,3 @@
-
 /*******************************************************************\
 
 Module:
@@ -48,6 +47,11 @@ protected:
     const struct_union_typet::componentst &components);
   std::string convert_struct(const exprt &src, unsigned &precedence) override;
   std::string convert_union(const exprt &src, unsigned &precedence) override;
+
+  std::string convert_typecast(const exprt &src, unsigned &precedence) override;
+  std::string convert_struct_typedef(const typet &src);
+  std::string convert_union_typedef(const typet &src);
+  std::string convert_struct_union_typedef(const typet &src);
 
   std::string convert_code_printf(const codet &src, unsigned indent) override;
   std::string convert_code_free(const codet &src, unsigned indent) override;
