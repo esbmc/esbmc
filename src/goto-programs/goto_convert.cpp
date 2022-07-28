@@ -189,6 +189,7 @@ void goto_convertt::convert_switch_case(
   convert(code.code(), tmp);
 
   goto_programt::targett target = tmp.instructions.begin();
+  target->location = code.code().location();
   dest.destructive_append(tmp);
 
   // default?
@@ -286,6 +287,7 @@ void goto_convertt::convert(const codet &code, goto_programt &dest)
   {
     dest.add_instruction(SKIP);
     dest.instructions.back().code = expr2tc();
+    dest.instructions.back().location = code.location();
   }
 }
 
@@ -1645,6 +1647,7 @@ void goto_convertt::generate_ifthenelse(
     goto_programt tmp_z;
     goto_programt::targett z = tmp_z.add_instruction();
     z->make_skip();
+    z->location = location;
     goto_programt::targett v = dest.add_instruction();
     expr2tc g;
     migrate_expr(guard, g);
@@ -1738,11 +1741,13 @@ void goto_convertt::generate_ifthenelse(
   // do the x label
   goto_programt tmp_x;
   goto_programt::targett x = tmp_x.add_instruction();
+  x->location = location;
 
   // do the z label
   goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
+  z->location = location;
 
   // y: Q;
   goto_programt tmp_y;
@@ -1751,6 +1756,7 @@ void goto_convertt::generate_ifthenelse(
   {
     tmp_y.swap(false_case);
     y = tmp_y.instructions.begin();
+    y->location = location;
   }
 
   // v: if(!c) goto z/y;
@@ -1874,6 +1880,7 @@ void goto_convertt::generate_conditional_branch(
   goto_programt tmp;
   goto_programt::targett target_false = tmp.add_instruction();
   target_false->make_skip();
+  target_false->location = location;
 
   generate_conditional_branch(guard, target_true, target_false, location, dest);
 
