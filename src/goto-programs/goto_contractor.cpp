@@ -21,7 +21,6 @@ void goto_contractort::get_constraints(goto_functionst goto_functions)
           .get_symbol_name() == "c:@F@__VERIFIER_assert")
       constraint = create_constraint_from_expr2t(
         to_code_function_call2t(ins.code).operands[0]);
-
   }
 }
 
@@ -103,10 +102,10 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
 
     if(
       last_loc <
-      function_loop.get_original_loop_head()->location.line().get_no())
+      function_loop.get_original_loop_head()->location_number)
     {
       loop = function_loop;
-      last_loc = loop.get_original_loop_head()->location.line().get_no();
+      last_loc = loop.get_original_loop_head()->location_number;
     }
 
   auto loop_exit = loop.get_original_loop_exit();
@@ -115,12 +114,23 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
 
   auto goto_function = goto_functions.function_map.find("c:@F@main")->second;
 
-  for(auto const &var : map.var_map)
+  if(map.isemptyVector)
   {
-    symbol2tc X = var.second.getSymbol();
-    if(var.second.isIntervalChanged())
+    auto cond = create_value_expr(0, int_type2());
+    goto_programt tmp_e(message_handler);
+    goto_programt::targett e = tmp_e.add_instruction(ASSUME);
+    e->inductive_step_instruction = false;
+    e->guard = cond;
+    e->location = loop_exit->location;
+    goto_function.body.destructive_insert(loop_exit, tmp_e);
+  }
+  else
+    for(auto const &var : map.var_map)
     {
-      /*auto lb = create_value_expr(var.second.getInterval().lb(), int_type2());
+      symbol2tc X = var.second.getSymbol();
+      if(var.second.isIntervalChanged())
+      {
+        /*auto lb = create_value_expr(var.second.getInterval().lb(), int_type2());
       auto cond = create_greaterthanequal_relation(X, lb);
       goto_programt tmp_e;
       goto_programt::targett e = tmp_e.add_instruction(ASSUME);
@@ -138,7 +148,6 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
       e2->location = loop_exit->location;
       goto_function.body.destructive_insert(loop_exit, tmp_e2);
     }
-  }
 }
 
 void goto_contractort::contractor()
@@ -166,6 +175,8 @@ void goto_contractort::contractor()
 
   oss << "\n\t- Domains (after): " << X;
   map.update_intervals(X);
+  if(X.is_empty() || X[0].is_degenerated())
+    map.isemptyVector = true;
 
   log_status("{}", oss.str());
 }
@@ -198,9 +209,9 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
     is_constant_number(get_base_object(expr)) ||
     is_symbol2t(get_base_object(expr)) ||
     is_notequal2t(get_base_object(expr)) ||
-    is_equality2t(get_base_object(expr)) ||
-    is_not2t(get_base_object(expr)) ||
-    is_modulus2t(get_base_object(expr)))
+    is_equality2t(get_base_object(expr)) || is_not2t(get_base_object(expr)) ||
+    is_modulus2t(get_base_object(expr)) || is_or2t(get_base_object(expr)) ||
+    is_and2t(get_base_object(expr)))
   {
     log_status("Expression is complex, skipping this assert");
     return nullptr;
