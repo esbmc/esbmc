@@ -7,7 +7,6 @@
 #include <goto-programs/goto_functions.h>
 #include <util/namespace.h>
 
-
 class c_instructiont : public goto_programt::instructiont
 {
 
@@ -39,6 +38,8 @@ public:
   bool scope_begin = false;
   bool scope_end = false;
 
+  unsigned int scope_id = 0;
+
 protected:
 
   unsigned int loop_depth = 0;
@@ -53,10 +54,9 @@ void inline_function_calls(std::vector<c_instructiont> c_instructions, goto_func
 void insert_static_declarations(std::vector<c_instructiont> c_instructions, namespacet ns);
 void merge_decl_assign_pairs(std::vector<c_instructiont> c_instructions);
 void assign_returns(std::vector<c_instructiont> c_instructions);
-
 void assign_dynamic_sizes(std::vector<c_instructiont> c_instructions);
-
 void adjust_gotos(std::vector<c_instructiont> c_instructions, namespacet ns);
+void output_execution_trace(namespacet &ns, std::ostream &out);
 
 std::vector<c_instructiont> inline_function_call(c_instructiont func_call, goto_functionst goto_functions);
 
@@ -65,6 +65,7 @@ extern std::map<std::string, std::vector<c_instructiont>> functions_to_c;
 extern unsigned int function_call_num;
 extern unsigned int label_num;
 extern std::map<std::string, unsigned int> fun_call_nums;
+extern std::map<expr2tc, unsigned int> dyn_size_map;
 
 extern std::map<std::string, type2tc> alive_vars;
 extern std::vector<std::string> declared_types;

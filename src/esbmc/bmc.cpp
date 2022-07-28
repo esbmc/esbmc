@@ -52,6 +52,7 @@ unsigned int label_num = 0;
 std::map<std::string, type2tc> alive_vars;
 std::vector<std::string> declared_types;
 std::map<std::string, unsigned int> fun_call_nums;
+std::map<expr2tc, unsigned int> dyn_size_map;
 
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
@@ -645,22 +646,22 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     const std::string &filename = options.get_option("output");
     if(!filename.empty())
     {
-      // Outputting all the intructions now
+      // Outputting all instructions to the output file
       std::ofstream out(filename.c_str());
       if(out)
       {
-        bool inside_main = false;
-        out << "void run_execution_trace(int argc, char *argv[])\n";
-        out << "{\n";
-
-        // Converting the instructions
-        for(c_instructiont it : instructions_to_c)
-          out << it.convert_to_c(ns) << "\n";
-
-        out << "}\n";
+        output_execution_trace(ns, out);
         out.close();
       }
     }
+    else
+    {
+      std::ostringstream str;
+      output_execution_trace(ns, str);
+      msg.status(str.str());
+    }
+    //return smt_convt::P_SATISFIABLE;
+    //return 0;
   }
 
   if(options.get_bool_option("double-assign-check"))

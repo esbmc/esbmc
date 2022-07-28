@@ -6,6 +6,9 @@
 #include <util/base_type.h>
 #include <pointer-analysis/dereference.h>
 
+#include <iostream>
+#include <regex>
+
 std::string get_function_name(expr2tc func_call)
 {
   assert(is_code_function_call2t(func_call));
@@ -19,7 +22,6 @@ std::string get_function_name(expr2tc func_call)
   return fun_name;
 }
 
-
 expr2tc get_symbol(const expr2tc &expr)
 {
   if(is_member2t(expr))
@@ -30,13 +32,38 @@ expr2tc get_symbol(const expr2tc &expr)
   return expr;
 }
 
+type2tc get_base_decl_type(type2tc type)
+{
+  if(is_pointer_type(type))
+  {
+    pointer_type2tc ptr_type = to_pointer_type(type);
+    return get_base_decl_type(ptr_type->subtype);
+  }
+  if(is_array_type(type))
+  {
+    array_type2tc arr_type = to_array_type(type);
+    return get_base_decl_type(arr_type->subtype);
+  }
+
+  return type;
+}
+
+expr2tc get_base_expr(expr2tc expr)
+{
+  if(is_typecast2t(expr))
+    return get_base_expr(to_typecast2t(expr).from);
+
+  return expr;
+}
+
+
 std::string c_instructiont::convert_to_c(namespacet &ns)
 {
   std::ostringstream out;
 
   unsigned int loop_unwind = atoi(config.options.get_option("unwind").c_str());
 
-  out << "// location = " << location << "\n";
+  //out << "// location = " << location << "; scope_id = " << scope_id << "\n";
 
   if(is_target())
   {
@@ -165,22 +192,6 @@ std::string c_instructiont::convert_assert_to_c(namespacet &ns)
   return out.str();
 }
 
-type2tc get_base_decl_type(type2tc type)
-{
-  if(is_pointer_type(type))
-  {
-    pointer_type2tc ptr_type = to_pointer_type(type);
-    return get_base_decl_type(ptr_type->subtype);
-  }
-  if(is_array_type(type))
-  {
-    array_type2tc arr_type = to_array_type(type);
-    return get_base_decl_type(arr_type->subtype);
-  }
-
-  return type;
-}
-
 std::string c_instructiont::convert_decl_to_c(namespacet &ns)
 {
   assert(is_code_decl2t(code));
@@ -270,12 +281,17 @@ void inline_function_calls(
   std::vector<c_instructiont> c_instructions,
   goto_functionst goto_functions)
 {
+  unsigned int scope_id_counter = 0;
+  std::vector<unsigned int> scope_stack;
+  scope_stack.push_back(scope_id_counter);
   for(unsigned int i = 0; i < instructions_to_c.size(); i++)
   {
     c_instructiont instr = instructions_to_c.at(i);
+    instructions_to_c.at(i).scope_id = scope_stack.back();
+    //std::cerr << ">>>>> instr_scope_id = " << instructions_to_c.at(i).scope_id << "\n";
     if(instr.type == FUNCTION_CALL)
     {
-      // Getting function name symbol fron the function call
+      // Getting function name symbol from the function call
       assert(is_code_function_call2t(instr.code));
       code_function_call2tc code_function_call =
         to_code_function_call2t(instr.code);
@@ -284,9 +300,14 @@ void inline_function_calls(
       auto function = goto_functions.function_map.find(func_call_sym.thename);
       if(function != goto_functions.function_map.end() && function->second.body_available)
       {
+        // We are entering a new scope here
+        scope_id_counter++;
+        scope_stack.push_back(scope_id_counter);
+        // Create a SKIP instruction with the scope_begin flag set
         c_instructiont scope_instr(SKIP);
         scope_instr.scope_begin = true;
         scope_instr.location = instr.location;
+        scope_instr.scope_id = scope_id_counter;
         i++;
         instructions_to_c.insert(instructions_to_c.begin() + i, scope_instr);
         std::vector<c_instructiont> fun_instr =
@@ -294,17 +315,23 @@ void inline_function_calls(
         for(auto it = fun_instr.begin(); it != fun_instr.end(); it++)
         {
           i++;
+          it->scope_id = scope_id_counter;
           instructions_to_c.insert(instructions_to_c.begin() + i, *it);
         }
       }
     }
     else if(instr.type == END_FUNCTION)
     {
+      // Create a SKIP instruction with the scope_begin flag set
       c_instructiont scope_instr(SKIP);
       scope_instr.scope_end = true;
       scope_instr.location = instr.location;
+      scope_instr.scope_id = scope_stack.back();
       instructions_to_c.insert(instructions_to_c.begin() + i, scope_instr);
       i++;
+      // We are leaving the scope int here. So pop the current scope from
+      // the scope stack
+      scope_stack.pop_back();
     }
   }
 }
@@ -313,45 +340,21 @@ void insert_static_declarations(
   std::vector<c_instructiont> c_instructions,
   namespacet ns)
 {
-  // Declaring extern variables first
+  // Declaring all extern variables but not functions
   ns.get_context().foreach_operand_in_order(
     [&ns](const symbolt &s) {
-      //if(s.static_lifetime)
-      //  std::cerr << " static_lifetime";
-      //if(s.file_local)
-      //  std::cerr << " file_local";
-      //if(s.is_type)
-      //  std::cerr << " type";
-      //if(s.is_extern)
-      //  std::cerr << " extern";
-      //if(s.is_macro)
-      //  std::cerr << " macro";
-      /*
-      if(s.is_extern && s.id != "argv\'" && s.id != "argc\'")
+      if(s.is_extern && s.id != "argv\'" && 
+          s.id != "argc\'" && s.type.id() != "code")
       {
         code_declt decl(symbol_expr(s));
         code_decl2tc code_decl;
         migrate_expr(decl, code_decl);
         c_instructiont instr(DECL);
-        instr.code = code_decl;
-        instr.location = s.location;
-        instructions_to_c.insert(instructions_to_c.begin(), instr);
-        //std::cerr << ">>>>> extern symbol: " << s.id << "\n";
-      }
-      */
-      /*
-      if(s.id == "argv\'" ||
-          s.id == "argc\'")
-      {
-        code_declt decl(symbol_expr(s));
-        code_decl2tc code_decl;
-        migrate_expr(decl, code_decl);
-        c_instructiont instr(DECL);
+        //instr.decl = decl;
         instr.code = code_decl;
         instr.location = s.location;
         instructions_to_c.insert(instructions_to_c.begin(), instr);
       }
-      */      
     });
   // Turning the initialisations in the form of assignments only
   // for variables with static lifetime into the initialisations
@@ -454,6 +457,7 @@ void merge_decl_assign_pairs(std::vector<c_instructiont> c_instructions)
 
 void assign_dynamic_sizes(std::vector<c_instructiont> c_instructions)
 {
+  unsigned int dyn_size_counter = 0;
   for(unsigned int i = 0; i < instructions_to_c.size(); i++)
   {
     c_instructiont cur_instr = instructions_to_c.at(i);
@@ -463,14 +467,93 @@ void assign_dynamic_sizes(std::vector<c_instructiont> c_instructions)
       code_assign2tc assign = to_code_assign2t(cur_instr.code);
       if(is_dynamic_size2t(assign->target))
       {
-        //dynamic_size2tc dyn_size = to_dynamic_size2t(assign->target);
-        //std::cerr << ">>>>> dyn_size = " << dyn_size << "\n";
-        //std::cerr << "----------\n";
-        //function_call2tc fun_call;
-        //instructions_to_c.erase(instructions_to_c.begin() + i);
+        dynamic_size2tc dyn_size = to_dynamic_size2t(assign->target);
+        assert(is_address_of2t(dyn_size.value));
+        // Erase the current instruction "dynamic_size(&arr) = val"
+        instructions_to_c.erase(instructions_to_c.begin() + i);
+        // Creating a new dynamic_size symbol for every "dynamic_size(&arr) = val" call
+        symbol2tc dyn_size_sym(get_uint32_type(),
+                            "__ESBMC_dynamic_size_" + std::to_string(dyn_size_counter));
+        // Declaring the dynamic_size symbol first
+        c_instructiont decl_instr(DECL);
+        code_decl2tc decl(dyn_size_sym->type, dyn_size_sym->thename); 
+        decl_instr.code = decl;
+        decl_instr.location = cur_instr.location;
+        instructions_to_c.insert(instructions_to_c.begin() + i, decl_instr);
+        i++;
+        // Assigning the value to the dynamic_size symbol
+        c_instructiont assign_instr(ASSIGN);
+        code_assign2tc new_assign(dyn_size_sym, assign->source);
+        assign_instr.code = new_assign;
+        assign_instr.location = cur_instr.location;
+        instructions_to_c.insert(instructions_to_c.begin() + i, assign_instr);
+        i++;
+        // Adding the dynamic_size symbol id to the map
+        dyn_size_map[assign->target] = dyn_size_counter;
+        dyn_size_counter++;
+      }
+      else if(is_union_type(assign->target->type) && 
+                is_constant_union2t(assign->source))
+      {
+        // This is a hack for now
+        constant_union2tc const_union = to_constant_union2t(assign->source);
+        if(const_union->datatype_members.size() == 1)
+        {
+          typecast2tc new_source(const_union->type, const_union->datatype_members[0]);
+          assign->source = new_source; 
+          c_instructiont assign_instr(ASSIGN);
+          assign_instr.code = assign;
+          assign_instr.location = cur_instr.location;
+          instructions_to_c.at(i) = assign_instr;
+        }
+      }
+      else if(is_typecast2t(assign->target))
+      {
+        // Creating a new instruction where the LHS typecast is removed
+        assign->target = get_base_expr(assign->target); 
+        c_instructiont assign_instr(ASSIGN);
+        assign_instr.code = assign;
+        assign_instr.location = cur_instr.location;
+        instructions_to_c.at(i) = assign_instr;
       }
     }
   }
+}
+
+void output_typedefs(namespacet &ns, std::ostream &out)
+{
+  // Declaring extern variables first
+  ns.get_context().foreach_operand_in_order(
+    [&ns, &out](const symbolt &s) {
+      std::smatch m;
+      //std::string tag = s.type.tag().as_string();
+      std::string tag = s.id.as_string();
+      if(std::regex_search(tag, m, std::regex("tag\\-.+")))
+      {
+        //std::cerr << ">>>>> found a tag: " << s.id << "\n";
+        //if(!(std::regex_search(tag, m, std::regex("tag\\-struct.+")) || 
+        //      std::regex_search(tag, m, std::regex("tag\\-union.+"))))
+        {
+          out << type2ccode(s.type, ns) << ";\n";
+        }
+      }
+    });
+}
+
+void output_execution_trace(namespacet &ns, std::ostream &out)
+{
+  out << "void run_execution_trace(int argc, char *argv[])\n";
+  out << "{\n";
+
+  out << "// Outputting typedefs\n";
+  output_typedefs(ns, out);
+
+  out << "// Outputting the rest of the instructions\n";
+  // Converting the instructions to C
+  for(c_instructiont it : instructions_to_c)
+    out << it.convert_to_c(ns) << "\n";
+
+  out << "}\n";
 }
 
 void adjust_gotos(std::vector<c_instructiont> c_instructions, namespacet ns)
