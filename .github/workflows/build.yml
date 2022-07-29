@@ -125,8 +125,8 @@ jobs:
         git config --system core.eol lf
     - uses: actions/checkout@v2
     - name: Install dependencies (flex, bison, od)
-        uses: crazy-max/ghaction-chocolatey@v2
-        with:
+      uses: crazy-max/ghaction-chocolatey@v2
+      with:
           args: install -y gnuwin32-coreutils.portable nsis.portable winflexbison --ignore-checksums
     - name: Check if od is on path
       run: od.exe --version
