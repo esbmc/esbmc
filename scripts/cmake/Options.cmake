@@ -45,6 +45,9 @@ option(ENABLE_FUZZER "Add fuzzing targets (default: OFF)" OFF)
 option(ENABLE_CLANG_TIDY "Activate clang tidy analysis (default: OFF)" OFF)
 option(ENABLE_CSMITH "Add csmith Tests (default: OFF) (depends: ENABLE_REGRESSION)" OFF)
 option(BENCHBRINGUP "Run a user-specified benchmark in Github workflow" OFF)
+if(WIN32)
+    option(DOWNLOAD_WINDOWS_DEPENDENCIES "Download Windows LLVM and Z3 through CMake (default: OFF)" OFF)
+endif()
 
 #############################
 # CMake extra Vars

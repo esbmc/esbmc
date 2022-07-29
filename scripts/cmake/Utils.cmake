@@ -103,3 +103,17 @@ function(mangle output_c dir)
     endif()
   endif()
 endfunction()
+
+function(download_zip_and_extract ID URL)
+  # TODO: might be a good idea to add sha1 checks
+  if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID}.zip)
+    message(STATUS "Downloading ${ID}")
+    file(DOWNLOAD ${URL} ${CMAKE_BINARY_DIR}/${ID}.zip SHOW_PROGRESS)
+  endif()
+
+  if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID})
+    message(STATUS "Extracting ${ID}") 
+    file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/${ID}.zip DESTINATION ${CMAKE_BINARY_DIR}/${ID})
+  endif()
+
+endfunction()
