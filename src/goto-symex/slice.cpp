@@ -110,6 +110,12 @@ void symex_slicet::slice_assume(symex_target_equationt::SSA_stept &SSA_step)
     // we don't really need it
     SSA_step.ignore = true;
     ++ignored;
+    if(is_symbol2t(SSA_step.cond))
+      log_debug(
+        "slice ignoring assume symbol {}",
+        to_symbol2t(SSA_step.cond).get_symbol_name());
+    else
+      log_debug("slide ignoring assume expression");
   }
   else
   {
@@ -128,6 +134,9 @@ void symex_slicet::slice_assignment(symex_target_equationt::SSA_stept &SSA_step)
     // we don't really need it
     SSA_step.ignore = true;
     ++ignored;
+    log_debug(
+      "slice ignoring assignment to symbol {}",
+      to_symbol2t(SSA_step.lhs).get_symbol_name());
   }
   else
   {
@@ -149,6 +158,9 @@ void symex_slicet::slice_renumber(symex_target_equationt::SSA_stept &SSA_step)
     // we don't really need it
     SSA_step.ignore = true;
     ++ignored;
+    log_debug(
+      "slice ignoring renumbering symbol {}",
+      to_symbol2t(SSA_step.lhs).get_symbol_name());
   }
 
   // Don't collect the symbol; this insn has no effect on dependencies.
