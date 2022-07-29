@@ -124,8 +124,10 @@ jobs:
         git config --system core.autocrlf false
         git config --system core.eol lf
     - uses: actions/checkout@v2
-    - name: Instal gnu tools (od)
-      run: choco install -y gnuwin32-coreutils.portable nsis.portable --ignore-checksums
+    - name: Install dependencies (flex, bison, od)
+        uses: crazy-max/ghaction-chocolatey@v2
+        with:
+          args: install -y gnuwin32-coreutils.portable nsis.portable winflexbison --ignore-checksums
     - name: Check if od is on path
       run: od.exe --version
     - name: Update vcpkg
@@ -138,8 +140,6 @@ jobs:
       run: vcpkg.exe integrate install
     - name: Install Boost
       run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows boost-program-options:x64-windows boost-iostreams:x64-windows
-    - name: Install Bison/Flex
-      run: choco install -y winflexbison --ignore-checksums
     - name: Prepare Environment
       run: .\scripts\configure_environment.ps1
     - name: Check environment
