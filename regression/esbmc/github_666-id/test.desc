@@ -1,0 +1,5 @@
+CORE
+no_slice.c
+--no-slice-id c:no_slice.c@21@F@main@foo?1!0&0#2
+\bfoo = 15\b
+^VERIFICATION FAILED$
