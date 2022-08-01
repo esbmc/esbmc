@@ -53,6 +53,13 @@ elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
     set(REGRESSIONS esbmc cbmc cstd llvm floats k-induction ${REGRESSIONS_JIMPLE})
 else()
+  if(BENCHBRINGUP) # run a single user-specified benchmark
+    if(NOT DEFINED ENV{BENCHMARK_TO_RUN})
+      message( FATAL_ERROR "ENV var BENCHMARK_TO_RUN is not defined. Please specify which benchmark to run." )
+    endif()
+    message(STATUS "Benchmark to run - $ENV{BENCHMARK_TO_RUN}")
+    set(REGRESSIONS $ENV{BENCHMARK_TO_RUN})
+  else()
     set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc ${REGRESSIONS_SOLIDITY}
                     ${REGRESSIONS_OLD_FRONTEND}
                     cbmc cstd llvm floats floats-regression
@@ -60,6 +67,7 @@ else()
                     k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
                     incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors esbmc-cpp11/new-delete esbmc-cpp11/reference
                     ${REGRESSIONS_GOTO_CONTRACTOR} ${REGRESSIONS_JIMPLE} extensions)
+  endif()
 endif()
 
 foreach(regression IN LISTS REGRESSIONS)

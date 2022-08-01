@@ -1,0 +1,56 @@
+name: Run a Benchmark
+on:
+  workflow_dispatch:
+    inputs:
+      strategy:
+        description: 'Which Strategy to use? (incr, kinduction, falsi). THIS IS BEING IGNORED!'
+        required: true
+        default: 'incr'
+      timeout:
+        description: 'Timeout for each benchmarks (in seconds)' # TODO: extend py script to use this timeout
+        required: true
+        default: '10'
+      options:
+        description: 'Command-line flags to pass via ESBMC_OPTS'
+        required: false
+        default: ''
+      benchmark:
+        description: 'Benchmark to run'
+        required: true
+        default: 'esbmc-cpp/cpp'
+
+jobs:
+  build-linux:
+    name: Build Linux Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 720 # 12h
+    container: rafaelsamenezes/esbmc-ci:clang11
+    steps:
+      - name: Small test
+        run: echo ${{ github.event.inputs.timeout }}
+      - name: Checkout code
+        uses: actions/checkout@master
+      - run: apt update  # Only for Docker jobs
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+      - name: Fix dubious ownership
+        run: git config --global --add safe.directory /__w/esbmc/esbmc
+      - name: Confirm the benchmark
+        run: echo ${{ github.event.inputs.benchmark }}
+      - name: Configure CMake
+        env:
+          BENCHMARK_TO_RUN: ${{ inputs.benchmark }}
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_REGRESSION=On -DBENCHBRINGUP=On
+      - name: Build ESBMC
+        run: cd build && cmake --build .
+      - uses: actions/upload-artifact@v1
+        with:
+          name: release-linux
+          path: ./build/src/esbmc/esbmc
+      - name: Run user-specified benchmark
+        env:
+          TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
+        run: cd build/ && ctest -j4 --output-on-failure --progress .
+
+      #TODO: - uses: actions/upload-artifact@v1 # upload logs
