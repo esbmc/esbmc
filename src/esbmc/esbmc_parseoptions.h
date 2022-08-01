@@ -77,7 +77,8 @@ protected:
   FILE *out = stdout;
   FILE *err = stderr;
 
-  std::vector<goto_functions_algorithm> goto_preprocess_algorithms;
+  std::vector<std::unique_ptr<goto_functions_algorithm>>
+    goto_preprocess_algorithms;
 
 private:
   void close_file(FILE *f)

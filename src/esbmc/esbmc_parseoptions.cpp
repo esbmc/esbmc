@@ -451,12 +451,14 @@ int esbmc_parseoptionst::doit()
     if(cmdline.isset("goto-unwind") && !cmdline.isset("unwind"))
     {
       size_t unroll_limit = cmdline.isset("unlimited-goto-unwind") ? -1 : 1000;
-      goto_preprocess_algorithms.push_back(bounded_loop_unroller(unroll_limit));
+      goto_preprocess_algorithms.push_back(
+        std::make_unique<bounded_loop_unroller>(unroll_limit));
     }
 
     // mark declarations as nondet
     if(cmdline.isset("initialize-nondet-variables"))
-      goto_preprocess_algorithms.push_back(mark_decl_as_non_det(context));
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<mark_decl_as_non_det>(context));
   }
   if(cmdline.isset("termination"))
     return doit_termination();
@@ -1557,7 +1559,7 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
     for(auto &algorithm : goto_preprocess_algorithms)
-      algorithm.run(goto_functions);
+      algorithm->run(goto_functions);
 
     // do partial inlining
     if(!cmdline.isset("no-inlining"))
