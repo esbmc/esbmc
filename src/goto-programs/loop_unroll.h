@@ -17,8 +17,7 @@
 class unsound_loop_unroller : public goto_functions_algorithm
 {
 public:
-  unsound_loop_unroller(goto_functionst &goto_functions)
-    : goto_functions_algorithm(goto_functions, true)
+  unsound_loop_unroller() : goto_functions_algorithm(true)
   {
   }
 
@@ -62,10 +61,8 @@ public:
   /**
    * Note: the default value for unroll_limit is based on testing
    */
-  bounded_loop_unroller(
-    goto_functionst &goto_functions,
-    size_t unroll_limit = 1000)
-    : unsound_loop_unroller(goto_functions), unroll_limit(unroll_limit)
+  explicit bounded_loop_unroller(size_t unroll_limit = 1000)
+    : unsound_loop_unroller(), unroll_limit(unroll_limit)
   {
   }
 

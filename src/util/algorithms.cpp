@@ -2,7 +2,7 @@
 #include <util/message.h>
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/remove_skip.h>
-bool goto_functions_algorithm::run()
+bool goto_functions_algorithm::run(goto_functionst &goto_functions)
 {
   Forall_goto_functions(it, goto_functions)
   {

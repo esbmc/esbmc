@@ -445,6 +445,19 @@ int esbmc_parseoptionst::doit()
     return 0;
   }
 
+  // initialize goto_functions algorithms
+  {
+    // loop unroll
+    if(cmdline.isset("goto-unwind") && !cmdline.isset("unwind"))
+    {
+      size_t unroll_limit = cmdline.isset("unlimited-goto-unwind") ? -1 : 1000;
+      goto_preprocess_algorithms.push_back(bounded_loop_unroller(unroll_limit));
+    }
+
+    // mark declarations as nondet
+    if(cmdline.isset("initialize-nondet-variables"))
+      goto_preprocess_algorithms.push_back(mark_decl_as_non_det(context));
+  }
   if(cmdline.isset("termination"))
     return doit_termination();
 
@@ -1543,18 +1556,8 @@ bool esbmc_parseoptionst::process_goto_program(
   try
   {
     namespacet ns(context);
-    if(
-      options.get_bool_option("goto-unwind") &&
-      !options.get_bool_option("unwind"))
-    {
-      size_t unroll_limit =
-        options.get_bool_option("unlimited-goto-unwind") ? -1 : 1000;
-      bounded_loop_unroller unwind_loops(goto_functions, unroll_limit);
-      unwind_loops.run();
-    }
-
-    if(options.get_bool_option("initialize-nondet-variables"))
-      mark_decl_as_non_det(context, goto_functions).run();
+    for(auto &algorithm : goto_preprocess_algorithms)
+      algorithm.run(goto_functions);
 
     // do partial inlining
     if(!cmdline.isset("no-inlining"))

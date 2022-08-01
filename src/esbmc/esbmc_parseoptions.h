@@ -7,6 +7,7 @@
 #include <util/cmdline.h>
 #include <util/options.h>
 #include <util/parseoptions.h>
+#include <util/algorithms.h>
 
 extern const struct group_opt_templ all_cmd_options[];
 
@@ -75,6 +76,8 @@ protected:
 
   FILE *out = stdout;
   FILE *err = stderr;
+
+  std::vector<goto_functions_algorithm> goto_preprocess_algorithms;
 
 private:
   void close_file(FILE *f)

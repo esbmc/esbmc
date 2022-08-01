@@ -39,8 +39,8 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
       "}");
     auto goto_functions = goto_factory::get_goto_functions(program);
 
-    bounded_loop_unroller unwind_loops(goto_functions);
-    unwind_loops.run();
+    bounded_loop_unroller unwind_loops;
+    unwind_loops.run(goto_functions);
 
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
     REQUIRE(unwind_loops.get_number_of_loops() == 0);
@@ -53,8 +53,8 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
       "return 0;"
       "}");
     auto goto_functions = goto_factory::get_goto_functions(program);
-    bounded_loop_unroller unwind_loops(goto_functions);
-    unwind_loops.run();
+    bounded_loop_unroller unwind_loops;
+    unwind_loops.run(goto_functions);
 
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
     REQUIRE(unwind_loops.get_number_of_loops() == 1);
@@ -69,8 +69,8 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
       "  return 0; "
       "}");
     auto goto_functions = goto_factory::get_goto_functions(program);
-    bounded_loop_unroller unwind_loops(goto_functions);
-    unwind_loops.run();
+    bounded_loop_unroller unwind_loops;
+    unwind_loops.run(goto_functions);
 
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
     REQUIRE(unwind_loops.get_number_of_loops() == 1);
@@ -86,8 +86,8 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
       "  return 0; "
       "}");
     auto goto_functions = goto_factory::get_goto_functions(program);
-    bounded_loop_unroller unwind_loops(goto_functions);
-    unwind_loops.run();
+    bounded_loop_unroller unwind_loops;
+    unwind_loops.run(goto_functions);
 
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
     REQUIRE(unwind_loops.get_number_of_loops() == 1);
@@ -103,8 +103,8 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
       "  return 0; "
       "}");
     auto goto_functions = goto_factory::get_goto_functions(program);
-    bounded_loop_unroller unwind_loops(goto_functions);
-    unwind_loops.run();
+    bounded_loop_unroller unwind_loops;
+    unwind_loops.run(goto_functions);
 
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
     REQUIRE(unwind_loops.get_number_of_loops() == 2);
