@@ -11,8 +11,6 @@ import re
 import xml.etree.ElementTree as ET
 import time
 import shlex
-from datetime import datetime
-import copy
 #####################
 # Testing Tool
 #####################
@@ -60,9 +58,6 @@ class BaseTest:
             as a KNOWNBUG and (if supported) add the issue
             to it"""
         raise NotImplementedError
-
-    def append_test_arg(self, arg: str):
-        self.test_args += arg
 
     def __str__(self):
         return f'[{self.name}]: {self.test_dir}, {self.test_mode}'
@@ -197,41 +192,11 @@ class TestParser:
             first_line = fp.readline().strip()
             return TestParser.MODES[TestParser.detect_mode_by_header(first_line)](test_dir, name)
 
-class TestControl:
-    """This class provides more fine-grained controls over the test cases, such as:
-       (a) Test log retention.
-       (b) Additional arguments for each test case"""
-    def __init__(self, regression_path):
-        self.now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.log_dir = (self.now + "_" + regression_path).replace("/", "_")
-
-    def set_old_frontend(self):
-        self.old_frontend = True
-
-    def set_log_retention(self):
-        self.log_retention = True
-        os.mkdir(self.log_dir)
-
-    def set_mode_dir(self, path):
-        """User provided operation mode directory"""
-        self.op_mode_dir = path
-
-    # ESBMC output logs
-    # If the user wants to keep the logs, please add "--retain-logs" argument.
-    # The logs will be kept in the director named as "20220211_073815_<test_name>".
-    now = ""
-    log_dir = ""
-    log_retention = False
-    # Use old C and C++ frontend
-    old_frontend = False
-    # user defined operation mode directory
-    op_mode_dir = ""
 
 class Executor:
-    def __init__(self, control: TestControl, tool="esbmc"):
+    def __init__(self, tool="esbmc"):
         self.tool = shlex.split(tool)
         self.timeout = RegressionBase.TIMEOUT
-        self.test_control = copy.deepcopy(control)
 
     def run(self, test_case: BaseTest):
         """Execute the test case with `executable`"""
@@ -247,7 +212,6 @@ class Executor:
             return None, None
         return stdout, stderr
 
-    test_control = TestControl("")
 
 def get_test_objects(base_dir: str):
     """Generates a TestCase from a list of files"""
@@ -282,16 +246,6 @@ def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
 
     def test(self):
-        # old frontend
-        if executor.test_control.old_frontend:
-            test_case.append_test_arg(" --old-frontend")
-
-        # user defined operation mode directory
-        if executor.test_control.op_mode_dir:
-            op_mode_arg = executor.test_control.op_mode_dir
-            test_case.append_test_arg(" {}".format(op_mode_arg))
-
-        # run test and collect output
         stdout, stderr = executor.run(test_case)
         if stdout == None:
             timeout_message ="\nTIMEOUT TEST: " + str(test_case.test_dir)
@@ -302,15 +256,6 @@ def _add_test(test_case, executor):
             str(test_case.test_regex) + "\n\nPROGRAM OUTPUT\n"
         error_message = output_to_validate + "\n\nARGUMENTS: " + \
             str(test_case.generate_run_argument_list(*executor.tool))
-
-        if executor.test_control.log_retention:
-            dir_path = os.path.dirname(os.path.realpath(__file__))
-            log_dir = executor.test_control.log_dir
-            destination = dir_path + '/' + log_dir +'/' + test_case.name
-            f=open(destination, 'a')
-            f.write("ESBMC args: " + test_case.test_args + '\n\n')
-            f.write(output_to_validate)
-            f.close()
 
         matches_regex = True
         for regex in test_case.test_regex:
@@ -331,9 +276,9 @@ def _add_test(test_case, executor):
     return test
 
 
-def create_tests(executor_path: str, base_dir: str, mode: str, test_control: TestControl):
+def create_tests(executor_path: str, base_dir: str, mode: str):
     assert mode in SUPPORTED_TEST_MODES, str(mode) + " is not supported"
-    executor = Executor(test_control, executor_path)
+    executor = Executor(executor_path)
 
     test_cases = get_test_objects(base_dir)
     print(f'Found {len(test_cases)} test cases')
@@ -345,8 +290,8 @@ def create_tests(executor_path: str, base_dir: str, mode: str, test_control: Tes
                 test_case.name), test_func)
 
 
-def gen_one_test(base_dir: str, test: str, executor_path: str, modes, test_control: TestControl):
-    executor = Executor(test_control, executor_path)
+def gen_one_test(base_dir: str, test: str, executor_path: str, modes):
+    executor = Executor(executor_path)
     test_case = TestParser.from_file(os.path.join(base_dir, test), test)
     if test_case.test_mode not in modes:
         exit(10)
@@ -368,11 +313,6 @@ def _arg_parsing():
                         help="Path for the Standard C++ Libraries abstractions")
     parser.add_argument("--mark_knownbug_with_word", required=False,
                         help="If test fails with word then mark it as a knownbug")
-    parser.add_argument("--retain-logs", default=False, action="store_true", required=False,
-            help="Keep ESBMC logs for further analysis. The logs will be stored in a directory named as YYMMDD_HHMMSS_TESTSUITE")
-    parser.add_argument("--old-frontend", default=False, action="store_true", required=False,
-            help="Use ansi-c and cpp old frontend")
-    parser.add_argument("--opmodedir", required=False, help="operation mode directory")
 
     main_args = parser.parse_args()
     if main_args.timeout:
@@ -382,25 +322,11 @@ def _arg_parsing():
 
     regression_path = os.path.join(os.path.dirname(os.path.relpath(__file__)),
                                    main_args.regression)
-    test_control = TestControl(regression_path)
-
-    # create a directory for log retention
-    if main_args.retain_logs:
-        test_control.set_log_retention();
-
-    # use old frontend
-    if main_args.old_frontend:
-        test_control.set_old_frontend();
-
-    # user defined operation mode directory
-    if main_args.opmodedir:
-        args = vars(main_args)
-        test_control.set_mode_dir(args['opmodedir'])
 
     if main_args.file:
-        gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes, test_control)
+        gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
     else:
-        create_tests(main_args.tool, regression_path, main_args.mode, test_control)
+        create_tests(main_args.tool, regression_path, main_args.mode)
 
 def main():
     _arg_parsing()
