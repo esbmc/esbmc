@@ -62,7 +62,7 @@ jobs:
           cp $HOME/esbmc-wrapper.py .
           cp $HOME/esbmc-kind.xml .
           chmod +x ./esbmc
-          benchexec -o ../output/ -N 24 ./esbmc-kind.xml --read-only-dir / --overlay-dir /home --no-container -T ${{ github.event.inputs.timeout }}
+          benchexec -o ../output/ -N 10 ./esbmc-kind.xml --read-only-dir / --overlay-dir /home  -T ${{ github.event.inputs.timeout }}
       - uses: actions/upload-artifact@v1
         with:
           name: benchexec-result
