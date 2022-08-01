@@ -12,8 +12,8 @@
 class mark_decl_as_non_det : public goto_functions_algorithm
 {
 public:
-  mark_decl_as_non_det(contextt &context, goto_functionst &goto_functions)
-    : goto_functions_algorithm(goto_functions, true), context(context)
+  mark_decl_as_non_det(contextt &context)
+    : goto_functions_algorithm(true), context(context)
   {
   }
 

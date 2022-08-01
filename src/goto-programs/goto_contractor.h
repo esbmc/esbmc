@@ -135,7 +135,7 @@ public:
    * @param _goto_functions
    */
   goto_contractort(goto_functionst &_goto_functions)
-    : goto_functions_algorithm(_goto_functions, true)
+    : goto_functions_algorithm(true), goto_functions(_goto_functions)
   {
     initialize_main_function_loops();
     if(!function_loops.empty())
@@ -161,6 +161,9 @@ public:
       insert_assume(_goto_functions);
     }
   }
+
+protected:
+  goto_functionst &goto_functions;
 
 private:
   ibex::IntervalVector domains;
