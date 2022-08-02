@@ -10,6 +10,7 @@
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
 #include <util/options.h>
+#include <util/algorithms.h>
 
 class bmct
 {
@@ -65,6 +66,7 @@ protected:
     std::shared_ptr<symex_target_equationt> &eq);
 
   smt_convt::resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
+  std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 };
 
 #endif

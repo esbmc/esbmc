@@ -39,6 +39,15 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   interleaving_number = 0;
   interleaving_failed = 0;
 
+  // Set algorithms
+  {
+    if(opts.get_bool_option("no-slice"))
+      algorithms.emplace_back(std::make_unique<simple_slice>());
+    else
+      algorithms.emplace_back(
+        std::make_unique<symex_slicet>(opts.get_bool_option("slice-assumes")));
+  }
+
   if(options.get_bool_option("smt-during-symex"))
   {
     runtime_solver = std::shared_ptr<smt_convt>(create_solver("", ns, options));
@@ -568,15 +577,13 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
   try
   {
-    fine_timet slice_start = current_time();
-    BigInt ignored = slice(eq);
-
-    fine_timet slice_stop = current_time();
-
-    log_status(
-      "Slicing time: {}s (removed {} assignments)",
-      time2string(slice_stop - slice_start),
-      ignored);
+    BigInt ignored;
+    for(auto &a : algorithms)
+    {
+      a->run(eq->SSA_steps);
+      ignored += a->ignored();
+    }
+    //slice(eq);
 
     if(
       options.get_bool_option("program-only") ||
