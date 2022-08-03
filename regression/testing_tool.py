@@ -5,7 +5,7 @@ import os.path
 import os
 import sys
 import unittest
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, STDOUT
 import argparse
 import re
 import xml.etree.ElementTree as ET
@@ -204,7 +204,7 @@ class Executor:
     def run(self, test_case: BaseTest):
         """Execute the test case with `executable`"""
         process = Popen(test_case.generate_run_argument_list(*self.tool),
-                        stdout=PIPE, stderr=PIPE)
+                        stdout=PIPE, stderr=STDOUT)
         try:
             stdout, stderr = process.communicate(timeout=self.timeout)
         except:
@@ -253,7 +253,8 @@ def _add_test(test_case, executor):
         if stdout == None:
             timeout_message ="\nTIMEOUT TEST: " + str(test_case.test_dir)
             self.fail(timeout_message)
-        output_to_validate = stdout.decode() + stderr.decode()
+        #output_to_validate = stdout.decode() + stderr.decode()
+        output_to_validate = stdout.decode()
         error_message_prefix = "\nTEST: " + \
             str(test_case.test_dir) + "\nEXPECTED TO FIND: " + \
             str(test_case.test_regex) + "\n\nPROGRAM OUTPUT\n"
