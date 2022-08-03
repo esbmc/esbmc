@@ -34,6 +34,9 @@ import shlex
 SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
 FAIL_MODES = ["KNOWNBUG"]
 
+# Bring up a single benchmark
+BENCHMARK_BRINGUP = False
+
 class BaseTest:
     """This class is responsible to:
        (a) parse and validate test descriptions.
@@ -313,6 +316,8 @@ def _arg_parsing():
                         help="Path for the Standard C++ Libraries abstractions")
     parser.add_argument("--mark_knownbug_with_word", required=False,
                         help="If test fails with word then mark it as a knownbug")
+    parser.add_argument("--benchbringup", required=False, action="store_false",
+            help="Bring up a benchmark. Logs will be saved in the `output` directory")
 
     main_args = parser.parse_args()
     if main_args.timeout:
@@ -322,6 +327,10 @@ def _arg_parsing():
 
     regression_path = os.path.join(os.path.dirname(os.path.relpath(__file__)),
                                    main_args.regression)
+
+    if main_args.benchbringup:
+        global BENCHMARK_BRINGUP
+        BENCHMARK_BRINGUP = True
 
     if main_args.file:
         gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
