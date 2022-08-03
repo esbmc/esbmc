@@ -39,7 +39,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   interleaving_number = 0;
   interleaving_failed = 0;
 
-  // Set algorithms
+  // The next block will initialize the algorithms used for the analysis.
   {
     if(opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
