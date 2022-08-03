@@ -15,7 +15,7 @@ on:
         required: false
         default: ''
       benchmark:
-        description: 'Benchmark to run'
+        description: 'Benchmark to run (e.g. any benchmark as in regression/<benchmark>)'
         required: true
         default: 'esbmc-cpp/cpp'
 
