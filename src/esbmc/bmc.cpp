@@ -44,8 +44,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
     if(opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
     else
-      algorithms.emplace_back(
-        std::make_unique<symex_slicet>(opts.get_bool_option("slice-assumes")));
+      algorithms.emplace_back(std::make_unique<symex_slicet>(options));
   }
 
   if(options.get_bool_option("smt-during-symex"))
