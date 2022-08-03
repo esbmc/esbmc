@@ -24,6 +24,7 @@ function(add_esbmc_regression_test folder modes test)
                        --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
                        --modes ${modes}
                        --file=${test}
+                       --timeout=$ENV{TIMEOUT}
                        --benchbringup) # logs will be save in the OUT_DIR directory
     endif()
     set_tests_properties(${test_name} PROPERTIES SKIP_RETURN_CODE 10)
@@ -74,7 +75,10 @@ else()
                     ${REGRESSIONS_GOTO_CONTRACTOR} ${REGRESSIONS_JIMPLE} extensions)
   else()
     if(NOT DEFINED ENV{BENCHMARK_TO_RUN} OR NOT DEFINED ENV{LOG_DIR})
-      message( FATAL_ERROR "ENV vars are not defined. Please specify which benchmark to run and the log directory." )
+      message( FATAL_ERROR "ENV vars are not defined. Please specify which benchmark to run and the corresponding log directory." )
+    endif()
+    if(NOT DEFINED ENV{TIMEOUT})
+      message( FATAL_ERROR "Missing TIMEOUT." )
     endif()
     message(STATUS "Benchmark to run - $ENV{BENCHMARK_TO_RUN}")
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

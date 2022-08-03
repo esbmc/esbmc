@@ -264,7 +264,6 @@ def _add_test(test_case, executor):
             if os.environ.get('LOG_DIR') is None:
                 raise RuntimeError('environment variable LOG_DIR is not defined')
             assert os.path.isdir(os.environ['LOG_DIR'])
-            #raise RuntimeError("this is LOG_DIR: {}, cwd: {}, BENCHMARK_BRINGUP: {}".format(os.environ['LOG_DIR'], os.getcwd(), BENCHMARK_BRINGUP))
             destination = os.environ['LOG_DIR'] + '/' + test_case.name
             f=open(destination, 'a')
             f.write("ESBMC args: " + test_case.test_args + '\n\n')

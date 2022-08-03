@@ -7,9 +7,9 @@ on:
         required: true
         default: 'incr'
       timeout:
-        description: 'Timeout for each benchmarks (in seconds)' # TODO: extend py script to use this timeout
+        description: 'Timeout for each test case (in seconds)'
         required: true
-        default: '10'
+        default: '300'
       options:
         description: 'Command-line flags to pass via ESBMC_OPTS'
         required: false
@@ -18,7 +18,7 @@ on:
         description: 'Benchmark to run (e.g. any benchmark as in regression/<benchmark>)'
         required: true
         #default: 'esbmc-cpp/cpp'
-        default: 'esbmc-cpp/cpp-quick-test'
+        default: 'esbmc-cpp/cpp'
       logdirectory:
         description: 'Log directory'
         required: true
@@ -44,6 +44,7 @@ jobs:
         run: echo ${{ github.event.inputs.benchmark }}
       - name: Configure CMake
         env:
+          TIMEOUT: ${{ inputs.timeout }}
           BENCHMARK_TO_RUN: ${{ inputs.benchmark }}
           LOG_DIR: ${{ inputs.logdirectory }}
         run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_REGRESSION=On -DBENCHBRINGUP=On
@@ -55,7 +56,6 @@ jobs:
           path: ./build/src/esbmc/esbmc
       - name: Run user-specified benchmark
         env:
-          TIMEOUT: ${{ inputs.timeout }} # TODO: testing_tool.py needs to use it!
           ESBMC_OPTS: ${{ inputs.options }}
           LOG_DIR: ${{ inputs.logdirectory }}
         run: cd build/ && ctest -j4 --output-on-failure --progress .
@@ -63,5 +63,3 @@ jobs:
         with:
           name: benchmark-logs
           path: ./build/regression/${{ inputs.logdirectory }}
-
-      #TODO: - uses: actions/upload-artifact@v1 # upload logs
