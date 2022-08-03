@@ -10,6 +10,10 @@ on:
         description: 'Timeout for each benchmarks (in seconds)'
         required: true
         default: '10'
+      num_of_threads:
+        description: 'How many benchexec threads should be used (values higher than 10 may cause it to hang)'
+        required: true
+        default: '10'  
       options:
         description: 'Command-line flags to pass via ESBMC_OPTS'
         required: false
@@ -54,6 +58,8 @@ jobs:
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
+          NUM_OF_THREADS: ${{ inputs.timeout }}
+
         run: |
           rm -rf $HOME/output-action $HOME/output
           mkdir $HOME/output-action
@@ -63,7 +69,7 @@ jobs:
           cp $HOME/esbmc-wrapper.py .
           cp $HOME/esbmc-kind.xml .
           chmod +x ./esbmc
-          benchexec -o ../output/ -N 15 ./esbmc-kind.xml --read-only-dir / --overlay-dir /home  -T ${{ github.event.inputs.timeout }}
+          benchexec -o ../output/ -N $NUM_OF_THREADS ./esbmc-kind.xml --read-only-dir / --overlay-dir /home  -T ${{ github.event.inputs.timeout }}
       - uses: actions/upload-artifact@v1
         with:
           name: benchexec-result
