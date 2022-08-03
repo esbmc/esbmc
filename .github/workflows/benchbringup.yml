@@ -17,7 +17,12 @@ on:
       benchmark:
         description: 'Benchmark to run (e.g. any benchmark as in regression/<benchmark>)'
         required: true
-        default: 'esbmc-cpp/cpp'
+        #default: 'esbmc-cpp/cpp'
+        default: 'esbmc-cpp/cpp-quick-test'
+      logdirectory:
+        description: 'Log directory'
+        required: true
+        default: 'benchmark_logs'
 
 jobs:
   build-linux:
@@ -40,6 +45,7 @@ jobs:
       - name: Configure CMake
         env:
           BENCHMARK_TO_RUN: ${{ inputs.benchmark }}
+          LOG_DIR: ${{ inputs.logdirectory }}
         run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_REGRESSION=On -DBENCHBRINGUP=On
       - name: Build ESBMC
         run: cd build && cmake --build .
@@ -49,8 +55,13 @@ jobs:
           path: ./build/src/esbmc/esbmc
       - name: Run user-specified benchmark
         env:
-          TIMEOUT: ${{ inputs.timeout }}
+          TIMEOUT: ${{ inputs.timeout }} # TODO: testing_tool.py needs to use it!
           ESBMC_OPTS: ${{ inputs.options }}
+          LOG_DIR: ${{ inputs.logdirectory }}
         run: cd build/ && ctest -j4 --output-on-failure --progress .
+      - uses: actions/upload-artifact@v2
+        with:
+          name: benchmark-logs
+          path: ./build/regression/
 
       #TODO: - uses: actions/upload-artifact@v1 # upload logs
