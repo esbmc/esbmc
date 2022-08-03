@@ -71,7 +71,7 @@ void ssa_step_algorithm::run_on_step(symex_target_equationt::SSA_stept &step)
   }
 }
 
-bool ssa_step_algorithm::iterate(
+void ssa_step_algorithm::iterate(
   symex_target_equationt::SSA_stepst &eq,
   bool in_order)
 {

@@ -82,7 +82,7 @@ public:
   /// How many steps were ignored after this algorithm
   virtual BigInt ignored() const = 0;
 
-  bool iterate(symex_target_equationt::SSA_stepst &eq, bool in_order = true);
+  void iterate(symex_target_equationt::SSA_stepst &eq, bool in_order = true);
 
   void run_on_step(symex_target_equationt::SSA_stept &);
 
