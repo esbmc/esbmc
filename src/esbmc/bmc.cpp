@@ -583,7 +583,6 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       a->run(eq->SSA_steps);
       ignored += a->ignored();
     }
-    //slice(eq);
 
     if(
       options.get_bool_option("program-only") ||

@@ -4,7 +4,6 @@
 #include <goto-symex/symex_target_equation.h>
 #include <util/time_stopping.h>
 #include <util/algorithms.h>
-BigInt slice(std::shared_ptr<symex_target_equationt> &eq);
 
 /* Base interface */
 class slicer : public ssa_step_algorithm

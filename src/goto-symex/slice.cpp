@@ -141,19 +141,3 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
 
   return true;
 }
-
-BigInt slice(std::shared_ptr<symex_target_equationt> &eq)
-{
-  const optionst &opts = config.options;
-
-  if(opts.get_bool_option("no-slice"))
-  {
-    simple_slice slice;
-    slice.run(eq->SSA_steps);
-    return slice.ignored();
-  }
-
-  symex_slicet symex_slice(opts.get_bool_option("slice-assumes"));
-  symex_slice.run(eq->SSA_steps);
-  return symex_slice.ignored();
-}
