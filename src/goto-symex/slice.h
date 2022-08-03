@@ -4,6 +4,7 @@
 #include <goto-symex/symex_target_equation.h>
 #include <util/time_stopping.h>
 #include <util/algorithms.h>
+#include <util/options.h>
 
 /* Base interface */
 class slicer : public ssa_step_algorithm
@@ -46,7 +47,8 @@ public:
 class symex_slicet : public slicer
 {
 public:
-  explicit symex_slicet(bool assume) : slice_assumes(assume)
+  explicit symex_slicet(const optionst &options)
+    : slice_assumes(options.get_bool_option("slice-assumes"))
   {
   }
 
