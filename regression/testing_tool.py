@@ -204,7 +204,7 @@ class Executor:
     def run(self, test_case: BaseTest):
         """Execute the test case with `executable`"""
         process = Popen(test_case.generate_run_argument_list(*self.tool),
-                        stdout=PIPE, stderr=STDOUT)
+                        stdout=PIPE, stderr=PIPE)
         try:
             stdout, stderr = process.communicate(timeout=self.timeout)
         except:
@@ -253,13 +253,23 @@ def _add_test(test_case, executor):
         if stdout == None:
             timeout_message ="\nTIMEOUT TEST: " + str(test_case.test_dir)
             self.fail(timeout_message)
-        #output_to_validate = stdout.decode() + stderr.decode()
-        output_to_validate = stdout.decode()
+        output_to_validate = stdout.decode() + stderr.decode()
         error_message_prefix = "\nTEST: " + \
             str(test_case.test_dir) + "\nEXPECTED TO FIND: " + \
             str(test_case.test_regex) + "\n\nPROGRAM OUTPUT\n"
         error_message = output_to_validate + "\n\nARGUMENTS: " + \
             str(test_case.generate_run_argument_list(*executor.tool))
+
+        if(BENCHMARK_BRINGUP):
+            if os.environ.get('LOG_DIR') is None:
+                raise RuntimeError('environment variable LOG_DIR is not defined')
+            assert os.path.isdir(os.environ['LOG_DIR'])
+            #raise RuntimeError("this is LOG_DIR: {}, cwd: {}, BENCHMARK_BRINGUP: {}".format(os.environ['LOG_DIR'], os.getcwd(), BENCHMARK_BRINGUP))
+            destination = os.environ['LOG_DIR'] + '/' + test_case.name
+            f=open(destination, 'a')
+            f.write("ESBMC args: " + test_case.test_args + '\n\n')
+            f.write(output_to_validate)
+            f.close()
 
         matches_regex = True
         for regex in test_case.test_regex:
@@ -317,8 +327,8 @@ def _arg_parsing():
                         help="Path for the Standard C++ Libraries abstractions")
     parser.add_argument("--mark_knownbug_with_word", required=False,
                         help="If test fails with word then mark it as a knownbug")
-    parser.add_argument("--benchbringup", required=False, action="store_false",
-            help="Bring up a benchmark. Logs will be saved in the `output` directory")
+    parser.add_argument("--benchbringup", default=False, action="store_true",
+            help="Flag to run a specific benchmark and collect logs in Github workflow")
 
     main_args = parser.parse_args()
     if main_args.timeout:
@@ -329,8 +339,8 @@ def _arg_parsing():
     regression_path = os.path.join(os.path.dirname(os.path.relpath(__file__)),
                                    main_args.regression)
 
-    if main_args.benchbringup:
-        global BENCHMARK_BRINGUP
+    global BENCHMARK_BRINGUP
+    if(main_args.benchbringup):
         BENCHMARK_BRINGUP = True
 
     if main_args.file:

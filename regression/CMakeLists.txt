@@ -73,14 +73,14 @@ else()
                     incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors esbmc-cpp11/new-delete esbmc-cpp11/reference
                     ${REGRESSIONS_GOTO_CONTRACTOR} ${REGRESSIONS_JIMPLE} extensions)
   else()
-    if(NOT DEFINED ENV{BENCHMARK_TO_RUN})
-      message( FATAL_ERROR "ENV var BENCHMARK_TO_RUN is not defined. Please specify which benchmark to run." )
+    if(NOT DEFINED ENV{BENCHMARK_TO_RUN} OR NOT DEFINED ENV{LOG_DIR})
+      message( FATAL_ERROR "ENV vars are not defined. Please specify which benchmark to run and the log directory." )
     endif()
     message(STATUS "Benchmark to run - $ENV{BENCHMARK_TO_RUN}")
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
     # create a directory at config time. Test logs will be saved in this directory.
-    set(OUT_DIR benchmark_logs)
-    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../${OUT_DIR})
+    set(OUT_DIR $ENV{LOG_DIR})
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${OUT_DIR})
   endif()
 endif()
 
