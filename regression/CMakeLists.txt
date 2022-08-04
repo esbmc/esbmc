@@ -31,7 +31,6 @@ function(add_esbmc_regression_test folder modes test)
                      --modes ${modes}
                      --file=${test}
                      ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
-    endif()
     set_tests_properties(${test_name} PROPERTIES SKIP_RETURN_CODE 10)
 endfunction()
 
