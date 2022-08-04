@@ -9,11 +9,10 @@ on:
       options:
         description: 'Command-line flags to pass via ESBMC_OPTS'
         required: false
-        default: ''
+        default: '-I /__w/esbmc/esbmc/src/cpp/library'
       benchmark:
         description: 'Benchmark to run (e.g. any benchmark as in regression/<benchmark>)'
         required: true
-        #default: 'esbmc-cpp/cpp'
         default: 'esbmc-cpp/cpp'
       logdirectory:
         description: 'Log directory'
