@@ -19,7 +19,7 @@ if(BENCHBRINGUP)
   endif()
 
   message(STATUS "Benchmark to run: $ENV{BENCHMARK_TO_RUN} with timeout $ENV{TEST_TIMEOUT}")
-  list(BENCHBRINGUP_ARGS --timeout=$ENV{TEST_TIMEOUT} --benchbringup)
+  set(BENCHBRINGUP_ARGS --timeout=$ENV{TEST_TIMEOUT} --benchbringup)
 endif()
 
 function(add_esbmc_regression_test folder modes test)
