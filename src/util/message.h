@@ -42,8 +42,10 @@ struct messaget
   static inline class
   {
     template <typename... Args>
-    void println(FILE *f, Args &&...args) const
+    void println(FILE *f, VerbosityLevel lvl, Args &&...args) const
     {
+      if(lvl == VerbosityLevel::Error)
+        fmt::print(f, "ERROR: ");
       fmt::print(f, std::forward<Args>(args)...);
       fmt::print(f, "\n");
     }
@@ -79,7 +81,7 @@ struct messaget
       FILE *f = target(lvl);
       if(!f)
         return false;
-      println(f, std::forward<Args>(args)...);
+      println(f, lvl, std::forward<Args>(args)...);
       return true;
       /* unused: */
       (void)file;
