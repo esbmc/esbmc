@@ -50,6 +50,7 @@ jobs:
           name: release-linux
           path: ./build/src/esbmc/esbmc
       - name: Run user-specified benchmark
+        continue-on-error: true
         env:
           ESBMC_OPTS: ${{ inputs.options }}
           LOG_DIR: ${{ inputs.logdirectory }}
