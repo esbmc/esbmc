@@ -2,10 +2,6 @@ name: Run a Benchmark
 on:
   workflow_dispatch:
     inputs:
-      strategy:
-        description: 'Which Strategy to use? (incr, kinduction, falsi). THIS IS BEING IGNORED!'
-        required: true
-        default: 'incr'
       timeout:
         description: 'Timeout for each test case (in seconds)'
         required: true
@@ -47,7 +43,7 @@ jobs:
           TIMEOUT: ${{ inputs.timeout }}
           BENCHMARK_TO_RUN: ${{ inputs.benchmark }}
           LOG_DIR: ${{ inputs.logdirectory }}
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_REGRESSION=On -DBENCHBRINGUP=On
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_YICES=On -DYices_DIR=/workspace/yices -DCVC4_DIR=/workspace/cvc4 -DGMP_DIR=/workspace/gmp -DBitwuzla_DIR=/workspace/bitwuzla-release -DENABLE_REGRESSION=On -DBENCHBRINGUP=On
       - name: Build ESBMC
         run: cd build && cmake --build .
       - uses: actions/upload-artifact@v1
