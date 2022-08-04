@@ -40,7 +40,7 @@ jobs:
         run: echo ${{ github.event.inputs.benchmark }}
       - name: Configure CMake
         env:
-          TIMEOUT: ${{ inputs.timeout }}
+          TEST_TIMEOUT: ${{ inputs.timeout }}
           BENCHMARK_TO_RUN: ${{ inputs.benchmark }}
           LOG_DIR: ${{ inputs.logdirectory }}
         run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_YICES=On -DYices_DIR=/workspace/yices -DCVC4_DIR=/workspace/cvc4 -DGMP_DIR=/workspace/gmp -DBitwuzla_DIR=/workspace/bitwuzla-release -DENABLE_REGRESSION=On -DBENCHBRINGUP=On

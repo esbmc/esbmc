@@ -7,25 +7,30 @@ find_package(Python)
 
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 
+if(BENCHBRINGUP)
+  # To run a specific benchmark in Github workflow and download the log archive when completed
+  #   - BENCHMARK_TO_RUN: user-specified benchmark to run
+  #   - LOG_DIR: log directory to be archived
+  #   - TEST_TIMEOUT: timeout for each test case in a benchmark
+  if(NOT DEFINED ENV{BENCHMARK_TO_RUN} OR
+     NOT DEFINED ENV{LOG_DIR} OR
+     NOT DEFINED ENV{TEST_TIMEOUT})
+   message( FATAL_ERROR "Please make sure ENV vars `BENCHMARK_TO_RUN`, `LOG_DIR` and `TEST_TIMEOUT` are defined" )
+  endif()
+
+  message(STATUS "Benchmark to run: $ENV{BENCHMARK_TO_RUN} with timeout $ENV{TEST_TIMEOUT}")
+  list(BENCHBRINGUP_ARGS --timeout=$ENV{TEST_TIMEOUT} --benchbringup)
+endif()
+
 function(add_esbmc_regression_test folder modes test)
     set(test_name "regression/${folder}/${test}")
-
-    if(NOT BENCHBRINGUP)
-      add_test(NAME ${test_name}
-               COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
-                       --tool=${ESBMC_BIN}
-                       --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
-                       --modes ${modes}
-                       --file=${test})
-    else()
-      add_test(NAME ${test_name}
-               COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
-                       --tool=${ESBMC_BIN}
-                       --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
-                       --modes ${modes}
-                       --file=${test}
-                       --timeout=$ENV{TIMEOUT}
-                       --benchbringup) # logs will be save in the OUT_DIR directory
+    add_test(NAME ${test_name}
+             COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
+                     --tool=${ESBMC_BIN}
+                     --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
+                     --modes ${modes}
+                     --file=${test}
+                     ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
     endif()
     set_tests_properties(${test_name} PROPERTIES SKIP_RETURN_CODE 10)
 endfunction()
@@ -74,13 +79,6 @@ else()
                     incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors esbmc-cpp11/new-delete esbmc-cpp11/reference
                     ${REGRESSIONS_GOTO_CONTRACTOR} ${REGRESSIONS_JIMPLE} extensions)
   else()
-    if(NOT DEFINED ENV{BENCHMARK_TO_RUN} OR NOT DEFINED ENV{LOG_DIR})
-      message( FATAL_ERROR "ENV vars are not defined. Please specify which benchmark to run and the corresponding log directory." )
-    endif()
-    if(NOT DEFINED ENV{TIMEOUT})
-      message( FATAL_ERROR "Missing TIMEOUT." )
-    endif()
-    message(STATUS "Benchmark to run - $ENV{BENCHMARK_TO_RUN}")
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
     # create a directory at config time. Test logs will be saved in this directory.
     set(OUT_DIR $ENV{LOG_DIR})
