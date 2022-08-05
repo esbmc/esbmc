@@ -1,4 +1,4 @@
 CORE
 main.c
 --k-induction --k-step 9 --max-k-step 4
-^Please specify --k-step smaller than max-k-step if you want to use incremental verification.
+^ERROR: Please specify --k-step smaller than max-k-step if you want to use incremental verification.

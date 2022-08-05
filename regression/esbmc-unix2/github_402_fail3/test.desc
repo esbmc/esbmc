@@ -1,4 +1,4 @@
 CORE
 main.c
 --no-por --no-goto-merge
-^There are goto statements that shouldn't be merged at this point$
+^ERROR: There are goto statements that shouldn't be merged at this point$
