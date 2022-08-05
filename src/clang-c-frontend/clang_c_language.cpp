@@ -35,6 +35,9 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
 {
   compiler_args.emplace_back("clang-tool");
 
+  // TODO: Implement a similar way to add opertional models for C++. For the time being,
+  // we are still following the way old ESBMC++ includes these operational models using -I.
+  // See discussions in PR834.
   const std::string *libc_headers = internal_libc_header_dir();
   if(libc_headers)
   {
