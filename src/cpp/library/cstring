@@ -11,6 +11,9 @@
 #define STL_CSTRING
 
 #include "definitions.h"
+// The functions in this operational model corresponds to the functions as listed in:
+//  https://en.cppreference.com/w/cpp/header/cstring
+//  https://cplusplus.com/reference/cstring/
 
 char *strcpy(char *d, const char *s) {
 	int i;
@@ -138,7 +141,7 @@ size_t strspn(const char *s1, const char *s2) {
 size_t strlen(const char *s) {
 	__ESBMC_assert(s != NULL, "string must contain any character");
 	size_t len = 0;
-	while (*s != NULL) { //until the end of string
+	while (*s != '\0') { //until the end of string, NOT including the null character
 		s++;
 		len++;
 	}
@@ -272,15 +275,20 @@ void *memcpy(void *dst, const void *src, size_t n) {
 
 void *memmove(void *dest, const void *src, size_t n) {
 	__ESBMC_HIDE:
-        char *cdst = static_cast<char *>(dest);
-        const char *csrc = static_cast<const char *>(src);
-        if (dest - src >= n) {
-		for (size_t i = 0; i < n; i++)
-			cdst[i] = csrc[i];
-	} else {
-		for (size_t i = n; i > 0; i--)
-			cdst[i - 1] = csrc[i - 1];
-	}
+    char *cdst = static_cast<char *>(dest);
+    const char *csrc = static_cast<const char *>(src);
+    if (cdst - csrc >= n)
+    {
+      // no overlapping
+      for (size_t i = 0; i < n; i++)
+        cdst[i] = csrc[i];
+    }
+    else
+    {
+      // overlapping
+      for (size_t i = n; i > 0; i--)
+        cdst[i - 1] = csrc[i - 1];
+    }
 	return dest;
 }
 
