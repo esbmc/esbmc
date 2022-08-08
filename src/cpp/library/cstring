@@ -11,9 +11,12 @@
 #define STL_CSTRING
 
 #include "definitions.h"
-// The functions in this operational model corresponds to the functions as listed in:
-//  https://en.cppreference.com/w/cpp/header/cstring
-//  https://cplusplus.com/reference/cstring/
+
+/**
+ * The functions in this operational model corresponds to the functions as listed in:
+ * https://en.cppreference.com/w/cpp/header/cstring
+ * https://cplusplus.com/reference/cstring/
+ */
 
 char *strcpy(char *d, const char *s) {
 	int i;

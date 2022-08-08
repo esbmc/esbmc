@@ -12,8 +12,13 @@
 
 #include "definitions.h"
 
-namespace std {
+/**
+ * The types and functions in this operational model corresponds to:
+ * https://en.cppreference.com/w/cpp/header/exception
+ * https://cplusplus.com/reference/exception/
+ */
 
+namespace std {
 const char* message;
 
 typedef void (*terminate_handler)();
@@ -40,11 +45,13 @@ unexpected_handler unexpected_pf=default_unexpected;
 
 terminate_handler set_terminate(terminate_handler f) throw ()
 {
+  // TODO: should return previous terminate handler?
   terminate_pf=f;
 }
 
 unexpected_handler set_unexpected(unexpected_handler f) throw ()
 {
+  // TODO: should return previous unexpected handler?
   unexpected_pf=f;
 }
 
@@ -70,6 +77,9 @@ public:
 
   exception& operator=(const exception&) throw ();
 
+  /**
+   * WARNING: throw() is an alias for noexcept(true) in C++17, but bad for C++14
+   */
   virtual ~exception() throw () {}
 
   virtual const char* what() const throw () {
@@ -89,9 +99,9 @@ class bad_exception: public exception {
 public:
   bad_exception() {}
 
-  virtual ~bad_exception() {}
+  virtual ~bad_exception() throw() {}
 
-  virtual const char* what() const {
+  virtual const char* what() const throw() {
     return (const char*) message;
   }
 };
