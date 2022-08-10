@@ -197,9 +197,9 @@ goto_contractort::create_constraint_from_expr2t(expr2tc expr)
   if(is_unsupported_operator(expr))
   {
     std::ostringstream oss;
-    oss<<get_expr_id(expr);
-    oss<<"Expression is complex, skipping this assert.\n";
-    log_debug("{}",oss.str());
+    oss << get_expr_id(expr);
+    oss << "Expression is complex, skipping this assert.\n";
+    log_debug("{}", oss.str());
     return nullptr;
   }
 
@@ -234,15 +234,9 @@ goto_contractort::create_constraint_from_expr2t(expr2tc expr)
 bool goto_contractort::is_unsupported_operator(expr2tc expr)
 {
   expr2tc e = get_base_object(expr);
-  return is_arith_expr(e) ||
-    is_constant_number(e) ||
-    is_symbol2t(e) ||
-    is_notequal2t(e) ||
-    is_equality2t(e) ||
-    is_not2t(e) ||
-    is_modulus2t(e) ||
-    is_or2t(e) ||
-    is_and2t(e);
+  return is_arith_expr(e) || is_constant_number(e) || is_symbol2t(e) ||
+         is_notequal2t(e) || is_equality2t(e) || is_not2t(e) ||
+         is_modulus2t(e) || is_or2t(e) || is_and2t(e);
 }
 
 ibex::Function *
@@ -351,10 +345,12 @@ const ibex::Interval &vart::getInterval() const
 {
   return interval;
 }
+
 int vart::getIndex() const
 {
   return index;
 }
+
 vart::vart(const string &varName, const symbol2tc &symbol, const size_t &index)
 {
   this->var_name = varName;
@@ -362,18 +358,22 @@ vart::vart(const string &varName, const symbol2tc &symbol, const size_t &index)
   this->index = index;
   interval_changed = false;
 }
+
 void vart::setInterval(const ibex::Interval &interval)
 {
   this->interval = interval;
 }
+
 bool vart::isIntervalChanged() const
 {
   return interval_changed;
 }
+
 void vart::setIntervalChanged(bool intervalChanged)
 {
   interval_changed = intervalChanged;
 }
+
 const symbol2tc &vart::getSymbol() const
 {
   return symbol;
