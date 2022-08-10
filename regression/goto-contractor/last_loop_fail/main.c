@@ -14,7 +14,7 @@ int main()
   {
     x = x + 1;
   }
-  assert(x>0);
+  assert(x>10);
 
   return 0;
 }
