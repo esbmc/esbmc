@@ -70,6 +70,9 @@ public:
 		}
 
 		iterator& operator -(int n) const {
+      // TODO: Return a reference to local variable on stack.
+      // This is allowed by old frontend parser. But clang parser gives an warning.
+      // Can we just return a copy of buffer?
 			iterator buffer;
 			buffer.pointer = pointer - sizeof(char) * n;
 			buffer.pos = pos - n;
@@ -78,6 +81,9 @@ public:
 		}
 
 		iterator& operator +(int n) const {
+      // TODO: Return a reference to local variable on stack.
+      // This is allowed by old frontend parser. But clang parser gives an warning.
+      // Can we just return a copy of buffer?
 			iterator buffer;
 			buffer.pointer = pointer + sizeof(char) * n;
 			buffer.pos = pos + n;
@@ -88,6 +94,9 @@ public:
 		//operator increases pointer address, but returns old value.
 		//It's like "++c"
 		iterator& operator ++() {
+      // TODO: Return a reference to local variable on stack.
+      // This is allowed by old frontend parser. But clang parser gives an warning.
+      // Can we just return a copy of buffer?
 			iterator buffer;
 			buffer.pointer = pointer;
 			buffer.pos = pos;
@@ -109,6 +118,9 @@ public:
 		//operator decreases pointer address, but returns old value.
 		//It's like "--c"
 		iterator& operator --() {
+      // TODO: Return a reference to local variable on stack.
+      // This is allowed by old frontend parser. But clang parser gives an warning.
+      // Can we just return a copy of buffer?
 			iterator buffer;
 			buffer.pointer = pointer;
 			buffer.pos = pos;
@@ -190,6 +202,9 @@ public:
 		//operator adds n positions on pointer address, and returns its address value
 
 		iterator& operator +=(int n) {
+      // TODO: Return a reference to local variable on stack.
+      // This is allowed by old frontend parser. But clang parser gives an warning.
+      // Can we just return a copy of buffer?
 			iterator buffer;
 			buffer = buffer + n;
 			pointer = pointer + sizeof(char) * n;
