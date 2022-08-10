@@ -33,7 +33,7 @@ void goto_contractort::get_intervals(goto_functionst goto_functions)
       parse_intervals(ins.guard);
 }
 
-void goto_contractort::parse_intervals(irep_container<expr2t> expr)
+void goto_contractort::parse_intervals(expr2tc expr)
 {
   symbol2tc symbol;
   BigInt value;
@@ -191,7 +191,7 @@ ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
 }
 
 ibex::NumConstraint *
-goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
+goto_contractort::create_constraint_from_expr2t(expr2tc expr)
 {
   ibex::NumConstraint *c;
   if(is_unsupported_operator(expr))
@@ -231,11 +231,10 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
   return c;
 }
 
-bool goto_contractort::is_unsupported_operator(irep_container<expr2t> expr)
+bool goto_contractort::is_unsupported_operator(expr2tc expr)
 {
-  irep_container<expr2t> e = get_base_object(expr);
-  if(
-    is_arith_expr(e) ||
+  expr2tc e = get_base_object(expr);
+  return is_arith_expr(e) ||
     is_constant_number(e) ||
     is_symbol2t(e) ||
     is_notequal2t(e) ||
@@ -243,11 +242,7 @@ bool goto_contractort::is_unsupported_operator(irep_container<expr2t> expr)
     is_not2t(e) ||
     is_modulus2t(e) ||
     is_or2t(e) ||
-    is_and2t(e))
-  {
-    return true;
-  }
-  return false;
+    is_and2t(e);
 }
 
 ibex::Function *

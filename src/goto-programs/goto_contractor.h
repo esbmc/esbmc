@@ -110,7 +110,7 @@ public:
   {
     //check if interval box is empty set or if the interval is degenerated
     // in the case of a single interval
-    if(vector.is_empty()|| vector[0].is_degenerated())
+    if(vector.is_empty()|| (vector.size() == 1 && vector[0].is_degenerated()))
       is_empty_vector = true;
 
     for(auto &var : var_map)
@@ -235,7 +235,7 @@ private:
    */
   void insert_assume(goto_functionst goto_functions);
 
-  bool is_unsupported_operator(irep_container<expr2t> expr);
+  bool is_unsupported_operator(expr2tc expr);
   ibex::NumConstraint *create_constraint_from_expr2t(irep_container<expr2t>);
   ibex::Function *create_function_from_expr2t(irep_container<expr2t>);
   int create_variable_from_expr2t(irep_container<expr2t>);
