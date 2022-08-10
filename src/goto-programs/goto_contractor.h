@@ -110,7 +110,7 @@ public:
   {
     //check if interval box is empty set or if the interval is degenerated
     // in the case of a single interval
-    if(vector.is_empty()|| (vector.size() == 1 && vector[0].is_degenerated()))
+    if(vector.is_empty() || (vector.size() == 1 && vector[0].is_degenerated()))
       is_empty_vector = true;
 
     for(auto &var : var_map)
