@@ -10,7 +10,7 @@ int main()
   }
 
   __ESBMC_assume(x>0);
-  while(x < 2147483640)
+  while(x < 2147483640 && __VERIFIER_nondet_int())
   {
     x = x + 1;
   }
