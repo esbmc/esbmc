@@ -98,11 +98,10 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
 {
   loopst loop;
   unsigned int last_loc = 0;
-  for(auto &function_loop : function_loops)
 
-    if(
-      last_loc <
-      function_loop.get_original_loop_head()->location_number)
+  ///This loop is to find the last loop in the code based on location
+  for(auto &function_loop : function_loops)
+    if(last_loc < function_loop.get_original_loop_head()->location_number)
     {
       loop = function_loop;
       last_loc = loop.get_original_loop_head()->location_number;
@@ -114,10 +113,10 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
 
   auto goto_function = goto_functions.function_map.find("c:@F@main")->second;
 
-  if(map.isemptyVector)
+  if(map.is_empty_set())
   {
-    auto cond = create_value_expr(0, int_type2());
-    goto_programt tmp_e(message_handler);
+    auto cond = gen_zero(int_type2());
+    goto_programt tmp_e;
     goto_programt::targett e = tmp_e.add_instruction(ASSUME);
     e->inductive_step_instruction = false;
     e->guard = cond;
@@ -130,23 +129,16 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
       symbol2tc X = var.second.getSymbol();
       if(var.second.isIntervalChanged())
       {
-        /*auto lb = create_value_expr(var.second.getInterval().lb(), int_type2());
-      auto cond = create_greaterthanequal_relation(X, lb);
-      goto_programt tmp_e;
-      goto_programt::targett e = tmp_e.add_instruction(ASSUME);
-      e->inductive_step_instruction = false;
-      e->guard = cond;
-      e->location = loop_exit->location;
-      goto_function.body.destructive_insert(loop_exit, tmp_e);*/
-
-      auto ub = create_value_expr(var.second.getInterval().ub(), int_type2());
-      auto cond2 = create_lessthanequal_relation(X, ub);
-      goto_programt tmp_e2;
-      goto_programt::targett e2 = tmp_e2.add_instruction(ASSUME);
-      e2->inductive_step_instruction = false;
-      e2->guard = cond2;
-      e2->location = loop_exit->location;
-      goto_function.body.destructive_insert(loop_exit, tmp_e2);
+        //only update upperbound
+        auto ub = create_value_expr(var.second.getInterval().ub(), int_type2());
+        auto cond2 = create_lessthanequal_relation(X, ub);
+        goto_programt tmp_e2;
+        goto_programt::targett e2 = tmp_e2.add_instruction(ASSUME);
+        e2->inductive_step_instruction = false;
+        e2->guard = cond2;
+        e2->location = loop_exit->location;
+        goto_function.body.destructive_insert(loop_exit, tmp_e2);
+      }
     }
 }
 
@@ -175,8 +167,6 @@ void goto_contractort::contractor()
 
   oss << "\n\t- Domains (after): " << X;
   map.update_intervals(X);
-  if(X.is_empty() || X[0].is_degenerated())
-    map.isemptyVector = true;
 
   log_status("{}", oss.str());
 }
@@ -204,16 +194,12 @@ ibex::NumConstraint *
 goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
 {
   ibex::NumConstraint *c;
-  if(
-    is_arith_expr(get_base_object(expr)) ||
-    is_constant_number(get_base_object(expr)) ||
-    is_symbol2t(get_base_object(expr)) ||
-    is_notequal2t(get_base_object(expr)) ||
-    is_equality2t(get_base_object(expr)) || is_not2t(get_base_object(expr)) ||
-    is_modulus2t(get_base_object(expr)) || is_or2t(get_base_object(expr)) ||
-    is_and2t(get_base_object(expr)))
+  if(is_unsupported_operator(expr))
   {
-    log_status("Expression is complex, skipping this assert");
+    std::ostringstream oss;
+    oss<<get_expr_id(expr);
+    oss<<"Expression is complex, skipping this assert.\n";
+    log_debug("{}",oss.str());
     return nullptr;
   }
 
@@ -243,6 +229,25 @@ goto_contractort::create_constraint_from_expr2t(irep_container<expr2t> expr)
     return nullptr;
   }
   return c;
+}
+
+bool goto_contractort::is_unsupported_operator(irep_container<expr2t> expr)
+{
+  irep_container<expr2t> e = get_base_object(expr);
+  if(
+    is_arith_expr(e) ||
+    is_constant_number(e) ||
+    is_symbol2t(e) ||
+    is_notequal2t(e) ||
+    is_equality2t(e) ||
+    is_not2t(e) ||
+    is_modulus2t(e) ||
+    is_or2t(e) ||
+    is_and2t(e))
+  {
+    return true;
+  }
+  return false;
 }
 
 ibex::Function *
