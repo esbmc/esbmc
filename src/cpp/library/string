@@ -622,9 +622,8 @@ public:
 				"The second parameter must to be different than NULL");
 		int pos1 = p.pos;
 		int n = 1;
-		int i;
 		char *s = new char[n + 1];
-		for (i = 0; i < n; i++) {
+		for (int i = 0; i < n; i++) {
 			s[i] = c;
 		}
 		int len = this->length(), i, k;
@@ -668,9 +667,8 @@ public:
     __ESBMC_assert(c != NULL,
         "The third parameter must to be different than NULL");
     int pos1 = p.pos;
-    int i;
     char *s = new char[n + 1];
-    for (i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++) {
       s[i] = c;
     }
     int len = this->length(), i, k;
@@ -728,9 +726,8 @@ public:
 		__ESBMC_assert(c != NULL,
 				"The third parameter must to be different than NULL");
 		int pos1 = p.pos;
-		int i;
 		char *s = new char[n + 1];
-		for (i = 0; i < n; i++) {
+		for (int i = 0; i < n; i++) {
 			s[i] = c;
 		}
 		int len = this->length(), i, k;
