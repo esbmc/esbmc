@@ -244,4 +244,4 @@ private:
 
   bool initialize_main_function_loops();
 };
-#endif ESBMC_GOTO_CONTRACTOR_H
+#endif //ESBMC_GOTO_CONTRACTOR_H
