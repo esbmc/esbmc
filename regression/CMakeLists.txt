@@ -86,7 +86,7 @@ else()
 endif()
 
 foreach(regression IN LISTS REGRESSIONS)
-    if(NOT WIN32) # FUTURE: configure suites using an option
+    if((NOT WIN32) OR (NOT APPLE)) # FUTURE: configure suites using an option
         set(MODES CORE KNOWNBUG FUTURE THOROUGH)
     else()
         set(MODES CORE KNOWNBUG FUTURE)
