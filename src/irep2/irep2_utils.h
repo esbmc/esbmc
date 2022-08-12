@@ -402,7 +402,7 @@ inline expr2tc gen_one(const type2tc &type)
 /**
    * @brief Distribute the functor `func` over op1 and op2
    * at least one of those must be a vector
-   * 
+   *
    * Here, if one of the operands is `nil` then func must
    * support an operation between the vector subtype and nil
    *
@@ -615,5 +615,44 @@ inline expr2tc distribute_vector_operation(
   }
   return result;
 }
+
+/**
+ * @brief Checks whether the type contains a FAM
+ *
+ * @param type input to be checked
+ * @return true if the type contains a FAM
+ */
+inline bool is_fam(const type2tc t)
+{
+    if(is_struct_type(t))
+    {
+        auto last_member = to_struct_type(t).members.back();
+        if(is_array_type(last_member))
+        {
+            auto size = to_array_type(last_member).array_size;
+            // This size is from the type, it should always be a constant
+            assert(is_constant_int2t(size));
+            return to_constant_int2t(size).value.is_zero();
+        }
+
+    }
+    return false;
+}
+
+/**
+ * @brief Extracts size of FAM
+ *
+ * @param e input to be checked
+ * @return exp2tc with the size of FAM
+ */
+inline expr2tc get_fam_size(const expr2tc e)
+{
+    assert(is_fam(e->type));
+    auto last_member = to_constant_struct2t(e).datatype_members.back();
+    last_member->dump();
+    return expr2tc();
+    //return to_array_type(last_member->type).array_size;
+}
+
 
 #endif /* UTIL_IREP2_UTILS_H_ */

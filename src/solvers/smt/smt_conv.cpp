@@ -1789,7 +1789,10 @@ unsigned long smt_convt::calculate_array_domain_width(const array_type2t &arr)
   if(!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size))
   {
     constant_int2tc thesize = arr.array_size;
-    return size_to_bit_width(thesize->value.to_uint64());
+    if(thesize->value != 0)
+        return size_to_bit_width(thesize->value.to_uint64());
+    thesize->dump();
+    log_debug("Found FAM in domain width calculation, new size {}", config.ansi_c.word_size);
   }
 
   return config.ansi_c.word_size;

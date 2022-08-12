@@ -1078,6 +1078,14 @@ void dereferencet::construct_from_array(
     unsigned int num_bytes = compute_num_bytes_to_extract(
       replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
 
+    if(!num_bytes)
+    {
+        log_debug("FAM detected, extracting the entire array on deref");
+        // Are we handling a FAM? Extract everything
+        num_bytes = compute_num_bytes_to_extract(
+            offset, type_byte_size_bits(value->type).to_uint64());
+    }
+
     // Converting offset to bytes for byte extracting
     expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
     simplify(offset_bytes);
@@ -1178,13 +1186,65 @@ void dereferencet::construct_from_const_struct_offset(
 
     if(m_size == 0)
     {
-      // This field has no size: it's most likely a struct that has no members.
+      // This field has no size: its either a struct with no members or a FAM.
+
+        // FAMs
+        if(is_array_type(it))
+      {
+        // Array of size 0 in a struct, means FAM
+        log_debug("FAM in deref");
+        // TODO: Check for allignment.
+        // GET THE VALUES
+        expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
+        constant_int2tc new_offs(pointer_type2(), int_offset - m_offs);
+
+        /* CAN WE CHECK FOR OVER READS?
+         *
+         * Global initializations are not handled by the goto_check
+         * code, here we try to get the size of the value assigned for
+         * it
+         */
+
+        if(is_symbol2t(value) && is_read(mode))
+        {
+          auto fam = ns.lookup(to_symbol2t(value).thename);
+          //assert(fam.is_struct());
+          auto last_operand =
+            to_array_type(fam->value.operands().back().type()).size();
+          BigInt size(
+            to_constant_expr(last_operand).get_value().as_string().c_str(), 2);
+          auto limit = size * type->get_width();
+          log_debug("Limit: {}", limit);
+          fam->dump();
+          if((new_offs->value + type->get_width()) > limit)
+          {
+            dereference_failure(
+              "pointer dereference",
+              fmt::format(
+                "Invalid read from FAM with offset {}. FAM contains {} "
+                "elements",
+                new_offs->value / type->get_width(),
+                size),
+              guard);
+          }
+        }
+
+
+        // Extract.
+        build_reference_rec(memb, new_offs, type, guard, mode);
+        value = memb;
+
+        return;
+      }
+
+      // No member struct!
       // Just skip over it: we can never correctly build a reference to a field
       // in that struct, because there are no fields. The next field in the
       // current struct lies at the same offset and is probably what the pointer
       // is supposed to point at.
       // If user is seeking a reference to this substruct, a different method
       // should have been called (construct_struct_ref_from_const_offset).
+
       assert(is_struct_type(it));
       assert(!is_struct_type(type));
       i++;
@@ -1308,6 +1368,28 @@ void dereferencet::construct_from_dyn_struct_offset(
 
     // Compute some kind of guard
     BigInt field_size = type_byte_size_bits(it);
+    // This breaks FAM
+    // Lets compute field size manually for fam :)
+    if(
+        is_array_type(it) &&
+        (to_array_type(it).array_size->expr_id != expr2t::constant_int_id ||
+         !to_array_type(it).get_width()))
+    {
+        auto fam = ns.lookup(to_symbol2t(value).thename);
+        auto last_operand =
+            to_array_type(fam->value.operands().back().type()).size();
+        BigInt quantity(
+            to_constant_expr(last_operand).get_value().as_string().c_str(), 2);
+        auto base_type_width = type_byte_size_bits(to_array_type(it).subtype);
+        field_size = quantity * base_type_width;
+
+        log_debug(
+            "Adding field size: {}, quantity: {}, base_type: {}, offs: {}",
+            field_size,
+            quantity,
+            base_type_width,
+            offs);
+    }
 
     // Round up to word size
     expr2tc field_offset = constant_int2tc(offset->type, offs);
@@ -1974,12 +2056,18 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   simplify(offset_bytes);
 
   BigInt num_bits = type_byte_size_bits(type);
+  if(num_bits == 0)
+  {
+      /* 0 could mean that we are dealing with a FAM
+       * we have to extract the entire byte_array */
+      log_debug("Size of type returned 0. Is this an incomplete array?");
+      num_bits = type_byte_size_bits(byte_array->type);
+  }
   assert(num_bits.is_uint64());
   uint64_t num_bits64 = num_bits.to_uint64();
   assert(num_bits64 <= ULONG_MAX);
   unsigned int num_bytes =
     compute_num_bytes_to_extract(offset_bits, num_bits64);
-
   offset_bits = modulus2tc(offset_bits->type, offset_bits, gen_ulong(8));
   simplify(offset_bits);
 
@@ -2083,7 +2171,6 @@ void dereferencet::bounds_check(
 
   assert(is_array_type(expr) || is_string_type(expr));
   const array_type2t arr_type = get_arr_type(expr);
-
   expr2tc arrsize;
   if(
     !is_constant_array2t(expr) &&
@@ -2121,7 +2208,6 @@ void dereferencet::bounds_check(
     expr2tc array_size = typecast2tc(uint_type2(), arr_type.array_size);
     arrsize = mul2tc(uint_type2(), array_size, subtype_size);
   }
-
   // Transforming offset to bytes
   typecast2tc unsigned_offset(
     uint_type2(), div2tc(offset->type, offset, gen_ulong(8)));
@@ -2136,7 +2222,6 @@ void dereferencet::bounds_check(
   or2tc is_in_bounds(gt, gt2);
 
   // Report these as assertions; they'll be simplified away if they're constant
-
   guardt tmp_guard1(guard);
   tmp_guard1.add(is_in_bounds);
   dereference_failure("array bounds", "array bounds violated", tmp_guard1);
@@ -2194,6 +2279,15 @@ void dereferencet::check_data_obj_access(
   modet mode)
 {
   assert(!is_array_type(value));
+  if(is_fam(value->type))
+  {
+      log_debug("checking fam acess...");
+      value->dump();
+      src_offset->dump();
+      type->dump();
+    return; // we can't compute the size here
+  }
+
 
   expr2tc offset = typecast2tc(pointer_type2(), src_offset);
   unsigned int data_sz = type_byte_size_bits(value->type).to_uint64();

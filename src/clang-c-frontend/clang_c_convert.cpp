@@ -870,6 +870,12 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
         integer2binary(val.getSExtValue(), bv_width(int_type())),
         integer2string(val.getSExtValue()),
         int_type()));
+
+    if(!val.getSExtValue()) // 0-sized array will be handled as incomplete
+    {
+        log_debug("Dealing with 0-size array");
+        new_type.set("incomplete", "true");
+    }
     break;
   }
 
@@ -883,7 +889,8 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if(get_type(arr.getElementType(), sub_type))
       return true;
 
-    new_type = array_typet(sub_type, gen_one(index_type()));
+    new_type = array_typet(sub_type, gen_zero(index_type()));
+    new_type.set("incomplete", "true");
     break;
   }
 
@@ -1862,8 +1869,16 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       // Initializer everything to zero, even pads
       // TODO: should we initialize pads with nondet values?
       inits = gen_zero(t);
+      if(t.get("incomplete") == "true")
+      {
+        log_debug(
+          "Initializing some incomplete array, array will be initialized with "
+          "{}", init_stmt.getNumInits());
+        t.dump();
+        init_stmt.dump();
+      }
 
-      unsigned int num = init_stmt.getNumInits();
+        unsigned int num = init_stmt.getNumInits();
       for(unsigned int i = 0, j = 0; (i < inits.operands().size() && j < num);
           ++i)
       {
@@ -1886,7 +1901,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           elem_type = to_array_type(t).subtype();
         else
           elem_type = to_vector_type(t).subtype();
-        gen_typecast(ns, init, elem_type);
+
+        if(elem_type.get("incomplete") != "true")
+          gen_typecast(ns, init, elem_type);
+        else
+            log_debug("Avoiding typecast element, {}", elem_type);
+
         inits.operands().at(i) = init;
       }
 
