@@ -206,6 +206,14 @@ codet cpp_typecheckt::cpp_constructor(
       assign.move_to_operands(member, val);
       typecheck_side_effect_assignment(assign);
       code_expressiont code_exp;
+
+      if(code_exp.operands().size() == 1)
+      {
+        // remove zombie operands
+        if(code_exp.operands().front().id() == "")
+          code_exp.operands().clear();
+      }
+
       code_exp.move_to_operands(assign);
       block.move_to_operands(code_exp);
     }

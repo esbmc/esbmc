@@ -261,6 +261,12 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
     make_ptr_typecast(this_expr, tmp_this.type());
     tmp_this.swap(this_expr);
     code = code_expressiont();
+    if(code.operands().size() == 1)
+    {
+      // remove zombie operands
+      if(code.operands().front().id() == "")
+        code.operands().clear();
+    }
     code.move_to_operands(initializer);
   }
   else
@@ -329,6 +335,14 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
         assign.copy_to_operands(symbol_expr, code.op0());
         typecheck_side_effect_assignment(assign);
         code_expressiont new_code;
+
+        if(new_code.operands().size() == 1)
+        {
+          // remove zombie operands
+          if(new_code.operands().front().id() == "")
+            new_code.operands().clear();
+        }
+
         new_code.move_to_operands(assign);
         code.swap(new_code);
       }
@@ -466,6 +480,14 @@ void cpp_typecheckt::typecheck_assign(codet &code)
   typecheck_expr(expr);
 
   code_expressiont code_expr;
+
+  if(code_expr.operands().size() == 1)
+  {
+    // remove zombie operands
+    if(code_expr.operands().front().id() == "")
+      code_expr.operands().clear();
+  }
+
   code_expr.copy_to_operands(expr);
   code_expr.location() = code.location();
 
