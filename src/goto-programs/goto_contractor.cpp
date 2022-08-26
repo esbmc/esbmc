@@ -12,6 +12,7 @@ void goto_contractort::get_constraints(goto_functionst goto_functions)
   auto function = goto_functions.function_map.find("c:@F@main");
   for(const auto &ins : function->second.body.instructions)
   {
+    //TODO: replace constraint with set of contractors
     if(ins.is_assert())
       constraint = create_constraint_from_expr2t(ins.guard);
     else if(
@@ -190,10 +191,64 @@ ibex::CmpOp goto_contractort::get_complement(ibex::CmpOp op)
   return ibex::GEQ;
 }
 
+ibex::Ctc *goto_contractort::create_contractor_from_expr2t(expr2tc expr)
+{
+  ibex::Ctc *contractor = nullptr;
+
+  if((is_comp_expr(expr) && !is_notequal2t(expr)) || is_arith_expr(expr))
+    contractor = new ibex::CtcFwdBwd(*create_constraint_from_expr2t(expr));
+  else
+  {
+    std::shared_ptr<relation_data> rel;
+    rel = std::dynamic_pointer_cast<relation_data>(get_base_object(expr));
+
+    switch(get_base_object(expr)->expr_id)
+    {
+    case expr2t::expr_ids::and_id:
+      contractor = new ibex::CtcCompo(
+        *create_contractor_from_expr2t(rel->side_1),
+        *create_contractor_from_expr2t(rel->side_2));
+      break;
+    case expr2t::expr_ids::or_id:
+      contractor = new ibex::CtcUnion(
+        *create_contractor_from_expr2t(rel->side_1),
+        *create_contractor_from_expr2t(rel->side_2));
+      break;
+    case expr2t::expr_ids::notequal_id:
+    {
+      ibex::Function *f = create_function_from_expr2t(rel->side_1);
+      ibex::Function *g = create_function_from_expr2t(rel->side_2);
+      ibex::NumConstraint *side1 =
+        new ibex::NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
+      ibex::NumConstraint *side2 =
+        new ibex::NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
+      ibex::CtcFwdBwd *c_side1 = new ibex::CtcFwdBwd(*side1);
+      ibex::CtcFwdBwd *c_side2 = new ibex::CtcFwdBwd(*side2);
+      contractor = new ibex::CtcUnion(*c_side1, *c_side2);
+      break;
+    }
+    case expr2t::expr_ids::not_id:
+      //"not" flag
+      //TODO: implement "not" flag  and process.
+      break;
+    default:
+      //unsupported. you shouldn't be here.
+      break;
+    }
+  }
+  return contractor;
+}
+
 ibex::NumConstraint *
 goto_contractort::create_constraint_from_expr2t(expr2tc expr)
 {
   ibex::NumConstraint *c;
+  expr2tc simp = expr->do_simplify();
+  //expr->dump();
+  //expr.simplify();
+  if(simp)
+    simp->dump();
+
   if(is_unsupported_operator(expr))
   {
     std::ostringstream oss;
@@ -201,6 +256,10 @@ goto_contractort::create_constraint_from_expr2t(expr2tc expr)
     oss << "Expression is complex, skipping this assert.\n";
     log_debug("{}", oss.str());
     return nullptr;
+  }
+  if(is_not2t(expr))
+  {
+    //TODO: implement "not" flag  and process.
   }
 
   std::shared_ptr<relation_data> rel;
@@ -211,6 +270,7 @@ goto_contractort::create_constraint_from_expr2t(expr2tc expr)
   g = create_function_from_expr2t(rel->side_2);
   if(f == nullptr || g == nullptr)
     return nullptr;
+  //TODO: implement "not" flag  and process.
   switch(get_base_object(expr)->expr_id)
   {
   case expr2t::expr_ids::greaterthanequal_id:

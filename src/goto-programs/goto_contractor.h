@@ -41,6 +41,39 @@ public:
   void setIntervalChanged(bool intervalChanged);
   const symbol2tc &getSymbol() const;
 };
+
+class Contractorc
+{
+  ibex::Ctc *outer;
+  ibex::Ctc *inner;
+  unsigned int location;
+
+  ibex::Ctc *get_complement_contractor(ibex::Ctc *c)
+  {
+    //TODO: implement.
+    return c;
+  }
+  Contractorc(ibex::Ctc *c, unsigned int loc)
+  {
+    outer = c;
+    location = loc;
+    inner = get_complement_contractor(c);
+
+  }
+};
+
+class Contractorsc
+{
+  Contractorc contractors[];
+
+  Contractorc *get_contractors_up_to_loc(unsigned int loc)
+  {
+    Contractorc *c;
+    //TODO: implement intersection and unioin of contractors up to a given location.
+    return c;
+  }
+};
+
 /**
  * This class is for mapping the variables with their names and intervals.
  * It includes functionalities such as search for a variable by name and add
@@ -50,7 +83,7 @@ public:
 class CspMap
 {
 public:
-  static constexpr int MAX_VAR = 10;
+  static constexpr int MAX_VAR = 26;
   static constexpr int NOT_FOUND = -1;
 
   std::map<std::string, vart> var_map;
@@ -186,6 +219,7 @@ private:
   /// constraint is where the constraint for CSP will be stored.
   ibex::NumConstraint *constraint = nullptr;
 
+
   unsigned number_of_functions = 0;
 
   typedef std::list<loopst> function_loopst;
@@ -235,12 +269,13 @@ private:
    */
   void insert_assume(goto_functionst goto_functions);
 
-  bool is_unsupported_operator(expr2tc expr);
-  ibex::NumConstraint *create_constraint_from_expr2t(irep_container<expr2t>);
-  ibex::Function *create_function_from_expr2t(irep_container<expr2t>);
-  int create_variable_from_expr2t(irep_container<expr2t>);
+  bool is_unsupported_operator(expr2tc);
+  ibex::Ctc *create_contractor_from_expr2t(expr2tc);
+  ibex::NumConstraint *create_constraint_from_expr2t(expr2tc);
+  ibex::Function *create_function_from_expr2t(expr2tc);
+  int create_variable_from_expr2t(expr2tc);
 
-  void parse_intervals(irep_container<expr2t> expr);
+  void parse_intervals(expr2tc);
 
   bool initialize_main_function_loops();
 };
