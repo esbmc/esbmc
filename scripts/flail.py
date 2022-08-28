@@ -12,8 +12,9 @@ import os
 
 class Flail:
     """
-        The flailng converts the content of an object file into an uint array. The resulting
-        array will be written in a C header.
+        The input file can be either an object file (e.g. a goto binary file)
+        or a list of C source file. The flailng converts the content of an input file
+        into an uint array. The resulting array will be written in a C header.
 
         Example:
 
@@ -157,6 +158,25 @@ class Flail:
 
 
 def parse_args(argv):
+    '''
+    Try the following examples:
+
+    Ex.1 Convert a list of C operational models (see last line of the CMD below) into unsigned int arrays.
+         Write the resulting array into libc.c and libc.h
+         CMD:
+            python3 flail.py \
+                --macro ESBMC_FLAIL \
+                --prefix esbmc_libc_ \
+                -o ./libc.c \
+                --header ./libc.h \
+                esbmc/src/c2goto/library/builtin_libs.c src/c2goto/library/ctype.c
+
+    Ex.2 Convert a goto binary file (see last line of the CMD below) into an unsigned int arrays
+         After building ESBMC, find clib32.goto from the build tree
+         CMD:
+            python3 flail.py -o ./clib32.c \
+                    esbmc/build/src/c2goto/clibd32.goto
+    '''
     p = argparse.ArgumentParser(prog=argv[0])
     p.add_argument('-p', '--prefix', type=str, default='',
                    help='prefix for C symbols (default: empty)')

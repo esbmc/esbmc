@@ -1,5 +1,4 @@
-
-add_subdirectory (headers)
+add_subdirectory(headers)
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr)
 file(TOUCH ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libc.h
@@ -13,7 +12,7 @@ target_include_directories(c2goto
     PRIVATE ${Boost_INCLUDE_DIRS}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr
     )
-target_link_libraries(c2goto 
+target_link_libraries(c2goto
   clangcfrontend gotoprograms langapi util_esbmc irep2 c2gotoheaders
   filesystem ${Boost_LIBRARIES})
 set_target_properties(c2goto PROPERTIES
@@ -25,6 +24,7 @@ if(DEFINED C2GOTO_SYSROOT)
 endif()
 
 if (ESBMC_BUNDLE_LIBC)
+  # set (<config_variable_name> <output_file> [<c2goto_args>...])
   set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
   set (clib64_config clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
   set (clib32f_config clib32_fp.c --32 --floatbv)
@@ -38,19 +38,21 @@ endif()
 
 function(mangle_clib output)
   set(result "")
-   file(GLOB c2goto_library_files CONFIGURE_DEPENDS
+  # Extract a list of C's operational models
+  file(GLOB c2goto_library_files CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/library/*.c")
+  # Extract a list of C's math operational models
   file(GLOB c2goto_libm_files CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/library/libm/*.c")
   file(GLOB_RECURSE c2goto_header_files CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/headers/*.h")
+
+  # For each config, generate clib*.c and clib*.goto file in the current binary directory
   foreach(in_f ${ARGN})
     set (in_f "${${in_f}}")
-    list(GET in_f 0 in_file)
+    list(GET in_f 0 out_file)
     list(SUBLIST in_f 1 -1 in_flags)
-    file(RELATIVE_PATH out_file ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${in_file})
-    string(REGEX REPLACE .c .goto out_goto "${in_file}")
-    string(REGEX REPLACE .c "" barename "${in_file}")
+    string(REGEX REPLACE .c .goto out_goto "${out_file}")
     set(out_goto "${CMAKE_CURRENT_BINARY_DIR}/${out_goto}")
     set(out_file "${CMAKE_CURRENT_BINARY_DIR}/${out_file}")
 
@@ -59,16 +61,21 @@ function(mangle_clib output)
     else()
       set(inputs_c ${c2goto_library_files})
     endif()
-    set(CMD c2goto ${multiarch_flags} ${OS_C2GOTO_FLAGS}
+
+    set(run_c2goto c2goto ${multiarch_flags} ${OS_C2GOTO_FLAGS}
                    ${inputs_c} ${in_flags} --output ${out_goto})
+
+    # Convert a list of C operational models (e.g. *.c) into a single goto binary file (e.g. clib32.goto) at CMake build time
     add_custom_command(OUTPUT ${out_goto}
-      COMMAND ${CMD}
+      COMMAND ${run_c2goto}
       DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files} ${c2goto_header_files}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Generating libc model ${out_goto}"
       VERBATIM
       )
 
+    # Convert the content of goto binary file (e.g. clib32.goto) into an unsigned int array at CMake build time
+    # The resulting array will be written in the correpsonding C file (e.g. clib32.c) in the current binary directory.
     add_custom_command(OUTPUT ${out_file}
       COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py -o ${out_file} ${out_goto}
       DEPENDS ${out_goto} ${CMAKE_SOURCE_DIR}/scripts/flail.py
@@ -79,12 +86,23 @@ function(mangle_clib output)
 
     list(APPEND result ${out_file})
   endforeach()
-  mangle(${CMAKE_CURRENT_BINARY_DIR}/libc.c ${CMAKE_CURRENT_SOURCE_DIR}/library
-         WILDCARD *.c SINGLE PREFIX esbmc_libc_ MACRO ESBMC_FLAIL
+
+  # `mangle` function defined in src/scripts/cmake/Utils.cmake
+  mangle(${CMAKE_CURRENT_BINARY_DIR}/libc.c  # an aggregate of C operational models
+         ${CMAKE_CURRENT_SOURCE_DIR}/library # the directory containing all C operational models
+         WILDCARD *.c
+         SINGLE
+         PREFIX esbmc_libc_
+         MACRO ESBMC_FLAIL
          ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libc.h)
-  mangle(${CMAKE_CURRENT_BINARY_DIR}/libm.c ${CMAKE_CURRENT_SOURCE_DIR}/library/libm
-         WILDCARD *.c SINGLE PREFIX esbmc_libm_ MACRO ESBMC_FLAIL
+  mangle(${CMAKE_CURRENT_BINARY_DIR}/libm.c       # an aggregate of C math operational models
+         ${CMAKE_CURRENT_SOURCE_DIR}/library/libm # the directory C math operational models
+         WILDCARD *.c
+         SINGLE
+         PREFIX esbmc_libm_
+         MACRO ESBMC_FLAIL
          ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libm.h)
+
   list(APPEND result ${CMAKE_CURRENT_BINARY_DIR}/libc.c
                      ${CMAKE_CURRENT_BINARY_DIR}/libm.c)
   set(${output} "${result}" PARENT_SCOPE)
