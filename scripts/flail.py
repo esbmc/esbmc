@@ -79,6 +79,19 @@ class Flail:
         self.filepath = filepath
         self.prefix = prefix
 
+    def custom_od(self):
+        '''
+        Generates octal representation of a file
+        '''
+        chars_per_line = 16
+        lines = []
+        with open(self.filepath, 'rb') as f:
+            for chunk in iter(lambda: f.read(chars_per_line), b''):
+                line = [ int(x,16) for x in chunk.hex(' ').split(' ')]
+                lines.append(' '.join(map(str, line)))
+        return lines
+
+
     def od_cli_command(self):
         return f'{self._od} -v -t u1 {self.filepath}'
 
@@ -121,14 +134,16 @@ class Flail:
                                                         self.filepath))
 
     def run(self, output_file, header = None, macro : str = None):
-        ps = subprocess.Popen(self.cat_cli_command().split(),
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        #ps = subprocess.Popen(self.cat_cli_command().split(),
+        #                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        output = subprocess.check_output(self.od_cli_command().split(),
-                                         stdin=ps.stdout
-                                        ).decode().splitlines()
+        #output = subprocess.check_output(self.od_cli_command().split(),
+         #                                stdin=ps.stdout
+          #                              ).decode().splitlines()
 
-        step_2 = [self._step_2(x) for x in output]
+        step_2 = self.custom_od()
+
+        #step_2 = [self._step_2(x) for x in output]
         step_3_4 = [self._step_3_4(x) for x in step_2]
         step_5 = [self._step_5(x) for x in step_3_4]
 
