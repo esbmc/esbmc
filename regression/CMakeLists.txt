@@ -86,10 +86,10 @@ else()
 endif()
 
 foreach(regression IN LISTS REGRESSIONS)
-    if((NOT WIN32) OR (NOT APPLE)) # FUTURE: configure suites using an option
-        set(MODES CORE KNOWNBUG FUTURE THOROUGH)
-    else()
+    if(WIN32 OR APPLE) # FUTURE: configure suites using an option
         set(MODES CORE KNOWNBUG FUTURE)
+    else()
+        set(MODES CORE KNOWNBUG FUTURE THOROUGH)
     endif()
     add_esbmc_regression("${regression}" "${MODES}")
 endforeach()
