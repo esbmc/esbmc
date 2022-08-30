@@ -42,35 +42,173 @@ public:
   const symbol2tc &getSymbol() const;
 };
 
-class Contractorc
+class Contractor
 {
   ibex::Ctc *outer;
   ibex::Ctc *inner;
   unsigned int location;
 
+public:
+  void set_outer(ibex::Ctc *outer)
+  {
+    Contractor::outer = outer;
+  }
+  void set_inner(ibex::Ctc *inner)
+  {
+    Contractor::inner = inner;
+  }
+  void set_location(unsigned int location)
+  {
+    Contractor::location = location;
+  }
+  ibex::Ctc *get_outer() const
+  {
+    return outer;
+  }
+  ibex::Ctc *get_inner() const
+  {
+    return inner;
+  }
+  unsigned int get_location() const
+  {
+    return location;
+  }
+
+private:
   ibex::Ctc *get_complement_contractor(ibex::Ctc *c)
   {
-    //TODO: implement.
-    return c;
+    //TODO: Test.
+    ibex::Ctc *complement_contractor = nullptr;
+    auto type = boost::core::demangle(typeid(c).name());
+    if( type == "CtcCompo")
+    {
+      auto compo = dynamic_cast<ibex::CtcCompo*>(c);
+      ibex::Array<ibex::Ctc> list_of_contractors;
+      for(auto &it:compo->list)
+        list_of_contractors.add(*get_complement_contractor(&it));
+
+      complement_contractor = new ibex::CtcUnion(list_of_contractors);
+    }
+    else if(type == "CtcUnion")
+    {
+      auto compo = dynamic_cast<ibex::CtcUnion*>(c);
+      ibex::Array<ibex::Ctc> list_of_contractors;
+      for(auto &it:compo->list)
+        list_of_contractors.add(*get_complement_contractor(&it));
+
+      complement_contractor = new ibex::CtcCompo(list_of_contractors);
+    }
+    else if(type == "CtcFwdBwd")
+    {
+      auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd*>(c);
+      ibex::NumConstraint *ctr;
+      switch(fwdbwd->ctr.op)
+      {
+      case ibex::GEQ:
+        ctr = new ibex::NumConstraint(fwdbwd->ctr.f,ibex::LT);
+        complement_contractor = new ibex::CtcFwdBwd(*ctr);
+        break;
+      case ibex::GT:
+        ctr = new ibex::NumConstraint(fwdbwd->ctr.f,ibex::LEQ);
+        complement_contractor = new ibex::CtcFwdBwd(*ctr);
+        break;
+      case ibex::LEQ:
+        ctr = new ibex::NumConstraint(fwdbwd->ctr.f,ibex::GT);
+        complement_contractor = new ibex::CtcFwdBwd(*ctr);
+        break;
+      case ibex::LT:
+        ctr = new ibex::NumConstraint(fwdbwd->ctr.f,ibex::GEQ);
+        complement_contractor = new ibex::CtcFwdBwd(*ctr);
+        break;
+      case ibex::EQ:
+        ctr = new ibex::NumConstraint(fwdbwd->ctr.f,ibex::GT);
+        auto ctr2 = new ibex::NumConstraint(fwdbwd->ctr.f,ibex::LT);
+        ibex::CtcFwdBwd* side1 = new ibex::CtcFwdBwd(*ctr);
+        ibex::CtcFwdBwd* side2 = new ibex::CtcFwdBwd(*ctr2);
+        complement_contractor = new ibex::CtcUnion(*side1,*side2);
+        break;
+      }
+    }
+    else
+    {
+      std::ostringstream oss;
+      oss << "Type: " << type;
+      log_debug("{}", oss.str());
+    }
+    return complement_contractor;
   }
-  Contractorc(ibex::Ctc *c, unsigned int loc)
+
+public:
+  Contractor(ibex::Ctc *c, unsigned int loc)
   {
     outer = c;
     location = loc;
     inner = get_complement_contractor(c);
-
+  }
+  Contractor()
+  {
   }
 };
 
-class Contractorsc
+class Contractors
 {
-  Contractorc contractors[];
+  std::list<Contractor *> contractors;
 
-  Contractorc *get_contractors_up_to_loc(unsigned int loc)
+  Contractor *get_contractors_up_to_loc(unsigned int loc)
   {
-    Contractorc *c;
-    //TODO: implement intersection and unioin of contractors up to a given location.
+    Contractor *c = new Contractor();
+    //TODO: test.
+    auto size = contractors.size();
+    ibex::Array<ibex::Ctc> outer[size];
+    ibex::Array<ibex::Ctc> inner[size];
+    for(auto const &ctc : contractors)
+      if(ctc->get_location() < loc)
+      {
+        outer->add(*(ctc->get_outer()));
+        inner->add(*(ctc->get_inner()));
+      }
+
+    c->set_outer(new ibex::CtcCompo(*outer));
+    c->set_inner(new ibex::CtcUnion(*inner));
+    c->set_location(0);
     return c;
+  }
+
+  Contractor *get_contractors(void)
+  {
+    Contractor *c = new Contractor();
+    //TODO: test.
+    auto size = contractors.size();
+    ibex::Array<ibex::Ctc> outer[size];
+    ibex::Array<ibex::Ctc> inner[size];
+    for(auto const &ctc : contractors)
+    {
+      outer->add(*(ctc->get_outer()));
+      inner->add(*(ctc->get_inner()));
+    }
+    c->set_outer(new ibex::CtcCompo(*outer));
+    c->set_inner(new ibex::CtcUnion(*inner));
+    c->set_location(0);
+    return c;
+  }
+
+  void dump()
+  {
+    std::ostringstream oss;
+    for(auto const &c : contractors)
+    {
+      oss << "outer :" << c->get_outer() << "\n";
+      oss << "inner :" << c->get_inner() << "\n";
+      oss << "location :" << c->get_location() << "\n";
+    }
+    log_debug("{}", oss.str());
+  }
+
+public:
+  void insert_contractor(ibex::Ctc *ctc, unsigned int loc)
+  {
+    Contractor *c = new Contractor(ctc, loc);
+    auto it = contractors.insert(contractors.end(), c);
   }
 };
 
@@ -218,7 +356,7 @@ private:
   CspMap map;
   /// constraint is where the constraint for CSP will be stored.
   ibex::NumConstraint *constraint = nullptr;
-
+  Contractors contractors;
 
   unsigned number_of_functions = 0;
 
@@ -231,6 +369,7 @@ private:
   /// nothing. However the constraints be added to the list of constraints.
   /// \param functionst list of functions in the goto program
   void get_constraints(goto_functionst functionst);
+  void get_contractors(goto_functionst goto_functions);
 
   /// \Function get_intervals is a function that will go through each asert in
   /// the program and parse it from ESBMC expression to a triplet that are the
@@ -278,5 +417,6 @@ private:
   void parse_intervals(expr2tc);
 
   bool initialize_main_function_loops();
+
 };
 #endif //ESBMC_GOTO_CONTRACTOR_H

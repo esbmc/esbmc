@@ -12,7 +12,6 @@ void goto_contractort::get_constraints(goto_functionst goto_functions)
   auto function = goto_functions.function_map.find("c:@F@main");
   for(const auto &ins : function->second.body.instructions)
   {
-    //TODO: replace constraint with set of contractors
     if(ins.is_assert())
       constraint = create_constraint_from_expr2t(ins.guard);
     else if(
@@ -22,6 +21,27 @@ void goto_contractort::get_constraints(goto_functionst goto_functions)
           .get_symbol_name() == "c:@F@__VERIFIER_assert")
       constraint = create_constraint_from_expr2t(
         to_code_function_call2t(ins.code).operands[0]);
+  }
+}
+
+void goto_contractort::get_contractors(goto_functionst goto_functions)
+{
+  //TODO: Test
+  auto function = goto_functions.function_map.find("c:@F@main");
+  for(const auto &ins : function->second.body.instructions)
+  {
+    if(ins.is_assert())
+      contractors.insert_contractor(
+        create_contractor_from_expr2t(ins.guard), ins.location_number);
+    else if(
+      ins.is_function_call() &&
+      is_symbol2t(to_code_function_call2t(ins.code).function) &&
+      to_symbol2t(to_code_function_call2t(ins.code).function)
+          .get_symbol_name() == "c:@F@__VERIFIER_assert")
+      contractors.insert_contractor(
+        create_contractor_from_expr2t(
+          to_code_function_call2t(ins.code).operands[0]),
+        ins.location_number);
   }
 }
 
