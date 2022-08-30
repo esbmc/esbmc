@@ -73,9 +73,6 @@ class Flail:
     REGEX_ADD_COMMA_END = re.compile(r'.*[0-9]$')
 
     def __init__(self, filepath: str, prefix : str = ''):
-        WINDOWS = platform.system() == 'Windows'
-        self._cat = 'cat.exe' if WINDOWS else 'cat'
-        self._od = 'od.exe' if WINDOWS else 'od'
         self.filepath = filepath
         self.prefix = prefix
 
@@ -134,16 +131,7 @@ class Flail:
                                                         self.filepath))
 
     def run(self, output_file, header = None, macro : str = None):
-        #ps = subprocess.Popen(self.cat_cli_command().split(),
-        #                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        #output = subprocess.check_output(self.od_cli_command().split(),
-         #                                stdin=ps.stdout
-          #                              ).decode().splitlines()
-
         step_2 = self.custom_od()
-
-        #step_2 = [self._step_2(x) for x in output]
         step_3_4 = [self._step_3_4(x) for x in step_2]
         step_5 = [self._step_5(x) for x in step_3_4]
 
