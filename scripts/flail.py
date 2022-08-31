@@ -8,13 +8,16 @@ import sys
 import re
 import argparse
 import os
+import textwrap
 
 
 class Flail:
     """
-        The input file can be either an object file (e.g. a goto binary file)
-        or a list of C source file. The flailng converts the content of an input file
-        into an uint array. The resulting array will be written in a C header.
+        The flailng generates the byte representation of the input file
+        by converting its content into a char array. The resulting array will be written in a *.c file.
+        The input file can be of any file type. For an input file of binary content, hexdump it
+        and you'll see the matching between the output and each element in the result array.
+        For input files that contain any text content, see example below:
 
         Example:
 
@@ -22,7 +25,8 @@ class Flail:
             #ifndef __ESBMC_HEADERS_STDARG_H_
             #define __ESBMC_HEADERS_STDARG_H_
             ...
-            is represented by the code as follows:
+            the byte representation of the above directives is:
+            (matching the ASCII code of each character)
             ...
             0000000  35 105 102 110 100 101 102  32  95  95  69  83  66  77  67  95
             0000020  72  69  65  68  69  82  83  95  83  84  68  65  82  71  95  72
@@ -84,7 +88,7 @@ class Flail:
             72,69,65,68,69,82,83,95,83,84,68,65,82,71,95,72,
             95,13,10,35,100,101,102,105,110,101,32,95,95,69,83,66,
 
-        Step 6: Create a C header containing the output of Step 5 as an uint array
+        Step 6: Create a C header containing the output of Step 5 as a char array
         """
 
     REGEX_REMOVE_ADDR = re.compile(r'^[0-9]+( +)?')
@@ -158,26 +162,28 @@ class Flail:
 
 
 def parse_args(argv):
-    '''
-    Try the following examples:
 
-    Ex.1 Convert a list of C operational models (see last line of the CMD below) into unsigned int arrays.
-         Write the resulting array into libc.c and libc.h
-         CMD:
-            python3 flail.py \
-                --macro ESBMC_FLAIL \
-                --prefix esbmc_libc_ \
-                -o ./libc.c \
-                --header ./libc.h \
-                esbmc/src/c2goto/library/builtin_libs.c src/c2goto/library/ctype.c
+    p = argparse.ArgumentParser(prog=argv[0],
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            description=textwrap.dedent('''\
+            Try the following examples:
 
-    Ex.2 Convert a goto binary file (see last line of the CMD below) into an unsigned int arrays
-         After building ESBMC, find clib32.goto from the build tree
-         CMD:
-            python3 flail.py -o ./clib32.c \
-                    esbmc/build/src/c2goto/clibd32.goto
-    '''
-    p = argparse.ArgumentParser(prog=argv[0])
+            Ex.1 Convert a list of C operational models (see last line of the CMD below) into char arrays.
+                 Write the resulting array into libc.c and libc.h
+                 CMD:
+                    python3 flail.py \\
+                        --macro ESBMC_FLAIL \\
+                        --prefix esbmc_libc_ \\
+                        -o ./libc.c \\
+                        --header ./libc.h \\
+                        esbmc/src/c2goto/library/builtin_libs.c src/c2goto/library/ctype.c
+
+            Ex.2 Convert a goto binary file (see last line of the CMD below) into a char array
+                 After building ESBMC, find clib32.goto from the build tree
+                 CMD:
+                    python3 flail.py -o ./clib32.c \\
+                            esbmc/build/src/c2goto/clibd32.goto
+            '''))
     p.add_argument('-p', '--prefix', type=str, default='',
                    help='prefix for C symbols (default: empty)')
     p.add_argument('--macro', type=str, default=None,
