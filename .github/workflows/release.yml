@@ -97,7 +97,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_DIR=C:/deps/clang/clang -DClang_DIR=C:/deps/clang/clang -DZ3_DIR=C:/deps/ -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc143-mt-x64-1_80.dll;C:/deps/boost_program_options-vc143-mt-x64-1_80.dll" -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On -DDOWNLOAD_WINDOWS_DEPENDENCIES=On
+        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc143-mt-x64-1_80.dll;C:/deps/boost_program_options-vc143-mt-x64-1_80.dll" -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On -DDOWNLOAD_WINDOWS_DEPENDENCIES=On
     - name: Build ESBMC
       run: |
         cd build
