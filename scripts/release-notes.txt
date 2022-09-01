@@ -1,11 +1,12 @@
 Release Notes of the ESBMC model checker
 *** Version 7
-* Added support for GCC Vectors
-* Added support for the Jimple language
-* Added option to disable slicing on particular symbols, specified by annotation or on the command line (Support not slicing particular symbols #814)
-* New C++ frontend now correctly handles new and delete ([clang-cpp-frontend] added support for new/delete #815) and references ([clang-cpp-frontend] Fix references #804)
-* Fixed initialization of static storage compound literals ([clang-c-converter] fix initialization of static storage compound literals #816)
-* Various fixes in old and new C++ frontends ([clang-c*-frontend] Minor fixes #808, [cpp] Fixed zombie operand #811, [cpp] quick fix for more zombie codet operand #839)
+* Added support for GCC Vectors.
+* Added support for the Jimple language.
+* Added option to disable slicing on particular symbols, specified by annotation or on the command line (Support not slicing particular symbols #814).
+* New C++ frontend now correctly handles new and delete ([clang-cpp-frontend] added support for new/delete #815) and references ([clang-cpp-frontend] Fix references #804).
+* Fixed initialization of static storage compound literals ([clang-c-converter] fix initialization of static storage compound literals #816).
+* Various fixes in old and new C++ frontends ([clang-c*-frontend] Minor fixes #808, [cpp] Fixed zombie operand #811, [cpp] quick fix for more zombie codet operand #839).
+* Various bugfixes in the --goto-contractor option (#836).
 
 *** Version 6.10
 * Lots of bugs related to unions have been fixed.
