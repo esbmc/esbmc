@@ -52,7 +52,7 @@ function(mangle_clib output)
     set (in_f "${${in_f}}")
     list(GET in_f 0 out_file)
     list(SUBLIST in_f 1 -1 in_flags)
-    string(REGEX REPLACE .c .goto out_goto "${out_file}")
+    string(REPLACE .c .goto out_goto "${out_file}")
     set(out_goto "${CMAKE_CURRENT_BINARY_DIR}/${out_goto}")
     set(out_file "${CMAKE_CURRENT_BINARY_DIR}/${out_file}")
 
