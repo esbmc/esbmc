@@ -183,11 +183,17 @@ def parse_args(argv):
                  CMD:
                     python3 flail.py -o ./clib32.c \\
                             esbmc/build/src/c2goto/clibd32.goto
+            NB:
+            --macro MACRO is only meaningful in combination with --header;
+            if specified, the header file will contain invocations of MACRO(body, size, fpath) for each input file where body is the name of
+            the extern char[] symbol defining the binary content of the input file, size is its size and fpath is the path to the input file as passed to this script.
+            If MACRO is not defined, the header will define it before the invocations to declare the body and size symbols as extern to facilitate usage
+            of the header in a C file
             '''))
     p.add_argument('-p', '--prefix', type=str, default='',
                    help='prefix for C symbols (default: empty)')
     p.add_argument('--macro', type=str, default=None,
-                   help='print MACRO invocation to stdout')
+                   help='define MACRO in the header file (only meaningful in combination with --header)')
     p.add_argument('--header', type=str, default=None,
                    help='write header file containing "extern" declarations of '
                         'generated symbols')

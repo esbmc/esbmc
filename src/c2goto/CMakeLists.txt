@@ -74,8 +74,7 @@ function(mangle_clib output)
       VERBATIM
       )
 
-    # Convert the content of goto binary file (e.g. clib32.goto) into a char array at CMake build time
-    # The resulting array will be written in the correpsonding C file (e.g. clib32.c) in the current binary directory.
+    # Convert the content of goto binary file (e.g. clib32.goto) into a C source file (e.g. clib32.c) containing the content of the binary
     add_custom_command(OUTPUT ${out_file}
       COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py -o ${out_file} ${out_goto}
       DEPENDS ${out_goto} ${CMAKE_SOURCE_DIR}/scripts/flail.py
