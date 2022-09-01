@@ -159,4 +159,8 @@ jobs:
     - uses: actions/upload-artifact@v1
       with:
           name: release-windows
-          path: release
+          path: C:/deps/esbmc
+    - name: Run Tests
+      run: |
+        cd build
+        ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
