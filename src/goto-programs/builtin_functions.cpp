@@ -399,15 +399,9 @@ void goto_convertt::cpp_new_initializer(
 void goto_convertt::do_exit(
   const exprt &,
   const exprt &function,
-  const exprt::operandst &arguments,
+  const exprt::operandst &,
   goto_programt &dest)
 {
-  if(arguments.size() != 1)
-  {
-    log_error("exit expected to have one argument");
-    abort();
-  }
-
   // same as assume(false)
 
   goto_programt::targett t_a = dest.add_instruction(ASSUME);
@@ -418,15 +412,9 @@ void goto_convertt::do_exit(
 void goto_convertt::do_abort(
   const exprt &,
   const exprt &function,
-  const exprt::operandst &arguments,
+  const exprt::operandst &,
   goto_programt &dest)
 {
-  if(arguments.size() != 0)
-  {
-    log_error("abort expected to have no arguments");
-    abort();
-  }
-
   // same as assume(false)
 
   goto_programt::targett t_a = dest.add_instruction(ASSUME);
@@ -435,17 +423,11 @@ void goto_convertt::do_abort(
 }
 
 void goto_convertt::do_free(
-  const exprt &lhs,
+  const exprt &,
   const exprt &function,
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  if(lhs.is_not_nil())
-  {
-    log_error("free is expected not to have LHS");
-    abort();
-  }
-
   // preserve the call
   codet free_statement("free");
   free_statement.location() = function.location();
