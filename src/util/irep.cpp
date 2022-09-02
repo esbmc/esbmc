@@ -12,7 +12,7 @@ const irept::dt empty_d;
 
 void irept::dump() const
 {
-  log_debug("{}", pretty(0));
+  log_status("{}", pretty(0));
 }
 
 const irept &get_nil_irep()

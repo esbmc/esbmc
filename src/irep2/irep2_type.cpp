@@ -106,7 +106,7 @@ std::string type2t::pretty(unsigned int indent) const
 
 void type2t::dump() const
 {
-  log_debug("{}", pretty(0));
+  log_status("{}", pretty(0));
 }
 
 size_t type2t::crc() const
