@@ -42,7 +42,7 @@ struct messaget
   static inline class
   {
     template <typename... Args>
-    void println(FILE *f, VerbosityLevel lvl, Args &&...args) const
+    static void println(FILE *f, VerbosityLevel lvl, Args &&...args)
     {
       if(lvl == VerbosityLevel::Error)
         fmt::print(f, "ERROR: ");
@@ -71,29 +71,22 @@ struct messaget
 #endif
     }
 
-    template <typename File, typename Line, typename... Args>
-    bool logln(
-      VerbosityLevel lvl,
-      const File &file,
-      const Line &line,
-      Args &&...args) const
+    template <typename... Args>
+    bool logln(VerbosityLevel lvl, Args &&...args) const
     {
       FILE *f = target(lvl);
       if(!f)
         return false;
       println(f, lvl, std::forward<Args>(args)...);
       return true;
-      /* unused: */
-      (void)file;
-      (void)line;
     }
   } state = {VerbosityLevel::Status, stdout, stderr};
 };
 
 static inline void
-print(VerbosityLevel lvl, std::string_view msg, const locationt &loc)
+print(VerbosityLevel lvl, std::string_view msg, const locationt &)
 {
-  messaget::state.logln(lvl, loc.get_file(), loc.get_line(), "{}", msg);
+  messaget::state.logln(lvl, "{}", msg);
 }
 
 // Macro to generate log functions
@@ -101,8 +94,7 @@ print(VerbosityLevel lvl, std::string_view msg, const locationt &loc)
   template <typename... Args>                                                  \
   static inline void log_##name(std::string_view fmt, Args &&...args)          \
   {                                                                            \
-    messaget::state.logln(                                                     \
-      verbosity, __FILE__, __LINE__, fmt, std::forward<Args>(args)...);        \
+    messaget::state.logln(verbosity, fmt, std::forward<Args>(args)...);        \
   }
 
 log_message(error, VerbosityLevel::Error);
