@@ -39,7 +39,7 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
 
 void contextt::dump() const
 {
-  log_debug("\nSymbols:");
+  log_status("\nSymbols:");
   // Do assignments based on "value".
   foreach_operand([](const symbolt &s) { s.dump(); });
 }
