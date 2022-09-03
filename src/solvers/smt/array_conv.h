@@ -93,7 +93,7 @@ public:
 static inline const array_ast *array_downcast(const smt_ast *x)
 {
   const array_ast *a = dynamic_cast<const array_ast *>(x);
-  assert(a);
+  assert(!a == !x);
   return a;
 }
 #endif
