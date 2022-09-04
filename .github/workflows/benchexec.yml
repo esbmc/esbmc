@@ -58,7 +58,7 @@ jobs:
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
-          NUM_OF_THREADS: ${{ inputs.timeout }}
+          NUM_OF_THREADS: ${{ inputs.num_of_threads }}
 
         run: |
           rm -rf $HOME/output-action $HOME/output
