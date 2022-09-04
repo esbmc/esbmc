@@ -527,7 +527,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   {
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    symbol.value = gen_zero(t, true);
+    symbol.value = gen_zero(ns.follow(t, true), true);
     symbol.value.zero_initializer(true);
   }
 
