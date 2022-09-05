@@ -815,8 +815,8 @@ bool clang_cpp_convertert::get_function_body(
         }
         else
         {
-          log_error("Base class initializer is not supported in {}", __func__);
-          abort();
+          if(get_expr(*init->getInit(), initializer))
+            return true;
         }
 
         // Convert to code and insert side-effect in the operands list
