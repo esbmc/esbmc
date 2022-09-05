@@ -273,7 +273,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 
 bool clang_cpp_convertert::get_struct_union_class_methods(
   const clang::RecordDecl &recordd,
-  struct_union_typet &)
+  struct_union_typet &type)
 {
   // If a struct is defined inside a extern C, it will be a RecordDecl
   const clang::CXXRecordDecl *cxxrd =
@@ -281,10 +281,18 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   if(cxxrd == nullptr)
     return false;
 
-  if(cxxrd->bases().begin() != cxxrd->bases().end())
+  // Parse bases
+  for(const auto &decl : cxxrd->bases())
   {
-    log_error("inheritance is not supported in {}", __func__);
-    abort();
+    struct_typet base_t;
+    if(get_type(decl.getType(), base_t))
+      return true;
+
+    // Add methods
+    to_struct_type(type).methods().insert(
+      to_struct_type(type).methods().begin(),
+      base_t.methods().begin(),
+      base_t.methods().end());
   }
 
   // Iterate over the declarations stored in this context
