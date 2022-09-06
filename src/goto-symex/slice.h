@@ -5,6 +5,7 @@
 #include <util/time_stopping.h>
 #include <util/algorithms.h>
 #include <util/options.h>
+#include <boost/range/adaptor/reversed.hpp>
 
 /* Base interface */
 class slicer : public ssa_step_algorithm
@@ -63,7 +64,8 @@ public:
   bool run(symex_target_equationt::SSA_stepst &eq) override
   {
     fine_timet algorithm_start = current_time();
-    iterate(eq, false); // iterate in reverse
+    for(auto &step : boost::adaptors::reverse(eq))
+      run_on_step(step);
     fine_timet algorithm_stop = current_time();
     log_status(
       "Slicing time: {}s (removed {} assignments)",

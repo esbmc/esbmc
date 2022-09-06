@@ -2,7 +2,6 @@
 #include <util/message.h>
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/remove_skip.h>
-#include <boost/range/adaptor/reversed.hpp>
 
 bool goto_functions_algorithm::run(goto_functionst &goto_functions)
 {
@@ -69,18 +68,4 @@ void ssa_step_algorithm::run_on_step(symex_target_equationt::SSA_stept &step)
   default:
     log_warning("Invalid type for SSA step");
   }
-}
-
-void ssa_step_algorithm::iterate(
-  symex_target_equationt::SSA_stepst &eq,
-  bool in_order)
-{
-  // Iterates over all steps calling the specific function based on the step.type
-  // TODO: in C++20 we change this into a range view
-  if(in_order)
-    for(auto &step : eq)
-      run_on_step(step);
-  else
-    for(auto &step : boost::adaptors::reverse(eq))
-      run_on_step(step);
 }
