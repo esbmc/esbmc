@@ -46,6 +46,15 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       algorithms.emplace_back(std::make_unique<simple_slice>());
     else
       algorithms.emplace_back(std::make_unique<symex_slicet>(options));
+
+    // Run cache if user has specified the options
+    if(options.get_bool_option("cache-asserts"))
+    {
+      // Store the set between runs
+      static auto cache = assertion_cache::create_empty_set();
+      algorithms.emplace_back(std::make_unique<assertion_cache>(
+        cache, !options.get_bool_option("forward-condition")));
+    }
   }
 
   if(options.get_bool_option("smt-during-symex"))
@@ -598,15 +607,6 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       result->remaining_claims,
       BigInt(eq->SSA_steps.size()) - ignored);
 
-    // Run cache if user has specified the options
-    if(options.get_bool_option("cache-asserts"))
-    {
-      // Store the set between runs
-      static auto cache = crc_assert_cache::create_empty_set();
-      crc_assert_cache(
-        eq->SSA_steps, cache, !options.get_bool_option("forward-condition"))
-        .run();
-    }
     if(options.get_bool_option("document-subgoals"))
     {
       std::ostringstream oss;
