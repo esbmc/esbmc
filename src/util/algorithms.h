@@ -17,6 +17,8 @@ public:
   {
   }
 
+  virtual ~algorithm() = default;
+
   /**
    * @brief Executes the algorithm over a T object
    *
