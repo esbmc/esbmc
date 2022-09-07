@@ -24,7 +24,6 @@ public:
 
   virtual smt_convt::resultt start_bmc();
   virtual smt_convt::resultt run(std::shared_ptr<symex_target_equationt> &eq);
-  virtual ~bmct() = default;
 
 protected:
   const contextt &context;
