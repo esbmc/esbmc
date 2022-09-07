@@ -49,12 +49,9 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
 
     // Run cache if user has specified the options
     if(options.get_bool_option("cache-asserts"))
-    {
       // Store the set between runs
-      static auto cache = assertion_cache::create_empty_set();
       algorithms.emplace_back(std::make_unique<assertion_cache>(
-        cache, !options.get_bool_option("forward-condition")));
-    }
+        config.caching_db, !options.get_bool_option("forward-condition")));
   }
 
   if(options.get_bool_option("smt-during-symex"))
