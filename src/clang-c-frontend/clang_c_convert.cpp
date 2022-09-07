@@ -1,4 +1,5 @@
 // Remove warnings from Clang headers
+#include <iostream>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -25,6 +26,9 @@
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+
+// DEBUG only
+#include <util/show_symbol_table.h>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
@@ -327,6 +331,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   // contain the fields, which are added to the symbol later on this method.
   move_symbol_to_context(symbol);
 
+  // DEBUG
+  catch_target_symbol(id);
+
   // Don't continue to parse if it doesn't have a complete definition
   // Try to get the definition
   clang::RecordDecl *rd_def = rd.getDefinition();
@@ -573,6 +580,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
     new_expr = decl;
   }
+
   return false;
 }
 
@@ -3025,6 +3033,9 @@ void clang_c_convertert::get_default_symbol(
   symbol.type = std::move(type);
   symbol.name = name;
   symbol.id = id;
+
+  // DEBUG
+  //catch_target_symbol(id.as_string());
 }
 
 std::string clang_c_convertert::get_decl_name(const clang::NamedDecl &nd)
@@ -3290,4 +3301,24 @@ clang_c_convertert::get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt)
   }
 
   return nullptr;
+}
+
+void clang_c_convertert::print_intermediate_symbol_table()
+{
+  std::ostringstream out;
+  ::show_symbol_table_plain(namespacet(context), out);
+  std::cout << out.str() << std::endl;
+}
+
+void clang_c_convertert::catch_target_symbol(std::string id)
+{
+  bool caught = false;
+  if (id == "tag-Vehicle")
+  {
+    caught = true;
+    printf("@@ Got %s", id.c_str());
+  }
+
+  if (caught)
+    print_intermediate_symbol_table();
 }

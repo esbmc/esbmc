@@ -65,6 +65,10 @@ public:
 
   static std::string get_decl_name(const clang::NamedDecl &nd);
 
+  // DEBUG only
+  void print_intermediate_symbol_table();
+  void catch_target_symbol(std::string id);
+
 protected:
   clang::ASTContext *ASTContext;
   contextt &context;
