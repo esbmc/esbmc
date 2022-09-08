@@ -251,7 +251,7 @@ void symex_target_equationt::SSA_stept::dump() const
 {
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }
 
 void symex_target_equationt::SSA_stept::output(
