@@ -27,28 +27,28 @@ void __ESBMC_set_thread_internal_data(
 #define __ESBMC_rwlock_field(a) ((a).__lock)
 
 /* Global tracking data. Should all initialize to 0 / false */
-__attribute__((annotate("__ESBMC_inf_size")))
+static __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_running[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
+static __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_ended[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
+static __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_detach[1];
 
-__attribute__((
+static __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
 
-void(
+static void(
   __attribute__((annotate("__ESBMC_inf_size"))) *
   __ESBMC_thread_key_destructors[1])(void *);
 
 /* TODO: these should be 'static', right? */
-pthread_key_t __ESBMC_next_thread_key = {0};
+static pthread_key_t __ESBMC_next_thread_key = {0};
 
-unsigned int __ESBMC_num_total_threads = 0;
-unsigned int __ESBMC_num_threads_running = 0;
-unsigned int __ESBMC_blocked_threads_count = 0;
+static unsigned int __ESBMC_num_total_threads = 0;
+static unsigned int __ESBMC_num_threads_running = 0;
+static unsigned int __ESBMC_blocked_threads_count = 0;
 
 unsigned long int __ESBMC_get_thread_id(void);
 
@@ -67,7 +67,7 @@ typedef struct thread_key
 
 static __ESBMC_thread_key *head = NULL;
 
-int insert_key_value(pthread_key_t key, const void *value)
+static int insert_key_value(pthread_key_t key, const void *value)
 {
   __ESBMC_thread_key *l =
     (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key));
@@ -81,7 +81,7 @@ int insert_key_value(pthread_key_t key, const void *value)
   return 0;
 }
 
-__ESBMC_thread_key *search_key(unsigned int key)
+static __ESBMC_thread_key *search_key(unsigned int key)
 {
   /* TODO: argument 'key' is unused? */
 __ESBMC_HIDE:;
@@ -93,7 +93,7 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_end();
 }
 
-int delete_key(__ESBMC_thread_key *l)
+static int delete_key(__ESBMC_thread_key *l)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
@@ -134,7 +134,7 @@ void pthread_end_main_hook(void)
   __ESBMC_num_threads_running--;
 }
 
-void pthread_exec_key_destructors(void)
+static void pthread_exec_key_destructors(void)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
@@ -157,7 +157,7 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_end();
 }
 
-void pthread_trampoline(void)
+static void pthread_trampoline(void)
 {
 __ESBMC_HIDE:;
   unsigned long int threadid = __ESBMC_get_thread_id();
@@ -294,7 +294,7 @@ __ESBMC_HIDE:;
   return 0;
 }
 
-int pthread_mutex_initializer(pthread_mutex_t *mutex)
+static int pthread_mutex_initializer(pthread_mutex_t *mutex)
 {
   // check whether this mutex has been initialized via
   // PTHREAD_MUTEX_INITIALIZER
