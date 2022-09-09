@@ -12,6 +12,9 @@ bool contextt::add(const symbolt &symbol)
 
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.name, symbol.id));
 
+  if (symbol.id == "tag.Vehicle")
+    printf("@@ Got target symbol insertion in context:add()\n");
+
   ordered_symbols.push_back(&result.first->second);
   return false;
 }
@@ -29,6 +32,9 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
   }
 
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.name, symbol.id));
+
+  if (symbol.id == "tag.Vehicle")
+    printf("@@ Got target symbol insertion in context:move()\n");
 
   ordered_symbols.push_back(&result.first->second);
 
