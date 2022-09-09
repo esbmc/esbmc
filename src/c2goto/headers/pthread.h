@@ -49,12 +49,10 @@ typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   int __lock;
-  unsigned int __count;
-  int __owner;
 } pthread_mutex_t;
 
 /* Mutex initializer. */
-#define PTHREAD_MUTEX_INITIALIZER { 0, 0, 0, }
+#define PTHREAD_MUTEX_INITIALIZER { 0, }
 
 typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
@@ -65,12 +63,10 @@ typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 typedef struct __attribute__((annotate("__ESBMC_ODR-override"))) pthread_cond_t
 {
   int __lock;
-  unsigned int __futex;
-  unsigned int __nwaiters;
 } pthread_cond_t;
 
 /* Conditional variable handling. */
-#define PTHREAD_COND_INITIALIZER { 0, 0, 0, }
+#define PTHREAD_COND_INITIALIZER { 0, }
 
 typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {

@@ -23,11 +23,7 @@ void __ESBMC_set_thread_internal_data(
   struct __pthread_start_data data);
 
 #define __ESBMC_mutex_lock_field(a) ((a).__lock)
-#define __ESBMC_mutex_count_field(a) ((a).__count)
-#define __ESBMC_mutex_owner_field(a) ((a).__owner)
 #define __ESBMC_cond_lock_field(a) ((a).__lock)
-#define __ESBMC_cond_futex_field(a) ((a).__futex)
-#define __ESBMC_cond_nwaiters_field(a) ((a).__nwaiters)
 #define __ESBMC_rwlock_field(a) ((a).__lock)
 
 /* Global tracking data. Should all initialize to 0 / false */
@@ -294,8 +290,6 @@ int pthread_mutex_init(
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
-  __ESBMC_mutex_count_field(*mutex) = 0;
-  __ESBMC_mutex_owner_field(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
