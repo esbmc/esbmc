@@ -33,13 +33,13 @@ struct timespec __attribute__((annotate("__ESBMC_ODR-override")));
 
 typedef int32_t __clockid_t __attribute__((annotate("__ESBMC_ODR-override")));
 
-typedef union __attribute__((annotate("__ESBMC_ODR-override")))
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
    unsigned long int tid;
 } pthread_t;
 
 #ifndef __have_pthread_attr_t
-typedef union __attribute__((annotate("__ESBMC_ODR-override")))
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   long int __align;
 } pthread_attr_t;
@@ -56,7 +56,7 @@ typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 /* Mutex initializer. */
 #define PTHREAD_MUTEX_INITIALIZER { 0, 0, 0, }
 
-typedef union __attribute__((annotate("__ESBMC_ODR-override")))
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   int __align;
 } pthread_mutexattr_t;
@@ -72,21 +72,21 @@ typedef struct __attribute__((annotate("__ESBMC_ODR-override"))) pthread_cond_t
 /* Conditional variable handling. */
 #define PTHREAD_COND_INITIALIZER { 0, 0, 0, }
 
-typedef union __attribute__((annotate("__ESBMC_ODR-override")))
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   int __align;
 } pthread_condattr_t;
 
 
 /* Keys for thread-specific data */
-typedef union __attribute__((annotate("__ESBMC_ODR-override")))
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   unsigned int key;
 } pthread_key_t;
 
 
 /* Once-only execution */
-typedef union __attribute__((annotate("__ESBMC_ODR-override")))
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   int once;
 } pthread_once_t;
@@ -102,7 +102,7 @@ typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 /* Read-write lock initializer. */
 #define PTHREAD_RWLOCK_INITIALIZER { 0, }
 
-typedef union __attribute__((annotate("__ESBMC_ODR-override")))
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   long int __align;
 } pthread_rwlockattr_t;
@@ -111,7 +111,7 @@ typedef union __attribute__((annotate("__ESBMC_ODR-override")))
 
 #ifdef __USE_XOPEN2K
 /* POSIX spinlock data type.  */
-typedef union __attribute__((annotate("__ESBMC_ODR-override")))
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   volatile int lock;
 } pthread_spinlock_t;
@@ -119,12 +119,12 @@ typedef union __attribute__((annotate("__ESBMC_ODR-override")))
 
 /* POSIX barriers data type.  The structure of the type is
    deliberately not exposed.  */
-typedef union __attribute__((annotate("__ESBMC_ODR-override")))
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   long int __align;
 } pthread_barrier_t;
 
-typedef union __attribute__((annotate("__ESBMC_ODR-override")))
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   int __align;
 } pthread_barrierattr_t;

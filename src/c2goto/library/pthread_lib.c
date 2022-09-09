@@ -230,7 +230,7 @@ __ESBMC_HIDE:;
 
 pthread_t pthread_self(void)
 {
-  return (pthread_t)__ESBMC_get_thread_id();
+  return (pthread_t){__ESBMC_get_thread_id()};
 }
 
 int pthread_join_switch(pthread_t thread, void **retval)
