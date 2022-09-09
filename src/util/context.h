@@ -1,8 +1,6 @@
 #ifndef CPROVER_CONTEXT_H
 #define CPROVER_CONTEXT_H
 
-#include <functional>
-
 #include <map>
 #include <util/config.h>
 #include <util/symbol.h>
@@ -22,38 +20,7 @@ typedef std::multimap<irep_idt, irep_idt> symbol_base_mapt;
 
 class contextt
 {
-  typedef std::function<void(const symbolt &symbol)> const_symbol_delegate;
-  typedef std::function<void(symbolt &symbol)> symbol_delegate;
-
 public:
-  typedef ::symbolst symbolst;
-  typedef ::ordered_symbolst ordered_symbolst;
-  explicit contextt()
-  {
-  }
-  ~contextt() = default;
-  contextt(const contextt &obj) = delete;
-
-#ifdef ENABLE_OLD_FRONTEND
-  contextt &operator=(const contextt &rhs)
-  {
-    // copy assignment operator for old frontend typechecking
-    if(&rhs == this) // check self assignment
-    {
-      log_error("Context is copying itself");
-    }
-
-    // Since the const messaget& member breaks default copy assignment operation in this class,
-    // this no-op copy assignment operator aims to restore the functionality
-    // of ansic_c_typecheck function in src/ansi-c/ansi_c_typecheck.cpp prior to commit 4dc8478.
-    // However, using a no-op copy assignment operator is quite hacky. We do not recomment it
-    // in other places of ESBMC.
-    return *this;
-  }
-#else
-  contextt &operator=(const contextt &rhs) = delete;
-#endif
-
   symbol_base_mapt symbol_base_map;
 
   bool add(const symbolt &symbol);
@@ -87,35 +54,35 @@ public:
 
   void erase_symbol(irep_idt name);
 
-  template <typename T>
-  void foreach_operand_in_order(T &&t) const
+  template <typename F>
+  void foreach_operand_in_order(F &&f) const
   {
-    const_symbol_delegate wrapped(std::cref(t));
-    foreach_operand_impl_in_order_const(wrapped);
+    for(const symbolt *ordered_symbol : ordered_symbols)
+      f(*ordered_symbol);
   }
 
-  template <typename T>
-  void Foreach_operand_in_order(T &&t)
+  template <typename F>
+  void Foreach_operand_in_order(F &&f)
   {
-    symbol_delegate wrapped(std::ref(t));
-    foreach_operand_impl_in_order(wrapped);
+    for(symbolt *ordered_symbol : ordered_symbols)
+      f(*ordered_symbol);
   }
 
-  template <typename T>
-  void foreach_operand(T &&t) const
+  template <typename F>
+  void foreach_operand(F &&f) const
   {
-    const_symbol_delegate wrapped(std::cref(t));
-    foreach_operand_impl_const(wrapped);
+    for(const auto &[id, symbol] : symbols)
+      f(symbol);
   }
 
-  template <typename T>
-  void Foreach_operand(T &&t)
+  template <typename F>
+  void Foreach_operand(F &&f)
   {
-    symbol_delegate wrapped(std::ref(t));
-    foreach_operand_impl(wrapped);
+    for(auto &[id, symbol] : symbols)
+      f(symbol);
   }
 
-  unsigned int size() const
+  size_t size() const
   {
     return symbols.size();
   }
@@ -123,12 +90,6 @@ public:
 private:
   symbolst symbols;
   ordered_symbolst ordered_symbols;
-
-  void foreach_operand_impl_const(const_symbol_delegate &expr) const;
-  void foreach_operand_impl(symbol_delegate &expr);
-
-  void foreach_operand_impl_in_order_const(const_symbol_delegate &expr) const;
-  void foreach_operand_impl_in_order(symbol_delegate &expr);
 };
 
 #endif
