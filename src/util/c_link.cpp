@@ -2,6 +2,7 @@
 #include <unordered_set>
 #include <util/base_type.h>
 #include <util/c_link.h>
+#include <util/expr_util.h>
 #include <util/fix_symbol.h>
 #include <util/i2string.h>
 #include <util/location.h>
@@ -74,7 +75,7 @@ protected:
   void duplicate(symbolt &in_context, symbolt &new_symbol);
   bool duplicate_type(symbolt &in_context, symbolt &new_symbol);
   bool duplicate_symbol(symbolt &in_context, symbolt &new_symbol);
-  void move(symbolt &new_symbol);
+  symbolt *move(symbolt &new_symbol);
 
   // overload to use language specific syntax
   std::string to_string(const exprt &expr);
@@ -408,6 +409,14 @@ void c_linkt::typecheck()
     move(s);
   });
 
+  context.Foreach_operand([this](symbolt &s) {
+    if(!s.is_type && s.value.zero_initializer())
+    {
+      s.value = gen_zero(ns.follow(s.type, true), true);
+      s.value.zero_initializer(true);
+    }
+  });
+
   if(context_needs_fixing)
     context.Foreach_operand([this](symbolt &s) {
       symbol_fixer.replace(s.type);
@@ -416,13 +425,15 @@ void c_linkt::typecheck()
     });
 }
 
-void c_linkt::move(symbolt &new_symbol)
+symbolt *c_linkt::move(symbolt &new_symbol)
 {
   // try to add it
 
   symbolt *new_symbol_ptr;
   if(context.move(new_symbol, new_symbol_ptr))
     duplicate(*new_symbol_ptr, new_symbol);
+
+  return new_symbol_ptr;
 }
 } /* end anonymous namespace */
 
