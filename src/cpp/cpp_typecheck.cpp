@@ -276,3 +276,11 @@ void cpp_typecheckt::clean_up()
     }
   });
 }
+
+// DEBUG only
+void cpp_typecheckt::print_intermediate_symbol_table()
+{
+  std::ostringstream out;
+  ::show_symbol_table_plain(namespacet(context), out);
+  std::cout << out.str() << std::endl;
+}

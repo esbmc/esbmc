@@ -24,6 +24,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/std_code.h>
 #include <util/std_types.h>
 
+// DEBUG only
+#include <util/show_symbol_table.h>
+
 bool cpp_typecheck(
   cpp_parse_treet &cpp_parse_tree,
   contextt &context,
@@ -115,6 +118,9 @@ public:
   ~cpp_typecheckt() override = default;
 
   void typecheck() override;
+
+  // DEBUG only
+  void print_intermediate_symbol_table();
 
   // overload to use C++ syntax
 
