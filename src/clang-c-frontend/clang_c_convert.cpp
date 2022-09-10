@@ -3313,12 +3313,12 @@ void clang_c_convertert::print_intermediate_symbol_table()
 void clang_c_convertert::catch_target_symbol(std::string id)
 {
   bool caught = false;
-  if (id == "tag-Vehicle")
+  if(id == "tag-Vehicle")
   {
     caught = true;
     printf("@@ Got %s", id.c_str());
   }
 
-  if (caught)
+  if(caught)
     print_intermediate_symbol_table();
 }

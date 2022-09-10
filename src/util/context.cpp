@@ -12,8 +12,8 @@ bool contextt::add(const symbolt &symbol)
 
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.name, symbol.id));
 
-  if (symbol.id == "tag.Vehicle")
-    printf("@@ Got target symbol insertion in context:add()\n");
+  if(symbol.id == "tag.Vehicle")
+    printf("@@ Got target symbol insertion in %s for: %s\n", __func__, symbol.id.c_str());
 
   ordered_symbols.push_back(&result.first->second);
   return false;
@@ -33,8 +33,16 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
 
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.name, symbol.id));
 
-  if (symbol.id == "tag.Vehicle")
-    printf("@@ Got target symbol insertion in context:move()\n");
+  if(symbol.id == "tag.Vehicle")
+    printf("@@ Got target symbol insertion in %s for: %s\n", __func__, symbol.id.c_str());
+  if(symbol.id == "Vehicle::number_of_wheels(this)")
+    printf("@@ Got target symbol insertion in %s for: %s\n", __func__, symbol.id.c_str());
+  if(symbol.id == "virtual_table::tag.Vehicle")
+    printf("@@ Got target symbol insertion in %s for: %s\n", __func__, symbol.id.c_str());
+  if(symbol.id == "Vehicle::~Vehicle(this)")
+    printf("@@ Got target symbol insertion in %s for: %s\n", __func__, symbol.id.c_str());
+  if(symbol.id == "Vehicle::Vehicle(this)")
+    printf("@@ Got target symbol insertion in %s for: %s\n", __func__, symbol.id.c_str());
 
   ordered_symbols.push_back(&result.first->second);
 
