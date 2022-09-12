@@ -22,6 +22,15 @@ public:
     return result;
   }
 
+  size_t to_size_t() const
+  {
+    size_t result = hash[0];
+    for(int i = 1; i < 5; i++)
+      // Do we care about overlaps?
+      result ^= (hash[i] << sizeof(unsigned int));
+    return result;
+  }
+
   std::string to_string() const;
 
   crypto_hash();

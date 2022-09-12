@@ -47,6 +47,7 @@ void test_constructed_equally(const expr2tc e1, const expr2tc e2)
   c_hash.fin();
   c_hash2.fin();
   REQUIRE(c_hash.to_array() == c_hash2.to_array());
+  REQUIRE(c_hash.to_size_t() == c_hash2.to_size_t());
 }
 
 void test_constructed_differently(const expr2tc e1, const expr2tc e2)
@@ -66,6 +67,7 @@ void test_constructed_differently(const expr2tc e1, const expr2tc e2)
   c_hash.fin();
   c_hash2.fin();
   REQUIRE(c_hash.to_array() != c_hash2.to_array());
+  REQUIRE(c_hash.to_size_t() != c_hash2.to_size_t());
 }
 
 } // namespace
