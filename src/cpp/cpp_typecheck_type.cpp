@@ -14,6 +14,13 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 void cpp_typecheckt::typecheck_type(typet &type)
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  // keeping the old data for debugging purposes
+  typet old_type = type;
+  //type.show_content();
+#pragma GCC diagnostic pop
+
   assert(type.id() != "");
   assert(type.is_not_nil());
 

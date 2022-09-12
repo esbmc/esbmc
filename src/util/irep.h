@@ -1196,6 +1196,8 @@ public:
   friend bool full_eq(const irept &a, const irept &b);
 
   std::string pretty(unsigned indent = 0) const;
+  // DEBUG: remove before commit
+  void show_content() const;
 
 protected:
   static bool is_comment(const irep_namet &name)

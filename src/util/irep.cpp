@@ -464,6 +464,11 @@ std::string irept::pretty(unsigned indent) const
   return result;
 }
 
+void irept::show_content() const
+{
+  printf("@@ %s\n", pretty(0).c_str());
+}
+
 const irep_idt irept::a_width = dstring("width");
 const irep_idt irept::a_name = dstring("name");
 const irep_idt irept::a_statement = dstring("statement");

@@ -98,6 +98,13 @@ void cpp_typecheckt::convert_anonymous_union(
 
 void cpp_typecheckt::convert(cpp_declarationt &declaration)
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  // keeping the old data for debugging purposes
+  cpp_declarationt old_declaration = declaration;
+  //old_item.show_content();
+#pragma GCC diagnostic pop
+
   // see if the declaration is empty
   if(declaration.find("type").is_nil() && !declaration.has_operands())
     return;
@@ -120,6 +127,13 @@ void cpp_typecheckt::convert(cpp_declarationt &declaration)
 void cpp_typecheckt::convert_non_template_declaration(
   cpp_declarationt &declaration)
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  // keeping the old data for debugging purposes
+  cpp_declarationt old_declaration = declaration;
+  //old_item.show_content();
+#pragma GCC diagnostic pop
+
   assert(!declaration.is_template());
 
   // we first check if this is a typedef

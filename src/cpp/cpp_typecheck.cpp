@@ -45,6 +45,13 @@ void cpp_typecheckt::convert(cpp_itemt &item)
   // the conversion modifies the originial cpp_itemt
   // dumping cpp_itemt contents before and after conversion give different results
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  // keeping the old data for debugging purposes
+  cpp_itemt old_item = item;
+  //old_item.show_content();
+#pragma GCC diagnostic pop
+
   if(item.is_declaration())
     convert(to_cpp_declaration(item));
   else if(item.is_linkage_spec())

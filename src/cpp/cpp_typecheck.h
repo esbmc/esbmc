@@ -119,7 +119,7 @@ public:
 
   void typecheck() override;
 
-  // DEBUG only
+  // for debugging
   void print_intermediate_symbol_table();
 
   // overload to use C++ syntax

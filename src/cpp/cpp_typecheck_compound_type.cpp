@@ -125,6 +125,13 @@ std::string cpp_typecheckt::fetch_compound_name(const typet &type)
 
 void cpp_typecheckt::typecheck_compound_type(typet &type)
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  // keeping the old data for debugging purposes
+  typet old_type = type;
+  //type.show_content();
+#pragma GCC diagnostic pop
+
   // first save qualifiers
   c_qualifierst qualifiers(type);
 
@@ -168,6 +175,9 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
   // leads to type conflicts when calling code with a different linkage. (i.e.,
   // a foo pointer isn't compatible with a foo pointer).
   const irep_idt symbol_name = dest_scope->prefix + "tag." + identifier;
+
+  if (symbol_name.as_string() == "tag.Vehicle")
+    printf("@@ Got tag.Vehicle symbol\n");
 
   // check if we have it already
 
@@ -229,7 +239,10 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     id.id_class = cpp_idt::CLASS;
 
     if(has_body)
+    {
+      // adding components to symbol.type, such as vtable_ptr, ctor, dtor, methods...
       typecheck_compound_body(*new_symbol);
+    }
     else
     {
       typet new_type("incomplete_" + new_symbol->type.id_string());

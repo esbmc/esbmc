@@ -3033,9 +3033,6 @@ void clang_c_convertert::get_default_symbol(
   symbol.type = std::move(type);
   symbol.name = name;
   symbol.id = id;
-
-  // DEBUG
-  //catch_target_symbol(id.as_string());
 }
 
 std::string clang_c_convertert::get_decl_name(const clang::NamedDecl &nd)
