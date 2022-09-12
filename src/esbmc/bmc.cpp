@@ -47,7 +47,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
     else
       algorithms.emplace_back(std::make_unique<symex_slicet>(options));
 
-    // Run cache if user has specified the options
+    // Run cache if user has specified the option
     if(options.get_bool_option("cache-asserts"))
       // Store the set between runs
       algorithms.emplace_back(std::make_unique<assertion_cache>(
