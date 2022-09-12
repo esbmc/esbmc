@@ -27,7 +27,7 @@ public:
     size_t result = hash[0];
     for(int i = 1; i < 5; i++)
       // Do we care about overlaps?
-      result ^= (hash[i] << sizeof(unsigned int));
+        result ^= (hash[i] << (sizeof(unsigned int)*i));
     return result;
   }
 
