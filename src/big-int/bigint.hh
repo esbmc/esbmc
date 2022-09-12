@@ -7,7 +7,6 @@
 
 #include <cstdint>
 #include <utility>
-#include <util/compiler_defs.h>
 
 // This one is pretty simple but has a fair divide implementation.
 // Though I'm not ambitious enough to do that FFT-like stuff.
@@ -117,73 +116,73 @@ private:
   inline void adjust();
 
   // Assign to this.
-  void assign(llong_t) _fast;
-  void assign(ullong_t) _fast;
+  void assign(llong_t);
+  void assign(ullong_t);
 
   // Aux methods, only for internal use.
   inline int ucompare(BigInt const &) const;
-  void add(onedig_t const *, unsigned, bool) _fast;
-  void mul(onedig_t const *, unsigned, bool) _fast;
+  void add(onedig_t const *, unsigned, bool);
+  void mul(onedig_t const *, unsigned, bool);
 
   // Auxiliary constructor used for temporary or static BigInt.
   // Sets size=0 which indicates that ~BigInt must not delete[].
-  inline BigInt(onedig_t *, unsigned, bool) _fast;
+  inline BigInt(onedig_t *, unsigned, bool);
 
 public:
-  ~BigInt() _fast;
+  ~BigInt();
 
-  BigInt() _fast;
-  BigInt(int) _fast;
-  BigInt(unsigned) _fast;
+  BigInt();
+  BigInt(int);
+  BigInt(unsigned);
 
-  BigInt(long signed int x) _fast;
-  BigInt(long unsigned int x) _fast;
+  BigInt(long signed int x);
+  BigInt(long unsigned int x);
 
-  BigInt(llong_t) _fast;
-  BigInt(ullong_t) _fast;
-  BigInt(BigInt const &) _fast;
-  BigInt(BigInt &&) _fast;
-  BigInt(char const *, onedig_t = 10) _fast;
+  BigInt(llong_t);
+  BigInt(ullong_t);
+  BigInt(BigInt const &);
+  BigInt(BigInt &&);
+  BigInt(char const *, onedig_t = 10);
 
-  BigInt &operator=(BigInt const &) _fast;
-  BigInt &operator=(BigInt &&) _fast;
+  BigInt &operator=(BigInt const &);
+  BigInt &operator=(BigInt &&);
 
   // Input conversion from text.
 
-  char const *scan_on(char const *, onedig_t = 10) _fast;
-  char const *scan(char const *, onedig_t = 10) _fast;
+  char const *scan_on(char const *, onedig_t = 10);
+  char const *scan(char const *, onedig_t = 10);
 
   // Output conversion into text.
 
   // Return an upper bound for the number of digits the textual
   // representation of this might have.
-  unsigned digits(onedig_t = 10) const _fast;
+  unsigned digits(onedig_t = 10) const;
 
   // Convert into string, right adjusted in field of specified width.
   // Returns pointer to start of number or NULL if field too small.
-  char *as_string(char *, unsigned, onedig_t = 10) const _fasta;
+  char *as_string(char *, unsigned, onedig_t = 10) const;
 
   // Convert to/from a binary representation.
 
   // Write and read in a compact byte-wise binary form. Effectively
   // print in base 256 with the most significant digit first. Also
   // read back from such a representation. Return success.
-  bool dump(unsigned char *, unsigned) _fast const;
-  void load(unsigned char const *, unsigned) _fast;
+  bool dump(unsigned char *, unsigned) const;
+  void load(unsigned char const *, unsigned);
 
   // Conversions to elementary types.
 
-  bool is_int64() const _fast;
+  bool is_int64() const;
   bool is_uint64() const
   {
     return length <= small;
   }
 
   // disabled by DK: makes operators ambigous
-  //operator llong_t() const _fast;
-  //operator ullong_t() const _fast;
-  uint64_t to_uint64() const _fast;
-  int64_t to_int64() const _fast;
+  //operator llong_t() const;
+  //operator ullong_t() const;
+  uint64_t to_uint64() const;
+  int64_t to_int64() const;
 
 #ifndef bool
   // Like int: non-zero is true. Equivalent to !is_zero().
@@ -192,9 +191,9 @@ public:
 
   // All comparisions are done with these primitives.
 
-  int compare(llong_t) const _fast;
-  int compare(ullong_t) const _fast;
-  int compare(BigInt const &) const _fast;
+  int compare(llong_t) const;
+  int compare(ullong_t) const;
+  int compare(BigInt const &) const;
 
   // Eliminate need for explicit casts when comparing.
 
@@ -252,11 +251,11 @@ public:
   }
 
 #define IN_PLACE_OPERATOR(TYPE)                                                \
-  BigInt &operator+=(TYPE) _fast;                                              \
-  BigInt &operator-=(TYPE) _fast;                                              \
-  BigInt &operator*=(TYPE) _fast;                                              \
-  BigInt &operator/=(TYPE) _fast;                                              \
-  BigInt &operator%=(TYPE) _fast;
+  BigInt &operator+=(TYPE);                                              \
+  BigInt &operator-=(TYPE);                                              \
+  BigInt &operator*=(TYPE);                                              \
+  BigInt &operator/=(TYPE);                                              \
+  BigInt &operator%=(TYPE);
 
   IN_PLACE_OPERATOR(const BigInt &)
   IN_PLACE_OPERATOR(llong_t)
@@ -301,15 +300,15 @@ public:
   } // predecrement
 
   static void
-  div(BigInt const &, BigInt const &, BigInt &quot, BigInt &rem) _fasta;
+  div(BigInt const &, BigInt const &, BigInt &quot, BigInt &rem);
 
   // Returns the largest x such that 2^x <= abs() or 0 if input is 0
   // Not part of original BigInt.
-  unsigned floorPow2() const _fast;
+  unsigned floorPow2() const;
 
   // Sets the number to the power of two given by the exponent
   // Not part of original BigInt.
-  void setPower2(unsigned exponent) _fast;
+  void setPower2(unsigned exponent);
 
   void swap(BigInt &other)
   {
