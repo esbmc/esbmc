@@ -12,6 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_storage_spec.h>
 #include <util/c_qualifiers.h>
 #include <util/c_types.h>
+#include <sstream>
 
 class ansi_c_convert_typet
 {

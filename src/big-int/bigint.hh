@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <utility>
+#include <util/compiler_defs.h>
 
 // This one is pretty simple but has a fair divide implementation.
 // Though I'm not ambitious enough to do that FFT-like stuff.
@@ -54,33 +55,6 @@
 //
 // You may however use and modify this without restriction.
 
-// Add your losing compiler to this list.
-#if !defined bool &&                                                           \
-  (defined __SUNPRO_CC && (__SUNPRO_CC < 0x500 || __SUNPRO_CC_COMPAT < 5) ||   \
-   defined __xlC__ || defined __DECCXX && __DECCXX_VER < 60000000 ||           \
-   defined _MSC_VER && _MSC_VER < 1100)
-#undef bool
-#undef false
-#undef true
-#define bool int
-#define false 0
-#define true 1
-#endif
-
-// Minor optimization for gcc on some intel platforms.
-#if !defined _fast
-#if defined __GNUC__ && defined __i386__ && defined NDEBUG
-#define _fast __attribute__((__regparm__(3), __stdcall__))
-#if defined _WIN32
-#define _fasta       // Mingw-gcc crashes when alloca is used
-#else                // inside a function declared regparm
-#define _fasta _fast // or stdcall (don't know which).
-#endif
-#else
-#define _fast
-#define _fasta
-#endif
-#endif
 
 class BigInt
 {
