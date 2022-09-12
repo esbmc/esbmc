@@ -63,7 +63,7 @@ inline int digit_cmp(onedig_t const *a, onedig_t const *b, unsigned n)
 }
 
 // Add unsigned digit strings, return carry. Assumes l1 >= l2!
-static _fast onedig_t digit_add(
+static onedig_t digit_add(
   onedig_t const *d1,
   unsigned l1,
   onedig_t const *d2,
@@ -95,7 +95,7 @@ copy:
 }
 
 // Subtract unsigned digit strings, return carry. Assumes l1 >= l2!
-static _fast void digit_sub(
+static void digit_sub(
   onedig_t const *d1,
   unsigned l1,
   onedig_t const *d2,
@@ -129,7 +129,7 @@ copy:
 
 // Multiply unsigned digit string by single digit, replaces argument
 // with product and returns overflowing digit.
-static _fast onedig_t digit_mul(onedig_t *b, unsigned l, onedig_t d)
+static onedig_t digit_mul(onedig_t *b, unsigned l, onedig_t d)
 {
   twodig_t p = 0;
   for(int i = l; --i >= 0;)
@@ -144,7 +144,7 @@ static _fast onedig_t digit_mul(onedig_t *b, unsigned l, onedig_t d)
 // Multiply two digit strings. Writes result into a third digit string
 // which must have the appropriate size and must not be same as one of
 // the arguments.
-static _fast void digit_mul(
+static void digit_mul(
   onedig_t const *a,
   unsigned la,
   onedig_t const *b,
@@ -169,7 +169,7 @@ static _fast void digit_mul(
 
 // Divide unsigned digit string by single digit, replaces argument
 // with quotient and returns remainder.
-static _fast onedig_t digit_div(onedig_t *b, unsigned l, onedig_t d)
+static onedig_t digit_div(onedig_t *b, unsigned l, onedig_t d)
 {
   twodig_t r = 0;
   for(int i = l; --i >= 0;)
@@ -212,7 +212,7 @@ inline onedig_t guess_q(onedig_t const *r, onedig_t const *y)
 
 // Multiply divisor with quotient digit and subtract from dividend.
 // Returns overflow.
-static _fast onedig_t
+static onedig_t
 multiply_and_subtract(onedig_t *r, onedig_t const *y, unsigned l, onedig_t q)
 {
   twodig_t p = 0;
@@ -236,7 +236,7 @@ multiply_and_subtract(onedig_t *r, onedig_t const *y, unsigned l, onedig_t q)
 
 // Add back divisor digits to dividend, corresponds to a correction of
 // the guessed quotient digit by -1.
-static _fast void add_back(onedig_t *r, onedig_t const *y, unsigned l)
+static void add_back(onedig_t *r, onedig_t const *y, unsigned l)
 {
   twodig_t h = 0;
   for(unsigned i = 0; i < l; i++)
@@ -251,7 +251,7 @@ static _fast void add_back(onedig_t *r, onedig_t const *y, unsigned l)
 
 // Divide two digit strings. Divides r by y/yl. Stores quotient in
 // q/ql and leaves the remainder in r. Size of r is yl+ql.
-static _fast void
+static void
 digit_div(onedig_t *r, const onedig_t *y, unsigned yl, onedig_t *q, unsigned ql)
 {
   r += ql;
