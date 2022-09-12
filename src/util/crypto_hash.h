@@ -14,20 +14,12 @@ public:
 
   bool operator<(const crypto_hash &h2) const;
 
-  std::array<unsigned int, 5> to_array() const
-  {
-    // TODO: CPP+20 will have a to_array function
-    std::array<unsigned int, 5> result;
-    std::copy(hash, hash + 5, result.begin());
-    return result;
-  }
-
   size_t to_size_t() const
   {
     size_t result = hash[0];
     for(int i = 1; i < 5; i++)
       // Do we care about overlaps?
-        result ^= (hash[i] << (sizeof(unsigned int)*i));
+      result ^= hash[i];
     return result;
   }
 
