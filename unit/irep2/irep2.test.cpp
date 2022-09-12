@@ -6,6 +6,12 @@
 
 namespace
 {
+std::array<unsigned int, 5> to_array(const crypto_hash &h)
+{
+  std::array<unsigned int, 5> result;
+  std::copy(h.hash, h.hash + 5, result.begin());
+  return result;
+}
 struct_type2tc testing_struct2t()
 {
   std::vector<type2tc> struct_members{
@@ -46,7 +52,7 @@ void test_constructed_equally(const expr2tc e1, const expr2tc e2)
 
   c_hash.fin();
   c_hash2.fin();
-  REQUIRE(c_hash.to_array() == c_hash2.to_array());
+  REQUIRE(to_array(c_hash) == to_array(c_hash2));
   REQUIRE(c_hash.to_size_t() == c_hash2.to_size_t());
 }
 
@@ -66,7 +72,7 @@ void test_constructed_differently(const expr2tc e1, const expr2tc e2)
 
   c_hash.fin();
   c_hash2.fin();
-  REQUIRE(c_hash.to_array() != c_hash2.to_array());
+  REQUIRE(to_array(c_hash) != to_array(c_hash2));
   REQUIRE(c_hash.to_size_t() != c_hash2.to_size_t());
 }
 
