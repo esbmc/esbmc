@@ -3,35 +3,27 @@
 #include <utility>
 #include <util/crypto_hash.h>
 
-namespace
-{
-std::string hash_irep2(const expr2tc e)
-{
-  crypto_hash h;
-  e->hash(h);
-  h.fin();
-  return h.to_string();
-}
-} // namespace
 void assertion_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
 {
-  auto cond_hash = hash_irep2(step.cond);
-  auto guard_hash = hash_irep2(step.guard);
-  assert_pair pair = std::make_pair(guard_hash, cond_hash);
-  auto it = assert_set.find(pair);
-  if(it == assert_set.end())
+  auto [it, ins] = db.emplace(std::make_pair(step.cond, step.guard));
+  if(!ins)
   {
-    log_debug("Cache missed");
-    assert_set.emplace(pair);
+    log_debug("Cache hits: {}", ++hits);
+    step.cond = constant_bool2tc(trivial_value);
   }
   else
-  {
-    if((guard_hash == it->first) && (cond_hash == it->second))
-    {
-      log_debug("Cache hits: {}", ++hits);
-      step.cond = constant_bool2tc(trivial_value);
-    }
-    else
-      log_debug("Cache had a hash collision");
-  }
+    log_debug("Cache missed");
+}
+
+bool assertion_cache::run(symex_target_equationt::SSA_stepst &eq)
+{
+  fine_timet algorithm_start = current_time();
+  for(auto &step : eq)
+    run_on_step(step);
+  fine_timet algorithm_stop = current_time();
+  log_status(
+    "Caching time: {}s (removed {} assignments)",
+    time2string(algorithm_stop - algorithm_start),
+    hits);
+  return true;
 }
