@@ -14,6 +14,14 @@ public:
 
   bool operator<(const crypto_hash &h2) const;
 
+  std::array<unsigned int, 5> to_array() const
+  {
+    // TODO: CPP+20 will have a to_array function
+    std::array<unsigned int, 5> result;
+    std::copy(hash, hash + 5, result.begin());
+    return result;
+  }
+
   std::string to_string() const;
 
   crypto_hash();

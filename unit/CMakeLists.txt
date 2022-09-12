@@ -12,4 +12,4 @@ endif()
 
 add_subdirectory(util)
 add_subdirectory(c2goto)
-
+add_subdirectory(irep2)
