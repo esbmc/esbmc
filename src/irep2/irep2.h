@@ -27,7 +27,7 @@
 #include <boost/preprocessor/list/for_each.hpp>
 #include <cstdarg>
 #include <functional>
-#include <util/config.h>
+#include <util/compiler_defs.h>
 #include <util/crypto_hash.h>
 #include <util/dstring.h>
 #include <util/irep.h>
