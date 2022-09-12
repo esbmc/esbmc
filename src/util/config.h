@@ -109,7 +109,7 @@ public:
 
   static triple host();
 
-  // For caching
+  // For caching ssa assertions
   assert_db ssa_caching_db;
 };
 
