@@ -6,11 +6,7 @@
 #include <util/options.h>
 #include <langapi/mode.h>
 #include <util/compiler_defs.h>
-
-// Helper definitions
-using hashing_type = std::string; // from irep2_meta_templates.h
-using assert_pair = std::pair<hashing_type, hashing_type>;
-
+#include <util/cache_defs.h>
 class configt
 {
 public:
@@ -26,8 +22,6 @@ public:
     bool is_macos() const;
     std::string to_string() const;
   };
-
-  // std::set<assertion_cache::assert_pair> cache_db;
 
 #define dm(char, short, int, long, addr, word, long_dbl)                       \
   ((uint64_t)(char) | (uint64_t)(short) << 8 | (uint64_t)(int) << 16 |         \
@@ -116,7 +110,7 @@ public:
   static triple host();
 
   // For caching
-  std::set<assert_pair> caching_db;
+  assert_db ssa_caching_db;
 };
 
 extern configt config;
