@@ -155,12 +155,12 @@ bool exprt::is_boolean() const
   return type().is_bool();
 }
 
-bool exprt::is_zero() const
+bool exprt::is_zero(bool compound) const
 {
+  const irep_idt &type_id = type().id_string();
   if(is_constant())
   {
     const std::string &value = get_string(a_value);
-    const irep_idt &type_id = type().id_string();
 
     if(type_id == "unsignedbv" || type_id == "signedbv")
     {
@@ -183,6 +183,14 @@ bool exprt::is_zero() const
       if(value == "NULL")
         return true;
     }
+  }
+  else if(compound && (type_id == "array" || type_id == "vector" ||
+                       type_id == "struct" || type_id == "union"))
+  {
+    for(const exprt &op : operands())
+      if(!op.is_zero(true))
+        return false;
+    return true;
   }
 
   return false;
