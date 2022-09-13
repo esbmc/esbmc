@@ -423,7 +423,10 @@ void c_linkt::typecheck()
       symbol_fixer.fix_symbol(s);
       if(!s.is_type && s.type.tag() == "pthread_mutex_t" &&
          s.static_lifetime && !s.value.zero_initializer())
+      {
+        assert(s.value.is_zero(true));
         s.value = gen_zero(ns.follow(s.type, true), true);
+      }
 #else
       symbol_fixer.replace(s.type);
       if(!s.is_type)
