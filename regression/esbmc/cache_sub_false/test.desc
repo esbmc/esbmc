@@ -1,0 +1,5 @@
+CORE
+main.c
+--cache-asserts --cache-asserts-subexpressions --incremental-bmc --verbosity 9
+\bSub-Cache hits: 2\b
+^VERIFICATION FAILED$
