@@ -331,9 +331,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   // contain the fields, which are added to the symbol later on this method.
   move_symbol_to_context(symbol);
 
-  // DEBUG
-  catch_target_symbol(id);
-
   // Don't continue to parse if it doesn't have a complete definition
   // Try to get the definition
   clang::RecordDecl *rd_def = rd.getDefinition();
@@ -647,6 +644,10 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
+  // DEBUG
+  if(id == "c:@S@Vehicle@F@number_of_wheels#")
+    printf("@@ Got %s\n", id.c_str());
+
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
   if(get_function_params(fd, type.arguments()))
@@ -655,6 +656,15 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   // Apparently, if the type has no arguments, we assume ellipsis
   if(!type.arguments().size())
     type.make_ellipsis();
+
+  // additional comment nodes for virtual method
+  const clang::CXXMethodDecl &md =
+    static_cast<const clang::CXXMethodDecl &>(fd);
+  if (md.isVirtual())
+  {
+    type.set("#is_virtual", true);
+    type.set("#virtual_name", name);
+  }
 
   added_symbol.type = type;
 
@@ -3310,7 +3320,7 @@ void clang_c_convertert::print_intermediate_symbol_table()
 void clang_c_convertert::catch_target_symbol(std::string id)
 {
   bool caught = false;
-  if(id == "tag-Vehicle")
+  if(id == "c:@S@Vehicle@F@number_of_wheels#")
   {
     caught = true;
     printf("@@ Got %s", id.c_str());

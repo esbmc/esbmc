@@ -268,6 +268,12 @@ void cpp_typecheckt::typecheck_compound_declarator(
   bool is_typedef,
   bool is_mutable)
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  // keeping the old data for debugging purposes
+  cpp_declaratort old_declarator = declarator;
+  //type.show_content();
+#pragma GCC diagnostic pop
   bool is_cast_operator = declaration.type().id() == "cpp-cast-operator";
 
   if(is_cast_operator)
