@@ -888,7 +888,7 @@ void dereferencet::build_reference_rec(
     break;
   case flag_src_struct | flag_dst_struct | flag_is_const_offs:
     // Extract a structure from inside another struct.
-    construct_struct_ref_from_const_offset(value, offset, type, guard);
+    construct_struct_ref_from_const_offset(value, offset, type, guard, mode, alignment);
     break;
   case flag_src_array | flag_dst_struct | flag_is_const_offs:
     // Extract a structure from inside an array.
@@ -904,7 +904,7 @@ void dereferencet::build_reference_rec(
     break;
   case flag_src_struct | flag_dst_union | flag_is_const_offs:
     // Extract a union from inside a structure.
-    construct_struct_ref_from_const_offset(value, offset, type, guard);
+    construct_struct_ref_from_const_offset(value, offset, type, guard, mode, alignment);
     break;
   case flag_src_array | flag_dst_union | flag_is_const_offs:
     // Extract a union from inside an array.
@@ -953,7 +953,7 @@ void dereferencet::build_reference_rec(
     break;
 
   case flag_src_union | flag_dst_union | flag_is_const_offs:
-    construct_struct_ref_from_const_offset(value, offset, type, guard);
+    construct_struct_ref_from_const_offset(value, offset, type, guard, mode, alignment);
     break;
   case flag_src_union | flag_dst_union | flag_is_dyn_offs:
     construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
@@ -1507,7 +1507,9 @@ void dereferencet::construct_struct_ref_from_const_offset(
   expr2tc &value,
   const expr2tc &offs,
   const type2tc &type,
-  const guardt &guard)
+  const guardt &guard,
+  modet mode,
+  unsigned long alignment)
 {
   // Minimal effort: the moment that we can throw this object out due to an
   // incompatible type, we do.
@@ -1562,7 +1564,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
         expr2tc offs_expr = gen_ulong(new_offs.to_uint64());
         value = member2tc(it, value, data->member_names[i]);
 
-        construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
+        build_reference_rec(value, offs_expr, type, guard, mode, alignment);
         return;
       }
     cont:
