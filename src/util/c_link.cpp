@@ -472,13 +472,16 @@ bool c_link(contextt &context, contextt &new_context, const std::string &module)
     }
   };
 
-  dump("tgt-", context);
-  dump("src-", new_context);
+  if(messaget::state.verbosity >= VerbosityLevel::Debug)
+    dump("tgt-", context);
+  if(messaget::state.verbosity >= VerbosityLevel::Debug)
+    dump("src-", new_context);
 
   c_linkt c_link(context, new_context, module);
   bool r = c_link.typecheck_main();
 
-  dump("res-", context);
+  if(messaget::state.verbosity >= VerbosityLevel::Debug)
+    dump("res-", context);
 
   return r;
 }
