@@ -116,7 +116,7 @@ void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)
 
   if(new_symbol.is_type && duplicate_type(in_context, new_symbol))
   {
-    // symbol_fixer.insert(in_context.id, new_symbol.type);
+    symbol_fixer.insert(in_context.id, new_symbol.type);
     context_needs_fixing = true;
     fprintf(
       stderr,
@@ -125,7 +125,7 @@ void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)
   }
   else if(duplicate_symbol(in_context, new_symbol))
   {
-    // symbol_fixer.insert(in_context.id, new_symbol.value);
+    symbol_fixer.insert(in_context.id, new_symbol.value);
     context_needs_fixing = true;
     fprintf(
       stderr,
@@ -419,9 +419,16 @@ void c_linkt::typecheck()
 
   if(context_needs_fixing)
     context.Foreach_operand([this](symbolt &s) {
+#if 1
+      symbol_fixer.fix_symbol(s);
+      if(!s.is_type && s.type.tag() == "pthread_mutex_t" &&
+         s.static_lifetime && !s.value.zero_initializer())
+        s.value = gen_zero(ns.follow(s.type, true), true);
+#else
       symbol_fixer.replace(s.type);
       if(!s.is_type)
         symbol_fixer.replace(s.value);
+#endif
     });
 }
 
