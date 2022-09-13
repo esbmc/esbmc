@@ -421,7 +421,13 @@ void c_linkt::typecheck()
     context.Foreach_operand([this](symbolt &s) {
 #if 1
       symbol_fixer.fix_symbol(s);
-      if(!s.is_type && s.type.tag() == "pthread_mutex_t" &&
+      /* For the types having static initializers defined, replace any such
+       * static initialization */
+      if(!s.is_type &&
+         (s.type.tag() == "pthread_mutex_t" ||
+          s.type.tag() == "pthread_cond_t" ||
+          s.type.tag() == "pthread_rwlock_t" ||
+          s.type.tag() == "pthread_once_t") &&
          s.static_lifetime && !s.value.zero_initializer())
       {
         assert(s.value.is_zero(true));
