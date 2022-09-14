@@ -1,3 +1,4 @@
+#include <assert.h>
 int main()
 {
   int x, y;
