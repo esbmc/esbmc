@@ -33,14 +33,14 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
 
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.name, symbol.id));
 
-  if(symbol.id == "tag.Vehicle") // s.type is copied from the original cpp_item, difficult to align
+  if(symbol.id == "tag.Vehicle") // Done - s.type is copied from the original cpp_item, difficult to match
+    printf("@@ Got target symbol insertion in %s for: %s\n", __func__, symbol.id.c_str());
+  if(symbol.id == "Vehicle::number_of_wheels(this)") // Done - #member_name should be class name "tag-*", difficult to match.
     printf("@@ Got target symbol insertion in %s for: %s\n", __func__, symbol.id.c_str());
 
-  if(symbol.id == "Vehicle::number_of_wheels(this)") // WIP
+  if(symbol.id == "virtual_table::tag.Vehicle") // WIP
     printf("@@ Got target symbol insertion in %s for: %s\n", __func__, symbol.id.c_str());
 
-  if(symbol.id == "virtual_table::tag.Vehicle")
-    printf("@@ Got target symbol insertion in %s for: %s\n", __func__, symbol.id.c_str());
   if(symbol.id == "Vehicle::~Vehicle(this)")
     printf("@@ Got target symbol insertion in %s for: %s\n", __func__, symbol.id.c_str());
   if(symbol.id == "virtual_table::tag.Vehicle@tag.Vehicle")

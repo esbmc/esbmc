@@ -1,5 +1,6 @@
 // Remove warnings from Clang headers
 #include <iostream>
+#include <sstream>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -42,6 +43,8 @@ clang_c_convertert::clang_c_convertert(
     anon_symbol("clang_c_convertert::"),
     current_scope_var_num(1),
     current_block(nullptr),
+    current_class_id(""),
+    current_class_name(""),
     sm(nullptr),
     current_functionDecl(nullptr)
 {
@@ -296,6 +299,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
   std::string id, name;
   get_decl_name(rd, name, id);
+
+  current_class_id = id;
+  current_class_name = name;
 
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context. See next comment
@@ -644,10 +650,6 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
-  // DEBUG
-  if(id == "c:@S@Vehicle@F@number_of_wheels#")
-    printf("@@ Got %s\n", id.c_str());
-
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
   if(get_function_params(fd, type.arguments()))
@@ -657,13 +659,16 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   if(!type.arguments().size())
     type.make_ellipsis();
 
-  // additional comment nodes for virtual method
+  // deal with virtual method
   const clang::CXXMethodDecl &md =
     static_cast<const clang::CXXMethodDecl &>(fd);
   if (md.isVirtual())
   {
+    // additional comment nodes for virtual method
     type.set("#is_virtual", true);
     type.set("#virtual_name", name);
+
+    get_virtual_method(added_symbol);
   }
 
   added_symbol.type = type;
@@ -677,6 +682,31 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 
   // Restore old functionDecl
   current_functionDecl = old_functionDecl;
+
+  return false;
+}
+
+bool clang_c_convertert::get_virtual_method(
+    const symbolt &func_symb)
+{
+  // add virtual table(vtable) symbol
+  std::string vt_id = "virtual_table::" + current_class_id;
+  std::string vt_name = "virtual_table::" + current_class_name;
+  locationt loc = func_symb.location;
+  symbolt vt_symb;
+  get_default_symbol(
+    vt_symb,
+    get_modulename_from_path(loc.file().as_string()),
+    struct_typet(),
+    vt_name,
+    vt_id,
+    loc);
+
+  symbolt &added_vt_symb = *move_symbol_to_context(vt_symb);
+  assert(added_vt_symb.type.id() == "struct");
+
+  catch_target_symbol(vt_id);
+  // TODO: add vtable pointer
 
   return false;
 }
@@ -3320,10 +3350,10 @@ void clang_c_convertert::print_intermediate_symbol_table()
 void clang_c_convertert::catch_target_symbol(std::string id)
 {
   bool caught = false;
-  if(id == "c:@S@Vehicle@F@number_of_wheels#")
+  if(id == "virtual_table::tag-Vehicle")
   {
     caught = true;
-    printf("@@ Got %s", id.c_str());
+    printf("@@ Got %s\n", id.c_str());
   }
 
   if(caught)

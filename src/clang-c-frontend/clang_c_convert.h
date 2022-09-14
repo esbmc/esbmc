@@ -38,6 +38,7 @@ class StringLiteral;
 class IntegerLiteral;
 class FloatingLiteral;
 class TagDecl;
+class CXXMethodDecl;
 } // namespace clang
 
 class clang_c_convertert
@@ -85,6 +86,9 @@ protected:
    */
   code_blockt *current_block;
 
+  std::string current_class_id;
+  std::string current_class_name;
+
   clang::SourceManager *sm;
 
   const clang::FunctionDecl *current_functionDecl;
@@ -118,6 +122,11 @@ protected:
    *  Parse each individual parameter of the function
    */
   bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
+
+  /**
+   * Parse virtual method and add vtable and vptr
+   */
+  bool get_virtual_method(const symbolt &func_symb);
 
   virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
 
