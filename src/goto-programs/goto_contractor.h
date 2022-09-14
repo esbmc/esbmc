@@ -55,8 +55,7 @@ public:
     location = loc;
     inner = get_complement_contractor(c);
   }
-  Contractor()
-  = default;
+  Contractor() = default;
   void set_outer(ibex::Ctc *outer)
   {
     Contractor::outer = outer;
@@ -438,9 +437,9 @@ private:
    */
   void insert_assume(goto_functionst goto_functions);
 
-  static bool is_unsupported_operator(const expr2tc&);
-  ibex::Ctc *create_contractor_from_expr2t(const expr2tc&);
-  ibex::NumConstraint *create_constraint_from_expr2t(const expr2tc&);
+  static bool is_unsupported_operator(const expr2tc &);
+  ibex::Ctc *create_contractor_from_expr2t(const expr2tc &);
+  ibex::NumConstraint *create_constraint_from_expr2t(const expr2tc &);
   ibex::Function *create_function_from_expr2t(expr2tc);
   int create_variable_from_expr2t(expr2tc);
 

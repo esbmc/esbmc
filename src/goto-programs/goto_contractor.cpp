@@ -176,13 +176,16 @@ void goto_contractort::apply_contractor()
   log_status("{}", oss.str());
 }
 
-ibex::Ctc *goto_contractort::create_contractor_from_expr2t(const expr2tc& expr)
+ibex::Ctc *goto_contractort::create_contractor_from_expr2t(const expr2tc &expr)
 {
   ibex::Ctc *contractor = nullptr;
   auto base_object = get_base_object(expr);
 
-  if((is_comp_expr(base_object) && !is_notequal2t(base_object)) || is_arith_expr(base_object))
-    contractor = new ibex::CtcFwdBwd(*create_constraint_from_expr2t(base_object));
+  if(
+    (is_comp_expr(base_object) && !is_notequal2t(base_object)) ||
+    is_arith_expr(base_object))
+    contractor =
+      new ibex::CtcFwdBwd(*create_constraint_from_expr2t(base_object));
   else
   {
     std::shared_ptr<logic_2ops> logic_op;
@@ -208,10 +211,8 @@ ibex::Ctc *goto_contractort::create_contractor_from_expr2t(const expr2tc& expr)
       rel = std::dynamic_pointer_cast<relation_data>(base_object);
       ibex::Function *f = create_function_from_expr2t(rel->side_1);
       ibex::Function *g = create_function_from_expr2t(rel->side_2);
-      auto *side1 =
-        new ibex::NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
-      auto *side2 =
-        new ibex::NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
+      auto *side1 = new ibex::NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
+      auto *side2 = new ibex::NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
       auto *c_side1 = new ibex::CtcFwdBwd(*side1);
       auto *c_side2 = new ibex::CtcFwdBwd(*side2);
       contractor = new ibex::CtcUnion(*c_side1, *c_side2);
@@ -229,7 +230,7 @@ ibex::Ctc *goto_contractort::create_contractor_from_expr2t(const expr2tc& expr)
 }
 
 ibex::NumConstraint *
-goto_contractort::create_constraint_from_expr2t(const expr2tc& expr)
+goto_contractort::create_constraint_from_expr2t(const expr2tc &expr)
 {
   ibex::NumConstraint *c;
 
@@ -279,12 +280,12 @@ goto_contractort::create_constraint_from_expr2t(const expr2tc& expr)
   return c;
 }
 
-bool goto_contractort::is_unsupported_operator(const expr2tc& expr)
+bool goto_contractort::is_unsupported_operator(const expr2tc &expr)
 {
   expr2tc e = get_base_object(expr);
   return is_arith_expr(e) || is_constant_number(e) || is_symbol2t(e) ||
-         is_notequal2t(e) || is_not2t(e) ||
-         is_modulus2t(e) || is_or2t(e) || is_and2t(e);
+         is_notequal2t(e) || is_not2t(e) || is_modulus2t(e) || is_or2t(e) ||
+         is_and2t(e);
 }
 
 ibex::Function *
@@ -335,7 +336,7 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   case expr2t::expr_ids::neg_id:
   {
     h = create_function_from_expr2t(to_neg2t(expr).value);
-    f = new ibex::Function(*vars, - (*h)(*vars));
+    f = new ibex::Function(*vars, -(*h)(*vars));
     break;
   }
   case expr2t::expr_ids::index_id:
@@ -366,8 +367,8 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
   }
   case expr2t::expr_ids::constant_floatbv_id:
   {
-    const ibex::ExprConstant &c =
-      ibex::ExprConstant::new_scalar(to_constant_floatbv2t(expr).value.to_double());
+    const ibex::ExprConstant &c = ibex::ExprConstant::new_scalar(
+      to_constant_floatbv2t(expr).value.to_double());
     f = new ibex::Function(*vars, c);
     break;
   }
