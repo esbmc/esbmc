@@ -1,0 +1,52 @@
+name: Generate diff page for benchexec artifacts
+on:
+  workflow_dispatch:
+    inputs:
+      old-workflow:
+        description: 'Workflow ID for OLD run'
+        required: true
+      new-workflow:
+        description: 'Workflow ID for NEW run'
+        required: true
+jobs:
+  benchexec-diff:
+    name: Compare two benchexec runs
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+    - name: Install benchexec
+      run: pip install benchexec
+    - name: Checkout code
+      uses: actions/checkout@master
+    - name: Download old artifact
+      id: download-old-artifact
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        github_token: ${{secrets.GITHUB_TOKEN}}
+        workflow: benchexec.yml
+        run_id: ${{ inputs.old-workflow }}
+        name: benchexec-result
+    - name: Extract old results
+      run: |
+        mkdir ../output && unzip -: run-output.zip && rm run-output.zip && ls ../output && mv ../output old
+    - name: Download new artifact
+      id: download-new-artifact
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        github_token: ${{secrets.GITHUB_TOKEN}}
+        workflow: benchexec.yml
+        run_id: ${{ inputs.new-workflow }}
+        name: benchexec-result
+    - name: Extract new results
+      run: |
+        mkdir ../output && unzip -: run-output.zip && rm run-output.zip && ls ../output && mv ../output new
+    - name: Run comparation script
+      run: |
+        ./scripts/competitions/compare-runs.sh old new
+    - uses: actions/upload-artifact@v1
+      with:
+        name: diff
+        path: ./diff-old-new
