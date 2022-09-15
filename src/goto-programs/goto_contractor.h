@@ -466,7 +466,7 @@ private:
   ibex::Function *create_function_from_expr2t(expr2tc);
   int create_variable_from_expr2t(expr2tc);
 
-  void parse_error(const expr2tc&);
+  void parse_error(const expr2tc &);
 
   void parse_intervals(expr2tc);
 

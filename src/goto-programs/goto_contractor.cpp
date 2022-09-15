@@ -134,8 +134,7 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
       symbol2tc X = var.second.getSymbol();
       if(var.second.isIntervalChanged())
       {
-        auto lb =
-          create_value_expr(var.second.getInterval().lb(), int_type2());
+        auto lb = create_value_expr(var.second.getInterval().lb(), int_type2());
         auto cond = create_greaterthanequal_relation(X, lb);
         goto_programt tmp_e;
         auto e = tmp_e.add_instruction(ASSUME);
@@ -144,8 +143,7 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
         e->location = loop_exit->location;
         goto_function.body.destructive_insert(loop_exit, tmp_e);
 
-        auto ub =
-          create_value_expr(var.second.getInterval().ub(), int_type2());
+        auto ub = create_value_expr(var.second.getInterval().ub(), int_type2());
         auto cond2 = create_lessthanequal_relation(X, ub);
         goto_programt tmp_e2;
         auto e2 = tmp_e2.add_instruction(ASSUME);
