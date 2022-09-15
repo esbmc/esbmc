@@ -383,8 +383,7 @@ private:
   ibex::Variable *vars;
   /// map is where the variable references and intervals are stored.
   CspMap map;
-  /// constraint is where the constraint for CSP will be stored.
-  ibex::NumConstraint *constraint = nullptr;
+  /// contractors is where all the contractors and their complement are stored.
   Contractors contractors;
 
   unsigned number_of_functions = 0;
@@ -392,12 +391,14 @@ private:
   typedef std::list<loopst> function_loopst;
   function_loopst function_loops;
 
-  /// \Function get_constraint is a function that will go through each asert
+  /// \Function get_contractors is a function that will go through each asert
   /// in the program and parse it from ESBMC expression to an IBEX expression
-  /// that will be added to constraints in the CSP. the function will return
-  /// nothing. However the constraints be added to the list of constraints.
+  /// that will be added create two contractors with the constraints.
+  /// One is for the outer contractor with the constraint of the assert
+  /// condition, another for the inner with the complement of the constraint.
+  /// the function will return nothing. However the contractors be added to
+  /// the list of contractors.
   /// \param functionst list of functions in the goto program
-  void get_constraints(goto_functionst functionst);
   void get_contractors(goto_functionst goto_functions);
 
   /// \Function get_intervals is a function that will go through each asert in
@@ -438,10 +439,34 @@ private:
   void insert_assume(goto_functionst goto_functions);
 
   static bool is_unsupported_operator(const expr2tc &);
+
+  /**
+   * @function create_contractor_from_expr2t is called from get_contractors
+   * where we parse the property to create constraints for our CSP.
+   * This function handles logical operators && and || to create a composition
+   * or union between contractors. With one exception for !=, because ibex does
+   * not have such operator and it can be expressed with a union between >
+   * and < for the same property. For example, x != y will be (x > y || x < y)
+   * @return ibex::Ctc * contractor
+   */
   ibex::Ctc *create_contractor_from_expr2t(const expr2tc &);
+  /**
+   * @function create_constraint_from_expr2t is called from create_contractor_from_expr2t
+   * and it will parse an expression with comparison operators and create
+   * constraints to be used by create_contractor_from_expr2t.
+   * @return Constraint
+   */
   ibex::NumConstraint *create_constraint_from_expr2t(const expr2tc &);
+  /**
+   * @function create_function_from_expr2t is called by create_constraint_from_expr2t
+   * and it will parse expressions with arithmetic operators and create
+   * functions to be used by create_constraint_from_expr2t.
+   * @return Function
+   */
   ibex::Function *create_function_from_expr2t(expr2tc);
   int create_variable_from_expr2t(expr2tc);
+
+  void parse_error(const expr2tc&);
 
   void parse_intervals(expr2tc);
 
