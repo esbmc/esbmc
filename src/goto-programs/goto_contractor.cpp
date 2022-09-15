@@ -39,7 +39,7 @@ void goto_contractort::get_intervals(goto_functionst goto_functions)
 void goto_contractort::parse_intervals(expr2tc expr)
 {
   symbol2tc symbol;
-  BigInt value;
+  double value;
 
   expr = get_base_object(expr);
 
@@ -72,10 +72,11 @@ void goto_contractort::parse_intervals(expr2tc expr)
     neg = true;
     side2 = to_neg2t(side2).value;
   }
-  if(!is_constant_int2t(side2))
-    return;
 
-  value = to_constant_int2t(side2).as_long() * (neg ? -1 : 1);
+  if(is_constant_int2t(side2))
+    value = to_constant_int2t(side2).as_long() * (neg ? -1 : 1);
+  else
+    return;
 
   if(map.find(symbol->get_symbol_name()) == CspMap::NOT_FOUND)
     return;
@@ -83,15 +84,15 @@ void goto_contractort::parse_intervals(expr2tc expr)
   {
   case expr2t::expr_ids::greaterthan_id:
   case expr2t::expr_ids::greaterthanequal_id:
-    map.update_lb_interval(value.to_int64(), symbol->get_symbol_name());
+    map.update_lb_interval(value, symbol->get_symbol_name());
     break;
   case expr2t::expr_ids::lessthan_id:
   case expr2t::expr_ids::lessthanequal_id:
-    map.update_ub_interval(value.to_int64(), symbol->get_symbol_name());
+    map.update_ub_interval(value, symbol->get_symbol_name());
     break;
   case expr2t::expr_ids::equality_id:
-    map.update_lb_interval(value.to_int64(), symbol->get_symbol_name());
-    map.update_ub_interval(value.to_int64(), symbol->get_symbol_name());
+    map.update_lb_interval(value, symbol->get_symbol_name());
+    map.update_ub_interval(value, symbol->get_symbol_name());
     break;
   default:;
   }
@@ -129,11 +130,12 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
   else
     for(auto const &var : map.var_map)
     {
+      //testing with updating both bounds after reduction.
       symbol2tc X = var.second.getSymbol();
       if(var.second.isIntervalChanged())
       {
         auto lb =
-          create_value_expr(var.second.getInterval().lb(), double_type2());
+          create_value_expr(var.second.getInterval().lb(), int_type2());
         auto cond = create_greaterthanequal_relation(X, lb);
         goto_programt tmp_e;
         auto e = tmp_e.add_instruction(ASSUME);
@@ -143,7 +145,7 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
         goto_function.body.destructive_insert(loop_exit, tmp_e);
 
         auto ub =
-          create_value_expr(var.second.getInterval().ub(), double_type2());
+          create_value_expr(var.second.getInterval().ub(), int_type2());
         auto cond2 = create_lessthanequal_relation(X, ub);
         goto_programt tmp_e2;
         auto e2 = tmp_e2.add_instruction(ASSUME);
@@ -159,7 +161,9 @@ void goto_contractort::apply_contractor()
 {
   Contractor *contractor = contractors.get_contractors();
 
+  //Take the intersection of all contractors to perform Algorithm 2
   ibex::CtcFixPoint c_out(*contractor->get_outer());
+  //Take the union of all contractors with complement constraints to perform Algorithm 3
   ibex::CtcFixPoint c_in(*contractor->get_inner());
 
   std::ostringstream oss;
@@ -222,9 +226,10 @@ ibex::Ctc *goto_contractort::create_contractor_from_expr2t(const expr2tc &expr)
     }
     case expr2t::expr_ids::not_id:
       //TODO: implement "not" flag  and process.
+      parse_error(base_object);
       break;
     default:
-      //unsupported. you shouldn't be here.
+      parse_error(base_object);
       break;
     }
   }
@@ -238,15 +243,13 @@ goto_contractort::create_constraint_from_expr2t(const expr2tc &expr)
 
   if(is_unsupported_operator(expr))
   {
-    std::ostringstream oss;
-    oss << get_expr_id(expr);
-    oss << " Expression is complex, skipping this assert.\n";
-    log_debug("{}", oss.str());
+    parse_error(expr);
     return nullptr;
   }
   if(is_not2t(expr))
   {
     //TODO: implement "not" flag  and process.
+    parse_error(expr);
     return nullptr;
   }
 
@@ -298,6 +301,7 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
 
   if(is_comp_expr(expr))
   {
+    parse_error(expr);
     return nullptr;
   }
   switch(expr->expr_id)
@@ -367,13 +371,6 @@ goto_contractort::create_function_from_expr2t(irep_container<expr2t> expr)
     f = new ibex::Function(*vars, c);
     break;
   }
-  case expr2t::expr_ids::constant_floatbv_id:
-  {
-    const ibex::ExprConstant &c = ibex::ExprConstant::new_scalar(
-      to_constant_floatbv2t(expr).value.to_double());
-    f = new ibex::Function(*vars, c);
-    break;
-  }
   default:
     f = nullptr;
   }
@@ -394,6 +391,14 @@ int goto_contractort::create_variable_from_expr2t(irep_container<expr2t> expr)
     return index;
   }
   return map.NOT_FOUND;
+}
+
+void goto_contractort::parse_error(const expr2tc &expr)
+{
+  std::ostringstream oss;
+  oss << get_expr_id(expr);
+  oss << " Expression is complex, skipping this assert.\n";
+  log_debug("{}", oss.str());
 }
 
 bool goto_contractort::initialize_main_function_loops()
