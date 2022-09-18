@@ -339,6 +339,65 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   return false;
 }
 
+bool clang_cpp_convertert::get_virtual_method(
+    const symbolt &func_symb)
+{
+  printf("@@ Got virtual method function\n");
+  // add virtual table(vtable) symbol
+  std::string vt_id = "virtual_table::" + current_class_id;
+  std::string vt_name = "virtual_table::" + current_class_name;
+  locationt loc = func_symb.location;
+
+  symbolt *s = context.find_symbol(vt_name);
+
+  if(s == nullptr)
+  {
+    // first time: create a virtual-table symbol type
+    symbolt vt_symb;
+    get_default_symbol(
+      vt_symb,
+      get_modulename_from_path(loc.file().as_string()),
+      struct_typet(),
+      vt_name,
+      vt_id,
+      loc);
+
+    s = move_symbol_to_context(vt_symb);
+
+    // TODO: add a virtual-table pointer?
+  }
+  else
+  {
+    log_error("Got existing vtable_symbol - dump the symbol type. Should we continue?");
+    abort();
+  }
+
+  assert(s->type.id() == "struct");
+
+  struct_typet &virtual_table = to_struct_type(s->type);
+
+  // TODO: need to set virtual_name and is_virtual?
+  //component.set("virtual_name", virtual_name);
+  //component.set("is_virtual", is_virtual);
+
+  // add an entry to the virtual table
+  struct_typet::componentt vt_entry;
+  //vt_entry.type() = pointer_typet(component.type());
+  std::string virtual_name = func_symb.name.as_string() + "()";
+  vt_entry.type() = pointer_typet();
+  vt_entry.set_name(vt_id + "::" + virtual_name);
+  vt_entry.set("base_name", virtual_name);
+  vt_entry.set("pretty_name", virtual_name);
+  vt_entry.set("access", "public");
+  vt_entry.location() = func_symb.location;
+  virtual_table.components().push_back(vt_entry); // DEBUG: virtual_table::tag.Vehicle s->type gets populated here
+
+  catch_target_symbol(vt_id);
+  // TODO: take care of overloading?
+
+  return false;
+}
+
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;

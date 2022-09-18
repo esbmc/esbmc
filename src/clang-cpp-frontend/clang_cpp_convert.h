@@ -77,6 +77,11 @@ protected:
     const clang::RecordDecl &rd,
     struct_union_typet &type) override;
 
+  /**
+   * Parse virtual method and add vtable and vptr
+   */
+  bool get_virtual_method(const symbolt &func_symb) override;
+
   template <typename TemplateDecl>
   bool get_template_decl(
     const TemplateDecl *D,

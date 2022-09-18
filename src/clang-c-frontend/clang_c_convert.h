@@ -123,11 +123,6 @@ protected:
    */
   bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
 
-  /**
-   * Parse virtual method and add vtable and vptr
-   */
-  bool get_virtual_method(const symbolt &func_symb);
-
   virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
 
   virtual bool get_struct_union_class_fields(
@@ -137,6 +132,8 @@ protected:
   virtual bool get_struct_union_class_methods(
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
+
+  virtual bool get_virtual_method(const symbolt &func_symb);
 
   virtual bool get_type(const clang::QualType &type, typet &new_type);
 

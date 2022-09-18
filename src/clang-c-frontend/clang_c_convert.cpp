@@ -445,7 +445,7 @@ bool clang_c_convertert::get_struct_union_class_methods(
   const clang::RecordDecl &,
   struct_union_typet &)
 {
-  // We don't add methods to the struct in C
+  log_status("We don't add methods to the struct in C");
   return false;
 }
 
@@ -689,25 +689,7 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 bool clang_c_convertert::get_virtual_method(
     const symbolt &func_symb)
 {
-  // add virtual table(vtable) symbol
-  std::string vt_id = "virtual_table::" + current_class_id;
-  std::string vt_name = "virtual_table::" + current_class_name;
-  locationt loc = func_symb.location;
-  symbolt vt_symb;
-  get_default_symbol(
-    vt_symb,
-    get_modulename_from_path(loc.file().as_string()),
-    struct_typet(),
-    vt_name,
-    vt_id,
-    loc);
-
-  symbolt &added_vt_symb = *move_symbol_to_context(vt_symb);
-  assert(added_vt_symb.type.id() == "struct");
-
-  catch_target_symbol(vt_id);
-  // TODO: add vtable pointer
-
+  log_status("We don't have virtual methods in C structs");
   return false;
 }
 
