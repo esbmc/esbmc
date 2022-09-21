@@ -743,7 +743,15 @@ bool clang_c_convertert::get_function_param(
   exprt &param)
 {
   typet param_type;
-  if(get_type(pd.getOriginalType(), param_type))
+  /* Instead of .getOriginalType(), we want to keep the implicitly decayed
+   * parameter types. Otherwise we would fail to recognize the call to g()
+   * below as (*g)() in
+   *
+   *   void f(void g(int)) { g(1); }
+   *
+   * See, e.g., sv-benchmarks/c/ldv-regression/callfpointer.i
+   */
+  if(get_type(pd.getType(), param_type))
     return true;
 
   if(param_type.is_array())
