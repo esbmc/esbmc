@@ -68,7 +68,17 @@ void cpp_typecheckt::convert_arguments(
 
 void cpp_typecheckt::convert_function(symbolt &symbol)
 {
+  // DEBUG: This function populates the s.value for functions like dtor, ctor... and all other standalone functions?
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  // keeping the old data for debugging purposes
+  symbolt old_func_symbol = symbol;
+  //old_item.show_content();
+#pragma GCC diagnostic pop
   code_typet &function_type = to_code_type(template_subtype(symbol.type));
+
+  if (symbol.id == "Vehicle::~Vehicle(this)")
+    printf("@@ Got dtor - about to populate the dtor body\n");
 
   // Is this a template that was instantiated for a function overload, but isn't
   // referred to? If so, don't attempt to convert it, because the template
@@ -87,7 +97,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   // if it is a destructor, add the implicit code
   if(symbol.type.get("return_type") == "destructor")
   {
-    const symbolt &msymb = *lookup(symbol.type.get("#member_name"));
+    const symbolt &msymb = *lookup(symbol.type.get("#member_name")); // get the correpsonding symbol
 
     assert(symbol.value.id() == "code");
     assert(symbol.value.statement() == "block");

@@ -238,9 +238,12 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     id.class_identifier = new_symbol->id;
     id.id_class = cpp_idt::CLASS;
 
-    if(has_body)
+    if (new_symbol->id.as_string() == "tag.Vehicle")
+      printf("@@ Got tag.Vehicle symbol! about to add more components\n");
+
+    if(has_body) // DEBUG: for tag.Vehicle has_body == true
     {
-      // adding components to symbol.type, such as vtable_ptr, ctor, dtor, methods...
+      // DEBUG: adding components to symbol.type, such as vtable_ptr, ctor, dtor, methods...
       typecheck_compound_body(*new_symbol);
     }
     else
@@ -933,6 +936,12 @@ void cpp_typecheckt::typecheck_friend_declaration(
 
 void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  // keeping the old data for debugging purposes
+  symbolt old_symbol = symbol;
+  //type.show_content();
+#pragma GCC diagnostic pop
   cpp_save_scopet saved_scope(cpp_scopes);
 
   // enter scope of compound
@@ -943,7 +952,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   struct_typet &type = to_struct_type(symbol.type);
 
   // pull the base types in
-  if(!type.find("bases").get_sub().empty())
+  if(!type.find("bases").get_sub().empty()) // DEBUG: skipped for tag.Vehicle symbol
   {
     if(type.id() == "union")
     {
@@ -955,7 +964,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   }
 
   exprt &body = static_cast<exprt &>(type.add("body"));
-  struct_typet::componentst &components = type.components();
+  struct_typet::componentst &components = type.components(); // DEBUG: tag.Vehicle symbol: components.size() == 0
 
   symbol.type.set("name", symbol.id);
 
@@ -967,13 +976,13 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
   // we first do everything but the constructors
 
-  Forall_operands(it, body)
+  Forall_operands(it, body) // DEBUG: tag.Vehicle symbol: body.operands().size == 3: [0]public, [1]vehicle, [2]number_of_wheels
   {
     if(it->id() == "cpp-declaration")
     {
       cpp_declarationt &declaration = to_cpp_declaration(*it);
 
-      if(declaration.member_spec().is_friend())
+      if(declaration.member_spec().is_friend()) // DEBUG: false for tag.Vehicle symbol
       {
         typecheck_friend_declaration(symbol, declaration);
         continue; // done
@@ -985,7 +994,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       if(declaration.is_constructor())
         found_ctor = true;
 
-      if(declaration.is_template())
+      if(declaration.is_template()) // DEBUG: false for tag.Vehicle symbol[1]
       {
         // remember access mode
         declaration.set("#access", access);
@@ -1004,9 +1013,9 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         declaration.type().id() == "union" ||
         declaration.type().id() == "c_enum")
         if(declaration.declarators().empty())
-          declaration.type().set("#tag_only_declaration", true);
+          declaration.type().set("#tag_only_declaration", true); // DEBUG: false for tag.Vehicle symbol[1]
 
-      typecheck_type(declaration.type());
+      typecheck_type(declaration.type()); // e.g. change int to singedbv/n* width: 32/n* #cpp_type: signed_int
 
       bool is_static = declaration.storage_spec().is_static();
       bool is_mutable = declaration.storage_spec().is_mutable();
@@ -1026,7 +1035,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       // anonymous member?
       if(
         declaration.declarators().empty() &&
-        final_type.get_bool("#is_anonymous"))
+        final_type.get_bool("#is_anonymous")) // DEBUG: false for tag.Vehicle symbol[1]
       {
         // we only allow this on struct/union types
         if(final_type.id() != "union" && final_type.id() != "struct")
@@ -1043,6 +1052,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       // declarators
       Forall_cpp_declarators(d_it, declaration)
       {
+        // DEBUG: virtual_table::tag.<class_name> is added in this loop if there is a virtual method.
         cpp_declaratort &declarator = *d_it;
 
         // Skip the constructors until all the data members
@@ -1050,7 +1060,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         if(declaration.is_constructor())
           continue;
 
-        typecheck_compound_declarator(
+        typecheck_compound_declarator( // DEBUG: hit twice for tag.Vehicle symbol.type.components
           symbol,
           declaration,
           declarator,
@@ -1094,6 +1104,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   // If we've seen a constructor, flag this type as not being a POD. This is
   // only useful when we might not be able to work that out later, such as a
   // constructor that gets deleted, or something.
+  // POD: Plain Old Data. A class/struct without ctor, dtor or virtual methods
   if(found_ctor || found_dtor)
     type.set("is_not_pod", "1");
 
@@ -1105,9 +1116,9 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   {
     // build declaration
     cpp_declarationt dtor;
-    default_dtor(symbol, dtor);
+    default_dtor(symbol, dtor); // added dtor in symbol.type's #components
 
-    typecheck_compound_declarator(
+    typecheck_compound_declarator( // DEBUG: hit once for tag.Vehicle symbol.type.componenets
       symbol,
       dtor,
       dtor.declarators()[0],
@@ -1119,7 +1130,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   }
 
   // setup virtual tables before doing the constructors
-  do_virtual_table(symbol);
+  do_virtual_table(symbol); // DEBUG: virtual_table::tag.<class>@tag.Vehicle is added in this loop if there is a virtual method.
 
   if(!found_ctor && !cpp_is_pod(symbol.type))
   {
@@ -1178,7 +1189,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
           declaration.storage_spec().is_mutable();             // Shall be false
         bool is_typedef = convert_typedef(declaration.type()); // Shall be false
 
-        typecheck_compound_declarator(
+        typecheck_compound_declarator( // DBEUG: hit once for tag.Vehicel symbol.type.componenets
           symbol,
           declaration,
           declarator,
@@ -1216,7 +1227,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       value.copy_to_operands(cpctor.declarators()[0].value());
       cpctor.declarators()[0].value() = value;
 
-      typecheck_compound_declarator(
+      typecheck_compound_declarator( // DEBUG: hit once for populating tag.Vehicle symbol.type.components
         symbol,
         cpctor,
         cpctor.declarators()[0],
@@ -1241,7 +1252,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       assignop.declarators().push_back(declarator);
       assignop.declarators()[0].value() = exprt("cpp_not_typechecked");
 
-      typecheck_compound_declarator(
+      typecheck_compound_declarator( // DEBUG: hit once for populating tag.Vehicle symbol.type.components
         symbol,
         assignop,
         assignop.declarators()[0],
@@ -1301,6 +1312,14 @@ void cpp_typecheckt::typecheck_member_function(
   const typet &method_qualifier,
   exprt &value)
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  // keeping the old data for debugging purposes
+  struct_typet::componentt old_component = component;
+  irept old_initializers = initializers;
+  exprt old_value = value;
+  //type.show_content();
+#pragma GCC diagnostic pop
   symbolt symbol;
 
   typet &type = component.type();
@@ -1346,6 +1365,9 @@ void cpp_typecheckt::typecheck_member_function(
   symbol.is_type = false;
   symbol.is_macro = false;
   symbol.location = component.location();
+
+  if (symbol.id == "Vehicle::~Vehicle(this)")
+    printf("@@ Got dtor\n");
 
   // move early, it must be visible before doing any value
   symbolt *new_symbol;

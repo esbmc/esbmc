@@ -16,6 +16,7 @@ public:
   virtual ~clang_cpp_convertert() = default;
 
 protected:
+  std::string current_access; // current access specifier
   // this_map contains key-value pairs in the form of <method address, <identifier, type>>
   typedef std::unordered_map<std::size_t, std::pair<std::string, typet>>
     this_mapt;

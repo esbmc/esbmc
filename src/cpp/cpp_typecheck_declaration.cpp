@@ -120,7 +120,24 @@ void cpp_typecheckt::convert(cpp_declarationt &declaration)
   else
     convert_non_template_declaration(declaration);
 
-  typecheck_function_bodies();
+  // DEBUG:
+  //  After converting declarations we have symbols for everything EXCEPT:
+  //    - Vehicle::Vehicle(this)::Vehicle::Vehicle(this)::this
+  //    - Vehicle::~Vehicle(this)::Vehicle::~Vehicle(this)::this
+  //  typecheck_function_bodies:
+  //    - addes above symbols
+  //    - modifies the s.value for other member functions, including:
+  //      > ctor
+  //      > dtor
+  //    - does NOT modify the symbols for:
+  //      > class: tag.Vehicle
+  //      > pure virtual function number_of_wheels
+  //      > implicit cpy ctor
+  //      > implicit cpy optr ctor
+  //      > vtable studd:
+  //        * virtual_table::Vehicle@Vehicle
+  //        * virtual_table::tag.Vehicle
+  typecheck_function_bodies(); // DEBUG: NOT here components ---> methods
   function_bodies = old_function_bodies;
 }
 

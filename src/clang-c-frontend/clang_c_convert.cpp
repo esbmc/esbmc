@@ -10,6 +10,7 @@
 #include <clang/AST/QualTypeNames.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/Version.inc>
+#include <clang/Basic/Specifiers.h>
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <llvm/Support/raw_os_ostream.h>
@@ -310,6 +311,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   else
     t = struct_typet();
   t.tag(name);
+  t.set("name", id);
 
   locationt location_begin;
   get_location_from_decl(rd, location_begin);
@@ -340,10 +342,12 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     return false;
 
   // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
-  current_class_symbol = &added_symbol;
+  current_class_symbol = context.find_symbol(symbol_name);
 
-  if(get_struct_union_class_fields(*rd_def, t))
+  if(id == "tag-Vehicle")
+    printf("@@ Got class symbol - now populating type\n");
+
+  if(get_struct_union_class_fields(*rd_def, t)) // add fields before methods
     return true;
 
   // Check for packed and aligned attributes
@@ -377,7 +381,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   else
     add_padding(to_struct_type(t), ns);
 
-  added_symbol.type = t;
+  current_class_symbol->type = t;
   return false;
 }
 
@@ -668,12 +672,11 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   // deal with virtual method after processing its type and body
   if(auto md = llvm::dyn_cast<const clang::CXXMethodDecl>(&fd))
   {
-    if(md->isVirtual())
+    added_symbol.type.set("#member_name", current_class_symbol->id.as_string());
+    if (md->isVirtual())
     {
       assert(mode == "C++");
       // additional comment nodes for virtual method
-      added_symbol.type.set(
-        "#member_name", current_class_symbol->id.as_string());
       added_symbol.type.set("#is_virtual", true);
       added_symbol.type.set("#virtual_name", name);
       get_virtual_method(added_symbol);
@@ -3332,7 +3335,7 @@ void clang_c_convertert::print_intermediate_symbol_table()
 void clang_c_convertert::catch_target_symbol(std::string id)
 {
   bool caught = false;
-  if(id == "virtual_table::tag-Vehicle")
+  if(id == "c:@S@Vehicle@F@~Vehicle#")
   {
     caught = true;
     printf("@@ Got %s\n", id.c_str());

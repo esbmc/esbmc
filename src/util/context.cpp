@@ -38,7 +38,7 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
 
   if(
     symbol.id ==
-    "tag.Vehicle") // Done - s.type is copied from the original cpp_item, difficult to match
+    "tag.Vehicle") // WIP
     printf(
       "@@ Got target symbol insertion in %s for: %s\n",
       __func__,
@@ -54,11 +54,12 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
       __func__,
       symbol.id.c_str());
 
-  if(symbol.id == "Vehicle::~Vehicle(this)")
+  if(symbol.id == "Vehicle::~Vehicle(this)") // WIP - relies on s.type and s.value from symbol tag.Vehicle
     printf(
       "@@ Got target symbol insertion in %s for: %s\n",
       __func__,
       symbol.id.c_str());
+
   if(symbol.id == "virtual_table::tag.Vehicle@tag.Vehicle")
     printf(
       "@@ Got target symbol insertion in %s for: %s\n",

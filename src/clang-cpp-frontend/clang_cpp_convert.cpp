@@ -27,7 +27,8 @@ clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
   irep_idt _mode)
-  : clang_c_convertert(_context, _ASTs, _mode)
+  : clang_c_convertert(_context, _ASTs, _mode),
+    current_access("")
 {
 }
 
@@ -126,6 +127,25 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
+  case clang::Decl::AccessSpec:
+  {
+    const clang::AccessSpecDecl &asd = static_cast<const clang::AccessSpecDecl &>(decl);
+    const clang::AccessSpecifier specifier = asd.getAccess();
+    if (specifier == clang::AS_public)
+      current_access = "public";
+    else if (specifier == clang::AS_private)
+      current_access = "private";
+    else if (specifier == clang::AS_protected)
+      current_access = "protected";
+    else
+    {
+      log_error("Unknown accessor specified returned from clang in {}", __func__);
+      abort();
+    }
+
+    break;
+  }
+
   // We can ignore any these declarations
   case clang::Decl::ClassTemplatePartialSpecialization:
   case clang::Decl::Using:
@@ -133,7 +153,6 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::UsingDirective:
   case clang::Decl::TypeAlias:
   case clang::Decl::NamespaceAlias:
-  case clang::Decl::AccessSpec:
   case clang::Decl::UnresolvedUsingValue:
   case clang::Decl::UnresolvedUsingTypename:
     break;
@@ -236,7 +255,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &rd,
   struct_union_typet &type)
 {
-  // If a struct is defined inside a extern C, it will be a RecordDecl
+  // If a struct is defined inside an extern C, it will be a RecordDecl
   if(auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
   {
     // So this is a CXXRecordDecl, let's check for (virtual) base classes
@@ -275,7 +294,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   const clang::RecordDecl &recordd,
   struct_union_typet &type)
 {
-  // If a struct is defined inside a extern C, it will be a RecordDecl
+  // If a struct is defined inside an extern C, it will be a RecordDecl
   const clang::CXXRecordDecl *cxxrd =
     llvm::dyn_cast<clang::CXXRecordDecl>(&recordd);
   if(cxxrd == nullptr)
@@ -295,11 +314,20 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       base_t.methods().end());
   }
 
-  // Iterate over the declarations stored in this context
+  // vector of components. In class, a component refers to a field or methods.
+  struct_typet::componentst &components = type.components();
+
+  // Iterate over the declarators stored in this class
   for(const auto &decl : cxxrd->decls())
   {
-    // Fields were already added
+    // Fields were already added in get_struct_union_class_fields
     if(decl->getKind() == clang::Decl::Field)
+      continue;
+
+    // Ignore implicit RecordDecl node, e.g.
+    // CXXRecordDecl <address> <location> implicit referenced class <class-name>
+    auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(decl);
+    if (cxxrd && decl->isImplicit())
       continue;
 
     struct_typet::componentt comp;
@@ -316,6 +344,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     {
       if(get_decl(*decl, comp))
         return true;
+      components.push_back(comp);
     }
 
     // This means that we probably just parsed nested class,
@@ -393,7 +422,6 @@ bool clang_cpp_convertert::get_virtual_method(const symbolt &func_symb)
   virtual_table.components().push_back(
     vt_entry); // DEBUG: virtual_table::tag.Vehicle s->type gets populated here
 
-  catch_target_symbol(vt_id);
   // TODO: take care of overloading?
 
   return false;
