@@ -69,6 +69,9 @@ def run(cmd_line):
   print("Verifying with ESBMC")
   print("Command: " + cmd_line)
 
+  if args.dry_run:
+    exit(0)
+
   the_args = shlex.split(cmd_line)
 
   p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -320,6 +323,7 @@ parser.add_argument("-p", "--propertyfile", help="Path to the property file")
 parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
 parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="fixed")
 parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
+parser.add_argument("-n", "--dry-run", help="do not actually run ESBMC, just print the command", action='store_true')
 
 args = parser.parse_args()
 
