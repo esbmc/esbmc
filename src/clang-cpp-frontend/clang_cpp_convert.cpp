@@ -390,7 +390,7 @@ bool clang_cpp_convertert::get_virtual_method(
   vt_entry.location() = loc;
   virtual_table.components().push_back(vt_entry); // DEBUG: virtual_table::tag.Vehicle s->type gets populated here
 
-  //catch_target_symbol(vt_id);
+  catch_target_symbol(vt_id);
   // TODO: take care of overloading?
 
   return false;
