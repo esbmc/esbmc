@@ -43,8 +43,7 @@ clang_c_convertert::clang_c_convertert(
     anon_symbol("clang_c_convertert::"),
     current_scope_var_num(1),
     current_block(nullptr),
-    current_class_id(""),
-    current_class_name(""),
+    current_class_symbol(nullptr),
     sm(nullptr),
     current_functionDecl(nullptr)
 {
@@ -300,9 +299,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   std::string id, name;
   get_decl_name(rd, name, id);
 
-  current_class_id = id;
-  current_class_name = name;
-
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context. See next comment
   if(context.find_symbol(id) != nullptr)
@@ -345,6 +341,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
   // Now get the symbol back to continue the conversion
   symbolt &added_symbol = *context.find_symbol(symbol_name);
+  current_class_symbol = &added_symbol;
 
   if(get_struct_union_class_fields(*rd_def, t))
     return true;
@@ -659,18 +656,6 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   if(!type.arguments().size())
     type.make_ellipsis();
 
-  // deal with virtual method
-  const clang::CXXMethodDecl &md =
-    static_cast<const clang::CXXMethodDecl &>(fd);
-  if (md.isVirtual())
-  {
-    // additional comment nodes for virtual method
-    type.set("#is_virtual", true);
-    type.set("#virtual_name", name);
-
-    get_virtual_method(added_symbol);
-  }
-
   added_symbol.type = type;
 
   // We need: a type, a name, and an optional body
@@ -678,6 +663,18 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   {
     if(get_function_body(fd, added_symbol.value))
       return true;
+  }
+
+  // deal with virtual method after processing its type and body
+  const clang::CXXMethodDecl &md =
+    static_cast<const clang::CXXMethodDecl &>(fd);
+  if (md.isVirtual())
+  {
+    assert(mode == "C++");
+    // additional comment nodes for virtual method
+    added_symbol.type.set("#is_virtual", true);
+    added_symbol.type.set("#virtual_name", name);
+    get_virtual_method(added_symbol);
   }
 
   // Restore old functionDecl
@@ -690,6 +687,7 @@ bool clang_c_convertert::get_virtual_method(
     const symbolt &func_symb)
 {
   log_status("We don't have virtual methods in C structs");
+  assert(func_symb.type.is_not_nil());
   return false;
 }
 

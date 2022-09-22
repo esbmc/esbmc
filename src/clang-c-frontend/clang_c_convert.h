@@ -86,8 +86,7 @@ protected:
    */
   code_blockt *current_block;
 
-  std::string current_class_id;
-  std::string current_class_name;
+  const symbolt* current_class_symbol;
 
   clang::SourceManager *sm;
 

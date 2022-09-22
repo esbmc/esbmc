@@ -344,9 +344,9 @@ bool clang_cpp_convertert::get_virtual_method(
 {
   printf("@@ Got virtual method function\n");
   // add virtual table(vtable) symbol
-  std::string vt_id = "virtual_table::" + current_class_id;
-  std::string vt_name = "virtual_table::" + current_class_name;
-  locationt loc = func_symb.location;
+  std::string vt_id = "virtual_table::" + current_class_symbol->id.as_string();
+  std::string vt_name = "virtual_table::" + current_class_symbol->name.as_string();
+  locationt loc = current_class_symbol->location;
 
   symbolt *s = context.find_symbol(vt_name);
 
@@ -376,23 +376,21 @@ bool clang_cpp_convertert::get_virtual_method(
 
   struct_typet &virtual_table = to_struct_type(s->type);
 
-  // TODO: need to set virtual_name and is_virtual?
-  //component.set("virtual_name", virtual_name);
-  //component.set("is_virtual", is_virtual);
-
   // add an entry to the virtual table
   struct_typet::componentt vt_entry;
-  //vt_entry.type() = pointer_typet(component.type());
   std::string virtual_name = func_symb.name.as_string() + "()";
-  vt_entry.type() = pointer_typet();
+  // is_virtual and virtual_name should have already been set
+  assert(func_symb.type.get_bool("#is_virtual"));
+  assert(func_symb.type.get("#virtual_name") != "");
+  vt_entry.type() = pointer_typet(func_symb.type); // "component" in old frontend refers to func_symb.type
   vt_entry.set_name(vt_id + "::" + virtual_name);
   vt_entry.set("base_name", virtual_name);
   vt_entry.set("pretty_name", virtual_name);
   vt_entry.set("access", "public");
-  vt_entry.location() = func_symb.location;
+  vt_entry.location() = loc;
   virtual_table.components().push_back(vt_entry); // DEBUG: virtual_table::tag.Vehicle s->type gets populated here
 
-  catch_target_symbol(vt_id);
+  //catch_target_symbol(vt_id);
   // TODO: take care of overloading?
 
   return false;
