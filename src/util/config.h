@@ -20,6 +20,7 @@ public:
     bool is_windows_abi() const;
     bool is_freebsd() const;
     bool is_macos() const;
+    bool is_arm() const;
     std::string to_string() const;
   };
 
