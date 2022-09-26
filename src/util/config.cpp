@@ -84,6 +84,11 @@ bool configt::triple::is_macos() const
   return std::regex_match(os, MACOS);
 }
 
+bool configt::triple::is_arm() const
+{
+  return std::regex_match(arch, ARM);
+}
+
 std::string configt::triple::to_string() const
 {
   return arch + "-" + vendor + "-" + os + (flavor.empty() ? "" : "-" + flavor);
