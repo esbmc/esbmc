@@ -37,6 +37,25 @@ public:
 };
 
 /**
+ * Claim slicer: remove every other claim of the formula
+ * with the exception of the one to keep.
+ */
+class claim_slicer : public slicer
+{
+public:
+    explicit claim_slicer(const size_t claim_to_keep) : claim_to_keep(claim_to_keep) {
+        if(claim_to_keep == 0)
+        {
+            log_error("All the claims start from 1 (use --show-claims)");
+            abort();
+        }
+    } ;
+    bool run(symex_target_equationt::SSA_stepst &) override;
+    size_t claim_to_keep;
+    std::string claim_msg;
+};
+
+/**
  * @brief Class for the symex-slicer, this slicer is to be executed
  * on SSA formula in order to remove every symbol that does not depends
  * on it

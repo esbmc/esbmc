@@ -1,4 +1,5 @@
 #include <csignal>
+#include <memory>
 #include <sys/types.h>
 
 #ifndef _WIN32
@@ -284,6 +285,31 @@ void bmct::report_trace(
     break;
 
   default:
+    break;
+  }
+}
+
+void bmct::report_multi_property_trace(
+  smt_convt::resultt &res,
+  std::shared_ptr<symex_target_equationt> &eq,
+  const std::string &msg)
+{
+  assert(options.get_bool_option("base-case"));
+
+  switch(res)
+  {
+  case smt_convt::P_UNSATISFIABLE:
+      // UNSAT means that the property was correct up to K
+      log_status("Claim '{}' holds up to the current K", msg);
+    break;
+
+  case smt_convt::P_SATISFIABLE:
+      // SAT means that we found a error!
+      log_status("Claim '{}' fails", msg);
+    break;
+
+  default:
+    log_status("Claim '{}' could not be solved", msg);
     break;
   }
 }
@@ -637,7 +663,12 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         std::shared_ptr<smt_convt>(create_solver("", ns, options));
     }
 
-    return run_decision_procedure(runtime_solver, eq);
+    if(
+      options.get_bool_option("multi-property") &&
+      options.get_bool_option("base-case"))
+      return multi_property_check(eq, result->remaining_claims);
+    else
+        return run_decision_procedure(runtime_solver, eq);
   }
 
   catch(std::string &error_str)
@@ -657,4 +688,58 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     log_error("Out of memory\n");
     return smt_convt::P_ERROR;
   }
+}
+
+smt_convt::resultt bmct::multi_property_check(
+    std::shared_ptr<symex_target_equationt> &eq, size_t remaining_claims)
+ {
+     // As of now, it only makes sense to do this for the base-case
+     assert(options.get_bool_option("base-case"));
+     smt_convt::resultt final_result;
+
+     /* TODO: For coverage, We probably should store all the claims that
+     */
+   for(size_t i = 1; i <= remaining_claims; i++)
+   {
+     // TODO: we might store the current EQ and then apply the symex_slicer again
+     claim_slicer slicer(i);
+     slicer.run(eq->SSA_steps);
+
+     // Saddly, some solvers need to be reconstructed every time
+     runtime_solver =
+       std::shared_ptr<smt_convt>(create_solver("", ns, options));
+
+     // Solve current instance
+     auto result = run_decision_procedure(runtime_solver, eq);
+
+     // Report the result
+     report_multi_property_trace(result, eq, slicer.claim_msg);
+
+     // If a violation was found, then we should generate a CE for it.
+     if(result == smt_convt::P_SATISFIABLE)
+     {
+
+       bool is_compact_trace = true;
+       if(
+         options.get_bool_option("no-slice") &&
+         !options.get_bool_option("compact-trace"))
+         is_compact_trace = false;
+
+       goto_tracet goto_trace;
+       build_goto_trace(eq, runtime_solver, goto_trace, is_compact_trace);
+       // TODO: Replace this with a test-case for coverage!
+       std::string output_file = options.get_option("cex-output");
+
+       if(output_file != "")
+       {
+         std::ofstream out(fmt::format("{}-{}",output_file,i));
+         show_goto_trace(out, ns, goto_trace);
+       }
+
+       final_result = result;
+     }
+
+   }
+   // TODO: Add a proper report for the current K!
+   return final_result;
 }
