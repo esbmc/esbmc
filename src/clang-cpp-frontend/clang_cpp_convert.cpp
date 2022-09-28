@@ -1,4 +1,5 @@
 // Remove warnings from Clang headers
+#include "llvm/Support/Casting.h"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -118,6 +119,9 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
   case clang::Decl::Friend:
   {
+    log_error("Got friend decl in {}. Need to review what it does", __func__);
+    abort();
+
     const clang::FriendDecl &fd = static_cast<const clang::FriendDecl &>(decl);
 
     if(fd.getFriendDecl() != nullptr)
@@ -240,130 +244,35 @@ bool clang_cpp_convertert::get_function(
   if(fd.isDependentContext())
     return false;
 
-  return clang_c_convertert::get_function(fd, new_expr);
-}
+  if(clang_c_convertert::get_function(fd, new_expr))
+    return true;
 
-bool clang_cpp_convertert::get_struct_union_class(const clang::RecordDecl &rd)
-{
-  // Only convert RecordDecl not depending on a template parameter
-  if(rd.isDependentContext())
+  if(
+    skip_function(
+      fd)) // check again because we don't know whether clang_c_converter skipped conversion
     return false;
 
-  return clang_c_convertert::get_struct_union_class(rd);
-}
-
-bool clang_cpp_convertert::get_struct_union_class_fields(
-  const clang::RecordDecl &rd,
-  struct_union_typet &type)
-{
-  // If a struct is defined inside an extern C, it will be a RecordDecl
-  if(auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
+  // might need to deal with virtual method after processing its type and body
+  if(auto md = llvm::dyn_cast<const clang::CXXMethodDecl>(&fd))
   {
-    // So this is a CXXRecordDecl, let's check for (virtual) base classes
-    for(const auto &decl : cxxrd->bases())
+    std::string current_func_id = new_expr.get("#func_symb_id").as_string();
+    symbolt *current_func_symbol =
+      context.find_symbol(new_expr.get("#func_symb_id"));
+    assert(current_func_id != "");
+    assert(current_func_symbol);
+
+    current_func_symbol->type.set(
+      "#member_name", current_class_symbol->id.as_string());
+    if(md->isVirtual())
     {
-      // The base class is always a CXXRecordDecl
-      const clang::CXXRecordDecl *base =
-        decl.getType().getTypePtr()->getAsCXXRecordDecl();
-      assert(base != nullptr);
-
-      // First, parse the fields
-      for(auto const *field : base->fields())
-      {
-        // We don't add if private
-        if(field->getAccess() >= clang::AS_private)
-          continue;
-
-        struct_typet::componentt comp;
-        if(get_decl(*field, comp))
-          return true;
-
-        // Don't add fields that have global storage (e.g., static)
-        if(const clang::VarDecl *nd = llvm::dyn_cast<clang::VarDecl>(field))
-          if(nd->hasGlobalStorage())
-            continue;
-
-        type.components().push_back(comp);
-      }
-    }
-  }
-
-  return clang_c_convertert::get_struct_union_class_fields(rd, type);
-}
-
-bool clang_cpp_convertert::get_struct_union_class_methods(
-  const clang::RecordDecl &recordd,
-  struct_union_typet &type)
-{
-  // If a struct is defined inside an extern C, it will be a RecordDecl
-  const clang::CXXRecordDecl *cxxrd =
-    llvm::dyn_cast<clang::CXXRecordDecl>(&recordd);
-  if(cxxrd == nullptr)
-    return false;
-
-  // Parse bases
-  for(const auto &decl : cxxrd->bases())
-  {
-    struct_typet base_t;
-    if(get_type(decl.getType(), base_t))
-      return true;
-
-    // Add methods
-    to_struct_type(type).methods().insert(
-      to_struct_type(type).methods().begin(),
-      base_t.methods().begin(),
-      base_t.methods().end());
-  }
-
-  // vector of components. In class, a component refers to a field or methods.
-  struct_typet::componentst &components = type.components();
-
-  // Iterate over the declarators stored in this class
-  for(const auto &decl : cxxrd->decls())
-  {
-    // Fields were already added in get_struct_union_class_fields
-    if(decl->getKind() == clang::Decl::Field)
-      continue;
-
-    // Ignore implicit RecordDecl node, e.g.
-    // CXXRecordDecl <address> <location> implicit referenced class <class-name>
-    auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(decl);
-    if(cxxrd && decl->isImplicit())
-      continue;
-
-    struct_typet::componentt comp;
-
-    if(
-      const clang::FunctionTemplateDecl *ftd =
-        llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
-    {
-      assert(ftd->isThisDeclarationADefinition());
-      log_error("template is not supported in {}", __func__);
-      abort();
-    }
-    else
-    {
-      if(get_decl(*decl, comp))
-        return true;
-      components.push_back(comp);
+      assert(mode == "C++");
+      // additional comment nodes for virtual method
+      current_func_symbol->type.set("#is_virtual", true);
+      current_func_symbol->type.set("#virtual_name", current_func_symbol->name);
+      get_virtual_method(*current_func_symbol);
     }
 
-    // This means that we probably just parsed nested class,
-    // don't add it to the class
-    if(comp.is_code() && to_code(comp).statement() == "skip")
-      continue;
-
-    if(
-      const clang::CXXMethodDecl *cxxmd =
-        llvm::dyn_cast<clang::CXXMethodDecl>(decl))
-    {
-      // Add only if it isn't static
-      if(!cxxmd->isStatic())
-      {
-        log_error("static method is not supported in {}", __func__);
-        abort();
-      }
-    }
+    // TODO: new_expr == struct_typet::componentt. populate it.
   }
 
   return false;
@@ -424,6 +333,162 @@ bool clang_cpp_convertert::get_virtual_method(const symbolt &func_symb)
     vt_entry); // DEBUG: virtual_table::tag.Vehicle s->type gets populated here
 
   // TODO: take care of overloading?
+
+  return false;
+}
+
+bool clang_cpp_convertert::get_struct_union_class(const clang::RecordDecl &rd)
+{
+  // Only convert RecordDecl not depending on a template parameter
+  if(rd.isDependentContext())
+    return false;
+
+  return clang_c_convertert::get_struct_union_class(rd);
+}
+
+bool clang_cpp_convertert::get_struct_union_class_fields(
+  const clang::RecordDecl &rd,
+  struct_union_typet &type)
+{
+  // If a struct is defined inside an extern C, it will be a RecordDecl
+  if(auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
+  {
+    // So this is a CXXRecordDecl, let's check for (virtual) base classes
+    for(const auto &decl : cxxrd->bases())
+    {
+      // The base class is always a CXXRecordDecl
+      const clang::CXXRecordDecl *base =
+        decl.getType().getTypePtr()->getAsCXXRecordDecl();
+      assert(base != nullptr);
+
+      // First, parse the fields
+      for(auto const *field : base->fields())
+      {
+        // We don't add if private
+        if(field->getAccess() >= clang::AS_private)
+          continue;
+
+        struct_typet::componentt comp;
+        if(get_decl(*field, comp))
+          return true;
+
+        // Don't add fields that have global storage (e.g., static)
+        if(const clang::VarDecl *nd = llvm::dyn_cast<clang::VarDecl>(field))
+          if(nd->hasGlobalStorage())
+            continue;
+
+        type.components().push_back(comp);
+      }
+    }
+  }
+
+  return clang_c_convertert::get_struct_union_class_fields(rd, type);
+}
+
+bool clang_cpp_convertert::get_struct_union_class_methods(
+  const clang::RecordDecl &recordd,
+  struct_union_typet &type)
+{
+  // If a struct is defined inside an extern C, it will be a RecordDecl
+  const clang::CXXRecordDecl *cxxrd =
+    llvm::dyn_cast<clang::CXXRecordDecl>(&recordd);
+  if(cxxrd == nullptr)
+    return false;
+
+  if(recordd.isClass())
+    type.set("#class", true);
+  current_access = type.get_bool("#class") ? "private" : "public";
+
+  bool found_ctor = false;
+  bool found_dtor = false;
+
+  // Parse bases
+  for(const auto &decl : cxxrd->bases())
+  {
+    struct_typet base_t;
+    if(get_type(decl.getType(), base_t))
+      return true;
+
+    // Add methods
+    to_struct_type(type).methods().insert(
+      to_struct_type(type).methods().begin(),
+      base_t.methods().begin(),
+      base_t.methods().end());
+  }
+
+  // get components vector. In class, a component refers to a field or methods.
+  struct_typet::componentst &components = type.components();
+
+  // Iterate over the declarators stored in this class MULTIPLE times.
+  // 1st time: add components for non-implicit methods but the constructors
+  for(const auto &decl : cxxrd->decls())
+  {
+    // Skip fields. They were already added in get_struct_union_class_fields
+    if(decl->getKind() == clang::Decl::Field)
+      continue;
+
+    // Skip implicit RecordDecl nodes, e.g.
+    // CXXRecordDecl <addr> <col:1, col:7> col:7 implicit referenced class Vehicle
+    auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(decl);
+    if(cxxrd && decl->isImplicit())
+      continue;
+
+    // Skip implicit MethodDecl nodes, e.g.
+    // CXXMethodDecl <addr> <line:3:7> col:7 implicit operator= 'Vehicle &(const Vehicle &)'
+    if(auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl))
+    {
+      if(md->isImplicit())
+        continue;
+    }
+
+    // Skip constructors we need more information
+    if(auto fd = llvm::dyn_cast<clang::FunctionDecl>(decl))
+    {
+      found_ctor_dtor(*fd, found_ctor, found_dtor);
+      if(is_ctor_or_dtor(*fd))
+        continue;
+    }
+
+    struct_typet::componentt comp;
+
+    if(
+      const clang::FunctionTemplateDecl *ftd =
+        llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
+    {
+      assert(ftd->isThisDeclarationADefinition());
+      log_error("template is not supported in {}", __func__);
+      abort();
+    }
+    else
+    {
+      printf("@@ printing clang declarator\n");
+      decl->dump();
+      printf("@@ done printing clang declarator\n");
+      if(get_decl(*decl, comp))
+        return true;
+    }
+
+    // This means that we probably just parsed nested class or access specifier,
+    // don't add it to the class
+    if(comp.is_code() && to_code(comp).statement() == "skip")
+      continue;
+
+    components.push_back(comp);
+
+    if(
+      const clang::CXXMethodDecl *cxxmd =
+        llvm::dyn_cast<clang::CXXMethodDecl>(decl))
+    {
+      // Add only if it isn't static
+      if(!cxxmd->isStatic())
+      {
+        log_error("static method is not supported in {}", __func__);
+        abort();
+      }
+    }
+  }
+
+  // TODO: continue from here
 
   return false;
 }
@@ -1120,4 +1185,16 @@ bool clang_cpp_convertert::get_decl_ref(
   new_expr.name(name);
 
   return false;
+}
+
+void clang_cpp_convertert::found_ctor_dtor(
+  const clang::FunctionDecl &fd,
+  bool &found_ctor,
+  bool &found_dtor)
+{
+  // flag ctor or dtor
+  if(fd.getKind() == clang::Decl::CXXConstructor)
+    found_ctor = true;
+  if(fd.getKind() == clang::Decl::CXXDestructor)
+    found_dtor = true;
 }

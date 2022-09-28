@@ -104,6 +104,7 @@ protected:
   virtual bool get_var(const clang::VarDecl &vd, exprt &new_expr);
 
   virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
+  bool skip_function(const clang::FunctionDecl &fd);
 
   virtual bool
   get_function_body(const clang::FunctionDecl &fd, exprt &new_expr);
@@ -131,8 +132,6 @@ protected:
   virtual bool get_struct_union_class_methods(
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
-
-  virtual bool get_virtual_method(const symbolt &func_symb);
 
   virtual bool get_type(const clang::QualType &type, typet &new_type);
 
@@ -212,6 +211,8 @@ protected:
   const clang::Decl *get_DeclContext_from_Stmt(const clang::Stmt &stmt);
 
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
+
+  bool is_ctor_or_dtor(const clang::FunctionDecl &fd);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

@@ -311,9 +311,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   else
     t = struct_typet();
   t.tag(name);
-
-  if(rd.isClass()) // additional annotations for class
-    t.set("name", id);
+  t.set("name", id);
 
   locationt location_begin;
   get_location_from_decl(rd, location_begin);
@@ -344,7 +342,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     return false;
 
   // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
   current_class_symbol = context.find_symbol(symbol_name);
 
   if(id == "tag-Vehicle")
@@ -384,7 +381,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   else
     add_padding(to_struct_type(t), ns);
 
-  added_symbol.type = t;
+  current_class_symbol->type = t;
   return false;
 }
 
@@ -449,7 +446,7 @@ bool clang_c_convertert::get_struct_union_class_methods(
   const clang::RecordDecl &,
   struct_union_typet &)
 {
-  log_status("We don't add methods to the struct in C");
+  // We don't add methods to the struct in C
   return false;
 }
 
@@ -591,21 +588,11 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return false;
 }
 
-bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
+bool clang_c_convertert::get_function(
+  const clang::FunctionDecl &fd,
+  exprt &new_expr)
 {
-  // Don't convert if implicit, unless it's a constructor or destructor
-  // A compiler-generated default ctor/dtor is considered implicit, but we have
-  // to parse it.
-  auto isContructorOrDestructor = [](const clang::FunctionDecl &fd) {
-    return fd.getKind() == clang::Decl::CXXConstructor ||
-           fd.getKind() == clang::Decl::CXXDestructor;
-  };
-
-  if(fd.isImplicit() && !isContructorOrDestructor(fd))
-    return false;
-
-  // If the function is not defined but this is not the definition, skip it
-  if(fd.isDefined() && !fd.isThisDeclarationADefinition())
+  if(skip_function(fd))
     return false;
 
   // Save old_functionDecl, to be restored at the end of this method
@@ -664,6 +651,7 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
     type.make_ellipsis();
 
   added_symbol.type = type;
+  new_expr.set("#func_symb_id", added_symbol.id);
 
   // We need: a type, a name, and an optional body
   if(fd.hasBody())
@@ -672,31 +660,9 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
       return true;
   }
 
-  // deal with virtual method after processing its type and body
-  if(auto md = llvm::dyn_cast<const clang::CXXMethodDecl>(&fd))
-  {
-    if(md->isVirtual())
-    {
-      added_symbol.type.set(
-        "#member_name", current_class_symbol->id.as_string());
-      assert(mode == "C++");
-      // additional comment nodes for virtual method
-      added_symbol.type.set("#is_virtual", true);
-      added_symbol.type.set("#virtual_name", name);
-      get_virtual_method(added_symbol);
-    }
-  }
-
   // Restore old functionDecl
   current_functionDecl = old_functionDecl;
 
-  return false;
-}
-
-bool clang_c_convertert::get_virtual_method(const symbolt &func_symb)
-{
-  log_status("We don't have virtual methods in C structs");
-  assert(func_symb.type.is_not_nil());
   return false;
 }
 
@@ -3347,4 +3313,26 @@ void clang_c_convertert::catch_target_symbol(std::string id)
 
   if(caught)
     print_intermediate_symbol_table();
+}
+
+bool clang_c_convertert::skip_function(const clang::FunctionDecl &fd)
+{
+  // Don't convert if implicit, unless it's a constructor or destructor
+  // A compiler-generated default ctor/dtor is considered implicit, but we have
+  // to parse it.
+  if(fd.isImplicit() && !is_ctor_or_dtor(fd))
+    return true;
+
+  // If the function is not defined but this is not the definition, skip it
+  if(fd.isDefined() && !fd.isThisDeclarationADefinition())
+    return true;
+
+  return false;
+}
+
+bool clang_c_convertert::is_ctor_or_dtor(const clang::FunctionDecl &fd)
+{
+  // detect ctor or dtor
+  return fd.getKind() == clang::Decl::CXXConstructor ||
+         fd.getKind() == clang::Decl::CXXDestructor;
 }

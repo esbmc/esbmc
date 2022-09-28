@@ -81,7 +81,7 @@ protected:
   /**
    * Parse virtual method and add vtable and vptr
    */
-  bool get_virtual_method(const symbolt &func_symb) override;
+  bool get_virtual_method(const symbolt &func_symb);
 
   template <typename TemplateDecl>
   bool get_template_decl(
@@ -100,6 +100,11 @@ protected:
 
   void
   build_member_from_component(const clang::FunctionDecl &fd, exprt &component);
+
+  void found_ctor_dtor(
+    const clang::FunctionDecl &func,
+    bool &found_ctor,
+    bool &found_dtor);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
