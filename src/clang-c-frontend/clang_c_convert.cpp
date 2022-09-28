@@ -311,7 +311,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   else
     t = struct_typet();
   t.tag(name);
-  t.set("name", id);
+
+  if(rd.isClass()) // additional annotations for class
+    t.set("name", id);
 
   locationt location_begin;
   get_location_from_decl(rd, location_begin);
@@ -342,6 +344,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     return false;
 
   // Now get the symbol back to continue the conversion
+  symbolt &added_symbol = *context.find_symbol(symbol_name);
   current_class_symbol = context.find_symbol(symbol_name);
 
   if(id == "tag-Vehicle")
@@ -381,7 +384,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   else
     add_padding(to_struct_type(t), ns);
 
-  current_class_symbol->type = t;
+  added_symbol.type = t;
   return false;
 }
 
@@ -672,9 +675,9 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   // deal with virtual method after processing its type and body
   if(auto md = llvm::dyn_cast<const clang::CXXMethodDecl>(&fd))
   {
-    added_symbol.type.set("#member_name", current_class_symbol->id.as_string());
     if (md->isVirtual())
     {
+      added_symbol.type.set("#member_name", current_class_symbol->id.as_string());
       assert(mode == "C++");
       // additional comment nodes for virtual method
       added_symbol.type.set("#is_virtual", true);
