@@ -176,7 +176,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
   // a foo pointer isn't compatible with a foo pointer).
   const irep_idt symbol_name = dest_scope->prefix + "tag." + identifier;
 
-  if (symbol_name.as_string() == "tag.Vehicle")
+  if(symbol_name.as_string() == "tag.Vehicle")
     printf("@@ Got tag.Vehicle symbol\n");
 
   // check if we have it already
@@ -551,7 +551,8 @@ void cpp_typecheckt::typecheck_compound_declarator(
       vt_entry.set("pretty_name", virtual_name);
       vt_entry.set("access", "public");
       vt_entry.location() = symbol.location;
-      virtual_table.components().push_back(vt_entry); // DEBUG: virtual_table::tag.Vehicle s->type gets populated here
+      virtual_table.components().push_back(
+        vt_entry); // DEBUG: virtual_table::tag.Vehicle s->type gets populated here
 
       // take care of overloading
       while(!virtual_bases.empty())

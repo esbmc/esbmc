@@ -1,6 +1,4 @@
 // Remove warnings from Clang headers
-#include "clang/AST/DeclCXX.h"
-#include "llvm/Support/Casting.h"
 #include <iostream>
 #include <sstream>
 #pragma GCC diagnostic push
@@ -668,13 +666,14 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   }
 
   // deal with virtual method after processing its type and body
-  if (auto md = llvm::dyn_cast<const clang::CXXMethodDecl>(&fd))
+  if(auto md = llvm::dyn_cast<const clang::CXXMethodDecl>(&fd))
   {
-    if (md->isVirtual())
+    if(md->isVirtual())
     {
       assert(mode == "C++");
       // additional comment nodes for virtual method
-      added_symbol.type.set("#member_name", current_class_symbol->id.as_string());
+      added_symbol.type.set(
+        "#member_name", current_class_symbol->id.as_string());
       added_symbol.type.set("#is_virtual", true);
       added_symbol.type.set("#virtual_name", name);
       get_virtual_method(added_symbol);
@@ -687,8 +686,7 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   return false;
 }
 
-bool clang_c_convertert::get_virtual_method(
-    const symbolt &func_symb)
+bool clang_c_convertert::get_virtual_method(const symbolt &func_symb)
 {
   log_status("We don't have virtual methods in C structs");
   assert(func_symb.type.is_not_nil());
