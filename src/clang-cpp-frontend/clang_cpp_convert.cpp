@@ -27,8 +27,7 @@ clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
   irep_idt _mode)
-  : clang_c_convertert(_context, _ASTs, _mode),
-    current_access("")
+  : clang_c_convertert(_context, _ASTs, _mode), current_access("")
 {
 }
 
@@ -129,17 +128,19 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
   case clang::Decl::AccessSpec:
   {
-    const clang::AccessSpecDecl &asd = static_cast<const clang::AccessSpecDecl &>(decl);
+    const clang::AccessSpecDecl &asd =
+      static_cast<const clang::AccessSpecDecl &>(decl);
     const clang::AccessSpecifier specifier = asd.getAccess();
-    if (specifier == clang::AS_public)
+    if(specifier == clang::AS_public)
       current_access = "public";
-    else if (specifier == clang::AS_private)
+    else if(specifier == clang::AS_private)
       current_access = "private";
-    else if (specifier == clang::AS_protected)
+    else if(specifier == clang::AS_protected)
       current_access = "protected";
     else
     {
-      log_error("Unknown accessor specified returned from clang in {}", __func__);
+      log_error(
+        "Unknown accessor specified returned from clang in {}", __func__);
       abort();
     }
 
@@ -327,7 +328,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     // Ignore implicit RecordDecl node, e.g.
     // CXXRecordDecl <address> <location> implicit referenced class <class-name>
     auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(decl);
-    if (cxxrd && decl->isImplicit())
+    if(cxxrd && decl->isImplicit())
       continue;
 
     struct_typet::componentt comp;

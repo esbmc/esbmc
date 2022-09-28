@@ -675,9 +675,10 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   // deal with virtual method after processing its type and body
   if(auto md = llvm::dyn_cast<const clang::CXXMethodDecl>(&fd))
   {
-    if (md->isVirtual())
+    if(md->isVirtual())
     {
-      added_symbol.type.set("#member_name", current_class_symbol->id.as_string());
+      added_symbol.type.set(
+        "#member_name", current_class_symbol->id.as_string());
       assert(mode == "C++");
       // additional comment nodes for virtual method
       added_symbol.type.set("#is_virtual", true);

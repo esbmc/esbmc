@@ -36,9 +36,7 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
 
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.name, symbol.id));
 
-  if(
-    symbol.id ==
-    "tag.Vehicle") // WIP
+  if(symbol.id == "tag.Vehicle") // WIP
     printf(
       "@@ Got target symbol insertion in %s for: %s\n",
       __func__,
@@ -54,7 +52,9 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
       __func__,
       symbol.id.c_str());
 
-  if(symbol.id == "Vehicle::~Vehicle(this)") // WIP - relies on s.type and s.value from symbol tag.Vehicle
+  if(
+    symbol.id ==
+    "Vehicle::~Vehicle(this)") // WIP - relies on s.type and s.value from symbol tag.Vehicle
     printf(
       "@@ Got target symbol insertion in %s for: %s\n",
       __func__,

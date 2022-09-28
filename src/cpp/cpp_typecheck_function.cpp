@@ -77,7 +77,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
 #pragma GCC diagnostic pop
   code_typet &function_type = to_code_type(template_subtype(symbol.type));
 
-  if (symbol.id == "Vehicle::~Vehicle(this)")
+  if(symbol.id == "Vehicle::~Vehicle(this)")
     printf("@@ Got dtor - about to populate the dtor body\n");
 
   // Is this a template that was instantiated for a function overload, but isn't
@@ -97,7 +97,8 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   // if it is a destructor, add the implicit code
   if(symbol.type.get("return_type") == "destructor")
   {
-    const symbolt &msymb = *lookup(symbol.type.get("#member_name")); // get the correpsonding symbol
+    const symbolt &msymb =
+      *lookup(symbol.type.get("#member_name")); // get the correpsonding symbol
 
     assert(symbol.value.id() == "code");
     assert(symbol.value.statement() == "block");

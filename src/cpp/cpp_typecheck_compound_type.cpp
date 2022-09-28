@@ -238,7 +238,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     id.class_identifier = new_symbol->id;
     id.id_class = cpp_idt::CLASS;
 
-    if (new_symbol->id.as_string() == "tag.Vehicle")
+    if(new_symbol->id.as_string() == "tag.Vehicle")
       printf("@@ Got tag.Vehicle symbol! about to add more components\n");
 
     if(has_body) // DEBUG: for tag.Vehicle has_body == true
@@ -952,7 +952,9 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   struct_typet &type = to_struct_type(symbol.type);
 
   // pull the base types in
-  if(!type.find("bases").get_sub().empty()) // DEBUG: skipped for tag.Vehicle symbol
+  if(!type.find("bases")
+        .get_sub()
+        .empty()) // DEBUG: skipped for tag.Vehicle symbol
   {
     if(type.id() == "union")
     {
@@ -964,7 +966,8 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   }
 
   exprt &body = static_cast<exprt &>(type.add("body"));
-  struct_typet::componentst &components = type.components(); // DEBUG: tag.Vehicle symbol: components.size() == 0
+  struct_typet::componentst &components =
+    type.components(); // DEBUG: tag.Vehicle symbol: components.size() == 0
 
   symbol.type.set("name", symbol.id);
 
@@ -976,13 +979,16 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
   // we first do everything but the constructors
 
-  Forall_operands(it, body) // DEBUG: tag.Vehicle symbol: body.operands().size == 3: [0]public, [1]vehicle, [2]number_of_wheels
+  Forall_operands(
+    it,
+    body) // DEBUG: tag.Vehicle symbol: body.operands().size == 3: [0]public, [1]vehicle, [2]number_of_wheels
   {
     if(it->id() == "cpp-declaration")
     {
       cpp_declarationt &declaration = to_cpp_declaration(*it);
 
-      if(declaration.member_spec().is_friend()) // DEBUG: false for tag.Vehicle symbol
+      if(declaration.member_spec()
+           .is_friend()) // DEBUG: false for tag.Vehicle symbol
       {
         typecheck_friend_declaration(symbol, declaration);
         continue; // done
@@ -1013,9 +1019,13 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         declaration.type().id() == "union" ||
         declaration.type().id() == "c_enum")
         if(declaration.declarators().empty())
-          declaration.type().set("#tag_only_declaration", true); // DEBUG: false for tag.Vehicle symbol[1]
+          declaration.type().set(
+            "#tag_only_declaration",
+            true); // DEBUG: false for tag.Vehicle symbol[1]
 
-      typecheck_type(declaration.type()); // e.g. change int to singedbv/n* width: 32/n* #cpp_type: signed_int
+      typecheck_type(
+        declaration
+          .type()); // e.g. change int to singedbv/n* width: 32/n* #cpp_type: signed_int
 
       bool is_static = declaration.storage_spec().is_static();
       bool is_mutable = declaration.storage_spec().is_mutable();
@@ -1035,7 +1045,8 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       // anonymous member?
       if(
         declaration.declarators().empty() &&
-        final_type.get_bool("#is_anonymous")) // DEBUG: false for tag.Vehicle symbol[1]
+        final_type.get_bool(
+          "#is_anonymous")) // DEBUG: false for tag.Vehicle symbol[1]
       {
         // we only allow this on struct/union types
         if(final_type.id() != "union" && final_type.id() != "struct")
@@ -1130,7 +1141,8 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   }
 
   // setup virtual tables before doing the constructors
-  do_virtual_table(symbol); // DEBUG: virtual_table::tag.<class>@tag.Vehicle is added in this loop if there is a virtual method.
+  do_virtual_table(
+    symbol); // DEBUG: virtual_table::tag.<class>@tag.Vehicle is added in this loop if there is a virtual method.
 
   if(!found_ctor && !cpp_is_pod(symbol.type))
   {
@@ -1366,7 +1378,7 @@ void cpp_typecheckt::typecheck_member_function(
   symbol.is_macro = false;
   symbol.location = component.location();
 
-  if (symbol.id == "Vehicle::~Vehicle(this)")
+  if(symbol.id == "Vehicle::~Vehicle(this)")
     printf("@@ Got dtor\n");
 
   // move early, it must be visible before doing any value
