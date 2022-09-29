@@ -261,10 +261,10 @@ bool clang_cpp_convertert::get_function(
     assert(current_func_id != "");
     assert(current_func_symbol);
 
-    current_func_symbol->type.set(
-      "#member_name", current_class_symbol->id.as_string());
     if(md->isVirtual())
     {
+      current_func_symbol->type.set(
+        "#member_name", current_class_symbol->id.as_string());
       assert(mode == "C++");
       // additional comment nodes for virtual method
       current_func_symbol->type.set("#is_virtual", true);
