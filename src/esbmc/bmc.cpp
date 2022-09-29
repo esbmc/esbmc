@@ -86,6 +86,8 @@ void bmct::do_cbmc(
 
 void bmct::successful_trace()
 {
+  config.progress_bar->set_text("BMC engine was able to prove correctness!");
+  config.progress_bar->make_blue();
   if(options.get_bool_option("result-only"))
     return;
 
@@ -103,6 +105,8 @@ void bmct::error_trace(
   std::shared_ptr<smt_convt> &smt_conv,
   std::shared_ptr<symex_target_equationt> &eq)
 {
+  config.progress_bar->set_text("Bug found!");
+  config.progress_bar->make_red();
   if(options.get_bool_option("result-only"))
     return;
 
@@ -138,6 +142,10 @@ smt_convt::resultt bmct::run_decision_procedure(
   std::shared_ptr<smt_convt> &smt_conv,
   std::shared_ptr<symex_target_equationt> &eq)
 {
+  { // Update progress
+    config.progress_bar->set_text("Checking Base Case");
+  }
+
   std::string logic;
 
   if(!options.get_bool_option("int-encoding"))
@@ -319,10 +327,14 @@ void bmct::report_result(smt_convt::resultt &res)
     }
     else if(fc)
     {
+      config.progress_bar->set_text("No bugs found!");
+      config.progress_bar->make_green();
       log_status("The forward condition is unable to prove the property");
     }
     else if(is)
     {
+      config.progress_bar->set_text("No bugs found!");
+      config.progress_bar->make_green();
       log_status("The inductive step is unable to prove the property");
     }
     break;
@@ -360,6 +372,8 @@ smt_convt::resultt bmct::start_bmc()
 
 smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 {
+  config.progress_bar->set_text("Running Symbolic Execution");
+
   symex->options.set_option("unwind", options.get_option("unwind"));
   symex->setup_for_new_explore();
 

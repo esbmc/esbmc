@@ -11,7 +11,7 @@
 #include <solvers/solve.h>
 #include <util/options.h>
 #include <util/algorithms.h>
-
+#include <util/bmc_progress.h>
 class bmct
 {
 public:

@@ -1172,6 +1172,10 @@ int esbmc_parseoptionst::doit_incremental()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
+      // Start Progress bar
+      config.progress_bar =
+          std::make_shared<bmc_progress>(k_step.to_uint64());
+
     if(do_base_case(opts, goto_functions, k_step))
       return true;
 

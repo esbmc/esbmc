@@ -7,6 +7,7 @@
 #include <langapi/mode.h>
 #include <util/compiler_defs.h>
 #include <util/cache_defs.h>
+#include <util/bmc_progress.h>
 class configt
 {
 public:
@@ -112,6 +113,8 @@ public:
 
   // For caching ssa assertions
   assert_db ssa_caching_db;
+    // For tracking progress
+    std::shared_ptr<bmc_progress> progress_bar;
 };
 
 extern configt config;
