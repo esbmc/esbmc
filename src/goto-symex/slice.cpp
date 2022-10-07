@@ -11,13 +11,11 @@ bool symex_slicet::get_symbols(const expr2tc &expr)
 {
   bool res = false;
   // Recursively look if any of the operands has a inner symbol
-  expr->foreach_operand(
-    [this, &res](const expr2tc &e)
-    {
-      if(!is_nil_expr(e))
-        res |= get_symbols<Add>(e);
-      return res;
-    });
+  expr->foreach_operand([this, &res](const expr2tc &e) {
+    if(!is_nil_expr(e))
+      res |= get_symbols<Add>(e);
+    return res;
+  });
 
   if(!is_symbol2t(expr))
     return res;
@@ -146,33 +144,34 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
 
 bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
 {
-    fine_timet algorithm_start = current_time();
-    size_t counter = 1;
-    for(symex_target_equationt::SSA_stepst::iterator it = steps.begin();
-        it != steps.end();
-        it++)
+  fine_timet algorithm_start = current_time();
+  size_t counter = 1;
+  for(symex_target_equationt::SSA_stepst::iterator it = steps.begin();
+      it != steps.end();
+      it++)
+  {
+    // just find the next assertion
+    if(it->is_assert())
     {
-        // just find the next assertion
-        if(it->is_assert())
-        {
-            if(counter++ == claim_to_keep) // this is the assertion that we should not skip!
-            {
-                it->ignore = false;
-                claim_msg = it->comment;
-                continue;
-            }
+      if(
+        counter++ ==
+        claim_to_keep) // this is the assertion that we should not skip!
+      {
+        it->ignore = false;
+        claim_msg = it->comment;
+        continue;
+      }
 
-
-            it->ignore = true;
-            ++sliced;
-        }
+      it->ignore = true;
+      ++sliced;
     }
+  }
 
-    fine_timet algorithm_stop = current_time();
-    log_status(
-        "Slicing for Claim {} ({}s)",
-        claim_msg,
-        time2string(algorithm_stop - algorithm_start));
+  fine_timet algorithm_stop = current_time();
+  log_status(
+    "Slicing for Claim {} ({}s)",
+    claim_msg,
+    time2string(algorithm_stop - algorithm_start));
 
-    return true;
+  return true;
 }
