@@ -844,3 +844,81 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options)
   }
   return invariant;
 }
+
+void generate_testcase_metadata(const std::string_view) {
+    xmlnodet metadata;
+
+    metadata.put("test-metadata.sourcecodelang", "C");
+
+    std::string producer = config.options.get_option("witness-producer");
+    if(producer.empty())
+    {
+        producer = "ESBMC " + std::string(ESBMC_VERSION);
+        if(config.options.get_bool_option("k-induction"))
+            producer += " kind";
+        else if(config.options.get_bool_option("k-induction-parallel"))
+            producer += " kind";
+        else if(config.options.get_bool_option("falsification"))
+            producer += " falsi";
+        else if(config.options.get_bool_option("incremental-bmc"))
+            producer += " incr";
+    }
+
+    metadata.put("test-metadata.producer", producer);
+    metadata.put("test-metadata.specification", "CHECK( LTL(G ! call(__VERIFIER_error())) )");
+    metadata.put("test-metadata.programfile", config.options.get_option("input-file"));
+    std::string programFileHash;
+    generate_sha1_hash_for_file(config.options.get_option("input-file").c_str(), programFileHash);
+    metadata.put("test-metadata.programhash", programFileHash);
+    metadata.put("test-metadata.entryFunction", "main");
+    metadata.put("test-metadata.architecture", std::to_string(config.ansi_c.word_size) + "bit");
+
+    // Conversion to string using the ISO 8601.
+    // Source: https://www.boost.org/doc/libs/1_49_0/doc/html/date_time/posix_time.html
+    boost::posix_time::ptime creation_time =
+        boost::posix_time::microsec_clock::universal_time();
+
+    std::string tmp = boost::posix_time::to_iso_extended_string(creation_time);
+    std::string new_creation_time = tmp.substr(0, tmp.find(".", 0));
+    metadata.put("test-metadata.creationtime", new_creation_time);
+
+    std::ofstream file("test.xml");
+    boost::property_tree::write_xml(file, metadata);
+}
+
+
+#include <util/prefix.h>
+#include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
+void generate_testcase(const std::string_view,
+                       const std::shared_ptr<symex_target_equationt> &target,
+                       std::shared_ptr<smt_convt> &smt_conv)
+{
+    xmlnodet test;
+
+  for(auto const &SSA_step : target->SSA_steps)
+  {
+    if(!smt_conv->l_get(SSA_step.guard_ast).is_true())
+      continue;
+
+    if(SSA_step.is_assignment())
+    {
+        if(is_symbol2t(SSA_step.rhs))
+        {
+            const symbol2t &sym = to_symbol2t(SSA_step.rhs);
+
+            if(has_prefix(sym.thename.as_string(), "nondet$"))
+            {
+                auto new_rhs = smt_conv->get(SSA_step.rhs);
+
+                // I don't think there is anything beyond that in SV-COMP/Test-Comp
+                if(is_constant_int2t(new_rhs))
+                    test.put("testcase.input", fmt::format("{}", to_constant_int2t(new_rhs).value));
+            }
+        }
+        //goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
+    }
+  }
+  std::ofstream file("testcase.xml");
+  auto settings = boost::property_tree::xml_writer_make_settings<std::string>('\t', 1, R"("utf-8\"?><!DOCTYPE testcase PUBLIC "+//IDN sosy-lab.org//DTD test-format testcase 1.1//EN" "https://sosy-lab.org/test-format/testcase-1.1.dtd">)");
+  boost::property_tree::write_xml("testcase.xml", test, std::locale(), settings);
+}
