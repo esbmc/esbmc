@@ -59,10 +59,8 @@ protected:
     smt_convt::resultt &res,
     std::shared_ptr<symex_target_equationt> &eq);
 
-  virtual void report_multi_property_trace(
-        smt_convt::resultt &res,
-        std::shared_ptr<symex_target_equationt> &eq,
-        const std::string &msg);
+  virtual void
+  report_multi_property_trace(smt_convt::resultt &res, const std::string &msg);
 
   virtual void report_result(smt_convt::resultt &res);
 
@@ -71,7 +69,9 @@ protected:
     std::shared_ptr<symex_target_equationt> &eq);
 
   smt_convt::resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
-    smt_convt::resultt multi_property_check(std::shared_ptr<symex_target_equationt> &eq, size_t remaining_claims);
+  smt_convt::resultt multi_property_check(
+    std::shared_ptr<symex_target_equationt> &eq,
+    size_t remaining_claims);
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 };
 

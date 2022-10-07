@@ -402,7 +402,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   // If multi-property is on, we should set result-only
   if(cmdline.isset("multi-property"))
-      options.set_option("result-only", true);
+    options.set_option("result-only", true);
 
   config.options = options;
 }
