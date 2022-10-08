@@ -26,6 +26,10 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
+// DEBUG
+#include <iostream>
+#include <util/show_symbol_table.h>
+
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
@@ -3290,4 +3294,26 @@ clang_c_convertert::get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt)
   }
 
   return nullptr;
+}
+
+// DEBUG
+void clang_c_convertert::print_intermediate_symbol_table()
+{
+  std::ostringstream out;
+  ::show_symbol_table_plain(namespacet(context), out);
+  std::cout << out.str() << std::endl;
+}
+
+// DEBUG
+void clang_c_convertert::catch_target_symbol(std::string id)
+{
+  bool caught = false;
+  if (id == "tag-Vehicle")
+  {
+    caught = true;
+    printf("@@ Got %s", id.c_str());
+  }
+
+  if (caught)
+    print_intermediate_symbol_table();
 }

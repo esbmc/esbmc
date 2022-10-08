@@ -45,6 +45,13 @@ void cpp_typecheckt::convert(cpp_itemt &item)
   // the conversion modifies the originial cpp_itemt
   // dumping cpp_itemt contents before and after conversion give different results
 
+// DEBUG
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  // keeping the old data for debugging purposes
+  cpp_itemt old_item = item;
+#pragma GCC diagnostic pop
+
   if(item.is_declaration())
     convert(to_cpp_declaration(item));
   else if(item.is_linkage_spec())
@@ -275,4 +282,12 @@ void cpp_typecheckt::clean_up()
       struct_type.components().swap(data_members);
     }
   });
+}
+
+// DEBUG
+void cpp_typecheckt::print_intermediate_symbol_table()
+{
+  std::ostringstream out;
+  ::show_symbol_table_plain(namespacet(context), out);
+  std::cout << out.str() << std::endl;
 }
