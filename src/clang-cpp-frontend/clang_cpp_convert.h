@@ -21,6 +21,9 @@ protected:
     this_mapt;
   this_mapt this_map;
 
+  // current access specifier
+  std::string current_access;
+
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
 
   /**

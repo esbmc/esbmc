@@ -1013,7 +1013,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         if(declaration.declarators().empty())
           declaration.type().set("#tag_only_declaration", true);
 
-      typecheck_type(declaration.type());
+      typecheck_type(declaration.type()); // convert "int" to "signedbv"
 
       bool is_static = declaration.storage_spec().is_static();
       bool is_mutable = declaration.storage_spec().is_mutable();

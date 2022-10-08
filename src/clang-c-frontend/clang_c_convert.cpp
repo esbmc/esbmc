@@ -309,6 +309,12 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     t = struct_typet();
   t.tag(name);
 
+  if(rd.isClass())
+  {
+    t.set("#class", true);
+    t.set("name", id);
+  }
+
   locationt location_begin;
   get_location_from_decl(rd, location_begin);
 
@@ -3317,3 +3323,4 @@ void clang_c_convertert::catch_target_symbol(std::string id)
   if (caught)
     print_intermediate_symbol_table();
 }
+

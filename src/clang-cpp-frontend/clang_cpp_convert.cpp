@@ -27,7 +27,7 @@ clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
   irep_idt _mode)
-  : clang_c_convertert(_context, _ASTs, _mode)
+  : clang_c_convertert(_context, _ASTs, _mode), current_access("")
 {
 }
 
@@ -126,6 +126,26 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
+  case clang::Decl::AccessSpec:
+  {
+    const clang::AccessSpecDecl &asd =
+      static_cast<const clang::AccessSpecDecl &>(decl);
+    const clang::AccessSpecifier specifier = asd.getAccess();
+    if(specifier == clang::AS_public)
+      current_access = "public";
+    else if(specifier == clang::AS_private)
+      current_access = "private";
+    else if(specifier == clang::AS_protected)
+      current_access = "protected";
+    else
+    {
+      log_error(
+        "Unknown accessor specified returned from clang in {}", __func__);
+      abort();
+    }
+    break;
+  }
+
   // We can ignore any these declarations
   case clang::Decl::ClassTemplatePartialSpecialization:
   case clang::Decl::Using:
@@ -133,7 +153,6 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::UsingDirective:
   case clang::Decl::TypeAlias:
   case clang::Decl::NamespaceAlias:
-  case clang::Decl::AccessSpec:
   case clang::Decl::UnresolvedUsingValue:
   case clang::Decl::UnresolvedUsingTypename:
     break;
@@ -273,7 +292,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 
 bool clang_cpp_convertert::get_struct_union_class_methods(
   const clang::RecordDecl &recordd,
-  struct_union_typet &)
+  struct_union_typet &type)
 {
   // If a struct is defined inside a extern C, it will be a RecordDecl
   const clang::CXXRecordDecl *cxxrd =
@@ -287,12 +306,45 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     abort();
   }
 
+  // default access: private for class, otherwise public
+  current_access = type.get_bool("#class") ? "private" : "public";
+
+  bool found_ctor = false;
+  bool found_dtor = false;
+
   // Iterate over the declarations stored in this context
+  // we first do everything but the constructors
   for(const auto &decl : cxxrd->decls())
   {
     // Fields were already added
     if(decl->getKind() == clang::Decl::Field)
       continue;
+
+    // Skip implicit MethodDecl nodes, e.g. implicit cpy ctor or cpy assignment operator
+    if(auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl))
+    {
+      if(md->isImplicit())
+        continue;
+    }
+    else
+    {
+      // Skip non-method declarations but accessspecifier
+      if(decl->getKind() != clang::Decl::AccessSpec)
+        continue;
+    }
+
+    // Skip ctor. We need to do vtable before ctor
+    if(auto fd = llvm::dyn_cast<clang::FunctionDecl>(decl))
+    {
+      if(fd->getKind() == clang::Decl::CXXConstructor)
+      {
+        found_ctor = true;
+        continue;
+      }
+
+      if(fd->getKind() == clang::Decl::CXXDestructor)
+        found_dtor = true;
+    }
 
     struct_typet::componentt comp;
 
@@ -306,8 +358,20 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
     else
     {
+      printf("@@ printing clang declarator\n");
+      decl->dump();
+      printf("@@ done printing clang declarator\n");
       if(get_decl(*decl, comp))
         return true;
+
+      comp.type().set("#member_name", type.name());
+      printf("@@ done 1x class decl\n");
+    }
+
+    // do more annotation
+    if(found_dtor || found_ctor)
+    {
+      printf("@@ Got ctor or dtor\n");
     }
 
     // This means that we probably just parsed nested class,
