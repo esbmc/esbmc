@@ -135,7 +135,7 @@ void bmct::error_trace(
   log_result("{}", oss.str());
 }
 
-smt_convt::resultt bmct::run_decision_procedure(
+void bmct::generate_smt_from_equation(
   std::shared_ptr<smt_convt> &smt_conv,
   std::shared_ptr<symex_target_equationt> &eq)
 {
@@ -155,9 +155,15 @@ smt_convt::resultt bmct::run_decision_procedure(
   fine_timet encode_start = current_time();
   do_cbmc(smt_conv, eq);
   fine_timet encode_stop = current_time();
-
   log_status(
     "Encoding to solver time: {}s", time2string(encode_stop - encode_start));
+}
+
+smt_convt::resultt bmct::run_decision_procedure(
+  std::shared_ptr<smt_convt> &smt_conv,
+  std::shared_ptr<symex_target_equationt> &eq)
+{
+  generate_smt_from_equation(smt_conv, eq);
 
   if(
     options.get_bool_option("smt-formula-too") ||
@@ -689,6 +695,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   }
 }
 
+#include <algorithm>
+#include <execution>
 smt_convt::resultt bmct::multi_property_check(
   std::shared_ptr<symex_target_equationt> &eq,
   size_t remaining_claims)
@@ -697,49 +705,59 @@ smt_convt::resultt bmct::multi_property_check(
   assert(
     options.get_bool_option("base-case") &&
     "Multi-property only supports base-case");
-  smt_convt::resultt final_result;
+  smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
+  std::atomic_size_t ce_counter = 0;
+  std::unordered_set<size_t> jobs;
 
   /* TODO: For coverage, We should store and remove all the claims that
-   *       were already verified
-   */
+   *       were already verified */
   for(size_t i = 1; i <= remaining_claims; i++)
-  {
-    // TODO: we might store the current EQ and then apply the symex_slicer again
-    claim_slicer slicer(i);
-    slicer.run(eq->SSA_steps);
+    jobs.emplace(i);
+  auto job_function = [this, &eq, &ce_counter, &final_result](const size_t &i) {
+    // Since this is just a copy, we probably don't need a lock
+    auto local_eq = std::make_shared<symex_target_equationt>(*eq);
+    claim_slicer claim(i);
+    claim.run(local_eq->SSA_steps);
+    symex_slicet slicer(options);
+    slicer.run(local_eq->SSA_steps);
 
-    // Saddly, some solvers need to be reconstructed every time
-    runtime_solver = std::shared_ptr<smt_convt>(create_solver("", ns, options));
+    // Initialize a solver
+    auto runtime_solver =
+      std::shared_ptr<smt_convt>(create_solver("", ns, options));
+    // Save current instance
+    generate_smt_from_equation(runtime_solver, local_eq);
 
-    // Solve current instance
-    auto result = run_decision_procedure(runtime_solver, eq);
+    log_status(
+      "Solving claim {} with solver {}",
+      claim.claim_msg,
+      runtime_solver->solver_text());
+    smt_convt::resultt result = runtime_solver->dec_solve();
+    report_multi_property_trace(result, claim.claim_msg);
 
-    // Report the result
-    report_multi_property_trace(result, slicer.claim_msg);
-
-    // If a violation was found, then we should generate a CE for it.
     if(result == smt_convt::P_SATISFIABLE)
     {
-      bool is_compact_trace = true;
-      if(
-        options.get_bool_option("no-slice") &&
-        !options.get_bool_option("compact-trace"))
-        is_compact_trace = false;
-
       goto_tracet goto_trace;
-      build_goto_trace(eq, runtime_solver, goto_trace, is_compact_trace);
+      build_goto_trace(local_eq, runtime_solver, goto_trace, false);
       // TODO: Replace this with a test-case for coverage!
       std::string output_file = options.get_option("cex-output");
 
       if(output_file != "")
       {
-        std::ofstream out(fmt::format("{}-{}", output_file, i));
+        std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
         show_goto_trace(out, ns, goto_trace);
       }
 
       final_result = result;
     }
-  }
+  };
+
+  if(options.get_bool_option("parallel-solving"))
+    std::for_each(
+      std::execution::par, std::begin(jobs), std::end(jobs), job_function);
+  else
+    std::for_each(
+      std::execution::seq, std::begin(jobs), std::end(jobs), job_function);
+
   // TODO: Add a proper report for the current K!
   return final_result;
 }
