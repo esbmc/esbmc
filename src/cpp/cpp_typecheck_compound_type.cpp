@@ -498,6 +498,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         }
       }
 
+      // member function symbol type is added before virtual table symbol type
       typecheck_member_function(
         symbol.id, component, initializers, method_qualifier, value);
 
@@ -506,6 +507,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
       symbolt *s = context.find_symbol(vt_name);
 
+      // add virtual_table symbol type
       if(s == nullptr)
       {
         // first time: create a virtual-table symbol type

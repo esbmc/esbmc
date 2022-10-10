@@ -39,6 +39,12 @@ protected:
 
   bool get_function(const clang::FunctionDecl &fd, exprt &new_expr) override;
 
+  bool get_virtual_method(
+      const clang::FunctionDecl &fd,
+      exprt &component,
+      code_typet &method_type,
+      const symbolt &method_symbol) override;
+
   /**
    *  Get reference for constructor callsite
    */

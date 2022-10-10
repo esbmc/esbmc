@@ -586,7 +586,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return false;
 }
 
-bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
+bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &new_expr)
 {
   // Don't convert if implicit, unless it's a constructor or destructor
   // A compiler-generated default ctor/dtor is considered implicit, but we have
@@ -658,6 +658,20 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   if(!type.arguments().size())
     type.make_ellipsis();
 
+  if(mode == "C++")
+  {
+    // additional checks for C++ class method
+    if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+    {
+      // new_expr == each component as in class' s.type().components()
+      // type == s.type for current member function
+      new_expr.type() = type;
+
+      if (md->isVirtual())
+        get_virtual_method(*md, new_expr, type, added_symbol);
+    }
+  }
+
   added_symbol.type = type;
 
   // We need: a type, a name, and an optional body
@@ -670,6 +684,16 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   // Restore old functionDecl
   current_functionDecl = old_functionDecl;
 
+  return false;
+}
+
+bool clang_c_convertert::get_virtual_method(
+    const clang::FunctionDecl &,
+    exprt &,
+    code_typet &,
+    const symbolt &)
+{
+  // No virtual methods in C
   return false;
 }
 

@@ -320,8 +320,9 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     if(decl->getKind() == clang::Decl::Field)
       continue;
 
+    const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
     // Skip implicit MethodDecl nodes, e.g. implicit cpy ctor or cpy assignment operator
-    if(auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl))
+    if(md)
     {
       if(md->isImplicit())
         continue;
@@ -333,8 +334,9 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
         continue;
     }
 
+    const auto fd = llvm::dyn_cast<clang::FunctionDecl>(decl);
     // Skip ctor. We need to do vtable before ctor
-    if(auto fd = llvm::dyn_cast<clang::FunctionDecl>(decl))
+    if(fd)
     {
       if(fd->getKind() == clang::Decl::CXXConstructor)
       {
@@ -363,9 +365,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       printf("@@ done printing clang declarator\n");
       if(get_decl(*decl, comp))
         return true;
-
-      comp.type().set("#member_name", type.name());
-      printf("@@ done 1x class decl\n");
     }
 
     // do more annotation
@@ -374,10 +373,15 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       printf("@@ Got ctor or dtor\n");
     }
 
-    // This means that we probably just parsed nested class,
+    // This means that we probably just parsed nested class or access specifier,
     // don't add it to the class
     if(comp.is_code() && to_code(comp).statement() == "skip")
-      continue;
+    {
+      // we still have to add pure virtual method component
+      if (fd && md)
+        if(!fd->isPure() && !md->isVirtual())
+          continue;
+    }
 
     if(
       const clang::CXXMethodDecl *cxxmd =
@@ -385,6 +389,8 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     {
       // Add only if it isn't static
       if(!cxxmd->isStatic())
+        to_struct_type(type).methods().push_back(comp); // TODO: still need to adjust `code` to `component` in adjuster
+      else
       {
         log_error("static method is not supported in {}", __func__);
         abort();
@@ -392,6 +398,51 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
   }
 
+  current_access = "";
+
+  return false;
+}
+
+bool clang_cpp_convertert::get_virtual_method(
+    const clang::FunctionDecl &fd,
+    exprt &component,
+    code_typet &method_type,
+    const symbolt &method_symbol)
+{
+  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+  {
+    assert(md->isVirtual());
+    assert(method_type.arguments().begin()->is_not_nil()); // "this" must have been added
+    std::string virtual_name = method_symbol.name.as_string();
+    std::string member_name = method_type.arguments().begin()->type().subtype().identifier().as_string();
+
+    typet &component_type = component.type();
+    component_type.set("#member_name", member_name);
+    component_type.set("#is_virtual", true);
+    component_type.set("#virtual_name", virtual_name);
+    method_type = to_code_type(component_type); // sync virtual method's type with component's type
+
+    // TODO: remove unused annotations
+    assert(current_access != "");
+    component.name(method_symbol.id);
+    component.set("access", current_access);
+    component.base_name(method_symbol.name);
+    component.pretty_name(method_symbol.name);
+    component.set("is_inlined", fd.isInlined());
+    component.set("is_pure_virtual", fd.isPure());
+    // TODO: prefix?
+    component.set("virtual_name", virtual_name);
+    component.set("is_virtual", true);
+    component.location() = method_symbol.location;
+
+    printf("@@  TODO: start to do virtual method\n");
+  }
+  else
+  {
+    log_error("Checking cast to CXXMethodDecl failed. Not a class method?");
+    fd.dump();
+    abort();
+  }
   return false;
 }
 
