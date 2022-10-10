@@ -46,7 +46,7 @@ public:
   explicit claim_slicer(const size_t claim_to_keep)
     : claim_to_keep(claim_to_keep)
   {
-    if(claim_to_keep == 0)
+    if(!claim_to_keep)
     {
       log_error("All the claims start from 1 (use --show-claims)");
       abort();
