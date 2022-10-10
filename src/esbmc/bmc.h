@@ -73,6 +73,10 @@ protected:
     std::shared_ptr<symex_target_equationt> &eq,
     size_t remaining_claims);
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
+
+  void generate_smt_from_equation(
+    std::shared_ptr<smt_convt> &smt_conv,
+    std::shared_ptr<symex_target_equationt> &eq);
 };
 
 #endif
