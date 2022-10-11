@@ -23,6 +23,8 @@ protected:
 
   // current access specifier
   std::string current_access;
+  // current struc or class symbol type
+  struct_union_typet* current_class_type;
 
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
 

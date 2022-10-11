@@ -860,7 +860,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if(sub_type.is_struct() || sub_type.is_union())
     {
       struct_union_typet t = to_struct_union_type(sub_type);
-      sub_type = symbol_typet("tag-" + t.tag().as_string());
+      sub_type = symbol_typet(tag_prefix + t.tag().as_string());
     }
 
     new_type = gen_pointer_type(sub_type);
@@ -1086,7 +1086,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if(sub_type.is_struct() || sub_type.is_union())
     {
       struct_union_typet t = to_struct_union_type(sub_type);
-      sub_type = symbol_typet("tag-" + t.tag().as_string());
+      sub_type = symbol_typet(tag_prefix + t.tag().as_string());
     }
 
     new_type = gen_pointer_type(sub_type);
@@ -1575,7 +1575,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if(size_type.is_struct() || size_type.is_union())
     {
       struct_union_typet t = to_struct_union_type(size_type);
-      size_type = symbol_typet("tag-" + t.tag().as_string());
+      size_type = symbol_typet(tag_prefix + t.tag().as_string());
     }
 
     new_expr.set("#c_sizeof_type", size_type);
@@ -3127,7 +3127,7 @@ void clang_c_convertert::get_decl_name(
   {
     const clang::RecordDecl &rd = static_cast<const clang::RecordDecl &>(nd);
     name = getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
-    id = "tag-" + name;
+    id = tag_prefix + name;
     return;
   }
 

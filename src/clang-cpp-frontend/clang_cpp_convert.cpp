@@ -27,7 +27,9 @@ clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
   irep_idt _mode)
-  : clang_c_convertert(_context, _ASTs, _mode), current_access("")
+  : clang_c_convertert(_context, _ASTs, _mode),
+    current_access(""),
+    current_class_type(nullptr)
 {
 }
 
@@ -312,6 +314,8 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   bool found_ctor = false;
   bool found_dtor = false;
 
+  current_class_type = &type;
+
   // Iterate over the declarations stored in this context
   // we first do everything but the constructors
   for(const auto &decl : cxxrd->decls())
@@ -398,7 +402,9 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
   }
 
+  // Restore access and class symbol type
   current_access = "";
+  current_class_type = nullptr;
 
   return false;
 }
@@ -414,10 +420,12 @@ bool clang_cpp_convertert::get_virtual_method(
     assert(md->isVirtual());
     assert(method_type.arguments().begin()->is_not_nil()); // "this" must have been added
     std::string virtual_name = method_symbol.name.as_string();
-    std::string member_name = method_type.arguments().begin()->type().subtype().identifier().as_string();
+    std::string class_symbol_id = method_type.arguments().begin()->type().subtype().identifier().as_string();
+    std::string class_base_name = class_symbol_id;
+    class_base_name.erase(0, tag_prefix.size());
 
     typet &component_type = component.type();
-    component_type.set("#member_name", member_name);
+    component_type.set("#member_name", class_symbol_id);
     component_type.set("#is_virtual", true);
     component_type.set("#virtual_name", virtual_name);
     method_type = to_code_type(component_type); // sync virtual method's type with component's type
@@ -434,6 +442,65 @@ bool clang_cpp_convertert::get_virtual_method(
     component.set("virtual_name", virtual_name);
     component.set("is_virtual", true);
     component.location() = method_symbol.location;
+
+    // get the virtual-table symbol type
+    irep_idt vt_name = "virtual_table::" + class_symbol_id;
+
+    symbolt *s = context.find_symbol(vt_name);
+
+    // add virtual_table symbol type
+    if(s == nullptr)
+    {
+      // first time: create a virtual-table symbol type
+      symbolt vt_symb_type;
+      vt_symb_type.id = vt_name;
+      vt_symb_type.name = "virtual_table::" + class_base_name;
+      vt_symb_type.mode = mode;
+      vt_symb_type.module = method_symbol.module;
+      vt_symb_type.location = method_symbol.location;
+      vt_symb_type.type = struct_typet();
+      vt_symb_type.type.set("name", vt_symb_type.id);
+      vt_symb_type.is_type = true;
+
+      bool failed = context.move(vt_symb_type);
+      assert(!failed);
+      (void)failed; //ndebug
+
+      s = context.find_symbol(vt_name);
+
+      // add a virtual-table pointer
+      struct_typet::componentt compo;
+      compo.type() = pointer_typet(symbol_typet(vt_name));
+      compo.set_name(class_symbol_id + "::@vtable_pointer");
+      compo.base_name("@vtable_pointer");
+      compo.pretty_name(class_base_name + "@vtable_pointer");
+      compo.set("is_vtptr", true);
+      compo.set("access", "public");
+      assert(current_class_type);
+      // add vptr component to class symbol type
+      current_class_type->components().push_back(compo);
+      // TODO: push_compound_into_scope?
+    }
+    else
+    {
+      log_error("Found existing vtable symbol type {}", __func__);
+      abort();
+    }
+
+    assert(s->type.id() == "struct");
+
+    struct_typet &virtual_table = to_struct_type(s->type);
+
+    // add an entry to the virtual table
+    struct_typet::componentt vt_entry;
+    vt_entry.type() = pointer_typet(component_type);
+    vt_entry.set_name(vt_name.as_string() + "::" + virtual_name);
+    vt_entry.set("base_name", virtual_name);
+    vt_entry.set("pretty_name", virtual_name);
+    vt_entry.set("access", "public");
+    // TODO: should be location of class decl, not virtual method. Let's try virtual method first
+    vt_entry.location() = method_symbol.location;
+    virtual_table.components().push_back(vt_entry);
 
     printf("@@  TODO: start to do virtual method\n");
   }

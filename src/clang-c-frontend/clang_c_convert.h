@@ -77,6 +77,9 @@ protected:
   irep_idt mode;
   symbol_generator anon_symbol;
 
+  // class symbol id prefix `tag-`
+  std::string tag_prefix = "tag-";
+
   unsigned int current_scope_var_num;
   /**
    *  During get_expr(), which also transforms blocks/scopes, this represents
