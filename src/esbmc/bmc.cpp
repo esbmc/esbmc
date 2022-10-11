@@ -1,9 +1,13 @@
 #include <csignal>
 #include <memory>
 #include <sys/types.h>
+#include <algorithm>
+#include <thread>
+#include <chrono>
 
 #ifndef _WIN32
 #include <unistd.h>
+#include <sched.h>
 #else
 #include <windows.h>
 #include <winbase.h>
@@ -695,8 +699,6 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   }
 }
 
-#include <algorithm>
-#include <execution>
 smt_convt::resultt bmct::multi_property_check(
   std::shared_ptr<symex_target_equationt> &eq,
   size_t remaining_claims)
@@ -705,58 +707,147 @@ smt_convt::resultt bmct::multi_property_check(
   assert(
     options.get_bool_option("base-case") &&
     "Multi-property only supports base-case");
+
+  // Initial values
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
   std::atomic_size_t ce_counter = 0;
   std::unordered_set<size_t> jobs;
+  std::mutex result_mutex;
 
-  /* TODO: For coverage, We should store and remove all the claims that
-   *       were already verified */
+  // TODO: This is the place to check a cache
   for(size_t i = 1; i <= remaining_claims; i++)
     jobs.emplace(i);
-  auto job_function = [this, &eq, &ce_counter, &final_result](const size_t &i) {
-    // Since this is just a copy, we probably don't need a lock
-    auto local_eq = std::make_shared<symex_target_equationt>(*eq);
-    claim_slicer claim(i);
-    claim.run(local_eq->SSA_steps);
-    symex_slicet slicer(options);
-    slicer.run(local_eq->SSA_steps);
 
-    // Initialize a solver
-    auto runtime_solver =
-      std::shared_ptr<smt_convt>(create_solver("", ns, options));
-    // Save current instance
-    generate_smt_from_equation(runtime_solver, local_eq);
+  /* This is a JOB that will:
+   * 1. Generate a solver instance for a specific claim (@parameter i)
+   * 2. Solve the instance
+   * 3. Generate a Counter-Example (or Witness)
+   *
+   * This job also affects the environment by using:
+   * - &ce_counter: for generating the Counter Example file name
+   * - &final_result: if the current instance is SAT, then we known that the current k contains a bug
+   * - &result_mutex: a mutex for step 3.
+   *
+   * Finally, this function is affected by the "multi-fail-fast" option, which makes this instance stop
+   * if final_result is set to SAT
+   */
+  auto job_function =
+    [this, &eq, &ce_counter, &final_result, &result_mutex](const size_t &i) {
+      // Since this is just a copy, we probably don't need a lock
+      auto local_eq = std::make_shared<symex_target_equationt>(*eq);
 
-    log_status(
-      "Solving claim {} with solver {}",
-      claim.claim_msg,
-      runtime_solver->solver_text());
-    smt_convt::resultt result = runtime_solver->dec_solve();
-    report_multi_property_trace(result, claim.claim_msg);
+    // Just to confirm that things are in parallel
+#ifndef _WIN32
+      log_debug("Thread running on Core {}", sched_getcpu());
+#endif
+      // Set up the current claim and slice it!
+      claim_slicer claim(i);
+      claim.run(local_eq->SSA_steps);
+      symex_slicet slicer(options);
+      slicer.run(local_eq->SSA_steps);
 
-    if(result == smt_convt::P_SATISFIABLE)
-    {
-      goto_tracet goto_trace;
-      build_goto_trace(local_eq, runtime_solver, goto_trace, false);
-      // TODO: Replace this with a test-case for coverage!
-      std::string output_file = options.get_option("cex-output");
+      // Initialize a solver
+      auto runtime_solver =
+        std::shared_ptr<smt_convt>(create_solver("", ns, options));
+      // Save current instance
+      generate_smt_from_equation(runtime_solver, local_eq);
 
-      if(output_file != "")
+      log_status(
+        "Solving claim {} with solver {}",
+        claim.claim_msg,
+        runtime_solver->solver_text());
+
+      smt_convt::resultt result;
+      /* TODO: We might move this into solver_convt. It is
+       * useful to have the solver as a thread.
+       */
+      std::thread solver_job(
+        [&result, &runtime_solver]() { result = runtime_solver->dec_solve(); });
+
+      const bool fail_fast = options.get_bool_option("multi-fail-fast");
+      // This loop is mainly for fail-fast.
+      try
       {
-        std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
-        show_goto_trace(out, ns, goto_trace);
+        while(!solver_job.joinable())
+        {
+          // Try again 100ms later
+          using namespace std::chrono_literals;
+          std::this_thread::sleep_for(100ms);
+          // Did someone finished already?
+          if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
+          {
+            log_status("Other thread already found a SAT VCC.");
+            throw 0;
+          }
+        }
+        solver_job.join();
+        report_multi_property_trace(result, claim.claim_msg);
+        if(result == smt_convt::P_SATISFIABLE)
+        {
+          const std::lock_guard<std::mutex> lock(result_mutex);
+          // First, check if someone else find the solution!
+          if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
+          {
+            log_status(
+              "Found solution for VCC. But, other thread found it first.");
+            throw 0;
+          }
+          goto_tracet goto_trace;
+          build_goto_trace(local_eq, runtime_solver, goto_trace, false);
+          // TODO: Replace this with a test-case for coverage!
+          std::string output_file = options.get_option("cex-output");
+          if(output_file != "")
+          {
+            std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
+            show_goto_trace(out, ns, goto_trace);
+          }
+          final_result = result;
+        }
+        // TODO: This is the place to store into a cache
       }
+      catch(...)
+      {
+        log_status("Failing Fast");
+      }
+    };
 
-      final_result = result;
-    }
-  };
-
+  // PARALLEL
   if(options.get_bool_option("parallel-solving"))
-    std::for_each(
-      std::execution::par, std::begin(jobs), std::end(jobs), job_function);
+  {
+    /* NOTE: I would love to use std::for_each here, but it is not giving
+       * the result I would expect. My guess is either compiler version
+       * or some magic flag that we are not using.
+       *
+       * Nevertheless, we can achieve the same results by just creating
+       * threads.
+       */
+
+    // TODO: Running everything in parallel might be a bad idea.
+    //       Should we also add a thread pool?
+    std::vector<std::thread> parallel_jobs;
+    for(const auto &i : jobs)
+      parallel_jobs.push_back(std::thread(job_function, i));
+
+    // Main driver
+    size_t not_finished = parallel_jobs.size();
+    while(not_finished)
+    {
+      for(auto &t : parallel_jobs)
+      {
+        if(t.joinable())
+        {
+          t.join();
+          // There is no data-race in this loop, we should be fine.
+          not_finished--;
+        }
+      }
+      // We could filter out parallel_jobs for the ones that were already joined.
+      // However, its probably not worth for small vectors.
+    }
+  }
+  // SEQUENTIAL
   else
-    std::for_each(
-      std::execution::seq, std::begin(jobs), std::end(jobs), job_function);
+    std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
   // TODO: Add a proper report for the current K!
   return final_result;
