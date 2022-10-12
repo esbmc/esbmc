@@ -311,6 +311,12 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   // default access: private for class, otherwise public
   current_access = type.get_bool("#class") ? "private" : "public";
 
+  // control flags to:
+  //  1. set is_not_pod
+  //  2. manually make ctor/dtor
+  //     (only in the old cpp frontend, clang automatically already adds
+  //     `implicit` ctor, dtor, cpy ctor, cpy assignment optr in AST)
+  // TODO: probably don't need these flags here, but let's try them first.
   bool found_ctor = false;
   bool found_dtor = false;
 
@@ -320,9 +326,14 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   // we first do everything but the constructors
   for(const auto &decl : cxxrd->decls())
   {
-    printf("@@ printing class attributes or methods ...\n");
-    decl->dump();
-    printf("@@ done printing class attributes or methods ...\n");
+    //printf("@@ printing class attributes or methods in 1st iteration ...\n");
+    //decl->dump();
+    //printf("@@ done printing class attributes or methods ...\n");
+
+    // Fields were already added
+    if(decl->getKind() == clang::Decl::Field)
+      continue;
+
     const auto fd = llvm::dyn_cast<clang::FunctionDecl>(decl);
     // Skip ctor. We need to do vtable before ctor
     if(fd)
@@ -336,10 +347,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       if(fd->getKind() == clang::Decl::CXXDestructor)
         found_dtor = true;
     }
-
-    // Fields were already added
-    if(decl->getKind() == clang::Decl::Field)
-      continue;
 
     const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
     // Skip implicit MethodDecl nodes, e.g. implicit cpy ctor or cpy assignment operator
@@ -360,7 +367,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
 
     struct_typet::componentt comp;
-
     if(
       const clang::FunctionTemplateDecl *ftd =
         llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
@@ -371,9 +377,9 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
     else
     {
-      printf("\t@@ processed in 1st iteration\n");
-      decl->dump();
-      printf("\t@@ ----- \n");
+      //printf("\t@@ processed in 1st iteration\n");
+      //decl->dump();
+      //printf("\t@@ ----- \n");
       if(get_decl(*decl, comp))
         return true;
     }
@@ -413,6 +419,65 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
 
   // setup virtual tables before doing the constructors
   do_virtual_table(type);
+
+  // reset current access before checking ctor
+  current_access = type.get_bool("#class") ? "private" : "public";
+
+  // All the data members are known now.
+  // So let's deal with the constructors that we are given.
+  for(const auto &decl : cxxrd->decls())
+  {
+    printf("@@ printing class attributes or methods in 2nd iteration ...\n");
+    decl->dump();
+    printf("@@ done printing class attributes or methods ...\n");
+
+    // Just do ctor in this iteration. Everything else should have been added.
+    const auto fd = llvm::dyn_cast<clang::FunctionDecl>(decl);
+    if(fd)
+    {
+      if(fd->getKind() != clang::Decl::CXXConstructor)
+        continue;
+    }
+    else
+    {
+      // Skip non-method declarations but accessspecifier
+      if(decl->getKind() != clang::Decl::AccessSpec)
+        continue;
+    }
+
+    struct_typet::componentt comp;
+    if(
+      const clang::FunctionTemplateDecl *ftd =
+        llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
+    {
+      assert(ftd->isThisDeclarationADefinition());
+      log_error("template is not supported in {}", __func__);
+      abort();
+    }
+    else
+    {
+      printf("\t@@ processed in 2nd iteration\n");
+      decl->dump();
+      printf("\t@@ ----- \n");
+      if(get_decl(*decl, comp))
+        return true;
+    }
+
+    if(
+      const clang::CXXMethodDecl *cxxmd =
+        llvm::dyn_cast<clang::CXXMethodDecl>(decl))
+    {
+      // Add only if it isn't static
+      if(!cxxmd->isStatic())
+        to_struct_type(type).components().push_back(comp); // TODO: still need to adjust `code` to `component` in adjuster
+        //to_struct_type(type).methods().push_back(comp); // TODO: still need to adjust `code` to `component` in adjuster
+      else
+      {
+        log_error("static method is not supported in {}", __func__);
+        abort();
+      }
+    }
+  }
 
   // Restore access and class symbol type
   current_access = "";

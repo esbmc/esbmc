@@ -1130,6 +1130,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   // setup virtual tables before doing the constructors
   do_virtual_table(symbol);
 
+  // manually add a `dtor` node in the parse tree for class symbol's body
   if(!found_ctor && !cpp_is_pod(symbol.type))
   {
     // it's public!
@@ -1167,7 +1168,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
         if(declarator.find("value").is_not_nil())
         {
-          if(declarator.find("member_initializers").is_nil())
+          if(declarator.find("member_initializers").is_nil()) // cpp ctor initializers?
             declarator.set("member_initializers", "member_initializers");
 
           check_member_initializers(
