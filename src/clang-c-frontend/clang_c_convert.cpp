@@ -649,6 +649,8 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &new_
 
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
+  // The order matters. Do NOT change.
+
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
   if(get_function_params(fd, type.arguments()))
@@ -658,17 +660,18 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &new_
   if(!type.arguments().size())
     type.make_ellipsis();
 
+  // Additional checks for C++ class method after parameters
   if(mode == "C++")
   {
-    // additional checks for C++ class method
-    if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+    const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd);
+    if(md)
     {
       // new_expr == each component as in class' s.type().components()
       // type == s.type for current member function
       new_expr.type() = type;
 
-      if (md->isVirtual())
-        get_virtual_method(*md, new_expr, type, added_symbol);
+      // add annotations for C++ class methods
+      get_class_method(fd, new_expr, type, added_symbol);
     }
   }
 
@@ -687,11 +690,22 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &new_
   return false;
 }
 
-bool clang_c_convertert::get_virtual_method(
+bool clang_c_convertert::get_class_method(
     const clang::FunctionDecl &,
     exprt &,
     code_typet &,
     const symbolt &)
+{
+  // No class methods in C
+  return false;
+}
+
+bool clang_c_convertert::get_virtual_method(
+    const clang::FunctionDecl &,
+    exprt &,
+    code_typet &,
+    const symbolt &,
+    const std::string &)
 {
   // No virtual methods in C
   return false;

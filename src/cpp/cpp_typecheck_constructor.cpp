@@ -1009,6 +1009,7 @@ bool cpp_typecheckt::find_dtor(const symbolt &symbol) const
 
 void cpp_typecheckt::default_dtor(const symbolt &symb, cpp_declarationt &dtor)
 {
+  // manually create and add a parse tree node for destructor
   assert(symb.type.id() == "struct");
 
   irept name;

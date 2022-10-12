@@ -320,24 +320,9 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   // we first do everything but the constructors
   for(const auto &decl : cxxrd->decls())
   {
-    // Fields were already added
-    if(decl->getKind() == clang::Decl::Field)
-      continue;
-
-    const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
-    // Skip implicit MethodDecl nodes, e.g. implicit cpy ctor or cpy assignment operator
-    if(md)
-    {
-      if(md->isImplicit())
-        continue;
-    }
-    else
-    {
-      // Skip non-method declarations but accessspecifier
-      if(decl->getKind() != clang::Decl::AccessSpec)
-        continue;
-    }
-
+    printf("@@ printing class attributes or methods ...\n");
+    decl->dump();
+    printf("@@ done printing class attributes or methods ...\n");
     const auto fd = llvm::dyn_cast<clang::FunctionDecl>(decl);
     // Skip ctor. We need to do vtable before ctor
     if(fd)
@@ -352,6 +337,24 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
         found_dtor = true;
     }
 
+    // Fields were already added
+    if(decl->getKind() == clang::Decl::Field)
+      continue;
+
+    const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
+    // Skip implicit MethodDecl nodes, e.g. implicit cpy ctor or cpy assignment operator
+    if(md)
+    {
+      if(md->isImplicit() && fd->getKind() != clang::Decl::CXXDestructor)
+        continue;
+    }
+    else
+    {
+      // Skip non-method declarations but accessspecifier
+      if(decl->getKind() != clang::Decl::AccessSpec)
+        continue;
+    }
+
     struct_typet::componentt comp;
 
     if(
@@ -364,26 +367,21 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
     else
     {
-      printf("@@ printing clang declarator\n");
+      printf("\t@@ processed in 1st iteration\n");
       decl->dump();
-      printf("@@ done printing clang declarator\n");
+      printf("\t@@ ----- \n");
       if(get_decl(*decl, comp))
         return true;
-    }
-
-    // do more annotation
-    if(found_dtor || found_ctor)
-    {
-      printf("@@ Got ctor or dtor\n");
     }
 
     // This means that we probably just parsed nested class or access specifier,
     // don't add it to the class
     if(comp.is_code() && to_code(comp).statement() == "skip")
     {
-      // we still have to add pure virtual method component
+      // we need to add pure virtual method and destructor
       if (fd && md)
-        if(!fd->isPure() && !md->isVirtual())
+        if(!fd->isPure() && !md->isVirtual() &&
+           fd->getKind() != clang::Decl::CXXDestructor)
           continue;
     }
 
@@ -402,6 +400,18 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
   }
 
+  // If we've seen a constructor, flag this type as not being a POD. This is
+  // only useful when we might not be able to work that out later, such as a
+  // constructor that gets deleted, or something.
+  if(found_ctor || found_dtor)
+    type.set("is_not_pod", "1");
+
+  // Add the default dtor, if needed
+  // (we have to do the destructor before building the virtual tables,
+  //  as the destructor may be virtual!)
+
+  if(found_ctor && !found_dtor) // TODO: need to consider POD?
+
   // Restore access and class symbol type
   current_access = "";
   current_class_type = nullptr;
@@ -409,39 +419,79 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   return false;
 }
 
-bool clang_cpp_convertert::get_virtual_method(
+bool clang_cpp_convertert::get_class_method(
     const clang::FunctionDecl &fd,
     exprt &component,
     code_typet &method_type,
     const symbolt &method_symbol)
 {
+  // This function typechecks C++ class methods,
+  // adding annotations to the component irep tree
+  // The `component` refers to the irep node of a method within a class
+  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+  {
+    assert(method_type.arguments().begin()->is_not_nil()); // "this" must have been added
+    std::string class_symbol_id = method_type.arguments().begin()->type().subtype().identifier().as_string();
+
+    // TODO: remove unused annotations
+    // Add the common annotations to all C++ class methods
+    typet &component_type = component.type();
+    component_type.set("#member_name", class_symbol_id);
+    component.name(method_symbol.id);
+    assert(current_access != "");
+    component.set("access", current_access);
+    component.base_name(method_symbol.name);
+    component.pretty_name(method_symbol.name);
+    component.set("is_inlined", fd.isInlined());
+    // TODO: prefix?
+    component.location() = method_symbol.location;
+
+    // Add annotations for C++ virtual methods
+    if (md->isVirtual())
+      get_virtual_method(
+          *md,
+          component,
+          method_type,
+          method_symbol,
+          class_symbol_id);
+
+    // Sync virtual method's type with component's type after all checks done
+    method_type = to_code_type(component_type);
+  }
+  else
+  {
+    log_error("Checking cast to CXXMethodDecl failed. Not a class method?");
+    fd.dump();
+    abort();
+  }
+  return false;
+}
+
+bool clang_cpp_convertert::get_virtual_method(
+    const clang::FunctionDecl &fd,
+    exprt &component,
+    code_typet &method_type,
+    const symbolt &method_symbol,
+    const std::string &class_symbol_id)
+{
+  // This function typechecks virtual methods,
+  // adding annotations to the virtual method component irep tree
+  // static non-method member are NOT handled here
   if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
   {
     assert(md->isVirtual());
     assert(method_type.arguments().begin()->is_not_nil()); // "this" must have been added
     std::string virtual_name = method_symbol.name.as_string();
-    std::string class_symbol_id = method_type.arguments().begin()->type().subtype().identifier().as_string();
     std::string class_base_name = class_symbol_id;
     class_base_name.erase(0, tag_prefix.size());
 
+    // Add additional annotations to C++ virtual method
     typet &component_type = component.type();
-    component_type.set("#member_name", class_symbol_id);
     component_type.set("#is_virtual", true);
     component_type.set("#virtual_name", virtual_name);
-    method_type = to_code_type(component_type); // sync virtual method's type with component's type
-
-    // TODO: remove unused annotations
-    assert(current_access != "");
-    component.name(method_symbol.id);
-    component.set("access", current_access);
-    component.base_name(method_symbol.name);
-    component.pretty_name(method_symbol.name);
-    component.set("is_inlined", fd.isInlined());
     component.set("is_pure_virtual", fd.isPure());
-    // TODO: prefix?
     component.set("virtual_name", virtual_name);
     component.set("is_virtual", true);
-    component.location() = method_symbol.location;
 
     // get the virtual-table symbol type
     irep_idt vt_name = "virtual_table::" + class_symbol_id;
@@ -492,6 +542,7 @@ bool clang_cpp_convertert::get_virtual_method(
     struct_typet &virtual_table = to_struct_type(s->type);
 
     // add an entry to the virtual table
+    // i.e. add virtual method component to virtual table symbol type
     struct_typet::componentt vt_entry;
     vt_entry.type() = pointer_typet(component_type);
     vt_entry.set_name(vt_name.as_string() + "::" + virtual_name);
@@ -502,7 +553,9 @@ bool clang_cpp_convertert::get_virtual_method(
     vt_entry.location() = method_symbol.location;
     virtual_table.components().push_back(vt_entry);
 
-    printf("@@  TODO: start to do virtual method\n");
+    // TODO: tabke care of overloading?
+
+    // TODO: check_array_types(component_type)?
   }
   else
   {
