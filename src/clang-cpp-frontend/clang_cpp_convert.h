@@ -112,6 +112,8 @@ protected:
 
   void
   build_member_from_component(const clang::FunctionDecl &fd, exprt &component);
+
+  void do_virtual_table(const struct_union_typet &type);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
