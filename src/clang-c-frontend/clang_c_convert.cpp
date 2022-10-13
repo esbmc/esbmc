@@ -596,6 +596,8 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &new_
            fd.getKind() == clang::Decl::CXXDestructor;
   };
 
+  // For C++ POD, Clang automatically adds implicit default cpy ctor and cpy assign optr to AST.
+  // But here we skip them.
   if(fd.isImplicit() && !isContructorOrDestructor(fd))
     return false;
 

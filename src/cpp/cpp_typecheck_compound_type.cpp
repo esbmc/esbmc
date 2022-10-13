@@ -1147,7 +1147,10 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   access = type.get_bool("#class") ? "private" : "public";
 
   // All the data members are known now.
-  // So let's deal with the constructors that we are given.
+  // So let's deal with the constructors that we are given:
+  //  1). add ctor component in class' s.type.components()
+  //  2). add `member_initializers` to ctor parse tree for vptr initialization
+  //  3). add ctor symbol (ctor's symbol value depends on the irep node added in 2 above)
   Forall_operands(it, body)
   {
     if(it->id() == "cpp-declaration")
@@ -1166,9 +1169,11 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         declarator.name().convert(ctor_full_name, ctor_base_name);
 #endif
 
+        // We do vptr initializer as part of the `member_initializers` checks:
+        // Add an assign statement to the ctor parse tree for vptr initialization
         if(declarator.find("value").is_not_nil())
         {
-          if(declarator.find("member_initializers").is_nil()) // cpp ctor initializers?
+          if(declarator.find("member_initializers").is_nil())
             declarator.set("member_initializers", "member_initializers");
 
           check_member_initializers(
@@ -1212,9 +1217,9 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
   if(!cpp_is_pod(symbol.type))
   {
-    // Add the default copy constructor
     struct_typet::componentt component;
 
+    // Add the default copy constructor
     if(!find_cpctor(symbol))
     {
       // build declaration

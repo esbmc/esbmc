@@ -349,22 +349,14 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
 
     const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
-    // Skip implicit MethodDecl nodes, e.g. implicit cpy ctor or cpy assignment operator
+    // Just skip constructors. We do implicit methods, such as implicit dtor,
+    // implicit cpy ctor or cpy assignment operator
+    // Add the default dtor, if needed
+    // we have to do the destructor before building the virtual tables,
+    // as the destructor may be virtual!
     if(md)
-    {
-      // Add the default dtor, if needed
-      // (we have to do the destructor before building the virtual tables,
-      //  as the destructor may be virtual!)
-      if(md->isImplicit() &&
-         fd->getKind() != clang::Decl::CXXDestructor)
+      if(fd->getKind() == clang::Decl::CXXConstructor)
         continue;
-    }
-    else
-    {
-      // Skip non-method declarations but accessspecifier
-      if(decl->getKind() != clang::Decl::AccessSpec)
-        continue;
-    }
 
     struct_typet::componentt comp;
     if(
@@ -1056,6 +1048,8 @@ bool clang_cpp_convertert::get_function_body(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
 {
+  // Constructor initializer list is checked here. Becasue we are going to convert
+  // each initializer into an assignment statement, added to the function body.
   // do nothing if function body doesn't exist
   if(!fd.hasBody())
     return false;
@@ -1127,6 +1121,8 @@ bool clang_cpp_convertert::get_function_body(
         body.operands().begin(), initializers.begin(), initializers.end());
     }
   }
+
+  // TODO: add code for vptr initialization
 
   return false;
 }
@@ -1205,7 +1201,6 @@ bool clang_cpp_convertert::get_function_params(
   // reserve space for `this' pointer and params
   params.resize(1 + fd.parameters().size());
 
-  // TODO: replace the loop with get_function_params
   // Parse other args
   for(std::size_t i = 0; i < fd.parameters().size(); ++i)
   {

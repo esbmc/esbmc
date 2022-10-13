@@ -185,7 +185,7 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
 
       if(lhs.type().get_bool("#reference"))
       {
-        // adjust rhs to address_off:
+        // adjust rhs to address_of:
         // `int &r = g;` is turned into `int &r = &g;`
         exprt result_expr = exprt("address_of", rhs.type());
         result_expr.copy_to_operands(rhs.op0());
