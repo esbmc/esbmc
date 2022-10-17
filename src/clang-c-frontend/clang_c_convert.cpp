@@ -635,6 +635,9 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &new_
   std::string id, name;
   get_decl_name(fd, name, id);
 
+  if (id == "c:@S@Vehicle@F@Vehicle#")
+    printf("@@ Got ctor, adding vptr initialisation\n");
+
   symbolt symbol;
   get_default_symbol(
     symbol,
@@ -682,7 +685,7 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &new_
   // We need: a type, a name, and an optional body
   if(fd.hasBody())
   {
-    if(get_function_body(fd, added_symbol.value))
+    if(get_function_body(fd, added_symbol.value, type))
       return true;
   }
 
@@ -715,7 +718,8 @@ bool clang_c_convertert::get_virtual_method(
 
 bool clang_c_convertert::get_function_body(
   const clang::FunctionDecl &fd,
-  exprt &new_expr)
+  exprt &new_expr,
+  code_typet &)
 {
   assert(fd.hasBody());
 

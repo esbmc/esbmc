@@ -1181,6 +1181,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
             type.components(),
             declarator.member_initializers());
 
+          // populate the member_initializers node, including the vptr initializations
           full_member_initialization(
             to_struct_type(type), declarator.member_initializers());
         }

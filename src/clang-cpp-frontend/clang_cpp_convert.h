@@ -41,6 +41,11 @@ protected:
 
   bool get_function(const clang::FunctionDecl &fd, exprt &new_expr) override;
 
+  /**
+   * Get member initializers for constructor
+   */
+  bool get_ctor_initializers(code_blockt &body);
+
   bool get_class_method(
       const clang::FunctionDecl &fd,
       exprt &component,
@@ -62,7 +67,7 @@ protected:
     exprt &new_expr);
 
   bool
-  get_function_body(const clang::FunctionDecl &fd, exprt &new_expr) override;
+  get_function_body(const clang::FunctionDecl &fd, exprt &new_expr, code_typet &ftype) override;
 
   /**
    *  Get function params for C++

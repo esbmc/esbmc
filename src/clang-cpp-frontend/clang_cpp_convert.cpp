@@ -1046,7 +1046,8 @@ void clang_cpp_convertert::build_member_from_component(
 
 bool clang_cpp_convertert::get_function_body(
   const clang::FunctionDecl &fd,
-  exprt &new_expr)
+  exprt &new_expr,
+  code_typet &ftype)
 {
   // Constructor initializer list is checked here. Becasue we are going to convert
   // each initializer into an assignment statement, added to the function body.
@@ -1055,7 +1056,7 @@ bool clang_cpp_convertert::get_function_body(
     return false;
 
   // Parse body
-  if(clang_c_convertert::get_function_body(fd, new_expr))
+  if(clang_c_convertert::get_function_body(fd, new_expr, ftype))
     return true;
 
   code_blockt &body = to_code_block(to_code(new_expr));
@@ -1065,6 +1066,9 @@ bool clang_cpp_convertert::get_function_body(
   {
     const clang::CXXConstructorDecl &cxxcd =
       static_cast<const clang::CXXConstructorDecl &>(fd);
+
+    // sync s.value.type with s.type for ctor
+    new_expr.type() = ftype;
 
     // Parse the initializers, if any
     if(cxxcd.init_begin() != cxxcd.init_end())
@@ -1120,9 +1124,12 @@ bool clang_cpp_convertert::get_function_body(
       body.operands().insert(
         body.operands().begin(), initializers.begin(), initializers.end());
     }
-  }
 
-  // TODO: add code for vptr initialization
+    // TODO: add code for vptr initialization
+    printf("@@ start populating ...\n");
+    // if we are converting a constructor, we are in the middle of converting a struct or class
+    assert(current_class_type);
+  }
 
   return false;
 }
