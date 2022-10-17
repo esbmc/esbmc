@@ -119,6 +119,8 @@ protected:
   build_member_from_component(const clang::FunctionDecl &fd, exprt &component);
 
   void do_virtual_table(const struct_union_typet &type);
+
+  void get_vptr_initialization(irept &vptr_init);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

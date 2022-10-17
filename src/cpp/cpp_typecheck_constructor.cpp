@@ -647,7 +647,7 @@ void cpp_typecheckt::full_member_initialization(
   std::list<irep_idt> vbases;
   get_virtual_bases(struct_type, vbases);
 
-  if(!vbases.empty())
+  if(!vbases.empty()) // DEBUG: skip for base class
   {
     codet cond("ifthenelse");
 
@@ -686,7 +686,7 @@ void cpp_typecheckt::full_member_initialization(
   }
 
   // Subsequenlty, we need to call the non-POD parent constructors
-  forall_irep(parent_it, bases.get_sub())
+  forall_irep(parent_it, bases.get_sub()) // DEBUG: skip for base class
   {
     assert(parent_it->id() == "base");
     assert(parent_it->get("type") == "symbol");

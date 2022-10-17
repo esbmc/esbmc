@@ -22,6 +22,7 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <fmt/core.h>
+#include <cpp/cpp_util.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -1125,10 +1126,13 @@ bool clang_cpp_convertert::get_function_body(
         body.operands().begin(), initializers.begin(), initializers.end());
     }
 
-    // TODO: add code for vptr initialization
-    printf("@@ start populating ...\n");
-    // if we are converting a constructor, we are in the middle of converting a struct or class
-    assert(current_class_type);
+    // Add code for vptr initialization if needed.
+    // Since clang AST does not contain virtual, we have to do the following things:
+    //  - first we synthesize a `member_initializer` irep node for vptr initialization
+    //  - then we convert the `member_initializer` node
+    irept vptr_init("member_initializers");
+    get_vptr_initialization(vptr_init);
+    printf("@@ Got vptr_init\n");
   }
 
   return false;
@@ -1407,5 +1411,49 @@ void clang_cpp_convertert::do_virtual_table(const struct_union_typet &type)
     bool failed = context.move(vt_symb_var);
     assert(!failed);
     (void)failed; // ndebug
+  }
+}
+
+void clang_cpp_convertert::get_vptr_initialization(irept &vptr_init)
+{
+  // search for vptr component in current class symbol type
+  // and make an assign statement to represent:
+  //    this->vptr = &vtable;
+
+  // vptr initialization comes from a constructor's body.
+  // if we are converting a constructor, we are in the middle of converting a struct or class
+  assert(current_class_type);
+
+  const struct_union_typet::componentst &components =
+    current_class_type->components();
+
+  for(struct_union_typet::componentst::const_iterator mem_it = components.begin();
+      mem_it != components.end();
+      mem_it++)
+  {
+    if(mem_it->get_bool("is_vtptr"))
+    {
+      const symbolt &virtual_table_symbol_type =
+        *context.find_symbol(
+            mem_it->type().subtype().identifier());
+
+      const symbolt &virtual_table_symbol_var =
+        *context.find_symbol(
+          virtual_table_symbol_type.id.as_string() + "@" +
+          current_class_type->name().as_string());
+
+      exprt var = symbol_expr(virtual_table_symbol_var);
+      address_of_exprt address(var);
+      assert(address.type() == mem_it->type());
+
+      already_typechecked(address);
+
+      exprt ptrmember("ptrmember");
+      ptrmember.set("component_name", mem_it->name());
+      ptrmember.operands().emplace_back("cpp-this");
+
+      code_assignt assign(ptrmember, address);
+      vptr_init.move_to_sub(assign);
+    }
   }
 }
