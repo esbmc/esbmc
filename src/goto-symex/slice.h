@@ -100,6 +100,8 @@ public:
    */
   std::unordered_set<std::string> depends;
 
+  static expr2tc get_nondet_symbol(const expr2tc &expr);
+
   /**
    * Marks SSA_steps to be ignored which have no effects on the target equation,
    * according to the options set in the `config`.
