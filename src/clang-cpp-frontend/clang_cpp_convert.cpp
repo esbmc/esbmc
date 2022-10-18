@@ -305,8 +305,18 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
 
   if(cxxrd->bases().begin() != cxxrd->bases().end())
   {
-    log_error("inheritance is not supported in {}", __func__);
-    abort();
+    for(const auto &decl : cxxrd->bases())
+    {
+      struct_typet base_t;
+      if(get_type(decl.getType(), base_t))
+        return true;
+
+      // Add methods
+      to_struct_type(type).methods().insert(
+        to_struct_type(type).methods().begin(),
+        base_t.methods().begin(),
+        base_t.methods().end());
+    }
   }
 
   // default access: private for class, otherwise public
@@ -1112,8 +1122,8 @@ bool clang_cpp_convertert::get_function_body(
         }
         else
         {
-          log_error("Base class initializer is not supported in {}", __func__);
-          abort();
+          if(get_expr(*init->getInit(), initializer))
+            return true;
         }
 
         // Convert to code and insert side-effect in the operands list
