@@ -67,7 +67,7 @@ protected:
     exprt &new_expr);
 
   bool
-  get_function_body(const clang::FunctionDecl &fd, exprt &new_expr, code_typet &ftype) override;
+  get_function_body(const clang::FunctionDecl &fd, exprt &new_expr, const code_typet &ftype) override;
 
   /**
    *  Get function params for C++
@@ -120,7 +120,19 @@ protected:
 
   void do_virtual_table(const struct_union_typet &type);
 
-  void get_vptr_initialization(irept &vptr_init);
+  /*
+   * Get irept node for virtual pointer initialization
+   */
+  bool get_vptr_init_irep(exprt &vptr_init);
+
+  /*
+   * Get assignment expression to represent vptr initialization
+   */
+  void get_vptr_init_expr(
+      const exprt &vptr_init,
+      code_blockt &body,
+      const clang::FunctionDecl &fd,
+      const code_typet &ftype);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

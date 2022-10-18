@@ -719,7 +719,7 @@ bool clang_c_convertert::get_virtual_method(
 bool clang_c_convertert::get_function_body(
   const clang::FunctionDecl &fd,
   exprt &new_expr,
-  code_typet &)
+  const code_typet &)
 {
   assert(fd.hasBody());
 

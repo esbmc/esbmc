@@ -119,7 +119,7 @@ protected:
       const std::string &class_symbol_id);
 
   virtual bool
-  get_function_body(const clang::FunctionDecl &fd, exprt &new_expr, code_typet &ftype);
+  get_function_body(const clang::FunctionDecl &fd, exprt &new_expr, const code_typet &ftype);
 
   /**
    *  Parse function parameters

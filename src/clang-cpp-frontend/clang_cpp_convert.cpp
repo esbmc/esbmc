@@ -462,8 +462,15 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     {
       // Add only if it isn't static
       if(!cxxmd->isStatic())
+      {
+        // Remove ctor's skip statement because we have vptr init.
+        if(fd->getKind() == clang::Decl::CXXConstructor &&
+           comp.statement() == "skip")
+          comp.remove("statement");
+
         to_struct_type(type).components().push_back(comp); // TODO: still need to adjust `code` to `component` in adjuster
         //to_struct_type(type).methods().push_back(comp); // TODO: still need to adjust `code` to `component` in adjuster
+      }
       else
       {
         log_error("static method is not supported in {}", __func__);
@@ -1048,7 +1055,7 @@ void clang_cpp_convertert::build_member_from_component(
 bool clang_cpp_convertert::get_function_body(
   const clang::FunctionDecl &fd,
   exprt &new_expr,
-  code_typet &ftype)
+  const code_typet &ftype)
 {
   // Constructor initializer list is checked here. Becasue we are going to convert
   // each initializer into an assignment statement, added to the function body.
@@ -1067,9 +1074,6 @@ bool clang_cpp_convertert::get_function_body(
   {
     const clang::CXXConstructorDecl &cxxcd =
       static_cast<const clang::CXXConstructorDecl &>(fd);
-
-    // sync s.value.type with s.type for ctor
-    new_expr.type() = ftype;
 
     // Parse the initializers, if any
     if(cxxcd.init_begin() != cxxcd.init_end())
@@ -1130,9 +1134,16 @@ bool clang_cpp_convertert::get_function_body(
     // Since clang AST does not contain virtual, we have to do the following things:
     //  - first we synthesize a `member_initializer` irep node for vptr initialization
     //  - then we convert the `member_initializer` node
-    irept vptr_init("member_initializers");
-    get_vptr_initialization(vptr_init);
-    printf("@@ Got vptr_init\n");
+    exprt vptr_init("code");
+    if(get_vptr_init_irep(vptr_init))
+    {
+      // sync value type with function type
+      new_expr.type() = ftype;
+
+      // populate ctor value using vptr_init's information
+      get_vptr_init_expr(
+          vptr_init, body, fd, ftype);
+    }
   }
 
   return false;
@@ -1414,15 +1425,17 @@ void clang_cpp_convertert::do_virtual_table(const struct_union_typet &type)
   }
 }
 
-void clang_cpp_convertert::get_vptr_initialization(irept &vptr_init)
+bool clang_cpp_convertert::get_vptr_init_irep(exprt &vptr_init)
 {
   // search for vptr component in current class symbol type
   // and make an assign statement to represent:
   //    this->vptr = &vtable;
 
   // vptr initialization comes from a constructor's body.
-  // if we are converting a constructor, we are in the middle of converting a struct or class
+  // if we are converting a constructor, we are in the middle of converting a class
   assert(current_class_type);
+
+  bool found_vptr = false;
 
   const struct_union_typet::componentst &components =
     current_class_type->components();
@@ -1433,6 +1446,7 @@ void clang_cpp_convertert::get_vptr_initialization(irept &vptr_init)
   {
     if(mem_it->get_bool("is_vtptr"))
     {
+      found_vptr = true;
       const symbolt &virtual_table_symbol_type =
         *context.find_symbol(
             mem_it->type().subtype().identifier());
@@ -1453,7 +1467,76 @@ void clang_cpp_convertert::get_vptr_initialization(irept &vptr_init)
       ptrmember.operands().emplace_back("cpp-this");
 
       code_assignt assign(ptrmember, address);
-      vptr_init.move_to_sub(assign);
+      vptr_init.move_to_operands(assign);
     }
   }
+
+  return found_vptr;
+}
+
+void clang_cpp_convertert::get_vptr_init_expr(
+    const exprt &vptr_init,
+    code_blockt &body,
+    const clang::FunctionDecl &fd,
+    const code_typet &ftype)
+{
+  // This function populates ctor symbol value for vptr initialization
+  // if we are converting a constructor, we are in the middle of converting a class
+  assert(current_class_type);
+
+  // now we populate function body using vptr_init information
+  codet vptr_init_code = to_code(vptr_init.operands()[0]);
+
+  // it has to be an "assign" statement to represent:
+  //    this->vptr = &vtable;
+  assert(vptr_init_code.statement() == "assign");
+
+  codet vptr_assign("expression");
+  vptr_assign.type() = code_typet();
+
+  // now let's do side effect for vptr init
+  side_effect_exprt expr(vptr_init_code.statement());
+  expr.set("#lvalue", true);
+
+  auto lhs = vptr_init_code.operands()[0];
+  auto rhs = vptr_init_code.operands()[1].operands().at(0);
+  // rhs has to be the address of vtable, i.e. "&vtable".
+  assert(rhs.id() == "address_of");
+  // type should be rhs type
+  expr.type() = rhs.type();
+
+  // do lhs: this->vptr
+  exprt member("member", rhs.type());
+  member.set("component_name", lhs.component_name());
+  member.set("#lvalue", true);
+  // get "this" pointer id from function declaration
+  const clang::CXXMethodDecl &cxxmd =
+    static_cast<const clang::CXXMethodDecl &>(fd);
+  std::string id, name;
+  get_decl_name(cxxmd, name, id);
+  name = "this";
+  id += name;
+
+  auto this_type = ftype.arguments().at(0).type();
+  exprt deref("dereference", this_type.subtype());
+  deref.set("#lvalue", true);
+
+  const symbolt *ctor_this_symbol =
+    context.find_symbol(id);
+  exprt tmp("symbol", ctor_this_symbol->type);
+  tmp.identifier(ctor_this_symbol->id);
+  if(ctor_this_symbol->lvalue)
+    tmp.set("#lvalue", true);
+  deref.operands().push_back(tmp);
+
+  member.operands().push_back(deref);
+  expr.operands().push_back(member);
+
+  // do rhs: &vtable
+  expr.operands().push_back(rhs);
+
+  // add side effect to ctor symbol value's operands
+  vptr_assign.operands().push_back(expr);
+  body.operands().push_back(vptr_assign);
+  printf("@@ populating vptr_init\n");
 }
