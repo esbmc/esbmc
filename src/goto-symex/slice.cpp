@@ -1,5 +1,6 @@
 #include <goto-symex/slice.h>
 
+#include <util/prefix.h>
 static bool no_slice(const symbol2t &sym)
 {
   return config.no_slice_names.count(sym.thename.as_string()) ||
@@ -71,6 +72,19 @@ void symex_slicet::run_on_assignment(
 
   if(!get_symbols<false>(SSA_step.lhs))
   {
+    // Are we generating a testcase?
+    auto is_test_mode = true;
+    if(is_test_mode)
+    {
+      auto expr = get_nondet_symbol(SSA_step.rhs);
+      if(expr && is_symbol2t(expr))
+      {
+        auto &sym = to_symbol2t(expr);
+        if(has_prefix(sym.thename.as_string(), "nondet$"))
+          return;
+      }
+    }
+
     // we don't really need it
     SSA_step.ignore = true;
     ++sliced;
@@ -140,4 +154,37 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
     sliced);
 
   return true;
+}
+
+// Recursively try to extract the nondet symbol of an expression
+expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
+{
+  switch(expr->expr_id)
+  {
+  case expr2t::symbol_id:
+    return expr;
+
+  case expr2t::with_id:
+    return get_nondet_symbol(to_with2t(expr).update_value);
+
+  case expr2t::byte_extract_id:
+    return get_nondet_symbol(to_byte_extract2t(expr).source_value);
+
+  case expr2t::typecast_id:
+    return get_nondet_symbol(to_typecast2t(expr).from);
+
+  case expr2t::bitcast_id:
+    return get_nondet_symbol(to_bitcast2t(expr).from);
+
+  case expr2t::if_id:
+  {
+    // TODO: I am not sure whether it is possible for both sides to have inputs
+    // Might ask the solver for this
+    auto side_1 = get_nondet_symbol(to_if2t(expr).true_value);
+    auto side_2 = get_nondet_symbol(to_if2t(expr).false_value);
+    return side_1 ? side_1 : side_2;
+  }
+  default:
+    return expr2tc();
+  }
 }
