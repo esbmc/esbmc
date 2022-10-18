@@ -281,6 +281,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-cex",
      NULL,
      "print the counter-example produced by the inductive step"},
+    {"generate-testcase",
+     NULL,
+     "if a solution is found, generates a testcase in XML"},
+
     {"bidirectional", NULL, ""},
     {"unlimited-k-steps", NULL, "set max number of iteration to UINT_MAX"},
     {"max-inductive-step",

@@ -127,8 +127,13 @@ void bmct::error_trace(
   std::string witness_output = options.get_option("witness-output");
   if(witness_output != "")
     violation_graphml_goto_trace(options, ns, goto_trace);
-  generate_testcase_metadata("asd");
-  generate_testcase("asd", eq, smt_conv);
+
+  if(options.get_bool_option("generate-testcase"))
+  {
+    generate_testcase_metadata();
+    generate_testcase("testcase.xml", eq, smt_conv);
+  }
+
   std::ostringstream oss;
   oss << "\nCounterexample:\n";
   show_goto_trace(oss, ns, goto_trace);
