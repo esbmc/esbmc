@@ -102,6 +102,12 @@ tmp_path file_operations::create_tmp_dir(const std::string &format)
     format)};
 }
 
+
+void file_operations::create_dir(const std::string &path)
+{
+    boost::filesystem::create_directory(path);
+}
+
 const std::string
 file_operations::get_unique_tmp_path(const std::string &format)
 {

@@ -890,7 +890,7 @@ void generate_testcase_metadata()
   std::string new_creation_time = tmp.substr(0, tmp.find(".", 0));
   metadata.put("test-metadata.creationtime", new_creation_time);
 
-  std::ofstream file("metadata.xml");
+  std::ofstream file("testcase/metadata.xml");
   boost::property_tree::write_xml(file, metadata);
 }
 

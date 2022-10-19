@@ -101,4 +101,5 @@ tmp_file create_tmp_file(
 
 tmp_path create_tmp_dir(const std::string &format = "esbmc.%%%%-%%%%-%%%%");
 
+    void create_dir(const std::string &folder);
 } // namespace file_operations

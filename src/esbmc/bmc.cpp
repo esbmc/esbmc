@@ -136,7 +136,7 @@ void bmct::error_trace(
   if(options.get_bool_option("generate-testcase"))
   {
     generate_testcase_metadata();
-    generate_testcase("testcase.xml", eq, smt_conv);
+    generate_testcase("testcase/testcase.xml", eq, smt_conv);
   }
 
   std::ostringstream oss;
@@ -800,14 +800,28 @@ smt_convt::resultt bmct::multi_property_check(
           }
           goto_tracet goto_trace;
           build_goto_trace(local_eq, runtime_solver, goto_trace, false);
-          // TODO: Replace this with a test-case for coverage!
+
+          // Test-case
+          if(config.options.get_bool_option("generate-testcase"))
+          {
+              generate_testcase_metadata();
+              generate_testcase(fmt::format("testcase/testcase-{}", ce_counter), eq, runtime_solver);
+          }
+
+          // Counter-example
           std::string output_file = options.get_option("cex-output");
           if(output_file != "")
           {
-            std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
+            std::ofstream out(fmt::format("{}-{}", output_file, ce_counter ));
             show_goto_trace(out, ns, goto_trace);
           }
-          final_result = result;
+
+          ce_counter++;
+
+          // TODO: A better stop condition
+          if(!config.options.get_bool_option("generate-testcase"))
+              final_result = result;
+
         }
         // TODO: This is the place to store into a cache
       }

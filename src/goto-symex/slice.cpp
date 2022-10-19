@@ -187,6 +187,7 @@ expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
   default:
     return expr2tc();
   }
+}
 bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
 {
   fine_timet algorithm_start = current_time();

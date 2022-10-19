@@ -49,6 +49,7 @@ extern "C"
 #include <pointer-analysis/value_set_analysis.h>
 #include <util/symbol.h>
 #include <util/time_stopping.h>
+#include <util/filesystem.h>
 
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -234,6 +235,11 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option(
       "witness-programfile", cmdline.getval("witness-programfile"));
 
+  if(cmdline.isset("generate-testcase"))
+  {
+      // Create "testcase" folder
+      file_operations::create_dir("testcase");
+  }
   if(cmdline.isset("git-hash"))
   {
     log_result("{}", esbmc_version_string);
