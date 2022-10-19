@@ -635,8 +635,8 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &new_
   std::string id, name;
   get_decl_name(fd, name, id);
 
-  if (id == "c:@S@Vehicle@F@Vehicle#")
-    printf("@@ Got ctor, adding vptr initialisation\n");
+  if (id == "c:@S@t3@F@t3#")
+    printf("@@ Got ctor\n");
 
   symbolt symbol;
   get_default_symbol(

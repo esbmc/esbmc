@@ -133,6 +133,13 @@ protected:
       code_blockt &body,
       const clang::FunctionDecl &fd,
       const code_typet &ftype);
+
+  /*
+   * Get access specifier for a method
+   */
+  void get_current_access(
+    const clang::FunctionDecl &target_fd,
+    const clang::CXXRecordDecl &cxxrd);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

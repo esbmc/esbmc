@@ -502,13 +502,18 @@ bool clang_cpp_convertert::get_class_method(
     code_typet &method_type,
     const symbolt &method_symbol)
 {
-  // This function typechecks C++ class methods,
-  // adding annotations to the component irep tree
-  // The `component` refers to the irep node of a method within a class
+  // This function typechecks C++ class methods:
+  //  1. adding annotations to the `component` node in the parse tree (irep)
+  //     The `component` refers to the irep node of a method within a class' symbol.type.components()
+  //  2. performing additional typechecks for virtual method
   if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
   {
     assert(method_type.arguments().begin()->is_not_nil()); // "this" must have been added
     std::string class_symbol_id = method_type.arguments().begin()->type().subtype().identifier().as_string();
+
+    // For method defined outside the class, we need to figure out the current access specifier
+    if(current_access == "")
+      get_current_access(fd, *md->getParent());
 
     // TODO: remove unused annotations
     // Add the common annotations to all C++ class methods
@@ -1549,4 +1554,38 @@ void clang_cpp_convertert::get_vptr_init_expr(
   vptr_assign.operands().push_back(expr);
   body.operands().push_back(vptr_assign);
   printf("@@ populating vptr_init\n");
+}
+
+void clang_cpp_convertert::get_current_access(
+    const clang::FunctionDecl &target_fd,
+    const clang::CXXRecordDecl &cxxrd)
+{
+  // default access
+  current_access = cxxrd.getDefinition()->isClass() ?
+    "private" : "public";
+
+  for(const auto &decl : cxxrd.decls())
+  {
+    const auto asd = llvm::dyn_cast<clang::AccessSpecDecl>(decl);
+    const auto current_fd = llvm::dyn_cast<clang::FunctionDecl>(decl);
+
+    // set current access
+    if(asd)
+    {
+      exprt dummy;
+      get_decl(*decl, dummy);
+    }
+
+    // stop when reaching target function declaration
+    if(current_fd)
+    {
+      std::string target_fd_id, current_fd_id;
+      std::string dummy_name;
+      get_decl_name(target_fd, dummy_name, target_fd_id);
+      get_decl_name(*current_fd, dummy_name, current_fd_id);
+
+      if (target_fd_id == current_fd_id)
+        break;
+    }
+  }
 }
