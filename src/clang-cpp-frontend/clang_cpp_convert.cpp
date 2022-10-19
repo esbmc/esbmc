@@ -511,7 +511,8 @@ bool clang_cpp_convertert::get_class_method(
     assert(method_type.arguments().begin()->is_not_nil()); // "this" must have been added
     std::string class_symbol_id = method_type.arguments().begin()->type().subtype().identifier().as_string();
 
-    // For method defined outside the class, we need to figure out the current access specifier
+    // For method defined outside the class declaration,
+    // we need to figure out the current access specifier
     if(current_access == "")
       get_current_access(fd, *md->getParent());
 
@@ -542,7 +543,7 @@ bool clang_cpp_convertert::get_class_method(
   }
   else
   {
-    log_error("Checking cast to CXXMethodDecl failed. Not a class method?");
+    log_error("Checking cast to CXXMethodDecl failed in {}. Not a class method?", __func__);
     fd.dump();
     abort();
   }
@@ -1150,7 +1151,7 @@ bool clang_cpp_convertert::get_function_body(
     //  - first we synthesize a `member_initializer` irep node for vptr initialization
     //  - then we convert the `member_initializer` node
     exprt vptr_init("code");
-    if(get_vptr_init_irep(vptr_init))
+    if(get_vptr_init_irep(vptr_init, fd))
     {
       // sync value type with function type
       new_expr.type() = ftype;
@@ -1440,18 +1441,21 @@ void clang_cpp_convertert::do_virtual_table(const struct_union_typet &type)
   }
 }
 
-bool clang_cpp_convertert::get_vptr_init_irep(exprt &vptr_init)
+bool clang_cpp_convertert::get_vptr_init_irep(
+    exprt &vptr_init,
+    const clang::FunctionDecl &fd)
 {
   // search for vptr component in current class symbol type
   // and make an assign statement to represent:
   //    this->vptr = &vtable;
 
   // vptr initialization comes from a constructor's body.
-  // if we are converting a constructor, we are in the middle of converting a class
-  assert(current_class_type);
+  // if we are converting a constructor body defined outside the class,
+  // we need to retrieve the class symbol type
+  if(current_class_type == nullptr)
+    current_class_type = &to_struct_union_type(get_parent_class_symbol(fd)->type);
 
   bool found_vptr = false;
-
   const struct_union_typet::componentst &components =
     current_class_type->components();
 
@@ -1561,8 +1565,7 @@ void clang_cpp_convertert::get_current_access(
     const clang::CXXRecordDecl &cxxrd)
 {
   // default access
-  current_access = cxxrd.getDefinition()->isClass() ?
-    "private" : "public";
+  current_access = cxxrd.getDefinition()->isClass() ? "private" : "public";
 
   for(const auto &decl : cxxrd.decls())
   {
@@ -1588,4 +1591,29 @@ void clang_cpp_convertert::get_current_access(
         break;
     }
   }
+}
+
+symbolt* clang_cpp_convertert::get_parent_class_symbol(
+  const clang::FunctionDecl &target_fd)
+{
+  symbolt *s = nullptr;
+  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&target_fd))
+  {
+    const clang::CXXRecordDecl *parent_rd = md->getParent();
+    assert(parent_rd);
+
+    std::string id, name;
+    get_decl_name(*parent_rd, name, id);
+
+    s = context.find_symbol(id);
+  }
+  else
+  {
+    log_error("Checking cast to CXXMethodDecl failed in {}. Not a class method?", __func__);
+    target_fd.dump();
+    abort();
+  }
+
+  assert(s);
+  return s;
 }

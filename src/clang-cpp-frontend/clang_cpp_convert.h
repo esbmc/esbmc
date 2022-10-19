@@ -123,7 +123,9 @@ protected:
   /*
    * Get irept node for virtual pointer initialization
    */
-  bool get_vptr_init_irep(exprt &vptr_init);
+  bool get_vptr_init_irep(
+      exprt &vptr_init,
+      const clang::FunctionDecl &fd);
 
   /*
    * Get assignment expression to represent vptr initialization
@@ -140,6 +142,12 @@ protected:
   void get_current_access(
     const clang::FunctionDecl &target_fd,
     const clang::CXXRecordDecl &cxxrd);
+
+  /*
+   * Get parent class symbol for a method
+   */
+  symbolt* get_parent_class_symbol(
+    const clang::FunctionDecl &target_fd);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
