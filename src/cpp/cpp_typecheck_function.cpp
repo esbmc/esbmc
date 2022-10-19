@@ -95,7 +95,8 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   // if it is a destructor, add the implicit code
   if(symbol.type.get("return_type") == "destructor")
   {
-    const symbolt &msymb = *lookup(symbol.type.get("#member_name")); // get the correpsonding symbol using member_name
+    const symbolt &msymb = *lookup(symbol.type.get(
+      "#member_name")); // get the correpsonding symbol using member_name
 
     assert(symbol.value.id() == "code");
     assert(symbol.value.statement() == "block");

@@ -392,9 +392,10 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     if(comp.is_code() && to_code(comp).statement() == "skip")
     {
       // we need to add pure virtual method and destructor
-      if (fd && md)
-        if(!fd->isPure() && !md->isVirtual() &&
-           fd->getKind() != clang::Decl::CXXDestructor)
+      if(fd && md)
+        if(
+          !fd->isPure() && !md->isVirtual() &&
+          fd->getKind() != clang::Decl::CXXDestructor)
           continue;
     }
 
@@ -404,8 +405,9 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     {
       // Add only if it isn't static
       if(!cxxmd->isStatic())
-        to_struct_type(type).components().push_back(comp); // TODO: still need to adjust `code` to `component` in adjuster
-        //to_struct_type(type).methods().push_back(comp); // TODO: still need to adjust `code` to `component` in adjuster
+        to_struct_type(type).components().push_back(
+          comp); // TODO: still need to adjust `code` to `component` in adjuster
+      //to_struct_type(type).methods().push_back(comp); // TODO: still need to adjust `code` to `component` in adjuster
       else
       {
         log_error("static method is not supported in {}", __func__);
@@ -474,11 +476,13 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       if(!cxxmd->isStatic())
       {
         // Remove ctor's skip statement because we have vptr init.
-        if(fd->getKind() == clang::Decl::CXXConstructor &&
-           comp.statement() == "skip")
+        if(
+          fd->getKind() == clang::Decl::CXXConstructor &&
+          comp.statement() == "skip")
           comp.remove("statement");
 
-        to_struct_type(type).components().push_back(comp); // TODO: still need to adjust `code` to `component` in adjuster
+        to_struct_type(type).components().push_back(
+          comp); // TODO: still need to adjust `code` to `component` in adjuster
         //to_struct_type(type).methods().push_back(comp); // TODO: still need to adjust `code` to `component` in adjuster
       }
       else
@@ -497,10 +501,10 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
 }
 
 bool clang_cpp_convertert::get_class_method(
-    const clang::FunctionDecl &fd,
-    exprt &component,
-    code_typet &method_type,
-    const symbolt &method_symbol)
+  const clang::FunctionDecl &fd,
+  exprt &component,
+  code_typet &method_type,
+  const symbolt &method_symbol)
 {
   // This function typechecks C++ class methods:
   //  1. adding annotations to the `component` node in the parse tree (irep)
@@ -508,8 +512,15 @@ bool clang_cpp_convertert::get_class_method(
   //  2. performing additional typechecks for virtual method
   if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
   {
-    assert(method_type.arguments().begin()->is_not_nil()); // "this" must have been added
-    std::string class_symbol_id = method_type.arguments().begin()->type().subtype().identifier().as_string();
+    assert(method_type.arguments()
+             .begin()
+             ->is_not_nil()); // "this" must have been added
+    std::string class_symbol_id = method_type.arguments()
+                                    .begin()
+                                    ->type()
+                                    .subtype()
+                                    .identifier()
+                                    .as_string();
 
     // For method defined outside the class declaration,
     // we need to figure out the current access specifier
@@ -530,20 +541,18 @@ bool clang_cpp_convertert::get_class_method(
     component.location() = method_symbol.location;
 
     // Add annotations for C++ virtual methods
-    if (md->isVirtual())
+    if(md->isVirtual())
       get_virtual_method(
-          *md,
-          component,
-          method_type,
-          method_symbol,
-          class_symbol_id);
+        *md, component, method_type, method_symbol, class_symbol_id);
 
     // Sync virtual method's type with component's type after all checks done
     method_type = to_code_type(component_type);
   }
   else
   {
-    log_error("Checking cast to CXXMethodDecl failed in {}. Not a class method?", __func__);
+    log_error(
+      "Checking cast to CXXMethodDecl failed in {}. Not a class method?",
+      __func__);
     fd.dump();
     abort();
   }
@@ -551,19 +560,21 @@ bool clang_cpp_convertert::get_class_method(
 }
 
 bool clang_cpp_convertert::get_virtual_method(
-    const clang::FunctionDecl &fd,
-    exprt &component,
-    code_typet &method_type,
-    const symbolt &method_symbol,
-    const std::string &class_symbol_id)
+  const clang::FunctionDecl &fd,
+  exprt &component,
+  code_typet &method_type,
+  const symbolt &method_symbol,
+  const std::string &class_symbol_id)
 {
   // This function typechecks virtual methods,
   // adding annotations to the virtual method component irep tree
   // static non-method member are NOT handled here
-  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
   {
     assert(md->isVirtual());
-    assert(method_type.arguments().begin()->is_not_nil()); // "this" must have been added
+    assert(method_type.arguments()
+             .begin()
+             ->is_not_nil()); // "this" must have been added
     std::string virtual_name = method_symbol.name.as_string();
     std::string class_base_name = class_symbol_id;
     class_base_name.erase(0, tag_prefix.size());
@@ -1157,8 +1168,7 @@ bool clang_cpp_convertert::get_function_body(
       new_expr.type() = ftype;
 
       // populate ctor value using vptr_init's information
-      get_vptr_init_expr(
-          vptr_init, body, fd, ftype);
+      get_vptr_init_expr(vptr_init, body, fd, ftype);
     }
   }
 
@@ -1442,8 +1452,8 @@ void clang_cpp_convertert::do_virtual_table(const struct_union_typet &type)
 }
 
 bool clang_cpp_convertert::get_vptr_init_irep(
-    exprt &vptr_init,
-    const clang::FunctionDecl &fd)
+  exprt &vptr_init,
+  const clang::FunctionDecl &fd)
 {
   // search for vptr component in current class symbol type
   // and make an assign statement to represent:
@@ -1453,13 +1463,15 @@ bool clang_cpp_convertert::get_vptr_init_irep(
   // if we are converting a constructor body defined outside the class,
   // we need to retrieve the class symbol type
   if(current_class_type == nullptr)
-    current_class_type = &to_struct_union_type(get_parent_class_symbol(fd)->type);
+    current_class_type =
+      &to_struct_union_type(get_parent_class_symbol(fd)->type);
 
   bool found_vptr = false;
   const struct_union_typet::componentst &components =
     current_class_type->components();
 
-  for(struct_union_typet::componentst::const_iterator mem_it = components.begin();
+  for(struct_union_typet::componentst::const_iterator mem_it =
+        components.begin();
       mem_it != components.end();
       mem_it++)
   {
@@ -1467,13 +1479,11 @@ bool clang_cpp_convertert::get_vptr_init_irep(
     {
       found_vptr = true;
       const symbolt &virtual_table_symbol_type =
-        *context.find_symbol(
-            mem_it->type().subtype().identifier());
+        *context.find_symbol(mem_it->type().subtype().identifier());
 
-      const symbolt &virtual_table_symbol_var =
-        *context.find_symbol(
-          virtual_table_symbol_type.id.as_string() + "@" +
-          current_class_type->name().as_string());
+      const symbolt &virtual_table_symbol_var = *context.find_symbol(
+        virtual_table_symbol_type.id.as_string() + "@" +
+        current_class_type->name().as_string());
 
       exprt var = symbol_expr(virtual_table_symbol_var);
       address_of_exprt address(var);
@@ -1494,10 +1504,10 @@ bool clang_cpp_convertert::get_vptr_init_irep(
 }
 
 void clang_cpp_convertert::get_vptr_init_expr(
-    const exprt &vptr_init,
-    code_blockt &body,
-    const clang::FunctionDecl &fd,
-    const code_typet &ftype)
+  const exprt &vptr_init,
+  code_blockt &body,
+  const clang::FunctionDecl &fd,
+  const code_typet &ftype)
 {
   // This function populates ctor symbol value for vptr initialization
   // if we are converting a constructor, we are in the middle of converting a class
@@ -1540,8 +1550,7 @@ void clang_cpp_convertert::get_vptr_init_expr(
   exprt deref("dereference", this_type.subtype());
   deref.set("#lvalue", true);
 
-  const symbolt *ctor_this_symbol =
-    context.find_symbol(id);
+  const symbolt *ctor_this_symbol = context.find_symbol(id);
   exprt tmp("symbol", ctor_this_symbol->type);
   tmp.identifier(ctor_this_symbol->id);
   if(ctor_this_symbol->lvalue)
@@ -1561,8 +1570,8 @@ void clang_cpp_convertert::get_vptr_init_expr(
 }
 
 void clang_cpp_convertert::get_current_access(
-    const clang::FunctionDecl &target_fd,
-    const clang::CXXRecordDecl &cxxrd)
+  const clang::FunctionDecl &target_fd,
+  const clang::CXXRecordDecl &cxxrd)
 {
   // default access
   current_access = cxxrd.getDefinition()->isClass() ? "private" : "public";
@@ -1587,13 +1596,13 @@ void clang_cpp_convertert::get_current_access(
       get_decl_name(target_fd, dummy_name, target_fd_id);
       get_decl_name(*current_fd, dummy_name, current_fd_id);
 
-      if (target_fd_id == current_fd_id)
+      if(target_fd_id == current_fd_id)
         break;
     }
   }
 }
 
-symbolt* clang_cpp_convertert::get_parent_class_symbol(
+symbolt *clang_cpp_convertert::get_parent_class_symbol(
   const clang::FunctionDecl &target_fd)
 {
   symbolt *s = nullptr;
@@ -1609,7 +1618,9 @@ symbolt* clang_cpp_convertert::get_parent_class_symbol(
   }
   else
   {
-    log_error("Checking cast to CXXMethodDecl failed in {}. Not a class method?", __func__);
+    log_error(
+      "Checking cast to CXXMethodDecl failed in {}. Not a class method?",
+      __func__);
     target_fd.dump();
     abort();
   }

@@ -235,7 +235,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     id.class_identifier = new_symbol->id;
     id.id_class = cpp_idt::CLASS;
 
-    if (new_symbol->id.as_string() == "tag.Vehicle")
+    if(new_symbol->id.as_string() == "tag.Vehicle")
       printf("@@ Got tag.Vehicle symbol\n");
 
     if(has_body)
@@ -1271,7 +1271,9 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
   // clean up!
   symbol.type.remove("body");
-  printf("@@ done class symbol typechecking for %s\n", symbol.id.as_string().c_str());
+  printf(
+    "@@ done class symbol typechecking for %s\n",
+    symbol.id.as_string().c_str());
 }
 
 void cpp_typecheckt::move_member_initializers(

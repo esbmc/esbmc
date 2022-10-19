@@ -106,20 +106,22 @@ protected:
   virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
 
   virtual bool get_class_method(
-      const clang::FunctionDecl &fd,
-      exprt &component,
-      code_typet &method_type,
-      const symbolt &method_symbol);
+    const clang::FunctionDecl &fd,
+    exprt &component,
+    code_typet &method_type,
+    const symbolt &method_symbol);
 
   virtual bool get_virtual_method(
-      const clang::FunctionDecl &fd,
-      exprt &component,
-      code_typet &method_type,
-      const symbolt &method_symbol,
-      const std::string &class_symbol_id);
+    const clang::FunctionDecl &fd,
+    exprt &component,
+    code_typet &method_type,
+    const symbolt &method_symbol,
+    const std::string &class_symbol_id);
 
-  virtual bool
-  get_function_body(const clang::FunctionDecl &fd, exprt &new_expr, const code_typet &ftype);
+  virtual bool get_function_body(
+    const clang::FunctionDecl &fd,
+    exprt &new_expr,
+    const code_typet &ftype);
 
   /**
    *  Parse function parameters

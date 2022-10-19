@@ -586,7 +586,9 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return false;
 }
 
-bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &new_expr)
+bool clang_c_convertert::get_function(
+  const clang::FunctionDecl &fd,
+  exprt &new_expr)
 {
   // Don't convert if implicit, unless it's a constructor or destructor
   // A compiler-generated default ctor/dtor is considered implicit, but we have
@@ -635,7 +637,7 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &new_
   std::string id, name;
   get_decl_name(fd, name, id);
 
-  if (id == "c:@S@t3@F@t3#")
+  if(id == "c:@S@t3@F@t3#")
     printf("@@ Got ctor\n");
 
   symbolt symbol;
@@ -696,21 +698,21 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &new_
 }
 
 bool clang_c_convertert::get_class_method(
-    const clang::FunctionDecl &,
-    exprt &,
-    code_typet &,
-    const symbolt &)
+  const clang::FunctionDecl &,
+  exprt &,
+  code_typet &,
+  const symbolt &)
 {
   // No class methods in C
   return false;
 }
 
 bool clang_c_convertert::get_virtual_method(
-    const clang::FunctionDecl &,
-    exprt &,
-    code_typet &,
-    const symbolt &,
-    const std::string &)
+  const clang::FunctionDecl &,
+  exprt &,
+  code_typet &,
+  const symbolt &,
+  const std::string &)
 {
   // No virtual methods in C
   return false;
@@ -3358,13 +3360,12 @@ void clang_c_convertert::print_intermediate_symbol_table()
 void clang_c_convertert::catch_target_symbol(std::string id)
 {
   bool caught = false;
-  if (id == "tag-Vehicle")
+  if(id == "tag-Vehicle")
   {
     caught = true;
     printf("@@ Got %s", id.c_str());
   }
 
-  if (caught)
+  if(caught)
     print_intermediate_symbol_table();
 }
-

@@ -47,9 +47,13 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
     printf("@@ Add symbol in %s for: %s\n", __func__, symbol.id.c_str());
   if(symbol.id == "Vehicle::Vehicle(this)")
     printf("@@ Add symbol in %s for: %s\n", __func__, symbol.id.c_str());
-  if(symbol.id == "Vehicle::Vehicle(this,ref_symbol(identifier=tag.Vehicle,#constant=1_1))")
+  if(
+    symbol.id ==
+    "Vehicle::Vehicle(this,ref_symbol(identifier=tag.Vehicle,#constant=1_1))")
     printf("@@ Add symbol in %s for: %s\n", __func__, symbol.id.c_str());
-  if(symbol.id == "Vehicle::operator=(this,ref_symbol(identifier=tag.Vehicle,#constant=1_1))")
+  if(
+    symbol.id ==
+    "Vehicle::operator=(this,ref_symbol(identifier=tag.Vehicle,#constant=1_1))")
     printf("@@ Add symbol in %s for: %s\n", __func__, symbol.id.c_str());
   if(symbol.id == "Vehicle::~Vehicle(this)::Vehicle::~Vehicle(this)::this")
     printf("@@ Add symbol in %s for: %s\n", __func__, symbol.id.c_str());

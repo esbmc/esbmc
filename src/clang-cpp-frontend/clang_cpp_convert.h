@@ -24,7 +24,7 @@ protected:
   // current access specifier
   std::string current_access;
   // current struc or class symbol type
-  struct_union_typet* current_class_type;
+  struct_union_typet *current_class_type;
 
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
 
@@ -47,17 +47,17 @@ protected:
   bool get_ctor_initializers(code_blockt &body);
 
   bool get_class_method(
-      const clang::FunctionDecl &fd,
-      exprt &component,
-      code_typet &method_type,
-      const symbolt &method_symbol) override;
+    const clang::FunctionDecl &fd,
+    exprt &component,
+    code_typet &method_type,
+    const symbolt &method_symbol) override;
 
   bool get_virtual_method(
-      const clang::FunctionDecl &fd,
-      exprt &component,
-      code_typet &method_type,
-      const symbolt &method_symbol,
-      const std::string &class_symbol_id) override;
+    const clang::FunctionDecl &fd,
+    exprt &component,
+    code_typet &method_type,
+    const symbolt &method_symbol,
+    const std::string &class_symbol_id) override;
 
   /**
    *  Get reference for constructor callsite
@@ -66,8 +66,10 @@ protected:
     const clang::CXXConstructExpr &constructor_call,
     exprt &new_expr);
 
-  bool
-  get_function_body(const clang::FunctionDecl &fd, exprt &new_expr, const code_typet &ftype) override;
+  bool get_function_body(
+    const clang::FunctionDecl &fd,
+    exprt &new_expr,
+    const code_typet &ftype) override;
 
   /**
    *  Get function params for C++
@@ -123,18 +125,16 @@ protected:
   /*
    * Get irept node for virtual pointer initialization
    */
-  bool get_vptr_init_irep(
-      exprt &vptr_init,
-      const clang::FunctionDecl &fd);
+  bool get_vptr_init_irep(exprt &vptr_init, const clang::FunctionDecl &fd);
 
   /*
    * Get assignment expression to represent vptr initialization
    */
   void get_vptr_init_expr(
-      const exprt &vptr_init,
-      code_blockt &body,
-      const clang::FunctionDecl &fd,
-      const code_typet &ftype);
+    const exprt &vptr_init,
+    code_blockt &body,
+    const clang::FunctionDecl &fd,
+    const code_typet &ftype);
 
   /*
    * Get access specifier for a method
@@ -146,8 +146,7 @@ protected:
   /*
    * Get parent class symbol for a method
    */
-  symbolt* get_parent_class_symbol(
-    const clang::FunctionDecl &target_fd);
+  symbolt *get_parent_class_symbol(const clang::FunctionDecl &target_fd);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
