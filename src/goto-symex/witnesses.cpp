@@ -928,6 +928,7 @@ void generate_testcase(
       has_prefix(sym.thename.as_string(), "nondet$") &&
       !nondet.count(sym.thename.as_string()))
     {
+        log_debug("Checking {}", sym.thename.as_string());
       nondet.insert(sym.thename.as_string());
       auto new_rhs = smt_conv->get(expr);
 

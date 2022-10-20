@@ -159,6 +159,9 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
 // Recursively try to extract the nondet symbol of an expression
 expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
 {
+  // TODO: This function should return a set!
+
+  expr->dump();
   switch(expr->expr_id)
   {
   case expr2t::symbol_id:
@@ -176,15 +179,22 @@ expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
   case expr2t::bitcast_id:
     return get_nondet_symbol(to_bitcast2t(expr).from);
 
+  case expr2t::constant_struct_id:
+      for(const auto &v : to_constant_struct2t(expr).datatype_members)
+      {
+          auto tmp = get_nondet_symbol(v);
+          if(v) return tmp;
+      }
+      return expr2tc();
+
   case expr2t::if_id:
   {
-    // TODO: I am not sure whether it is possible for both sides to have inputs
-    // Might ask the solver for this
     auto side_1 = get_nondet_symbol(to_if2t(expr).true_value);
     auto side_2 = get_nondet_symbol(to_if2t(expr).false_value);
     return side_1 ? side_1 : side_2;
   }
   default:
+
     return expr2tc();
   }
 }

@@ -90,9 +90,6 @@ def parse_result(the_output, prop):
     if "Out of memory" in the_output:
         return Result.err_memout
 
-    if "Chosen solver doesn\'t support floating-point numbers" in the_output:
-        return Result.force_fp_mode
-
     # Error messages:
     if "VERIFICATION FAILED" in the_output:
         if "unwinding assertion loop" in the_output:
@@ -135,7 +132,7 @@ esbmc_path = "./esbmc "
 # ESBMC default commands: this is the same for every submission
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --goto-unwind "
 esbmc_dargs += "--no-align-check --k-step 5 --floatbv --unlimited-k-steps "
-esbmc_dargs += "--no-pointer-check --no-bounds-check --no-pointer-check "
+esbmc_dargs += "--no-pointer-check --no-bounds-check "
 # TODO: interval-analysis, contractor and pointer-check (problem with array index wrap)
 
 def get_command_line(strat, prop, arch, benchmark, fp_mode):
@@ -182,7 +179,7 @@ def verify(strat, prop, fp_mode):
     # Call ESBMC
     output = run(esbmc_command_line)
 
-    res = parse_result(output, category_property)
+    res = parse_result(output.decode(), category_property)
     if(res == Result.force_fp_mode):
         return verify(strat, prop, True)
 
@@ -244,3 +241,6 @@ else:
 
 result = verify(strategy, category_property, False)
 print (get_result_string(result))
+
+import shutil
+shutil.make_archive('test-suite', 'zip', 'testcase')
