@@ -25,9 +25,6 @@ void cpp_typecheckt::typecheck_function_bodies()
     if(function_symbol.id == "main")
       add_argc_argv(function_symbol);
 
-    if(function_symbol.id == "Vehicle::Vehicle(this)")
-      printf("@@ Got ctor\n");
-
     exprt &body = function_symbol.value;
     if(body.id() == "cpp_not_typechecked")
       continue;

@@ -125,13 +125,6 @@ std::string cpp_typecheckt::fetch_compound_name(const typet &type)
 
 void cpp_typecheckt::typecheck_compound_type(typet &type)
 {
-  // DEBUG
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-variable"
-  // keeping the old data for debugging purposes
-  typet old_type = type;
-#pragma GCC diagnostic pop
-
   // first save qualifiers
   c_qualifierst qualifiers(type);
 
@@ -235,12 +228,9 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     id.class_identifier = new_symbol->id;
     id.id_class = cpp_idt::CLASS;
 
-    if(new_symbol->id.as_string() == "tag.Vehicle")
-      printf("@@ Got tag.Vehicle symbol\n");
-
     if(has_body)
     {
-      // adding components to symbol.type, such as vtable_ptr, ctor, dtor, methods...
+      // adding components to symbol.type, such as vtable, vptr, ctor, dtor, methods...
       typecheck_compound_body(*new_symbol);
     }
     else
@@ -268,13 +258,6 @@ void cpp_typecheckt::typecheck_compound_declarator(
   bool is_typedef,
   bool is_mutable)
 {
-  // DEBUG
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-variable"
-  // keeping the old data for debugging purposes
-  cpp_declaratort old_declarator = declarator;
-#pragma GCC diagnostic pop
-
   bool is_cast_operator = declaration.type().id() == "cpp-cast-operator";
 
   if(is_cast_operator)
@@ -935,13 +918,6 @@ void cpp_typecheckt::typecheck_friend_declaration(
 
 void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 {
-  // DEBUG
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-variable"
-  // keeping the old data for debugging purposes
-  symbolt old_symbol = symbol;
-#pragma GCC diagnostic pop
-
   cpp_save_scopet saved_scope(cpp_scopes);
 
   // enter scope of compound
@@ -1015,7 +991,8 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         if(declaration.declarators().empty())
           declaration.type().set("#tag_only_declaration", true);
 
-      typecheck_type(declaration.type()); // convert "int" to "signedbv"
+      // e.g. convert "int" type to "signedbv"
+      typecheck_type(declaration.type());
 
       bool is_static = declaration.storage_spec().is_static();
       bool is_mutable = declaration.storage_spec().is_mutable();
@@ -1271,9 +1248,6 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
   // clean up!
   symbol.type.remove("body");
-  printf(
-    "@@ done class symbol typechecking for %s\n",
-    symbol.id.as_string().c_str());
 }
 
 void cpp_typecheckt::move_member_initializers(
@@ -1320,16 +1294,6 @@ void cpp_typecheckt::typecheck_member_function(
   const typet &method_qualifier,
   exprt &value)
 {
-  // DEBUG
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-variable"
-  // keeping the old data for debugging purposes
-  struct_typet::componentt old_component = component;
-  irept old_initializers = initializers;
-  exprt old_value = value;
-  //type.show_content();
-#pragma GCC diagnostic pop
-
   symbolt symbol;
 
   typet &type = component.type();

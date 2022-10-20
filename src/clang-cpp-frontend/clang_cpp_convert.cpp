@@ -337,10 +337,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   // we first do everything but the constructors
   for(const auto &decl : cxxrd->decls())
   {
-    //printf("@@ printing class attributes or methods in 1st iteration ...\n");
-    //decl->dump();
-    //printf("@@ done printing class attributes or methods ...\n");
-
     // Fields were already added
     if(decl->getKind() == clang::Decl::Field)
       continue;
@@ -360,7 +356,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
 
     const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
-    // Just skip constructors. We do implicit methods, such as implicit dtor,
+    // Skip constructors only. We do implicit methods, such as implicit dtor,
     // implicit cpy ctor or cpy assignment operator
     // Add the default dtor, if needed
     // we have to do the destructor before building the virtual tables,
@@ -380,9 +376,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
     else
     {
-      //printf("\t@@ processed in 1st iteration\n");
-      //decl->dump();
-      //printf("\t@@ ----- \n");
       if(get_decl(*decl, comp))
         return true;
     }
@@ -405,9 +398,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     {
       // Add only if it isn't static
       if(!cxxmd->isStatic())
-        to_struct_type(type).components().push_back(
-          comp); // TODO: still need to adjust `code` to `component` in adjuster
-      //to_struct_type(type).methods().push_back(comp); // TODO: still need to adjust `code` to `component` in adjuster
+        to_struct_type(type).components().push_back(comp);
       else
       {
         log_error("static method is not supported in {}", __func__);
@@ -432,10 +423,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   // So let's deal with the constructors that we are given.
   for(const auto &decl : cxxrd->decls())
   {
-    printf("@@ printing class attributes or methods in 2nd iteration ...\n");
-    decl->dump();
-    printf("@@ done printing class attributes or methods ...\n");
-
     // Just do ctor in this iteration. Everything else should have been added.
     const auto fd = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if(fd)
@@ -445,7 +432,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
     else
     {
-      // Skip non-method declarations but accessspecifier
+      // Skip non-method declarations except access specifier
       if(decl->getKind() != clang::Decl::AccessSpec)
         continue;
     }
@@ -461,9 +448,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
     else
     {
-      printf("\t@@ processed in 2nd iteration\n");
-      decl->dump();
-      printf("\t@@ ----- \n");
       if(get_decl(*decl, comp))
         return true;
     }
@@ -481,9 +465,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
           comp.statement() == "skip")
           comp.remove("statement");
 
-        to_struct_type(type).components().push_back(
-          comp); // TODO: still need to adjust `code` to `component` in adjuster
-        //to_struct_type(type).methods().push_back(comp); // TODO: still need to adjust `code` to `component` in adjuster
+        to_struct_type(type).components().push_back(comp);
       }
       else
       {
@@ -537,7 +519,6 @@ bool clang_cpp_convertert::get_class_method(
     component.base_name(method_symbol.name);
     component.pretty_name(method_symbol.name);
     component.set("is_inlined", fd.isInlined());
-    // TODO: prefix?
     component.location() = method_symbol.location;
 
     // Add annotations for C++ virtual methods

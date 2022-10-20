@@ -24,9 +24,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/std_code.h>
 #include <util/std_types.h>
 
-// DEBUG
-#include <util/show_symbol_table.h>
-
 bool cpp_typecheck(
   cpp_parse_treet &cpp_parse_tree,
   contextt &context,
@@ -146,9 +143,6 @@ public:
     const locationt &location,
     const exprt &object,
     const exprt::operandst &operands);
-
-  // DEBUG
-  void print_intermediate_symbol_table();
 
 protected:
   cpp_scopest cpp_scopes;
