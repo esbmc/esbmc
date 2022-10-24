@@ -254,7 +254,6 @@ public:
 class CspMap
 {
 public:
-  static constexpr int MAX_VAR = 26;
   static constexpr int NOT_FOUND = -1;
 
   std::map<std::string, vart> var_map;
@@ -279,12 +278,16 @@ public:
   void update_lb_interval(double lb, const std::string &name)
   {
     auto find = var_map.find(name);
+    if(find == var_map.end())
+      return;
     ibex::Interval X(lb, find->second.getInterval().ub());
     find->second.setInterval(X);
   }
   void update_ub_interval(double ub, const std::string &name)
   {
     auto find = var_map.find(name);
+    if(find == var_map.end())
+      return;
     ibex::Interval X(find->second.getInterval().lb(), ub);
     find->second.setInterval(X);
   }
@@ -312,8 +315,11 @@ public:
   {
     //check if interval box is empty set or if the interval is degenerated
     // in the case of a single interval
-    if(vector.is_empty() || (vector.size() == 1 && vector[0].is_degenerated()))
+    if(vector.is_empty())
       is_empty_vector = true;
+
+    if(vector.size() == 1 && vector[0].is_degenerated())
+      return;
 
     for(auto &var : var_map)
     {
@@ -354,12 +360,12 @@ public:
     initialize_main_function_loops();
     if(!function_loops.empty())
     {
-      vars = new ibex::Variable(CspMap::MAX_VAR);
+      vars = new ibex::Variable(26);
       log_debug("1/4 - Parsing asserts to create CSP Constraints.");
       get_contractors(_goto_functions);
       if(contractors.is_empty())
       {
-        log_status("Aborting goto-contractor, No Contractors were created.");
+        log_status("Contractors: expression not supported, No Contractors were created.");
         return;
       }
       contractors.dump();
@@ -438,7 +444,8 @@ private:
    */
   void insert_assume(goto_functionst goto_functions);
 
-  static bool is_unsupported_operator(const expr2tc &);
+  static bool is_unsupported_operator_in_contractor(const expr2tc &);
+  static bool is_unsupported_operator_in_constraint(const expr2tc &);
 
   /**
    * @function create_contractor_from_expr2t is called from get_contractors
