@@ -365,7 +365,9 @@ public:
       get_contractors(_goto_functions);
       if(contractors.is_empty())
       {
-        log_status("Contractors: expression not supported, No Contractors were created.");
+        log_status(
+          "Contractors: expression not supported, No Contractors were "
+          "created.");
         return;
       }
       contractors.dump();
