@@ -805,7 +805,7 @@ smt_convt::resultt bmct::multi_property_check(
           if(config.options.get_bool_option("generate-testcase"))
           {
               generate_testcase_metadata();
-              generate_testcase(fmt::format("testcase/testcase-{}", ce_counter), eq, runtime_solver);
+              generate_testcase(fmt::format("testcase/testcase-{}.xml", ce_counter), local_eq, runtime_solver);
           }
 
           // Counter-example

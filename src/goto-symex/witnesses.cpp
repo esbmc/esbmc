@@ -848,6 +848,10 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options)
 
 void generate_testcase_metadata()
 {
+  std::string input_file = config.options.get_option("input-file");
+  if(config.options.get_bool_option("multi-property"))
+    input_file = config.options.get_option("original-file");
+
   xmlnodet metadata;
 
   metadata.put("test-metadata.sourcecodelang", "C");
@@ -871,10 +875,10 @@ void generate_testcase_metadata()
     "test-metadata.specification",
     "CHECK( LTL(G ! call(__VERIFIER_error())) )");
   metadata.put(
-    "test-metadata.programfile", config.options.get_option("input-file"));
+    "test-metadata.programfile", input_file);
   std::string programFileHash;
   generate_sha1_hash_for_file(
-    config.options.get_option("input-file").c_str(), programFileHash);
+    input_file.c_str(), programFileHash);
   metadata.put("test-metadata.programhash", programFileHash);
   metadata.put("test-metadata.entryfunction", "main");
   metadata.put(
@@ -913,7 +917,11 @@ void generate_testcase(
   test_case
     << R"(<!DOCTYPE testcase PUBLIC "+//IDN sosy-lab.org//DTD test-format testcase 1.1//EN" "https://sosy-lab.org/test-format/testcase-1.1.dtd">)"
     << "\n";
-  test_case << R"(<testcase coversError="true">)"
+  if(!config.options.get_bool_option("multi-property"))
+	  test_case << R"(<testcase coversError="true">)"
+            << "\n";
+	    else
+	  test_case << R"(<testcase >)"
             << "\n";
 
   // We should only show the symbol one time

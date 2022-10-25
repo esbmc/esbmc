@@ -15,7 +15,6 @@ import re
 start_time = time.time()
 property_file_content = ""
 
-
 class Result:
     success = 1
     fail_deref = 2
@@ -80,6 +79,15 @@ def run(cmd_line):
 
   return stdout
 
+def instrument():
+  print("Instrumenting benchmark for coverage")
+  p = subprocess.Popen(["./instrumentator", benchmark, "instrumented.c"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  (stdout, stderr) = p.communicate()
+
+  print(stdout.decode())
+  print(stderr.decode())
+
+  return stdout
 
 def parse_result(the_output, prop):
 
@@ -138,9 +146,6 @@ esbmc_dargs += "--no-pointer-check --no-bounds-check "
 def get_command_line(strat, prop, arch, benchmark, fp_mode):
     command_line = esbmc_path + esbmc_dargs
 
-    # Add benchmark
-    command_line += benchmark + " "
-
     # Add arch
     if arch == 32:
         command_line += "--32 "
@@ -152,7 +157,7 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
 
     # Add strategy
     if strat == "kinduction":
-        command_line += "--bidirectional "
+        command_line += "--k-induction --bidirectional "
     elif strat == "falsi":
         command_line += "--falsification "
     elif strat == "incr":
@@ -163,11 +168,16 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
 
     if prop == Property.coverage:
         # TODO: Parallel solving?
-        command_line += "--multi-property "
+        instrument()
+        command_line += "--multi-property --original-file " + benchmark
+        command_line += " instrumented.c "
+        return command_line
     if prop != Property.reach and prop != Property.coverage :
         print ("Unknown property")
         exit(1)
 
+    # Add benchmark
+    command_line += benchmark + " "
     return command_line
 
 
