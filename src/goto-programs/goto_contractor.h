@@ -84,62 +84,50 @@ public:
 private:
   ibex::Ctc *get_complement_contractor(ibex::Ctc *c)
   {
-    ibex::Ctc *complement_contractor = nullptr;
-    auto type = boost::core::demangle(typeid(*c).name());
-    if(type == "ibex::CtcCompo")
+    if(auto ctc_compo = dynamic_cast<ibex::CtcCompo *>(c))
     {
-      auto ctc_compo = dynamic_cast<ibex::CtcCompo *>(c);
       ibex::Array<ibex::Ctc> list_of_contractors;
       for(auto &it : ctc_compo->list)
         list_of_contractors.add(*get_complement_contractor(&it));
-      complement_contractor = new ibex::CtcUnion(list_of_contractors);
+      return new ibex::CtcUnion(list_of_contractors);
     }
-    else if(type == "ibex::CtcUnion")
+    else if(auto ctc_union = dynamic_cast<ibex::CtcUnion *>(c))
     {
-      auto ctc_union = dynamic_cast<ibex::CtcUnion *>(c);
       ibex::Array<ibex::Ctc> list_of_contractors;
       for(auto &it : ctc_union->list)
         list_of_contractors.add(*get_complement_contractor(&it));
-      complement_contractor = new ibex::CtcCompo(list_of_contractors);
+      return new ibex::CtcCompo(list_of_contractors);
     }
-    else if(type == "ibex::CtcFwdBwd")
+    else if(auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd *>(c))
     {
-      auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd *>(c);
       ibex::NumConstraint *ctr;
       switch(fwdbwd->ctr.op)
       {
       case ibex::GEQ:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::LT);
-        complement_contractor = new ibex::CtcFwdBwd(*ctr);
-        break;
+        return new ibex::CtcFwdBwd(*ctr);
       case ibex::GT:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::LEQ);
-        complement_contractor = new ibex::CtcFwdBwd(*ctr);
-        break;
+        return new ibex::CtcFwdBwd(*ctr);
       case ibex::LEQ:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::GT);
-        complement_contractor = new ibex::CtcFwdBwd(*ctr);
-        break;
+        return new ibex::CtcFwdBwd(*ctr);
       case ibex::LT:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::GEQ);
-        complement_contractor = new ibex::CtcFwdBwd(*ctr);
-        break;
+        return new ibex::CtcFwdBwd(*ctr);
       case ibex::EQ:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::GT);
         auto ctr2 = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::LT);
         auto *side1 = new ibex::CtcFwdBwd(*ctr);
         auto *side2 = new ibex::CtcFwdBwd(*ctr2);
-        complement_contractor = new ibex::CtcUnion(*side1, *side2);
-        break;
+        return new ibex::CtcUnion(*side1, *side2);
       }
     }
     else
     {
-      std::ostringstream oss;
-      oss << "Type: " << type;
-      log_debug("{}", oss.str());
+      log_debug("Contractors: Unsupported Ctc type");
     }
-    return complement_contractor;
+    return nullptr;
   }
 };
 
@@ -168,7 +156,7 @@ public:
     return c;
   }
 
-  Contractor *get_contractors(void)
+  Contractor *get_contractors()
   {
     Contractor *c = new Contractor();
 
@@ -254,6 +242,7 @@ public:
 class CspMap
 {
 public:
+  static constexpr int MAX_VAR = 26;
   static constexpr int NOT_FOUND = -1;
 
   std::map<std::string, vart> var_map;
@@ -360,7 +349,7 @@ public:
     initialize_main_function_loops();
     if(!function_loops.empty())
     {
-      vars = new ibex::Variable(26);
+      vars = new ibex::Variable(CspMap::MAX_VAR);
       log_debug("1/4 - Parsing asserts to create CSP Constraints.");
       get_contractors(_goto_functions);
       if(contractors.is_empty())
@@ -446,7 +435,7 @@ private:
    */
   void insert_assume(goto_functionst goto_functions);
 
-  static bool is_unsupported_operator_in_contractor(const expr2tc &);
+  static bool is_constraint_operator(const expr2tc &);
   static bool is_unsupported_operator_in_constraint(const expr2tc &);
 
   /**
