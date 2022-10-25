@@ -174,7 +174,7 @@ ibex::Ctc *goto_contractort::create_contractor_from_expr2t(const expr2tc &expr)
   ibex::Ctc *contractor = nullptr;
   auto base_object = get_base_object(expr);
 
-  if(is_unsupported_operator_in_contractor(expr))
+  if(is_constraint_operator(expr))
   {
     auto cons = create_constraint_from_expr2t(base_object);
     if(cons == nullptr)
@@ -231,8 +231,7 @@ ibex::Ctc *goto_contractort::create_contractor_from_expr2t(const expr2tc &expr)
   return contractor;
 }
 
-bool goto_contractort::is_unsupported_operator_in_contractor(
-  const expr2tc &expr)
+bool goto_contractort::is_constraint_operator(const expr2tc &expr)
 {
   expr2tc e = get_base_object(expr);
   return (is_comp_expr(e) && !is_notequal2t(e)) || is_arith_expr(e);
@@ -378,7 +377,7 @@ ibex::Function *goto_contractort::create_function_from_expr2t(expr2tc expr)
   return f;
 }
 
-int goto_contractort::create_variable_from_expr2t(irep_container<expr2t> expr)
+int goto_contractort::create_variable_from_expr2t(expr2tc expr)
 {
   if(is_symbol2t(expr))
   {
