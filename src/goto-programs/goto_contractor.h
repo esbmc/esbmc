@@ -186,39 +186,33 @@ public:
     }
     log_debug("{}", oss.str());
   }
+  std::ostringstream list_to_oss(ibex::Array<ibex::Ctc> *list, bool is_compo)
+  {
+    std::ostringstream oss;
+    auto it = list->begin();
+    oss << "( " << to_oss(&*it).str();
+    it++;
+    while(it != list->end())
+    {
+      oss << (is_compo ? " && " : " || ") << to_oss(&*it).str();
+      it++;
+    }
+    oss << " )";
+    return oss;
+  }
   std::ostringstream to_oss(ibex::Ctc *c)
   {
     std::ostringstream oss;
-    auto type = boost::core::demangle(typeid(*c).name());
-    if(type == "ibex::CtcCompo" || type == "ibex::CtcUnion")
-    {
-      bool is_compo = false;
-      ibex::Array<ibex::Ctc> *list;
-      if(type == "ibex::CtcCompo")
-      {
-        list = &(dynamic_cast<ibex::CtcCompo *>(c)->list);
-        is_compo = true;
-      }
-      else
-        list = &(dynamic_cast<ibex::CtcUnion *>(c)->list);
-
-      auto it = list->begin();
-      oss << "( " << to_oss(&*it).str();
-      it++;
-      while(it != list->end())
-      {
-        oss << (is_compo ? " && " : " || ") << to_oss(&*it).str();
-        it++;
-      }
-      oss << " )";
-    }
-    else if(type == "ibex::CtcFwdBwd")
-    {
-      auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd *>(c);
+    if(auto ctc_compo = dynamic_cast<ibex::CtcCompo *>(c))
+      oss = list_to_oss(&ctc_compo->list, true);
+    else if(auto ctc_union = dynamic_cast<ibex::CtcUnion *>(c))
+      oss = list_to_oss(&ctc_union->list, false);
+    else if(auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd *>(c))
       oss << fwdbwd->ctr;
-    }
+
     return oss;
   }
+
   void add_contractor(ibex::Ctc *ctc, unsigned int loc)
   {
     if(ctc != nullptr)
