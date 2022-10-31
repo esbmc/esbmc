@@ -305,8 +305,6 @@ void execution_statet::symex_step(reachability_treet &art)
         cur_state->loop_iterations[c_instr.loop_number].to_uint64());
     }
     instructions_to_c.push_back(c_instr);
-    std::string fun_name = c_instr.location.get_function().c_str();
-    functions_to_c[fun_name].push_back(c_instr);
   }
 }
 
@@ -326,6 +324,33 @@ void execution_statet::symex_assign(
 void execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
   pre_goto_guard = guardt();
+
+  if(options.get_bool_option("symex-ssa-trace-as-c"))
+  {
+    const goto_programt::instructiont &instruction = *cur_state->source.pc;
+    c_instructiont c_instruction(instruction);
+    /*
+    if(msg == "assertion" ||
+        msg == std::string("assertion ") + instruction.location.get_function().c_str())
+    {
+      c_instruction.make_assertion(instruction.guard);
+    }
+    else
+    {
+      expr2tc new_expr = claim_expr;
+      //cur_state->rename(new_expr);
+      //do_simplify(new_expr);
+      c_instruction.make_assertion(new_expr);
+    }
+    */
+    expr2tc new_expr = expr;
+    //cur_state->rename(new_expr);
+    //do_simplify(new_expr);
+    c_instruction.make_assertion(new_expr);
+    c_instruction.msg = msg;
+    c_instruction.location = instruction.location;
+    instructions_to_c.push_back(c_instruction);
+  }
 
   goto_symext::claim(expr, msg);
 
