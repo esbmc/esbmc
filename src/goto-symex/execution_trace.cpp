@@ -1,4 +1,5 @@
 #include <goto-symex/execution_trace.h>
+#include <goto-symex/goto_symex.h>
 #include <clang-c-frontend/expr2ccode.h>
 #include <goto-programs/loopst.h>
 #include <util/config.h>
@@ -184,11 +185,66 @@ std::string c_instructiont::convert_to_c(namespacet &ns)
   return out.str();
 }
 
+void replace_esbmc_alloc_size(expr2tc &expr)
+{
+  //expr->Foreach_operand([](expr2tc e)
+  for(unsigned int i = 0; i < expr->get_num_sub_exprs(); i++)
+  {
+    expr2tc *e = expr->get_sub_expr_nc(i);
+    if(is_index2t(*e))
+    {
+      index2tc idx = to_index2t(*e);
+      if(to_symbol2t(idx->source_value).thename.as_string() == "c:@__ESBMC_alloc_size")
+      {
+        //std::cerr << ">>>>> index = " << idx->index << "\n";
+        if(is_pointer_object2t(idx->index))
+        {
+          pointer_object2tc ptr_obj = to_pointer_object2t(idx->index);
+          //std::cerr << ">>>>> ptr_object = " << ptr_obj << "\n";
+          if(is_address_of2t(*(ptr_obj->get_sub_expr(0))))
+          {
+            address_of2tc addr = to_address_of2t(*(ptr_obj->get_sub_expr(0)));
+            //std::cerr << ">>>>> addr = " << addr->ptr_obj << "\n";
+            if(is_array_type(addr->ptr_obj->type))
+            {
+              array_type2tc arr_type = to_array_type(addr->ptr_obj->type); 
+              unsigned int arr_subtype_size = type_byte_size(arr_type->subtype).to_uint64();
+              // this arr_size is equal to the number of elements of the given array
+              // array size in bytes
+              expr2tc arr_size = mul2tc(arr_type->array_size->type, arr_type->array_size, gen_ulong(arr_subtype_size));
+              std::cerr << ">>>>> arr_size = " << arr_size << "\n";
+              /*
+              greaterthan2tc gt(addr->ptr_obj, same->side_1);
+              greaterthan2tc gt2(add2tc(same->side_1->type, same->side_1, gen_ulong(1)), 
+                                  add2tc(arr_type->subtype, addr->ptr_obj, arr_size));
+              or2tc in_bounds(gt, gt2);
+              simplify(in_bounds);
+              return convert(migrate_expr_back(in_bounds), precedence);
+              */
+              e->swap(arr_size);
+              std::cerr << ">>>>> e after swap = " << *e << "\n";
+              std::cerr << ">>>>> expr = " << expr << "\n";
+              std::cerr << "----------\n";
+            }
+          }
+        }
+      }
+    }
+    else
+      replace_esbmc_alloc_size(*e);
+  //});
+  }
+}
+
 std::string c_instructiont::convert_assert_to_c(namespacet &ns)
 {
+  replace_esbmc_alloc_size(guard);
   std::ostringstream out;
   out << "assert((" << expr2ccode(migrate_expr_back(guard), ns)
       << ") && \"[what: " << msg << "] [location: " << location << "]\");";
+
+  //replace_esbmc_alloc_size(guard);
+
   return out.str();
 }
 
@@ -278,7 +334,6 @@ inline_function_call(c_instructiont func_call, goto_functiont function)
 }
 
 void inline_function_calls(
-  std::vector<c_instructiont> c_instructions,
   goto_functionst goto_functions)
 {
   unsigned int scope_id_counter = 0;
@@ -336,9 +391,7 @@ void inline_function_calls(
   }
 }
 
-void insert_static_declarations(
-  std::vector<c_instructiont> c_instructions,
-  namespacet ns)
+void insert_static_declarations(namespacet ns)
 {
   // Declaring all extern variables but not functions
   ns.get_context().foreach_operand_in_order(
@@ -355,6 +408,14 @@ void insert_static_declarations(
         instr.location = s.location;
         instructions_to_c.insert(instructions_to_c.begin(), instr);
       }
+
+      /*
+      if(s.id == "c:@__ESBMC_alloc_size")
+      {
+        //std::cerr << ">>>>> s.id = " << s.id << "\n";
+        std::cerr << ">>>>> s = " << s << "\n";
+      }
+      */
     });
   // Turning the initialisations in the form of assignments only
   // for variables with static lifetime into the initialisations
@@ -393,7 +454,7 @@ void insert_static_declarations(
   }
 }
 
-void assign_returns(std::vector<c_instructiont> c_instructions)
+void assign_returns()
 {
   std::vector<code_function_call2t> fun_call_list;
   for(unsigned int i = 0; i < instructions_to_c.size(); i++)
@@ -429,7 +490,7 @@ void assign_returns(std::vector<c_instructiont> c_instructions)
   assert(fun_call_list.size() == 0);
 }
 
-void merge_decl_assign_pairs(std::vector<c_instructiont> c_instructions)
+void merge_decl_assign_pairs()
 {
   for(unsigned int i = 0; i < instructions_to_c.size() - 1; i++)
   {
@@ -455,7 +516,7 @@ void merge_decl_assign_pairs(std::vector<c_instructiont> c_instructions)
   }
 }
 
-void assign_dynamic_sizes(std::vector<c_instructiont> c_instructions)
+void assign_dynamic_sizes()
 {
   unsigned int dyn_size_counter = 0;
   for(unsigned int i = 0; i < instructions_to_c.size(); i++)
@@ -556,9 +617,3 @@ void output_execution_trace(namespacet &ns, std::ostream &out)
   out << "}\n";
 }
 
-void adjust_gotos(std::vector<c_instructiont> c_instructions, namespacet ns)
-{
-  for(auto it = instructions_to_c.begin(); it != instructions_to_c.end(); it++)
-  {
-  }
-}

@@ -46,7 +46,6 @@
 // Declaring the extern vars for the symex-execution-trace translation.
 // This is an initial temporary solution which will be redesigned later.
 std::vector<c_instructiont> instructions_to_c;
-std::map<std::string, std::vector<c_instructiont>> functions_to_c;
 unsigned int function_call_num = 0;
 unsigned int label_num = 0;
 std::map<std::string, type2tc> alive_vars;
@@ -54,9 +53,18 @@ std::vector<std::string> declared_types;
 std::map<std::string, unsigned int> fun_call_nums;
 std::map<expr2tc, unsigned int> dyn_size_map;
 
+<<<<<<< HEAD
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
+=======
+bmct::bmct(
+  goto_functionst &funcs,
+  optionst &opts,
+  contextt &_context,
+  const messaget &_message_handler)
+  : options(opts), context(_context), ns(context), msg(_message_handler)
+>>>>>>> ed04094e2 ([symex] updated functions signatures)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -638,11 +646,11 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
   if(options.get_bool_option("symex-ssa-trace-as-c"))
   {
-    insert_static_declarations(instructions_to_c, ns);
-    inline_function_calls(instructions_to_c, symex->goto_functions);
-    assign_returns(instructions_to_c);
-    merge_decl_assign_pairs(instructions_to_c);
-    assign_dynamic_sizes(instructions_to_c);
+    insert_static_declarations(ns);
+    inline_function_calls(symex->goto_functions);
+    assign_returns();
+    merge_decl_assign_pairs();
+    assign_dynamic_sizes();
     const std::string &filename = options.get_option("output");
     if(!filename.empty())
     {
