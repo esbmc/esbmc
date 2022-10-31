@@ -56,28 +56,6 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
 
 void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 {
-/*
-  if(options.get_bool_option("symex-ssa-trace-as-c"))
-  {
-    const goto_programt::instructiont &instruction = *cur_state->source.pc;
-    c_instructiont c_instruction;
-    if(msg == "assertion" ||
-        msg == std::string("assertion ") + instruction.location.get_function().c_str())
-    {
-      c_instruction.make_assertion(instruction.guard);
-    }
-    else
-    {
-      expr2tc new_expr = claim_expr;
-      //cur_state->rename(new_expr);
-      do_simplify(new_expr);
-      c_instruction.make_assertion(new_expr);
-    }
-    c_instruction.msg = msg;
-    c_instruction.location = instruction.location;
-    instructions_to_c.push_back(c_instruction);
-  }
-*/
   // Convert asserts in assumes, if it's not the last loop iteration
   // also, don't convert assertions added by the bidirectional search
   if(inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
