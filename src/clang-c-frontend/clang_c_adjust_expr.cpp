@@ -1,4 +1,5 @@
 #include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -515,7 +516,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
 
 void clang_c_adjust::adjust_type(typet &type)
 {
-  if(type.id() == "symbol")
+  if(type.is_symbol())
   {
     const irep_idt &identifier = type.identifier();
 
@@ -538,6 +539,44 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(symbol.is_macro)
       type = symbol.type; // overwrite
+  }
+  else if(type.is_struct() || type.is_union())
+  {
+    // FIXME: should we have a tag_name() method on struct_union_typet?
+    std::string id = "tag-" + type.tag().as_string();
+
+    symbolt *s = context.find_symbol(id);
+    if(s == nullptr)
+    {
+      log_error("type symbol `{}' not found", id);
+      abort();
+    }
+
+    const symbolt &symbol = *s;
+    if(!symbol.is_type)
+    {
+      log_error("expected type symbol, but got\n{}", symbol);
+      abort();
+    }
+
+    typet new_type = symbol.type;
+
+    struct_union_typet& the_type = to_struct_union_type(new_type);
+
+    struct_union_typet::componentst new_components;
+    for(auto &f : the_type.components())
+    {
+      adjust_expr(f);
+      new_components.push_back(f);
+    }
+    std::swap(the_type.components(), new_components);
+
+    if(new_type.is_union())
+      add_padding(to_union_type(new_type), ns);
+    else
+      add_padding(to_struct_type(new_type), ns);
+
+    std::swap(type, new_type);
   }
 }
 

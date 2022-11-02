@@ -13,7 +13,6 @@
 #include <llvm/Support/raw_os_ostream.h>
 #pragma GCC diagnostic pop
 
-#include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -364,11 +363,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
   if(get_struct_union_class_methods(*rd_def, t))
     return true;
-
-  if(rd.isUnion())
-    add_padding(to_union_type(t), ns);
-  else
-    add_padding(to_struct_type(t), ns);
 
   added_symbol.type = t;
   return false;
