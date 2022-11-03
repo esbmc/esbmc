@@ -40,6 +40,7 @@ extern "C"
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/mark_decl_as_non_det.h>
+#include <goto-programs/goto_slicer.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -1628,6 +1629,12 @@ bool esbmc_parseoptionst::process_goto_program(
     // add pointer checks
     pointer_checks(
       goto_functions, ns, context, options, value_set_analysis);
+#endif
+
+#if 1
+     goto_slicer s(ns);
+     s.run(goto_functions);
+
 #endif
 
     // remove skips

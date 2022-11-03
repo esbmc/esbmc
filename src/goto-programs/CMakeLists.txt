@@ -7,7 +7,7 @@ add_library(gotoprograms goto_convert.cpp goto_function.cpp goto_main.cpp
   read_bin_goto_object.cpp goto_program_irep.cpp format_strings.cpp
   loop_numbers.cpp goto_loops.cpp write_goto_binary.cpp
   goto_k_induction.cpp loopst.cpp ai.cpp ai_domain.cpp interval_analysis.cpp interval_domain.cpp)
-add_library(gotoalgorithms loop_unroll.cpp mark_decl_as_non_det.cpp)
+add_library(gotoalgorithms goto_slicer.cpp loop_unroll.cpp mark_decl_as_non_det.cpp)
 
 if(ENABLE_GOTO_CONTRACTOR)
     include(FindIbex)

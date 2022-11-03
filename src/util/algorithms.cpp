@@ -5,6 +5,7 @@
 
 bool goto_functions_algorithm::run(goto_functionst &goto_functions)
 {
+  runOnProgram(goto_functions);
   Forall_goto_functions(it, goto_functions)
   {
     number_of_functions++;
@@ -37,6 +38,11 @@ bool goto_functions_algorithm::runOnLoop(loopst &, goto_programt &)
 
 bool goto_functions_algorithm::runOnFunction(
   std::pair<const dstring, goto_functiont> &)
+{
+  return true;
+}
+
+bool goto_functions_algorithm::runOnProgram(goto_functionst &)
 {
   return true;
 }
