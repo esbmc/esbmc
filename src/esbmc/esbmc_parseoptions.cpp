@@ -40,7 +40,7 @@ extern "C"
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/mark_decl_as_non_det.h>
-#include <goto-programs/goto_slicer.h>
+#include <goto-programs/forward_slicer.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -1285,6 +1285,23 @@ int esbmc_parseoptionst::do_forward_condition(
   opts.set_option("no-unwinding-assertions", false);
   opts.set_option("partial-loops", false);
 
+  auto g = goto_functions;
+  if(!opts.get_bool_option("forward-slicer"))
+  {
+    namespacet ns(context);
+    forward_slicer slicer(ns);
+    try
+    {
+      slicer.run(g);
+      remove_skip(g);
+      g.update();
+    }
+    catch(...)
+    {
+      g = goto_functions;
+    }
+  }
+
   // We have to disable assertions in the forward condition but
   // restore the previous value after it
   bool no_assertions = opts.get_bool_option("no-assertions");
@@ -1292,7 +1309,7 @@ int esbmc_parseoptionst::do_forward_condition(
   // Turn assertions off
   opts.set_option("no-assertions", true);
 
-  bmct bmc(goto_functions, opts, context);
+  bmct bmc(g, opts, context);
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -1629,12 +1646,6 @@ bool esbmc_parseoptionst::process_goto_program(
     // add pointer checks
     pointer_checks(
       goto_functions, ns, context, options, value_set_analysis);
-#endif
-
-#if 1
-     goto_slicer s(ns);
-     s.run(goto_functions);
-
 #endif
 
     // remove skips

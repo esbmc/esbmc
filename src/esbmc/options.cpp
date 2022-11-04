@@ -149,6 +149,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"partial-loops", NULL, "permit paths with partial loops"},
     {"unroll-loops", NULL, ""},
     {"no-slice", NULL, "do not remove unused equations"},
+    {"forward-slicer", NULL, "attempt to slice loops that don't affect VCCs"},
     {"no-slice-name",
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "name"),
