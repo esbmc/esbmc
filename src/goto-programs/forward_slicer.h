@@ -7,7 +7,6 @@
 #include <map>
 #include <util/algorithms.h>
 
-
 class slicer_domaint : public ai_domain_baset
 {
 public:
@@ -27,23 +26,30 @@ public:
 
   virtual void output(std::ostream &out) const override;
 
-  virtual void make_bottom() override {
+  virtual void make_bottom() override
+  {
     dependencies.clear();
   }
 
-  virtual void make_entry() override {
+  virtual void make_entry() override
+  {
     dependencies.clear();
   };
-  virtual void make_top() override {
+  virtual void make_top() override{
 
   };
 
-  virtual bool is_bottom() const override {
+  virtual bool is_bottom() const override
+  {
     return dependencies.size() == 0;
   }
-  virtual bool is_top() const override {return false; }
+  virtual bool is_top() const override
+  {
+    return false;
+  }
 
-  virtual bool ai_simplify(expr2tc &condition, const namespacet &ns) const override {
+  virtual bool ai_simplify(expr2tc &, const namespacet &) const override
+  {
     return true;
   }
 
@@ -59,21 +65,29 @@ public:
     return join(b);
   }
 
-protected:
   std::map<std::string, std::set<std::string>> dependencies;
 
+protected:
   void assign(const expr2tc &assignment);
   void declaration(const expr2tc &decl);
 };
 
-class goto_slicer : public goto_functions_algorithm {
+class forward_slicer : public goto_functions_algorithm
+{
 public:
-  explicit goto_slicer(const namespacet &ns) : goto_functions_algorithm(true), ns(ns) {}
+  explicit forward_slicer(const namespacet &ns)
+    : goto_functions_algorithm(true), ns(ns)
+  {
+  }
+
 protected:
-  virtual bool runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
-  //virtual bool runOnLoop(loopst &loop, goto_programt &goto_program);
+  virtual bool
+  runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
+  virtual bool runOnLoop(loopst &loop, goto_programt &goto_program);
   virtual bool runOnProgram(goto_functionst &) override;
   const namespacet &ns;
+
 private:
   ait<slicer_domaint> sl;
+  bool should_skip_function(const std::string &func);
 };
