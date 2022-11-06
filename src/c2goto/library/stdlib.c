@@ -8,57 +8,42 @@
 #undef atol
 #undef getenv
 
-typedef struct atexit_key
-{
-  void (*atexit_func)();
-  struct atexit_key *next;
-} __ESBMC_atexit_key;
-
-static __ESBMC_atexit_key *head = NULL;
+unsigned short atexit_index = 0;
+void (*atexit_func[32])();
 
 void __atexit_handler()
 {
-__ESBMC_HIDE:;
-  __ESBMC_atexit_key *tmp = head;
-  while(head)
-  {
-    __ESBMC_atexit_key *next = head->next;
-    head->atexit_func();
-    free(head);
-    head = next;
-  }
-  __ESBMC_assume(0);
+  unsigned short i = atexit_index;
+  for(; i > 0; --i)
+    atexit_func[i - 1]();
 }
 
 int atexit(void (*func)(void))
 {
-__ESBMC_HIDE:;
-  __ESBMC_atexit_key *l =
-    (__ESBMC_atexit_key *)malloc(sizeof(__ESBMC_atexit_key));
-  if(l == NULL)
-    return -1;
-  l->atexit_func = func;
-  l->next = head;
-  head = l;
+  atexit_func[atexit_index] = func;
+  ++atexit_index;
   return 0;
 }
 
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
-void exit(int status)
+void exit(int)
 {
   __atexit_handler();
+  __ESBMC_finish_formula();
   __ESBMC_assume(0);
 }
 
 void abort(void)
 {
   __atexit_handler();
+  __ESBMC_finish_formula();
   __ESBMC_assume(0);
 }
 
-void _Exit(int exit_code)
+void _Exit(int)
 {
+  __ESBMC_finish_formula();
   __ESBMC_assume(0);
 }
 #pragma clang diagnostic pop

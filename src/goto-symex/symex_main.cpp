@@ -707,17 +707,7 @@ void goto_symext::finish_formula()
 
     equality2tc eq(deallocd, gen_true_expr());
     replace_dynamic_allocation(eq);
-    it.alloc_guard.guard_expr(eq);
     cur_state->rename(eq);
-    target->assertion(
-      it.alloc_guard.as_expr(),
-      eq,
-      "dereference failure: forgotten memory: " + get_pretty_name(it.name),
-      cur_state->gen_stack_trace(),
-      cur_state->source,
-      first_loop);
-
-    total_claims++;
-    remaining_claims++;
+    assertion(eq, "dereference failure: forgotten memory: " + get_pretty_name(it.name));
   }
 }
