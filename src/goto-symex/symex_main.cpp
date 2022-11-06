@@ -397,72 +397,106 @@ void goto_symext::run_intrinsic(
   if (symname == "c:@F@__ESBMC_yield")
   {
     intrinsic_yield(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_switch_to")
+
+  if(symname == "c:@F@__ESBMC_switch_to")
   {
     intrinsic_switch_to(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_switch_away_from")
+
+  if(symname == "c:@F@__ESBMC_switch_away_from")
   {
     intrinsic_switch_from(art);
+    return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_get_thread_id"))
+
+  if(has_prefix(symname, "c:@F@__ESBMC_get_thread_id"))
   {
     intrinsic_get_thread_id(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_set_thread_internal_data")
+
+  if(symname == "c:@F@__ESBMC_set_thread_internal_data")
   {
     intrinsic_set_thread_data(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_get_thread_internal_data")
+
+  if(symname == "c:@F@__ESBMC_get_thread_internal_data")
   {
     intrinsic_get_thread_data(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_spawn_thread")
+
+  if(symname == "c:@F@__ESBMC_spawn_thread")
   {
     intrinsic_spawn_thread(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_terminate_thread")
+
+  if(symname == "c:@F@__ESBMC_terminate_thread")
   {
     intrinsic_terminate_thread(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_get_thread_state")
+
+  if(symname == "c:@F@__ESBMC_get_thread_state")
   {
     intrinsic_get_thread_state(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_really_atomic_begin")
+
+  if(symname == "c:@F@__ESBMC_really_atomic_begin")
   {
     intrinsic_really_atomic_begin(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_really_atomic_end")
+
+  if(symname == "c:@F@__ESBMC_really_atomic_end")
   {
     intrinsic_really_atomic_end(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_switch_to_monitor")
+
+  if(symname == "c:@F@__ESBMC_switch_to_monitor")
   {
     intrinsic_switch_to_monitor(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_switch_from_monitor")
+
+  if(symname == "c:@F@__ESBMC_switch_from_monitor")
   {
     intrinsic_switch_from_monitor(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_register_monitor")
+
+  if(symname == "c:@F@__ESBMC_register_monitor")
   {
     intrinsic_register_monitor(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_kill_monitor")
+
+  if(symname == "c:@F@__ESBMC_kill_monitor")
   {
     intrinsic_kill_monitor(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_memset")
+
+  if(symname == "c:@F@__ESBMC_memset")
   {
     intrinsic_memset(art, func_call);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_get_object_size")
+
+  if(symname == "c:@F@__ESBMC_get_object_size")
   {
     intrinsic_get_object_size(func_call, art);
+    return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_overflow"))
+
+  if(has_prefix(symname, "c:@F@__ESBMC_overflow"))
   {
     bool is_mult = has_prefix(symname, "c:@F@__ESBMC_overflow_smul") ||
                    has_prefix(symname, "c:@F@__ESBMC_overflow_umul");
@@ -501,8 +535,10 @@ void goto_symext::run_intrinsic(
 
     // Perform overflow check and assign it to the return object
     symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
+    return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_convertvector"))
+
+  if(has_prefix(symname, "c:@F@__ESBMC_convertvector"))
   {
     assert(
       func_call.operands.size() == 1 &&
@@ -533,8 +569,10 @@ void goto_symext::run_intrinsic(
     expr2tc ret_ref = func_call.ret;
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
+    return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_shufflevector"))
+
+  if(has_prefix(symname, "c:@F@__ESBMC_shufflevector"))
   {
     assert(
       func_call.operands.size() >= 2 &&
@@ -576,8 +614,10 @@ void goto_symext::run_intrinsic(
     expr2tc ret_ref = func_call.ret;
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
+    return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_atomic_load"))
+
+  if(has_prefix(symname, "c:@F@__ESBMC_atomic_load"))
   {
     assert(
       func_call.operands.size() == 3 && "Wrong __ESBMC_atomic_load signature");
@@ -591,8 +631,10 @@ void goto_symext::run_intrinsic(
     symex_assign(code_assign2tc(
       dereference2tc(to_pointer_type(ret->type).subtype, ret),
       dereference2tc(to_pointer_type(ptr->type).subtype, ptr)));
+    return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_atomic_store"))
+
+  if(has_prefix(symname, "c:@F@__ESBMC_atomic_store"))
   {
     assert(
       func_call.operands.size() == 3 && "Wrong __ESBMC_atomic_store signature");
@@ -607,13 +649,15 @@ void goto_symext::run_intrinsic(
       dereference2tc(to_pointer_type(ptr->type).subtype, ptr),
       dereference2tc(to_pointer_type(ret->type).subtype, ret)));
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_is_little_endian"))
+
+  if(has_prefix(symname, "c:@F@__ESBMC_is_little_endian"))
   {
     expr2tc is_little_endian =
       (config.ansi_c.endianess == configt::ansi_ct::IS_LITTLE_ENDIAN)
         ? gen_true_expr()
         : gen_false_expr();
     symex_assign(code_assign2tc(func_call.ret, is_little_endian));
+    return;
   }
   else if (symname == "c:@F@__ESBMC_no_abnormal_memory_leak")
   {
@@ -622,8 +666,10 @@ void goto_symext::run_intrinsic(
         ? gen_true_expr()
         : gen_false_expr();
     symex_assign(code_assign2tc(func_call.ret, no_abnormal_memleak));
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_builtin_constant_p")
+
+  if(symname == "c:@F@__ESBMC_builtin_constant_p")
   {
     assert(
       func_call.operands.size() == 1 &&
@@ -637,13 +683,10 @@ void goto_symext::run_intrinsic(
     symex_assign(code_assign2tc(
       func_call.ret,
       is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
-  }
-  else if (has_prefix(symname, "c:@F@__ESBMC_sync_fetch_and_add"))
-  {
-    // Already modelled in builtin_libs
     return;
   }
-  else if (
+
+  if(
     has_prefix(symname, "c:@F@__ESBMC_scanf") ||
     has_prefix(symname, "c:@F@__ESBMC_sscanf") ||
     has_prefix(symname, "c:@F@__ESBMC_fscanf"))
@@ -655,7 +698,8 @@ void goto_symext::run_intrinsic(
     symex_input(func_call);
     return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_init_object"))
+
+  if(has_prefix(symname, "c:@F@__ESBMC_init_object"))
   {
     assert(
       func_call.operands.size() == 1 && "Wrong __ESBMC_init_object signature");
@@ -705,11 +749,14 @@ void goto_symext::run_intrinsic(
 
     return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_memory_leak_checks"))
+
+  if(has_prefix(symname, "c:@F@__ESBMC_memory_leak_checks"))
   {
     add_memory_leak_checks();
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_bitcast")
+  
+  if(symname == "c:@F@__ESBMC_bitcast")
   {
     assert(func_call.operands.size() == 2 && "Wrong __ESBMC_bitcast signature");
     expr2tc tgtptr = func_call.operands[0];
@@ -730,24 +777,25 @@ void goto_symext::run_intrinsic(
 
     symex_assign(
       code_assign2tc(tgt, bitcast2tc(tgt->type, src)), false, cur_state->guard);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_unreachable")
+  
+  if (symname == "c:@F@__ESBMC_unreachable")
   {
     if (options.get_bool_option("enable-unreachability-intrinsic"))
       claim(
         not2tc(cur_state->guard.as_expr()),
         "reachability: unreachable code reached");
+    return;
   }
-  else
-  {
-    log_error(
-      "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
-      "The name in question: {}\n"
-      "(NB: the C spec reserves the __ prefix for the compiler and "
-      "environment)",
-      symname);
-    abort();
-  }
+
+  log_error(
+    "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
+    "The name in question: {}\n"
+    "(NB: the C spec reserves the __ prefix for the compiler and "
+    "environment)",
+    symname);
+  abort();
 }
 
 namespace

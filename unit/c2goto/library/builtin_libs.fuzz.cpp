@@ -31,7 +31,7 @@ void test_sync_fetch_add(int initial, int value)
   int actual = initial;
   int num = value;
   int expected = initial + value;
-  int fetch = __ESBMC_sync_fetch_and_add(&actual, num);
+  int fetch = sync_fetch_and_add(&actual, num);
   assert(expected == actual);
   assert(fetch == initial);
 }
