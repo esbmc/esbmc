@@ -8,14 +8,56 @@
 #undef atol
 #undef getenv
 
+typedef struct atexit_key
+{
+  void (*atexit_func)();
+  struct atexit_key *next;
+} __ESBMC_atexit_key;
+
+static __ESBMC_atexit_key *head = NULL;
+
+void __ESBMC_atexit()
+{
+__ESBMC_HIDE:;
+  __ESBMC_atexit_key *tmp = head;
+  while(head)
+  {
+    __ESBMC_atexit_key *next = head->next;
+    head->atexit_func();
+    free(head);
+    head = next;
+  }
+  __ESBMC_assume(0);
+}
+
+int atexit(void (*func)(void))
+{
+__ESBMC_HIDE:;
+  __ESBMC_atexit_key *l =
+    (__ESBMC_atexit_key *)malloc(sizeof(__ESBMC_atexit_key));
+  if(l == NULL)
+    return -1;
+  l->atexit_func = func;
+  l->next = head;
+  head = l;
+  return 0;
+}
+
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void exit(int status)
 {
+  __ESBMC_atexit();
   __ESBMC_assume(0);
 }
 
 void abort(void)
+{
+  __ESBMC_atexit();
+  __ESBMC_assume(0);
+}
+
+void _Exit(int exit_code)
 {
   __ESBMC_assume(0);
 }
