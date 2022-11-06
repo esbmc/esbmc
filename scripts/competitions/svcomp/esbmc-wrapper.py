@@ -115,7 +115,7 @@ def parse_result(the_output, prop):
 
     if prop == Property.memory:
       if memory_leak in the_output:
-        return Result.fail_memtrack
+        return Result.unknown
 
       if invalid_pointer_free in the_output:
         return Result.fail_free
@@ -249,7 +249,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
     command_line += "--memory-leak-check --no-assertions "
     strat = "incr"
   elif prop == Property.memcleanup:
-    command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --memory-cleanup-check --no-assertions "
+    command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
     strat = "incr"
   elif prop == Property.reach:
     if concurrency:
