@@ -409,19 +409,6 @@ void goto_convertt::do_exit(
   t_a->location = function.location();
 }
 
-void goto_convertt::do_abort(
-  const exprt &,
-  const exprt &function,
-  const exprt::operandst &,
-  goto_programt &dest)
-{
-  // same as assume(false)
-
-  goto_programt::targett t_a = dest.add_instruction(ASSUME);
-  t_a->guard = gen_false_expr();
-  t_a->location = function.location();
-}
-
 void goto_convertt::do_free(
   const exprt &,
   const exprt &function,
@@ -643,10 +630,6 @@ void goto_convertt::do_function_call_symbol(
   else if(base_name == "exit")
   {
     do_exit(lhs, function, arguments, dest);
-  }
-  else if(base_name == "abort")
-  {
-    do_abort(lhs, function, arguments, dest);
   }
   else if(base_name == "malloc")
   {
