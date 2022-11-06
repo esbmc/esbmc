@@ -327,6 +327,8 @@ void __ESBMC_finish_formula();
 void pthread_start_main_hook(void);
 void pthread_end_main_hook(void);
 
+void __atexit_handler(void);
+
 // Forward declarations for nondeterministic types.
 int nondet_int();
 unsigned int nondet_uint();

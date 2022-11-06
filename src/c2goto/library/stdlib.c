@@ -16,7 +16,7 @@ typedef struct atexit_key
 
 static __ESBMC_atexit_key *head = NULL;
 
-void __ESBMC_atexit()
+void __atexit_handler()
 {
 __ESBMC_HIDE:;
   __ESBMC_atexit_key *tmp = head;
@@ -47,13 +47,13 @@ __ESBMC_HIDE:;
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void exit(int status)
 {
-  __ESBMC_atexit();
+  __atexit_handler();
   __ESBMC_assume(0);
 }
 
 void abort(void)
 {
-  __ESBMC_atexit();
+  __atexit_handler();
   __ESBMC_assume(0);
 }
 
