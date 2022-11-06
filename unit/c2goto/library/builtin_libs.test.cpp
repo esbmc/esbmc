@@ -26,7 +26,7 @@ void __ESBMC_atomic_end()
   {                                                                            \
     int dest = 10;                                                             \
     TYPE value = 5;                                                            \
-    int fetch = __ESBMC_sync_fetch_and_##OPERATOR(&dest, value);               \
+    int fetch = sync_fetch_and_##OPERATOR(&dest, value);                       \
     CHECK(dest == 15);                                                         \
     CHECK(fetch == 10);                                                        \
   }
