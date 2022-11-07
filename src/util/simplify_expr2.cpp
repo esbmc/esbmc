@@ -553,7 +553,10 @@ struct Multor
     if(is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
-      get_value(c1) *= get_value(c2);
+      if constexpr(std::is_same<constant_type, bool>::value)
+        get_value(c1) &= get_value(c2);
+      else
+        get_value(c1) *= get_value(c2);
       return c1;
     }
 
@@ -2580,10 +2583,9 @@ static expr2tc simplify_floatbv_2ops(
   const expr2tc &side_2,
   const expr2tc &rounding_mode)
 {
-  bool is_float = is_vector_type(type)
-                    ? is_floatbv_type(to_vector_type(type).subtype)
-                    : is_floatbv_type(type);
-  assert(is_float);
+  assert(
+    is_vector_type(type) ? is_floatbv_type(to_vector_type(type).subtype)
+                         : is_floatbv_type(type));
 
   if(!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
     return expr2tc();
