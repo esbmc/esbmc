@@ -27,7 +27,7 @@ int atexit(void (*func)(void))
 
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
-void exit(int)
+void exit(int status)
 {
   __atexit_handler();
   __ESBMC_finish_formula();
@@ -41,7 +41,7 @@ void abort(void)
   __ESBMC_assume(0);
 }
 
-void _Exit(int)
+void _Exit(int status)
 {
   __ESBMC_finish_formula();
   __ESBMC_assume(0);
