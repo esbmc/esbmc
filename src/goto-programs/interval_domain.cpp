@@ -263,7 +263,7 @@ void interval_domaint::assume_rec(
       {
         auto value = id == expr2t::lessthan_id ? lhs_i.get_lower() : lhs_i.get_lower() + 1;
         value = rhs_i.lower_set ? std::max(value, rhs_i.lower) : value;
-        lhs_i.make_ge_than(value);
+        rhs_i.make_ge_than(value);
       }
 
       if(rhs_i.is_bottom() || lhs_i.is_bottom())
