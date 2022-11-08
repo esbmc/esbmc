@@ -5,6 +5,13 @@
 #include <iosfwd>
 #include <util/threeval.h>
 
+/**
+ * @brief This class is used to store intervals
+ * in the form of lower <= upper. It also has support
+ * for infinite. For this the variables `_set` are used.
+ * 
+ * @tparam T template type for the numeric value (e.g. int, float, bigint)
+ */
 template <class T>
 class interval_templatet
 {
@@ -24,7 +31,13 @@ public:
   {
   }
 
+  /* TODO: There is a clear dependency between the lower/upper and
+  *        and lower_set/upper_set variable. Shouldn't we convert the
+  *        the uses into the constraints functions?
+  */
+  /// If the `_set` variables are false, then the bound is infinity
   bool lower_set, upper_set;
+  /// Bound value
   T lower, upper;
 
   const T &get_lower() const
@@ -37,6 +50,10 @@ public:
     return upper;
   }
 
+  /**
+ * @brief Checks whether there are values that satisfy the
+ * the interval.
+ */
   bool empty() const
   {
     return upper_set && lower_set && lower > upper;
@@ -52,6 +69,7 @@ public:
     return !lower_set && !upper_set;
   }
 
+  /// There is only one value that satisfies
   bool singleton() const
   {
     return upper_set && lower_set && lower == upper;
@@ -86,13 +104,13 @@ public:
     }
   }
 
-  // Union or disjunction
+  /// Union or disjunction
   void join(const interval_templatet<T> &i)
   {
     approx_union_with(i);
   }
 
-  // Intersection or conjunction
+  /// Intersection or conjunction
   void meet(const interval_templatet<T> &i)
   {
     intersect_with(i);
