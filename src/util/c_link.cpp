@@ -118,19 +118,11 @@ void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)
   {
     symbol_fixer.insert(in_context.id, new_symbol.type);
     context_needs_fixing = true;
-    fprintf(
-      stderr,
-      "c_link: context needs fixing for type %s\n",
-      in_context.id.c_str());
   }
   else if(duplicate_symbol(in_context, new_symbol))
   {
     symbol_fixer.insert(in_context.id, new_symbol.value);
     context_needs_fixing = true;
-    fprintf(
-      stderr,
-      "c_link: context needs fixing for expr %s\n",
-      in_context.id.c_str());
   }
 }
 
@@ -212,11 +204,6 @@ bool c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
     if(in_context.value.is_nil())
     {
       // the one with body wins!
-      fprintf(
-        stderr,
-        "c_link: overwriting empty %s in context\n",
-        new_symbol.id.c_str());
-      // new_symbol.dump();
       in_context.value.swap(new_symbol.value);
       in_context.type.swap(new_symbol.type); // for argument identifiers
       return false;
