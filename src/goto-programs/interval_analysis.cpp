@@ -94,9 +94,6 @@ void interval_analysis(goto_functionst &goto_functions, const namespacet &ns)
 
   interval_analysis(goto_functions, ns);
 
-  std::ostringstream oss;
-  interval_analysis.output(goto_functions, oss);
-
   Forall_goto_functions(f_it, goto_functions)
     instrument_intervals(interval_analysis, f_it->second);
 
