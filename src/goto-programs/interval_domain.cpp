@@ -60,10 +60,10 @@ void interval_domaint::transform(
       {
         expr2tc guard = instruction.guard;
         make_not(guard);
-        assume(guard);
+        assume(guard);        
       }
       else
-        assume(instruction.guard);
+        assume(instruction.guard);        
     }
   }
   break;
@@ -214,14 +214,16 @@ void interval_domaint::assume_rec(
     }
   }
   else if(is_symbol2t(lhs) && is_symbol2t(rhs))
-  {
+  {   
     irep_idt lhs_identifier = to_symbol2t(lhs).thename;
     irep_idt rhs_identifier = to_symbol2t(rhs).thename;
-
+    // This does not work for nondet!
+    if(rhs_identifier.as_string().find("__VERIFIER_nondet"))
+      return;
     if(is_bv_type(lhs) && is_bv_type(rhs))
     {
       integer_intervalt &lhs_i = int_map[lhs_identifier];
-      integer_intervalt &rhs_i = int_map[rhs_identifier];
+      integer_intervalt &rhs_i = int_map[rhs_identifier];      
       lhs_i.meet(rhs_i);
       rhs_i = lhs_i;
       if(rhs_i.is_bottom())
