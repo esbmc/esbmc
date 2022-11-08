@@ -60,10 +60,10 @@ void interval_domaint::transform(
       {
         expr2tc guard = instruction.guard;
         make_not(guard);
-        assume(guard);        
+        assume(guard);
       }
       else
-        assume(instruction.guard);        
+        assume(instruction.guard);
     }
   }
   break;
@@ -147,6 +147,13 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
   {
     havoc_rec(to_typecast2t(expr).from);
   }
+  else if(is_code_decl2t(expr))
+  {
+    irep_idt identifier = to_code_decl2t(expr).value;
+
+    if(is_bv_type(expr))
+      int_map.erase(identifier);
+  }
   else
     log_debug("[havoc_rec] Missing support: {}", *expr);
 }
@@ -185,6 +192,8 @@ void interval_domaint::assume_rec(
 
   if(is_symbol2t(lhs) && is_constant_number(rhs))
   {
+    // Example: a: [-2, 10] and we are evaluating a <= 6
+
     irep_idt lhs_identifier = to_symbol2t(lhs).thename;
 
     if(is_bv_type(lhs) && is_bv_type(rhs))
@@ -193,13 +202,16 @@ void interval_domaint::assume_rec(
       if(id == expr2t::lessthan_id)
         --tmp;
       integer_intervalt &ii = int_map[lhs_identifier];
+      // li should be [-2, 10]
       ii.make_le_than(tmp);
+      // li should be [-2, 6]
       if(ii.is_bottom())
         make_bottom();
     }
   }
   else if(is_constant_number(lhs) && is_symbol2t(rhs))
   {
+    // Example: a: [-2, 10] and we are evaluating 3 <= a
     irep_idt rhs_identifier = to_symbol2t(rhs).thename;
 
     if(is_bv_type(lhs) && is_bv_type(rhs))
@@ -208,25 +220,53 @@ void interval_domaint::assume_rec(
       if(id == expr2t::lessthan_id)
         ++tmp;
       integer_intervalt &ii = int_map[rhs_identifier];
+      // li: [-2, 10]
       ii.make_ge_than(tmp);
+      // li: [3, 10]
       if(ii.is_bottom())
         make_bottom();
     }
   }
   else if(is_symbol2t(lhs) && is_symbol2t(rhs))
-  {   
+  {
     irep_idt lhs_identifier = to_symbol2t(lhs).thename;
     irep_idt rhs_identifier = to_symbol2t(rhs).thename;
-    // This does not work for nondet!
-    if(rhs_identifier.as_string().find("__VERIFIER_nondet"))
-      return;
     if(is_bv_type(lhs) && is_bv_type(rhs))
     {
+      // a < b : a: [0,2] and b: [3,4] and we are evaluating a <= b
       integer_intervalt &lhs_i = int_map[lhs_identifier];
-      integer_intervalt &rhs_i = int_map[rhs_identifier];      
-      lhs_i.meet(rhs_i);
-      rhs_i = lhs_i;
-      if(rhs_i.is_bottom())
+      // lhs_i: [0,1]
+      integer_intervalt &rhs_i = int_map[rhs_identifier];
+      // rhs_i: [3,4]
+
+      /* Let's assume that a: [a_min, a_max] and b: [b_min, b_max]
+       * This means that the interval should be (for less_equal):
+       *   a: [a_min, MIN(b_min, a_max)] or a: [a_min, MIN(b_min-1)]
+       *   b: [MAX(a_max, b_min), b_max] or b: [MAX(a_max+1, b_min), b_max]
+       * 
+       * For the example:
+       *   a: [0,3]
+       *   b: [2,4]
+       * 
+       * Note that they CAN have different sets.
+      */
+
+     // TODO: This should replace the current meet (with all the other meets from this function)
+      if(rhs_i.upper_set)
+      {
+        auto value = id == expr2t::lessthan_id ? rhs_i.get_upper() : rhs_i.get_upper() - 1;
+        value = lhs_i.upper_set ? std::min(value, lhs_i.upper) : value;
+        lhs_i.make_le_than(value);
+      }  
+
+      if(lhs_i.lower_set)
+      {
+        auto value = id == expr2t::lessthan_id ? lhs_i.get_lower() : lhs_i.get_lower() + 1;
+        value = rhs_i.lower_set ? std::max(value, rhs_i.lower) : value;
+        lhs_i.make_ge_than(value);
+      }
+
+      if(rhs_i.is_bottom() || lhs_i.is_bottom())
         make_bottom();
     }
   }
