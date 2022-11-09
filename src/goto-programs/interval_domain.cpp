@@ -233,41 +233,10 @@ void interval_domaint::assume_rec(
     irep_idt rhs_identifier = to_symbol2t(rhs).thename;
     if(is_bv_type(lhs) && is_bv_type(rhs))
     {
-      // a < b : a: [2,5] and b: [3,7] and we are evaluating a <= b
       integer_intervalt &lhs_i = int_map[lhs_identifier];
-      // lhs_i: [2,5]
       integer_intervalt &rhs_i = int_map[rhs_identifier];
-      // rhs_i: [3,7]
 
-      /* Let's assume that a: [a_min, a_max] and b: [b_min, b_max]
-       * This means that the interval should be (for less_equal):
-       *   a: [a_min, MIN(b_min, a_max)] or a: [a_min, MIN(b_min-1)]
-       *   b: [MAX(a_max, b_min), b_max] or b: [MAX(a_max+1, b_min), b_max]
-       * 
-       * For the example:
-       *   a: [2,3]
-       *   b: [5,7]
-       * 
-       * Note that they CAN have different sets.
-      */
-
-      // TODO: This should replace the current meet (with all the other meets from this function)
-      if(rhs_i.upper_set)
-      {
-        auto value =
-          id == expr2t::lessthan_id ? rhs_i.get_upper() - 1 : rhs_i.get_upper();
-        value = lhs_i.upper_set ? std::min(value, lhs_i.upper) : value;
-        lhs_i.make_le_than(value);
-      }
-
-      if(lhs_i.lower_set)
-      {
-        auto value =
-          id == expr2t::lessthan_id ? lhs_i.get_lower() + 1 : lhs_i.get_lower();
-        value = rhs_i.lower_set ? std::max(value, rhs_i.lower) : value;
-        rhs_i.make_ge_than(value);
-      }
-
+      integer_intervalt::contract_interval_le(lhs_i, rhs_i);
       if(rhs_i.is_bottom() || lhs_i.is_bottom())
         make_bottom();
     }
@@ -321,6 +290,7 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
   {
     assume_rec(to_not2t(cond).value, !negation);
   }
+  // de morgan
   else if(is_and2t(cond))
   {
     if(!negation)

@@ -4,7 +4,8 @@
 #include <algorithm>
 #include <iosfwd>
 #include <util/threeval.h>
-
+#include <util/message.h>
+#include <sstream>
 /**
  * @brief This class is used to store intervals
  * in the form of lower <= upper. It also has support
@@ -156,6 +157,105 @@ public:
       upper = std::max(upper, i.upper);
     else if(!i.upper_set && upper_set)
       upper_set = false;
+  }
+
+  friend interval_templatet<T>
+  operator+(const interval_templatet<T> lhs, const interval_templatet<T> &rhs)
+  {
+    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
+    auto result = lhs;
+    if(!lhs.lower_set || !rhs.lower_set)
+      result.lower_set = false;
+    else
+      result.lower = lhs.lower + rhs.lower;
+
+    if(!lhs.upper_set || !rhs.upper_set)
+      result.upper_set = false;
+    else
+      result.upper = lhs.upper + rhs.upper;
+
+    return result;
+  }
+  friend interval_templatet<T>
+  operator-(const interval_templatet<T> lhs, const interval_templatet<T> &rhs)
+  {
+    // [a_0, a_1] - [b_0, b_1] = [a_0-b_1, a_1 - b_0]
+    auto result = lhs;
+    if(!lhs.lower_set || !rhs.upper_set)
+      result.lower_set = false;
+    else
+      result.lower = lhs.lower - rhs.upper;
+
+    if(!lhs.upper_set || !rhs.lower_set)
+      result.upper_set = false;
+    else
+      result.upper = lhs.upper - rhs.lower;
+
+    return result;
+  }
+
+  /// This is just to check if a value has changed. This is not the same as an interval comparation!
+  bool inline has_changed(const interval_templatet<T> &i)
+  {
+    if(empty())
+      return false;
+    auto lower_equal = lower == i.lower;
+    auto upper_equal = upper == i.upper;
+    auto lower_set_equal = lower_set == i.lower_set;
+    auto upper_set_equal = upper_set == i.upper_set;
+
+    if(lower_set && upper_set)
+      return !(
+        lower_set_equal && upper_set_equal && lower_equal && upper_equal);
+
+    if(lower_set)
+      return !(upper_set_equal && upper_equal);
+
+    if(upper_set)
+      return !(lower_set_equal && lower_equal);
+
+    return false;
+  }
+
+  /**
+     * @brief Computer the contraction of "a" and "b" under a <= b
+     * 
+     * @param a 
+     * @param b 
+     */
+  static void
+  contract_interval_le(interval_templatet<T> &a, interval_templatet<T> &b)
+  {
+    /**
+       * 1. Forward Evaluation y = (a - b) ===> [y] = ([a] - [b]) intersect [-infinity, 0]
+       * 2. Backwards Step, for each variable:
+       *   a. [a] = [a] intersect [b] - [y]
+       *   b. [b] = [b] intersect [a] + [y]
+       * 3. Find a fixpoint. 
+       * 
+       */
+    interval_templatet<T> intersection_operand;
+    // [-infinity, 0]
+    intersection_operand.make_le_than(0);
+    bool changed;
+    do
+    {
+      changed = false;
+      auto tmp_a = a;
+      auto tmp_b = b;
+      auto y = (a - b);
+      y.intersect_with(intersection_operand);
+
+      a.intersect_with(tmp_b + y);
+      b.intersect_with(tmp_a - y);
+
+      std::ostringstream oss;
+      oss << "[Contractor] Y: " << y;
+      oss << "\n[Contractor] A: " << a;
+      oss << "\n[Contractor] B: " << b;
+      log_debug("\n\n{}", oss.str());
+      changed = a.has_changed(tmp_a) || b.has_changed(tmp_b);
+    } while(changed);
   }
 };
 
