@@ -8,20 +8,39 @@
 #undef atol
 #undef getenv
 
-unsigned short atexit_index = 0;
-void (*atexit_func[32])();
+typedef struct atexit_key
+{
+  void (*atexit_func)();
+  struct atexit_key *next;
+} __ESBMC_atexit_key;
+
+__ESBMC_atexit_key *__ESBMC_atexits = NULL;
 
 void __atexit_handler()
 {
-  unsigned short i = atexit_index;
-  for(; i > 0; --i)
-    atexit_func[i - 1]();
+__ESBMC_HIDE:;
+  // This is here to prevent k-induction from unwind the next loop unnecessarily
+  if(__ESBMC_atexits == NULL)
+    return;
+
+  while(__ESBMC_atexits)
+  {
+    __ESBMC_atexits->atexit_func();
+    __ESBMC_atexit_key *tmp = __ESBMC_atexits->next;
+    free(__ESBMC_atexits);
+    __ESBMC_atexits = tmp;
+  }
 }
 
 int atexit(void (*func)(void))
 {
-  atexit_func[atexit_index] = func;
-  ++atexit_index;
+__ESBMC_HIDE:;
+  __ESBMC_atexit_key *l =
+    (__ESBMC_atexit_key *)malloc(sizeof(__ESBMC_atexit_key));
+  __ESBMC_assume(l);
+  l->atexit_func = func;
+  l->next = __ESBMC_atexits;
+  __ESBMC_atexits = l;
   return 0;
 }
 
