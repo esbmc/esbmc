@@ -125,6 +125,12 @@ std::string cpp_typecheckt::fetch_compound_name(const typet &type)
 
 void cpp_typecheckt::typecheck_compound_type(typet &type)
 {
+// DEBUG
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  typet old_type = type;
+#pragma GCC diagnostic pop
+
   // first save qualifiers
   c_qualifierst qualifiers(type);
 
@@ -227,6 +233,9 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
       cpp_scopes.current_scope().prefix + id2string(new_symbol->name) + "::";
     id.class_identifier = new_symbol->id;
     id.id_class = cpp_idt::CLASS;
+
+    if (symbol_name == "tag.Motorcycle")
+      printf("@@ Got target class\n");
 
     if(has_body)
     {
@@ -918,6 +927,12 @@ void cpp_typecheckt::typecheck_friend_declaration(
 
 void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 {
+// DEBUG
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  symbolt old_symbol = symbol;
+#pragma GCC diagnostic pop
+
   cpp_save_scopet saved_scope(cpp_scopes);
 
   // enter scope of compound
@@ -1248,6 +1263,10 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
   // clean up!
   symbol.type.remove("body");
+
+  printf(
+    "@@ done class symbol typechecking for %s\n",
+    symbol.id.as_string().c_str());
 }
 
 void cpp_typecheckt::move_member_initializers(
@@ -1294,6 +1313,14 @@ void cpp_typecheckt::typecheck_member_function(
   const typet &method_qualifier,
   exprt &value)
 {
+// DEBUG
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+  struct_typet::componentt old_component = component;
+  irept old_initializers = initializers;
+  exprt old_value = value;
+#pragma GCC diagnostic pop
+
   symbolt symbol;
 
   typet &type = component.type();

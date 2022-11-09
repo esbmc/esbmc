@@ -53,8 +53,8 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
       throw 0;
     }
 
-    bool virtual_base = base_it->get_bool("virtual");
-    irep_idt class_access = base_it->get("protection");
+    bool is_virtual = base_it->get_bool("virtual"); // virtual base
+    irep_idt class_access = base_it->get("protection"); // inheritance access specifier
 
     if(class_access == "")
       class_access = default_class_access;
@@ -62,7 +62,7 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
     base_symbol_expr.id("base");
     base_symbol_expr.set("access", class_access);
 
-    if(virtual_base)
+    if(is_virtual)
       base_symbol_expr.set("virtual", true);
 
     base_it->swap(base_symbol_expr);
@@ -73,7 +73,7 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
     const struct_typet &base_struct_type = to_struct_type(base_symbol.type);
 
     add_base_components(
-      base_struct_type, class_access, type, bases, vbases, virtual_base);
+      base_struct_type, class_access, type, bases, vbases, is_virtual);
   }
 
   if(!vbases.empty())
@@ -93,6 +93,22 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
 
     to_struct_type(type).components().push_back(most_derived);
   }
+
+  // DEBUG - print
+  printf("@@ Done base parsing\n");
+  printf("@@ This is bases for class: %s\n", type.tag().as_string().c_str());
+  printf("- printing bases: ");
+  for(const auto& base : bases)
+  {
+    printf("%s ", base.as_string().c_str());
+  }
+  printf("\n");
+  printf("- printing vbases: ");
+  for(const auto& vbase : vbases)
+  {
+    printf("%s ", vbase.as_string().c_str());
+  }
+  printf("\n");
 }
 
 void cpp_typecheckt::add_base_components(
@@ -105,7 +121,7 @@ void cpp_typecheckt::add_base_components(
 {
   const irep_idt &from_name = from.name();
 
-  if(is_virtual && vbases.find(from_name) != vbases.end())
+  if(is_virtual && vbases.find(from_name) != vbases.end()) // nothing to add if virtual inheritance
     return;
 
   //source: http://msdn.microsoft.com/en-us/library/wcz57btd.aspx

@@ -587,15 +587,15 @@ bool clang_c_convertert::get_function(
   exprt &new_expr)
 {
   // Don't convert if implicit, unless it's a constructor or destructor
-  // A compiler-generated default ctor/dtor is considered implicit, but we have
-  // to parse it.
+  // For C++ POD, a compiler-generated default ctor/dtor is considered implicit, but we have to parse it.
+  // Notes for future extension:
+  //   If we want to include copy/move assignment operators, refer to isCopyAssignmentOperator()
+  //   in clang::CXXMethodDecl.
   auto isContructorOrDestructor = [](const clang::FunctionDecl &fd) {
     return fd.getKind() == clang::Decl::CXXConstructor ||
            fd.getKind() == clang::Decl::CXXDestructor;
   };
 
-  // For C++ POD, Clang automatically adds implicit default cpy ctor and cpy assign optr to AST.
-  // But here we skip them.
   if(fd.isImplicit() && !isContructorOrDestructor(fd))
     return false;
 

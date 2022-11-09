@@ -327,7 +327,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   //  2. manually make ctor/dtor
   //     (only in the old cpp frontend, clang automatically already adds
   //     `implicit` ctor, dtor, cpy ctor, cpy assignment optr in AST)
-  // TODO: probably don't need these flags here, but let's try them first.
   bool found_ctor = false;
   bool found_dtor = false;
 
@@ -397,6 +396,8 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
         llvm::dyn_cast<clang::CXXMethodDecl>(decl))
     {
       // Add only if it isn't static
+      // Both fields and methods are considered components in typechecking.
+      // TODO: Methods will be moved from `components` to `methods` in adjuster.
       if(!cxxmd->isStatic())
         to_struct_type(type).components().push_back(comp);
       else
@@ -504,12 +505,11 @@ bool clang_cpp_convertert::get_class_method(
                                     .identifier()
                                     .as_string();
 
-    // For method defined outside the class declaration,
+    // For method defined outside the class declaration, i.e. not inlined
     // we need to figure out the current access specifier
     if(current_access == "")
       get_current_access(fd, *md->getParent());
 
-    // TODO: remove unused annotations
     // Add the common annotations to all C++ class methods
     typet &component_type = component.type();
     component_type.set("#member_name", class_symbol_id);
