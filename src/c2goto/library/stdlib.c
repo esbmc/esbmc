@@ -48,6 +48,7 @@ __ESBMC_HIDE:;
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void exit(int status)
 {
+__ESBMC_HIDE:;
   __atexit_handler();
   __ESBMC_finish_formula();
   __ESBMC_assume(0);
@@ -55,6 +56,7 @@ void exit(int status)
 
 void abort(void)
 {
+__ESBMC_HIDE:;
   __atexit_handler();
   __ESBMC_finish_formula();
   __ESBMC_assume(0);
@@ -62,6 +64,7 @@ void abort(void)
 
 void _Exit(int status)
 {
+__ESBMC_HIDE:;
   __ESBMC_finish_formula();
   __ESBMC_assume(0);
 }
