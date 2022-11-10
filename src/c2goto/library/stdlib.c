@@ -37,7 +37,8 @@ int atexit(void (*func)(void))
 __ESBMC_HIDE:;
   __ESBMC_atexit_key *l =
     (__ESBMC_atexit_key *)malloc(sizeof(__ESBMC_atexit_key));
-  __ESBMC_assume(l);
+  if(l == NULL)
+    return -1;
   l->atexit_func = func;
   l->next = __ESBMC_atexits;
   __ESBMC_atexits = l;
