@@ -1305,7 +1305,7 @@ void interval_templatet<ieee_floatt>::make_lower_interval()
 {
   // [-infinity, 0]
   upper_set = true;
-  set_sign(true);
+  upper.set_sign(true);
   upper.make_zero();
   lower_set = false;
   lower.make_minus_infinity();
