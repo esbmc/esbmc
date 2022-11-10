@@ -6,6 +6,7 @@
 #include <util/threeval.h>
 #include <util/message.h>
 #include <sstream>
+#include <util/ieee_float.h>
 /**
  * @brief This class is used to store intervals
  * in the form of lower <= upper. It also has support
@@ -160,7 +161,7 @@ public:
   }
 
   friend interval_templatet<T>
-  operator+(const interval_templatet<T> lhs, const interval_templatet<T> &rhs)
+  operator+(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
   {
     // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
     auto result = lhs;
@@ -177,7 +178,7 @@ public:
     return result;
   }
   friend interval_templatet<T>
-  operator-(const interval_templatet<T> lhs, const interval_templatet<T> &rhs)
+  operator-(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
   {
     // [a_0, a_1] - [b_0, b_1] = [a_0-b_1, a_1 - b_0]
     auto result = lhs;
@@ -217,6 +218,13 @@ public:
     return false;
   }
 
+  /// Generates an interval of the form (-infinity, 0]
+  void make_lower_interval()
+  {
+    // [-infinity, 0]
+    make_le_than(0);
+  }
+
   /**
      * @brief Computer the contraction of "a" and "b" under a <= b
      * 
@@ -235,8 +243,7 @@ public:
        * 
        */
     interval_templatet<T> intersection_operand;
-    // [-infinity, 0]
-    intersection_operand.make_le_than(0);
+    intersection_operand.make_lower_interval();
     bool changed;
     do
     {
@@ -345,5 +352,14 @@ std::ostream &operator<<(std::ostream &out, const interval_templatet<T> &i)
 
   return out;
 }
+
+template <>
+void interval_templatet<ieee_floatt>::make_lower_interval();
+
+template <>
+bool interval_templatet<ieee_floatt>::is_top() const;
+
+template <>
+bool interval_templatet<const ieee_floatt>::is_top() const;
 
 #endif // CPROVER_ANALYSES_INTERVAL_TEMPLATE_H

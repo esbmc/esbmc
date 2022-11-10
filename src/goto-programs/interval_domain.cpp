@@ -142,6 +142,9 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
 
     if(is_bv_type(expr))
       int_map.erase(identifier);
+
+    if(is_floatbv_type(expr))
+      real_map.erase(identifier);
   }
   else if(is_typecast2t(expr))
   {
@@ -153,6 +156,9 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
 
     if(is_bv_type(expr))
       int_map.erase(identifier);
+
+    if(is_floatbv_type(expr))
+      real_map.erase(identifier);
   }
   else
     log_debug("[havoc_rec] Missing support: {}", *expr);
@@ -189,7 +195,7 @@ void interval_domaint::assume_rec(
   //             lhs <= rhs
 
   assert(id == expr2t::lessthan_id || id == expr2t::lessthanequal_id);
-
+  // TODO: this could use some heavy refactoring!
   if(is_symbol2t(lhs) && is_constant_number(rhs))
   {
     // Example: a: [-2, 10] and we are evaluating a <= 6
@@ -208,6 +214,19 @@ void interval_domaint::assume_rec(
       if(ii.is_bottom())
         make_bottom();
     }
+
+    if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
+    {
+      // Example: a: [0.001, 0.1] and we are evaluating a <= 0.01
+      auto tmp = to_constant_floatbv2t(rhs).value;
+      auto &ii = real_map[lhs_identifier];
+      ii.make_le_than(tmp);
+      // li should be: [0.001, 0.01]
+      if(ii.is_bottom())
+        make_bottom();
+    }
+
+    // TODO: Mix int and float!
   }
   else if(is_constant_number(lhs) && is_symbol2t(rhs))
   {
@@ -226,17 +245,38 @@ void interval_domaint::assume_rec(
       if(ii.is_bottom())
         make_bottom();
     }
+
+    if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
+    {
+      // Example: a: [0.001, 0.1] and we are evaluating 0.01 <= a
+      auto tmp = to_constant_floatbv2t(lhs).value;
+      auto &ii = real_map[rhs_identifier];
+      ii.make_ge_than(tmp);
+      // li should be:  [0.01, 0.01]
+      if(ii.is_bottom())
+        make_bottom();
+    }
   }
   else if(is_symbol2t(lhs) && is_symbol2t(rhs))
   {
     irep_idt lhs_identifier = to_symbol2t(lhs).thename;
     irep_idt rhs_identifier = to_symbol2t(rhs).thename;
+
     if(is_bv_type(lhs) && is_bv_type(rhs))
     {
-      integer_intervalt &lhs_i = int_map[lhs_identifier];
-      integer_intervalt &rhs_i = int_map[rhs_identifier];
+      auto &lhs_i = int_map[lhs_identifier];
+      auto &rhs_i = int_map[rhs_identifier];
 
       integer_intervalt::contract_interval_le(lhs_i, rhs_i);
+      if(rhs_i.is_bottom() || lhs_i.is_bottom())
+        make_bottom();
+    }
+
+    if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
+    {
+      auto &lhs_i = real_map[lhs_identifier];
+      auto &rhs_i = real_map[rhs_identifier];
+      real_intervalt::contract_interval_le(lhs_i, rhs_i);
       if(rhs_i.is_bottom() || lhs_i.is_bottom())
         make_bottom();
     }
@@ -316,6 +356,7 @@ expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
   assert(is_symbol2t(symbol));
 
   symbol2t src = to_symbol2t(symbol);
+  // TODO: this needs a heavy refactoring!
   if(is_bv_type(symbol))
   {
     int_mapt::const_iterator i_it = int_map.find(src.thename);
@@ -357,6 +398,47 @@ expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
           new_expr, value, *migrate_namespace_lookup);
         conjuncts.push_back(lessthanequal2tc(value, new_expr));
       }
+    }
+
+    return conjunction(conjuncts);
+  }
+
+  if(is_floatbv_type(symbol))
+  {
+    real_mapt::const_iterator i_it = real_map.find(src.thename);
+    if(i_it == real_map.end())
+      return gen_true_expr();
+
+    const real_intervalt &interval = i_it->second;
+    if(interval.is_top())
+      return gen_true_expr();
+
+    if(interval.is_bottom())
+      return gen_false_expr();
+
+    std::vector<expr2tc> conjuncts;
+    if(interval.upper_set)
+    {
+      constant_floatbv2tc value(ieee_floatt(ieee_float_spect(
+        to_floatbv_type(src.type).fraction,
+        to_floatbv_type(src.type).exponent)));
+      value->value = interval.upper;
+      expr2tc new_expr = symbol;
+      c_implicit_typecast_arithmetic(
+        new_expr, value, *migrate_namespace_lookup);
+      conjuncts.push_back(lessthanequal2tc(new_expr, value));
+    }
+
+    if(interval.lower_set)
+    {
+      constant_floatbv2tc value(ieee_floatt(ieee_float_spect(
+        to_floatbv_type(src.type).fraction,
+        to_floatbv_type(src.type).exponent)));
+      value->value = interval.lower;
+      expr2tc new_expr = symbol;
+      c_implicit_typecast_arithmetic(
+        new_expr, value, *migrate_namespace_lookup);
+      conjuncts.push_back(lessthanequal2tc(value, new_expr));
     }
 
     return conjunction(conjuncts);

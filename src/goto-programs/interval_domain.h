@@ -11,6 +11,7 @@
 #include <util/mp_arith.h>
 
 typedef interval_templatet<BigInt> integer_intervalt;
+typedef interval_templatet<ieee_floatt> real_intervalt;
 
 /**
  * @brief Trivial, conjunctive interval domain for both float
@@ -144,11 +145,15 @@ protected:
   typedef std::unordered_map<irep_idt, integer_intervalt, irep_id_hash>
     int_mapt;
 
+  typedef std::unordered_map<irep_idt, real_intervalt, irep_id_hash> real_mapt;
+
   // Abstract state information
   /// Is this state a bottom. I.e., there is a contradiction between an assignment and an assume
   bool bottom;
   /// Map for all integers intervals
   int_mapt int_map;
+  /// Map for all real intervals
+  real_mapt real_map;
 
   /**
    * @brief Recursively explores an Expression until it reaches a symbol. If the
