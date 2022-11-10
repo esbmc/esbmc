@@ -26,9 +26,9 @@ __ESBMC_HIDE:;
   while(__ESBMC_atexits)
   {
     __ESBMC_atexits->atexit_func();
-    __ESBMC_atexit_key *tmp = __ESBMC_atexits->next;
+    __ESBMC_atexit_key *__ESBMC_tmp = __ESBMC_atexits->next;
     free(__ESBMC_atexits);
-    __ESBMC_atexits = tmp;
+    __ESBMC_atexits = __ESBMC_tmp;
   }
 }
 
