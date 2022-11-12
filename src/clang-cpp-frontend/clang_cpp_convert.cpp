@@ -66,9 +66,9 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     symbolt &s = *context.find_symbol(id);
 
     // copy components from base(s) into this class
-    if (id == "tag-Motorcycle")
-      printf("@@ Got it!\n");
-
+    if(cxxrd.bases().begin() != cxxrd.bases().end())
+      if(get_bases(cxxrd, to_struct_type(s.type)))
+        return true;
 
     break;
   }
@@ -144,19 +144,8 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   {
     const clang::AccessSpecDecl &asd =
       static_cast<const clang::AccessSpecDecl &>(decl);
-    const clang::AccessSpecifier specifier = asd.getAccess();
-    if(specifier == clang::AS_public)
-      current_access = "public";
-    else if(specifier == clang::AS_private)
-      current_access = "private";
-    else if(specifier == clang::AS_protected)
-      current_access = "protected";
-    else
-    {
-      log_error(
-        "Unknown accessor specified returned from clang in {}", __func__);
-      abort();
-    }
+    const clang::AccessSpecifier &specifier = asd.getAccess();
+    current_access = get_access(specifier);
     break;
   }
 
@@ -305,8 +294,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
 
     // Clang AST contains an implicit CXXRecordDecl refering to the class itself
     // Skip it
-    if(decl->getKind() == clang::Decl::CXXRecord &&
-       decl->isImplicit())
+    if(decl->getKind() == clang::Decl::CXXRecord && decl->isImplicit())
       continue;
 
     const auto fd = llvm::dyn_cast<clang::FunctionDecl>(decl);
@@ -344,9 +332,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
     else
     {
-      printf("@@ In get_class_methods, first iteration, dumping decl... \n");
-      decl->dump();
-      printf("@@ In get_class_methods, first iteration, done dumping decl... \n");
       if(get_decl(*decl, comp))
         return true;
     }
@@ -1323,6 +1308,22 @@ bool clang_cpp_convertert::get_decl_ref(
   return false;
 }
 
+std::string
+clang_cpp_convertert::get_access(const clang::AccessSpecifier &specifier)
+{
+  if(specifier == clang::AS_public)
+    return "public";
+  else if(specifier == clang::AS_private)
+    return "private";
+  else if(specifier == clang::AS_protected)
+    return "protected";
+  else
+  {
+    log_error("Unknown accessor specified returned from clang in {}", __func__);
+    abort();
+  }
+}
+
 void clang_cpp_convertert::do_virtual_table(const struct_union_typet &type)
 {
   // builds virtual-table value maps: (class x virtual_name x value)
@@ -1558,6 +1559,8 @@ void clang_cpp_convertert::get_current_access(
 symbolt *clang_cpp_convertert::get_parent_class_symbol(
   const clang::FunctionDecl &target_fd)
 {
+  // This is NOT the parent class to a child class.
+  // It's the parent class for non-inlined methods.
   symbolt *s = nullptr;
   if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&target_fd))
   {
@@ -1580,4 +1583,173 @@ symbolt *clang_cpp_convertert::get_parent_class_symbol(
 
   assert(s);
   return s;
+}
+
+bool clang_cpp_convertert::get_bases(
+  const clang::CXXRecordDecl &cxxrd,
+  struct_typet &derived_class_type)
+{
+  std::set<irep_idt> bases;
+  std::set<irep_idt> vbases;
+
+  for(const clang::CXXBaseSpecifier &decl : cxxrd.bases())
+  {
+    // The base class is always a CXXRecordDecl
+    const clang::CXXRecordDecl &base_cxxrd =
+      *(decl.getType().getTypePtr()->getAsCXXRecordDecl());
+
+    // get base class id
+    std::string base_id, base_name;
+    get_decl_name(base_cxxrd, base_name, base_id);
+
+    // get base class symbol
+    const symbolt &base_symbol = *namespacet(context).lookup(base_id);
+    assert(base_symbol.type.id() == "struct");
+    const struct_typet &base_struct_type = to_struct_type(base_symbol.type);
+
+    bool is_virtual = decl.isVirtual(); // virtual base
+    clang::AccessSpecifier class_access =
+      decl.getAccessSpecifier(); // inheritance access specifier
+
+    // TODO: added derived_class_type.add("bases") ? See base_symbol_expr in cpp_typecheckt::typecheck_compound_bases
+
+    add_base_components(
+      base_cxxrd,
+      base_struct_type,
+      class_access,
+      derived_class_type,
+      bases,
+      vbases,
+      is_virtual);
+  }
+
+  if(!vbases.empty())
+  {
+    log_error(
+      "Got non-empty vbases in {}. Need most_derived component?", __func__);
+    abort();
+  }
+
+  // DEBUG - print
+  printf("@@ Done base parsing\n");
+  printf(
+    "@@ This is bases for class: %s\n",
+    derived_class_type.tag().as_string().c_str());
+  printf("- printing bases: ");
+  for(const auto &base : bases)
+  {
+    printf("%s ", base.as_string().c_str());
+  }
+  printf("\n");
+  printf("- printing vbases: ");
+  for(const auto &vbase : vbases)
+  {
+    printf("%s ", vbase.as_string().c_str());
+  }
+  printf("\n");
+  printf("@@ Done pulling bases in ...\n");
+
+  return false;
+}
+
+void clang_cpp_convertert::add_base_components(
+  const clang::CXXRecordDecl &base_cxxrd,
+  const struct_typet &from,
+  const clang::AccessSpecifier &access,
+  struct_typet &to,
+  std::set<irep_idt> &bases,
+  std::set<irep_idt> &vbases,
+  bool is_virtual)
+{
+  const irep_idt &from_name = from.name();
+
+  if(
+    is_virtual && vbases.find(from_name) !=
+                    vbases.end()) // nothing to add if virtual inheritance
+    return;
+
+  // Check for multiple inheritance of non-virtual base class
+  // Clang should've reported parsing error
+  assert(bases.find(from_name) == bases.end());
+
+  // update bases and vbases
+  bases.insert(from_name);
+  if(is_virtual)
+    vbases.insert(from_name);
+
+  // look at the inheritance hierarchy of the base class
+  for(const clang::CXXBaseSpecifier &decl : base_cxxrd.bases())
+  {
+    // The base class is always a CXXRecordDecl
+    const clang::CXXRecordDecl &base =
+      *(decl.getType().getTypePtr()->getAsCXXRecordDecl());
+
+    // work out access specifier
+    clang::AccessSpecifier sub_access = clang::AS_none;
+    if(access == clang::AS_private)
+      sub_access = clang::AS_private;
+    else if(access == clang::AS_protected)
+      sub_access = clang::AS_protected;
+    else
+      sub_access = clang::AS_public;
+
+    // get class id
+    std::string base_id, base_name;
+    get_decl_name(base_cxxrd, base_name, base_id);
+
+    // get base class symbol
+    const symbolt &symb = *namespacet(context).lookup(base_id);
+    assert(symb.type.id() == "struct");
+    bool is_virtual = decl.isVirtual(); // virtual base
+
+    // recursive call
+    add_base_components(
+      base,
+      to_struct_type(symb.type),
+      sub_access,
+      to,
+      bases,
+      vbases,
+      is_virtual);
+  }
+
+  // add the components
+  const struct_typet::componentst &src_c = from.components();
+  struct_typet::componentst &dest_c = to.components();
+
+  for(const auto &it : src_c)
+  {
+    if(it.get_bool("from_base"))
+      continue;
+
+    // copy the component
+    dest_c.push_back(it);
+
+    // now twiddle the copy
+    struct_typet::componentt &component = dest_c.back();
+    component.set("from_base", true);
+
+    irep_idt comp_access = component.get_access();
+    if(access == clang::AS_public)
+    {
+      if(comp_access == "private")
+        component.set_access("noaccess");
+    }
+    else if(access == clang::AS_protected)
+    {
+      if(comp_access == "private")
+        component.set_access("noaccess");
+      else
+        component.set_access("private");
+    }
+    else if(access == clang::AS_private)
+    {
+      if(comp_access == "noaccess" || comp_access == "private")
+        component.set_access("noaccess");
+      else
+        component.set_access("private");
+    }
+    else
+      assert(false);
+  }
 }

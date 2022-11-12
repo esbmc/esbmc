@@ -120,6 +120,8 @@ protected:
   void
   build_member_from_component(const clang::FunctionDecl &fd, exprt &component);
 
+  std::string get_access(const clang::AccessSpecifier &specifier);
+
   void do_virtual_table(const struct_union_typet &type);
 
   /*
@@ -144,9 +146,30 @@ protected:
     const clang::CXXRecordDecl &cxxrd);
 
   /*
-   * Get parent class symbol for a method
+   * Get parent class symbol for a non-inlined method
    */
   symbolt *get_parent_class_symbol(const clang::FunctionDecl &target_fd);
+
+  /**
+   * Typecheck base(s)
+   * cxxrd refers to the clang AST of the derived class
+   */
+  bool get_bases(
+    const clang::CXXRecordDecl &cxxrd,
+    struct_typet &derived_class_type);
+
+  /**
+   * Traverse the class hierarchy and
+   * copy components from base(s) to the derived
+   */
+  void add_base_components(
+    const clang::CXXRecordDecl &base_cxxrd,
+    const struct_typet &from,
+    const clang::AccessSpecifier &access,
+    struct_typet &to,
+    std::set<irep_idt> &bases,
+    std::set<irep_idt> &vbases,
+    bool is_virtual);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
