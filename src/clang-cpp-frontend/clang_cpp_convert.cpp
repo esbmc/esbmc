@@ -258,38 +258,6 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &rd,
   struct_union_typet &type)
 {
-  // If a struct is defined inside a extern C, it will be a RecordDecl
-  if(auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
-  {
-    // So this is a CXXRecordDecl, let's check for (virtual) base classes
-    for(const auto &decl : cxxrd->bases())
-    {
-      // The base class is always a CXXRecordDecl
-      const clang::CXXRecordDecl *base =
-        decl.getType().getTypePtr()->getAsCXXRecordDecl();
-      assert(base != nullptr);
-
-      // First, parse the fields
-      for(auto const *field : base->fields())
-      {
-        // We don't add if private
-        if(field->getAccess() >= clang::AS_private)
-          continue;
-
-        struct_typet::componentt comp;
-        if(get_decl(*field, comp))
-          return true;
-
-        // Don't add fields that have global storage (e.g., static)
-        if(const clang::VarDecl *nd = llvm::dyn_cast<clang::VarDecl>(field))
-          if(nd->hasGlobalStorage())
-            continue;
-
-        type.components().push_back(comp);
-      }
-    }
-  }
-
   return clang_c_convertert::get_struct_union_class_fields(rd, type);
 }
 
@@ -302,22 +270,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     llvm::dyn_cast<clang::CXXRecordDecl>(&recordd);
   if(cxxrd == nullptr)
     return false;
-
-  if(cxxrd->bases().begin() != cxxrd->bases().end())
-  {
-    for(const auto &decl : cxxrd->bases())
-    {
-      struct_typet base_t;
-      if(get_type(decl.getType(), base_t))
-        return true;
-
-      // Add methods
-      to_struct_type(type).methods().insert(
-        to_struct_type(type).methods().begin(),
-        base_t.methods().begin(),
-        base_t.methods().end());
-    }
-  }
 
   // default access: private for class, otherwise public
   current_access = type.get_bool("#class") ? "private" : "public";
