@@ -56,8 +56,19 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::CXXRecordDecl &cxxrd =
       static_cast<const clang::CXXRecordDecl &>(decl);
 
+    // get class fields and methods
     if(get_struct_union_class(cxxrd))
       return true;
+
+    // get the symbol for this class
+    std::string id, name;
+    get_decl_name(cxxrd, name, id);
+    symbolt &s = *context.find_symbol(id);
+
+    // copy components from base(s) into this class
+    if (id == "tag-Motorcycle")
+      printf("@@ Got it!\n");
+
 
     break;
   }
@@ -292,6 +303,12 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     if(decl->getKind() == clang::Decl::Field)
       continue;
 
+    // Clang AST contains an implicit CXXRecordDecl refering to the class itself
+    // Skip it
+    if(decl->getKind() == clang::Decl::CXXRecord &&
+       decl->isImplicit())
+      continue;
+
     const auto fd = llvm::dyn_cast<clang::FunctionDecl>(decl);
     // Skip ctor. We need to do vtable before ctor
     if(fd)
@@ -327,6 +344,9 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
     else
     {
+      printf("@@ In get_class_methods, first iteration, dumping decl... \n");
+      decl->dump();
+      printf("@@ In get_class_methods, first iteration, done dumping decl... \n");
       if(get_decl(*decl, comp))
         return true;
     }
