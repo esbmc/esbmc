@@ -66,9 +66,11 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     symbolt &s = *context.find_symbol(id);
 
     // copy components from base(s) into this class
-    if(cxxrd.bases().begin() != cxxrd.bases().end())
-      if(get_bases(cxxrd, to_struct_type(s.type)))
-        return true;
+    // skip incomplete class
+    if(cxxrd.isCompleteDefinition())
+      if(cxxrd.bases().begin() != cxxrd.bases().end())
+        if(get_bases(cxxrd, to_struct_type(s.type)))
+          return true;
 
     break;
   }
