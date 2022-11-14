@@ -6,12 +6,13 @@
 
 #include <goto-programs/ai.h>
 #include <goto-programs/interval_template.h>
+#include <boost/multiprecision/cpp_bin_float.hpp>
 #include <util/ieee_float.h>
 #include <irep2/irep2_utils.h>
 #include <util/mp_arith.h>
 
 typedef interval_templatet<BigInt> integer_intervalt;
-typedef interval_templatet<ieee_floatt> real_intervalt;
+using real_intervalt = interval_templatet<boost::multiprecision::cpp_bin_float_100>;
 
 /**
  * @brief Trivial, conjunctive interval domain for both float
