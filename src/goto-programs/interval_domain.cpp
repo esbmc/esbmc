@@ -422,7 +422,7 @@ expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
       constant_floatbv2tc value(ieee_floatt(ieee_float_spect(
         to_floatbv_type(src.type).fraction,
         to_floatbv_type(src.type).exponent)));
-        value->value.from_double(interval.upper.convert_to<double>());
+      value->value.from_double(interval.upper.convert_to<double>());
       expr2tc new_expr = symbol;
       c_implicit_typecast_arithmetic(
         new_expr, value, *migrate_namespace_lookup);
@@ -434,7 +434,7 @@ expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
       constant_floatbv2tc value(ieee_floatt(ieee_float_spect(
         to_floatbv_type(src.type).fraction,
         to_floatbv_type(src.type).exponent)));
-        value->value.from_double(interval.lower.convert_to<double>());
+      value->value.from_double(interval.lower.convert_to<double>());
       expr2tc new_expr = symbol;
       c_implicit_typecast_arithmetic(
         new_expr, value, *migrate_namespace_lookup);
