@@ -14,7 +14,7 @@ typedef struct atexit_key
   struct atexit_key *next;
 } __ESBMC_atexit_key;
 
-__ESBMC_atexit_key *__ESBMC_atexits = NULL;
+static __ESBMC_atexit_key *__ESBMC_atexits = NULL;
 
 void __atexit_handler()
 {
