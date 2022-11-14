@@ -101,8 +101,7 @@ inline bool is_constant_number(const expr2tc &t)
 
 inline bool is_constant_expr(const expr2tc &t)
 {
-  return is_constant_number(t) ||
-         t->expr_id == expr2t::constant_string_id ||
+  return is_constant_number(t) || t->expr_id == expr2t::constant_string_id ||
          t->expr_id == expr2t::constant_struct_id ||
          t->expr_id == expr2t::constant_union_id ||
          t->expr_id == expr2t::constant_array_id ||
