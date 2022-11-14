@@ -220,7 +220,7 @@ void interval_domaint::assume_rec(
       // Example: a: [0.001, 0.1] and we are evaluating a <= 0.01
       auto tmp = to_constant_floatbv2t(rhs).value;
       auto &ii = real_map[lhs_identifier];
-      ii.make_le_than(tmp);
+      ii.make_le_than(tmp.to_double());
       // li should be: [0.001, 0.01]
       if(ii.is_bottom())
         make_bottom();
@@ -251,7 +251,7 @@ void interval_domaint::assume_rec(
       // Example: a: [0.001, 0.1] and we are evaluating 0.01 <= a
       auto tmp = to_constant_floatbv2t(lhs).value;
       auto &ii = real_map[rhs_identifier];
-      ii.make_ge_than(tmp);
+      ii.make_ge_than(tmp.to_double());
       // li should be:  [0.01, 0.01]
       if(ii.is_bottom())
         make_bottom();
@@ -422,7 +422,7 @@ expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
       constant_floatbv2tc value(ieee_floatt(ieee_float_spect(
         to_floatbv_type(src.type).fraction,
         to_floatbv_type(src.type).exponent)));
-      value->value = interval.upper;
+        value->value.from_double(interval.upper.convert_to<double>());
       expr2tc new_expr = symbol;
       c_implicit_typecast_arithmetic(
         new_expr, value, *migrate_namespace_lookup);
@@ -434,7 +434,7 @@ expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
       constant_floatbv2tc value(ieee_floatt(ieee_float_spect(
         to_floatbv_type(src.type).fraction,
         to_floatbv_type(src.type).exponent)));
-      value->value = interval.lower;
+        value->value.from_double(interval.lower.convert_to<double>());
       expr2tc new_expr = symbol;
       c_implicit_typecast_arithmetic(
         new_expr, value, *migrate_namespace_lookup);
