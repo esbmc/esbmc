@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
---no-unwinding-assertions --unwind 15 --partial-loops --boolector --no-align-check --smtlib-solver-prog --error-label --tuple-node-flattener --all-claims --bv --witness-output --show-loops
+--partial-loops --boolector --no-align-check --smtlib-solver-prog --error-label --tuple-node-flattener --all-claims --bv --witness-output --show-loops --incremental-bmc
 ^VERIFICATION FAILED$
