@@ -1046,6 +1046,9 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       {
         cpp_declaratort &declarator = *d_it;
 
+        printf("@@ Processing one d_it...\n");
+        declarator.dump();
+
         // Skip the constructors until all the data members
         // are discovered
         if(declaration.is_constructor())
@@ -1060,6 +1063,8 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
           is_static,
           is_typedef,
           is_mutable);
+
+        printf("@@ Done one d_it---\n");
       }
 
       if(declaration.operands().size())

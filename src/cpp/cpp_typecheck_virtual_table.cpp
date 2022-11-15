@@ -40,6 +40,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
     }
   }
 
+  printf("@@Start Looping ...\n");
   // create virtual-table symbol variables
   for(std::map<irep_idt, std::map<irep_idt, exprt>>::const_iterator cit =
         vt_value_maps.begin();
@@ -77,8 +78,13 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
     }
     vt_symb_var.value = values;
 
+    // DEBUG
+    //if (vt_symb_var.id.as_string() == "virtual_table::tag.Motorcycle@tag.Motorcycle")
+    //  printf("@@Got vtable tag-M@tag-M!\n");
+
     bool failed = context.move(vt_symb_var);
     assert(!failed);
     (void)failed; // ndebug
   }
+  printf("@@ End Looping ...\n");
 }
