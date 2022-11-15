@@ -96,7 +96,7 @@ void interval_analysis(goto_functionst &goto_functions, const namespacet &ns)
 
   std::ostringstream oss;
   interval_analysis.output(goto_functions,oss);
-  log_status("{}", oss.str());
+  //log_status("{}", oss.str());
   //  abort();
 
   Forall_goto_functions(f_it, goto_functions)

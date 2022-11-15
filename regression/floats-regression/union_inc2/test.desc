@@ -1,4 +1,4 @@
 CORE
 main.c
---floatbv --32 --big-endian
+--floatbv --32 --big-endian --interval-analysis
 ^VERIFICATION SUCCESSFUL$
