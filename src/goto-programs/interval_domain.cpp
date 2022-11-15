@@ -27,6 +27,18 @@ void interval_domaint::output(std::ostream &out) const
       out << " <= " << interval.second.upper;
     out << "\n";
   }
+
+  for(const auto &interval : real_map)
+  {
+    if(interval.second.is_top())
+      continue;
+    if(interval.second.lower_set)
+      out << interval.second.lower << " <= ";
+    out << interval.first;
+    if(interval.second.upper_set)
+      out << " <= " << interval.second.upper;
+    out << "\n";
+  }
 }
 
 void interval_domaint::transform(
@@ -117,6 +129,28 @@ bool interval_domaint::join(const interval_domaint &b)
       it++;
     }
   }
+
+   for(real_mapt::iterator it = real_map.begin(); it != real_map.end();) // no it++
+  {
+    // search for the variable that needs to be merged
+    // containers have different size and variable order
+    const real_mapt::const_iterator b_it = b.real_map.find(it->first);
+    if(b_it == b.real_map.end())
+    {
+      it = real_map.erase(it);
+      result = true;
+    }
+    else
+    {
+      real_intervalt previous = it->second;
+      it->second.join(b_it->second);
+      if(it->second != previous)
+        result = true;
+
+      it++;
+    }
+  }
+
 
   return result;
 }
@@ -423,6 +457,7 @@ expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
         to_floatbv_type(src.type).fraction,
         to_floatbv_type(src.type).exponent)));
       value->value.from_double(interval.upper.convert_to<double>());
+      assert(value->value.to_double() == interval.upper.convert_to<double>());
       expr2tc new_expr = symbol;
       c_implicit_typecast_arithmetic(
         new_expr, value, *migrate_namespace_lookup);
@@ -435,6 +470,7 @@ expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
         to_floatbv_type(src.type).fraction,
         to_floatbv_type(src.type).exponent)));
       value->value.from_double(interval.lower.convert_to<double>());
+      assert(value->value.to_double() == interval.lower.convert_to<double>());
       expr2tc new_expr = symbol;
       c_implicit_typecast_arithmetic(
         new_expr, value, *migrate_namespace_lookup);
