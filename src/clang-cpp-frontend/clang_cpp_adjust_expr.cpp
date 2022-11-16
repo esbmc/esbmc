@@ -57,3 +57,28 @@ void clang_cpp_adjust::adjust_new(exprt &expr)
 
   expr.set("sizeof", size_of);
 }
+
+void clang_cpp_adjust::adjust_class_type(typet &type)
+{
+  // make a tmp struct type with empty component and method vectors
+  struct_typet tmp(to_struct_type(type));
+  tmp.components().clear();
+  tmp.methods().clear();
+
+  for(auto &comp : to_struct_type(type).components())
+  {
+    if(comp.id().as_string() == "component")
+    {
+      // found a field
+      tmp.components().push_back(comp);
+    }
+    else if(comp.is_code())
+    {
+      // found a method: change id to "component"
+      comp.id("component");
+      tmp.methods().push_back(comp);
+    }
+  }
+
+  type.swap(tmp);
+}

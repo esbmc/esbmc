@@ -61,6 +61,8 @@ protected:
   void adjust_argc_argv(const symbolt &main_symbol);
 
   void do_special_functions(side_effect_expr_function_callt &expr);
+
+  virtual void adjust_class_type(typet &type);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */

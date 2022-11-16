@@ -37,8 +37,6 @@ bool clang_c_adjust::adjust()
   Forall_symbol_list(it, symbol_list)
   {
     symbolt &symbol = **it;
-    adjust_type(symbol.type);
-
     if(symbol.is_type)
       continue;
 
@@ -538,6 +536,15 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(symbol.is_macro)
       type = symbol.type; // overwrite
+  }
+
+  if(type.id() == "struct")
+  {
+    if(type.get_bool("#class"))
+    {
+      // adjust class type to move functions to type's method vector
+      adjust_class_type(type);
+    }
   }
 }
 
@@ -1211,4 +1218,13 @@ void clang_c_adjust::adjust_operands(exprt &expr)
 
   for(auto &op : expr.operands())
     adjust_expr(op);
+}
+
+void clang_c_adjust::adjust_class_type(typet &)
+{
+  log_error(
+    "Unexpected class type found in C symbols. Trying to adjust class type in "
+    "{}.",
+    __func__);
+  abort();
 }

@@ -18,6 +18,8 @@ public:
   void adjust_side_effect(side_effect_exprt &expr) override;
 
   void adjust_new(exprt &expr);
+
+  void adjust_class_type(typet &type) override;
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
