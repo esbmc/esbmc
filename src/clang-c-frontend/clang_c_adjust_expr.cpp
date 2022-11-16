@@ -37,8 +37,6 @@ bool clang_c_adjust::adjust()
   Forall_symbol_list(it, symbol_list)
   {
     symbolt &symbol = **it;
-    adjust_type(symbol.type);
-
     if(symbol.is_type)
       continue;
 
