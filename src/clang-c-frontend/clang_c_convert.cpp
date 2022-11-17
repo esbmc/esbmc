@@ -342,6 +342,13 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   // Now get the symbol back to continue the conversion
   symbolt &added_symbol = *context.find_symbol(symbol_name);
 
+  if(mode == "C++")
+  {
+    // need to pull bases in before typechecking methods
+    if(get_bases(rd, to_struct_type(t)))
+      return true;
+  }
+
   if(get_struct_union_class_fields(*rd_def, t))
     return true;
 
@@ -442,6 +449,12 @@ bool clang_c_convertert::get_struct_union_class_methods(
   struct_union_typet &)
 {
   // We don't add methods to the struct in C
+  return false;
+}
+
+bool clang_c_convertert::get_bases(const clang::RecordDecl &, struct_typet &)
+{
+  // We don't have base classes in C
   return false;
 }
 

@@ -154,9 +154,8 @@ protected:
    * Typecheck base(s)
    * cxxrd refers to the clang AST of the derived class
    */
-  bool get_bases(
-    const clang::CXXRecordDecl &cxxrd,
-    struct_typet &derived_class_type);
+  bool get_bases(const clang::RecordDecl &rd, struct_typet &derived_class_type)
+    override;
 
   /**
    * Traverse the class hierarchy and

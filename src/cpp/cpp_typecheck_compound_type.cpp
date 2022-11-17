@@ -435,6 +435,9 @@ void cpp_typecheckt::typecheck_compound_declarator(
     if(component.type().get("return_type") == "destructor")
       virtual_name = "@dtor";
 
+    if(symbol.id.as_string() == "tag.Motorcycle")
+      printf("@@ printing virtual_bases for tag.Motorcycle ...\n");
+
     // The method may be virtual implicitly.
     std::set<irep_idt> virtual_bases;
 
@@ -547,6 +550,21 @@ void cpp_typecheckt::typecheck_compound_declarator(
       vt_entry.set("access", "public");
       vt_entry.location() = symbol.location;
       virtual_table.components().push_back(vt_entry);
+
+      // DEBUG
+      if(!virtual_bases.empty())
+      {
+        if(symbol.id.as_string() == "tag.Motorcycle")
+        {
+          printf("@@ printing virtual_bases for tag.Motorcycle ...\n");
+          for(const auto &base : virtual_bases)
+          {
+            printf("%s ", base.as_string().c_str());
+          }
+          printf("\n");
+          printf("@@ Done printing virtual_bases for tag.Motorcycle ...\n");
+        }
+      }
 
       // take care of overloading
       while(!virtual_bases.empty())
@@ -1046,9 +1064,6 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       {
         cpp_declaratort &declarator = *d_it;
 
-        printf("@@ Processing one d_it...\n");
-        declarator.dump();
-
         // Skip the constructors until all the data members
         // are discovered
         if(declaration.is_constructor())
@@ -1063,8 +1078,6 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
           is_static,
           is_typedef,
           is_mutable);
-
-        printf("@@ Done one d_it---\n");
       }
 
       if(declaration.operands().size())

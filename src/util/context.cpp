@@ -30,16 +30,9 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
 
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.name, symbol.id));
 
-  if(symbol.id == "Motorcycle::number_of_wheels(this)::tag.Vehicle::this")
-    printf("@@ Add symbol in %s for: %s\n", __func__, symbol.id.c_str()); // 1
   if(symbol.id == "Motorcycle::number_of_wheels(this)::tag.Vehicle")
-    printf("@@ Add symbol in %s for: %s\n", __func__, symbol.id.c_str()); // 2
-
-  if(symbol.id == "virtual_table::tag.Motorcycle")
-    printf("@@ Add symbol in %s for: %s\n", __func__, symbol.id.c_str()); // 3
+    printf("@@ Add symbol in %s for: %s\n", __func__, symbol.id.c_str());
   if(symbol.id == "virtual_table::tag.Vehicle@tag.Motorcycle")
-    printf("@@ Add symbol in %s for: %s\n", __func__, symbol.id.c_str()); // 3
-  if(symbol.id == "virtual_table::tag.Motorcycle@tag.Motorcycle")
     printf("@@ Add symbol in %s for: %s\n", __func__, symbol.id.c_str());
 
   ordered_symbols.push_back(&result.first->second);

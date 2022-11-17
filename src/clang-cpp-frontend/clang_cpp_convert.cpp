@@ -60,18 +60,6 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     if(get_struct_union_class(cxxrd))
       return true;
 
-    // get the symbol for this class
-    std::string id, name;
-    get_decl_name(cxxrd, name, id);
-    symbolt &s = *context.find_symbol(id);
-
-    // copy components from base(s) into this class
-    // skip incomplete class
-    if(cxxrd.isCompleteDefinition())
-      if(cxxrd.bases().begin() != cxxrd.bases().end())
-        if(get_bases(cxxrd, to_struct_type(s.type)))
-          return true;
-
     break;
   }
 
@@ -448,6 +436,7 @@ bool clang_cpp_convertert::get_class_method(
   code_typet &method_type,
   const symbolt &method_symbol)
 {
+  // Maps for method typechecking in cpp_typecheckt::typecheck_compound_declarator
   // This function typechecks C++ class methods:
   //  1. adding annotations to the `component` node in the parse tree (irep)
   //     The `component` refers to the irep node of a method within a class' symbol.type.components()
@@ -506,6 +495,7 @@ bool clang_cpp_convertert::get_virtual_method(
   const symbolt &method_symbol,
   const std::string &class_symbol_id)
 {
+  // Maps the virtual method typechecking in cpp_typecheckt::typecheck_compound_declarator
   // This function typechecks virtual methods,
   // adding annotations to the virtual method component irep tree
   // static non-method member are NOT handled here
@@ -587,9 +577,7 @@ bool clang_cpp_convertert::get_virtual_method(
     vt_entry.location() = method_symbol.location;
     virtual_table.components().push_back(vt_entry);
 
-    // TODO: tabke care of overloading?
-
-    // TODO: check_array_types(component_type)?
+    // TODO: take care of overloading?
   }
   else
   {
@@ -1588,9 +1576,22 @@ symbolt *clang_cpp_convertert::get_parent_class_symbol(
 }
 
 bool clang_cpp_convertert::get_bases(
-  const clang::CXXRecordDecl &cxxrd,
+  const clang::RecordDecl &rd,
   struct_typet &derived_class_type)
 {
+  // copy components from base(s) into this class
+
+  const clang::CXXRecordDecl &cxxrd =
+    static_cast<const clang::CXXRecordDecl &>(rd);
+
+  // skip incomplete class
+  if(!cxxrd.isCompleteDefinition())
+    return false;
+
+  // skip if this class does not have any base
+  if(cxxrd.bases().empty())
+    return false;
+
   std::set<irep_idt> bases;
   std::set<irep_idt> vbases;
 

@@ -143,6 +143,9 @@ protected:
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
+  virtual bool
+  get_bases(const clang::RecordDecl &rd, struct_typet &derived_class_type);
+
   virtual bool get_type(const clang::QualType &type, typet &new_type);
 
   virtual bool get_type(const clang::Type &the_type, typet &new_type);
