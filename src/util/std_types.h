@@ -90,6 +90,10 @@ public:
     {
     }
 
+    inline componentt(exprt& from) : exprt(from.id(), from.type())
+    {
+    }
+
     inline componentt(const irep_idt &_name, const typet &_type)
       : exprt(a_component)
     {

@@ -169,6 +169,16 @@ protected:
     std::set<irep_idt> &bases,
     std::set<irep_idt> &vbases,
     bool is_virtual);
+
+  /**
+   * When typechecking a method in derived class
+   * this function populates a set of bases that contain
+   * the virtual method.
+   */
+    void get_method_virtual_bases(
+        std::set<irep_idt> &virtual_bases,
+      const std::string &class_symbol_id,
+      const std::string &virtual_name);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

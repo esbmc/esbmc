@@ -21,6 +21,7 @@
 #include <util/message.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/i2string.h>
 #include <fmt/core.h>
 #include <cpp/cpp_util.h>
 
@@ -344,7 +345,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     {
       // Add only if it isn't static
       // Both fields and methods are considered components in typechecking.
-      // TODO: Methods will be moved from `components` to `methods` in adjuster.
+      // Methods will be moved from `components` to `methods` in adjuster.
       if(!cxxmd->isStatic())
         to_struct_type(type).components().push_back(comp);
       else
@@ -469,7 +470,7 @@ bool clang_cpp_convertert::get_class_method(
     component.set("is_inlined", fd.isInlined());
     component.location() = method_symbol.location;
 
-    // Add annotations for C++ virtual methods
+    // Typechecking C++ virtual methods
     if(md->isVirtual())
       get_virtual_method(
         *md, component, method_type, method_symbol, class_symbol_id);
@@ -573,11 +574,118 @@ bool clang_cpp_convertert::get_virtual_method(
     vt_entry.set("base_name", virtual_name);
     vt_entry.set("pretty_name", virtual_name);
     vt_entry.set("access", "public");
-    // TODO: should be location of class decl, not virtual method. Let's try virtual method first
     vt_entry.location() = method_symbol.location;
     virtual_table.components().push_back(vt_entry);
 
-    // TODO: take care of overloading?
+    if(class_symbol_id == "tag-Motorcycle")
+      printf("@@ doing overloading!\n");
+
+    // take care of overloading:
+    //  The bases should have been pulled in recursively.
+    //  Walk through the components of method's parent class
+    //  and add new function symbol for "late casting" of 'this' parameter
+    std::set<irep_idt> virtual_bases;
+    get_method_virtual_bases(
+        virtual_bases,
+        class_symbol_id,
+        virtual_name);
+    while(!virtual_bases.empty()) // TODO: move to another function?
+    {
+      irep_idt virtual_base = *virtual_bases.begin();
+
+      // a new function that does 'late casting' of the 'this' parameter
+      symbolt func_symb;
+      func_symb.id =
+        component.name().as_string() + "::" + virtual_base.as_string();
+      func_symb.name = component.base_name();
+      func_symb.mode = mode;
+      func_symb.module = get_modulename_from_path(
+          component.location().file().as_string());
+      func_symb.location = component.location();
+      func_symb.type = component.type();
+
+      // change the type of the 'this' pointer
+      code_typet &code_type = to_code_type(func_symb.type);
+      code_typet::argumentt &arg = code_type.arguments().front();
+      arg.type().subtype().set("identifier", virtual_base);
+
+      // create symbols for the arguments
+      code_typet::argumentst &args = code_type.arguments();
+      for(unsigned i = 0; i < args.size(); i++)
+      {
+        code_typet::argumentt &arg = args[i];
+        irep_idt base_name = arg.get_base_name();
+
+        if(base_name == "")
+          base_name = "arg" + i2string(i);
+
+        symbolt arg_symb;
+        arg_symb.id = func_symb.id.as_string() + "::" + base_name.as_string();
+        arg_symb.name = base_name;
+        arg_symb.mode = mode;
+        arg_symb.location = func_symb.location;
+        arg_symb.type = arg.type();
+
+        arg.set("#identifier", arg_symb.id);
+
+        // add the argument to the symbol table
+        bool failed = context.move(arg_symb);
+        assert(!failed);
+        (void)failed; //ndebug
+      }
+
+      // do the body of the function
+      typecast_exprt late_cast(
+        to_code_type(component.type()).arguments()[0].type());
+
+      late_cast.op0() =
+        symbol_expr(*namespacet(context).lookup(args[0].cmt_identifier()));
+
+      if(
+        code_type.return_type().id() != "empty" &&
+        code_type.return_type().id() != "destructor")
+      {
+        side_effect_expr_function_callt expr_call;
+        expr_call.function() =
+          symbol_exprt(component.name(), component.type());
+        expr_call.type() = to_code_type(component.type()).return_type();
+        expr_call.arguments().reserve(args.size());
+        expr_call.arguments().push_back(late_cast);
+
+        for(unsigned i = 1; i < args.size(); i++)
+        {
+          expr_call.arguments().push_back(symbol_expr(
+            *namespacet(context).lookup(args[i].cmt_identifier())));
+        }
+
+        code_returnt code_return;
+        code_return.return_value() = expr_call;
+
+        func_symb.value = code_return;
+      }
+      else
+      {
+        log_error("Found destructor/empty return ids in {}", __func__);
+        abort();
+      }
+
+      // add this new function to the list of components
+
+      struct_typet::componentt new_compo(component);
+      new_compo.type() = func_symb.type;
+      new_compo.set_name(func_symb.id);
+      current_class_type->components().push_back(new_compo);
+
+      // add the function to the symbol table
+      {
+        bool failed = context.move(func_symb);
+        assert(!failed);
+        (void)failed; //ndebug
+      }
+
+      // next base
+      virtual_bases.erase(virtual_bases.begin());
+    }
   }
   else
   {
@@ -1369,7 +1477,8 @@ void clang_cpp_convertert::do_virtual_table(const struct_union_typet &type)
     vt_symb_var.name =
       vt_symb_type.name.as_string() + "@" + type.tag().as_string();
     vt_symb_var.mode = mode;
-    vt_symb_var.module = "main"; // TODO: fix me
+    vt_symb_var.module = get_modulename_from_path(
+          type.location().file().as_string());
     vt_symb_var.location = vt_symb_type.location;
     vt_symb_var.type = symbol_typet(vt_symb_type.id);
     vt_symb_var.lvalue = true;
@@ -1754,5 +1863,33 @@ void clang_cpp_convertert::add_base_components(
     }
     else
       assert(false);
+  }
+}
+
+void clang_cpp_convertert::get_method_virtual_bases(
+    std::set<irep_idt> &virtual_bases,
+    const std::string &class_symbol_id,
+    const std::string &virtual_name)
+{
+  assert(current_class_type);
+  assert(current_class_type->name().as_string()
+      == class_symbol_id);
+
+  struct_typet::componentst &components = current_class_type->components();
+  for(struct_typet::componentst::const_iterator it = components.begin();
+      it != components.end();
+      it++)
+  {
+    if(it->get_bool("is_virtual"))
+    {
+      if(it->get("virtual_name") == virtual_name)
+      {
+        const code_typet &code_type = to_code_type(it->type());
+        assert(code_type.arguments().size() > 0);
+        const typet &pointer_type = code_type.arguments()[0].type();
+        assert(pointer_type.id() == "pointer");
+        virtual_bases.insert(pointer_type.subtype().identifier());
+      }
+    }
   }
 }

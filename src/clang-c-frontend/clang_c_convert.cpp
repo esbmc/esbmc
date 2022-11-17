@@ -345,6 +345,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if(mode == "C++")
   {
     // need to pull bases in before typechecking methods
+    // TODO: could be moved to get_struct_union_class_methods in clang-cpp converter?
     if(get_bases(rd, to_struct_type(t)))
       return true;
   }
