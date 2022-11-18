@@ -254,6 +254,7 @@ void interval_domaint::assume_rec(
       // Example: a: [0.001, 0.1] and we are evaluating a <= 0.01
       auto tmp = to_constant_floatbv2t(rhs).value;
       auto &ii = real_map[lhs_identifier];
+      tmp.increment(true);
       ii.make_le_than(tmp.to_double());
       // li should be: [0.001, 0.01]
       if(ii.is_bottom())
@@ -285,6 +286,7 @@ void interval_domaint::assume_rec(
       // Example: a: [0.001, 0.1] and we are evaluating 0.01 <= a
       auto tmp = to_constant_floatbv2t(lhs).value;
       auto &ii = real_map[rhs_identifier];
+      tmp.decrement(true);
       ii.make_ge_than(tmp.to_double());
       // li should be:  [0.01, 0.01]
       if(ii.is_bottom())
