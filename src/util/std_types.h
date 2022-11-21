@@ -90,7 +90,7 @@ public:
     {
     }
 
-    inline componentt(exprt& from) : exprt(from.id(), from.type())
+    inline componentt(exprt &from) : exprt(from.id(), from.type())
     {
     }
 

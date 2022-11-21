@@ -175,10 +175,29 @@ protected:
    * this function populates a set of bases that contain
    * the virtual method.
    */
-    void get_method_virtual_bases(
-        std::set<irep_idt> &virtual_bases,
-      const std::string &class_symbol_id,
-      const std::string &virtual_name);
+  void get_method_virtual_bases(
+    std::set<irep_idt> &virtual_bases,
+    const std::string &class_symbol_id,
+    const std::string &virtual_name);
+
+  /**
+   * Populates the `bases` vector in class symbol.type, e.g.:
+   * struct:
+   *  * name: ...
+   *  * tag: ...
+   *  * components: ...
+   *  * bases:
+   *    0: tag-Base1: ...
+   *    1: tag-Base2: ...
+   *    2: tag-Base3: ...
+   * This will be used to add implicit code in dtor, e.g.:
+   *  - vtables should be updated as soon as the destructor is called
+   *  - dtors contains the destructors for members and base classes,
+   *    that should be called after the code of the current destructor.
+   */
+  void get_irep_base_vector(
+    const clang::CXXRecordDecl &cxxrd,
+    struct_typet &derived_class_type);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

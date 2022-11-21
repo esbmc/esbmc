@@ -585,10 +585,7 @@ bool clang_cpp_convertert::get_virtual_method(
     //  Walk through the components of method's parent class
     //  and add new function symbol for "late casting" of 'this' parameter
     std::set<irep_idt> virtual_bases;
-    get_method_virtual_bases(
-        virtual_bases,
-        class_symbol_id,
-        virtual_name);
+    get_method_virtual_bases(virtual_bases, class_symbol_id, virtual_name);
     while(!virtual_bases.empty()) // TODO: move to another function?
     {
       irep_idt virtual_base = *virtual_bases.begin();
@@ -599,8 +596,8 @@ bool clang_cpp_convertert::get_virtual_method(
         component.name().as_string() + "::" + virtual_base.as_string();
       func_symb.name = component.base_name();
       func_symb.mode = mode;
-      func_symb.module = get_modulename_from_path(
-          component.location().file().as_string());
+      func_symb.module =
+        get_modulename_from_path(component.location().file().as_string());
       func_symb.location = component.location();
       func_symb.type = component.type();
 
@@ -646,16 +643,15 @@ bool clang_cpp_convertert::get_virtual_method(
         code_type.return_type().id() != "destructor")
       {
         side_effect_expr_function_callt expr_call;
-        expr_call.function() =
-          symbol_exprt(component.name(), component.type());
+        expr_call.function() = symbol_exprt(component.name(), component.type());
         expr_call.type() = to_code_type(component.type()).return_type();
         expr_call.arguments().reserve(args.size());
         expr_call.arguments().push_back(late_cast);
 
         for(unsigned i = 1; i < args.size(); i++)
         {
-          expr_call.arguments().push_back(symbol_expr(
-            *namespacet(context).lookup(args[i].cmt_identifier())));
+          expr_call.arguments().push_back(
+            symbol_expr(*namespacet(context).lookup(args[i].cmt_identifier())));
         }
 
         code_returnt code_return;
@@ -1477,8 +1473,8 @@ void clang_cpp_convertert::do_virtual_table(const struct_union_typet &type)
     vt_symb_var.name =
       vt_symb_type.name.as_string() + "@" + type.tag().as_string();
     vt_symb_var.mode = mode;
-    vt_symb_var.module = get_modulename_from_path(
-          type.location().file().as_string());
+    vt_symb_var.module =
+      get_modulename_from_path(type.location().file().as_string());
     vt_symb_var.location = vt_symb_type.location;
     vt_symb_var.type = symbol_typet(vt_symb_type.id);
     vt_symb_var.lvalue = true;
@@ -1701,6 +1697,8 @@ bool clang_cpp_convertert::get_bases(
   if(cxxrd.bases().empty())
     return false;
 
+  get_irep_base_vector(cxxrd, derived_class_type);
+
   std::set<irep_idt> bases;
   std::set<irep_idt> vbases;
 
@@ -1866,14 +1864,47 @@ void clang_cpp_convertert::add_base_components(
   }
 }
 
+void clang_cpp_convertert::get_irep_base_vector(
+  const clang::CXXRecordDecl &cxxrd,
+  struct_typet &derived_class_type)
+{
+  irept::subt &bases = derived_class_type.add("bases").get_sub();
+  for(const clang::CXXBaseSpecifier &decl : cxxrd.bases())
+  {
+    typet t;
+    if(get_type(decl.getType(), t))
+    {
+      log_error("Failed to get base type in {}", __func__);
+      abort();
+    }
+
+    // base type
+    assert(t.is_struct() && t.get_bool("#class"));
+    struct_union_typet class_t = to_struct_union_type(t);
+    t = symbol_typet(tag_prefix + class_t.tag().as_string());
+    exprt base("base", t);
+
+    // base access
+    base.set("access", get_access(decl.getAccessSpecifier()));
+
+    // base location
+    locationt loc;
+    const clang::CXXRecordDecl &base_cxxrd =
+      *(decl.getType().getTypePtr()->getAsCXXRecordDecl());
+    get_location_from_decl(base_cxxrd, loc);
+    base.location() = loc;
+
+    bases.push_back(base);
+  }
+}
+
 void clang_cpp_convertert::get_method_virtual_bases(
-    std::set<irep_idt> &virtual_bases,
-    const std::string &class_symbol_id,
-    const std::string &virtual_name)
+  std::set<irep_idt> &virtual_bases,
+  const std::string &class_symbol_id,
+  const std::string &virtual_name)
 {
   assert(current_class_type);
-  assert(current_class_type->name().as_string()
-      == class_symbol_id);
+  assert(current_class_type->name().as_string() == class_symbol_id);
 
   struct_typet::componentst &components = current_class_type->components();
   for(struct_typet::componentst::const_iterator it = components.begin();

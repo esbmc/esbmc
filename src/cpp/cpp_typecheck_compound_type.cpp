@@ -235,7 +235,10 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     id.id_class = cpp_idt::CLASS;
 
     if(symbol_name == "tag.Motorcycle")
-      printf("@@ Got target class\n");
+      printf("@@ Got Motorcycle class\n");
+
+    if(symbol_name == "tag.Vehicle")
+      printf("@@ Got Vehicle class\n");
 
     if(has_body)
     {

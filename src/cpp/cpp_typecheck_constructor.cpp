@@ -1059,9 +1059,6 @@ void cpp_typecheckt::dtor(
       exprt name("name");
       name.set("identifier", cit->base_name());
 
-      cpp_namet cppname;
-      cppname.move_to_sub(name);
-
       const symbolt &virtual_table_symbol_type =
         *namespacet(context).lookup(cit->type().subtype().identifier());
 

@@ -663,6 +663,9 @@ bool clang_c_convertert::get_function(
 
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
+  if(id == "c:@S@Vehicle@F@number_of_wheels#")
+    printf("@@ Got Vehicle's number_of_wheels\n");
+
   // The order matters. Do NOT change.
 
   // We convert the parameters first so their symbol are added to context
@@ -885,7 +888,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     // Special case, pointers to structs/unions/classes must not
     // have a copy of it, but a reference to the type
-    // TODO: classes
+    // A class is of struct type
     if(sub_type.is_struct() || sub_type.is_union())
     {
       struct_union_typet t = to_struct_union_type(sub_type);

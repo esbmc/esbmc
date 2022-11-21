@@ -25,6 +25,12 @@ void cpp_typecheckt::typecheck_function_bodies()
     if(function_symbol.id == "main")
       add_argc_argv(function_symbol);
 
+    if(function_symbol.id.as_string() == "Motorcycle::~Motorcycle(this)")
+      printf("@@ Got Motorcycle dtor in typecheck_function_bodies\n");
+
+    if(function_symbol.id.as_string() == "Vehicle::~Vehicle(this)")
+      printf("@@ Got Vehicle dtor in typecheck_function_bodies\n");
+
     exprt &body = function_symbol.value;
     if(body.id() == "cpp_not_typechecked")
       continue;
