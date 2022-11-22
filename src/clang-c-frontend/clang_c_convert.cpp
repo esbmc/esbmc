@@ -605,12 +605,7 @@ bool clang_c_convertert::get_function(
   // Notes for future extension:
   //   If we want to include copy/move assignment operators, refer to isCopyAssignmentOperator()
   //   in clang::CXXMethodDecl.
-  auto isContructorOrDestructor = [](const clang::FunctionDecl &fd) {
-    return fd.getKind() == clang::Decl::CXXConstructor ||
-           fd.getKind() == clang::Decl::CXXDestructor;
-  };
-
-  if(fd.isImplicit() && !isContructorOrDestructor(fd))
+  if(fd.isImplicit() && !is_ctor(fd) && !is_dtor(fd))
     return false;
 
   // If the function is not defined but this is not the definition, skip it
@@ -646,9 +641,6 @@ bool clang_c_convertert::get_function(
 
   std::string id, name;
   get_decl_name(fd, name, id);
-
-  if(id == "c:@S@Vehicle@F@~Vehicle#")
-    printf("@@ Got ~Vehicle!\n");
 
   symbolt symbol;
   get_default_symbol(
@@ -695,11 +687,8 @@ bool clang_c_convertert::get_function(
   added_symbol.type = type;
 
   // We need: a type, a name, and an optional body
-  if(fd.hasBody())
-  {
-    if(get_function_body(fd, added_symbol.value, type))
-      return true;
-  }
+  if(get_function_body(fd, added_symbol.value, type))
+    return true;
 
   // Restore old functionDecl
   current_functionDecl = old_functionDecl;
@@ -733,7 +722,8 @@ bool clang_c_convertert::get_function_body(
   exprt &new_expr,
   const code_typet &)
 {
-  assert(fd.hasBody());
+  if(!fd.hasBody())
+    return false;
 
   exprt body_exprt;
   if(get_expr(*fd.getBody(), body_exprt))
@@ -3356,4 +3346,14 @@ clang_c_convertert::get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt)
   }
 
   return nullptr;
+}
+
+bool clang_c_convertert::is_ctor(const clang::FunctionDecl &fd)
+{
+  return (fd.getKind() == clang::Decl::CXXConstructor);
+}
+
+bool clang_c_convertert::is_dtor(const clang::FunctionDecl &fd)
+{
+  return (fd.getKind() == clang::Decl::CXXDestructor);
 }

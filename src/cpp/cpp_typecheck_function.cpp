@@ -114,10 +114,15 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   function_scope.prefix += id2string(symbol.id) + "::";
 
   // genuine function definition -- do the parameter declarations
-  convert_arguments(symbol.mode, function_type); // DEBUG: has effect for Task 1: dtor implicit code
+  convert_arguments(
+    symbol.mode,
+    function_type); // DEBUG: has effect for Task 1: dtor implicit code
 
   // create "this" if it's a non-static method
-  if(function_scope.is_method && !function_scope.is_static_member) // DEBUG: NO effect for Task 1: dtor implicit code
+  if(
+    function_scope.is_method &&
+    !function_scope
+       .is_static_member) // DEBUG: NO effect for Task 1: dtor implicit code
   {
     code_typet::argumentst &arguments = function_type.arguments();
     assert(arguments.size() >= 1);
@@ -140,9 +145,11 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   if(return_type.id() == "constructor" || return_type.id() == "destructor")
     return_type = empty_typet();
 
-  typecheck_code(to_code(symbol.value)); // DEBUG: has effect for Task 1: dtor implicit code
+  typecheck_code(
+    to_code(symbol.value)); // DEBUG: has effect for Task 1: dtor implicit code
 
-  symbol.value.type() = symbol.type; // DEBUG: has effect for Task 1: dtor implicit code
+  symbol.value.type() =
+    symbol.type; // DEBUG: has effect for Task 1: dtor implicit code
 
   return_type = old_return_type;
 }

@@ -237,9 +237,6 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     if(symbol_name == "tag.Vehicle")
       printf("@@ Got Vehicle class\n");
 
-    if(symbol_name == "tag.Motorcycle")
-      printf("@@ Got Motorcycle class\n");
-
     if(has_body)
     {
       // adding components to symbol.type, such as vtable, vptr, ctor, dtor, methods...

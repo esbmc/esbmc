@@ -1132,7 +1132,12 @@ bool clang_cpp_convertert::get_function_body(
 {
   // Constructor initializer list is checked here. Becasue we are going to convert
   // each initializer into an assignment statement, added to the function body.
-  // do nothing if function body doesn't exist
+
+  // Make a placeholder of code block, as we might need to add vptr initialization code in adjuster
+  // TODO: refactor our ctor vptr initialization like this???
+  if(is_dtor(fd))
+    new_expr = code_blockt();
+
   if(!fd.hasBody())
     return false;
 

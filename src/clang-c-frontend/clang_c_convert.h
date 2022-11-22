@@ -224,6 +224,9 @@ protected:
   const clang::Decl *get_DeclContext_from_Stmt(const clang::Stmt &stmt);
 
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
+
+  bool is_ctor(const clang::FunctionDecl &fd);
+  bool is_dtor(const clang::FunctionDecl &fd);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
