@@ -647,6 +647,9 @@ bool clang_c_convertert::get_function(
   std::string id, name;
   get_decl_name(fd, name, id);
 
+  if(id == "c:@S@Vehicle@F@~Vehicle#")
+    printf("@@ Got ~Vehicle!\n");
+
   symbolt symbol;
   get_default_symbol(
     symbol,
@@ -662,9 +665,6 @@ bool clang_c_convertert::get_function(
   symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
 
   symbolt &added_symbol = *move_symbol_to_context(symbol);
-
-  if(id == "c:@S@Vehicle@F@number_of_wheels#")
-    printf("@@ Got Vehicle's number_of_wheels\n");
 
   // The order matters. Do NOT change.
 

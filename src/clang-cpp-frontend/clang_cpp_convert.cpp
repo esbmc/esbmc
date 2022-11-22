@@ -442,11 +442,25 @@ bool clang_cpp_convertert::get_class_method(
   //  1. adding annotations to the `component` node in the parse tree (irep)
   //     The `component` refers to the irep node of a method within a class' symbol.type.components()
   //  2. performing additional typechecks for virtual method
+  //  3. For constructors and destructors, the return_type will be `constructor` and `destructor` respectively
   if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
   {
     assert(method_type.arguments()
              .begin()
              ->is_not_nil()); // "this" must have been added
+
+    // setting ctor and dtor return type
+    if(fd.getKind() == clang::Decl::CXXDestructor)
+    {
+      typet rtn_type("destructor");
+      to_code_type(component.type()).return_type() = rtn_type;
+    }
+    if(fd.getKind() == clang::Decl::CXXConstructor)
+    {
+      typet rtn_type("constructor");
+      to_code_type(component.type()).return_type() = rtn_type;
+    }
+
     std::string class_symbol_id = method_type.arguments()
                                     .begin()
                                     ->type()

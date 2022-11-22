@@ -234,11 +234,11 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     id.class_identifier = new_symbol->id;
     id.id_class = cpp_idt::CLASS;
 
-    if(symbol_name == "tag.Motorcycle")
-      printf("@@ Got Motorcycle class\n");
-
     if(symbol_name == "tag.Vehicle")
       printf("@@ Got Vehicle class\n");
+
+    if(symbol_name == "tag.Motorcycle")
+      printf("@@ Got Motorcycle class\n");
 
     if(has_body)
     {
@@ -288,7 +288,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
   typet final_type = declarator.merge_type(declaration.type());
 
-  typecheck_type(final_type);
+  typecheck_type(final_type); // DEBUG: changed to "return_type: destructor"
 
   cpp_namet cpp_name;
   cpp_name.swap(declarator.name());
