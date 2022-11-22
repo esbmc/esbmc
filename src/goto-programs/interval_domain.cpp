@@ -27,6 +27,18 @@ void interval_domaint::output(std::ostream &out) const
       out << " <= " << interval.second.upper;
     out << "\n";
   }
+
+  for(const auto &interval : real_map)
+  {
+    if(interval.second.is_top())
+      continue;
+    if(interval.second.lower_set)
+      out << interval.second.lower << " <= ";
+    out << interval.first;
+    if(interval.second.upper_set)
+      out << " <= " << interval.second.upper;
+    out << "\n";
+  }
 }
 
 void interval_domaint::transform(
@@ -85,18 +97,6 @@ void interval_domaint::transform(
   }
 }
 
-/// Sets *this to the mathematical join between the two domains. This can be
-/// thought of as an abstract version of union; *this is increased so that it
-/// contains all of the values that are represented by b as well as its original
-/// intervals. The result is an overapproximation, for example:
-/// "[0,1]".join("[3,4]") --> "[0,4]" includes 2 which isn't in [0,1] or [3,4].
-///
-///          Join is used in several places, the most significant being
-///          merge, which uses it to bring together two different paths
-///          of analysis.
-/// \par parameters: The interval domain, b, to join to this domain.
-/// \return True if the join increases the set represented by *this, False if
-///   there is no change.
 bool interval_domaint::join(const interval_domaint &b)
 {
   if(b.bottom)
@@ -130,6 +130,28 @@ bool interval_domaint::join(const interval_domaint &b)
     }
   }
 
+   for(real_mapt::iterator it = real_map.begin(); it != real_map.end();) // no it++
+  {
+    // search for the variable that needs to be merged
+    // containers have different size and variable order
+    const real_mapt::const_iterator b_it = b.real_map.find(it->first);
+    if(b_it == b.real_map.end())
+    {
+      it = real_map.erase(it);
+      result = true;
+    }
+    else
+    {
+      real_intervalt previous = it->second;
+      it->second.join(b_it->second);
+      if(it->second != previous)
+        result = true;
+
+      it++;
+    }
+  }
+
+
   return result;
 }
 
@@ -154,11 +176,26 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
 
     if(is_bv_type(expr))
       int_map.erase(identifier);
+
+    if(is_floatbv_type(expr))
+      real_map.erase(identifier);
   }
   else if(is_typecast2t(expr))
   {
     havoc_rec(to_typecast2t(expr).from);
   }
+  else if(is_code_decl2t(expr))
+  {
+    irep_idt identifier = to_code_decl2t(expr).value;
+
+    if(is_bv_type(expr))
+      int_map.erase(identifier);
+
+    if(is_floatbv_type(expr))
+      real_map.erase(identifier);
+  }
+  else
+    log_debug("[havoc_rec] Missing support: {}", *expr);
 }
 
 void interval_domaint::assume_rec(
@@ -192,9 +229,11 @@ void interval_domaint::assume_rec(
   //             lhs <= rhs
 
   assert(id == expr2t::lessthan_id || id == expr2t::lessthanequal_id);
-
+  // TODO: this could use some heavy refactoring!
   if(is_symbol2t(lhs) && is_constant_number(rhs))
   {
+    // Example: a: [-2, 10] and we are evaluating a <= 6
+
     irep_idt lhs_identifier = to_symbol2t(lhs).thename;
 
     if(is_bv_type(lhs) && is_bv_type(rhs))
@@ -203,13 +242,30 @@ void interval_domaint::assume_rec(
       if(id == expr2t::lessthan_id)
         --tmp;
       integer_intervalt &ii = int_map[lhs_identifier];
+      // li should be [-2, 10]
       ii.make_le_than(tmp);
+      // li should be [-2, 6]
       if(ii.is_bottom())
         make_bottom();
     }
+
+    if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
+    {
+      // Example: a: [0.001, 0.1] and we are evaluating a <= 0.01
+      auto tmp = to_constant_floatbv2t(rhs).value;
+      auto &ii = real_map[lhs_identifier];
+      tmp.increment(true);
+      ii.make_le_than(tmp.to_double());
+      // li should be: [0.001, 0.01]
+      if(ii.is_bottom())
+        make_bottom();
+    }
+
+    // TODO: Mix int and float!
   }
   else if(is_constant_number(lhs) && is_symbol2t(rhs))
   {
+    // Example: a: [-2, 10] and we are evaluating 3 <= a
     irep_idt rhs_identifier = to_symbol2t(rhs).thename;
 
     if(is_bv_type(lhs) && is_bv_type(rhs))
@@ -218,7 +274,21 @@ void interval_domaint::assume_rec(
       if(id == expr2t::lessthan_id)
         ++tmp;
       integer_intervalt &ii = int_map[rhs_identifier];
+      // li: [-2, 10]
       ii.make_ge_than(tmp);
+      // li: [3, 10]
+      if(ii.is_bottom())
+        make_bottom();
+    }
+
+    if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
+    {
+      // Example: a: [0.001, 0.1] and we are evaluating 0.01 <= a
+      auto tmp = to_constant_floatbv2t(lhs).value;
+      auto &ii = real_map[rhs_identifier];
+      tmp.decrement(true);
+      ii.make_ge_than(tmp.to_double());
+      // li should be:  [0.01, 0.01]
       if(ii.is_bottom())
         make_bottom();
     }
@@ -230,11 +300,20 @@ void interval_domaint::assume_rec(
 
     if(is_bv_type(lhs) && is_bv_type(rhs))
     {
-      integer_intervalt &lhs_i = int_map[lhs_identifier];
-      integer_intervalt &rhs_i = int_map[rhs_identifier];
-      lhs_i.meet(rhs_i);
-      rhs_i = lhs_i;
-      if(rhs_i.is_bottom())
+      auto &lhs_i = int_map[lhs_identifier];
+      auto &rhs_i = int_map[rhs_identifier];
+
+      integer_intervalt::contract_interval_le(lhs_i, rhs_i);
+      if(rhs_i.is_bottom() || lhs_i.is_bottom())
+        make_bottom();
+    }
+
+    if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
+    {
+      auto &lhs_i = real_map[lhs_identifier];
+      auto &rhs_i = real_map[rhs_identifier];
+      real_intervalt::contract_interval_le(lhs_i, rhs_i);
+      if(rhs_i.is_bottom() || lhs_i.is_bottom())
         make_bottom();
     }
   }
@@ -287,6 +366,7 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
   {
     assume_rec(to_not2t(cond).value, !negation);
   }
+  // de morgan
   else if(is_and2t(cond))
   {
     if(!negation)
@@ -297,6 +377,8 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
     if(negation)
       cond->foreach_operand([this](const expr2tc &e) { assume_rec(e, true); });
   }
+  else
+    log_debug("[assume_rec] Missing support: {}", *cond);
 }
 
 void interval_domaint::dump() const
@@ -305,12 +387,13 @@ void interval_domaint::dump() const
   output(oss);
   log_debug("{}", oss.str());
 }
-expr2tc interval_domaint::make_expression(const expr2tc &expr) const
+expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
 {
-  assert(is_symbol2t(expr));
+  assert(is_symbol2t(symbol));
 
-  symbol2t src = to_symbol2t(expr);
-  if(is_bv_type(expr))
+  symbol2t src = to_symbol2t(symbol);
+  // TODO: this needs a heavy refactoring!
+  if(is_bv_type(symbol))
   {
     int_mapt::const_iterator i_it = int_map.find(src.thename);
     if(i_it == int_map.end())
@@ -327,7 +410,7 @@ expr2tc interval_domaint::make_expression(const expr2tc &expr) const
     if(interval.singleton())
     {
       expr2tc value = from_integer(interval.upper, src.type);
-      expr2tc new_expr = expr;
+      expr2tc new_expr = symbol;
       c_implicit_typecast_arithmetic(
         new_expr, value, *migrate_namespace_lookup);
       conjuncts.push_back(equality2tc(new_expr, value));
@@ -337,7 +420,7 @@ expr2tc interval_domaint::make_expression(const expr2tc &expr) const
       if(interval.upper_set)
       {
         expr2tc value = from_integer(interval.upper, src.type);
-        expr2tc new_expr = expr;
+        expr2tc new_expr = symbol;
         c_implicit_typecast_arithmetic(
           new_expr, value, *migrate_namespace_lookup);
         conjuncts.push_back(lessthanequal2tc(new_expr, value));
@@ -346,7 +429,7 @@ expr2tc interval_domaint::make_expression(const expr2tc &expr) const
       if(interval.lower_set)
       {
         expr2tc value = from_integer(interval.lower, src.type);
-        expr2tc new_expr = expr;
+        expr2tc new_expr = symbol;
         c_implicit_typecast_arithmetic(
           new_expr, value, *migrate_namespace_lookup);
         conjuncts.push_back(lessthanequal2tc(value, new_expr));
@@ -356,26 +439,53 @@ expr2tc interval_domaint::make_expression(const expr2tc &expr) const
     return conjunction(conjuncts);
   }
 
+  if(is_floatbv_type(symbol))
+  {
+    real_mapt::const_iterator i_it = real_map.find(src.thename);
+    if(i_it == real_map.end())
+      return gen_true_expr();
+
+    const real_intervalt &interval = i_it->second;
+    if(interval.is_top())
+      return gen_true_expr();
+
+    if(interval.is_bottom())
+      return gen_false_expr();
+
+    std::vector<expr2tc> conjuncts;
+    if(interval.upper_set)
+    {
+      constant_floatbv2tc value(ieee_floatt(ieee_float_spect(
+        to_floatbv_type(src.type).fraction,
+        to_floatbv_type(src.type).exponent)));
+      const double d = interval.upper.convert_to<double>();
+      value->value.from_double(d);
+      value->value.increment(true);      
+      expr2tc new_expr = symbol;
+      c_implicit_typecast_arithmetic(
+        new_expr, value, *migrate_namespace_lookup);
+      conjuncts.push_back(lessthanequal2tc(new_expr, value));
+    }
+
+    if(interval.lower_set)
+    {
+      constant_floatbv2tc value(ieee_floatt(ieee_float_spect(
+        to_floatbv_type(src.type).fraction,
+        to_floatbv_type(src.type).exponent)));
+      const double d = interval.lower.convert_to<double>();
+      value->value.from_double(d);
+      value->value.decrement(true);
+      expr2tc new_expr = symbol;
+      c_implicit_typecast_arithmetic(
+        new_expr, value, *migrate_namespace_lookup);
+      conjuncts.push_back(lessthanequal2tc(value, new_expr));
+    }
+
+    return conjunction(conjuncts);
+  }
+
   return gen_true_expr();
 }
-
-/// Uses the abstract state to simplify a given expression using context-
-/// specific information.
-/// \par parameters: The expression to simplify.
-/// \return A simplified version of the expression.
-/*
- * This implementation is aimed at reducing assertions to true, particularly
- * range checks for arrays and other bounds checks.
- *
- * Rather than work with the various kinds of exprt directly, we use assume,
- * join and is_bottom.  It is sufficient for the use case and avoids duplicating
- * functionality that is in assume anyway.
- *
- * As some expressions (1<=a && a<=2) can be represented exactly as intervals
- * and some can't (a<1 || a>2), the way these operations are used varies
- * depending on the structure of the expression to try to give the best results.
- * For example negating a disjunction makes it easier for assume to handle.
- */
 
 bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
   const
