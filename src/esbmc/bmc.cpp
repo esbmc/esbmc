@@ -53,18 +53,8 @@ std::vector<std::string> declared_types;
 std::map<std::string, unsigned int> fun_call_nums;
 std::map<expr2tc, unsigned int> dyn_size_map;
 
-<<<<<<< HEAD
-
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
-=======
-bmct::bmct(
-  goto_functionst &funcs,
-  optionst &opts,
-  contextt &_context,
-  const messaget &_message_handler)
-  : options(opts), context(_context), ns(context), msg(_message_handler)
->>>>>>> ed04094e2 ([symex] updated functions signatures)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -666,7 +656,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     {
       std::ostringstream str;
       output_execution_trace(ns, str);
-      msg.status(str.str());
+      log_status(str.str());
     }
     //return smt_convt::P_SATISFIABLE;
     //return 0;
