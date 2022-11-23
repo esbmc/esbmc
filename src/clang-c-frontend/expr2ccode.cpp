@@ -30,16 +30,16 @@ bool is_anonymous_tag(std::string tag)
 {
   std::smatch m;
   return std::regex_search(tag, m, std::regex("anonymous at")) ||
-          std::regex_search(tag, m, std::regex("anonymous struct at")) ||
-          std::regex_search(tag, m, std::regex("anonymous union at"));
+         std::regex_search(tag, m, std::regex("anonymous struct at")) ||
+         std::regex_search(tag, m, std::regex("anonymous union at"));
 }
 
 bool is_padding(std::string tag)
 {
   std::smatch m;
   return std::regex_search(tag, m, std::regex("anon_pad\\$\\d+")) ||
-          std::regex_search(tag, m, std::regex("\\$pad")) ||
-            std::regex_search(tag, m, std::regex("anon_bit_field_pad\\$\\d+"));
+         std::regex_search(tag, m, std::regex("\\$pad")) ||
+         std::regex_search(tag, m, std::regex("anon_bit_field_pad\\$\\d+"));
 }
 
 bool is_anonymous_member(std::string tag)
@@ -51,18 +51,18 @@ bool is_anonymous_member(std::string tag)
 // The following is a simple workaround to determine when a struct/union
 // type is defined using the "typedef" keyword since it changes
 // the type declaration syntax. This information is reflected only in the
-// type name in ESBMC irep. (Currently this info is not carried over from the 
-// Clang AST, and ideally we should introduce a separate 
+// type name in ESBMC irep. (Currently this info is not carried over from the
+// Clang AST, and ideally we should introduce a separate
 // attribute for this field.)
 bool is_typedef_struct_union(std::string tag)
 {
   std::smatch m;
-  return !(std::regex_search(id2string(tag), m, std::regex("union[[:space:]]+.*")) ||
-            std::regex_search(id2string(tag), m, std::regex("struct[[:space:]]+.*")));
+  return !(
+    std::regex_search(id2string(tag), m, std::regex("union[[:space:]]+.*")) ||
+    std::regex_search(id2string(tag), m, std::regex("struct[[:space:]]+.*")));
 }
 
-std::string
-expr2ccode(const exprt &expr, const namespacet &ns, bool fullname)
+std::string expr2ccode(const exprt &expr, const namespacet &ns, bool fullname)
 {
   std::string code;
   expr2ccodet expr2ccode(ns, fullname);
@@ -70,8 +70,7 @@ expr2ccode(const exprt &expr, const namespacet &ns, bool fullname)
   return expr2ccode.convert(expr);
 }
 
-std::string
-type2ccode(const typet &type, const namespacet &ns, bool fullname)
+std::string type2ccode(const typet &type, const namespacet &ns, bool fullname)
 {
   expr2ccodet expr2ccode(ns, fullname);
   return expr2ccode.convert(type);
@@ -160,8 +159,9 @@ std::string expr2ccodet::convert_rec(
 
     // Checking if the type has been already declared.
     // If true, then we only need to output the type's tag.
-    if(std::find(declared_types.begin(), declared_types.end(), 
-        id2string(tag)) != declared_types.end())
+    if(
+      std::find(declared_types.begin(), declared_types.end(), id2string(tag)) !=
+      declared_types.end())
       return dest += " " + id2string(tag) + " " + declarator;
 
     // Adding this type to the list of declared types before continuing onto
@@ -174,7 +174,7 @@ std::string expr2ccodet::convert_rec(
     if(is_typedef_struct_union(tag.as_string()))
       return convert_struct_union_typedef(struct_type);
 
-    // Anonymous structs are always redeclared with all their members  
+    // Anonymous structs are always redeclared with all their members
     if(is_anonymous)
       dest += "struct ";
     else if(tag != "")
@@ -189,8 +189,7 @@ std::string expr2ccodet::convert_rec(
         continue;
 
       dest += ' ';
-      dest += convert_rec(
-        component.type(), c_qualifierst(), comp_name);
+      dest += convert_rec(component.type(), c_qualifierst(), comp_name);
       dest += ';';
     }
 
@@ -207,8 +206,9 @@ std::string expr2ccodet::convert_rec(
 
     // Checking if the type has been already declared.
     // If true, then we only need to output the type's tag
-    if(std::find(declared_types.begin(), declared_types.end(), 
-        id2string(tag)) != declared_types.end())
+    if(
+      std::find(declared_types.begin(), declared_types.end(), id2string(tag)) !=
+      declared_types.end())
       return dest += " " + id2string(tag) + " " + declarator;
 
     // Checking if the union type is anonymous. If the union is anonymous
@@ -225,7 +225,7 @@ std::string expr2ccodet::convert_rec(
     if(is_typedef_struct_union(tag.as_string()))
       return convert_struct_union_typedef(union_type);
 
-    // Anonymous unions are always redeclared with all their members  
+    // Anonymous unions are always redeclared with all their members
     if(is_anonymous)
       dest += "union ";
     else if(tag != "")
@@ -364,7 +364,7 @@ std::string expr2ccodet::convert_rec(
   return convert_norep((exprt &)src, precedence);
 }
 
-std::string expr2ccodet::convert_code_printf (const codet &src, unsigned indent)
+std::string expr2ccodet::convert_code_printf(const codet &src, unsigned indent)
 {
   std::string dest = indent_str(indent) + "printf(";
 
@@ -399,7 +399,7 @@ std::string expr2ccodet::convert_symbol(const exprt &src, unsigned &)
 {
   const irep_idt &id = src.identifier();
   std::string dest;
-  
+
   dest = id2string(id);
 
   if(src.id() == "next_symbol")
@@ -877,8 +877,8 @@ std::string expr2ccodet::convert_struct_union_typedef(const typet &src)
   // The following is a simple workaround to determine when a struct
   // type is defined using the "typedef" keyword since it changes
   // the type declaration syntax. This information is reflected only in the
-  // type name in ESBMC irep. (Currently this info is not carried over from the 
-  // Clang AST, and ideally we should introduce a separate attribute for 
+  // type name in ESBMC irep. (Currently this info is not carried over from the
+  // Clang AST, and ideally we should introduce a separate attribute for
   // this field.)
   std::string dest = "typedef ";
   dest += src.id().as_string();
@@ -891,8 +891,7 @@ std::string expr2ccodet::convert_struct_union_typedef(const typet &src)
       continue;
 
     dest += ' ';
-    dest += convert_rec(
-      component.type(), c_qualifierst(), comp_name);
+    dest += convert_rec(component.type(), c_qualifierst(), comp_name);
     dest += ';';
   }
 
@@ -903,7 +902,8 @@ std::string expr2ccodet::convert_struct_union_typedef(const typet &src)
   return dest;
 }
 
-std::string expr2ccodet::convert_typecast(const exprt &src, unsigned &precedence)
+std::string
+expr2ccodet::convert_typecast(const exprt &src, unsigned &precedence)
 {
   precedence = 14;
 
@@ -1175,7 +1175,8 @@ std::string expr2ccodet::convert_from_ssa_form(const std::string symbol)
   return new_symbol;
 }
 
-std::string expr2ccodet::convert_same_object(const exprt &src, unsigned &precedence)
+std::string
+expr2ccodet::convert_same_object(const exprt &src, unsigned &precedence)
 {
   assert(src.operands().size() == 2);
   expr2tc new_src;
@@ -1184,23 +1185,25 @@ std::string expr2ccodet::convert_same_object(const exprt &src, unsigned &precede
   assert(is_same_object2t(new_src));
   same_object2tc same = to_same_object2t(new_src);
 
-  assert(is_pointer_type(same->side_1->type) && 
-          is_pointer_type(same->side_2->type));
+  assert(
+    is_pointer_type(same->side_1->type) && is_pointer_type(same->side_2->type));
   pointer_type2tc ptr_type = to_pointer_type(same->side_1->type);
   unsigned int ptr_subtype_size = type_byte_size(ptr_type->subtype).to_uint64();
-  
+
   if(is_address_of2t(same->side_2))
   {
     address_of2tc addr = to_address_of2t(same->side_2);
     if(is_array_type(addr->ptr_obj->type))
     {
-      array_type2tc arr_type = to_array_type(addr->ptr_obj->type); 
-      unsigned int arr_subtype_size = type_byte_size(arr_type->subtype).to_uint64();
+      array_type2tc arr_type = to_array_type(addr->ptr_obj->type);
+      unsigned int arr_subtype_size =
+        type_byte_size(arr_type->subtype).to_uint64();
       // this arr_size is equal to the number of elements of the given array
       expr2tc arr_size = arr_type->array_size;
       greaterthan2tc gt(addr->ptr_obj, same->side_1);
-      greaterthan2tc gt2(add2tc(same->side_1->type, same->side_1, gen_ulong(1)), 
-                          add2tc(arr_type->subtype, addr->ptr_obj, arr_size));
+      greaterthan2tc gt2(
+        add2tc(same->side_1->type, same->side_1, gen_ulong(1)),
+        add2tc(arr_type->subtype, addr->ptr_obj, arr_size));
       or2tc in_bounds(gt, gt2);
       simplify(in_bounds);
       return convert(migrate_expr_back(in_bounds), precedence);
@@ -1211,7 +1214,8 @@ std::string expr2ccodet::convert_same_object(const exprt &src, unsigned &precede
   return convert(migrate_expr_back(not2tc(eq)), precedence);
 }
 
-std::string expr2ccodet::convert_pointer_offset(const exprt &src, unsigned &precedence)
+std::string
+expr2ccodet::convert_pointer_offset(const exprt &src, unsigned &precedence)
 {
   std::string dest = "pointer_offset";
   dest += '(';
@@ -1288,7 +1292,8 @@ std::string expr2ccodet::convert_array_of(const exprt &src, unsigned precedence)
   return dest;
 }
 
-std::string expr2ccodet::convert_dynamic_size(const exprt &src, unsigned &precedence)
+std::string
+expr2ccodet::convert_dynamic_size(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -1304,12 +1309,14 @@ std::string expr2ccodet::convert_dynamic_size(const exprt &src, unsigned &preced
   return dest;
 }
 
-std::string expr2ccodet::convert_infinity(const exprt &src, unsigned &precedence)
+std::string
+expr2ccodet::convert_infinity(const exprt &src, unsigned &precedence)
 {
   return "10000";
 }
 
-std::string expr2ccodet::convert_ieee_add(const exprt &src, unsigned &precedence)
+std::string
+expr2ccodet::convert_ieee_add(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 2)
     return convert_norep(src, precedence);
@@ -1317,7 +1324,8 @@ std::string expr2ccodet::convert_ieee_add(const exprt &src, unsigned &precedence
   return "(" + convert(src.op0()) + "+" + convert(src.op1()) + ")";
 }
 
-std::string expr2ccodet::convert_ieee_sub(const exprt &src, unsigned &precedence)
+std::string
+expr2ccodet::convert_ieee_sub(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 2)
     return convert_norep(src, precedence);
@@ -1325,7 +1333,8 @@ std::string expr2ccodet::convert_ieee_sub(const exprt &src, unsigned &precedence
   return "(" + convert(src.op0()) + "-" + convert(src.op1()) + ")";
 }
 
-std::string expr2ccodet::convert_ieee_mul(const exprt &src, unsigned &precedence)
+std::string
+expr2ccodet::convert_ieee_mul(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 2)
     return convert_norep(src, precedence);
@@ -1333,7 +1342,8 @@ std::string expr2ccodet::convert_ieee_mul(const exprt &src, unsigned &precedence
   return "(" + convert(src.op0()) + "*" + convert(src.op1()) + ")";
 }
 
-std::string expr2ccodet::convert_ieee_div(const exprt &src, unsigned &precedence)
+std::string
+expr2ccodet::convert_ieee_div(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 2)
     return convert_norep(src, precedence);

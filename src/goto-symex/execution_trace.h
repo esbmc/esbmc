@@ -10,7 +10,6 @@
 
 class c_instructiont : public goto_programt::instructiont
 {
-
 public:
   std::string msg;
 
@@ -18,11 +17,13 @@ public:
   {
   }
 
-  c_instructiont(goto_programt::instructiont &i) : goto_programt::instructiont(i)
+  c_instructiont(goto_programt::instructiont &i)
+    : goto_programt::instructiont(i)
   {
   }
-  
-  c_instructiont(const goto_programt::instructiont &i) : goto_programt::instructiont(i)
+
+  c_instructiont(const goto_programt::instructiont &i)
+    : goto_programt::instructiont(i)
   {
   }
 
@@ -42,7 +43,6 @@ public:
   unsigned int scope_id = 0;
 
 protected:
-
   unsigned int loop_depth = 0;
   unsigned int fun_call_num = 0;
 
@@ -58,7 +58,8 @@ void assign_returns();
 void assign_dynamic_sizes();
 void output_execution_trace(namespacet &ns, std::ostream &out);
 
-std::vector<c_instructiont> inline_function_call(c_instructiont func_call, goto_functionst goto_functions);
+std::vector<c_instructiont>
+inline_function_call(c_instructiont func_call, goto_functionst goto_functions);
 
 extern std::vector<c_instructiont> instructions_to_c;
 extern unsigned int function_call_num;
