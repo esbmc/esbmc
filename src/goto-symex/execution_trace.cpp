@@ -57,7 +57,6 @@ expr2tc get_base_expr(expr2tc expr)
   return expr;
 }
 
-
 std::string c_instructiont::convert_to_c(namespacet &ns)
 {
   std::ostringstream out;
@@ -194,7 +193,9 @@ void replace_esbmc_alloc_size(expr2tc &expr)
     if(is_index2t(*e))
     {
       index2tc idx = to_index2t(*e);
-      if(to_symbol2t(idx->source_value).thename.as_string() == "c:@__ESBMC_alloc_size")
+      if(
+        to_symbol2t(idx->source_value).thename.as_string() ==
+        "c:@__ESBMC_alloc_size")
       {
         //std::cerr << ">>>>> index = " << idx->index << "\n";
         if(is_pointer_object2t(idx->index))
@@ -207,12 +208,16 @@ void replace_esbmc_alloc_size(expr2tc &expr)
             //std::cerr << ">>>>> addr = " << addr->ptr_obj << "\n";
             if(is_array_type(addr->ptr_obj->type))
             {
-              array_type2tc arr_type = to_array_type(addr->ptr_obj->type); 
-              unsigned int arr_subtype_size = type_byte_size(arr_type->subtype).to_uint64();
+              array_type2tc arr_type = to_array_type(addr->ptr_obj->type);
+              unsigned int arr_subtype_size =
+                type_byte_size(arr_type->subtype).to_uint64();
               // this arr_size is equal to the number of elements of the given array
               // array size in bytes
-              expr2tc arr_size = mul2tc(arr_type->array_size->type, arr_type->array_size, gen_ulong(arr_subtype_size));
-              std::cerr << ">>>>> arr_size = " << arr_size << "\n";
+              expr2tc arr_size = mul2tc(
+                arr_type->array_size->type,
+                arr_type->array_size,
+                gen_ulong(arr_subtype_size));
+              //std::cerr << ">>>>> arr_size = " << arr_size << "\n";
               /*
               greaterthan2tc gt(addr->ptr_obj, same->side_1);
               greaterthan2tc gt2(add2tc(same->side_1->type, same->side_1, gen_ulong(1)), 
@@ -232,7 +237,7 @@ void replace_esbmc_alloc_size(expr2tc &expr)
     }
     else
       replace_esbmc_alloc_size(*e);
-  //});
+    //});
   }
 }
 
@@ -306,10 +311,10 @@ inline_function_call(c_instructiont func_call, goto_functiont function)
 {
   std::vector<c_instructiont> res;
   assert(is_code_function_call2t(func_call.code));
-  code_function_call2tc code_function_call = to_code_function_call2t(func_call.code);
+  code_function_call2tc code_function_call =
+    to_code_function_call2t(func_call.code);
   assert(
-    function.type.arguments().size() ==
-    code_function_call->operands.size());
+    function.type.arguments().size() == code_function_call->operands.size());
   // Going through all the function arguments
   for(unsigned int i = 0; i < function.type.arguments().size(); i++)
   {
@@ -333,8 +338,7 @@ inline_function_call(c_instructiont func_call, goto_functiont function)
   return res;
 }
 
-void inline_function_calls(
-  goto_functionst goto_functions)
+void inline_function_calls(goto_functionst goto_functions)
 {
   unsigned int scope_id_counter = 0;
   std::vector<unsigned int> scope_stack;
@@ -343,7 +347,6 @@ void inline_function_calls(
   {
     c_instructiont instr = instructions_to_c.at(i);
     instructions_to_c.at(i).scope_id = scope_stack.back();
-    //std::cerr << ">>>>> instr_scope_id = " << instructions_to_c.at(i).scope_id << "\n";
     if(instr.type == FUNCTION_CALL)
     {
       // Getting function name symbol from the function call
@@ -353,7 +356,9 @@ void inline_function_calls(
       symbol2t func_call_sym = to_symbol2t(code_function_call->function);
       // Checking if the function exists in the symbol map and it has a body
       auto function = goto_functions.function_map.find(func_call_sym.thename);
-      if(function != goto_functions.function_map.end() && function->second.body_available)
+      if(
+        function != goto_functions.function_map.end() &&
+        function->second.body_available)
       {
         // We are entering a new scope here
         scope_id_counter++;
@@ -394,29 +399,29 @@ void inline_function_calls(
 void insert_static_declarations(namespacet ns)
 {
   // Declaring all extern variables but not functions
-  ns.get_context().foreach_operand_in_order(
-    [&ns](const symbolt &s) {
-      if(s.is_extern && s.id != "argv\'" && 
-          s.id != "argc\'" && s.type.id() != "code")
-      {
-        code_declt decl(symbol_expr(s));
-        code_decl2tc code_decl;
-        migrate_expr(decl, code_decl);
-        c_instructiont instr(DECL);
-        //instr.decl = decl;
-        instr.code = code_decl;
-        instr.location = s.location;
-        instructions_to_c.insert(instructions_to_c.begin(), instr);
-      }
+  ns.get_context().foreach_operand_in_order([&ns](const symbolt &s) {
+    if(
+      s.is_extern && s.id != "argv\'" && s.id != "argc\'" &&
+      s.type.id() != "code")
+    {
+      code_declt decl(symbol_expr(s));
+      code_decl2tc code_decl;
+      migrate_expr(decl, code_decl);
+      c_instructiont instr(DECL);
+      //instr.decl = decl;
+      instr.code = code_decl;
+      instr.location = s.location;
+      instructions_to_c.insert(instructions_to_c.begin(), instr);
+    }
 
-      /*
+    /*
       if(s.id == "c:@__ESBMC_alloc_size")
       {
         //std::cerr << ">>>>> s.id = " << s.id << "\n";
         std::cerr << ">>>>> s = " << s << "\n";
       }
       */
-    });
+  });
   // Turning the initialisations in the form of assignments only
   // for variables with static lifetime into the initialisations
   // in the form of declarations with initialisers
@@ -428,10 +433,9 @@ void insert_static_declarations(namespacet ns)
       assert(is_code_assign2t(instr.code));
       code_assign2t assign = to_code_assign2t(instr.code);
       symbol2tc sym = get_symbol(assign.target);
- 
+
       // Skip all the assignments for argv and argc
-      if(sym->thename == "argv\'" ||
-         sym->thename == "argc\'")
+      if(sym->thename == "argv\'" || sym->thename == "argc\'")
       {
         instructions_to_c.erase(instructions_to_c.begin() + i);
         i--;
@@ -529,15 +533,16 @@ void assign_dynamic_sizes()
       if(is_dynamic_size2t(assign->target))
       {
         dynamic_size2tc dyn_size = to_dynamic_size2t(assign->target);
-        assert(is_address_of2t(dyn_size.value));
+        assert(is_address_of2t(dyn_size->value));
         // Erase the current instruction "dynamic_size(&arr) = val"
         instructions_to_c.erase(instructions_to_c.begin() + i);
         // Creating a new dynamic_size symbol for every "dynamic_size(&arr) = val" call
-        symbol2tc dyn_size_sym(get_uint32_type(),
-                            "__ESBMC_dynamic_size_" + std::to_string(dyn_size_counter));
+        symbol2tc dyn_size_sym(
+          get_uint32_type(),
+          "__ESBMC_dynamic_size_" + std::to_string(dyn_size_counter));
         // Declaring the dynamic_size symbol first
         c_instructiont decl_instr(DECL);
-        code_decl2tc decl(dyn_size_sym->type, dyn_size_sym->thename); 
+        code_decl2tc decl(dyn_size_sym->type, dyn_size_sym->thename);
         decl_instr.code = decl;
         decl_instr.location = cur_instr.location;
         instructions_to_c.insert(instructions_to_c.begin() + i, decl_instr);
@@ -553,15 +558,17 @@ void assign_dynamic_sizes()
         dyn_size_map[assign->target] = dyn_size_counter;
         dyn_size_counter++;
       }
-      else if(is_union_type(assign->target->type) && 
-                is_constant_union2t(assign->source))
+      else if(
+        is_union_type(assign->target->type) &&
+        is_constant_union2t(assign->source))
       {
         // This is a hack for now
         constant_union2tc const_union = to_constant_union2t(assign->source);
         if(const_union->datatype_members.size() == 1)
         {
-          typecast2tc new_source(const_union->type, const_union->datatype_members[0]);
-          assign->source = new_source; 
+          typecast2tc new_source(
+            const_union->type, const_union->datatype_members[0]);
+          assign->source = new_source;
           c_instructiont assign_instr(ASSIGN);
           assign_instr.code = assign;
           assign_instr.location = cur_instr.location;
@@ -571,7 +578,7 @@ void assign_dynamic_sizes()
       else if(is_typecast2t(assign->target))
       {
         // Creating a new instruction where the LHS typecast is removed
-        assign->target = get_base_expr(assign->target); 
+        assign->target = get_base_expr(assign->target);
         c_instructiont assign_instr(ASSIGN);
         assign_instr.code = assign;
         assign_instr.location = cur_instr.location;
@@ -584,21 +591,20 @@ void assign_dynamic_sizes()
 void output_typedefs(namespacet &ns, std::ostream &out)
 {
   // Declaring extern variables first
-  ns.get_context().foreach_operand_in_order(
-    [&ns, &out](const symbolt &s) {
-      std::smatch m;
-      //std::string tag = s.type.tag().as_string();
-      std::string tag = s.id.as_string();
-      if(std::regex_search(tag, m, std::regex("tag\\-.+")))
+  ns.get_context().foreach_operand_in_order([&ns, &out](const symbolt &s) {
+    std::smatch m;
+    //std::string tag = s.type.tag().as_string();
+    std::string tag = s.id.as_string();
+    if(std::regex_search(tag, m, std::regex("tag\\-.+")))
+    {
+      //std::cerr << ">>>>> found a tag: " << s.id << "\n";
+      //if(!(std::regex_search(tag, m, std::regex("tag\\-struct.+")) ||
+      //      std::regex_search(tag, m, std::regex("tag\\-union.+"))))
       {
-        //std::cerr << ">>>>> found a tag: " << s.id << "\n";
-        //if(!(std::regex_search(tag, m, std::regex("tag\\-struct.+")) || 
-        //      std::regex_search(tag, m, std::regex("tag\\-union.+"))))
-        {
-          out << type2ccode(s.type, ns) << ";\n";
-        }
+        out << type2ccode(s.type, ns) << ";\n";
       }
-    });
+    }
+  });
 }
 
 void output_execution_trace(namespacet &ns, std::ostream &out)
@@ -616,4 +622,3 @@ void output_execution_trace(namespacet &ns, std::ostream &out)
 
   out << "}\n";
 }
-

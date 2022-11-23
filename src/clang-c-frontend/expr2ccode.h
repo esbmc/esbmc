@@ -26,16 +26,16 @@ type2ccode(const typet &type, const namespacet &ns, bool fullname = false);
 class expr2ccodet : public expr2ct
 {
 public:
-  expr2ccodet(const namespacet &_ns, const bool _fullname) : expr2ct(_ns, _fullname)
+  expr2ccodet(const namespacet &_ns, const bool _fullname)
+    : expr2ct(_ns, _fullname)
   {
   }
   virtual ~expr2ccodet() = default;
-  
+
   std::string convert(const typet &src) override;
   std::string convert(const exprt &src) override;
 
 protected:
-
   std::string convert_rec(
     const typet &src,
     const c_qualifierst &qualifiers,
@@ -80,8 +80,6 @@ protected:
 
 private:
   std::string convert_from_ssa_form(const std::string symbol);
-
 };
-
 
 #endif
