@@ -948,7 +948,7 @@ std::string expr2ccodet::convert_code_decl(const codet &src, unsigned indent)
   std::string dest = indent_str(indent);
 
   const symbolt *symbol = NULL;
-  if(!ns.lookup(to_symbol_expr(src.op0()).get_identifier(), symbol))
+  if(ns.lookup(to_symbol_expr(src.op0()).get_identifier()))
   {
     if(
       symbol->file_local &&
