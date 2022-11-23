@@ -130,7 +130,8 @@ bool interval_domaint::join(const interval_domaint &b)
     }
   }
 
-   for(real_mapt::iterator it = real_map.begin(); it != real_map.end();) // no it++
+  for(real_mapt::iterator it = real_map.begin();
+      it != real_map.end();) // no it++
   {
     // search for the variable that needs to be merged
     // containers have different size and variable order
@@ -150,7 +151,6 @@ bool interval_domaint::join(const interval_domaint &b)
       it++;
     }
   }
-
 
   return result;
 }
@@ -460,7 +460,7 @@ expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
         to_floatbv_type(src.type).exponent)));
       const double d = interval.upper.convert_to<double>();
       value->value.from_double(d);
-      value->value.increment(true);      
+      value->value.increment(true);
       expr2tc new_expr = symbol;
       c_implicit_typecast_arithmetic(
         new_expr, value, *migrate_namespace_lookup);
