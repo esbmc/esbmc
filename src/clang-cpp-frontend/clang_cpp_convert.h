@@ -100,7 +100,8 @@ protected:
 
   bool get_struct_union_class_methods(
     const clang::RecordDecl &rd,
-    struct_union_typet &type) override;
+    struct_union_typet &type,
+    symbolt &class_symbol) override;
 
   template <typename TemplateDecl>
   bool get_template_decl(
@@ -198,6 +199,18 @@ protected:
   void get_irep_base_vector(
     const clang::CXXRecordDecl &cxxrd,
     struct_typet &derived_class_type);
+
+  /**
+   * Add implicit code in destructors, e.g.:
+   *  1. vptr initializations
+   *  2. bases' destructors (in reverse order)
+   */
+  void
+  get_dtor_implicit_code_block(const code_typet &dtor_ftype, exprt &new_expr);
+  void get_dtor_implicit_code(
+    const symbolt &symb,
+    code_blockt &vtables,
+    code_blockt &dtors);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

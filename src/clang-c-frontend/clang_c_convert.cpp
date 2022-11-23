@@ -376,7 +376,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  if(get_struct_union_class_methods(*rd_def, t))
+  if(get_struct_union_class_methods(*rd_def, t, added_symbol))
     return true;
 
   if(rd.isUnion())
@@ -447,7 +447,8 @@ bool clang_c_convertert::get_struct_union_class_fields(
 
 bool clang_c_convertert::get_struct_union_class_methods(
   const clang::RecordDecl &,
-  struct_union_typet &)
+  struct_union_typet &,
+  symbolt &)
 {
   // We don't add methods to the struct in C
   return false;
