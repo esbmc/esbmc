@@ -1232,8 +1232,7 @@ void clang_c_adjust::adjust_class_type(typet &)
   abort();
 }
 
-void clang_c_adjust::adjust_code_block(codet &)
+void clang_c_adjust::adjust_code_block(codet &code)
 {
-  // We have nothing to adjust in code block for C
-  return;
+  adjust_operands(code);
 }

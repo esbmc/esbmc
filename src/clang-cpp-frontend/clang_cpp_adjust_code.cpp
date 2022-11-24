@@ -228,6 +228,10 @@ void clang_cpp_adjust::adjust_code_block(codet &code)
       "@@ adjust the operands? or continue adjust the code block for "
       "dtor???\n");
   }
+  else
+  {
+    adjust_operands(code);
+  }
 }
 
 void clang_cpp_adjust::get_vtables_dtors(
