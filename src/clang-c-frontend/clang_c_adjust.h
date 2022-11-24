@@ -63,6 +63,8 @@ protected:
   void do_special_functions(side_effect_expr_function_callt &expr);
 
   virtual void adjust_class_type(typet &type);
+
+  virtual void adjust_code_block(codet &code);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */

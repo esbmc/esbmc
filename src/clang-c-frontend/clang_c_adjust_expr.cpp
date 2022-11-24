@@ -48,6 +48,9 @@ bool clang_c_adjust::adjust()
 
 void clang_c_adjust::adjust_symbol(symbolt &symbol)
 {
+  if(symbol.id.as_string() == "c:@S@Vehicle@F@~Vehicle#")
+    printf("@@ Got it!\n");
+
   if(!symbol.value.is_nil())
     adjust_expr(symbol.value);
 
@@ -1227,4 +1230,10 @@ void clang_c_adjust::adjust_class_type(typet &)
     "{}.",
     __func__);
   abort();
+}
+
+void clang_c_adjust::adjust_code_block(codet &)
+{
+  // We have nothing to adjust in code block for C
+  return;
 }

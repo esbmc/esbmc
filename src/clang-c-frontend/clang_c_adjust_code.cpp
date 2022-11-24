@@ -39,7 +39,13 @@ void clang_c_adjust::adjust_code(codet &code)
   {
   }
   else if(statement == "decl-block")
+  {
     adjust_decl_block(code);
+  }
+  else if(statement == "block")
+  {
+    adjust_code_block(code);
+  }
   else
   {
     adjust_operands(code);

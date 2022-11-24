@@ -1,4 +1,6 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
+#include <cpp/cpp_util.h>
+#include <util/expr_util.h>
 
 void convert_expression_to_code(exprt &expr)
 {
@@ -197,4 +199,139 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
   }
 
   code.swap(new_block);
+}
+
+void clang_cpp_adjust::adjust_code_block(codet &code)
+{
+  // if it is a destructor, add the implicit code
+  if(code.get_bool("#is_dtor") && code.get_bool("#add_implicit_code"))
+  {
+    // get the correpsonding symbol using member_name
+    const symbolt &msymb =
+      *namespacet(context).lookup(code.get("#member_name"));
+
+    // vtables should be updated as soon as the destructor is called
+    // dtors contains the destructors for members and base classes,
+    // that should be called after the code of the current destructor
+    code_blockt vtables, dtors;
+    get_vtables_dtors(msymb, vtables, dtors);
+
+    if(vtables.has_operands())
+      code.operands().insert(code.operands().begin(), vtables);
+
+    if(dtors.has_operands())
+      code.copy_to_operands(dtors);
+
+    // now we have populated the code block for dtor
+    // need to adjust the operands
+    printf(
+      "@@ adjust the operands? or continue adjust the code block for "
+      "dtor???\n");
+  }
+}
+
+void clang_cpp_adjust::get_vtables_dtors(
+  const symbolt &symb,
+  code_blockt &vtables,
+  code_blockt &dtors)
+{
+  assert(symb.type.id() == "struct");
+
+  locationt location = symb.type.location();
+
+  location.set_function(
+    id2string(symb.name) + "::~" + id2string(symb.name) + "()");
+
+  const struct_typet::componentst &components =
+    to_struct_type(symb.type).components();
+
+  // take care of virtual methods
+  for(struct_typet::componentst::const_iterator cit = components.begin();
+      cit != components.end();
+      cit++)
+  {
+    if(cit->get_bool("is_vtptr"))
+    {
+      exprt name("name");
+      name.set("identifier", cit->base_name());
+
+      const symbolt &virtual_table_symbol_type =
+        *namespacet(context).lookup(cit->type().subtype().identifier());
+
+      const symbolt &virtual_table_symbol_var = *namespacet(context).lookup(
+        virtual_table_symbol_type.id.as_string() + "@" + symb.id.as_string());
+
+      exprt var = symbol_expr(virtual_table_symbol_var);
+      address_of_exprt address(var);
+      assert(address.type() == cit->type());
+
+      already_typechecked(address);
+
+      exprt ptrmember("ptrmember");
+      ptrmember.component_name(cit->name());
+      ptrmember.operands().emplace_back("cpp-this");
+
+      code_assignt assign(ptrmember, address);
+      vtables.operands().push_back(assign);
+      continue;
+    }
+  }
+
+  code_blockt block;
+#if 0
+  // call the data member destructors in the reverse order
+  for(struct_typet::componentst::const_reverse_iterator cit =
+        components.rbegin();
+      cit != components.rend();
+      cit++)
+  {
+    const typet &type = cit->type();
+
+    if(
+      cit->get_bool("from_base") || cit->is_type() ||
+      cit->get_bool("is_static") || type.id() == "code" || is_reference(type) ||
+      cpp_is_pod(type))
+      continue;
+
+    irept name("name");
+    name.identifier(cit->base_name());
+    name.set("#location", location);
+
+    cpp_namet cppname;
+    cppname.get_sub().push_back(name);
+
+    exprt member("ptrmember");
+    member.set("component_cpp_name", cppname);
+    member.operands().emplace_back("cpp-this");
+    member.location() = location;
+
+    codet dtor_code = cpp_destructor(location, cit->type(), member);
+
+    if(dtor_code.is_not_nil())
+      block.move_to_operands(dtor_code);
+  }
+
+  const irept::subt &bases = symb.type.find("bases").get_sub();
+
+  // call the base destructors in the reverse order
+  for(irept::subt::const_reverse_iterator bit = bases.rbegin();
+      bit != bases.rend();
+      bit++)
+  {
+    assert(bit->id() == "base");
+    assert(bit->type().id() == "symbol");
+    const symbolt &psymb = *lookup(bit->type().identifier());
+
+    exprt object("dereference");
+    object.operands().emplace_back("cpp-this");
+    object.location() = location;
+
+    exprt dtor_code = cpp_destructor(location, psymb.type, object);
+
+    if(dtor_code.is_not_nil())
+      block.move_to_operands(dtor_code);
+  }
+#endif
+
+  dtors = block;
 }

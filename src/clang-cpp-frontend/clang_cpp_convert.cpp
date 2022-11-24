@@ -1136,7 +1136,14 @@ bool clang_cpp_convertert::get_function_body(
   // Make a placeholder of code block, as we might need to add vptr initialization code in adjuster
   // TODO: refactor our ctor vptr initialization like this???
   if(is_dtor(fd))
+  {
     new_expr = code_blockt();
+    // Add additional annotations so that we can "catch" it in the adjuster
+    // and add implicit code
+    new_expr.set("#is_dtor", true);
+    new_expr.set("#add_implicit_code", true);
+    new_expr.set("#member_name", ftype.get("#member_name"));
+  }
 
   if(!fd.hasBody())
     return false;

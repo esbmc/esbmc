@@ -20,6 +20,13 @@ public:
   void adjust_new(exprt &expr);
 
   void adjust_class_type(typet &type) override;
+
+  void adjust_code_block(codet &code) override;
+
+  void get_vtables_dtors(
+    const symbolt &symb,
+    code_blockt &vtables,
+    code_blockt &dtors);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
