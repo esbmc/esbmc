@@ -254,10 +254,8 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 
 bool clang_cpp_convertert::get_struct_union_class_methods(
   const clang::RecordDecl &recordd,
-  struct_union_typet &type,
-  symbolt &class_symbol)
+  struct_union_typet &type)
 {
-  // Maps to the method conversion flows in cpp_typecheckt::typecheck_compound_body
   // If a struct is defined inside a extern C, it will be a RecordDecl
   const clang::CXXRecordDecl *cxxrd =
     llvm::dyn_cast<clang::CXXRecordDecl>(&recordd);
@@ -291,7 +289,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       continue;
 
     const auto fd = llvm::dyn_cast<clang::FunctionDecl>(decl);
-    // Skip ctor and dtor. We need to do vitual functions before typechecking ctor/dtor
+    // Skip ctor. We need to do vtable before ctor
     if(fd)
     {
       if(fd->getKind() == clang::Decl::CXXConstructor)
@@ -301,11 +299,18 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       }
 
       if(fd->getKind() == clang::Decl::CXXDestructor)
-      {
         found_dtor = true;
-        continue;
-      }
     }
+
+    const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
+    // Skip constructors only. We do implicit methods, such as implicit dtor,
+    // implicit cpy ctor or cpy assignment operator
+    // Add the default dtor, if needed
+    // we have to do the destructor before building the virtual tables,
+    // as the destructor may be virtual!
+    if(md)
+      if(fd->getKind() == clang::Decl::CXXConstructor)
+        continue;
 
     struct_typet::componentt comp;
     if(
@@ -326,10 +331,11 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     // don't add it to the class
     if(comp.is_code() && to_code(comp).statement() == "skip")
     {
-      const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
-      // we need to add pure virtual method
+      // we need to add pure virtual method and destructor
       if(fd && md)
-        if(!fd->isPure() && !md->isVirtual())
+        if(
+          !fd->isPure() && !md->isVirtual() &&
+          fd->getKind() != clang::Decl::CXXDestructor)
           continue;
     }
 
@@ -350,70 +356,11 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
   }
 
-  // We have to sync class symbol type after each iteration
-  class_symbol.type = type;
-
   // If we've seen a constructor, flag this type as not being a POD. This is
   // only useful when we might not be able to work that out later, such as a
   // constructor that gets deleted, or something.
   if(found_ctor || found_dtor)
     type.set("is_not_pod", "1");
-
-  // Typecheck the dtor
-  // we have to do the destructor before building the virtual tables,
-  // as the destructor may be virtual!
-  for(const auto &decl : cxxrd->decls())
-  {
-    const auto fd = llvm::dyn_cast<clang::FunctionDecl>(decl);
-    // skip everything else, just do dtor
-    if(fd)
-    {
-      if(fd->getKind() != clang::Decl::CXXDestructor)
-        continue;
-    }
-    else
-      continue;
-
-    struct_typet::componentt comp;
-    if(
-      const clang::FunctionTemplateDecl *ftd =
-        llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
-    {
-      assert(ftd->isThisDeclarationADefinition());
-      log_error("template is not supported in {}", __func__);
-      abort();
-    }
-    else
-    {
-      if(get_decl(*decl, comp))
-        return true;
-    }
-
-    if(
-      const clang::CXXMethodDecl *cxxmd =
-        llvm::dyn_cast<clang::CXXMethodDecl>(decl))
-    {
-      // Add only if it isn't static
-      if(!cxxmd->isStatic())
-      {
-        // Remove ctor's skip statement because we have vptr init.
-        if(
-          fd->getKind() == clang::Decl::CXXDestructor &&
-          comp.statement() == "skip")
-          comp.remove("statement");
-
-        to_struct_type(type).components().push_back(comp);
-      }
-      else
-      {
-        log_error("static method is not supported in {}", __func__);
-        abort();
-      }
-    }
-  }
-
-  // We have to sync class symbol type after each iteration
-  class_symbol.type = type;
 
   // setup virtual tables before doing the constructors
   do_virtual_table(type);
@@ -481,9 +428,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   current_access = "";
   current_class_type = nullptr;
 
-  // We have to sync class symbol type after each iteration
-  class_symbol.type = type;
-
   return false;
 }
 
@@ -545,7 +489,7 @@ bool clang_cpp_convertert::get_class_method(
       get_virtual_method(
         *md, component, method_type, method_symbol, class_symbol_id);
 
-    // Sync method's type with component's type after all checks done
+    // Sync virtual method's type with component's type after all checks done
     method_type = to_code_type(component_type);
   }
   else
@@ -1189,9 +1133,10 @@ bool clang_cpp_convertert::get_function_body(
   // Constructor initializer list is checked here. Becasue we are going to convert
   // each initializer into an assignment statement, added to the function body.
 
-  // TODO: add implicit code in ctor like this???
+  // Make a placeholder of code block, as we might need to add vptr initialization code in adjuster
+  // TODO: refactor our ctor vptr initialization like this???
   if(is_dtor(fd))
-    get_dtor_implicit_code_block(ftype, new_expr);
+    new_expr = code_blockt();
 
   if(!fd.hasBody())
     return false;
@@ -1203,7 +1148,7 @@ bool clang_cpp_convertert::get_function_body(
   code_blockt &body = to_code_block(to_code(new_expr));
 
   // if it's a constructor, check for initializers
-  if(is_ctor(fd))
+  if(fd.getKind() == clang::Decl::CXXConstructor)
   {
     const clang::CXXConstructorDecl &cxxcd =
       static_cast<const clang::CXXConstructorDecl &>(fd);
@@ -1997,137 +1942,4 @@ void clang_cpp_convertert::get_method_virtual_bases(
       }
     }
   }
-}
-
-void clang_cpp_convertert::get_dtor_implicit_code_block(
-  const code_typet &dtor_ftype,
-  exprt &new_expr)
-{
-  // Maps to the conversion flows for dtor implicit code in cpp_typecheckt::convert_function
-  assert(
-    dtor_ftype.id().as_string() == "code"); // dtor body has to be `code` type
-  new_expr = code_blockt();
-  // get the corresponding class symbol
-  const symbolt &msymb =
-    *namespacet(context).lookup(dtor_ftype.get("#member_name"));
-
-  assert(msymb.type.id() == "struct");
-
-  // vtables should be updated as soon as the destructor is called
-  // dtors contains the destructors for members and base classes,
-  // that should be called after the code of the current destructor
-  code_blockt vtables, dtors;
-  get_dtor_implicit_code(msymb, vtables, dtors);
-
-  if(vtables.has_operands())
-    new_expr.operands().insert(new_expr.operands().begin(), vtables);
-
-  if(dtors.has_operands())
-    new_expr.copy_to_operands(dtors);
-}
-
-void clang_cpp_convertert::get_dtor_implicit_code(
-  const symbolt &symb,
-  code_blockt &vtables,
-  code_blockt &dtors)
-{
-  assert(symb.type.id() == "struct");
-
-  locationt location = symb.type.location();
-
-  location.set_function(
-    id2string(symb.name) + "::~" + id2string(symb.name) + "()");
-
-  const struct_typet::componentst &components =
-    to_struct_type(symb.type).components();
-
-  // take care of virtual methods
-  for(struct_typet::componentst::const_iterator cit = components.begin();
-      cit != components.end();
-      cit++)
-  {
-    if(cit->get_bool("is_vtptr"))
-    {
-      exprt name("name");
-      name.set("identifier", cit->base_name());
-
-      const symbolt &virtual_table_symbol_type =
-        *namespacet(context).lookup(cit->type().subtype().identifier());
-
-      const symbolt &virtual_table_symbol_var = *namespacet(context).lookup(
-        virtual_table_symbol_type.id.as_string() + "@" + symb.id.as_string());
-
-      exprt var = symbol_expr(virtual_table_symbol_var);
-      address_of_exprt address(var);
-      assert(address.type() == cit->type());
-
-      already_typechecked(address);
-
-      exprt ptrmember("ptrmember");
-      ptrmember.component_name(cit->name());
-      ptrmember.operands().emplace_back("cpp-this");
-
-      code_assignt assign(ptrmember, address);
-      vtables.operands().push_back(assign);
-      continue;
-    }
-  }
-
-  code_blockt block;
-
-#if 0
-  // call the data member destructors in the reverse order
-  for(struct_typet::componentst::const_reverse_iterator cit =
-        components.rbegin();
-      cit != components.rend();
-      cit++)
-  {
-    const typet &type = cit->type();
-
-    if(
-      cit->get_bool("from_base") || cit->is_type() ||
-      cit->get_bool("is_static") || type.id() == "code" || is_reference(type)) // TODO: check cpp_is_pod?
-      continue;
-
-    irept name("name");
-    name.identifier(cit->base_name());
-    name.set("#location", location);
-
-    cpp_namet cppname;
-    cppname.get_sub().push_back(name);
-
-    exprt member("ptrmember");
-    member.set("component_cpp_name", cppname);
-    member.operands().emplace_back("cpp-this");
-    member.location() = location;
-
-    codet dtor_code = cpp_destructor(location, cit->type(), member);
-
-    if(dtor_code.is_not_nil())
-      block.move_to_operands(dtor_code);
-  }
-
-  const irept::subt &bases = symb.type.find("bases").get_sub();
-
-  // call the base destructors in the reverse order
-  for(irept::subt::const_reverse_iterator bit = bases.rbegin();
-      bit != bases.rend();
-      bit++)
-  {
-    assert(bit->id() == "base");
-    assert(bit->type().id() == "symbol");
-    const symbolt &psymb = *lookup(bit->type().identifier());
-
-    exprt object("dereference");
-    object.operands().emplace_back("cpp-this");
-    object.location() = location;
-
-    exprt dtor_code = cpp_destructor(location, psymb.type, object);
-
-    if(dtor_code.is_not_nil())
-      block.move_to_operands(dtor_code);
-  }
-#endif
-
-  dtors = block;
 }

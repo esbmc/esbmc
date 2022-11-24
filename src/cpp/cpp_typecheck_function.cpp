@@ -84,9 +84,6 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   if(symbol.value.is_nil())
     return;
 
-  if(symbol.id.as_string() == "Vehicle::~Vehicle(this)")
-    printf("@@ Got it\n");
-
   // if it is a destructor, add the implicit code
   if(symbol.type.get("return_type") == "destructor")
   {
@@ -119,7 +116,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   // genuine function definition -- do the parameter declarations
   convert_arguments(
     symbol.mode,
-    function_type); // DEBUG: changing dtor s.type `identifier`
+    function_type); // DEBUG: has effect for Task 1: dtor implicit code
 
   // create "this" if it's a non-static method
   if(
@@ -148,12 +145,11 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   if(return_type.id() == "constructor" || return_type.id() == "destructor")
     return_type = empty_typet();
 
-  typecheck_code(to_code(
-    symbol.value)); // DEBUG: adding side effect for Task 1: dtor implicit code
+  typecheck_code(
+    to_code(symbol.value)); // DEBUG: has effect for Task 1: dtor implicit code
 
   symbol.value.type() =
-    symbol
-      .type; // DEBUG: changed s.value.type.arguments for Task 1: dtor implicit code
+    symbol.type; // DEBUG: has effect for Task 1: dtor implicit code
 
   return_type = old_return_type;
 }

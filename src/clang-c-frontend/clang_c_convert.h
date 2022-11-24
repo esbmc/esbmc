@@ -141,8 +141,7 @@ protected:
 
   virtual bool get_struct_union_class_methods(
     const clang::RecordDecl &recordd,
-    struct_union_typet &type,
-    symbolt &class_symbol);
+    struct_union_typet &type);
 
   virtual bool
   get_bases(const clang::RecordDecl &rd, struct_typet &derived_class_type);
