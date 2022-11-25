@@ -625,6 +625,14 @@ void goto_symext::run_intrinsic(
     // Already modelled in builtin_libs
     return;
   }
+  else if(has_prefix(symname, "c:@F@__ESBMC_fscanf"))
+  {
+    symex_fscanf(func_call.ret, func_call.operands);
+    constant_int2tc ret(int_type2(), BigInt(func_call.operands.size() - 2));
+    if(func_call.ret)
+      symex_assign(code_assign2tc(func_call.ret, ret));
+    return;
+  }
   else if(has_prefix(symname, "c:@F@__ESBMC_init_object"))
   {
     assert(

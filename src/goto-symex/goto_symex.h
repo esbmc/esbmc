@@ -743,6 +743,8 @@ protected:
   void symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, const expr2tc &code);
+  /** Symbolic implementation of fscanf */
+  void symex_fscanf(const expr2tc &lhs, const std::vector<expr2tc> &operands);
   /** Symbolic implementation of va_arg */
   void symex_va_arg(const expr2tc &lhs, const sideeffect2t &code);
 
