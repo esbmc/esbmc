@@ -13,11 +13,11 @@ if(ENABLE_CSMITH)
     # --float: enable floats
     # --no-math64: disable 64-bit math ops
     set(CSMITH_DEFAULT_ARGS "--inline-function --paranoid --float --no-math64")
-    set(CSMITH_TIMEOUT 1000)
+    set(CSMITH_TIMEOUT 30)
 
     # DEFAULT ESBMC ARGS
     set(CSMITH_ESBMC_DEFAULT_ARGS "-I${CSMITH_INC}")
-    set(CSMITH_ESBMC_TIMEOUT 60)
+    set(CSMITH_ESBMC_TIMEOUT 10)
 
     assert_variable_is_defined(ESBMC_BIN)
     # Creates a csmith target
