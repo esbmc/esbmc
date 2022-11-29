@@ -186,6 +186,7 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
   }
   else if(is_code_decl2t(expr))
   {
+    // Reset the interval domain if it is being reasigned (-infinity, +infinity).
     irep_idt identifier = to_code_decl2t(expr).value;
 
     if(is_bv_type(expr))
