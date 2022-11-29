@@ -1141,7 +1141,7 @@ bool clang_cpp_convertert::get_function_body(
     // Add additional annotations so that we can "catch" it in the adjuster
     // and add implicit code
     new_expr.set("#is_dtor", true);
-    new_expr.set("#add_implicit_code", true);
+    new_expr.set("#added_implicit_code", false);
     new_expr.set("#member_name", ftype.get("#member_name"));
   }
 

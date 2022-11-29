@@ -138,6 +138,10 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   {
     adjust_code(to_code(expr));
   }
+  else if(expr.id() == "ptrmember")
+  {
+    assert(!"Got ptrmember");
+  }
   else
   {
     // Just check operands of everything else

@@ -204,7 +204,7 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
 void clang_cpp_adjust::adjust_code_block(codet &code)
 {
   // if it is a destructor, add the implicit code
-  if(code.get_bool("#is_dtor") && code.get_bool("#add_implicit_code"))
+  if(code.get_bool("#is_dtor") && !code.get_bool("#added_implicit_code"))
   {
     // get the correpsonding symbol using member_name
     const symbolt &msymb =
@@ -222,16 +222,11 @@ void clang_cpp_adjust::adjust_code_block(codet &code)
     if(dtors.has_operands())
       code.copy_to_operands(dtors);
 
-    // now we have populated the code block for dtor
-    // need to adjust the operands
-    printf(
-      "@@ adjust the operands? or continue adjust the code block for "
-      "dtor???\n");
+    assert(code.statement() == "block"); // has to be a code block
+    code.set("#added_implicit_code", true);
   }
-  else
-  {
-    adjust_operands(code);
-  }
+
+  adjust_operands(code);
 }
 
 void clang_cpp_adjust::get_vtables_dtors(
