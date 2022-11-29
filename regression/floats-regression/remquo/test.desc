@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 --floatbv --interval-analysis
 ^VERIFICATION SUCCESSFUL$
