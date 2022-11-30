@@ -7,6 +7,41 @@ clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
 {
 }
 
+void clang_cpp_adjust::adjust_type(typet &type)
+{
+  // special cases for C++ typet adjustment
+  // redirect everything else to C's typet adjustment
+  if(type.id() == "struct")
+  {
+    if(type.get_bool("#class"))
+    {
+      // adjust class type to move functions to type's method vector
+      adjust_class_type(type);
+    }
+  }
+  else
+    clang_c_adjust::adjust_type(type);
+}
+
+void clang_cpp_adjust::adjust_expr(exprt &expr)
+{
+  // special cases for C++ exprt adjustment
+  // redirect everything else to C's exprt adjustment
+  if(expr.id() == "ptrmember")
+  {
+    printf("@@ cool\n");
+    adjust_ptrmember(expr);
+  }
+  else if(expr.id() == "already_typechecked")
+  {
+    assert(!"Got already_typechecked for C++ exprt adjustment");
+  }
+  else
+  {
+    clang_c_adjust::adjust_expr(expr);
+  }
+}
+
 void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
 {
   const irep_idt &statement = expr.statement();
@@ -81,4 +116,10 @@ void clang_cpp_adjust::adjust_class_type(typet &type)
   }
 
   type.swap(tmp);
+}
+
+void clang_cpp_adjust::adjust_ptrmember(exprt &expr)
+{
+  assert(expr.is_not_nil());
+  assert(!"Got ptrmember");
 }

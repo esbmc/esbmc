@@ -51,6 +51,9 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
   if(symbol.id.as_string() == "c:@S@Vehicle@F@~Vehicle#")
     printf("@@ Got it!\n");
 
+  if(symbol.id.as_string() == "c:@S@Motorcycle@F@~Motorcycle#")
+    return;
+
   if(!symbol.value.is_nil())
     adjust_expr(symbol.value);
 
@@ -137,10 +140,6 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   else if(expr.is_code())
   {
     adjust_code(to_code(expr));
-  }
-  else if(expr.id() == "ptrmember")
-  {
-    assert(!"Got ptrmember");
   }
   else
   {
@@ -543,15 +542,6 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(symbol.is_macro)
       type = symbol.type; // overwrite
-  }
-
-  if(type.id() == "struct")
-  {
-    if(type.get_bool("#class"))
-    {
-      // adjust class type to move functions to type's method vector
-      adjust_class_type(type);
-    }
   }
 }
 
@@ -1225,15 +1215,6 @@ void clang_c_adjust::adjust_operands(exprt &expr)
 
   for(auto &op : expr.operands())
     adjust_expr(op);
-}
-
-void clang_c_adjust::adjust_class_type(typet &)
-{
-  log_error(
-    "Unexpected class type found in C symbols. Trying to adjust class type in "
-    "{}.",
-    __func__);
-  abort();
 }
 
 void clang_c_adjust::adjust_code_block(codet &code)

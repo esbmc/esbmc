@@ -144,6 +144,7 @@ void clang_cpp_adjust::adjust_for(codet &code)
 
 void clang_cpp_adjust::adjust_decl_block(codet &code)
 {
+  //For class instantiation in C++, we need to adjust the side-effect of constructor
   codet new_block("decl-block");
 
   Forall_operands(it, code)
@@ -271,6 +272,8 @@ void clang_cpp_adjust::get_vtables_dtors(
       ptrmember.operands().emplace_back("cpp-this");
 
       code_assignt assign(ptrmember, address);
+      // special annotations for assigns in dtor implicit code
+      assign.set("#dtor_implicit_code", true);
       vtables.operands().push_back(assign);
       continue;
     }
@@ -333,4 +336,41 @@ void clang_cpp_adjust::get_vtables_dtors(
 #endif
 
   dtors = block;
+}
+
+void clang_cpp_adjust::adjust_assign(codet &code)
+{
+  // Maps the flow in cpp_typecheckt::typecheck_assign
+
+  // TODO: remove the condition and provide a unified way to adjust assign in C++
+  if(code.get_bool("#dtor_implicit_code")) // add ctor/dtor implicit code
+  {
+    if(code.operands().size() != 2)
+      throw "assignment statement expected to have two operands";
+
+    // turn into a sideeffect
+    side_effect_exprt expr(code.statement());
+    expr.operands() = code.operands();
+    // adjust operands in this expr, need to deal with ptrmember and already_typechecked
+    adjust_expr(expr);
+
+    code_expressiont code_expr;
+
+    if(code_expr.operands().size() == 1)
+    {
+      // remove zombie operands
+      if(code_expr.operands().front().id() == "")
+        code_expr.operands().clear();
+    }
+
+    code_expr.copy_to_operands(expr);
+    code_expr.location() = code.location();
+
+    code.swap(code_expr);
+  }
+  else
+  {
+    // redirect everything else to clang-c's adjust_assign, same as before
+    clang_c_adjust::adjust_assign(code);
+  }
 }
