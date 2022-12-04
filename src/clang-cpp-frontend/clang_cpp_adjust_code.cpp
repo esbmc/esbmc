@@ -1,3 +1,4 @@
+#include <boost/type_traits/aligned_storage.hpp>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <cpp/cpp_util.h>
 #include <util/expr_util.h>
@@ -207,6 +208,8 @@ void clang_cpp_adjust::adjust_code_block(codet &code)
   // if it is a destructor, add the implicit code
   if(code.get_bool("#is_dtor") && !code.get_bool("#added_implicit_code"))
   {
+    // Maps the conversion flow for destructors in cpp_typecheckt::convert_function
+
     // get the correpsonding symbol using member_name
     const symbolt &msymb =
       *namespacet(context).lookup(code.get("#member_name"));
@@ -215,7 +218,7 @@ void clang_cpp_adjust::adjust_code_block(codet &code)
     // dtors contains the destructors for members and base classes,
     // that should be called after the code of the current destructor
     code_blockt vtables, dtors;
-    get_vtables_dtors(msymb, vtables, dtors);
+    get_vtables_dtors(msymb, vtables, dtors, code);
 
     if(vtables.has_operands())
       code.operands().insert(code.operands().begin(), vtables);
@@ -233,7 +236,8 @@ void clang_cpp_adjust::adjust_code_block(codet &code)
 void clang_cpp_adjust::get_vtables_dtors(
   const symbolt &symb,
   code_blockt &vtables,
-  code_blockt &dtors)
+  code_blockt &dtors,
+  codet &code)
 {
   assert(symb.type.id() == "struct");
 
@@ -269,7 +273,9 @@ void clang_cpp_adjust::get_vtables_dtors(
 
       exprt ptrmember("ptrmember");
       ptrmember.component_name(cit->name());
-      ptrmember.operands().emplace_back("cpp-this");
+      exprt dtor_this("cpp-this");
+      dtor_this.set("#this_arg", code.get("#this_arg"));
+      ptrmember.operands().emplace_back(dtor_this);
 
       code_assignt assign(ptrmember, address);
       // special annotations for assigns in dtor implicit code
