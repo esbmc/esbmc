@@ -398,9 +398,13 @@ static expr2tc flatten_unions(expr2tc expr)
         BigInt bits = type_byte_size_bits(member_type);
         if(bits % 8 == 0)
         {
+          BigInt bytes = bits / 8;
+          assert(bytes.is_uint64());
+          uint64_t bytes64 = bytes.to_uint64();
+          assert(bytes64 <= ULONG_MAX);
           guardt guard;
           e = dereferencet::stitch_together_from_byte_array(
-            member_type, flattened_source, gen_ulong(0), guard);
+            member_type, bytes64, flattened_source, gen_ulong(0), guard);
         }
         else
           assert(0);
