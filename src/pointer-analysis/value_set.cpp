@@ -1440,15 +1440,6 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
     unsigned no = data->get_component_number(component_name);
     return to_constant_struct2t(src).datatype_members[no];
   }
-  if(is_constant_union2t(src))
-  {
-    const constant_union2t &un = to_constant_union2t(src);
-    if(un.init_field == component_name)
-    {
-      assert(un.datatype_members.size() == 1);
-      return un.datatype_members[0];
-    }
-  }
   if(is_with2t(src))
   {
     const with2t &with = to_with2t(src);
