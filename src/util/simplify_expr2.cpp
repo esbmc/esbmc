@@ -2986,63 +2986,6 @@ expr2tc constant_array2t::do_simplify() const
   return expr2tc();
 }
 
-expr2tc byte_extract2t::do_simplify() const
-{
-  expr2tc src = try_simplification(source_value);
-  expr2tc off = try_simplification(source_offset);
-
-  if(is_array_type(src))
-  {
-    const array_type2t &at = to_array_type(src->type);
-    if(is_bv_type(at.subtype) && at.subtype->get_width() == type->get_width())
-      return try_simplification(typecast2tc(type, index2tc(at.subtype, src, off)));
-  }
-
-  if(is_constant_int2t(off) && type == get_uint8_type())
-  {
-    const BigInt &off_value = to_constant_int2t(off).value;
-    if(src->type == type && off_value.is_zero())
-      return src;
-
-    if(off_value.is_uint64() && is_constant_expr(src))
-    {
-      uint64_t off64 = off_value.to_uint64();
-      if(is_constant_int2t(src) && off64 * 8 >= off64)
-      {
-        off64 *= 8;
-        const BigInt &src_value = to_constant_int2t(src).value;
-        bool neg = is_signedbv_type(src) && src_value.is_negative();
-        unsigned width = src->type->get_width();
-        /* width bits in ss...ss|...|ssssssss|xxxxxxxx|xxxxxxxx|...|xxxxxxxx|
-         * at most 64 bits x; s = neg ? 1 : 0; off64 is in bits */
-        if((neg ? src_value.is_int64() : src_value.is_uint64()) && off64 + 8 <= width)
-        {
-          /* We assume two's complement, as does do_bit_munge_operation() */
-
-          /* constant repetition of sign bit? */
-          if(big_endian ? off64 + 64 + 8 <= width : off64 >= 64)
-            return constant_int2tc(type, BigInt(neg ? 0xff : 0x00));
-          /* now we know that we are extracting part of |xxxxxxxx|...|xxxxxxxx| */
-          uint64_t x = neg ? src_value.to_int64() : src_value.to_uint64();
-          if(big_endian)
-          {
-            /* off64 + 64 + 8 > width and off64 + 8 <= width
-             * i.e. width-off64-8 in [0,64) */
-            off64 = width - off64 - 8;
-          }
-          return constant_int2tc(type, BigInt((x >> off64) & 0xff));
-        }
-        /* XXX how to simplify this? */
-      }
-    }
-  }
-
-  if(src != source_value || off != source_offset)
-    return byte_extract2tc(type, src, off, big_endian);
-
-  return {};
-}
-
 expr2tc byte_update2t::do_simplify() const
 {
   expr2tc simplied_source = try_simplification(source_value);

@@ -2749,8 +2749,6 @@ public:
   }
   byte_extract2t(const byte_extract2t &ref) = default;
 
-  expr2tc do_simplify() const override;
-
   static std::string field_names[esbmct::num_type_fields];
 };
 
