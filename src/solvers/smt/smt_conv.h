@@ -739,7 +739,7 @@ public:
 
   /** When dealing with multi-dimensional arrays, and selecting one element
    *  out of several dimensions, reduce it to an expression on a single
-   *  dimensional array, by concatenating the indexes. Works in conjunction
+   *  dimensional array, by concatonating the indexes. Works in conjunction
    *  with flatten_array_type. */
   expr2tc decompose_select_chain(const expr2tc &expr, expr2tc &base);
   /** Like decompose_select_chain, but for multidimensional stores. */

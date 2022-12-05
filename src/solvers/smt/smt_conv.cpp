@@ -2299,7 +2299,7 @@ expr2tc smt_convt::get_array(const expr2tc &expr)
   if(w > 10)
     w = 10;
 
-  array_type2t ar = to_array_type(flatten_array_type(expr->type));
+  const array_type2t &ar = to_array_type(flatten_array_type(expr->type));
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
   type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
   std::vector<expr2tc> fields;
