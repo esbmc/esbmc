@@ -253,7 +253,7 @@ void goto_symext::symex_assign_rec(
   {
     symex_assign_extract(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
-  else if(is_bitand2t(lhs))
+  else if(is_lshr2t(lhs))
   {
     symex_assign_bitfield(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
@@ -658,50 +658,23 @@ void goto_symext::symex_assign_bitfield(
   guardt &guard,
   const bool hidden)
 {
-  /* Expect to assign values to bitfields. Bitfield values are constructed
-   * by dereferencet::extract_bits_from_byte_array(), thus we handle this case:
-   *   lhs := rhs
-   * where
-   *   lhs = (rtype)(val >> shft) & mask
-   *   rtype = rhs->type
-   *
-   * Translate to
-   *   val := new_rhs
-   * where
-   *   new_rhs  = (vtype)val & neg_mask | rhs_shft
-   *   neg_mask = ~((vtype)mask << shft)
-   *   rhs_shft = (vtype)rhs << shft
-   *   vtype    = (unsignedbv of width matching val->type)
-   *
-   * The new LHS is either an index, a byte_extract or a concat which can be
-   * handled recursively
-   */
+  // Here we expect the LHS to be an expression of the form
+  //   (expr_1 & expr_2) >> expr_3
+  //
+  // Here we basically convert an assignment of the form:
+  //   (val & mask) >> shft := rhs;
+  //
+  // to the form:
+  //   val := new_rhs;
+  //
+  // performing the following 3 steps:
+  //   (1) val := val & not(mask);
+  //   (2) new_val := new_val << shft;
+  //   (3) val := val | new_val;
+  //
+  // where the new LHS is either an index, a byte_extract or
+  // a concat which can be handled recursively
 
-  assert(is_bitand2t(lhs));
-  const expr2tc &cast_expr = to_bitand2t(lhs).side_1;
-  assert(is_typecast2t(cast_expr));
-  const expr2tc &shft_expr = to_typecast2t(cast_expr).from;
-  assert(is_lshr2t(shft_expr));
-  const expr2tc &val       = to_lshr2t(shft_expr).side_1;
-  const expr2tc &shft      = to_lshr2t(shft_expr).side_2;
-  const expr2tc &mask      = to_bitand2t(lhs).side_2;
-
-  expr2tc neg_mask, rhs_shft, new_rhs;
-
-  neg_mask = typecast2tc(get_uint_type(val->type->get_width()), mask);
-  neg_mask = shl2tc(neg_mask->type, neg_mask, shft);
-  neg_mask = bitnot2tc(neg_mask->type, neg_mask);
-
-  rhs_shft = typecast2tc(neg_mask->type, rhs);
-  rhs_shft = shl2tc(rhs_shft->type, rhs_shft, shft);
-
-  new_rhs = typecast2tc(neg_mask->type, val);
-  new_rhs = bitand2tc(new_rhs->type, new_rhs, neg_mask);
-  new_rhs = bitor2tc(new_rhs->type, new_rhs, rhs_shft);
-  new_rhs = typecast2tc(val->type, new_rhs);
-
-  return symex_assign_rec(val, full_lhs, new_rhs, full_rhs, guard, hidden);
-#if 0
   expr2tc left_side = to_lshr2t(lhs).side_1;
   expr2tc shft_expr = to_lshr2t(lhs).side_2;
 
@@ -715,12 +688,12 @@ void goto_symext::symex_assign_bitfield(
   expr2tc new_value_expr =
     bitand2tc(value_expr->type, value_expr, not_mask_expr);
   // (2) Aligning the RHS value with the target bits
-  expr2tc new_rhs = bitcast2tc(left_side->type, rhs);
+  expr2tc new_rhs = bitcast2tc(shft_expr->type, rhs);
   new_rhs = shl2tc(new_rhs->type, new_rhs, shft_expr);
   // (3) Updating the RHS with the remaining bits
   new_rhs = bitor2tc(new_rhs->type, new_rhs, new_value_expr);
+
   symex_assign_rec(value_expr, full_lhs, new_rhs, full_rhs, guard, hidden);
-#endif
 }
 
 void goto_symext::replace_nondet(expr2tc &expr)

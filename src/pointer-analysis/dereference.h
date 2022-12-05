@@ -457,7 +457,7 @@ private:
     const expr2tc offset,
     unsigned long num_bits);
   static expr2tc extract_bits_from_byte_array(
-    const expr2tc &value,
+    expr2tc value,
     const expr2tc &offset,
     unsigned long num_bits);
 

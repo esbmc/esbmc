@@ -1913,7 +1913,6 @@ public:
   bitcast2t(const type2tc &type, const expr2tc &from)
     : bitcast_expr_methods(type, bitcast_id, from)
   {
-    assert(type->get_width() == from->type->get_width());
   }
 
   bitcast2t(const bitcast2t &ref) = default;
