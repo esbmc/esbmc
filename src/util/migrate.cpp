@@ -546,8 +546,6 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     type, thename, target_level, level1_num, level2_num, thread_num, node_num));
 }
 
-#if 0
-#else
 // Functions to flatten union literals to not contain anything of union type.
 // Everything should become a byte array, as we slowly purge concrete unions
 static expr2tc flatten_union(const exprt &expr);
@@ -717,7 +715,6 @@ static expr2tc flatten_union(const exprt &expr)
   constant_array2tc arr(arraytype, byte_array);
   return arr;
 }
-#endif
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   type2tc type;
@@ -870,18 +867,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else if(expr.id() == typet::t_union)
   {
-    type = migrate_type(expr.type());
-
-    std::vector<expr2tc> members;
-    forall_operands(it, expr) {
-      expr2tc new_ref;
-      migrate_expr(*it, new_ref);
-
-      members.push_back(new_ref);
-    }
-
-    constant_union2t *u = new constant_union2t(type, members);
-    new_expr_ref = expr2tc(u);
+    // Unions are now being transformed into byte arrays at all stages past
+    // parsing.
+    new_expr_ref = flatten_union(expr);
   }
   else if(expr.id() == "string-constant")
   {
