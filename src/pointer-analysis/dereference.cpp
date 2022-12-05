@@ -814,8 +814,8 @@ enum target_flags
 {
   flag_src_scalar = 0,
   flag_src_array = 1,
-  flag_src_struct = 2, // Unions in future?
-  flag_src_union = 3,
+  flag_src_struct = 2,
+  // Union sources are now illegal
 
   flag_dst_scalar = 0,
   flag_dst_array = 4,
@@ -866,7 +866,10 @@ void dereferencet::build_reference_rec(
   if(is_struct_type(value))
     flags |= flag_src_struct;
   else if(is_union_type(value))
-    flags |= flag_src_union;
+  {
+    log_error("Dereference target of type union is now illegal");
+    abort();
+  }
   else if(is_scalar_type(value))
     flags |= flag_src_scalar;
   else if(is_array_type(value) || is_string_type(value))
@@ -964,41 +967,6 @@ void dereferencet::build_reference_rec(
     // function supports both (which is bad).
     construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
     break;
-
-
-  case flag_src_union | flag_dst_union | flag_is_const_offs:
-    construct_struct_ref_from_const_offset(value, offset, type, guard);
-    break;
-  case flag_src_union | flag_dst_union | flag_is_dyn_offs:
-    construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
-    break;
-
-  // All union-src situations are currently approximations
-  case flag_src_union | flag_dst_scalar | flag_is_const_offs:
-  case flag_src_union | flag_dst_struct | flag_is_const_offs:
-  case flag_src_union | flag_dst_scalar | flag_is_dyn_offs:
-  case flag_src_union | flag_dst_struct | flag_is_dyn_offs:
-  {
-    const union_type2t &uni_type = to_union_type(value->type);
-    assert(uni_type.members.size() != 0);
-    BigInt union_total_size = type_byte_size(value->type);
-    // Let's find a member with the biggest size
-    size_t selected_member_index = SIZE_MAX;
-    for(size_t i = 0; i < uni_type.members.size(); i++)
-      if(type_byte_size(uni_type.members[i]) == union_total_size)
-      {
-        selected_member_index = i;
-        break;
-      }
-    assert(selected_member_index < SIZE_MAX);
-
-    value = member2tc(
-      uni_type.members[selected_member_index],
-      value,
-      uni_type.member_names[selected_member_index]);
-    build_reference_rec(value, offset, type, guard, mode, alignment);
-    break;
-  }
 
   // No scope for constructing references to arrays
   default:
