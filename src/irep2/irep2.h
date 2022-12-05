@@ -774,12 +774,16 @@ public:
 
 inline bool is_nil_expr(const expr2tc &exp)
 {
-  return exp.get() == nullptr;
+  if(exp.get() == nullptr)
+    return true;
+  return false;
 }
 
 inline bool is_nil_type(const type2tc &t)
 {
-  return t.get() == nullptr;
+  if(t.get() == nullptr)
+    return true;
+  return false;
 }
 
 // For boost multi-index hashing,
