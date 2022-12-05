@@ -668,12 +668,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         get_uint_type(type_byte_size_bits(with.update_value->type).to_uint64()),
         with.update_value);
       /* We ignore the previous content of the union as it is unspecified after
-       * the update [C99,C11 6.2.6.1/7]:
-       *
-       * > When a value is stored in a member of an object of union type, the
-       * > bytes of the object representation that do not correspond to that
-       * > member but do correspond to other members take unspecified values.
-       */
+       * the update */
       return convert_ast(typecast2tc(get_uint_type(size.to_uint64()), to_bv));
     }
     else
