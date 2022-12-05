@@ -403,21 +403,29 @@ private:
     const type2tc &type,
     const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
-  std::vector<expr2tc> extract_bytes_from_array(
+
+public:
+  static std::vector<expr2tc> extract_bytes_from_array(
     const expr2tc &array,
     unsigned int bytes,
     const expr2tc &offset);
-  std::vector<expr2tc> extract_bytes_from_scalar(
+  static std::vector<expr2tc> extract_bytes_from_scalar(
     const expr2tc &object,
     unsigned int bytes,
     const expr2tc &offset);
-  expr2tc stitch_together_from_byte_array(
-    unsigned int num_bytes,
-    const std::vector<expr2tc> &bytes);
-  expr2tc stitch_together_from_byte_array(
+  static expr2tc stitch_together_from_byte_array(
     const type2tc &type,
     const expr2tc &byte_array,
     expr2tc offset_bits,
+    const guardt &guard);
+
+private:
+  static expr2tc stitch_together_from_byte_array(
+    unsigned int num_bytes,
+    const std::vector<expr2tc> &bytes);
+  void wrap_in_scalar_step_list(
+    expr2tc &value,
+    std::list<expr2tc> *scalar_step_list,
     const guardt &guard);
   void dereference_failure(
     const std::string &error_class,

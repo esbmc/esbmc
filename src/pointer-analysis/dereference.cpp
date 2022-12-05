@@ -1924,7 +1924,11 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_scalar(
 
   for(auto &byte : bytes)
   {
-    byte = byte_extract2tc(bytetype, new_object, accuml_offs, is_big_endian);
+    byte = byte_extract2tc(
+      bytetype,
+      new_object,
+      accuml_offs,
+      config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
     accuml_offs = add2tc(offset->type, accuml_offs, gen_ulong(1));
   }
 
@@ -1940,7 +1944,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   // We are composing a larger data type out of bytes -- we must consider
   // what byte order we are giong to stitch it together out of.
   expr2tc accuml;
-  if(is_big_endian)
+  if(config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN)
   {
     // First bytes at top of accumulated bitstring
     accuml = bytes[0];
