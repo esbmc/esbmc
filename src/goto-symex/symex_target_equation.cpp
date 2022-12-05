@@ -16,6 +16,8 @@ void symex_target_equationt::debug_print_step(const SSA_stept &step) const
   log_debug("{}", oss.str());
 }
 
+static expr2tc flatten_unions(const expr2tc &expr);
+
 void symex_target_equationt::assignment(
   const expr2tc &guard,
   const expr2tc &lhs,
@@ -32,13 +34,13 @@ void symex_target_equationt::assignment(
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
 
-  SSA_step.guard = guard;
-  SSA_step.lhs = lhs;
-  SSA_step.original_lhs = original_lhs;
-  SSA_step.original_rhs = original_rhs;
-  SSA_step.rhs = rhs;
+  SSA_step.guard = flatten_unions(guard);
+  SSA_step.lhs = flatten_unions(lhs);
+  SSA_step.original_lhs = flatten_unions(original_lhs);
+  SSA_step.original_rhs = flatten_unions(original_rhs);
+  SSA_step.rhs = flatten_unions(rhs);
   SSA_step.hidden = hidden;
-  SSA_step.cond = equality2tc(lhs, rhs);
+  SSA_step.cond = equality2tc(SSA_step.lhs, SSA_step.rhs);
   SSA_step.type = goto_trace_stept::ASSIGNMENT;
   SSA_step.source = source;
   SSA_step.stack_trace = stack_trace;
@@ -57,10 +59,11 @@ void symex_target_equationt::output(
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
 
-  SSA_step.guard = guard;
+  SSA_step.guard = flatten_unions(guard);
   SSA_step.type = goto_trace_stept::OUTPUT;
   SSA_step.source = source;
-  SSA_step.output_args = args;
+  for(const expr2tc &o : args)
+    SSA_step.output_args.push_back(flatten_unions(o));
   SSA_step.format_string = fmt;
 
   if(debug_print)
@@ -76,8 +79,8 @@ void symex_target_equationt::assumption(
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
 
-  SSA_step.guard = guard;
-  SSA_step.cond = cond;
+  SSA_step.guard = flatten_unions(guard);
+  SSA_step.cond = flatten_unions(cond);
   SSA_step.type = goto_trace_stept::ASSUME;
   SSA_step.source = source;
   SSA_step.loop_number = loop_number;
@@ -97,8 +100,8 @@ void symex_target_equationt::assertion(
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
 
-  SSA_step.guard = guard;
-  SSA_step.cond = cond;
+  SSA_step.guard = flatten_unions(guard);
+  SSA_step.cond = flatten_unions(cond);
   SSA_step.type = goto_trace_stept::ASSERT;
   SSA_step.source = source;
   SSA_step.comment = msg;
@@ -120,9 +123,9 @@ void symex_target_equationt::renumber(
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
 
-  SSA_step.guard = guard;
-  SSA_step.lhs = symbol;
-  SSA_step.rhs = size;
+  SSA_step.guard = flatten_unions(guard);
+  SSA_step.lhs = flatten_unions(symbol);
+  SSA_step.rhs = flatten_unions(size);
   SSA_step.type = goto_trace_stept::RENUMBER;
   SSA_step.source = source;
 
@@ -148,6 +151,322 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
   if(!assertions.empty())
     smt_conv.assert_ast(
       smt_conv.make_n_ary(&smt_conv, &smt_convt::mk_or, assertions));
+}
+
+static void
+flatten_to_bytes(const expr2tc &new_expr, std::vector<expr2tc> &bytes)
+{
+  // Awkwardly, this array literal might not be completely fixed-value, if
+  // encoded in the middle of a function body or something that refers to other
+  // variables.
+  if(is_array_type(new_expr))
+  {
+    // Assume only fixed-size arrays (because you can't have variable size
+    // members of unions).
+    const array_type2t &arraytype = to_array_type(new_expr->type);
+    assert(
+      !arraytype.size_is_infinite && !is_nil_expr(arraytype.array_size) &&
+      is_constant_int2t(arraytype.array_size) &&
+      "Can't flatten array in union literal with unbounded size");
+
+    // Iterate over each field and flatten to bytes
+    const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
+    for(unsigned int i = 0; i < intref.value.to_uint64(); i++)
+    {
+      index2tc idx(arraytype.subtype, new_expr, gen_ulong(i));
+      flatten_to_bytes(idx, bytes);
+    }
+  }
+  else if(is_struct_type(new_expr))
+  {
+    // Iterate over each field.
+    const struct_type2t &structtype = to_struct_type(new_expr->type);
+    BigInt member_offset_bits = 0;
+    bool been_inside_bits_region = false;
+    BigInt bitfields_first_byte = 0;
+    for(unsigned long i = 0; i < structtype.members.size(); i++)
+    {
+      BigInt member_size_bits = type_byte_size_bits(structtype.members[i]);
+      // If this member is a bitfield, extract everything as it is until
+      // the next member aligned to a byte as all such members can only
+      // be of scalar type
+      if(member_size_bits % 8 != 0 || member_offset_bits % 8 != 0)
+      {
+        // This is the first bit-field within the region.
+        // So we update its first byte
+        if(!been_inside_bits_region)
+        {
+          bitfields_first_byte = member_offset_bits / 8;
+          been_inside_bits_region = true;
+        }
+      }
+      else
+      {
+        // This means that we just came out of the region comprised by
+        // bit-fields and we need to extract this region as it is
+        // before we try extract current member
+        if(been_inside_bits_region)
+        {
+          bool is_big_endian =
+            config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+          for(unsigned long j = bitfields_first_byte.to_uint64();
+              j < (member_offset_bits / 8).to_uint64();
+              j++)
+          {
+            byte_extract2tc struct_byte(
+              get_uint8_type(), new_expr, gen_ulong(j), is_big_endian);
+            bytes.push_back(struct_byte);
+          }
+          been_inside_bits_region = false;
+        }
+        // Now we can flatten to bytes this member as most likely it is not a bit-field.
+        // And even if it is a bit-field it is aligned to a byte and its
+        // size
+        member2tc memb(
+          structtype.members[i], new_expr, structtype.member_names[i]);
+        flatten_to_bytes(memb, bytes);
+      }
+      member_offset_bits += member_size_bits;
+    }
+    // This means that the struct ended on a bitfield.
+    // Hence, we need to do some final extractions.
+    if(been_inside_bits_region)
+    {
+      bool is_big_endian =
+        config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+      for(unsigned long j = bitfields_first_byte.to_uint64();
+          j < (member_offset_bits / 8).to_uint64();
+          j++)
+      {
+        byte_extract2tc struct_byte(
+          get_uint8_type(), new_expr, gen_ulong(j), is_big_endian);
+        bytes.push_back(struct_byte);
+      }
+    }
+  }
+  else if(is_union_type(new_expr))
+  {
+    // This is an expression that evaluates to a union -- probably a symbol
+    // name. It can't be a union literal, because that would have been
+    // recursively flattened. In this circumstance we are *not* required to
+    // actually perform any flattening, because something else in the union
+    // transformation should have transformed it to a byte array. Simply take
+    // the address (it has to have storage), cast to byte array, and index.
+    BigInt size = type_byte_size(new_expr->type);
+    address_of2tc addrof(new_expr->type, new_expr);
+    type2tc byteptr(new pointer_type2t(get_uint8_type()));
+    typecast2tc cast(byteptr, addrof);
+
+    // Produce N bytes
+    for(unsigned int i = 0; i < size.to_uint64(); i++)
+    {
+      index2tc idx(get_uint8_type(), cast, gen_ulong(i));
+      flatten_to_bytes(idx, bytes);
+    }
+  }
+  else if(is_number_type(new_expr) || is_pointer_type(new_expr))
+  {
+    BigInt size = type_byte_size(new_expr->type);
+
+    bool is_big_endian =
+      config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+    for(unsigned int i = 0; i < size.to_uint64(); i++)
+    {
+      byte_extract2tc ext(
+        get_uint8_type(), new_expr, gen_ulong(i), is_big_endian);
+      bytes.push_back(ext);
+    }
+  }
+  else
+  {
+    assert(
+      0 && fmt::format(
+             "Unrecognized type {}  when flattening union literal",
+             get_type_id(*new_expr->type))
+             .c_str());
+  }
+}
+
+static constant_array2tc flatten_union(const constant_union2t &expr)
+{
+  const type2tc &type = expr.type;
+  BigInt full_size = type_byte_size(type);
+
+  // Union literals should have zero/one field.
+  assert(
+    expr.datatype_members.size() < 2 &&
+    "Union literal with more than one field");
+
+  // Cannot have unbounded size; flatten to an array of bytes.
+  std::vector<expr2tc> byte_array;
+
+  if(expr.datatype_members.size() == 1)
+    flatten_to_bytes(expr.datatype_members[0], byte_array);
+
+  // Potentially extend this array further if this literal is smaller than
+  // the overall size of the union.
+  expr2tc abyte = gen_zero(get_uint8_type());
+  while(byte_array.size() < full_size.to_uint64())
+    byte_array.push_back(abyte);
+
+  expr2tc size = gen_ulong(byte_array.size());
+  type2tc arraytype(new array_type2t(get_uint8_type(), size, false));
+  return constant_array2tc(arraytype, byte_array);
+}
+
+static expr2tc flatten_with(const with2t &with)
+{
+  assert(with.type == with.source_value->type);
+  auto *u = static_cast<const struct_union_data *>(
+    dynamic_cast<const union_type2t *>(with.source_value->type.get()));
+  // BigInt bits = type_byte_size_bits(with.type);
+  assert(is_constant_string2t(with.update_field));
+  const irep_idt &field = to_constant_string2t(with.update_field).value;
+  assert(member_offset_bits(with.type, field) == 0);
+  unsigned c = u->get_component_number(field);
+  const type2tc &member_type = u->members[c];
+  expr2tc flattened_source =
+    flatten_unions(with.source_value /*, member_type */);
+  assert(is_array_type(flattened_source->type));
+  assert(to_array_type(flattened_source->type).subtype == get_uint8_type());
+  expr2tc flattened_value = flatten_unions(with.update_value);
+  BigInt bits = type_byte_size_bits(member_type);
+  if(bits % 8 == 0)
+  {
+    BigInt bytes = bits / 8;
+    assert(bytes.is_uint64());
+    uint64_t bytes64 = bytes.to_uint64();
+    assert(bytes64 <= UINT_MAX);
+    std::vector<expr2tc> value_bytes;
+    flatten_to_bytes(flattened_value, value_bytes);
+    assert(bytes64 <= value_bytes.size());
+    expr2tc res;
+    if(is_constant_expr(flattened_source))
+    {
+      constant_array2tc tgt(flattened_source);
+      for(size_t i = 0; i < bytes64; i++)
+        tgt->datatype_members[i] = value_bytes[i];
+      res = tgt;
+    }
+    else
+    {
+      res = flattened_source;
+      for(size_t i = 0; i < bytes64; i++)
+        res = with2tc(res->type, res, gen_ulong(i), value_bytes[i]);
+    }
+    return res;
+  }
+  else
+    assert(0 && "unimplemented");
+}
+
+static void fix_union_type(type2tc &type)
+{
+  if(is_union_type(type))
+  {
+    // Replace with byte array.
+    type2tc new_type = type;
+    auto size = type_byte_size(new_type);
+    type = type2tc(
+      new array_type2t(get_uint8_type(), gen_ulong(size.to_uint64()), false));
+  }
+  else
+  {
+    // Otherwise, recurse, taking care to handle pointers appropriately. All
+    // pointers to unions should remain union types.
+    type->Foreach_subtype(fix_union_type);
+  }
+}
+
+static void fix_union_expr(expr2tc &expr)
+{
+  // We care about one kind of expression: member expressions that access a
+  // union field. We also need to rewrite types as we come across them.
+  if(is_member2t(expr))
+  {
+    member2t &mem = to_member2t(expr);
+    // Are we accessing a union? If it's already a dereference, that's fine.
+    if(is_union_type(
+         mem.source_value) /*&& !is_dereference2t(mem.source_value)*/)
+    {
+      auto *u = static_cast<const struct_union_data *>(
+        dynamic_cast<const union_type2t *>(mem.source_value->type.get()));
+      unsigned c = u->get_component_number(mem.member);
+      assert(member_offset_bits(mem.source_value->type, mem.member) == 0);
+      const type2tc &member_type = u->members[c];
+      expr2tc flattened_source = flatten_unions(mem.source_value);
+      assert(is_array_type(flattened_source));
+      guardt guard;
+      expr = dereferencet::stitch_together_from_byte_array(
+        member_type, flattened_source, gen_ulong(0), guard);
+
+      // Fix type
+      fix_union_type(expr->type);
+    }
+    else
+    {
+      expr->Foreach_operand(fix_union_expr);
+      fix_union_type(expr->type);
+    }
+  }
+  else if(is_union_type(expr))
+  {
+    if(is_with2t(expr))
+    {
+      expr = flatten_with(to_with2t(expr));
+      fix_union_type(expr->type); // XXX unnecessary?
+    }
+    else if(is_symbol2t(expr))
+    {
+      fix_union_type(expr->type); // XXX unnecessary?
+    }
+    else
+    {
+      // There may be union types embedded within this type; those need their
+      // types fixing too.
+      expr->Foreach_operand(fix_union_expr);
+
+      // A union expr is a constant/literal union. This needs to be flattened
+      // out at this stage. Handle this by migrating immediately (which will
+      // eliminate anything on union type), and overwriting this expression.
+      if(is_constant_union2t(expr))
+        expr = flatten_union(to_constant_union2t(expr));
+      else
+        fix_union_type(expr->type);
+    }
+  }
+  else if(is_dereference2t(expr))
+  {
+    // We want the dereference of a union pointer to evaluate to a union type,
+    // as that can be picked apart by the pointer handling code. However, do
+    // rewrite types if it points at a struct that contains a union, because
+    // the correct type of a struct reference with a union is it, has it's
+    // fields rewritten to be arrays. Actual accesses to that union field will
+    // be transformed into a dereference to one of the fields _within_ the
+    // union, so we never up constructing a union reference.
+    expr->Foreach_operand(fix_union_expr);
+    fix_union_type(expr->type);
+  }
+  else
+  {
+    // Default action: recurse and beat types.
+
+    fix_union_type(expr->type);
+
+    expr->Foreach_operand(fix_union_expr);
+  }
+}
+
+static expr2tc flatten_unions(const expr2tc &e)
+{
+  return e;
+
+  expr2tc expr = e;
+  if(is_nil_expr(expr))
+    return expr;
+  fix_union_expr(expr);
+  fix_union_type(expr->type);
+  return expr;
 }
 
 void symex_target_equationt::convert_internal_step(

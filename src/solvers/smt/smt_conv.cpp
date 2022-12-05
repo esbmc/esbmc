@@ -1639,12 +1639,13 @@ smt_astt smt_convt::convert_member(const expr2tc &expr)
   if(is_union_type(member.source_value))
   {
     BigInt size = type_byte_size_bits(member.source_value->type);
-    expr2tc to_bv =
-      bitcast2tc(get_uint_type(size.to_uint64()), member.source_value);
+    expr2tc to_bv = bitcast2tc(
+      get_uint_type(size.to_uint64()), member.source_value);
     return convert_ast(bitcast2tc(
       expr->type,
       typecast2tc(
-        get_uint_type(type_byte_size_bits(expr->type).to_uint64()), to_bv)));
+        get_uint_type(type_byte_size_bits(expr->type).to_uint64()),
+        to_bv)));
   }
 
   assert(
@@ -2303,8 +2304,9 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
 
   case type2t::union_id:
   {
-    expr2tc uint_rep =
-      get_by_ast(get_uint_type(type_byte_size_bits(type).to_uint64()), a);
+    expr2tc uint_rep = get_by_ast(
+      get_uint_type(type_byte_size_bits(type).to_uint64()),
+      a);
     std::vector<expr2tc> members;
     /* TODO: this violates the assumption in the rest of ESBMC that
      *       constant_union2t only have at most 1 member initializer.
