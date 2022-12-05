@@ -16,8 +16,6 @@ void symex_target_equationt::debug_print_step(const SSA_stept &step) const
   log_debug("{}", oss.str());
 }
 
-static expr2tc flatten_unions(const expr2tc &expr);
-
 void symex_target_equationt::assignment(
   const expr2tc &guard,
   const expr2tc &lhs,
@@ -34,13 +32,13 @@ void symex_target_equationt::assignment(
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
 
-  SSA_step.guard = flatten_unions(guard);
-  SSA_step.lhs = flatten_unions(lhs);
-  SSA_step.original_lhs = flatten_unions(original_lhs);
-  SSA_step.original_rhs = flatten_unions(original_rhs);
-  SSA_step.rhs = flatten_unions(rhs);
+  SSA_step.guard = guard;
+  SSA_step.lhs = lhs;
+  SSA_step.original_lhs = original_lhs;
+  SSA_step.original_rhs = original_rhs;
+  SSA_step.rhs = rhs;
   SSA_step.hidden = hidden;
-  SSA_step.cond = equality2tc(SSA_step.lhs, SSA_step.rhs);
+  SSA_step.cond = equality2tc(lhs, rhs);
   SSA_step.type = goto_trace_stept::ASSIGNMENT;
   SSA_step.source = source;
   SSA_step.stack_trace = stack_trace;
@@ -59,7 +57,7 @@ void symex_target_equationt::output(
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
 
-  SSA_step.guard = flatten_unions(guard);
+  SSA_step.guard = guard;
   SSA_step.type = goto_trace_stept::OUTPUT;
   SSA_step.source = source;
   SSA_step.output_args = args;
@@ -78,8 +76,8 @@ void symex_target_equationt::assumption(
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
 
-  SSA_step.guard = flatten_unions(guard);
-  SSA_step.cond = flatten_unions(cond);
+  SSA_step.guard = guard;
+  SSA_step.cond = cond;
   SSA_step.type = goto_trace_stept::ASSUME;
   SSA_step.source = source;
   SSA_step.loop_number = loop_number;
@@ -99,8 +97,8 @@ void symex_target_equationt::assertion(
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
 
-  SSA_step.guard = flatten_unions(guard);
-  SSA_step.cond = flatten_unions(cond);
+  SSA_step.guard = guard;
+  SSA_step.cond = cond;
   SSA_step.type = goto_trace_stept::ASSERT;
   SSA_step.source = source;
   SSA_step.comment = msg;
@@ -122,9 +120,9 @@ void symex_target_equationt::renumber(
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
 
-  SSA_step.guard = flatten_unions(guard);
-  SSA_step.lhs = flatten_unions(symbol);
-  SSA_step.rhs = flatten_unions(size);
+  SSA_step.guard = guard;
+  SSA_step.lhs = symbol;
+  SSA_step.rhs = size;
   SSA_step.type = goto_trace_stept::RENUMBER;
   SSA_step.source = source;
 
@@ -311,6 +309,8 @@ static constant_array2tc flatten_union(const constant_union2t &expr)
   return constant_array2tc(arraytype, byte_array);
 }
 
+static expr2tc flatten_unions(const expr2tc &expr);
+
 static expr2tc flatten_with(const with2t &with)
 {
   assert(with.type == with.source_value->type);
@@ -451,6 +451,7 @@ static void fix_union_expr(expr2tc &expr)
       // There may be union types embedded within this type; those need their
       // types fixing too.
       expr->Foreach_operand(fix_union_expr);
+      fix_union_type(expr->type, false); // XXX unnecessary?
 
       // A union expr is a constant/literal union. This needs to be flattened
       // out at this stage. Handle this by migrating immediately (which will
@@ -458,7 +459,7 @@ static void fix_union_expr(expr2tc &expr)
       if(is_constant_union2t(expr))
         expr = flatten_union(to_constant_union2t(expr));
       else
-        fix_union_type(expr->type, false); // XXX unnecessary?
+        abort();
       /*
       expr2tc new_expr;
       migrate_expr(expr, new_expr);
@@ -550,8 +551,6 @@ static expr2tc flatten_unions(const expr2tc &e)
   } do_flatten;
   expr2tc expr = e;
   // do_flatten(expr);
-  if(is_nil_expr(expr))
-    return expr;
   fix_union_expr(expr);
   fix_union_type(expr->type, false);
   return expr;
@@ -586,6 +585,7 @@ void symex_target_equationt::convert_internal_step(
   log_debug("Guard converted {} {}", __FUNCTION__, __FILE__ );
   if(step.is_assume() || step.is_assert())
   {
+    step.cond = flatten_unions(step.cond);
     expr2tc tmp(step.cond);
     step.cond_ast = smt_conv.convert_ast(tmp);
 
