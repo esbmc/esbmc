@@ -309,7 +309,7 @@ static constant_array2tc flatten_union(const constant_union2t &expr)
   return constant_array2tc(arraytype, byte_array);
 }
 
-static expr2tc flatten_unions(const expr2tc &expr);
+static expr2tc flatten_unions(expr2tc expr);
 
 static expr2tc flatten_with(const with2t &with)
 {
@@ -356,161 +356,13 @@ static expr2tc flatten_with(const with2t &with)
     assert(0 && "unimplemented");
 }
 
-static void fix_union_type(type2tc &type, bool is_pointer)
-{
-  if(!is_pointer && is_union_type(type))
-  {
-    // Replace with byte array.
-    type2tc new_type = type;
-    auto size = type_byte_size(new_type);
-    type = type2tc(
-      new array_type2t(get_uint8_type(), gen_ulong(size.to_uint64()), false));
-    return;
-  }
-
-  // Otherwise, recurse, taking care to handle pointers appropriately. All
-  // pointers to unions should remain union types.
-  if(0 && is_pointer_type(type))
-  {
-    fix_union_type(to_pointer_type(type).subtype, /* true */ false);
-  }
-  else if(0 && is_structure_type(type))
-  {
-    for(type2tc &mem : static_cast<struct_union_data *>(type.get())->members)
-      fix_union_type(mem, false);
-  }
-  else
-  {
-    type->Foreach_subtype([](type2tc &ty){ fix_union_type(ty, false); });
-  }
-}
-
-static void fix_union_expr(expr2tc &expr)
-{
-  // We care about one kind of expression: member expressions that access a
-  // union field. We also need to rewrite types as we come across them.
-  if(is_member2t(expr))
-  {
-    member2t &mem = to_member2t(expr);
-    // Are we accessing a union? If it's already a dereference, that's fine.
-    if(is_union_type(mem.source_value) /*&& !is_dereference2t(mem.source_value)*/)
-    {
-#if 1
-      auto *u = static_cast<const struct_union_data *>(
-        dynamic_cast<const union_type2t *>(mem.source_value->type.get()));
-      unsigned c = u->get_component_number(mem.member);
-      assert(
-        member_offset_bits(mem.source_value->type, mem.member) == 0);
-      const type2tc &member_type = u->members[c];
-      expr2tc flattened_source = flatten_unions(mem.source_value);
-      assert(is_array_type(flattened_source));
-      guardt guard;
-      expr = dereferencet::stitch_together_from_byte_array(
-        member_type, flattened_source, gen_ulong(0), guard);
-
-      // Fix type
-      fix_union_type(expr->type, false);
-#else
-      // Rewrite 'dataobj.field' to '((uniontype*)&dataobj)->field'
-      expr2tc dataobj = mem.source_value;
-      type2tc union_type = dataobj->type;
-      auto size = type_byte_size(union_type);
-      type2tc array_type = type2tc(
-        new array_type2t(get_uint8_type(), gen_ulong(size.to_uint64()), false));
-      type2tc union_pointer(new pointer_type2t(union_type));
-
-      address_of2tc addrof(array_type, dataobj);
-      typecast2tc cast(union_pointer, addrof);
-      dereference2tc deref(union_type, cast);
-      mem.source_value = deref;
-
-      // Fix type -- it needs to remain a union at the top level
-      fix_union_type(expr->type, false);
-      fix_union_expr(mem.source_value);
-#endif
-    }
-    else
-    {
-      expr->Foreach_operand(fix_union_expr);
-      fix_union_type(expr->type, false);
-    }
-  }
-  else if(is_union_type(expr))
-  {
-    if(is_with2t(expr))
-    {
-      expr = flatten_with(to_with2t(expr));
-      fix_union_type(expr->type, false); // XXX unnecessary?
-    }
-    else if(is_symbol2t(expr))
-    {
-      fix_union_type(expr->type, false); // XXX unnecessary?
-    }
-    else
-    {
-      // There may be union types embedded within this type; those need their
-      // types fixing too.
-      expr->Foreach_operand(fix_union_expr);
-      fix_union_type(expr->type, false); // XXX unnecessary?
-
-      // A union expr is a constant/literal union. This needs to be flattened
-      // out at this stage. Handle this by migrating immediately (which will
-      // eliminate anything on union type), and overwriting this expression.
-      if(is_constant_union2t(expr))
-        expr = flatten_union(to_constant_union2t(expr));
-      else
-        abort();
-      /*
-      expr2tc new_expr;
-      migrate_expr(expr, new_expr);
-      expr = migrate_expr_back(new_expr);
-      */
-    }
-  }
-  else if(is_dereference2t(expr))
-  {
-    // We want the dereference of a union pointer to evaluate to a union type,
-    // as that can be picked apart by the pointer handling code. However, do
-    // rewrite types if it points at a struct that contains a union, because
-    // the correct type of a struct reference with a union is it, has it's
-    // fields rewritten to be arrays. Actual accesses to that union field will
-    // be transformed into a dereference to one of the fields _within_ the
-    // union, so we never up constructing a union reference.
-    expr->Foreach_operand(fix_union_expr);
-    fix_union_type(expr->type, /* true */ false);
-  }
-  else
-  {
-    // Default action: recurse and beat types.
-
-    fix_union_type(expr->type, false);
-
-    expr->Foreach_operand(fix_union_expr);
-  }
-}
-
-static expr2tc flatten_unions(const expr2tc &e)
+static expr2tc flatten_unions(expr2tc expr)
 {
   struct
   {
     void operator()(expr2tc &e) const
     {
-      if(is_member2t(e) && is_union_type(to_member2t(e).source_value))
-      {
-        const member2t &member = to_member2t(e);
-        auto *u = static_cast<const struct_union_data *>(
-          dynamic_cast<const union_type2t *>(member.source_value->type.get()));
-        unsigned c = u->get_component_number(member.member);
-        assert(
-          member_offset_bits(member.source_value->type, member.member) == 0);
-        const type2tc &member_type = u->members[c];
-        expr2tc flattened_source = flatten_unions(member.source_value);
-        assert(is_array_type(flattened_source));
-        guardt guard;
-        e = dereferencet::stitch_together_from_byte_array(
-          member_type, flattened_source, gen_ulong(0), guard);
-      }
-      else if(is_union_type(e))
+      if(is_union_type(e))
       {
         if(is_with2t(e))
         {
@@ -532,27 +384,32 @@ static expr2tc flatten_unions(const expr2tc &e)
         else
           assert(0);
       }
-      else
+      else if(is_member2t(e) && is_union_type(to_member2t(e).source_value))
       {
-        bool b = false;
-        e->Foreach_operand([this,&b](expr2tc &op){
-          expr2tc flat = flatten_unions(op);
-          if(flat != op)
-          {
-            b = true;
-            op = flat;
-          }
-        });
-        if(b)
-          fix_union_type(e->type, false);
-        // assert(!b);
+        const member2t &member = to_member2t(e);
+        auto *u = static_cast<const struct_union_data *>(
+          dynamic_cast<const union_type2t *>(member.source_value->type.get()));
+        unsigned c = u->get_component_number(member.member);
+        assert(
+          member_offset_bits(member.source_value->type, member.member) == 0);
+        const type2tc &member_type = u->members[c];
+        expr2tc flattened_source = flatten_unions(member.source_value);
+        assert(is_array_type(flattened_source));
+        BigInt bits = type_byte_size_bits(member_type);
+        if(bits % 8 == 0)
+        {
+          guardt guard;
+          e = dereferencet::stitch_together_from_byte_array(
+            member_type, flattened_source, gen_ulong(0), guard);
+        }
+        else
+          assert(0);
       }
+      else
+        e->Foreach_operand(*this);
     }
   } do_flatten;
-  expr2tc expr = e;
-  // do_flatten(expr);
-  fix_union_expr(expr);
-  fix_union_type(expr->type, false);
+  do_flatten(expr);
   return expr;
 }
 
@@ -585,8 +442,7 @@ void symex_target_equationt::convert_internal_step(
   log_debug("Guard converted {} {}", __FUNCTION__, __FILE__ );
   if(step.is_assume() || step.is_assert())
   {
-    step.cond = flatten_unions(step.cond);
-    expr2tc tmp(step.cond);
+    expr2tc tmp(flatten_unions(step.cond));
     step.cond_ast = smt_conv.convert_ast(tmp);
 
     if(ssa_smt_trace)
