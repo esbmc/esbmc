@@ -701,6 +701,26 @@ void goto_symext::symex_assign_bitfield(
   new_rhs = typecast2tc(val->type, new_rhs);
 
   return symex_assign_rec(val, full_lhs, new_rhs, full_rhs, guard, hidden);
+#if 0
+  expr2tc left_side = to_lshr2t(lhs).side_1;
+  expr2tc shft_expr = to_lshr2t(lhs).side_2;
+
+  assert(is_bitand2t(left_side));
+
+  expr2tc value_expr = to_bitand2t(left_side).side_1;
+  expr2tc mask_expr = to_bitand2t(left_side).side_2;
+  expr2tc not_mask_expr = bitnot2tc(mask_expr->type, mask_expr);
+
+  // (1) Resetting the target bits first
+  expr2tc new_value_expr =
+    bitand2tc(value_expr->type, value_expr, not_mask_expr);
+  // (2) Aligning the RHS value with the target bits
+  expr2tc new_rhs = bitcast2tc(left_side->type, rhs);
+  new_rhs = shl2tc(new_rhs->type, new_rhs, shft_expr);
+  // (3) Updating the RHS with the remaining bits
+  new_rhs = bitor2tc(new_rhs->type, new_rhs, new_value_expr);
+  symex_assign_rec(value_expr, full_lhs, new_rhs, full_rhs, guard, hidden);
+#endif
 }
 
 void goto_symext::replace_nondet(expr2tc &expr)
