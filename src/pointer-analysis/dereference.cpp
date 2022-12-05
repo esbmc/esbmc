@@ -1491,7 +1491,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
   const constant_int2t &intref = to_constant_int2t(offs);
   BigInt type_size = type_byte_size_bits(type);
 
-  if(is_struct_type(value->type) || is_union_type(value->type))
+  if(is_struct_type(value->type))
   {
     // Right. In this situation, there are several possibilities. First, if the
     // offset is zero, and the struct type is compatible, we've succeeded.
