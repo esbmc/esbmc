@@ -663,25 +663,18 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else if(is_union_type(expr))
     {
-      uint64_t bits = type_byte_size_bits(expr->type).to_uint64();
-      const union_type2t &tu = to_union_type(expr->type);
-      assert(is_constant_string2t(with.update_field));
-      unsigned c =
-        tu.get_component_number(to_constant_string2t(with.update_field).value);
-      uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
-      expr2tc upd = bitcast2tc(
-        get_uint_type(mem_bits),
-        typecast2tc(tu.members[c], with.update_value));
-      if(mem_bits < bits)
-        upd = concat2tc(
-          get_uint_type(bits),
-          extract2tc(
-            get_uint_type(bits - mem_bits),
-            with.source_value,
-            bits - 1,
-            mem_bits),
-          upd);
-      a = convert_ast(upd);
+      BigInt size = type_byte_size_bits(expr->type);
+      expr2tc to_bv = bitcast2tc(
+        get_uint_type(type_byte_size_bits(with.update_value->type).to_uint64()),
+        with.update_value);
+      /* We ignore the previous content of the union as it is unspecified after
+       * the update [C99,C11 6.2.6.1/7]:
+       *
+       * > When a value is stored in a member of an object of union type, the
+       * > bytes of the object representation that do not correspond to that
+       * > member but do correspond to other members take unspecified values.
+       */
+      return convert_ast(typecast2tc(get_uint_type(size.to_uint64()), to_bv));
     }
     else
     {
