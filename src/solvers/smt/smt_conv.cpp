@@ -343,24 +343,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::constant_union_id:
   {
     // Get size
-    const constant_union2t &cu = to_constant_union2t(expr);
-    const std::vector<expr2tc> &dt_memb = cu.datatype_members;
-    expr2tc src_expr =
-      dt_memb.empty() ? gen_zero(get_uint_type(0)) : dt_memb[0];
-#ifndef NDEBUG
-    if(!cu.init_field.empty())
-    {
-      const union_type2t &ut = to_union_type(expr->type);
-      unsigned c = ut.get_component_number(cu.init_field);
-      /* Can only initialize unions by expressions of same type as init_field */
-      assert(src_expr->type == ut.members[c]);
-    }
-#endif
-    a = convert_ast(typecast2tc(
-      get_uint_type(type_byte_size_bits(expr->type).to_uint64()),
-      bitcast2tc(
-        get_uint_type(type_byte_size_bits(src_expr->type).to_uint64()),
-        src_expr)));
+    BigInt size = type_byte_size_bits(expr->type);
+    a = convert_ast(bitcast2tc(
+      get_uint_type(size.to_uint64()),
+      to_constant_union2t(expr).datatype_members.at(0)));
     break;
   }
   case expr2t::constant_vector_id:
@@ -663,13 +649,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else if(is_union_type(expr))
     {
+      // We ignore the member name and typecast it to bv
       BigInt size = type_byte_size_bits(expr->type);
-      expr2tc to_bv = bitcast2tc(
-        get_uint_type(type_byte_size_bits(with.update_value->type).to_uint64()),
-        with.update_value);
-      /* We ignore the previous content of the union as it is unspecified after
-       * the update */
-      return convert_ast(typecast2tc(get_uint_type(size.to_uint64()), to_bv));
+      a = convert_ast(
+        bitcast2tc(get_uint_type(size.to_uint64()), with.update_value));
     }
     else
     {
@@ -1640,12 +1623,8 @@ smt_astt smt_convt::convert_member(const expr2tc &expr)
   {
     BigInt size = type_byte_size_bits(member.source_value->type);
     expr2tc to_bv = bitcast2tc(
-      get_uint_type(size.to_uint64()), member.source_value);
-    return convert_ast(bitcast2tc(
-      expr->type,
-      typecast2tc(
-        get_uint_type(type_byte_size_bits(expr->type).to_uint64()),
-        to_bv)));
+      get_uint_type(size.to_uint64()), get_base_object(member.source_value));
+    return convert_ast(bitcast2tc(expr->type, to_bv));
   }
 
   assert(
@@ -2187,10 +2166,8 @@ expr2tc smt_convt::get(const expr2tc &expr)
     }
 
     expr2tc src = get(with.source_value);
-    expr2tc val = get(update_val);
-    if(is_nil_expr(src)) /* XXX this does not have the type of res! */
-      return val;
     expr2tc fld = get(update_fld);
+    expr2tc val = get(update_val);
     expr2tc res = with2tc(with.type, src, fld, val);
     simplify(res);
 
@@ -2336,28 +2313,6 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
   case type2t::struct_id:
   case type2t::pointer_id:
     return tuple_api->tuple_get(expr);
-
-  case type2t::union_id:
-  {
-    expr2tc uint_rep = get_by_ast(
-      get_uint_type(type_byte_size_bits(expr->type).to_uint64()),
-      convert_ast(expr));
-    std::vector<expr2tc> members;
-    const union_type2t &ut = to_union_type(expr->type);
-    for(const type2tc &member_type : ut.members)
-    {
-      expr2tc cast = typecast2tc(
-        member_type,
-        bitcast2tc(
-          get_uint_type(type_byte_size_bits(member_type).to_uint64()),
-          uint_rep));
-      simplify(cast);
-      members.push_back(cast);
-    }
-    return constant_union2tc(
-      expr->type, "" /* TODO: which field assigned last? */, members);
-    return bitcast2tc(expr->type, uint_rep);
-  }
 
   default:
     if(!options.get_bool_option("non-supported-models-as-zero"))

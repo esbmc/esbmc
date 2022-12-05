@@ -187,11 +187,6 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
       return convert_ast(constant_struct2tc(to_type, fields));
     }
   }
-  else if(is_union_type(to_type))
-  {
-    if(is_bv_type(from))
-      return convert_ast(from);
-  }
   else if(is_array_type(to_type))
   {
     expr2tc new_from = from;
