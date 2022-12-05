@@ -448,7 +448,6 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
 
 void clang_c_adjust::adjust_dereference(exprt &deref)
 {
-  // follows the conversion flow in c_typecheck_baset::typecheck_expr_dereference
   adjust_operands(deref);
 
   exprt &op = deref.op0();

@@ -23,8 +23,7 @@ public:
   void get_vtables_dtors(
     const symbolt &symb,
     code_blockt &vtables,
-    code_blockt &dtors,
-    codet &code);
+    code_blockt &dtors);
 
   /**
    * methods for type (typet) adjustment
@@ -40,15 +39,6 @@ public:
   void adjust_new(exprt &expr);
   void adjust_side_effect(side_effect_exprt &expr) override;
   void adjust_ptrmember(exprt &expr);
-  void adjust_cpp_already_checked(exprt &expr);
-  void adjust_cpp_this(exprt &expr);
-  void adjust_dereference(exprt &expr);
-  void adjust_member(member_exprt &expr) override;
-  bool get_component(
-    const locationt &location,
-    const exprt &object,
-    const irep_idt &component_name,
-    exprt &member);
 
   /**
    * methods for code (codet) adjustment

@@ -1143,12 +1143,6 @@ bool clang_cpp_convertert::get_function_body(
     new_expr.set("#is_dtor", true);
     new_expr.set("#added_implicit_code", false);
     new_expr.set("#member_name", ftype.get("#member_name"));
-    // this parameter must have been added
-    assert(ftype.arguments().at(0).type().id() == "pointer");
-    // get dtor `this` argument id for adjustment later
-    new_expr.set("#this_arg", ftype.arguments().at(0).get("#identifier"));
-    // sync dtor symbol.value.type with symbol.type
-    new_expr.type() = ftype;
   }
 
   if(!fd.hasBody())

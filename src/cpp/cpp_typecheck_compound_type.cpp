@@ -1558,7 +1558,7 @@ bool cpp_typecheckt::get_component(
       member.swap(tmp);
 
       bool not_ok = check_component_access(component, final_type);
-      if(not_ok) // DEBUG: ignore for tag-Vehicle
+      if(not_ok)
       {
         if(disable_access_control)
         {
