@@ -244,35 +244,13 @@ void value_sett::get_value_set_rec(
     assert(is_struct_type(source_type) || is_union_type(source_type));
 #endif
 
-    irep_idt single_source;
-    if(is_struct_type(memb.source_value))
-      single_source = memb.member;
-    else if(is_constant_union2t(memb.source_value))
-      single_source = to_constant_union2t(memb.source_value).init_field;
-    if(!single_source.empty())
-    {
-      // Add '.$field' to the suffix, identifying the member from the other
-      // members of the struct's variable.
-      get_value_set_rec(
-        memb.source_value,
-        dest,
-        "." + single_source.as_string() + suffix,
-        original_type);
-    }
-    else
-    {
-      /* We have a member of a union. The value-set of it is the same as the
-       * union of the value-sets of each member. */
-      assert(is_union_type(memb.source_value->type));
-      auto *u =
-        dynamic_cast<const struct_union_data *>(memb.source_value->type.get());
-      for(const irep_idt &name : u->member_names)
-        get_value_set_rec(
-          memb.source_value,
-          dest,
-          "." + name.as_string() + suffix,
-          original_type);
-    }
+    // Add '.$field' to the suffix, identifying the member from the other
+    // members of the struct's variable.
+    get_value_set_rec(
+      memb.source_value,
+      dest,
+      "." + memb.member.as_string() + suffix,
+      original_type);
     return;
   }
 
