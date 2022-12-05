@@ -459,8 +459,6 @@ static void fix_union_expr(expr2tc &expr)
 
 static expr2tc flatten_unions(const expr2tc &e)
 {
-  return e;
-
   expr2tc expr = e;
   if(is_nil_expr(expr))
     return expr;
