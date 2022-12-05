@@ -265,7 +265,7 @@ void value_sett::get_value_set_rec(
        * union of the value-sets of each member. */
       assert(is_union_type(memb.source_value->type));
       auto *u =
-        static_cast<const struct_union_data *>(memb.source_value->type.get());
+        dynamic_cast<const struct_union_data *>(memb.source_value->type.get());
       for(const irep_idt &name : u->member_names)
         get_value_set_rec(
           memb.source_value,
