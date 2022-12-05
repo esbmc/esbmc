@@ -670,7 +670,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         tu.get_component_number(to_constant_string2t(with.update_field).value);
       uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
       expr2tc upd = bitcast2tc(
-        get_uint_type(mem_bits), typecast2tc(tu.members[c], with.update_value));
+        get_uint_type(mem_bits),
+        typecast2tc(tu.members[c], with.update_value));
       if(mem_bits < bits)
         upd = concat2tc(
           get_uint_type(bits),
