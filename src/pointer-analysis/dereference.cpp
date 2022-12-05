@@ -1970,19 +1970,6 @@ expr2tc dereferencet::stitch_together_from_byte_array(
 
   /* TODO: check array bounds, (alignment?) */
 
-  if(is_array_type(type) && is_constant_int2t(offset))
-  {
-    const array_type2t &ret_type = to_array_type(type);
-    const array_type2t &arr_type = to_array_type(byte_array->type);
-    if(is_constant_int2t(arr_type.array_size) &&
-       is_constant_int2t(ret_type.array_size) &&
-       to_constant_int2t(offset).value == 0 &&
-       arr_type.subtype == get_uint8_type() &&
-       to_constant_int2t(arr_type.array_size).value ==
-       to_constant_int2t(ret_type.array_size).value)
-      return byte_array;
-  }
-
   expr2tc *bytes = extract_bytes_from_array(byte_array, num_bytes, offset);
   expr2tc result;
   stitch_together_from_byte_array(result, num_bytes, bytes);
