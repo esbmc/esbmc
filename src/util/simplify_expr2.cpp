@@ -813,7 +813,7 @@ expr2tc with2t::do_simplify() const
     if(thetype.members[no] != update_value->type)
       return expr2tc();
 
-    std::vector<expr2tc> newmembers = {update_value};
+    std::vector<expr2tc> newmembers = { update_value };
     return constant_union2tc(type, thetype.member_names[no], newmembers);
   }
   else if(is_constant_array2t(source_value) && is_constant_int2t(update_field))
@@ -2995,8 +2995,7 @@ expr2tc byte_extract2t::do_simplify() const
   {
     const array_type2t &at = to_array_type(src->type);
     if(is_bv_type(at.subtype) && at.subtype->get_width() == type->get_width())
-      return try_simplification(
-        typecast2tc(type, index2tc(at.subtype, src, off)));
+      return try_simplification(typecast2tc(type, index2tc(at.subtype, src, off)));
   }
 
   if(is_constant_int2t(off) && type == get_uint8_type())
@@ -3016,9 +3015,7 @@ expr2tc byte_extract2t::do_simplify() const
         unsigned width = src->type->get_width();
         /* width bits in ss...ss|...|ssssssss|xxxxxxxx|xxxxxxxx|...|xxxxxxxx|
          * at most 64 bits x; s = neg ? 1 : 0; off64 is in bits */
-        if(
-          (neg ? src_value.is_int64() : src_value.is_uint64()) &&
-          off64 + 8 <= width)
+        if((neg ? src_value.is_int64() : src_value.is_uint64()) && off64 + 8 <= width)
         {
           /* We assume two's complement, as does do_bit_munge_operation() */
 

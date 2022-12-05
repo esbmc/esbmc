@@ -135,8 +135,7 @@ public:
     constant_union_data,
     &constant_union_data::init_field>
     init_field_field;
-  typedef esbmct::expr2t_traits<datatype_members_field, init_field_field>
-    traits;
+  typedef esbmct::expr2t_traits<datatype_members_field, init_field_field> traits;
 };
 
 class constant_bool_data : public constant2t
@@ -1700,10 +1699,7 @@ public:
    *  @param type Type of this structure, presumably a union_type2t
    *  @param members Vector of member values that make up this union.
    */
-  constant_union2t(
-    const type2tc &type,
-    irep_idt init_field,
-    const std::vector<expr2tc> &members)
+  constant_union2t(const type2tc &type, irep_idt init_field, const std::vector<expr2tc> &members)
     : constant_union_expr_methods(type, constant_union_id, init_field, members)
   {
     assert(is_union_type(type));

@@ -682,9 +682,9 @@ void goto_symext::symex_assign_bitfield(
   assert(is_typecast2t(cast_expr));
   const expr2tc &shft_expr = to_typecast2t(cast_expr).from;
   assert(is_lshr2t(shft_expr));
-  const expr2tc &val = to_lshr2t(shft_expr).side_1;
-  const expr2tc &shft = to_lshr2t(shft_expr).side_2;
-  const expr2tc &mask = to_bitand2t(lhs).side_2;
+  const expr2tc &val       = to_lshr2t(shft_expr).side_1;
+  const expr2tc &shft      = to_lshr2t(shft_expr).side_2;
+  const expr2tc &mask      = to_bitand2t(lhs).side_2;
 
   expr2tc neg_mask, rhs_shft, new_rhs;
 

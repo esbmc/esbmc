@@ -152,8 +152,7 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
       smt_conv.make_n_ary(&smt_conv, &smt_convt::mk_or, assertions));
 }
 
-static void
-flatten_to_bytes(const expr2tc &new_expr, std::vector<expr2tc> &bytes)
+static void flatten_to_bytes(const expr2tc &new_expr, std::vector<expr2tc> &bytes)
 {
   // Awkwardly, this array literal might not be completely fixed-value, if
   // encoded in the middle of a function body or something that refers to other
@@ -293,8 +292,7 @@ static constant_array2tc flatten_union(const constant_union2t &expr)
 
   // Union literals should have zero/one field.
   assert(
-    expr.datatype_members.size() < 2 &&
-    "Union literal with more than one field");
+    expr.datatype_members.size() < 2 && "Union literal with more than one field");
 
   // Cannot have unbounded size; flatten to an array of bytes.
   std::vector<expr2tc> byte_array;
@@ -324,8 +322,7 @@ static expr2tc flatten_with(const with2t &with)
   assert(member_offset_bits(with.type, field) == 0);
   unsigned c = u->get_component_number(field);
   const type2tc &member_type = u->members[c];
-  expr2tc flattened_source =
-    flatten_unions(with.source_value /*, member_type */);
+  expr2tc flattened_source = flatten_unions(with.source_value /*, member_type */);
   assert(is_array_type(flattened_source->type));
   assert(to_array_type(flattened_source->type).subtype == get_uint8_type());
   expr2tc flattened_value = flatten_unions(with.update_value);
@@ -385,13 +382,13 @@ static void fix_union_expr(expr2tc &expr)
   {
     member2t &mem = to_member2t(expr);
     // Are we accessing a union? If it's already a dereference, that's fine.
-    if(is_union_type(
-         mem.source_value) /*&& !is_dereference2t(mem.source_value)*/)
+    if(is_union_type(mem.source_value) /*&& !is_dereference2t(mem.source_value)*/)
     {
       auto *u = static_cast<const struct_union_data *>(
         dynamic_cast<const union_type2t *>(mem.source_value->type.get()));
       unsigned c = u->get_component_number(mem.member);
-      assert(member_offset_bits(mem.source_value->type, mem.member) == 0);
+      assert(
+        member_offset_bits(mem.source_value->type, mem.member) == 0);
       const type2tc &member_type = u->members[c];
       expr2tc flattened_source = flatten_unions(mem.source_value);
       assert(is_array_type(flattened_source));

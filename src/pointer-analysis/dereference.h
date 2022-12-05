@@ -403,7 +403,6 @@ private:
     const type2tc &type,
     const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
-
 public:
   static std::vector<expr2tc> extract_bytes_from_array(
     const expr2tc &array,
@@ -418,7 +417,6 @@ public:
     const expr2tc &byte_array,
     expr2tc offset_bits,
     const guardt &guard);
-
 private:
   static expr2tc stitch_together_from_byte_array(
     unsigned int num_bytes,
@@ -454,7 +452,8 @@ private:
     unsigned long minwidth,
     const expr2tc &&offset,
     const guardt &guard);
-  unsigned int static compute_num_bytes_to_extract(
+  unsigned int
+  static compute_num_bytes_to_extract(
     const expr2tc offset,
     unsigned long num_bits);
   static expr2tc extract_bits_from_byte_array(
