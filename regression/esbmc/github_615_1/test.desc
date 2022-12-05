@@ -1,5 +1,0 @@
-CORE
-CWE476_NULL_Pointer_Dereference---CWE476_NULL_Pointer_Dereference__int64_t_34_bad.i
---no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --k-step 2 --floatbv --unlimited-k-steps --64 --memory-leak-check --no-assertions --incremental-bmc 
-^VERIFICATION FAILED$
-dereference failure: NULL pointer$

@@ -1,5 +1,0 @@
-CORE
-CWE590_Free_Memory_Not_on_Heap---s05---CWE590_Free_Memory_Not_on_Heap__free_struct_declare_34_bad.i
---no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --k-step 2 --floatbv --unlimited-k-steps --64 --memory-leak-check --no-assertions --incremental-bmc 
-^VERIFICATION FAILED$
-dereference failure
