@@ -2119,22 +2119,15 @@ expr2tc smt_convt::get(const expr2tc &expr)
     // This will be converted
     with2t with = to_with2t(res);
     expr2tc update_val = with.update_value;
-    expr2tc update_fld = with.update_field;
 
     if(
       is_array_type(with.type) &&
       is_array_type(to_array_type(with.type).subtype))
     {
-      update_fld = decompose_store_chain(expr, update_val);
+      decompose_store_chain(expr, update_val);
     }
 
-    expr2tc src = get(with.source_value);
-    expr2tc fld = get(update_fld);
-    expr2tc val = get(update_val);
-    expr2tc res = with2tc(with.type, src, fld, val);
-    simplify(res);
-
-    return res;
+    return get(update_val);
   }
 
   case expr2t::address_of_id:
