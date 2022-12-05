@@ -135,8 +135,8 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
     if(is_union_type(new_from))
     {
-      msg.error(fmt::format(
-        "Unions not supported when bitcasting to fp for now\n{}", *expr));
+      log_error(
+        "Unions not supported when bitcasting to fp for now\n{}", *expr);
       abort();
     }
   }
@@ -150,8 +150,8 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
     if(is_union_type(from))
     {
-      msg.error(fmt::format(
-        "Unions not supported when bitcasting to bv for now\n{}", *expr));
+      log_error(
+        "Unions not supported when bitcasting to bv for now\n{}", *expr);
       abort();
     }
   }
@@ -193,8 +193,8 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
     if(is_union_type(new_from))
     {
-      msg.error(fmt::format(
-        "Unions not supported when bitcasting to struct for now\n{}", *expr));
+     log_error(
+        "Unions not supported when bitcasting to struct for now\n{}", *expr);
       abort();
     }
   }
@@ -243,8 +243,8 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
     if(is_union_type(new_from))
     {
-      msg.error(fmt::format(
-        "Unions not supported when bitcasting to struct for now\n{}", *expr));
+      log_error(
+        "Unions not supported when bitcasting to struct for now\n{}", *expr);
       abort();
     }
   }
