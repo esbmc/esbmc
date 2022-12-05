@@ -106,14 +106,7 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
     return concat_tree(0, sz, extract);
   }
 
-  if(is_union_type(new_expr))
-  {
-    size_t sz = type_byte_size_bits(new_expr->type).to_uint64();
-    return extract2tc(get_uint_type(sz), new_expr, sz - 1, 0);
-  }
-
-  log_error(
-    "Unrecognized type {} when flattening to bytes",
+  log_error("Unrecognized type {} when flattening to bytes",
     get_type_id(*new_expr->type));
   abort();
 }

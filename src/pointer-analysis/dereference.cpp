@@ -814,7 +814,7 @@ enum target_flags
 {
   flag_src_scalar = 0,
   flag_src_array = 1,
-  flag_src_struct = 2,
+  flag_src_struct = 2, // Unions in future?
   flag_src_union = 3,
 
   flag_dst_scalar = 0,
