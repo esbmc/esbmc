@@ -47,7 +47,7 @@ std::string constant_floatbv2t::field_names[esbmct::num_type_fields] =
 std::string constant_struct2t::field_names[esbmct::num_type_fields] =
   {"members", "", "", "", ""};
 std::string constant_union2t::field_names[esbmct::num_type_fields] =
-  {"members", "init_field", "", "", ""};
+  {"members", "", "", "", ""};
 std::string constant_bool2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string constant_array2t::field_names[esbmct::num_type_fields] =

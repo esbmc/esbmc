@@ -4,7 +4,7 @@ expr_typedefs1(constant_int, constant_int_data);
 expr_typedefs1(constant_fixedbv, constant_fixedbv_data);
 expr_typedefs1(constant_floatbv, constant_floatbv_data);
 expr_typedefs1(constant_struct, constant_datatype_data);
-expr_typedefs2(constant_union, constant_union_data);
+expr_typedefs1(constant_union, constant_datatype_data);
 expr_typedefs1(constant_array, constant_datatype_data);
 expr_typedefs1(constant_vector, constant_datatype_data);
 expr_typedefs1(constant_bool, constant_bool_data);

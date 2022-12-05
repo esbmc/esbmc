@@ -813,8 +813,9 @@ expr2tc with2t::do_simplify() const
     if(thetype.members[no] != update_value->type)
       return expr2tc();
 
-    std::vector<expr2tc> newmembers = { update_value };
-    return constant_union2tc(type, thetype.member_names[no], newmembers);
+    std::vector<expr2tc> newmembers;
+    newmembers.push_back(update_value);
+    return constant_union2tc(type, newmembers);
   }
   else if(is_constant_array2t(source_value) && is_constant_int2t(update_field))
   {

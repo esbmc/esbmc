@@ -880,8 +880,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       members.push_back(new_ref);
     }
 
-    constant_union2t *u =
-      new constant_union2t(type, expr.component_name(), members);
+    constant_union2t *u = new constant_union2t(type, members);
     new_expr_ref = expr2tc(u);
   }
   else if(expr.id() == "string-constant")
@@ -2290,7 +2289,6 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt theunion("union", thetype);
     for(auto const &it : ref2.datatype_members)
       theunion.operands().push_back(migrate_expr_back(it));
-    theunion.component_name(ref2.init_field);
     return theunion;
   }
   case expr2t::constant_array_id:
