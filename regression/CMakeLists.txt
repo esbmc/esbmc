@@ -23,7 +23,7 @@ if(BENCHBRINGUP)
 endif()
 
 function(add_esbmc_regression_test folder modes test)
-    set(test_name "regression/${folder}/${test}")
+    set(test_name "regression-${folder}-${test}")
     add_test(NAME ${test_name}
              COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
                      --tool=${ESBMC_BIN}
