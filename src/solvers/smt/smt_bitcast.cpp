@@ -106,7 +106,8 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
     return concat_tree(0, sz, extract);
   }
 
-  log_error("Unrecognized type {} when flattening to bytes",
+  log_error(
+    "Unrecognized type {} when flattening to bytes",
     get_type_id(*new_expr->type));
   abort();
 }
@@ -193,7 +194,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
     if(is_union_type(new_from))
     {
-     log_error(
+      log_error(
         "Unions not supported when bitcasting to struct for now\n{}", *expr);
       abort();
     }

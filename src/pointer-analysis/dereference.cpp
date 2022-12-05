@@ -1830,8 +1830,11 @@ expr2tc *dereferencet::extract_bytes_from_array(
       // Extracting bytes from the current index
       for(unsigned int j = 0; j < bytes_per_index; j++)
       {
-        exprs[i] =
-          byte_extract2tc(bytetype, the_index, gen_ulong(j), config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+        exprs[i] = byte_extract2tc(
+          bytetype,
+          the_index,
+          gen_ulong(j),
+          config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
         i++;
       }
       i--;
