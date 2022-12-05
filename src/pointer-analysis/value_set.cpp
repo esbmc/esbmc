@@ -799,16 +799,10 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     bool has_const_index_offset = false;
     try
     {
-      /* We put some effort into determining whether the offset is constant
-       * since during symex many are and if they are overlooked we end up
-       * building huge if-then-else chains in all the
-       * dereference::construct_*_dyn_*_offset() methods. */
-      expr2tc idx = index.index;
-      simplify(idx);
-      if(is_constant_int2t(idx))
+      if(is_constant_int2t(index.index))
       {
         index_offset =
-          to_constant_int2t(idx).value * type_byte_size(index.type);
+          to_constant_int2t(index.index).value * type_byte_size(index.type);
         has_const_index_offset = true;
       }
     }
