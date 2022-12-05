@@ -2996,7 +2996,7 @@ expr2tc byte_extract2t::do_simplify() const
     const array_type2t &at = to_array_type(src->type);
     if(is_bv_type(at.subtype) && at.subtype->get_width() == type->get_width())
       return try_simplification(
-        bitcast2tc(type, index2tc(at.subtype, src, off)));
+        typecast2tc(type, index2tc(at.subtype, src, off)));
   }
 
   if(is_constant_int2t(off) && type == get_uint8_type())
