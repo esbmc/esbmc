@@ -1905,9 +1905,6 @@ public:
  *  is bitcasting floats: if one typecasted them to integers, they would be
  *  rounded; bitcasting them produces the bit-representation of the float, as
  *  an integer value.
- *
- *  Bitcasts are only allowed between types of equal width.
- *
  *  @extends bitcast_data
  */
 class bitcast2t : public bitcast_expr_methods

@@ -2302,30 +2302,6 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   case type2t::pointer_id:
     return tuple_api->tuple_get(type, a);
 
-  case type2t::union_id:
-  {
-    expr2tc uint_rep = get_by_ast(
-      get_uint_type(type_byte_size_bits(type).to_uint64()),
-      a);
-    std::vector<expr2tc> members;
-    /* TODO: this violates the assumption in the rest of ESBMC that
-     *       constant_union2t only have at most 1 member initializer.
-     *       Maybe it makes sense to go for one of the largest ones instead of
-     *       all members? */
-    for(const type2tc &member_type : to_union_type(type).members)
-    {
-      expr2tc cast = bitcast2tc(
-        member_type,
-        typecast2tc(
-          get_uint_type(type_byte_size_bits(member_type).to_uint64()),
-          uint_rep));
-      simplify(cast);
-      members.push_back(cast);
-    }
-    return constant_union2tc(
-      type, "" /* TODO: which field assigned last? */, members);
-  }
-
   default:
     if(!options.get_bool_option("non-supported-models-as-zero"))
     {
@@ -2352,7 +2328,6 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
-  case type2t::union_id:
     return get_by_ast(expr->type, convert_ast(expr));
 
   case type2t::array_id:
@@ -2361,6 +2336,28 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
   case type2t::struct_id:
   case type2t::pointer_id:
     return tuple_api->tuple_get(expr);
+
+  case type2t::union_id:
+  {
+    expr2tc uint_rep = get_by_ast(
+      get_uint_type(type_byte_size_bits(expr->type).to_uint64()),
+      convert_ast(expr));
+    std::vector<expr2tc> members;
+    const union_type2t &ut = to_union_type(expr->type);
+    for(const type2tc &member_type : ut.members)
+    {
+      expr2tc cast = typecast2tc(
+        member_type,
+        bitcast2tc(
+          get_uint_type(type_byte_size_bits(member_type).to_uint64()),
+          uint_rep));
+      simplify(cast);
+      members.push_back(cast);
+    }
+    return constant_union2tc(
+      expr->type, "" /* TODO: which field assigned last? */, members);
+    return bitcast2tc(expr->type, uint_rep);
+  }
 
   default:
     if(!options.get_bool_option("non-supported-models-as-zero"))
