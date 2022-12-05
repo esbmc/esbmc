@@ -1914,11 +1914,8 @@ expr2tc *dereferencet::extract_bytes_from_scalar(
 
   for(unsigned int i = 0; i < num_bytes; i++)
   {
-    bytes[i] = byte_extract2tc(
-      bytetype,
-      new_object,
-      accuml_offs,
-      config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+    bytes[i] =
+      byte_extract2tc(bytetype, new_object, accuml_offs, is_big_endian);
     accuml_offs = add2tc(offset->type, accuml_offs, gen_ulong(1));
   }
 
@@ -1935,7 +1932,7 @@ void dereferencet::stitch_together_from_byte_array(
   // We are composing a larger data type out of bytes -- we must consider
   // what byte order we are giong to stitch it together out of.
   expr2tc accuml;
-  if(config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN)
+  if(is_big_endian)
   {
     // First bytes at top of accumulated bitstring
     accuml = bytes[0];
