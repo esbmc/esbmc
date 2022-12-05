@@ -1736,7 +1736,13 @@ std::string expr2ct::convert_code_assign(const codet &src, unsigned indent)
   unsigned int precedent = 15;
   std::string tmp = convert(src.op0(), precedent);
   tmp += "=";
-  tmp += convert(src.op1(), precedent);
+
+  if(
+    src.op1().id() == "constant" && src.op1().type().id() == "array" &&
+    src.op1().pretty().find("byte_extract") != std::string::npos)
+    tmp += "FLATTENED_UNION_LITERAL()";
+  else
+    tmp += convert(src.op1(), precedent);
 
   std::string dest = indent_str(indent) + tmp + ";";
 
