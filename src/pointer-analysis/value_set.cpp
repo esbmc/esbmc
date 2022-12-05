@@ -1000,7 +1000,18 @@ void value_sett::assign(
 
   if(is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
-    if(lhs_type->type_id == rhs->type->type_id)
+    /* either both union or both struct */
+    assert(lhs_type->type_id == rhs->type->type_id);
+
+    // Assign the values of all members of the rhs thing to the lhs. It's
+    // sort-of-valid for the right hand side to be a superclass of the subclass,
+    // in which case there are some fields not common between them, so we
+    // iterate over the superclasses members.
+    auto *rhs_data = static_cast<const struct_union_data *>(rhs->type.get());
+    const std::vector<type2tc> &members = rhs_data->members;
+    const std::vector<irep_idt> &member_names = rhs_data->member_names;
+
+    for(size_t i = 0; i<members.size(); i++)
     {
       /* either both union or both struct */
       assert(lhs_type->type_id == rhs->type->type_id);
@@ -1044,17 +1055,6 @@ void value_sett::assign(
           assign(lhs_member, rhs_member, add_to_sets);
         }
       }
-    }
-    else
-    {
-      /* types do not agree, this can happen during dereferences like this:
-       *   struct S { int x; } a;
-       *   int b;
-       *   a = *(struct S *)&b;
-       * and is caught as a dereference_failure by build_reference_to().
-       *
-       * Thus, we ignore this value-set assignment request here.
-       */
     }
     return;
   }
