@@ -1188,7 +1188,8 @@ std::string expr2ct::convert_union(const exprt &src, unsigned &precedence)
      * all of them */
     assert(init.empty());
     return convert_struct_union_body(
-      operands, to_union_type(full_type).components());
+      operands,
+      to_union_type(full_type).components());
   }
 }
 
