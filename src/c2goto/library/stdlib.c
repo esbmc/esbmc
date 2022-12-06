@@ -51,7 +51,7 @@ void exit(int status)
 {
 __ESBMC_HIDE:;
   __atexit_handler();
-  __ESBMC_finish_formula();
+  __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
 
@@ -59,14 +59,14 @@ void abort(void)
 {
 __ESBMC_HIDE:;
   __atexit_handler();
-  __ESBMC_finish_formula();
+  __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
 
 void _Exit(int status)
 {
 __ESBMC_HIDE:;
-  __ESBMC_finish_formula();
+  __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
 #pragma clang diagnostic pop

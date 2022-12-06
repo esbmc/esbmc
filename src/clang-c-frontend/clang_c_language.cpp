@@ -319,7 +319,7 @@ int __ESBMC_rounding_mode = 0;
 
 void *__ESBMC_memset(void *, int, unsigned int);
 
-void __ESBMC_finish_formula();
+void __ESBMC_memory_leak_checks();
 
 // Forward decs for pthread main thread begin/end hooks. Because they're
 // pulled in from the C library, they need to be declared prior to pulling
