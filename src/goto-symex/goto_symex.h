@@ -141,7 +141,7 @@ public:
    *  This should contain anything that must happen at the end of a program run,
    *  for example assertions about dynamic memory being freed.
    */
-  void finish_formula();
+  void add_memory_leak_checks();
 
 protected:
   /**

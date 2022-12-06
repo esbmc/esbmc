@@ -675,9 +675,9 @@ void goto_symext::run_intrinsic(
 
     return;
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_finish_formula"))
+  else if(has_prefix(symname, "c:@F@__ESBMC_memory_leak_checks"))
   {
-    finish_formula();
+    add_memory_leak_checks();
   }
   else
   {
@@ -691,7 +691,7 @@ void goto_symext::run_intrinsic(
   }
 }
 
-void goto_symext::finish_formula()
+void goto_symext::add_memory_leak_checks()
 {
   if(!memory_leak_check)
     return;
