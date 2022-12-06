@@ -37,9 +37,7 @@ void clang_cpp_adjust::adjust_expr(exprt &expr)
     assert(!"Got already_typechecked for C++ exprt adjustment");
   }
   else
-  {
     clang_c_adjust::adjust_expr(expr);
-  }
 }
 
 void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)

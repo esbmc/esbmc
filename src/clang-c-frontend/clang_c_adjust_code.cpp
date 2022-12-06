@@ -135,6 +135,7 @@ void clang_c_adjust::adjust_switch(codet &code)
 
 void clang_c_adjust::adjust_assign(codet &code)
 {
+  // similar to c_typecheck_baset::typecheck_assign
   adjust_operands(code);
 
   // Create typecast on assingments, if needed
