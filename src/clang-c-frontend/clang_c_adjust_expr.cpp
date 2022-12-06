@@ -241,6 +241,7 @@ void clang_c_adjust::adjust_member(member_exprt &expr)
     exprt deref("dereference");
     deref.type() = base.type().subtype();
     deref.move_to_operands(base);
+    deref.cmt_lvalue(true);
     base.swap(deref);
   }
 }

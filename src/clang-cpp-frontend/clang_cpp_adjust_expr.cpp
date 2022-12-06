@@ -151,10 +151,14 @@ void clang_cpp_adjust::adjust_ptrmember(exprt &expr)
 
   // TODO: add implicit dereference, could be part of adjust_operands
 
-  // adjust operands before converting to pointer deference to member
-  clang_c_adjust::adjust_operands(expr);
+  // TODO: continue from here - match expr for ptrmember!
+  expr.id("member");
+  clang_c_adjust::adjust_member(to_member_expr(expr));
 
-  if(expr.op0().type().id() != "pointer")
+  // make sure it's `symbol->member` where `symbol` refers to a class/struct/union object...
+  if(
+    expr.op0().type().id() == "symbol" &&
+    expr.op0().op0().type().id() != "pointer")
   {
     log_error(
       "ptrmember operator requires pointer type on left hand side, but got "
@@ -163,6 +167,5 @@ void clang_cpp_adjust::adjust_ptrmember(exprt &expr)
     abort();
   }
 
-  // TODO: continue from here - match expr for ptrmember!
   assert(!"continue from here");
 }
