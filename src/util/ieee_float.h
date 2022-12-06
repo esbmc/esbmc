@@ -265,6 +265,9 @@ public:
   ieee_floatt &operator+=(const ieee_floatt &other);
   ieee_floatt &operator-=(const ieee_floatt &other);
 
+  friend ieee_floatt operator+(const ieee_floatt &lhs, const ieee_floatt &rhs);
+  friend ieee_floatt operator-(const ieee_floatt &lhs, const ieee_floatt &rhs);
+
   ieee_floatt &operator-();
 
   friend bool operator<(const ieee_floatt &a, const ieee_floatt &b);

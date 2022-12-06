@@ -3,6 +3,7 @@
 #include <util/arith_tools.h>
 #include <util/ieee_float.h>
 #include <util/std_types.h>
+#include <goto-programs/interval_template.h>
 
 BigInt ieee_float_spect::bias() const
 {
@@ -888,6 +889,20 @@ ieee_floatt &ieee_floatt::operator-=(const ieee_floatt &other)
   return (*this) += _other;
 }
 
+ieee_floatt operator+(const ieee_floatt &lhs, const ieee_floatt &rhs)
+{
+  ieee_floatt copy(lhs);
+  copy += rhs;
+  return copy;
+}
+
+ieee_floatt operator-(const ieee_floatt &lhs, const ieee_floatt &rhs)
+{
+  ieee_floatt copy(lhs);
+  copy -= rhs;
+  return copy;
+}
+
 ieee_floatt &ieee_floatt::operator-()
 {
   this->negate();
@@ -1283,4 +1298,29 @@ void ieee_floatt::next_representable(bool greater)
 
   // sign change impossible (zero case caught earler)
   set_sign(old_sign);
+}
+
+template <>
+void interval_templatet<ieee_floatt>::make_lower_interval()
+{
+  // [-infinity, 0]
+  upper_set = true;
+  upper.set_sign(true);
+  upper.make_zero();
+  lower_set = false;
+  lower.make_minus_infinity();
+}
+
+template <>
+bool interval_templatet<const ieee_floatt>::is_top() const
+{
+  return (!lower_set || lower.is_infinity()) &&
+         (!upper_set || upper.is_infinity());
+}
+
+template <>
+bool interval_templatet<ieee_floatt>::is_top() const
+{
+  return (!lower_set || lower.is_infinity()) &&
+         (!upper_set || upper.is_infinity());
 }
