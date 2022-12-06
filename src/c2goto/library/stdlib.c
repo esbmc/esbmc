@@ -58,7 +58,6 @@ __ESBMC_HIDE:;
 void abort(void)
 {
 __ESBMC_HIDE:;
-  __atexit_handler();
   __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
