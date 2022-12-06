@@ -54,8 +54,8 @@ static void internal_additions(std::string &code)
     // Forward decs for pthread main thread begin/end hooks. Because they're
     // pulled in from the C library, they need to be declared prior to pulling
     // them in, for type checking.
-    "void pthread_start_main_hook(void);\n"
-    "void pthread_end_main_hook(void);\n"
+    "void __ESBMC_pthread_start_main_hook(void);\n"
+    "void __ESBMC_pthread_end_main_hook(void);\n"
 
     // Forward declarations for nondeterministic types.
     "int nondet_int();\n"

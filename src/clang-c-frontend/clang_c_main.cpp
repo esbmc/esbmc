@@ -85,13 +85,8 @@ bool clang_c_maint::clang_main()
 
   if(matches.size() >= 2)
   {
-    if(matches.size() == 2)
-      log_error("warning: main symbol `" + main + "' is ambiguous");
-    else
-    {
-      log_error("main symbol `" + main + "' is ambiguous");
-      return true;
-    }
+    log_error("main symbol `" + main + "' is ambiguous");
+    return true;
   }
 
   main_symbol = matches.front();
@@ -278,14 +273,16 @@ bool clang_c_maint::clang_main()
 
   code_function_callt thread_start_call;
   thread_start_call.location() = symbol.location;
-  thread_start_call.function() = symbol_exprt("c:@F@pthread_start_main_hook");
+  thread_start_call.function() =
+    symbol_exprt("c:@F@__ESBMC_pthread_start_main_hook");
   code_function_callt thread_end_call;
   thread_end_call.location() = symbol.location;
-  thread_end_call.function() = symbol_exprt("c:@F@pthread_end_main_hook");
+  thread_end_call.function() =
+    symbol_exprt("c:@F@__ESBMC_pthread_end_main_hook");
 
   code_function_callt atexit_call;
   atexit_call.location() = symbol.location;
-  atexit_call.function() = symbol_exprt("c:@F@__atexit_handler");
+  atexit_call.function() = symbol_exprt("c:@F@__ESBMC_atexit_handler");
 
   init_code.move_to_operands(thread_start_call);
   init_code.move_to_operands(call);

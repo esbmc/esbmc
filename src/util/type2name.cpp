@@ -6,11 +6,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <ansi-c/type2name.h>
+#include <util/type2name.h>
 #include <cctype>
 #include <util/i2string.h>
 #include <util/std_types.h>
-#include <iostream>
+#include <util/message.h>
 
 std::string type2name(const typet &type)
 {
@@ -27,8 +27,7 @@ std::string type2name(const typet &type)
 
   if(type.id() == "")
   {
-    std::cerr << "Empty type encountered when creating struct irep"
-              << std::endl;
+    log_error("Empty type encountered when creating struct irep");
     abort();
   }
   else if(type.id() == "empty")
@@ -109,8 +108,8 @@ std::string type2name(const typet &type)
   }
   else
   {
-    throw(
-      std::string("Unknown type '") + type.id().as_string() + "' encountered.");
+    log_error("Unknown type '" + type.id().as_string() + "' encountered.");
+    abort();
   }
 
   if(type.has_subtype())

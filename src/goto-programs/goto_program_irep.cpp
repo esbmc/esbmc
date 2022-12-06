@@ -114,8 +114,8 @@ void convert(const irept &irep, goto_programt &program)
       if(fit == program.instructions.end())
       {
         log_error(
-          "Warning: could not resolve target link "
-          "during irep->goto_program translation.");
+          "could not resolve target link during irep->goto_program "
+          "translation.");
         abort();
       }
     }

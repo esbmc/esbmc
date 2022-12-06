@@ -416,7 +416,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     {
       auto *t = static_cast<const struct_union_data *>(structure->type.get());
       log_warning(
-        "WARNING: not checking alignment for access to packed {} {}",
+        "not checking alignment for access to packed {} {}",
         get_type_id(*structure->type),
         t->name.as_string());
       mode.unaligned = true;

@@ -206,8 +206,8 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       {
         // keep the one in in_context -- libraries come last!
         log_warning(
-          "warning: function `{}' in module `{}' "
-          "is shadowed by a definition in module `{}'",
+          "function `{}' in module `{}' is shadowed by a definition in module "
+          "`{}'",
           in_context.name,
           new_symbol.module,
           in_context.module);

@@ -19,7 +19,7 @@ target_include_directories(ansic_with_register
 target_link_libraries(ansic_with_register PUBLIC fmt::fmt)
 
 
-add_library(ansicfrontend_stuff ansi_c_parser.cpp ansi_c_language.cpp c_main.cpp c_final.cpp trans_unit.cpp ansi_c_typecheck.cpp c_preprocess.cpp type2name.cpp c_typecheck_base.cpp c_typecheck_initializer.cpp c_typecheck_typecast.cpp c_typecheck_code.cpp c_typecheck_expr.cpp c_typecheck_type.cpp unescape_string.cpp parse_float.cpp convert_float_literal.cpp convert_integer_literal.cpp c_typecheck_argc_argv.cpp ansi_c_parse_tree.cpp preprocessor_line.cpp convert_character_literal.cpp convert_string_literal.cpp ansi_c_convert.cpp ansi_c_convert_type.cpp)
+add_library(ansicfrontend_stuff ansi_c_parser.cpp ansi_c_language.cpp c_main.cpp c_final.cpp trans_unit.cpp ansi_c_typecheck.cpp c_preprocess.cpp c_typecheck_base.cpp c_typecheck_initializer.cpp c_typecheck_typecast.cpp c_typecheck_code.cpp c_typecheck_expr.cpp c_typecheck_type.cpp unescape_string.cpp parse_float.cpp convert_float_literal.cpp convert_integer_literal.cpp c_typecheck_argc_argv.cpp ansi_c_parse_tree.cpp preprocessor_line.cpp convert_character_literal.cpp convert_string_literal.cpp ansi_c_convert.cpp ansi_c_convert_type.cpp)
 target_include_directories(ansicfrontend_stuff
     PRIVATE ${Boost_INCLUDE_DIRS}
     PRIVATE ${CMAKE_BINARY_DIR}/src
