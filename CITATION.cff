@@ -1,16 +1,20 @@
 cff-version: 1.2.0
-message: "If you cite ESBMC >= 5.0 please cite us as follows"
+message: "If you cite ESBMC >= 5.0 please cite us as below."
 authors:
     - family-names: Gadelha
       given-names: Mikhail R.
+      orcid: https://orcid.org/0000-0001-6540-6587
     - family-names: Monteiro
       given-names: Felipe R.
+      orcid: https://orcid.org/0000-0001-9420-9056
     - family-names: Morse
       given-names: Jeremy
     - family-names: Cordeiro
       given-names: Lucas C.
+      orcid: https://orcid.org/0000-0002-6235-4272
     - family-names: Fischer
       given-names: Bernd
+      orcid: https://orcid.org/0000-0002-1815-218X
     - family-names: Nicole
       given-names: Denis A.
 title: "ESBMC: 5.0: An Industrial-Strength Model Checker"
