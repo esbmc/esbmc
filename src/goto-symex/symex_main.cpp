@@ -708,7 +708,7 @@ void goto_symext::add_memory_leak_checks()
     equality2tc eq(deallocd, gen_true_expr());
     replace_dynamic_allocation(eq);
     cur_state->rename(eq);
-    assertion(
+    claim(
       eq, "dereference failure: forgotten memory: " + get_pretty_name(it.name));
   }
 }
