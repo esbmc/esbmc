@@ -389,12 +389,9 @@ _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_yield();
 void __ESBMC_atomic_begin();
 void __ESBMC_atomic_end();
-/** Explicitly initialize a new object */
-void __ESBMC_init_object(void*);
 
-int __ESBMC_abs(int);
-long int __ESBMC_labs(long int);
-long long int __ESBMC_llabs(long long int);
+// Explicitly initialize a new object
+void __ESBMC_init_object(void*);
 
 // pointers
 __UINTPTR_TYPE__ __ESBMC_POINTER_OBJECT(const void *);
