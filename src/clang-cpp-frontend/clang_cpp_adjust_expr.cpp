@@ -36,8 +36,28 @@ void clang_cpp_adjust::adjust_expr(exprt &expr)
   {
     assert(!"Got already_typechecked for C++ exprt adjustment");
   }
+  else if(expr.id() == "cpp-this")
+  {
+    adjust_cpp_this(expr);
+  }
   else
     clang_c_adjust::adjust_expr(expr);
+}
+
+void clang_cpp_adjust::adjust_cpp_this(exprt &expr)
+{
+  // `cpp-this` is just a placeholder. We need to get the actual exprt
+  // Maps the conversion flow as in cpp_typecheckt::typecheck_expr_this
+
+  // find `this` argument in the symbol table
+  const symbolt *this_symb = namespacet(context).lookup(expr.get("#this_arg"));
+  assert(this_symb);
+
+  // now make an expression to replace `cpp-this`
+  exprt this_expr("symbol", this_symb->type);
+  this_expr.identifier(this_symb->id);
+  this_expr.location() = this_symb->location;
+  expr.swap(this_expr);
 }
 
 void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
@@ -118,6 +138,31 @@ void clang_cpp_adjust::adjust_class_type(typet &type)
 
 void clang_cpp_adjust::adjust_ptrmember(exprt &expr)
 {
+  // Maps the convertsion flow as in cpp_typecheckt::typecheck_expr_ptrmember
+  // adjust pointer-to-member expression:
+  //  e.g. this->vptr
   assert(expr.is_not_nil());
-  assert(!"Got ptrmember");
+
+  if(expr.operands().size() != 1)
+  {
+    log_error("ptrmember operator expects one operand");
+    abort();
+  }
+
+  // TODO: add implicit dereference, could be part of adjust_operands
+
+  // adjust operands before converting to pointer deference to member
+  clang_c_adjust::adjust_operands(expr);
+
+  if(expr.op0().type().id() != "pointer")
+  {
+    log_error(
+      "ptrmember operator requires pointer type on left hand side, but got "
+      "`{}`",
+      expr.op0().type().id().as_string());
+    abort();
+  }
+
+  // TODO: continue from here - match expr for ptrmember!
+  assert(!"continue from here");
 }

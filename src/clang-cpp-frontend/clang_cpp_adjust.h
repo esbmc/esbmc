@@ -17,15 +17,6 @@ public:
   virtual ~clang_cpp_adjust() = default;
 
   /**
-   * methods for symbol adjustment
-   */
-  // get implicit code for C++ dtors
-  void get_vtables_dtors(
-    const symbolt &symb,
-    code_blockt &vtables,
-    code_blockt &dtors);
-
-  /**
    * methods for type (typet) adjustment
    */
   void adjust_type(typet &type) override;
@@ -39,6 +30,7 @@ public:
   void adjust_new(exprt &expr);
   void adjust_side_effect(side_effect_exprt &expr) override;
   void adjust_ptrmember(exprt &expr);
+  void adjust_cpp_this(exprt &expr);
 
   /**
    * methods for code (codet) adjustment
@@ -51,6 +43,17 @@ public:
   void adjust_decl_block(codet &code) override;
   void adjust_assign(codet &code) override;
   void adjust_code_block(codet &code) override;
+
+  /**
+   * methods to generate code
+   * In some cases, we need to generate additional code for C++, e.g.
+   * generate the implicit code for ctors/dtors
+   */
+  void gen_vtables_dtors(
+    const symbolt &symb,
+    code_blockt &vtables,
+    code_blockt &dtors,
+    codet &code);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
