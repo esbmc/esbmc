@@ -394,6 +394,17 @@ protected:
     reachability_treet &art,
     const std::string &symname);
 
+  /**
+   *  Run a builtin, something prefixed with __builtin.
+   *  This looks through a set of builtin functions that are implemented in
+   *  ESBMC, and calls the appropriate one.
+   *  @param call Function call being performed.
+   *  @param symname Name of builtin we're calling.
+   *  @return true if we handled the builtin
+   */
+  bool
+  run_builtin(const code_function_call2t &call, const std::string &symname);
+
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
   /** Perform switch_to; switches control to explicit thread ID. */
