@@ -115,7 +115,7 @@ __ESBMC_HIDE:;
 
 /************************** Thread creation and exit **************************/
 
-void pthread_start_main_hook(void)
+void __ESBMC_pthread_start_main_hook(void)
 {
   __ESBMC_atomic_begin();
   __ESBMC_num_total_threads++;
@@ -123,7 +123,7 @@ void pthread_start_main_hook(void)
   __ESBMC_atomic_end();
 }
 
-void pthread_end_main_hook(void)
+void __ESBMC_pthread_end_main_hook(void)
 {
   // We want to be able to access this internal accounting data atomically,
   // but that'll never be permitted by POR, which will see the access and try

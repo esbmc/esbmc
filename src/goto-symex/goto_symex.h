@@ -449,6 +449,10 @@ protected:
   void intrinsic_memset(
     reachability_treet &art,
     const code_function_call2t &func_call);
+
+  // Function to call a symname function, in case where were not able to optimize it
+  void bump_call(const code_function_call2t &func_call, const std::string &symname);
+
   /** Returns the size of the object
    *
    * If the object is invalid, then this function will return 0
