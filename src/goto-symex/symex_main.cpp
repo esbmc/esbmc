@@ -789,6 +789,16 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  // We simply call these functions
+  if(
+    has_prefix(symname, "c:@F@__ESBMC_pthread_start_main_hook") ||
+    has_prefix(symname, "c:@F@__ESBMC_pthread_end_main_hook") ||
+    has_prefix(symname, "c:@F@__ESBMC_atexit_handler"))
+  {
+    bump_call(func_call, symname);
+    return;
+  }
+
   log_error(
     "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
     "The name in question: {}\n"
