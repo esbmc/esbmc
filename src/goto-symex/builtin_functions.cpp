@@ -1629,3 +1629,70 @@ void goto_symext::bump_call(
   symex_function_call(newcall);
   return;
 }
+
+// Copied from https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
+static inline bool
+ends_with(std::string const &value, std::string const &ending)
+{
+  if(ending.size() > value.size())
+    return false;
+  return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
+}
+
+bool goto_symext::run_builtin(
+  const code_function_call2t &func_call,
+  const std::string &symname)
+{
+  if(
+    has_prefix(symname, "c:@F@__builtin_sadd") ||
+    has_prefix(symname, "c:@F@__builtin_uadd") ||
+    has_prefix(symname, "c:@F@__builtin_ssub") ||
+    has_prefix(symname, "c:@F@__builtin_usub") ||
+    has_prefix(symname, "c:@F@__builtin_smul") ||
+    has_prefix(symname, "c:@F@__builtin_umul"))
+  {
+    assert(ends_with(symname, "_overflow"));
+    assert(func_call.operands.size() == 3);
+
+    const auto &func_type = to_code_type(func_call.function->type);
+    assert(func_type.arguments[0] == func_type.arguments[1]);
+    assert(is_pointer_type(func_type.arguments[2]));
+
+    bool is_mult = has_prefix(symname, "c:@F@__builtin_smul") ||
+                   has_prefix(symname, "c:@F@__builtin_umul");
+    bool is_add = has_prefix(symname, "c:@F@__builtin_sadd") ||
+                  has_prefix(symname, "c:@F@__builtin_uadd");
+    bool is_sub = has_prefix(symname, "c:@F@__builtin_ssub") ||
+                  has_prefix(symname, "c:@F@__builtin_usub");
+
+    expr2tc op;
+    if(is_mult)
+      op = mul2tc(
+        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else if(is_add)
+      op = add2tc(
+        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else if(is_sub)
+      op = sub2tc(
+        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else
+    {
+      log_error("Unknown overflow intrinsics");
+      abort();
+    }
+
+    // Assign result of the two arguments to the dereferenced third argument
+    symex_assign(code_assign2tc(
+      dereference2tc(
+        to_pointer_type(func_call.operands[2]->type).subtype,
+        func_call.operands[2]),
+      op));
+
+    // Perform overflow check and assign it to the return object
+    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
+
+    return true;
+  }
+
+  return false;
+}
