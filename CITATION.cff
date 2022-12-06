@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you cite ESBMC >= 5.0 please cite us as follows"
+authors:
+    - family-names: Gadelha
+      given-names: Mikhail R.
+    - family-names: Monteiro
+      given-names: Felipe R.
+    - family-names: Morse
+      given-names: Jeremy
+    - family-names: Cordeiro
+      given-names: Lucas C.
+    - family-names: Fischer
+      given-names: Bernd
+    - family-names: Nicole
+      given-names: Denis A.
+title: "ESBMC: 5.0: An Industrial-Strength Model Checker"
+license: Apache 2.0
+license-url: "https://github.com/esbmc/esbmc/blob/master/COPYING"
+repository-code: "https://github.com/esbmc/esbmc"
+type: software
+version: 7.0
+date-released: 2011
