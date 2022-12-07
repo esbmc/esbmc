@@ -281,7 +281,7 @@ void reachability_treet::go_next_state()
 
       // For the last one:
       if(execution_states.size() == 1)
-        (*it)->finish_formula();
+        (*it)->add_memory_leak_checks();
 
       execution_states.erase(it);
     }
@@ -561,7 +561,7 @@ reachability_treet::get_next_formula()
       break;
   }
 
-  (*cur_state_it)->finish_formula();
+  (*cur_state_it)->add_memory_leak_checks();
 
   has_complete_formula = false;
 

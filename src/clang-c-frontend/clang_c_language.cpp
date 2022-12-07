@@ -319,11 +319,15 @@ int __ESBMC_rounding_mode = 0;
 
 void *__ESBMC_memset(void *, int, unsigned int);
 
+void __ESBMC_memory_leak_checks();
+
 // Forward decs for pthread main thread begin/end hooks. Because they're
 // pulled in from the C library, they need to be declared prior to pulling
 // them in, for type checking.
 void pthread_start_main_hook(void);
 void pthread_end_main_hook(void);
+
+void __atexit_handler(void);
 
 // Forward declarations for nondeterministic types.
 int nondet_int();

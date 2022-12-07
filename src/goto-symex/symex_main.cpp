@@ -675,6 +675,10 @@ void goto_symext::run_intrinsic(
 
     return;
   }
+  else if(has_prefix(symname, "c:@F@__ESBMC_memory_leak_checks"))
+  {
+    add_memory_leak_checks();
+  }
   else
   {
     log_error(
@@ -687,7 +691,7 @@ void goto_symext::run_intrinsic(
   }
 }
 
-void goto_symext::finish_formula()
+void goto_symext::add_memory_leak_checks()
 {
   if(!memory_leak_check)
     return;
@@ -703,17 +707,8 @@ void goto_symext::finish_formula()
 
     equality2tc eq(deallocd, gen_true_expr());
     replace_dynamic_allocation(eq);
-    it.alloc_guard.guard_expr(eq);
     cur_state->rename(eq);
-    target->assertion(
-      it.alloc_guard.as_expr(),
-      eq,
-      "dereference failure: forgotten memory: " + get_pretty_name(it.name),
-      cur_state->gen_stack_trace(),
-      cur_state->source,
-      first_loop);
-
-    total_claims++;
-    remaining_claims++;
+    claim(
+      eq, "dereference failure: forgotten memory: " + get_pretty_name(it.name));
   }
 }

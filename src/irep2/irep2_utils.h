@@ -101,16 +101,23 @@ inline bool is_constant_number(const expr2tc &t)
 
 inline bool is_constant_expr(const expr2tc &t)
 {
-  return t->expr_id == expr2t::constant_int_id ||
-         t->expr_id == expr2t::constant_fixedbv_id ||
-         t->expr_id == expr2t::constant_floatbv_id ||
-         t->expr_id == expr2t::constant_bool_id ||
-         t->expr_id == expr2t::constant_string_id ||
+  return is_constant_number(t) || t->expr_id == expr2t::constant_string_id ||
          t->expr_id == expr2t::constant_struct_id ||
          t->expr_id == expr2t::constant_union_id ||
          t->expr_id == expr2t::constant_array_id ||
          t->expr_id == expr2t::constant_array_of_id ||
          t->expr_id == expr2t::constant_vector_id;
+}
+
+inline bool is_constant(const expr2tc &t)
+{
+  if(is_pointer_type(t) && is_symbol2t(t))
+  {
+    symbol2t s = to_symbol2t(t);
+    if(s.thename == "NULL")
+      return true;
+  }
+  return is_constant_expr(t);
 }
 
 inline bool is_structure_type(const type2tc &t)

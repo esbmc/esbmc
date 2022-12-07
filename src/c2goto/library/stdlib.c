@@ -8,15 +8,64 @@
 #undef atol
 #undef getenv
 
+typedef struct atexit_key
+{
+  void (*atexit_func)();
+  struct atexit_key *next;
+} __ESBMC_atexit_key;
+
+static __ESBMC_atexit_key *__ESBMC_atexits = NULL;
+
+void __atexit_handler()
+{
+__ESBMC_HIDE:;
+  // This is here to prevent k-induction from unwind the next loop unnecessarily
+  if(__ESBMC_atexits == NULL)
+    return;
+
+  while(__ESBMC_atexits)
+  {
+    __ESBMC_atexits->atexit_func();
+    __ESBMC_atexit_key *__ESBMC_tmp = __ESBMC_atexits->next;
+    free(__ESBMC_atexits);
+    __ESBMC_atexits = __ESBMC_tmp;
+  }
+}
+
+int atexit(void (*func)(void))
+{
+__ESBMC_HIDE:;
+  __ESBMC_atexit_key *l =
+    (__ESBMC_atexit_key *)malloc(sizeof(__ESBMC_atexit_key));
+  if(l == NULL)
+    return -1;
+  l->atexit_func = func;
+  l->next = __ESBMC_atexits;
+  __ESBMC_atexits = l;
+  return 0;
+}
+
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void exit(int status)
 {
+__ESBMC_HIDE:;
+  __atexit_handler();
+  __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
 
 void abort(void)
 {
+__ESBMC_HIDE:;
+  __ESBMC_memory_leak_checks();
+  __ESBMC_assume(0);
+}
+
+void _Exit(int status)
+{
+__ESBMC_HIDE:;
+  __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
 #pragma clang diagnostic pop

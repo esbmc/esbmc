@@ -1863,7 +1863,7 @@ static expr2tc simplify_relations(
   expr2tc simplied_side_1 = try_simplification(side_1);
   expr2tc simplied_side_2 = try_simplification(side_2);
 
-  if(!is_constant_expr(simplied_side_1) || !is_constant_expr(simplied_side_2))
+  if(!is_constant(simplied_side_1) || !is_constant(simplied_side_2))
   {
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
@@ -1888,7 +1888,7 @@ static expr2tc simplify_relations(
       return to_constant_int2t(c).value;
     };
 
-    simpl_res = TFunctor<BigInt>::simplify(
+    simpl_res = TFunctor<BigInt &>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
   }
   else if(is_fixedbv_type(simplied_side_1) || is_fixedbv_type(simplied_side_2))
@@ -1899,7 +1899,7 @@ static expr2tc simplify_relations(
     std::function<fixedbvt &(expr2tc &)> get_value =
       [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
 
-    simpl_res = TFunctor<fixedbvt>::simplify(
+    simpl_res = TFunctor<fixedbvt &>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
   }
   else if(is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
@@ -1912,7 +1912,27 @@ static expr2tc simplify_relations(
       return to_constant_floatbv2t(c).value;
     };
 
-    simpl_res = TFunctor<ieee_floatt>::simplify(
+    simpl_res = TFunctor<ieee_floatt &>::simplify(
+      simplied_side_1, simplied_side_2, is_constant, get_value);
+  }
+  else if(is_pointer_type(simplied_side_1) || is_pointer_type(simplied_side_2))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      [&](const expr2tc &t) -> bool {
+      if(is_pointer_type(t) && is_symbol2t(t))
+      {
+        symbol2t s = to_symbol2t(t);
+        if(s.thename == "NULL")
+          return true;
+      }
+      return false;
+    };
+
+    std::function<int(expr2tc &)> get_value = [](expr2tc &) -> int {
+      return 0xbadbeef;
+    };
+
+    simpl_res = TFunctor<int>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
   }
   else
@@ -1977,7 +1997,7 @@ struct IEEE_equalitytor
     const expr2tc &op1,
     const expr2tc &op2,
     const std::function<bool(const expr2tc &)> &is_constant,
-    std::function<constant_type &(expr2tc &)> get_value)
+    std::function<constant_type(expr2tc &)> get_value)
   {
     // Two constants? Simplify to result of the comparison
     if(is_constant(op1) && is_constant(op2))
@@ -2005,7 +2025,7 @@ struct Equalitytor
     const expr2tc &op1,
     const expr2tc &op2,
     const std::function<bool(const expr2tc &)> &is_constant,
-    std::function<constant_type &(expr2tc &)> get_value)
+    std::function<constant_type(expr2tc &)> get_value)
   {
     // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
@@ -2043,7 +2063,7 @@ struct IEEE_notequalitytor
     const expr2tc &op1,
     const expr2tc &op2,
     const std::function<bool(const expr2tc &)> &is_constant,
-    std::function<constant_type &(expr2tc &)> get_value)
+    std::function<constant_type(expr2tc &)> get_value)
   {
     // Two constants? Simplify to result of the comparison
     if(is_constant(op1) && is_constant(op2))
@@ -2070,7 +2090,7 @@ struct Notequaltor
     const expr2tc &op1,
     const expr2tc &op2,
     const std::function<bool(const expr2tc &)> &is_constant,
-    std::function<constant_type &(expr2tc &)> get_value)
+    std::function<constant_type(expr2tc &)> get_value)
   {
     if(is_constant(op1) && is_constant(op2))
     {
@@ -2099,7 +2119,7 @@ struct Lessthantor
     const expr2tc &op1,
     const expr2tc &op2,
     const std::function<bool(const expr2tc &)> &is_constant,
-    std::function<constant_type &(expr2tc &)> get_value)
+    std::function<constant_type(expr2tc &)> get_value)
   {
     // op1 < zero and op2 is unsigned: always true
     if(is_constant(op1))
@@ -2131,7 +2151,7 @@ struct Greaterthantor
     const expr2tc &op1,
     const expr2tc &op2,
     const std::function<bool(const expr2tc &)> &is_constant,
-    std::function<constant_type &(expr2tc &)> get_value)
+    std::function<constant_type(expr2tc &)> get_value)
   {
     // op2 < zero and op1 is unsigned: always true
     if(is_constant(op2))
@@ -2164,7 +2184,7 @@ struct Lessthanequaltor
     const expr2tc &op1,
     const expr2tc &op2,
     const std::function<bool(const expr2tc &)> &is_constant,
-    std::function<constant_type &(expr2tc &)> get_value)
+    std::function<constant_type(expr2tc &)> get_value)
   {
     // op1 <= zero and op2 is unsigned: always true
     if(is_constant(op1))
@@ -2197,7 +2217,7 @@ struct Greaterthanequaltor
     const expr2tc &op1,
     const expr2tc &op2,
     const std::function<bool(const expr2tc &)> &is_constant,
-    std::function<constant_type &(expr2tc &)> get_value)
+    std::function<constant_type(expr2tc &)> get_value)
   {
     // op2 <= zero and op1 is unsigned: always true
     if(is_constant(op2))
