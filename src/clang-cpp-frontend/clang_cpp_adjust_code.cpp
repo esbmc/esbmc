@@ -1,6 +1,7 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <cpp/cpp_util.h>
 #include <util/expr_util.h>
+#include <util/arith_tools.h>
 
 void convert_expression_to_code(exprt &expr)
 {
@@ -315,6 +316,7 @@ void clang_cpp_adjust::gen_vtables_dtors(
     if(dtor_code.is_not_nil())
       block.move_to_operands(dtor_code);
   }
+#endif
 
   const irept::subt &bases = symb.type.find("bases").get_sub();
 
@@ -325,18 +327,18 @@ void clang_cpp_adjust::gen_vtables_dtors(
   {
     assert(bit->id() == "base");
     assert(bit->type().id() == "symbol");
-    const symbolt &psymb = *lookup(bit->type().identifier());
+    const symbolt &psymb =
+      *namespacet(context).lookup(bit->type().identifier());
 
     exprt object("dereference");
     object.operands().emplace_back("cpp-this");
     object.location() = location;
 
-    exprt dtor_code = cpp_destructor(location, psymb.type, object);
+    exprt dtor_code = gen_cpp_destructor(location, psymb.type, object);
 
     if(dtor_code.is_not_nil())
       block.move_to_operands(dtor_code);
   }
-#endif
 
   dtors = block;
 }
@@ -376,4 +378,186 @@ void clang_cpp_adjust::adjust_assign(codet &code)
     // redirect everything else to clang-c's adjust_assign, same as before
     clang_c_adjust::adjust_assign(code);
   }
+}
+
+codet clang_cpp_adjust::gen_cpp_destructor(
+  const locationt &location,
+  const typet &type,
+  const exprt &object)
+{
+  // Maps the conversion flow to generate destructor code
+  codet new_code;
+  new_code.location() = location;
+
+  typet tmp_type(type);
+  namespacet(context).follow_symbol(tmp_type);
+
+  assert(!is_reference(tmp_type));
+
+  // PODs don't need a destructor
+  if(cpp_is_pod(tmp_type))
+  {
+    new_code.make_nil();
+    return new_code;
+  }
+
+  if(tmp_type.id() == "array")
+  {
+    log_error("TODO: Got array in {}", __func__);
+    abort();
+  }
+  else
+  {
+    const struct_typet &struct_type = to_struct_type(tmp_type);
+
+    // find name of destructor
+    const struct_typet::componentst &components = struct_type.components();
+    const struct_typet::componentst &methods = struct_type.methods();
+
+    irep_idt dtor_name;
+
+    for(const auto &component : components)
+    {
+      const typet &type = component.type();
+
+      if(
+        !component.get_bool("from_base") && type.id() == "code" &&
+        type.return_type().id() == "destructor")
+      {
+        dtor_name = component.base_name();
+        break;
+      }
+    }
+
+    // FIX ME: remove this loop when everything is in `components`
+    for(const auto &component : methods)
+    {
+      const typet &type = component.type();
+
+      if(
+        !component.get_bool("from_base") && type.id() == "code" &&
+        type.return_type().id() == "destructor")
+      {
+        dtor_name = component.base_name();
+        break;
+      }
+    }
+
+    // there is always a destructor for non-PODs
+    assert(dtor_name != "");
+
+    const symbolt &symb = *namespacet(context).lookup(struct_type.name());
+
+    irept cpp_name("cpp-name");
+
+    cpp_name.get_sub().emplace_back("name");
+    cpp_name.get_sub().back().identifier(symb.name);
+    cpp_name.get_sub().back().set("#location", location);
+
+    cpp_name.get_sub().emplace_back("::");
+
+    cpp_name.get_sub().emplace_back("name");
+    cpp_name.get_sub().back().identifier(dtor_name);
+    cpp_name.get_sub().back().set("#location", location);
+
+    exprt member_expr("member");
+    member_expr.copy_to_operands(object);
+    member_expr.op0().type().cmt_constant(false);
+    member_expr.add("component_cpp_name").swap(cpp_name);
+    member_expr.location() = location;
+
+    side_effect_expr_function_callt function_call;
+    function_call.function() = member_expr;
+    function_call.location() = location;
+
+    new_code.set_statement("expression");
+    new_code.location() = location;
+    new_code.move_to_operands(function_call);
+  }
+
+  return new_code;
+}
+
+bool clang_cpp_adjust::cpp_is_pod(const typet &type) const
+{
+  if(type.id() == "struct")
+  {
+    // Not allowed in PODs:
+    // * Non-PODs
+    // * Constructors/Destructors
+    // * virtuals
+    // * private/protected, unless static
+    // * overloading assignment operator
+    // * Base classes
+
+    // XXX jmorse: certain things listed above don't always make their way into
+    // the class definition though, such as templated constructors. In that
+    // case, we set a flag to indicate that such methods have been seen, before
+    // removing them. The "is_not_pod" flag thus only guarentees that it /isn't/
+    // and its absence doesn't guarentee that it is.
+    if(!type.find("is_not_pod").is_nil())
+      return false;
+
+    const struct_typet &struct_type = to_struct_type(type);
+
+    if(!type.find("bases").get_sub().empty())
+      return false;
+
+    const struct_typet::componentst &components = struct_type.components();
+
+    for(const auto &component : components)
+    {
+      if(component.is_type())
+        continue;
+
+      if(component.get_base_name() == "operator=")
+        return false;
+
+      if(component.get_bool("is_virtual"))
+        return false;
+
+      const typet &sub_type = component.type();
+
+      if(sub_type.id() == "code")
+      {
+        if(component.get_bool("is_virtual"))
+          return false;
+
+        const typet &return_type = to_code_type(sub_type).return_type();
+
+        if(
+          return_type.id() == "constructor" || return_type.id() == "destructor")
+          return false;
+      }
+      else if(
+        component.get("access") != "public" && !component.get_bool("is_static"))
+        return false;
+
+      if(!cpp_is_pod(sub_type))
+        return false;
+    }
+
+    return true;
+  }
+  if(type.id() == "array")
+  {
+    return cpp_is_pod(type.subtype());
+  }
+  else if(type.id() == "pointer")
+  {
+    if(is_reference(type)) // references are not PODs
+      return false;
+
+    // but pointers are PODs!
+    return true;
+  }
+  else if(type.id() == "symbol")
+  {
+    const symbolt &symb = *namespacet(context).lookup(type.identifier());
+    assert(symb.is_type);
+    return cpp_is_pod(symb.type);
+  }
+
+  // everything else is POD
+  return true;
 }

@@ -31,7 +31,6 @@ void clang_cpp_adjust::adjust_expr(exprt &expr)
   // redirect everything else to C's exprt adjustment
   if(expr.id() == "ptrmember")
   {
-    printf("@@ cool\n");
     adjust_ptrmember(expr);
   }
   else if(expr.id() == "already_typechecked")

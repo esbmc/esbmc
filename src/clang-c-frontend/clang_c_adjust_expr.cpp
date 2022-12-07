@@ -48,11 +48,8 @@ bool clang_c_adjust::adjust()
 
 void clang_c_adjust::adjust_symbol(symbolt &symbol)
 {
-  if(symbol.id.as_string() == "c:@S@Vehicle@F@~Vehicle#")
-    printf("@@ Got it!\n");
-
   if(symbol.id.as_string() == "c:@S@Motorcycle@F@~Motorcycle#")
-    return;
+    printf("@@ Got it!\n");
 
   if(!symbol.value.is_nil())
     adjust_expr(symbol.value);

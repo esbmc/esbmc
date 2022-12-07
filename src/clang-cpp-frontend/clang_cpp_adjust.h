@@ -62,6 +62,15 @@ public:
     code_blockt &vtables,
     code_blockt &dtors,
     codet &code);
+  codet gen_cpp_destructor(
+    const locationt &location,
+    const typet &type,
+    const exprt &object);
+
+  /**
+   * other helper methods
+   */
+  bool cpp_is_pod(const typet &type) const;
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
