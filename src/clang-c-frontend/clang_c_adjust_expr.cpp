@@ -644,34 +644,15 @@ void clang_c_adjust::adjust_side_effect_function_call(
   if (f_op.is_symbol())
   {
     const irep_idt &identifier = f_op.identifier();
-    symbolt *s = context.find_symbol(identifier);
-    if (s == nullptr)
-    {
-      // maybe this is an undeclared function
-      // let's just add it
-      symbolt new_symbol;
-
-      new_symbol.id = identifier;
-      new_symbol.name = f_op.name();
-      new_symbol.location = expr.location();
-      new_symbol.type = f_op.type();
-      new_symbol.mode = "C";
-
-      symbolt *symbol_ptr;
-      bool res = context.move(new_symbol, symbol_ptr);
-      assert(!res);
-      (void)res; // ndebug
-
-      // clang will complain about this already, no need for us to do the same!
-    }
-    else
+    symbolt *function_symbol = context.find_symbol(identifier);
+    if(function_symbol)
     {
       // Pull symbol informations, like parameter types and location
 
       // Save previous location
       locationt location = f_op.location();
 
-      const symbolt &symbol = *s;
+      const symbolt &symbol = *function_symbol;
       f_op = symbol_expr(symbol);
 
       // Restore location
@@ -681,6 +662,65 @@ void clang_c_adjust::adjust_side_effect_function_call(
         f_op.cmt_lvalue(true);
 
       align_se_function_call_return_type(f_op, expr);
+    }
+    else
+    {
+      if(exprt poly = is_gcc_polymorphic_builtin(identifier, expr.arguments());
+         poly.is_not_nil())
+      {
+        irep_idt identifier_with_type = poly.identifier();
+        auto &arguments = to_code_type(poly.type()).arguments();
+
+        // For all atomic/sync polymorphic built-ins (which are the ones handled
+        // by typecheck_gcc_polymorphic_builtin), looking at the first parameter
+        // suffices to distinguish different implementations.
+        if(arguments.front().type().is_pointer())
+        {
+          identifier_with_type =
+            id2string(identifier) + "_" +
+            type2name(to_pointer_type(arguments.front().type()).subtype());
+        }
+        else
+        {
+          identifier_with_type =
+            id2string(identifier) + "_" + type2name(arguments.front().type());
+        }
+
+        poly.identifier(identifier_with_type);
+
+        symbolt *function_symbol_with_type = context.find_symbol(identifier_with_type);
+        if(!function_symbol_with_type)
+        {
+          symbolt new_symbol;
+
+          new_symbol.id = identifier_with_type;
+          new_symbol.name = f_op.name();
+          new_symbol.location = expr.location();
+          new_symbol.type = poly.type();
+          context.add(new_symbol);
+        }
+
+        f_op = std::move(poly);
+      }
+      else
+      {
+        // clang will complain about this already, no need for us to do the same!
+
+        // maybe this is an undeclared function
+        // let's just add it
+        symbolt new_symbol;
+
+        new_symbol.id = identifier;
+        new_symbol.name = f_op.name();
+        new_symbol.location = expr.location();
+        new_symbol.type = f_op.type();
+        new_symbol.mode = "C";
+
+        // Adjust type
+        to_code_type(new_symbol.type).make_ellipsis();
+        to_code_type(f_op.type()).make_ellipsis();
+        context.add(new_symbol);
+      }
     }
   }
   else

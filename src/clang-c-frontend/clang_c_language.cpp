@@ -436,22 +436,6 @@ void __VERIFIER_atomic_end();
  * models */
 void __ESBMC_unreachable();
 
-// This is causing problems when using the C++ frontend. It needs to be rewritten
-#define __atomic_load_n(PTR, MO)                                               \
-  __extension__({                                                              \
-    __auto_type __atomic_load_ptr = (PTR);                                     \
-    __typeof__(*__atomic_load_ptr) __atomic_load_tmp;                          \
-    __ESBMC_atomic_load(__atomic_load_ptr, &__atomic_load_tmp, (MO));          \
-    __atomic_load_tmp;                                                         \
-  })
-
-#define __atomic_store_n(PTR, VAL, MO)                                         \
-  __extension__({                                                              \
-    __auto_type __atomic_store_ptr = (PTR);                                    \
-    __typeof__(*__atomic_store_ptr) __atomic_store_tmp = (VAL);                \
-    __ESBMC_atomic_store(__atomic_store_ptr, &__atomic_store_tmp, (MO));       \
-  })
-
 // TODO: implement this similarly to printf
   #define fscanf __ESBMC_fscanf
   #define sscanf __ESBMC_sscanf
