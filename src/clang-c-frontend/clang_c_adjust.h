@@ -78,6 +78,10 @@ protected:
   // For class instantiation in C++, we need to adjust the side-effect of constructor
   virtual void adjust_decl_block(codet &code);
 
+  exprt is_gcc_polymorphic_builtin(
+    const irep_idt &identifier,
+    const exprt::operandst &arguments);
+
   /**
    * ancillary methods to support the expr/code adjustments above
    */
