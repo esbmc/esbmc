@@ -257,6 +257,10 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   convert_expression_to_code(atomic_begin);
   block.operands().push_back(atomic_begin);
 
+  // Change the cex to show that these code comes from the atomic/sync
+  locationt new_loc = function_symbol.location();
+  new_loc.set_function(function_symbol.name());
+
   if(
     has_prefix(identifier.as_string(), "c:@F@__sync_add_and_fetch") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_sub_and_fetch") ||
@@ -288,7 +292,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
       initial,
       dereference_exprt(
         symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type()));
-    assign.location() = function_symbol.location();
+    assign.location() = new_loc;
     block.operands().push_back(assign);
 
     exprt new_expr;
@@ -331,7 +335,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
       arg0_deref, symbol_exprt(arg1.cmt_identifier(), arg1.type()));
 
     code_assignt assign1(arg0_deref, new_expr);
-    assign1.location() = function_symbol.location();
+    assign1.location() = new_loc;
     block.operands().push_back(assign1);
 
     // atomic scope end
@@ -342,7 +346,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
 
     code_returnt ret;
     ret.return_value() = initial;
-    ret.location() = function_symbol.location();
+    ret.location() = new_loc;
     block.operands().push_back(ret);
   }
   else if(has_prefix(
@@ -378,7 +382,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
       result,
       dereference_exprt(
         symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type()));
-    assign.location() = function_symbol.location();
+    assign.location() = new_loc;
     block.operands().push_back(assign);
 
     // atomic scope end
@@ -389,7 +393,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
 
     code_returnt ret;
     ret.return_value() = result;
-    ret.location() = function_symbol.location();
+    ret.location() = new_loc;
     block.operands().push_back(ret);
   }
   else if(has_prefix(identifier.as_string(), "c:@F@__atomic_store_n"))
@@ -400,7 +404,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
       dereference_exprt(
         symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type()),
       symbol_exprt(arg1.cmt_identifier(), arg1.type()));
-    assign.location() = function_symbol.location();
+    assign.location() = new_loc;
     block.operands().push_back(assign);
 
     // atomic scope end
@@ -422,7 +426,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
         symbol_exprt(arg1.cmt_identifier(), arg1.type()), arg1.type()),
       dereference_exprt(
         symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type()));
-    assign.location() = function_symbol.location();
+    assign.location() = new_loc;
     block.operands().push_back(assign);
 
     // atomic scope end
@@ -440,7 +444,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
         symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type()),
       dereference_exprt(
         symbol_exprt(arg1.cmt_identifier(), arg1.type()), arg1.type()));
-    assign.location() = function_symbol.location();
+    assign.location() = new_loc;
     block.operands().push_back(assign);
 
     // atomic scope end
