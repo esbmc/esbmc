@@ -395,6 +395,19 @@ protected:
     const std::string &symname);
 
   /**
+   *  Run an atomic, something prefixed with __atomic.
+   *  This looks through a set of atomic functions that are implemented in
+   *  ESBMC, and calls the appropriate one.
+   *  @param call Function call being performed.
+   *  @param art Reachability tree we're operating on.
+   *  @param symname Name of builtin we're calling.
+   *  @return true if we handled the atomic
+   */
+  bool run_atomic_or_sync(
+    const code_function_call2t &call,
+    const std::string &symname);
+
+  /**
    *  Run a builtin, something prefixed with __builtin.
    *  This looks through a set of builtin functions that are implemented in
    *  ESBMC, and calls the appropriate one.

@@ -290,6 +290,15 @@ void goto_symext::symex_step(reachability_treet &art)
         if (run_builtin(call, id.as_string()))
           return;
       }
+
+      if(
+        has_prefix(id.as_string(), "c:@F@__atomic") ||
+        has_prefix(id.as_string(), "c:@F@__sync"))
+      {
+        cur_state->source.pc++;
+        if(run_atomic_or_sync(call, id.as_string()))
+          return;
+      }
     }
 
     symex_function_call(deref_code);

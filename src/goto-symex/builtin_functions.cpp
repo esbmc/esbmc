@@ -1706,3 +1706,31 @@ bool goto_symext::run_builtin(
 
   return false;
 }
+
+bool goto_symext::run_atomic_or_sync(
+  const code_function_call2t &func_call,
+  const std::string &symname)
+{
+  if(has_prefix(symname, "c:@F@__atomic_load_n"))
+  {
+    expr2tc ptr = func_call.operands[0];
+
+    symex_assign(code_assign2tc(
+      func_call.ret,
+      dereference2tc(to_pointer_type(ptr->type).subtype, ptr)));
+    return true;
+  }
+
+  if(has_prefix(symname, "c:@F@__atomic_store_n"))
+  {
+    expr2tc ptr = func_call.operands[0];
+    expr2tc ret = func_call.operands[1];
+
+    symex_assign(code_assign2tc(
+      dereference2tc(to_pointer_type(ptr->type).subtype, ptr),
+      dereference2tc(to_pointer_type(ret->type).subtype, ret)));
+    return true;
+  }
+
+  return false;
+}
