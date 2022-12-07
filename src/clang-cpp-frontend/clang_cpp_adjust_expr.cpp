@@ -1,6 +1,8 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/c_sizeof.h>
 #include <util/destructor.h>
+#include <util/std_expr.h>
+#include <clang-cpp-frontend/expr2cpp.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)
@@ -34,7 +36,7 @@ void clang_cpp_adjust::adjust_expr(exprt &expr)
   }
   else if(expr.id() == "already_typechecked")
   {
-    assert(!"Got already_typechecked for C++ exprt adjustment");
+    adjust_cpp_already_checked(expr);
   }
   else if(expr.id() == "cpp-this")
   {
@@ -138,7 +140,7 @@ void clang_cpp_adjust::adjust_class_type(typet &type)
 
 void clang_cpp_adjust::adjust_ptrmember(exprt &expr)
 {
-  // Maps the convertsion flow as in cpp_typecheckt::typecheck_expr_ptrmember
+  // Maps the conversion flow as in cpp_typecheckt::typecheck_expr_ptrmember
   // adjust pointer-to-member expression:
   //  e.g. this->vptr
   assert(expr.is_not_nil());
@@ -167,5 +169,181 @@ void clang_cpp_adjust::adjust_ptrmember(exprt &expr)
     abort();
   }
 
-  assert(!"continue from here");
+  // get the type of `member` expr
+  gen_member_type(expr);
+}
+
+void clang_cpp_adjust::gen_member_type(exprt &expr)
+{
+  // Maps the conversion flow in cpp_typecheckt::typecheck_expr_member for C++ member
+  // The conversion flow in clang_c_adjust::adjust_member
+  // does not fit in our C++ conversion flows
+  assert(expr.operands().size() == 1);
+
+  exprt &op0 = expr.op0();
+  // TODO: add_implicit_dereference(op0)?
+
+  // The notation for explicit calls to destructors can be used regardless
+  // of whether the type defines a destructor.  This allows you to make such
+  // explicit calls without knowing if a destructor is defined for the type.
+  // An explicit call to a destructor where none is defined has no effect.
+
+  if(
+    expr.find("component_cpp_name").is_not_nil() &&
+    namespacet(context).follow(op0.type()).id() != "struct")
+  {
+    log_error("TODO: adjust expr to be \"cpp_dummy_destructor\"");
+    abort();
+  }
+
+  if(op0.type().id() != "symbol")
+  {
+    log_error(
+      "error: member operator requires type symbol on left hand side but got "
+      "`{}`",
+      type2cpp(op0.type(), ns));
+    abort();
+  }
+
+  typet op_type = op0.type();
+  // Follow symbolic types up until the last one.
+  while(namespacet(context).lookup(op_type.identifier())->type.id() == "symbol")
+    op_type = namespacet(context).lookup(op_type.identifier())->type;
+
+  const irep_idt &struct_identifier = to_symbol_type(op_type).get_identifier();
+
+  const symbolt &struct_symbol = *namespacet(context).lookup(struct_identifier);
+
+  if(
+    struct_symbol.type.id() == "incomplete_struct" ||
+    struct_symbol.type.id() == "incomplete_union" ||
+    struct_symbol.type.id() == "incomplete_class")
+  {
+    log_error("error: member operator got incomplete type on left hand side");
+    abort();
+  }
+
+  if(struct_symbol.type.id() != "struct" && struct_symbol.type.id() != "union")
+  {
+    log_error(
+      "error: member operator requires struct/union type on left hand side but "
+      "got `{}`",
+      type2cpp(struct_symbol.type, ns));
+    abort();
+  }
+
+  //const struct_typet &type = to_struct_type(struct_symbol.type);
+
+  if(expr.find("component_cpp_name").is_not_nil())
+  {
+    log_error("TODO: conversion flow for component_cpp_name in {}", __func__);
+    abort();
+  }
+
+  const irep_idt &component_name = expr.component_name();
+
+  assert(component_name != "");
+
+  exprt component;
+  component.make_nil();
+
+  assert(
+    namespacet(context).follow(expr.op0().type()).id() == "struct" ||
+    namespacet(context).follow(expr.op0().type()).id() == "union");
+
+  exprt member;
+
+  if(get_component(expr.location(), expr.op0(), component_name, member))
+  {
+    // because of possible anonymous members
+    expr.swap(member);
+  }
+  else
+  {
+    log_error(
+      "error: member `{}` of `{}` not found",
+      component_name.as_string(),
+      struct_symbol.name.as_string());
+    abort();
+  }
+
+  // TODO: add_implicit_dereference(op0)?
+
+  if(expr.type().id() == "code")
+  {
+    log_error(
+      "TODO: add conversion flow to deal with `code` type in {}", __func__);
+    abort();
+  }
+}
+
+bool clang_cpp_adjust::get_component(
+  const locationt &location,
+  const exprt &object,
+  const irep_idt &component_name,
+  exprt &member)
+{
+  // maps to the conversion flow in cpp_typecheckt::get_component
+  struct_typet final_type =
+    to_struct_type(namespacet(context).follow(object.type()));
+
+  const struct_typet::componentst &components = final_type.components();
+
+  for(const auto &component : components)
+  {
+    exprt tmp("member", component.type());
+    tmp.component_name(component.get_name());
+    tmp.location() = location;
+    tmp.copy_to_operands(object);
+
+    if(component.get_name() == component_name)
+    {
+      member.swap(tmp);
+
+#if 0
+      // TODO: need to check component access?
+      bool not_ok = check_component_access(component, final_type);
+      if(not_ok)
+      {
+        if(disable_access_control)
+        {
+          member.set("#not_accessible", true);
+          member.set("#access", component.get("access"));
+        }
+      }
+#endif
+
+      if(object.cmt_lvalue())
+        member.set("#lvalue", true);
+
+      if(object.type().cmt_constant() && !component.get_bool("is_mutable"))
+        member.type().set("#constant", true);
+
+      member.location() = location;
+
+      return true; // component found
+    }
+
+    if(namespacet(context)
+         .follow(component.type())
+         .find("#unnamed_object")
+         .is_not_nil())
+    {
+      log_error(
+        "TODO: add conversion flow to deal with `#unnamed_object` type in {}",
+        __func__);
+      abort();
+    }
+  }
+
+  return false; // component not found
+}
+
+void clang_cpp_adjust::adjust_cpp_already_checked(exprt &expr)
+{
+  assert(expr.id() == "already_typechecked");
+  assert(expr.operands().size() == 1);
+  exprt tmp;
+  tmp.swap(expr.op0());
+  expr.swap(tmp);
 }
