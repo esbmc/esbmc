@@ -687,16 +687,43 @@ void clang_c_adjust::adjust_side_effect_function_call(
         }
 
         poly.identifier(identifier_with_type);
+        poly.location() = expr.location();
 
         symbolt *function_symbol_with_type = context.find_symbol(identifier_with_type);
         if(!function_symbol_with_type)
         {
-          symbolt new_symbol;
+          for(std::size_t i = 0; i < arguments.size(); ++i)
+          {
+            const std::string base_name = "p_" + std::to_string(i);
 
+            // TODO: Just like the function parameter symbols in
+            // clang_c_convertert::get_function_param, adding this symbol to the
+            // context is only necessary for the migrate code.
+            symbolt param_symbol;
+            param_symbol.id =
+              id2string(identifier_with_type) + "::" + base_name;
+            param_symbol.name = base_name;
+            param_symbol.location = f_op.location();
+            param_symbol.type = arguments[i].type();
+            param_symbol.lvalue = true;
+            param_symbol.is_parameter = true;
+            param_symbol.file_local = true;
+
+            arguments[i].cmt_identifier(param_symbol.id);
+            arguments[i].cmt_base_name(param_symbol.name);
+
+            context.add(param_symbol);
+          }
+
+          symbolt new_symbol;
           new_symbol.id = identifier_with_type;
           new_symbol.name = f_op.name();
           new_symbol.location = expr.location();
           new_symbol.type = poly.type();
+          code_blockt implementation =
+            instantiate_gcc_polymorphic_builtin(identifier, to_symbol_expr(poly));
+          new_symbol.value = implementation;
+
           context.add(new_symbol);
         }
 
