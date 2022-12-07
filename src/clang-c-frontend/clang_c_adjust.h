@@ -82,6 +82,10 @@ protected:
     const irep_idt &identifier,
     const exprt::operandst &arguments);
 
+  code_blockt instantiate_gcc_polymorphic_builtin(
+    const irep_idt &identifier,
+    const symbol_exprt &function_symbol);
+
   /**
    * ancillary methods to support the expr/code adjustments above
    */
