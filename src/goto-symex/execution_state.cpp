@@ -5,6 +5,7 @@
 #include <langapi/mode.h>
 #include <sstream>
 #include <string>
+#include <util/breakpoint.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
@@ -236,20 +237,9 @@ void execution_statet::symex_step(reachability_treet &art)
     log_result("{}", oss.str());
   }
 
+  // We use this to break when we are about to run an instruction through symex
   if (break_insn != 0 && break_insn == instruction.location_number)
-  {
-#ifndef _WIN32
-#  if !(defined(__arm__) || defined(__aarch64__))
-    __asm__("int $3");
-#  else
-    log_error("Can't trap on ARM, sorry");
-    abort();
-#  endif
-#else
-    log_error("Can't trap on windows, sorry");
-    abort();
-#endif
-  }
+    breakpoint();
 
   switch (instruction.type)
   {
