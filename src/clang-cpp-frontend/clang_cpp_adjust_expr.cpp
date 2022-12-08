@@ -31,6 +31,8 @@ bool clang_cpp_adjust::adjust()
       }
     }
   }
+
+  return false;
 }
 
 void clang_cpp_adjust::adjust_expr(exprt &expr)
