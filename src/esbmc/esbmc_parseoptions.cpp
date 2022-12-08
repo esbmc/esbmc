@@ -735,9 +735,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         break;
 
       default:
-        log_error(
-          "Message from unrecognized k-induction child "
-          "process");
+        log_error("Message from unrecognized k-induction child process");
         abort();
       }
 
