@@ -9,20 +9,28 @@ clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
 {
 }
 
-void clang_cpp_adjust::adjust_type(typet &type)
+bool clang_cpp_adjust::adjust()
 {
-  // special cases for C++ typet adjustment
-  // redirect everything else to C's typet adjustment
-  if(type.id() == "struct")
+  clang_c_adjust::adjust();
+
+  // additional adjustment for C++ class types
+
+  Forall_symbol_list(it, symbol_list)
   {
-    if(type.get_bool("#class"))
+    symbolt &symbol = **it;
+    if(!symbol.is_type)
+      continue;
+
+    typet &type = symbol.type;
+    if(type.id() == "struct")
     {
-      // adjust class type to move functions to type's method vector
-      adjust_class_type(type);
+      if(type.get_bool("#class"))
+      {
+        // adjust class type to move functions to type's method vector
+        adjust_class_type(type);
+      }
     }
   }
-  else
-    clang_c_adjust::adjust_type(type);
 }
 
 void clang_cpp_adjust::adjust_expr(exprt &expr)

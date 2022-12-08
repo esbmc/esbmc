@@ -16,10 +16,11 @@ public:
   explicit clang_cpp_adjust(contextt &_context);
   virtual ~clang_cpp_adjust() = default;
 
+  bool adjust() override;
+
   /**
    * methods for type (typet) adjustment
    */
-  void adjust_type(typet &type) override;
   void adjust_class_type(typet &type);
 
   /**

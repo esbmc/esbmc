@@ -17,13 +17,19 @@ clang_c_adjust::clang_c_adjust(contextt &_context)
 {
 }
 
-bool clang_c_adjust::adjust()
+void clang_c_adjust::get_symbol_list()
 {
   // warning! hash-table iterators are not stable
-
-  symbol_listt symbol_list;
+  symbol_listt &tmp_symbol_list = symbol_list;
   context.Foreach_operand(
-    [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
+    [&tmp_symbol_list](symbolt &s) { tmp_symbol_list.push_back(&s); });
+
+  //symbol_list = tmp_symbol_list;
+}
+
+bool clang_c_adjust::adjust()
+{
+  get_symbol_list();
 
   // Adjust types first, so that symbolic-type resolution always receives
   // fixed up types.

@@ -412,25 +412,10 @@ codet clang_cpp_adjust::gen_cpp_destructor(
 
     // find name of destructor
     const struct_typet::componentst &components = struct_type.components();
-    const struct_typet::componentst &methods = struct_type.methods();
 
     irep_idt dtor_name;
 
     for(const auto &component : components)
-    {
-      const typet &type = component.type();
-
-      if(
-        !component.get_bool("from_base") && type.id() == "code" &&
-        type.return_type().id() == "destructor")
-      {
-        dtor_name = component.base_name();
-        break;
-      }
-    }
-
-    // FIX ME: remove this loop when everything is in `components`
-    for(const auto &component : methods)
     {
       const typet &type = component.type();
 

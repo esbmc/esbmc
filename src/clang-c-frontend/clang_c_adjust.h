@@ -19,7 +19,10 @@ public:
   explicit clang_c_adjust(contextt &_context);
   virtual ~clang_c_adjust() = default;
 
-  bool adjust();
+  virtual bool adjust();
+
+  symbol_listt symbol_list;
+  void get_symbol_list();
 
 protected:
   contextt &context;
@@ -34,7 +37,7 @@ protected:
   /**
    * methods for type (typet) adjustment
    */
-  virtual void adjust_type(typet &type);
+  void adjust_type(typet &type);
 
   /**
    * methods for expression (exprt) adjustment
