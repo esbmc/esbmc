@@ -1,8 +1,8 @@
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include <util/compiler_defs.h>
+CC_DIAGNOSTIC_PUSH()
+CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Frontend/ASTUnit.h>
-#pragma GCC diagnostic pop
+CC_DIAGNOSTIC_POP()
 
 #include <AST/build_ast.h>
 #include <ansi-c/c_preprocess.h>
