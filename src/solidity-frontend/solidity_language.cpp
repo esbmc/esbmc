@@ -1,9 +1,10 @@
+#include <util/compiler_defs.h>
 // Remove warnings from Clang headers
-#pragma GCC diagnostic push
+CC_DIAGNOSTIC_PUSH()
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <clang/Frontend/ASTUnit.h>
-#pragma GCC diagnostic pop
+CC_DIAGNOSTIC_POP()
 
 #include <solidity-frontend/solidity_language.h>
 #include <solidity-frontend/solidity_convert.h>
