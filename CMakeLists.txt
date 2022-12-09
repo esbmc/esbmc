@@ -2,6 +2,11 @@
 # Project Information           #
 #################################
 cmake_minimum_required (VERSION 3.7)
+
+# HACK: This msvc policy needs to be setted before project()
+# This can be removed when we move to CMake >= 3.15
+cmake_policy(SET CMP0091 NEW)
+
 project (ESBMC)
 
 set (ESBMC_VERSION_MAJOR 7)
