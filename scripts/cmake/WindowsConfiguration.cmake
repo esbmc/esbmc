@@ -27,8 +27,12 @@ if (WIN32)
 	  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-everything")
       set(OS_Z3_LIBS "stdc++")
   elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+      # CMP0092 does not add any warning level by default
+      # TODO: This can be removed when we move to CMake >= 3.15
+      cmake_policy(SET CMP0092 NEW)
 	  add_compile_options(/bigobj)
-      add_compile_options(/W1)
+	  add_compile_definitions(/W1)
+	  string(REGEX REPLACE "/W[1-3]" "/W1" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
       set(OS_Z3_LIBS "")
   else()
 	  message(AUTHOR_WARNING "${CMAKE_CXX_COMPILER_ID} is not tested in Windows. You may run into issues.")
@@ -41,4 +45,9 @@ if (WIN32)
     set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/clang)
     set(Z3_DIR ${CMAKE_BINARY_DIR}/Z3)
   endif()
+
+  # Produce static builds in windows
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+  set(Boost_USE_STATIC_LIBS        ON)
+
 endif()
