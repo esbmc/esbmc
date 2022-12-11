@@ -26,7 +26,10 @@ The cannonical public location of ESBMCs source is on github:
 
     https://github.com/esbmc/esbmc
 
-While our main website is [esbmc.org](http://esbmc.org)
+While our main website is [esbmc.org](http://esbmc.org). The figure below illustrates the current ESBMC architecture.
+
+![image](https://user-images.githubusercontent.com/3694109/206883029-ac98c53e-72e0-432f-9b84-dbae2d0c7774.png)
+
 
 ### Publications
 
