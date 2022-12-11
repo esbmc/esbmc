@@ -383,7 +383,7 @@ void clang_cpp_adjust::adjust_assign(codet &code)
 codet clang_cpp_adjust::gen_cpp_destructor(
   const locationt &location,
   const typet &type,
-  const exprt &object)
+  exprt &object)
 {
   // Maps the conversion flow to generate destructor code
   codet new_code;
@@ -424,6 +424,9 @@ codet clang_cpp_adjust::gen_cpp_destructor(
         type.return_type().id() == "destructor")
       {
         dtor_name = component.base_name();
+        // additional annotation to adjust `cpp-this`
+        assert(object.op0().id() == "cpp-this");
+        object.op0().set("#this_arg", component.name().as_string() + "this");
         break;
       }
     }

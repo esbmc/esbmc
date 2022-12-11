@@ -66,7 +66,7 @@ public:
   codet gen_cpp_destructor(
     const locationt &location,
     const typet &type,
-    const exprt &object);
+    exprt &object);
 
   /**
    * other helper methods
