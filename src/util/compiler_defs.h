@@ -6,23 +6,22 @@
   have a slight difference between Clang 11 and 14 warnings
 */
 #if defined(_MSC_VER)
-#define CC_DIAGNOSTIC_PUSH() __pragma(warning( push ))
-#define CC_DIAGNOSTIC_POP() __pragma(warning( pop ))
+#define CC_DIAGNOSTIC_PUSH() __pragma(warning(push))
+#define CC_DIAGNOSTIC_POP() __pragma(warning(pop))
 #define CC_DIAGNOSTIC_DISABLE(x) __pragma(warning(disable : x))
 
 // NOTE: The magic numbers came directly from MSVC
-#define CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS() \
-    __pragma(message("Disabling diagnostic checks for clang headers")) \
+#define CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()                                     \
+  __pragma(message("Disabling diagnostic checks for clang headers"))           \
     CC_DIAGNOSTIC_DISABLE(4146 4244 4267 4291 4624)
 #else
+#define CC_DIAGNOSTIC_PUSH() _Pragma("GCC diagnostic push")
+#define CC_DIAGNOSTIC_POP() _Pragma("GCC diagnostic push")
+#define DO_PRAGMA(x) _Pragma(#x)
 
-#define CC_DIAGNOSTIC_PUSH() _Pragma(GCC diagnostic push)
-#define CC_DIAGNOSTIC_POP() _Pragma(GCC diagnostic push)
-#define CC_DIAGNOSTIC_DISABLE(x) _Pragma(GCC diagnostic ignored x)
-
-#define CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()  \
-  CC_DIAGNOSTIC_DISABLE("-Wstrict-aliasing") \
-  CC_DIAGNOSTIC_DISABLE("-Wunused-parameter")
+#define CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()                                     \
+  DO_PRAGMA(GCC diagnostic ignored "-Wstrict-aliasing")                        \
+  DO_PRAGMA(GCC diagnostic ignored "-Wunused-parameter")
 
 #endif
 
@@ -54,7 +53,6 @@
 #define ATTRIBUTE_NOINLINE
 #endif
 
-
 #define ATTRIBUTE_USED
 #ifndef _MSC_VER
 #if GNUC_PREREQ(3, 1, 0) || __has_attribute(used)
@@ -68,5 +66,3 @@
 #else
 #define DUMP_METHOD ATTRIBUTE_NOINLINE
 #endif
-
-
