@@ -42,8 +42,11 @@ static const struct buffer
     {&clib64_fp_buf[0], clib64_fp_buf_size},
   },
 #else
-  { { NULL, 0}, {NULL, NULL}},
-  { { NULL, 0}, {&clib64_fp_buf[0], clib64_fp_buf_size},},
+  {{NULL, 0}, {NULL, NULL}},
+  {
+    {NULL, 0},
+    {&clib64_fp_buf[0], clib64_fp_buf_size},
+  },
 #endif
 #endif
 };

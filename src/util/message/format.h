@@ -14,10 +14,8 @@ CC_DIAGNOSTIC_PUSH()
 #ifdef __GNUC__
 #ifndef __clang__ // For some reason clang also defines GNUC :)
 #pragma GCC diagnostic ignored "-Wnonnull-compare"
-CC_DIAGNOSTIC_DISABLE("-Wnonnull-compare")
 #endif
 #pragma GCC diagnostic ignored "-Waddress"
-CC_DIAGNOSTIC_DISABLE("-Wunused-parameter")
 #endif
 
 #include <fmt/format.h>
