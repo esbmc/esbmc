@@ -111,7 +111,7 @@ endfunction()
 function(download_zip_and_extract ID URL)
   # TODO: might be a good idea to add sha1 checks
   if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID}.zip)
-    message(STATUS "Downloading ${ID}")
+    message(STATUS "Downloading ${ID} from ${URL}")
     file(DOWNLOAD ${URL} ${CMAKE_BINARY_DIR}/${ID}.zip SHOW_PROGRESS)
   endif()
 
