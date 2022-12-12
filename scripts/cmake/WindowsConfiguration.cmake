@@ -39,10 +39,10 @@ if (WIN32)
 	endif()
 
   if(DOWNLOAD_WINDOWS_DEPENDENCIES)
-    download_zip_and_extract(LLVM https://sourceforge.net/projects/esbmc-deps/files/clang.zip/download)
+    download_zip_and_extract(LLVM https://sourceforge.net/projects/esbmc-deps/files/llvm14-mt/download)
     download_zip_and_extract(Z3 https://sourceforge.net/projects/esbmc-deps/files/z3.zip/download)
-    set(LLVM_DIR ${CMAKE_BINARY_DIR}/LLVM/clang)
-    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/clang)
+    set(LLVM_DIR ${CMAKE_BINARY_DIR}/LLVM/llvm+clang+lld-14.0.6-x86_64-windows-msvc-release-mt)
+    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/llvm+clang+lld-14.0.6-x86_64-windows-msvc-release-mt)
     set(Z3_DIR ${CMAKE_BINARY_DIR}/Z3)
   endif()
 
