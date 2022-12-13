@@ -141,10 +141,6 @@ jobs:
       run: vcpkg.exe integrate install
     - name: Install Boost
       run: vcpkg.exe install boost-filesystem:x64-Windows-static boost-multiprecision:x64-Windows-static boost-date-time:x64-windows-static boost-test:x64-windows-static boost-multi-index:x64-windows-static boost-crc:x64-windows-static boost-property-tree:x64-windows-static boost-uuid:x64-windows-static boost-program-options:x64-windows-static boost-iostreams:x64-windows-static
-    - name: Check environment
-      run: |
-        ls C:\vcpkg\installed\x64-windows-static\bin\
-        ls C:\Deps
     - name: Configure CMake
       run: |
         mkdir build
@@ -154,7 +150,7 @@ jobs:
       run: |
         cd build
         cmake --build . --target INSTALL  --config RelWithDebInfo
-    - uses: actions/upload-artifact@v1
+    - uses: actions/upload-artifact@v2
       with:
           name: release-windows
           path: C:/deps/esbmc
