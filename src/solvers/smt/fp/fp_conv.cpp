@@ -672,7 +672,8 @@ smt_astt fp_convt::mk_to_bv(smt_astt x, bool is_signed, std::size_t width)
 
   // NaN, Inf, or negative (except -0) -> unspecified
   smt_astt c1 = ctx->mk_or(x_is_nan, x_is_inf);
-  smt_astt unspec_v = ctx->mk_smt_symbol("UNSPEC_FP" + std::to_string(width), ctx->mk_bv_sort(width));
+  smt_astt unspec_v = ctx->mk_smt_symbol(
+    "UNSPEC_FP" + std::to_string(width), ctx->mk_bv_sort(width));
   assert(unspec_v->sort->get_data_width() == width);
   smt_astt v1 = unspec_v;
 
