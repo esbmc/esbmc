@@ -32,7 +32,7 @@ While our main website is [esbmc.org](http://esbmc.org).
 
 The figure below illustrates the current ESBMC architecture.
 
-![image](https://user-images.githubusercontent.com/3694109/206883648-3bdc63b2-857b-411b-81da-36eb6fa849c4.png)
+![image](https://user-images.githubusercontent.com/1328287/207741181-eb91fe17-9802-4030-be81-fb22cedd5e56.JPG)
 
 ### Publications
 
