@@ -3,7 +3,6 @@
 #include <util/destructor.h>
 #include <util/std_expr.h>
 #include <clang-cpp-frontend/expr2cpp.h>
-#include <clang-cpp-frontend/cpp_name.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)
@@ -359,50 +358,8 @@ void clang_cpp_adjust::adjust_cpp_already_checked(exprt &expr)
 }
 
 void clang_cpp_adjust::adjust_side_effect_function_call(
-  side_effect_expr_function_callt &expr)
+  side_effect_expr_function_callt &)
 {
-  // For virtual functions, it is important to check whether
-  // the function name is qualified. If it is qualified, then
-  // the call is not virtual.
-  bool is_qualified;
-
-  if(expr.function().id() == "member" || expr.function().id() == "ptrmember")
-  {
-    if(expr.function().get("component_cpp_name") == "cpp-name")
-    {
-      const cpp_namet &cpp_name =
-        to_cpp_name(expr.function().find("component_cpp_name"));
-      is_qualified = cpp_name.is_qualified();
-    }
-  }
-  else if(expr.function().id() == "cpp-name")
-  {
-    const cpp_namet &cpp_name = to_cpp_name(expr.function());
-    is_qualified = cpp_name.is_qualified();
-  }
-  else
-  {
-    is_qualified = false;
-  }
-
-  // Backup of the original operand
-  exprt op0 = expr.function();
-
-  // Check typeid and return, we'll only check its parameters
-  if(op0.has_operands())
-  {
-    if(op0.op0().statement() == "typeid")
-    {
-      log_error(
-        "TODO: add conversion flow to deal with `typeid` type in {}", __func__);
-      abort();
-    }
-  }
-
-  // TODO: need to add cpp_typecheck_fargst check?
-
-  adjust_function_expr(expr.function());
-
   assert(!"side_effect_funciton_call for C++");
 }
 
