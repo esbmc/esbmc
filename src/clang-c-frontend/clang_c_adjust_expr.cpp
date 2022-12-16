@@ -595,6 +595,7 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
 void clang_c_adjust::adjust_side_effect_function_call(
   side_effect_expr_function_callt &expr)
 {
+  // similar to the conversion flows in c_typecheck_baset::typecheck_side_effect_function_call
   exprt &f_op = expr.function();
 
   if(f_op.is_symbol())
@@ -668,6 +669,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
 void clang_c_adjust::adjust_function_call_arguments(
   side_effect_expr_function_callt &expr)
 {
+  // similar to the conversion flows in c_typecheck_baset::typecheck_function_call_arguments
   exprt &f_op = expr.function();
   const code_typet &code_type = to_code_type(f_op.type());
   exprt::operandst &arguments = expr.arguments();

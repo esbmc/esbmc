@@ -121,7 +121,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   convert_arguments(symbol.mode, function_type);
 
   // create "this" if it's a non-static method
-  // DEBUG: NO effect for Task 1: dtor implicit code
+  // DEBUG: no effect on derived dtor implicit call to base dtor
   if(function_scope.is_method && !function_scope.is_static_member)
   {
     code_typet::argumentst &arguments = function_type.arguments();
@@ -134,7 +134,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
     function_scope.this_expr.make_nil();
 
   // do the function body
-  // DEBUG: NO effect for Task 1: dtor implicit code
+  // DEBUG: no effect on derived dtor implicit call to base dtor
   start_typecheck_code();
 
   // save current return type
@@ -146,7 +146,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   if(return_type.id() == "constructor" || return_type.id() == "destructor")
     return_type = empty_typet();
 
-  // DEBUG: adding side effect for Task 1: dtor implicit code
+  // DEBUG: adding side effect for derived dtor implicit call to base dtor
   typecheck_code(to_code(symbol.value));
 
   // DEBUG: changed s.value.type.arguments for Task 1: dtor implicit code

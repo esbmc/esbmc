@@ -1493,7 +1493,8 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
   if(expr.find("#this_expr").is_not_nil())
     fargs.add_object(static_cast<const exprt &>(expr.find("#this_expr")));
 
-  typecheck_function_expr(expr.function(), fargs);
+  typecheck_function_expr(
+    expr.function(), fargs); // DEBUG: typechecked cpp-this in dereference
 
   if(expr.function().id() == "type")
   {

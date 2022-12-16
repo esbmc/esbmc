@@ -33,6 +33,10 @@ public:
   void adjust_ptrmember(exprt &expr);
   void adjust_cpp_this(exprt &expr);
   void adjust_cpp_already_checked(exprt &expr);
+  void adjust_side_effect_function_call(
+    side_effect_expr_function_callt &expr) override;
+  // need to adjust the op0 when we have an side_effect with statement being function_call,
+  void adjust_function_expr(exprt &expr);
   // generate member type based on the information in `member` expr
   void gen_member_type(exprt &expr);
   bool get_component(
@@ -69,7 +73,7 @@ public:
     exprt &object);
 
   /**
-   * other helper methods
+   * other "helper" methods
    */
   bool cpp_is_pod(const typet &type) const;
 };
