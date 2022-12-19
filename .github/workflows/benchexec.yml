@@ -9,16 +9,11 @@ on:
       timeout:
         description: 'Timeout for each benchmarks (in seconds)'
         required: true
-        default: '10'
-      num_of_threads:
-        description: 'How many benchexec threads should be used (values higher than 10 may cause it to hang)'
-        required: true
-        default: '10'  
+        default: '30'
       options:
         description: 'Command-line flags to pass via ESBMC_OPTS'
         required: false
         default: ''
-
 
 jobs:
   build-linux:
@@ -39,7 +34,7 @@ jobs:
         run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3
       - name: Build ESBMC
         run: cd build && cmake --build .
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@v2
         with:
           name: release-linux
           path: ./build/src/esbmc/esbmc
@@ -54,24 +49,38 @@ jobs:
         with:
           name: release-linux
           path: ./
+      - name: Checkout code
+        uses: actions/checkout@master
+        with:
+          path: esbmc-src
       - name: Run Benchexec
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
           NUM_OF_THREADS: ${{ inputs.num_of_threads }}
-
         run: |
-          rm -rf $HOME/output-action $HOME/output
+          cp esbmc-src/scripts/competitions/svcomp/esbmc-wrapper.py $HOME/esbmc-wrapper.py
+          rm -rf $HOME/output-action $HOME/esbmc-output esbmc-src $HOME/run-output.zip
           mkdir $HOME/output-action
-          mkdir $HOME/output
+          mkdir $HOME/esbmc-output
           cp ./esbmc $HOME/output-action
           cd $HOME/output-action
           cp $HOME/esbmc-wrapper.py .
-          cp $HOME/esbmc-kind.xml .
-          chmod +x ./esbmc
-          benchexec -o ../output/ -N $NUM_OF_THREADS ./esbmc-kind.xml --read-only-dir / --overlay-dir /home  -T ${{ github.event.inputs.timeout }} --no-container
-          zip -r run-output.zip ../output
-      - uses: actions/upload-artifact@v1
+          cp $HOME/esbmc.xml .
+          chmod +x ./esbmc         
+          chmod +x ./esbmc-wrapper.py
+          ls -l
+          /usr/bin/benchexec -o ../esbmc-output/ -N 9 ./esbmc.xml --read-only-dir / --overlay-dir /home  -T ${{ github.event.inputs.timeout }} --container
+          zip -r run-output.zip ../esbmc-output
+          cp run-output.zip $HOME
+      - name: Copy files
+        env:
+          TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
+          NUM_OF_THREADS: ${{ inputs.num_of_threads }}
+        run: |
+          cp $HOME/run-output.zip .
+      - uses: actions/upload-artifact@v2
         with:
           name: benchexec-result
-          path: /home/vm/output-action/run-output.zip
+          path: run-output.zip
