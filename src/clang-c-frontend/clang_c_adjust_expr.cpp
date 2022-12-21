@@ -340,8 +340,6 @@ void clang_c_adjust::adjust_index(index_exprt &index)
     index.id("dereference");
     index.cmt_lvalue(true);
   }
-
-  index.type() = final_array_type.subtype();
 }
 
 void clang_c_adjust::adjust_expr_rel(exprt &expr)
