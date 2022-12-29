@@ -7,6 +7,8 @@ import subprocess
 import time
 import sys
 import resource
+from hashlib import sha256
+import datetime
 
 # Start time for this script
 start_time = time.time()
@@ -211,7 +213,7 @@ import re
 def check_if_benchmark_contains_pthread(benchmark):
   with open(benchmark, "r") as f:
     for line in f:
-      if re.search("pthread_create", line.strip()):        
+      if re.search("pthread_create", line.strip()):
         return True
   return False
 
@@ -231,7 +233,6 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
 
   if concurrency:
     command_line += " --no-por --context-bound 2 --no-goto-merge "
-    print("Found pthread benchmark!") # For debugging
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
@@ -249,13 +250,13 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
     command_line += "--memory-leak-check --no-assertions "
     strat = "incr"
   elif prop == Property.memcleanup:
-    command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
+    command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --memory-cleanup-check --no-assertions "
     strat = "incr"
   elif prop == Property.reach:
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
-      command_line += "--no-pointer-check --no-bounds-check --interval-analysis "
+      command_line += "--no-pointer-check --no-bounds-check --interval-analysis --error-label ERROR --goto-unwind --unlimited-goto-unwind "
   else:
     print("Unknown property")
     exit(1)
@@ -287,6 +288,29 @@ def verify(strat, prop, concurrency, dargs):
   res = parse_result(output.decode(), category_property)
   # Parse output
   return res
+
+def witness_to_sha256(benchmark):
+  sha256hash = ''
+  with open(benchmark, 'r') as f:
+    data = f.read().encode('utf-8')
+    sha256hash = sha256(data).hexdigest()
+  witness = os.path.basename(benchmark) + ".graphml"
+  
+  fin = open(witness, "rt")
+  data = fin.readlines()
+  fin.close()
+  
+  fin = open(witness, "wt")
+  for line in data:
+    if '<data key="programhash">' in line:
+      line = line.replace(line[line.index('>')+1:line.index('</data>')], sha256hash)
+      
+    if '<data key="creationtime">' in line:
+      time = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+      line = line.replace(line[line.index('>')+1:line.index('</data>')], time)
+    fin.write(line)
+  fin.close()
+  return
 
 # Options
 parser = argparse.ArgumentParser()
@@ -338,4 +362,8 @@ else:
   exit(1)
 
 result = verify(strategy, category_property, concurrency, esbmc_dargs)
+try:
+  witness_to_sha256(benchmark)
+except:
+  pass
 print(get_result_string(result))
