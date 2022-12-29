@@ -1,4 +1,4 @@
-#include <goto-programs/interval_template.h>
+#include <goto-programs/abstract-interpretation/interval_template.h>
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>

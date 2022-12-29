@@ -1,8 +1,8 @@
 /// \file
 /// Interval Analysis
 
-#include <goto-programs/interval_analysis.h>
-#include <goto-programs/interval_domain.h>
+#include <goto-programs/abstract-interpretation/interval_analysis.h>
+#include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <unordered_set>
 
 static inline void get_symbols(

@@ -1,7 +1,7 @@
 /// \file
 /// Interval Domain
 
-#include <goto-programs/interval_domain.h>
+#include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <langapi/language_util.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
