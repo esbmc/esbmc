@@ -1,7 +1,7 @@
 /// \file
 /// Abstract Interpretation Domain
 
-#include <goto-programs/ai_domain.h>
+#include <goto-programs/abstract-interpretation/ai_domain.h>
 #include <util/simplify_expr.h>
 
 /// Use the information in the domain to simplify the expression on the LHS of

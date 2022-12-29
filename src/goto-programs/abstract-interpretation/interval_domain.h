@@ -4,8 +4,8 @@
 #ifndef CPROVER_ANALYSES_INTERVAL_DOMAIN_H
 #define CPROVER_ANALYSES_INTERVAL_DOMAIN_H
 
-#include <goto-programs/ai.h>
-#include <goto-programs/interval_template.h>
+#include <goto-programs/abstract-interpretation/ai.h>
+#include <goto-programs/abstract-interpretation/interval_template.h>
 #include <boost/serialization/nvp.hpp>
 #include <boost/multiprecision/cpp_bin_float.hpp>
 #include <util/ieee_float.h>

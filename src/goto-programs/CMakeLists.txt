@@ -6,7 +6,7 @@ add_library(gotoprograms goto_convert.cpp goto_function.cpp goto_main.cpp
   goto_program_serialization.cpp goto_function_serialization.cpp
   read_bin_goto_object.cpp goto_program_irep.cpp format_strings.cpp
   loop_numbers.cpp goto_loops.cpp write_goto_binary.cpp
-  goto_k_induction.cpp loopst.cpp ai.cpp ai_domain.cpp interval_analysis.cpp interval_domain.cpp)
+  goto_k_induction.cpp loopst.cpp)
 add_library(gotoalgorithms loop_unroll.cpp mark_decl_as_non_det.cpp)
 
 if(ENABLE_GOTO_CONTRACTOR)
@@ -17,7 +17,8 @@ if(ENABLE_GOTO_CONTRACTOR)
     target_link_libraries(gotocontractor PUBLIC algorithms gotoprograms ${IBEX_LIB} ${IBEX_LIB_GAOL} ${IBEX_LIB_GDTOA} ${IBEX_LIB_ULTIM} ${IBEX_LIB_SOPLEX} -lz)
 endif()
 
-target_link_libraries(gotoalgorithms algorithms gotoprograms)
+add_subdirectory(abstract-interpretation)
+target_link_libraries(gotoalgorithms algorithms gotoprograms abstract-interpretation)
 target_include_directories(gotoprograms
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
