@@ -160,11 +160,40 @@ public:
       upper_set = false;
   }
 
+  /* INTERVAL ARITHMETICS 
+   *
+   * Following Chapter 32 of Principles of Abstract Interpretation.
+   * 
+   * ADD/SUB
+   * [x0, x1] + empty <==>  empty + [x0, x1] <==> [x0, x1] - empty <==>  empty + [x0, x1] <==> empty
+   * [x0, x1] + [y0, y1] <==> [x0+y0, x1+y1]
+   * [x0, x1] - [y0, y1] <==> [x0-y1, x1-y0]
+   * -[x0, x1] <==> [-x1, -x0]
+   * -infinity + infinity <==> -infinity
+   * -infinity + c <==> -infinity
+   * infinity + infinity = infinity
+   * 
+   * MULT
+   * [x0, x1] * empty <==> empty * [x0, x1] <==> empty
+   * [x0, x1] * [y0, y1] <==> [min(x0*y0, x0*y1, x1*y0, x1*y1), max(x0*y0, x0*y1, x1*y0, x1*y1)]
+   * 
+   * DIV
+   * [1, 1] / [x0, x1] <==> {
+   *  (x1 < 0) || (0 < x0) => [1/x1, 1/x0]
+   *  otherwise (e.g. 1/0) => [-infinity, infinity]
+   *  }
+   * [x0, x1] / [y0, y1] <==> [x0, x1] * [[1,1] / [y0, y1]]
+   * 
+   * 
+  */
   friend interval_templatet<T>
   operator+(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
   {
     // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
-    auto result = lhs;
+    auto result = rhs.empty() ? rhs : lhs;
+    if(result.empty)
+      return result;
+
     if(!lhs.lower_set || !rhs.lower_set)
       result.lower_set = false;
     else
@@ -181,7 +210,10 @@ public:
   operator-(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
   {
     // [a_0, a_1] - [b_0, b_1] = [a_0-b_1, a_1 - b_0]
-    auto result = lhs;
+    auto result = rhs.empty() ? rhs : lhs;
+    if(result.empty)
+      return result;
+
     if(!lhs.lower_set || !rhs.upper_set)
       result.lower_set = false;
     else
@@ -237,8 +269,8 @@ public:
     /**
        * 1. Forward Evaluation y = (a - b) ===> [y] = ([a] - [b]) intersect [-infinity, 0]
        * 2. Backwards Step, for each variable:
-       *   a. [a] = [a] intersect [b] - [y]
-       *   b. [b] = [b] intersect [a] + [y]
+       *   a. [a] = [a] intersect [b] + [y]
+       *   b. [b] = [b] intersect [a] - [y]
        * 3. Find a fixpoint. 
        * 
        */

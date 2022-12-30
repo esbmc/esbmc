@@ -20,8 +20,6 @@ using real_intervalt =
  * @brief Trivial, conjunctive interval domain for both float
  *        and integers. The categorization 'float' and 'integers'
  *        is done by is_int and is_float.
- * 
- * TODO: Add support for floats
  */
 class interval_domaint : public ai_domain_baset
 {
@@ -162,7 +160,6 @@ protected:
    * @brief Recursively explores an Expression until it reaches a symbol. If the
    * symbol is a BV, then removes it from the int_map
    * 
-   * TODO: This should be extended for floats
    * TODO: There are a lot of expressions that are not supported
    * TODO: A utility function that recursively extracts all the symbols of an expr would be very useful
    * @param expr 
@@ -183,8 +180,6 @@ protected:
 
   /**
    * @brief Recursively explores intervals over a comparation expression, inserting them into int_map
-   * 
-   * TODO: This should be extended for floats
    * 
    * @param lhs 
    * @param id 

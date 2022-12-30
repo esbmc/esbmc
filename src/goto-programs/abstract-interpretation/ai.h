@@ -12,24 +12,52 @@
 #include <util/xml.h>
 #include <util/expr.h>
 
-/// The basic interface of an abstract interpreter.  This should be enough
-/// to create, run and query an abstract interpreter.
-// don't use me -- I am just a base class
-// use ait instead
+/**
+ * This is the basic interface of the abstract interpreter with default
+ * implementations of the core functionality.
+ *
+ * Users of abstract interpreters should use the interface given by this class.
+ * It breaks into three categories:
+ *
+ * 1. Running an analysis, via operator() overloeads
+ * 2. Accessing the results of an analysis, by looking up the history objects
+ * 3. Outputting the results of the analysis; 
+ * 
+ * Where possible, uses should be agnostic of the particular configuration of
+ * the abstract interpreter.
+ *
+ * From a development point of view, there are several directions in which
+ * this can be extended by inheriting from ai_baset or one of its children:
+ *
+ * A. To change how single edges are computed `visit_edge`
+ *
+ * B. To change how individual instructions are handled `visit`
+ *
+ * C. To change the way that the fixed point is computed `fixedpoint`
+ *
+ * D. For pre-analysis initialization `initialize`
+ *
+ * E. For post-analysis cleanup `finalize`
+ *
+ * Historically, uses of abstract interpretation inherited from ait<domainT>
+ * and added the necessary functionality.  This works (although care must be
+ * taken to respect the APIs of the various components -- there are some hacks
+ * to support older analyses that didn't) but is discouraged in favour of
+ * having an object for the abstract interpreter and using its public API.
+*/
 class ai_baset
 {
 public:
   typedef ai_domain_baset statet;
 
-  ai_baset()
-  {
-  }
+  ai_baset() = default;
 
-  virtual ~ai_baset()
-  {
-  }
-
-  /// Running the interpreter
+  /**
+   * @brief Run analysis over Program
+   * 
+   * @param goto_program prograam under analysis
+   * @param ns current namespace
+   */
   void operator()(const goto_programt &goto_program, const namespacet &ns)
   {
     goto_functionst goto_functions;
@@ -39,6 +67,12 @@ public:
     finalize();
   }
 
+  /**
+   * @brief Run analysis over Module (Goto Functions)
+   * 
+   * @param goto_functions functions under analysis
+   * @param ns current namespace
+   */
   void operator()(const goto_functionst &goto_functions, const namespacet &ns)
   {
     initialize(goto_functions);
@@ -47,23 +81,15 @@ public:
     finalize();
   }
 
-  /// Accessing individual domains at particular locations
-  /// (without needing to know what kind of domain or history is used)
-  /// A pointer to a copy as the method should be const and
-  /// there are some non-trivial cases including merging domains, etc.
-  /// Intended for users of the abstract interpreter; don't use internally.
+  // TODO: add history (for widening!)
 
-  /// Returns the abstract state before the given instruction
-  /// PRECONDITION(l is dereferenceable)
   virtual std::unique_ptr<statet>
   abstract_state_before(goto_programt::const_targett l) const = 0;
 
-  /// Returns the abstract state after the given instruction
+  // Returns the abstract state after the given instruction
   virtual std::unique_ptr<statet>
   abstract_state_after(goto_programt::const_targett l) const
   {
-    /// PRECONDITION(l is dereferenceable && std::next(l) is dereferenceable)
-    /// Check relies on a DATA_INVARIANT of goto_programs
     assert(!l->is_end_function()); // No state after the last instruction
     return abstract_state_before(std::next(l));
   }
@@ -88,6 +114,9 @@ protected:
   void entry_state(const goto_programt &);
   void entry_state(const goto_functionst &);
 
+  /* The fixedpoint is computed through a Work set algorithm which
+   * consists in adding nodes that have changed with the current merge
+  */
   // the work-queue is sorted by location number
   typedef std::unordered_map<unsigned, goto_programt::const_targett>
     working_sett;
