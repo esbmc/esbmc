@@ -1,6 +1,6 @@
 /// \file
 /// Interval Domain
-
+// TODO: Ternary operators, loop widening, modular arithmetic, lessthan into lessthanequal for integers
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <langapi/language_util.h>
 #include <util/arith_tools.h>
@@ -156,7 +156,7 @@ bool interval_domaint::join(const interval_domaint &b)
 }
 
 void interval_domaint::assign(const expr2tc &expr)
-{
+{  
   assert(is_code_assign2t(expr));
   auto const &c = to_code_assign2t(expr);
   havoc_rec(c.target);
@@ -199,6 +199,120 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
     log_debug("[havoc_rec] Missing support: {}", *expr);
 }
 
+template<>
+  integer_intervalt interval_domaint::get_interval_from_symbol(const symbol2t &sym) {
+    return int_map[sym.thename];
+  }
+
+template<>
+  void interval_domaint::update_symbol_interval(const symbol2t &sym, const integer_intervalt value) {
+        int_map[sym.thename] = value;
+  }
+
+template<>
+  real_intervalt interval_domaint::get_interval_from_symbol(const symbol2t &sym) {
+    return real_map[sym.thename];
+  }
+
+  template<>
+  void interval_domaint::update_symbol_interval(const symbol2t &sym, const real_intervalt value) {
+    real_map[sym.thename] = value;
+  }
+
+template<>
+  integer_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) {
+    integer_intervalt result; // (-infinity, infinity)
+    if(!is_constant_int2t(e))
+      return result;
+    auto value = to_constant_int2t(e).value;
+    result.make_le_than(value);
+    result.make_ge_than(value);
+    return result;
+  }
+
+  template<>
+  real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) {
+    real_intervalt result; // (-infinity, infinity)
+    if(!is_constant_floatbv2t(e))
+      return result;
+
+    auto value1 = to_constant_floatbv2t(e).value;
+    value1.increment();
+    auto value2 = to_constant_floatbv2t(e).value;
+    value2.decrement();
+    result.make_le_than(value1.to_double());
+    result.make_ge_than(value2.to_double());
+    assert(value2 <= value1);
+    std::ostringstream oss;
+    oss << result;
+    log_debug("[interval] generating float interval {}", oss.str());
+    return result;
+  }
+
+template<class T>
+T interval_domaint::get_interval(const expr2tc &e) {
+  log_debug("[interval] getting interval...");
+  if(is_symbol2t(e))
+    return get_interval_from_symbol<T>(to_symbol2t(e));
+
+  if(is_neg2t(e))
+    return -get_interval<T>(to_neg2t(e).value);
+
+  // We do not care about overflows/overlaps for now
+  if(is_typecast2t(e))
+    return get_interval<T>(to_typecast2t(e).from);
+
+  if(is_constant_number(e))
+    return get_interval_from_const<T>(e);
+
+  // Arithmetic?
+  auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
+  auto ieee_arith_op = std::dynamic_pointer_cast<ieee_arith_2ops>(e);    
+  if(arith_op || ieee_arith_op){
+    // It should be safe to mix integers/floats in here.
+    // The worst that can happen is an overaproximation
+    auto lhs = get_interval<T>(arith_op ? arith_op->side_1 : ieee_arith_op->side_1);
+    auto rhs = get_interval<T>(arith_op ? arith_op->side_2 : ieee_arith_op->side_2);
+
+    if(is_add2t(e) || is_ieee_add2t(e))
+      return lhs + rhs;
+
+    if(is_sub2t(e) || is_ieee_sub2t(e))
+      return lhs - rhs;
+
+    if(is_mul2t(e) || is_ieee_mul2t(e))
+      return lhs * rhs;  
+
+    if(is_div2t(e) || is_ieee_div2t(e))
+      return lhs / rhs;
+
+    // TODO: Add more as needed.
+  }
+  // We could not generate from the expr. Return top
+  log_debug("[interval] unable to find it");
+  T result; // (-infinity, infinity) 
+  return result;
+}
+
+template<class Interval>
+  void interval_domaint::assume_less(const expr2tc &a, const expr2tc &b, bool less_than_equal) {
+    // 1. Apply contractor algorithms
+    // 2. Update refs
+    auto rhs = get_interval<Interval>(b);
+    auto lhs = get_interval<Interval>(a);
+
+    // TODO: less than equal fix    
+    Interval::contract_interval_le(lhs, rhs);
+    if(is_symbol2t(a))    
+      update_symbol_interval(to_symbol2t(a), lhs);
+    
+    if(is_symbol2t(b))    
+      update_symbol_interval(to_symbol2t(b), rhs);
+    
+    if(rhs.is_bottom() || lhs.is_bottom())
+      make_bottom();
+  }
+
 void interval_domaint::assume_rec(
   const expr2tc &lhs,
   expr2t::expr_ids id,
@@ -230,95 +344,22 @@ void interval_domaint::assume_rec(
   //             lhs <= rhs
 
   assert(id == expr2t::lessthan_id || id == expr2t::lessthanequal_id);
-  // TODO: this could use some heavy refactoring!
-  if(is_symbol2t(lhs) && is_constant_number(rhs))
-  {
-    // Example: a: [-2, 10] and we are evaluating a <= 6
 
-    irep_idt lhs_identifier = to_symbol2t(lhs).thename;
+  auto islessthan = id == expr2t::lessthan_id;
+  auto isbvop = is_bv_type(lhs) && is_bv_type(rhs);
+  auto isfloatbvop =is_floatbv_type(lhs) && is_floatbv_type(rhs);
 
-    if(is_bv_type(lhs) && is_bv_type(rhs))
-    {
-      BigInt tmp = to_constant_int2t(rhs).value;
-      if(id == expr2t::lessthan_id)
-        --tmp;
-      integer_intervalt &ii = int_map[lhs_identifier];
-      // li should be [-2, 10]
-      ii.make_le_than(tmp);
-      // li should be [-2, 6]
-      if(ii.is_bottom())
-        make_bottom();
-    }
-
-    if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
-    {
-      // Example: a: [0.001, 0.1] and we are evaluating a <= 0.01
-      auto tmp = to_constant_floatbv2t(rhs).value;
-      auto &ii = real_map[lhs_identifier];
-      tmp.increment(true);
-      ii.make_le_than(tmp.to_double());
-      // li should be: [0.001, 0.01]
-      if(ii.is_bottom())
-        make_bottom();
-    }
-
-    // TODO: Mix int and float!
-  }
-  else if(is_constant_number(lhs) && is_symbol2t(rhs))
-  {
-    // Example: a: [-2, 10] and we are evaluating 3 <= a
-    irep_idt rhs_identifier = to_symbol2t(rhs).thename;
-
-    if(is_bv_type(lhs) && is_bv_type(rhs))
-    {
-      BigInt tmp = to_constant_int2t(lhs).value;
-      if(id == expr2t::lessthan_id)
-        ++tmp;
-      integer_intervalt &ii = int_map[rhs_identifier];
-      // li: [-2, 10]
-      ii.make_ge_than(tmp);
-      // li: [3, 10]
-      if(ii.is_bottom())
-        make_bottom();
-    }
-
-    if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
-    {
-      // Example: a: [0.001, 0.1] and we are evaluating 0.01 <= a
-      auto tmp = to_constant_floatbv2t(lhs).value;
-      auto &ii = real_map[rhs_identifier];
-      tmp.decrement(true);
-      ii.make_ge_than(tmp.to_double());
-      // li should be:  [0.01, 0.01]
-      if(ii.is_bottom())
-        make_bottom();
-    }
-  }
-  else if(is_symbol2t(lhs) && is_symbol2t(rhs))
-  {
-    irep_idt lhs_identifier = to_symbol2t(lhs).thename;
-    irep_idt rhs_identifier = to_symbol2t(rhs).thename;
-
-    if(is_bv_type(lhs) && is_bv_type(rhs))
-    {
-      auto &lhs_i = int_map[lhs_identifier];
-      auto &rhs_i = int_map[rhs_identifier];
-
-      integer_intervalt::contract_interval_le(lhs_i, rhs_i);
-      if(rhs_i.is_bottom() || lhs_i.is_bottom())
-        make_bottom();
-    }
-
-    if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
-    {
-      auto &lhs_i = real_map[lhs_identifier];
-      auto &rhs_i = real_map[rhs_identifier];
-      real_intervalt::contract_interval_le(lhs_i, rhs_i);
-      if(rhs_i.is_bottom() || lhs_i.is_bottom())
-        make_bottom();
-    }
-  }
+  log_debug("[interval] LHS:");
+  lhs->dump();
+  log_debug("[interval] RHS:");
+  rhs->dump();
+  if(isbvop)
+    assume_less<integer_intervalt>(lhs,rhs,id == expr2t::lessthanequal_id);
+  else if(isfloatbvop)
+    assume_less<real_intervalt>(lhs,rhs,id == expr2t::lessthanequal_id);
 }
+
+
 
 void interval_domaint::assume(const expr2tc &cond)
 {
@@ -499,6 +540,8 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
   // merge intervals to properly handle conjunction
   if(is_and2t(condition)) // May be directly representable
   {
+    // TODO: This is not working, reimplement this using other logic
+    log_debug("[interval] Conjuction");
     interval_domaint a;
     a.make_top();        // a is everything
     a.assume(condition); // Restrict a to an over-approximation
@@ -515,6 +558,7 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
   }
   else // Less likely to be representable
   {
+    log_debug("[interval] union");
     expr2tc not_condition = condition;
     make_not(not_condition);
     d.assume(not_condition); // Restrict to when condition is false

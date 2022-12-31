@@ -195,6 +195,21 @@ protected:
    * @param assignment 
    */
   void assign(const expr2tc &assignment);
+
+  template<class Interval>
+  Interval get_interval(const expr2tc &e);
+
+  template<class Interval>
+  Interval get_interval_from_symbol(const symbol2t &sym);
+
+  template<class Interval>
+  void update_symbol_interval(const symbol2t &sym, const Interval value);
+
+  template<class Interval>
+  Interval get_interval_from_const(const expr2tc &sym);
+
+  template<class Interval>
+  void assume_less(const expr2tc &a, const expr2tc &b, bool less_than_equal);
 };
 
 #endif // CPROVER_ANALYSES_INTERVAL_DOMAIN_H
