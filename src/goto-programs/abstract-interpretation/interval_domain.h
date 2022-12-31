@@ -155,6 +155,13 @@ protected:
   int_mapt int_map;
   /// Map for all real intervals
   real_mapt real_map;
+  // TODO: a proper widening!
+  std::unordered_map<irep_idt, unsigned, irep_id_hash> naive_counter;
+  // TODO: Magic Number!
+  unsigned widening_limit() const
+  {
+    return 100;
+  }
 
   /**
    * @brief Recursively explores an Expression until it reaches a symbol. If the
@@ -196,20 +203,92 @@ protected:
    */
   void assign(const expr2tc &assignment);
 
-  template<class Interval>
+  /**
+   * @brief Applies LHS <= RHS and RHS <= LHS from assignment instructions
+   * 
+   * This is separate from the usual assume_rec as LHS symbol may be inside RHS
+   * 
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param lhs 
+   * @param rhs 
+   */
+  template <class Interval>
+  void apply_assignment(const expr2tc &lhs, const expr2tc &rhs);
+
+  /**
+   * @brief Applies  LHS < RHS
+   * 
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param lhs 
+   * @param rhs
+   * @param less_than_equal if operation should be <=
+   */
+  template <class Interval>
+  void apply_assume_less(const expr2tc &lhs, const expr2tc &rhs);
+
+  /**
+   * @brief Generates interval with [min, max] using symbol type
+   * 
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param sym 
+   * @return Interval the returned interval is either [min, max] or (-infinity, infinity) 
+   */
+  template <class Interval>
+  Interval generate_modular_interval(const symbol2t sym) const;
+
+  /**
+   * @brief Get the interval for expression
+   * 
+   * This computes the interval of a given expression and returns it
+   * 
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param e 
+   * @return Interval 
+   */
+  template <class Interval>
   Interval get_interval(const expr2tc &e);
 
-  template<class Interval>
-  Interval get_interval_from_symbol(const symbol2t &sym);
+  /**
+   * @brief Get the interval from symbol object or top
+   * 
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param sym 
+   * @return Interval 
+   */
+  template <class Interval>
+  Interval get_interval_from_symbol(const symbol2t &sym) const;
 
-  template<class Interval>
-  void update_symbol_interval(const symbol2t &sym, const Interval value);
-
-  template<class Interval>
+  /**
+   * @brief Get the interval from constant expression
+   * 
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param sym 
+   * @return Interval 
+   */
+  template <class Interval>
   Interval get_interval_from_const(const expr2tc &sym);
 
-  template<class Interval>
-  void assume_less(const expr2tc &a, const expr2tc &b, bool less_than_equal);
+  /**
+   * @brief Sets new interval for symbol
+   * 
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param sym 
+   * @param value 
+   */
+  template <class Interval>
+  void update_symbol_interval(const symbol2t &sym, const Interval value);
+
+  template <class Interval>
+  bool is_mapped(const symbol2t &sym) const;
+
+  template <class Interval>
+  expr2tc make_expression_helper(const expr2tc &symbol) const;
+
+  template <class Interval>
+  expr2tc make_expression_value(
+    const Interval interval,
+    const type2tc &type,
+    bool upper) const;
 };
 
 #endif // CPROVER_ANALYSES_INTERVAL_DOMAIN_H

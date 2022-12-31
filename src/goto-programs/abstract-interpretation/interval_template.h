@@ -207,8 +207,7 @@ public:
     return result;
   }
 
-  friend interval_templatet<T>
-  operator-(const interval_templatet<T> &lhs)
+  friend interval_templatet<T> operator-(const interval_templatet<T> &lhs)
   {
     // -[a_0, a_1] = [-a_1, -a_0]
     auto result = lhs;
@@ -224,7 +223,8 @@ public:
     {
       result.upper_set = false;
     }
-    else {
+    else
+    {
       result.upper = -lhs.lower;
       result.upper_set = true;
     }
@@ -257,7 +257,7 @@ public:
   {
     // [a_0, a_1] * [b_0, b_1] = [min(a_0*b_0, a_0*b_1, a_1*b_0, a_1*b_1), max(a_0*b_0, a_0*b_1, a_1*b_0, a_1*b_1)]
     interval_templatet<T> result;
-    if(rhs.empty()|| lhs.empty())
+    if(rhs.empty() || lhs.empty())
       return rhs.empty() ? rhs : lhs;
 
     // Let's deal with infinities first
@@ -268,7 +268,7 @@ public:
     result.upper_set = true;
 
     // Initialize with a0 * b0
-    auto a0_b0 = lhs.lower * rhs.lower; 
+    auto a0_b0 = lhs.lower * rhs.lower;
     result.lower = a0_b0;
     result.upper = a0_b0;
 
@@ -276,7 +276,7 @@ public:
       result.lower = std::min(value, result.lower);
       result.upper = std::max(value, result.upper);
     };
-    
+
     update_value(lhs.lower * rhs.upper); // a0 * b1
     update_value(lhs.upper * rhs.lower); // a1 * b0
     update_value(lhs.upper * rhs.upper); // a1 * b1
@@ -298,14 +298,16 @@ public:
     interval_templatet<T> result;
 
     // Let's (not) deal with infinities first and division by 0.
-    if(!lhs.lower_set || !rhs.lower_set || !lhs.upper_set || !rhs.upper_set || rhs.lower == 0 || rhs.upper == 0)
+    if(
+      !lhs.lower_set || !rhs.lower_set || !lhs.upper_set || !rhs.upper_set ||
+      rhs.lower == 0 || rhs.upper == 0)
       return result;
 
     result.lower_set = true;
     result.upper_set = true;
 
     // Initialize with a0 * b0
-    auto a0_b0 = lhs.lower / rhs.lower; 
+    auto a0_b0 = lhs.lower / rhs.lower;
     result.lower = a0_b0;
     result.upper = a0_b0;
 
@@ -313,7 +315,7 @@ public:
       result.lower = std::min(value, result.lower);
       result.upper = std::max(value, result.upper);
     };
-    
+
     update_value(lhs.lower / rhs.upper); // a0 / b1
     update_value(lhs.upper / rhs.lower); // a1 / b0
     update_value(lhs.upper / rhs.upper); // a1 / b1
