@@ -40,7 +40,6 @@ public:
   /// PRECONDITION(are_comparable(from,to) ||
   ///              (from->is_function_call() || from->is_end_function())
 
-
   virtual void transform(
     goto_programt::const_targett from,
     goto_programt::const_targett to,
