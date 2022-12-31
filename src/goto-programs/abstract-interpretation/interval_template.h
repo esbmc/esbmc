@@ -191,7 +191,7 @@ public:
   {
     // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
     auto result = rhs.empty() ? rhs : lhs;
-    if(result.empty)
+    if(result.empty())
       return result;
 
     if(!lhs.lower_set || !rhs.lower_set)
@@ -206,12 +206,37 @@ public:
 
     return result;
   }
+
+  friend interval_templatet<T>
+  operator-(const interval_templatet<T> &lhs)
+  {
+    // -[a_0, a_1] = [-a_1, -a_0]
+    auto result = lhs;
+    if(!lhs.upper_set)
+      result.lower_set = false;
+    else
+    {
+      result.lower = -lhs.upper;
+      result.lower_set = true;
+    }
+
+    if(!lhs.lower_set)
+    {
+      result.upper_set = false;
+    }
+    else {
+      result.upper = -lhs.lower;
+      result.upper_set = true;
+    }
+    return result;
+  }
+
   friend interval_templatet<T>
   operator-(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
   {
     // [a_0, a_1] - [b_0, b_1] = [a_0-b_1, a_1 - b_0]
     auto result = rhs.empty() ? rhs : lhs;
-    if(result.empty)
+    if(result.empty())
       return result;
 
     if(!lhs.lower_set || !rhs.upper_set)
@@ -223,6 +248,75 @@ public:
       result.upper_set = false;
     else
       result.upper = lhs.upper - rhs.lower;
+
+    return result;
+  }
+
+  friend interval_templatet<T>
+  operator*(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
+  {
+    // [a_0, a_1] * [b_0, b_1] = [min(a_0*b_0, a_0*b_1, a_1*b_0, a_1*b_1), max(a_0*b_0, a_0*b_1, a_1*b_0, a_1*b_1)]
+    interval_templatet<T> result;
+    if(rhs.empty()|| lhs.empty())
+      return rhs.empty() ? rhs : lhs;
+
+    // Let's deal with infinities first
+    if(!lhs.lower_set || !rhs.lower_set || !lhs.upper_set || !rhs.upper_set)
+      return result;
+
+    result.lower_set = true;
+    result.upper_set = true;
+
+    // Initialize with a0 * b0
+    auto a0_b0 = lhs.lower * rhs.lower; 
+    result.lower = a0_b0;
+    result.upper = a0_b0;
+
+    auto update_value = [&result](T value) {
+      result.lower = std::min(value, result.lower);
+      result.upper = std::max(value, result.upper);
+    };
+    
+    update_value(lhs.lower * rhs.upper); // a0 * b1
+    update_value(lhs.upper * rhs.lower); // a1 * b0
+    update_value(lhs.upper * rhs.upper); // a1 * b1
+
+    return result;
+  }
+
+  friend interval_templatet<T>
+  operator/(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
+  {
+    /* Note, some works suggests doing a multiplication as [a0, a_1] * ([1,1] / [b_0, b_1])
+     * However, our implementation is not a symbolic computation; thus the arithmetic is not
+     * associative. For example, [-6, 10] / 2 which is [-3, 5] cannot be computed through
+     * the [-6, 10] * [1/2, 1/2] because 1/2 will result in 0.
+    */
+    if(rhs.empty() || lhs.empty())
+      return rhs.empty() ? rhs : lhs;
+
+    interval_templatet<T> result;
+
+    // Let's (not) deal with infinities first and division by 0.
+    if(!lhs.lower_set || !rhs.lower_set || !lhs.upper_set || !rhs.upper_set || rhs.lower == 0 || rhs.upper == 0)
+      return result;
+
+    result.lower_set = true;
+    result.upper_set = true;
+
+    // Initialize with a0 * b0
+    auto a0_b0 = lhs.lower / rhs.lower; 
+    result.lower = a0_b0;
+    result.upper = a0_b0;
+
+    auto update_value = [&result](T value) {
+      result.lower = std::min(value, result.lower);
+      result.upper = std::max(value, result.upper);
+    };
+    
+    update_value(lhs.lower / rhs.upper); // a0 / b1
+    update_value(lhs.upper / rhs.lower); // a1 / b0
+    update_value(lhs.upper / rhs.upper); // a1 / b1
 
     return result;
   }
