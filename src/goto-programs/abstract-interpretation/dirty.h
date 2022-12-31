@@ -5,14 +5,12 @@
 #include <unordered_set>
 #include <string>
 
-
 /** Dirty variables are ones which have their address taken so we can't
  * reliably work out where they may be assigned and are also considered shared
  * state in the presence of multi-threading. */
 class dirtyt
 {
 public:
-
   dirtyt() = default;
 
   explicit dirtyt(const goto_functiont &goto_function)
