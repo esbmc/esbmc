@@ -2,6 +2,7 @@
 #include <cpp/cpp_util.h>
 #include <util/expr_util.h>
 #include <util/arith_tools.h>
+#include <clang-c-frontend/typecast.h>
 
 void convert_expression_to_code(exprt &expr)
 {
@@ -218,6 +219,7 @@ void clang_cpp_adjust::adjust_code_block(codet &code)
     code_blockt vtables, dtors;
     gen_vtables_dtors(msymb, vtables, dtors, code);
 
+    // first we update the vtables, then we call the base destructors in reverse order
     if(vtables.has_operands())
       code.operands().insert(code.operands().begin(), vtables);
 
@@ -237,12 +239,12 @@ void clang_cpp_adjust::gen_vtables_dtors(
   code_blockt &dtors,
   codet &code)
 {
+  // generate the implicit code for vtables and dtors
   assert(symb.type.id() == "struct");
 
   locationt location = symb.type.location();
 
-  location.set_function(
-    id2string(symb.name) + "::~" + id2string(symb.name) + "()");
+  //location.set_function(id2string(symb.name) + "::~" + id2string(symb.name) + "()");
 
   const struct_typet::componentst &components =
     to_struct_type(symb.type).components();
@@ -330,11 +332,7 @@ void clang_cpp_adjust::gen_vtables_dtors(
     const symbolt &psymb =
       *namespacet(context).lookup(bit->type().identifier());
 
-    exprt object("dereference");
-    object.operands().emplace_back("cpp-this");
-    object.location() = location;
-
-    exprt dtor_code = gen_cpp_destructor(location, psymb.type, object);
+    exprt dtor_code = gen_base_destructor(location, psymb.type, code);
 
     if(dtor_code.is_not_nil())
       block.move_to_operands(dtor_code);
@@ -380,16 +378,30 @@ void clang_cpp_adjust::adjust_assign(codet &code)
   }
 }
 
-codet clang_cpp_adjust::gen_cpp_destructor(
+codet clang_cpp_adjust::gen_base_destructor(
   const locationt &location,
   const typet &type,
-  exprt &object)
+  codet &derived_dtor_code)
 {
-  // Maps the conversion flow to generate destructor code
+  // Maps the conversion flow to generate implicit destructor code
+  //
+  // Compared to the old frontend, this is a much simplified method to generate implicit
+  // base dtor call.
+  //
+  // The old frontend uses cpp_typecheckt::cpp_destructor to generate an intermediate
+  // irep, which is in turn "resolved" using the `cpp_typecheck_resolve` module to get the
+  // base dtor function call. The `cpp_typecheck_resolve` module contains lots of code
+  // to guess template args, exact type match, exact function match, identifier
+  // disambuiation and some other "guessings" specific for the old typechecker.
+  // I believe these "guessings" are already handled by the clang frontend converter.
+  //
+  // Since there cannot be more than one destructor in a class,
+  // we just generate the base dtor call here.
   codet new_code;
-  new_code.location() = location;
+  code_function_callt base_dtor_call;
+  base_dtor_call.location() = location;
 
-  typet tmp_type(type);
+  typet tmp_type(type); // base class type
   namespacet(context).follow_symbol(tmp_type);
 
   assert(!is_reference(tmp_type));
@@ -397,8 +409,8 @@ codet clang_cpp_adjust::gen_cpp_destructor(
   // PODs don't need a destructor
   if(cpp_is_pod(tmp_type))
   {
-    new_code.make_nil();
-    return new_code;
+    base_dtor_call.make_nil();
+    return base_dtor_call;
   }
 
   if(tmp_type.id() == "array")
@@ -410,11 +422,10 @@ codet clang_cpp_adjust::gen_cpp_destructor(
   {
     const struct_typet &struct_type = to_struct_type(tmp_type);
 
-    // find name of destructor
-    const struct_typet::componentst &components = struct_type.components();
-
     irep_idt dtor_name;
 
+    // get the components of the base class and search for dtor
+    const struct_typet::componentst &components = struct_type.components();
     for(const auto &component : components)
     {
       const typet &type = component.type();
@@ -423,46 +434,43 @@ codet clang_cpp_adjust::gen_cpp_destructor(
         !component.get_bool("from_base") && type.id() == "code" &&
         type.return_type().id() == "destructor")
       {
+        // found base class dtor!
         dtor_name = component.base_name();
-        // additional annotation to adjust `cpp-this`
-        assert(object.op0().id() == "cpp-this");
-        object.op0().set("#this_arg", component.name().as_string() + "this");
+
+        // calling the base class dtor
+        base_dtor_call.function() = symbol_exprt("symbol", component.type());
+        base_dtor_call.function().identifier(component.name());
+        ;
+
+        // get the correct argument by type casting, something like:
+        // ~BASE((BASE *)this);
+        // where `this` represents the this operator in DERIVED dtor
+        const code_typet &base_dtor_code_type = to_code_type(component.type());
+        const code_typet::argumentst &base_dtor_arguments =
+          base_dtor_code_type.arguments();
+        // just one argument representing `this` in base class dtor
+        assert(base_dtor_arguments.size() == 1);
+        const typet base_dtor_arg_type = base_dtor_arguments.at(0).type();
+        // generate the argument we want
+        symbolt *s = context.find_symbol(derived_dtor_code.get("#this_arg"));
+        const symbolt &this_symbol = *s;
+        assert(s);
+        exprt derived_dtor_this_symb = symbol_expr(this_symbol);
+        gen_typecast(ns, derived_dtor_this_symb, base_dtor_arg_type);
+        // use the argument in nase dtor function call
+        base_dtor_call.arguments().push_back(derived_dtor_this_symb);
+
+        // finally we set location of the base dtor function call
+        base_dtor_call.location() = location;
         break;
       }
     }
 
     // there is always a destructor for non-PODs
     assert(dtor_name != "");
-
-    const symbolt &symb = *namespacet(context).lookup(struct_type.name());
-
-    irept cpp_name("cpp-name");
-
-    cpp_name.get_sub().emplace_back("name");
-    cpp_name.get_sub().back().identifier(symb.name);
-    cpp_name.get_sub().back().set("#location", location);
-
-    cpp_name.get_sub().emplace_back("::");
-
-    cpp_name.get_sub().emplace_back("name");
-    cpp_name.get_sub().back().identifier(dtor_name);
-    cpp_name.get_sub().back().set("#location", location);
-
-    exprt member_expr("member");
-    member_expr.copy_to_operands(object);
-    member_expr.op0().type().cmt_constant(false);
-    member_expr.add("component_cpp_name").swap(cpp_name);
-    member_expr.location() = location;
-
-    side_effect_expr_function_callt function_call;
-    function_call.function() = member_expr;
-    function_call.location() = location;
-
-    new_code.set_statement("expression");
-    new_code.location() = location;
-    new_code.move_to_operands(function_call);
   }
 
+  new_code.swap(base_dtor_call);
   return new_code;
 }
 

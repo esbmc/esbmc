@@ -180,10 +180,12 @@ void clang_cpp_adjust::adjust_ptrmember(exprt &expr)
   }
 
   // get the type of `member` expr
-  gen_member_type(expr);
+  gen_member_type(expr, cpp_typecheck_fargst());
 }
 
-void clang_cpp_adjust::gen_member_type(exprt &expr)
+void clang_cpp_adjust::gen_member_type(
+  exprt &expr,
+  const cpp_typecheck_fargst &fargs)
 {
   // Maps the conversion flow in cpp_typecheckt::typecheck_expr_member for C++ member
   // The conversion flow in clang_c_adjust::adjust_member
@@ -200,6 +202,7 @@ void clang_cpp_adjust::gen_member_type(exprt &expr)
 
   if(
     expr.find("component_cpp_name").is_not_nil() &&
+    to_cpp_name(expr.find("component_cpp_name")).is_destructor() &&
     namespacet(context).follow(op0.type()).id() != "struct")
   {
     log_error("TODO: adjust expr to be \"cpp_dummy_destructor\"");
@@ -246,7 +249,17 @@ void clang_cpp_adjust::gen_member_type(exprt &expr)
 
   if(expr.find("component_cpp_name").is_not_nil())
   {
-    log_error("TODO: conversion flow for component_cpp_name in {}", __func__);
+    cpp_namet component_cpp_name = to_cpp_name(expr.find("component_cpp_name"));
+
+    // TODO: need cpp_save_scopet?
+
+    // resolve the member name in this scope
+    cpp_typecheck_fargst new_fargs(fargs);
+    new_fargs.add_object(op0);
+
+    log_error(
+      "TODO: add conversion flow to deal with `component_cpp_name` type in {}",
+      __func__);
     abort();
   }
 
@@ -361,10 +374,12 @@ void clang_cpp_adjust::adjust_cpp_already_checked(exprt &expr)
 void clang_cpp_adjust::adjust_side_effect_function_call(
   side_effect_expr_function_callt &expr)
 {
+  clang_c_adjust::adjust_side_effect_function_call(expr);
+#if 0
   // For virtual functions, it is important to check whether
   // the function name is qualified. If it is qualified, then
   // the call is not virtual.
-  bool is_qualified = false;
+  bool is_qualified;
 
   if(expr.function().id() == "member" || expr.function().id() == "ptrmember")
   {
@@ -377,6 +392,10 @@ void clang_cpp_adjust::adjust_side_effect_function_call(
     log_error(
       "TODO: add conversion flow to deal with `cpp-name` type in {}", __func__);
     abort();
+  }
+  else
+  {
+    is_qualified = false;
   }
 
   // Backup of the original operand
@@ -393,13 +412,46 @@ void clang_cpp_adjust::adjust_side_effect_function_call(
     }
   }
 
-  if(is_qualified)
-    assert(true);
+  // now do the function -- this has been postponed
+  cpp_typecheck_fargst fargs(expr);
+  // If the expression is decorated with what the 'this' object is, add it to
+  // the fargst record. If it isn't available, name resolution will still work,
+  // it just won't take the 'this' argument into account when overloading. (NB:
+  // this is bad).
+  if(expr.find("#this_expr").is_not_nil())
+    fargs.add_object(static_cast<const exprt &>(expr.find("#this_expr")));
 
-  clang_c_adjust::adjust_side_effect_function_call(expr);
+  adjust_function_expr(expr.function(), fargs);
+
+  if(expr.function().id() == "type")
+  {
+    log_error(
+      "TODO: add conversion flow to deal with `type` type in {}", __func__);
+    abort();
+  }
+
+  if(expr.function().id() == "cast_expression")
+  {
+    log_error(
+      "TODO: add conversion flow to deal with `cast_expression` type in {}", __func__);
+    abort();
+  }
+  if(expr.function().id() == "cpp_dummy_destructor")
+  {
+    log_error(
+      "TODO: add conversion flow to deal with `cpp_dummy_destructor` type in {}", __func__);
+    abort();
+  }
+
+  // look at type of function
+
+  assert(!"done side effect function call");
+#endif
 }
 
-void clang_cpp_adjust::adjust_function_expr(exprt &expr)
+void clang_cpp_adjust::adjust_function_expr(
+  exprt &expr,
+  const cpp_typecheck_fargst &fargs)
 {
   if(expr.id() == "cpp-name")
   {
@@ -408,8 +460,9 @@ void clang_cpp_adjust::adjust_function_expr(exprt &expr)
   }
   else if(expr.id() == "member")
   {
-    log_error("TODO: found expr id `member` in {}", __func__);
-    abort();
+    adjust_operands(expr);
+    // TODO: missing fargs
+    gen_member_type(expr, fargs);
   }
   else if(expr.id() == "ptrmember")
   {

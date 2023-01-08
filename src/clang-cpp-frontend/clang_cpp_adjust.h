@@ -2,6 +2,7 @@
 #define CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_
 
 #include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-cpp-frontend/cpp_typecheck_fargs.h>
 
 /**
  * clang C++ adjuster class for:
@@ -36,9 +37,9 @@ public:
   void adjust_side_effect_function_call(
     side_effect_expr_function_callt &expr) override;
   // need to adjust the op0 when we have an side_effect with statement being function_call,
-  void adjust_function_expr(exprt &expr);
+  void adjust_function_expr(exprt &expr, const cpp_typecheck_fargst &fargs);
   // generate member type based on the information in `member` expr
-  void gen_member_type(exprt &expr);
+  void gen_member_type(exprt &expr, const cpp_typecheck_fargst &fargs);
   bool get_component(
     const locationt &location,
     const exprt &object,
@@ -67,13 +68,14 @@ public:
     code_blockt &vtables,
     code_blockt &dtors,
     codet &code);
-  codet gen_cpp_destructor(
+  // generate function call to base class destructor for deerived calss destructor
+  codet gen_base_destructor(
     const locationt &location,
     const typet &type,
-    exprt &object);
+    codet &code);
 
   /**
-   * other "helper" methods
+   * other ancillary methods
    */
   bool cpp_is_pod(const typet &type) const;
 };

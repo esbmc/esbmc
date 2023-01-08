@@ -4,10 +4,12 @@ Module:
 
 Author: Daniel Kroening, kroening@cs.cmu.edu
 
+Adapted for clang-cpp adjuster
+
 \*******************************************************************/
 
-#ifndef CPROVER_CPP_CPP_NAME_H
-#define CPROVER_CPP_CPP_NAME_H
+#ifndef CLANG_CPP_FRONTEND_CLANG_CPP_NAME_H_
+#define CLANG_CPP_FRONTEND_CLANG_CPP_NAME_H_
 
 #include <util/location.h>
 
@@ -77,4 +79,4 @@ inline const cpp_namet &to_cpp_name(const irept &cpp_name)
   return static_cast<const cpp_namet &>(cpp_name);
 }
 
-#endif
+#endif /* CLANG_CPP_FRONTEND_CLANG_CPP_NAME_H_ */

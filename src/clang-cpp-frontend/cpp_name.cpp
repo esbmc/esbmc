@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <cassert>
-#include <cpp/cpp_name.h>
+#include <clang-cpp-frontend/cpp_name.h>
 #include <sstream>
 
 void cpp_namet::convert(std::string &identifier, std::string &base_name) const
