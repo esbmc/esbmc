@@ -3,7 +3,7 @@
 #include <util/destructor.h>
 #include <util/std_expr.h>
 #include <clang-cpp-frontend/expr2cpp.h>
-#include <clang-cpp-frontend/cpp_name.h>
+//#include <clang-cpp-frontend/cpp_name.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)
@@ -200,7 +200,7 @@ void clang_cpp_adjust::gen_member_type(exprt &expr)
 
   if(
     expr.find("component_cpp_name").is_not_nil() &&
-    to_cpp_name(expr.find("component_cpp_name")).is_destructor() &&
+    //to_cpp_name(expr.find("component_cpp_name")).is_destructor() &&
     namespacet(context).follow(op0.type()).id() != "struct")
   {
     log_error("TODO: adjust expr to be \"cpp_dummy_destructor\"");

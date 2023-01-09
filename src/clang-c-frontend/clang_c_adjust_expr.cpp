@@ -54,7 +54,7 @@ bool clang_c_adjust::adjust()
 
 void clang_c_adjust::adjust_symbol(symbolt &symbol)
 {
-  if(symbol.id.as_string() == "c:@S@Motorcycle@F@~Motorcycle#")
+  if(symbol.id.as_string() == "c:@S@Motorcycle@F@Motorcycle#")
     printf("@@ Got it!\n");
 
   if(!symbol.value.is_nil())

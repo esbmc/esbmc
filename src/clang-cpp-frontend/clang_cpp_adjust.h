@@ -71,7 +71,7 @@ public:
   codet gen_base_destructor(
     const locationt &location,
     const typet &type,
-    codet &code);
+    codet &derived_dtor_code);
 
   /**
    * other ancillary methods

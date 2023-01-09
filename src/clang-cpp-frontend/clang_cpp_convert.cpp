@@ -591,9 +591,6 @@ bool clang_cpp_convertert::get_virtual_method(
     vt_entry.location() = method_symbol.location;
     virtual_table.components().push_back(vt_entry);
 
-    if(class_symbol_id == "tag-Motorcycle")
-      printf("@@ doing overloading!\n");
-
     // take care of overloading:
     //  The bases should have been pulled in recursively.
     //  Walk through the components of method's parent class
@@ -1647,7 +1644,6 @@ void clang_cpp_convertert::get_vptr_init_expr(
   // add side effect to ctor symbol value's operands
   vptr_assign.operands().push_back(expr);
   body.operands().push_back(vptr_assign);
-  printf("@@ populating vptr_init\n");
 }
 
 void clang_cpp_convertert::get_current_access(
@@ -1775,8 +1771,7 @@ bool clang_cpp_convertert::get_bases(
   // DEBUG - print
   printf("@@ Done base parsing\n");
   printf(
-    "@@ This is bases for class: %s\n",
-    derived_class_type.tag().as_string().c_str());
+    "@@ Bases for class: %s\n", derived_class_type.tag().as_string().c_str());
   printf("- printing bases: ");
   for(const auto &base : bases)
   {

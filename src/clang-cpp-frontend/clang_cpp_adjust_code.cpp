@@ -410,7 +410,8 @@ codet clang_cpp_adjust::gen_base_destructor(
   if(cpp_is_pod(tmp_type))
   {
     base_dtor_call.make_nil();
-    return base_dtor_call;
+    new_code.swap(base_dtor_call);
+    return new_code;
   }
 
   if(tmp_type.id() == "array")
