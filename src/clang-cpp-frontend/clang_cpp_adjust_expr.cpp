@@ -183,8 +183,7 @@ void clang_cpp_adjust::adjust_ptrmember(exprt &expr)
   gen_member_type(expr);
 }
 
-void clang_cpp_adjust::gen_member_type(
-  exprt &expr)
+void clang_cpp_adjust::gen_member_type(exprt &expr)
 {
   // Maps the conversion flow in cpp_typecheckt::typecheck_expr_member for C++ member
   // The conversion flow in clang_c_adjust::adjust_member
@@ -368,8 +367,7 @@ void clang_cpp_adjust::adjust_side_effect_function_call(
   clang_c_adjust::adjust_side_effect_function_call(expr);
 }
 
-void clang_cpp_adjust::adjust_function_expr(
-  exprt &expr)
+void clang_cpp_adjust::adjust_function_expr(exprt &expr)
 {
   if(expr.id() == "cpp-name")
   {
