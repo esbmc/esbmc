@@ -180,12 +180,11 @@ void clang_cpp_adjust::adjust_ptrmember(exprt &expr)
   }
 
   // get the type of `member` expr
-  gen_member_type(expr, cpp_typecheck_fargst());
+  gen_member_type(expr);
 }
 
 void clang_cpp_adjust::gen_member_type(
-  exprt &expr,
-  const cpp_typecheck_fargst &fargs)
+  exprt &expr)
 {
   // Maps the conversion flow in cpp_typecheckt::typecheck_expr_member for C++ member
   // The conversion flow in clang_c_adjust::adjust_member
@@ -249,14 +248,6 @@ void clang_cpp_adjust::gen_member_type(
 
   if(expr.find("component_cpp_name").is_not_nil())
   {
-    cpp_namet component_cpp_name = to_cpp_name(expr.find("component_cpp_name"));
-
-    // TODO: need cpp_save_scopet?
-
-    // resolve the member name in this scope
-    cpp_typecheck_fargst new_fargs(fargs);
-    new_fargs.add_object(op0);
-
     log_error(
       "TODO: add conversion flow to deal with `component_cpp_name` type in {}",
       __func__);
@@ -375,83 +366,10 @@ void clang_cpp_adjust::adjust_side_effect_function_call(
   side_effect_expr_function_callt &expr)
 {
   clang_c_adjust::adjust_side_effect_function_call(expr);
-#if 0
-  // For virtual functions, it is important to check whether
-  // the function name is qualified. If it is qualified, then
-  // the call is not virtual.
-  bool is_qualified;
-
-  if(expr.function().id() == "member" || expr.function().id() == "ptrmember")
-  {
-    const cpp_namet &cpp_name =
-      to_cpp_name(expr.function().find("component_cpp_name"));
-    is_qualified = cpp_name.is_qualified();
-  }
-  else if(expr.function().id() == "cpp-name")
-  {
-    log_error(
-      "TODO: add conversion flow to deal with `cpp-name` type in {}", __func__);
-    abort();
-  }
-  else
-  {
-    is_qualified = false;
-  }
-
-  // Backup of the original operand
-  exprt op0 = expr.function();
-
-  // Check typeid and return, we'll only check its parameters
-  if(op0.has_operands())
-  {
-    if(op0.op0().statement() == "typeid")
-    {
-      log_error(
-        "TODO: add conversion flow to deal with `typeid` type in {}", __func__);
-      abort();
-    }
-  }
-
-  // now do the function -- this has been postponed
-  cpp_typecheck_fargst fargs(expr);
-  // If the expression is decorated with what the 'this' object is, add it to
-  // the fargst record. If it isn't available, name resolution will still work,
-  // it just won't take the 'this' argument into account when overloading. (NB:
-  // this is bad).
-  if(expr.find("#this_expr").is_not_nil())
-    fargs.add_object(static_cast<const exprt &>(expr.find("#this_expr")));
-
-  adjust_function_expr(expr.function(), fargs);
-
-  if(expr.function().id() == "type")
-  {
-    log_error(
-      "TODO: add conversion flow to deal with `type` type in {}", __func__);
-    abort();
-  }
-
-  if(expr.function().id() == "cast_expression")
-  {
-    log_error(
-      "TODO: add conversion flow to deal with `cast_expression` type in {}", __func__);
-    abort();
-  }
-  if(expr.function().id() == "cpp_dummy_destructor")
-  {
-    log_error(
-      "TODO: add conversion flow to deal with `cpp_dummy_destructor` type in {}", __func__);
-    abort();
-  }
-
-  // look at type of function
-
-  assert(!"done side effect function call");
-#endif
 }
 
 void clang_cpp_adjust::adjust_function_expr(
-  exprt &expr,
-  const cpp_typecheck_fargst &fargs)
+  exprt &expr)
 {
   if(expr.id() == "cpp-name")
   {
@@ -461,8 +379,7 @@ void clang_cpp_adjust::adjust_function_expr(
   else if(expr.id() == "member")
   {
     adjust_operands(expr);
-    // TODO: missing fargs
-    gen_member_type(expr, fargs);
+    gen_member_type(expr);
   }
   else if(expr.id() == "ptrmember")
   {
