@@ -106,7 +106,7 @@ void clang_c_adjust::adjust_for(codet &code)
   //
   //   { a; for(;b;c) d; }
   //
-#if 0
+
   code_blockt code_block;
   code_block.location() = code.location();
   if(to_code(code.op3()).get_statement() == "block")
@@ -117,7 +117,6 @@ void clang_c_adjust::adjust_for(codet &code)
   code.op0().make_nil();
   code_block.move_to_operands(code);
   code.swap(code_block);
-#endif
 }
 
 void clang_c_adjust::adjust_switch(codet &code)
