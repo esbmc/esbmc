@@ -84,8 +84,10 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   if(symbol.value.is_nil())
     return;
 
-  if(symbol.id.as_string() == "Motorcycle::~Motorcycle(this)")
-    printf("@@ Got Motorcycle dtor\n");
+  if(symbol.id.as_string() == "Vehicle::Vehicle(this)")
+    printf("@@ Got Vehicle ctor\n");
+  if(symbol.id.as_string() == "Motorcycle::Motorcycle(this)")
+    printf("@@ Got Motorcycle ctor\n");
 
   // if it is a destructor, add the implicit code
   if(symbol.type.get("return_type") == "destructor")

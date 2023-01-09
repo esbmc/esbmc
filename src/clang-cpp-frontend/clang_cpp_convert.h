@@ -41,11 +41,6 @@ protected:
 
   bool get_function(const clang::FunctionDecl &fd, exprt &new_expr) override;
 
-  /**
-   * Get member initializers for constructor
-   */
-  bool get_ctor_initializers(code_blockt &body);
-
   bool get_class_method(
     const clang::FunctionDecl &fd,
     exprt &component,

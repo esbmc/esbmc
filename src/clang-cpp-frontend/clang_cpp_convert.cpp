@@ -24,6 +24,7 @@
 #include <util/i2string.h>
 #include <fmt/core.h>
 #include <cpp/cpp_util.h>
+#include <clang-c-frontend/typecast.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -1079,6 +1080,31 @@ bool clang_cpp_convertert::get_constructor_call(
     call.arguments().push_back(tmp_expr);
   }
 
+  // Add implicit `this` before doing actual args
+  // Given Motorcycle is a derived class from the base class Vehicle,
+  // here the `#this_arg` represents `this` as in Motorcycle's ctor.
+  // We need to wrap it in a typecast expr and convert to the Vehichle's `this`
+  if(new_expr.get("#this_arg") != "")
+  {
+    // get base ctor this type
+    const code_typet &base_ctor_code_type = to_code_type(callee_decl.type());
+    const code_typet::argumentst &base_ctor_arguments =
+      base_ctor_code_type.arguments();
+    // just one argument representing `this` in base class ctor
+    assert(base_ctor_arguments.size() == 1);
+    const typet base_ctor_this_type = base_ctor_arguments.at(0).type();
+
+    // get derived class ctor implicit this
+    symbolt *s = context.find_symbol(new_expr.get("#this_arg"));
+    const symbolt &this_symbol = *s;
+    assert(s);
+    exprt implicit_this_symb = symbol_expr(this_symbol);
+
+    // generate the type casting expr and push it to callee's arguments
+    gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
+    call.arguments().push_back(implicit_this_symb);
+  }
+
   // Do args
   for(const clang::Expr *arg : constructor_call.arguments())
   {
@@ -1130,7 +1156,7 @@ bool clang_cpp_convertert::get_function_body(
   // Constructor initializer list is checked here. Becasue we are going to convert
   // each initializer into an assignment statement, added to the function body.
 
-  // Make a placeholder of code block, as we might need to add vptr initialization code in adjuster
+  // Make a placeholder of code block. We add implicit code for dtor in the adjuster
   // TODO: refactor our ctor vptr initialization like this???
   if(is_dtor(fd))
   {
@@ -1157,7 +1183,7 @@ bool clang_cpp_convertert::get_function_body(
 
   code_blockt &body = to_code_block(to_code(new_expr));
 
-  // if it's a constructor, check for initializers
+  // if it's a constructor, check for initializers, e.g. initializers for data member, base class
   if(fd.getKind() == clang::Decl::CXXConstructor)
   {
     const clang::CXXConstructorDecl &cxxcd =
@@ -1200,6 +1226,9 @@ bool clang_cpp_convertert::get_function_body(
         }
         else
         {
+          // Add additional annotation for `this` parameter
+          initializer.set(
+            "#this_arg", ftype.arguments().at(0).get("#identifier"));
           if(get_expr(*init->getInit(), initializer))
             return true;
         }
@@ -1218,7 +1247,8 @@ bool clang_cpp_convertert::get_function_body(
         body.operands().begin(), initializers.begin(), initializers.end());
     }
 
-    // Add code for vptr initialization if needed.
+    // TODO: move to adjuster! like what we did for dtor implicit code
+    // Add implicit code for vptr initialization in ctor if needed.
     // Since clang AST does not contain virtual, we have to do the following things:
     //  - first we synthesize a `member_initializer` irep node for vptr initialization
     //  - then we convert the `member_initializer` node
