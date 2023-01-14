@@ -229,7 +229,9 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     id.id_class = cpp_idt::CLASS;
 
     if(has_body)
+    {
       typecheck_compound_body(*new_symbol);
+    }
     else
     {
       typet new_type("incomplete_" + new_symbol->type.id_string());
