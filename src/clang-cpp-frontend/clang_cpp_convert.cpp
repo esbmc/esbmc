@@ -283,8 +283,20 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
 
   if(cxxrd->bases().begin() != cxxrd->bases().end())
   {
-    log_error("inheritance is not supported in {}", __func__);
-    abort();
+    log_debug(
+      "Class {} has {} bases, {} virtual bases",
+      cxxrd->getNameAsString(),
+      cxxrd->getNumBases(),
+      cxxrd->getNumVBases());
+
+    // TODO-split: add methods from base class
+    for(auto base : cxxrd->bases())
+    {
+      // `base` type is clang::CXXBaseSpecifier
+      base.getType().dump();
+      //log_error("inheritance is not supported in {}", __func__);
+      //abort();
+    }
   }
 
   // Iterate over the declarations stored in this context
@@ -773,10 +785,17 @@ bool clang_cpp_convertert::get_function_body(
     // Parse the initializers, if any
     if(cxxcd.init_begin() != cxxcd.init_end())
     {
+      log_debug(
+        "Class {}'s ctor {} has {} initializers",
+        cxxcd.getParent()->getNameAsString(),
+        cxxcd.getNameAsString(),
+        cxxcd.getNumCtorInitializers());
+
       // Resize the number of operands
       exprt::operandst initializers;
       initializers.reserve(cxxcd.getNumCtorInitializers());
 
+      // `init` type is clang::CXXCtorInitializer
       for(auto init : cxxcd.inits())
       {
         exprt initializer;
@@ -807,8 +826,10 @@ bool clang_cpp_convertert::get_function_body(
         }
         else
         {
-          log_error("Base class initializer is not supported in {}", __func__);
-          abort();
+          // TODO-split: add base class initializer
+          init->getInit()->dump();
+          //log_error("Base class initializer is not supported in {}", __func__);
+          //abort();
         }
 
         // Convert to code and insert side-effect in the operands list
