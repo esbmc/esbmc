@@ -268,7 +268,10 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     }
   }
 
-  return clang_c_convertert::get_struct_union_class_fields(rd, type);
+  if(clang_c_convertert::get_struct_union_class_fields(rd, type))
+    return true;
+
+  return false;
 }
 
 bool clang_cpp_convertert::get_struct_union_class_methods(
