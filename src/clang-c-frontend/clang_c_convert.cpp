@@ -184,6 +184,11 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       comp.set_is_unnamed_bitfield(fd.isUnnamedBitfield());
     }
 
+    // set location
+    locationt location_begin;
+    get_location_from_decl(fd, location_begin);
+    comp.location() = location_begin;
+
     new_expr.swap(comp);
     break;
   }
