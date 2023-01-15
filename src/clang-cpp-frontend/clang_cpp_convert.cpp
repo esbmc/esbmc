@@ -283,8 +283,11 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if(is_field_global_storage(field))
       continue;
 
-    // [C++ annotation]: set parent in component type
+    // [C++ annotation]: set parent in component's type
     comp.type().set("#member_name", type.name());
+    // [C++ annotation]: set access in component
+    if(annotate_class_field_access(field, comp))
+      return true;
 
     type.components().push_back(comp);
   }
@@ -1063,6 +1066,50 @@ bool clang_cpp_convertert::get_decl_ref(
   new_expr.identifier(id);
   new_expr.cmt_lvalue(true);
   new_expr.name(name);
+
+  return false;
+}
+
+bool clang_cpp_convertert::annotate_class_field_access(
+  const clang::FieldDecl *field,
+  struct_typet::componentt &comp)
+{
+  std::string access;
+  if(get_access_from_decl(field, access))
+    return true;
+
+  // annotate access in component
+  comp.set_access(access);
+  return false;
+}
+
+bool clang_cpp_convertert::get_access_from_decl(
+  const clang::Decl *decl,
+  std::string &access)
+{
+  switch(decl->getAccess())
+  {
+  case clang::AS_public:
+  {
+    access = "public";
+    break;
+  }
+  case clang::AS_private:
+  {
+    access = "private";
+    break;
+  }
+  case clang::AS_protected:
+  {
+    access = "protected";
+    break;
+  }
+  default:
+  {
+    log_error("Unknown specifier returned from clang in {}", __func__);
+    return true;
+  }
+  }
 
   return false;
 }
