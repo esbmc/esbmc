@@ -127,7 +127,7 @@ protected:
 
   virtual bool get_struct_union_class_methods(
     const clang::RecordDecl &recordd,
-    struct_union_typet &type);
+    struct_typet &type);
 
   virtual bool get_type(const clang::QualType &type, typet &new_type);
 

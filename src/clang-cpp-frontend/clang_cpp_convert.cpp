@@ -220,7 +220,14 @@ bool clang_cpp_convertert::get_function(
   if(fd.isDependentContext())
     return false;
 
-  return clang_c_convertert::get_function(fd, new_expr);
+  // Only convert non-trivial functions, e.g. non-trivial ctor/dtor, copy ctor, move ctor .etc
+  //if(fd.isTrivial())
+  //  return false;
+
+  if(clang_c_convertert::get_function(fd, new_expr))
+    return true;
+
+  return false;
 }
 
 bool clang_cpp_convertert::get_struct_union_class(const clang::RecordDecl &rd)
@@ -236,10 +243,11 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &rd,
   struct_union_typet &type)
 {
-  // If a struct is defined inside a extern C, it will be a RecordDecl
+  // Note: If a struct is defined inside an extern C, it will be a RecordDecl
+
+  // let's check for (virtual) base classes if this declaration is a CXXRecordDecl,
   if(auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
   {
-    // So this is a CXXRecordDecl, let's check for (virtual) base classes
     for(const auto &decl : cxxrd->bases())
     {
       // The base class is always a CXXRecordDecl
@@ -297,9 +305,10 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 
 bool clang_cpp_convertert::get_struct_union_class_methods(
   const clang::RecordDecl &recordd,
-  struct_union_typet &)
+  struct_typet &type)
 {
-  // If a struct is defined inside a extern C, it will be a RecordDecl
+  // Note: If a struct is defined inside an extern C, it will be a RecordDecl
+
   const clang::CXXRecordDecl *cxxrd =
     llvm::dyn_cast<clang::CXXRecordDecl>(&recordd);
   if(cxxrd == nullptr)
@@ -342,9 +351,13 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
     else
     {
+      printf("@@ Printing decl:\n");
+      decl->dump();
       if(get_decl(*decl, comp))
         return true;
     }
+
+    type.methods().push_back(comp);
 
     // This means that we probably just parsed nested class,
     // don't add it to the class
