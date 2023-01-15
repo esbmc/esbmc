@@ -383,6 +383,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   else
     add_padding(to_struct_type(t), ns);
 
+  t.location() = location_begin;
   added_symbol.type = t;
   return false;
 }
