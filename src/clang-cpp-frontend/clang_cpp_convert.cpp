@@ -227,6 +227,11 @@ bool clang_cpp_convertert::get_function(
   if(clang_c_convertert::get_function(fd, new_expr))
     return true;
 
+  // add additional annotations for class/struct/union methods
+  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+    if(annotate_cpp_methods(md, new_expr))
+      return true;
+
   return false;
 }
 
@@ -1123,6 +1128,34 @@ bool clang_cpp_convertert::get_access_from_decl(
     return true;
   }
   }
+
+  return false;
+}
+
+bool clang_cpp_convertert::annotate_cpp_methods(
+  const clang::CXXMethodDecl *cxxmdd,
+  exprt &new_expr)
+{
+  code_typet &component_type = to_code_type(new_expr.type());
+
+  // set ctor and dtor return type
+  if(cxxmdd->getKind() == clang::Decl::CXXDestructor)
+  {
+    typet rtn_type("destructor");
+    component_type.return_type() = rtn_type;
+  }
+  if(cxxmdd->getKind() == clang::Decl::CXXConstructor)
+  {
+    typet rtn_type("constructor");
+    component_type.return_type() = rtn_type;
+  }
+
+  // set parent
+  std::string parent_class_id =
+    tag_prefix +
+    getFullyQualifiedName(
+      ASTContext->getTagDeclType(cxxmdd->getParent()), *ASTContext);
+  component_type.set("#member_name", parent_class_id);
 
   return false;
 }
