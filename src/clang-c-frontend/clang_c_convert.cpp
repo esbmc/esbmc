@@ -3026,7 +3026,7 @@ std::string clang_c_convertert::get_decl_name(const clang::NamedDecl &nd)
   return rso.str();
 }
 
-inline std::string
+std::string
 getFullyQualifiedName(const clang::QualType &t, const clang::ASTContext &c)
 {
   clang::PrintingPolicy Policy(c.getPrintingPolicy());
