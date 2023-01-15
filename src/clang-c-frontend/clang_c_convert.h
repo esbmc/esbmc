@@ -38,6 +38,7 @@ class StringLiteral;
 class IntegerLiteral;
 class FloatingLiteral;
 class TagDecl;
+class FieldDecl;
 } // namespace clang
 
 class clang_c_convertert
@@ -206,6 +207,25 @@ protected:
   const clang::Decl *get_DeclContext_from_Stmt(const clang::Stmt &stmt);
 
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
+
+  /*
+   * add additional annotations if a class/struct/union field has alignment attribute
+   * Arguments:
+   *   field: clang AST representing the class/struct/union field we are dealing with
+   *   comp: a `component` in class/struct/union's symbol type
+   *   type: a class/struct/union's symbol type
+   */
+  bool check_alignment_attributes(
+    const clang::FieldDecl *field,
+    struct_typet::componentt &comp);
+
+  /*
+   * check if a class/struct/union's field has global storage
+   * (e.g. static)
+   * Arguments:
+   *   field: clang AST representing the class/struct/union field we are dealing with
+   */
+  bool is_field_global_storage(const clang::FieldDecl *field);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
