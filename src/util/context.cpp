@@ -135,6 +135,10 @@ symbolt *contextt::move_symbol_to_context(symbolt &symbol)
       if(symbol.type.is_not_nil() && !s->type.is_not_nil())
         s->swap(symbol);
     }
+    else if(s->is_extern && !symbol.is_extern)
+    {
+      s->swap(symbol);
+    }
   }
   return s;
 }
