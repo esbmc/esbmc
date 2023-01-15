@@ -53,6 +53,18 @@ public:
 
   void typecheck() override;
 
+  /**
+   * @brief Merges extern symbols from old contexts
+   * 
+   * Checks whether a non-extern new_context symbol
+   * was an extern symbol in a previous context.
+   * 
+   * If it was, then merge it.
+   * 
+   * @param s 
+   */
+  void extern_fixup(symbolt &s);
+
 protected:
   void duplicate(symbolt &in_context, symbolt &new_symbol);
   void duplicate_type(symbolt &in_context, symbolt &new_symbol);
@@ -304,9 +316,26 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
   }
 }
 
+void c_linkt::extern_fixup(symbolt &s)
+{
+  if(!s.is_extern)
+  {
+    // Does the previous context have it?
+    auto prev = context.find_symbol(s.id);
+    if(prev)
+    {
+      // If current context is extern and previous wasnt?
+      if(!s.is_extern && prev->is_extern)
+        prev->swap(s);
+    }
+  }
+}
+
 void c_linkt::typecheck()
 {
   new_context.Foreach_operand([this](symbolt &s) {
+    // Check for externs
+    extern_fixup(s);
     // build module clash table
     if(s.file_local && known_modules.find(s.module) != known_modules.end())
     {
