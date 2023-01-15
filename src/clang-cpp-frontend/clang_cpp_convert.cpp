@@ -804,7 +804,7 @@ bool clang_cpp_convertert::get_function_body(
     if(cxxcd.init_begin() != cxxcd.init_end())
     {
       log_debug(
-        "Class {}'s ctor {} has {} initializers",
+        "Class {} ctor {} has {} initializers",
         cxxcd.getParent()->getNameAsString(),
         cxxcd.getNameAsString(),
         cxxcd.getNumCtorInitializers());
