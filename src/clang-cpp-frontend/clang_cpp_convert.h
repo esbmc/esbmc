@@ -119,6 +119,9 @@ protected:
    *    * access: public
    *    * name: MyMethodName
    *    * #location:
+   * Arguments:
+   *  cxxmd: clang AST node representing the method we are dealing with
+   *  new_expr: the `component` in class/struct/union symbol type
    */
   bool
   annotate_cpp_methods(const clang::CXXMethodDecl *cxxmdd, exprt &new_expr);
