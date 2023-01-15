@@ -41,7 +41,7 @@ class TagDecl;
 class FieldDecl;
 } // namespace clang
 
-std::string
+extern std::string
 getFullyQualifiedName(const clang::QualType &, const clang::ASTContext &);
 
 class clang_c_convertert
