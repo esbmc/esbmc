@@ -283,6 +283,9 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if(is_field_global_storage(field))
       continue;
 
+    // [C++ annotation]: set parent in component type
+    comp.type().set("#member_name", type.name());
+
     type.components().push_back(comp);
   }
 
