@@ -108,6 +108,20 @@ protected:
    * Get access from any clang Decl (field, method .etc)
    */
   bool get_access_from_decl(const clang::Decl *decl, std::string &access);
+
+  /*
+   * Add additional annotations for class/struct/union methods:
+   * 0: component
+   *    * type: code
+   *      * #member_name: tag-MyClasss
+   *      * return_type: constructor
+   *    * from_base: 1
+   *    * access: public
+   *    * name: MyMethodName
+   *    * #location:
+   */
+  bool
+  annotate_cpp_methods(const clang::CXXMethodDecl *cxxmdd, exprt &new_expr);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
