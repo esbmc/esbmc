@@ -394,44 +394,12 @@ bool clang_c_convertert::get_struct_union_class_fields(
       return true;
 
     // Check for alignment attributes
-    if(field->hasAttrs())
-    {
-      const auto &attrs = field->getAttrs();
-      for(const auto &attr : attrs)
-      {
-        if(attr->getKind() == clang::attr::Aligned)
-        {
-          const clang::AlignedAttr &aattr =
-            static_cast<const clang::AlignedAttr &>(*attr);
-
-          if(aattr.isAlignmentExpr())
-          {
-            // This is usually a constant
-            clang::Expr *alignExpr = aattr.getAlignmentExpr();
-            exprt alignment;
-            if(alignExpr && get_expr(*(aattr.getAlignmentExpr()), alignment))
-              return true;
-            comp.type().set("alignment", alignment);
-          }
-          else
-          {
-            // I was not able to find an example to test this, so abort for now
-            log_error("ESBMC currently does not support type alignments");
-            std::ostringstream oss;
-            llvm::raw_os_ostream ross(oss);
-            aattr.getAlignmentType()->getType()->dump(ross, *ASTContext);
-            ross.flush();
-            log_error("{}", oss.str());
-            return true;
-          }
-        }
-      }
-    }
+    if(check_alignment_attributes(field, comp))
+      return true;
 
     // Don't add fields that have global storage (e.g., static)
-    if(const clang::VarDecl *nd = llvm::dyn_cast<clang::VarDecl>(field))
-      if(nd->hasGlobalStorage())
-        continue;
+    if(is_field_global_storage(field))
+      continue;
 
     type.components().push_back(comp);
   }
@@ -3298,4 +3266,52 @@ clang_c_convertert::get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt)
   }
 
   return nullptr;
+}
+
+bool clang_c_convertert::check_alignment_attributes(
+  const clang::FieldDecl *field,
+  struct_typet::componentt &comp)
+{
+  if(field->hasAttrs())
+  {
+    const auto &attrs = field->getAttrs();
+    for(const auto &attr : attrs)
+    {
+      if(attr->getKind() == clang::attr::Aligned)
+      {
+        const clang::AlignedAttr &aattr =
+          static_cast<const clang::AlignedAttr &>(*attr);
+
+        if(aattr.isAlignmentExpr())
+        {
+          // This is usually a constant
+          clang::Expr *alignExpr = aattr.getAlignmentExpr();
+          exprt alignment;
+          if(alignExpr && get_expr(*(aattr.getAlignmentExpr()), alignment))
+            return true;
+          comp.type().set("alignment", alignment);
+        }
+        else
+        {
+          // I was not able to find an example to test this, so abort for now
+          log_error("ESBMC currently does not support type alignments");
+          std::ostringstream oss;
+          llvm::raw_os_ostream ross(oss);
+          aattr.getAlignmentType()->getType()->dump(ross, *ASTContext);
+          ross.flush();
+          log_error("{}", oss.str());
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+bool clang_c_convertert::is_field_global_storage(const clang::FieldDecl *field)
+{
+  if(const clang::VarDecl *nd = llvm::dyn_cast<clang::VarDecl>(field))
+    return (nd->hasGlobalStorage());
+
+  return false;
 }

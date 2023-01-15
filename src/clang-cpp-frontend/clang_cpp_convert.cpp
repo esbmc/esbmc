@@ -268,8 +268,23 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     }
   }
 
-  if(clang_c_convertert::get_struct_union_class_fields(rd, type))
-    return true;
+  // Parse the fields
+  for(auto const *field : rd.fields())
+  {
+    struct_typet::componentt comp;
+    if(get_decl(*field, comp))
+      return true;
+
+    // Check for alignment attributes
+    if(check_alignment_attributes(field, comp))
+      return true;
+
+    // Don't add fields that have global storage (e.g., static)
+    if(is_field_global_storage(field))
+      continue;
+
+    type.components().push_back(comp);
+  }
 
   return false;
 }
