@@ -362,8 +362,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
         return true;
     }
 
-    type.methods().push_back(comp);
-
     // This means that we probably just parsed nested class,
     // don't add it to the class
     if(comp.is_code() && to_code(comp).statement() == "skip")
@@ -375,6 +373,10 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     {
       // Add only if it isn't static
       if(!cxxmd->isStatic())
+      {
+        type.methods().push_back(comp);
+      }
+      else
       {
         log_error("static method is not supported in {}", __func__);
         abort();
@@ -870,8 +872,11 @@ bool clang_cpp_convertert::get_function_body(
         {
           // TODO-split: add base class initializer
           init->getInit()->dump();
-          //log_error("Base class initializer is not supported in {}", __func__);
-          //abort();
+          // Add additional annotation for `this` parameter
+          //initializer.set(
+          //  "#this_arg", ftype.arguments().at(0).get("#identifier"));
+          if(get_expr(*init->getInit(), initializer))
+            return true;
         }
 
         // Convert to code and insert side-effect in the operands list
@@ -1138,7 +1143,7 @@ bool clang_cpp_convertert::annotate_cpp_methods(
 {
   code_typet &component_type = to_code_type(new_expr.type());
 
-  // set ctor and dtor return type
+  // annotate ctor and dtor return type
   if(cxxmdd->getKind() == clang::Decl::CXXDestructor)
   {
     typet rtn_type("destructor");
@@ -1150,12 +1155,47 @@ bool clang_cpp_convertert::annotate_cpp_methods(
     component_type.return_type() = rtn_type;
   }
 
-  // set parent
-  std::string parent_class_id =
-    tag_prefix +
-    getFullyQualifiedName(
-      ASTContext->getTagDeclType(cxxmdd->getParent()), *ASTContext);
+  // annotate parent
+  std::string parent_class_name = getFullyQualifiedName(
+    ASTContext->getTagDeclType(cxxmdd->getParent()), *ASTContext);
+  std::string parent_class_id = tag_prefix + parent_class_name;
   component_type.set("#member_name", parent_class_id);
+
+  // annotate name
+  std::string method_id, method_name;
+  clang_c_convertert::get_decl_name(*cxxmdd, method_name, method_id);
+  new_expr.name(method_id);
+
+  // annotate access
+  std::string access;
+  if(get_access_from_decl(cxxmdd, access))
+    return true;
+  new_expr.set("access", access);
+
+  // annotate base name
+  new_expr.base_name(parent_class_name);
+
+  // annotate pretty name
+  new_expr.pretty_name(parent_class_name);
+
+  // annotate inline
+  new_expr.set("is_inlined", cxxmdd->isInlined());
+
+  // annotate location
+  locationt location_begin;
+  get_location_from_decl(*cxxmdd, location_begin);
+  new_expr.location() = location_begin;
+
+  // We still need to add a trivial ctor/dtor as a `component` in class symbol's type
+  // remove "statement: skip" otherwise it won't be added
+  // TODO-split: Any more elegant way to do it?
+  if(
+    cxxmdd->getKind() == clang::Decl::CXXDestructor ||
+    cxxmdd->getKind() == clang::Decl::CXXConstructor)
+  {
+    if(to_code(new_expr).statement() == "skip")
+      to_code(new_expr).remove("statement");
+  }
 
   return false;
 }
