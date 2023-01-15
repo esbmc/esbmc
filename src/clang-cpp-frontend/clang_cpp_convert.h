@@ -94,6 +94,20 @@ protected:
 
   void
   build_member_from_component(const clang::FunctionDecl &fd, exprt &component);
+
+  /*
+   * Add access in class symbol type's component:
+   *  0: component:
+   *    * access: public
+   */
+  bool annotate_class_field_access(
+    const clang::FieldDecl *field,
+    struct_typet::componentt &comp);
+
+  /*
+   * Get access from any clang Decl (field, method .etc)
+   */
+  bool get_access_from_decl(const clang::Decl *decl, std::string &access);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
