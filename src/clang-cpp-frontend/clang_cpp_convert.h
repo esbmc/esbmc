@@ -75,7 +75,7 @@ protected:
 
   bool get_struct_union_class_methods(
     const clang::RecordDecl &rd,
-    struct_union_typet &type) override;
+    struct_typet &type) override;
 
   template <typename TemplateDecl>
   bool get_template_decl(

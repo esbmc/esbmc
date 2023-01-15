@@ -303,6 +303,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if(context.find_symbol(id) != nullptr)
     return false;
 
+  // TODO: Fix me when we have a test case using C++ unioin.
+  //       A C++ union can have member functions but not virtual functions.
+  //       Just use struct_typet for C++?
   struct_union_typet t;
   if(rd.isUnion())
     t = union_typet();
@@ -375,7 +378,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  if(get_struct_union_class_methods(*rd_def, t))
+  if(get_struct_union_class_methods(*rd_def, to_struct_type(t)))
     return true;
 
   if(rd.isUnion())
@@ -415,7 +418,7 @@ bool clang_c_convertert::get_struct_union_class_fields(
 
 bool clang_c_convertert::get_struct_union_class_methods(
   const clang::RecordDecl &,
-  struct_union_typet &)
+  struct_typet &)
 {
   // We don't add methods to the struct in C
   return false;
@@ -558,7 +561,9 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return false;
 }
 
-bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
+bool clang_c_convertert::get_function(
+  const clang::FunctionDecl &fd,
+  exprt &new_expr)
 {
   // Don't convert if implicit, unless it's a constructor or destructor
   // A compiler-generated default ctor/dtor is considered implicit, but we have
@@ -631,6 +636,7 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
     type.make_ellipsis();
 
   added_symbol.type = type;
+  new_expr.type() = type;
 
   // We need: a type, a name, and an optional body
   if(fd.hasBody())
