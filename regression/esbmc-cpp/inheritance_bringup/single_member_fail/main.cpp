@@ -11,7 +11,6 @@ class Motorcycle: public Vehicle
 {
 public:
   Motorcycle() : Vehicle() {}
-  //Motorcycle() {}
 };
 
 int main()
