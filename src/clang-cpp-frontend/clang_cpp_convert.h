@@ -43,8 +43,10 @@ protected:
     const clang::CXXConstructExpr &constructor_call,
     exprt &new_expr);
 
-  bool
-  get_function_body(const clang::FunctionDecl &fd, exprt &new_expr) override;
+  bool get_function_body(
+    const clang::FunctionDecl &fd,
+    exprt &new_expr,
+    const code_typet &ftype) override;
 
   /**
    *  Get function params for C++
