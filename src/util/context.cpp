@@ -28,9 +28,6 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
     return true;
   }
 
-  if(symbol.id == "tag.Vehicle")
-    printf("@@ Add symbol in %s for: %s\n", __func__, symbol.id.c_str());
-
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.name, symbol.id));
 
   ordered_symbols.push_back(&result.first->second);
