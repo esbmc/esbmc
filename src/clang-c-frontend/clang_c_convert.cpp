@@ -641,7 +641,7 @@ bool clang_c_convertert::get_function(
   // We need: a type, a name, and an optional body
   if(fd.hasBody())
   {
-    if(get_function_body(fd, added_symbol.value))
+    if(get_function_body(fd, added_symbol.value, type))
       return true;
   }
 
@@ -653,7 +653,8 @@ bool clang_c_convertert::get_function(
 
 bool clang_c_convertert::get_function_body(
   const clang::FunctionDecl &fd,
-  exprt &new_expr)
+  exprt &new_expr,
+  const code_typet &)
 {
   assert(fd.hasBody());
 
