@@ -75,7 +75,7 @@ else()
                     cbmc cstd llvm floats floats-regression
                     k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith
                     k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
-                    incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors esbmc-cpp11/new-delete esbmc-cpp11/reference
+                    incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors esbmc-cpp11/new-delete esbmc-cpp11/reference esbmc-cpp/inheritance_bringup
                     ${REGRESSIONS_GOTO_CONTRACTOR} ${REGRESSIONS_JIMPLE} extensions)
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
