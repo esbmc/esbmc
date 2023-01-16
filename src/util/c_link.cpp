@@ -320,11 +320,11 @@ void c_linkt::extern_fixup(symbolt &s)
 {
   if(!s.is_extern)
   {
-    // Does the previous context have it?
+    // If the previous context had it
     auto prev = context.find_symbol(s.id);
     if(prev)
     {
-      // If current context is extern and previous wasnt?
+      // If current context is not extern and previous was
       if(!s.is_extern && prev->is_extern)
         prev->swap(s);
     }
