@@ -127,6 +127,21 @@ protected:
    */
   bool
   annotate_cpp_methods(const clang::CXXMethodDecl *cxxmdd, exprt &new_expr);
+
+  /*
+   * When getting a function call to ctor, we might call the base ctor from a derived class ctor
+   * Need to wrap derived class `this` in a typecast expr and convert to the base `this`, e.g.:
+   *    Base( (Base*) this)
+   *
+   * Arguments:
+   *  callee_decl: base ctor symbol
+   *  call: function call statement to the base ctor
+   *  initializer: this is an intermediate data structure containing the information of derived `this`
+   */
+  void gen_typecast_base_ctor_call(
+    const exprt &callee_decl,
+    side_effect_expr_function_callt &call,
+    exprt &initializer);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

@@ -764,31 +764,9 @@ bool clang_cpp_convertert::get_constructor_call(
     call.arguments().push_back(tmp_expr);
   }
 
-  // Add implicit `this` before doing actual args
-  // Given Motorcycle is a derived class from the base class Vehicle,
-  // here the `#this_arg` represents `this` as in Motorcycle's ctor.
-  // We need to wrap it in a typecast expr and convert to the Vehichle's `this`:
-  //  Vehicle((Vehicle*)this)
-  if(new_expr.get("#this_arg") != "")
-  {
-    // get base ctor this type
-    const code_typet &base_ctor_code_type = to_code_type(callee_decl.type());
-    const code_typet::argumentst &base_ctor_arguments =
-      base_ctor_code_type.arguments();
-    // just one argument representing `this` in base class ctor
-    assert(base_ctor_arguments.size() == 1);
-    const typet base_ctor_this_type = base_ctor_arguments.at(0).type();
-
-    // get derived class ctor implicit this
-    symbolt *s = context.find_symbol(new_expr.get("#this_arg"));
-    const symbolt &this_symbol = *s;
-    assert(s);
-    exprt implicit_this_symb = symbol_expr(this_symbol);
-
-    // generate the type casting expr and push it to callee's arguments
-    gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
-    call.arguments().push_back(implicit_this_symb);
-  }
+  // Calling base constructor from derived constructor
+  if(new_expr.base_ctor_derived())
+    gen_typecast_base_ctor_call(callee_decl, call, new_expr);
 
   // Do args
   for(const clang::Expr *arg : constructor_call.arguments())
@@ -901,8 +879,9 @@ bool clang_cpp_convertert::get_function_body(
           // TODO-split: add base class initializer
           init->getInit()->dump();
           // Add additional annotation for `this` parameter
-          initializer.set(
-            "#this_arg", ftype.arguments().at(0).get("#identifier"));
+          initializer.derived_this_arg(
+            ftype.arguments().at(0).get("#identifier"));
+          initializer.base_ctor_derived(true);
           if(get_expr(*init->getInit(), initializer))
             return true;
           printf("@@ done base initializer\n");
@@ -1227,4 +1206,32 @@ bool clang_cpp_convertert::annotate_cpp_methods(
   }
 
   return false;
+}
+
+void clang_cpp_convertert::gen_typecast_base_ctor_call(
+  const exprt &callee_decl,
+  side_effect_expr_function_callt &call,
+  exprt &initializer)
+{
+  // sanity checks
+  assert(initializer.derived_this_arg() != "");
+  assert(initializer.base_ctor_derived());
+
+  // get base ctor this type
+  const code_typet &base_ctor_code_type = to_code_type(callee_decl.type());
+  const code_typet::argumentst &base_ctor_arguments =
+    base_ctor_code_type.arguments();
+  // just one argument representing `this` in base class ctor
+  assert(base_ctor_arguments.size() == 1);
+  const typet base_ctor_this_type = base_ctor_arguments.at(0).type();
+
+  // get derived class ctor implicit this
+  symbolt *s = context.find_symbol(initializer.derived_this_arg());
+  const symbolt &this_symbol = *s;
+  assert(s);
+  exprt implicit_this_symb = symbol_expr(this_symbol);
+
+  // generate the type casting expr and push it to callee's arguments
+  gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
+  call.arguments().push_back(implicit_this_symb);
 }
