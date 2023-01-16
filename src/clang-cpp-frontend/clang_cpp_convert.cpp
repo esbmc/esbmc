@@ -221,10 +221,6 @@ bool clang_cpp_convertert::get_function(
   if(fd.isDependentContext())
     return false;
 
-  // Only convert non-trivial functions, e.g. non-trivial ctor/dtor, copy ctor, move ctor .etc
-  //if(fd.isTrivial())
-  //  return false;
-
   if(clang_c_convertert::get_function(fd, new_expr))
     return true;
 
@@ -333,8 +329,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     {
       // `base` type is clang::CXXBaseSpecifier
       base.getType().dump();
-      //log_error("inheritance is not supported in {}", __func__);
-      //abort();
     }
   }
 
@@ -372,9 +366,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     {
       // Add only if it isn't static
       if(!cxxmd->isStatic())
-      {
         type.methods().push_back(comp);
-      }
       else
       {
         log_error("static method is not supported in {}", __func__);
