@@ -357,8 +357,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     }
     else
     {
-      printf("@@ Printing decl:\n");
-      decl->dump();
       if(get_decl(*decl, comp))
         return true;
     }
@@ -884,7 +882,6 @@ bool clang_cpp_convertert::get_function_body(
           initializer.base_ctor_derived(true);
           if(get_expr(*init->getInit(), initializer))
             return true;
-          printf("@@ done base initializer\n");
         }
 
         // Convert to code and insert side-effect in the operands list
