@@ -1,4 +1,4 @@
 CORE
-a.c b.c
-
+a.c
+b.c
 ^VERIFICATION SUCCESSFUL$
