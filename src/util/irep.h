@@ -264,6 +264,16 @@ public:
     return get(a_pretty_name);
   }
 
+  inline const irep_idt &derived_this_arg() const
+  {
+    return get(a_derived_this_arg);
+  }
+
+  inline bool base_ctor_derived() const
+  {
+    return get_bool(a_base_ctor_derived);
+  }
+
   inline const irep_idt &property() const
   {
     return get(a_property);
@@ -940,6 +950,16 @@ public:
     set(a_pretty_name, val);
   }
 
+  inline void derived_this_arg(const irep_idt &val)
+  {
+    set(a_derived_this_arg, val);
+  }
+
+  inline void base_ctor_derived(bool val)
+  {
+    set(a_base_ctor_derived, val);
+  }
+
   inline void restricted(bool val)
   {
     set(a_restricted, val);
@@ -1232,6 +1252,8 @@ public:
   static const irep_idt a_end_location, a_guard, a_label, a_lhs, a_location;
   static const irep_idt a_object_type, a_cmt_size, a_cmt, a_type_id;
   static const irep_idt a_cmt_type;
+  // annotations for typecasting derived derived class `this` to base class type
+  static const irep_idt a_derived_this_arg, a_base_ctor_derived;
 
   static const irep_idt id_address_of, id_and, id_or, id_array, id_bool,
     id_code;
