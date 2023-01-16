@@ -1,4 +1,4 @@
 CORE
-a.c b.c
-
+b.c
+a.c
 ^VERIFICATION FAILED$
