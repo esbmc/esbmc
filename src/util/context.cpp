@@ -136,9 +136,7 @@ symbolt *contextt::move_symbol_to_context(symbolt &symbol)
         s->swap(symbol);
     }
     else if(s->is_extern && !symbol.is_extern)
-    {
       s->swap(symbol);
-    }
   }
   return s;
 }
