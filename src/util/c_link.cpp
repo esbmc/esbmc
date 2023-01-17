@@ -55,13 +55,13 @@ public:
 
   /**
    * @brief Merges extern symbols from old contexts
-   * 
+   *
    * Checks whether a non-extern new_context symbol
    * was an extern symbol in a previous context.
-   * 
+   *
    * If it was, then merge it.
-   * 
-   * @param s 
+   *
+   * @param s
    */
   void extern_fixup(symbolt &s);
 
@@ -334,7 +334,7 @@ void c_linkt::extern_fixup(symbolt &s)
 void c_linkt::typecheck()
 {
   new_context.Foreach_operand([this](symbolt &s) {
-    // Check for externs
+    // First, if the symbol is extern, then check whether it can be merged
     extern_fixup(s);
     // build module clash table
     if(s.file_local && known_modules.find(s.module) != known_modules.end())
