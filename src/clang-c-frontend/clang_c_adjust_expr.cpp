@@ -602,10 +602,6 @@ void clang_c_adjust::adjust_side_effect_function_call(
       new_symbol.type = f_op.type();
       new_symbol.mode = "C";
 
-      // Adjust type
-      to_code_type(new_symbol.type).make_ellipsis();
-      to_code_type(f_op.type()).make_ellipsis();
-
       symbolt *symbol_ptr;
       bool res = context.move(new_symbol, symbol_ptr);
       assert(!res);
