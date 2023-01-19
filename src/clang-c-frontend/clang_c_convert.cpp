@@ -632,10 +632,6 @@ bool clang_c_convertert::get_function(
   if(get_function_params(fd, type.arguments()))
     return true;
 
-  // Apparently, if the type has no arguments, we assume ellipsis
-  if(!type.arguments().size())
-    type.make_ellipsis();
-
   added_symbol.type = type;
   new_expr.type() = type;
 
@@ -963,8 +959,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       type.arguments().emplace_back(param_type);
     }
 
-    // Apparently, if the type has no arguments, we assume ellipsis
-    if(!type.arguments().size() || func.isVariadic())
+    if(func.isVariadic())
       type.make_ellipsis();
 
     new_type = type;
@@ -986,10 +981,6 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       return true;
 
     type.return_type() = return_type;
-
-    // Apparently, if the type has no arguments, we assume ellipsis
-    if(!type.arguments().size())
-      type.make_ellipsis();
 
     new_type = type;
     break;
