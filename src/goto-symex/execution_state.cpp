@@ -295,7 +295,7 @@ void execution_statet::symex_step(reachability_treet &art)
     goto_symext::symex_step(art);
   }
 
-  if(options.get_bool_option("symex-ssa-trace-as-c"))
+  if(options.get_bool_option("goto2c"))
   {
     c_instructiont c_instr(instruction);
     // This instruction is inside the loop. Hence, need to increment the loop depth
@@ -325,7 +325,7 @@ void execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
   pre_goto_guard = guardt();
 
-  if(options.get_bool_option("symex-ssa-trace-as-c"))
+  if(options.get_bool_option("goto2c"))
   {
     const goto_programt::instructiont &instruction = *cur_state->source.pc;
     c_instructiont c_instruction(instruction);

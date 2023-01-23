@@ -1702,6 +1702,28 @@ bool esbmc_parseoptionst::process_goto_program(
       if(cmdline.isset("goto-functions-only"))
         return true;
     }
+
+    // translate it?
+    if(cmdline.isset("goto2c"))
+    {
+      std::ostringstream oss;
+      goto_functions.convert_to_c(ns, oss);
+
+      const std::string &filename = options.get_option("output");
+      if(!filename.empty())
+      {
+        // Outputting all instructions to the output file
+        std::ofstream out(filename.c_str());
+        if(out)
+        {
+          out << oss.str();
+          out.close();
+        }
+      }
+      else
+        log_status("{}", oss.str());
+      return true;
+    }
   }
 
   catch(const char *e)

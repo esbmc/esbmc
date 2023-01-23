@@ -42,7 +42,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"ssa-trace", NULL, "print SSA during SMT encoding"},
     {"ssa-smt-trace", NULL, "print generated SMT during SMT encoding"},
     {"symex-ssa-trace", NULL, "print generated SSA during symbolic execution"},
-    {"symex-ssa-trace-as-c", NULL, "print instructions and generated SSA during symbolic execution as C code"},
+    {"goto2c", NULL, "translate the GOTO program to C"},
     {"show-goto-value-sets",
      NULL,
      "show value-set analysis for the goto functions"},
