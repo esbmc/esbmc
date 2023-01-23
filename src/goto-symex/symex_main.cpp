@@ -16,9 +16,6 @@
 #include <util/std_expr.h>
 #include <vector>
 
-#include <clang-c-frontend/expr2ccode.h>
-#include <goto-symex/execution_trace.h>
-
 bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
 {
   auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
