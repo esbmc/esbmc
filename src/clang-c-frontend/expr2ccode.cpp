@@ -26,7 +26,20 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <algorithm>
 #include <regex>
 
+#include <iostream>
+
 std::list<std::string> expr2ccodet::declared_types;
+
+std::string name_shorthand(std::string fullname)
+{
+  std::string shorthand = fullname;
+
+  std::string::size_type pos = shorthand.rfind("@");
+  if(pos != std::string::npos)
+    shorthand.erase(0, pos + 1);
+
+  return shorthand;
+}
 
 void expr2ccodet::remove_declared_type(std::string type)
 {
@@ -71,7 +84,6 @@ bool is_typedef_struct_union(std::string tag)
 
 std::string expr2ccode(const exprt &expr, const namespacet &ns, bool fullname)
 {
-  std::string code;
   expr2ccodet expr2ccode(ns, fullname);
   expr2ccode.get_shorthands(expr);
   return expr2ccode.convert(expr);
@@ -128,11 +140,32 @@ std::string expr2ccodet::convert_rec(
   else if(src.id() == "signedbv" || src.id() == "unsignedbv")
   {
     BigInt width = string2integer(src.width().as_string());
-    
+
+    // Sometimes there is no way of distinguishing between
+    // types based on their width. For example,
+    // "long" and "long long" are both 64 bits on
+    // 64-bit platforms. However, in many cases the type contains
+    // a non-empty "#cpp_type" field with a string
+    // representation of the corresponding type in the original
+    // program. Hence, if "#cpp_type" is not empty, we try to use
+    // this information first, and only resort to infering the type name
+    // from its width otherwise
+    std::string cpp_type = src.get("#cpp_type").as_string();
+    if(!cpp_type.empty() && width % 8 == 0)
+    {
+      std::replace(cpp_type.begin(), cpp_type.end(), '_', ' ');
+      size_t sign_pos = cpp_type.find(" ");
+      std::string sign_str = cpp_type.substr(0, sign_pos + 1);
+      if(sign_str == "signed ")
+        sign_str = "";
+      std::string type_name = cpp_type.substr(sign_pos + 1, cpp_type.length());
+      return q + sign_str + type_name + d;
+    }
+
     // We cannot have a signed type with a 1 bit width.
     // So setting "sign_str" to "unsigned" to allow _ExtInt(1)
     bool is_signed = src.id() == "signedbv";
-    
+
     // Also we do not add the "signed" keyword for signed types.
     // Only unsigned is being added.
     std::string sign_str = (is_signed && width > 1) ? "" : "unsigned ";
@@ -143,14 +176,14 @@ std::string expr2ccodet::convert_rec(
     if(width == config.ansi_c.long_int_width)
       return q + sign_str + "long int" + d;
 
+    if(width == config.ansi_c.long_long_int_width)
+      return q + sign_str + "long long int" + d;
+
     if(width == config.ansi_c.char_width)
       return q + sign_str + "char" + d;
 
     if(width == config.ansi_c.short_int_width)
       return q + sign_str + "short int" + d;
-
-    if(width == config.ansi_c.long_long_int_width)
-      return q + sign_str + "long long int" + d;
 
     return q + sign_str + "_ExtInt(" + std::to_string(width.to_uint64()) + ")" +
            d;
@@ -174,22 +207,21 @@ std::string expr2ccodet::convert_rec(
 
     const irep_idt &tag = struct_type.tag().as_string();
 
-    // Checking if this struct type is anonymous. 
-    // If the struct is anonymous we need to redeclare its 
+    // Checking if this struct type is anonymous.
+    // If the struct is anonymous we need to redeclare its
     // components every time we declare a new variable
     bool is_anonymous = is_anonymous_tag(id2string(tag));
 
     // Checking if the type has been already declared globally.
     // If true, then we only need to output the type's tag.
     if(
-      std::find(declared_types.begin(), 
-                declared_types.end(), 
-                id2string(tag)) !=  declared_types.end())
+      std::find(declared_types.begin(), declared_types.end(), id2string(tag)) !=
+      declared_types.end())
       return dest += " " + id2string(tag) + " " + declarator;
 
-    // Adding this type to the list of declared compound types 
+    // Adding this type to the list of declared compound types
     // before continuing onto declaring the individual components.
-    // Anonymous structs/unions are not added to the list of 
+    // Anonymous structs/unions are not added to the list of
     // declared compound types.
     if(!is_anonymous)
       declared_types.push_back(id2string(tag));
@@ -227,23 +259,22 @@ std::string expr2ccodet::convert_rec(
     std::string dest = q;
 
     const irep_idt &tag = union_type.tag().as_string();
-    
+
     // Checking if the union type is anonymous. If the union is anonymous
-    // we need to redeclare its components every time 
+    // we need to redeclare its components every time
     // we declare a new variable
     bool is_anonymous = is_anonymous_tag(id2string(tag));
 
     // Checking if the type has been already declared.
     // If true, then we only need to output the type's tag
     if(
-      std::find(declared_types.begin(), 
-                declared_types.end(), 
-                id2string(tag)) !=  declared_types.end())
+      std::find(declared_types.begin(), declared_types.end(), id2string(tag)) !=
+      declared_types.end())
       return dest += " " + id2string(tag) + " " + declarator;
 
-    // Adding this type to the list of declared compound types 
+    // Adding this type to the list of declared compound types
     // before continuing onto declaring the individual components.
-    // Anonymous structs/unions are not added to the list of 
+    // Anonymous structs/unions are not added to the list of
     // declared compound types.
     if(!is_anonymous)
       declared_types.push_back(id2string(tag));
@@ -294,32 +325,39 @@ std::string expr2ccodet::convert_rec(
   }
   else if(src.id() == "pointer")
   {
-    // Checking if it's a function pointer
+    // This is a function pointer declaration.
     if(src.subtype().is_code())
     {
-      const typet &return_type = (typet &)src.subtype().return_type();
+      // Can cast "src.subtype()" to "code_typet"
+      const code_typet type = to_code_type(src.subtype());
 
-      std::string dest = q + convert(return_type);
+      // Converting the return type and the function name.
+      // "d" holds the name of the function
+      // "q" holds the type qualifier
+      // "rst_q" holds the "__restrict" keyword if used
+      // (unused so far but should be used)
+      std::string dest = q + convert(type.return_type()) + " (*" + d + ")";
 
-      // function "name"
-      dest += " (*" + d + ")" + rst_q;
-
-      // arguments
       dest += "(";
-      const irept &arguments = src.subtype().arguments();
-
-      forall_irep(it, arguments.get_sub())
+      // Converting the function parameters just as
+      // regular variable declarations (perhaps we should implement
+      // a separate method in the future for converting the
+      // function parameters)
+      for(unsigned int i = 0; i < type.arguments().size(); i++)
       {
-        const typet &argument_type = ((exprt &)*it).type();
+        code_typet::argumentt arg = type.arguments()[i];
+        std::string arg_name = name_shorthand(arg.get_identifier().as_string());
 
-        if(it != arguments.get_sub().begin())
+        dest += convert_rec(arg.type(), c_qualifierst(), arg_name);
+
+        if(i != type.arguments().size() - 1)
           dest += ", ";
-
-        dest += convert(argument_type);
       }
+      // Before finishing, check if it is a variadic function
+      if(type.has_ellipsis())
+        dest += ", ...";
 
       dest += ")";
-      
       return dest;
     }
 
@@ -334,7 +372,7 @@ std::string expr2ccodet::convert_rec(
       //return convert_rec(subtype, new_qualifiers, "(*" + d + ")");
       return convert_rec(subtype, new_qualifiers, " * " + rst_q + d);
 
-    // This is the old way of doing things. 
+    // This is the old way of doing things.
     // Come back to it and have a look at it!!!
     std::string tmp = convert(src.subtype());
     return q + " " + tmp + " * " + rst_q + d;
@@ -368,23 +406,33 @@ std::string expr2ccodet::convert_rec(
   }
   else if(src.is_code())
   {
-    // Converting a function declaration
-    const typet &return_type = (typet &)src.return_type();
+    // This is a function declaration.
+    // Can cast "src" to "code_typet"
+    const code_typet type = to_code_type(src);
 
-    std::string dest = convert(return_type) + " ";
+    // Converting the return type and the function name.
+    // "d" holds the name of the function
+    // "q" holds the type qualifier
+    std::string dest = q + convert(type.return_type()) + d;
 
     dest += "(";
-    const irept &arguments = src.arguments();
-
-    forall_irep(it, arguments.get_sub())
+    // Converting the function parameters just as
+    // regular variable declarations (perhaps we should implement
+    // a separate method in the future for converting the
+    // function parameters)
+    for(unsigned int i = 0; i < type.arguments().size(); i++)
     {
-      const typet &argument_type = ((exprt &)*it).type();
+      code_typet::argumentt arg = type.arguments()[i];
+      std::string arg_name = name_shorthand(arg.get_identifier().as_string());
 
-      if(it != arguments.get_sub().begin())
+      dest += convert_rec(arg.type(), c_qualifierst(), arg_name);
+
+      if(i != type.arguments().size() - 1)
         dest += ", ";
-
-      dest += convert(argument_type);
     }
+    // Before finishing, check if it is a variadic function
+    if(type.has_ellipsis() && type.arguments().size() > 0)
+      dest += ", ...";
 
     dest += ")";
     return dest;
@@ -959,9 +1007,10 @@ expr2ccodet::convert_typecast(const exprt &src, unsigned &precedence)
 
   std::string tmp = convert(src.op0(), precedence);
 
+  // better fix precedence
   if(
     src.op0().id() == "member" || src.op0().id() == "constant" ||
-    src.op0().id() == "symbol") // better fix precedence
+    src.op0().id() == "symbol" || src.op0().id() == "array_of")
     dest += tmp;
   else
     dest += '(' + tmp + ')';
@@ -997,10 +1046,11 @@ std::string expr2ccodet::convert_code_decl(const codet &src, unsigned indent)
 
   dest += convert_rec(src.op0().type(), c_qualifierst(), declarator);
 
+  // Checking if there is an initializer
   if(src.operands().size() == 2)
     dest += "=" + convert(src.op1());
 
-  dest += ';';
+  //dest += ';';
 
   return dest;
 }
@@ -1316,9 +1366,9 @@ std::string expr2ccodet::convert_nondet(const exprt &src, unsigned &precedence)
   else if(src.type().id() == "signedbv" || src.type().id() == "unsignedbv")
   {
     BigInt width = string2integer(src.type().width().as_string());
- 
+
     if(src.type().id() == "unsignedbv")
-      type_str += "u"; 
+      type_str += "u";
 
     if(width == config.ansi_c.int_width)
       type_str += "int";
