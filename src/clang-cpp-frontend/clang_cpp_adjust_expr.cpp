@@ -1,6 +1,7 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/c_sizeof.h>
 #include <util/destructor.h>
+#include <util/expr_util.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)
@@ -56,4 +57,34 @@ void clang_cpp_adjust::adjust_new(exprt &expr)
   size_of.set("#c_sizeof_type", expr.type().subtype());
 
   expr.set("sizeof", size_of);
+}
+
+void clang_cpp_adjust::adjust_member(member_exprt &expr)
+{
+  clang_c_adjust::adjust_member(expr);
+
+  // we got a class/struct member function call, e.g.:
+  //  CLASS.setX();
+  if(expr.struct_op().is_symbol() && expr.type().is_code())
+    adjust_struct_member_code(expr);
+}
+
+void clang_cpp_adjust::adjust_struct_member_code(member_exprt &expr)
+{
+  // member function call:
+  //  Replace CLASS.setX() with setX(), where
+  //  ClASS.setX() is represented by:
+  //    member:
+  //      * type: ...
+  //      * operands: ...
+  //      * component_name: <setX_clang_ID>
+  //  and setX() is represented by the symbol expr:
+  //    symbol:
+  //      * type: ...
+  //      * id: <setX_clang_ID>
+  const symbolt *method_symb =
+    namespacet(context).lookup(expr.component_name());
+  assert(method_symb);
+  exprt method_call = symbol_expr(*method_symb);
+  expr.swap(method_call);
 }
