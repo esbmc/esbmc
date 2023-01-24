@@ -650,6 +650,19 @@ void c_typecastt::implicit_typecast_followed(
 
       return; // ok
     }
+
+    if(src_type.id() == "struct")
+    {
+      // We got a case to convert derived class object to base base class pointer, e.g.:
+      //  Convert from `derived_obj` to `(Base*)&derived_obj`
+      // (probably) as part of function call argument adjustment flow
+      // when calling a base method from a derived object
+      address_of_exprt base_ptr;
+      base_ptr.type() = dest_type; // base type
+      base_ptr.object() = expr;    // derived object
+      base_ptr.location() = expr.location();
+      expr.swap(base_ptr);
+    }
   }
   else if(dest_type.id() == "array")
   {
