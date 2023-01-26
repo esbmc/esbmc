@@ -303,7 +303,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if(context.find_symbol(id) != nullptr)
     return false;
 
-  // TODO: Fix me when we have a test case using C++ unioin.
+  // TODO: Fix me when we have a test case using C++ union.
   //       A C++ union can have member functions but not virtual functions.
   //       Just use struct_typet for C++?
   struct_union_typet t;
@@ -312,12 +312,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   else
     t = struct_typet();
   t.tag(name);
-
-  if(rd.isClass())
-  {
-    t.set("#class", true);
-    t.set("name", id);
-  }
 
   locationt location_begin;
   get_location_from_decl(rd, location_begin);
