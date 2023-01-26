@@ -324,12 +324,13 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       cxxrd->getNumBases(),
       cxxrd->getNumVBases());
 
+#if 0
     // TODO-split: add methods from base class
     for(auto base : cxxrd->bases())
     {
       // `base` type is clang::CXXBaseSpecifier
-      base.getType().dump();
     }
+#endif
   }
 
   // Iterate over the declarations stored in this context
@@ -866,8 +867,6 @@ bool clang_cpp_convertert::get_function_body(
         }
         else
         {
-          // TODO-split: add base class initializer
-          init->getInit()->dump();
           // Add additional annotation for `this` parameter
           initializer.derived_this_arg(
             ftype.arguments().at(0).get("#identifier"));
@@ -1170,10 +1169,10 @@ bool clang_cpp_convertert::annotate_cpp_methods(
   new_expr.set("access", access);
 
   // annotate base name
-  new_expr.base_name(parent_class_name);
+  new_expr.base_name(method_id);
 
   // annotate pretty name
-  new_expr.pretty_name(parent_class_name);
+  new_expr.pretty_name(method_name);
 
   // annotate inline
   new_expr.set("is_inlined", cxxmdd->isInlined());
