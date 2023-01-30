@@ -1,3 +1,6 @@
+/*
+ * Multiple inheritance: methods call
+ */
 #include <cassert>
 
 // Base class Shape
