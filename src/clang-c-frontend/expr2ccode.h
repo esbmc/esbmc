@@ -65,6 +65,7 @@ protected:
   std::string convert_code_printf(const codet &src, unsigned indent) override;
   std::string convert_code_free(const codet &src, unsigned indent) override;
   std::string convert_malloc(const exprt &src, unsigned &precedence) override;
+  std::string convert_realloc(const exprt &src, unsigned &precedence) override;
   std::string convert_alloca(const exprt &src, unsigned &precedence) override;
   std::string convert_symbol(const exprt &src, unsigned &precedence) override;
 
@@ -82,6 +83,7 @@ protected:
   std::string convert_ieee_mul(const exprt &src, unsigned &precedence);
   std::string convert_ieee_add(const exprt &src, unsigned &precedence);
   std::string convert_ieee_sub(const exprt &src, unsigned &precedence);
+  std::string convert_ieee_sqrt(const exprt &src, unsigned &precedence);
 
   std::string convert_nondet(const exprt &src, unsigned &precedence) override;
 
