@@ -810,6 +810,9 @@ std::string expr2ccodet::convert(const exprt &src, unsigned &precedence)
   else if(src.id() == "ieee_div")
     return convert_ieee_div(src, precedence = 15);
 
+  else if(src.id() == "ieee_sqrt")
+    return convert_ieee_sqrt(src, precedence = 15);
+
   else if(src.id() == "width")
     return convert_function(src, "width", precedence = 15);
 
@@ -1336,6 +1339,25 @@ std::string expr2ccodet::convert_malloc(const exprt &src, unsigned &precedence)
   return dest;
 }
 
+std::string expr2ccodet::convert_realloc(const exprt &src, unsigned &precedence)
+{
+  if(src.operands().size() != 1)
+    return convert_norep(src, precedence);
+
+  unsigned p0, p1;
+  std::string op0 = convert(src.op0(), p0);
+  std::string size = convert((const exprt &)src.cmt_size(), p1);
+
+  std::string dest = "realloc";
+  dest += '(';
+  dest += op0;
+  dest += ", ";
+  dest += size;
+  dest += ')';
+
+  return dest;
+}
+
 std::string expr2ccodet::convert_alloca(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 1)
@@ -1361,7 +1383,7 @@ std::string expr2ccodet::convert_nondet(const exprt &src, unsigned &precedence)
 
   if(src.type().is_bool())
   {
-    return type_str = "bool";
+    type_str += "bool";
   }
   else if(src.type().id() == "signedbv" || src.type().id() == "unsignedbv")
   {
@@ -1469,4 +1491,13 @@ expr2ccodet::convert_ieee_div(const exprt &src, unsigned &precedence)
     return convert_norep(src, precedence);
 
   return "(" + convert(src.op0()) + "/" + convert(src.op1()) + ")";
+}
+
+std::string
+expr2ccodet::convert_ieee_sqrt(const exprt &src, unsigned &precedence)
+{
+  if(src.operands().size() != 1)
+    return convert_norep(src, precedence);
+
+  return "sqrt(" + convert(src.op0()) + ")";
 }
