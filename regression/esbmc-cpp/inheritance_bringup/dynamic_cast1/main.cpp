@@ -38,7 +38,7 @@ public:
 };
 
 int main () {
-	CPolygon* polygons[4];
+	CPolygon* polygons[2];
 
 	polygons[0] = new CTriangle(20,25);  //CRectangle(20,30);
 	polygons[1] = new CRectangle(20,30); //new CTriangle(20,25);
@@ -54,6 +54,9 @@ int main () {
 			assert(trin->area() == 50); // PASS
 		}
 	}
+
+	for(int i = 0; i < 2; i++)
+    delete polygons[i];
 
   return 0;
 }
