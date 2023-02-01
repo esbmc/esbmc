@@ -69,10 +69,10 @@ void clang_cpp_adjust::adjust_member(member_exprt &expr)
   if(
     (expr.struct_op().is_symbol() && expr.type().is_code()) ||
     (expr.struct_op().is_dereference() && expr.type().is_code()))
-    adjust_struct_method_access(expr);
+    adjust_struct_method_call(expr);
 }
 
-void clang_cpp_adjust::adjust_struct_method_access(member_exprt &expr)
+void clang_cpp_adjust::adjust_struct_method_call(member_exprt &expr)
 {
   /*
    * member function call:
