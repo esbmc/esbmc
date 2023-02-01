@@ -6,6 +6,13 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
+/**
+ * clang C adjuster class for:
+ *  - symbol adjustment, dealing with ESBMC-IR `symbolt`
+ *  - type adjustment, dealing with ESBMC-IR `typet` or other IRs derived from typet
+ *  - expression adjustment, dealing with ESBMC-IR `exprt` or other IRs derived from exprt
+ *  - code adjustment, dealing with ESBMC-IR `codet` or other IRs derived from codet
+ */
 class clang_c_adjust
 {
 public:
@@ -18,11 +25,22 @@ protected:
   contextt &context;
   namespacet ns;
 
+  /**
+   * methods for symbol adjustment
+   */
   void adjust_symbol(symbolt &symbol);
+  void adjust_argc_argv(const symbolt &main_symbol);
+
+  /**
+   * methods for type (typet) adjustment
+   */
   void adjust_type(typet &type);
 
+  /**
+   * methods for expression (exprt) adjustment
+   * and other IRs derived from exprt
+   */
   void adjust_expr(exprt &expr);
-
   void adjust_side_effect_assignment(exprt &expr);
   void adjust_side_effect_function_call(side_effect_expr_function_callt &expr);
   void adjust_side_effect_statement_expression(side_effect_exprt &expr);
@@ -41,13 +59,14 @@ protected:
   void adjust_symbol(exprt &expr);
   void adjust_comma(exprt &expr);
   void adjust_builtin_va_arg(exprt &expr);
-  /**
-   * For class instantiation in C++, we need to adjust the side-effect of constructor
-   */
-  virtual void adjust_decl_block(codet &code);
-
   void adjust_function_call_arguments(side_effect_expr_function_callt &expr);
+  void do_special_functions(side_effect_expr_function_callt &expr);
+  void adjust_operands(exprt &expr);
 
+  /**
+   * methods for code (codet) adjustment
+   * and other IRs derived from codet
+   */
   void adjust_code(codet &code);
   virtual void adjust_ifthenelse(codet &code);
   virtual void adjust_while(codet &code);
@@ -55,12 +74,8 @@ protected:
   virtual void adjust_switch(codet &code);
   void adjust_assign(codet &code);
   void adjust_decl(codet &code);
-
-  void adjust_operands(exprt &expr);
-
-  void adjust_argc_argv(const symbolt &main_symbol);
-
-  void do_special_functions(side_effect_expr_function_callt &expr);
+  // For class instantiation in C++, we need to adjust the side-effect of constructor
+  virtual void adjust_decl_block(codet &code);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */
