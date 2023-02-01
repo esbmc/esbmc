@@ -63,25 +63,36 @@ void clang_cpp_adjust::adjust_member(member_exprt &expr)
 {
   clang_c_adjust::adjust_member(expr);
 
-  // we got a class/struct member function call, e.g.:
-  //  CLASS.setX();
-  if(expr.struct_op().is_symbol() && expr.type().is_code())
-    adjust_struct_member_code(expr);
+  // we got a class/struct member function call via:
+  // dot operator, e.g. OBJECT.setX();
+  // or arrow operator, e.g.OBJECT->setX();
+  if((expr.struct_op().is_symbol() && expr.type().is_code()) ||
+     (expr.struct_op().is_dereference() && expr.type().is_code()))
+    adjust_struct_method_access(expr);
 }
 
-void clang_cpp_adjust::adjust_struct_member_code(member_exprt &expr)
+void clang_cpp_adjust::adjust_struct_method_access(member_exprt &expr)
 {
-  // member function call:
-  //  Replace CLASS.setX() with setX(), where
-  //  ClASS.setX() is represented by:
-  //    member:
-  //      * type: ...
-  //      * operands: ...
-  //      * component_name: <setX_clang_ID>
-  //  and setX() is represented by the symbol expr:
-  //    symbol:
-  //      * type: ...
-  //      * id: <setX_clang_ID>
+  /*
+   * member function call:
+   * Replace OBJECT.setX() OR OBJECT->setX() with setX(), where
+   * OBJECT.setX() is represented by:
+   *    member:
+   *      * type: ...
+   *      * operands:
+   *      * symbol: <object_symbol>
+   *      * component_name: <setX_clang_ID>
+   *  OBJECT->setX() is represented by:
+   *    member:
+   *      * type: ...
+   *      * operands:
+   *        * dereference: <object_ptr>
+   *      * component_name: <setX_clang_ID>
+   *  and setX() is represented by the symbol expr:
+   *    symbol:
+   *      * type: ...
+   *      * id: <setX_clang_ID>
+   */
   const symbolt *method_symb =
     namespacet(context).lookup(expr.component_name());
   assert(method_symb);
