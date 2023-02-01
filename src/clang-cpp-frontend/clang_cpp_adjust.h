@@ -21,7 +21,7 @@ public:
 
   void adjust_new(exprt &expr);
 
-  void adjust_struct_member_code(member_exprt &expr);
+  void adjust_struct_method_access(member_exprt &expr);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
