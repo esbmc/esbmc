@@ -1,3 +1,6 @@
+/*
+ * Multi-inheritance diamond problem
+ */
 #include <cassert>
 
 class A
