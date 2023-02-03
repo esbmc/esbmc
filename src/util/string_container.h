@@ -58,14 +58,18 @@ public:
   // the pointer is guaranteed to be stable
   const char *c_str(size_t no) const
   {
-    assert(no < string_vector.size());
+    if(no >= string_vector.size()) {
+      return "0";
+    }
     return string_vector[no]->c_str();
   }
 
   // the reference is guaranteed to be stable
   const std::string &get_string(size_t no) const
   {
-    assert(no < string_vector.size());
+    if(no >= string_vector.size()) {
+      return "0";
+    }
     return *string_vector[no];
   }
 

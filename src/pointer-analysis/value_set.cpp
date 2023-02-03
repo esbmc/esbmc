@@ -1027,7 +1027,7 @@ void value_sett::assign(
         // ignore methods
         if(is_code_type(subtype))
           continue;
-
+        log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
         member2tc lhs_member(subtype, lhs, name);
 
         expr2tc rhs_member;
@@ -1478,6 +1478,7 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   // give up
   unsigned no = data->get_component_number(component_name);
   const type2tc &subtype = members[no];
+  log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
   member2tc memb(subtype, src, component_name);
   return memb;
 }

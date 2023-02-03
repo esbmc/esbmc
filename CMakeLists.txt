@@ -111,6 +111,8 @@ if(ENABLE_GOTO_CONTRACTOR)
   add_compile_options(-DENABLE_GOTO_CONTRACTOR)
 endif()
 
+string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
 add_subdirectory(src)
 
 include(Irep2Optimization)

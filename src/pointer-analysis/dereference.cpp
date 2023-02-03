@@ -1227,6 +1227,7 @@ void dereferencet::construct_from_const_struct_offset(
       }
 
       // This is a valid access to this field. Extract it, recurse.
+      log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
       value = member2tc(it, value, struct_type.member_names[i]);
       // The offset is 0 here. So does not matter bytes or bits
       build_reference_rec(value, gen_ulong(0), type, guard, mode);
@@ -1238,6 +1239,7 @@ void dereferencet::construct_from_const_struct_offset(
     {
       // This access is in the bounds of this member, but isn't at the start.
       // XXX that might be an alignment error.
+      log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
       expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
       constant_int2tc new_offs(pointer_type2(), int_offset - m_offs);
 
@@ -1315,6 +1317,7 @@ void dereferencet::construct_from_dyn_struct_offset(
     expr2tc lower_bound = greaterthanequal2tc(bits_offset, field_offset);
     expr2tc upper_bound = lessthan2tc(bits_offset, field_top);
     expr2tc field_guard = and2tc(lower_bound, upper_bound);
+    log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
     expr2tc field = member2tc(it, value, struct_type.member_names[i]);
     expr2tc new_offset = sub2tc(offset->type, offset, field_offset);
     simplify(new_offset);
@@ -1560,7 +1563,12 @@ void dereferencet::construct_struct_ref_from_const_offset(
         // menace. Recurse to continue our checks.
         BigInt new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs.to_uint64());
+<<<<<<< Updated upstream
         value = member2tc(it, value, data->member_names[i]);
+=======
+        log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
+        value = member2tc(it, value, struct_type.member_names[i]);
+>>>>>>> Stashed changes
 
         construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
         return;
@@ -1713,6 +1721,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       BigInt size = type_byte_size_bits(it);
       expr2tc memb_offs_expr = gen_ulong(memb_offs.to_uint64());
       expr2tc limit_expr = gen_ulong(memb_offs.to_uint64() + size.to_uint64());
+      log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
       expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
 
       // Compute a guard and update the offset for an access to this field.

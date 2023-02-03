@@ -96,6 +96,7 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
 
     auto extract = [&](size_t i) {
       /* The sub-expression should be flattened as well */
+      log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
       return flatten_to_bitvector(member2tc(
         structtype.members[sz - i - 1],
         new_expr,

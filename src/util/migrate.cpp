@@ -546,6 +546,179 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     type, thename, target_level, level1_num, level2_num, thread_num, node_num));
 }
 
+<<<<<<< Updated upstream
+=======
+// Functions to flatten union literals to not contain anything of union type.
+// Everything should become a byte array, as we slowly purge concrete unions
+static expr2tc flatten_union(const exprt &expr);
+
+static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
+{
+  // Migrate to irep2 for sanity. We can't have recursive unions.
+  expr2tc new_expr;
+  migrate_expr(expr, new_expr);
+
+  // Awkwardly, this array literal might not be completely fixed-value, if
+  // encoded in the middle of a function body or something that refers to other
+  // variables.
+  if(is_array_type(new_expr))
+  {
+    // Assume only fixed-size arrays (because you can't have variable size
+    // members of unions).
+    const array_type2t &arraytype = to_array_type(new_expr->type);
+    assert(
+      !arraytype.size_is_infinite && !is_nil_expr(arraytype.array_size) &&
+      is_constant_int2t(arraytype.array_size) &&
+      "Can't flatten array in union literal with unbounded size");
+
+    // Iterate over each field and flatten to bytes
+    const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
+    for(unsigned int i = 0; i < intref.value.to_uint64(); i++)
+    {
+      index2tc idx(arraytype.subtype, new_expr, gen_ulong(i));
+      flatten_to_bytes(migrate_expr_back(idx), bytes);
+    }
+  }
+  else if(is_struct_type(new_expr))
+  {
+    // Iterate over each field.
+    const struct_type2t &structtype = to_struct_type(new_expr->type);
+    BigInt member_offset_bits = 0;
+    bool been_inside_bits_region = false;
+    BigInt bitfields_first_byte = 0;
+    for(unsigned long i = 0; i < structtype.members.size(); i++)
+    {
+      BigInt member_size_bits = type_byte_size_bits(structtype.members[i]);
+      // If this member is a bitfield, extract everything as it is until
+      // the next member aligned to a byte as all such members can only
+      // be of scalar type
+      if(member_size_bits % 8 != 0 || member_offset_bits % 8 != 0)
+      {
+        // This is the first bit-field within the region.
+        // So we update its first byte
+        if(!been_inside_bits_region)
+        {
+          bitfields_first_byte = member_offset_bits / 8;
+          been_inside_bits_region = true;
+        }
+      }
+      else
+      {
+        // This means that we just came out of the region comprised by
+        // bit-fields and we need to extract this region as it is
+        // before we try extract current member
+        if(been_inside_bits_region)
+        {
+          bool is_big_endian =
+            config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+          for(unsigned long j = bitfields_first_byte.to_uint64();
+              j < (member_offset_bits / 8).to_uint64();
+              j++)
+          {
+            byte_extract2tc struct_byte(
+              get_uint8_type(), new_expr, gen_ulong(j), is_big_endian);
+            bytes.push_back(struct_byte);
+          }
+          been_inside_bits_region = false;
+        }
+        // Now we can flatten to bytes this member as most likely it is not a bit-field.
+        // And even if it is a bit-field it is aligned to a byte and its
+        // size
+        log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
+        member2tc memb(
+          structtype.members[i], new_expr, structtype.member_names[i]);
+        flatten_to_bytes(migrate_expr_back(memb), bytes);
+      }
+      member_offset_bits += member_size_bits;
+    }
+    // This means that the struct ended on a bitfield.
+    // Hence, we need to do some final extractions.
+    if(been_inside_bits_region)
+    {
+      bool is_big_endian =
+        config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+      for(unsigned long j = bitfields_first_byte.to_uint64();
+          j < (member_offset_bits / 8).to_uint64();
+          j++)
+      {
+        byte_extract2tc struct_byte(
+          get_uint8_type(), new_expr, gen_ulong(j), is_big_endian);
+        bytes.push_back(struct_byte);
+      }
+    }
+  }
+  else if(is_union_type(new_expr))
+  {
+    // This is an expression that evaluates to a union -- probably a symbol
+    // name. It can't be a union literal, because that would have been
+    // recursively flattened. In this circumstance we are *not* required to
+    // actually perform any flattening, because something else in the union
+    // transformation should have transformed it to a byte array. Simply take
+    // the address (it has to have storage), cast to byte array, and index.
+    BigInt size = type_byte_size(new_expr->type);
+    address_of2tc addrof(new_expr->type, new_expr);
+    type2tc byteptr(new pointer_type2t(get_uint8_type()));
+    typecast2tc cast(byteptr, addrof);
+
+    // Produce N bytes
+    for(unsigned int i = 0; i < size.to_uint64(); i++)
+    {
+      index2tc idx(get_uint8_type(), cast, gen_ulong(i));
+      flatten_to_bytes(migrate_expr_back(idx), bytes);
+    }
+  }
+  else if(is_number_type(new_expr) || is_pointer_type(new_expr))
+  {
+    BigInt size = type_byte_size(new_expr->type);
+
+    bool is_big_endian =
+      config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+    for(unsigned int i = 0; i < size.to_uint64(); i++)
+    {
+      byte_extract2tc ext(
+        get_uint8_type(), new_expr, gen_ulong(i), is_big_endian);
+      bytes.push_back(ext);
+    }
+  }
+  else
+  {
+    assert(
+      0 && fmt::format(
+             "Unrecognized type {}  when flattening union literal",
+             get_type_id(*new_expr->type))
+             .c_str());
+  }
+}
+
+static expr2tc flatten_union(const exprt &expr)
+{
+  type2tc type;
+  type = migrate_type(expr.type());
+  BigInt full_size = type_byte_size(type);
+
+  // Union literals should have zero/one field.
+  assert(
+    expr.operands().size() < 2 && "Union literal with more than one field");
+
+  // Cannot have unbounded size; flatten to an array of bytes.
+  std::vector<expr2tc> byte_array;
+
+  if(expr.operands().size() == 1)
+    flatten_to_bytes(expr.op0(), byte_array);
+
+  // Potentially extend this array further if this literal is smaller than
+  // the overall size of the union.
+  expr2tc abyte = gen_zero(get_uint8_type());
+  while(byte_array.size() < full_size.to_uint64())
+    byte_array.push_back(abyte);
+
+  expr2tc size = gen_ulong(byte_array.size());
+  type2tc arraytype(new array_type2t(get_uint8_type(), size, false));
+  constant_array2tc arr(arraytype, byte_array);
+  return arr;
+}
+
+>>>>>>> Stashed changes
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   type2tc type;
@@ -1361,7 +1534,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     expr2tc sourcedata;
     migrate_expr(expr.op0(), sourcedata);
-
+    log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
     member2t *m = new member2t(type, sourcedata, expr.component_name());
     new_expr_ref = expr2tc(m);
   }

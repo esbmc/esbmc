@@ -132,12 +132,19 @@ void symex_target_equationt::renumber(
 
 void symex_target_equationt::convert(smt_convt &smt_conv)
 {
+  log_debug("Building equation {}", __FUNCTION__);
   smt_convt::ast_vec assertions;
   smt_astt assumpt_ast = smt_conv.convert_ast(gen_true_expr());
 
+  int counter = 0;
   for(auto &SSA_step : SSA_steps)
+  {
+    log_debug("Converted step {}", counter++);
     convert_internal_step(smt_conv, assumpt_ast, assertions, SSA_step);
+  }
 
+
+  log_debug("Converted all steps {}", __FUNCTION__);
   if(!assertions.empty())
     smt_conv.assert_ast(
       smt_conv.make_n_ary(&smt_conv, &smt_convt::mk_or, assertions));
@@ -167,8 +174,9 @@ void symex_target_equationt::convert_internal_step(
     log_status("{}", oss.str());
   }
 
-  step.guard_ast = smt_conv.convert_ast(step.guard);
 
+  step.guard_ast = smt_conv.convert_ast(step.guard);
+  log_debug("Guard converted {} {}", __FUNCTION__, __FILE__ );
   if(step.is_assume() || step.is_assert())
   {
     expr2tc tmp(step.cond);
@@ -181,10 +189,18 @@ void symex_target_equationt::convert_internal_step(
   }
   else if(step.is_assignment())
   {
-    smt_astt assign = smt_conv.convert_assign(step.cond);
-    if(ssa_smt_trace)
+    log_debug("Assignment {}", __FUNCTION__);
+    try {
+      smt_astt assign = smt_conv.convert_assign(step.cond);
+      log_debug("Assignment was converted {}", __FUNCTION__);
+      if(ssa_smt_trace)
+      {
+        assign->dump();
+      }
+    }
+    catch (...)
     {
-      assign->dump();
+      log_error("Something bad happened");
     }
   }
   else if(step.is_output())

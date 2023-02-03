@@ -120,6 +120,7 @@ expr2tc pointer_logict::object_rec(
       if(new_offset > offset)
       {
         // found it
+        log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
         member2tc tmp(it, src, member_names[idx]);
         return object_rec(offset - current_offset, pointer_type, tmp);
       }

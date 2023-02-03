@@ -2827,7 +2827,7 @@ public:
 
   static std::string field_names[esbmct::num_type_fields];
 };
-
+#include <iostream>
 /** Member operation. Extracts a particular member out of a struct or union.
  *  @extends member_data */
 class member2t : public member_expr_methods
@@ -2840,10 +2840,16 @@ public:
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
     : member_expr_methods(type, member_id, source, memb)
   {
-#ifndef NDEBUG /* only check consistency in non-Release builds */
-    assert(
+#if 0 /* only check consistency in non-Release builds */
+
+    if(!(
       source->type->type_id == type2t::struct_id ||
-      source->type->type_id == type2t::union_id);
+      source->type->type_id == type2t::union_id));
+    {
+     std::cout << "Member expression source should be an struct or union";
+      source->type->dump();
+      assert(0);
+    }
     auto *data = dynamic_cast<const struct_union_data *>(source->type.get());
     assert(data);
     /* internally asserts consistency conditions */

@@ -5,6 +5,7 @@
 
 static void error_handler(Z3_context c, Z3_error_code e)
 {
+  log_error("Found Z3 error");
   log_error("Z3 error {} encountered", Z3_get_error_msg(c, e));
   abort();
 }
@@ -16,6 +17,7 @@ smt_convt *create_new_z3_solver(
   array_iface **array_api,
   fp_convt **fp_api)
 {
+  Z3_open_log("z3.log");
   z3_convt *conv = new z3_convt(ns, options);
   *tuple_api = static_cast<tuple_iface *>(conv);
   *array_api = static_cast<array_iface *>(conv);
@@ -32,6 +34,7 @@ z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
             z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "smt"))
              .mk_solver())
 {
+  solver.set("smtlib2_log", "log.smt2");
   z3::params p(z3_ctx);
   p.set("relevancy", 0U);
   p.set("model", true);
@@ -62,6 +65,7 @@ void z3_convt::pop_ctx()
 
 smt_convt::resultt z3_convt::dec_solve()
 {
+  log_status("Started z3 solving");
   pre_solve();
 
   z3::check_result result = solver.check();
@@ -1047,8 +1051,13 @@ smt_astt z3_convt::tuple_array_create(
   assert(
     is_constant_int2t(arrtype.array_size) &&
     "array_of sizes should be constant");
+  log_debug("Creating z3_constant {} {} {}", __FILE__, __FUNCTION__, __LINE__);
 
-  z3::expr output = z3_ctx.constant(nullptr, array_sort);
+  if(!array_sort.name()) {
+    log_error("Maybe error:");
+  }
+  z3::expr output = z3_ctx.constant("magic", array_sort);
+  log_debug("Variable was created");
   for(std::size_t i = 0; i < to_constant_int2t(arrtype.array_size).as_ulong();
       ++i)
   {
@@ -1150,6 +1159,7 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
   unsigned int i = 0;
   for(auto const &it : strct.members)
   {
+    log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
     member2tc memb(it, expr, strct.member_names[i]);
     outstruct->datatype_members.push_back(get(memb));
     i++;

@@ -218,10 +218,14 @@ void smt_convt::set_to(const expr2tc &expr, bool value)
 
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
+  log_debug("Converting assignment {} {}", __FILE__, __LINE__);
   const equality2t &eq = to_equality2t(expr);
   smt_astt side1 = convert_ast(eq.side_1); // LHS
+  log_debug("Converted LHS {}", __LINE__);
   smt_astt side2 = convert_ast(eq.side_2); // RHS
+  log_debug("Converted RHS {}", __LINE__);
   side2->assign(this, side1);
+  log_debug("Applied assignment {}", __LINE__);
 
   // Put that into the smt cache, thus preserving the value of the assigned symbols.
   // IMPORTANT: the cache is now a fundamental part of how some flatteners work,
@@ -229,8 +233,11 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   // store them in the cache, rather than have a more sophisticated conversion.
   smt_cache_entryt e = {eq.side_1, side2, ctx_level};
   smt_cache.insert(e);
+  log_debug("Cached assignment {}", __LINE__);
 
-  return side2;
+  auto cpy = side2;
+  cpy->dump();
+  return cpy;
 }
 
 smt_astt smt_convt::convert_ast(const expr2tc &expr)
@@ -1635,6 +1642,7 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
 
 smt_astt smt_convt::convert_member(const expr2tc &expr)
 {
+  log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
   const member2t &member = to_member2t(expr);
 
   // Special case unions: bitcast it to bv then convert it back to the
