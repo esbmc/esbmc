@@ -663,15 +663,27 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXConstructExpr &cxxc =
       static_cast<const clang::CXXConstructExpr &>(stmt);
 
-    // Avoid materializing a temporary for an elidable copy/move constructor.
-    if(cxxc.isElidable() && !cxxc.requiresZeroInitialization())
+    // need to cope with materializing a temporary using elidable cpy constructor, e.g.:
+    // Foo foo = Foo();
+    // First get the temporary expr, then get the constructor call
+    if(cxxc.isElidable())
     {
-      const clang::MaterializeTemporaryExpr *mt =
-        llvm::dyn_cast<clang::MaterializeTemporaryExpr>(cxxc.getArg(0));
-
-      if(mt != nullptr)
+      if(!cxxc.requiresZeroInitialization())
       {
-        log_error("elidable copy/move is not supported in {}", __func__);
+        const clang::MaterializeTemporaryExpr *mt =
+          llvm::dyn_cast<clang::MaterializeTemporaryExpr>(cxxc.getArg(0));
+
+        if(mt != nullptr)
+          if(get_expr(*mt, new_expr))
+            return true;
+      }
+      else
+      {
+        // TODO: Not able to find an example to test this, so abort for now
+        log_error(
+          "zero initialization is required when materializing a temporary in "
+          "{}",
+          __func__);
         abort();
       }
     }
@@ -706,6 +718,18 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     assert(this_type == it->second.second);
 
     new_expr = symbol_exprt(it->second.first, it->second.second);
+    break;
+  }
+
+  case clang::Stmt::CXXTemporaryObjectExprClass:
+  {
+    const clang::CXXTemporaryObjectExpr &cxxtoe =
+      static_cast<const clang::CXXTemporaryObjectExpr &>(stmt);
+
+    // get the constructor making this temporary
+    if(get_constructor_call(cxxtoe, new_expr))
+      return true;
+
     break;
   }
 
