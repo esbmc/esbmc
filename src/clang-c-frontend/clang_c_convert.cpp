@@ -92,7 +92,7 @@ bool clang_c_convertert::convert_top_level_decl()
 
 // This method convert declarations. They are called when those declarations
 // are to be added to the context. If a variable or function is being called
-// but then get_decl_expr is called instead
+// but then get_decl_ref is called instead
 bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 {
   new_expr = code_skipt();
