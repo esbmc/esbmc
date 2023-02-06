@@ -586,9 +586,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if(ne.hasInitializer())
     {
-      exprt lhs("new_object", t);
-      lhs.cmt_lvalue(true);
-
       exprt init;
       if(get_expr(*ne.getInitializer(), init))
         return true;
@@ -665,7 +662,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // need to cope with materializing a temporary using elidable cpy constructor, e.g.:
     // Foo foo = Foo();
-    // First get the temporary expr, then get the constructor call
+    // There are two objects constructed here: $foo and $tmp:
+    // First get the expr for the construction of the temporary object $tmp, something like `Foo($tmp)`
+    // then get expr of the copy constructor for the construction of $foo, something like `Foo($foo, $tmp)`
     if(cxxc.isElidable())
     {
       if(!cxxc.requiresZeroInitialization())
