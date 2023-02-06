@@ -34,7 +34,7 @@ Linux:
 sudo apt-get update && sudo apt-get install build-essential git gperf libgmp-dev cmake bison curl flex gcc-multilib linux-libc-dev libboost-all-dev libtinfo-dev ninja-build python3-setuptools unzip wget python3-pip openjdk-8-jre
 
 macOS:
-brew install gmp cmake boost ninja python3 wget automake && pip3 install PySMT
+brew install gmp cmake boost ninja python3 wget automake flex bison && pip3 install PySMT
 ```
 
 Note that they are listed with their name in Debian/Ubuntu, but they can be found in other distributions as well.
