@@ -531,6 +531,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXBindTemporaryExpr &cxxbtmp =
       static_cast<const clang::CXXBindTemporaryExpr &>(stmt);
 
+    // get the object we are binding to
     if(get_expr(*cxxbtmp.getSubExpr(), new_expr))
       return true;
 
@@ -760,22 +761,37 @@ bool clang_cpp_convertert::get_constructor_call(
 
   // Try to get the object that this constructor is constructing
   auto it = ASTContext->getParents(constructor_call).begin();
-
   const clang::Decl *objectDecl = it->get<clang::Decl>();
   if(!objectDecl)
   {
-    address_of_exprt tmp_expr;
-    tmp_expr.type() = pointer_typet();
-    tmp_expr.type().subtype() = type;
+    if(new_expr.statement() == "function_call" &&
+       new_expr.get_bool("constructor"))
+    {
+      // Already got the constructor exprt making this temporary object
+      // just need to deal with the temporary object
+      side_effect_exprt tmp_obj("temporary_object", type);
+      codet code_expr("expression");
+      code_expr.operands().push_back(new_expr);
+      tmp_obj.initializer(code_expr);
+      tmp_obj.location() = new_expr.location();
 
-    exprt new_object("new_object");
-    new_object.set("#lvalue", true);
-    new_object.type() = type;
+      call.arguments().push_back(tmp_obj);
+    }
+    else
+    {
+      address_of_exprt tmp_expr;
+      tmp_expr.type() = pointer_typet();
+      tmp_expr.type().subtype() = type;
 
-    tmp_expr.operands().resize(0);
-    tmp_expr.move_to_operands(new_object);
+      exprt new_object("new_object");
+      new_object.set("#lvalue", true);
+      new_object.type() = type;
 
-    call.arguments().push_back(tmp_expr);
+      tmp_expr.operands().resize(0);
+      tmp_expr.move_to_operands(new_object);
+
+      call.arguments().push_back(tmp_expr);
+    }
   }
 
   // Calling base constructor from derived constructor
