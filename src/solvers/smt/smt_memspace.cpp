@@ -334,7 +334,7 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   constant_struct2tc ptr_val_s(pointer_struct, membs);
   smt_astt ptr_val = tuple_api->tuple_create(ptr_val_s);
 
-  type2tc ptr_loc_type = machine_ptr;
+  type2tc ptr_loc_type = ptraddr_type2();
 
   std::stringstream sse1, sse2;
   sse1 << "__ESBMC_ptr_obj_start_" << obj_num;
@@ -349,7 +349,7 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   // from start. Express this in irep.
   expr2tc endisequal;
   expr2tc the_offs;
-  the_offs = typecast2tc(machine_ptr, size);
+  the_offs = typecast2tc(ptr_loc_type, size);
   add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
   endisequal = equality2tc(start_plus_offs, end_sym);
 
@@ -401,7 +401,7 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
 
 void smt_convt::finalize_pointer_chain(unsigned int objnum)
 {
-  type2tc inttype = machine_ptr;
+  type2tc inttype = ptraddr_type2();
   unsigned int num_ptrs = addr_space_data.back().size();
   if(num_ptrs == 0)
     return;
