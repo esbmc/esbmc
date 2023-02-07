@@ -531,6 +531,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXBindTemporaryExpr &cxxbtmp =
       static_cast<const clang::CXXBindTemporaryExpr &>(stmt);
 
+    assert(!"cool - 2");
+
     if(get_expr(*cxxbtmp.getSubExpr(), new_expr))
       return true;
 
@@ -552,6 +554,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   {
     const clang::MaterializeTemporaryExpr &mtemp =
       static_cast<const clang::MaterializeTemporaryExpr &>(stmt);
+
+    assert(!"cool - 1");
 
     if(get_expr(*mtemp.getSubExpr(), new_expr))
       return true;
@@ -660,33 +664,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXConstructExpr &cxxc =
       static_cast<const clang::CXXConstructExpr &>(stmt);
 
-    // need to cope with materializing a temporary using elidable cpy constructor, e.g.:
-    // Foo foo = Foo();
-    // There are two objects constructed here: $foo and $tmp:
-    // First get the expr for the construction of the temporary object $tmp, something like `Foo($tmp)`
-    // then get expr of the copy constructor for the construction of $foo, something like `Foo($foo, $tmp)`
-    if(cxxc.isElidable())
-    {
-      if(!cxxc.requiresZeroInitialization())
-      {
-        const clang::MaterializeTemporaryExpr *mt =
-          llvm::dyn_cast<clang::MaterializeTemporaryExpr>(cxxc.getArg(0));
-
-        if(mt != nullptr)
-          if(get_expr(*mt, new_expr))
-            return true;
-      }
-      else
-      {
-        // TODO: Not able to find an example to test this, so abort for now
-        log_error(
-          "zero initialization is required when materializing a temporary in "
-          "{}",
-          __func__);
-        abort();
-      }
-    }
-
     if(get_constructor_call(cxxc, new_expr))
       return true;
 
@@ -725,9 +702,13 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXTemporaryObjectExpr &cxxtoe =
       static_cast<const clang::CXXTemporaryObjectExpr &>(stmt);
 
+    assert(!"cool - 3");
+
+    /*
     // get the constructor making this temporary
     if(get_constructor_call(cxxtoe, new_expr))
       return true;
+    */
 
     break;
   }
@@ -760,8 +741,28 @@ bool clang_cpp_convertert::get_constructor_call(
 
   // Try to get the object that this constructor is constructing
   auto it = ASTContext->getParents(constructor_call).begin();
-
   const clang::Decl *objectDecl = it->get<clang::Decl>();
+
+  printf("Dumping DynTypedNode begin(): \n");
+  std::ostringstream oss;
+  llvm::raw_os_ostream ross(oss);
+  it->dump(ross, *ASTContext);
+  ross.flush();
+  log_debug("{}", oss.str());
+  printf("Done dumping DynTypedNode begin(): \n");
+
+  int i = 0;
+  for(auto dynode : ASTContext->getParents(constructor_call))
+  {
+    printf("Printing DynTypedNode[%d]: \n", i++);
+    std::ostringstream oss;
+    llvm::raw_os_ostream ross(oss);
+    dynode.dump(ross, *ASTContext);
+    ross.flush();
+    log_debug("{}", oss.str());
+    printf("Done DynTypedNode: \n");
+  }
+
   if(!objectDecl)
   {
     address_of_exprt tmp_expr;
@@ -783,8 +784,12 @@ bool clang_cpp_convertert::get_constructor_call(
     gen_typecast_base_ctor_call(callee_decl, call, new_expr);
 
   // Do args
+  int j = 0;
   for(const clang::Expr *arg : constructor_call.arguments())
   {
+    printf("arg[%d]: \n", j++);
+    arg->dump();
+    printf("done printing arg[%d]: \n", j);
     exprt single_arg;
     if(get_expr(*arg, single_arg))
       return true;
