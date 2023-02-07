@@ -2,7 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include <cheri/cheric.h>
-// #include "cheric.h"
+// #include <cheri/cheric.h>
 
 char *buffer = "hello";
 char *secret = "secret";

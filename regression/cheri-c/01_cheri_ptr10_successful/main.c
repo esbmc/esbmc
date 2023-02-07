@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "cheric.h"
+#include <cheri/cheric.h>
 
 int nondet_int();
 
