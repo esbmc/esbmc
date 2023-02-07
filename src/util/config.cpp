@@ -48,10 +48,17 @@ static const eregex X86("i[3456]86|x86_64|x64");
 static const eregex ARM("(arm|thumb|aarch64c?)(eb|_be)?");
 static const eregex MIPS("mips(64|isa64|isa64sb1)?(r[0-9]+)?(el|le)?.*");
 static const eregex POWERPC("(ppc|powerpc)(64)?(le)?");
+static const eregex RISCV("riscv(32|64)(be)?");
+
+bool configt::triple::is_riscv() const
+{
+  std::smatch r;
+  return std::regex_match(arch, r, RISCV);
+}
 
 static configt::ansi_ct::endianesst arch_endianness(const std::string &arch)
 {
-  if(std::regex_match(arch, X86) || arch == "riscv32" || arch == "riscv64")
+  if(std::regex_match(arch, X86))
     return configt::ansi_ct::IS_LITTLE_ENDIAN;
   std::smatch r;
   if(std::regex_match(arch, r, ARM))
@@ -63,6 +70,9 @@ static configt::ansi_ct::endianesst arch_endianness(const std::string &arch)
   if(std::regex_match(arch, r, POWERPC))
     return r.length(3) > 0 ? configt::ansi_ct::IS_LITTLE_ENDIAN
                            : configt::ansi_ct::IS_BIG_ENDIAN;
+  if(std::regex_match(arch, r, RISCV))
+    return r.length(2) > 0 ? configt::ansi_ct::IS_BIG_ENDIAN
+                           : configt::ansi_ct::IS_LITTLE_ENDIAN;
   if(arch == "none")
     return configt::ansi_ct::NO_ENDIANESS;
   log_error("unknown arch '{}', cannot determine endianness", arch);
@@ -192,10 +202,13 @@ bool configt::set(const cmdlinet &cmdline)
     req_target++;
   }
 
-  if(ansi_c.cheri)
+  if(ansi_c.cheri) /* CHERI-TODO: remove, either determine through sysroot or leave to user to specify */
   {
     arch = "mips64el"; /* CHERI-TODO: either big-endian MIPS or maybe RISC-V */
     os = "freebsd";
+    if(!flavor.empty())
+      msg.warning(
+        "overriding flavor '" + flavor + "' by 'purecap' due to --cheri");
     flavor = "purecap";
     req_target++;
   }

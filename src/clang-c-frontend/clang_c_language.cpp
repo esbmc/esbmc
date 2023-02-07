@@ -111,12 +111,20 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
 
   if(config.ansi_c.cheri)
   {
-    compiler_args.emplace_back("-D__ESBMC_CHERI__");
-    compiler_args.emplace_back("-cheri=" + std::to_string(config.ansi_c.capability_width()));
-    // compiler_args.emplace_back("-target");
-    // compiler_args.emplace_back("mips64c128-unknown-freebsd");
-    // compiler_args.emplace_back("mips64c128-unknown-linux-purecap");
-    // compiler_args.emplace_back("--sysroot=/usr/mips64-unknown-linux-gnu");
+    compiler_args.emplace_back(
+      "-cheri=" + std::to_string(config.ansi_c.capability_width()));
+
+    if(config.ansi_c.target.is_riscv()) /* unused as of yet: arch is mips64el */
+    {
+      compiler_args.emplace_back("-march=rv64imafdcxcheri");
+      compiler_args.emplace_back(
+        std::string("-mabi=") +
+        (config.ansi_c.cheri == configt::ansi_ct::CHERI_PURECAP ? "l64pc128d"
+                                                                : "lp64d"));
+    }
+
+    compiler_args.emplace_back(
+      "-D__ESBMC_CHERI__=" + std::to_string(config.ansi_c.capability_width()));
     compiler_args.emplace_back(
       "-D__builtin_cheri_length_get(p)=__esbmc_cheri_length_get(p)");
     compiler_args.emplace_back(
