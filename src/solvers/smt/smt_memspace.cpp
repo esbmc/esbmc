@@ -41,9 +41,9 @@ smt_astt smt_convt::convert_ptr_cmp(
   type2tc int_type = machine_ptr;
 
   pointer_object2tc ptr_obj1(int_type, side1);
-  pointer_offset2tc ptr_offs1(int_type, side1);
+  pointer_offset2tc ptr_offs1(signed_size_type2(), side1);
   pointer_object2tc ptr_obj2(int_type, side2);
-  pointer_offset2tc ptr_offs2(int_type, side2);
+  pointer_offset2tc ptr_offs2(signed_size_type2(), side2);
 
   symbol2tc addrspacesym(addr_space_arr_type, get_cur_addrspace_ident());
   index2tc obj1_data(addr_space_type, addrspacesym, ptr_obj1);
@@ -109,8 +109,8 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     // already asserted for elsewhere.
     if(expr->expr_id == expr2t::sub_id)
     {
-      pointer_offset2tc offs1(machine_ptr, side1);
-      pointer_offset2tc offs2(machine_ptr, side2);
+      pointer_offset2tc offs1(signed_size_type2(), side1);
+      pointer_offset2tc offs2(signed_size_type2(), side2);
       sub2tc the_ptr_offs(offs1->type, offs1, offs2);
 
       if(ret_is_ptr)
@@ -162,7 +162,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     if(non_ptr_op->type->get_width() < config.ansi_c.pointer_width())
       non_ptr_op = typecast2tc(machine_ptr, non_ptr_op);
 
-    expr2tc mul = mul2tc(inttype, non_ptr_op, pointee_size);
+    expr2tc mul = mul2tc(inttype, typecast2tc(inttype, non_ptr_op), constant);
 
     // Add or sub that value
     expr2tc ptr_offset = typecast2tc(inttype, pointer_offset2tc(difftype, ptr_op));
@@ -289,7 +289,7 @@ smt_astt smt_convt::convert_identifier_pointer(
   if(addr_space_data.back().find(obj_num) == addr_space_data.back().end())
   {
     // Fetch a size.
-    type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.word_size));
+    type2tc ptr_loc_type = size_type2();
     expr2tc size;
     try
     {

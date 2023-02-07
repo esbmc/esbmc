@@ -991,8 +991,7 @@ expr2tc pointer_offset2t::do_simplify() const
     BigInt thesize = type_byte_size(ptr_subtype);
     constant_int2tc type_size(type, thesize);
 
-    // SV-Comp workaround
-    if(non_ptr_op->type->get_width() != type->get_width())
+    if(non_ptr_op->type != type)
       non_ptr_op = typecast2tc(type, non_ptr_op);
 
     mul2tc new_non_ptr_op(type, non_ptr_op, type_size);
