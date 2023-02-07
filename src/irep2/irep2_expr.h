@@ -1494,6 +1494,7 @@ irep_typedefs(ashr, bit_2ops);
 irep_typedefs(same_object, same_object_data);
 irep_typedefs(pointer_offset, pointer_ops);
 irep_typedefs(pointer_object, pointer_ops);
+irep_typedefs(pointer_capability, pointer_ops);
 irep_typedefs(address_of, pointer_ops);
 irep_typedefs(byte_extract, byte_extract_data);
 irep_typedefs(byte_update, byte_update_data);
@@ -2700,6 +2701,19 @@ public:
   {
   }
   pointer_object2t(const pointer_object2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** @extends pointer_ops */
+class pointer_capability2t : public pointer_capability_expr_methods
+{
+public:
+  pointer_capability2t(const type2tc &type, const expr2tc &ptrobj)
+    : pointer_capability_expr_methods(type, pointer_capability_id, ptrobj)
+  {
+  }
+  pointer_capability2t(const pointer_capability2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
