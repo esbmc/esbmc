@@ -582,12 +582,16 @@ void smt_convt::init_addr_space_array()
     pointer_struct,
     std::vector<expr2tc>{
       constant_int2tc(pointer_struct->members[0], 0),
-      constant_int2tc(pointer_struct->members[1], 0)});
+      constant_int2tc(pointer_struct->members[1], 0),
+      constant_int2tc(pointer_struct->members[2], 0)});
   constant_struct2tc invalid_ptr_tuple(
     pointer_struct,
     std::vector<expr2tc>{
       constant_int2tc(pointer_struct->members[0], 1),
-      constant_int2tc(pointer_struct->members[1], 0)});
+      constant_int2tc(pointer_struct->members[1], 0),
+      constant_int2tc(
+        pointer_struct->members[2],
+        0) /* same as NULL capability */});
 
   null_ptr_ast = convert_ast(null_ptr_tuple);
   invalid_ptr_ast = convert_ast(invalid_ptr_tuple);
