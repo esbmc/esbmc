@@ -779,6 +779,9 @@ bool clang_c_convertert::get_type(
   if(q_type.isRestrictQualified())
     new_type.restricted(true);
 
+  if(the_type.canCarryProvenance(*ASTContext))
+    new_type.can_carry_provenance(true);
+
   return false;
 }
 
@@ -824,6 +827,28 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     // Special case, pointers to structs/unions/classes must not
     // have a copy of it, but a reference to the type
     get_ref_to_struct_type(sub_type);
+
+#if 0
+    // true for pointers that are implemented as CHERI capabilities
+    // and _Atomic with capability pointers as the underlying type.
+    bool is_cap = pt.isCapabilityPointerType();
+
+    // Whether this type can hold tagged capability values.
+    // This is true for capability types that have not been annotated with
+    // attr::CHERINoProvenance.
+    // In hybrid mode this also returns true for pointer types since they can
+    // be converted to capabilities.
+    bool can_prov = pt.canCarryProvenance(*ASTContext);
+
+    // true if this type is a CHERI capability type.
+    // If \p IncludeIntCap
+    // is true this also includes __uintcap_t and __intcap_t, otherwise it will
+    // return false for these types. This is useful for cases such as checking
+    // the validity of casts where __uintcap_t is not handled the same way as
+    // pointers.
+    bool IncludeIntCap = true;
+    bool is_cheri = pt.isCHERICapabilityType(*ASTContext, IncludeIntCap);
+#endif
 
     new_type = gen_pointer_type(sub_type);
     break;

@@ -29,6 +29,13 @@ clang_c_languaget::clang_c_languaget()
 {
   // Build the compile arguments
   build_compiler_args(clang_headers_path());
+
+#if 0
+  fprintf(stderr, "clang invocation:");
+  for (const std::string &s : compiler_args)
+    fprintf(stderr, " '%s'", s.c_str());
+  fprintf(stderr, "\n");
+#endif
 }
 
 void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)

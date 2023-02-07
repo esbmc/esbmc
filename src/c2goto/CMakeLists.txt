@@ -50,26 +50,34 @@ function(foreach_in_cross_product_rec fn acc_i acc_v)
 endfunction()
 
 function(foreach_in_cross_product fn)
-  list(SUBLIST ARGN 0 0 empty)
-  foreach_in_cross_product_rec(${fn} "${empty}" "${empty}" ${ARGN})
+  foreach_in_cross_product_rec(${fn} "" "" ${ARGN})
 endfunction()
 
 if (ESBMC_BUNDLE_LIBC)
 
   set(archs --32 --64)
   set(floats "--fixedbv -D__ESBMC_FIXEDBV" --floatbv)
-  set(cherimodes "" "--cheri hybrid" "--cheri purecap")
-  set(combinations archs floats cherimodes)
+  # for some reason CMake does not differentiate between [""], "" and [] so we
+  # have to 'represent' the empty string by a non-empty string in order to get
+  # the non-cheri combinations, sigh...
+  set(cherimodes " ")
+  if(ESBMC_CHERI_HYBRID_SYSROOT)
+    list(APPEND cherimodes "--cheri hybrid --sysroot ${ESBMC_CHERI_HYBRID_SYSROOT}")
+  endif()
+  if(ESBMC_CHERI_PURECAP_SYSROOT)
+    list(APPEND cherimodes "--cheri purecap --sysroot ${ESBMC_CHERI_PURECAP_SYSROOT}")
+  endif()
 
-  function(test idcs tuple)
-    message(STATUS "test: idcs: ${idcs}, tuple: ${tuple}")
-    list(GET idcs 0 arch_i)
-    list(GET idcs 1 float_i)
-    list(GET idcs 2 cheri_i)
-    message(STATUS "test: clib_${arch_i}_${float_i}_${cheri_i}: ${tuple}")
+  function(clib_join_argv idcs tuple)
+    #message(STATUS "test: idcs: ${idcs}, tuple: ${tuple}")
+    list(JOIN idcs "_" idcs)
+    list(PREPEND tuple clib_${idcs}.c)
+    list(JOIN tuple " " clib_config_${idcs})
+    list(APPEND clib_configs clib_config_${idcs})
+    message(STATUS "test: ${clib_config_${idcs}}")
   endfunction()
 
-  foreach_in_cross_product(test archs floats cherimodes)
+  foreach_in_cross_product(clib_join_argv cherimodes floats archs)
 
   set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
   set (clib64_config clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
