@@ -1,6 +1,7 @@
 #ifndef IREP2_EXPR_H_
 #define IREP2_EXPR_H_
 
+#include <util/config.h>
 #include <util/c_types.h>
 #include <util/fixedbv.h>
 #include <util/ieee_float.h>

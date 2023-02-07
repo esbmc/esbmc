@@ -155,7 +155,7 @@ bool configt::set(const cmdlinet &cmdline)
       ansi_c.cheri = ansi_ct::CHERI_PURECAP;
     else if(mode != "off")
     {
-      msg.error(
+      log_error(
         "error: only 'hybrid' and 'purecap' modes supported for --cheri, "
         "argument was: " +
         mode);
@@ -215,7 +215,7 @@ bool configt::set(const cmdlinet &cmdline)
     if(ansi_c.cheri == ansi_ct::CHERI_PURECAP)
     {
       if(!flavor.empty() && flavor != "purecap")
-        msg.warning(
+        log_warning(
           "overriding flavor '" + flavor + "' by 'purecap' due to --cheri");
       flavor = "purecap";
     }
@@ -255,7 +255,7 @@ bool configt::set(const cmdlinet &cmdline)
 
   if(ansi_c.cheri && ansi_c.word_size != 64)
   {
-    msg.error("--cheri!=off is only supported with 64-bit targets");
+    log_error("--cheri!=off is only supported with 64-bit targets");
     return true;
   }
 
