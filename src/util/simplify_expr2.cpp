@@ -405,7 +405,7 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
   bool p1 = is_pointer_type(a);
   bool p2 = is_pointer_type(b);
   if(p1 && p2)
-    return get_int_type(config.ansi_c.pointer_width);
+    return get_int_type(config.ansi_c.address_width);
   if(p1)
     return a;
   if(p2)
