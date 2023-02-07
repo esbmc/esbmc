@@ -1468,7 +1468,7 @@ void dereferencet::construct_from_dyn_offset(
   unsigned int num_bytes = compute_num_bytes_to_extract(
     replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
   // Converting offset to bytes before bytes extraction
-  expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
+  expr2tc offset_bytes = div2tc(offset->type, offset, is_signedbv_type(offset) ? gen_slong(8) : gen_ulong(8));
   simplify(offset_bytes);
 
   // Extracting and stitching bytes together
@@ -2189,7 +2189,11 @@ void dereferencet::bounds_check(
 
   // Transforming offset to bytes
   typecast2tc unsigned_offset(
-    uint_type2(), div2tc(offset->type, offset, gen_ulong(8)));
+    uint_type2(),
+    div2tc(
+      offset->type,
+      offset,
+      is_signedbv_type(offset) ? gen_slong(8) : gen_ulong(8)));
 
   // Then, expressions as to whether the access is over or under the array
   // size.

@@ -2424,6 +2424,8 @@ public:
   div2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : div_expr_methods(type, div_id, v1, v2)
   {
+    assert(is_signedbv_type(v1) == is_signedbv_type(v2));
+    assert(is_unsignedbv_type(v1) == is_unsignedbv_type(v2));
   }
   div2t(const div2t &ref) = default;
 
