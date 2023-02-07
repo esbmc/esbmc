@@ -112,6 +112,22 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     // compiler_args.emplace_back("--sysroot=/usr/mips64-unknown-linux-gnu");
     compiler_args.emplace_back(
       "-D__builtin_cheri_length_get(p)=__esbmc_cheri_length_get(p)");
+
+    switch (config.ansi_c.cheri)
+    {
+    case configt::ansi_ct::CHERI_OFF:
+      break;
+    case configt::ansi_ct::CHERI_HYBRID:
+#ifdef ESBMC_CHERI_HYBRID_SYSROOT
+      sysroot = ESBMC_CHERI_HYBRID_SYSROOT;
+#endif
+      break;
+    case configt::ansi_ct::CHERI_PURECAP:
+#ifdef ESBMC_CHERI_PURECAP_SYSROOT
+      sysroot = ESBMC_CHERI_PURECAP_SYSROOT;
+#endif
+      break;
+    }
   }
 
   config.options.get_option("sysroot", sysroot);
