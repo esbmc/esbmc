@@ -122,6 +122,7 @@ if(APPLE)
                     esbmc-cpp11/cbmc-constructors
                     extensions
                     cheri-c
+                    cheri-128
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -166,6 +167,7 @@ else()
                     cuda/COM_sanity_checks
                     linux
                     cheri-c
+                    cheri-128
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
