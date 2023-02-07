@@ -57,13 +57,18 @@ public:
     unsigned char_width;
     unsigned short_int_width;
     unsigned long_long_int_width;
-    unsigned pointer_width;
+    unsigned address_width;
     unsigned single_width;
     unsigned double_width;
     unsigned long_double_width;
     unsigned pointer_diff_width;
     unsigned word_size;
     unsigned wchar_t_width;
+
+    unsigned pointer_width() const noexcept
+    {
+      return (cheri ? 2 : 1) * address_width;
+    }
 
     bool char_is_unsigned;
     bool use_fixed_for_float;

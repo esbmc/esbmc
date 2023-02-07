@@ -18,13 +18,13 @@ void configt::ansi_ct::set_data_model(enum data_model dm)
   short_int_width = next();
   int_width = next();
   long_int_width = next();
-  pointer_width = next();
+  address_width = next();
   word_size = next();
   long_double_width = next();
 
   long_long_int_width = 64;
   bool_width = char_width;
-  pointer_diff_width = pointer_width;
+  pointer_diff_width = address_width;
   single_width = 32;
   double_width = 64;
   char_is_unsigned = false;
