@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <string.h>
-//#include <cheri/cheric.h>
 #include <cheri/cheric.h>
 
 char *test;
