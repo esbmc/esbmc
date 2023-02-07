@@ -19,6 +19,7 @@ const struct group_opt_templ c2goto_options[] = {
    {{"16", NULL, "set width of machine word (default is 64)"},
     {"32", NULL, "set width of machine word (default is 64)"},
     {"64", NULL, "set width of machine word (default is 64)"},
+    {"cheri", NULL, "enable CHERI-C mode (default is off)"},
     {"fixedbv", NULL, "encode floating-point as fixed bit-vectors"},
     {"floatbv",
      NULL,

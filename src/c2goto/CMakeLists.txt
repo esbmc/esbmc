@@ -25,14 +25,19 @@ endif()
 
 if (ESBMC_BUNDLE_LIBC)
   # set (<config_variable_name> <output_file> [<c2goto_args>...])
-  set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
-  set (clib64_config clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
-  set (clib32f_config clib32_fp.c --32 --floatbv)
-  set (clib64f_config clib64_fp.c --64 --floatbv)
-  set (inputs clib32_config
-              clib64_config
-              clib32f_config
-              clib64f_config
+  set (clib32_config clib32.c clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
+  set (clib64_config clib64.c clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
+  set (clib32f_config clib32_fp.c clib32_fp.c --32 --floatbv)
+  set (clib64f_config clib64_fp.c clib64_fp.c --64 --floatbv)
+  set (clib32_cheri_config clib32.c clib32_cheri.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri)
+  set (clib64_cheri_config clib64.c clib64_cheri.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri)
+  set (clib32f_cheri_config clib32_fp.c clib32_fp_cheri.c --32 --floatbv --cheri)
+  set (clib64f_cheri_config clib64_fp.c clib64_fp_cheri.c --64 --floatbv --cheri)
+
+  set (inputs clib32_config clib64_config
+              clib32f_config clib64f_config
+              clib32_cheri_config clib64_cheri_config
+              clib32f_cheri_config clib64f_cheri_config
       )
 endif()
 
@@ -50,9 +55,12 @@ function(mangle_clib output)
   # For each config, generate clib*.c and clib*.goto file in the current binary directory
   foreach(in_f ${ARGN})
     set (in_f "${${in_f}}")
-    list(GET in_f 0 out_file)
-    list(SUBLIST in_f 1 -1 in_flags)
-    string(REPLACE .c .goto out_goto "${out_file}")
+    list(GET in_f 0 in_file)
+    list(GET in_f 1 out_name)
+    list(SUBLIST in_f 2 -1 in_flags)
+    file(RELATIVE_PATH out_file ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${out_name})
+    string(REGEX REPLACE \\.c$ .goto out_goto "${out_name}")
+    string(REGEX REPLACE \\.c$ "" barename "${in_file}")
     set(out_goto "${CMAKE_CURRENT_BINARY_DIR}/${out_goto}")
     set(out_file "${CMAKE_CURRENT_BINARY_DIR}/${out_file}")
 

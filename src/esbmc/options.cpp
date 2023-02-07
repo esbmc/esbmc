@@ -103,6 +103,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"16", NULL, "set width of machine word (default is 64)"},
     {"32", NULL, "set width of machine word (default is 64)"},
     {"64", NULL, "set width of machine word (default is 64)"},
+    {"cheri", NULL, "enable CHERI-C mode (default is off)"},
     {"version", NULL, "show current ESBMC version and exit"},
     {"cex-output",
      boost::program_options::value<std::string>(),
