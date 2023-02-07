@@ -17,7 +17,7 @@ int __ESBMC_sync_fetch_and_add(int *ptr, int value)
 
 #ifdef __ESBMC_CHERI_MORELLO__
 #define CC_IS_MORELLO
-#enif
+#endif
 
 #if !defined(cheri_debug_assert)
 /* Disable cheri-compressed-cap's debug assertions since they assert that
