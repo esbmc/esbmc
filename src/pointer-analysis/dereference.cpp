@@ -702,7 +702,8 @@ expr2tc dereferencet::build_reference_to(
       // it as future work.
       alignment = 1;
     }
-    final_offset = pointer_offset2tc(pointer_type2(), deref_expr);
+    final_offset = pointer_offset2tc(
+      get_int_type(config.ansi_c.address_width), deref_expr);
   }
 
   // Converting final_offset from bytes to bits!
