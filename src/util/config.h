@@ -67,12 +67,27 @@ public:
 
     unsigned pointer_width() const noexcept
     {
-      return (cheri ? 2 : 1) * address_width;
+      /* TODO: should only return capability_width() when
+       *       cheri == CHERI_PURECAP */
+      return cheri != CHERI_OFF ? capability_width() : address_width;
+    }
+
+    unsigned int capability_width() const noexcept
+    {
+      assert(cheri);
+      return (cheri_concentrate ? 2 : 4) * address_width;
     }
 
     bool char_is_unsigned;
     bool use_fixed_for_float;
-    bool cheri;
+
+    enum cheri_flavor {
+      CHERI_OFF,
+      CHERI_HYBRID,
+      CHERI_PURECAP,
+    } cheri;
+    /* otherwise, uncompressed encoding quadruple the size */
+    bool cheri_concentrate;
 
     // for fixed size
     unsigned int_128_width = 128;

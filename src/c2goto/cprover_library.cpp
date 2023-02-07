@@ -33,12 +33,12 @@ extern "C"
 
 namespace
 {
-/* [cheri ? 1 : 0][floatbv ? 1 : 0][wordsz == 64 ? 1 : 0] */
+/* [cheri][floatbv ? 1 : 0][wordsz == 64 ? 1 : 0] */
 static const struct buffer
 {
   const uint8_t *start;
   size_t size;
-} clibs[2][2][2] = {
+} clibs[3][2][2] = {
 #ifdef ESBMC_BUNDLE_LIBC
   {
     {
