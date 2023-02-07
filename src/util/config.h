@@ -80,7 +80,8 @@ public:
     bool char_is_unsigned;
     bool use_fixed_for_float;
 
-    enum cheri_flavor {
+    enum cheri_flavor
+    {
       CHERI_OFF,
       CHERI_HYBRID,
       CHERI_PURECAP,

@@ -1793,7 +1793,6 @@ expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
     get_uint_type(domain_width), idx, gen_zero(get_int32_type()));
 }
 
-
 /** Convert the size of an array to its bit width. Essential log2 with
  *  some rounding. */
 static unsigned long size_to_bit_width(unsigned long sz)

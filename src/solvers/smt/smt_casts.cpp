@@ -356,8 +356,8 @@ static type2tc capability_struct_type2()
     config.ansi_c.cheri_concentrate &&
     "uncompressed CHERI capabilities are not implemented");
   type2tc type = ptraddr_type2();
-  std::vector<type2tc> members = {type,type};
-  std::vector<irep_idt> names = {"pesbt","cursor"};
+  std::vector<type2tc> members = {type, type};
+  std::vector<irep_idt> names = {"pesbt", "cursor"};
   return struct_type2tc(members, names, names, "__ESBMC_capability_struct");
 }
 
@@ -368,7 +368,7 @@ static type2tc capability_union_type2()
     get_uint_type(config.ansi_c.capability_width()),
     capability_struct_type2(),
   };
-  std::vector<irep_idt> names = {"cap","str"};
+  std::vector<irep_idt> names = {"cap", "str"};
   return union_type2tc(members, names, names, "__ESBMC_capability_union");
 }
 
@@ -389,7 +389,8 @@ static expr2tc capability_struct_from_cap(const expr2tc &cap)
     "str");
 }
 
-static expr2tc capability_from_components(const expr2tc &pesbt, const expr2tc &cursor)
+static expr2tc
+capability_from_components(const expr2tc &pesbt, const expr2tc &cursor)
 {
   std::vector<expr2tc> member = {capability_struct2(pesbt, cursor)};
   return member2tc(
@@ -461,8 +462,8 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
     smt_astt output_cap = output->project(this, 2);
     expr2tc other_cap;
     if(can_carry_provenance(cast.from->type))
-      other_cap = member2tc(
-        int_type, capability_struct_from_cap(cast.from), "pesbt");
+      other_cap =
+        member2tc(int_type, capability_struct_from_cap(cast.from), "pesbt");
     else
       other_cap = gen_zero(int_type);
     smt_astt other_cap_ast = convert_ast(other_cap);
@@ -543,8 +544,7 @@ smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
   {
     /* encode capability information */
     pointer = capability_from_components(
-      pointer_capability2tc(addr_type, cast.from),
-      pointer);
+      pointer_capability2tc(addr_type, cast.from), pointer);
   }
 
   // Finally, type-cast the address to the destination's type

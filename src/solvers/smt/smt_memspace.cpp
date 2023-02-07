@@ -331,7 +331,8 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   membs.push_back(constant_int2tc(pointer_struct->members[0], BigInt(obj_num)));
   membs.push_back(constant_int2tc(pointer_struct->members[1], BigInt(0)));
   if(config.ansi_c.cheri)
-    membs.push_back(constant_int2tc(pointer_struct->members[2], BigInt(0))); /* CHERI-TODO */
+    membs.push_back(
+      constant_int2tc(pointer_struct->members[2], BigInt(0))); /* CHERI-TODO */
   constant_struct2tc ptr_val_s(pointer_struct, membs);
   smt_astt ptr_val = tuple_api->tuple_create(ptr_val_s);
 
@@ -580,11 +581,11 @@ void smt_convt::init_addr_space_array()
                          {
                            constant_int2tc(pointer_struct->members[0], 0),
                            constant_int2tc(pointer_struct->members[1], 0),
-  },
+                         },
                        inv_members = {
                          constant_int2tc(pointer_struct->members[0], 1),
                          constant_int2tc(pointer_struct->members[1], 0),
-  };
+                       };
   if(config.ansi_c.cheri)
   {
     null_members.emplace_back(constant_int2tc(pointer_struct->members[2], 0));
