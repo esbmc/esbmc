@@ -29,19 +29,27 @@ if (ESBMC_BUNDLE_LIBC)
   set (clib64_config clib64.c clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
   set (clib32f_config clib32_fp.c clib32_fp.c --32 --floatbv)
   set (clib64f_config clib64_fp.c clib64_fp.c --64 --floatbv)
-  set (clib32_cheri_config clib32.c clib32_cheri.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri)
-  set (clib64_cheri_config clib64.c clib64_cheri.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri)
-  set (clib32f_cheri_config clib32_fp.c clib32_fp_cheri.c --32 --floatbv --cheri)
-  set (clib64f_cheri_config clib64_fp.c clib64_fp_cheri.c --64 --floatbv --cheri)
+  set (clib32_cherih_config clib32.c clib32_cheri.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid)
+  set (clib64_cherih_config clib64.c clib64_cheri.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid)
+  set (clib32f_cherih_config clib32_fp.c clib32_fp_cheri.c --32 --floatbv --cheri hybrid)
+  set (clib64f_cherih_config clib64_fp.c clib64_fp_cheri.c --64 --floatbv --cheri hybrid)
+  set (clib32_cherip_config clib32.c clib32_cheri.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri purecap)
+  set (clib64_cherip_config clib64.c clib64_cheri.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri purecap)
+  set (clib32f_cherip_config clib32_fp.c clib32_fp_cheri.c --32 --floatbv --cheri purecap)
+  set (clib64f_cherip_config clib64_fp.c clib64_fp_cheri.c --64 --floatbv --cheri purecap)
 
   set (inputs clib32_config
               clib64_config
               clib32f_config
               clib64f_config
-              #clib32_cheri_config
-              clib64_cheri_config
-              #clib32f_cheri_config
-              clib64f_cheri_config
+              #clib32_cherih_config
+              clib64_cherih_config
+              #clib32f_cherih_config
+              clib64f_cherih_config
+              ##clib32_cherip_config
+              #clib64_cherip_config
+              ##clib32f_cherip_config
+              #clib64f_cherip_config
       )
 endif()
 
