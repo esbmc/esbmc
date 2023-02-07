@@ -14,6 +14,7 @@ public:
   option_mapt option_map; // input
 
   const std::string get_option(const std::string &option) const;
+  bool get_option(const std::string &option, std::string &value) const;
   bool get_bool_option(const std::string &option) const;
   void set_option(const std::string &option, const bool value);
   void set_option(const std::string &option, const char *value);
