@@ -18,10 +18,14 @@ string_constantt::string_constantt(const irep_idt &value, const typet &type)
 
 void string_constantt::set_value(const irep_idt &value)
 {
+  /* Fails for L"" and other large character types, because the below
+   * computation is buggy for those. */
+  assert(bv_width(type().subtype()) == config.ansi_c.char_width);
+
   exprt size_expr = constant_exprt(
-    integer2binary(value.size() + 1, bv_width(uint_type())),
+    integer2binary(value.size() + 1, bv_width(size_type())),
     integer2string(value.size() + 1),
-    uint_type());
+    size_type());
   type().size(size_expr);
   exprt::value(value);
 }

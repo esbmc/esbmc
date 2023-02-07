@@ -269,9 +269,19 @@ typet size_type()
   return unsignedbv_typet(config.ansi_c.address_width);
 }
 
+type2tc size_type2()
+{
+  return get_uint_type(config.ansi_c.address_width);
+}
+
 typet signed_size_type()
 {
   return signedbv_typet(config.ansi_c.address_width);
+}
+
+type2tc signed_size_type2()
+{
+  return get_int_type(config.ansi_c.address_width);
 }
 
 typet pointer_type()

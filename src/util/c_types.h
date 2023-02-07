@@ -71,4 +71,7 @@ type2tc get_int_type(unsigned int sz);
 type2tc get_bool_type();
 type2tc get_empty_type();
 
+type2tc size_type2();
+type2tc signed_size_type2();
+
 #endif
