@@ -721,7 +721,9 @@ void c_typecastt::implicit_typecast_followed(
   if(check_c_implicit_typecast(src_type, dest_type))
   {
     errors.emplace_back("implicit conversion not permitted");
-    assert(dest_type.id() == typet::t_empty);
+    assert(
+      dest_type.id() == typet::t_empty ||
+      src_type.id() == typet::t_code /* regression/esbmc/03_nondet */);
   }
   else if(src_type != dest_type)
     do_typecast(expr, dest_type);
