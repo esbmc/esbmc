@@ -61,11 +61,13 @@ if (ESBMC_BUNDLE_LIBC)
   # have to 'represent' the empty string by a non-empty string in order to get
   # the non-cheri combinations, sigh...
   set(cherimodes " ")
-  if(ESBMC_CHERI_HYBRID_SYSROOT)
-    list(APPEND cherimodes "--cheri hybrid --sysroot ${ESBMC_CHERI_HYBRID_SYSROOT}")
-  endif()
-  if(ESBMC_CHERI_PURECAP_SYSROOT)
-    list(APPEND cherimodes "--cheri purecap --sysroot ${ESBMC_CHERI_PURECAP_SYSROOT}")
+  if(ESBMC_CHERI_CLANG)
+    if(ESBMC_CHERI_HYBRID_SYSROOT)
+      list(APPEND cherimodes "--cheri hybrid --sysroot ${ESBMC_CHERI_HYBRID_SYSROOT}")
+    endif()
+    if(ESBMC_CHERI_PURECAP_SYSROOT)
+      list(APPEND cherimodes "--cheri purecap --sysroot ${ESBMC_CHERI_PURECAP_SYSROOT}")
+    endif()
   endif()
 
   function(clib_join_argv idcs tuple)
