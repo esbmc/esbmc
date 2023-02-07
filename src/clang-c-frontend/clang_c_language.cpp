@@ -100,7 +100,9 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   compiler_args.emplace_back("-target");
   compiler_args.emplace_back(config.ansi_c.target.to_string());
 
-  std::string sysroot = config.options.get_option("sysroot");
+  std::string sysroot;
+
+  config.options.get_option("sysroot", sysroot);
   if(!sysroot.empty())
     compiler_args.push_back("--sysroot=" + sysroot);
   else
