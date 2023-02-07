@@ -111,6 +111,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
 
   if(config.ansi_c.cheri)
   {
+    bool is_purecap = config.ansi_c.cheri == configt::ansi_ct::CHERI_PURECAP;
     compiler_args.emplace_back(
       "-cheri=" + std::to_string(config.ansi_c.capability_width()));
 
@@ -118,10 +119,24 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     {
       compiler_args.emplace_back("-march=rv64imafdcxcheri");
       compiler_args.emplace_back(
-        std::string("-mabi=") +
-        (config.ansi_c.cheri == configt::ansi_ct::CHERI_PURECAP ? "l64pc128d"
-                                                                : "lp64d"));
+        std::string("-mabi=") + (is_purecap ? "l64pc128d" : "lp64d"));
     }
+    else if(config.ansi_c.target.arch == "aarch64c")
+    {
+      /* for morello-llvm 11.0.0 from
+       * https://git.morello-project.org/morello/llvm-project.git
+       * 94e1dbacf1d854b48386ec2c07a35e0694d626e2
+       */
+      std::string march = "-march=morello";
+      if(is_purecap)
+      {
+        march += "+c64";
+        compiler_args.emplace_back("-mabi=purecap");
+      }
+      compiler_args.emplace_back(std::move(march));
+    }
+    else
+      compiler_args.emplace_back("-mabi=purecap");
 
     compiler_args.emplace_back(
       "-D__ESBMC_CHERI__=" + std::to_string(config.ansi_c.capability_width()));
