@@ -203,7 +203,8 @@ bool configt::set(const cmdlinet &cmdline)
     req_target++;
   }
 
-  if(ansi_c.cheri) /* CHERI-TODO: remove, either determine through sysroot or leave to user to specify */
+  /* CHERI-TODO: remove, either determine through sysroot or leave to user to specify */
+  if(ansi_c.cheri)
   {
 #ifdef ESBMC_CHERI_CLANG_MORELLO
     arch = "aarch64c";
