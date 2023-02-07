@@ -52,11 +52,11 @@ static const struct buffer
   },
   {
     {
-      {&clib32_cheri_buf[0], clib32_cheri_buf_size},
+      {NULL, 0}, // {&clib32_cheri_buf[0], clib32_cheri_buf_size},
       {&clib64_cheri_buf[0], clib64_cheri_buf_size},
     },
     {
-      {&clib32_fp_cheri_buf[0], clib32_fp_cheri_buf_size},
+      {NULL, 0}, // {&clib32_fp_cheri_buf[0], clib32_fp_cheri_buf_size},
       {&clib64_fp_cheri_buf[0], clib64_fp_cheri_buf_size},
     },
   },
