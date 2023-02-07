@@ -548,11 +548,10 @@ void smt_convt::init_addr_space_array()
 {
   addr_space_sym_num.back() = 1;
 
-  type2tc ptr_int_type = machine_ptr;
+  type2tc ptr_int_type = ptraddr_type2(); /* CHERI-TODO */
   constant_int2tc zero_ptr_int(ptr_int_type, BigInt(0));
   constant_int2tc one_ptr_int(ptr_int_type, BigInt(1));
-  constant_int2tc obj1_end_const(
-    ptr_int_type, ones(config.ansi_c.pointer_width())); /* CHERI-TODO */
+  constant_int2tc obj1_end_const(ptr_int_type, ones(ptr_int_type->get_width()));
 
   symbol2tc obj0_start(ptr_int_type, "__ESBMC_ptr_obj_start_0");
   symbol2tc obj0_end(ptr_int_type, "__ESBMC_ptr_obj_end_0");

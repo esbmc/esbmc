@@ -75,8 +75,8 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   std::vector<irep_idt> names;
 
   /* TODO: pointer_object is actually identified by an 'unsigned int' number */
-  members.push_back(get_uint_type(config.ansi_c.pointer_width())); /* CHERI-TODO */
-  members.push_back(get_uint_type(config.ansi_c.address_width));
+  members.push_back(ptraddr_type2()); /* CHERI-TODO */
+  members.push_back(ptraddr_type2());
   names.emplace_back("pointer_object");
   names.emplace_back("pointer_offset");
 
@@ -90,12 +90,13 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
 
   members.clear();
   names.clear();
-  members.push_back(get_uint_type(config.ansi_c.pointer_width())); /* CHERI-TODO */
-  members.push_back(get_uint_type(config.ansi_c.pointer_width())); /* CHERI-TODO */
+  members.push_back(ptraddr_type2()); /* CHERI-TODO */
+  members.push_back(ptraddr_type2()); /* CHERI-TODO */
   names.emplace_back("start");
   names.emplace_back("end");
   addr_space_type = {members, names, names, "addr_space_type"};
 
+  /* indexed by pointer_object2t expressions */
   addr_space_arr_type = {addr_space_type, expr2tc(), true};
 
   addr_space_data.emplace_back();
@@ -301,6 +302,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::ieee_div_id:
   case expr2t::ieee_fma_id:
   case expr2t::ieee_sqrt_id:
+  case expr2t::pointer_offset_id:
     break; // Don't convert their operands
 
   default:
@@ -700,7 +702,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     const pointer_offset2t &obj = to_pointer_offset2t(expr);
     // Potentially walk through some typecasts
     const expr2tc *ptr = &obj.ptr_obj;
-    while(is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
+    while(is_typecast2t(*ptr) && !is_pointer_type(*ptr))
       ptr = &to_typecast2t(*ptr).from;
 
     args[0] = convert_ast(*ptr);
