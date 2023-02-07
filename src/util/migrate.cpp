@@ -85,6 +85,12 @@ type2tc migrate_type(const typet &type)
     return type2tc(s);
   }
 
+  if (type.id() == typet::t_intcap)
+    return type2tc(new signedbv_type2t(config.ansi_c.pointer_width()));
+
+  if (type.id() == typet::t_uintcap)
+    return type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width()));
+
   if(type.id() == typet::t_array)
   {
     type2tc subtype = migrate_type(type.subtype());
@@ -235,7 +241,7 @@ type2tc migrate_type(const typet &type)
     // Don't migrate return type if it's a symbol. There are a variety of C++
     // things where a method returns itself, or similar.
     type2tc ret_type;
-    if(type.return_type().id() == "symbol")
+    if(type.return_type().id() == typet::t_symbol)
     {
       ret_type = type2tc(new symbol_type2t(type.return_type().identifier()));
     }
@@ -318,7 +324,7 @@ type2tc migrate_type(const typet &type)
     return type2tc(new array_type2t(get_uint8_type(), expr2tc(), true));
   }
 
-  if(type.id() == "string")
+  if(type.id() == typet::t_string)
   {
     irep_idt width = type.width();
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
