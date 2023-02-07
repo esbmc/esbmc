@@ -107,10 +107,15 @@ bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type)
       return false;
     if(dest_type.id() == "c_enum")
       return false;
+    if(dest_type.id() == typet::t_intcap)
+      return false;
+    if(dest_type.id() == typet::t_uintcap)
+      return false;
   }
   else if(
     src_type_id == "unsignedbv" || src_type_id == "signedbv" ||
-    src_type_id == "c_enum" || src_type_id == "incomplete_c_enum")
+    src_type_id == "c_enum" || src_type_id == "incomplete_c_enum" ||
+    src_type.id() == typet::t_intcap || src_type.id() == typet::t_uintcap)
   {
     if(dest_type.id() == "unsignedbv")
       return false;
@@ -128,6 +133,10 @@ bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type)
       return false;
     if(dest_type.id() == "incomplete_c_enum")
       return false;
+    if(dest_type.id() == typet::t_intcap)
+      return false;
+    if(dest_type.id() == typet::t_uintcap)
+      return false;
   }
   else if(src_type_id == "floatbv" || src_type_id == "fixedbv")
   {
@@ -140,6 +149,10 @@ bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type)
     if(dest_type.id() == "floatbv")
       return false;
     if(dest_type.id() == "fixedbv")
+      return false;
+    if(dest_type.id() == typet::t_intcap)
+      return false;
+    if(dest_type.id() == typet::t_uintcap)
       return false;
   }
   else if(
@@ -169,6 +182,10 @@ bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type)
     if(dest_type.id() == "unsignedbv")
       return false;
     if(dest_type.id() == "signedbv")
+      return false;
+    if(dest_type.id() == typet::t_intcap)
+      return false;
+    if(dest_type.id() == typet::t_uintcap)
       return false;
   }
 
@@ -702,7 +719,10 @@ void c_typecastt::implicit_typecast_followed(
   }
 
   if(check_c_implicit_typecast(src_type, dest_type))
+  {
     errors.emplace_back("implicit conversion not permitted");
+    assert(dest_type.id() == typet::t_empty);
+  }
   else if(src_type != dest_type)
     do_typecast(expr, dest_type);
 }
