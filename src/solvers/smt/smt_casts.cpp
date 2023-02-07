@@ -345,6 +345,56 @@ smt_astt smt_convt::convert_typecast_to_ints_from_bool(const typecast2t &cast)
   return mk_ite(a, one, zero);
 }
 
+static bool can_carry_provenance(const type2tc &t)
+{
+  return t->get_width() >= config.ansi_c.capability_width();
+}
+
+static type2tc capability_struct_type2()
+{
+  type2tc type = ptraddr_type2();
+  std::vector<type2tc> members = {type,type};
+  std::vector<irep_idt> names = {"pesbt","cursor"};
+  return struct_type2tc(members, names, names, "__ESBMC_capability_struct");
+}
+
+static type2tc capability_union_type2()
+{
+  type2tc type = ptraddr_type2();
+  std::vector<type2tc> members = {
+    get_uint_type(config.ansi_c.capability_width()),
+    capability_struct_type2(),
+  };
+  std::vector<irep_idt> names = {"cap","str"};
+  return union_type2tc(members, names, names, "__ESBMC_capability_union");
+}
+
+static expr2tc capability_struct2(const expr2tc &pesbt, const expr2tc &cursor)
+{
+  std::vector<expr2tc> members = {pesbt, cursor};
+  return constant_struct2tc(capability_struct_type2(), members);
+}
+
+static expr2tc capability_struct_from_cap(const expr2tc &cap)
+{
+  // assert(is_pointer_type(cap));
+  assert(cap->type->get_width() == config.ansi_c.capability_width());
+  std::vector<expr2tc> member = {cap};
+  return member2tc(
+    capability_struct_type2(),
+    constant_union2tc(capability_union_type2(), "cap", member),
+    "str");
+}
+
+static expr2tc capability_from_components(const expr2tc &pesbt, const expr2tc &cursor)
+{
+  std::vector<expr2tc> member = {capability_struct2(pesbt, cursor)};
+  return member2tc(
+    get_uint_type(config.ansi_c.capability_width()),
+    constant_union2tc(capability_union_type2(), "str", member),
+    "cap");
+}
+
 smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 {
   // First, sanity check -- typecast from one kind of a pointer to another kind
@@ -358,18 +408,15 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   // is expensive, but here we are.
 
   // First cast it to an unsignedbv
-  type2tc int_type = machine_ptr;
+  type2tc int_type = ptraddr_type2();
   smt_sortt int_sort = convert_sort(int_type);
   typecast2tc cast_to_unsigned(int_type, cast.from);
   smt_astt target = convert_ast(cast_to_unsigned);
 
   // Construct array for all possible object outcomes
-  std::vector<smt_astt> is_in_range;
-  std::vector<smt_astt> obj_ids;
-  std::vector<smt_astt> obj_starts;
-  is_in_range.resize(addr_space_data.back().size());
-  obj_ids.resize(addr_space_data.back().size());
-  obj_starts.resize(addr_space_data.back().size());
+  std::vector<smt_astt> is_in_range(addr_space_data.back().size());
+  std::vector<smt_astt> obj_ids(addr_space_data.back().size());
+  std::vector<smt_astt> obj_starts(addr_space_data.back().size());
 
   std::map<unsigned, unsigned>::const_iterator it;
   unsigned int i;
@@ -406,6 +453,18 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   smt_astt output = mk_fresh(s, "smt_convt::int_to_ptr");
   smt_astt output_obj = output->project(this, 0);
   smt_astt output_offs = output->project(this, 1);
+  if(config.ansi_c.cheri)
+  {
+    smt_astt output_cap = output->project(this, 2);
+    expr2tc other_cap;
+    if(can_carry_provenance(cast.from->type))
+      other_cap = member2tc(
+        int_type, capability_struct_from_cap(cast.from), "pesbt");
+    else
+      other_cap = gen_zero(int_type);
+    smt_astt other_cap_ast = convert_ast(other_cap);
+    assert_ast(other_cap_ast->eq(this, output_cap));
+  }
 
   ast_vec guards;
   for(i = 0; i < addr_space_data.back().size(); i++)
@@ -452,25 +511,6 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   return output;
 }
 
-static bool can_carry_provenance(const type2tc &t)
-{
-  return t->get_width() >= config.ansi_c.capability_width();
-}
-
-static type2tc capability_struct_type2()
-{
-  type2tc type = get_uint64_type();
-  std::vector<type2tc> members = {type,type};
-  std::vector<irep_idt> names = {"pesbt","cursor"};
-  return struct_type2tc(members, names, names, "__ESBMC_capability_struct");
-}
-
-static expr2tc capability_struct2(const expr2tc &pesbt, const expr2tc &cursor)
-{
-  std::vector<expr2tc> members = {pesbt, cursor};
-  return constant_struct2tc(capability_struct_type2(), members);
-}
-
 smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
 {
   type2tc addr_type = ptraddr_type2();
@@ -493,17 +533,15 @@ smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
     addr_space_type->member_names[0]);
 
   pointer_offset2tc ptr_offs(addr_type, cast.from);
-  add2tc add(addr_type, from_start, ptr_offs);
-  expr2tc pointer = add;
+  expr2tc address = add2tc(addr_type, from_start, ptr_offs);
+  expr2tc pointer = address;
 
   if(config.ansi_c.cheri && can_carry_provenance(cast.type))
   {
     /* encode capability information */
-    pointer = bitcast2tc(
-      get_uint_type(config.ansi_c.capability_width()),
-      capability_struct2(
-        pointer_capability2tc(addr_type, cast.from),
-        pointer));
+    pointer = capability_from_components(
+      pointer_capability2tc(addr_type, cast.from),
+      pointer);
   }
 
   // Finally, type-cast the address to the destination's type
