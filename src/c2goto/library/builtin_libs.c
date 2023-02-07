@@ -13,8 +13,33 @@ int __ESBMC_sync_fetch_and_add(int *ptr, int value)
 // #include <stddef.h>
 // #include <cheri.h>
 
+#if !defined(cheri_debug_assert)
+/* Disable cheri-compressed-cap's debug assertions since they assert that
+ * base <= top in compute_base_top, which the comment above it admits is not
+ * always true. */
+#if 1
+#define cheri_debug_assert(...)
+#else
+#define cheri_debug_assert(...)                                                \
+  __ESBMC_assert(__VA_ARGS__, "cheri-compressed-cap internal assertion")
+#endif
+#endif
+#include <cheri_compressed_cap.h>
+
 __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
 {
+#if 1
+  union {
+    void *__capability cap;
+    struct {
+      uint64_t pesbt;
+      uint64_t cursor;
+    };
+  } u = { cap };
+  cc128_cap_t result;
+  cc128_decompress_mem(u.pesbt, u.cursor, false /* TODO: tag bit */, &result);
+  return result.cr_bounds_valid ? result._cr_top - result.cr_base : 0;
+#else
   union {
     void *__capability cap;
     struct {
@@ -69,6 +94,7 @@ __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
   uint64_t t = (a_top + c_t) << (E + 14) | T;
   uint64_t b = (a_top + c_b) << (E + 14) | B;
   return t - b;
+#endif
 }
 
 #endif
