@@ -452,28 +452,62 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   return output;
 }
 
+static bool can_carry_provenance(const type2tc &t)
+{
+  return t->get_width() >= config.ansi_c.capability_width();
+}
+
+static type2tc capability_struct_type2()
+{
+  type2tc type = get_uint64_type();
+  std::vector<type2tc> members = {type,type};
+  std::vector<irep_idt> names = {"pesbt","cursor"};
+  return struct_type2tc(members, names, names, "__ESBMC_capability_struct");
+}
+
+static expr2tc capability_struct2(const expr2tc &pesbt, const expr2tc &cursor)
+{
+  std::vector<expr2tc> members = {pesbt, cursor};
+  return constant_struct2tc(capability_struct_type2(), members);
+}
+
 smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
 {
-  type2tc int_type = machine_ptr;
+  type2tc addr_type = ptraddr_type2();
 
   // The plan: index the object id -> address-space array and pick out the
   // start address, then add it to any additional pointer offset.
 
-  pointer_object2tc obj_num(int_type, cast.from);
+  pointer_object2tc obj_num(addr_type, cast.from);
 
-  symbol2tc addrspacesym(addr_space_arr_type, get_cur_addrspace_ident());
-  index2tc idx(addr_space_type, addrspacesym, obj_num);
+  expr2tc from_addr_space = index2tc(
+    addr_space_type,
+    symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
+    obj_num);
 
   // We've now grabbed the pointer struct, now get first element. Represent
   // as fetching the first element of the struct representation.
-  member2tc memb(int_type, idx, addr_space_type->member_names[0]);
+  expr2tc from_start = member2tc(
+    addr_space_type->members[0],
+    from_addr_space,
+    addr_space_type->member_names[0]);
 
-  pointer_offset2tc ptr_offs(int_type, cast.from);
-  add2tc add(int_type, memb, ptr_offs);
+  pointer_offset2tc ptr_offs(addr_type, cast.from);
+  add2tc add(addr_type, from_start, ptr_offs);
+  expr2tc pointer = add;
 
-  // Finally, replace typecast
-  typecast2tc new_cast(cast.type, add);
-  return convert_ast(new_cast);
+  if(config.ansi_c.cheri && can_carry_provenance(cast.type))
+  {
+    /* encode capability information */
+    pointer = bitcast2tc(
+      get_uint_type(config.ansi_c.capability_width()),
+      capability_struct2(
+        pointer_capability2tc(addr_type, cast.from),
+        pointer));
+  }
+
+  // Finally, type-cast the address to the destination's type
+  return convert_ast(typecast2tc(cast.type, pointer));
 }
 
 smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)

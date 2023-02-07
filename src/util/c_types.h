@@ -42,6 +42,8 @@ type2tc long_double_type2();
 typet pointer_type();
 type2tc pointer_type2();
 
+type2tc ptraddr_type2();
+
 typet enum_type();
 typet signed_short_int_type();
 typet unsigned_short_int_type();
