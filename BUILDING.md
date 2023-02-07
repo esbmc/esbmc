@@ -51,28 +51,28 @@ You can get the latest version using the following __git__ command:
 mkdir ESBMC_Project && cd ESBMC_Project && git clone https://github.com/esbmc/esbmc
 ```
 
-## Preparing Clang 11
+## Preparing CHERI Clang 13
 
-ESBMC uses [__clang__](https://clang.llvm.org/) in its front-end. It currently supports version 11.0.0.
+CHERI-enabled ESBMC uses [__CHERI clang__](https://github.com/CTSRD-CHERI/llvm-project) in its front-end. It currently supports the release 20210817 based on clang version 13.0.0.
 
 First, we need to download the package. It can be performed using the following __wget__ command:
 
 ```
-Linux:
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
-
-macOS:
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz
+wget https://github.com/CTSRD-CHERI/llvm-project/archive/refs/tags/cheri-rel-20210817.tar.gz
 ```
 
-Then, we need to extract the package. You can use the following __tar__ command:
+Then, we need to extract and build the package. You can use the following commands:
 
 ```
-Linux:
-tar xJf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang11
-
-macOS:
-tar xJf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-apple-darwin clang11
+tar xf cheri-rel-20210817.tar.gz &&
+mkdir clang13 &&
+cd llvm-project-cheri-rel-20210817 &&
+mkdir build &&
+cd build &&
+cmake -GNinja -S ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_PARALLEL_LINK_JOBS=4 -DLLVM_CCACHE_BUILD=FALSE -DLLVM_INSTALL_BINUTILS_SYMLINKS=TRUE -DLLVM_ENABLE_LIBXML2=FALSE -DLLVM_ENABLE_ZLIB=FORCE_ON -DLLVM_ENABLE_OCAMLDOC=FALSE -DLLVM_ENABLE_BINDINGS=FALSE -DLLVM_INCLUDE_EXAMPLES=FALSE -DLLVM_INCLUDE_DOCS=FALSE -DLLVM_INCLUDE_BENCHMARKS=FALSE -DCLANG_ENABLE_STATIC_ANALYZER=FALSE -DCLANG_ENABLE_ARCMT=FALSE -DLLVM_ENABLE_Z3_SOLVER=FALSE -DLLVM_TOOL_LLVM_MCA_BUILD=FALSE -DLLVM_TOOL_LLVM_EXEGESIS_BUILD=FALSE -DLLVM_TOOL_LLVM_RC_BUILD=FALSE -DLLVM_ENABLE_LLD=TRUE -DLLVM_OPTIMIZED_TABLEGEN=FALSE -DLLVM_USE_SPLIT_DWARF=TRUE -DLLVM_ENABLE_ASSERTIONS=TRUE '-DLLVM_LIT_ARGS=--max-time 3600 --timeout 300 -s -vv' '-DLLVM_TARGETS_TO_BUILD=AArch64;ARM;Mips;RISCV;X86;host' -DENABLE_EXPERIMENTAL_NEW_PASS_MANAGER=FALSE -DCLANG_ROUND_TRIP_CC1_ARGS=FALSE '-DLLVM_ENABLE_PROJECTS=llvm;clang;lld' -DCMAKE_INSTALL_PREFIX=../../clang13 -DCMAKE_C_COMPILER=/usr/bin/cc -DCMAKE_CXX_COMPILER=/usr/bin/c++ -DCMAKE_ASM_COMPILER=/usr/bin/cc -DCMAKE_BUILD_RPATH_USE_ORIGIN=TRUE
+ninja &&
+ninja install &&
+cd ../..
 ```
 
 ## Preparing the Solidity frontend
@@ -199,7 +199,7 @@ Before proceeding to the next section, make sure you have clang, LLVM and all th
 
 ```
 clang and LLVM:
-<path_to_your_project>/ESBMC_Project/clang11
+<path_to_your_project>/ESBMC_Project/clang13
 
 Boolector:
 <path_to_your_project>/ESBMC_Project/boolector
@@ -242,10 +242,10 @@ First, we need to setup __cmake__, by using the following command in ESBMC_Proje
 
 ```
 Linux:
-cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../../clang11 -DLLVM_DIR=$PWD/../../clang11 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=On -DYices_DIR=$PWD/../../yices -DCVC4_DIR=$PWD/../../cvc4 -DGMP_DIR=$PWD/../../gmp -DBitwuzla_DIR=$PWD/../../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
+cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../../clang13 -DLLVM_DIR=$PWD/../../clang13 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=On -DYices_DIR=$PWD/../../yices -DCVC4_DIR=$PWD/../../cvc4 -DGMP_DIR=$PWD/../../gmp -DBitwuzla_DIR=$PWD/../../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
 
 macOS:
-cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../../clang11 -DLLVM_DIR=$PWD/../../clang11 -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DBitwuzla_DIR=$PWD/../../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
+cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../../clang13 -DLLVM_DIR=$PWD/../../clang13 -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DBitwuzla_DIR=$PWD/../../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
 ```
 
 Finally, we can trigger the build process, by using the following command:
@@ -286,3 +286,27 @@ to be recompiled.
 
 It is advised to keep the default setting `detect` for `CLANG_HEADERS_BUNDLED`,
 which decides to bundle headers only when linking statically against __clang__.
+
+
+## Setting up the sysroot for CHERI clang
+
+CHERI clang is used as frontend by CHERI-enabled ESBMC.
+Since CHERI support is available only for a few platforms, verifying CHERI-C programs that use header files from the C standard library will require a setup of a C standard library for one of these platforms.
+CHERI-enabled ESBMC defaults to the platform mips64-unknown-linux-gnu and
+expects the corresponding sysroot to be accessible at `/usr/mips64-unknown-linux-gnu`.
+
+In case you are running CHERI-enabled ESBMC on such a platform, the system can
+directly be used, only a symlink has to be set up in case it does not yet exist:
+```
+test -e /usr/mips64-unknown-linux-gnu || su -c 'ln -s . /usr/mips64-unknown-linux-gnu'
+```
+
+Otherwise, to install the library and its headers, on Ubuntu run
+```
+sudo apt install libc6-dev-mips64-cross &&
+sudo ln -s mips64-linux-gnuabi64 /usr/mips64-unknown-linux-gnu
+```
+and on Gentoo execute (as root)
+```
+emerge -n crossdev && crossdev -t mips64-unknown-linux-gnu --stage3 -A "n64 n32"
+```
