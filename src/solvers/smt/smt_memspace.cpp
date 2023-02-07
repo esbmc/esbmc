@@ -387,18 +387,6 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   // Update array
   bump_addrspace_array(obj_num, range_struct);
 
-  // Finally, ensure that the array storing whether this pointer is dynamic,
-  // is initialized for this ptr to false. That way, only pointers created
-  // through malloc will be marked dynamic.
-
-  type2tc arrtype(new array_type2t(get_bool_type(), expr2tc(), true));
-  symbol2tc allocarr(arrtype, dyn_info_arr_name);
-  constant_int2tc objid(
-    get_uint_type(sizeof(obj_num) * CHAR_BIT), BigInt(obj_num));
-  index2tc idx(get_bool_type(), allocarr, objid);
-  equality2tc dyn_eq(idx, gen_false_expr());
-  assert_expr(dyn_eq);
-
   return ptr_val;
 }
 
