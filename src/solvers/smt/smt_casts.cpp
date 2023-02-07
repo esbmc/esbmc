@@ -352,6 +352,9 @@ static bool can_carry_provenance(const type2tc &t)
 
 static type2tc capability_struct_type2()
 {
+  assert(
+    config.ansi_c.cheri_concentrate &&
+    "uncompressed CHERI capabilities are not implemented");
   type2tc type = ptraddr_type2();
   std::vector<type2tc> members = {type,type};
   std::vector<irep_idt> names = {"pesbt","cursor"};
