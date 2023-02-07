@@ -61,6 +61,7 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "path"),
      "set include path"},
+    {"nostdinc", NULL, "do not include from standard system paths"},
     {"idirafter",
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "path"),
