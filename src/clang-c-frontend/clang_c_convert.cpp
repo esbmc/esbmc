@@ -1334,6 +1334,16 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "__uint128";
     break;
 
+  case clang::BuiltinType::IntCap:
+    new_type = intcap_typet();
+    c_type = "__intcap";
+    break;
+
+  case clang::BuiltinType::UIntCap:
+    new_type = uintcap_typet();
+    c_type = "unsigned __intcap";
+    break;
+
   default:
   {
     std::ostringstream oss;
