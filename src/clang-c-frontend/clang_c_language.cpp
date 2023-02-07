@@ -146,6 +146,24 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.emplace_back(
       "-D__builtin_cheri_bounds_set(p,n)=__esbmc_cheri_bounds_set(p,n)");
 
+    /* DEMO */
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_base_get(p)=__esbmc_cheri_base_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_top_get(p)=__esbmc_cheri_top_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_perms_get(p)=__esbmc_cheri_perms_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_type_get(p)=__esbmc_cheri_type_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_flags_get(p)=__esbmc_cheri_flags_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_sealed_get(p)=__esbmc_cheri_sealed_get(p)");
+
+    /* TODO: DEMO */
+    compiler_args.emplace_back("-D__builtin_cheri_tag_get(p)=1");
+    compiler_args.emplace_back("-D__builtin_clzll(n)=__esbmc_clzll(n)");
+
     switch(config.ansi_c.cheri)
     {
     case configt::ansi_ct::CHERI_OFF:
@@ -373,7 +391,7 @@ long long int __ESBMC_llabs(long long int);
 
 // pointers
 unsigned __ESBMC_POINTER_OBJECT(const void *);
-signed __ESBMC_POINTER_OFFSET(const void *);
+__PTRDIFF_TYPE__ __ESBMC_POINTER_OFFSET(const void *);
 
 // malloc
 __attribute__((annotate("__ESBMC_inf_size")))
@@ -486,6 +504,15 @@ int __ESBMC_builtin_constant_p(int);
     intrinsics += R"(
 __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability);
 void *__capability __esbmc_cheri_bounds_set(void *__capability, __SIZE_TYPE__);
+__SIZE_TYPE__ __esbmc_cheri_base_get(void *__capability);
+#if __ESBMC_CHERI__ == 128
+__UINT64_TYPE__ __esbmc_cheri_top_get(void *__capability);
+__SIZE_TYPE__ __esbmc_cheri_perms_get(void *__capability);
+__UINT16_TYPE__ __esbmc_cheri_flags_get(void *__capability);
+__UINT32_TYPE__ __esbmc_cheri_type_get(void *__capability);
+_Bool __esbmc_cheri_sealed_get(void *__capability);
+#endif
+__UINT64_TYPE__ __esbmc_clzll(__UINT64_TYPE__);
     )";
   }
 

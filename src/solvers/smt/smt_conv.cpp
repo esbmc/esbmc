@@ -356,7 +356,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const union_type2t &ut = to_union_type(expr->type);
       unsigned c = ut.get_component_number(cu.init_field);
       /* Can only initialize unions by expressions of same type as init_field */
-      assert(src_expr->type == ut.members[c]);
+      assert(src_expr->type->type_id == ut.members[c]->type_id);
     }
 #endif
     a = convert_ast(typecast2tc(

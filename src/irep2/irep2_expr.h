@@ -2680,6 +2680,8 @@ public:
   pointer_offset2t(const type2tc &type, const expr2tc &ptrobj)
     : pointer_offset_expr_methods(type, pointer_offset_id, ptrobj)
   {
+    assert(type->type_id == type2t::signedbv_id);
+    assert(type->get_width() == config.ansi_c.address_width);
   }
   pointer_offset2t(const pointer_offset2t &ref) = default;
 

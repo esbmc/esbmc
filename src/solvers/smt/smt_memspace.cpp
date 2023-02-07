@@ -157,6 +157,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     type2tc followed_type = migrate_type(followed_type_old);
     expr2tc pointee_size = type_byte_size_expr(followed_type);
     type2tc inttype = machine_ptr;
+    type2tc difftype = get_int_type(config.ansi_c.address_width);
 
     if(non_ptr_op->type->get_width() < config.ansi_c.pointer_width())
       non_ptr_op = typecast2tc(machine_ptr, non_ptr_op);
@@ -164,7 +165,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     expr2tc mul = mul2tc(inttype, non_ptr_op, pointee_size);
 
     // Add or sub that value
-    expr2tc ptr_offset = pointer_offset2tc(inttype, ptr_op);
+    expr2tc ptr_offset = typecast2tc(inttype, pointer_offset2tc(difftype, ptr_op));
 
     expr2tc newexpr;
     if(is_add2t(expr))
