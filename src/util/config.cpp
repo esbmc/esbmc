@@ -203,6 +203,14 @@ bool configt::set(const cmdlinet &cmdline)
     dm = ansi_c.target.is_windows_abi() ? LLP64 : LP64;
   ansi_c.set_data_model(dm);
 
+  ansi_c.cheri = cmdline.isset("cheri");
+
+  if(ansi_c.cheri && ansi_c.word_size != 64)
+  {
+    msg.error("--cheri!=off is only supported with 64-bit targets");
+    return true;
+  }
+
   if(cmdline.isset("little-endian") && cmdline.isset("big-endian"))
   {
     log_error("Can't set both little and big endian modes");
