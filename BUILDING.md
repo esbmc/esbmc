@@ -291,22 +291,20 @@ which decides to bundle headers only when linking statically against __clang__.
 ## Setting up the sysroot for CHERI clang
 
 CHERI clang is used as frontend by CHERI-enabled ESBMC.
-Since CHERI support is available only for a few platforms, verifying CHERI-C programs that use header files from the C standard library will require a setup of a C standard library for one of these platforms.
-CHERI-enabled ESBMC defaults to the platform mips64-unknown-linux-gnu and
-expects the corresponding sysroot to be accessible at `/usr/mips64-unknown-linux-gnu`.
+Since CHERI support is available only for a few platforms, verifying CHERI-C
+programs that use header files from the C standard library will require a setup
+of a C standard library for one of these platforms.
 
-In case you are running CHERI-enabled ESBMC on such a platform, the system can
-directly be used, only a symlink has to be set up in case it does not yet exist:
+CHERI-enabled ESBMC defaults to the platform mips64-unknown-freebsd and
+expects a the corresponding sysroot, the default of which can be configured by
+passing the CMake flags
 ```
-test -e /usr/mips64-unknown-linux-gnu || su -c 'ln -s . /usr/mips64-unknown-linux-gnu'
+-DESBMC_CHERI_HYBRID_SYSROOT=<path> -DESBMC_CHERI_PURECAP_SYSROOT=<path>
 ```
 
-Otherwise, to install the library and its headers, on Ubuntu run
+To obtain and install a CHERI sysroot, the
+[cheribuild](https://github.com/CTSRD-CHERI/cheribuild)
+tool is the recommended way:
 ```
-sudo apt install libc6-dev-mips64-cross &&
-sudo ln -s mips64-linux-gnuabi64 /usr/mips64-unknown-linux-gnu
-```
-and on Gentoo execute (as root)
-```
-emerge -n crossdev && crossdev -t mips64-unknown-linux-gnu --stage3 -A "n64 n32"
+cheribuild.py cheribsd-mips64-hybrid disk-image-mips64-hybrid
 ```
