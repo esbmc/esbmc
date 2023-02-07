@@ -448,7 +448,7 @@ arith_2ops::arith_2ops(
   {
     assert(id == expr2t::sub_id);
     assert(is_bv_type(t));
-    assert(t->get_width() == config.ansi_c.pointer_width);
+    assert(t->get_width() == config.ansi_c.address_width);
   }
   else if(!(is_vector_type(v1->type) || is_vector_type(v2->type)))
   {
