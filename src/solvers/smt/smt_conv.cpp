@@ -74,8 +74,9 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
 
+  /* TODO: pointer_object is actually identified by an 'unsigned int' number */
   members.push_back(get_uint_type(config.ansi_c.pointer_width())); /* CHERI-TODO */
-  members.push_back(get_uint_type(config.ansi_c.pointer_width())); /* CHERI-TODO */
+  members.push_back(get_uint_type(config.ansi_c.address_width));
   names.emplace_back("pointer_object");
   names.emplace_back("pointer_offset");
 
@@ -99,7 +100,7 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
 
   addr_space_data.emplace_back();
 
-  machine_ptr = type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width())); /* CHERI-TODO */
+  machine_ptr = get_uint_type(config.ansi_c.pointer_width()); /* CHERI-TODO */
 
   ptr_foo_inited = false;
 }
@@ -304,7 +305,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
   default:
   {
-    // Convert /all the arguments/. Via magical delegates.
+    // Convert all the arguments and store them in 'args'.
     unsigned int i = 0;
     expr->foreach_operand(
       [this, &args, &i](const expr2tc &e) { args[i++] = convert_ast(e); });
@@ -1770,7 +1771,10 @@ expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
     get_uint_type(domain_width), idx, gen_zero(get_int32_type()));
 }
 
-unsigned long smt_convt::size_to_bit_width(unsigned long sz)
+
+/** Convert the size of an array to its bit width. Essential log2 with
+ *  some rounding. */
+static unsigned long size_to_bit_width(unsigned long sz)
 {
   uint64_t domwidth = 2;
   unsigned int dombits = 1;
@@ -1789,7 +1793,7 @@ unsigned long smt_convt::size_to_bit_width(unsigned long sz)
   return dombits;
 }
 
-unsigned long smt_convt::calculate_array_domain_width(const array_type2t &arr)
+unsigned long calculate_array_domain_width(const array_type2t &arr)
 {
   // Index arrays by the smallest integer required to represent its size.
   // Unless it's either infinite or dynamic in size, in which case use the
@@ -1803,13 +1807,13 @@ unsigned long smt_convt::calculate_array_domain_width(const array_type2t &arr)
   return config.ansi_c.word_size;
 }
 
-type2tc smt_convt::make_array_domain_type(const array_type2t &arr)
+type2tc make_array_domain_type(const array_type2t &arr)
 {
   // Start special casing if this is an array of arrays.
   if(!is_array_type(arr.subtype))
   {
     // Normal array, work out what the domain sort is.
-    if(int_encoding)
+    if(config.options.get_bool_option("int-encoding"))
       return get_uint_type(config.ansi_c.int_width);
 
     return get_uint_type(calculate_array_domain_width(arr));
