@@ -332,8 +332,8 @@ smt_astt smt_convt::convert_identifier_pointer(
 smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
 {
   std::vector<expr2tc> membs;
-  membs.push_back(constant_int2tc(machine_ptr, BigInt(obj_num)));
-  membs.push_back(constant_int2tc(machine_ptr, BigInt(0)));
+  membs.push_back(constant_int2tc(pointer_struct->members[0], BigInt(obj_num)));
+  membs.push_back(constant_int2tc(pointer_struct->members[1], BigInt(0)));
   constant_struct2tc ptr_val_s(pointer_struct, membs);
   smt_astt ptr_val = tuple_api->tuple_create(ptr_val_s);
 
@@ -386,6 +386,18 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
 
   // Update array
   bump_addrspace_array(obj_num, range_struct);
+
+  // Finally, ensure that the array storing whether this pointer is dynamic,
+  // is initialized for this ptr to false. That way, only pointers created
+  // through malloc will be marked dynamic.
+
+  type2tc arrtype(new array_type2t(get_bool_type(), expr2tc(), true));
+  symbol2tc allocarr(arrtype, dyn_info_arr_name);
+  constant_int2tc objid(
+    get_uint_type(sizeof(obj_num) * CHAR_BIT), BigInt(obj_num));
+  index2tc idx(get_bool_type(), allocarr, objid);
+  equality2tc dyn_eq(idx, gen_false_expr());
+  assert_expr(dyn_eq);
 
   return ptr_val;
 }
@@ -568,9 +580,15 @@ void smt_convt::init_addr_space_array()
   bump_addrspace_array(pointer_logic.back().get_invalid_object(), addr1_tuple);
 
   constant_struct2tc null_ptr_tuple(
-    pointer_struct, std::vector<expr2tc>{zero_ptr_int, zero_ptr_int});
+    pointer_struct,
+    std::vector<expr2tc>{
+      constant_int2tc(pointer_struct->members[0], 0),
+      constant_int2tc(pointer_struct->members[1], 0)});
   constant_struct2tc invalid_ptr_tuple(
-    pointer_struct, std::vector<expr2tc>{one_ptr_int, zero_ptr_int});
+    pointer_struct,
+    std::vector<expr2tc>{
+      constant_int2tc(pointer_struct->members[0], 1),
+      constant_int2tc(pointer_struct->members[1], 0)});
 
   null_ptr_ast = convert_ast(null_ptr_tuple);
   invalid_ptr_ast = convert_ast(invalid_ptr_tuple);
