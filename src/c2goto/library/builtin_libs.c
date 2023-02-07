@@ -16,7 +16,7 @@ int __ESBMC_sync_fetch_and_add(int *ptr, int value)
 #if 1
 
 #ifdef __ESBMC_CHERI_MORELLO__
-# define CC_IS_MORELLO
+#define CC_IS_MORELLO
 #enif
 
 #if !defined(cheri_debug_assert)
@@ -25,7 +25,7 @@ int __ESBMC_sync_fetch_and_add(int *ptr, int value)
  * always true. */
 #if 1
 #ifndef assert
-# define assert(expr) __ESBMC_assert(expr, "builtin libc assertion")
+#define assert(expr) __ESBMC_assert(expr, "builtin libc assertion")
 #endif
 #define cheri_debug_assert(...)
 #else
@@ -36,7 +36,7 @@ int __ESBMC_sync_fetch_and_add(int *ptr, int value)
 #include <cheri_compressed_cap.h>
 
 #ifdef __ESBMC_CHERI_MORELLO__
-# undef CC_IS_MORELLO
+#undef CC_IS_MORELLO
 #endif
 
 #include <cheri/cheric.h>

@@ -85,10 +85,10 @@ static type2tc migrate_type0(const typet &type)
     return type2tc(s);
   }
 
-  if (type.id() == typet::t_intcap)
+  if(type.id() == typet::t_intcap)
     return type2tc(new signedbv_type2t(config.ansi_c.capability_width()));
 
-  if (type.id() == typet::t_uintcap)
+  if(type.id() == typet::t_uintcap)
     return type2tc(new unsignedbv_type2t(config.ansi_c.capability_width()));
 
   if(type.id() == typet::t_array)
@@ -337,9 +337,10 @@ static type2tc migrate_type0(const typet &type)
 
 type2tc migrate_type(const typet &type)
 {
-  if (type.can_carry_provenance())
-    assert(type.id() == typet::t_pointer || type.id() == "c_enum" ||
-           type.id() == typet::t_intcap || type.id() == typet::t_uintcap);
+  if(type.can_carry_provenance())
+    assert(
+      type.id() == typet::t_pointer || type.id() == "c_enum" ||
+      type.id() == typet::t_intcap || type.id() == typet::t_uintcap);
   type2tc ty2 = migrate_type0(type);
   return ty2;
 }
