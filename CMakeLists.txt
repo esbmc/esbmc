@@ -35,9 +35,9 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Sanitizer")
 endif()
 
-if(CMAKE_COMPILER_IS_GNUCXX)
-  add_compile_options(-Wall -Wextra)
-endif()
+set(ESBMC_CXX_Clang_DEFAULTS -Wall -Wextra -pipe)
+set(ESBMC_CXX_GNU_DEFAULTS -Wall -Wextra -pipe)
+add_compile_options(${ESBMC_CXX_${CMAKE_CXX_COMPILER_ID}_DEFAULTS})
 
 include(CheckIncludeFile)
 check_include_file(unistd.h HAVE_UNISTD)
