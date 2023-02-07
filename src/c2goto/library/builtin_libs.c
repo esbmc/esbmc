@@ -42,38 +42,104 @@ int __ESBMC_sync_fetch_and_add(int *ptr, int value)
 #include <cheri/cheric.h>
 // #include <assert.h>
 
+uint64_t __esbmc_clzll(uint64_t v)
+{
+  for (int i=0; i<64; i++, v <<= 1)
+    if (v & (uint64_t)1 << 63)
+      return i;
+  __ESBMC_assert(0, "clzll is not defined for zero arguments");
+  return nondet_uint64();
+}
+
+union __esbmc_cheri_cap128 {
+  void *__capability cap;
+  // struct { __UINT64_TYPE__ pesbt, cursor; };
+  struct { __UINT64_TYPE__ cursor, pesbt; };
+};
+
+__SIZE_TYPE__ __esbmc_cheri_base_get(void *__capability cap)
+{
+  union __esbmc_cheri_cap128 u = { cap };
+  cc128_cap_t comp;
+  cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
+  // __ESBMC_assert(u.comp.cr_bounds_valid, "__esbmc_cheri_base_get on capability with invalid bounds");
+  return comp.cr_base;
+}
+
+__SIZE_TYPE__ __esbmc_cheri_perms_get(void *__capability cap)
+{
+  union __esbmc_cheri_cap128 u = { cap };
+  cc128_cap_t comp;
+  cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
+  // __ESBMC_assert(u.comp.cr_bounds_valid, "__esbmc_cheri_type_get on capability with invalid bounds");
+  __SIZE_TYPE__ hwperms = cc128_get_perms(&comp);
+  __SIZE_TYPE__ swperms = cc128_get_uperms(&comp);
+  return hwperms | swperms << CC128_UPERMS_SHFT;
+}
+
+__UINT16_TYPE__ __esbmc_cheri_flags_get(void *__capability cap)
+{
+  union __esbmc_cheri_cap128 u = { cap };
+  cc128_cap_t comp;
+  cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
+  return cc128_get_flags(&comp);
+}
+
+__UINT32_TYPE__ __esbmc_cheri_type_get(void *__capability cap)
+{
+  union __esbmc_cheri_cap128 u = { cap };
+  cc128_cap_t comp;
+  cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
+  // __ESBMC_assert(comp.cr_bounds_valid, "__esbmc_cheri_type_get on capability with invalid bounds");
+  return cc128_get_otype(&comp);
+}
+
+_Bool __esbmc_cheri_sealed_get(void *__capability cap)
+{
+  union __esbmc_cheri_cap128 u = { cap };
+  cc128_cap_t comp;
+  cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
+  return cc128_is_cap_sealed(&comp);
+}
+
 /* modelled after UCAM-CL-TR-951 semantics of CHERI-MIPS instruction CSetBounds */
 void *__capability
 __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
 {
+#if 1
+  union __esbmc_cheri_cap128 u = { cap };
+  cc128_cap_t comp;
+  cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
+  __PTRADDR_TYPE__ cursor = comp._cr_cursor;
+  __PTRADDR_TYPE__ base = comp.cr_base;
+  __PTRADDR_TYPE__ top = comp._cr_top;
+#else
   __PTRADDR_TYPE__ cursor = (__PTRADDR_TYPE__)cap;
   __PTRADDR_TYPE__ base = cheri_getbase(cap);
   __PTRADDR_TYPE__ top = cheri_gettop(cap);
+#endif
   __ESBMC_assert(cheri_gettag(cap), "tag-violation c2exception");
-  __ESBMC_assert(!cheri_getsealed(cap), "seal-violation c2exception");
+  // __ESBMC_assert(!cc128_is_cap_sealed(&comp) /*cheri_getsealed(cap)*/, "seal-violation c2exception");
   __ESBMC_assert(base <= cursor, "length-violation c2exception");
   __uint128_t newTop = cursor;
   newTop += sz;
-  __ESBMC_assert(newTop <= top, "length-violation c2exception");
-  cc128_cap_t comp;
+  // __ESBMC_assert(newTop <= top, "length-violation c2exception");
+  // cc128_cap_t comp;
   bool exact = cc128_setbounds(&comp, cursor, newTop);
   (void)exact; /* ignore */
-  union
-  {
-    struct
-    {
-      __UINT64_TYPE__ pesbt;
-      __UINT64_TYPE__ cursor;
-    };
-    void *__capability cap;
-  } ret;
-  __ESBMC_assume(ret.cursor == cursor);
-  __ESBMC_assume(ret.pesbt == comp.cr_pesbt);
+  u.pesbt = cc128_compress_mem(&comp);
+  // __ESBMC_assume(ret.cursor == cursor);
+  // __ESBMC_assume(ret.pesbt == comp.cr_pesbt);
+  /*
   __ESBMC_assume(cheri_gettag(ret.cap) == cheri_gettag(cap));
   __ESBMC_assume(cheri_gettype(ret.cap) == cheri_gettype(cap));
   __ESBMC_assume(cheri_getperm(ret.cap) == cheri_getperm(cap));
   __ESBMC_assume(cheri_getflags(ret.cap) == cheri_getflags(cap));
-  return ret.cap;
+  */
+  __ESBMC_assert(__ESBMC_POINTER_OBJECT((__cheri_fromcap void *)u.cap) == __ESBMC_POINTER_OBJECT((__cheri_fromcap void *)cap), "error: not same pointer_object");
+  __ESBMC_assert(__ESBMC_POINTER_OFFSET((__cheri_fromcap void *)u.cap) == __ESBMC_POINTER_OFFSET((__cheri_fromcap void *)cap), "error: not same pointer_offset");
+  __ESBMC_assume(__ESBMC_same_object((__cheri_fromcap void *)u.cap, (__cheri_fromcap void *)cap));
+  return u.cap;
 }
 
 #endif
@@ -87,6 +153,7 @@ __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
 __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
 {
 #if 1
+/*
   union
   {
     void *__capability cap;
@@ -95,7 +162,9 @@ __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
       __UINT64_TYPE__ pesbt;
       __UINT64_TYPE__ cursor;
     };
-  } u = {cap};
+  }
+  */
+  union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t result;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* TODO: tag bit */, &result);
   return result.cr_bounds_valid ? result._cr_top - result.cr_base : 0;

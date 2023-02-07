@@ -518,6 +518,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
 {
   type2tc addr_type = ptraddr_type2();
+  type2tc diff_type = get_int_type(config.ansi_c.address_width);
 
   // The plan: index the object id -> address-space array and pick out the
   // start address, then add it to any additional pointer offset.
@@ -536,7 +537,7 @@ smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
     from_addr_space,
     addr_space_type->member_names[0]);
 
-  pointer_offset2tc ptr_offs(addr_type, cast.from);
+  pointer_offset2tc ptr_offs(diff_type, cast.from);
   expr2tc address = add2tc(addr_type, from_start, ptr_offs);
   expr2tc pointer = address;
 
