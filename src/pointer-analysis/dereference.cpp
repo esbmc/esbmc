@@ -1074,7 +1074,8 @@ void dereferencet::construct_from_array(
   constant_int2tc subtype_sz_expr(offset->type, BigInt(subtype_size));
   // The value of "div" does not depend on the offset units (i.e., bits or bytes)
   // as it essentially represents an index in the array of the given subtype
-  div2tc div(pointer_type2(), offset, subtype_sz_expr);
+  expr2tc div =
+    typecast2tc(pointer_type2(), div2tc(offset->type, offset, subtype_sz_expr));
   simplify(div);
 
   modulus2tc mod(offset->type, offset, subtype_sz_expr);
@@ -2258,13 +2259,13 @@ void dereferencet::check_data_obj_access(
 {
   assert(!is_array_type(value));
 
-  expr2tc offset = typecast2tc(pointer_type2(), src_offset);
-  unsigned int data_sz = type_byte_size_bits(value->type).to_uint64();
-  unsigned int access_sz = type_byte_size_bits(type).to_uint64();
+  expr2tc offset = typecast2tc(ptraddr_type2(), src_offset);
+  uint64_t data_sz = type_byte_size_bits(value->type).to_uint64();
+  uint64_t access_sz = type_byte_size_bits(type).to_uint64();
   expr2tc data_sz_e = gen_ulong(data_sz);
   expr2tc access_sz_e = gen_ulong(access_sz);
 
-  // Only erronous thing we check for right now is that the offset is out of
+  // Only erroneous thing we check for right now is that the offset is out of
   // bounds, misaligned access happense elsewhere. The highest byte read is at
   // offset+access_sz-1, so check fail if the (offset+access_sz) > data_sz.
   // Lower bound not checked, instead we just treat everything as unsigned,
