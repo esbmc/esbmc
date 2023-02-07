@@ -13,7 +13,7 @@ int __ESBMC_sync_fetch_and_add(int *ptr, int value)
 // #include <stddef.h>
 // #include <cheri.h>
 
-#if 0
+#if 1
 
 #if !defined(cheri_debug_assert)
 /* Disable cheri-compressed-cap's debug assertions since they assert that
@@ -28,11 +28,48 @@ int __ESBMC_sync_fetch_and_add(int *ptr, int value)
 #endif
 #include <cheri_compressed_cap.h>
 
+#include <cheri/cheric.h>
+#include <assert.h>
+
+void *__capability __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
+{
+  __PTRADDR_TYPE__ cursor = (__PTRADDR_TYPE__)cap;
+  __PTRADDR_TYPE__ base = cheri_getbase(cap);
+  __PTRADDR_TYPE__ top = cheri_gettop(cap);
+  assert(cheri_gettag(cap)); /* else raise_c2_exception(CapEx_TagViolation, cb) */
+  assert(!cheri_getsealed(cap)); /* else raise_c2_exception(CapEx_SealViolation, cb) */
+  assert(base <= cursor); /* else raise_c2_exception(CapEx_LengthViolation, cb) */
+  __uint128_t newTop = cursor;
+  newTop += sz;
+  assert(newTop <= top); /* else raise_c2_exception(CapEx_LengthViolaton, cb) */
+  cc128_cap_t comp;
+  bool exact = cc128_setbounds(&comp, cursor, newTop);
+  (void)exact; /* ignore */
+  union {
+    struct {
+      uint64_t pesbt;
+      uint64_t cursor;
+    };
+    void *__capability cap;
+  } ret;
+  /* TODO: otype, perms, type, ... */
+  __ESBMC_assume(ret.cursor == cursor);
+  __ESBMC_assume(ret.pesbt == comp.cr_pesbt);
+  __ESBMC_assume(cheri_gettag(ret.cap) == cheri_gettag(cap));
+  return ret.cap;
+}
+
+#endif
+
+#if 0
+#define cheri_ptr(ptr, len)                                                    \
+  cheri_bounds_set(                                                            \
+    (union __esbmc_cheri_cap128){.cursor = (uintptr_t)(ptr)}.cap, len)
 #endif
 
 __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
 {
-#if 0
+#if 1
   union {
     void *__capability cap;
     struct {

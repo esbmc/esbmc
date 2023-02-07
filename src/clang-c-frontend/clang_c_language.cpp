@@ -119,6 +119,8 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     // compiler_args.emplace_back("--sysroot=/usr/mips64-unknown-linux-gnu");
     compiler_args.emplace_back(
       "-D__builtin_cheri_length_get(p)=__esbmc_cheri_length_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_bounds_set(p,n)=__esbmc_cheri_bounds_set(p,n)");
 
     switch (config.ansi_c.cheri)
     {
@@ -456,7 +458,10 @@ int __ESBMC_builtin_constant_p(int);
     )";
 
   if (config.ansi_c.cheri)
+  {
     intrinsics += "__SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability);";
+    intrinsics += "void *__capability __esbmc_cheri_bounds_set(void *__capability, __SIZE_TYPE__);";
+  }
 
   return intrinsics;
 }
