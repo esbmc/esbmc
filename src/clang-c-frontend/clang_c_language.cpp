@@ -102,6 +102,12 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
 
   std::string sysroot;
 
+  if(config.ansi_c.cheri)
+  {
+    compiler_args.emplace_back("-D__ESBMC_CHERI__");
+    compiler_args.emplace_back("-cheri");
+  }
+
   config.options.get_option("sysroot", sysroot);
   if(!sysroot.empty())
     compiler_args.push_back("--sysroot=" + sysroot);
