@@ -315,11 +315,7 @@ smt_astt smt_convt::convert_identifier_pointer(
     }
 
     smt_astt output = init_pointer_obj(obj_num, size);
-    smt_astt args[2];
-    args[0] = a;
-    args[1] = output;
-
-    assert_ast(args[0]->eq(this, args[1]));
+    assert_ast(a->eq(this, output));
   }
 
   // Insert canonical address-of this expression.
@@ -334,6 +330,7 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   std::vector<expr2tc> membs;
   membs.push_back(constant_int2tc(pointer_struct->members[0], BigInt(obj_num)));
   membs.push_back(constant_int2tc(pointer_struct->members[1], BigInt(0)));
+  membs.push_back(constant_int2tc(pointer_struct->members[2], BigInt(0))); /* CHERI-TODO */
   constant_struct2tc ptr_val_s(pointer_struct, membs);
   smt_astt ptr_val = tuple_api->tuple_create(ptr_val_s);
 
