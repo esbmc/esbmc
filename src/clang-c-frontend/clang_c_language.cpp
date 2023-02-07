@@ -146,7 +146,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.emplace_back(
       "-D__builtin_cheri_bounds_set(p,n)=__esbmc_cheri_bounds_set(p,n)");
 
-    switch (config.ansi_c.cheri)
+    switch(config.ansi_c.cheri)
     {
     case configt::ansi_ct::CHERI_OFF:
       break;
