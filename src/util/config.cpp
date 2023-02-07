@@ -211,10 +211,13 @@ bool configt::set(const cmdlinet &cmdline)
     arch = "mips64el"; /* CHERI-TODO: either big-endian MIPS or maybe RISC-V */
 #endif
     os = "freebsd";
-    if(!flavor.empty())
-      msg.warning(
-        "overriding flavor '" + flavor + "' by 'purecap' due to --cheri");
-    flavor = "purecap";
+    if(ansi_c.cheri == ansi_ct::CHERI_PURECAP)
+    {
+      if(flavor != "purecap")
+        msg.warning(
+          "overriding flavor '" + flavor + "' by 'purecap' due to --cheri");
+      flavor = "purecap";
+    }
     req_target++;
   }
 

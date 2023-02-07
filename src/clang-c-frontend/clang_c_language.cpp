@@ -135,7 +135,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
       }
       compiler_args.emplace_back(std::move(march));
     }
-    else
+    else if(is_purecap)
       compiler_args.emplace_back("-mabi=purecap");
 
     compiler_args.emplace_back(
