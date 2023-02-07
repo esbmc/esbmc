@@ -69,7 +69,7 @@ public:
     {
       /* TODO: should only return capability_width() when
        *       cheri == CHERI_PURECAP */
-      return cheri != CHERI_OFF ? capability_width() : address_width;
+      return cheri == CHERI_PURECAP ? capability_width() : address_width;
     }
 
     unsigned int capability_width() const noexcept
