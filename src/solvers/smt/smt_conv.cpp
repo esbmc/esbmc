@@ -77,8 +77,10 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   /* TODO: pointer_object is actually identified by an 'unsigned int' number */
   members.push_back(ptraddr_type2()); /* CHERI-TODO */
   members.push_back(ptraddr_type2());
+  members.push_back(ptraddr_type2());
   names.emplace_back("pointer_object");
   names.emplace_back("pointer_offset");
+  names.emplace_back("pointer_cap_info");
 
   pointer_struct = {members, names, names, "pointer_struct"};
 
@@ -303,6 +305,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::ieee_fma_id:
   case expr2t::ieee_sqrt_id:
   case expr2t::pointer_offset_id:
+  case expr2t::pointer_object_id:
+  case expr2t::pointer_capability_id:
     break; // Don't convert their operands
 
   default:
@@ -719,6 +723,18 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     args[0] = convert_ast(*ptr);
     a = args[0]->project(this, 0);
+    break;
+  }
+  case expr2t::pointer_capability_id:
+  {
+    const pointer_capability2t &obj = to_pointer_capability2t(expr);
+    // Potentially walk through some typecasts
+    const expr2tc *ptr = &obj.ptr_obj;
+    while(is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
+      ptr = &to_typecast2t(*ptr).from;
+
+    args[0] = convert_ast(*ptr);
+    a = args[0]->project(this, 2);
     break;
   }
   case expr2t::typecast_id:
