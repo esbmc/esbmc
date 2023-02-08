@@ -695,14 +695,20 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::CXXTemporaryObjectExprClass:
   {
-    /*
     const clang::CXXTemporaryObjectExpr &cxxtoe =
       static_cast<const clang::CXXTemporaryObjectExpr &>(stmt);
 
-    // get the constructor making this temporary
+    // get the constructor call making this temporary
     if(get_constructor_call(cxxtoe, new_expr))
       return true;
-    */
+
+    // make the temporary
+    side_effect_exprt tmp_obj("temporary_object", new_expr.type());
+    codet code_expr("expression");
+    code_expr.operands().push_back(new_expr);
+    tmp_obj.initializer(code_expr);
+    tmp_obj.location() = new_expr.location();
+    new_expr.swap(tmp_obj);
 
     break;
   }
@@ -737,7 +743,11 @@ bool clang_cpp_convertert::get_constructor_call(
   auto it = ASTContext->getParents(constructor_call).begin();
   const clang::Decl *objectDecl = it->get<clang::Decl>();
 
-  if(!objectDecl)
+  // Distinguish `Foo foo = new foo();` from `Foo foo = foo();`
+  // The latter involves a temporary object and copy constructor call
+  // where the the temporary object construction is considered an argument to
+  // the cpy ctor call's AST node. We shouldn't make a new_object in this case.
+  if(!objectDecl && constructor_call.arguments().empty())
   {
     address_of_exprt tmp_expr;
     tmp_expr.type() = pointer_typet();

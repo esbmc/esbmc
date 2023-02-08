@@ -1,13 +1,16 @@
+#include <cassert>
+
 class Foo {
   public:
     Foo() {};
     ~Foo() {};
-    void Execute() {};
+    void Execute() { assert(0); }
+
 };
 
 int main()
 {
-  auto foo = Foo();
+  Foo foo = Foo();
   foo.Execute();
   return 0;
 }
