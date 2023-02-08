@@ -743,10 +743,12 @@ bool clang_cpp_convertert::get_constructor_call(
   auto it = ASTContext->getParents(constructor_call).begin();
   const clang::Decl *objectDecl = it->get<clang::Decl>();
 
-  // Distinguish `Foo foo = new foo();` from `Foo foo = foo();`
-  // The latter involves a temporary object and copy constructor call
-  // where the the temporary object construction is considered an argument to
-  // the cpy ctor call's AST node. We shouldn't make a new_object in this case.
+  /*
+   * Distinguish `Foo foo = new foo();` from `Foo foo = foo();`
+   * The latter involves a temporary object and copy constructor call
+   * where the the temporary object construction is considered an argument to
+   * the cpy ctor call's AST node. We shouldn't make a new_object in this case.
+   */
   if(!objectDecl && constructor_call.arguments().empty())
   {
     address_of_exprt tmp_expr;
