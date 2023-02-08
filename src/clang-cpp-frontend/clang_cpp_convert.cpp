@@ -744,12 +744,11 @@ bool clang_cpp_convertert::get_constructor_call(
   const clang::Decl *objectDecl = it->get<clang::Decl>();
 
   /*
-   * Distinguish `Foo foo = new foo();` from `Foo foo = foo();`
-   * The latter involves a temporary object and copy constructor call
-   * where the the temporary object construction is considered an argument to
-   * the cpy ctor call's AST node. We shouldn't make a new_object in this case.
+   * We only need to build the new_object if:
+   *  1. we are dealing with new operator
+   *  2. we are binding a temporary
    */
-  if(!objectDecl && constructor_call.arguments().empty())
+  if(!objectDecl && need_new_object(it->get<clang::Stmt>()))
   {
     address_of_exprt tmp_expr;
     tmp_expr.type() = pointer_typet();
@@ -1232,4 +1231,30 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   // generate the type casting expr and push it to callee's arguments
   gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
   call.arguments().push_back(implicit_this_symb);
+}
+
+bool clang_cpp_convertert::need_new_object(const clang::Stmt *parentStmt)
+{
+  /*
+   * Example:
+   * Distinguish `Foo foo = new foo();` from `Foo foo = foo();`
+   * This function will return true for the former.
+   * The latter involves a temporary object and copy constructor call
+   * where the the temporary object construction is considered an argument to
+   * the cpy ctor call's AST node, in which case this function will return false,
+   * indicating we shouldn't make a new_object.
+   */
+  if(parentStmt)
+  {
+    switch(parentStmt->getStmtClass())
+    {
+    case clang::Stmt::CXXNewExprClass:
+    case clang::Stmt::CXXBindTemporaryExprClass:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  return false;
 }

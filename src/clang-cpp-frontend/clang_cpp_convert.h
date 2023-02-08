@@ -142,6 +142,12 @@ protected:
     const exprt &callee_decl,
     side_effect_expr_function_callt &call,
     exprt &initializer);
+
+  /*
+   * This is an ancillary function deciding whether we need
+   * need to build an new_object when dealing with constructor_call
+   */
+  bool need_new_object(const clang::Stmt *parentStmt);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
