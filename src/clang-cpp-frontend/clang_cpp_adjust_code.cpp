@@ -1,4 +1,5 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
+#include <algorithm>
 
 void convert_expression_to_code(exprt &expr)
 {
@@ -167,13 +168,16 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
         code_declt object(code_decl.lhs());
         new_block.copy_to_operands(object);
 
-        // Get rhs
+        // Get rhs - this represents the constructor call
         side_effect_expr_function_callt &init =
           to_side_effect_expr_function_call(rhs);
 
-        // Get lhs
-        // TODO: the original lhs needs to be the first arg!
-        init.arguments().push_back(address_of_exprt(code_decl.lhs()));
+        // Get lhs - this represents the `this` pointer
+        exprt::operandst &rhs_args = init.arguments();
+        rhs_args.push_back(address_of_exprt(code_decl.lhs()));
+        // the original lhs needs to be the first arg, then followed by others:
+        //  BLAH(&bleh, arg1, arg2, ...)
+        std::rotate(rhs_args.rbegin(), rhs_args.rbegin() + 1, rhs_args.rend());
 
         // Now convert the side_effect into an expression
         convert_expression_to_code(init);
