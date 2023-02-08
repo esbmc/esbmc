@@ -1563,12 +1563,12 @@ void dereferencet::construct_struct_ref_from_const_offset(
         // menace. Recurse to continue our checks.
         BigInt new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs.to_uint64());
-<<<<<<< Updated upstream
+#if 1
         value = member2tc(it, value, data->member_names[i]);
-=======
+#else
         log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
         value = member2tc(it, value, struct_type.member_names[i]);
->>>>>>> Stashed changes
+#endif
 
         construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
         return;

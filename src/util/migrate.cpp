@@ -546,8 +546,8 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     type, thename, target_level, level1_num, level2_num, thread_num, node_num));
 }
 
-<<<<<<< Updated upstream
-=======
+#if 0
+#else
 // Functions to flatten union literals to not contain anything of union type.
 // Everything should become a byte array, as we slowly purge concrete unions
 static expr2tc flatten_union(const exprt &expr);
@@ -717,8 +717,7 @@ static expr2tc flatten_union(const exprt &expr)
   constant_array2tc arr(arraytype, byte_array);
   return arr;
 }
-
->>>>>>> Stashed changes
+#endif
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   type2tc type;

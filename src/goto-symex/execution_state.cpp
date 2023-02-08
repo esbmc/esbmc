@@ -197,9 +197,13 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
 void execution_statet::symex_step(reachability_treet &art)
 {
   statet &state = get_active_state();
+  log_debug("Guard");
+  state.guard.dump();
   const goto_programt::instructiont &instruction = *state.source.pc;
   last_insn = &instruction;
-
+  log_debug("instruction");
+  instruction.dump();
+  log_debug("merging goto");
   merge_gotos();
   if(break_insn != 0 && break_insn == instruction.location_number)
   {

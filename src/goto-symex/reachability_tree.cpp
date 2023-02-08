@@ -56,6 +56,7 @@ void reachability_treet::setup_for_new_explore()
   execution_statet *s;
   if(schedule)
   {
+    log_debug("Schedule execution mode");
     schedule_target = target_template->clone();
     targ = schedule_target;
     s = reinterpret_cast<execution_statet *>(new schedule_execution_statet(
@@ -70,6 +71,7 @@ void reachability_treet::setup_for_new_explore()
   }
   else
   {
+    log_debug("DFS execution mode");
     targ = target_template->clone();
     s = reinterpret_cast<execution_statet *>(new dfs_execution_statet(
       goto_functions, ns, this, targ, permanent_context, options));
@@ -525,13 +527,18 @@ std::shared_ptr<goto_symext::symex_resultt>
 reachability_treet::get_next_formula()
 {
   assert(execution_states.size() > 0 && "Must setup RT before exploring");
-
-  while(!is_has_complete_formula())
+  unsigned step = 0;
+   while(!is_has_complete_formula())
   {
+
     while((!get_cur_state().has_cswitch_point_occured() ||
            get_cur_state().check_if_ileaves_blocked()) &&
           get_cur_state().can_execution_continue())
+    {
+      log_debug("Exploring step {}", step++);
       get_cur_state().symex_step(*this);
+    }
+
 
     if(state_hashing)
     {

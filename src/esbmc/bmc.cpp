@@ -352,6 +352,7 @@ void bmct::report_result(smt_convt::resultt &res)
 smt_convt::resultt bmct::start_bmc()
 {
   std::shared_ptr<symex_target_equationt> eq;
+
   smt_convt::resultt res = run(eq);
   report_trace(res, eq);
   report_result(res);
@@ -361,20 +362,23 @@ smt_convt::resultt bmct::start_bmc()
 smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 {
   symex->options.set_option("unwind", options.get_option("unwind"));
+  log_debug("Starting Symex with bound: {}", options.get_option("unwind"));
   symex->setup_for_new_explore();
 
   if(options.get_bool_option("schedule"))
     return run_thread(eq);
 
+  log_debug("Symex setup completed");
   smt_convt::resultt res;
   do
   {
     if(++interleaving_number > 1)
       log_status("Thread interleavings {}", interleaving_number);
 
+    log_debug("Checking interleaving: {}", interleaving_number);
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
-
+    log_debug("Thread finished");
     if(res == smt_convt::P_SATISFIABLE)
     {
       if(config.options.get_bool_option("smt-model"))
@@ -543,10 +547,12 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   {
     if(options.get_bool_option("schedule"))
     {
+      log_debug("Preparing next schedule formula");
       result = symex->generate_schedule_formula();
     }
     else
     {
+      log_debug("Preparing next formula");
       result = symex->get_next_formula();
     }
   }
