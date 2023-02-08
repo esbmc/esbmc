@@ -487,11 +487,6 @@ expr2tc dereferencet::dereference(
   for(const expr2tc &target : points_to_set)
     known_exhaustive &= !(is_unknown2t(target) || is_invalid2t(target));
 
-  if(is_struct_type(type)) {
-    log_warning("FAM dereference!");
-
-  }
-
   expr2tc value;
   if(!known_exhaustive)
     value = make_failed_symbol(type);
@@ -1210,7 +1205,7 @@ void dereferencet::construct_from_const_struct_offset(
          * Global initializations are not handled by the goto_check
          * code, here we try to get the size of the value assigned for
          * it
-        *
+        */
         /*
         if(is_symbol2t(value) && mode == READ)
         {
