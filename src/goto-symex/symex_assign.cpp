@@ -396,8 +396,8 @@ void goto_symext::symex_assign_array(
   if(new_rhs->type != index.type)
     new_rhs = typecast2tc(index.type, new_rhs);
 
-  new_rhs = with2tc(
-    index.source_value->type, index.source_value, index.index, new_rhs);
+  new_rhs =
+    with2tc(index.source_value->type, index.source_value, index.index, new_rhs);
 
   symex_assign_rec(
     index.source_value, full_lhs, new_rhs, full_rhs, guard, hidden);
