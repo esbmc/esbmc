@@ -702,13 +702,13 @@ expr2tc dereferencet::build_reference_to(
       // it as future work.
       alignment = 1;
     }
-    final_offset = pointer_offset2tc(
-      get_int_type(config.ansi_c.address_width), deref_expr);
+    final_offset =
+      pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
   }
 
   // Converting final_offset from bytes to bits!
-  final_offset = mul2tc(
-    final_offset->type, final_offset, gen_long(final_offset->type, 8));
+  final_offset =
+    mul2tc(final_offset->type, final_offset, gen_long(final_offset->type, 8));
 
   // Add any offset introduced lexically at the dereference site, i.e. member
   // or index exprs, like foo->bar[3]. If bar is of integer type, we translate
@@ -724,8 +724,8 @@ expr2tc dereferencet::build_reference_to(
     dereference_callbackt::internal_item internal;
     internal.object = value;
     // Converting offset to bytes
-    internal.offset = div2tc(
-      final_offset->type, final_offset, gen_long(final_offset->type, 8));
+    internal.offset =
+      div2tc(final_offset->type, final_offset, gen_long(final_offset->type, 8));
     internal.guard = pointer_guard;
     internal_items.push_back(internal);
     return expr2tc();
@@ -1141,16 +1141,16 @@ void dereferencet::construct_from_array(
       replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
 
     // Converting offset to bytes for byte extracting
-    expr2tc offset_bytes = div2tc(
-      offset->type, offset, gen_long(offset->type, 8));
+    expr2tc offset_bytes =
+      div2tc(offset->type, offset, gen_long(offset->type, 8));
     simplify(offset_bytes);
 
     // Extracting and stitching bytes together
     value = stitch_together_from_byte_array(
       num_bytes, extract_bytes_from_array(value, num_bytes, offset_bytes));
 
-    expr2tc offset_bits = modulus2tc(
-      offset->type, offset, gen_long(offset->type, 8));
+    expr2tc offset_bits =
+      modulus2tc(offset->type, offset, gen_long(offset->type, 8));
     simplify(offset_bits);
 
     // Extracting bits from the produced bv
@@ -1472,7 +1472,10 @@ void dereferencet::construct_from_dyn_offset(
   unsigned int num_bytes = compute_num_bytes_to_extract(
     replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
   // Converting offset to bytes before bytes extraction
-  expr2tc offset_bytes = div2tc(offset->type, offset, is_signedbv_type(offset) ? gen_slong(8) : gen_ulong(8));
+  expr2tc offset_bytes = div2tc(
+    offset->type,
+    offset,
+    is_signedbv_type(offset) ? gen_slong(8) : gen_ulong(8));
   simplify(offset_bytes);
 
   // Extracting and stitching bytes together
