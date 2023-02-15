@@ -159,3 +159,26 @@ jobs:
       run: |
         cd build
         ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
+
+  build-linux-ucode:
+    name: Build ESBMC with all Solvers (Linux)
+    runs-on: ubuntu-latest
+    container: rafaelsamenezes/esbmc-ci:clang11
+    steps:
+    - uses: actions/checkout@v2
+    - run: apt update  # Only for Docker jobs
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+    - name: Fix dubious ownership
+      run: git config --global --add safe.directory /__w/esbmc/esbmc
+    - name: Check branches
+      run: git branch -a
+    - name: Merge development -> staging
+      uses: devmasx/merge-branch@master
+      with:
+          type: now
+          target_branch: revert_615
+          github_token: ${{ github.token }}
+    - name: Configure CMake
+      run: mkdir build && cd build && cmake .. -GNinja  -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_YICES=On -DYices_DIR=/workspace/yices -DCVC4_DIR=/workspace/cvc4 -DGMP_DIR=/workspace/gmp -DBitwuzla_DIR=/workspace/bitwuzla-release -DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=/workspace/ibex -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=OFF -DENABLE_OLD_FRONTEND=OFF -DENABLE_JIMPLE_FRONTEND=On
+
