@@ -1840,7 +1840,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     exprt inits;
 
     // Structs/unions/arrays put the initializer on operands
-    if(t.is_struct() || t.is_union() || t.is_array() || t.is_vector())
+    if(t.is_struct() || t.is_array() || t.is_vector())
     {
       // Initializer everything to zero, even pads
       // TODO: should we initialize pads with nondet values?
@@ -1851,7 +1851,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           ++i)
       {
         // if it is an struct/union, we should skip padding
-        if(t.is_struct() || t.is_union())
+        if(t.is_struct())
           if(
             to_struct_union_type(t).components()[i].get_is_padding() ||
             to_struct_union_type(t).components()[i].get_is_unnamed_bitfield())
@@ -1863,7 +1863,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           return true;
 
         typet elem_type;
-        if(t.is_struct() || t.is_union())
+        if(t.is_struct())
           elem_type = to_struct_union_type(t).components()[i].type();
         else if(t.is_array())
           elem_type = to_array_type(t).subtype();
@@ -1872,11 +1872,23 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         gen_typecast(ns, init, elem_type);
         inits.operands().at(i) = init;
       }
+    }
+    else if(t.is_union())
+    {
+      /* The Clang AST either contains a single initializer for union-typed
+       * expressions or none for the empty union. Create a constant expression
+       * of the right type and set its init-expression, if it exists.
+       * The init expression has to be the only operand to this expression
+       * regardless of the position the initialized field is being declared. */
+      inits = gen_zero(t);
+      if(init_stmt.getNumInits() > 0) {
+        assert(init_stmt.getNumInits() == 1);
+        exprt init;
+        if(get_expr(*init_stmt.getInit(0), init))
+          return true;
+        inits.operands().at(0) = init;
 
-      // If this expression is initializing an union, we should
-      // set which field is being initialized
-      if(t.is_union())
-      {
+        // set which field is being initialized
         auto init_union_field = init_stmt.getInitializedFieldInUnion();
         if(init_union_field)
           to_union_expr(inits).set_component_name(
