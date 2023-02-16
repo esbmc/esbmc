@@ -2,4 +2,4 @@ CORE
 test_abort.c
 --function func1 --no-slice
 ^VERIFICATION FAILED$
-\sarray upper bound$
+\sarray (upper|lower) bound$
