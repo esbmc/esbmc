@@ -1881,7 +1881,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
        * The init expression has to be the only operand to this expression
        * regardless of the position the initialized field is being declared. */
       inits = gen_zero(t);
-      if(init_stmt.getNumInits() > 0) {
+      if(init_stmt.getNumInits() > 0)
+      {
         assert(init_stmt.getNumInits() == 1);
         exprt init;
         if(get_expr(*init_stmt.getInit(0), init))
