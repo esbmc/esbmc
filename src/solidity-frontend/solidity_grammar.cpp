@@ -69,7 +69,7 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   }
   else if(
     element["nodeType"] == "FunctionDefinition" &&
-    element["kind"] == "function")
+    (element["kind"] == "function" || element["kind"] == "constructor"))
   {
     return FunctionDef;
   }

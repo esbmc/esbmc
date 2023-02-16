@@ -71,7 +71,7 @@ bool solidity_convertert::convert_string_literal(
   std::string the_value,
   exprt &dest)
 {
-  size_t string_size = the_value.size();
+  size_t string_size = the_value.size();  
   typet type = array_typet(
     signed_char_type(),
     constant_exprt(
