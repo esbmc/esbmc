@@ -237,6 +237,52 @@ TEST_CASE(
     REQUIRE(result.upper == 5);
   }
 
+  SECTION("Mul test 1")
+  {
+    // A: [5,10], B: [-1,1], Result: [-10,+10]
+    A.make_le_than(10);
+    A.make_ge_than(5);
+    B.make_ge_than(-1);
+    B.make_le_than(1);
+
+    auto result = A * B;
+    REQUIRE(result.lower_set);
+    REQUIRE(result.upper_set);
+    REQUIRE(result.lower == -10);
+    REQUIRE(result.upper == 10);
+  }
+
+  SECTION("Mul test 2")
+  {
+    // A: [-15,10], B: [-1,2], Result: [-30,+20]
+    A.make_le_than(10);
+    A.make_ge_than(-15);
+    B.make_ge_than(-1);
+    B.make_le_than(2);
+
+    auto result = A * B;
+    REQUIRE(result.lower_set);
+    REQUIRE(result.upper_set);
+    REQUIRE(result.lower == -30);
+    REQUIRE(result.upper == 20);
+  }
+
+  SECTION("Div test 1")
+  {
+    // A: [4,10], B: [1,2], Result: [2,+10]
+    A.make_le_than(10);
+    A.make_ge_than(4);
+    B.make_ge_than(1);
+    B.make_le_than(2);
+
+    auto result = A / B;
+    REQUIRE(result.lower_set);
+    REQUIRE(result.upper_set);
+    REQUIRE(result.lower == 2);
+    REQUIRE(result.upper == 10);
+  }
+
+
   SECTION("Copy constructor")
   {
     // Just to be sure
