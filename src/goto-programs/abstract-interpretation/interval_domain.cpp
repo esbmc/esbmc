@@ -62,9 +62,13 @@ real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
     return result;
 
   auto value1 = to_constant_floatbv2t(e).value;
-  value1.increment();
   auto value2 = to_constant_floatbv2t(e).value;
-  value2.decrement();
+
+  if(value1.is_NaN() || value1.is_infinity())
+    return result;
+
+  value1.increment(true);
+  value2.decrement(true);
   result.make_le_than(value1.to_double());
   result.make_ge_than(value2.to_double());
   assert(value2 <= value1);
@@ -121,8 +125,9 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
   T::contract_interval_le(a, b); // a <= b
   T::contract_interval_le(b, a); // b <= a
 
-  if(naive_counter[to_symbol2t(lhs).thename] >= widening_limit())
+  if(fixpoint_counter[to_symbol2t(lhs).thename] >= widening_limit())
   {
+#if 0
     auto previous = get_interval_from_symbol<T>(to_symbol2t(lhs));
     auto upper_increased =
       a.upper_set && previous.upper_set && a.upper > previous.upper;
@@ -132,6 +137,10 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
       a.upper_set = false;
     if(lower_increased)
       a.lower_set = false;
+#else
+    a.upper_set = false;
+    a.lower_set = false;
+#endif
   }
 
   update_symbol_interval(to_symbol2t(lhs), a);
@@ -262,7 +271,8 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
     return gen_false_expr();
 
   std::vector<expr2tc> conjuncts;
-  auto typecast = [&symbol](expr2tc v) {
+  auto typecast = [&symbol](expr2tc v)
+  {
     expr2tc new_expr = symbol;
     c_implicit_typecast_arithmetic(new_expr, v, *migrate_namespace_lookup);
     return new_expr;
@@ -408,9 +418,9 @@ bool interval_domaint::join(const interval_domaint &b)
     }
     else
     {
-      auto test = b.naive_counter.find(it->first);
-      naive_counter[it->first] =
-        test == b.naive_counter.end() ? 0 : test->second + 1;
+      auto test = b.fixpoint_counter.find(it->first);
+      fixpoint_counter[it->first] =
+        test == b.fixpoint_counter.end() ? 0 : test->second + 1;
       auto previous = it->second;
       it->second.join(b_it->second);
       if(it->second != previous)
@@ -450,6 +460,10 @@ void interval_domaint::assign(const expr2tc &expr)
   auto const &c = to_code_assign2t(expr);
   auto isbvop = is_bv_type(c.source) && is_bv_type(c.target);
   auto isfloatbvop = is_floatbv_type(c.source) && is_floatbv_type(c.target);
+  auto ispointer = is_symbol2t(c.source);
+
+  if(!is_symbol2t(c.target))
+    return;
   if(isbvop)
     apply_assignment<integer_intervalt>(c.target, c.source);
   if(isfloatbvop)
@@ -472,7 +486,7 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
     // Reset the interval domain if it is being reasigned (-infinity, +infinity).
     irep_idt identifier = is_symbol2t(expr) ? to_symbol2t(expr).thename
                                             : to_code_decl2t(expr).value;
-    naive_counter[identifier] = 0;
+    fixpoint_counter[identifier] = 0;
     if(is_bv_type(expr))
       int_map.erase(identifier);
 
@@ -592,8 +606,6 @@ void interval_domaint::dump() const
 expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
 {
   assert(is_symbol2t(symbol));
-  symbol2t src = to_symbol2t(symbol);
-  // TODO: this needs a heavy refactoring!
   if(is_bv_type(symbol))
     return make_expression_helper<integer_intervalt>(symbol);
   if(is_floatbv_type(symbol))

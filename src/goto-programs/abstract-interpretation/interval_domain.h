@@ -100,30 +100,30 @@ public:
 
   /**
    * @brief Creates an expression with the intervals found for the given symbol
-   * 
+   *
    * For example, if given a symbol expression with the variable 'FOO'.
    * If at the current abstract state the interval for it is of: [2, 42]
-   * 
-   * This would return an expression of the form: AND (>= FOO 2) (<= FOO 42) 
-   * 
+   *
+   * This would return an expression of the form: AND (>= FOO 2) (<= FOO 42)
+   *
    * If top, it will return a true expr.
    * If bottom, it will return a false expr.
-   * 
-   * @param symbol to construct the interval 
-   * @return expr2tc 
+   *
+   * @param symbol to construct the interval
+   * @return expr2tc
    */
   expr2tc make_expression(const expr2tc &symbol) const;
 
   /**
    * @brief Adds a restriction over all intervals.
-   * 
+   *
    * Do not mistake this by an ASSUME instruction! This can take any type of expression!
    */
   void assume(const expr2tc &);
 
-  /** 
+  /**
    * @brief Uses the abstract state to simplify a given expression using context-
-   * specific information. 
+   * specific information.
    * @param parameters: The expression to simplify.
    * @return A simplified version of the expression.
    *
@@ -156,7 +156,7 @@ protected:
   /// Map for all real intervals
   real_mapt real_map;
   // TODO: a proper widening!
-  std::unordered_map<irep_idt, unsigned, irep_id_hash> naive_counter;
+  std::unordered_map<irep_idt, unsigned, irep_id_hash> fixpoint_counter;
   // TODO: Magic Number!
   unsigned widening_limit() const
   {
@@ -166,60 +166,60 @@ protected:
   /**
    * @brief Recursively explores an Expression until it reaches a symbol. If the
    * symbol is a BV, then removes it from the int_map
-   * 
+   *
    * TODO: There are a lot of expressions that are not supported
    * TODO: A utility function that recursively extracts all the symbols of an expr would be very useful
-   * @param expr 
+   * @param expr
    */
   void havoc_rec(const expr2tc &expr);
 
   /**
    * @brief Recursively explores intervals of an assume expression
-   * 
+   *
    * This is the entry-point of the function, it does the following:
    * 1. If the current negation flag is set. Then the operator is inverted (e.g. lower becomes greater_eq)
    * 2. For if2t and or2t... de morgan is applied and this function is called again for its operands
-   * 
-   * @param expr 
+   *
+   * @param expr
    * @param negation sets whether the current expr is a negation
    */
   void assume_rec(const expr2tc &expr, bool negation = false);
 
   /**
    * @brief Recursively explores intervals over a comparation expression, inserting them into int_map
-   * 
-   * @param lhs 
-   * @param id 
-   * @param rhs 
+   *
+   * @param lhs
+   * @param id
+   * @param rhs
    */
   void assume_rec(const expr2tc &lhs, expr2t::expr_ids id, const expr2tc &rhs);
 
   /**
    * @brief Computes an assignment expression.
-   * 
+   *
    * This recomputes the interval of the LHS to be of RHS, i.e. LHS == RHS.
-   * 
-   * @param assignment 
+   *
+   * @param assignment
    */
   void assign(const expr2tc &assignment);
 
   /**
    * @brief Applies LHS <= RHS and RHS <= LHS from assignment instructions
-   * 
+   *
    * This is separate from the usual assume_rec as LHS symbol may be inside RHS
-   * 
+   *
    * @tparam Interval interval template specialization (Integers, Reals)
-   * @param lhs 
-   * @param rhs 
+   * @param lhs
+   * @param rhs
    */
   template <class Interval>
   void apply_assignment(const expr2tc &lhs, const expr2tc &rhs);
 
   /**
    * @brief Applies  LHS < RHS
-   * 
+   *
    * @tparam Interval interval template specialization (Integers, Reals)
-   * @param lhs 
+   * @param lhs
    * @param rhs
    * @param less_than_equal if operation should be <=
    */
@@ -228,52 +228,52 @@ protected:
 
   /**
    * @brief Generates interval with [min, max] using symbol type
-   * 
+   *
    * @tparam Interval interval template specialization (Integers, Reals)
-   * @param sym 
-   * @return Interval the returned interval is either [min, max] or (-infinity, infinity) 
+   * @param sym
+   * @return Interval the returned interval is either [min, max] or (-infinity, infinity)
    */
   template <class Interval>
   Interval generate_modular_interval(const symbol2t sym) const;
 
   /**
    * @brief Get the interval for expression
-   * 
+   *
    * This computes the interval of a given expression and returns it
-   * 
+   *
    * @tparam Interval interval template specialization (Integers, Reals)
-   * @param e 
-   * @return Interval 
+   * @param e
+   * @return Interval
    */
   template <class Interval>
   Interval get_interval(const expr2tc &e);
 
   /**
    * @brief Get the interval from symbol object or top
-   * 
+   *
    * @tparam Interval interval template specialization (Integers, Reals)
-   * @param sym 
-   * @return Interval 
+   * @param sym
+   * @return Interval
    */
   template <class Interval>
   Interval get_interval_from_symbol(const symbol2t &sym) const;
 
   /**
    * @brief Get the interval from constant expression
-   * 
+   *
    * @tparam Interval interval template specialization (Integers, Reals)
-   * @param sym 
-   * @return Interval 
+   * @param sym
+   * @return Interval
    */
   template <class Interval>
   Interval get_interval_from_const(const expr2tc &sym);
 
   /**
    * @brief Sets new interval for symbol
-   * 
+   *
    * @tparam Interval interval template specialization (Integers, Reals)
-   * @param sym 
-   * @param value 
+   * @param sym
+   * @param value
    */
   template <class Interval>
   void update_symbol_interval(const symbol2t &sym, const Interval value);
