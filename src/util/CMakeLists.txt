@@ -35,9 +35,9 @@ add_library(util_esbmc xml_irep.cpp xml.cpp
         )
 # Boost is needed by anything that touches irep2
 target_include_directories(util_esbmc
-        PRIVATE ${CMAKE_BINARY_DIR}/src
-        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-        PRIVATE ${Boost_INCLUDE_DIRS}
+        PUBLIC ${CMAKE_BINARY_DIR}/src
+        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
+        PUBLIC ${Boost_INCLUDE_DIRS}
         )
 
 target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt ${Boost_LIBRARIES})
