@@ -83,7 +83,7 @@ bool solidity_convertert::convert()
     std::string node_type = (*itr)["nodeType"].get<std::string>();
     if(node_type == "ContractDefinition") // rule source-unit
     {
-      constructor_name=(*itr)["name"].get<std::string>();
+      constructor_name = (*itr)["name"].get<std::string>();
       if(convert_ast_nodes(*itr))
         return true; // 'true' indicates something goes wrong.
     }
@@ -322,11 +322,12 @@ bool solidity_convertert::get_function_definition(
   current_scope_var_num = 1;
   const nlohmann::json *old_functionDecl = current_functionDecl;
   current_functionDecl = &ast_node;
-  if((*current_functionDecl)["name"].get<std::string>() != "")
-    current_functionName = (*current_functionDecl)["name"].get<std::string>();
-  else
+  if(
+    (*current_functionDecl)["name"].get<std::string>() == "" &&
+    (*current_functionDecl)["kind"] == "constructor")
     current_functionName = constructor_name;
-  printf("%s\n",current_functionName.c_str());
+  else
+    current_functionName = (*current_functionDecl)["name"].get<std::string>();
 
   // 4. Return type
   code_typet type;
@@ -1717,12 +1718,13 @@ void solidity_convertert::get_function_definition_name(
   // Follow the way in clang:
   //  - For function name, just use the ast_node["name"]
   // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
-  if(ast_node["name"].get<std::string>() != "")
-    name = ast_node["name"].get<std::string>();
-  else
+  if(
+    ast_node["name"].get<std::string>() == "" &&
+    ast_node["kind"].get<std::string>() == "constructor")
     name = constructor_name;
+  else
+    name = ast_node["name"].get<std::string>();
   id = name;
-  printf("%s\n",name.c_str());
 }
 
 unsigned int solidity_convertert::add_offset(

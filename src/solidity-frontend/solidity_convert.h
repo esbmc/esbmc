@@ -45,7 +45,6 @@ protected:
   std::stack<const nlohmann::json *> current_BinOp_type;
   std::string current_functionName;
 
-  // for constructor
   std::string constructor_name;
 
   bool convert_ast_nodes(const nlohmann::json &contract_def);
