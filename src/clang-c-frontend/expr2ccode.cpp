@@ -21,7 +21,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/base_type.h>
 #include <util/type_byte_size.h>
 
-#include <goto-symex/execution_trace.h>
+#include <irep2/irep2_utils.h>
 
 #include <algorithm>
 #include <regex>
@@ -236,13 +236,16 @@ std::string expr2ccodet::convert_rec(
     else if(tag != "")
       dest += " " + id2string(tag);
 
+    if(struct_type.components().size() == 0)
+      return dest;
+
     dest += " {";
 
     for(const auto &component : struct_type.components())
     {
       std::string comp_name = id2string(component.get_name());
-      if(is_padding(comp_name))
-        continue;
+      //if(is_padding(comp_name))
+      //  continue;
 
       dest += ' ';
       dest += convert_rec(component.type(), c_qualifierst(), comp_name);
@@ -289,13 +292,16 @@ std::string expr2ccodet::convert_rec(
     else if(tag != "")
       dest += " " + id2string(tag);
 
+    if(union_type.components().size() == 0)
+      return dest;
+
     dest += " {";
 
     for(const auto &component : union_type.components())
     {
       std::string comp_name = id2string(component.get_name());
-      if(is_padding(comp_name))
-        continue;
+      //if(is_padding(comp_name))
+      //  continue;
 
       dest += ' ';
       dest += convert_rec(
@@ -955,10 +961,7 @@ std::string expr2ccodet::convert(const exprt &src, unsigned &precedence)
 
 std::string expr2ccodet::convert_struct_union_typedef(const typet &src)
 {
-  const struct_typet &struct_type = to_struct_type(src);
-
-  const irep_idt &tag = struct_type.tag().as_string();
-
+  assert(src.id() == "struct" || src.id() == "union");
   // The following is a simple workaround to determine when a struct
   // type is defined using the "typedef" keyword since it changes
   // the type declaration syntax. This information is reflected only in the
@@ -967,20 +970,33 @@ std::string expr2ccodet::convert_struct_union_typedef(const typet &src)
   // this field.)
   std::string dest = "typedef ";
   dest += src.id().as_string();
-  dest += " {";
 
-  for(const auto &component : struct_type.components())
+  struct_union_typet struct_union_type;
+
+  if(src.id() == "struct")
+    struct_union_type = to_struct_type(src);
+
+  if(src.id() == "union")
+    struct_union_type = to_union_type(src);
+
+  const irep_idt &tag = struct_union_type.tag().as_string();
+
+  if(struct_union_type.components().size() > 0)
   {
-    std::string comp_name = id2string(component.get_name());
-    if(is_padding(comp_name))
-      continue;
+    dest += " {";
+    for(const auto &component : struct_union_type.components())
+    {
+      std::string comp_name = id2string(component.get_name());
+      //if(is_padding(comp_name))
+      //  continue;
 
-    dest += ' ';
-    dest += convert_rec(component.type(), c_qualifierst(), comp_name);
-    dest += ';';
+      dest += ' ';
+      dest += convert_rec(component.type(), c_qualifierst(), comp_name);
+      dest += ';';
+    }
+    dest += " }";
   }
 
-  dest += " }";
   if(tag != "")
     dest += " " + id2string(tag) + " ";
 
@@ -1123,24 +1139,21 @@ std::string expr2ccodet::convert_struct_union_body(
   assert(src.type().id() == "struct" || src.type().id() == "union");
 
   std::string dest;
+  struct_union_typet struct_union_type;
+
   if(src.type().id() == "struct")
-  {
-    const struct_typet &struct_type = to_struct_type(src.type());
-    const irep_idt &tag = struct_type.tag().as_string();
-    // Checking if we have an anonymous struct here before adding the tag
-    std::smatch m;
-    if(!is_anonymous_tag(tag.as_string()))
-      dest += "(" + tag.as_string() + ")";
-  }
+    struct_union_type = to_struct_type(src.type());
+
   if(src.type().id() == "union")
-  {
-    const union_typet &union_type = to_union_type(src.type());
-    const irep_idt &tag = union_type.tag().as_string();
-    // Checking if we have an anonymous union here before adding the tag
-    std::smatch m;
-    if(!is_anonymous_tag(tag.as_string()))
-      dest += "(" + tag.as_string() + ")";
-  }
+    struct_union_type = to_union_type(src.type());
+
+  const irep_idt &tag = struct_union_type.tag().as_string();
+
+  if(!is_anonymous_tag(tag.as_string()))
+    dest += "(" + tag.as_string() + ")";
+
+  if(struct_union_type.components().size() == 0)
+    return dest;
 
   dest += "{ ";
 
@@ -1162,8 +1175,8 @@ std::string expr2ccodet::convert_struct_union_body(
     if(component.get_is_padding())
       continue;
 
-    if(is_padding(component.get_name().as_string()))
-      continue;
+    //if(is_padding(component.get_name().as_string()))
+    //  continue;
 
     if(first)
       first = false;
