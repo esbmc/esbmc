@@ -41,18 +41,6 @@
 #include <atomic>
 #include <goto-symex/witnesses.h>
 
-#include <goto-symex/execution_trace.h>
-
-// Declaring the extern vars for the symex-execution-trace translation.
-// This is an initial temporary solution which will be redesigned later.
-std::vector<c_instructiont> instructions_to_c;
-unsigned int function_call_num = 0;
-unsigned int label_num = 0;
-std::map<std::string, type2tc> alive_vars;
-std::vector<std::string> declared_types;
-std::map<std::string, unsigned int> fun_call_nums;
-std::map<expr2tc, unsigned int> dyn_size_map;
-
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
 {
@@ -633,34 +621,6 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     "Symex completed in: {}s ({} assignments)",
     time2string(symex_stop - symex_start),
     eq->SSA_steps.size());
-
-  if(options.get_bool_option("symex-ssa-trace-as-c"))
-  {
-    insert_static_declarations(ns);
-    inline_function_calls(symex->goto_functions);
-    assign_returns();
-    merge_decl_assign_pairs();
-    assign_dynamic_sizes();
-    const std::string &filename = options.get_option("output");
-    if(!filename.empty())
-    {
-      // Outputting all instructions to the output file
-      std::ofstream out(filename.c_str());
-      if(out)
-      {
-        output_execution_trace(ns, out);
-        out.close();
-      }
-    }
-    else
-    {
-      std::ostringstream str;
-      output_execution_trace(ns, str);
-      log_status(str.str());
-    }
-    //return smt_convt::P_SATISFIABLE;
-    //return 0;
-  }
 
   if(options.get_bool_option("double-assign-check"))
     eq->check_for_duplicate_assigns();
