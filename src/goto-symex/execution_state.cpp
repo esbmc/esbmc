@@ -16,8 +16,6 @@
 #include <util/string2array.h>
 #include <vector>
 
-#include <goto-symex/execution_trace.h>
-
 unsigned int execution_statet::node_count = 0;
 unsigned int execution_statet::dynamic_counter = 0;
 
@@ -294,18 +292,6 @@ void execution_statet::symex_step(reachability_treet &art)
   default:
     goto_symext::symex_step(art);
   }
-
-  if(options.get_bool_option("goto2c"))
-  {
-    c_instructiont c_instr(instruction);
-    // This instruction is inside the loop. Hence, need to increment the loop depth
-    if(c_instr.type == GOTO && c_instr.loop_number > 0)
-    {
-      c_instr.set_loop_depth(
-        cur_state->loop_iterations[c_instr.loop_number].to_uint64());
-    }
-    instructions_to_c.push_back(c_instr);
-  }
 }
 
 void execution_statet::symex_assign(
@@ -324,33 +310,6 @@ void execution_statet::symex_assign(
 void execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
   pre_goto_guard = guardt();
-
-  if(options.get_bool_option("goto2c"))
-  {
-    const goto_programt::instructiont &instruction = *cur_state->source.pc;
-    c_instructiont c_instruction(instruction);
-    /*
-    if(msg == "assertion" ||
-        msg == std::string("assertion ") + instruction.location.get_function().c_str())
-    {
-      c_instruction.make_assertion(instruction.guard);
-    }
-    else
-    {
-      expr2tc new_expr = claim_expr;
-      //cur_state->rename(new_expr);
-      //do_simplify(new_expr);
-      c_instruction.make_assertion(new_expr);
-    }
-    */
-    expr2tc new_expr = expr;
-    //cur_state->rename(new_expr);
-    //do_simplify(new_expr);
-    c_instruction.make_assertion(new_expr);
-    c_instruction.msg = msg;
-    c_instruction.location = instruction.location;
-    instructions_to_c.push_back(c_instruction);
-  }
 
   goto_symext::claim(expr, msg);
 
