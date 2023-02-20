@@ -536,7 +536,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
       vt_entry.location() = symbol.location;
       virtual_table.components().push_back(vt_entry);
 
-      // take care of overloading
+      // take care of overriding
       while(!virtual_bases.empty())
       {
         irep_idt virtual_base = *virtual_bases.begin();
