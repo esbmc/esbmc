@@ -47,6 +47,7 @@ if (WIN32)
   endif()
 
   # Produce static builds in windows
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
   set(Boost_USE_STATIC_LIBS        ON)
 
 endif()
