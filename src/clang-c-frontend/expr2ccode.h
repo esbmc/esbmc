@@ -34,17 +34,15 @@ public:
 
   std::string convert(const typet &src) override;
   std::string convert(const exprt &src) override;
-  
+
   // Static list to keep track of the global compound types that have
   // already been declared declared
   static std::list<std::string> declared_types;
-  
+
   // A method for removing a type from the list of declared types
   static void remove_declared_type(std::string type);
 
-
 protected:
-
   std::string convert_rec(
     const typet &src,
     const c_qualifierst &qualifiers,
