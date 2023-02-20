@@ -40,7 +40,7 @@ if (WIN32)
 
   if(DOWNLOAD_WINDOWS_DEPENDENCIES)
     download_zip_and_extract(LLVM https://sourceforge.net/projects/esbmc-deps/files/llvm14-mt/download)
-    download_zip_and_extract(Z3 https://github.com/Z3Prover/z3/releases/latest/download/z3-4.11.2-x64-win.zip)
+    download_zip_and_extract(Z3 https://github.com/Z3Prover/z3/releases/download/z3-4.11.2/z3-4.11.2-x64-win.zip)
     set(LLVM_DIR ${CMAKE_BINARY_DIR}/LLVM/llvm+clang+lld-14.0.6-x86_64-windows-msvc-release-mt)
     set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/llvm+clang+lld-14.0.6-x86_64-windows-msvc-release-mt)
     set(Z3_DIR ${CMAKE_BINARY_DIR}/Z3/z3-4.11.2-x64-win)
