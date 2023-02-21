@@ -43,7 +43,7 @@ static const struct buffer
   },
 #else
   {
-    {NULL, 0}, 
+    {NULL, 0},
     {&clib64_buf[0], clib64_buf_size},
   },
   {
