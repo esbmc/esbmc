@@ -6,11 +6,21 @@ bool replace_symbolt::replace(exprt &dest)
   if(dest.id() == "symbol")
   {
     expr_mapt::const_iterator it = expr_map.find(dest.identifier());
-
     if(it != expr_map.end())
     {
       dest = it->second;
       return false;
+    }
+  }
+  else if(dest.id() == "argument")
+  {
+    code_typet::argumentt &a = static_cast<code_typet::argumentt &>(dest);
+    expr_mapt::const_iterator it = expr_map.find(a.get_identifier());
+    if(it != expr_map.end())
+    {
+      a.set_identifier(it->second.identifier());
+      a.type() = it->second.type();
+      a.location() = it->second.location();
     }
   }
 
