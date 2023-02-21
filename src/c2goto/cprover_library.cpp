@@ -10,15 +10,15 @@
 
 extern "C"
 {
+  extern const uint8_t clib64_buf[];
   extern const uint8_t clib64_fp_buf[];
+  extern const unsigned int clib64_buf_size;
   extern const unsigned int clib64_fp_buf_size;
 
 #ifndef DISABLE_32_BITS_LIBRARIES
   extern const uint8_t clib32_buf[];
-  extern const uint8_t clib64_buf[];
-  extern const unsigned int clib32_buf_size;
-  extern const unsigned int clib64_buf_size;
   extern const uint8_t clib32_fp_buf[];
+  extern const unsigned int clib32_buf_size;
   extern const unsigned int clib32_fp_buf_size;
 #endif
 }
@@ -42,7 +42,10 @@ static const struct buffer
     {&clib64_fp_buf[0], clib64_fp_buf_size},
   },
 #else
-  {{NULL, 0}, {NULL, NULL}},
+  {
+    {NULL, 0}, 
+    {&clib64_buf[0], clib64_buf_size},
+  },
   {
     {NULL, 0},
     {&clib64_fp_buf[0], clib64_fp_buf_size},
