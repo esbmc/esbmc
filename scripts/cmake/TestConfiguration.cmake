@@ -13,7 +13,10 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(Catch2)
 
-list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/contrib)
+list(APPEND CMAKE_MODULE_PATH
+     ${catch2_SOURCE_DIR}/contrib  # Catch2 v2.x
+     ${catch2_SOURCE_DIR}/extras   # Catch2 v3.x
+)
 include(Catch)
 set(UNIT_TEST_LIB Catch2::Catch2)
 
