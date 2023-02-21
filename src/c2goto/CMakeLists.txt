@@ -31,7 +31,9 @@ if (ESBMC_BUNDLE_LIBC)
   set (clib64f_config clib64_fp.c --64 --floatbv)
 
   if(DISABLE_32_BITS_LIBRARIES)
-    set (inputs clib64f_config)
+    set (inputs clib64_config
+            clib64f_config
+            )
   else()
     set (inputs clib32_config
             clib64_config
