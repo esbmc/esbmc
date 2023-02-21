@@ -96,6 +96,7 @@ jobs:
         run: |
           cd build
           cmake --build . --target INSTALL  --config RelWithDebInfo
+          cpack -G ZIP -C RelWithDebInfo
       - uses: actions/upload-artifact@v2
         with:
           name: release-windows
