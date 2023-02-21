@@ -228,6 +228,11 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     id.class_identifier = new_symbol->id;
     id.id_class = cpp_idt::CLASS;
 
+    if(new_symbol->id.as_string() == "tag.Bird")
+      printf("Got Bird class\n");
+    if(new_symbol->id.as_string() == "tag.Penguin")
+      printf("Got Penguin class\n");
+
     if(has_body)
     {
       typecheck_compound_body(*new_symbol);
