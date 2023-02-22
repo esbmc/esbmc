@@ -18,29 +18,22 @@ target_link_libraries(c2goto
 set_target_properties(c2goto PROPERTIES
   PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libc.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libm.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/headers/libc_hdr.h")
 
+
 if(DEFINED C2GOTO_SYSROOT)
   set(multiarch_flags --sysroot "${C2GOTO_SYSROOT}")
 endif()
 
 if (ESBMC_BUNDLE_LIBC)
-
   # set (<config_variable_name> <output_file> [<c2goto_args>...])
   set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
   set (clib64_config clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
   set (clib32f_config clib32_fp.c --32 --floatbv)
   set (clib64f_config clib64_fp.c --64 --floatbv)
-
-  if(DISABLE_32_BITS_LIBRARIES)
-    set (inputs clib64_config
-            clib64f_config
-            )
-  else()
-    set (inputs clib32_config
-            clib64_config
-            clib32f_config
-            clib64f_config
-            )
-    endif()
+  set (inputs clib32_config
+              clib64_config
+              clib32f_config
+              clib64f_config
+      )
 endif()
 
 function(mangle_clib output)
