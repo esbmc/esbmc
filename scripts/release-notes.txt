@@ -6,8 +6,8 @@ Release Notes of the ESBMC model checker
 * Additional operators for the goto-contractor with `--goto-contractor` (Goto contractor: support for multiple operators. #852).
 * Interval analysis now supports integer and floating-point interval contraction for relational operators with `--interval-analysis` (Interval analysis fixes #861).
 * Added `atexit` operational model (Atexit model implementation #859).
-* Fixed an issue that caused extern variables to not be linked correctly (Changes in the c_link and contextt to handle extern variables #881).
-* The Clang C++ frontend now has support:
+* Fixed an issue that caused extern variables to be linked incorrectly (Changes in the c_link and contextt to handle extern variables #881).
+* The Clang C++ frontend now has support for the following features:
   ** single-inheritance (Single inheritance #882).
   ** multiple-inheritance (Multiple inheritance #884).
   ** arrow operator for objects (Method callsite via arrow operator #891).
