@@ -56,58 +56,51 @@ jobs:
           path: ./build/ESBMC-Darwin.sh
 
   build-windows:
-    name: Build Windows Release
+    name: Build ESBMC with Z3 (Windows)
     runs-on: windows-latest
     steps:
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.8
-    - name: check python
-      run: python --version
-    - name: Make git use LF only
-      run: |
-        git config --system core.autocrlf false
-        git config --system core.eol lf
-    - uses: actions/checkout@v2
-    - name: Install dependencies (flex, bison, od)
-      run: |
-        Write-Host "Set TLS1.2"
-        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor "Tls12"
-        choco install -y nsis.portable winflexbison --ignore-checksums
-    - name: Check if od is on path
-      run: od.exe --version
-    - name: Update vcpkg
-      run: |
-        vcpkg.exe update
-        cd C:/vcpkg
-        git.exe pull
-        .\bootstrap-vcpkg.bat
-    - name: vcpkg integrate
-      run: vcpkg.exe integrate install
-    - name: Install Boost
-      run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows boost-program-options:x64-windows boost-iostreams:x64-windows
-    - name: Prepare Environment
-      run: .\scripts\configure_environment.ps1
-    - name: Check environment
-      run: |
-        ls C:\vcpkg\installed\x64-windows\bin\
-        ls C:\Deps
-    - name: Configure CMake
-      run: |
-        mkdir build
-        cd build
-        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc143-mt-x64-1_80.dll;C:/deps/boost_program_options-vc143-mt-x64-1_80.dll" -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On -DDOWNLOAD_WINDOWS_DEPENDENCIES=On
-    - name: Build ESBMC
-      run: |
-        cd build
-        cmake --build . --target INSTALL --config RelWithDebInfo
-        cpack -G ZIP -C RelWithDebInfo
-        mv ESBMC-*.zip ESBMC-Windows.zip
-    - uses: actions/upload-artifact@v1
-      with:
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - name: check python
+        run: python --version
+      - name: Make git use LF only
+        run: |
+          git config --system core.autocrlf false
+          git config --system core.eol lf
+      - uses: actions/checkout@v2
+      - name: Install dependencies (flex, bison, od)
+        run: |
+          Write-Host "Set TLS1.2"
+          [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor "Tls12"
+          choco install -y nsis.portable winflexbison --ignore-checksums
+      - name: Check if od is on path
+        run: od.exe --version
+      - name: Update vcpkg
+        run: |
+          vcpkg.exe update
+          cd C:/vcpkg
+          git.exe pull
+          .\bootstrap-vcpkg.bat
+      - name: vcpkg integrate
+        run: vcpkg.exe integrate install
+      - name: Install Boost
+        run: vcpkg.exe install boost-filesystem:x64-Windows-static boost-multiprecision:x64-Windows-static boost-date-time:x64-windows-static boost-test:x64-windows-static boost-multi-index:x64-windows-static boost-crc:x64-windows-static boost-property-tree:x64-windows-static boost-uuid:x64-windows-static boost-program-options:x64-windows-static boost-iostreams:x64-windows-static
+      - name: Configure CMake
+        run: |
+          mkdir build
+          cd build
+          cmake.exe .. -A x64 -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On -DDOWNLOAD_WINDOWS_DEPENDENCIES=On
+      - name: Build ESBMC
+        run: |
+          cd build
+          cmake --build . --target INSTALL  --config RelWithDebInfo
+          cpack -G ZIP -C RelWithDebInfo
+      - uses: actions/upload-artifact@v2
+        with:
           name: release-windows
-          path: ./build/ESBMC-Windows.zip
+          path: C:/deps/esbmc
 
 
   create-release:

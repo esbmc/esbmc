@@ -1,0 +1,4 @@
+CORE
+main.c
+file1.c
+^VERIFICATION SUCCESSFUL$

@@ -7,18 +7,19 @@ Author: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
 
 #pragma once
 #include <string>
+#include <util/compiler_defs.h>
 
-#pragma GCC diagnostic push
+CC_DIAGNOSTIC_PUSH()
 // Clang has no support for nonnull-compare warning
 #ifdef __GNUC__
 #ifndef __clang__ // For some reason clang also defines GNUC :)
 #pragma GCC diagnostic ignored "-Wnonnull-compare"
 #endif
+#pragma GCC diagnostic ignored "-Waddress"
 #endif
 
-#pragma GCC diagnostic ignored "-Waddress"
 #include <fmt/format.h>
-#pragma GCC diagnostic pop
+CC_DIAGNOSTIC_POP()
 
 #define ESBMC_FORMATS_START_ASSERTION
 
