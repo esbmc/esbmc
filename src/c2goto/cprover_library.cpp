@@ -10,17 +10,15 @@
 
 extern "C"
 {
-  extern const uint8_t clib64_buf[];
-  extern const uint8_t clib64_fp_buf[];
-  extern const unsigned int clib64_buf_size;
-  extern const unsigned int clib64_fp_buf_size;
-
-#ifndef DISABLE_32_BITS_LIBRARIES
   extern const uint8_t clib32_buf[];
-  extern const uint8_t clib32_fp_buf[];
+  extern const uint8_t clib64_buf[];
   extern const unsigned int clib32_buf_size;
+  extern const unsigned int clib64_buf_size;
+
+  extern const uint8_t clib32_fp_buf[];
+  extern const uint8_t clib64_fp_buf[];
   extern const unsigned int clib32_fp_buf_size;
-#endif
+  extern const unsigned int clib64_fp_buf_size;
 }
 
 namespace
@@ -32,7 +30,6 @@ static const struct buffer
   size_t size;
 } clibs[2][2] = {
 #ifdef ESBMC_BUNDLE_LIBC
-#ifndef DISABLE_32_BITS_LIBRARIES
   {
     {&clib32_buf[0], clib32_buf_size},
     {&clib64_buf[0], clib64_buf_size},
@@ -41,16 +38,6 @@ static const struct buffer
     {&clib32_fp_buf[0], clib32_fp_buf_size},
     {&clib64_fp_buf[0], clib64_fp_buf_size},
   },
-#else
-  {
-    {NULL, 0},
-    {&clib64_buf[0], clib64_buf_size},
-  },
-  {
-    {NULL, 0},
-    {&clib64_fp_buf[0], clib64_fp_buf_size},
-  },
-#endif
 #endif
 };
 } // namespace
