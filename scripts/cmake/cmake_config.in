@@ -15,8 +15,6 @@
 #endif
 
 #cmakedefine ESBMC_BUNDLE_LIBC 1
-#cmakedefine DISABLE_32_BITS_LIBRARIES 1
-
 #cmakedefine ESBMC_CLANG_HEADER_DIR "@ESBMC_CLANG_HEADER_DIR@"
 #cmakedefine ESBMC_CLANG_HEADERS_BUNDLED 1
 
