@@ -1,0 +1,4 @@
+CORE
+main.c
+--incremental-bmc --interval-analysis
+^VERIFICATION FAILED$
