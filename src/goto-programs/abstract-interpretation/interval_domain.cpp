@@ -394,7 +394,6 @@ void interval_domaint::transform(
   }
 }
 
-// TODO: Refactor
 bool interval_domaint::join(const interval_domaint &b)
 {
   if(b.bottom)
@@ -406,51 +405,34 @@ bool interval_domaint::join(const interval_domaint &b)
   }
 
   bool result = false;
-  for(auto it = int_map.begin(); it != int_map.end();) // no it++
+
+  auto f = [&result,this](auto& this_map, const auto& b_map, const auto& b_counter)
   {
-    // search for the variable that needs to be merged
-    // containers have different size and variable order
-    const auto b_it = b.int_map.find(it->first);
-    if(b_it == b.int_map.end())
+    for(auto it = this_map.begin(); it != this_map.end();) // no it++
     {
-      it = int_map.erase(it);
-      result = true;
-    }
-    else
-    {
-      auto test = b.fixpoint_counter.find(it->first);
-      fixpoint_counter[it->first] =
-        test == b.fixpoint_counter.end() ? 0 : test->second + 1;
-      auto previous = it->second;
-      it->second.join(b_it->second);
-      if(it->second != previous)
+      // search for the variable that needs to be merged
+      // containers have different size and variable order
+      const auto b_it = b_map.find(it->first);
+      if(b_it == b_map.end())
+      {
+        it = this_map.erase(it);
         result = true;
-
-      it++;
+      }
+      else
+      {
+        auto test = b_counter.find(it->first);
+        fixpoint_counter[it->first] =
+          test == b_counter.end() ? 0 : test->second + 1;
+        auto previous = it->second;
+        it->second.join(b_it->second);
+        if(it->second != previous)
+          result = true;
+        it++;
     }
-  }
-
-  for(auto it = real_map.begin(); it != real_map.end();) // no it++
-  {
-    // search for the variable that needs to be merged
-    // containers have different size and variable order
-    const auto b_it = b.real_map.find(it->first);
-    if(b_it == b.real_map.end())
-    {
-      it = real_map.erase(it);
-      result = true;
     }
-    else
-    {
-      auto previous = it->second;
-      it->second.join(b_it->second);
-      if(it->second != previous)
-        result = true;
-
-      it++;
-    }
-  }
-
+  };
+  f(int_map, b.int_map, b.fixpoint_counter);
+  f(real_map, b.real_map, b.fixpoint_counter);
   return result;
 }
 
