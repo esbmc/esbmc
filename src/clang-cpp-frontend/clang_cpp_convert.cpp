@@ -316,6 +316,14 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   if(cxxrd == nullptr)
     return false;
 
+  /*
+   * Order of converting methods:
+   *  1. pull base methods in
+   *  2. convert virtual methods. We also need to add:
+   *    a). add virtual table type
+   *    b). virtual pointers
+   *  3. instantiate virtual tables
+   */
   if(cxxrd->bases().begin() != cxxrd->bases().end())
   {
     log_debug(
@@ -324,14 +332,21 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       cxxrd->getNumBases(),
       cxxrd->getNumVBases());
 
-#if 0
     // TODO-split: add methods from base class
     for(auto base : cxxrd->bases())
     {
       // `base` type is clang::CXXBaseSpecifier
+      assert(!"Need to pull bases in");
+      assert(&base);
     }
-#endif
   }
+
+  // skip unions as they don't have virtual methods
+  if(!recordd.isUnion())
+    if(get_struct_class_virtual_methods(cxxrd, type))
+      return true;
+
+  assert(!"TODO: done getting virtual method. Check symbol table");
 
   // Iterate over the declarations stored in this context
   for(const auto &decl : cxxrd->decls())
@@ -339,6 +354,14 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     // Fields were already added
     if(decl->getKind() == clang::Decl::Field)
       continue;
+
+    // virtual methods were already added
+    if(decl->getKind() == clang::Decl::CXXMethod)
+    {
+      const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
+      if(md->isVirtual())
+        continue;
+    }
 
     struct_typet::componentt comp;
 
