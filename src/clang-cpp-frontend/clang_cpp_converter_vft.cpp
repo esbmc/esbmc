@@ -43,21 +43,25 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
 
     /*
      * 2. If this is the first time we see a virtual method in this class,
-     *  add virtual table type symbol and virtual pointer.
-     *  Otherwise just add an entry in the existing virtual table type symbol
+     *  add virtual table type symbol and virtual pointer. Then add a new
+     *  entry in the vtable.
      */
-    if(!check_vtable_existence(type))
+    symbolt *vtable_type_symbol = check_vtable_type_symbol_existence(type);
+    if(!vtable_type_symbol)
     {
-      if(add_vtable_type_symbol(md, type))
+      // first time we create the vtable type for this class
+      vtable_type_symbol = add_vtable_type_symbol(md, comp, type);
+      if(vtable_type_symbol == nullptr)
         return true;
-      if(add_vptr(md, type))
-        return true;
-    }
-    else if(add_vtable_type_entry(type, comp))
-      return true;
-  }
 
-  assert(!"TODO: check tag.Bird type, vtable type and vptr");
+      add_vptr(md, type);
+    }
+
+    /*
+     * 3. add an entry in the existing virtual table type symbol
+     */
+    add_vtable_type_entry(type, comp, vtable_type_symbol);
+  }
 
   return false;
 }
@@ -71,51 +75,109 @@ bool clang_cpp_convertert::annotate_virtual_overriding_methods(
 
   comp.type().set("#is_virtual", true);
   comp.type().set("#virtual_name", comp.name().as_string());
-  comp.set("#is_virtual", true);
-  comp.set("#virtual_name", comp.name().as_string());
+  comp.set("is_virtual", true);
+  comp.set("virtual_name", comp.name().as_string());
 
   return false;
 }
 
-bool clang_cpp_convertert::check_vtable_existence(struct_typet &type)
+symbolt *
+clang_cpp_convertert::check_vtable_type_symbol_existence(struct_typet &type)
 {
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
-  symbolt *s = context.find_symbol(vt_name);
-  // first time we create the vtable type for this class
-  if(s == nullptr)
-    return false; // vtable type symbol doesn't exist
-
-  return true; // vtable type symbol exists
+  return context.find_symbol(vt_name);
 }
 
-bool clang_cpp_convertert::add_vtable_type_symbol(
+symbolt *clang_cpp_convertert::add_vtable_type_symbol(
+  const clang::CXXMethodDecl *md,
+  const struct_typet::componentt &comp,
+  struct_typet &type)
+{
+  /*
+   *  We model the type of the virtual table as a struct type, something like:
+   *   typedef struct {
+   *      void (*do_something)(Base*);
+   *    } VftTag_Base;
+   * Later, we will instantiate a virtual table as:
+   *  VftTag_Base vtable_TagBase@TagBase = { .do_something = &TagBase::do_someting(); }
+   *
+   *  Vtable type has the id in the form of `virtual_table::tag-BLAH`.
+   */
+
+  irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
+
+  symbolt vt_type_symb;
+  vt_type_symb.id = vt_name;
+  vt_type_symb.name = vtable_type_prefix + type.tag().as_string();
+  vt_type_symb.mode = mode;
+  vt_type_symb.type = struct_typet();
+  vt_type_symb.is_type = true;
+  vt_type_symb.type.set("name", vt_type_symb.id);
+  vt_type_symb.location = comp.location();
+  vt_type_symb.module =
+    get_modulename_from_path(comp.location().file().as_string());
+
+  if(context.move(vt_type_symb))
+  {
+    log_error(
+      "Couldn't add vtable type symbol {} to symbol table", vt_type_symb.id);
+    abort();
+  }
+
+  return context.find_symbol(vt_name);
+}
+
+void clang_cpp_convertert::add_vptr(
   const clang::CXXMethodDecl *md,
   struct_typet &type)
 {
   /*
-   *  We model the virtual function table as struct:
-   *   typedef struct {
-   *      void (*do_something)(Base*);
-   *    } VftTag_Base;
-   * Later, we will instantiate the virtual table as:
-   *  VftTag_Base vtable_TagBase@TagBase = { .do_something = &TagBase::do_someting(); }
+   * We model the virtual pointer as a `component` to the parent class' type.
+   * This will be the vptr pointing to the vtable that contains the overriden functions.
+   *
+   * Vptr has the name in the form of `tag-BLAH@vtable_pointer`.
    */
-  assert(!"TODO: First add vtable");
-  return false;
+
+  irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
+  // add a virtual-table pointer
+  struct_typet::componentt component;
+  component.type() = pointer_typet(symbol_typet(vt_name));
+  component.set_name(tag_prefix + type.tag().as_string() + "::@vtable_pointer");
+  component.base_name("@vtable_pointer");
+  component.pretty_name(type.tag().as_string() + "@vtable_pointer");
+  component.set("is_vtptr", true);
+  component.set("access", "public");
+  // add to the class' type
+  type.components().push_back(component);
 }
 
-bool clang_cpp_convertert::add_vptr(
-  const clang::CXXMethodDecl *md,
-  struct_typet &type)
-{
-  assert(!"TODO: add vptr");
-  return false;
-}
-
-bool clang_cpp_convertert::add_vtable_type_entry(
+void clang_cpp_convertert::add_vtable_type_entry(
   struct_typet &type,
-  struct_typet::componentt &comp)
+  struct_typet::componentt &comp,
+  symbolt *vtable_type_symbol)
 {
-  assert(!"TODO: Add entry in existing vtable type");
-  return false;
+  /*
+   * When we encounter a virtual or overriding method in a class,
+   * need to add an entry to the vtable type symbol.
+   * Since the vtable type symbol is modelled as a struct,
+   * this entry is considered a `component` in this struct.
+   * We model this entry as a function pointer, pointing to the
+   * virtual or overriding method in this class.
+   *
+   * Vtable entry's name is of the form ``virtual_table::tag.BLAH::do_something().
+   */
+
+  irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
+  std::string virtual_name = comp.name().as_string();
+  struct_typet::componentt vt_entry;
+  vt_entry.type() = pointer_typet(comp.type());
+  vt_entry.set_name(vt_name.as_string() + "::" + virtual_name);
+  vt_entry.set("base_name", virtual_name);
+  vt_entry.set("pretty_name", virtual_name);
+  vt_entry.set("access", "public");
+  vt_entry.location() = comp.location();
+  // add an entry to the virtual table
+  assert(vtable_type_symbol);
+  struct_typet &vtable_type = to_struct_type(vtable_type_symbol->type);
+  vtable_type.components().push_back(vt_entry);
 }

@@ -157,11 +157,11 @@ protected:
   /*
    * traverse methods to:
    *  1. convert virtual methods and add them to class' type
-   *  2. Add/update vtable type and add vptr:
-   *    a). If there is no existing vtable type symbol,
+   *  2. If there is no existing vtable type symbol,
    *    add virtual table type symbol in the context
    *    and the virtual pointer.
-   *    b). If vtable type symbol exists, do not add it or the vptr,
+   *    Then add a new entry in the vtable.
+   *  3. If vtable type symbol exists, do not add it or the vptr,
    *    just add a new entry in the existing vtable.
    */
   bool get_struct_class_virtual_methods(
@@ -174,33 +174,37 @@ protected:
     const clang::CXXMethodDecl *md,
     struct_typet::componentt &comp);
   /*
-   * Check whether this is the first time we encounter a virtual method
-   * in a class
+   * Check the existence of virtual table type symbol.
+   * If it exists, return its pointer. Otherwise, return nullptr.
    */
-  bool check_vtable_existence(struct_typet &type);
+  symbolt *check_vtable_type_symbol_existence(struct_typet &type);
   /*
    * Add virtual table(vtable) type symbol.
    * This is added as a type symbol in the symbol table.
    *
    * This is done the first time when we encounter a virtual method in a class
    */
-  bool
-  add_vtable_type_symbol(const clang::CXXMethodDecl *md, struct_typet &type);
+  symbolt *add_vtable_type_symbol(
+    const clang::CXXMethodDecl *md,
+    const struct_typet::componentt &comp,
+    struct_typet &type);
   /*
    * Add virtual pointer(vptr).
    * Vptr is NOT a symbol but rather simply added as a component to the class' type.
    *
    * This is done the first time we encounter a virtual method in a class
    */
-  bool add_vptr(const clang::CXXMethodDecl *md, struct_typet &type);
+  void add_vptr(const clang::CXXMethodDecl *md, struct_typet &type);
   /*
    * Add an entry to the virtual table type
    *
    * This is done when NOT the first time we encounter a virtual method in a class
    * in which case we just want to add a new entry to the virtual table type
    */
-  bool
-  add_vtable_type_entry(struct_typet &type, struct_typet::componentt &comp);
+  void add_vtable_type_entry(
+    struct_typet &type,
+    struct_typet::componentt &comp,
+    symbolt *vtable_type_symbol);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
