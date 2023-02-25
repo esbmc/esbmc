@@ -148,6 +148,59 @@ protected:
    * need to build an new_object when dealing with constructor_call
    */
   bool need_new_object(const clang::Stmt *parentStmt);
+
+  /*
+   * Functions for virtual tables and virtual pointers
+   *  TODO: add link to wiki page
+   */
+  std::string vtable_type_prefix = "virtual_table::";
+  /*
+   * traverse methods to:
+   *  1. convert virtual methods and add them to class' type
+   *  2. Add/update vtable type and add vptr:
+   *    a). If there is no existing vtable type symbol,
+   *    add virtual table type symbol in the context
+   *    and the virtual pointer.
+   *    b). If vtable type symbol exists, do not add it or the vptr,
+   *    just add a new entry in the existing vtable.
+   */
+  bool get_struct_class_virtual_methods(
+    const clang::CXXRecordDecl *cxxrd,
+    struct_typet &type);
+  /*
+   * additional annotations for virtual or overriding methods
+   */
+  bool annotate_virtual_overriding_methods(
+    const clang::CXXMethodDecl *md,
+    struct_typet::componentt &comp);
+  /*
+   * Check whether this is the first time we encounter a virtual method
+   * in a class
+   */
+  bool check_vtable_existence(struct_typet &type);
+  /*
+   * Add virtual table(vtable) type symbol.
+   * This is added as a type symbol in the symbol table.
+   *
+   * This is done the first time when we encounter a virtual method in a class
+   */
+  bool
+  add_vtable_type_symbol(const clang::CXXMethodDecl *md, struct_typet &type);
+  /*
+   * Add virtual pointer(vptr).
+   * Vptr is NOT a symbol but rather simply added as a component to the class' type.
+   *
+   * This is done the first time we encounter a virtual method in a class
+   */
+  bool add_vptr(const clang::CXXMethodDecl *md, struct_typet &type);
+  /*
+   * Add an entry to the virtual table type
+   *
+   * This is done when NOT the first time we encounter a virtual method in a class
+   * in which case we just want to add a new entry to the virtual table type
+   */
+  bool
+  add_vtable_type_entry(struct_typet &type, struct_typet::componentt &comp);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
