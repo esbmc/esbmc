@@ -1,12 +1,13 @@
 /*
- * A simple test case of polymorphism
+ * Polymorphism:
+ *  - derived class contains an overriding method
+ *  - the overriding method has `virtual` keyword
  */
 #include <cassert>
 
 class Bird {
   public:
   virtual int do_something(void) { return 21; }
-  //virtual ~Bird(){}
 };
 
 class Penguin: public Bird {
