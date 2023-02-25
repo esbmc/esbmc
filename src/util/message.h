@@ -14,6 +14,8 @@ Maintainers:
 #include <fmt/format.h>
 #include <util/message/format.h>
 #include <util/location.h>
+#include <ctime>
+#include <cstring>
 
 /**
  * @brief Verbosity refers to the max level
@@ -44,10 +46,47 @@ struct messaget
     template <typename... Args>
     static void println(FILE *f, VerbosityLevel lvl, Args &&...args)
     {
-      if(lvl == VerbosityLevel::Error)
-        fmt::print(f, "ERROR: ");
-      fmt::print(f, std::forward<Args>(args)...);
-      fmt::print(f, "\n");
+    	     
+      	/** 
+		* Newly added code to address issue #886.
+			* It prepends a well formatted timestamp, file path, function name, line number and log level to each LOG message. 
+			* It is transparent to the existing logging function, i.e., log_message.
+			* TODO: It can be implemented using a separate function and invoked here and/or elsewhere when required. 		
+		*/		
+		//========Start===============================================================================================
+		struct tm* time_struct; //A time structure consisting of 9 members, such as tm_sec, tm_min, tm_hour, tm_mday, tm_mon, tm_year, etc. 
+		char time_info[20]; //A variable to hold the date and time values.
+		char log_level[12]; //A variable to hold the log level.
+		
+		time_t current_time = time(0);
+		time_struct = localtime(&current_time);
+		strftime (time_info, sizeof(time_info), "%Y-%m-%d %H:%M:%S", time_struct); //"strftime" is to format the date/time structure. 
+	   
+		switch(lvl){//To prepend the respective log level to each log message.  
+			case VerbosityLevel::Error:
+				std::strcpy(log_level, "[ERROR]:"); 
+				break;
+			case VerbosityLevel::Result:
+				std::strcpy(log_level, "[RESULT]:");
+				break;
+			case VerbosityLevel::Warning:
+				std::strcpy(log_level, "[WARNING]:");
+				break;
+			case VerbosityLevel::Progress:
+				std::strcpy(log_level, "[PROGRESS]:");
+				break;
+			case VerbosityLevel::Status:
+				std::strcpy(log_level, "[STATUS]:");
+				break;
+			default:
+				std::strcpy(log_level, "[DEBUG]:");
+		}
+		
+		std::fprintf(f, "%s [%s] [%s:%d] %s ", time_info, __FILE__, __FUNCTION__, __LINE__, log_level); /* Prepends the timestamp, file name, file path, 
+		* function name, line number and log level to each log message. */
+		fmt::print(f, std::forward<Args>(args)...);
+	  	fmt::print(f, "\n");
+	  	//========End=================================================================================================     
     }
 
   public:
