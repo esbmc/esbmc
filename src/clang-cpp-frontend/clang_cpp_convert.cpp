@@ -346,8 +346,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     if(get_struct_class_virtual_methods(cxxrd, type))
       return true;
 
-  assert(!"TODO: done getting virtual method. Check symbol table");
-
   // Iterate over the declarations stored in this context
   for(const auto &decl : cxxrd->decls())
   {
