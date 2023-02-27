@@ -549,7 +549,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         irep_idt virtual_base = *virtual_bases.begin();
 
         // a new thunk function that does 'late casting' of the 'this' parameter
-        // redirecting the call the overriding function
+        // redirecting the call to the overriding function
         symbolt func_symb;
         func_symb.id =
           component.get_name().as_string() + "::" + virtual_base.as_string();

@@ -163,6 +163,9 @@ protected:
    *    Then add a new entry in the vtable.
    *  3. If vtable type symbol exists, do not add it or the vptr,
    *    just add a new entry in the existing vtable.
+   *  4. If method X overrides a base method,
+   *    add a thunk function that does late casting of the `this` parameter
+   *    and redirects the call to the overriding function (i.e. method X itself)
    */
   bool get_struct_class_virtual_methods(
     const clang::CXXRecordDecl *cxxrd,
@@ -205,6 +208,11 @@ protected:
     struct_typet &type,
     struct_typet::componentt &comp,
     symbolt *vtable_type_symbol);
+  /*
+   * add a thunk function for each overriding method
+   */
+  void
+  add_thunk_method(const clang::CXXMethodDecl *const *md, struct_typet &type);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

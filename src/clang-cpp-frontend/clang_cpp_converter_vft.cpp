@@ -27,9 +27,6 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
     if(!md->isVirtual())
       continue;
 
-    // TODO: take care of overriding methods
-    assert(md->begin_overridden_methods() == md->end_overridden_methods());
-
     /*
      * 1. convert this virtual method and add them to class symbol type
      */
@@ -37,6 +34,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
     if(get_decl(*md, comp))
       return true;
 
+    // additional annotations for virtual/overriding methods
     if(annotate_virtual_overriding_methods(md, comp))
       return true;
     type.methods().push_back(comp);
@@ -61,6 +59,20 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
      * 3. add an entry in the existing virtual table type symbol
      */
     add_vtable_type_entry(type, comp, vtable_type_symbol);
+
+    /*
+     * 4. deal with overriding method
+     */
+    if(md->begin_overridden_methods() != md->end_overridden_methods())
+    {
+      /*
+       * Assume it *always* points to one overriden method in base class
+       * TODO: Use a loop if there are more overriden methods
+       *    md->overriden_methods() should do the job
+       */
+      assert(md->size_overridden_methods() == 1);
+      add_thunk_method(md->begin_overridden_methods(), type);
+    }
   }
 
   return false;
@@ -71,7 +83,7 @@ bool clang_cpp_convertert::annotate_virtual_overriding_methods(
   struct_typet::componentt &comp)
 {
   // TODO: take care of overriding methods
-  assert(md->begin_overridden_methods() == md->end_overridden_methods());
+  //assert(md->begin_overridden_methods() == md->end_overridden_methods());
 
   comp.type().set("#is_virtual", true);
   comp.type().set("#virtual_name", comp.name().as_string());
@@ -180,4 +192,30 @@ void clang_cpp_convertert::add_vtable_type_entry(
   assert(vtable_type_symbol);
   struct_typet &vtable_type = to_struct_type(vtable_type_symbol->type);
   vtable_type.components().push_back(vt_entry);
+}
+
+void clang_cpp_convertert::add_thunk_method(
+  const clang::CXXMethodDecl *const *md,
+  struct_typet &type)
+{
+  /*
+   * Add a thunk function for a overriding method.
+   * This thunk function will be added as a symbol in the symbol table,
+   * and considered a `component` to the derived class' type.
+   * This thunk function will be used to set up the derived class' vtable
+   * to override the base method, e.g.
+   *
+   * Suppose Penguin derives Bird, we have the following vtables for Penguin:
+   *  virtual_table::Bird@Penguin =
+   *    {
+   *      .do_it() = &Penguin::do_it()::tag.Bird; // this is the thunk redirecting call to the overriding function
+   *    };
+   *
+   *  virtual_table::Penguin@Penguin =
+   *    {
+   *      .do_it() = &Penguin::do_it(); // this is the overriding function
+   *    };
+   */
+
+  assert(!"TODO: add thunks");
 }
