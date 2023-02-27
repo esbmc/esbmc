@@ -221,6 +221,18 @@ protected:
     const clang::CXXMethodDecl *md,
     const struct_typet::componentt &component,
     struct_typet &type);
+  /*
+   * change the type of 'this' pointer from derived class type to base class type
+   */
+  void update_thunk_this_type(
+    typet &thunk_symbol_type,
+    const std::string &base_class_id);
+  /*
+   * Add symbol for arguments of the thunk method
+   * Params:
+   *  - thunk_func_symb: function symbol for the thunk method
+   */
+  void add_thunk_method_arguments(symbolt &thunk_func_symb);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
