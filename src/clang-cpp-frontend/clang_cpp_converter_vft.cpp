@@ -132,7 +132,7 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
   if(context.move(vt_type_symb))
   {
     log_error(
-      "Couldn't add vtable type symbol {} to symbol table", vt_type_symb.id);
+      "Failed add vtable type symbol {} to symbol table", vt_type_symb.id);
     abort();
   }
 
@@ -217,7 +217,7 @@ void clang_cpp_convertert::add_thunk_method(
    *      .do_it() = &c:@S@Penguin@F@do_something#::do_it(); // this is the overriding function
    *    };
    *
-   *  The thunk method's symbol id is of the form - "thunk::c:@S@Penguin@F@do_something#::tag-Bird"
+   *  The thunk function's symbol id is of the form - "thunk::c:@S@Penguin@F@do_something#::tag-Bird"
    *  meaning "a thunk to Penguin's overriding function `do_something` taking a `this` parameter of the type Bird*"
    */
 
@@ -226,7 +226,8 @@ void clang_cpp_convertert::add_thunk_method(
    *  1. its symbol in the symbol table
    *  2. its arguments in the symbol table
    *  3. its body
-   *  4. also need to add it to the list of components of the derived class' type
+   *
+   *  also need to add this thunk method to the list of components of the derived class' type
    */
 
   std::string base_class_id = tag_prefix + md->getParent()->getNameAsString();
@@ -242,5 +243,73 @@ void clang_cpp_convertert::add_thunk_method(
   thunk_func_symb.module =
     get_modulename_from_path(component.location().file().as_string());
 
-  assert(!"TODO: add thunks");
+  // update the type of `this` argument in thunk
+  update_thunk_this_type(thunk_func_symb.type, base_class_id);
+
+  // add symbols for arguments of this thunk function
+  add_thunk_method_arguments(thunk_func_symb);
+
+  assert(!"TODO: add thunk function body");
+}
+
+void clang_cpp_convertert::update_thunk_this_type(
+  typet &thunk_symbol_type,
+  const std::string &base_class_id)
+{
+  /*
+   * update the type of `this` argument in thunk function:
+   * Before:
+   *  * type: pointer
+        * subtype: symbol
+          * identifier: tag-Derived
+     After:
+   *  * type: pointer
+        * subtype: symbol
+          * identifier: tag-Base
+    */
+
+  code_typet &code_type = to_code_type(thunk_symbol_type);
+  code_typet::argumentt &this_arg = code_type.arguments().front();
+  this_arg.type().subtype().set("identifier", base_class_id);
+}
+
+void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
+{
+  /*
+   * Loop through the arguments of the thunk methods,
+   * and add symbol for each argument. We need to
+   * update the identifier field in each argument to indicate it "belongs" to the thunk function.
+   *
+   * Each argument symbol's id is of the form - "<thunk_func_symbol_ID>::<argument_base_name>"
+   */
+
+  code_typet &code_type = to_code_type(thunk_func_symb.type);
+  code_typet::argumentst &args = code_type.arguments();
+  for(unsigned i = 0; i < args.size(); i++)
+  {
+    code_typet::argumentt &arg = args[i];
+    irep_idt base_name = arg.get_base_name();
+
+    assert(base_name != "");
+
+    symbolt arg_symb;
+    arg_symb.id = thunk_func_symb.id.as_string() + "::" + base_name.as_string();
+    arg_symb.name = base_name;
+    arg_symb.mode = mode;
+    arg_symb.location = thunk_func_symb.location;
+    arg_symb.type = arg.type();
+
+    // Change argument identifier field to thunk function
+    arg.set("#identifier", arg_symb.id);
+
+    // add the argument to the symbol table
+    if(context.move(arg_symb))
+    {
+      log_error(
+        "Failed to add arg symbol {} for thunk function {}",
+        arg_symb.id,
+        thunk_func_symb.id);
+      abort();
+    }
+  }
 }
