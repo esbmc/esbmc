@@ -7,6 +7,8 @@ string_ptrt::string_ptrt(const char *_s) : s(_s), len(strlen(_s))
 {
 }
 
+std::string zero = "0";
+
 bool string_ptrt::operator==(const string_ptrt &other) const
 {
   if(len != other.len)

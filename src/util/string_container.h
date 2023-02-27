@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+extern std::string zero;
 struct string_ptrt
 {
   const char *s;
@@ -68,7 +69,7 @@ public:
   const std::string &get_string(size_t no) const
   {
     if(no >= string_vector.size()) {
-      return "0";
+      return zero;
     }
     return *string_vector[no];
   }
