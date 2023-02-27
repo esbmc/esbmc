@@ -17,6 +17,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
+#include <util/expr_util.cpp>
 
 bool clang_cpp_convertert::get_struct_class_virtual_methods(
   const clang::CXXRecordDecl *cxxrd,
@@ -249,7 +250,14 @@ void clang_cpp_convertert::add_thunk_method(
   // add symbols for arguments of this thunk function
   add_thunk_method_arguments(thunk_func_symb);
 
-  assert(!"TODO: add thunk function body");
+  // add thunk function body
+  add_thunk_method_body(thunk_func_symb, component);
+
+  // add thunk function symbol to the symbol table
+  symbolt &added_thunk_symbol = *move_symbol_to_context(thunk_func_symb);
+
+  // add thunk function as a `method` in the derived class' type
+  add_thunk_component_to_type(added_thunk_symbol, type, component);
 }
 
 void clang_cpp_convertert::update_thunk_this_type(
@@ -312,4 +320,100 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
       abort();
     }
   }
+}
+
+void clang_cpp_convertert::add_thunk_method_body(
+  symbolt &thunk_func_symb,
+  const struct_typet::componentt &component)
+{
+  code_typet &code_type = to_code_type(thunk_func_symb.type);
+  code_typet::argumentst &args = code_type.arguments();
+
+  /*
+   * late cast of `this` pointer to (Derived*)this
+   */
+  typecast_exprt late_cast_this(
+    to_code_type(component.type()).arguments()[0].type());
+  late_cast_this.op0() =
+    symbol_expr(*namespacet(context).lookup(args[0].cmt_identifier()));
+
+  if(
+    code_type.return_type().id() != "empty" &&
+    code_type.return_type().id() != "destructor")
+    add_thunk_method_body_return(thunk_func_symb, component, late_cast_this);
+  else
+    add_thunk_method_body_no_return(thunk_func_symb, component, late_cast_this);
+}
+
+void clang_cpp_convertert::add_thunk_method_body_return(
+  symbolt &thunk_func_symb,
+  const struct_typet::componentt &component,
+  const typecast_exprt &late_cast_this)
+{
+  /*
+   * Add thunk function with return value, something like:
+   * thunk_to_do_something(this): // `this` of the type `Base*`
+   *  int return_value;
+   *  FUNCTION_CALL: return_value = do_something((Derived*)this);
+   *  RETURN: return_value;
+   * END_FUNCTION
+   */
+  code_typet::argumentst &args = to_code_type(thunk_func_symb.type).arguments();
+
+  side_effect_expr_function_callt expr_call;
+  expr_call.function() = symbol_exprt(component.get_name(), component.type());
+  expr_call.type() = to_code_type(component.type()).return_type();
+  expr_call.arguments().reserve(args.size());
+  // `this` parameter is always the first one to add
+  expr_call.arguments().push_back(late_cast_this);
+
+  for(unsigned i = 1; i < args.size(); i++)
+  {
+    expr_call.arguments().push_back(
+      symbol_expr(*namespacet(context).lookup(args[i].cmt_identifier())));
+  }
+
+  code_returnt code_return;
+  code_return.return_value() = expr_call;
+
+  thunk_func_symb.value = code_return;
+}
+
+void clang_cpp_convertert::add_thunk_method_body_no_return(
+  symbolt &thunk_func_symb,
+  const struct_typet::componentt &component,
+  const typecast_exprt &late_cast_this)
+{
+  /*
+   * Add thunk function without return value, something like:
+   * thunk_to_do_something(this): // `this` of the type `Base*`
+   *  FUNCTION_CALL: do_something((Derived*)this);
+   * END_FUNCTION
+   */
+  code_typet::argumentst &args = to_code_type(thunk_func_symb.type).arguments();
+
+  code_function_callt code_func;
+  code_func.function() = symbol_exprt(component.get_name(), component.type());
+  code_func.arguments().reserve(args.size());
+  // `this` parameter is always the first one to add
+  code_func.arguments().push_back(late_cast_this);
+
+  for(unsigned i = 1; i < args.size(); i++)
+  {
+    code_func.arguments().push_back(
+      symbol_expr(*namespacet(context).lookup(args[i].cmt_identifier())));
+  }
+
+  thunk_func_symb.value = code_func;
+}
+
+void clang_cpp_convertert::add_thunk_component_to_type(
+  const symbolt &thunk_func_symb,
+  struct_typet &type,
+  const struct_typet::componentt &comp)
+{
+  struct_typet::componentt new_compo = comp;
+  new_compo.type() = thunk_func_symb.type;
+  new_compo.set_name(thunk_func_symb.id);
+  type.methods().push_back(new_compo);
 }
