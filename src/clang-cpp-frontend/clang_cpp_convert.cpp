@@ -332,6 +332,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       cxxrd->getNumBases(),
       cxxrd->getNumVBases());
 
+#if 0
     // TODO-split: add methods from base class
     for(auto base : cxxrd->bases())
     {
@@ -339,6 +340,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
       assert(!"Need to pull bases in");
       assert(&base);
     }
+#endif
   }
 
   // skip unions as they don't have virtual methods
