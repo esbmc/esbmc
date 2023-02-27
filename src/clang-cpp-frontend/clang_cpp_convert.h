@@ -233,6 +233,48 @@ protected:
    *  - thunk_func_symb: function symbol for the thunk method
    */
   void add_thunk_method_arguments(symbolt &thunk_func_symb);
+  /*
+   * Add thunk function body
+   * Params:
+   *  - thunk_func_symb: function symbol for the thunk method
+   *  - component: ESBMC IR representing the the overriding method in derived class' type
+   */
+  void add_thunk_method_body(
+    symbolt &thunk_func_symb,
+    const struct_typet::componentt &component);
+  /*
+   * Add thunk body that contains return value
+   * Params:
+   *  - thunk_func_symb: function symbol for the thunk method
+   *  - component: ESBMC IR representing the the overriding method in derived class' type
+   *  - late_cast_this: late casting of `this`
+   */
+  void add_thunk_method_body_return(
+    symbolt &thunk_func_symb,
+    const struct_typet::componentt &component,
+    const typecast_exprt &late_cast_this);
+  /*
+   * Add thunk body that does NOT contain return value
+   * Params:
+   *  - thunk_func_symb: function symbol for the thunk method
+   *  - component: ESBMC IR representing the the overriding method in derived class' type
+   *  - late_cast_this: late casting of `this`
+   */
+  void add_thunk_method_body_no_return(
+    symbolt &thunk_func_symb,
+    const struct_typet::componentt &component,
+    const typecast_exprt &late_cast_this);
+  /*
+   * Add thunk function as a `method` in the derived class' type
+   * Params:
+   *  - thunk_func_symbol: thunk function symbol
+   *  - type: derived class' type
+   *  - comp: `component` representing the overriding function
+   */
+  void add_thunk_component_to_type(
+    const symbolt &thunk_func_symb,
+    struct_typet &type,
+    const struct_typet::componentt &comp);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
