@@ -154,6 +154,7 @@ protected:
    *  TODO: add link to wiki page
    */
   std::string vtable_type_prefix = "virtual_table::";
+  std::string thunk_prefix = "thunk::";
   /*
    * traverse methods to:
    *  1. convert virtual methods and add them to class' type
@@ -210,9 +211,16 @@ protected:
     symbolt *vtable_type_symbol);
   /*
    * add a thunk function for each overriding method
+   *
+   * Params:
+   *  - md: clang AST of the overriden method in base class
+   *  - component: ESBMC IR representing the the overriding method in derived class' type
+   *  - type: ESBMC IR representing the derived class' type
    */
-  void
-  add_thunk_method(const clang::CXXMethodDecl *const *md, struct_typet &type);
+  void add_thunk_method(
+    const clang::CXXMethodDecl *md,
+    const struct_typet::componentt &component,
+    struct_typet &type);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

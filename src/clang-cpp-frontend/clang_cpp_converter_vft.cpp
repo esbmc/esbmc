@@ -71,7 +71,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
        *    md->overriden_methods() should do the job
        */
       assert(md->size_overridden_methods() == 1);
-      add_thunk_method(md->begin_overridden_methods(), type);
+      add_thunk_method(*(md->begin_overridden_methods()), comp, type);
     }
   }
 
@@ -195,7 +195,8 @@ void clang_cpp_convertert::add_vtable_type_entry(
 }
 
 void clang_cpp_convertert::add_thunk_method(
-  const clang::CXXMethodDecl *const *md,
+  const clang::CXXMethodDecl *md,
+  const struct_typet::componentt &component,
   struct_typet &type)
 {
   /*
@@ -208,14 +209,38 @@ void clang_cpp_convertert::add_thunk_method(
    * Suppose Penguin derives Bird, we have the following vtables for Penguin:
    *  virtual_table::Bird@Penguin =
    *    {
-   *      .do_it() = &Penguin::do_it()::tag.Bird; // this is the thunk redirecting call to the overriding function
+   *      .do_it() = &thunk::c:@S@Penguin@F@do_something#::tag-Bird; // this is the thunk redirecting call to the overriding function
    *    };
    *
    *  virtual_table::Penguin@Penguin =
    *    {
-   *      .do_it() = &Penguin::do_it(); // this is the overriding function
+   *      .do_it() = &c:@S@Penguin@F@do_something#::do_it(); // this is the overriding function
    *    };
+   *
+   *  The thunk method's symbol id is of the form - "thunk::c:@S@Penguin@F@do_something#::tag-Bird"
+   *  meaning "a thunk to Penguin's overriding function `do_something` taking a `this` parameter of the type Bird*"
    */
+
+  /*
+   * For this thunk method, we need to add:
+   *  1. its symbol in the symbol table
+   *  2. its arguments in the symbol table
+   *  3. its body
+   *  4. also need to add it to the list of components of the derived class' type
+   */
+
+  std::string base_class_id = tag_prefix + md->getParent()->getNameAsString();
+
+  // Create the thunk method symbol
+  symbolt thunk_func_symb;
+  thunk_func_symb.id =
+    thunk_prefix + component.get_name().as_string() + "::" + base_class_id;
+  thunk_func_symb.name = component.base_name();
+  thunk_func_symb.mode = mode;
+  thunk_func_symb.location = component.location();
+  thunk_func_symb.type = component.type();
+  thunk_func_symb.module =
+    get_modulename_from_path(component.location().file().as_string());
 
   assert(!"TODO: add thunks");
 }
