@@ -318,11 +318,11 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
 
   /*
    * Order of converting methods:
-   *  1. pull base methods in
-   *  2. convert virtual methods. We also need to add:
+   *  [TODO: confirm: 1. pull base methods in?]
+   *  1. convert virtual methods. We also need to add:
    *    a). add virtual table type
    *    b). virtual pointers
-   *  3. instantiate virtual tables
+   *  2. instantiate virtual tables
    */
   if(cxxrd->bases().begin() != cxxrd->bases().end())
   {
