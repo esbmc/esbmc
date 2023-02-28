@@ -275,6 +275,11 @@ protected:
     const symbolt &thunk_func_symb,
     struct_typet &type,
     const struct_typet::componentt &comp);
+  /*
+   * set an intuitive name to thunk function
+   */
+  void
+  set_thunk_name(symbolt &thunk_func_symb, const std::string &base_class_id);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

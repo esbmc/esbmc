@@ -244,6 +244,9 @@ void clang_cpp_convertert::add_thunk_method(
   thunk_func_symb.module =
     get_modulename_from_path(component.location().file().as_string());
 
+  // make thunk function names intuitive
+  set_thunk_name(thunk_func_symb, base_class_id);
+
   // update the type of `this` argument in thunk
   update_thunk_this_type(thunk_func_symb.type, base_class_id);
 
@@ -258,6 +261,22 @@ void clang_cpp_convertert::add_thunk_method(
 
   // add thunk function as a `method` in the derived class' type
   add_thunk_component_to_type(added_thunk_symbol, type, component);
+}
+
+void clang_cpp_convertert::set_thunk_name(
+  symbolt &thunk_func_symb,
+  const std::string &base_class_id)
+{
+  /*
+   * set an intuitive name to thunk function in the form of:
+   *  thunk_to::<overriding_func_name>::tag-Base
+   * where `Base` represents the base function this overriding function
+   * applies to.
+   */
+
+  irep_idt thunk_bn = thunk_prefix + "to::" + thunk_func_symb.name.as_string() +
+                      "::" + base_class_id;
+  thunk_func_symb.name = thunk_bn;
 }
 
 void clang_cpp_convertert::update_thunk_this_type(
