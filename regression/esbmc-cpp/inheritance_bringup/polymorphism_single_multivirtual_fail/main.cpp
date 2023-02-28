@@ -1,7 +1,7 @@
 /*
  * Polymorphism:
- *  - derived class contains an overriding method
- *  - the overriding method has `virtual` keyword
+ *  - derived class contains two overriding methods
+ *  - one of the overriding methods has `virtual` keyword, but the other doesn't
  */
 #include <cassert>
 

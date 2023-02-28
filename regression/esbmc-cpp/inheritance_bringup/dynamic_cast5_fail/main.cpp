@@ -3,7 +3,7 @@
  */
 #include <cassert>
 
-int x;
+int x = 0;
 
 struct A {
   virtual void f() { x+=1;}
@@ -34,8 +34,8 @@ int main() {
   C cobj;
   A* ap = &cobj;
   A* ap2 = &aobj;
-  f(ap);
-  f(ap2);
+  f(ap);  // x += 2;
+  f(ap2); // x +=1
   assert(x==1); // FAIL, should be 3
 }
 
