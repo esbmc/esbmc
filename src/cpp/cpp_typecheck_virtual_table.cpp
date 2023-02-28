@@ -41,6 +41,23 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
     }
   }
 
+#if 0
+  printf("############ @@ Begin printing vtable value maps for %s...\n", symbol.id.as_string().c_str());
+  int ctr = 0;
+  for(auto const &x : vt_value_maps)
+  {
+    printf("========= @ This is top level vt key %d: %s: \n", ctr++, x.first.as_string().c_str());
+    int ctry = 0;
+    for(auto const &y : x.second)
+    {
+      printf("--------- @@ - This is second level vt key %d: %s\n", ctry++, y.first.as_string().c_str());
+      printf("@@\t Below is second level exprt dump: \n");
+      y.second.dump();
+    }
+  }
+  printf("############ @@ Done printing vtable value maps for %s...\n", symbol.id.as_string().c_str());
+#endif
+
   // create virtual-table symbol variables
   for(std::map<irep_idt, std::map<irep_idt, exprt>>::const_iterator cit =
         vt_value_maps.begin();
