@@ -247,33 +247,45 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 {
   // Note: If a struct is defined inside an extern C, it will be a RecordDecl
 
-  // let's check for (virtual) base classes if this declaration is a CXXRecordDecl,
+  // pull bases in
   if(auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
   {
-    for(const auto &decl : cxxrd->bases())
+    log_debug(
+      "Class {} has {} bases, {} virtual bases",
+      cxxrd->getNameAsString(),
+      cxxrd->getNumBases(),
+      cxxrd->getNumVBases());
+
+    // TODO: this method blindly pulls all bases in without updating the access specifiers.
+    //  It may NOT work for complicated cases like multi-level inheritance with private fields and/or methods.
+    for(const clang::CXXBaseSpecifier &base : cxxrd->bases())
     {
       // The base class is always a CXXRecordDecl
-      const clang::CXXRecordDecl *base =
-        decl.getType().getTypePtr()->getAsCXXRecordDecl();
-      assert(base != nullptr);
+      const clang::CXXRecordDecl &base_cxxrd =
+        *(base.getType().getTypePtr()->getAsCXXRecordDecl());
 
-      // First, parse the fields
-      for(auto const *field : base->fields())
+      // get base class id
+      std::string class_id, class_name;
+      clang_c_convertert::get_decl_name(base_cxxrd, class_name, class_id);
+
+      // get base class symbol
+      symbolt *s = context.find_symbol(class_id);
+      assert(s);
+
+      const struct_typet &base_type = to_struct_type(s->type);
+
+      // pull components in
+      const struct_typet::componentst &components = base_type.components();
+      for(const auto &component : components)
       {
-        // We don't add if private
-        if(field->getAccess() >= clang::AS_private)
-          continue;
+        to_struct_type(type).components().push_back(component);
+      }
 
-        struct_typet::componentt comp;
-        if(get_decl(*field, comp))
-          return true;
-
-        // Don't add fields that have global storage (e.g., static)
-        if(const clang::VarDecl *nd = llvm::dyn_cast<clang::VarDecl>(field))
-          if(nd->hasGlobalStorage())
-            continue;
-
-        type.components().push_back(comp);
+      // pull methods in
+      const struct_typet::componentst &methods = base_type.methods();
+      for(const auto &method : methods)
+      {
+        to_struct_type(type).methods().push_back(method);
       }
     }
   }
@@ -318,30 +330,11 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
 
   /*
    * Order of converting methods:
-   *  [TODO: confirm: 1. pull base methods in?]
    *  1. convert virtual methods. We also need to add:
    *    a). add virtual table type
    *    b). virtual pointers
    *  2. instantiate virtual tables
    */
-  if(cxxrd->bases().begin() != cxxrd->bases().end())
-  {
-    log_debug(
-      "Class {} has {} bases, {} virtual bases",
-      cxxrd->getNameAsString(),
-      cxxrd->getNumBases(),
-      cxxrd->getNumVBases());
-
-#if 0
-    // TODO-split: add methods from base class
-    for(auto base : cxxrd->bases())
-    {
-      // `base` type is clang::CXXBaseSpecifier
-      assert(!"Need to pull bases in");
-      assert(&base);
-    }
-#endif
-  }
 
   // skip unions as they don't have virtual methods
   if(!recordd.isUnion())
