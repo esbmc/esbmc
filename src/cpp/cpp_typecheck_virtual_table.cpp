@@ -9,6 +9,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
   std::map<irep_idt, std::map<irep_idt, exprt>> vt_value_maps;
 
   const struct_typet &struct_type = to_struct_type(symbol.type);
+  // the `components` contains not only fields, but also methods
   for(const auto &compo : struct_type.components())
   {
     if(!compo.get_bool("is_virtual"))
