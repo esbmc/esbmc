@@ -467,7 +467,7 @@ void clang_cpp_convertert::setup_vtable_struct_variables(
 }
 
 void clang_cpp_convertert::build_vtable_map(
-  const struct_typet &type,
+  const struct_typet &struct_type,
   switch_table &vtable_value_map)
 {
   /*
@@ -476,7 +476,35 @@ void clang_cpp_convertert::build_vtable_map(
    * This table will be used to create the vtable variable symbols.
    */
 
-  assert(!"TODO: build vtable map");
+  for(const auto &method : struct_type.methods())
+  {
+    if(!method.get_bool("is_virtual"))
+      continue;
+
+    const code_typet &code_type = to_code_type(method.type());
+    assert(code_type.arguments().size() >= 1); // because of `this` param
+
+    const pointer_typet &pointer_type =
+      static_cast<const pointer_typet &>(code_type.arguments()[0].type());
+
+    irep_idt class_id = pointer_type.subtype().identifier();
+
+    std::map<irep_idt, exprt> &value_map = vtable_value_map[class_id];
+    exprt e = symbol_exprt(method.get_name(), code_type);
+
+    if(method.get_bool("is_pure_virtual"))
+    {
+      pointer_typet pointer_type(code_type);
+      e = gen_zero(pointer_type);
+      assert(e.is_not_nil());
+      value_map[method.get("virtual_name")] = e;
+    }
+    else
+    {
+      address_of_exprt address(e);
+      value_map[method.get("virtual_name")] = address;
+    }
+  }
 }
 
 void clang_cpp_convertert::add_vtable_variable_symbols(
