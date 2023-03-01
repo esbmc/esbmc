@@ -89,13 +89,13 @@ bool clang_cpp_convertert::annotate_virtual_overriding_methods(
   const clang::CXXMethodDecl *md,
   struct_typet::componentt &comp)
 {
-  // TODO: take care of overriding methods
-  //assert(md->begin_overridden_methods() == md->end_overridden_methods());
+  std::string method_id, method_name;
+  clang_c_convertert::get_decl_name(*md, method_name, method_id);
 
   comp.type().set("#is_virtual", true);
-  comp.type().set("#virtual_name", comp.name().as_string());
+  comp.type().set("#virtual_name", method_name);
   comp.set("is_virtual", true);
-  comp.set("virtual_name", comp.name().as_string());
+  comp.set("virtual_name", method_name);
 
   return false;
 }
@@ -187,12 +187,14 @@ void clang_cpp_convertert::add_vtable_type_entry(
    */
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
-  std::string virtual_name = comp.name().as_string();
+  std::string virtual_name =
+    comp.name().as_string(); // TODO: this is NOT virtual name!
   struct_typet::componentt vt_entry;
   vt_entry.type() = pointer_typet(comp.type());
   vt_entry.set_name(vt_name.as_string() + "::" + virtual_name);
-  vt_entry.set("base_name", virtual_name);
+  vt_entry.set("base_name", comp.base_name());
   vt_entry.set("pretty_name", virtual_name);
+  vt_entry.set("virtual_name", comp.get("virtual_name"));
   vt_entry.set("access", "public");
   vt_entry.location() = comp.location();
   // add an entry to the virtual table
@@ -463,6 +465,35 @@ void clang_cpp_convertert::setup_vtable_struct_variables(
 
   build_vtable_map(type, vtable_value_map);
 
+#if 1
+  std::string class_id, class_name;
+  clang_c_convertert::get_decl_name(*cxxrd, class_id, class_name);
+  printf(
+    "############ @@ Begin printing vtable value maps for %s...\n",
+    class_id.c_str());
+  int ctr = 0;
+  for(auto const &x : vtable_value_map)
+  {
+    printf(
+      "========= @ This is top level vt key %d: %s: \n",
+      ctr++,
+      x.first.as_string().c_str());
+    int ctry = 0;
+    for(auto const &y : x.second)
+    {
+      printf(
+        "--------- @@ - This is second level vt key %d: %s\n",
+        ctry++,
+        y.first.as_string().c_str());
+      printf("@@\t Below is second level exprt dump: \n");
+      y.second.dump();
+    }
+  }
+  printf(
+    "############ @@ Done printing vtable value maps for %s...\n",
+    class_id.c_str());
+#endif
+
   add_vtable_variable_symbols(cxxrd, type, vtable_value_map);
 }
 
@@ -489,7 +520,8 @@ void clang_cpp_convertert::build_vtable_map(
 
     irep_idt class_id = pointer_type.subtype().identifier();
 
-    std::map<irep_idt, exprt> &value_map = vtable_value_map[class_id];
+    std::map<irep_idt, exprt> &value_map =
+      vtable_value_map[class_id]; // switch_map = switch_table
     exprt e = symbol_exprt(method.get_name(), code_type);
 
     if(method.get_bool("is_pure_virtual"))
@@ -549,7 +581,7 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     for(const auto &compo : vt_type.components())
     {
       std::map<irep_idt, exprt>::const_iterator cit2 =
-        switch_map.find(compo.base_name());
+        switch_map.find(compo.get("virtual_name").as_string());
       assert(cit2 != switch_map.end());
       const exprt &value = cit2->second;
       assert(value.type() == compo.type());
