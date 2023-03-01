@@ -250,7 +250,7 @@ void clang_cpp_convertert::add_thunk_method(
   // Create the thunk method symbol
   symbolt thunk_func_symb;
   thunk_func_symb.id =
-    thunk_prefix + component.get_name().as_string() + "::" + base_class_id;
+    base_class_id + "::" + thunk_prefix + component.get_name().as_string();
   thunk_func_symb.name = component.base_name();
   thunk_func_symb.mode = mode;
   thunk_func_symb.location = component.location();
@@ -288,8 +288,8 @@ void clang_cpp_convertert::set_thunk_name(
    * applies to.
    */
 
-  irep_idt thunk_bn = thunk_prefix + "to::" + thunk_func_symb.name.as_string() +
-                      "::" + base_class_id;
+  irep_idt thunk_bn = base_class_id + "::" + thunk_prefix +
+                      "to::" + thunk_func_symb.name.as_string();
   thunk_func_symb.name = thunk_bn;
 }
 
