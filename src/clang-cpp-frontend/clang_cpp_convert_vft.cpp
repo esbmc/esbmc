@@ -519,5 +519,51 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
    * and add them to the symbol table.
    */
 
-  assert(!"TODO: add vtable variable symbols");
+  for(const auto &vft_switch_kv_pair : vtable_value_map)
+  {
+    const function_switch &switch_map = vft_switch_kv_pair.second;
+
+    // To create the vtable variable symbol we need to get the corresponding type
+    const symbolt &late_cast_symb =
+      *namespacet(context).lookup(vft_switch_kv_pair.first);
+    const symbolt &vt_symb_type = *namespacet(context).lookup(
+      "virtual_table::" + late_cast_symb.id.as_string());
+
+    // This is the class we are currently dealing with
+    std::string class_id = tag_prefix + cxxrd->getNameAsString();
+
+    symbolt vt_symb_var;
+    vt_symb_var.id = vt_symb_type.id.as_string() + "@" + class_id;
+    vt_symb_var.name = vt_symb_type.name.as_string() + "@" + class_id;
+    vt_symb_var.mode = mode;
+    vt_symb_var.module =
+      get_modulename_from_path(type.location().file().as_string());
+    vt_symb_var.location = vt_symb_type.location;
+    vt_symb_var.type = symbol_typet(vt_symb_type.id);
+    vt_symb_var.lvalue = true;
+    vt_symb_var.static_lifetime = true;
+
+    // add vtable variable symbols
+    const struct_typet &vt_type = to_struct_type(vt_symb_type.type);
+    exprt values("struct", symbol_typet(vt_symb_type.id));
+    for(const auto &compo : vt_type.components())
+    {
+      std::map<irep_idt, exprt>::const_iterator cit2 =
+        switch_map.find(compo.base_name());
+      assert(cit2 != switch_map.end());
+      const exprt &value = cit2->second;
+      assert(value.type() == compo.type());
+      values.operands().push_back(value);
+    }
+    vt_symb_var.value = values;
+
+    if(context.move(vt_symb_var))
+    {
+      log_error(
+        "Failed to add vtable variable symbol {} for class {}",
+        vt_symb_var.id,
+        class_id);
+      abort();
+    }
+  }
 }
