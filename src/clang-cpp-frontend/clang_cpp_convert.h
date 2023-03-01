@@ -155,7 +155,8 @@ protected:
    */
   std::string vtable_type_prefix = "virtual_table::";
   std::string thunk_prefix = "thunk::";
-  using switch_table = std::map<irep_idt, std::map<irep_idt, exprt>>;
+  using function_switch = std::map<irep_idt, exprt>;
+  using switch_table = std::map<irep_idt, function_switch>;
   /*
    * traverse methods to:
    *  1. convert virtual methods and add them to class' type
