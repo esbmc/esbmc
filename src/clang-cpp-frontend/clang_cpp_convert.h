@@ -155,6 +155,9 @@ protected:
    */
   std::string vtable_type_prefix = "virtual_table::";
   std::string thunk_prefix = "thunk::";
+  using switch_table =
+    std::map<
+      irep_idt,std::map<irep_idt, exprt> >;
   /*
    * traverse methods to:
    *  1. convert virtual methods and add them to class' type
@@ -167,6 +170,9 @@ protected:
    *  4. If method X overrides a base method,
    *    add a thunk function that does late casting of the `this` parameter
    *    and redirects the call to the overriding function (i.e. method X itself)
+   *
+   *  Last but not least, set up the vtable varaible symbols (i.e. these are the struct variables
+   *  instantiated from the vtable type symbols)
    */
   bool get_struct_class_virtual_methods(
     const clang::CXXRecordDecl *cxxrd,
@@ -276,10 +282,58 @@ protected:
     struct_typet &type,
     const struct_typet::componentt &comp);
   /*
-   * set an intuitive name to thunk function
+   * Set an intuitive name to thunk function
    */
   void
   set_thunk_name(symbolt &thunk_func_symb, const std::string &base_class_id);
+  /*
+   * Recall that we mode the virtual function table as struct of function pointers.
+   * This function adds the symbols for these struct variables.
+   *
+   * Params:
+   *  - cxxrd: clang AST node representing the class/struct we are currently dealing with
+   *  - type: ESBMC IR representing the type the class/struct we are currently dealing with
+   *  - vft_value_map: representing the vtable value maps for this class/struct we are currently dealing with
+   */
+  void setup_vtable_struct_variables(
+    const clang::CXXRecordDecl *cxxrd,
+    const struct_typet &type);
+  /*
+   * This function builds the vtable value map -
+   * a map representing the function switch table
+   * with each key-value pair in the form of:
+   *  Class X : {VirtualName Y : FunctionID}
+   *
+   * where X represents the name of a virtual/thunk/overriding function and function ID represents the
+   * actual function we are calling when calling the virtual/thunk/overriding function
+   * via a Class X* pointer, something like:
+   *   xptr->Y()
+   *
+   * Params:
+   *  - type: ESBMC IR representing the type the class/struct we are currently dealing with
+   *  - vtable_value_map: representing the vtable value maps for this class/struct we are currently dealing with
+   */
+  void build_vtable_map(
+    const struct_typet &type,
+    switch_table &vtable_value_map);
+  /*
+   * Create the vtable variable symbols and add them to the symbol table.
+   * Each vtable variable represents the actual function switch table, which
+   * is modelled as a struct of function pointers, e.g.:
+   *  Vtable tag.Base@Base =
+   *    {
+   *      .do_something = &TagBase::do_someting();
+   *    };
+   *
+   * Params:
+   *  - cxxrd: clang AST node representing the class/struct we are currently dealing with
+   *  - type: ESBMC IR representing the type the class/struct we are currently dealing with
+   *  - vtable_value_map: representing the vtable value maps for this class/struct we are currently dealing with
+   */
+  void add_vtable_variable_symbols(
+    const clang::CXXRecordDecl *cxxrd,
+    const struct_typet &type,
+    const switch_table &vtable_value_map);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
