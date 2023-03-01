@@ -155,9 +155,7 @@ protected:
    */
   std::string vtable_type_prefix = "virtual_table::";
   std::string thunk_prefix = "thunk::";
-  using switch_table =
-    std::map<
-      irep_idt,std::map<irep_idt, exprt> >;
+  using switch_table = std::map<irep_idt, std::map<irep_idt, exprt>>;
   /*
    * traverse methods to:
    *  1. convert virtual methods and add them to class' type
@@ -310,11 +308,11 @@ protected:
    *   xptr->Y()
    *
    * Params:
-   *  - type: ESBMC IR representing the type the class/struct we are currently dealing with
+   *  - struct_type: ESBMC IR representing the type the class/struct we are currently dealing with
    *  - vtable_value_map: representing the vtable value maps for this class/struct we are currently dealing with
    */
   void build_vtable_map(
-    const struct_typet &type,
+    const struct_typet &struct_type,
     switch_table &vtable_value_map);
   /*
    * Create the vtable variable symbols and add them to the symbol table.
@@ -327,12 +325,12 @@ protected:
    *
    * Params:
    *  - cxxrd: clang AST node representing the class/struct we are currently dealing with
-   *  - type: ESBMC IR representing the type the class/struct we are currently dealing with
+   *  - struct_type: ESBMC IR representing the type the class/struct we are currently dealing with
    *  - vtable_value_map: representing the vtable value maps for this class/struct we are currently dealing with
    */
   void add_vtable_variable_symbols(
     const clang::CXXRecordDecl *cxxrd,
-    const struct_typet &type,
+    const struct_typet &struct_type,
     const switch_table &vtable_value_map);
 };
 
