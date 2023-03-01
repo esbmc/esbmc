@@ -76,6 +76,12 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
     }
   }
 
+  /*
+   * Set up virtual function table(vft) variable symbols
+   * Each vft is modelled as a struct of function pointers.
+   */
+  setup_vtable_struct_variables(cxxrd, type);
+
   return false;
 }
 
@@ -435,4 +441,55 @@ void clang_cpp_convertert::add_thunk_component_to_type(
   new_compo.type() = thunk_func_symb.type;
   new_compo.set_name(thunk_func_symb.id);
   type.methods().push_back(new_compo);
+}
+
+void clang_cpp_convertert::setup_vtable_struct_variables(
+  const clang::CXXRecordDecl *cxxrd,
+  const struct_typet &type)
+{
+  /*
+   * Recall that the virtual function table (VFT) is just a switch table, and
+   * we model it as a struct of function pointers each pointing to
+   * the targeting function, where this targeting function can be a
+   * virtual, thunk or the actual overriding function.
+   *
+   * To add the VFT struct variables, we follow the steps below:
+   *  1. Build an intermediate VFT value map from the class' type
+   *  2. Create the VFT symbols based on this map. These symbols are
+   *  of the VFT struct type we created when getting virtual methods.
+   */
+
+  switch_table vtable_value_map;
+
+  build_vtable_map(type, vtable_value_map);
+
+  add_vtable_variable_symbols(cxxrd, type, vtable_value_map);
+}
+
+void clang_cpp_convertert::build_vtable_map(
+  const struct_typet &type,
+  switch_table &vtable_value_map)
+{
+  /*
+   * Build a vtable map from the class type
+   * This is the function switch table for this class.
+   * This table will be used to create the vtable variable symbols.
+   */
+
+  assert(!"TODO: build vtable map");
+}
+
+void clang_cpp_convertert::add_vtable_variable_symbols(
+  const clang::CXXRecordDecl *cxxrd,
+  const struct_typet &type,
+  const switch_table &vtable_value_map)
+{
+  /*
+   * Now we got the vtable map for the class type representing
+   * the function switch relations.
+   * Let's use this map to create the vtable struct variables
+   * and add them to the symbol table.
+   */
+
+  assert(!"TODO: add vtable variable symbols");
 }
