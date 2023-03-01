@@ -193,7 +193,13 @@ void clang_cpp_convertert::add_vtable_type_entry(
   vt_entry.type() = pointer_typet(comp.type());
   vt_entry.set_name(vt_name.as_string() + "::" + virtual_name);
   vt_entry.set("base_name", comp.base_name());
-  vt_entry.set("pretty_name", virtual_name);
+  /*
+   * `pretty_name` gets printed in symbol table:
+   *    virtual_table::BLAH@tag-BLAH={ .<pretty_name>=&<virtual_method_base_class> };
+   *    virtual_table::BLAH@tag-BLEH={ .<pretty_name>=&<thunk_to_overriding_method_in_derived_class> };
+   *    virtual_table::BLEH@tag-BLEH={ .<pretty_name>=&<overriding_function_in_derived_class> };
+   */
+  vt_entry.set("pretty_name", comp.get("virtual_name"));
   vt_entry.set("virtual_name", comp.get("virtual_name"));
   vt_entry.set("access", "public");
   vt_entry.location() = comp.location();
