@@ -276,15 +276,17 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 
       // pull components in
       const struct_typet::componentst &components = base_type.components();
-      for(const auto &component : components)
+      for(auto component : components)
       {
+        component.set("from_base", true);
         to_struct_type(type).components().push_back(component);
       }
 
       // pull methods in
       const struct_typet::componentst &methods = base_type.methods();
-      for(const auto &method : methods)
+      for(auto method : methods)
       {
+        method.set("from_base", true);
         to_struct_type(type).methods().push_back(method);
       }
     }
