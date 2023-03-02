@@ -22,9 +22,9 @@ int main(){
   FlyingBird *f = new FlyingBird();
   Penguin *p = new Penguin();
   assert(b->f() == 21);
-  assert(f->g() == 21);
-  assert(p->f() == 42);
+  assert(f->g() == 42);
   assert(p->g() == 21);
+  assert(p->f() == 21); // FAIL, should be 42
   delete b;
   delete f;
   delete p;
