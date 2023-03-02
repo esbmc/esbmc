@@ -2,6 +2,7 @@
  * Polymorphism:
  *  - derived class contains an overriding method
  *  - the overriding method has `virtual` keyword
+ *  - trival ctor
  */
 #include <cassert>
 
@@ -19,7 +20,7 @@ int main(){
   Bird *b = new Bird();
   Bird *p = new Penguin();
   assert(b->do_something() == 21);
-  assert(p->do_something() == 42);
+  assert(p->do_something() == 21); // should be 42
   delete b;
   delete p;
   return 0;
