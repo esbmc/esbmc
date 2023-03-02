@@ -1,5 +1,6 @@
 /*
  * dynamic cast, check address
+ * Contains virtual, but doesn't check polymorhism
  */
 #include <cassert>
 using namespace std;
