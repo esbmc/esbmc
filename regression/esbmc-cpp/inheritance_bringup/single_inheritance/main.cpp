@@ -1,3 +1,7 @@
+/*
+ * Polymorphism, single inheritance with one overriding function
+ * in each derived class
+ */
 #include <cassert>
 
 class Bird {
@@ -26,8 +30,8 @@ int main(){
   Penguin *p = new Penguin();
   assert(b->f() == 21);
   assert(f->g() == 42);
-  assert(p->f() == 42);
   assert(p->g() == 21);
+  assert(p->f() == 42);
   delete b;
   delete f;
   delete p;
