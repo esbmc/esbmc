@@ -76,6 +76,7 @@ else()
                     k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith
                     k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
                     incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors esbmc-cpp11/new-delete esbmc-cpp11/reference esbmc-cpp/inheritance_bringup
+                    esbmc-cpp/polymorphism_bringup
                     esbmc-cpp/bug_fixes
                     ${REGRESSIONS_GOTO_CONTRACTOR} ${REGRESSIONS_JIMPLE} extensions cuda)
   else()
