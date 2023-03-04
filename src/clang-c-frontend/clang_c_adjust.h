@@ -28,7 +28,7 @@ protected:
   /**
    * methods for symbol adjustment
    */
-  void adjust_symbol(symbolt &symbol);
+  virtual void adjust_symbol(symbolt &symbol);
   void adjust_argc_argv(const symbolt &main_symbol);
 
   /**

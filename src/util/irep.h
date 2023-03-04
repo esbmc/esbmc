@@ -274,9 +274,9 @@ public:
     return get_bool(a_base_ctor_derived);
   }
 
-  inline bool vptr_initialized() const
+  inline bool need_vptr_init() const
   {
-    return get_bool(a_vptr_initialized);
+    return get_bool(a_need_vptr_init);
   }
 
   inline const irep_idt &property() const
@@ -965,9 +965,9 @@ public:
     set(a_base_ctor_derived, val);
   }
 
-  inline void vptr_initialized(bool val)
+  inline void need_vptr_init(bool val)
   {
-    set(a_vptr_initialized, val);
+    set(a_need_vptr_init, val);
   }
 
   inline void restricted(bool val)
@@ -1268,7 +1268,7 @@ public:
    * annotations to indicate whether virtual pointer(vptr) has been initialized in contrustor
    * This is used by implicit IR generation in adjuster
    */
-  static const irep_idt a_vptr_initialized;
+  static const irep_idt a_need_vptr_init;
 
   static const irep_idt id_address_of, id_and, id_or, id_array, id_bool,
     id_code;
