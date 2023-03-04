@@ -130,6 +130,16 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
       printf("Got %s\n", temp.c_str());
   }
 
+  {
+    std::string temp = "c:@S@Bird@F@Bird#";
+    if(symbol.id.as_string() == temp)
+      printf("Got %s\n", temp.c_str());
+
+    temp = "c:@S@Penguin@F@Penguin#";
+    if(symbol.id.as_string() == temp)
+      printf("Got %s\n", temp.c_str());
+  }
+
   if(!result.second)
   {
     new_symbol = &result.first->second;

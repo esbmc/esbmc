@@ -112,6 +112,16 @@ protected:
   bool get_access_from_decl(const clang::Decl *decl, std::string &access);
 
   /*
+   * Get the symbol from the context for a C++ function
+   *
+   * Returns:
+   *  fd_symb: pointer of the function symbol
+   * Arguments:
+   *  fd: Clang AST for this function declaration
+   */
+  symbolt *get_fd_symbol(const clang::FunctionDecl &fd);
+
+  /*
    * Add additional annotations for class/struct/union methods:
    * 0: component
    *    * type: code
@@ -122,11 +132,14 @@ protected:
    *    * name: MyMethodName
    *    * #location:
    * Arguments:
-   *  cxxmd: clang AST node representing the method we are dealing with
+   *  cxxmd:    clang AST node representing the method we are dealing with
    *  new_expr: the `component` in class/struct/union symbol type
+   *  fd_symb:  function symbol that has been added in symbol table (i.e. the `context`)
    */
-  bool
-  annotate_cpp_methods(const clang::CXXMethodDecl *cxxmdd, exprt &new_expr);
+  bool annotate_cpp_methods(
+    const clang::CXXMethodDecl *cxxmdd,
+    exprt &new_expr,
+    const clang::FunctionDecl &fd);
 
   /*
    * When getting a function call to ctor, we might call the base ctor from a derived class ctor

@@ -562,12 +562,7 @@ bool clang_c_convertert::get_function(
   // Don't convert if implicit, unless it's a constructor or destructor
   // A compiler-generated default ctor/dtor is considered implicit, but we have
   // to parse it.
-  auto isContructorOrDestructor = [](const clang::FunctionDecl &fd) {
-    return fd.getKind() == clang::Decl::CXXConstructor ||
-           fd.getKind() == clang::Decl::CXXDestructor;
-  };
-
-  if(fd.isImplicit() && !isContructorOrDestructor(fd))
+  if(fd.isImplicit() && !is_ConstructorOrDestructor(fd))
     return false;
 
   // If the function is not defined but this is not the definition, skip it
@@ -3334,4 +3329,11 @@ bool clang_c_convertert::is_field_global_storage(const clang::FieldDecl *field)
     return (nd->hasGlobalStorage());
 
   return false;
+}
+
+bool clang_c_convertert::is_ConstructorOrDestructor(
+  const clang::FunctionDecl &fd)
+{
+  return fd.getKind() == clang::Decl::CXXConstructor ||
+         fd.getKind() == clang::Decl::CXXDestructor;
 }

@@ -231,6 +231,13 @@ protected:
    *   field: clang AST representing the class/struct/union field we are dealing with
    */
   bool is_field_global_storage(const clang::FieldDecl *field);
+
+  /*
+   * check if a method is constructor or destructor
+   * Arguments:
+   *  fd: clang AST representing a C++ method
+   */
+  bool is_ConstructorOrDestructor(const clang::FunctionDecl &fd);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
