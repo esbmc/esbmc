@@ -1202,7 +1202,7 @@ bool clang_cpp_convertert::annotate_cpp_methods(
        * we indicate the need for vptr initializations in contructor.
        * vptr initializations will be added in the adjuster.
        */
-      fd_symb->value.vptr_initialized(false);
+      fd_symb->value.need_vptr_init(true);
     }
   }
 
@@ -1302,6 +1302,5 @@ symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
 {
   std::string id, name;
   get_decl_name(fd, name, id);
-  printf("Getting %s func_symbol\n", id.c_str());
   return (context.find_symbol(id));
 }
