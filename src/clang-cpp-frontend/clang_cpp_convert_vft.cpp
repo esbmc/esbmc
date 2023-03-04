@@ -471,7 +471,7 @@ void clang_cpp_convertert::setup_vtable_struct_variables(
 
   build_vtable_map(type, vtable_value_map);
 
-#if 1
+#if 0
   std::string class_id, class_name;
   clang_c_convertert::get_decl_name(*cxxrd, class_id, class_name);
   printf(

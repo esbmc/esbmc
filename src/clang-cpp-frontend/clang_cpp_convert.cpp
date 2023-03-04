@@ -226,7 +226,7 @@ bool clang_cpp_convertert::get_function(
 
   // add additional annotations for class/struct/union methods
   if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
-    if(annotate_cpp_methods(md, new_expr))
+    if(annotate_cpp_methods(md, new_expr, fd))
       return true;
 
   return false;
@@ -1162,27 +1162,42 @@ bool clang_cpp_convertert::get_access_from_decl(
 
 bool clang_cpp_convertert::annotate_cpp_methods(
   const clang::CXXMethodDecl *cxxmdd,
-  exprt &new_expr)
+  exprt &new_expr,
+  const clang::FunctionDecl &fd)
 {
   code_typet &component_type = to_code_type(new_expr.type());
 
-  // annotate ctor and dtor return type
-  if(cxxmdd->getKind() == clang::Decl::CXXDestructor)
-  {
-    typet rtn_type("destructor");
-    component_type.return_type() = rtn_type;
-  }
-  if(cxxmdd->getKind() == clang::Decl::CXXConstructor)
-  {
-    typet rtn_type("constructor");
-    component_type.return_type() = rtn_type;
-  }
-
+  /*
+   * The order of annotations matters.
+   */
   // annotate parent
   std::string parent_class_name = getFullyQualifiedName(
     ASTContext->getTagDeclType(cxxmdd->getParent()), *ASTContext);
   std::string parent_class_id = tag_prefix + parent_class_name;
   component_type.set("#member_name", parent_class_id);
+
+  // annotate ctor and dtor
+  if(is_ConstructorOrDestructor(fd))
+  {
+    // annotate ctor and dtor return type
+    std::string mark_rtn = (cxxmdd->getKind() == clang::Decl::CXXDestructor)
+                             ? "destrucor"
+                             : "constructor";
+    typet rtn_type(mark_rtn);
+    component_type.return_type() = rtn_type;
+
+    /*
+     * We also have a `component` in class type representing the ctor/dtor.
+     * Need to sync the type of this function symbol and its corresponding type
+     * of the component inside the class' symbol
+     * We just need "#member_name" and "return_type" fields to be synced for later use
+     * in the adjuster.
+     * So let's do the sync before adding more annotations.
+     */
+    symbolt *fd_symb = get_fd_symbol(fd);
+    assert(fd_symb);
+    fd_symb->type = component_type;
+  }
 
   // annotate name
   std::string method_id, method_name;
@@ -1211,7 +1226,6 @@ bool clang_cpp_convertert::annotate_cpp_methods(
 
   // We still need to add a trivial ctor/dtor as a `component` in class symbol's type
   // remove "statement: skip" otherwise it won't be added
-  // TODO-split: Any more elegant way to do it?
   if(
     cxxmdd->getKind() == clang::Decl::CXXDestructor ||
     cxxmdd->getKind() == clang::Decl::CXXConstructor)
@@ -1275,4 +1289,12 @@ bool clang_cpp_convertert::need_new_object(const clang::Stmt *parentStmt)
   }
 
   return false;
+}
+
+symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
+{
+  std::string id, name;
+  get_decl_name(fd, name, id);
+  printf("Getting %s func_symbol\n", id.c_str());
+  return (context.find_symbol(id));
 }
