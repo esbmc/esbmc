@@ -1181,7 +1181,7 @@ bool clang_cpp_convertert::annotate_cpp_methods(
   {
     // annotate ctor and dtor return type
     std::string mark_rtn = (cxxmdd->getKind() == clang::Decl::CXXDestructor)
-                             ? "destrucor"
+                             ? "destructor"
                              : "constructor";
     typet rtn_type(mark_rtn);
     component_type.return_type() = rtn_type;
@@ -1195,8 +1195,15 @@ bool clang_cpp_convertert::annotate_cpp_methods(
      * So let's do the sync before adding more annotations.
      */
     symbolt *fd_symb = get_fd_symbol(fd);
-    assert(fd_symb);
-    fd_symb->type = component_type;
+    if(fd_symb)
+    {
+      fd_symb->type = component_type;
+      /*
+       * we indicate the need for vptr initializations in contructor.
+       * vptr initializations will be added in the adjuster.
+       */
+      fd_symb->value.vptr_initialized(false);
+    }
   }
 
   // annotate name
