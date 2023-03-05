@@ -40,21 +40,25 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
     namespacet(context).lookup(ctor_type.get("#member_name"));
   assert(ctor_class_symb);
   // get the `components` vector from this class' type
-  const struct_typet::componentst &components = to_struct_type(ctor_class_symb->type).components();
+  const struct_typet::componentst &components =
+    to_struct_type(ctor_class_symb->type).components();
 
-  printf("This is ctor function symbol: %s from class %s\n",
-      symbol.id.as_string().c_str(),
-      ctor_class_symb->id.as_string().c_str());
+  printf(
+    "This is ctor function symbol: %s from class %s\n",
+    symbol.id.as_string().c_str(),
+    ctor_class_symb->id.as_string().c_str());
 
   // iterate over the `components` and initialize each virtual pointers
-  for(const auto& comp : components)
+  for(const auto &comp : components)
   {
     if(!comp.get_bool("is_vtptr"))
       continue;
 
     side_effect_exprt new_code("assign");
     gen_vptr_init_code(comp, new_code, ctor_type);
-    ctor_body.operands().push_back(new_code);
+    codet code_expr("expression");
+    code_expr.move_to_operands(new_code);
+    ctor_body.operands().push_back(code_expr);
   }
 
   symbol.value.need_vptr_init(false);
@@ -83,7 +87,9 @@ void clang_cpp_adjust::gen_vptr_init_code(
   exprt rhs_expr;
   gen_vptr_init_rhs(comp, rhs_expr, ctor_type);
 
-  assert(!"Done - vptr init code");
+  // now push them to the assignment statement code
+  new_code.operands().push_back(lhs_expr);
+  new_code.operands().push_back(rhs_expr);
 }
 
 void clang_cpp_adjust::gen_vptr_init_lhs(
@@ -94,19 +100,17 @@ void clang_cpp_adjust::gen_vptr_init_lhs(
   /*
    * Generate the LHS expression for virtual pointer initialization,
    * as in:
-   *  this->vptr = &<vtable_struct_var_name>
+   *  this->vptr = &<vtable_struct_variable>
    */
 
   // get the `this` argument symbol
-  const symbolt *this_symb =
-    namespacet(context).lookup(
-        ctor_type.arguments().at(0).type().subtype().identifier());
+  const symbolt *this_symb = namespacet(context).lookup(
+    ctor_type.arguments().at(0).type().subtype().identifier());
   assert(this_symb);
 
   // prepare dereference operand
   exprt deref_operand = symbol_exprt(
-      ctor_type.arguments().at(0).get("#identifier"),
-      pointer_typet(this_symb->type));
+    ctor_type.arguments().at(0).get("#identifier"), this_symb->type);
 
   // get the reference symbol
   dereference_exprt this_deref(deref_operand.type());
@@ -122,14 +126,25 @@ void clang_cpp_adjust::gen_vptr_init_lhs(
 
 void clang_cpp_adjust::gen_vptr_init_rhs(
   const struct_union_typet::componentt &comp,
-  exprt& rhs_code,
+  exprt &rhs_code,
   const code_typet &ctor_type)
 {
   /*
    * Generate the RHS expression for virtual pointer initialization,
    * as in:
-   *  this->vptr = &<vtable_struct_var_name>
+   *  this->vptr = &<vtable_struct_variable>
    */
 
-  assert(!"Done - addr of vtable");
+  // get the corresponding vtable variable symbol
+  std::string vtable_var_id = comp.type().subtype().identifier().as_string() +
+                              "@" + ctor_type.get("#member_name").as_string();
+  const symbolt *vtable_var_symb = namespacet(context).lookup(vtable_var_id);
+  assert(vtable_var_symb);
+
+  // get the operand for address_of expr as in `&<vtable_struct_variable>`
+  exprt vtable_var = symbol_exprt(vtable_var_symb->id, vtable_var_symb->type);
+  vtable_var.name(vtable_var_symb->name);
+
+  // now we can get the address_of expr for "&<vtable_struct_variable>"
+  rhs_code = address_of_exprt(vtable_var);
 }
