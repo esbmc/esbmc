@@ -24,7 +24,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
-#include <util/expr_util.cpp>
+#include <util/expr_util.h>
 
 bool clang_cpp_convertert::get_struct_class_virtual_methods(
   const clang::CXXRecordDecl *cxxrd,
