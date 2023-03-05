@@ -163,7 +163,7 @@ protected:
   bool need_new_object(const clang::Stmt *parentStmt);
 
   /*
-   * Functions for virtual tables and virtual pointers
+   * Methods for virtual tables and virtual pointers
    *  TODO: add link to wiki page
    */
   std::string vtable_type_prefix = "virtual_table::";
@@ -346,6 +346,11 @@ protected:
     const clang::CXXRecordDecl *cxxrd,
     const struct_typet &struct_type,
     const switch_table &vtable_value_map);
+
+  /*
+   * Methods for resolving a clang::MemberExpr to virtual/overriding method
+   */
+  bool check_member_expr_virtual_overriding();
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
