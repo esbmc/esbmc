@@ -350,7 +350,11 @@ protected:
   /*
    * Methods for resolving a clang::MemberExpr to virtual/overriding method
    */
-  bool check_member_expr_virtual_overriding();
+  /*
+   * Function to check whether a member function call refers to
+   * a virtual/overriding method.
+   */
+  bool check_member_expr_virtual_overriding(const clang::Decl &decl);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

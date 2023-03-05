@@ -238,6 +238,12 @@ protected:
    *  fd: clang AST representing a C++ method
    */
   bool is_ConstructorOrDestructor(const clang::FunctionDecl &fd);
+
+  /*
+   * Function to check whether a member function call refers to
+   * a virtual/overriding method.
+   */
+  virtual bool check_member_expr_virtual_overriding(const clang::Decl &decl);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

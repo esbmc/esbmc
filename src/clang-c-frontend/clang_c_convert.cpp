@@ -1566,15 +1566,22 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::MemberExpr &member =
       static_cast<const clang::MemberExpr &>(stmt);
 
-    exprt base;
-    if(get_expr(*member.getBase(), base))
-      return true;
+    if(!check_member_expr_virtual_overriding(*member.getMemberDecl()))
+    {
+      exprt base;
+      if(get_expr(*member.getBase(), base))
+        return true;
 
-    exprt comp;
-    if(get_decl(*member.getMemberDecl(), comp))
-      return true;
+      exprt comp;
+      if(get_decl(*member.getMemberDecl(), comp))
+        return true;
 
-    new_expr = member_exprt(base, comp.name(), comp.type());
+      new_expr = member_exprt(base, comp.name(), comp.type());
+    }
+    else
+    {
+      assert(!"TODO - get vtable dereference expr");
+    }
     break;
   }
 
@@ -3336,4 +3343,11 @@ bool clang_c_convertert::is_ConstructorOrDestructor(
 {
   return fd.getKind() == clang::Decl::CXXConstructor ||
          fd.getKind() == clang::Decl::CXXDestructor;
+}
+
+bool clang_c_convertert::check_member_expr_virtual_overriding(
+  const clang::Decl &decl)
+{
+  // It just can't happen in C
+  return false;
 }
