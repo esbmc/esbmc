@@ -39,6 +39,7 @@ class IntegerLiteral;
 class FloatingLiteral;
 class TagDecl;
 class FieldDecl;
+class MemberExpr;
 } // namespace clang
 
 std::string
@@ -240,10 +241,18 @@ protected:
   bool is_ConstructorOrDestructor(const clang::FunctionDecl &fd);
 
   /*
-   * Function to check whether a member function call refers to
+   * Virtual function to check whether a member function call refers to
    * a virtual/overriding method.
+   * For C, it always return false.
+   * For C++, see the overriding method in clang_cpp_convert module
    */
   virtual bool check_member_expr_virtual_overriding(const clang::Decl &decl);
+
+  /*
+   * Virtual function to for virtual function table dynamic binding.
+   */
+  virtual bool
+  get_vft_binding_expr(const clang::MemberExpr &member, exprt &new_expr);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

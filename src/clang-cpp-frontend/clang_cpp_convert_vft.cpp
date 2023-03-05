@@ -168,9 +168,10 @@ void clang_cpp_convertert::add_vptr(
   // add a virtual-table pointer
   struct_typet::componentt component;
   component.type() = pointer_typet(symbol_typet(vt_name));
-  component.set_name(tag_prefix + type.tag().as_string() + "::@vtable_pointer");
-  component.base_name("@vtable_pointer");
-  component.pretty_name(type.tag().as_string() + "@vtable_pointer");
+  component.set_name(
+    tag_prefix + type.tag().as_string() + "::" + vtable_ptr_suffix);
+  component.base_name(vtable_ptr_suffix);
+  component.pretty_name(type.tag().as_string() + vtable_ptr_suffix);
   component.set("is_vtptr", true);
   component.set("access", "public");
   // add to the class' type
@@ -194,8 +195,7 @@ void clang_cpp_convertert::add_vtable_type_entry(
    */
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
-  std::string virtual_name =
-    comp.name().as_string(); // TODO: this is NOT virtual name!
+  std::string virtual_name = comp.name().as_string();
   struct_typet::componentt vt_entry;
   vt_entry.type() = pointer_typet(comp.type());
   vt_entry.set_name(vt_name.as_string() + "::" + virtual_name);

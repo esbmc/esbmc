@@ -1580,8 +1580,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
     else
     {
-      assert(!"TODO - get vtable dereference expr");
+      if(get_vft_binding_expr(member, new_expr))
+        return true;
     }
+
     break;
   }
 
@@ -3350,4 +3352,14 @@ bool clang_c_convertert::check_member_expr_virtual_overriding(
 {
   // It just can't happen in C
   return false;
+}
+
+bool clang_c_convertert::get_vft_binding_expr(
+  const clang::MemberExpr &,
+  exprt &)
+{
+  log_error(
+    "MemberExpr call to virtual/overriding function cannot happen in C");
+  abort();
+  return true;
 }
