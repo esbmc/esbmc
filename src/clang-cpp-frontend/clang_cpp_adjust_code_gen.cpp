@@ -33,7 +33,13 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
    */
   code_typet &ctor_type = to_code_type(symbol.type);
   code_blockt &ctor_body = to_code_block(to_code(symbol.value));
-  assert(ctor_type.return_type().id() == "constructor");
+
+  /*
+   *  TODO: For the time being, we just add vptr int code in ctors.
+   *        We *might* need to add vptr init code in dtors in the future. But we need some TCs first.
+   */
+  if(ctor_type.return_type().id() != "constructor")
+    return;
 
   // get the class' type where this ctor is declared
   const symbolt *ctor_class_symb =
