@@ -167,6 +167,7 @@ protected:
    *  TODO: add link to wiki page
    */
   std::string vtable_type_prefix = "virtual_table::";
+  std::string vtable_ptr_suffix = "@vtable_pointer";
   std::string thunk_prefix = "thunk::";
   using function_switch = std::map<irep_idt, exprt>;
   using switch_table = std::map<irep_idt, function_switch>;
@@ -353,8 +354,57 @@ protected:
   /*
    * Function to check whether a member function call refers to
    * a virtual/overriding method.
+   *
+   * Params:
+   *  - decl: the member declaration to which this MemberExpr refers
    */
-  bool check_member_expr_virtual_overriding(const clang::Decl &decl);
+  bool check_member_expr_virtual_overriding(const clang::Decl &decl) override;
+  /*
+   * Function to for virtual function table dynamic binding,
+   * Turning
+   *  x->F
+   * into
+   *  x->X@vtable_pointer->F
+   *
+   * Params:
+   *  - member: the method to which this MemberExpr refers
+   *  - new_expr: ESBMC IR to represent `x->X@vtable_ptr->F` or `x.X@vtable_ptr->F`
+   */
+  bool get_vft_binding_expr(const clang::MemberExpr &member, exprt &new_expr)
+    override;
+  /*
+   * Get the base dereference for VFT bound MemberExpr
+   *
+   * Params:
+   *  - member: the method to which this MemberExpr refers
+   *  - new_expr: ESBMC IR to represent x dereferencing as in `x->X@vtable_ptr->F` or `x.X@vtable_ptr->F`
+   */
+  bool
+  get_vft_binding_expr_base(const clang::MemberExpr &member, exprt &new_expr);
+  /*
+   * Get the vtable poitner dereferencing for VFT bound MemberExpr
+   *
+   * Params:
+   *  - member: the method to which this MemberExpr refers
+   *  - new_expr: ESBMC IR to represent X@Vtable_ptr dereferencing as in `x->X@vtable_ptr->F` or `x.X@vtable_ptr->F`
+   *  - base_deref: the base dereferencing expression incorporated in vtable pointer dereferencing expression
+   */
+  void get_vft_binding_expr_vtable_ptr(
+    const clang::MemberExpr &member,
+    exprt &new_expr,
+    const exprt &base_deref);
+  /*
+   * Get the Function for VFT bound MemberExpr
+   *
+   * Params:
+   *  - member: the method to which this MemberExpr refers
+   *  - new_expr: ESBMC IR to represent F in `x->X@vtable_ptr->F` or `x.X@vtable_ptr->F`
+   *  - vtable_ptr_deref: the vtable pointer dereferencing expression
+   */
+  bool get_vft_binding_expr_function(
+    const clang::MemberExpr &member,
+    exprt &new_expr,
+    const exprt &vtable_ptr_deref);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

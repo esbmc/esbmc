@@ -53,3 +53,98 @@ bool clang_cpp_convertert::check_member_expr_virtual_overriding(
 
   return false;
 }
+
+bool clang_cpp_convertert::get_vft_binding_expr(
+  const clang::MemberExpr &member,
+  exprt &new_expr)
+{
+  /*
+   * To turn `x->F` into `x->X@vtable_pointer->F`, we would need
+   * a bunch of dereference expressions nested together.
+   *
+   * TODO: Same for `x.F`? Add a TC and test it
+   */
+  // Let's start with base `x` dereferencing
+  exprt base_deref;
+  if(get_vft_binding_expr_base(member, base_deref))
+    return true;
+
+  // Then deal with X@vtable_pointer dereferencing
+  exprt vtable_ptr_deref;
+  get_vft_binding_expr_vtable_ptr(member, vtable_ptr_deref, base_deref);
+
+  // Then deal with F dereferencing
+  exprt f_expr;
+  if(get_vft_binding_expr_function(member, f_expr, vtable_ptr_deref))
+    return true;
+
+  new_expr.swap(f_expr);
+  return false;
+}
+
+bool clang_cpp_convertert::get_vft_binding_expr_base(
+  const clang::MemberExpr &member,
+  exprt &new_expr)
+{
+  exprt base;
+  if(get_expr(*member.getBase(), base))
+    return true;
+
+  new_expr = dereference_exprt(base, base.type());
+  new_expr.set("#lvalue", true);
+
+  return false;
+}
+
+void clang_cpp_convertert::get_vft_binding_expr_vtable_ptr(
+  const clang::MemberExpr &member,
+  exprt &new_expr,
+  const exprt &base_deref)
+{
+  // get the parent class id of the method to which this MemberExpr refers
+  const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(member.getMemberDecl());
+  assert(md);
+  std::string base_class_id = tag_prefix + md->getParent()->getNameAsString();
+
+  std::string vtable_type_symb_id = vtable_type_prefix + base_class_id;
+  typet vtable_type = symbol_typet(vtable_type_symb_id);
+
+  std::string vtable_ptr_name = base_class_id + "::" + vtable_ptr_suffix;
+  pointer_typet member_type(vtable_type);
+  member_exprt deref_member(base_deref, vtable_ptr_name, member_type);
+  deref_member.set("#lvalue", true);
+
+  // we've got the deref type and member. Now we are ready to make the deref new_expr
+  new_expr = dereference_exprt(deref_member, member_type);
+  new_expr.set("#lvalue", true);
+}
+
+bool clang_cpp_convertert::get_vft_binding_expr_function(
+  const clang::MemberExpr &member,
+  exprt &new_expr,
+  const exprt &vtable_ptr_deref)
+{
+  // get the parent class id of the method to which this MemberExpr refers
+  const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(member.getMemberDecl());
+  assert(md);
+  std::string base_class_id = tag_prefix + md->getParent()->getNameAsString();
+
+  exprt comp;
+  if(get_decl(*member.getMemberDecl(), comp))
+    return true;
+
+  /*
+   * This is the component name as in vtable's type symbol
+   * e.g. virtual_table::tag.Bird::c:@S@Bird@F@do_something#
+   */
+  std::string member_comp_name =
+    vtable_type_prefix + base_class_id + "::" + comp.name().as_string();
+  pointer_typet member_type(comp.type());
+  member_exprt deref_member(vtable_ptr_deref, member_comp_name, member_type);
+  deref_member.set("#lvalue", true);
+
+  new_expr = dereference_exprt(deref_member, member_type);
+  new_expr.set("#lvalue", true);
+
+  return false;
+}
