@@ -122,7 +122,9 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       // For Literal, their typeString is like "int_const 100".
       return ElementaryTypeName;
     }
-    else if(typeString.find("function") != std::string::npos)
+    else if(
+      typeString.find("function") != std::string::npos &&
+      typeString.find("contract ") == std::string::npos)
     {
       // FunctionToPointer decay in CallExpr when making a function call
       return Pointer;

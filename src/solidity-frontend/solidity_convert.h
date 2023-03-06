@@ -95,6 +95,7 @@ protected:
     const nlohmann::json &ast_node,
     std::string &name,
     std::string &id);
+  bool get_constructor_call(const nlohmann::json &ast_node, exprt &new_expr);
 
   // line number and locations
   void
@@ -150,7 +151,7 @@ protected:
     exprt &dest);
   bool convert_string_literal(std::string the_value, exprt &dest);
 
-  static constexpr const char *mode = "C";
+  static constexpr const char *mode = "C++";
 
 private:
   bool get_elementary_type_name_uint(

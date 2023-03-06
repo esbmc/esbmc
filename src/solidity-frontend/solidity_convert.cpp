@@ -901,7 +901,6 @@ bool solidity_convertert::get_expr(
     break;
   }
   case SolidityGrammar::ExpressionT::CallExprClass:
-  case SolidityGrammar::ExpressionT::NewExpression:
   {
     // 1. Get callee expr
     const nlohmann::json &callee_expr_json = expr["expression"];
@@ -912,7 +911,7 @@ bool solidity_convertert::get_expr(
     exprt callee_expr;
     if(get_expr(implicit_cast_expr, callee_expr))
       return true;
-
+    printf("here1");
     // 2. Get type
     // Need to "decrypt" the typeDescriptions and manually make a typeDescription
     nlohmann::json callee_rtn_type =
@@ -920,7 +919,7 @@ bool solidity_convertert::get_expr(
     typet type;
     if(get_type_description(callee_rtn_type, type))
       return true;
-
+    printf("here2");
     side_effect_expr_function_callt call;
     call.function() = callee_expr;
     call.type() = type;
@@ -970,6 +969,24 @@ bool solidity_convertert::get_expr(
       return true;
 
     new_expr = index_exprt(array, pos, t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::NewExpression:
+  {
+    printf("1\n");
+    // get the constructor call making this temporary
+    if(get_constructor_call(expr, new_expr))
+      return true;
+    printf("2\n");
+    // make the temporary
+    side_effect_exprt tmp_obj("temporary_object", new_expr.type());
+    codet code_expr("expression");
+    code_expr.operands().push_back(new_expr);
+    tmp_obj.initializer(code_expr);
+    tmp_obj.location() = new_expr.location();
+
+    new_expr.swap(tmp_obj);
+
     break;
   }
   default:
@@ -2126,6 +2143,21 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
           )"_json;
           adjusted_expr["returnParameters"] = j2;
         }
+        else if(
+          sub_expr["typeString"].get<std::string>().find("returns (contract") !=
+          std::string::npos)
+        {
+          // TODO: Fix me
+          auto j2 = R"(
+          {
+            "nodeType": "ParameterList",
+            "parameters": []
+          }
+        )"_json;
+          printf("111");
+          adjusted_expr["returnParameters"] = j2;
+          printf("222");
+        }
         else
           assert(!"Unsupported return types in pointee");
       }
@@ -2176,6 +2208,21 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(
             }
           )"_json;
         adjusted_expr = j2;
+      }
+      else if(
+        type_descrpt["typeString"].get<std::string>().find(
+          "returns (contract") != std::string::npos)
+      {
+        // TODO: Fix me
+        auto j2 = R"(
+          {
+            "nodeType": "ParameterList",
+            "parameters": []
+          }
+        )"_json;
+        printf("11");
+        adjusted_expr["returnParameters"] = j2;
+        printf("22");
       }
       else
         assert(!"Unsupported types in callee's return in CallExpr");
@@ -2285,5 +2332,68 @@ bool solidity_convertert::is_dyn_array(const nlohmann::json &json_in)
       return true;
     }
   }
+  return false;
+}
+
+bool solidity_convertert::get_constructor_call(
+  const nlohmann::json &expr,
+  exprt &new_expr)
+{
+  std::string name, id;
+  name = expr["typeName"]["pathNode"]["name"].get<std::string>();
+  id = "tag-" + name;
+
+  symbolt s = *context.find_symbol(id);
+  typet type = s.type;
+
+  // TODO: populate function params
+  new_expr = exprt("symbol", type);
+  new_expr.identifier(id);
+  new_expr.cmt_lvalue(true);
+  new_expr.name(name);
+
+  side_effect_expr_function_callt call;
+  call.function() = new_expr;
+  call.type() = type;
+
+  // TODO: decide if a new object is needed
+  if(true)
+  {
+    address_of_exprt tmp_expr;
+    tmp_expr.type() = pointer_typet();
+    tmp_expr.type().subtype() = type;
+
+    exprt new_object("new_object");
+    new_object.set("#lvalue", true);
+    new_object.type() = type;
+
+    tmp_expr.operands().resize(0);
+    tmp_expr.move_to_operands(new_object);
+
+    call.arguments().push_back(tmp_expr);
+  }
+
+  //  TODO: support derived constructor
+  if(true)
+  {
+  }
+
+  // Do args
+  unsigned num_args = 0;
+  if(expr.contains("arguments"))
+  {
+    for(const auto &arg : expr["arguments"].items())
+    {
+      exprt single_arg;
+      if(get_expr(arg.value(), single_arg))
+        return true;
+
+      call.arguments().push_back(single_arg);
+      ++num_args;
+    }
+  }
+
+  call.set("constructor", 1);
+  new_expr.swap(call);
   return false;
 }
