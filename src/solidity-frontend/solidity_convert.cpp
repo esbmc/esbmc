@@ -83,7 +83,11 @@ bool solidity_convertert::convert()
     std::string node_type = (*itr)["nodeType"].get<std::string>();
     if(node_type == "ContractDefinition") // rule source-unit
     {
-      constructor_name = (*itr)["name"].get<std::string>();
+      contract_name = (*itr)["name"].get<std::string>();
+      // add struct symbol for each contract
+      if(get_struct_class(*itr))
+        return true;
+
       if(convert_ast_nodes(*itr))
         return true; // 'true' indicates something goes wrong.
     }
@@ -302,6 +306,39 @@ bool solidity_convertert::get_var_decl(
   return false;
 }
 
+bool solidity_convertert::get_struct_class(const nlohmann::json &ast_node)
+{
+  // Convert Contract => class => struct
+
+  // 1. populate name, id
+  std::string id, name;
+  name = contract_name;
+  id = "tag-" + name;
+  struct_union_typet t = struct_typet();
+  t.tag(name);
+  printf("here: %s\n", t.id().c_str());
+
+  // 2. Check if the symbol is already added to the context, do nothing if it is
+  // already in the context.
+  if(context.find_symbol(id) != nullptr)
+    return false;
+
+  // 3. populate location
+  locationt location_begin;
+  get_location_from_decl(ast_node, location_begin);
+
+  // 4. populate debug module name
+  std::string debug_modulename =
+    get_modulename_from_path(location_begin.file().as_string());
+
+  symbolt symbol;
+  get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
+
+  symbol.is_type = true;
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
+  return false;
+}
+
 bool solidity_convertert::get_function_definition(
   const nlohmann::json &ast_node)
 {
@@ -325,7 +362,7 @@ bool solidity_convertert::get_function_definition(
   if(
     (*current_functionDecl)["name"].get<std::string>() == "" &&
     (*current_functionDecl)["kind"] == "constructor")
-    current_functionName = constructor_name;
+    current_functionName = contract_name;
   else
     current_functionName = (*current_functionDecl)["name"].get<std::string>();
 
@@ -1383,6 +1420,18 @@ bool solidity_convertert::get_type_description(
 
     break;
   }
+  case SolidityGrammar::TypeNameT::ContractTypeName:
+  {
+    // i.e. ContractName tmp = new ContractName(Args);
+
+    std::string constructor_name=type_name["typeString"].get<std::string>();
+    size_t pos = constructor_name.find(" ");
+    std::string id = "tag-" + constructor_name.substr(pos+1);
+
+    symbolt &s = *context.find_symbol(id);
+    new_type = s.type;
+    break;
+  }
   default:
   {
     log_debug(
@@ -1721,7 +1770,7 @@ void solidity_convertert::get_function_definition_name(
   if(
     ast_node["name"].get<std::string>() == "" &&
     ast_node["kind"].get<std::string>() == "constructor")
-    name = constructor_name;
+    name = contract_name;
   else
     name = ast_node["name"].get<std::string>();
   id = name;

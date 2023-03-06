@@ -40,6 +40,9 @@ enum TypeNameT
   // dynamic array type
   DynArrayTypeName,
 
+  // contract type
+  ContractTypeName,
+
   TypeNameTError
 };
 TypeNameT get_type_name_t(const nlohmann::json &type_name);
