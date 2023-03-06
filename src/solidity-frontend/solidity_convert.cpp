@@ -2287,4 +2287,3 @@ bool solidity_convertert::is_dyn_array(const nlohmann::json &json_in)
   }
   return false;
 }
-  
