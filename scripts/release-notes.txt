@@ -1,4 +1,18 @@
 Release Notes of the ESBMC model checker
+
+*** Version 7.1
+* Added an experimental flag to cache SSA assertions with `--cache-asserts` (SSA caching #827).
+* Support for macOS M1 architecture (Fixed macOS M1 build #810).
+* Additional operators for the goto-contractor with `--goto-contractor` (Goto contractor: support for multiple operators. #852).
+* Interval analysis now supports integer and floating-point interval contraction for relational operators with `--interval-analysis` (Interval analysis fixes #861).
+* Added `atexit` operational model (Atexit model implementation #859).
+* Fixed an issue that caused extern variables to be linked incorrectly (Changes in the c_link and contextt to handle extern variables #881).
+* The Clang C++ frontend now has support for the following features:
+  ** single-inheritance (Single inheritance #882).
+  ** multiple-inheritance (Multiple inheritance #884).
+  ** arrow operator for objects (Method callsite via arrow operator #891).
+* Various fixes (Fix returning instance of void #846, Fixed some warnings #860, [clang-c] fixed double type adjustment #866, Fix float cast #878, Fix union initializer type #904, [util] replace_symbolt learned to handle argumentt #907, Fix WinCI #911)  
+
 *** Version 7
 * Added support for GCC Vectors.
 * Added support for the Jimple language.
