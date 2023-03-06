@@ -1,0 +1,4 @@
+CORE
+mul.solast
+--function empty --contract mul.sol
+^VERIFICATION SUCCESSFUL$

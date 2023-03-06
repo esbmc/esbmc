@@ -90,6 +90,7 @@ bool solidity_convertert::convert()
 
       if(convert_ast_nodes(*itr))
         return true; // 'true' indicates something goes wrong.
+      //clear_current_contract_info();
     }
   }
 
@@ -316,7 +317,6 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &ast_node)
   id = "tag-" + name;
   struct_union_typet t = struct_typet();
   t.tag(name);
-  printf("here: %s\n", t.id().c_str());
 
   // 2. Check if the symbol is already added to the context, do nothing if it is
   // already in the context.
@@ -702,6 +702,7 @@ bool solidity_convertert::get_statement(
     code_for.body() = body;
 
     new_expr = code_for;
+    current_forStmt = nullptr;
     break;
   }
   case SolidityGrammar::StatementT::IfStatement:
@@ -900,6 +901,7 @@ bool solidity_convertert::get_expr(
     break;
   }
   case SolidityGrammar::ExpressionT::CallExprClass:
+  case SolidityGrammar::ExpressionT::NewExpression:
   {
     // 1. Get callee expr
     const nlohmann::json &callee_expr_json = expr["expression"];
@@ -1424,9 +1426,12 @@ bool solidity_convertert::get_type_description(
   {
     // i.e. ContractName tmp = new ContractName(Args);
 
-    std::string constructor_name=type_name["typeString"].get<std::string>();
+    std::string constructor_name = type_name["typeString"].get<std::string>();
     size_t pos = constructor_name.find(" ");
-    std::string id = "tag-" + constructor_name.substr(pos+1);
+    std::string id = "tag-" + constructor_name.substr(pos + 1);
+
+    if(context.find_symbol(id) == nullptr)
+      return true;
 
     symbolt &s = *context.find_symbol(id);
     new_type = s.type;
@@ -2282,3 +2287,4 @@ bool solidity_convertert::is_dyn_array(const nlohmann::json &json_in)
   }
   return false;
 }
+  
