@@ -4,3 +4,4 @@ contract Simple {
     constructor () public {}
     function empty() external pure {}
 }
+

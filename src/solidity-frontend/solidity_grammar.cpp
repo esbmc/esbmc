@@ -149,6 +149,12 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
 
       return ArrayTypeName;
     }
+    else if(
+      type_name["typeIdentifier"].get<std::string>().find("t_contract") !=
+        std::string::npos)
+    {
+      return ContractTypeName;
+    }
     else
     {
       log_error(
@@ -186,6 +192,7 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(PointerArrayToPtr)
     ENUM_TO_STR(ArrayTypeName)
     ENUM_TO_STR(DynArrayTypeName)
+    ENUM_TO_STR(ContractTypeName)
     ENUM_TO_STR(TypeNameTError)
   default:
   {
