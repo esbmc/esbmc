@@ -221,6 +221,8 @@ enum ExpressionT
   // Solidity does NOT provide such rule
   IndexAccess,
 
+  NewExpression,
+
   ExpressionTError
 };
 ExpressionT get_expression_t(const nlohmann::json &expr);

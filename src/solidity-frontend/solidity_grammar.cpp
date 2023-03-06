@@ -151,7 +151,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     }
     else if(
       type_name["typeIdentifier"].get<std::string>().find("t_contract") !=
-        std::string::npos)
+      std::string::npos)
     {
       return ContractTypeName;
     }
@@ -494,6 +494,10 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return IndexAccess;
   }
+  else if(expr["nodeType"] == "NewExpression")
+  {
+    return NewExpression;
+  }
   else
   {
     log_error(
@@ -603,6 +607,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(CallExprClass)
     ENUM_TO_STR(ImplicitCastExprClass)
     ENUM_TO_STR(IndexAccess)
+    ENUM_TO_STR(NewExpression)
     ENUM_TO_STR(ExpressionTError)
   default:
   {
