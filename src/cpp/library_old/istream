@@ -1,0 +1,242 @@
+#ifndef STL_ISTREAM
+#define STL_ISTREAM
+
+#include "ios"
+#include "definitions.h"
+#include "cstdio"
+
+namespace std
+{
+  class istream: virtual public ios
+  {
+    public:
+    virtual ~istream (){}
+
+    istream(): ios()
+    {
+      _gcount = 0;
+      _filesize = nondet_uint();
+      _filepos = 0;
+    }
+
+    istream (streambuf * sb)
+    {
+      ios();
+      _gcount = 0;
+      _filesize = nondet_uint();
+      _filepos = 0;
+    }
+
+    istream& ignore(int i = 1, int delim = EOF);
+
+    int get();
+    istream& get ( char& c );
+    istream& get ( char* s, streamsize n );
+    istream& get ( char* s, streamsize n, char delim );
+    istream& get ( streambuf& sb);
+    istream& get ( streambuf& sb, char delim );
+
+    //  static istream& getline(char str[], int size, char delim = '\n');
+    istream& getline (char* s, streamsize n );
+    istream& getline (char* s, streamsize n, char delim );
+
+    streamsize  gcount ( ) const;
+    //  int rdstate();
+    istream& read ( char* s, streamsize n );
+    istream& seekg ( streampos pos );
+    istream& seekg ( streamoff off, ios_base::seekdir dir );
+    streampos tellg ( ); //model
+
+    int peek ( );
+    streamsize readsome ( char* s, streamsize n );
+    istream& putback ( char c );
+    istream& unget ( );
+
+    int sync ( );
+
+    class sentry {
+      public:
+        explicit sentry ( istream& is, bool noskipws = false );
+        ~sentry();
+        operator bool() const;
+      private:
+        sentry (const sentry&);             // not defined
+        sentry& operator= (const sentry& ); // not defined
+    };
+
+    static streamsize _gcount;
+
+    istream(const istream&); // disabled
+    istream& operator=(const istream&); // disabled
+    streamsize _filesize;
+    static streampos _filepos;
+  };
+}
+
+namespace std
+{
+  // As with ostream, the spec says that these functions are explicitly
+  // declared and defined, not templated.
+  istream& operator>> (istream& is, bool &val )
+  {
+    dec(is);
+    if (val == 1) {
+      boolalpha(is);
+    }
+    is._gcount=0; return is; }
+  istream& operator>> (istream& is, char &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, short &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, unsigned short &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, int &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, unsigned int &val )
+  { is._gcount=0; return is; }
+#if __WORDSIZE == 64
+  istream& operator>> (istream& is, long &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, unsigned long &val )
+  { is._gcount=0; return is; }
+#endif
+  istream& operator>> (istream& is, float &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, double &val )
+  { is._gcount=0; return is; }
+#if 0
+  istream& operator>> (istream& is, long double &val )
+  { is._gcount=0; return is; }
+#endif
+  istream& operator>> (istream& is, void *&val )
+  { is._gcount=0; return is; }
+
+  // Delightful special cases.
+  istream& operator>> (istream& is, ios& (*pf)(ios&))
+  {
+    pf(is);
+    return is;
+  }
+  istream& operator>> (istream& is, ios_base& (*pf)(ios_base&))
+  {
+    pf(is);
+    return is;
+  }
+
+  // These are also defined to be non-member functions by the spec.
+
+  istream& operator>> (istream& is, char *s)
+  { is._gcount=0; return is; }
+#if 0
+  // platform-dependant difference right now.
+  istream& operator>> (istream& is, signed char *s)
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, unsigned char *s)
+  { is._gcount=0; return is; }
+#endif
+
+  istream& operator>> (istream& is, const smanip &val)
+  { is._gcount=0; return is; }
+
+  int istream::get()
+  {
+    _gcount = 1;
+    if (nondet_bool()) {
+      return (int) nondet_char();
+    }
+    else
+      return EOF;
+  }
+
+  //istream& get(char str[], int n)
+  istream& istream::get ( char* s, streamsize n )
+  {
+#if 0
+    char *out[nondet_uint() % n];
+    str = out;
+#endif
+    _gcount = n;
+    return *this;
+  }
+
+  istream& istream::getline (char* s, streamsize n ) {
+    _gcount = n;
+    return *this;
+  }
+  istream& istream::getline (char* s, streamsize n, char delim ) {
+    _gcount = n;
+    return *this;
+  }
+
+  istream& istream::read(char* s, streamsize n)
+  {
+#if 0
+    char *out[nondet_uint() % size];
+    str = out;
+#endif
+    //    	size_t slen = strlen(s);
+    _gcount = n;
+    //	if(slen<=n) _gcount = slen;
+    //	else _gcount = n;
+    return *this;
+  }
+
+  istream& istream::ignore(int i, int delim)
+  {
+    return *this;
+  }
+
+  streamsize istream::gcount() const
+  {
+    return _gcount;
+  }
+
+  int istream::peek ( ) {
+    _gcount = 1;
+    return nondet_uint();
+  }
+
+  streamsize istream::readsome ( char* s, streamsize n ) {
+#if 0
+    size_t len = strlen(s);
+    if(n<=len) _gcount = n;
+    else _gcount = len;
+#else
+    _gcount = n;
+#endif
+    return _gcount;
+  }
+
+  istream& istream::putback ( char c ) {
+    _gcount = 0;
+    return *this;
+  }
+
+  istream& istream::unget ( ) {
+    _gcount = 0;
+    return *this;
+  }
+
+  istream& istream::seekg ( ios::streampos pos ) {
+    //__ESBMC_assert (pos<=_filesize, "Invalid stream position");
+    _filepos = pos;
+    return *this;
+  }
+  istream& istream::seekg ( ios::streamoff off, ios_base::seekdir dir ) {
+    if (dir==ios::beg) {_filepos=off;}
+    if (dir==ios::cur) {_filepos+=off;}
+    if (dir==ios::end) {_filepos=_filesize-off;}
+    return *this;
+  }
+  ios::streampos istream::tellg ( ) {
+    return _filepos;
+  }
+}
+
+namespace std
+{
+  istream& ws ( istream& is );
+}
+
+
+#endif

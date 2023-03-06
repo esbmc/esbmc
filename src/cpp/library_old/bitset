@@ -1,0 +1,80 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
+#ifndef STL_BITSET
+#define STL_BITSET
+
+#include "iostream"
+#include "utility"
+#include "iterator"
+#include "string"
+using namespace std;
+
+#define BITSET_CAPACITY 20
+
+namespace std {
+
+class reference {
+	friend class bitset;
+	reference(); // no public constructor
+public:
+	~reference();
+	operator bool() const; // convert to bool
+	reference& operator=(bool x); // assign from bool
+	reference& operator=(const reference& x); // assign from bit
+	reference& flip(); // flip bit value
+	bool operator~() const; // return inverse value
+};
+
+template<size_t N> class bitset {
+	int _size = 0;
+public:
+	bitset() :
+			_size(0) {
+	}
+	bitset(unsigned long val) :
+			_size(0) {
+	}
+	bitset<N>& flip();
+	bitset<N>& flip(size_t pos);
+	size_t size() const {
+		assert(0 <= _size && _size <= BITSET_CAPACITY);
+		return _size;
+	}
+	unsigned long to_ulong() const;
+	bool any() const;
+	bool none() const;
+	bool test(size_t pos) const;
+	bitset<N>& reset();
+	bitset<N>& reset(size_t pos);
+	bool operator[](size_t pos) const;
+	reference operator[](size_t pos);
+	bitset<N>& set();
+	bitset<N>& set(size_t pos, bool val = true);
+	size_t count();
+	bitset<N>& operator&=(const bitset<N>& rhs);
+	bitset<N>& operator|=(const bitset<N>& rhs);
+	bitset<N>& operator^=(const bitset<N>& rhs);
+	bitset<N>& operator<<=(size_t pos);
+	bitset<N>& operator>>=(size_t pos);
+	bitset<N> operator~() const;
+	bitset<N> operator<<(size_t pos) const;
+	bitset<N> operator>>(size_t pos) const;
+	bool operator==(const bitset<N>& rhs) const;
+	bool operator!=(const bitset<N>& rhs) const;
+	template<size_t N>
+	bitset<N> operator&(const bitset<N>& lhs, const bitset<N>& rhs);
+	template<size_t N>
+	bitset<N> operator|(const bitset<N>& lhs, const bitset<N>& rhs);
+	template<size_t N>
+	bitset<N> operator^(const bitset<N>& lhs, const bitset<N>& rhs);
+};
+
+}
+#endif

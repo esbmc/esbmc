@@ -1,0 +1,100 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
+#ifndef STL_EXCEPTION
+#define STL_EXCEPTION
+
+#include "definitions.h"
+
+namespace std {
+
+const char* message;
+
+typedef void (*terminate_handler)();
+typedef void (*unexpected_handler)();
+
+bool uncaught_exception() throw ();
+
+// Default terminate function: calls abort
+void default_terminate() throw ()
+{
+  __ESBMC_assert(0, "Aborted");
+  // Allow now further execution.
+  __ESBMC_assume(0);
+}
+
+// Default unexpected function: calls terminate
+void default_unexpected() throw ()
+{
+  default_terminate();
+}
+
+terminate_handler terminate_pf=default_terminate;
+unexpected_handler unexpected_pf=default_unexpected;
+
+terminate_handler set_terminate(terminate_handler f) throw ()
+{
+  terminate_pf=f;
+}
+
+unexpected_handler set_unexpected(unexpected_handler f) throw ()
+{
+  unexpected_pf=f;
+}
+
+// Model for unexpected function: calls the current
+// unexpected handler function
+void unexpected()
+{
+  unexpected_pf();
+  throw;
+}
+
+// Model for terminate function: calls the current
+// terminate handler function
+void terminate()
+{
+  terminate_pf();
+}
+
+class exception {
+public:
+  exception() throw () {};
+  exception(const exception&) throw () {};
+
+  exception& operator=(const exception&) throw ();
+
+  virtual ~exception() throw () {}
+
+  virtual const char* what() const throw () {
+    /**
+     *Returns a null terminated character sequence containing a generic description of the exception.
+     *Both the wording of such description and the character width are implementation-defined.
+     *source: http://www.cplusplus.com/reference/std/exception/exception/
+     **/
+    return (const char*) message;
+  }
+};
+
+/** If an %exception is thrown which is not listed in a function's
+ *  %exception specification, one of these may be thrown.
+ **/
+class bad_exception: public exception {
+public:
+  bad_exception() {}
+
+  virtual ~bad_exception() {}
+
+  virtual const char* what() const {
+    return (const char*) message;
+  }
+};
+}
+
+#endif

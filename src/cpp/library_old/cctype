@@ -1,0 +1,486 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
+#ifndef STL_CCTYPE
+#define STL_CCTYPE
+
+int islower(int c);
+int toupper(int c);
+int isdigit(int c);
+int isalpha(int c);
+int isalnum(int c);
+int isxdigit(int c);
+int isupper(int c);
+int tolower(int c);
+int isspace(int c);
+int iscntrl(int c);
+int ispunct(int c);
+int isprint(int c);
+int isgraph(int c);
+
+int islower(int c) {
+	int res = 0;
+	switch (c) {
+	case 'a':
+	case 'b':
+	case 'c':
+	case 'd':
+	case 'e':
+	case 'f':
+	case 'g':
+	case 'h':
+	case 'i':
+	case 'j':
+	case 'k':
+	case 'l':
+	case 'm':
+	case 'n':
+	case 'o':
+	case 'p':
+	case 'q':
+	case 'r':
+	case 's':
+	case 't':
+	case 'u':
+	case 'v':
+	case 'w':
+	case 'x':
+	case 'y':
+	case 'z':
+		res = 1;
+		break;
+	}
+	return res;
+}
+
+int toupper(int c) {
+	int res = c;
+	switch (c) {
+	case 'a':
+		res = 'A';
+		break;
+	case 'b':
+		res = 'B';
+		break;
+	case 'c':
+		res = 'C';
+		break;
+	case 'd':
+		res = 'D';
+		break;
+	case 'e':
+		res = 'E';
+		break;
+	case 'f':
+		res = 'F';
+		break;
+	case 'g':
+		res = 'G';
+		break;
+	case 'h':
+		res = 'H';
+		break;
+	case 'i':
+		res = 'I';
+		break;
+	case 'j':
+		res = 'J';
+		break;
+	case 'k':
+		res = 'K';
+		break;
+	case 'l':
+		res = 'L';
+		break;
+	case 'm':
+		res = 'M';
+		break;
+	case 'n':
+		res = 'N';
+		break;
+	case 'o':
+		res = 'O';
+		break;
+	case 'p':
+		res = 'P';
+		break;
+	case 'q':
+		res = 'Q';
+		break;
+	case 'r':
+		res = 'R';
+		break;
+	case 's':
+		res = 'S';
+		break;
+	case 't':
+		res = 'T';
+		break;
+	case 'u':
+		res = 'U';
+		break;
+	case 'v':
+		res = 'V';
+		break;
+	case 'w':
+		res = 'W';
+		break;
+	case 'x':
+		res = 'X';
+		break;
+	case 'y':
+		res = 'Y';
+		break;
+	case 'z':
+		res = 'Z';
+		break;
+		break;
+	}
+	return res;
+}
+
+int isdigit(int c) {
+	int res = 0;
+	switch (c) {
+	case '0':
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+	case '8':
+	case '9':
+		res = 1;
+		break;
+	}
+	return res;
+}
+
+int isalpha(int c) {
+	int res = 0;
+	switch (c) {
+	case 'a':
+	case 'b':
+	case 'c':
+	case 'd':
+	case 'e':
+	case 'f':
+	case 'g':
+	case 'h':
+	case 'i':
+	case 'j':
+	case 'k':
+	case 'l':
+	case 'm':
+	case 'n':
+	case 'o':
+	case 'p':
+	case 'q':
+	case 'r':
+	case 's':
+	case 't':
+	case 'u':
+	case 'v':
+	case 'w':
+	case 'x':
+	case 'y':
+	case 'z':
+	case 'A':
+	case 'B':
+	case 'C':
+	case 'D':
+	case 'E':
+	case 'F':
+	case 'G':
+	case 'H':
+	case 'I':
+	case 'J':
+	case 'K':
+	case 'L':
+	case 'M':
+	case 'N':
+	case 'O':
+	case 'P':
+	case 'Q':
+	case 'R':
+	case 'S':
+	case 'T':
+	case 'U':
+	case 'V':
+	case 'W':
+	case 'X':
+	case 'Y':
+	case 'Z':
+		res = 1;
+		break;
+	}
+}
+
+int isalnum(int c) {
+	int res = 0;
+	switch (c) {
+	case '0':
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+	case '8':
+	case '9':
+	case 'a':
+	case 'b':
+	case 'c':
+	case 'd':
+	case 'e':
+	case 'f':
+	case 'g':
+	case 'h':
+	case 'i':
+	case 'j':
+	case 'k':
+	case 'l':
+	case 'm':
+	case 'n':
+	case 'o':
+	case 'p':
+	case 'q':
+	case 'r':
+	case 's':
+	case 't':
+	case 'u':
+	case 'v':
+	case 'w':
+	case 'x':
+	case 'y':
+	case 'z':
+	case 'A':
+	case 'B':
+	case 'C':
+	case 'D':
+	case 'E':
+	case 'F':
+	case 'G':
+	case 'H':
+	case 'I':
+	case 'J':
+	case 'K':
+	case 'L':
+	case 'M':
+	case 'N':
+	case 'O':
+	case 'P':
+	case 'Q':
+	case 'R':
+	case 'S':
+	case 'T':
+	case 'U':
+	case 'V':
+	case 'W':
+	case 'X':
+	case 'Y':
+	case 'Z':
+		res = 1;
+		break;
+	}
+}
+
+int isxdigit(int c) {
+	int res = 0;
+	switch (c) {
+	case '0':
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+	case '8':
+	case '9':
+	case 'a':
+	case 'b':
+	case 'c':
+	case 'd':
+	case 'e':
+	case 'f':
+	case 'A':
+	case 'B':
+	case 'C':
+	case 'D':
+	case 'E':
+	case 'F':
+		res = 1;
+		break;
+	}
+}
+
+int isupper(int c) {
+	int res = 0;
+	switch (c) {
+	case 'A':
+	case 'B':
+	case 'C':
+	case 'D':
+	case 'E':
+	case 'F':
+	case 'G':
+	case 'H':
+	case 'I':
+	case 'J':
+	case 'K':
+	case 'L':
+	case 'M':
+	case 'N':
+	case 'O':
+	case 'P':
+	case 'Q':
+	case 'R':
+	case 'S':
+	case 'T':
+	case 'U':
+	case 'V':
+	case 'W':
+	case 'X':
+	case 'Y':
+	case 'Z':
+		res = 1;
+		break;
+	}
+}
+
+int tolower(int c) {
+	int res = c;
+	switch (c) {
+	case 'A':
+		res = 'a';
+		break;
+	case 'B':
+		res = 'b';
+		break;
+	case 'C':
+		res = 'c';
+		break;
+	case 'D':
+		res = 'd';
+		break;
+	case 'E':
+		res = 'e';
+		break;
+	case 'F':
+		res = 'f';
+		break;
+	case 'G':
+		res = 'g';
+		break;
+	case 'H':
+		res = 'h';
+		break;
+	case 'I':
+		res = 'i';
+		break;
+	case 'J':
+		res = 'j';
+		break;
+	case 'K':
+		res = 'k';
+		break;
+	case 'L':
+		res = 'l';
+		break;
+	case 'M':
+		res = 'm';
+		break;
+	case 'N':
+		res = 'n';
+		break;
+	case 'O':
+		res = 'o';
+		break;
+	case 'P':
+		res = 'p';
+		break;
+	case 'Q':
+		res = 'q';
+		break;
+	case 'R':
+		res = 'r';
+		break;
+	case 'S':
+		res = 's';
+		break;
+	case 'T':
+		res = 't';
+		break;
+	case 'U':
+		res = 'u';
+		break;
+	case 'V':
+		res = 'v';
+		break;
+	case 'W':
+		res = 'w';
+		break;
+	case 'X':
+		res = 'x';
+		break;
+	case 'Y':
+		res = 'y';
+		break;
+	case 'Z':
+		res = 'z';
+		break;
+		break;
+	}
+	return res;
+}
+
+int isspace(int c) {
+	int res = 0;
+	switch (c) {
+	case ' ':
+	case '\t':
+	case '\n':
+	case '\v':
+	case '\f':
+	case '\r':
+		res = 1;
+		break;
+	}
+}
+
+int iscntrl(int c) {
+	if (c >= 00 && c <= 32)
+		return 1;
+
+	return 0;
+}
+
+int ispunct(int c) {
+	return !isalnum(c);
+}
+
+int isprint(int c) {
+	return !iscntrl(c);
+}
+
+int isgraph(int c) {
+	int res = isprint(c);
+	int aux = isspace(c);
+
+	if ((res == 1) && (aux == 0))
+		return 1;
+
+	return 0;
+}
+
+#endif

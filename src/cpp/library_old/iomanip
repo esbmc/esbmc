@@ -1,0 +1,20 @@
+#ifndef STL_IOMANIP
+#define STL_IOMANIP
+
+#include "definitions.h"
+#include "ios"
+
+namespace std
+{
+//Parameterized manipulators
+
+smanip setiosflags ( ios_base::fmtflags mask );
+smanip resetiosflags ( ios_base::fmtflags mask );
+smanip setbase ( int base );
+smanip setfill ( char c );
+smanip setprecision ( int n );
+smanip setw ( int n );
+
+}
+
+#endif

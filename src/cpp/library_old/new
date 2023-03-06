@@ -1,0 +1,53 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
+#ifndef STL_NEW
+#define STL_NEW
+
+#include "definitions.h"
+#include "exception"
+
+typedef void (*new_handler)();
+
+struct nothrow_t {
+};
+
+extern const nothrow_t nothrow;
+
+namespace std {
+struct bad_alloc: public exception {
+public:
+	bad_alloc() throw ();
+	bad_alloc(const bad_alloc&) throw ();
+	bad_alloc& operator=(const bad_alloc&) throw ();
+	const char* what() const throw () :
+			message("std::bad_alloc") {
+		return message;
+	}
+};
+
+new_handler set_new_handler(new_handler new_p) throw ();
+void* operator new(std::size_t size) throw (std::bad_alloc);
+void* operator new(std::size_t size,
+		const std::nothrow_t& nothrow_constant) throw ();
+void* operator new(std::size_t size, void* ptr) throw ();
+void* operator new[](std::size_t size) throw (std::bad_alloc);
+void* operator new[](std::size_t size,
+		const std::nothrow_t& nothrow_constant) throw ();
+void* operator new[](std::size_t size, void* ptr) throw ();
+void operator delete(void* ptr) throw ();
+void operator delete(void* ptr, const std::nothrow_t& nothrow_constant) throw ();
+void operator delete(void* ptr, void* voidptr2) throw ();
+void operator delete[](void* ptr) throw ();
+void operator delete[](void* ptr,
+		const std::nothrow_t& nothrow_constant) throw ();
+void operator delete[](void* ptr, void* voidptr2) throw ();
+}
+
+#endif

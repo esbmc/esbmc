@@ -1,0 +1,454 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
+#ifndef STL_LOCALE
+#define STL_LOCALE
+
+#include "string"
+#include "iterator"
+#include "iostream"
+using namespace std;
+
+namespace std {
+class ctype_base {
+public:
+	enum mask { // numeric values only as example of possible bitmask values:
+		space = 1 << 0,
+		print = 1 << 1,
+		cntrl = 1 << 2,
+		upper = 1 << 3,
+		lower = 1 << 4,
+		alpha = 1 << 5,
+		digit = 1 << 6,
+		punct = 1 << 7,
+		xdigit = 1 << 8,
+		alnum = alpha | digit,
+		graph = alnum | punct
+	};
+};
+
+class codecvt_base {
+public:
+	enum result {
+		ok, partial, error, noconv
+	};
+};
+
+class time_base {
+public:
+	enum dateorder {
+		no_order, dmy, mdy, ymd, ydm
+	};
+};
+
+class money_base {
+public:
+
+	enum part {
+		none, space, symbol, sign, value
+	};
+
+	struct pattern {
+		char field[4];
+	};
+};
+
+class messages_base {
+public:
+	typedef int catalog;
+};
+
+class locale {
+public:
+	typedef int category;
+	class locale::facet {
+	public:
+		explicit facet(size_t refs = 0);
+		virtual ~facet();
+	private:
+		facet(const facet&); // not defined
+		void operator=(const facet&); // not defined
+	};
+	class locale::id {
+	public:
+		id();
+	private:
+		void operator=(const id&); // not defined
+		id(const id&); // not defined
+	};
+	locale() throw ();
+	locale(const locale& other) throw ();
+	explicit locale(const char* std_name);
+	locale(const locale& other, const char* std_name, category cats);
+	template<class Facet>
+	locale(const locale& other, Facet* f);
+	locale(const locale& other, const locale& one, category cats);
+	~locale() throw ();
+	static const locale& classic();
+	template<class Facet> locale combine(const locale& other) const;
+	static locale global(const locale& loc);
+	string& name() const;
+	bool operator!=(const locale& other) const;
+	template<class charT, class Traits, class Allocator>
+	bool operator()(const basic_string<charT, Traits, Allocator>& s1,
+			const basic_string<charT, Traits, Allocator>& s2) const {
+		return (use_facet<collate<charT> >(*this).compare(s1.data(),
+				s1.data() + s1.size(), s2.data(), s2.data() + s2.size()) < 0);
+	}
+	const locale& operator=(const locale& other) throw ();
+	bool operator==(const locale& other) const;
+};
+
+template<class Facet> const Facet& use_facet(const locale& loc);
+
+template<class Facet> bool has_facet(const locale& loc) throw ();
+
+template<class charT> class ctype: public ctype_base, locale::facet {
+public:
+	typedef charT char_type;
+	explicit ctype(const mask* tab = 0, bool del = false, size_t refs = 0);
+	~ctype();
+	bool is(mask m, charT c) const;
+	const charT* is(const charT* low, const charT* high, mask* vec) const;
+	const charT* scan_is(mask m, const charT* low, const charT* high) const;
+	const charT* scan_not(mask m, const charT* low, const charT* high) const;
+	charT toupper(charT c) const;
+	const charT* toupper(charT* low, const charT* high) const;
+	charT tolower(charT c) const;
+	const charT* tolower(charT* low, const charT* high) const;
+	charT widen(char c) const;
+	const char* widen(const char* low, const char* high, charT* to) const;
+	char narrow(charT c, char dfault) const;
+	const charT* narrow(const charT* low, const charT* high, char dfault,
+			char* to) const;
+	bool do_is(mask m, charT c) const;
+	const charT* do_is(const charT* low, const charT* high, mask* vec) const;
+	const charT* do_scan_is(mask m, const charT* low, const charT* high) const;
+	const charT* do_scan_not(mask m, const charT* low, const charT* high) const;
+	charT do_toupper(charT c) const;
+	const charT* do_toupper(charT* low, const charT* high) const;
+	charT do_tolower(charT c) const;
+	const charT* do_tolower(charT* low, const charT* high) const;
+	charT do_widen(char c) const;
+	const char* do_widen(const char* low, const char* high, charT* to) const;
+	char do_narrow(charT c, char dfault) const;
+	const charT* do_narrow(const charT* low, const charT* high, char dfault,
+			char* to) const;
+};
+
+template<class charT> class ctype_byname: public ctype {
+	explicit ctype_byname(const char* std_name, size_t refs = 0);
+};
+
+template<class internT, class externT, class stateT> class codecvt: public locale::facet,
+		codecvt_base {
+public:
+	typedef externT extern_type;
+	typedef stateT state_type;
+	typedef internT intern_type;
+
+	explicit codecvt(size_t refs = 0);
+	~ctype();
+	result in(stateT& state, const externT* from, const externT* from_end,
+			const externT*& from_next, internT* to, internT* to_limit,
+			internT*& to_next) const;
+	result out(stateT& state, const internT* from, const internT* from_end,
+			const internT*& from_next, externT* to, externT* to_limit,
+			externT*& to_next) const;
+	result unshift(stateT& state, externT* to, externT* to_limit,
+			externT*& to_next) const;
+	int always_noconv() const throw ();
+	int encoding() const throw ();
+	int length(stateT& state, const externT* from, const externT* from_end,
+			size_t max) const;
+	int max_length() const throw ();
+	int do_always_noconv() const throw ();
+	int do_encoding() const throw ();
+	result do_in(stateT& state, const externT* from, const externT* from_end,
+			const externT*& from_next, internT* to, internT* to_limit,
+			internT*& to_next) const;
+	int do_length(stateT& state, const externT* from, const externT* from_end,
+			size_t max) const;
+	int do_max_length() const throw ();
+	result do_out(stateT& state, const internT* from, const internT* from_end,
+			const internT*& from_next, externT* to, externT* to_limit,
+			externT*& to_next) const;
+	result do_unshift(stateT& state, externT* to, externT* to_limit,
+			externT*& to_next) const;
+};
+
+template<class internT, class externT, class stateT> class codecvt_byname: public codecvt {
+public:
+	explicit codecvt_byname(const char* std_name, size_t refs = 0);
+};
+
+template<class charT, class InputIterator = istreambuf_iterator<charT> > class num_get: locale::facet {
+public:
+	typedef charT char_type;
+	typedef InputIterator iter_type;
+	explicit num_get(size_t refs = 0);
+	~num_get();
+	iter_type get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, bool& val) const;
+	iter_type get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, long& val) const;
+	iter_type get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, unsigned short& val) const;
+	iter_type get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, unsigned int& val) const;
+	iter_type get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, unsigned long& val) const;
+	iter_type get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, float& val) const;
+	iter_type get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, double& val) const;
+	iter_type get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, long double& val) const;
+	iter_type get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, void*& val) const;
+	iter_type do_get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, bool& val) const;
+	iter_type do_get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, long& val) const;
+	iter_type do_get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, unsigned short& val) const;
+	iter_type do_get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, unsigned int& val) const;
+	iter_type do_get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, unsigned long& val) const;
+	iter_type do_get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, float& val) const;
+	iter_type do_get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, double& val) const;
+	iter_type do_get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, long double& val) const;
+	iter_type do_get(iter_type in, iter_type end, ios_base& str,
+			ios_base::iostate& err, void*& val) const;
+};
+
+template<class charT, class OutputIterator = ostreambuf_iterator<charT> > class num_put: public locale::facet {
+public:
+	typedef charT char_type;
+	typedef OutputIterator char_type;
+	explicit num_put(size_t refs = 0);
+	~num_put();
+	iter_type put(iter_type out, ios_base& str, char_type fill, bool val) const;
+	iter_type put(iter_type out, ios_base& str, char_type fill, long val) const;
+	iter_type put(iter_type out, ios_base& str, char_type fill,
+			unsigned long val) const;
+	iter_type put(iter_type out, ios_base& str, char_type fill,
+			double val) const;
+	iter_type put(iter_type out, ios_base& str, char_type fill,
+			long double val) const;
+	iter_type put(iter_type out, ios_base& str, char_type fill,
+			const void* val) const;
+	iter_type do_put(iter_type out, ios_base& str, char_type fill,
+			bool val) const;
+	iter_type do_put(iter_type out, ios_base& str, char_type fill,
+			long val) const;
+	iter_type do_put(iter_type out, ios_base& str, char_type fill,
+			unsigned long val) const;
+	iter_type do_put(iter_type out, ios_base& str, char_type fill,
+			double val) const;
+	iter_type do_put(iter_type out, ios_base& str, char_type fill,
+			long double val) const;
+	iter_type do_put(iter_type out, ios_base& str, char_type fill,
+			const void* val) const;
+};
+
+template<class charT> class numpunct: public locale::facet {
+public:
+	typedef charT char_type;
+	typedef string string_type;
+	explicit numpunct(size_t refs = 0);
+	char_type decimal_point() const;
+	char_type thousands_sep() const;
+	string grouping() const;
+	string_type truename() const;
+	string_type falsename() const;
+	char_type do_decimal_point() const;
+	char_type do_thousands_sep() const;
+	string do_grouping() const;
+	string_type do_truename() const;
+	string_type do_falsename() const;
+};
+
+template<class charT> class numpunct_byname: public numpunct {
+public:
+	explicit numpunct_byname(const char* std_name, size_t refs = 0);
+};
+
+template<class charT> class collate: public locale::facet {
+public:
+	typedef charT char_type;
+	typedef string string_type;
+	explicit collate(size_t refs = 0);
+	~collate();
+	int compare(const charT* low1, const charT* high1, const charT* low2,
+			const charT* high2) const;
+	string_type transform(const charT* low, const charT* high) const;
+	long hash(const charT* low, const charT* high) const;
+	int do_compare(const charT* low1, const charT* high1, const charT* low2,
+			const charT* high2) const;
+	string_type do_transform(const charT* low, const charT* high) const;
+	long do_hash(const charT* low, const charT* high) const;
+};
+
+template<class charT> class collate_byname: public collate {
+public:
+	explicit collate_byname(const char* std_name, size_t refs = 0);
+};
+
+template<class charT, class InputIterator = istreambuf_iterator<charT> > class time_get: public locale::facet,
+		time_base {
+public:
+	typedef charT char_type;
+	typedef InputIterator iter_type;
+	explicit time_get(size_t refs = 0);
+	~time_get();
+	dateorder date_order() const;
+	iter_type get_time(iter_type s, iter_type end, ios_base& str,
+			ios_base::iostate& err, tm* t) const;
+	iter_type get_date(iter_type s, iter_type end, ios_base& str,
+			ios_base::iostate& err, tm* t) const;
+	iter_type get_weekday(iter_type s, iter_type end, ios_base& str,
+			ios_base::iostate& err, tm* t) const;
+	iter_type get_monthname(iter_type s, iter_type end, ios_base& str,
+			ios_base::iostate& err, tm* t) const;
+	iter_type get_year(iter_type s, iter_type end, ios_base& str,
+			ios_base::iostate& err, tm* t) const;
+	dateorder do_date_order() const;
+	iter_type do_get_time(iter_type s, iter_type end, ios_base& str,
+			ios_base::iostate& err, tm* t) const;
+	iter_type do_get_date(iter_type s, iter_type end, ios_base& str,
+			ios_base::iostate& err, tm* t) const;
+	iter_type do_get_weekday(iter_type s, iter_type end, ios_base& str,
+			ios_base::iostate& err, tm* t) const;
+	iter_type do_get_monthname(iter_type s, iter_type end, ios_base& str,
+			ios_base::iostate& err, tm* t) const;
+	iter_type do_get_year(iter_type s, iter_type end, ios_base& str,
+			ios_base::iostate& err, tm* t) const;
+};
+
+template<class charT, class InputIterator = istreambuf_iterator<charT> > class time_get_byname: public time_get {
+public:
+	explicit time_get_byname(const char* std_name, size_t refs = 0);
+};
+
+template<class charT, class OutputIterator = ostreambuf_iterator<charT> > class time_put: public locale::facet {
+public:
+	typedef charT char_type;
+	typedef OutputIterator char_type;
+	explicit time_put(size_t refs = 0);
+	~time_put();
+	iter_type put(iter_type s, ios_base& str, char_type fill, const tm* t,
+			const charT* pattern, const charT* pat_end) const;
+	iter_type put(iter_type s, ios_base& str, char_type fill, const tm* t,
+			char format, char modifier = 0) const;
+	iter_type do_put(iter_type s, ios_base& str, char_type fill, const tm* t,
+			char format, char modifier = 0) const;
+};
+
+template<class charT, class OutputIterator = ostreambuf_iterator<charT> > class time_put_byname: public time_put {
+public:
+	explicit time_put_byname(const char* std_name, size_t refs = 0);
+};
+
+template<class charT, class InputIterator = istreambuf_iterator<charT> > class money_get: public locale::facet {
+public:
+	typedef charT char_type;
+	typedef InputIterator iter_type;
+	typedef string string_type;
+	explicit money_get(size_t refs = 0);
+	~money_get();
+	iter_type get(iter_type s, iter_type end, bool intl, ios_base& str,
+			ios_base::iostate& err, long double& units) const;
+	iter_type get(iter_type s, iter_type end, bool intl, ios_base& str,
+			ios_base::iostate& err, string_type& digits) const;
+	iter_type do_get(iter_type s, iter_type end, bool intl, ios_base& str,
+			ios_base::iostate& err, long double& units) const;
+	iter_type do_get(iter_type s, iter_type end, bool intl, ios_base& str,
+			ios_base::iostate& err, string_type& digits) const;
+};
+
+template<class charT, class OutputIterator = ostreambuf_iterator<charT> > class money_put: public locale::facet {
+public:
+	typedef charT char_type;
+	typedef InputIterator iter_type;
+	typedef string string_type;
+	explicit money_put(size_t refs = 0);
+	~money_put();
+	iter_type put(iter_type s, bool intl, ios_base& str, char_type fill,
+			long double units) const;
+	iter_type put(iter_type s, bool intl, ios_base& str, char_type fill,
+			const string_type& digits) const;
+	iter_type do_put(iter_type s, bool intl, ios_base& str, char_type fill,
+			long double units) const;
+	iter_type do_put(iter_type s, bool intl, ios_base& str, char_type fill,
+			const string_type& digits) const;
+};
+
+template<class charT, bool International = false> class moneypunct: public locale::facet,
+		money_base {
+public:
+	typedef charT char_type;
+	typedef string string_type;
+	static const bool intl;
+	explicit moneypunct(size_t refs = 0);
+	~moneypunct();
+	char_type decimal_point() const;
+	char_type thousands_sep() const;
+	string grouping() const;
+	string_type curr_symbol() const;
+	string_type positive_sign() const;
+	string_type negative_sign() const;
+	int frac_digits() const;
+	pattern pos_format() const;
+	pattern neg_format() const;
+	char_type do_decimal_point() const;
+	char_type do_thousands_sep() const;
+	string do_grouping() const;
+	string_type do_curr_symbol() const;
+	string_type do_positive_sign() const;
+	string_type do_negative_sign() const;
+	int do_frac_digits() const;
+	pattern do_pos_format() const;
+	pattern do_neg_format() const;
+};
+
+template<class charT, bool International = false> class numpunct_byname: public moneypunct {
+public:
+	explicit numpunct_byname(const char* std_name, size_t refs = 0);
+};
+
+template<class charT> class messages: public locale::facet, messages_base {
+public:
+	typedef charT char_type;
+	typedef string string_type;
+	typedef int catalog;
+	explicit messages(size_t refs = 0);
+	~messages();
+	catalog open(const string& name, const locale& loc) const;
+	string_type get(catalog cat, int set, int msgid,
+			const string_type&dfault) const;
+	void close(catalog cat) const;
+	catalog do_open(const string& name, const locale& loc) const;
+	string_type do_get(catalog cat, int set, int msgid,
+			const string_type&dfault) const;
+	void do_close(catalog cat) const;
+};
+
+template<class charT> class messages_byname: public messages {
+public:
+	explicit messages_byname(const char* std_name, size_t refs = 0);
+};
+
+}
+
+#endif

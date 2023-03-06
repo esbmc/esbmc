@@ -1,0 +1,17 @@
+/*******************************************************************\
+
+Module: 
+
+Author: Felipe Rodrigues
+
+Date: November 2012
+
+\*******************************************************************/
+
+#include "QList"
+
+class QStringList
+{
+public:
+	QStringList();
+};

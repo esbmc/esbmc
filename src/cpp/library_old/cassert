@@ -1,0 +1,20 @@
+/*******************************************************************\
+
+Module: 
+
+Author: Felipe Rodrigues
+
+Date: September 2012
+
+\*******************************************************************/
+
+#ifndef STL_CASSERT
+#define STL_CASSERT
+
+void assert (int expression);
+
+void assert (int expression) {
+	__ESBMC_assert(expression, "assertion");
+}
+
+#endif

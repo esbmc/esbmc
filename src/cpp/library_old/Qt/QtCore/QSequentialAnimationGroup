@@ -1,0 +1,15 @@
+/*******************************************************************\
+
+Module: 
+
+Author: Felipe Rodrigues
+
+Date: 
+
+\*******************************************************************/
+
+class QSequentialAnimationGroup {
+public:
+	QSequentialAnimationGroup();
+	~QSequentialAnimationGroup();
+};

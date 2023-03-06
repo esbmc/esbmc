@@ -1,0 +1,15 @@
+/*******************************************************************
+ Module:
+
+ Author: Lucas Cordeiro
+
+ Date: August 2012
+
+ \*******************************************************************/
+
+#ifndef STL_CLIMITS
+#define STL_CLIMITS
+
+#include <limits.h>
+
+#endif
