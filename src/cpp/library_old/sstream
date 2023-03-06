@@ -1,0 +1,160 @@
+#ifndef STL_SSTREAM
+#define STL_SSTREAM
+
+#include "streambuf"
+#include "definitions.h"
+#include "ostream"
+#include "ios"
+#include "string"
+#include "cstdio"
+#include "cstdlib"
+
+#ifdef _WIN64
+#define NUM_SIZE 20
+#else
+#define NUM_SIZE 20
+#endif
+#define DEC 10
+
+namespace std
+{
+  class stringbuf: public streambuf{
+    public:
+    explicit stringbuf ( ios_base::openmode which = ios_base::in | ios_base::out );
+    explicit stringbuf ( const string& str, ios_base::openmode which = ios_base::in | ios_base::out );
+    void str ( const string & s );
+    string str ( ) const;
+
+  };
+
+  class istringstream:public istream{
+    public:
+      explicit istringstream ( openmode which = ios_base::in ){istream();}
+      explicit istringstream ( const string & str, openmode which = ios_base::in ){istream();}
+      stringbuf* rdbuf ( ) const;
+      string str ( ) const;
+      void str ( const string & s );
+  };
+
+  class stringstream : public istream, public ostream {
+    public:
+      string _string;
+      explicit stringstream (openmode which = ios_base::out|ios_base::in)
+      : istream(), ostream(), _string("") {}
+
+      explicit stringstream (const string & str, openmode which = ios_base::out|ios_base::in)
+      : istream(), ostream(), _string("") {}
+
+      stringbuf* rdbuf ( ) const {}
+
+      string str ( ) const{
+        return _string;
+      }
+
+      ostream& operator<< (string& val) {
+        _string.append(val);
+        return ostream();
+      }
+
+      ostream& operator<< (bool& val) {
+        char temp;
+        if(val)
+          _string.append("1");
+        else
+          _string.append("0");
+
+        return ostream();
+      }
+
+      ostream& operator<< (short& val) {
+        char* temp = new char[NUM_SIZE];
+        itoa(val, temp, DEC);
+        _string.append(temp);
+        return *this;
+      }
+
+      ostream& operator<< (long& val) {
+        char* temp = new char[NUM_SIZE];
+        itoa(val, temp, DEC);
+        _string.append(temp);
+        return *this;
+      }
+
+      ostream& operator<< (unsigned int& val) {
+        char* temp = new char[NUM_SIZE];
+        itoa(val, temp, DEC);
+        _string.append(temp);
+        return *this;
+      }
+
+      ostream& operator<< (float val) {
+        char* temp = new char[NUM_SIZE];
+        char* temp2 = new char[2];
+        int n = (int) val;
+        itoa(n, temp, DEC);
+        strcat(temp, ".");
+        val = val - (float) n;
+        for(int i = 0;i < NUM_SIZE && val != 0;i++){
+          val = val * DEC;
+          n = (int) val;
+          itoa(n, temp2, DEC);
+          strcat(temp, temp2);
+        }
+        _string.append(temp);
+        return ostream();
+      }
+
+      ostream& operator<< (double val) {
+        char* temp = new char[NUM_SIZE];
+        char* temp2 = new char[2];
+        int n = (int) val;
+        itoa(n, temp, DEC);
+        strcat(temp, ".");
+        val = val - (double) n;
+        for(int i = 0;i < NUM_SIZE && val != 0;i++){
+          val = val * DEC;
+          n = (int) val;
+          itoa(n, temp2, DEC);
+          strcat(temp, temp2);
+        }
+        _string.append(temp);
+        return ostream();
+      }
+
+      ostream& operator<< (char& val) {
+        _string.append(&val, 1);
+        return *this;
+      }
+
+      ostream& operator<< (unsigned char& val) {
+        _string.append(reinterpret_cast<const char*>(&val), 1);
+        return *this;
+      }
+
+      ostream& operator<< (char* val) {
+        int tam = strlen(val);
+        _string.append(val, tam);
+        return ostream();
+      }
+
+      ostream& operator<< (unsigned short& val) {
+        char* temp = new char[NUM_SIZE];
+        itoa(val, temp, DEC);
+        _string.append(temp);
+        _string._size = strlen(_string.str) + strlen(temp);
+        return *this;
+      }
+  };
+
+  class ostringstream : public ostream{
+    public:
+      explicit ostringstream ( openmode which = out ){ostream();}
+      explicit ostringstream ( const string & str, openmode which = out ){ostream();}
+      stringbuf* rdbuf ( ) const;
+      string str ( ) const;
+      void str ( const string & s );
+  };
+
+}
+
+#endif

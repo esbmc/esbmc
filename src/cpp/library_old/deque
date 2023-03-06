@@ -1,0 +1,718 @@
+/*******************************************************************\
+
+Module:
+
+Author: Felipe Rodrigues and Lucas Cordeiro
+
+Date: February 2012
+
+\*******************************************************************/
+
+
+#ifndef __STL_DEQUE
+#define __STL_DEQUE
+
+#include "iterator"
+#include "stdexcept"
+
+#define DEQUE_CAPACITY 500
+
+namespace std{
+
+template<class T>
+class deque{
+public:
+
+	class iterator{
+	public:
+		T* pointer;
+		int pos;
+		T* vec_pos;
+
+		iterator(const iterator& i)
+		{
+			pointer = i.pointer;
+			pos = i.pos;
+			vec_pos = i.vec_pos;
+		}
+		iterator(){
+
+		}
+		iterator(T* p){
+			pointer = p;
+		}
+		iterator(T* ppointer,int ppos,T* pvec_pos){
+			pointer = ppointer;
+			pos = ppos;
+			vec_pos = pvec_pos;
+		}
+		iterator& operator=(const iterator& i){
+			pointer = i.pointer;
+			pos = i.pos;
+			vec_pos = i.vec_pos;
+			return *this;
+		}
+
+		T* operator -> (){
+			return pointer;
+		}
+
+		T& operator * (){
+			if(vec_pos != 0)
+				return vec_pos[pos];
+			else
+				return *pointer;
+		}
+
+		iterator& operator ++ (){
+			return iterator(++pointer,++pos,vec_pos);
+		}
+		iterator operator ++ (int b){
+			return iterator(pointer++,pos++,vec_pos);
+		}
+
+		iterator& operator -- (){
+			return iterator(--pointer,--pos,vec_pos);
+		}
+		iterator operator -- (int b){
+			return iterator(pointer--,pos--,vec_pos);
+		}
+
+		bool operator == ( const iterator& i)const{
+			return (pointer == i.pointer);
+		}
+		bool operator == ( int i)const{
+			return (pos == i);
+		}
+		bool operator != ( const iterator& i)const{
+			return (pointer != i.pointer);
+		}
+
+		bool operator < ( const iterator& i)const{
+			return (pointer < i.pointer);
+		}
+		bool operator > ( const iterator& i)const{
+			return (pointer > i.pointer);
+		}
+
+
+		bool operator <= ( const iterator& i)const{
+			return (pointer <= i.pointer);
+		}
+		bool operator >= ( const iterator& i)const{
+			return (pointer >= i. pointer);
+		}
+
+		iterator operator + (int n) const{
+			return iterator(pointer + n,pos + n,vec_pos);
+		}
+		iterator operator - (int n) const{
+			return iterator(pointer - n,pos - n,vec_pos);
+		}
+		iterator operator - (const iterator& i) {
+			return iterator(pointer-i.pos,pos-i.pos,vec_pos);
+		}
+
+		iterator& operator += (int n){
+			return iterator(pointer+=n,pos+=n,vec_pos);
+		}
+		iterator& operator -= (int n){
+			return iterator(pointer-=n,pos-=n,vec_pos);
+		}
+	};
+
+	class const_iterator
+	{
+	public:
+		T* pointer;
+		int pos;
+		T* vec_pos;
+
+		const_iterator(const const_iterator& i)
+		{
+			pointer = i.pointer;
+			pos = i.pos;
+			vec_pos = i.vec_pos;
+		}
+		const_iterator(){
+
+		}
+		const_iterator(T* p){
+			pointer = p;
+		}
+		const_iterator(T* ppointer,int ppos,T* pvec_pos){
+			pointer = ppointer;
+			pos = ppos;
+			vec_pos = pvec_pos;
+		}
+		const_iterator& operator=(const const_iterator& i){
+			pointer = i.pointer;
+			pos = i.pos;
+			vec_pos = i.vec_pos;
+			return *this;
+		}
+
+		T* operator -> ();
+
+		T& operator * (){
+			return vec_pos[pos];
+		}
+
+		const_iterator& operator ++ (){
+			return const_iterator(++pointer,++pos,vec_pos);
+		}
+		const_iterator operator ++ (int b){
+			return const_iterator(pointer++,pos++,vec_pos);
+		}
+
+		const_iterator& operator -- (){
+			return const_iterator(--pointer,--pos,vec_pos);
+		}
+		const_iterator operator -- (int b){
+			return const_iterator(pointer--,pos--,vec_pos);
+		}
+
+		bool operator == ( const const_iterator& i)const{
+			return (pointer == i.pointer);
+		}
+		bool operator != ( const const_iterator& i)const{
+			return (pointer != i.pointer);
+		}
+
+		bool operator < ( const const_iterator& i)const{
+			return (pointer < i.pointer);
+		}
+		bool operator > ( const const_iterator& i)const{
+			return (pointer > i.pointer);
+		}
+
+		bool operator <= ( const const_iterator&)const;
+		bool operator >= ( const const_iterator&)const;
+
+		const_iterator operator + (int n) const{
+			return const_iterator(pointer + n,pos + n,vec_pos);
+		}
+		const_iterator operator - (int n) const{
+			return const_iterator(pointer - n,pos - n,vec_pos);
+		}
+		const_iterator operator - (const const_iterator&) const;
+
+		const_iterator& operator += (int n){
+			return const_iterator(pointer+=n,pos+=n,vec_pos);
+		}
+		const_iterator& operator -= (int n){
+			return const_iterator(pointer-=n,pos-=n,vec_pos);
+		}
+	};
+
+	class reverse_iterator{
+	public:
+		T* pointer;
+		int pos;
+		T* vec_pos;
+		reverse_iterator(const reverse_iterator& i){
+			pointer = i.pointer;
+			pos = i.pos;
+			vec_pos = i.vec_pos;
+		}
+		reverse_iterator(){
+
+		}
+		reverse_iterator& operator=(const reverse_iterator& i){
+			pointer = i.pointer;
+			pos = i.pos;
+			vec_pos = i.vec_pos;
+			return *this;
+		}
+
+		T* operator -> ();
+
+		T& operator * (){
+			return *pointer;
+		}
+
+		reverse_iterator& operator ++ ();
+		reverse_iterator operator ++ (int n){
+			reverse_iterator buffer;
+			buffer.pointer = pointer;
+			buffer.pos = pos;
+			buffer.vec_pos = vec_pos;
+			pointer -= sizeof(T);
+			pos--;
+			return buffer;
+		}
+
+		reverse_iterator& operator -- ();
+		reverse_iterator operator -- (int);
+
+		bool operator == ( const reverse_iterator&)const;
+		bool operator != ( const reverse_iterator&)const;
+
+		bool operator < ( const reverse_iterator&)const;
+		bool operator > ( const reverse_iterator&)const;
+
+		bool operator <= ( const reverse_iterator&)const;
+		bool operator >= ( const reverse_iterator&)const;
+
+		reverse_iterator operator + (int) const;
+		reverse_iterator operator - (int) const;
+
+		reverse_iterator& operator += (int);
+		reverse_iterator& operator -= (int);
+	};
+
+	class  const_reverse_iterator {
+	public:
+		const_reverse_iterator(const const_reverse_iterator&);
+		const_reverse_iterator();
+		const_reverse_iterator& operator=(const const_reverse_iterator&);
+
+		const T* operator -> ();
+
+		const T& operator * ();
+
+		const_reverse_iterator& operator ++ ();
+		const_reverse_iterator operator ++ (int);
+
+		const_reverse_iterator& operator -- ();
+		const_reverse_iterator operator -- (int);
+
+		bool operator == ( const const_reverse_iterator&)const;
+		bool operator != ( const const_reverse_iterator&)const;
+
+		bool operator < ( const const_reverse_iterator&)const;
+		bool operator > ( const const_reverse_iterator&)const;
+
+		bool operator <= ( const const_reverse_iterator&)const;
+		bool operator >= ( const const_reverse_iterator&)const;
+
+		const_reverse_iterator operator + (int) const;
+		const_reverse_iterator operator - (int) const;
+
+		const_reverse_iterator& operator += (int);
+		const_reverse_iterator& operator -= (int);
+	};
+
+	// types:
+	typedef T& reference;
+	typedef const T& const_reference;
+	typedef int size_type;
+	typedef int difference_type;
+	typedef T value_type;
+	typedef T* pointer;
+	typedef const T* const_pointer;
+
+	// construct:
+	explicit deque(): _size(0), _capacity(1)
+	{
+		buf[0] = T();
+		buf[1] = T();
+		_size = 0;
+		_capacity = 1;
+	}
+
+	explicit deque(iterator t1, iterator t2): _size(0)
+	{
+		int n = 1;
+		for(n = 1 ; t1 != t2 ; t1++){
+			buf[n++] = *t1;
+		}
+		_size = n;
+		verify_capacity();
+	}
+
+	explicit deque(size_type n): _size(0),  _capacity(1)
+	{
+		for(int i = 0;i < n;i++)
+		  push_back(T());
+		_capacity = n;
+	}
+
+	explicit deque(void t[], void* addr): _size(0),  _capacity(1)
+	{
+		int i=0;
+		T* t1 = (T*) t;
+		T* addr1 = (T*) addr;
+		while((t1+i)<addr1)
+			push_back(t1[i++]);
+		verify_capacity();
+	}
+
+	explicit deque ( size_type n, const T& x)
+	{
+		_size = 0;
+		buf[0] = T();
+		for(int i = 0; i < n; i++)
+			push_back(x);
+		verify_capacity();
+	}
+
+	deque(const deque<T>& x): _size(0),  _capacity(1)
+	{
+		_size = 0;
+		buf[0] = T();
+		for(int i = 0 ; i < x.size() ; i++)
+			push_back(x[i]);
+		verify_capacity();
+	}
+
+	deque<T>& operator=(const deque<T>& x){
+		_size = 0;
+		buf[0] = T();
+		for(int i = 0 ; i < x.size() ; i++)
+			push_back(x[i]);
+		int n = _size + 1;
+		buf[n] = T();
+		verify_capacity();
+		return *this;
+	}
+
+	void assign(size_type n, const T& u){
+		_size = 0;
+		buf[0] = T();
+		for(int i = 0; i < n; i++)
+			push_back(u);
+		int n = _size + 1;
+		buf[n] = T();
+		verify_capacity();
+	}
+
+	void assign(iterator t1, iterator t2){
+		int n = 1;
+		for(n = 1 ; t1 != t2 ; t1++){
+			buf[n++] = *t1;
+		}
+		n--;
+		_size = n;
+		n++;
+		buf[n] = T();
+		verify_capacity();
+	}
+
+	void assign(void t1[], void *t2){
+		int i=0;
+		_size = 0;
+		T* t11 = (T*) t1;
+		T* t21 = (T*) t2;
+		while((t11+i)<t21)
+			push_back(t11[i++]);
+		verify_capacity();
+	}
+
+	// iterators:
+	iterator begin(){
+		iterator buffer(buf+1,1,buf);
+		return buffer;
+	}
+
+	const_iterator begin() const{
+		const_iterator buffer(buf+1,1,buf);
+		return buffer;
+	}
+
+	iterator end(){
+		iterator buffer;
+		int n = _size + 1;
+		buf[n] = T();
+		buffer.pointer = buf + n;
+		buffer.pos = n;
+		buffer.vec_pos = buf;
+		return buffer;
+	}
+
+	const_iterator end() const{
+		int n = _size + 1;
+		buf[n] = T();
+		const_iterator buffer(buf+n,n,buf);
+		return buffer;
+	}
+
+	reverse_iterator rbegin(){
+		reverse_iterator buffer;
+		buffer.pointer = buf + _size;
+		buffer.pos = _size;
+		buffer.vec_pos = buf;
+		return buffer;
+	}
+	const_reverse_iterator rbegin() const;
+	reverse_iterator rend(){
+		reverse_iterator buffer;
+		buf[0] = T();
+		buffer.pointer = buf;
+		buffer.pos = 0;
+		buffer.vec_pos = buf;
+		return buffer;
+	}
+	const_reverse_iterator rend() const;
+
+	// capacity:
+	size_type size() const
+	{
+		assert(0 <= _size );
+		assert(_size <= DEQUE_CAPACITY);
+		return _size;
+	}
+
+	size_type max_size() const;
+
+	void resize(size_type sz){
+		if(sz < _size){
+			_size = sz;
+			return;
+		}
+		while(_size < sz){
+			push_back(T());
+		}
+		verify_capacity();
+		return;
+	}
+	void resize(size_type sz, T t){
+		if(sz < _size){
+			_size = sz;
+			return;
+		}
+		while(_size < sz){
+			push_back(t);
+		}
+		verify_capacity();
+		return;
+	}
+	void resize(iterator i){
+		_size = i.pos;
+		verify_capacity();
+	}
+	size_type capacity() const
+	{
+		assert(0 <= _size && _size <= _capacity);
+		return _capacity;
+	}
+
+	bool empty() const
+	{
+		return (_size == 0) ? true : false;
+	}
+
+	void reserve(size_type n){
+		_capacity = n;
+	}
+
+	// element access:
+	reference operator[](size_type i)
+	{
+		assert(0 <= i);
+		assert(i < _size);
+		assert(_size <= DEQUE_CAPACITY);
+		i++;
+		return buf[i];
+	}
+
+	const_reference operator[](size_type i) const
+	{
+		assert(0 <= i);
+		assert(i < _size);
+		assert(_size <= DEQUE_CAPACITY);
+		i++;
+		return buf[i];
+	}
+
+	const_reference at(size_type n) const{
+		assert(0 <= n);
+		assert(n < _size);
+		assert(_size <= DEQUE_CAPACITY);
+		n++;
+		return buf[n];
+	}
+	reference at(size_type n){
+		assert(0 <= n);
+		assert(n < _size);
+		assert(_size <= DEQUE_CAPACITY);
+		n++;
+		return buf[n];
+	}
+	reference front(){
+		return buf[1];
+	}
+	const_reference front() const{
+		return buf[1];
+	}
+
+	value_type back()
+	{
+		return buf[_size];
+	}
+
+	const_reference back() const{
+		return buf[_size];
+	}
+
+	// modifiers:
+
+	void push_back(const T& x)
+	{
+		assert(0 <= _size);
+		assert(_size < DEQUE_CAPACITY);
+		_size++;
+		buf[_size] = x;
+		verify_capacity();
+	}
+
+	void push_front(const T& x){
+		assert(0 <= _size);
+		assert(_size < DEQUE_CAPACITY);
+		insert(begin(), x);
+		verify_capacity();
+	}
+
+	void verify_capacity(){
+		while(_size >= _capacity) _capacity *= 2;
+	}
+
+	void pop_back()
+	{
+		__ESBMC_assert(_size!=0, "pop_back() on empty deque");
+		buf[_size] = T();
+		_size--;
+	}
+
+	void pop_front(){
+		__ESBMC_assert(_size!=0, "pop_front() on empty deque");
+		erase(begin());
+	}
+
+	iterator insert(iterator position, const T& x){
+		_size++;
+		int i = _size;
+		int aux;
+		while( i > position.pos - 1){
+			aux = i +1;
+			buf[aux] = buf[i];
+			i--;
+		}
+		buf[position.pos] = x;
+		verify_capacity();
+		return position;
+	}
+
+	void insert(iterator position, size_type n, const T& x){
+		for(int j = 0 ; j < n ; j++){
+			_size++;
+			int i = _size;
+			int aux;
+			while( i > position.pos - 1){
+				aux = i +1;
+				buf[aux] = buf[i];
+				i--;
+			}
+			buf[position.pos] = x;
+		}
+		verify_capacity();
+	}
+
+//	void insert(iterator position, iterator first, iterator last){
+//		int i = _size;
+//		int aux;
+//		while(first!=last){
+//			insert(position++, *first);
+//			first++;
+//		}
+//		verify_capacity();
+//	}
+
+	template<class Iterator1,class Iterator2>
+	void insert(Iterator1 position, Iterator2 first, Iterator2 last){
+			int i = _size;
+			int aux;
+			while(first!=last){
+				insert(position++, *first);
+				first++;
+			}
+			verify_capacity();
+		}
+
+	void insert(iterator position, T n[], T* x){
+		int j = 0;
+		int i = _size;
+		int aux;
+		while((n+j)<x){
+			insert(position++,n[j++]);
+		}
+		verify_capacity();
+	}
+
+	iterator erase(iterator position){
+		int j;
+		for(int i = position.pos + 1; i <= _size ; i++){
+			j = i - 1;
+			buf[j] = buf[i];
+		}
+		_size--;
+		j = _size + 1;
+		buf[j] = T();
+		verify_capacity();
+		return position;
+	}
+	iterator erase(iterator first, iterator last){
+		iterator it;
+		while(first != last){
+			it = erase(last--);
+		}
+		return it;
+	}
+
+  void swap(deque<T>& v1)
+  {
+    deque<T> aux;
+    aux = v1;
+    v1 = *this;
+    *this = aux;
+  }
+
+	void clear()
+	{
+		_size = 0;
+		buf[0] = T();
+		buf[1] = T();
+		return;
+	}
+
+  // comparators:
+  bool operator==(const deque<T>& rhv)
+  {
+    if(this->size() != rhv.size()) return false;
+    int i = 0;
+    while(i != this->size()){
+      if(this->at(i) != rhv[i]) return false;
+      i++;
+    }
+    return true;
+  }
+
+  bool operator!=(const deque<T>& rhv)
+  {
+    return (!(*this == rhv));
+  }
+
+	bool operator>=(const deque<T>& rhv)
+  {
+	  return ((*this == rhv)||(this->size() > rhv.size()));
+  }
+
+	bool operator<=(const deque<T>& rhv)
+  {
+	  return ((*this == rhv)||(this->size() < rhv.size()));
+  }
+
+private:
+	T buf[DEQUE_CAPACITY];
+	int _size;
+	int _capacity;
+
+	T null_value(){
+		return T();
+	}
+
+};
+
+}
+
+#endif

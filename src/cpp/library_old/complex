@@ -1,0 +1,97 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
+#ifndef __STL_COMPLEX
+#define __STL_COMPLEX
+
+#include "iostream"
+using namespace std;
+
+namespace std {
+
+template <class T> class complex{
+	typedef T value_type;
+
+	complex (const T& re = T(), const T& im = T());
+	complex (const complex& cmplx);
+	template<class X>
+	  complex (const complex<X>& cmplx);
+	T imag() const;
+	T real() const;
+	complex<T>& operator= (const T& val);
+	complex<T>& operator+= (const T& val);
+	complex<T>& operator-= (const T& val);
+	complex<T>& operator*= (const T& val);
+	complex<T>& operator/= (const T& val);
+
+	complex& operator= (const complex& rhs);
+
+	template<class X> complex<T>& operator= (const complex<X>& rhs);
+	template<class X> complex<T>& operator+= (const complex<X>& rhs);
+	template<class X> complex<T>& operator-= (const complex<X>& rhs);
+	template<class X> complex<T>& operator*= (const complex<X>& rhs);
+	template<class X> complex<T>& operator/= (const complex<X>& rhs);
+};
+
+template<class T> complex<T> operator+(const complex<T>& lhs, const complex<T>& rhs);
+template<class T> complex<T> operator+(const complex<T>& lhs, const T& val);
+template<class T> complex<T> operator+(const T& val, const complex<T>& rhs);
+
+template<class T> complex<T> operator-(const complex<T>& lhs, const complex<T>& rhs);
+template<class T> complex<T> operator-(const complex<T>& lhs, const T& val);
+template<class T> complex<T> operator-(const T& val, const complex<T>& rhs);
+
+template<class T> complex<T> operator*(const complex<T>& lhs, const complex<T>& rhs);
+template<class T> complex<T> operator*(const complex<T>& lhs, const T& val);
+template<class T> complex<T> operator*(const T& val, const complex<T>& rhs);
+
+template<class T> complex<T> operator/(const complex<T>& lhs, const complex<T>& rhs);
+template<class T> complex<T> operator/(const complex<T>& lhs, const T& val);
+template<class T> complex<T> operator/(const T& val, const complex<T>& rhs);
+
+template<class T> complex<T> operator+(const complex<T>& rhs);
+template<class T> complex<T> operator-(const complex<T>& rhs);
+
+template<class T> complex<T> operator==(const complex<T>& lhs, const complex<T>& rhs);
+template<class T> complex<T> operator==(const complex<T>& lhs, const T& val);
+template<class T> complex<T> operator==(const T& val, const complex<T>& rhs);
+
+template<class T> complex<T> operator!=(const complex<T>& lhs, const complex<T>& rhs);
+template<class T> complex<T> operator!=(const complex<T>& lhs, const T& val);
+template<class T> complex<T> operator!=(const T& val, const complex<T>& rhs);
+
+template<class T> istream& operator>> (istream& istr, complex<T>& rhs);
+template<class T> ostream& operator<< (ostream& ostr, const complex<T>& rhs);
+
+template<class T> T real (const complex<T>& x);
+template<class T> T imag (const complex<T>& x);
+template<class T> T abs (const complex<T>& x);
+template<class T> T arg (const complex<T>& x);
+template<class T> T norm (const complex<T>& x);
+template<class T> complex<T> conj (const complex<T>& x);
+template<class T> complex<T> polar (const T& rho, const T& theta = 0);
+template<class T> complex<T> cos (const complex<T>& x);
+template<class T> complex<T> cosh (const complex<T>& x);
+template<class T> complex<T> exp (const complex<T>& x);
+template<class T> complex<T> log (const complex<T>& x);
+template<class T> complex<T> log10 (const complex<T>& x);
+template<class T> complex<T> pow (const complex<T>& x, int y);
+template<class T> complex<T> pow (const complex<T>& x, const complex<T>& y);
+template<class T> complex<T> pow (const complex<T>& x, const T& y);
+template<class T> complex<T> pow (const T& x, const complex<T>& y);
+template<class T> complex<T> sin (const complex<T>& x);
+template<class T> complex<T> sinh (const complex<T>& x);
+template<class T> complex<T> sqrt (const complex<T>& x);
+template<class T> complex<T> tan (const complex<T>& x);
+template<class T> complex<T> tanh (const complex<T>& x);
+
+}
+
+#endif
+

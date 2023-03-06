@@ -1,0 +1,15 @@
+/*******************************************************************\
+
+Module: 
+
+Author: Felipe Rodrigues
+
+Date: 
+
+\*******************************************************************/
+
+class QCoreApplication {
+public:
+	QCoreApplication();
+	~QCoreApplication();
+};

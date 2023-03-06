@@ -1,0 +1,125 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
+#ifndef STL_STDEXCEPT
+#define STL_STDEXCEPT
+
+#include "definitions.h"
+#include "exception"
+
+namespace std {
+
+struct runtime_error: public exception
+{
+public:
+  runtime_error() {}
+
+  runtime_error(const char* what_arg)
+  {
+    message = (char *) what_arg;
+  }
+};
+
+class range_error: public runtime_error
+{
+public:
+  explicit range_error() {}
+
+  explicit range_error(const char* what_arg)
+  {
+    message = (char *) what_arg;
+  }
+};
+
+class overflow_error: public runtime_error
+{
+public:
+  explicit overflow_error() {}
+
+  explicit overflow_error(const char* what_arg)
+  {
+    message = (char *) what_arg;
+  }
+};
+
+class underflow_error: public runtime_error {
+public:
+  explicit underflow_error() {}
+
+  explicit underflow_error(const char* what_arg)
+  {
+    message = (char *) what_arg;
+  }
+};
+
+class logic_error: public exception
+{
+public:
+  explicit logic_error() {}
+
+  explicit logic_error(const char* what_arg)
+  {
+    message = (char *) what_arg;
+  }
+  virtual ~logic_error() {
+  }
+};
+
+class domain_error: public logic_error
+{
+public:
+  explicit domain_error() {}
+
+  explicit domain_error(const char* what_arg)
+  {
+    message = (char *) what_arg;
+  }
+};
+
+class invalid_argument: public logic_error
+{
+public:
+  explicit invalid_argument() {}
+
+  explicit invalid_argument(const char* what_arg)
+  {
+    message = (char *) what_arg;
+  }
+};
+
+class length_error: public logic_error
+{
+public:
+  explicit length_error() {}
+
+  explicit length_error(const char* what_arg)
+  {
+    message = (char *) what_arg;
+  }
+
+  virtual ~length_error() {}
+
+};
+
+class out_of_range: public logic_error
+{
+public:
+  explicit out_of_range() {}
+
+  explicit out_of_range(const char* what_arg)
+  {
+    message = (char *) what_arg;
+  }
+
+  virtual ~out_of_range() {}
+};
+
+}
+
+#endif

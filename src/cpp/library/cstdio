@@ -18,9 +18,9 @@
 #define EOF (-1)
 #endif
 
-typedef int fpos_t;
+typedef int& fpos_t;
 
-typedef void* FILE;
+typedef void& FILE;
 
 typedef unsigned int TMP_MAX;
 

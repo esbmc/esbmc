@@ -1,0 +1,243 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues and Mikhail Ramalho
+
+ Date:
+
+ \*******************************************************************/
+
+#ifndef STL_CMATH
+#define STL_CMATH
+
+#include "definitions.h"
+
+float sqrt(float n) {
+    	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
+    	float x = n;
+    	float y = 1;
+    	float e = 1; /* e decides the accuracy level*/
+    	int i = 0;
+    	while(i++ < 15) //Change this line to increase precision
+    	{
+          	x = (x + y)/2.0;
+        	y = n/x;
+    	}
+    	return x;
+}
+
+
+float sqrt(int n) {
+	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
+	return nondet_int();
+}
+
+double sqrt(double n) {
+    	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
+    	double x = n;
+    	double y = 1;
+    	double e = 1; /* e decides the accuracy level*/
+    	int i = 0;
+    	while(i++ < 15) //Change this line to increase precision
+    	{
+          	x = (x + y)/2.0;
+        	y = n/x;
+    	}
+    	return x;
+}
+
+unsigned sqrt(unsigned x) {
+	__ESBMC_assert(x >= 0, "The number must be greater or equal than 0");
+	return nondet_unsigned();
+}
+
+float exp(float n) {
+	// model: buffer overflow check.
+	return nondet_float();
+}
+
+double exp(double x) {
+	// model: buffer overflow check.
+	return nondet_double();
+}
+
+float pow(float base, float exponent) {
+	// model: buffer overflow check
+	// model: base negative and exponent is not a integer value
+	__ESBMC_assert( (base != 0) || (exponent >= 0) , "base zero and exponent is negative");
+	return nondet_float();
+}
+
+double pow(double base, double exponent) {
+	// model: buffer overflow check
+	// model: base negative and exponent is not a integer value
+	__ESBMC_assert( (base != 0) || (exponent >= 0) , "base zero and exponent is negative");
+	return nondet_double();
+}
+
+double pow(double base, int exponent) {
+	// model: buffer overflow check
+	// model: base negative and exponent is not a integer value
+	__ESBMC_assert( (base != 0) || (exponent >= 0) , "base zero and exponent is negative");
+	return nondet_double();
+}
+
+float log(float n) {
+	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
+	return nondet_float();
+}
+
+double log(double n) {
+	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
+	return nondet_double();
+}
+
+double log10(double n) {
+	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
+	return nondet_double();
+}
+
+float log10(float n) {
+	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
+	return nondet_float();
+}
+
+float fabs(float n) {
+	return nondet_float();
+}
+
+double fabs(double x) {
+	return nondet_double();
+}
+
+float ceil(float n) {
+	return nondet_float();
+}
+
+double ceil(double x) {
+	return nondet_double();
+}
+
+float floor(float n) {
+	return nondet_float();
+}
+
+double floor(double x) {
+	return nondet_double();
+}
+
+float fmod(float numerator, float denominator) {
+	__ESBMC_assert(denominator != 0, "The number must not be equal to 0");
+	return nondet_float();
+}
+
+double fmod(double numerator, double denominator) {
+	__ESBMC_assert(denominator != 0, "The number must not be equal to 0");
+	return nondet_double();
+}
+
+float sin(float n) {
+	return nondet_float();
+}
+
+double sin(double x) {
+	return nondet_double();
+}
+
+double sinh(double x) {
+	return nondet_double();
+}
+
+float sinh(float x) {
+	return nondet_float();
+}
+
+float cos(float n) {
+	return nondet_float();
+}
+
+double cosh(double x) {
+	return nondet_double();
+}
+
+float cosh(float x) {
+	return nondet_float();
+}
+
+float tan(float n) {
+	return nondet_float();
+}
+
+double tan(double x) {
+	return nondet_double();
+}
+
+double tanh(double x) {
+	return nondet_double();
+}
+
+float tanh(float x) {
+	return nondet_float();
+}
+
+int abs(int n) {
+	return nondet_int();
+}
+
+double acos(double x) {
+	return nondet_double();
+}
+
+float acos(float x) {
+	return nondet_float();
+}
+
+double asin(double x) {
+	return nondet_double();
+}
+
+float asin(float x) {
+	return nondet_float();
+}
+
+double atan(double x) {
+	return nondet_double();
+}
+
+float atan(float x) {
+	return nondet_float();
+}
+
+double atan2(double y, double x) {
+	return nondet_double();
+}
+
+float atan2(float y, float x) {
+	return nondet_float();
+}
+
+double frexp(double x, int * exp) {
+	return nondet_double();
+}
+
+float frexp(float x, int * exp) {
+	return nondet_float();
+}
+
+double ldexp(double x, int exp) {
+	return nondet_double();
+}
+
+float ldexp(float x, int exp) {
+	return nondet_float();
+}
+
+double modf(double x, double * intpart) {
+	return nondet_double();
+}
+
+float modf(float x, float * intpart) {
+	return nondet_float();
+}
+
+#endif

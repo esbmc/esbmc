@@ -1,0 +1,378 @@
+#ifndef STL_IOS
+#define STL_IOS
+
+#include "streambuf"
+#include "definitions.h"
+#include "cstdio"
+
+namespace std
+{
+enum _Ios_Fmtflags
+  {
+    __boolalpha 	= 1L << 0,
+    __dec 		= 1L << 1,
+    __fixed 		= 1L << 2,
+    __hex 		= 1L << 3,
+    __internal 	= 1L << 4,
+    __left 		= 1L << 5,
+    __oct 		= 1L << 6,
+    __right 		= 1L << 7,
+    __scientific 	= 1L << 8,
+    __showbase 	= 1L << 9,
+    __showpoint 	= 1L << 10,
+    __showpos 	= 1L << 11,
+    __skipws 	= 1L << 12,
+    __unitbuf 	= 1L << 13,
+    __uppercase 	= 1L << 14,
+    __adjustfield 	= __left | __right | __internal,
+    __basefield 	= __dec | __oct | __hex,
+    __floatfield 	= __scientific | __fixed,
+    __ios_fmtflags_end = 1L << 16
+  };
+
+enum _Ios_Iostate
+  {
+    __goodbit 		= 0,
+    __badbit 		= 1L << 0,
+    __eofbit 		= 1L << 1,
+    __failbit		= 1L << 2,
+    __ios_iostate_end = 1L << 16
+  };
+
+enum _Ios_Openmode
+  {
+    __app 		= 1L << 0,
+    __ate 		= 1L << 1,
+    __bin 		= 1L << 2,
+    __in 		= 1L << 3,
+    __out 		= 1L << 4,
+    __trunc 		= 1L << 5,
+    __ios_openmode_end = 1L << 16
+  };
+
+enum _Ios_Seekdir
+  {
+    __beg = 0,
+    __cur = 1L << 0,
+    __end = 1L << 1,
+    __ios_seekdir_end = 1L << 16
+  };
+
+class ios_base {
+
+public:
+  typedef int iostate;
+  typedef int fmtflags;
+  typedef int openmode;
+  typedef int seekdir;
+
+  enum event { erase_event, imbue_event, copyfmt_event };
+  typedef void (*event_callback) (event ev, ios_base& obj, int index);
+
+  static const iostate goodbit  =  __goodbit;
+  static const iostate badbit   =  __badbit;
+  static const iostate eofbit   =  __eofbit;
+  static const iostate failbit  =  __failbit;
+
+//  static const fmtflags boolalpha   = __boolalpha;
+//  static const fmtflags dec         = __dec;
+//  static const fmtflags fixed       = __fixed;
+//  static const fmtflags hex         = __hex;
+//  static const fmtflags internal    = __internal;
+//  static const fmtflags left        = __left;
+//  static const fmtflags oct         = __oct;
+//  static const fmtflags right       = __right;
+//  static const fmtflags scientific  = __scientific;
+//  static const fmtflags showbase    = __showbase;
+//  static const fmtflags showpoint   = __showpoint;
+//  static const fmtflags showpos     = __showpos;
+//  static const fmtflags skipws      = __skipws;
+//  static const fmtflags unitbuf     = __unitbuf;
+//  static const fmtflags uppercase   = __uppercase;
+  static const fmtflags adjustfield = __adjustfield;
+  static const fmtflags basefield   = __basefield;
+  static const fmtflags floatfield  = __floatfield;
+
+  static const openmode app    =  __app;
+  static const openmode ate    =  __ate;
+  static const openmode binary =  __bin;
+  static const openmode in     =  __in;
+  static const openmode out    =  __out;
+  static const openmode trunc  =  __trunc;
+
+  static const seekdir beg  =  __beg;
+  static const seekdir cur  =  __cur;
+  static const seekdir end  =  __end;
+
+  streamsize __width;
+  streamsize __precision;
+  static fmtflags	 __flags;
+  iostate	__exception;
+  iostate	 __streambuf_state;
+
+  fmtflags flags ( ) const;
+  fmtflags flags ( fmtflags fmtfl );
+  fmtflags setf ( fmtflags fmtfl );
+  fmtflags setf ( fmtflags fmtfl, fmtflags mask );
+  void unsetf ( fmtflags mask );
+  streamsize precision ( ) const;
+  streamsize precision ( streamsize prec );
+  streamsize width ( ) const;
+  streamsize width ( streamsize wide );
+  locale imbue ( const locale& loc );
+  locale getloc ( ) const;
+  static int xalloc() throw();
+
+  void register_callback ( event_callback fn, int index );
+  bool sync_with_stdio ( bool sync = true );
+  class Init {
+  public:
+    Init();
+    ~Init();
+  };
+  class failure {};
+
+  ios_base();
+  virtual ~ios_base(){}
+  ios_base (const ios_base&);
+  ios_base& operator= (const ios_base&);
+};
+
+class ios: public ios_base{
+public:
+  //	typedef fpos<mbstate_t> streampos;
+  //	typedef fpos<mbstate_t> streamoff;
+  typedef int streampos;
+  typedef int streamoff;
+
+  ios() {ios_base(); }
+  virtual ~ios(){}
+  mutable char  __fill;
+  streambuf*    __streambuf;
+  bool operator ! ( ) const;
+  operator void * ( ) const;
+  void clear ( iostate state = ios_base::goodbit );
+
+  bool fail() const;
+  bool bad() const;
+  bool eof() const;
+  bool good() const;
+
+  iostate rdstate() const;
+  void setstate(iostate state);
+
+  ios& copyfmt ( const ios& rhs );
+  char fill ( ) const;
+  char fill ( char fillch );
+
+  iostate exceptions ( ) const;
+  void exceptions ( iostate except );
+  locale imbue ( const locale& loc );
+//  ostream *tie ( ) const;
+//  ostream *tie ( ostream* tiestr );
+  streambuf* rdbuf ( ) const;
+  streambuf* rdbuf ( streambuf* sb );
+  char narrow ( char c, char dfault ) const;
+  char widen ( char c ) const;
+
+};
+
+ios_base::ios_base()
+{
+	__streambuf_state = goodbit;
+}
+
+ios_base::fmtflags ios_base::flags() const {
+	return (bool)__flags;
+}
+
+ios_base::fmtflags ios_base::flags ( ios_base::fmtflags fmtfl ) {
+	ios_base::fmtflags _old = __flags;
+	__flags = fmtfl;
+	return _old;
+}
+
+ios_base::fmtflags ios_base::setf ( ios_base::fmtflags fmtfl ){
+   ios_base::fmtflags __old = __flags;
+  __flags |= fmtfl;
+  return __old;
+}
+
+ios_base::fmtflags ios_base::setf ( ios_base::fmtflags fmtfl, ios_base::fmtflags mask ) {
+	ios_base::fmtflags __old = __flags;
+  __flags &= ~mask;
+  __flags |= (fmtfl & mask);
+  return __old;
+}
+void ios_base::unsetf ( ios_base::fmtflags mask ) { __flags &= ~mask; }
+
+streamsize ios_base::precision ( ) const
+{	return __precision;}
+
+streamsize ios_base::precision ( streamsize prec ) {
+	streamsize _old = __precision;
+	__precision = prec;
+	return _old;
+}
+
+streamsize ios_base::width ( ) const
+{	return __width;}
+
+streamsize ios_base::width ( streamsize wide ) {
+	streamsize _old = __width;
+	__width = wide;
+	return _old;
+}
+
+ios::iostate ios::rdstate() const
+{ return __streambuf_state; }
+
+void ios::setstate(ios::iostate state)
+{	clear(__streambuf_state |= state);}
+
+bool ios::operator ! ( ) const
+{	return this->fail();}
+
+
+
+ios::operator void * ( ) const {
+	if (this->fail()) return 0;
+	else return const_cast<ios*>(this);
+}
+
+void ios::clear ( ios::iostate state )
+{	ios_base::__streambuf_state = state;}
+
+bool ios::good() const
+{	return (bool)this->rdstate() == 0;}
+
+bool ios::bad() const
+{  return ((bool)this->rdstate() & (bool)badbit) != 0;}
+
+bool ios::eof() const
+{	return ((bool)this->rdstate() & (bool)eofbit) != 0;}
+
+bool ios::fail() const
+{	return ((bool)this->rdstate() & ((bool)badbit | (bool)failbit)) != 0;}
+
+std::streambuf* ios::rdbuf() const
+{ return __streambuf; }
+
+char ios::fill ( ) const
+{	return __fill; }
+
+char ios::fill ( char fillch )
+{
+	char __old = __fill;
+	__fill = fillch;
+	return __old;
+}
+
+}
+
+namespace std
+{//==========Manipulators========
+
+//Independent flags (switch on):
+ios_base& boolalpha ( ios_base& str ) {
+  str.setf(__boolalpha);
+	return str;
+}
+
+ios_base& showbase ( ios_base& str ) {
+	str.setf(__showbase);
+	return str;
+}
+ios_base& showpoint ( ios_base& str ) {
+	str.setf(__showpoint);
+	return str;
+}
+ios_base& showpos ( ios_base& str ) {
+	str.setf(__showpos);
+	return str;
+}
+ios_base& skipws ( ios_base& str ) {
+	str.setf(__skipws);
+	return str;
+}
+ios_base& unitbuf ( ios_base& str ) {
+	str.setf(__unitbuf);
+	return str;
+}
+ios_base& uppercase ( ios_base& str ) {
+	str.setf(__uppercase);
+	return str;
+}
+
+//Independent flags (switch off):
+ios_base& noboolalpha ( ios_base& str ) {
+	str.unsetf(__boolalpha);
+	return str;
+}
+ios_base& noshowbase ( ios_base& str ) {
+	str.unsetf(__showbase);
+	return str;
+}
+ios_base& noshowpoint ( ios_base& str ) {
+	str.unsetf(__showpoint);
+	return str;
+}
+ios_base& noshowpos ( ios_base& str ) {
+	str.unsetf(__showpos);
+	return str;
+}
+ios_base& noskipws ( ios_base& str ) {
+	str.unsetf(__skipws);
+	return str;
+}
+ios_base& nounitbuf ( ios_base& str ) {
+	str.unsetf(__unitbuf);
+	return str;
+}
+ios_base& nouppercase ( ios_base& str ) {
+	str.unsetf(__uppercase);
+	return str;
+}
+
+//Numerical base format flags ("basefield" flags):
+ios_base& dec ( ios_base& str ){
+	str.setf(__dec, __basefield);
+	return str;
+}
+ios_base& hex ( ios_base& str ) {
+	str.setf(__hex, __basefield);
+	return str;
+}
+ios_base& oct ( ios_base& str ) {
+	str.setf(__oct, __basefield);
+	return str;
+}
+
+//Floating-point format flags ("floatfield" flags):
+ios_base& fixed ( ios_base& str ){
+	str.setf(__fixed, __floatfield);
+	return str;
+}
+ios_base& scientific ( ios_base& str ) {
+	str.ios_base::setf(__scientific, __floatfield);
+	return str;
+}
+
+//Adustment format flags ("adjustfield" flags):
+ios_base& internal ( ios_base& str ) {
+	str.setf(__internal, __adjustfield);
+	return str;
+}
+ios_base& left ( ios_base& str ) {
+	str.setf(__left, __adjustfield);
+	return str;
+}
+ios_base& right ( ios_base& str ) {
+	str.setf(__right, __adjustfield);
+	return str;
+}
+
+}//==============================
+
+
+#endif

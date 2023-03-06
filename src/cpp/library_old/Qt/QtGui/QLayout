@@ -1,0 +1,15 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: November 2012
+
+\*******************************************************************/
+
+#include "../QtCore/QObject"
+#include "../QtCore/QRect"
+
+class QLayout{
+	QLayout (){}
+};
