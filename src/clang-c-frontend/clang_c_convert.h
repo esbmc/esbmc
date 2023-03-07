@@ -241,7 +241,7 @@ protected:
   bool is_ConstructorOrDestructor(const clang::FunctionDecl &fd);
 
   /*
-   * Virtual function to check whether a member function call refers to
+   * Check whether a member function call refers to
    * a virtual/overriding method.
    * For C, it always return false.
    * For C++, see the overriding method in clang_cpp_convert module
@@ -249,7 +249,9 @@ protected:
   virtual bool check_member_expr_virtual_overriding(const clang::Decl &decl);
 
   /*
-   * Virtual function to for virtual function table dynamic binding.
+   * Get the Function for VFT bound MemberExpr
+   * For C, it can't happen.
+   * For C++, see the overriding method in clang_cpp_convert module
    */
   virtual bool
   get_vft_binding_expr(const clang::MemberExpr &member, exprt &new_expr);

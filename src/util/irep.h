@@ -1262,10 +1262,10 @@ public:
   static const irep_idt a_end_location, a_guard, a_label, a_lhs, a_location;
   static const irep_idt a_object_type, a_cmt_size, a_cmt, a_type_id;
   static const irep_idt a_cmt_type;
-  // annotations for typecasting derived class `this` to base class type
+  // annotation for typecasting derived class `this` to base class type
   static const irep_idt a_derived_this_arg, a_base_ctor_derived;
   /*
-   * annotations to indicate whether virtual pointer(vptr) has been initialized in contrustor
+   * annotation to indicate whether virtual pointer(vptr) has been initialized in contrustor
    * This is used by implicit IR generation in adjuster
    */
   static const irep_idt a_need_vptr_init;

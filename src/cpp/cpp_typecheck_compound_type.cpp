@@ -228,11 +228,6 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     id.class_identifier = new_symbol->id;
     id.id_class = cpp_idt::CLASS;
 
-    if(new_symbol->id.as_string() == "tag.Bird")
-      printf("Got Bird class\n");
-    if(new_symbol->id.as_string() == "tag.Penguin")
-      printf("Got Penguin class\n");
-
     if(has_body)
     {
       typecheck_compound_body(*new_symbol);
@@ -431,7 +426,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
       virtual_name = "@dtor";
 
     // The method may be virtual implicitly.
-    // `virtual_bases` actually means a set of virtual functions from bases,
+    // The `virtual_bases` here actually means a set of virtual functions from bases,
     // used for creating the thunk to the overriding function
     std::set<irep_idt> virtual_bases;
 
