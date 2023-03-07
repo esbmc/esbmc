@@ -5,7 +5,8 @@
 static const char *const extensions_ansi_c[] = {"c", "i", nullptr};
 
 #ifdef _WIN32
-static const char *const extensions_cpp[] = {"cpp", "cc", "cu", "ipp", "cxx", NULL};
+static const char *const extensions_cpp[] =
+  {"cpp", "cc", "cu", "ipp", "cxx", NULL};
 #else
 static const char *const extensions_cpp[] =
   {"cpp", "cc", "cu", "ipp", "C", "cxx", nullptr};
