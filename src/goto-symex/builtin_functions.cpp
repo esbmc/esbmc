@@ -356,21 +356,29 @@ void goto_symext::symex_printf(const expr2tc &, const expr2tc &rhs)
 }
 
 void goto_symext::symex_fscanf(
-  const expr2tc&,
+  const expr2tc &ret,
   const std::vector<expr2tc> &op)
 {
+  /* TODO: Check input stream
   auto input_stream = op[0]; // stdin?
   cur_state->rename(input_stream);
-  input_stream->dump();
+  */
 
   /* TODO: Check for Format
   const irep_idt fmt = get_string_argument(op[1]);
   std::vector<size_t> alloc_size;
   */
 
-  for(size_t i = 2; i < op.size(); i++)
+  // Just a hack while we don't support format
+  unsigned number_of_format_args = op.size() - 2;
+
+  // Set return value
+  if(ret)
+    symex_assign(code_assign2tc(
+      ret, constant_int2tc(int_type2(), BigInt(number_of_format_args))));
+
+  for(size_t i = 2; i < number_of_format_args + 2; i++)
   {
-    // TODO: this should become a function
     expr2tc operand = op[i];
     internal_deref_items.clear();
     dereference2tc deref(get_empty_type(), operand);
@@ -380,24 +388,12 @@ void goto_symext::symex_fscanf(
     {
       assert(is_symbol2t(item.object) && "This only works for variables");
 
+      // TODO: get the correct type by using the format string
+      auto type = item.object->type;
       // Get the length of the type. This will propagate an exception for dynamic/infinite
       // sized arrays (as expected)
-      try
-      {
-        type_byte_size(item.object->type).to_int64();
-      }
-      catch(array_type2t::dyn_sized_array_excp *e)
-      {
-        log_error("no support VLAs");
-        abort();
-      }
-      catch(array_type2t::inf_sized_array_excp *e)
-      {
-        log_error(" no infinite-length arrays");
-        abort();
-      }
       expr2tc val = sideeffect2tc(
-        item.object->type,
+        type,
         expr2tc(),
         expr2tc(),
         std::vector<expr2tc>(),
@@ -407,7 +403,6 @@ void goto_symext::symex_fscanf(
       symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
     }
   }
-  log_debug("Finished updating variables");
 }
 
 void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
