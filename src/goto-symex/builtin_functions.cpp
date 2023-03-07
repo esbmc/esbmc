@@ -356,7 +356,7 @@ void goto_symext::symex_printf(const expr2tc &, const expr2tc &rhs)
 }
 
 void goto_symext::symex_fscanf(
-  const expr2tc &lhs,
+  const expr2tc&,
   const std::vector<expr2tc> &op)
 {
   auto input_stream = op[0]; // stdin?
@@ -379,9 +379,6 @@ void goto_symext::symex_fscanf(
     for(const auto &item : internal_deref_items)
     {
       assert(is_symbol2t(item.object) && "This only works for variables");
-
-      log_debug("Checking operand");
-      item.object->dump();
 
       // Get the length of the type. This will propagate an exception for dynamic/infinite
       // sized arrays (as expected)
