@@ -233,7 +233,7 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   log_debug("Cached assignment {}", __LINE__);
 
   auto cpy = side2;
-  cpy->dump();
+  //cpy->dump();
   return cpy;
 }
 
