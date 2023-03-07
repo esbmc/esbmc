@@ -478,35 +478,6 @@ void clang_cpp_convertert::setup_vtable_struct_variables(
 
   build_vtable_map(type, vtable_value_map);
 
-#if 0
-  std::string class_id, class_name;
-  clang_c_convertert::get_decl_name(*cxxrd, class_id, class_name);
-  printf(
-    "############ @@ Begin printing vtable value maps for %s...\n",
-    class_id.c_str());
-  int ctr = 0;
-  for(auto const &x : vtable_value_map)
-  {
-    printf(
-      "========= @ This is top level vt key %d: %s: \n",
-      ctr++,
-      x.first.as_string().c_str());
-    int ctry = 0;
-    for(auto const &y : x.second)
-    {
-      printf(
-        "--------- @@ - This is second level vt key %d: %s\n",
-        ctry++,
-        y.first.as_string().c_str());
-      printf("@@\t Below is second level exprt dump: \n");
-      y.second.dump();
-    }
-  }
-  printf(
-    "############ @@ Done printing vtable value maps for %s...\n",
-    class_id.c_str());
-#endif
-
   add_vtable_variable_symbols(cxxrd, type, vtable_value_map);
 }
 

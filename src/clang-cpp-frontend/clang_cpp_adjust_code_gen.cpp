@@ -6,7 +6,7 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
   /*
    * This function traverses the vptr components of the correponding class type
    * in which the constructor is decleared. Then complete the initializations
-   * for these pointers. The vptr is initialized like this:
+   * for vptrs. A vptr is initialized like this:
    *
    * For a standalone class BLAH:
    *  this->BLAH@vptr = &vtable::BLAH@BLAH;
@@ -27,14 +27,15 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
     return;
 
   /*
-   * The "to_code_*" conversion functions has done some sanity checks for us:
-   *  - vptr initializations shall be done in ctor
+   * The "to_code_*" conversion functions have done some sanity checks for us:
    *  - a ctor symbol shall contain a function body modelled by code_blockt
+   *  - symbol should be of code type
    */
   code_typet &ctor_type = to_code_type(symbol.type);
   code_blockt &ctor_body = to_code_block(to_code(symbol.value));
 
   /*
+   *  vptr initializations shall be done in ctor
    *  TODO: For the time being, we just add vptr int code in ctors.
    *        We *might* need to add vptr init code in dtors in the future. But we need some TCs first.
    */
@@ -48,11 +49,6 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
   // get the `components` vector from this class' type
   const struct_typet::componentst &components =
     to_struct_type(ctor_class_symb->type).components();
-
-  printf(
-    "This is ctor function symbol: %s from class %s\n",
-    symbol.id.as_string().c_str(),
-    ctor_class_symb->id.as_string().c_str());
 
   // iterate over the `components` and initialize each virtual pointers
   for(const auto &comp : components)

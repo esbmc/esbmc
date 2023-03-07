@@ -1,8 +1,10 @@
 /*
  * This file contains functions to resolve dynamic binding
  * when a clang::MemberExpr refers to a virtual/overriding method, e.g.:
- *  x->F or X.F.
+ *  x->F
  *  where F represents a virtual/overriding method
+ *
+ *  clang::MemberExpr may represent x->F or x.F, but we don't care about dot operator.
  */
 
 #include <util/compiler_defs.h>
@@ -61,8 +63,6 @@ bool clang_cpp_convertert::get_vft_binding_expr(
   /*
    * To turn `x->F` into `x->X@vtable_pointer->F`, we would need
    * a bunch of dereference expressions nested together.
-   *
-   * TODO: Same for `x.F`? Add a TC and test it
    */
   // Let's start with base `x` dereferencing
   exprt base_deref;

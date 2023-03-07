@@ -360,7 +360,7 @@ protected:
    */
   bool check_member_expr_virtual_overriding(const clang::Decl &decl) override;
   /*
-   * Function to for virtual function table dynamic binding,
+   * Function to for virtual function table dynamic binding for "->" operator
    * Turning
    *  x->F
    * into
@@ -368,7 +368,7 @@ protected:
    *
    * Params:
    *  - member: the method to which this MemberExpr refers
-   *  - new_expr: ESBMC IR to represent `x->X@vtable_ptr->F` or `x.X@vtable_ptr->F`
+   *  - new_expr: ESBMC IR to represent `x->X@vtable_ptr->F`
    */
   bool get_vft_binding_expr(const clang::MemberExpr &member, exprt &new_expr)
     override;
@@ -377,7 +377,7 @@ protected:
    *
    * Params:
    *  - member: the method to which this MemberExpr refers
-   *  - new_expr: ESBMC IR to represent x dereferencing as in `x->X@vtable_ptr->F` or `x.X@vtable_ptr->F`
+   *  - new_expr: ESBMC IR to represent x dereferencing as in `x->X@vtable_ptr->F`
    */
   bool
   get_vft_binding_expr_base(const clang::MemberExpr &member, exprt &new_expr);
@@ -386,7 +386,7 @@ protected:
    *
    * Params:
    *  - member: the method to which this MemberExpr refers
-   *  - new_expr: ESBMC IR to represent X@Vtable_ptr dereferencing as in `x->X@vtable_ptr->F` or `x.X@vtable_ptr->F`
+   *  - new_expr: ESBMC IR to represent X@Vtable_ptr dereferencing as in `x->X@vtable_ptr->F`
    *  - base_deref: the base dereferencing expression incorporated in vtable pointer dereferencing expression
    */
   void get_vft_binding_expr_vtable_ptr(
@@ -398,7 +398,7 @@ protected:
    *
    * Params:
    *  - member: the method to which this MemberExpr refers
-   *  - new_expr: ESBMC IR to represent F in `x->X@vtable_ptr->F` or `x.X@vtable_ptr->F`
+   *  - new_expr: ESBMC IR to represent F in `x->X@vtable_ptr->F`
    *  - vtable_ptr_deref: the vtable pointer dereferencing expression
    */
   bool get_vft_binding_expr_function(
