@@ -88,15 +88,18 @@ void instrument_intervals(
   }
 }
 
-void interval_analysis(goto_functionst &goto_functions, const namespacet &ns)
+void interval_analysis(goto_functionst &goto_functions, const namespacet &ns, bool print_intervals)
 {
   ait<interval_domaint> interval_analysis;
 
   interval_analysis(goto_functions, ns);
 
-  std::ostringstream oss;
-  interval_analysis.output(goto_functions, oss);
-  log_debug("[interval-analysis: {}", oss.str());
+  if(print_intervals)
+  {
+    std::ostringstream oss;
+    interval_analysis.output(goto_functions, oss);
+    log_debug("[interval-analysis: {}", oss.str());
+  }
 
   Forall_goto_functions(f_it, goto_functions)
     instrument_intervals(interval_analysis, f_it->second);
