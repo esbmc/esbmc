@@ -333,7 +333,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   /*
    * Order of converting methods:
    *  1. convert virtual methods. We also need to add:
-   *    a). add virtual table type
+   *    a). virtual table type
    *    b). virtual pointers
    *  2. instantiate virtual tables
    */
@@ -1302,5 +1302,6 @@ symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
 {
   std::string id, name;
   get_decl_name(fd, name, id);
+  // if not found, nullptr is returned
   return (context.find_symbol(id));
 }

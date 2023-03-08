@@ -5,7 +5,7 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
 {
   /*
    * This function traverses the vptr components of the correponding class type
-   * in which the constructor is decleared. Then complete the initializations
+   * in which the constructor is declared. Then complete the initializations
    * for vptrs. A vptr is initialized like this:
    *
    * For a standalone class BLAH:
@@ -36,7 +36,7 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
 
   /*
    *  vptr initializations shall be done in ctor
-   *  TODO: For the time being, we just add vptr int code in ctors.
+   *  TODO: For the time being, we just add vptr init code in ctors.
    *        We *might* need to add vptr init code in dtors in the future. But we need some TCs first.
    */
   if(ctor_type.return_type().id() != "constructor")

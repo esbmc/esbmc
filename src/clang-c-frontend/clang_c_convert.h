@@ -241,17 +241,28 @@ protected:
   bool is_ConstructorOrDestructor(const clang::FunctionDecl &fd);
 
   /*
-   * Check whether a member function call refers to
+   * Function to check whether a member function call refers to
    * a virtual/overriding method.
+   *
+   * Params:
+   *  - decl: the member declaration to which this MemberExpr refers
+   *
    * For C, it always return false.
-   * For C++, see the overriding method in clang_cpp_convert module
    */
-  virtual bool check_member_expr_virtual_overriding(const clang::Decl &decl);
+  virtual bool perform_virtual_dispatch(const clang::Decl &decl);
 
   /*
-   * Get the Function for VFT bound MemberExpr
+   * Function to for virtual function table dynamic binding for "->" operator
+   * Turning
+   *  x->F
+   * into
+   *  x->X@vtable_pointer->F
+   *
+   * Params:
+   *  - member: the method to which this MemberExpr refers
+   *  - new_expr: ESBMC IR to represent `x->X@vtable_ptr->F`
+   *
    * For C, it can't happen.
-   * For C++, see the overriding method in clang_cpp_convert module
    */
   virtual bool
   get_vft_binding_expr(const clang::MemberExpr &member, exprt &new_expr);
