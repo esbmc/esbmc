@@ -107,7 +107,9 @@ public:
 template <typename derived_class>
 const derived_class *to_solver_smt_ast(smt_astt s)
 {
-  return dynamic_cast<const derived_class *>(s);
+  const derived_class *r = dynamic_cast<const derived_class *>(s);
+  assert(r);
+  return r;
 }
 #ifdef dynamic_cast
 #undef dynamic_cast
