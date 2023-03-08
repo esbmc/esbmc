@@ -19,31 +19,9 @@
  * Users of abstract interpreters should use the interface given by this class.
  * It breaks into three categories:
  *
- * 1. Running an analysis, via operator() overloeads
- * 2. Accessing the results of an analysis, by looking up the history objects
- * 3. Outputting the results of the analysis; 
- * 
- * Where possible, uses should be agnostic of the particular configuration of
- * the abstract interpreter.
- *
- * From a development point of view, there are several directions in which
- * this can be extended by inheriting from ai_baset or one of its children:
- *
- * A. To change how single edges are computed `visit_edge`
- *
- * B. To change how individual instructions are handled `visit`
- *
- * C. To change the way that the fixed point is computed `fixedpoint`
- *
- * D. For pre-analysis initialization `initialize`
- *
- * E. For post-analysis cleanup `finalize`
- *
- * Historically, uses of abstract interpretation inherited from ait<domainT>
- * and added the necessary functionality.  This works (although care must be
- * taken to respect the APIs of the various components -- there are some hacks
- * to support older analyses that didn't) but is discouraged in favour of
- * having an object for the abstract interpreter and using its public API.
+ * 1. Running an analysis, via operator() overloads
+ * 2. Accessing the results of an analysis, by looking up the state map
+ * 3. Outputting the results of the analysis;
 */
 class ai_baset
 {
@@ -54,7 +32,7 @@ public:
 
   /**
    * @brief Run analysis over Program
-   * 
+   *
    * @param goto_program prograam under analysis
    * @param ns current namespace
    */
@@ -69,7 +47,7 @@ public:
 
   /**
    * @brief Run analysis over Module (Goto Functions)
-   * 
+   *
    * @param goto_functions functions under analysis
    * @param ns current namespace
    */
