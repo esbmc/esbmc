@@ -46,7 +46,7 @@ template <>
 integer_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
 {
   integer_intervalt result; // (-infinity, infinity)
-  if(!is_constant_int2t(e))
+  if(!is_constant_int2t(e) || !enable_modular_intervals)
     return result;
   auto value = to_constant_int2t(e).value;
   result.make_le_than(value);
@@ -58,7 +58,7 @@ template <>
 real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
 {
   real_intervalt result; // (-infinity, infinity)
-  if(!is_constant_floatbv2t(e))
+  if(!is_constant_floatbv2t(e) || !enable_modular_intervals)
     return result;
 
   auto value1 = to_constant_floatbv2t(e).value;
@@ -125,9 +125,9 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
   T::contract_interval_le(a, b); // a <= b
   T::contract_interval_le(b, a); // b <= a
 
-  if(fixpoint_counter[to_symbol2t(lhs).thename] >= widening_limit())
+  if(fixpoint_counter[to_symbol2t(lhs).thename] >= delayed_widening_limit)
   {
-#if 0
+if(widening_underaproximate_bound) {
     auto previous = get_interval_from_symbol<T>(to_symbol2t(lhs));
     auto upper_increased =
       a.upper_set && previous.upper_set && a.upper > previous.upper;
@@ -137,12 +137,12 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
       a.upper_set = false;
     if(lower_increased)
       a.lower_set = false;
-#else
+}
+else {
     a.upper_set = false;
     a.lower_set = false;
-#endif
+}
   }
-
   update_symbol_interval(to_symbol2t(lhs), a);
 }
 
@@ -166,7 +166,7 @@ T interval_domaint::get_interval(const expr2tc &e)
   // Arithmetic?
   auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
   auto ieee_arith_op = std::dynamic_pointer_cast<ieee_arith_2ops>(e);
-  if(arith_op) // TODO: add support for float ops
+  if(arith_op && enable_interval_arithmetic) // TODO: add support for float ops
   {
     // It should be safe to mix integers/floats in here.
     // The worst that can happen is an overaproximation
@@ -387,8 +387,15 @@ void interval_domaint::transform(
       to_code_function_call2t(instruction.code);
     if(!is_nil_expr(code_function_call.ret))
       havoc_rec(code_function_call.ret);
+    break;
   }
-  break;
+
+  case ASSERT:
+  {
+    expr2tc code = instruction.code;
+    ai_simplify(code, ns);
+    break;
+  }
 
   default:;
   }
@@ -601,6 +608,9 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
 {
   (void)ns;
 
+  if(!enable_assertion_simplification)
+    return true;
+
   bool unchanged = true;
   interval_domaint d(*this);
 
@@ -625,7 +635,7 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
   }
   else // Less likely to be representable
   {
-    log_debug("[interval] union");
+    log_debug("[interval] not");
     expr2tc not_condition = condition;
     make_not(not_condition);
     d.assume(not_condition); // Restrict to when condition is false
