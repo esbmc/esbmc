@@ -28,7 +28,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <util/expr_util.h>
 
-bool clang_cpp_convertert::check_member_expr_virtual_overriding(
+bool clang_cpp_convertert::perform_virtual_dispatch(
   const clang::Decl &decl)
 {
   switch(decl.getKind())

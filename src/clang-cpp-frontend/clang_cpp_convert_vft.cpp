@@ -161,7 +161,7 @@ void clang_cpp_convertert::add_vptr(
    * We model the virtual pointer as a `component` to the parent class' type.
    * This will be the vptr pointing to the vtable that contains the overriden functions.
    *
-   * Vptr has the name in the form of `tag-BLAH@vtable_pointer`.
+   * Vptr has the name in the form of `tag-BLAH@vtable_pointer`, where BLAH is the class name.
    */
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
@@ -463,8 +463,8 @@ void clang_cpp_convertert::setup_vtable_struct_variables(
   const struct_typet &type)
 {
   /*
-   * Recall that the virtual function table (VFT) is just a switch table, and
-   * we model it as a struct of function pointers each pointing to
+   * Recall that we model the virtual function table (VFT) as
+   * a struct of function pointers each pointing to
    * the targeting function, where this targeting function can be a
    * virtual, thunk or the actual overriding function.
    *
@@ -487,7 +487,7 @@ void clang_cpp_convertert::build_vtable_map(
 {
   /*
    * Build a vtable map from the class type
-   * This is the function switch table for this class.
+   * This is virtual function table for this class.
    * This table will be used to create the vtable variable symbols.
    */
 

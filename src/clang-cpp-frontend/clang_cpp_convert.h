@@ -351,25 +351,7 @@ protected:
   /*
    * Methods for resolving a clang::MemberExpr to virtual/overriding method
    */
-  /*
-   * Function to check whether a member function call refers to
-   * a virtual/overriding method.
-   *
-   * Params:
-   *  - decl: the member declaration to which this MemberExpr refers
-   */
-  bool check_member_expr_virtual_overriding(const clang::Decl &decl) override;
-  /*
-   * Function to for virtual function table dynamic binding for "->" operator
-   * Turning
-   *  x->F
-   * into
-   *  x->X@vtable_pointer->F
-   *
-   * Params:
-   *  - member: the method to which this MemberExpr refers
-   *  - new_expr: ESBMC IR to represent `x->X@vtable_ptr->F`
-   */
+  bool perform_virtual_dispatch(const clang::Decl &decl) override;
   bool get_vft_binding_expr(const clang::MemberExpr &member, exprt &new_expr)
     override;
   /*
