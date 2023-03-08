@@ -3347,8 +3347,7 @@ bool clang_c_convertert::is_ConstructorOrDestructor(
          fd.getKind() == clang::Decl::CXXDestructor;
 }
 
-bool clang_c_convertert::perform_virtual_dispatch(
-  const clang::Decl &decl)
+bool clang_c_convertert::perform_virtual_dispatch(const clang::Decl &decl)
 {
   // It just can't happen in C
   return false;
