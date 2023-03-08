@@ -1566,7 +1566,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::MemberExpr &member =
       static_cast<const clang::MemberExpr &>(stmt);
 
-    if(!perform_virtual_dispatch(*member.getMemberDecl()))
+    if(!perform_virtual_dispatch(member))
     {
       exprt base;
       if(get_expr(*member.getBase(), base))
@@ -3347,7 +3347,8 @@ bool clang_c_convertert::is_ConstructorOrDestructor(
          fd.getKind() == clang::Decl::CXXDestructor;
 }
 
-bool clang_c_convertert::perform_virtual_dispatch(const clang::Decl &decl)
+bool clang_c_convertert::perform_virtual_dispatch(
+  const clang::MemberExpr &member)
 {
   // It just can't happen in C
   return false;

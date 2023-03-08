@@ -245,11 +245,13 @@ protected:
    * a virtual/overriding method.
    *
    * Params:
-   *  - decl: the member declaration to which this MemberExpr refers
+   *  - member: a clang::MemberExpr representing member access x.F or x->F where
+   *  where F could be a field or a method
    *
    * For C, it always return false.
    */
-  virtual bool perform_virtual_dispatch(const clang::Decl &decl);
+  virtual bool
+  perform_virtual_dispatch(const clang::MemberExpr &member);
 
   /*
    * Function to for virtual function table dynamic binding for "->" operator
