@@ -38,6 +38,16 @@ public:
 
   void dump() const;
 
+  // Extensions
+  bool enable_interval_arithmetic = true;
+  bool enable_modular_intervals = true;
+  bool enable_assertion_simplification = false;
+
+  // Widening options
+  unsigned delayed_widening_limit = 50;
+  bool widening_underaproximate_bound = false;
+
+
 protected:
   /**
   * Sets *this to the mathematical join between the two domains. This can be
@@ -64,17 +74,23 @@ public:
     return join(b);
   }
 
+  void clear_state() {
+    int_map.clear();
+    real_map.clear();
+    fixpoint_counter.clear();
+  }
+
   // no states
   void make_bottom() final override
   {
-    int_map.clear();
+    clear_state();
     bottom = true;
   }
 
   // all states
   void make_top() final override
   {
-    int_map.clear();
+    clear_state();
     bottom = false;
   }
 
@@ -85,17 +101,12 @@ public:
 
   bool is_bottom() const override final
   {
-#if 0
-    // This invariant should hold but is not correctly enforced at the moment.
-    assert(!bottom || (int_map.empty() && float_map.empty()));
-#endif
-
     return bottom;
   }
 
   bool is_top() const override final
   {
-    return !bottom && int_map.empty();
+    return !bottom && int_map.empty() && real_map.empty();
   }
 
   /**
@@ -157,11 +168,7 @@ protected:
   real_mapt real_map;
   // TODO: a proper widening!
   std::unordered_map<irep_idt, unsigned, irep_id_hash> fixpoint_counter;
-  // TODO: Magic Number!
-  unsigned widening_limit() const
-  {
-    return 100;
-  }
+
 
   /**
    * @brief Recursively explores an Expression until it reaches a symbol. If the
