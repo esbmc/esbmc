@@ -31,10 +31,28 @@ CC_DIAGNOSTIC_POP()
 bool clang_cpp_convertert::perform_virtual_dispatch(
   const clang::MemberExpr &member)
 {
+  const clang::Decl &decl = *member.getMemberDecl();
+  switch(decl.getKind())
+  {
+  // TODO: dtor might be virtual too
+  //case clang::Decl::CXXDestructor:
+  case clang::Decl::CXXMethod:
+  {
+    break;
+  }
+  default:
+    return false;
+  }
+
+  const clang::CXXMethodDecl &cxxmd =
+    static_cast<const clang::CXXMethodDecl &>(decl);
+
   clang::LangOptions langOpts;
   langOpts.CPlusPlus = 1;
   langOpts.RTTI = 1;
-  if(member.performsVirtualDispatch(langOpts))
+  if(
+    member.performsVirtualDispatch(langOpts) &&
+    cxxmd.getKind() != clang::Decl::CXXConstructor)
     return true;
 
   return false;
