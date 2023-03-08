@@ -29,28 +29,12 @@ CC_DIAGNOSTIC_POP()
 #include <util/expr_util.h>
 
 bool clang_cpp_convertert::check_member_expr_virtual_overriding(
-  const clang::Decl &decl)
+  const clang::MemberExpr &member)
 {
-  switch(decl.getKind())
-  {
-  // TODO: dtor might be virtual too
-  //case clang::Decl::CXXDestructor:
-  case clang::Decl::CXXMethod:
-  {
-    break;
-  }
-  default:
-    return false;
-  }
-
-  const clang::CXXMethodDecl &cxxmd =
-    static_cast<const clang::CXXMethodDecl &>(decl);
-
-  // TODO: might be a good idea to use `performsVirtualDispatch(const LangOptions &LO)`?
-  // These conditions indicate a member function call referring to a virtual/overriding method
-  if(
-    cxxmd.isVirtual() ||
-    cxxmd.begin_overridden_methods() != cxxmd.end_overridden_methods())
+  clang::LangOptions langOpts;
+  langOpts.CPlusPlus = 1;
+  langOpts.RTTI = 1;
+  if(member.performsVirtualDispatch(langOpts))
     return true;
 
   return false;

@@ -358,7 +358,8 @@ protected:
    * Params:
    *  - decl: the member declaration to which this MemberExpr refers
    */
-  bool check_member_expr_virtual_overriding(const clang::Decl &decl) override;
+  bool check_member_expr_virtual_overriding(
+    const clang::MemberExpr &member) override;
   /*
    * Function to for virtual function table dynamic binding for "->" operator
    * Turning

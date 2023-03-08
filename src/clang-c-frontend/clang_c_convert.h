@@ -246,7 +246,8 @@ protected:
    * For C, it always return false.
    * For C++, see the overriding method in clang_cpp_convert module
    */
-  virtual bool check_member_expr_virtual_overriding(const clang::Decl &decl);
+  virtual bool
+  check_member_expr_virtual_overriding(const clang::MemberExpr &member);
 
   /*
    * Get the Function for VFT bound MemberExpr

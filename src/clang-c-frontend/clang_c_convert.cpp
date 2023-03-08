@@ -1566,7 +1566,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::MemberExpr &member =
       static_cast<const clang::MemberExpr &>(stmt);
 
-    if(!check_member_expr_virtual_overriding(*member.getMemberDecl()))
+    if(!check_member_expr_virtual_overriding(member))
     {
       exprt base;
       if(get_expr(*member.getBase(), base))
@@ -3348,7 +3348,7 @@ bool clang_c_convertert::is_ConstructorOrDestructor(
 }
 
 bool clang_c_convertert::check_member_expr_virtual_overriding(
-  const clang::Decl &decl)
+  const clang::MemberExpr &member)
 {
   // It just can't happen in C
   return false;

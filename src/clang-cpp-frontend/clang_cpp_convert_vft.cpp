@@ -75,11 +75,9 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
     {
       /*
        * Assume it *always* points to one overriden method in base class
-       * TODO: Use a loop if there are more overriden methods
-       *    md->overriden_methods() should do the job
        */
-      assert(md->size_overridden_methods() == 1);
-      add_thunk_method(*(md->begin_overridden_methods()), comp, type);
+      for(const auto &md_overriden : md->overridden_methods())
+        add_thunk_method(md_overriden, comp, type);
     }
   }
 
