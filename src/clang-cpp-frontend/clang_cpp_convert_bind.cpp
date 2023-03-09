@@ -31,6 +31,10 @@ CC_DIAGNOSTIC_POP()
 bool clang_cpp_convertert::check_member_expr_virtual_overriding(
   const clang::MemberExpr &member)
 {
+  // x.F() can't be a virtual dispatch
+  if(!member.isArrow())
+    return false;
+
   const clang::Decl &decl = *member.getMemberDecl();
   switch(decl.getKind())
   {
