@@ -1,6 +1,8 @@
 /*
  * Polymorphism, single inheritance with one overriding function
  * in each derived class
+ *
+ * virtual method defined inside class
  */
 #include <cassert>
 
@@ -8,12 +10,11 @@ class Bird {
   public:
   virtual int f(void) { return 21; }
   virtual int g(void) { return 21; }
-  virtual ~Bird(){}
 };
 
 class FlyingBird: public Bird {
   public:
-    virtual void fly();
+    virtual void fly() {}
     virtual int g(void) { return 42; }
 };
 
@@ -21,8 +22,6 @@ class Penguin: public Bird {
   public:
     virtual int f(void) { return 42; }
 };
-
-void FlyingBird::fly() { }
 
 int main(){
   Bird *b = new Bird();
