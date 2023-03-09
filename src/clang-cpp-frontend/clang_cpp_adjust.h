@@ -62,13 +62,11 @@ public:
     const struct_union_typet::componentt &comp,
     side_effect_exprt &new_code,
     const code_typet &ctor_type);
-  void gen_vptr_init_lhs(
+  exprt gen_vptr_init_lhs(
     const struct_union_typet::componentt &comp,
-    exprt &lhs_code,
     const code_typet &ctor_type);
-  void gen_vptr_init_rhs(
+  exprt gen_vptr_init_rhs(
     const struct_union_typet::componentt &comp,
-    exprt &rhs_code,
     const code_typet &ctor_type);
 
   /**
