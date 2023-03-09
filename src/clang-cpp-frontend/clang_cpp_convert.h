@@ -352,6 +352,7 @@ protected:
    * Methods for resolving a clang::MemberExpr to virtual/overriding method
    */
   bool perform_virtual_dispatch(const clang::MemberExpr &member) override;
+  bool is_virtual_or_overriding(const clang::CXXMethodDecl &cxxmd);
   bool get_vft_binding_expr(const clang::MemberExpr &member, exprt &new_expr)
     override;
   /*
