@@ -82,21 +82,18 @@ void clang_cpp_adjust::gen_vptr_init_code(
   new_code.type() = comp.type();
 
   // 2. LHS: generate the member pointer dereference expression
-  exprt lhs_expr;
-  gen_vptr_init_lhs(comp, lhs_expr, ctor_type);
+  exprt lhs_expr = gen_vptr_init_lhs(comp, ctor_type);
 
   // 3. RHS: generate the address of the target virtual pointer struct
-  exprt rhs_expr;
-  gen_vptr_init_rhs(comp, rhs_expr, ctor_type);
+  exprt rhs_expr = gen_vptr_init_rhs(comp, ctor_type);
 
   // now push them to the assignment statement code
   new_code.operands().push_back(lhs_expr);
   new_code.operands().push_back(rhs_expr);
 }
 
-void clang_cpp_adjust::gen_vptr_init_lhs(
+exprt clang_cpp_adjust::gen_vptr_init_lhs(
   const struct_union_typet::componentt &comp,
-  exprt &lhs_code,
   const code_typet &ctor_type)
 {
   /*
@@ -104,6 +101,8 @@ void clang_cpp_adjust::gen_vptr_init_lhs(
    * as in:
    *  this->vptr = &<vtable_struct_variable>
    */
+
+  exprt lhs_code;
 
   // get the `this` argument symbol
   const symbolt *this_symb = namespacet(context).lookup(
@@ -124,11 +123,12 @@ void clang_cpp_adjust::gen_vptr_init_lhs(
   lhs_code = member_exprt(comp.name(), comp.type());
   lhs_code.operands().push_back(this_deref);
   lhs_code.set("#lvalue", true);
+
+  return lhs_code;
 }
 
-void clang_cpp_adjust::gen_vptr_init_rhs(
+exprt clang_cpp_adjust::gen_vptr_init_rhs(
   const struct_union_typet::componentt &comp,
-  exprt &rhs_code,
   const code_typet &ctor_type)
 {
   /*
@@ -136,6 +136,8 @@ void clang_cpp_adjust::gen_vptr_init_rhs(
    * as in:
    *  this->vptr = &<vtable_struct_variable>
    */
+
+  exprt rhs_code;
 
   // get the corresponding vtable variable symbol
   std::string vtable_var_id = comp.type().subtype().identifier().as_string() +
@@ -149,4 +151,6 @@ void clang_cpp_adjust::gen_vptr_init_rhs(
 
   // now we can get the address_of expr for "&<vtable_struct_variable>"
   rhs_code = address_of_exprt(vtable_var);
+
+  return rhs_code;
 }

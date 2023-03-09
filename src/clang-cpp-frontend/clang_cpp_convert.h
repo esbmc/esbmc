@@ -200,7 +200,7 @@ protected:
    * Check the existence of virtual table type symbol.
    * If it exists, return its pointer. Otherwise, return nullptr.
    */
-  symbolt *check_vtable_type_symbol_existence(struct_typet &type);
+  symbolt *check_vtable_type_symbol_existence(const struct_typet &type);
   /*
    * Add virtual table(vtable) type symbol.
    * This is added as a type symbol in the symbol table.

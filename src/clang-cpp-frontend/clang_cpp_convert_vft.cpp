@@ -107,8 +107,8 @@ bool clang_cpp_convertert::annotate_virtual_overriding_methods(
   return false;
 }
 
-symbolt *
-clang_cpp_convertert::check_vtable_type_symbol_existence(struct_typet &type)
+symbolt *clang_cpp_convertert::check_vtable_type_symbol_existence(
+  const struct_typet &type)
 {
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
   return context.find_symbol(vt_name);
