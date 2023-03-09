@@ -42,22 +42,22 @@ bool clang_cpp_convertert::perform_virtual_dispatch(
   //case clang::Decl::CXXDestructor:
   case clang::Decl::CXXMethod:
   {
+    const clang::CXXMethodDecl &cxxmd =
+      static_cast<const clang::CXXMethodDecl &>(decl);
+
+    clang::LangOptions langOpts;
+    langOpts.CPlusPlus = 1;
+    langOpts.RTTI = 1;
+    if(
+      member.performsVirtualDispatch(langOpts) &&
+      cxxmd.getKind() != clang::Decl::CXXConstructor)
+      return true;
+
     break;
   }
   default:
     return false;
   }
-
-  const clang::CXXMethodDecl &cxxmd =
-    static_cast<const clang::CXXMethodDecl &>(decl);
-
-  clang::LangOptions langOpts;
-  langOpts.CPlusPlus = 1;
-  langOpts.RTTI = 1;
-  if(
-    member.performsVirtualDispatch(langOpts) &&
-    cxxmd.getKind() != clang::Decl::CXXConstructor)
-    return true;
 
   return false;
 }

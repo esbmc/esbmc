@@ -250,8 +250,7 @@ protected:
    *
    * For C, it always return false.
    */
-  virtual bool
-  perform_virtual_dispatch(const clang::MemberExpr &member);
+  virtual bool perform_virtual_dispatch(const clang::MemberExpr &member);
 
   /*
    * Function to for virtual function table dynamic binding for "->" operator
