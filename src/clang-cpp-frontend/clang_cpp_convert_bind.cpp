@@ -31,6 +31,10 @@ CC_DIAGNOSTIC_POP()
 bool clang_cpp_convertert::perform_virtual_dispatch(
   const clang::MemberExpr &member)
 {
+  // x.F() can't be a virtual dispatch
+  if(!member.isArrow())
+    return false;
+
   const clang::Decl &decl = *member.getMemberDecl();
   switch(decl.getKind())
   {
