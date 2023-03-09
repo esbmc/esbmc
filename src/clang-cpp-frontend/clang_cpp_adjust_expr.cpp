@@ -8,6 +8,19 @@ clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
 {
 }
 
+void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
+{
+  clang_c_adjust::adjust_symbol(symbol);
+
+  /*
+   * implicit code generation for vptr initializations:
+   * The idea is to get the constructor method symbol and
+   * add implicit code to set each virtual pointer of this
+   * class to point to the corresponding virtual table.
+   */
+  gen_vptr_initializations(symbol);
+}
+
 void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
 {
   const irep_idt &statement = expr.statement();
@@ -63,9 +76,11 @@ void clang_cpp_adjust::adjust_member(member_exprt &expr)
 {
   clang_c_adjust::adjust_member(expr);
 
-  // we got a class/struct member function call via:
-  // dot operator, e.g. OBJECT.setX();
-  // or arrow operator, e.g.OBJECT->setX();
+  /*
+   * we got a class/struct member function call via:
+   * dot operator, e.g. OBJECT.setX();
+   * or arrow operator, e.g.OBJECT->setX();
+   */
   if(
     (expr.struct_op().is_symbol() && expr.type().is_code()) ||
     (expr.struct_op().is_dereference() && expr.type().is_code()))

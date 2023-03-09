@@ -39,6 +39,7 @@ class IntegerLiteral;
 class FloatingLiteral;
 class TagDecl;
 class FieldDecl;
+class MemberExpr;
 } // namespace clang
 
 std::string
@@ -231,6 +232,40 @@ protected:
    *   field: clang AST representing the class/struct/union field we are dealing with
    */
   bool is_field_global_storage(const clang::FieldDecl *field);
+
+  /*
+   * check if a method is constructor or destructor
+   * Arguments:
+   *  fd: clang AST representing a C++ method
+   */
+  bool is_ConstructorOrDestructor(const clang::FunctionDecl &fd);
+
+  /*
+   * Function to check whether a member function call refers to
+   * a virtual/overriding method.
+   *
+   * Params:
+   *  - decl: the member declaration to which this MemberExpr refers
+   *
+   * For C, it always return false.
+   */
+  virtual bool perform_virtual_dispatch(const clang::Decl &decl);
+
+  /*
+   * Function to for virtual function table dynamic binding for "->" operator
+   * Turning
+   *  x->F
+   * into
+   *  x->X@vtable_pointer->F
+   *
+   * Params:
+   *  - member: the method to which this MemberExpr refers
+   *  - new_expr: ESBMC IR to represent `x->X@vtable_ptr->F`
+   *
+   * For C, it can't happen.
+   */
+  virtual bool
+  get_vft_binding_expr(const clang::MemberExpr &member, exprt &new_expr);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

@@ -1,5 +1,5 @@
 /*
- * Multiple inheritance: call base method in derived class
+ * Single virtual inheritance: call base method in derived class
  */
 #include <cassert>
 

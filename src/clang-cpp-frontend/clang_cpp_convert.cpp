@@ -226,7 +226,7 @@ bool clang_cpp_convertert::get_function(
 
   // add additional annotations for class/struct/union methods
   if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
-    if(annotate_cpp_methods(md, new_expr))
+    if(annotate_cpp_methods(md, new_expr, fd))
       return true;
 
   return false;
@@ -247,33 +247,47 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 {
   // Note: If a struct is defined inside an extern C, it will be a RecordDecl
 
-  // let's check for (virtual) base classes if this declaration is a CXXRecordDecl,
+  // pull bases in
   if(auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
   {
-    for(const auto &decl : cxxrd->bases())
+    log_debug(
+      "Class {} has {} bases, {} virtual bases",
+      cxxrd->getNameAsString(),
+      cxxrd->getNumBases(),
+      cxxrd->getNumVBases());
+
+    // TODO: this method blindly pulls all bases in without updating the access specifiers.
+    //  It may NOT work for complicated cases like multi-level inheritance with private fields and/or methods.
+    for(const clang::CXXBaseSpecifier &base : cxxrd->bases())
     {
       // The base class is always a CXXRecordDecl
-      const clang::CXXRecordDecl *base =
-        decl.getType().getTypePtr()->getAsCXXRecordDecl();
-      assert(base != nullptr);
+      const clang::CXXRecordDecl &base_cxxrd =
+        *(base.getType().getTypePtr()->getAsCXXRecordDecl());
 
-      // First, parse the fields
-      for(auto const *field : base->fields())
+      // get base class id
+      std::string class_id, class_name;
+      clang_c_convertert::get_decl_name(base_cxxrd, class_name, class_id);
+
+      // get base class symbol
+      symbolt *s = context.find_symbol(class_id);
+      assert(s);
+
+      const struct_typet &base_type = to_struct_type(s->type);
+
+      // pull components in
+      const struct_typet::componentst &components = base_type.components();
+      for(auto component : components)
       {
-        // We don't add if private
-        if(field->getAccess() >= clang::AS_private)
-          continue;
+        component.set("from_base", true);
+        to_struct_type(type).components().push_back(component);
+      }
 
-        struct_typet::componentt comp;
-        if(get_decl(*field, comp))
-          return true;
-
-        // Don't add fields that have global storage (e.g., static)
-        if(const clang::VarDecl *nd = llvm::dyn_cast<clang::VarDecl>(field))
-          if(nd->hasGlobalStorage())
-            continue;
-
-        type.components().push_back(comp);
+      // pull methods in
+      const struct_typet::componentst &methods = base_type.methods();
+      for(auto method : methods)
+      {
+        method.set("from_base", true);
+        to_struct_type(type).methods().push_back(method);
       }
     }
   }
@@ -316,22 +330,18 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   if(cxxrd == nullptr)
     return false;
 
-  if(cxxrd->bases().begin() != cxxrd->bases().end())
-  {
-    log_debug(
-      "Class {} has {} bases, {} virtual bases",
-      cxxrd->getNameAsString(),
-      cxxrd->getNumBases(),
-      cxxrd->getNumVBases());
+  /*
+   * Order of converting methods:
+   *  1. convert virtual methods. We also need to add:
+   *    a). virtual table type
+   *    b). virtual pointers
+   *  2. instantiate virtual tables
+   */
 
-#if 0
-    // TODO-split: add methods from base class
-    for(auto base : cxxrd->bases())
-    {
-      // `base` type is clang::CXXBaseSpecifier
-    }
-#endif
-  }
+  // skip unions as they don't have virtual methods
+  if(!recordd.isUnion())
+    if(get_struct_class_virtual_methods(cxxrd, type))
+      return true;
 
   // Iterate over the declarations stored in this context
   for(const auto &decl : cxxrd->decls())
@@ -339,6 +349,14 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     // Fields were already added
     if(decl->getKind() == clang::Decl::Field)
       continue;
+
+    // virtual methods were already added
+    if(decl->getKind() == clang::Decl::CXXMethod)
+    {
+      const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
+      if(md->isVirtual())
+        continue;
+    }
 
     struct_typet::componentt comp;
 
@@ -1144,27 +1162,49 @@ bool clang_cpp_convertert::get_access_from_decl(
 
 bool clang_cpp_convertert::annotate_cpp_methods(
   const clang::CXXMethodDecl *cxxmdd,
-  exprt &new_expr)
+  exprt &new_expr,
+  const clang::FunctionDecl &fd)
 {
   code_typet &component_type = to_code_type(new_expr.type());
 
-  // annotate ctor and dtor return type
-  if(cxxmdd->getKind() == clang::Decl::CXXDestructor)
-  {
-    typet rtn_type("destructor");
-    component_type.return_type() = rtn_type;
-  }
-  if(cxxmdd->getKind() == clang::Decl::CXXConstructor)
-  {
-    typet rtn_type("constructor");
-    component_type.return_type() = rtn_type;
-  }
-
+  /*
+   * The order of annotations matters.
+   */
   // annotate parent
   std::string parent_class_name = getFullyQualifiedName(
     ASTContext->getTagDeclType(cxxmdd->getParent()), *ASTContext);
   std::string parent_class_id = tag_prefix + parent_class_name;
   component_type.set("#member_name", parent_class_id);
+
+  // annotate ctor and dtor
+  if(is_ConstructorOrDestructor(fd))
+  {
+    // annotate ctor and dtor return type
+    std::string mark_rtn = (cxxmdd->getKind() == clang::Decl::CXXDestructor)
+                             ? "destructor"
+                             : "constructor";
+    typet rtn_type(mark_rtn);
+    component_type.return_type() = rtn_type;
+
+    /*
+     * We also have a `component` in class type representing the ctor/dtor.
+     * Need to sync the type of this function symbol and its corresponding type
+     * of the component inside the class' symbol
+     * We just need "#member_name" and "return_type" fields to be synced for later use
+     * in the adjuster.
+     * So let's do the sync before adding more annotations.
+     */
+    symbolt *fd_symb = get_fd_symbol(fd);
+    if(fd_symb)
+    {
+      fd_symb->type = component_type;
+      /*
+       * we indicate the need for vptr initializations in contructor.
+       * vptr initializations will be added in the adjuster.
+       */
+      fd_symb->value.need_vptr_init(true);
+    }
+  }
 
   // annotate name
   std::string method_id, method_name;
@@ -1193,7 +1233,6 @@ bool clang_cpp_convertert::annotate_cpp_methods(
 
   // We still need to add a trivial ctor/dtor as a `component` in class symbol's type
   // remove "statement: skip" otherwise it won't be added
-  // TODO-split: Any more elegant way to do it?
   if(
     cxxmdd->getKind() == clang::Decl::CXXDestructor ||
     cxxmdd->getKind() == clang::Decl::CXXConstructor)
@@ -1257,4 +1296,12 @@ bool clang_cpp_convertert::need_new_object(const clang::Stmt *parentStmt)
   }
 
   return false;
+}
+
+symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
+{
+  std::string id, name;
+  get_decl_name(fd, name, id);
+  // if not found, nullptr is returned
+  return (context.find_symbol(id));
 }

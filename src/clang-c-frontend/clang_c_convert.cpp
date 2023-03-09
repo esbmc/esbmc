@@ -562,12 +562,7 @@ bool clang_c_convertert::get_function(
   // Don't convert if implicit, unless it's a constructor or destructor
   // A compiler-generated default ctor/dtor is considered implicit, but we have
   // to parse it.
-  auto isContructorOrDestructor = [](const clang::FunctionDecl &fd) {
-    return fd.getKind() == clang::Decl::CXXConstructor ||
-           fd.getKind() == clang::Decl::CXXDestructor;
-  };
-
-  if(fd.isImplicit() && !isContructorOrDestructor(fd))
+  if(fd.isImplicit() && !is_ConstructorOrDestructor(fd))
     return false;
 
   // If the function is not defined but this is not the definition, skip it
@@ -1571,15 +1566,24 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::MemberExpr &member =
       static_cast<const clang::MemberExpr &>(stmt);
 
-    exprt base;
-    if(get_expr(*member.getBase(), base))
-      return true;
+    if(!perform_virtual_dispatch(*member.getMemberDecl()))
+    {
+      exprt base;
+      if(get_expr(*member.getBase(), base))
+        return true;
 
-    exprt comp;
-    if(get_decl(*member.getMemberDecl(), comp))
-      return true;
+      exprt comp;
+      if(get_decl(*member.getMemberDecl(), comp))
+        return true;
 
-    new_expr = member_exprt(base, comp.name(), comp.type());
+      new_expr = member_exprt(base, comp.name(), comp.type());
+    }
+    else
+    {
+      if(get_vft_binding_expr(member, new_expr))
+        return true;
+    }
+
     break;
   }
 
@@ -3334,4 +3338,27 @@ bool clang_c_convertert::is_field_global_storage(const clang::FieldDecl *field)
     return (nd->hasGlobalStorage());
 
   return false;
+}
+
+bool clang_c_convertert::is_ConstructorOrDestructor(
+  const clang::FunctionDecl &fd)
+{
+  return fd.getKind() == clang::Decl::CXXConstructor ||
+         fd.getKind() == clang::Decl::CXXDestructor;
+}
+
+bool clang_c_convertert::perform_virtual_dispatch(const clang::Decl &decl)
+{
+  // It just can't happen in C
+  return false;
+}
+
+bool clang_c_convertert::get_vft_binding_expr(
+  const clang::MemberExpr &,
+  exprt &)
+{
+  log_error(
+    "MemberExpr call to virtual/overriding function cannot happen in C");
+  abort();
+  return true;
 }
