@@ -15,7 +15,7 @@ class InputFile: virtual public File {
 
 class OutputFile {
   public:
-    int f(void) { return 63; }
+    virtual int f(void) { return 63; }
 };
 
 class IOFile: public InputFile, public OutputFile {
@@ -28,7 +28,7 @@ int main(){
   assert(iofile->File::f() == 21);
   assert(iofile->InputFile::f() == 42);
   assert(iofile->OutputFile::f() == 63);
-  assert(iofile->f() == 5); // FAIL, should be 52
+  assert(iofile->f() == 52);
   delete iofile;
   return 0;
 }
