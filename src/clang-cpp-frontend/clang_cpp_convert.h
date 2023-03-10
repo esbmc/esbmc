@@ -193,6 +193,11 @@ protected:
     struct_typet &type);
   /*
    * additional annotations for virtual or overriding methods
+   *
+   * Params:
+   *  - md: the virtual method AST we are currently dealing with
+   *  - comp: the `component` as in `components` list in class type IR
+   *    this `component` represents the type of the virtual method
    */
   bool annotate_virtual_overriding_methods(
     const clang::CXXMethodDecl *md,
@@ -334,7 +339,7 @@ protected:
    *   xptr->Y()
    *
    * Params:
-   *  - struct_type: ESBMC IR representing the type the class/struct we are currently dealing with
+   *  - struct_type: ESBMC IR representing the type of the class/struct we are currently dealing with
    *  - vtable_value_map: representing the vtable value maps for this class/struct we are currently dealing with
    */
   void build_vtable_map(

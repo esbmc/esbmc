@@ -108,6 +108,9 @@ bool clang_cpp_convertert::annotate_virtual_overriding_methods(
   comp.set("is_virtual", true);
   comp.set("virtual_name", method_name);
 
+  if(md->isPure())
+    comp.set("is_pure_virtual", true);
+
   return false;
 }
 
