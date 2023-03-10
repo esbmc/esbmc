@@ -171,6 +171,7 @@ protected:
   std::string thunk_prefix = "thunk::";
   using function_switch = std::map<irep_idt, exprt>;
   using switch_table = std::map<irep_idt, function_switch>;
+  using overriden_map = std::map<std::string, const clang::CXXMethodDecl *>;
   /*
    * traverse methods to:
    *  1. convert virtual methods and add them to class' type
@@ -228,6 +229,16 @@ protected:
     struct_typet &type,
     struct_typet::componentt &comp,
     symbolt *vtable_type_symbol);
+
+  /*
+   * Get the overriden methods to which we need to create thunks.
+   *
+   * Params:
+   *  - md: clang AST of the overriding method
+   *  - map: key: a map that takes method id as key and pointer to the overriden method AST
+   */
+  void
+  get_overriden_methods(const clang::CXXMethodDecl *md, overriden_map &map);
   /*
    * add a thunk function for each overriding method
    *
