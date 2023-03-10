@@ -569,8 +569,11 @@ void goto_checkt::goto_check(goto_programt &goto_program)
     else if(i.is_assign())
     {
       const code_assign2t &assign = to_code_assign2t(i.code);
-      check(assign.target, loc);
-      check(assign.source, loc);
+      if(!is_dynamic_size2t(assign.target))
+      {
+        check(assign.target, loc);
+        check(assign.source, loc);
+      }
     }
     else if(i.is_function_call())
     {
