@@ -74,11 +74,16 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
     if(md->begin_overridden_methods() != md->end_overridden_methods())
     {
       /*
-       * In a multi-inheritance case this method might overrides multiple base methods
-       * so we need to create multiple thunk functions
+       * In a multi-inheritance case(e.g. diamond problem)
+       * a method might overrides multiple base methods in multiple levels.
+       * so we need to create multiple thunk functions for each overriden
+       * method in each level.
        */
-      for(const auto &md_overriden : md->overridden_methods())
-        add_thunk_method(md_overriden, comp, type);
+      overriden_map cxxmethods_overriden;
+      get_overriden_methods(md, cxxmethods_overriden);
+
+      for(const auto &overriden_md_entry : cxxmethods_overriden)
+        add_thunk_method(overriden_md_entry.second, comp, type);
     }
   }
 
@@ -580,5 +585,30 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
         class_id);
       abort();
     }
+  }
+}
+
+void clang_cpp_convertert::get_overriden_methods(
+  const clang::CXXMethodDecl *md,
+  overriden_map &map)
+{
+  /*
+   * This function gets all the overriden methods to which we need to create a thunk
+   */
+  for(const auto &md_overriden : md->overridden_methods())
+  {
+    if(md->begin_overridden_methods() != md->end_overridden_methods())
+      get_overriden_methods(md_overriden, map);
+
+    // get the id for this overriden method
+    std::string method_id, method_name;
+    clang_c_convertert::get_decl_name(*md, method_name, method_id);
+
+    // avoid adding the same overriden method, e.g. in case of diamond problem
+    if(map.find(method_id) != map.end())
+      continue;
+
+    auto status = map.insert({method_id, md_overriden});
+    assert(status.second);
   }
 }
