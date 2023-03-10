@@ -1,5 +1,6 @@
 /*
  * multi-level inheritance, single column
+ * polymorphism using top-level pointer
  */
 #include <cassert>
 
@@ -21,14 +22,8 @@ class IOFile: public InputFile {
 int main(){
   File *iofile = new IOFile();
   assert(iofile->File::f() == 1);
-  assert(iofile->f() == 100);
+  assert(iofile->f() == 10); // this should not pass
   delete iofile;
-
-  InputFile *iofile2 = new IOFile();
-  assert(iofile2->File::f() == 1);
-  assert(iofile2->InputFile::f() == 10);
-  assert(iofile2->f() == 10); // should be 100
-  delete iofile2;
 
   return 0;
 }
