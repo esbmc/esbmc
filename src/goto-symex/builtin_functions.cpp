@@ -345,11 +345,13 @@ void goto_symext::symex_printf(const expr2tc &, const expr2tc &rhs)
   new_rhs->operands.erase(new_rhs->operands.begin());
 
   std::list<expr2tc> args;
-  new_rhs->foreach_operand([this, &args](const expr2tc &e) {
-    expr2tc tmp = e;
-    do_simplify(tmp);
-    args.push_back(tmp);
-  });
+  new_rhs->foreach_operand(
+    [this, &args](const expr2tc &e)
+    {
+      expr2tc tmp = e;
+      do_simplify(tmp);
+      args.push_back(tmp);
+    });
 
   target->output(
     cur_state->guard.as_expr(), cur_state->source, fmt.as_string(), args);
@@ -951,7 +953,8 @@ inline expr2tc gen_value_by_byte(
    *
    */
 
-  // I am not sure if bitwise operations are valid for floats
+  // Bitwise operations are not valid for floats. Throw error (debug) or give up (release)
+  assert(!is_floatbv_type(type) && !is_fixedbv_type(type));
   if(is_floatbv_type(type) || is_fixedbv_type(type))
     return expr2tc();
 
@@ -1014,14 +1017,14 @@ inline expr2tc gen_value_by_byte(
 
     for(unsigned i = 0; i < result->datatype_members.size(); i++)
     {
-      auto name = to_struct_type(type).member_names[i];
+      irep_idt name = to_struct_type(type).member_names[i];
       member2tc local_member(to_struct_type(type).members[i], src, name);
 
       // Since it is a symbol, lets start from the old value
       if(is_pointer_type(to_struct_type(type).members[i]))
         result->datatype_members[i] = local_member;
 
-      auto current_member_type = result->datatype_members[i]->type;
+      type2tc current_member_type = result->datatype_members[i]->type;
 
       auto current_member_size =
         type_byte_size(current_member_type).to_uint64();
@@ -1154,7 +1157,8 @@ void goto_symext::intrinsic_memset(
 
   // Define a local function for translating to calling the unwinding C
   // implementation of memset
-  auto bump_call = [this, &func_call]() -> void {
+  auto bump_call = [this, &func_call]() -> void
+  {
     // We're going to execute a function call, and that's going to mess with
     // the program counter. Set it back *onto* pointing at this intrinsic, so
     // symex_function_call calculates the right return address. Misery.
