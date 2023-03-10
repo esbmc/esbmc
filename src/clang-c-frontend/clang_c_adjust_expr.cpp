@@ -522,7 +522,7 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(s == nullptr)
     {
-      log_error("type symbol `{}' not found in {}", identifier, __func__);
+      log_error("{}: type symbol `{}' not found", __func__, identifier);
       abort();
     }
 
