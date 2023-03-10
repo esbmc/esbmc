@@ -46,6 +46,7 @@ bool clang_cpp_convertert::perform_virtual_dispatch(
       static_cast<const clang::CXXMethodDecl &>(decl);
 
     clang::LangOptions langOpts;
+    // set LangOptions in C++ mode with RIIT enabled
     langOpts.CPlusPlus = 1;
     langOpts.RTTI = 1;
     if(
