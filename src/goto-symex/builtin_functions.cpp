@@ -1026,7 +1026,7 @@ inline expr2tc gen_value_by_byte(
 
       type2tc current_member_type = result->datatype_members[i]->type;
 
-      auto current_member_size =
+      size_t current_member_size =
         type_byte_size(current_member_type).to_uint64();
 
       // Skip offsets
