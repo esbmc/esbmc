@@ -285,7 +285,7 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
   else if(count > 1)
   {
     log_error(
-      "Name \"{}\" matches more than one member\" in struct/union \"{}\"",
+      "Name \"{}\" matches more than one member in struct/union \"{}\"",
       comp,
       name);
     abort();
