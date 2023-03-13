@@ -603,7 +603,9 @@ void clang_cpp_convertert::get_overriden_methods(
    */
   for(const auto &md_overriden : md->overridden_methods())
   {
-    if(md_overriden->begin_overridden_methods() != md_overriden->end_overridden_methods())
+    if(
+      md_overriden->begin_overridden_methods() !=
+      md_overriden->end_overridden_methods())
       get_overriden_methods(md_overriden, map);
 
     // get the id for this overriden method
