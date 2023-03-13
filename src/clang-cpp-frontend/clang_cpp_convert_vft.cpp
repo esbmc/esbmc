@@ -361,7 +361,7 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
     if(context.move(arg_symb))
     {
       log_error(
-        "Failed to add arg symbol {} for thunk function {}",
+        "Failed to add arg symbol `{}' for thunk function `{}'",
         arg_symb.id,
         thunk_func_symb.id);
       abort();
