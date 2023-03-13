@@ -229,7 +229,7 @@ void clang_cpp_convertert::add_thunk_method(
   struct_typet &type)
 {
   /*
-   * Add a thunk function for a overriding method.
+   * Add a thunk function for an overriding method.
    * This thunk function will be added as a symbol in the symbol table,
    * and considered a `component` to the derived class' type.
    * This thunk function will be used to set up the derived class' vtable
@@ -358,12 +358,15 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
     arg.set("#identifier", arg_symb.id);
 
     // add the argument to the symbol table
-    if(context.move(arg_symb))
+    symbolt *tmp_symbol;
+    if(context.move(arg_symb, tmp_symbol))
     {
       log_error(
-        "Failed to add arg symbol `{}' for thunk function `{}'",
+        "Failed to add arg symbol `{}' for thunk function `{}'.\n"
+        "`{}' already exists",
         arg_symb.id,
-        thunk_func_symb.id);
+        thunk_func_symb.id,
+        tmp_symbol->id);
       abort();
     }
   }
@@ -600,12 +603,12 @@ void clang_cpp_convertert::get_overriden_methods(
    */
   for(const auto &md_overriden : md->overridden_methods())
   {
-    if(md->begin_overridden_methods() != md->end_overridden_methods())
+    if(md_overriden->begin_overridden_methods() != md_overriden->end_overridden_methods())
       get_overriden_methods(md_overriden, map);
 
     // get the id for this overriden method
     std::string method_id, method_name;
-    clang_c_convertert::get_decl_name(*md, method_name, method_id);
+    clang_c_convertert::get_decl_name(*md_overriden, method_name, method_id);
 
     // avoid adding the same overriden method, e.g. in case of diamond problem
     if(map.find(method_id) != map.end())

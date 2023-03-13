@@ -1,5 +1,6 @@
 /*
- * Diamond problem: missing one of the base initializers
+ * Multi-inheritance diamond problem
+ * non-trivial constructor
  */
 #include <cassert>
 
