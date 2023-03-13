@@ -1,5 +1,6 @@
 /*
  * Multi-inheritance diamond problem
+ * non-trivial constructor
  */
 #include <cassert>
 

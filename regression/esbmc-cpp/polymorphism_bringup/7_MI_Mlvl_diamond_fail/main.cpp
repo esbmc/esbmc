@@ -1,5 +1,6 @@
 /*
- * multiple inheritance: diamond problem, late binding
+ * Multi-inheritance diamond problem
+ * trivial constructor
  */
 #include <cassert>
 
