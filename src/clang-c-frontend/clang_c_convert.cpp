@@ -567,7 +567,11 @@ bool clang_c_convertert::get_function(
 
   // If the function is not defined but this is not the definition, skip it
   if(fd.isDefined() && !fd.isThisDeclarationADefinition())
-    return false;
+  {
+    // Continue for virtual method as we need its type to make virtual function table
+    if(!is_fd_virtual_or_overriding(fd))
+      return false;
+  }
 
   // Save old_functionDecl, to be restored at the end of this method
   const clang::FunctionDecl *old_functionDecl = current_functionDecl;
@@ -3349,6 +3353,13 @@ bool clang_c_convertert::is_ConstructorOrDestructor(
 
 bool clang_c_convertert::perform_virtual_dispatch(
   const clang::MemberExpr &member)
+{
+  // It just can't happen in C
+  return false;
+}
+
+bool clang_c_convertert::is_fd_virtual_or_overriding(
+  const clang::FunctionDecl &fd)
 {
   // It just can't happen in C
   return false;

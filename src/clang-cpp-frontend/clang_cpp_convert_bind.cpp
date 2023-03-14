@@ -52,7 +52,7 @@ bool clang_cpp_convertert::perform_virtual_dispatch(
     if(
       member.performsVirtualDispatch(langOpts) &&
       cxxmd.getKind() != clang::Decl::CXXConstructor &&
-      (is_virtual_or_overriding(cxxmd)))
+      (is_md_virtual_or_overriding(cxxmd)))
       return true;
 
     break;
@@ -64,12 +64,21 @@ bool clang_cpp_convertert::perform_virtual_dispatch(
   return false;
 }
 
-bool clang_cpp_convertert::is_virtual_or_overriding(
+bool clang_cpp_convertert::is_md_virtual_or_overriding(
   const clang::CXXMethodDecl &cxxmd)
 {
   return (
     cxxmd.isVirtual() ||
     cxxmd.begin_overridden_methods() != cxxmd.end_overridden_methods());
+}
+
+bool clang_cpp_convertert::is_fd_virtual_or_overriding(
+  const clang::FunctionDecl &fd)
+{
+  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+    return is_md_virtual_or_overriding(*md);
+  else
+    return false;
 }
 
 bool clang_cpp_convertert::get_vft_binding_expr(

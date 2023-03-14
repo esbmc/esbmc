@@ -253,7 +253,7 @@ protected:
   virtual bool perform_virtual_dispatch(const clang::MemberExpr &member);
 
   /*
-   * Function to for virtual function table dynamic binding for "->" operator
+   * Function to get the ESBMC IR representing a virtual function table dynamic binding for "->" operator
    * Turning
    *  x->F
    * into
@@ -267,6 +267,17 @@ protected:
    */
   virtual bool
   get_vft_binding_expr(const clang::MemberExpr &member, exprt &new_expr);
+
+  /*
+   * Function to check whether a clang::FunctionDec represents a
+   * clang::CXXMethodDecl that is virtual OR overrides another function
+   *
+   * Params:
+   *  - fd: a clang::FunctionDec we are currently dealing with
+   *
+   * For C, it always return false.
+   */
+  virtual bool is_fd_virtual_or_overriding(const clang::FunctionDecl &fd);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
