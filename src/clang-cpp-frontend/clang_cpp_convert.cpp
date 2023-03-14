@@ -250,45 +250,11 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   // pull bases in
   if(auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
   {
-    log_debug(
-      "Class {} has {} bases, {} virtual bases",
-      cxxrd->getNameAsString(),
-      cxxrd->getNumBases(),
-      cxxrd->getNumVBases());
-
-    // TODO: this method blindly pulls all bases in without updating the access specifiers.
-    //  It may NOT work for complicated cases like multi-level inheritance with private fields and/or methods.
-    for(const clang::CXXBaseSpecifier &base : cxxrd->bases())
+    if(cxxrd->bases_begin() != cxxrd->bases_end())
     {
-      // The base class is always a CXXRecordDecl
-      const clang::CXXRecordDecl &base_cxxrd =
-        *(base.getType().getTypePtr()->getAsCXXRecordDecl());
-
-      // get base class id
-      std::string class_id, class_name;
-      clang_c_convertert::get_decl_name(base_cxxrd, class_name, class_id);
-
-      // get base class symbol
-      symbolt *s = context.find_symbol(class_id);
-      assert(s);
-
-      const struct_typet &base_type = to_struct_type(s->type);
-
-      // pull components in
-      const struct_typet::componentst &components = base_type.components();
-      for(auto component : components)
-      {
-        component.set("from_base", true);
-        to_struct_type(type).components().push_back(component);
-      }
-
-      // pull methods in
-      const struct_typet::componentst &methods = base_type.methods();
-      for(auto method : methods)
-      {
-        method.set("from_base", true);
-        to_struct_type(type).methods().push_back(method);
-      }
+      base_map bases;
+      get_base_map(cxxrd, bases);
+      get_base_components_methods(bases, type);
     }
   }
 
@@ -1304,4 +1270,98 @@ symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
   get_decl_name(fd, name, id);
   // if not found, nullptr is returned
   return (context.find_symbol(id));
+}
+
+void clang_cpp_convertert::get_base_map(
+    const clang::CXXRecordDecl *cxxrd,
+    base_map &map)
+{
+  /*
+   * This function gets all the base classes from which we need to get the components/methods
+   */
+  for(const clang::CXXBaseSpecifier &base : cxxrd->bases())
+  {
+    // The base class is always a CXXRecordDecl
+    const clang::CXXRecordDecl *base_cxxrd =
+      (base.getType().getTypePtr()->getAsCXXRecordDecl());
+
+    // recursively get more bases for this `base`
+    if(base_cxxrd->bases_begin() != base_cxxrd->bases_end())
+      get_base_map(base_cxxrd, map);
+
+    // get base class id
+    std::string class_id, class_name;
+    clang_c_convertert::get_decl_name(*base_cxxrd, class_name, class_id);
+
+    // avoid adding the same base, e.g. in case of diamond problem
+    if(map.find(class_id) != map.end())
+      continue;
+
+    auto status = map.insert({class_id, base_cxxrd});
+    assert(status.second);
+  }
+}
+
+void clang_cpp_convertert::get_base_components_methods(
+    base_map &map,
+    struct_union_typet &type)
+{
+  for(const auto &base : map)
+  {
+    std::string class_id = base.first;
+
+    // get base class symbol
+    symbolt *s = context.find_symbol(class_id);
+    assert(s);
+
+    const struct_typet &base_type = to_struct_type(s->type);
+
+    // pull components in
+    const struct_typet::componentst &components = base_type.components();
+    for(auto component : components)
+    {
+      // TODO: tweak access specifier
+      component.set("from_base", true);
+      if(!is_duplicate_component(component, type))
+        to_struct_type(type).components().push_back(component);
+    }
+
+    // pull methods in
+    const struct_typet::componentst &methods = base_type.methods();
+    for(auto method : methods)
+    {
+      // TODO: tweak access specifier
+      method.set("from_base", true);
+      if(!is_duplicate_method(method, type))
+        to_struct_type(type).methods().push_back(method);
+    }
+  }
+}
+
+bool clang_cpp_convertert::is_duplicate_component(
+    const struct_typet::componentt &component,
+    const struct_union_typet &type)
+{
+  const struct_typet &stype = to_struct_type(type);
+  const struct_typet::componentst &components = stype.components();
+  for(const auto& existing_component : components)
+  {
+    if(component.name() == existing_component.name())
+      return true;
+  }
+  return false;
+}
+
+bool clang_cpp_convertert::is_duplicate_method(
+    const struct_typet::componentt &method,
+    const struct_union_typet &type)
+{
+  const struct_typet &stype = to_struct_type(type);
+  const struct_typet::componentst &methods = stype.methods();
+  for(const auto& existing_method : methods)
+  {
+    if(method.name() == existing_method.name())
+      return true;
+  }
+  return false;
 }
