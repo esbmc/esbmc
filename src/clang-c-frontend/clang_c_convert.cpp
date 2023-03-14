@@ -565,6 +565,10 @@ bool clang_c_convertert::get_function(
   if(fd.isImplicit() && !is_ConstructorOrDestructor(fd))
     return false;
 
+  // If the function is not defined but this is not the definition, skip it
+  if(fd.isDefined() && !fd.isThisDeclarationADefinition())
+    return false;
+
   // Save old_functionDecl, to be restored at the end of this method
   const clang::FunctionDecl *old_functionDecl = current_functionDecl;
   current_functionDecl = &fd;
