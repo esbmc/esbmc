@@ -1273,8 +1273,8 @@ symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
 }
 
 void clang_cpp_convertert::get_base_map(
-    const clang::CXXRecordDecl *cxxrd,
-    base_map &map)
+  const clang::CXXRecordDecl *cxxrd,
+  base_map &map)
 {
   /*
    * This function gets all the base classes from which we need to get the components/methods
@@ -1303,8 +1303,8 @@ void clang_cpp_convertert::get_base_map(
 }
 
 void clang_cpp_convertert::get_base_components_methods(
-    base_map &map,
-    struct_union_typet &type)
+  base_map &map,
+  struct_union_typet &type)
 {
   for(const auto &base : map)
   {
@@ -1339,12 +1339,12 @@ void clang_cpp_convertert::get_base_components_methods(
 }
 
 bool clang_cpp_convertert::is_duplicate_component(
-    const struct_typet::componentt &component,
-    const struct_union_typet &type)
+  const struct_typet::componentt &component,
+  const struct_union_typet &type)
 {
   const struct_typet &stype = to_struct_type(type);
   const struct_typet::componentst &components = stype.components();
-  for(const auto& existing_component : components)
+  for(const auto &existing_component : components)
   {
     if(component.name() == existing_component.name())
       return true;
@@ -1353,12 +1353,12 @@ bool clang_cpp_convertert::is_duplicate_component(
 }
 
 bool clang_cpp_convertert::is_duplicate_method(
-    const struct_typet::componentt &method,
-    const struct_union_typet &type)
+  const struct_typet::componentt &method,
+  const struct_union_typet &type)
 {
   const struct_typet &stype = to_struct_type(type);
   const struct_typet::componentst &methods = stype.methods();
-  for(const auto& existing_method : methods)
+  for(const auto &existing_method : methods)
   {
     if(method.name() == existing_method.name())
       return true;
