@@ -269,6 +269,18 @@ enum ImplicitCastTypeT
 ImplicitCastTypeT get_implicit_cast_type_t(std::string cast);
 const char *implicit_cast_type_to_str(ImplicitCastTypeT type);
 
+enum VisibilityT
+{
+  PublicT,
+  PrivateT,
+  ExternalT,
+  InternalT,
+  UnknownT
+}; // access
+VisibilityT get_access(const nlohmann::json &ast_node);
+
 }; // namespace SolidityGrammar
+
+
 
 #endif /* SOLIDITY_GRAMMAR_H_ */

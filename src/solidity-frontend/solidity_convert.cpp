@@ -307,7 +307,7 @@ bool solidity_convertert::get_var_decl(
   return false;
 }
 
-bool solidity_convertert::get_struct_class(const nlohmann::json &ast_node)
+bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
 {
   // Convert Contract => class => struct
 
@@ -315,7 +315,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &ast_node)
   std::string id, name;
   name = contract_name;
   id = "tag-" + name;
-  struct_union_typet t = struct_typet();
+  struct_typet t = struct_typet();
   t.tag(name);
 
   // 2. Check if the symbol is already added to the context, do nothing if it is
@@ -325,7 +325,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &ast_node)
 
   // 3. populate location
   locationt location_begin;
-  get_location_from_decl(ast_node, location_begin);
+  get_location_from_decl(contract_def, location_begin);
 
   // 4. populate debug module name
   std::string debug_modulename =
@@ -336,6 +336,75 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &ast_node)
 
   symbol.is_type = true;
   symbolt &added_symbol = *move_symbol_to_context(symbol);
+
+  // 5. populate fields(data memeber) and method(function)
+  nlohmann::json ast_nodes = contract_def["nodes"];
+  for(nlohmann::json::iterator itr = ast_nodes.begin(); itr != ast_nodes.end();
+      ++itr)
+  {
+    SolidityGrammar::ContractBodyElementT type =
+      SolidityGrammar::get_contract_body_element_t(*itr);
+
+    switch(type)
+    {
+    case SolidityGrammar::ContractBodyElementT::StateVarDecl:
+    {
+      if(get_struct_class_fields(*itr, t))
+        return true;
+      break;
+    }
+    case SolidityGrammar::ContractBodyElementT::FunctionDef:
+    {
+      // if(get_struct_class_method(*itr, t))
+      //   return true;
+      break;
+    }
+    default:
+    {
+      assert(!"Unimplemented type in rule contract-body-element");
+      return true;
+    }
+    }
+  }
+
+  add_padding(t, ns);
+  t.location() = location_begin;
+  added_symbol.type = t;
+
+  return false;
+}
+
+bool solidity_convertert::get_struct_class_fields(
+  const nlohmann::json &ast_node,
+  struct_typet &type)
+{
+  struct_typet::componentt comp;
+  if(ast_node)
+    return false;
+
+  if(SolidityGrammar::get_access(ast_node) == SolidityGrammar::VisibilityT::UnknownT)
+    return false;
+
+  if(get_var_decl(ast_node, comp))
+    return true;
+  comp.type().set("#member_name", type.name());
+  if(get_access_from_decl(ast_node, comp))
+    return true;
+  type.components().push_back(comp);
+
+  return false;
+}
+
+bool solidity_convertert::get_access_from_decl(
+  const nlohmann::json &ast_node,
+  struct_typet::componentt &comp)
+{
+  if(SolidityGrammar::get_access(ast_node) == SolidityGrammar::VisibilityT::UnknownT)
+    return true;
+
+  std::string access = ast_node["visibility"].get<std::string>();
+  comp.set_access(access);
+
   return false;
 }
 
@@ -911,7 +980,7 @@ bool solidity_convertert::get_expr(
     exprt callee_expr;
     if(get_expr(implicit_cast_expr, callee_expr))
       return true;
-    printf("here1");
+
     // 2. Get type
     // Need to "decrypt" the typeDescriptions and manually make a typeDescription
     nlohmann::json callee_rtn_type =
@@ -919,7 +988,7 @@ bool solidity_convertert::get_expr(
     typet type;
     if(get_type_description(callee_rtn_type, type))
       return true;
-    printf("here2");
+
     side_effect_expr_function_callt call;
     call.function() = callee_expr;
     call.type() = type;
@@ -973,18 +1042,17 @@ bool solidity_convertert::get_expr(
   }
   case SolidityGrammar::ExpressionT::NewExpression:
   {
-    printf("1\n");
     // get the constructor call making this temporary
+    // convert from "clang::Stmt::CXXTemporaryObjectExprClass"
+
     if(get_constructor_call(expr, new_expr))
       return true;
-    printf("2\n");
-    // make the temporary
+    
     side_effect_exprt tmp_obj("temporary_object", new_expr.type());
     codet code_expr("expression");
     code_expr.operands().push_back(new_expr);
     tmp_obj.initializer(code_expr);
     tmp_obj.location() = new_expr.location();
-
     new_expr.swap(tmp_obj);
 
     break;
@@ -2154,9 +2222,8 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
             "parameters": []
           }
         )"_json;
-          printf("111");
           adjusted_expr["returnParameters"] = j2;
-          printf("222");
+
         }
         else
           assert(!"Unsupported return types in pointee");
@@ -2220,9 +2287,9 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(
             "parameters": []
           }
         )"_json;
-        printf("11");
+
         adjusted_expr["returnParameters"] = j2;
-        printf("22");
+
       }
       else
         assert(!"Unsupported types in callee's return in CallExpr");
@@ -2374,9 +2441,6 @@ bool solidity_convertert::get_constructor_call(
   }
 
   //  TODO: support derived constructor
-  if(true)
-  {
-  }
 
   // Do args
   unsigned num_args = 0;
@@ -2392,8 +2456,9 @@ bool solidity_convertert::get_constructor_call(
       ++num_args;
     }
   }
-
+  
   call.set("constructor", 1);
-  new_expr.swap(call);
+  new_expr = call;
+
   return false;
 }
