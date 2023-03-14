@@ -713,7 +713,7 @@ const char *implicit_cast_type_to_str(ImplicitCastTypeT type)
   {
     ENUM_TO_STR(LValueToRValue)
     ENUM_TO_STR(FunctionToPointerDecay)
-    ENUM_TO_STR(ArrayToPointerDecay)
+    ENUM_TO_STR(ArrayToPointerDecay)  
     ENUM_TO_STR(ImplicitCastTypeTError)
   default:
   {
@@ -722,4 +722,32 @@ const char *implicit_cast_type_to_str(ImplicitCastTypeT type)
   }
   }
 }
+
+VisibilityT get_access(const nlohmann::json &ast_node)
+{
+  std::string access = ast_node["visibility"].get<std::string>();
+  if(access == "public")
+  {
+    return PublicT;
+  }
+  else if(access == "private")
+  {
+    return PrivateT;
+  }
+  else if(access == "external")
+  {
+    return ExternalT;
+  }
+  else if(access == "internal")
+  {
+    return InternalT;
+  }
+  else
+  {
+    log_error("Unknown Visibility");
+    abort();
+  }
+  return UnknownT;
+}
+
 }; // namespace SolidityGrammar

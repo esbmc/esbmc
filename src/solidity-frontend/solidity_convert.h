@@ -7,6 +7,7 @@
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_types.h>
+#include <clang-c-frontend/padding.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
@@ -47,6 +48,10 @@ protected:
 
   std::string contract_name;
 
+  typedef std::unordered_map<std::size_t, std::pair<std::string, typet>>
+    this_mapt;
+  this_mapt this_map;
+
   bool convert_ast_nodes(const nlohmann::json &contract_def);
 
   // conversion functions
@@ -58,6 +63,13 @@ protected:
   bool get_function_definition(const nlohmann::json &ast_node);
   bool get_function_params(const nlohmann::json &pd, exprt &param);
   bool get_struct_class(const nlohmann::json &ast_node);
+  bool
+  get_struct_class_fields(const nlohmann::json &ast_node, struct_typet &type);
+  bool
+  get_struct_class_method(const nlohmann::json &ast_node, struct_typet &type);
+  bool get_access_from_decl(
+    const nlohmann::json &ast_node,
+    struct_typet::componentt &comp);
   bool get_block(
     const nlohmann::json &expr,
     exprt &
