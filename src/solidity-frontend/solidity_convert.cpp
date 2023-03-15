@@ -94,6 +94,7 @@ bool solidity_convertert::convert()
     }
   }
 
+  printf("finish convert\n");
   return false; // 'false' indicates successful completion.
 }
 
@@ -119,7 +120,7 @@ bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
 
   // After converting all AST nodes, current_functionDecl should be restored to nullptr.
   assert(current_functionDecl == nullptr);
-
+  printf("end nodes traverse\n");
   return false;
 }
 
@@ -195,6 +196,7 @@ bool solidity_convertert::get_var_decl(
   const nlohmann::json &ast_node,
   exprt &new_expr)
 {
+  printf("get_var_decl\n");
   // For Solidity rule state-variable-declaration:
   // 1. populate typet
   typet t;
@@ -301,9 +303,8 @@ bool solidity_convertert::get_var_decl(
   }
 
   decl.location() = location_begin;
-
   new_expr = decl;
-
+  printf("get_var_decl_end\n");
   return false;
 }
 
@@ -355,8 +356,8 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
     }
     case SolidityGrammar::ContractBodyElementT::FunctionDef:
     {
-      // if(get_struct_class_method(*itr, t))
-      //   return true;
+      if(get_struct_class_method(*itr, t))
+        return true;
       break;
     }
     default:
@@ -379,10 +380,10 @@ bool solidity_convertert::get_struct_class_fields(
   struct_typet &type)
 {
   struct_typet::componentt comp;
-  if(ast_node)
-    return false;
 
-  if(SolidityGrammar::get_access(ast_node) == SolidityGrammar::VisibilityT::UnknownT)
+  if(
+    SolidityGrammar::get_access_t(ast_node) ==
+    SolidityGrammar::VisibilityT::UnknownT)
     return false;
 
   if(get_var_decl(ast_node, comp))
@@ -395,11 +396,26 @@ bool solidity_convertert::get_struct_class_fields(
   return false;
 }
 
+bool solidity_convertert::get_struct_class_method(
+  const nlohmann::json &ast_node,
+  struct_typet &type)
+{
+  struct_typet::componentt comp;
+  if(get_decl(ast_node, comp))
+    return true;
+  if(comp.is_code() && to_code(comp).statement() == "skip")
+    return false;
+  type.methods().push_back(comp);
+  return false;
+}
+
 bool solidity_convertert::get_access_from_decl(
   const nlohmann::json &ast_node,
   struct_typet::componentt &comp)
 {
-  if(SolidityGrammar::get_access(ast_node) == SolidityGrammar::VisibilityT::UnknownT)
+  if(
+    SolidityGrammar::get_access_t(ast_node) ==
+    SolidityGrammar::VisibilityT::UnknownT)
     return true;
 
   std::string access = ast_node["visibility"].get<std::string>();
@@ -419,7 +435,7 @@ bool solidity_convertert::get_function_definition(
     !ast_node
       ["implemented"]) // TODO: for interface function, it's just a definition. Add something like "&& isInterface_JustDefinition()"
     return false;
-
+  printf("get_function_definition\n");
   // Check intrinsic functions
   if(check_intrinsic_function(ast_node))
     return false;
@@ -515,7 +531,7 @@ bool solidity_convertert::get_function_definition(
   // 13. Restore current_functionDecl
   current_functionDecl =
     old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
-
+  printf("get_function_definition_end\n");
   return false;
 }
 
@@ -683,7 +699,8 @@ bool solidity_convertert::get_statement(
       exprt single_decl;
       if(get_var_decl_stmt(decl, single_decl))
         return true;
-
+      // Added
+      convert_expression_to_code(single_decl);
       decls.operands().push_back(single_decl);
       ++ctr;
     }
@@ -1042,19 +1059,19 @@ bool solidity_convertert::get_expr(
   }
   case SolidityGrammar::ExpressionT::NewExpression:
   {
-    // get the constructor call making this temporary
     // convert from "clang::Stmt::CXXTemporaryObjectExprClass"
-
+    // get the constructor call making this temporary
     if(get_constructor_call(expr, new_expr))
       return true;
-    
+
     side_effect_exprt tmp_obj("temporary_object", new_expr.type());
     codet code_expr("expression");
     code_expr.operands().push_back(new_expr);
     tmp_obj.initializer(code_expr);
     tmp_obj.location() = new_expr.location();
     new_expr.swap(tmp_obj);
-
+    //convert_expression_to_code(new_expr);
+    //printf("NewExpression type:%s\n",new_expr.type().id().c_str());
     break;
   }
   default:
@@ -2223,7 +2240,6 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
           }
         )"_json;
           adjusted_expr["returnParameters"] = j2;
-
         }
         else
           assert(!"Unsupported return types in pointee");
@@ -2289,7 +2305,6 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(
         )"_json;
 
         adjusted_expr["returnParameters"] = j2;
-
       }
       else
         assert(!"Unsupported types in callee's return in CallExpr");
@@ -2403,16 +2418,18 @@ bool solidity_convertert::is_dyn_array(const nlohmann::json &json_in)
 }
 
 bool solidity_convertert::get_constructor_call(
-  const nlohmann::json &expr,
+  const nlohmann::json &ast_node,
   exprt &new_expr)
 {
+  nlohmann::json expr = ast_node["expression"];
+
   std::string name, id;
   name = expr["typeName"]["pathNode"]["name"].get<std::string>();
   id = "tag-" + name;
 
   symbolt s = *context.find_symbol(id);
   typet type = s.type;
-
+  
   // TODO: populate function params
   new_expr = exprt("symbol", type);
   new_expr.identifier(id);
@@ -2423,26 +2440,6 @@ bool solidity_convertert::get_constructor_call(
   call.function() = new_expr;
   call.type() = type;
 
-  // TODO: decide if a new object is needed
-  if(true)
-  {
-    address_of_exprt tmp_expr;
-    tmp_expr.type() = pointer_typet();
-    tmp_expr.type().subtype() = type;
-
-    exprt new_object("new_object");
-    new_object.set("#lvalue", true);
-    new_object.type() = type;
-
-    tmp_expr.operands().resize(0);
-    tmp_expr.move_to_operands(new_object);
-
-    call.arguments().push_back(tmp_expr);
-  }
-
-  //  TODO: support derived constructor
-
-  // Do args
   unsigned num_args = 0;
   if(expr.contains("arguments"))
   {
@@ -2456,9 +2453,10 @@ bool solidity_convertert::get_constructor_call(
       ++num_args;
     }
   }
-  
-  call.set("constructor", 1);
-  new_expr = call;
 
+  call.set("constructor", 1);
+  new_expr.swap(call);
+  printf("Constructor type: %s\n",new_expr.type().id().c_str());
+  //convert_expression_to_code(new_expr);
   return false;
 }
