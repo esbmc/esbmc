@@ -277,7 +277,7 @@ enum VisibilityT
   InternalT,
   UnknownT
 }; // access
-VisibilityT get_access(const nlohmann::json &ast_node);
+VisibilityT get_access_t(const nlohmann::json &ast_node);
 
 }; // namespace SolidityGrammar
 

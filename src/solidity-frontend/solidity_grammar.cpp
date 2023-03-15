@@ -486,6 +486,8 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   }
   else if(expr["nodeType"] == "FunctionCall")
   {
+    if(expr["expression"]["nodeType"] == "NewExpression")
+        return NewExpression;
     return CallExprClass;
   }
   else if(expr["nodeType"] == "ImplicitCastExprClass")
@@ -495,10 +497,6 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   else if(expr["nodeType"] == "IndexAccess")
   {
     return IndexAccess;
-  }
-  else if(expr["nodeType"] == "NewExpression")
-  {
-    return NewExpression;
   }
   else
   {
@@ -713,7 +711,7 @@ const char *implicit_cast_type_to_str(ImplicitCastTypeT type)
   {
     ENUM_TO_STR(LValueToRValue)
     ENUM_TO_STR(FunctionToPointerDecay)
-    ENUM_TO_STR(ArrayToPointerDecay)  
+    ENUM_TO_STR(ArrayToPointerDecay)
     ENUM_TO_STR(ImplicitCastTypeTError)
   default:
   {
@@ -723,7 +721,7 @@ const char *implicit_cast_type_to_str(ImplicitCastTypeT type)
   }
 }
 
-VisibilityT get_access(const nlohmann::json &ast_node)
+VisibilityT get_access_t(const nlohmann::json &ast_node)
 {
   std::string access = ast_node["visibility"].get<std::string>();
   if(access == "public")

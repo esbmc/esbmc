@@ -9,8 +9,8 @@ CC_DIAGNOSTIC_POP()
 #include <solidity-frontend/solidity_language.h>
 #include <solidity-frontend/solidity_convert.h>
 #include <clang-c-frontend/clang_c_main.h>
-#include <clang-c-frontend/clang_c_adjust.h>
-#include <clang-c-frontend/clang_c_convert.h>
+#include <clang-cpp-frontend/clang_cpp_adjust.h>
+#include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <c2goto/cprover_library.h>
 #include <clang-c-frontend/expr2c.h>
 #include <util/c_link.h>
@@ -43,7 +43,7 @@ std::string solidity_languaget::get_temp_file()
 
   // populate temp file
   std::ofstream f;
-  p += "/temp_sol.c";
+  p += "/temp_sol.cpp";
   f.open(p.string());
   f << temp_c_file();
   f.close();
@@ -58,7 +58,7 @@ bool solidity_languaget::parse(const std::string &path)
 
   // get AST nodes of ESBMC intrinsics and the dummy main
   // populate ASTs inherited from parent class
-  clang_c_languaget::parse(temp_path);
+  clang_cpp_languaget::parse(temp_path);
 
   // Process AST json file
   std::ifstream ast_json_file_stream(path);
@@ -92,9 +92,10 @@ bool solidity_languaget::parse(const std::string &path)
 
 bool solidity_languaget::convert_intrinsics(contextt &context)
 {
-  clang_c_convertert converter(context, ASTs, "C");
+  clang_cpp_convertert converter(context, ASTs, "C++");
   if(converter.convert())
     return true;
+
   return false;
 }
 
@@ -110,16 +111,17 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   if(converter.convert()) // Add Solidity symbols to the context
     return true;
 
-  clang_c_adjust adjuster(new_context);
-  if(adjuster.adjust())
-    return true;
+  clang_cpp_adjust adjuster(new_context);
+  //   return true;
+  // if(adjuster.adjust())
 
+  printf("finish adjust\n");
   if(c_link(
        context,
        new_context,
        module)) // also populates language_uit::context
     return true;
-
+  printf("finish clink\n");
   return false;
 }
 
