@@ -229,6 +229,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "name for Z3 smt2 file"},
     {"mathsat", NULL, "use MathSAT"},
     {"cvc", NULL, "use CVC4"},
+    {"cvc4", NULL, "use CVC4"},
+    {"cvc5", NULL, "use CVC5"},
     {"yices", NULL, "use Yices"},
     {"bitwuzla", NULL, "use Bitwuzla"},
     {"bv", NULL, "use solver with bit-vector arithmetic"},
