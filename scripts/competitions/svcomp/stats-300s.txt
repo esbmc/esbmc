@@ -1,9 +1,9 @@
-Statistics:          15648 Files
-   correct:            8561
-     correct true:     5169
-     correct false:    3392
-   incorrect:            56
-     incorrect true:     25
-    incorrect false:    31
-   unknown:            7031
-   Score:             12434 (max: 25567)
+Statistics:          26459 Files
+   correct:           15602
+     correct true:     8871
+     correct false:    6731
+   incorrect:           102
+     incorrect true:     43
+     incorrect false:    59
+   unknown:           10755
+   Score:             22153 (max: 43043)
