@@ -1228,7 +1228,7 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   const code_typet::argumentst &base_ctor_arguments =
     base_ctor_code_type.arguments();
   // just one argument representing `this` in base class ctor
-  assert(base_ctor_arguments.size() == 1);
+  assert(base_ctor_arguments.size() >= 1);
   const typet base_ctor_this_type = base_ctor_arguments.at(0).type();
 
   // get derived class ctor implicit this
