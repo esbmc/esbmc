@@ -91,6 +91,7 @@ bool solidity_convertert::convert()
       if(convert_ast_nodes(*itr))
         return true; // 'true' indicates something goes wrong.
       //clear_current_contract_info();
+      printf("-------\n");
     }
   }
 
@@ -848,7 +849,7 @@ bool solidity_convertert::get_statement(
     return true;
   }
   }
-
+  printf("get_statement_end\n");
   return false;
 }
 
@@ -884,6 +885,15 @@ bool solidity_convertert::get_expr(
 {
   // For rule expression
   // We need to do location settings to match clang C's number of times to set the locations when recurring
+
+  printf(
+    "\tcurrent statement type: %s\n",
+    expr["nodeType"].get<std::string>().c_str());
+  if(expr.contains("expression"))
+    printf(
+      "\tsub statement type: %s\n",
+      expr["expression"]["nodeType"].get<std::string>().c_str());
+
   locationt location;
   get_start_location_from_stmt(expr, location);
 
@@ -1072,11 +1082,11 @@ bool solidity_convertert::get_expr(
     tmp_obj.location() = new_expr.location();
     new_expr.swap(tmp_obj);
 
-    break;
+    return false;
   }
   // case SolidityGrammar::ExpressionT::MemberCallClass:
   // {
-   
+
   // }
   default:
   {
@@ -2031,18 +2041,18 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
       ++itr, ++index)
   {
     if((*itr)["nodeType"] == "ContractDefinition") // contains AST nodes we need
-      break;
-  }
+    {
+      nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
 
-  nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
-
-  index = 0;
-  for(nlohmann::json::iterator itrr = ast_nodes.begin();
-      itrr != ast_nodes.end();
-      ++itrr, ++index)
-  {
-    if((*itrr)["id"] == ref_decl_id)
-      return ast_nodes.at(index);
+      unsigned idx = 0;
+      for(nlohmann::json::iterator itrr = ast_nodes.begin();
+          itrr != ast_nodes.end();
+          ++itrr, ++idx)
+      {
+        if((*itrr)["id"] == ref_decl_id)
+          return ast_nodes.at(idx);
+      }
+    }
   }
 
   // Then search "declarations" in current function scope
@@ -2433,7 +2443,7 @@ bool solidity_convertert::get_constructor_call(
 
   symbolt s = *context.find_symbol(id);
   typet type = s.type;
-  
+
   // TODO: populate function params
   new_expr = exprt("symbol", type);
   new_expr.identifier(id);
@@ -2460,7 +2470,7 @@ bool solidity_convertert::get_constructor_call(
 
   call.set("constructor", 1);
   new_expr.swap(call);
-  printf("Constructor type: %s\n",new_expr.type().id().c_str());
+  printf("Constructor type: %s\n", new_expr.type().id().c_str());
   //convert_expression_to_code(new_expr);
   return false;
 }
