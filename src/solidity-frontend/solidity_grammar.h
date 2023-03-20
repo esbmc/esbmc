@@ -223,6 +223,8 @@ enum ExpressionT
 
   NewExpression,
 
+  MemberCallClass,
+
   ExpressionTError
 };
 ExpressionT get_expression_t(const nlohmann::json &expr);

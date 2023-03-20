@@ -112,8 +112,8 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
     return true;
 
   clang_cpp_adjust adjuster(new_context);
-  //   return true;
   // if(adjuster.adjust())
+  //   return true;
 
   printf("finish adjust\n");
   if(c_link(

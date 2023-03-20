@@ -487,7 +487,7 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   else if(expr["nodeType"] == "FunctionCall")
   {
     if(expr["expression"]["nodeType"] == "NewExpression")
-        return NewExpression;
+      return NewExpression;
     return CallExprClass;
   }
   else if(expr["nodeType"] == "ImplicitCastExprClass")
@@ -498,6 +498,11 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return IndexAccess;
   }
+  else if(expr["nodeType"] == "MemberAccess")
+  {
+    return MemberCallClass;
+  }
+
   else
   {
     log_error(
@@ -608,6 +613,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(ImplicitCastExprClass)
     ENUM_TO_STR(IndexAccess)
     ENUM_TO_STR(NewExpression)
+    ENUM_TO_STR(MemberCallClass)
     ENUM_TO_STR(ExpressionTError)
   default:
   {
