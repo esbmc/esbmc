@@ -986,6 +986,7 @@ bool solidity_convertert::get_expr(
 
     break;
   }
+  case SolidityGrammar::ExpressionT::MemberCallClass:
   case SolidityGrammar::ExpressionT::CallExprClass:
   {
     // 1. Get callee expr
@@ -1070,10 +1071,13 @@ bool solidity_convertert::get_expr(
     tmp_obj.initializer(code_expr);
     tmp_obj.location() = new_expr.location();
     new_expr.swap(tmp_obj);
-    //convert_expression_to_code(new_expr);
-    //printf("NewExpression type:%s\n",new_expr.type().id().c_str());
+
     break;
   }
+  // case SolidityGrammar::ExpressionT::MemberCallClass:
+  // {
+   
+  // }
   default:
   {
     assert(!"Unimplemented type in rule expression");
