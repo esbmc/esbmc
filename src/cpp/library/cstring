@@ -138,7 +138,7 @@ size_t strspn(const char *s1, const char *s2) {
 size_t strlen(const char *s) {
 	__ESBMC_assert(s != NULL, "string must contain any character");
 	size_t len = 0;
-	while (*s != NULL) { //until the end of string
+	while (*s != '\0') { //until the end of string
 		s++;
 		len++;
 	}
@@ -274,7 +274,8 @@ void *memmove(void *dest, const void *src, size_t n) {
 	__ESBMC_HIDE:
         char *cdst = static_cast<char *>(dest);
         const char *csrc = static_cast<const char *>(src);
-        if (dest - src >= n) {
+        if (reinterpret_cast<const void*>(cdst - csrc) >= 
+			reinterpret_cast<const void*>(n)) {
 		for (size_t i = 0; i < n; i++)
 			cdst[i] = csrc[i];
 	} else {

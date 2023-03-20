@@ -110,7 +110,7 @@ unsigned long int strtoul(const char * str, char ** endptr, int base);
 
 char * getenv(const char * name) {
 	size_t size = strlen(name) + 1;
-	char tmp[size];
+	char* tmp = (char*)malloc(size);
 	strcpy(tmp, name);
 	return tmp;
 }

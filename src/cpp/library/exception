@@ -40,12 +40,14 @@ unexpected_handler unexpected_pf=default_unexpected;
 
 terminate_handler set_terminate(terminate_handler f) throw ()
 {
-  terminate_pf=f;
+    terminate_pf = f;
+    return terminate_pf;
 }
 
 unexpected_handler set_unexpected(unexpected_handler f) throw ()
 {
-  unexpected_pf=f;
+    unexpected_pf=f;
+    return unexpected_pf;
 }
 
 // Model for unexpected function: calls the current
@@ -53,7 +55,7 @@ unexpected_handler set_unexpected(unexpected_handler f) throw ()
 void unexpected()
 {
   unexpected_pf();
-  throw;
+  //throw;
 }
 
 // Model for terminate function: calls the current
@@ -65,14 +67,14 @@ void terminate()
 
 class exception {
 public:
-  exception() throw () {};
-  exception(const exception&) throw () {};
+  exception() throw (){};
+  exception(const exception&) throw (){};
 
   exception& operator=(const exception&) throw ();
 
-  virtual ~exception() throw () {}
+  ~exception() throw (){}
 
-  virtual const char* what() const throw () {
+  const char* what() const throw (){
     /**
      *Returns a null terminated character sequence containing a generic description of the exception.
      *Both the wording of such description and the character width are implementation-defined.
@@ -87,11 +89,11 @@ public:
  **/
 class bad_exception: public exception {
 public:
-  bad_exception() {}
+  bad_exception() throw (){}
 
-  virtual ~bad_exception() {}
+  ~bad_exception() throw (){}
 
-  virtual const char* what() const {
+  const char* what() const throw (){
     return (const char*) message;
   }
 };
