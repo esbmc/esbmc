@@ -625,6 +625,11 @@ void goto_symext::run_intrinsic(
     // Already modelled in builtin_libs
     return;
   }
+  else if(has_prefix(symname, "c:@F@__ESBMC_fscanf"))
+  {
+    symex_fscanf(func_call.ret, func_call.operands);
+    return;
+  }
   else if(has_prefix(symname, "c:@F@__ESBMC_init_object"))
   {
     assert(

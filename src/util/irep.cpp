@@ -540,6 +540,7 @@ const irep_idt irept::a_cmt_type = dstring("#type");
 const irep_idt irept::a_type_id = dstring("typeid");
 const irep_idt irept::a_derived_this_arg = dstring("#derived_this_arg");
 const irep_idt irept::a_base_ctor_derived = dstring("#base_ctor_derived");
+const irep_idt irept::a_need_vptr_init = dstring("#need_vptr_init");
 
 const irep_idt irept::s_type = dstring("type");
 const irep_idt irept::s_arguments = dstring("arguments");

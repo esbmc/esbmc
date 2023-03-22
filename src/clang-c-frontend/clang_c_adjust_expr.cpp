@@ -340,8 +340,6 @@ void clang_c_adjust::adjust_index(index_exprt &index)
     index.id("dereference");
     index.cmt_lvalue(true);
   }
-
-  index.type() = final_array_type.subtype();
 }
 
 void clang_c_adjust::adjust_expr_rel(exprt &expr)
@@ -522,7 +520,7 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(s == nullptr)
     {
-      log_error("type symbol `{}' not found", identifier);
+      log_error("{}: type symbol `{}' not found", __func__, identifier);
       abort();
     }
 
@@ -824,8 +822,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(nan_expr);
     }
     else if(
-      identifier == "abs" || identifier == "labs" || identifier == "llabs" ||
-      compare_float_suffix(identifier, "fabs") ||
+      identifier == "abs" || identifier == "labs" || identifier == "imaxabs" ||
+      identifier == "llabs" || compare_float_suffix(identifier, "fabs") ||
       compare_unscore_builtin(identifier, "fabs"))
     {
       exprt abs_expr("abs", expr.type());

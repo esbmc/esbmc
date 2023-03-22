@@ -67,6 +67,7 @@ ESBMC aims to support all of C99/C11, and detects errors in software by simulati
    * Double-free of malloc'd memory
    * Misaligned memory access
  * Integer overflows
+ * Floating-point for NaN
  * Divide by zero
  * Memory leaks
 

@@ -1,5 +1,6 @@
 /*
  * dynamic cast test: cast from void* should fail
+ * Contains virtual, but doesn't check polymorphism
  */
 #include <cassert>
 

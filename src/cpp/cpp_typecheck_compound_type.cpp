@@ -426,6 +426,8 @@ void cpp_typecheckt::typecheck_compound_declarator(
       virtual_name = "@dtor";
 
     // The method may be virtual implicitly.
+    // The `virtual_bases` here actually means a set of virtual functions from bases,
+    // used for creating the thunk to the overriding function
     std::set<irep_idt> virtual_bases;
 
     for(struct_typet::componentst::const_iterator it = components.begin();
@@ -536,12 +538,13 @@ void cpp_typecheckt::typecheck_compound_declarator(
       vt_entry.location() = symbol.location;
       virtual_table.components().push_back(vt_entry);
 
-      // take care of overloading
+      // take care of overriding
       while(!virtual_bases.empty())
       {
         irep_idt virtual_base = *virtual_bases.begin();
 
-        // a new function that does 'late casting' of the 'this' parameter
+        // a new thunk function that does 'late casting' of the 'this' parameter
+        // redirecting the call to the overriding function
         symbolt func_symb;
         func_symb.id =
           component.get_name().as_string() + "::" + virtual_base.as_string();

@@ -344,7 +344,7 @@ smt_astt array_convt::array_ite(
     // One ite pls.
     smt_astt res =
       true_arr->array_fields[i]->ite(ctx, cond, false_arr->array_fields[i]);
-    mast->array_fields.push_back(array_downcast(res));
+    mast->array_fields.push_back(res);
   }
 
   return mast;

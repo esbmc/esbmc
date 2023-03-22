@@ -1,6 +1,6 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 
-void convert_expression_to_code(exprt &expr)
+void clang_cpp_adjust::convert_expression_to_code(exprt &expr)
 {
   if(expr.is_code())
     return;

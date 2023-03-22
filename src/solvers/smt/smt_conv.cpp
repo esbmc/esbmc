@@ -2533,7 +2533,7 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
     array_size = calculate_array_domain_width(arrtype);
   }
 
-  if(is_structure_type(base_init->type))
+  if(is_struct_type(base_init->type))
     return tuple_api->tuple_array_of(base_init, array_size);
   if(is_pointer_type(base_init->type))
     return pointer_array_of(base_init, array_size);

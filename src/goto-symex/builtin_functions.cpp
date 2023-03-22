@@ -355,6 +355,56 @@ void goto_symext::symex_printf(const expr2tc &, const expr2tc &rhs)
     cur_state->guard.as_expr(), cur_state->source, fmt.as_string(), args);
 }
 
+void goto_symext::symex_fscanf(
+  const expr2tc &ret,
+  const std::vector<expr2tc> &op)
+{
+  /* TODO: Check input stream
+  auto input_stream = op[0]; // stdin?
+  cur_state->rename(input_stream);
+  */
+
+  /* TODO: Check for Format
+  const irep_idt fmt = get_string_argument(op[1]);
+  std::vector<size_t> alloc_size;
+  */
+
+  // Just a hack while we don't support format
+  unsigned number_of_format_args = op.size() - 2;
+
+  // Set return value
+  if(ret)
+    symex_assign(code_assign2tc(
+      ret, constant_int2tc(int_type2(), BigInt(number_of_format_args))));
+
+  for(size_t i = 2; i < number_of_format_args + 2; i++)
+  {
+    expr2tc operand = op[i];
+    internal_deref_items.clear();
+    dereference2tc deref(get_empty_type(), operand);
+    dereference(deref, dereferencet::INTERNAL);
+
+    for(const auto &item : internal_deref_items)
+    {
+      assert(is_symbol2t(item.object) && "This only works for variables");
+
+      // TODO: get the correct type by using the format string
+      auto type = item.object->type;
+      // Get the length of the type. This will propagate an exception for dynamic/infinite
+      // sized arrays (as expected)
+      expr2tc val = sideeffect2tc(
+        type,
+        expr2tc(),
+        expr2tc(),
+        std::vector<expr2tc>(),
+        type2tc(),
+        sideeffect2t::nondet);
+
+      symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
+    }
+  }
+}
+
 void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
 {
   bool do_array;

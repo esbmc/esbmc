@@ -398,6 +398,9 @@ int __ESBMC_builtin_constant_p(int);
     __typeof__(*__atomic_store_ptr) __atomic_store_tmp = (VAL);                \
     __ESBMC_atomic_store(__atomic_store_ptr, &__atomic_store_tmp, (MO));       \
   })
+
+// TODO: implement this similarly to printf
+  #define fscanf __ESBMC_fscanf
     )";
 
   return intrinsics;

@@ -39,6 +39,7 @@ class IntegerLiteral;
 class FloatingLiteral;
 class TagDecl;
 class FieldDecl;
+class MemberExpr;
 } // namespace clang
 
 std::string
@@ -231,6 +232,52 @@ protected:
    *   field: clang AST representing the class/struct/union field we are dealing with
    */
   bool is_field_global_storage(const clang::FieldDecl *field);
+
+  /*
+   * check if a method is constructor or destructor
+   * Arguments:
+   *  fd: clang AST representing a C++ method
+   */
+  bool is_ConstructorOrDestructor(const clang::FunctionDecl &fd);
+
+  /*
+   * Function to check whether a member function call refers to
+   * a virtual/overriding method.
+   *
+   * Params:
+   *  - member: a clang::MemberExpr representing member access x.F or x->F where
+   *  where F could be a field or a method
+   *
+   * For C, it always return false.
+   */
+  virtual bool perform_virtual_dispatch(const clang::MemberExpr &member);
+
+  /*
+   * Function to get the ESBMC IR representing a virtual function table dynamic binding for "->" operator
+   * Turning
+   *  x->F
+   * into
+   *  x->X@vtable_pointer->F
+   *
+   * Params:
+   *  - member: the method to which this MemberExpr refers
+   *  - new_expr: ESBMC IR to represent `x->X@vtable_ptr->F`
+   *
+   * For C, it can't happen.
+   */
+  virtual bool
+  get_vft_binding_expr(const clang::MemberExpr &member, exprt &new_expr);
+
+  /*
+   * Function to check whether a clang::FunctionDec represents a
+   * clang::CXXMethodDecl that is virtual OR overrides another function
+   *
+   * Params:
+   *  - fd: a clang::FunctionDec we are currently dealing with
+   *
+   * For C, it always return false.
+   */
+  virtual bool is_fd_virtual_or_overriding(const clang::FunctionDecl &fd);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

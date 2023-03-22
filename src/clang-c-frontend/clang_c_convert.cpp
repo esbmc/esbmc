@@ -562,17 +562,16 @@ bool clang_c_convertert::get_function(
   // Don't convert if implicit, unless it's a constructor or destructor
   // A compiler-generated default ctor/dtor is considered implicit, but we have
   // to parse it.
-  auto isContructorOrDestructor = [](const clang::FunctionDecl &fd) {
-    return fd.getKind() == clang::Decl::CXXConstructor ||
-           fd.getKind() == clang::Decl::CXXDestructor;
-  };
-
-  if(fd.isImplicit() && !isContructorOrDestructor(fd))
+  if(fd.isImplicit() && !is_ConstructorOrDestructor(fd))
     return false;
 
   // If the function is not defined but this is not the definition, skip it
   if(fd.isDefined() && !fd.isThisDeclarationADefinition())
-    return false;
+  {
+    // Continue for virtual method as we need its type to make virtual function table
+    if(!is_fd_virtual_or_overriding(fd))
+      return false;
+  }
 
   // Save old_functionDecl, to be restored at the end of this method
   const clang::FunctionDecl *old_functionDecl = current_functionDecl;
@@ -1571,15 +1570,24 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::MemberExpr &member =
       static_cast<const clang::MemberExpr &>(stmt);
 
-    exprt base;
-    if(get_expr(*member.getBase(), base))
-      return true;
+    if(!perform_virtual_dispatch(member))
+    {
+      exprt base;
+      if(get_expr(*member.getBase(), base))
+        return true;
 
-    exprt comp;
-    if(get_decl(*member.getMemberDecl(), comp))
-      return true;
+      exprt comp;
+      if(get_decl(*member.getMemberDecl(), comp))
+        return true;
 
-    new_expr = member_exprt(base, comp.name(), comp.type());
+      new_expr = member_exprt(base, comp.name(), comp.type());
+    }
+    else
+    {
+      if(get_vft_binding_expr(member, new_expr))
+        return true;
+    }
+
     break;
   }
 
@@ -3334,4 +3342,35 @@ bool clang_c_convertert::is_field_global_storage(const clang::FieldDecl *field)
     return (nd->hasGlobalStorage());
 
   return false;
+}
+
+bool clang_c_convertert::is_ConstructorOrDestructor(
+  const clang::FunctionDecl &fd)
+{
+  return fd.getKind() == clang::Decl::CXXConstructor ||
+         fd.getKind() == clang::Decl::CXXDestructor;
+}
+
+bool clang_c_convertert::perform_virtual_dispatch(
+  const clang::MemberExpr &member)
+{
+  // It just can't happen in C
+  return false;
+}
+
+bool clang_c_convertert::is_fd_virtual_or_overriding(
+  const clang::FunctionDecl &fd)
+{
+  // It just can't happen in C
+  return false;
+}
+
+bool clang_c_convertert::get_vft_binding_expr(
+  const clang::MemberExpr &,
+  exprt &)
+{
+  log_error(
+    "MemberExpr call to virtual/overriding function cannot happen in C");
+  abort();
+  return true;
 }

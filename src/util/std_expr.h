@@ -971,6 +971,12 @@ public:
     set_component_name(component_name);
   }
 
+  inline member_exprt(const irep_idt &component_name, const typet &_type)
+    : exprt(exprt::member, _type)
+  {
+    set_component_name(component_name);
+  }
+
   member_exprt() : exprt(exprt::member)
   {
     operands().resize(1);

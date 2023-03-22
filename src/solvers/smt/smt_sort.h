@@ -216,7 +216,9 @@ public:
 template <typename T>
 const solver_smt_sort<T> *to_solver_smt_sort(smt_sortt s)
 {
-  return dynamic_cast<const solver_smt_sort<T> *>(s);
+  const solver_smt_sort<T> *r = dynamic_cast<const solver_smt_sort<T> *>(s);
+  assert(r);
+  return r;
 }
 #ifdef dynamic_cast
 #undef dynamic_cast

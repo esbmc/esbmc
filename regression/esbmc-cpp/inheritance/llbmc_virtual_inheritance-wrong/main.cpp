@@ -1,3 +1,7 @@
+/*
+ * diamond problem.
+ * The most derived class is responsible for constructing the top base class.
+ */
 #include <cassert>
 
 class A

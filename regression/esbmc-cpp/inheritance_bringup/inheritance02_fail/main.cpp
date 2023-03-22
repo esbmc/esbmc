@@ -1,3 +1,6 @@
+/*
+ * Single virtual inheritance: call base method in derived class
+ */
 #include <cassert>
 
 class exforsys
