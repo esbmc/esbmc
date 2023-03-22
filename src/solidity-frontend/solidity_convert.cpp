@@ -996,7 +996,6 @@ bool solidity_convertert::get_expr(
 
     break;
   }
-  case SolidityGrammar::ExpressionT::MemberCallClass:
   case SolidityGrammar::ExpressionT::CallExprClass:
   {
     // 1. Get callee expr
@@ -1028,7 +1027,7 @@ bool solidity_convertert::get_expr(
       exprt single_arg;
       if(get_expr(arg.value(), single_arg))
         return true;
-
+      //assert(single_arg.id() == typet::t_code);
       call.arguments().push_back(single_arg);
       ++num_args;
     }
@@ -1084,10 +1083,62 @@ bool solidity_convertert::get_expr(
 
     return false;
   }
-  // case SolidityGrammar::ExpressionT::MemberCallClass:
-  // {
+  case SolidityGrammar::ExpressionT::MemberCallClass:
+  {
+    printf("MemberCallClass\n");
 
-  // }
+    assert(expr.contains("expression"));
+    const nlohmann::json &callee_expr_json = expr["expression"];
+
+    std::string name, id;
+    // TODO: id
+    name = id = callee_expr_json["memberName"].get<std::string>();
+
+    symbolt s = *context.find_symbol(id);
+    typet type = s.type;
+
+    // TODO: populate function params
+    new_expr = exprt("symbol", type);
+    new_expr.identifier(id);
+    new_expr.cmt_lvalue(true);
+    new_expr.name(name);
+
+    side_effect_expr_function_callt call;
+    call.function() = new_expr;
+    call.type() = type;
+
+    const nlohmann::json caller_expr_json =
+      find_decl_ref(callee_expr_json["referencedDeclaration"]);
+    auto param_nodes = caller_expr_json["parameters"]["parameters"];
+
+    unsigned num_args = 0;
+    for(const auto &arg : expr["arguments"].items())
+    {
+      nlohmann::json param = nullptr;
+      nlohmann::json::iterator itr = param_nodes.begin();
+      if(itr != param_nodes.end())
+      {
+        if((*itr).contains("typeDescriptions"))
+        {
+          param = (*itr)["typeDescriptions"];
+          printf("1\n");
+        }
+        itr++;
+      }
+
+      exprt single_arg;
+      if(get_expr(arg.value(), param, single_arg))
+        return true;
+
+      //assert(single_arg.id() == typet::t_code);
+      call.arguments().push_back(single_arg);
+      ++num_args;
+    }
+    log_debug("  @@ num_args={}", num_args);
+
+    new_expr = call;
+    break;
+  }
   default:
   {
     assert(!"Unimplemented type in rule expression");
@@ -2318,7 +2369,8 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(
           }
         )"_json;
 
-        adjusted_expr["returnParameters"] = j2;
+        //adjusted_expr["returnParameters"] = j2;
+        adjusted_expr = j2;
       }
       else
         assert(!"Unsupported types in callee's return in CallExpr");
@@ -2462,7 +2514,7 @@ bool solidity_convertert::get_constructor_call(
       exprt single_arg;
       if(get_expr(arg.value(), single_arg))
         return true;
-
+      //assert(single_arg.id() == typet::t_code);
       call.arguments().push_back(single_arg);
       ++num_args;
     }
@@ -2470,7 +2522,5 @@ bool solidity_convertert::get_constructor_call(
 
   call.set("constructor", 1);
   new_expr.swap(call);
-  printf("Constructor type: %s\n", new_expr.type().id().c_str());
-  //convert_expression_to_code(new_expr);
   return false;
 }
