@@ -78,6 +78,7 @@ else()
                     incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors esbmc-cpp11/new-delete esbmc-cpp11/reference esbmc-cpp/inheritance_bringup
                     esbmc-cpp/polymorphism_bringup
                     esbmc-cpp/bug_fixes
+                    esbmc-cpp/OM_sanity_checks
                     ${REGRESSIONS_GOTO_CONTRACTOR} ${REGRESSIONS_JIMPLE} extensions cuda)
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
