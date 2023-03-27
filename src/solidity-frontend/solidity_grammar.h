@@ -283,6 +283,4 @@ VisibilityT get_access_t(const nlohmann::json &ast_node);
 
 }; // namespace SolidityGrammar
 
-
-
 #endif /* SOLIDITY_GRAMMAR_H_ */

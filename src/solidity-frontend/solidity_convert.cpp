@@ -90,12 +90,9 @@ bool solidity_convertert::convert()
 
       if(convert_ast_nodes(*itr))
         return true; // 'true' indicates something goes wrong.
-      //clear_current_contract_info();
-      printf("-------\n");
     }
   }
 
-  printf("finish convert\n");
   return false; // 'false' indicates successful completion.
 }
 
@@ -121,7 +118,7 @@ bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
 
   // After converting all AST nodes, current_functionDecl should be restored to nullptr.
   assert(current_functionDecl == nullptr);
-  printf("end nodes traverse\n");
+
   return false;
 }
 
@@ -197,7 +194,6 @@ bool solidity_convertert::get_var_decl(
   const nlohmann::json &ast_node,
   exprt &new_expr)
 {
-  printf("get_var_decl\n");
   // For Solidity rule state-variable-declaration:
   // 1. populate typet
   typet t;
@@ -305,7 +301,7 @@ bool solidity_convertert::get_var_decl(
 
   decl.location() = location_begin;
   new_expr = decl;
-  printf("get_var_decl_end\n");
+
   return false;
 }
 
@@ -357,8 +353,8 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
     }
     case SolidityGrammar::ContractBodyElementT::FunctionDef:
     {
-      if(get_struct_class_method(*itr, t))
-        return true;
+      // if(get_struct_class_method(*itr, t))
+      //   return true;
       break;
     }
     default:
@@ -436,7 +432,7 @@ bool solidity_convertert::get_function_definition(
     !ast_node
       ["implemented"]) // TODO: for interface function, it's just a definition. Add something like "&& isInterface_JustDefinition()"
     return false;
-  printf("get_function_definition\n");
+
   // Check intrinsic functions
   if(check_intrinsic_function(ast_node))
     return false;
@@ -532,7 +528,7 @@ bool solidity_convertert::get_function_definition(
   // 13. Restore current_functionDecl
   current_functionDecl =
     old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
-  printf("get_function_definition_end\n");
+
   return false;
 }
 
@@ -700,8 +696,7 @@ bool solidity_convertert::get_statement(
       exprt single_decl;
       if(get_var_decl_stmt(decl, single_decl))
         return true;
-      // Added
-      convert_expression_to_code(single_decl);
+
       decls.operands().push_back(single_decl);
       ++ctr;
     }
@@ -849,7 +844,7 @@ bool solidity_convertert::get_statement(
     return true;
   }
   }
-  printf("get_statement_end\n");
+
   return false;
 }
 
@@ -885,14 +880,6 @@ bool solidity_convertert::get_expr(
 {
   // For rule expression
   // We need to do location settings to match clang C's number of times to set the locations when recurring
-
-  printf(
-    "\tcurrent statement type: %s\n",
-    expr["nodeType"].get<std::string>().c_str());
-  if(expr.contains("expression"))
-    printf(
-      "\tsub statement type: %s\n",
-      expr["expression"]["nodeType"].get<std::string>().c_str());
 
   locationt location;
   get_start_location_from_stmt(expr, location);
@@ -1027,7 +1014,7 @@ bool solidity_convertert::get_expr(
       exprt single_arg;
       if(get_expr(arg.value(), single_arg))
         return true;
-      //assert(single_arg.id() == typet::t_code);
+
       call.arguments().push_back(single_arg);
       ++num_args;
     }
@@ -1035,6 +1022,7 @@ bool solidity_convertert::get_expr(
 
     // 4. Convert call arguments
     new_expr = call;
+
     break;
   }
   case SolidityGrammar::ExpressionT::ImplicitCastExprClass:
@@ -1071,6 +1059,7 @@ bool solidity_convertert::get_expr(
   {
     // convert from "clang::Stmt::CXXTemporaryObjectExprClass"
     // get the constructor call making this temporary
+
     if(get_constructor_call(expr, new_expr))
       return true;
 
@@ -1081,19 +1070,19 @@ bool solidity_convertert::get_expr(
     tmp_obj.location() = new_expr.location();
     new_expr.swap(tmp_obj);
 
-    return false;
+    break;
   }
   case SolidityGrammar::ExpressionT::MemberCallClass:
   {
-    printf("MemberCallClass\n");
-
     assert(expr.contains("expression"));
     const nlohmann::json &callee_expr_json = expr["expression"];
 
     std::string name, id;
-    // TODO: id
-    name = id = callee_expr_json["memberName"].get<std::string>();
+    name = callee_expr_json["memberName"].get<std::string>();
+    id = name;
 
+    if(context.find_symbol(id) == nullptr)
+      return true;
     symbolt s = *context.find_symbol(id);
     typet type = s.type;
 
@@ -1121,7 +1110,6 @@ bool solidity_convertert::get_expr(
         if((*itr).contains("typeDescriptions"))
         {
           param = (*itr)["typeDescriptions"];
-          printf("1\n");
         }
         itr++;
       }
@@ -1602,6 +1590,7 @@ bool solidity_convertert::get_type_description(
 
     symbolt &s = *context.find_symbol(id);
     new_type = s.type;
+
     break;
   }
   default:
@@ -1939,9 +1928,7 @@ void solidity_convertert::get_function_definition_name(
   // Follow the way in clang:
   //  - For function name, just use the ast_node["name"]
   // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
-  if(
-    ast_node["name"].get<std::string>() == "" &&
-    ast_node["kind"].get<std::string>() == "constructor")
+  if(ast_node["kind"].get<std::string>() == "constructor")
     name = contract_name;
   else
     name = ast_node["name"].get<std::string>();
@@ -2091,6 +2078,10 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
   for(nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
       ++itr, ++index)
   {
+    // for constructor ref
+    if((*itr)["id"] == ref_decl_id)
+      return nodes.at(index);
+
     if((*itr)["nodeType"] == "ContractDefinition") // contains AST nodes we need
     {
       nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
@@ -2175,6 +2166,28 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
 
   assert(!"should not be here - no matching ref decl id found");
   return ast_json;
+}
+
+bool solidity_convertert::get_constructor_ref(
+  const nlohmann::json &decl,
+  exprt &expr)
+{
+  int ref_decl_id = decl["typeName"]["referencedDeclaration"];
+  nlohmann::json contract_def = find_decl_ref(ref_decl_id);
+  nlohmann::json ast_nodes = contract_def["nodes"];
+  for(nlohmann::json::iterator itr = ast_nodes.begin(); itr != ast_nodes.end();
+      ++itr)
+  {
+    if((*itr)["kind"] == "constructor")
+    {
+      get_func_decl_ref(*itr, expr);
+
+      //fix identifer
+      //expr.identifier("tag-"+expr.identifier().as_string());
+      return false;
+    }
+  }
+  return true;
 }
 
 void solidity_convertert::get_default_symbol(
@@ -2488,23 +2501,14 @@ bool solidity_convertert::get_constructor_call(
   exprt &new_expr)
 {
   nlohmann::json expr = ast_node["expression"];
+  exprt callee;
+  if(get_constructor_ref(expr, callee))
+    return true;
 
-  std::string name, id;
-  name = expr["typeName"]["pathNode"]["name"].get<std::string>();
-  id = "tag-" + name;
-
-  symbolt s = *context.find_symbol(id);
-  typet type = s.type;
-
-  // TODO: populate function params
-  new_expr = exprt("symbol", type);
-  new_expr.identifier(id);
-  new_expr.cmt_lvalue(true);
-  new_expr.name(name);
-
+  struct_typet tmp = struct_typet();
   side_effect_expr_function_callt call;
-  call.function() = new_expr;
-  call.type() = type;
+  call.function() = callee;
+  call.type() = tmp;
 
   unsigned num_args = 0;
   if(expr.contains("arguments"))
@@ -2514,13 +2518,14 @@ bool solidity_convertert::get_constructor_call(
       exprt single_arg;
       if(get_expr(arg.value(), single_arg))
         return true;
-      //assert(single_arg.id() == typet::t_code);
+
       call.arguments().push_back(single_arg);
       ++num_args;
     }
   }
 
   call.set("constructor", 1);
-  new_expr.swap(call);
+  new_expr = call;
+
   return false;
 }
