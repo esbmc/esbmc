@@ -484,7 +484,8 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return Literal;
   }
-  else if(expr["nodeType"] == "FunctionCall" || expr["nodeType"] == "MemberAccess")
+  else if(
+    expr["nodeType"] == "FunctionCall" || expr["nodeType"] == "MemberAccess")
   {
     if(expr["expression"]["nodeType"] == "NewExpression")
       return NewExpression;
