@@ -48,10 +48,6 @@ protected:
 
   std::string contract_name;
 
-  typedef std::unordered_map<std::size_t, std::pair<std::string, typet>>
-    this_mapt;
-  this_mapt this_map;
-
   bool convert_ast_nodes(const nlohmann::json &contract_def);
 
   // conversion functions
@@ -88,6 +84,7 @@ protected:
   bool get_cast_expr(const nlohmann::json &cast_expr, exprt &new_expr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
+  bool get_constructor_ref(const nlohmann::json &decl, exprt &expr);
   bool get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
   bool get_func_decl_ref_type(const nlohmann::json &decl, typet &new_type);

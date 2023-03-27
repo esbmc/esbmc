@@ -111,17 +111,16 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   if(converter.convert()) // Add Solidity symbols to the context
     return true;
 
-  //clang_cpp_adjust adjuster(new_context);
-  // if(adjuster.adjust())
-  //   return true;
+  clang_cpp_adjust adjuster(new_context);
+  if(adjuster.adjust())
+    return true;
 
-  printf("finish adjust\n");
   if(c_link(
        context,
        new_context,
        module)) // also populates language_uit::context
     return true;
-  printf("finish clink\n");
+
   return false;
 }
 
