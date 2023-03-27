@@ -83,13 +83,17 @@ bool solidity_convertert::convert()
     std::string node_type = (*itr)["nodeType"].get<std::string>();
     if(node_type == "ContractDefinition") // rule source-unit
     {
-      contract_name = (*itr)["name"].get<std::string>();
+      current_contractName = (*itr)["name"].get<std::string>();
       // add struct symbol for each contract
       if(get_struct_class(*itr))
         return true;
 
       if(convert_ast_nodes(*itr))
         return true; // 'true' indicates something goes wrong.
+
+      // add implicit construcor function
+      if(add_implicit_constructor())
+        return true;
     }
   }
 
@@ -311,8 +315,8 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
 
   // 1. populate name, id
   std::string id, name;
-  name = contract_name;
-  id = "tag-" + name;
+  name = current_contractName;
+  id = prefix + name;
   struct_typet t = struct_typet();
   t.tag(name);
 
@@ -328,6 +332,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
   // 4. populate debug module name
   std::string debug_modulename =
     get_modulename_from_path(location_begin.file().as_string());
+  current_fileName = debug_modulename;
 
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
@@ -406,6 +411,51 @@ bool solidity_convertert::get_struct_class_method(
   return false;
 }
 
+bool solidity_convertert::add_implicit_constructor()
+{
+  std::string name, id;
+  name = id = current_contractName;
+
+  if(context.find_symbol(id) != nullptr)
+    return false;
+
+  nlohmann::json ast_node;
+  auto j2 = R"(
+          {
+            "nodeType": "ParameterList",
+            "parameters": []
+          }
+        )"_json;
+  ast_node["returnParameters"] = j2;
+
+  code_typet type;
+  if(get_type_description(ast_node["returnParameters"], type.return_type()))
+    return true;
+
+  locationt location_begin;
+
+  if(current_fileName == "")
+    return true;
+  std::string debug_modulename = current_fileName;
+
+  symbolt symbol;
+  get_default_symbol(symbol, debug_modulename, type, name, id, location_begin);
+
+  symbol.lvalue = true;
+  symbol.is_extern = false;
+  symbol.file_local = false;
+
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
+
+  code_blockt body_exprt = code_blockt();
+  added_symbol.value = body_exprt;
+
+  type.make_ellipsis();
+  added_symbol.type = type;
+
+  return false;
+}
+
 bool solidity_convertert::get_access_from_decl(
   const nlohmann::json &ast_node,
   struct_typet::componentt &comp)
@@ -444,7 +494,7 @@ bool solidity_convertert::get_function_definition(
   if(
     (*current_functionDecl)["name"].get<std::string>() == "" &&
     (*current_functionDecl)["kind"] == "constructor")
-    current_functionName = contract_name;
+    current_functionName = current_contractName;
   else
     current_functionName = (*current_functionDecl)["name"].get<std::string>();
 
@@ -1583,7 +1633,7 @@ bool solidity_convertert::get_type_description(
 
     std::string constructor_name = type_name["typeString"].get<std::string>();
     size_t pos = constructor_name.find(" ");
-    std::string id = "tag-" + constructor_name.substr(pos + 1);
+    std::string id = prefix + constructor_name.substr(pos + 1);
 
     if(context.find_symbol(id) == nullptr)
       return true;
@@ -1929,7 +1979,7 @@ void solidity_convertert::get_function_definition_name(
   //  - For function name, just use the ast_node["name"]
   // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
   if(ast_node["kind"].get<std::string>() == "constructor")
-    name = contract_name;
+    name = current_contractName;
   else
     name = ast_node["name"].get<std::string>();
   id = name;
@@ -2183,7 +2233,7 @@ bool solidity_convertert::get_constructor_ref(
       get_func_decl_ref(*itr, expr);
 
       //fix identifer
-      //expr.identifier("tag-"+expr.identifier().as_string());
+      //expr.identifier(prefix+expr.identifier().as_string());
       return false;
     }
   }

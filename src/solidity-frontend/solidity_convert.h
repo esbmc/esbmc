@@ -46,7 +46,8 @@ protected:
   std::stack<const nlohmann::json *> current_BinOp_type;
   std::string current_functionName;
 
-  std::string contract_name;
+  std::string current_contractName;
+  std::string current_fileName;
 
   bool convert_ast_nodes(const nlohmann::json &contract_def);
 
@@ -59,6 +60,7 @@ protected:
   bool get_function_definition(const nlohmann::json &ast_node);
   bool get_function_params(const nlohmann::json &pd, exprt &param);
   bool get_struct_class(const nlohmann::json &ast_node);
+  bool add_implicit_constructor();
   bool
   get_struct_class_fields(const nlohmann::json &ast_node, struct_typet &type);
   bool
@@ -161,6 +163,8 @@ protected:
   bool convert_string_literal(std::string the_value, exprt &dest);
 
   static constexpr const char *mode = "C++";
+
+  std::string prefix = "tag-";
 
 private:
   bool get_elementary_type_name_uint(
