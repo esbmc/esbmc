@@ -659,7 +659,9 @@ const char *var_decl_statement_to_str(VarDeclStmtT type)
 FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
 {
   assert(decl["nodeType"] == "FunctionDefinition");
-  if(decl["parameters"]["parameters"].size() == 0)
+  if(
+    decl["parameters"]["parameters"].size() == 0 ||
+    decl["kind"] == "constructor")
   {
     return FunctionNoProto;
   }

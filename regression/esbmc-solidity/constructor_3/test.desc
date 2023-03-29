@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--function Simple --contract contract.sol
+^VERIFICATION SUCCESSFUL$
