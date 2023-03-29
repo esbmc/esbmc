@@ -551,10 +551,11 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     const function_switch &switch_map = vft_switch_kv_pair.second;
 
     // To create the vtable variable symbol we need to get the corresponding type
-    const symbolt &late_cast_symb =
-      *namespacet(context).lookup(vft_switch_kv_pair.first);
+    const symbolt *late_cast_symb =
+      namespacet(context).lookup(vft_switch_kv_pair.first);
+    assert(late_cast_symb);
     const symbolt &vt_symb_type = *namespacet(context).lookup(
-      "virtual_table::" + late_cast_symb.id.as_string());
+      "virtual_table::" + late_cast_symb->id.as_string());
 
     // This is the class we are currently dealing with
     std::string class_id, class_name;
