@@ -259,7 +259,8 @@ void clang_cpp_convertert::add_thunk_method(
    *  also need to add this thunk method to the list of components of the derived class' type
    */
 
-  std::string base_class_id = tag_prefix + md->getParent()->getNameAsString();
+  std::string base_class_id, base_class_name;
+  get_decl_name(*md->getParent(), base_class_name, base_class_id);
 
   // Create the thunk method symbol
   symbolt thunk_func_symb;
@@ -497,7 +498,7 @@ void clang_cpp_convertert::build_vtable_map(
 {
   /*
    * Build a vtable map from the class type
-   * This is virtual function table for this class.
+   * This is the virtual function table for this class.
    * This table will be used to create the vtable variable symbols.
    */
 
