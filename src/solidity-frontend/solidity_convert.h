@@ -86,7 +86,6 @@ protected:
   bool get_cast_expr(const nlohmann::json &cast_expr, exprt &new_expr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
-  bool get_constructor_ref(const nlohmann::json &decl, exprt &expr);
   bool get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
   bool get_func_decl_ref_type(const nlohmann::json &decl, typet &new_type);
@@ -128,6 +127,7 @@ protected:
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
   const nlohmann::json &find_decl_ref(int ref_decl_id);
+  const nlohmann::json &find_constructor_ref(nlohmann::json &contract_def);
   void convert_expression_to_code(exprt &expr);
   bool check_intrinsic_function(const nlohmann::json &ast_node);
   nlohmann::json make_implicit_cast_expr(
@@ -163,8 +163,8 @@ protected:
   bool convert_string_literal(std::string the_value, exprt &dest);
 
   static constexpr const char *mode = "C++";
-
   std::string prefix = "tag-";
+  exprt new_object_expr;
 
 private:
   bool get_elementary_type_name_uint(
