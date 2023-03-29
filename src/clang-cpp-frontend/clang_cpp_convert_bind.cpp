@@ -129,7 +129,8 @@ void clang_cpp_convertert::get_vft_binding_expr_vtable_ptr(
   // get the parent class id of the method to which this MemberExpr refers
   const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(member.getMemberDecl());
   assert(md);
-  std::string base_class_id = tag_prefix + md->getParent()->getNameAsString();
+  std::string base_class_id, base_class_name;
+  get_decl_name(*md->getParent(), base_class_name, base_class_id);
 
   std::string vtable_type_symb_id = vtable_type_prefix + base_class_id;
   typet vtable_type = symbol_typet(vtable_type_symb_id);
@@ -152,7 +153,8 @@ bool clang_cpp_convertert::get_vft_binding_expr_function(
   // get the parent class id of the method to which this MemberExpr refers
   const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(member.getMemberDecl());
   assert(md);
-  std::string base_class_id = tag_prefix + md->getParent()->getNameAsString();
+  std::string base_class_id, base_class_name;
+  get_decl_name(*md->getParent(), base_class_name, base_class_id);
 
   exprt comp;
   if(get_decl(*member.getMemberDecl(), comp))
