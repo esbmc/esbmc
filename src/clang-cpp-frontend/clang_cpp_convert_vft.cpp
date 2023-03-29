@@ -557,7 +557,8 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
       "virtual_table::" + late_cast_symb.id.as_string());
 
     // This is the class we are currently dealing with
-    std::string class_id = tag_prefix + cxxrd->getNameAsString();
+    std::string class_id, class_name;
+    get_decl_name(*cxxrd, class_name, class_id);
 
     symbolt vt_symb_var;
     vt_symb_var.id = vt_symb_type.id.as_string() + "@" + class_id;
