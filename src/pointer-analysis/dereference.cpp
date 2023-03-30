@@ -2047,10 +2047,8 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   simplify(offset_bytes);
 
   BigInt num_bits = type_byte_size_bits(type);
-  /* If the destiny is a zero-sized array then we can just return it
-   * dereferencing should be catch from bounds-check or we just
-   * return a nondet anyway */
-  if(!num_bits.compare(0)_array)
+  // If the destiny is a zero-sized array then we can just return anything
+  if(!num_bits.compare(0))
     return gen_zero(type);
   assert(num_bits.is_uint64());
   uint64_t num_bits64 = num_bits.to_uint64();
