@@ -1890,14 +1890,18 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     // If this is a struct, we might be dealing with a fam!
-    if(t.is_struct() && to_struct_union_type(t).components().back().type().get("incomplete") == "true")
-      {
-        // We should update the size of the incomplete array to the size of the last init!
-        typet fam_member;
-        if(get_type((*init_stmt.getInit(init_stmt.getNumInits()-1)).getType(), fam_member))
-          return true;
-        to_struct_union_type(t).components().back().set("type", fam_member);
-      }
+    if(
+      t.is_struct() && to_struct_union_type(t).components().back().type().get(
+                         "incomplete") == "true")
+    {
+      // We should update the size of the incomplete array to the size of the last init!
+      typet fam_member;
+      if(get_type(
+           (*init_stmt.getInit(init_stmt.getNumInits() - 1)).getType(),
+           fam_member))
+        return true;
+      to_struct_union_type(t).components().back().set("type", fam_member);
+    }
 
     exprt inits;
     // Structs/unions/arrays put the initializer on operands

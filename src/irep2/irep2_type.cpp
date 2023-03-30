@@ -160,7 +160,6 @@ unsigned int array_type2t::get_width() const
   return num_elems * sub_width;
 }
 
-
 unsigned int vector_type2t::get_width() const
 {
   unsigned int sub_width = subtype->get_width();

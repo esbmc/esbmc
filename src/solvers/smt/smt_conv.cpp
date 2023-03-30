@@ -1766,7 +1766,8 @@ expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
     {
       // TODO: Maybe we should propagate an invalid expression here?
       log_warning(
-        "ESBMC relies on bounds check to guarantee that arrays are not overlaping!"
+        "ESBMC relies on bounds check to guarantee that arrays are not "
+        "overlaping!"
         "You have an array with an index limit of {}. \nArray: {}\nIndex: {}",
         limit,
         *arr_sort,

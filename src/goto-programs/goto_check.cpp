@@ -487,8 +487,8 @@ static bool has_dereference(const expr2tc &expr)
   // Recurse through all subsequent source objects, which are always operand
   // zero.
   bool found = false;
-  expr->foreach_operand(
-    [&found](const expr2tc &e) { found |= has_dereference(e); });
+  expr->foreach_operand([&found](const expr2tc &e)
+                        { found |= has_dereference(e); });
 
   return found;
 }
@@ -555,7 +555,10 @@ void goto_checkt::bounds_check(
       : constant_int2tc(get_uint32_type(), to_string_type(t).get_length());
 
   // Are we dealing with infinity/incomplete arrays?
-  if(is_array_type(t) && (to_array_type(t).size_is_infinite ||  (to_constant_int2t(to_array_type(t).array_size).value == 0)))
+  if(
+    is_array_type(t) &&
+    (to_array_type(t).size_is_infinite ||
+     (to_constant_int2t(to_array_type(t).array_size).value == 0)))
   {
     // Special case for FAMs, which might have an updated static size
     if(is_member2t(ind.source_value))
@@ -568,7 +571,9 @@ void goto_checkt::bounds_check(
         assert(fam);
         // Static FAM: update array_size
         if(!fam->value.is_dereference())
-            array_size = to_array_type(migrate_type(fam->value.operands().back().type())).array_size;
+          array_size =
+            to_array_type(migrate_type(fam->value.operands().back().type()))
+              .array_size;
       }
     }
     // Upper bound of incomplete/infinity arrays should be handled at symex
