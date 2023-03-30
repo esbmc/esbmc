@@ -1191,41 +1191,9 @@ void dereferencet::construct_from_const_struct_offset(
       if(is_array_type(it))
       {
         // Array of size 0 in a struct, means FAM
-        log_debug("FAM in deref");
         // TODO: Check for allignment.
-        // GET THE VALUES
         expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
         constant_int2tc new_offs(pointer_type2(), int_offset - m_offs);
-
-        /* CAN WE CHECK FOR OVER READS?
-         *
-         * Global initializations are not handled by the goto_check
-         * code, here we try to get the size of the value assigned for
-         * it
-        */
-        /*
-        if(is_symbol2t(value) && mode == READ)
-        {
-          auto fam = ns.lookup(to_symbol2t(value).thename);
-          //assert(fam.is_struct());
-          auto last_operand =
-            to_array_type(fam->value.operands().back().type()).size();
-          BigInt size(
-            to_constant_expr(last_operand).get_value().as_string().c_str(), 2);
-          auto limit = size * type->get_width();
-          if((new_offs->value + type->get_width()) > limit)
-          {
-            dereference_failure(
-              "pointer dereference",
-              fmt::format(
-                "Invalid read from FAM with offset {}. FAM contains {} "
-                "elements",
-                new_offs->value / type->get_width(),
-                size),
-              guard);
-          }
-        }
-        */
 
         // Extract.
         build_reference_rec(memb, new_offs, type, guard, mode);
@@ -1357,7 +1325,6 @@ void dereferencet::construct_from_dyn_struct_offset(
     // Compute some kind of guard
     BigInt field_size = type_byte_size_bits(it);
 
-    // This breaks FAM
     // Lets compute field size manually for fam :)
     if(
       is_array_type(it) &&
