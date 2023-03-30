@@ -1762,16 +1762,15 @@ expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
   {
     auto index_value = to_constant_int2t(idx).value.to_uint64();
     auto limit = pow(2, domain_width);
-    if(index_value >= limit)
+    if(index_value >= limit && options.get_bool_option("no-bounds-check"))
     {
       // TODO: Maybe we should propagate an invalid expression here?
-      log_error(
-        "ESBMC encodes array domains by the nearest power of 2. "
-        "Current array has a index limit of {}. \nArray: {}\nIndex: {}",
+      log_warning(
+        "ESBMC relies on bounds check to guarantee that arrays are not overlaping!"
+        "You have an array with an index limit of {}. \nArray: {}\nIndex: {}",
         limit,
         *arr_sort,
         *idx);
-      abort();
     }
   }
 
