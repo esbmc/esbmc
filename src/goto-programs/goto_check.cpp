@@ -548,15 +548,16 @@ void goto_checkt::bounds_check(
 
   assert(is_array_type(t) || is_string_type(t) || is_vector_type(t));
 
-  // We can't check the upper bound of an infinite sized array
-  // or of FAMs
-  // TODO: Rewrite this in a proper way
-  if(
-    is_array_type(t) &&
-    (to_array_type(t).size_is_infinite ||
-     (to_constant_int2t(to_array_type(t).array_size).value == 0)))
+  expr2tc array_size =
+    is_array_type(t) ? to_array_type(t).array_size
+    : is_vector_type(t)
+      ? to_vector_type(t).array_size
+      : constant_int2tc(get_uint32_type(), to_string_type(t).get_length());
+
+  // Are we dealing with infinity/incomplete arrays?
+  if(is_array_type(t) && (to_array_type(t).size_is_infinite ||  (to_constant_int2t(to_array_type(t).array_size).value == 0)))
   {
-    // Is it a FAM?
+    // Special case for FAMs, which might have an updated static size
     if(is_member2t(ind.source_value))
     {
       auto member = to_member2t(ind.source_value);
@@ -565,26 +566,15 @@ void goto_checkt::bounds_check(
         // Lookup for FAM
         auto fam = ns.lookup(to_symbol2t(member.source_value).thename);
         assert(fam);
-        // If it is a dereference, lets check it later!
-        if(fam->value.is_dereference())
-          return;
-
-        // We can add the bound check then!
-        // TODO: get the upper bound
-        return;
+        // Static FAM: update array_size
+        if(!fam->value.is_dereference())
+            array_size = to_array_type(migrate_type(fam->value.operands().back().type())).array_size;
       }
-      else
-        return;
     }
+    // Upper bound of incomplete/infinity arrays should be handled at symex
     else
       return;
   }
-
-  const expr2tc &array_size =
-    is_array_type(t) ? to_array_type(t).array_size
-    : is_vector_type(t)
-      ? to_vector_type(t).array_size
-      : constant_int2tc(get_uint32_type(), to_string_type(t).get_length());
 
   // Cast size to index type
   typecast2tc casted_size(the_index->type, array_size);
