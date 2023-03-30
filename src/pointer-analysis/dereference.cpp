@@ -1077,12 +1077,9 @@ void dereferencet::construct_from_array(
       replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
 
     if(!num_bytes)
-    {
-      log_debug("FAM detected, extracting the entire array on deref");
-      // Are we handling a FAM? Extract everything
       num_bytes = compute_num_bytes_to_extract(
         offset, type_byte_size_bits(value->type).to_uint64());
-    }
+
 
     // Converting offset to bytes for byte extracting
     expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
@@ -2050,13 +2047,11 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   simplify(offset_bytes);
 
   BigInt num_bits = type_byte_size_bits(type);
-  if(!num_bits.compare(0))
-  {
-    /* 0 could mean that we are dealing with a FAM
-     * we have to extract the entire byte_array */
-    log_debug("Size of type returned 0. Is this an incomplete array?");
-    num_bits = type_byte_size_bits(byte_array->type);
-  }
+  /* If the destiny is a zero-sized array then we can just return it
+   * dereferencing should be catch from bounds-check or we just
+   * return a nondet anyway */
+  if(!num_bits.compare(0)_array)
+    return gen_zero(type);
   assert(num_bits.is_uint64());
   uint64_t num_bits64 = num_bits.to_uint64();
   assert(num_bits64 <= ULONG_MAX);
@@ -2066,7 +2061,6 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   offset_bits = modulus2tc(offset_bits->type, offset_bits, gen_ulong(8));
   simplify(offset_bits);
 
-  log_debug("New num_bytes: {}", num_bytes);
   return bitcast2tc(
     type,
     extract_bits_from_byte_array(
@@ -2281,6 +2275,20 @@ void dereferencet::check_data_obj_access(
 
   expr2tc offset = typecast2tc(pointer_type2(), src_offset);
   unsigned int data_sz = type_byte_size_bits(value->type).to_uint64();
+  // Check for FAM struct
+  if(is_struct_type(value->type) && is_symbol2t(value)) {
+    auto fam = ns.lookup(to_symbol2t(value).thename);
+            // Is FAM pointing to a static object?
+    if(!has_prefix(fam->id.as_string(), "symex_dynamic::")) {
+      // Here we are checking for a dynamic index of a FAM!
+      auto &v = to_struct_type(value->type);
+      auto last = v.members.back();
+      if(is_array_type(last) && !to_array_type(last).get_width())
+        data_sz += type_byte_size_bits(migrate_type(fam->value.operands().back().type())).to_uint64();
+    }
+  }
+
+
   unsigned int access_sz = type_byte_size_bits(type).to_uint64();
   expr2tc data_sz_e = gen_ulong(data_sz);
   expr2tc access_sz_e = gen_ulong(access_sz);
@@ -2293,31 +2301,7 @@ void dereferencet::check_data_obj_access(
   add2tc add(access_sz_e->type, offset, access_sz_e);
   greaterthan2tc gt(add, data_sz_e);
 
-  // Check for FAM struct
-  if(is_struct_type(value->type))
-  {
-    // Here we are checking for a dynamic index of a FAM!
-    auto &v = to_struct_type(value->type);
-    auto last = v.members.back();
-    if(is_array_type(last) && !to_array_type(last).get_width())
-    {
-      log_debug("FAM in obj access");
-      if(is_symbol2t(value))
-      {
-        auto fam = ns.lookup(to_symbol2t(value).thename);
-        // Is FAM pointing to a static object?
-        if(!has_prefix(fam->id.as_string(), "symex_dynamic::"))
-        {
-          log_debug("Skipping FAM check on obj access");
-          return;
-        }
-        else
-        {
-          log_debug("Dynamic memory for FAM");
-        }
-      }
-    }
-  }
+
 
   if(!options.get_bool_option("no-bounds-check"))
   {
