@@ -4,7 +4,7 @@ typedef struct {
   int arr[]; // Array of size 0
 } FAM;
 
-
+#include <stdlib.h>
 main() {
   // 10 positions with arr of size 5
   FAM **matrix = (FAM**) malloc(sizeof(FAM*) * 10);

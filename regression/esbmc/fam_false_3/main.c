@@ -4,7 +4,7 @@ typedef struct {
   int arr[]; // Array of size 0
 } FAM;
 
-
+#include <stdlib.h>
 main() {
   int value = 42;
   FAM *ptr = (FAM*) malloc(sizeof(FAM));

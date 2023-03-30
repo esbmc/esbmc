@@ -40,7 +40,8 @@ void FamInit()
 	p[1] = &array2[1];
 }
 
-
+#include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 int main() {
 
