@@ -106,7 +106,7 @@ protected:
     std::string &name,
     std::string &id);
   bool get_constructor_call(const nlohmann::json &ast_node, exprt &new_expr);
-
+  bool get_contract_name(const nlohmann::json &ast_node, std::string &contract_name);
   // line number and locations
   void
   get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
@@ -164,7 +164,7 @@ protected:
 
   static constexpr const char *mode = "C++";
   std::string prefix = "tag-";
-  exprt new_object_expr;
+  //exprt new_object_expr;
 
 private:
   bool get_elementary_type_name_uint(
