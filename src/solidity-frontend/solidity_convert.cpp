@@ -315,7 +315,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
 
   // 1. populate name, id
   std::string id, name;
-  name = current_contractName;
+  name = contract_def["name"];
   id = prefix + name;
   struct_typet t = struct_typet();
   t.tag(name);
@@ -494,7 +494,10 @@ bool solidity_convertert::get_function_definition(
   if(
     (*current_functionDecl)["name"].get<std::string>() == "" &&
     (*current_functionDecl)["kind"] == "constructor")
-    current_functionName = current_contractName;
+  {
+    if(get_contract_name(*current_functionDecl, current_functionName))
+      return true;
+  }
   else
     current_functionName = (*current_functionDecl)["name"].get<std::string>();
 
@@ -673,12 +676,12 @@ bool solidity_convertert::get_block(
       // We are now mannually doing the adjustment for NewExpression
       // by spilting into two expression.
       // instead we should use the adjustment in clang_cpp_adjust_code.cpp
-      if(new_object_expr.is_not_nil())
-      {
-        convert_expression_to_code(new_object_expr);
-        _block.operands().push_back(new_object_expr);
-        new_object_expr.make_nil();
-      }
+      // if(new_object_expr.is_not_nil())
+      // {
+      //   convert_expression_to_code(new_object_expr);
+      //   _block.operands().push_back(new_object_expr);
+      //   new_object_expr.make_nil();
+      // }
 
       convert_expression_to_code(statement);
       _block.operands().push_back(statement);
@@ -949,7 +952,7 @@ bool solidity_convertert::get_expr(
   log_debug(
     "	@@@ got Expr: SolidityGrammar::ExpressionT::{}",
     SolidityGrammar::expression_to_str(type));
-  printf("%s\n", SolidityGrammar::expression_to_str(type));
+
   switch(type)
   {
   case SolidityGrammar::ExpressionT::BinaryOperatorClass:
@@ -1120,32 +1123,14 @@ bool solidity_convertert::get_expr(
   {
     if(get_constructor_call(expr, new_expr))
       return true;
-
+    if(new_expr.arguments().is_not_nil())
+      break;
     side_effect_exprt tmp_obj("temporary_object", new_expr.type());
     codet code_expr("expression");
     code_expr.operands().push_back(new_expr);
     tmp_obj.initializer(code_expr);
     tmp_obj.location() = new_expr.location();
     new_expr.swap(tmp_obj);
-
-
-    nlohmann::json rhs_expr = expr["expression"];
-    std::string member_name = rhs_expr["typeName"]["pathNode"]["name"];
-    int ref_decl_id = rhs_expr["typeName"]["referencedDeclaration"];
-    nlohmann::json new_json = {
-      {"nodeType", "FunctionCall"},
-      {"src", expr["src"]},
-      {"expression",
-       {{"src", rhs_expr["src"]},
-        {"nodeType", "MemberAccess"},
-        {"memberName", member_name},
-        {"referencedDeclaration", ref_decl_id}}}};
-      
-    if(expr.contains("arguments"))
-      new_json["arguments"]= expr["arguments"];
-
-    if(get_expr(new_json, new_object_expr))
-      return true;
 
     break;
   }
@@ -1179,7 +1164,6 @@ bool solidity_convertert::get_expr(
     unsigned num_args = 0;
     for(const auto &arg : expr["arguments"].items())
     {
-      printf("10202\n");
       nlohmann::json param = nullptr;
       nlohmann::json::iterator itr = param_nodes.begin();
       if(itr != param_nodes.end())
@@ -1201,6 +1185,7 @@ bool solidity_convertert::get_expr(
     log_debug("  @@ num_args={}", num_args);
 
     new_expr = call;
+
     break;
   }
   default:
@@ -1212,6 +1197,26 @@ bool solidity_convertert::get_expr(
 
   new_expr.location() = location;
   return false;
+}
+
+bool solidity_convertert::get_contract_name(
+  const nlohmann::json &ast_node,
+  std::string &contract_name)
+{
+  int ref_decl_id = ast_node["scope"];
+  nlohmann::json &nodes = ast_json["nodes"];
+
+  unsigned index = 0;
+  for(nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
+      ++itr, ++index)
+  {
+    if((*itr)["id"] == ref_decl_id)
+    {
+      contract_name = (*itr)["name"];
+      return false;
+    }
+  }
+  return true;
 }
 
 bool solidity_convertert::get_binary_operator_expr(
@@ -2005,7 +2010,7 @@ void solidity_convertert::get_function_definition_name(
   //  - For function name, just use the ast_node["name"]
   // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
   if(ast_node["kind"].get<std::string>() == "constructor")
-    name = current_contractName;
+    get_contract_name(ast_node, name);
   else
     name = ast_node["name"].get<std::string>();
   id = name;
@@ -2569,32 +2574,42 @@ bool solidity_convertert::get_constructor_call(
   const nlohmann::json &ast_node,
   exprt &new_expr)
 {
-  nlohmann::json expr_node = ast_node["expression"];
-  int ref_decl_id = expr_node["typeName"]["referencedDeclaration"];
+  nlohmann::json callee_expr_json = ast_node["expression"];
+  int ref_decl_id = callee_expr_json["typeName"]["referencedDeclaration"];
   exprt callee;
 
   const nlohmann::json constructor_ref = find_decl_ref(ref_decl_id);
-  
+
   if(get_func_decl_ref(constructor_ref, callee))
     return true;
-  printf("112134123\n");
+
   struct_typet tmp = struct_typet();
   side_effect_expr_function_callt call;
   call.function() = callee;
   call.type() = tmp;
 
+  auto param_nodes = constructor_ref["parameters"]["parameters"];
   unsigned num_args = 0;
-  if(expr_node.contains("arguments"))
-  {
-    for(const auto &arg : expr_node["arguments"].items())
-    {
-      exprt single_arg;
-      if(get_expr(arg.value(), single_arg))
-        return true;
 
-      call.arguments().push_back(single_arg);
-      ++num_args;
+  for(const auto &arg : ast_node["arguments"].items())
+  {
+    nlohmann::json param = nullptr;
+    nlohmann::json::iterator itr = param_nodes.begin();
+    if(itr != param_nodes.end())
+    {
+      if((*itr).contains("typeDescriptions"))
+      {
+        param = (*itr)["typeDescriptions"];
+      }
+      itr++;
     }
+
+    exprt single_arg;
+    if(get_expr(arg.value(), param, single_arg))
+      return true;
+
+    call.arguments().push_back(single_arg);
+    ++num_args;
   }
 
   // for adjustment
