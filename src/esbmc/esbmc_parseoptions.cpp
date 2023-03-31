@@ -17,6 +17,7 @@ extern "C"
 #endif
 
 #include <esbmc/bmc.h>
+#include <esbmc/expr2while.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
@@ -468,6 +469,9 @@ int esbmc_parseoptionst::doit()
 
   if(cmdline.isset("falsification"))
     return doit_falsification();
+
+  if(cmdline.isset("rapid"))
+    return doit_rapid();
 
   if(cmdline.isset("k-induction"))
     return doit_k_induction();
@@ -1061,6 +1065,26 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   return 0;
 }
 
+int esbmc_parseoptionst::doit_rapid()
+{
+  std::string rapid_file_name = tmpnam(NULL);
+  rapid_file_name = rapid_file_name + ".spec";
+
+  optionst opts;
+  get_command_line_options(opts);
+
+  // we dont need the GOTO program, but getting the program triggers
+  // parsing and reading into intermediate representation which we need
+  if(get_goto_program(opts, goto_functions))
+    return 6;
+
+  convert_to_while(context, rapid_file_name);
+
+  // Logic for popping open rapid and running on file
+  // at the end delete the file...
+
+}
+
 int esbmc_parseoptionst::doit_k_induction()
 {
   optionst opts;
@@ -1458,7 +1482,10 @@ bool esbmc_parseoptionst::get_goto_program(
 
       log_status("Generating GOTO Program");
 
-      goto_convert(context, options, goto_functions);
+      printf(rapid_file_name.c_str());
+      printf("\n");
+ 
+      goto_convert(context, options, goto_functions, rapid_file_name);
     }
 
     fine_timet parse_stop = current_time();

@@ -269,6 +269,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"goto-contractor",
      NULL,
      "enable contractor-based interval refinements on goto level"},
+    {"rapid", NULL, 
+     "use Rapid first-order based verification as an alternative to k-induction"},
     {"k-induction-parallel",
      NULL,
      "prove by k-induction, running each step on a separate process"},

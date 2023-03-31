@@ -39,6 +39,8 @@ protected:
   virtual bool
   process_goto_program(optionst &options, goto_functionst &goto_functions);
 
+  int doit_rapid();
+
   int doit_k_induction();
   int doit_k_induction_parallel();
 
