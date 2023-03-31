@@ -1177,7 +1177,7 @@ bool solidity_convertert::get_expr(
         {
           param = (*itr)["typeDescriptions"];
         }
-        itr++;
+        ++itr;
       }
 
       exprt single_arg;
