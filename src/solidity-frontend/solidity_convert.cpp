@@ -2606,7 +2606,7 @@ bool solidity_convertert::get_constructor_call(
       {
         param = (*itr)["typeDescriptions"];
       }
-      itr++;
+      ++itr;
     }
 
     exprt single_arg;
