@@ -1123,12 +1123,13 @@ bool solidity_convertert::get_expr(
   {
     if(get_constructor_call(expr, new_expr))
       return true;
-    side_effect_expr_function_callt e =to_side_effect_expr_function_call(new_expr);
+    side_effect_expr_function_callt e =
+      to_side_effect_expr_function_call(new_expr);
     if(e.arguments().size())
     {
-       break; 
+      break;
     }
-     
+
     side_effect_exprt tmp_obj("temporary_object", new_expr.type());
     codet code_expr("expression");
     code_expr.operands().push_back(new_expr);

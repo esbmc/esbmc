@@ -106,7 +106,8 @@ protected:
     std::string &name,
     std::string &id);
   bool get_constructor_call(const nlohmann::json &ast_node, exprt &new_expr);
-  bool get_contract_name(const nlohmann::json &ast_node, std::string &contract_name);
+  bool
+  get_contract_name(const nlohmann::json &ast_node, std::string &contract_name);
   // line number and locations
   void
   get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
