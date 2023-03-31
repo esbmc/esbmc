@@ -259,7 +259,8 @@ void clang_cpp_convertert::add_thunk_method(
    *  also need to add this thunk method to the list of components of the derived class' type
    */
 
-  std::string base_class_id = tag_prefix + md->getParent()->getNameAsString();
+  std::string base_class_id, base_class_name;
+  get_decl_name(*md->getParent(), base_class_name, base_class_id);
 
   // Create the thunk method symbol
   symbolt thunk_func_symb;
@@ -497,7 +498,7 @@ void clang_cpp_convertert::build_vtable_map(
 {
   /*
    * Build a vtable map from the class type
-   * This is virtual function table for this class.
+   * This is the virtual function table for this class.
    * This table will be used to create the vtable variable symbols.
    */
 
@@ -550,13 +551,15 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     const function_switch &switch_map = vft_switch_kv_pair.second;
 
     // To create the vtable variable symbol we need to get the corresponding type
-    const symbolt &late_cast_symb =
-      *namespacet(context).lookup(vft_switch_kv_pair.first);
+    const symbolt *late_cast_symb =
+      namespacet(context).lookup(vft_switch_kv_pair.first);
+    assert(late_cast_symb);
     const symbolt &vt_symb_type = *namespacet(context).lookup(
-      "virtual_table::" + late_cast_symb.id.as_string());
+      "virtual_table::" + late_cast_symb->id.as_string());
 
     // This is the class we are currently dealing with
-    std::string class_id = tag_prefix + cxxrd->getNameAsString();
+    std::string class_id, class_name;
+    get_decl_name(*cxxrd, class_name, class_id);
 
     symbolt vt_symb_var;
     vt_symb_var.id = vt_symb_type.id.as_string() + "@" + class_id;
