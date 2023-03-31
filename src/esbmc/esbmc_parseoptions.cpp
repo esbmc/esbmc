@@ -17,6 +17,7 @@ extern "C"
 #endif
 
 #include <esbmc/bmc.h>
+#include <esbmc/expr2while.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
@@ -572,6 +573,10 @@ int esbmc_parseoptionst::doit()
         std::make_unique<assign_params_as_non_det>(context));
     }
   }
+
+  if(cmdline.isset("rapid"))
+    return doit_rapid();
+
 
   // Run this before the main flow. This method performs its own
   // parsing and preprocessing.
@@ -1195,6 +1200,27 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   return 0;
 }
 
+int esbmc_parseoptionst::doit_rapid()
+{
+  std::string rapid_file_name = tmpnam(NULL);
+  rapid_file_name = rapid_file_name + ".spec";
+
+  optionst opts;
+  get_command_line_options(opts);
+
+  // we dont need the GOTO program, but getting the program triggers
+  // parsing and reading into intermediate representation which we need
+  if(get_goto_program(opts, goto_functions))
+    return 6;
+
+  convert_to_while(context, rapid_file_name);
+
+  // Logic for popping open rapid and running on file
+  // at the end delete the file...
+
+}
+
+
 // This method iteratively applies one of the verification strategies
 // for different unwinding bounds up to the specified maximum depth.
 //
@@ -1592,7 +1618,64 @@ bool esbmc_parseoptionst::get_goto_program(
     fine_timet create_start = current_time();
     if (create_goto_program(options, goto_functions))
       return true;
-    fine_timet create_stop = current_time();
+    }
+
+    // Ahem
+    migrate_namespace_lookup = new namespacet(context);
+
+    // If the user is providing the GOTO functions, we don't need to parse
+    if(cmdline.isset("binary"))
+    {
+      log_status("Reading GOTO program from file");
+
+      if(read_goto_binary(goto_functions))
+        return true;
+    }
+    else
+    {
+      // Parsing
+      if(parse())
+        return true;
+
+      if(cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
+      {
+        assert(language_files.filemap.size());
+        languaget &language = *language_files.filemap.begin()->second.language;
+        std::ostringstream oss;
+        language.show_parse(oss);
+        log_status("{}", oss.str());
+        if(cmdline.isset("parse-tree-only"))
+          return true;
+      }
+
+      // Typecheking (old frontend) or adjust (clang frontend)
+      if(typecheck())
+        return true;
+      if(final())
+        return true;
+
+      // we no longer need any parse trees or language files
+      clear_parse();
+
+      if(
+        cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
+      {
+        std::ostringstream oss;
+        show_symbol_table_plain(oss);
+        log_status("{}", oss.str());
+        if(cmdline.isset("symbol-table-only"))
+          return true;
+      }
+
+      log_status("Generating GOTO Program");
+
+      printf(rapid_file_name.c_str());
+      printf("\n");
+ 
+      goto_convert(context, options, goto_functions, rapid_file_name);
+    }
+
+    fine_timet parse_stop = current_time();
     log_status(
       "GOTO program creation time: {}s",
       time2string(create_stop - create_start));
