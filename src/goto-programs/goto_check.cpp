@@ -555,13 +555,16 @@ void goto_checkt::bounds_check(
       : constant_int2tc(get_uint32_type(), to_string_type(t).get_length());
 
   // Are we dealing with infinity/incomplete arrays?
-  if(
-    is_array_type(t) &&
-    (to_array_type(t).size_is_infinite ||
-     (to_constant_int2t(to_array_type(t).array_size).value == 0)))
+  if(is_array_type(t))
   {
-    // Special case for FAMs, which might have an updated static size
-    if(is_member2t(ind.source_value))
+    // No bounds for infinity
+    if(to_array_type(t).size_is_infinite)
+      return;
+
+    // Are we dealing with an incomplete array?
+    if(
+      is_constant_int2t(array_size) &&
+      to_constant_int2t(array_size).value == 0 && is_member2t(ind.source_value))
     {
       auto member = to_member2t(ind.source_value);
       if(is_symbol2t(member.source_value))
@@ -576,9 +579,6 @@ void goto_checkt::bounds_check(
               .array_size;
       }
     }
-    // Upper bound of incomplete/infinity arrays should be handled at symex
-    else
-      return;
   }
 
   // Cast size to index type
