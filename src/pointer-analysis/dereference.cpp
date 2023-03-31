@@ -1076,10 +1076,6 @@ void dereferencet::construct_from_array(
     unsigned int num_bytes = compute_num_bytes_to_extract(
       replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
 
-    if(!num_bytes)
-      num_bytes = compute_num_bytes_to_extract(
-        offset, type_byte_size_bits(value->type).to_uint64());
-
     // Converting offset to bytes for byte extracting
     expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
     simplify(offset_bytes);
@@ -2013,7 +2009,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   simplify(offset_bytes);
 
   BigInt num_bits = type_byte_size_bits(type);
-  // If the destiny is a zero-sized array then we can just return anything
+  // If the destination is a zero-sized array then we can just return anything
   if(!num_bits.compare(0))
     return gen_zero(type);
   assert(num_bits.is_uint64());

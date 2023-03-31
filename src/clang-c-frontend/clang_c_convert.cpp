@@ -873,7 +873,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       return true;
 
     new_type = array_typet(sub_type, gen_zero(index_type()));
-    new_type.set("incomplete", "true");
+    new_type.set("incomplete", true);
     break;
   }
 
@@ -1891,16 +1891,16 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // If this is a struct, we might be dealing with a fam!
     if(
-      t.is_struct() && to_struct_union_type(t).components().back().type().get(
-                         "incomplete") == "true")
+      t.is_struct() && to_struct_union_type(t).components().back().type().get_bool(
+                         "incomplete"))
     {
       // We should update the size of the incomplete array to the size of the last init!
-      typet fam_member;
+      typet fam_member_type;
       if(get_type(
            (*init_stmt.getInit(init_stmt.getNumInits() - 1)).getType(),
-           fam_member))
+           fam_member_type))
         return true;
-      to_struct_union_type(t).components().back().set("type", fam_member);
+      to_struct_union_type(t).components().back().type() = fam_member_type;
     }
 
     exprt inits;
@@ -1928,7 +1928,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           return true;
 
         typet elem_type;
-        if(t.is_struct() || t.is_union())
+        if(t.is_struct())
           elem_type = to_struct_union_type(t).components()[i].type();
 
         else if(t.is_array())
