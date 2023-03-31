@@ -22,7 +22,7 @@ void dynamic_fam_test_1(int x) {
   for(int i = 0; i < s->x; i++)
     s->y[i] = i;
 
-  // Check if FAM was actually initialized (Check #1)
+  // Check if FAM was actually initialized
   for(int i = 0; i < s->x; i++)
     assert(s->y[i] == i);
 
@@ -39,14 +39,13 @@ void dynamic_fam_test_2()
   struct S *s = (struct S*) malloc(sizeof(int) * (x + 1));
 
   // Initialize it with Y
-
-  // Wrong test
   memcpy(s->y, y, sizeof(s->y[0]) * x);
 
-  // Check
+  // Check if 's->y' is initialized with 'y'
   for(int i = 0; i < x; i++)
     assert(s->y[i] == i);
 
+  // Resets 's->y'
   memset(s->y, 0, sizeof(s->y[0]) * x);
   for(int i = 0; i < x; i++)
     assert(!s->y[i]);

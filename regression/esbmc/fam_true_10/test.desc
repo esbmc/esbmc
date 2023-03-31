@@ -1,4 +1,4 @@
 CORE
 main.c
---compact-trace  --force-malloc-success
+--compact-trace  --force-malloc-success --incremental-bmc
 ^VERIFICATION SUCCESSFUL$
