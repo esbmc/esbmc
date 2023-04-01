@@ -1668,11 +1668,8 @@ bool esbmc_parseoptionst::get_goto_program(
       }
 
       log_status("Generating GOTO Program");
-
-      printf(rapid_file_name.c_str());
-      printf("\n");
  
-      goto_convert(context, options, goto_functions, rapid_file_name);
+      goto_convert(context, options, goto_functions);
     }
 
     fine_timet parse_stop = current_time();
