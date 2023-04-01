@@ -34,6 +34,7 @@ public:
 
   virtual void convert(const typet &src);
   virtual void convert(const exprt &src);
+  void convert_main(const codet &src);
 
  // void get_shorthands(const exprt &expr);
 
@@ -42,7 +43,7 @@ protected:
   std::ofstream rapid_file;
 
 
-  const bool fullname;
+//  const bool fullname;
 
   virtual void convert_rec(
     const typet &src,
@@ -131,7 +132,6 @@ protected:
 
   //void convert_Hoare(const exprt &src);
 
-  void convert_main(const codet &src);
   void convert_code(const codet &src, unsigned indent);
   void convert_code_label(const code_labelt &src, unsigned indent);
   void
@@ -163,7 +163,7 @@ protected:
   void convert_code_unlock(const codet &src, unsigned indent);
   void convert_code_printf(const codet &src, unsigned indent);
 
-  virtual std::string convert(const exprt &src, unsigned &precedence);
+  virtual void convert(const exprt &src, unsigned &precedence);
 
   void convert_function_call(const exprt &src, unsigned &precedence);
   void convert_malloc(const exprt &src, unsigned &precedence);
@@ -174,9 +174,9 @@ protected:
 //  convert_statement_expression(const exprt &src, unsigned &precedence);
 
  // virtual void convert_symbol(const exprt &src, unsigned &precedence);
-  void convert_predicate_symbol(const exprt &src, unsigned &precedence);
-  std::string
-  convert_predicate_next_symbol(const exprt &src, unsigned &precedence);
+ // void convert_predicate_symbol(const exprt &src, unsigned &precedence);
+ // std::string
+ // convert_predicate_next_symbol(const exprt &src, unsigned &precedence);
   void convert_nondet_symbol(const exprt &src, unsigned &precedence);
   void convert_quantified_symbol(const exprt &src, unsigned &precedence);
   void convert_nondet_bool(const exprt &src, unsigned &precedence);
@@ -190,8 +190,8 @@ protected:
     const struct_union_typet::componentst &components);
   virtual void convert_struct(const exprt &src, unsigned &precedence);
   void convert_union(const exprt &src, unsigned &precedence);
-  void convert_array(const exprt &src, unsigned &precedence);
-  void convert_array_list(const exprt &src, unsigned &precedence);
+//  void convert_array(const exprt &src, unsigned &precedence);
+//  void convert_array_list(const exprt &src, unsigned &precedence);
 };
 
 #endif
