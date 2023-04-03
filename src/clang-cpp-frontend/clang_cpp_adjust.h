@@ -23,7 +23,7 @@ public:
   /**
    * methods for symbol adjustment
    */
-  void adjust_symbol(symbolt &symbol);
+  void adjust_symbol(symbolt &symbol) override;
 
   /**
    * methods for code (codet) adjustment
