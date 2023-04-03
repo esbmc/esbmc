@@ -8,6 +8,9 @@
 namespace std
 {
 
+// a dummy locale
+class locale{};
+
 /* References:
  * - https://cplusplus.com/reference/streambuf/
  * - https://cplusplus.com/reference/streambuf/streambuf/
@@ -18,10 +21,6 @@ namespace std
  *  However, this OM does NOT provide 100% coverage of the actual C++ streambuf library. Some APIs are not included here.
  *  We probably need to add the missing APIs on-demand when we start to verify real-world C++ programs.
  */
-
-// a dummy locale
-class locale{};
-
 class streambuf{
 
 	typedef int streampos;
@@ -81,7 +80,7 @@ protected:
 /*
  * Ignore missing returns for some non-void non-pure virtual functions:
  *  It's difficult to decide what needs to be returned at the time of adding this comment.
- *  They seemed worked fine in ESBMC-v2.1 to verify the C++ programs in our regression suite.
+ *  They seem worked fine in ESBMC-v2.1 and managed to verify the C++ programs in our regression suite.
  *  So I just suppressed these warnings from Clang for the time being.
  *
  *  TODO: When we start to verify real-world C++ programs, we might need to properly model their returns.
