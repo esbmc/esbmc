@@ -56,11 +56,11 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
     if(!vtable_type_symbol)
     {
       // first time we create the vtable type for this class
-      vtable_type_symbol = add_vtable_type_symbol(md, comp, type);
+      vtable_type_symbol = add_vtable_type_symbol(comp, type);
       if(vtable_type_symbol == nullptr)
         return true;
 
-      add_vptr(md, type);
+      add_vptr(type);
     }
 
     /*
@@ -122,7 +122,6 @@ symbolt *clang_cpp_convertert::check_vtable_type_symbol_existence(
 }
 
 symbolt *clang_cpp_convertert::add_vtable_type_symbol(
-  const clang::CXXMethodDecl *md,
   const struct_typet::componentt &comp,
   struct_typet &type)
 {
@@ -160,9 +159,7 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
   return context.find_symbol(vt_name);
 }
 
-void clang_cpp_convertert::add_vptr(
-  const clang::CXXMethodDecl *md,
-  struct_typet &type)
+void clang_cpp_convertert::add_vptr(struct_typet &type)
 {
   /*
    * We model the virtual pointer as a `component` to the parent class' type.

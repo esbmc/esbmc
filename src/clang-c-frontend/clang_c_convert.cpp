@@ -3351,15 +3351,14 @@ bool clang_c_convertert::is_ConstructorOrDestructor(
          fd.getKind() == clang::Decl::CXXDestructor;
 }
 
-bool clang_c_convertert::perform_virtual_dispatch(
-  const clang::MemberExpr &member)
+bool clang_c_convertert::perform_virtual_dispatch(const clang::MemberExpr &)
 {
   // It just can't happen in C
   return false;
 }
 
 bool clang_c_convertert::is_fd_virtual_or_overriding(
-  const clang::FunctionDecl &fd)
+  const clang::FunctionDecl &)
 {
   // It just can't happen in C
   return false;
