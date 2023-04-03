@@ -1,13 +1,25 @@
 #ifndef STL_STREAMBUF
 #define STL_STREAMBUF
 
+#include "OM_compiler_defs.h"
 #include "definitions.h"
-//#include "ios"
 #include "cstdio"
 
 namespace std
 {
 
+/* References:
+ * - https://cplusplus.com/reference/streambuf/
+ * - https://cplusplus.com/reference/streambuf/streambuf/
+ *
+ * Some design rationales:
+ *  In our OMs, `streambuf' appears to be an abstract class, to be extended by other I/O stream classes (e.g. fstream and sstream).
+ *  The APIs provided by this OM appears to be "just enough" to verify the test cases in our regression suite.
+ *  However, this OM does NOT provide 100% coverage of the actual C++ streambuf library. Some APIs are not included here.
+ *  We probably need to add the missing APIs on-demand when we start to verify real-world C++ programs.
+ */
+
+// a dummy locale
 class locale{};
 
 class streambuf{
@@ -66,11 +78,21 @@ protected:
 //	Locales
 	virtual void imbue ( const locale & loc ){}
 
+/*
+ * Ignore missing returns for some non-void non-pure virtual functions:
+ *  They seemed worked fine in ESBMC-v2.1 to verify the C++ programs in our regression suite.
+ *  It's difficult to decide what needs to be returned at the time of adding this comment.
+ *
+ *  TODO: For the time being, I just suppressed these warnings from Clang.
+ *  When we start to verify real-world C++ programs, we might need to properly model their returns.
+ */
+CC_DIAGNOSTIC_PUSH()
+CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS_OM()
 //	Buffer management and positioning:
-	virtual streambuf * setbuf ( char * s, streamsize n );
-	virtual streampos seekoff ( streamoff off, seekdir way, openmode which = in | out );
-	virtual streampos seekpos ( streampos sp, openmode which = in | out );
-	virtual int sync ( );
+	virtual streambuf * setbuf ( char * s, streamsize n ) {}
+	virtual streampos seekoff ( streamoff off, seekdir way, openmode which = in | out ) {}
+	virtual streampos seekpos ( streampos sp, openmode which = in | out ) {}
+	virtual int sync () {}
 
 //	Input functions (get):
 	virtual streamsize showmanyc ( );
@@ -82,8 +104,7 @@ protected:
 //	Output functions (put):
 	virtual streamsize xsputn ( const char * s, streamsize n );
 	virtual int overflow ( int c = EOF );
-
-
+CC_DIAGNOSTIC_POP()
 };
 }
 
