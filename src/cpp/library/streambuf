@@ -80,14 +80,14 @@ protected:
 
 /*
  * Ignore missing returns for some non-void non-pure virtual functions:
- *  They seemed worked fine in ESBMC-v2.1 to verify the C++ programs in our regression suite.
  *  It's difficult to decide what needs to be returned at the time of adding this comment.
+ *  They seemed worked fine in ESBMC-v2.1 to verify the C++ programs in our regression suite.
+ *  So I just suppressed these warnings from Clang for the time being.
  *
- *  TODO: For the time being, I just suppressed these warnings from Clang.
- *  When we start to verify real-world C++ programs, we might need to properly model their returns.
+ *  TODO: When we start to verify real-world C++ programs, we might need to properly model their returns.
  */
 CC_DIAGNOSTIC_PUSH()
-CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS_OM()
+CC_DIAGNOSTIC_IGNORE_OM_LLVM_CHECKS()
 //	Buffer management and positioning:
 	virtual streambuf * setbuf ( char * s, streamsize n ) {}
 	virtual streampos seekoff ( streamoff off, seekdir way, openmode which = in | out ) {}
@@ -95,15 +95,15 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS_OM()
 	virtual int sync () {}
 
 //	Input functions (get):
-	virtual streamsize showmanyc ( );
-	virtual streamsize xsgetn ( char * s, streamsize n );
-	virtual int underflow ( );
-	virtual int uflow ( );
-	virtual int pbackfail ( int c = EOF );
+	virtual streamsize showmanyc ( ) {}
+	virtual streamsize xsgetn ( char * s, streamsize n ) {}
+	virtual int underflow ( ) {}
+	virtual int uflow ( ) {}
+	virtual int pbackfail ( int c = EOF ) {}
 
 //	Output functions (put):
-	virtual streamsize xsputn ( const char * s, streamsize n );
-	virtual int overflow ( int c = EOF );
+	virtual streamsize xsputn ( const char * s, streamsize n ) {}
+	virtual int overflow ( int c = EOF ) {}
 CC_DIAGNOSTIC_POP()
 };
 }
