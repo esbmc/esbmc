@@ -1205,6 +1205,9 @@ int esbmc_parseoptionst::doit_rapid()
   std::string rapid_file_name = tmpnam(NULL);
   rapid_file_name = rapid_file_name + ".spec";
 
+  printf(rapid_file_name.c_str());
+  printf("\n");
+
   optionst opts;
   get_command_line_options(opts);
 
@@ -1213,7 +1216,8 @@ int esbmc_parseoptionst::doit_rapid()
   if(get_goto_program(opts, goto_functions))
     return 6;
 
-  convert_to_while(context, rapid_file_name);
+  if(convert_to_while(context, rapid_file_name))
+    return 6;
 
   // Logic for popping open rapid and running on file
   // at the end delete the file...

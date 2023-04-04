@@ -10,57 +10,83 @@
 #include <util/std_code.h>
 #include <util/std_types.h>
 
-void convert_to_while(
+#include <clang-c-frontend/expr2c.h>
+
+#include <exception>
+
+class unsupported_error : public std::logic_error
+{
+public:
+  unsupported_error(std::string what) : std::logic_error(what) {}
+};
+
+class norep_error : public std::logic_error
+{
+public:
+  norep_error(std::string what) : std::logic_error(what) {}
+};
+
+int convert_to_while(
   contextt &context,
   std::string rapid_file_name){
 
-  symbol_listt symbol_list;
-  context.Foreach_operand_in_order([&symbol_list](symbolt &s) {
-    if(!s.is_type && s.type.is_code())
-      symbol_list.push_back(&s);
-  });
+  try{
 
-  // we are only interested in translating the main 
-  // function to While, not ESBMC intrinsics
-  // While cannot (yet) support function calls
-  auto get_func_name = [](std::string esbmc_name){
-    size_t pos = esbmc_name.find_last_of("@");
-    if (pos != std::string::npos){
-      return esbmc_name.substr(pos + 1);
+    symbol_listt symbol_list;
+    context.Foreach_operand_in_order([&symbol_list](symbolt &s) {
+      if(!s.is_type && s.type.is_code())
+        symbol_list.push_back(&s);
+    });
+
+    // we are only interested in translating the main 
+    // function to While, not ESBMC intrinsics
+    // While cannot (yet) support function calls
+    auto get_func_name = [](std::string esbmc_name){
+      size_t pos = esbmc_name.find_last_of("@");
+      if (pos != std::string::npos){
+        return esbmc_name.substr(pos + 1);
+      }
+      return esbmc_name;
+    };
+
+    bool main_found = false;
+
+    symbolt* main;
+
+    for(auto &it : symbol_list)
+    {
+      irep_idt identifier = it->id;  
+      std::string identifier_str(identifier.c_str());
+      if(get_func_name(identifier_str) == "main"){
+        main = it;
+        main_found = true;
+        break;
+      }
     }
-    return esbmc_name;
-  };
 
-  bool main_found = false;
-
-  symbolt* main;
-
-  for(auto &it : symbol_list)
-  {
-    irep_idt identifier = it->id;  
-    std::string identifier_str(identifier.c_str());
-    if(get_func_name(identifier_str) == "main"){
-      main = it;
-      main_found = true;
-      break;
+    // TODO is below correct behaviour?
+    // also, we should return an error code so that we don't try
+    // and run Rapid on empty file
+    if(!main_found){
+      throw unsupported_error("could not convert to While as no main found");
     }
+
+    const codet &code = to_code(main->value);
+
+    expr2whilet expr2while(namespacet(context), rapid_file_name);
+    expr2while.convert_main(code);
+    return 0;
+  
+  } catch( const unsupported_error& e ) {
+    log_error(e.what());
+    return 6;
+  } catch( const norep_error& e ) {
+
   }
-
-  // TODO is below correct behaviour?
-  // also, we should return an error code so that we don't try
-  // and run Rapid on empty file
-  if(!main_found){
-    log_error("could not convert to While as no main found");
-  }
-
-  const codet &code = to_code(main->value);
-
-  expr2whilet expr2while(namespacet(context), rapid_file_name);
-  expr2while.convert_main(code);
 }
 
 
-/*void expr2whilet::id_shorthand(const exprt &expr) const
+std::string expr2whilet::id_shorthand(const exprt &expr) const
 {
   const irep_idt &identifier = expr.identifier();
   const symbolt *symbol = ns.lookup(identifier);
@@ -75,7 +101,7 @@ void convert_to_while(
     sh.erase(0, pos + 1);
 
   return sh;
-}*/
+}
 
 void expr2whilet::get_symbols(const exprt &expr)
 {
@@ -108,70 +134,42 @@ void expr2whilet::get_symbols(const exprt &expr)
 
 void expr2whilet::convert(const typet &src)
 {
-  convert_rec(src, c_qualifierst(), "");
+  convert_rec(src, c_qualifierst());
 }
 
 void expr2whilet::convert_rec(
   const typet &src,
-  const c_qualifierst &qualifiers,
-  const std::string &declarator)
+  const c_qualifierst &qualifiers)
 {
- /* c_qualifierst new_qualifiers(qualifiers);
+
+  c_qualifierst new_qualifiers(qualifiers);
   new_qualifiers.read(src);
 
   std::string q = new_qualifiers.as_string();
 
-  std::string d = declarator == "" ? declarator : " " + declarator;
-
-  std::string res;
+  printf(src.id().c_str());
+  printf("\n");
 
   if(src.is_bool())
   {
-    res = q + "_Bool" + d;
+    throw unsupported_error("Rapid does not support Boolean type currently");
   }
   if(src.id() == "empty")
   {
-    res = q + "void" + d;
+    log_error("Rapid does not support void type currently");
   }
   else if(src.id() == "signedbv" || src.id() == "unsignedbv")
   {
-    BigInt width = string2integer(src.width().as_string());
-
-    bool is_signed = src.id() == "signedbv";
-    std::string sign_str = is_signed ? "signed " : "unsigned ";
-
-    if(width == config.ansi_c.int_width)
-      res = q + sign_str + "int" + d;
-
-    if(width == config.ansi_c.long_int_width)
-      res = q + sign_str + "long int" + d;
-
-    if(width == config.ansi_c.char_width)
-      res = q + sign_str + "char" + d;
-
-    if(width == config.ansi_c.short_int_width)
-      res = q + sign_str + "short int" + d;
-
-    if(width == config.ansi_c.long_long_int_width)
-      res = q + sign_str + "long long int" + d;
-
-    res = q + sign_str + "_ExtInt(" + std::to_string(width.to_uint64()) + ")" +
-           d;
+    rapid_file << "Int";
   }
   else if(src.id() == "floatbv" || src.id() == "fixedbv")
   {
-    BigInt width = string2integer(src.width().as_string());
-
-    if(width == config.ansi_c.single_width)
-      res = q + "float" + d;
-    if(width == config.ansi_c.double_width)
-      res = q + "double" + d;
-    else if(width == config.ansi_c.long_double_width)
-      res = q + "long double" + d;
+    rapid_file << "Int";
   }
   else if(src.id() == "struct")
   {
-    const struct_typet &struct_type = to_struct_type(src);
+    //AYB TODO
+    /*const struct_typet &struct_type = to_struct_type(src);
 
     std::string dest = q;
 
@@ -191,105 +189,58 @@ void expr2whilet::convert_rec(
 
     dest += " }";
     dest += declarator;
-    res = dest;
+    res = dest;*/
   }
   else if(src.id() == "incomplete_struct")
   {
-    std::string dest = q + "struct";
+    // AYB what is this?
+    /*std::string dest = q + "struct";
     const std::string &tag = src.tag().as_string();
     if(tag != "")
       dest += " " + tag;
     dest += d;
-    res = dest;
+    res = dest;*/
   }
   else if(src.id() == "union")
   {
-    const union_typet &union_type = to_union_type(src);
-
-    std::string dest = q;
-
-    const irep_idt &tag = union_type.tag().as_string();
-    if(tag != "")
-      dest += " " + id2string(tag);
-    dest += " {";
-    for(auto const &it : union_type.components())
-    {
-      dest += ' ';
-      dest += convert_rec(it.type(), c_qualifierst(), id2string(it.get_name()));
-      dest += ';';
-    }
-    dest += " }";
-    dest += d;
-    res = dest;
+    throw unsupported_error("Rapid does not support union type");
   }
   else if(src.id() == "c_enum" || src.id() == "incomplete_c_enum")
   {
-    std::string result = q + "enum";
-    if(src.name() != "")
-      result += " " + src.tag().as_string();
-    result += d;
-    res = result;
+    throw unsupported_error("Rapid does not support enumeration types");
   }
   else if(src.id() == "pointer")
   {
     if(src.subtype().is_code())
     {
-      const typet &return_type = (typet &)src.subtype().return_type();
-
-      std::string dest = q + convert(return_type);
-
-      // function "name"
-      dest += " (*)";
-
-      // arguments
-      dest += "(";
-      const irept &arguments = src.subtype().arguments();
-
-      forall_irep(it, arguments.get_sub())
-      {
-        const typet &argument_type = ((exprt &)*it).type();
-
-        if(it != arguments.get_sub().begin())
-          dest += ", ";
-
-        dest += convert(argument_type);
-      }
-
-      dest += ")";
-
-      res = dest;
+      throw unsupported_error("Rapid does not support function pointers");
     }
 
-    std::string tmp = convert(src.subtype());
-
-    if(q == "")
-      res = tmp + " *" + d;
-
-    res = q + " (" + tmp + " *)" + d;
+    convert(src.subtype());
+    rapid_file << "*";
   }
   else if(src.is_array())
   {
-    std::string size_string =
+    // AYB TODO
+    /*std::string size_string =
       convert(static_cast<const exprt &>(src.size_irep()));
-    res = convert(src.subtype()) + " [" + size_string + "]" + d;
-  }*/
+    res = convert(src.subtype()) + " [" + size_string + "]" + d;*/
+  }
   /** int vector [3]
    *   /          |
    * type        size
    */
-  /*else if(src.is_vector())
+  else if(src.is_vector())
   {
-    std::string size_string =
+    // AYB TODO treat same as array?
+    /*std::string size_string =
       convert(static_cast<const exprt &>(src.size_irep()));
-    res = convert(src.subtype()) + " vector [" + size_string + "]" + d;
-  }
-  else if(src.id() == "incomplete_array")
-  {
-    res = convert(src.subtype()) + " []";
+    res = convert(src.subtype()) + " vector [" + size_string + "]" + d;*/
   }
   else if(src.id() == "symbol")
   {
-    const typet &followed = ns.follow(src);
+    // AYB what is this case?
+    /*const typet &followed = ns.follow(src);
     if(followed.id() == "struct")
     {
       std::string dest = q;
@@ -310,11 +261,12 @@ void expr2whilet::convert_rec(
       res = dest;
     }
 
-    return convert_rec(ns.follow(src), new_qualifiers, declarator);
+    return convert_rec(ns.follow(src), new_qualifiers, declarator);*/
   }
   else if(src.is_code())
   {
-    const typet &return_type = (typet &)src.return_type();
+    // What is this? Looks like sme sort of function type?
+    /*const typet &return_type = (typet &)src.return_type();
 
     std::string dest = convert(return_type) + " ";
 
@@ -332,23 +284,25 @@ void expr2whilet::convert_rec(
     }
 
     dest += ")";
-    res = dest;
+    res = dest;*/
+  } else {
+    log_error("non-supported type");
   }
-
-  unsigned precedence;
-  return convert_norep((exprt &)src, precedence);*/
 }
 
 void expr2whilet::convert_typecast(const exprt &src, unsigned &precedence)
 {
- /* precedence = 14;
+  precedence = 14;
 
   if(src.id() == "typecast" && src.operands().size() != 1)
-    log_error("typecast has an incorrect number of operands. translation aborted")
+    log_error("typecast has an incorrect number of operands. translation aborted");
+
+  // just convert the thing inside and hope for the best for now!
+  convert(src.op0(), precedence);
 
   // some special cases
 
-  const typet &type = ns.follow(src.type());
+  /*const typet &type = ns.follow(src.type());
 
   std::string res;
 
@@ -621,18 +575,55 @@ void expr2whilet::convert_binary(
   unsigned precedence,
   bool full_parentheses)
 {
- // if(src.operands().size() < 2)
- //   return convert_norep(src, precedence);
+  if(src.operands().size() < 2)
+    log_error("binary operator must have two operands");
 
-/*  std::string dest;
+  std::string dest;
   bool first = true;
 
-  forall_operands(it, src)
+  // AYB TODO precedence?
+
+  auto op0 = src.op0();
+  auto op1 = src.op1();
+
+  unsigned p;
+
+  if(symbol == "+=" || symbol == "-=" || 
+     symbol == "*=" || symbol == "%="){
+ 
+    std::string op;
+    if(symbol == "+=") op = " + ";
+    if(symbol == "-=") op = " - ";
+    if(symbol == "*=") op = " * ";
+    if(symbol == "%=") op = " mod ";
+
+    convert(op0, p);
+    
+    rapid_file << " = ";
+
+    convert(op0, p);
+
+    rapid_file << op;
+
+    convert(op1, p);
+
+  } else {
+
+    convert(op0, p);
+
+    rapid_file << " " << symbol << " ";
+
+    convert(op1, p);
+  
+  }
+
+  /*forall_operands(it, src)
   {
     if(first)
       first = false;
     else
     {
+      // TODO
       if(symbol != ", ")
         dest += ' ';
       dest += symbol;
@@ -847,21 +838,25 @@ void expr2whilet::convert_unary_post(
   const std::string &symbol,
   unsigned precedence)
 {
-  /*if(src.operands().size() != 1)
-    return convert_norep(src, precedence);
+  if(src.operands().size() != 1)
+    log_error("incorrect number of operands for unary postfix operator " + symbol);
 
   unsigned p;
-  std::string op = convert(src.op0(), p);
+  convert(src.op0(), p);
 
-  std::string dest;
-  if(precedence > p)
-    dest += '(';
-  dest += op;
-  if(precedence > p)
-    dest += ')';
-  dest += symbol;
+  rapid_file << " = ";
 
-  return dest;*/
+  convert(src.op0(), p);
+
+  if(symbol == "++"){
+    rapid_file << " + ";
+  } else if (symbol == "--"){
+    rapid_file << " - ";
+  } else {
+    log_error("non-supported postfix symbol " + symbol);
+  }
+
+  rapid_file << "1";
 }
 
 void expr2whilet::convert_index(const exprt &src, unsigned precedence)
@@ -963,25 +958,22 @@ expr2whilet::convert_struct_member_value(const exprt &src, unsigned precedence)
 void expr2whilet::convert_norep(const exprt &src, unsigned &)
 {
   return src.pretty(0);
-}
+}*/
 
 void expr2whilet::convert_symbol(const exprt &src, unsigned &)
 {
   const irep_idt &id = src.identifier();
   std::string dest;
 
-  if(!fullname && ns_collision.find(id) == ns_collision.end())
+  if(ns_collision.find(id) == ns_collision.end())
     dest = id_shorthand(src);
   else
     dest = id2string(id);
 
-  if(src.id() == "next_symbol")
-    dest = "NEXT(" + dest + ")";
-
-  return dest;
+  rapid_file << dest;
 }
 
-void expr2whilet::convert_nondet_symbol(const exprt &src, unsigned &)
+/*void expr2whilet::convert_nondet_symbol(const exprt &src, unsigned &)
 {
   const std::string &id = src.identifier().as_string();
   return "nondet_symbol(" + id + ")";
@@ -1031,79 +1023,44 @@ expr2whilet::convert_object_descriptor(const exprt &src, unsigned &precedence)
 
 void expr2whilet::convert_constant(const exprt &src, unsigned &precedence)
 {
-/*  const typet &type = ns.follow(src.type());
+  const typet &type = ns.follow(src.type());
   const std::string &cformat = src.cformat().as_string();
   const std::string &value = src.value().as_string();
-  std::string dest;
 
-  if(cformat != "")
-    dest = cformat;
+  std::string src_id(src.id().c_str());
+
+  if(cformat != ""){
+    rapid_file << cformat;
+  }
   else if(src.id() == "string-constant")
   {
-    dest = '"';
-    MetaString(dest, value);
-    dest += '"';
+    log_error("Rapid does not support string constants");
   }
   else if(type.id() == "c_enum" || type.id() == "incomplete_c_enum")
   {
-    BigInt int_value = string2integer(value);
-    BigInt i = 0;
-    const irept &body = type.body();
-
-    forall_irep(it, body.get_sub())
-    {
-      if(i == int_value)
-      {
-        dest = it->name().as_string();
-        return dest;
-      }
-
-      ++i;
-    }
-
-    // failed...
-    dest = "enum(" + value + ")";
-
-    return dest;
+    log_error("Rapid does not support enumeration types");
   }
   else if(type.id() == "bv")
-    dest = value;
+  {
+    rapid_file << value;
+  }
   else if(type.is_bool())
   {
-    dest = src.is_true() ? "1" : "0";
+    log_error("Rapid does not support Boolean type");
   }
   else if(type.id() == "unsignedbv" || type.id() == "signedbv")
   {
     BigInt int_value = binary2integer(value, type.id() == "signedbv");
-    dest = integer2string(int_value);
+    rapid_file << integer2string(int_value);
   }
-  else if(type.id() == "floatbv")
+  else if(type.id() == "floatbv" || type.id() == "fixedbv")
   {
-    dest = ieee_floatt(to_constant_expr(src)).to_ansi_c_string();
-
-    if(dest != "" && isdigit(dest[dest.size() - 1]))
-    {
-      if(src.type() == float_type())
-        dest += "f";
-      else if(src.type() == long_double_type())
-        dest += "l";
-    }
-  }
-  else if(type.id() == "fixedbv")
-  {
-    dest = fixedbvt(to_constant_expr(src)).to_ansi_c_string();
-
-    if(dest != "" && isdigit(dest[dest.size() - 1]))
-    {
-      if(src.type() == float_type())
-        dest += "f";
-      else if(src.type() == long_double_type())
-        dest += "l";
-    }
+    log_error("Rapid does not support fixed and floating point types");
   }
   else if(is_array_like(type))
   {
-    dest = "{ ";
+  // AYB todo
+   /* dest = "{ ";
 
     forall_operands(it, src)
     {
@@ -1119,20 +1076,21 @@ void expr2whilet::convert_constant(const exprt &src, unsigned &precedence)
       dest += tmp;
     }
 
-    dest += " }";
+    dest += " }";*/
   }
   else if(type.id() == "pointer")
   {
-    if(value == "NULL")
-      dest = "0";
+    // AYB TODO
+    /*if(value == "NULL")
+      rapid_file <<
     else if(value == "INVALID" || std::string(value, 0, 8) == "INVALID-")
       dest = value;
     else
-      return convert_norep(src, precedence);
+      return convert_norep(src, precedence);*/
   }
-  else
-    return convert_norep(src, precedence);*/
-
+  else {
+    log_error("Unsupported constant with id " + src_id);
+  }
   //return dest;
 }
 
@@ -1306,40 +1264,29 @@ void expr2whilet::convert_array_list(const exprt &src, unsigned &precedence)
 
 void expr2whilet::convert_function_call(const exprt &src, unsigned &)
 {
-  /*if(src.operands().size() != 2)
+  if(src.operands().size() != 2)
   {
-    unsigned precedence;
-    return convert_norep(src, precedence);
+    log_error("incorrect number of operands for function call");
   }
 
-  std::string dest;
+  std::string function_str = expr2c(src.op0(), ns);
+  
+  unsigned p;
 
-  {
-    unsigned p;
-    std::string function_str = convert(src.op0(), p);
-    dest += function_str;
+  if(function_str == "__ESBMC_assume"){
+    rapid_file << "assume(";
+    convert(src.op1().op0(), p);
+    rapid_file << ")";
+    return;
   }
+  if(function_str == "__ESBMC_assert"){
+    rapid_file << "assert(";
+    convert(src.op1().op0(), p);
+    rapid_file << ")";
+    return;
+  }  
 
-  dest += "(";
-
-  unsigned i = 0;
-
-  forall_operands(it, src.op1())
-  {
-    unsigned p;
-    std::string arg_str = convert(*it, p);
-
-    if(i > 0)
-      dest += ", ";
-    // TODO: [add] brackets, if necessary, depending on p
-    dest += arg_str;
-
-    i++;
-  }
-
-  dest += ")";*/
-
-  //return dest;
+  log_error("Rapid does not support function calls");
 }
 
 /*void expr2whilet::convert_overflow(const exprt &src, unsigned &precedence)
@@ -1382,26 +1329,22 @@ std::string expr2whilet::indent_str(unsigned indent)
 
 void expr2whilet::convert_code_while(const codet &src, unsigned indent)
 {
-/*  if(src.operands().size() != 2)
+  if(src.operands().size() != 2)
   {
-    unsigned precedence;
-//    return convert_norep(src, precedence);
+    log_error("incorrect number of operands for while loop");
   }
 
-  std::string dest = indent_str(indent);
-  dest += "while(" + convert(src.op0());
+  rapid_file << indent_str(indent);
+  rapid_file << "while(";
 
-  if(src.op1().is_nil())
-    dest += ");\n";
-  else
-  {
-    dest += ")\n";
-    dest += convert_code(to_code(src.op1()), indent + 2);
-  }
+  convert(src.op0());
 
-  dest += "\n";*/
+  rapid_file << "){\n";
 
- // return dest;
+  convert_code(to_code(src.op1()), indent + 2);
+  
+  rapid_file << indent_str(indent);
+  rapid_file << "}\n";
 }
 
 void expr2whilet::convert_code_dowhile(const codet &src, unsigned indent)
@@ -1580,75 +1523,29 @@ void expr2whilet::convert_code_dead(const codet &src, unsigned indent)
 void expr2whilet::convert_code_decl(const codet &src, unsigned indent)
 {
 
-  /*if(rapid){
-   
-    exprt &expr = new_code.op1();
-
-    std::string decl_str = "";
-    auto var_type = var.type().id_string();
-    if(var_type == "signedbv" || var_type == "unsignedbv" || var_type == "fixedbv"){
-      // rapid only handles integers which it treats as ideal integers
-      decl_str += "Int ";
-    } else if (true){
-      //pointer
-    } else if (true) {
-      //struct
-    } else {
-      rapid = false;
-      log_error("Rapid unable to handle type " + var_type);
-    }
-
-    decl_str += std::string(var.name().c_str()) + " = ";
-
-  }*/
-
-  /*if(src.operands().size() != 1 && src.operands().size() != 2)
+  if(src.operands().size() != 1 && src.operands().size() != 2)
   {
-    unsigned precedence;
-    return convert_norep(src, precedence);
+    log_error("could not convert decl to While as incorrect number of operands");
   }
 
-  std::string declarator = convert(src.op0());
+  rapid_file << indent_str(indent);
 
-  std::string dest = indent_str(indent);
+  // TODO const qualifier?
+  convert(src.op0().type());
 
-  const symbolt *symbol = ns.lookup(to_symbol_expr(src.op0()).get_identifier());
-  if(symbol)
-  {
-    if(
-      symbol->file_local &&
-      (src.op0().type().is_code() || symbol->static_lifetime))
-      dest += "static ";
-    else if(symbol->is_extern)
-      dest += "extern ";
+  rapid_file << " ";
 
-    if(symbol->type.is_code() && to_code_type(symbol->type).get_inlined())
-      dest += "inline ";
+  convert(src.op0());
+
+  if(src.operands().size() == 2){
+
+    rapid_file << " = ";
+
+    convert(src.op1());
+
   }
 
-  const typet &followed = ns.follow(src.op0().type());
-  if(followed.id() == "struct")
-  {
-    const std::string &tag = followed.tag().as_string();
-    if(tag != "")
-      dest += tag + " ";
-    dest += declarator;
-  }
-  else if(followed.id() == "union")
-  {
-    const std::string &tag = followed.tag().as_string();
-    if(tag != "")
-      dest += tag + " ";
-    dest += declarator;
-  }
-  else
-    dest += convert_rec(src.op0().type(), c_qualifierst(), declarator);
-
-  if(src.operands().size() == 2)
-    dest += "=" + convert(src.op1());
-
-  dest += ';';*/
-
+  rapid_file << ";\n";
   //return dest;
 }
 
@@ -1705,20 +1602,44 @@ void expr2whilet::convert_code_block(const codet &src, unsigned indent)
 
 void expr2whilet::convert_code_expression(const codet &src, unsigned indent)
 {
- /* std::string dest = indent_str(indent);
 
-  std::string expr_str;
-  if(src.operands().size() == 1)
-    expr_str = convert(src.op0());
-  else
+  if(src.operands().size() != 1)
   {
+    log_error("Expression has unsupported number of operands");
+  }
+  
+  auto op0 = src.op0();
+
+  rapid_file << indent_str(indent);
+
+  if(op0.id() == "sideeffect")
+  {
+    const irep_idt &statement = op0.statement();
+
     unsigned precedence;
-    expr_str = convert_norep(src, precedence);
+    if(statement == "postincrement")
+      convert_unary_post(op0, "++", precedence = 16);
+    else if(statement == "postdecrement")
+      convert_unary_post(op0, "--", precedence = 16);
+    else if(statement == "assign+")
+      convert_binary(op0, "+=", precedence = 2, true);
+    else if(statement == "assign-")
+      convert_binary(op0, "-=", precedence = 2, true);
+    else if(statement == "assign*")
+      convert_binary(op0, "*=", precedence = 2, true);
+    else if(statement == "assign_mod")
+      convert_binary(op0, "%=", precedence = 2, true);
+    else if(statement == "function_call")
+      convert_function_call(op0, precedence);
+    else if(statement == "malloc")
+      convert_malloc(op0, precedence = 15);
+    else
+      convert(op0);
+    //  return convert_norep(src, precedence);
   }
 
-  dest += expr_str + ";";
+  rapid_file << ";\n";
 
-  dest += "\n";*/
   //return dest;
 }
 
@@ -1737,8 +1658,8 @@ void expr2whilet::convert_code(const codet &src, unsigned indent)
 {
   const irep_idt &statement = src.statement();
 
-  printf(statement.c_str());
-  printf("\n");
+  //printf(statement.c_str());
+  //printf("\n");
  
   if(statement == "expression")
     convert_code_expression(src, indent);
@@ -1835,6 +1756,7 @@ void expr2whilet::convert_code_assign(const codet &src, unsigned indent)
   // union literal. Precise identification isn't feasible right now, sadly.
   // In that case, replace with a special intrinsic indicating to the user that
   // the original code is now meaningless.
+  
   /*unsigned int precedent = 15;
   std::string tmp = convert(src.op0(), precedent);
   tmp += "=";
@@ -2405,38 +2327,40 @@ void expr2whilet::convert(const exprt &src, unsigned &precedence)
   else if(src.id() == "sideeffect")
   {
     const irep_idt &statement = src.statement();
-    if(statement == "preincrement")
-      convert_unary(src, "++", precedence = 15);
-    if(statement == "predecrement")
-      convert_unary(src, "--", precedence = 15);
-    else if(statement == "postincrement")
-      convert_unary_post(src, "++", precedence = 16);
-    else if(statement == "postdecrement")
-      convert_unary_post(src, "--", precedence = 16);
-    else if(statement == "assign+")
-      convert_binary(src, "+=", precedence = 2, true);
-    else if(statement == "assign-")
-      convert_binary(src, "-=", precedence = 2, true);
-    else if(statement == "assign*")
-      convert_binary(src, "*=", precedence = 2, true);
-    else if(statement == "assign_div")
-      convert_binary(src, "/=", precedence = 2, true);
-    else if(statement == "assign_mod")
-      convert_binary(src, "%=", precedence = 2, true);
-    else if(statement == "assign_shl")
-      convert_binary(src, "<<=", precedence = 2, true);
-    else if(statement == "assign_ashr")
-      convert_binary(src, ">>=", precedence = 2, true);
-    else if(statement == "assign_bitand")
-      convert_binary(src, "&=", precedence = 2, true);
-    else if(statement == "assign_bitxor")
-      convert_binary(src, "^=", precedence = 2, true);
-    else if(statement == "assign_bitor")
-      convert_binary(src, "|=", precedence = 2, true);
-    else if(statement == "assign")
+
+    if(statement == "preincrement"){
+      //convert_unary(src, "++", precedence = 15);
+    }
+    if(statement == "predecrement"){
+      //convert_unary(src, "--", precedence = 15);
+    }
+    else if(statement == "postincrement"){
+      //convert_unary_post(src, "++", precedence = 16);
+    }
+    else if(statement == "postdecrement"){
+      //convert_unary_post(src, "--", precedence = 16);
+    }
+    else if(statement == "assign+"){
+      //convert_binary(src, "+=", precedence = 2, true);
+    }
+    else if(statement == "assign-"){
+      //convert_binary(src, "-=", precedence = 2, true);
+    }
+    else if(statement == "assign*"){
+      //convert_binary(src, "*=", precedence = 2, true);
+    }
+    else if(statement == "assign_div"){
+      //convert_binary(src, "/=", precedence = 2, true);
+    }
+    else if(statement == "assign_mod"){
+      //convert_binary(src, "%=", precedence = 2, true);
+    }
+    else if(statement == "assign"){
       convert_binary(src, "=", precedence = 2, true);
-    else if(statement == "function_call")
+    }
+    else if(statement == "function_call"){
       convert_function_call(src, precedence);
+    }
     else if(statement == "malloc")
       convert_malloc(src, precedence = 15);
   /*  else if(statement == "realloc")
@@ -2539,12 +2463,12 @@ void expr2whilet::convert(const exprt &src, unsigned &precedence)
     return convert_quantifier(src, "EXISTS", precedence = 2);
 
   else if(src.id() == "with")
-    return convert_with(src, precedence = 2);
+    return convert_with(src, precedence = 2);*/
 
   else if(src.id() == "symbol")
     return convert_symbol(src, precedence);
 
-  else if(src.id() == "next_symbol")
+  /*else if(src.id() == "next_symbol")
     return convert_symbol(src, precedence);
 
   else if(src.id() == "nondet_symbol")
@@ -2589,8 +2513,8 @@ void expr2whilet::convert(const exprt &src, unsigned &precedence)
   //else if(src.id() == "array-list")
   //  return convert_array_list(src, precedence);
 
-  //else if(src.id() == "typecast")
-  //  return convert_typecast(src, precedence);
+  else if(src.id() == "typecast")
+    return convert_typecast(src, precedence);
 
   //else if(src.id() == "bitcast")
   //  return convert_bitcast(src, precedence);
