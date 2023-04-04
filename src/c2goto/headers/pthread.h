@@ -57,7 +57,7 @@ typedef union
 } pthread_mutexattr_t;
 
 
-typedef struct
+typedef struct pthread_cond_t
 {
   int __lock;
   unsigned int __futex;
