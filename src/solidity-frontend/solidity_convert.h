@@ -78,6 +78,7 @@ protected:
     const nlohmann::json &expr_common_type,
     exprt &new_expr);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
+  bool get_compound_assign_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_unary_operator_expr(
     const nlohmann::json &expr,
     const nlohmann::json &int_literal_type,
@@ -105,8 +106,7 @@ protected:
     std::string &name,
     std::string &id);
   bool get_constructor_call(const nlohmann::json &ast_node, exprt &new_expr);
-  bool
-  get_contract_name(const nlohmann::json &ast_node, std::string &contract_name);
+  bool get_contract_name(const int ref_decl_id, std::string &contract_name);
   // line number and locations
   void
   get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
