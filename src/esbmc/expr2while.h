@@ -11,7 +11,7 @@
 #include <iostream>
 #include <fstream>
 
-void convert_to_while(
+int convert_to_while(
   contextt &context,
   std::string rapid_file_name);
 
@@ -42,13 +42,11 @@ protected:
   const namespacet &ns;
   std::ofstream rapid_file;
 
-
 //  const bool fullname;
 
   virtual void convert_rec(
     const typet &src,
-    const c_qualifierst &qualifiers,
-    const std::string &declarator);
+    const c_qualifierst &qualifiers);
 
   static std::string indent_str(unsigned indent);
 
@@ -57,7 +55,7 @@ protected:
   std::set<irep_idt> ns_collision;
 
   void get_symbols(const exprt &expr);
-//  std::string id_shorthand(const exprt &expr) const;
+  std::string id_shorthand(const exprt &expr) const;
 
   void convert_typecast(const exprt &src, unsigned &precedence);
 
@@ -173,7 +171,7 @@ protected:
 //  std::string
 //  convert_statement_expression(const exprt &src, unsigned &precedence);
 
- // virtual void convert_symbol(const exprt &src, unsigned &precedence);
+  virtual void convert_symbol(const exprt &src, unsigned &precedence);
  // void convert_predicate_symbol(const exprt &src, unsigned &precedence);
  // std::string
  // convert_predicate_next_symbol(const exprt &src, unsigned &precedence);
