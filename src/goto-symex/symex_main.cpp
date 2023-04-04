@@ -710,10 +710,22 @@ void goto_symext::add_memory_leak_checks()
     // Assert that the allocated object was freed.
     deallocated_obj2tc deallocd(it.obj);
 
+    // For each dynamic object we generate a condition checking
+    // whether it has been deallocated.
     equality2tc eq(deallocd, gen_true_expr());
-    replace_dynamic_allocation(eq);
-    cur_state->rename(eq);
+
+    // Additionally, we need to make sure that we check the above condition
+    // only for dynamic objects that were created from successful
+    // memory allocations. This is because we always create a dynamic object for
+    // each dynamic allocation, and the allocation success status
+    // is described by a separate "allocation_guard".
+    // (see "symex_mem" method in "goto-symex/builtin_functions.cpp").
+    if2tc cond(eq->type, it.alloc_guard.as_expr(), eq, gen_true_expr());
+
+    replace_dynamic_allocation(cond);
+    cur_state->rename(cond);
     claim(
-      eq, "dereference failure: forgotten memory: " + get_pretty_name(it.name));
+      cond,
+      "dereference failure: forgotten memory: " + get_pretty_name(it.name));
   }
 }

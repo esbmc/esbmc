@@ -260,6 +260,7 @@ protected:
    * This is done the first time when we encounter a virtual method in a class
    */
   symbolt *add_vtable_type_symbol(
+    const clang::CXXMethodDecl *md,
     const struct_typet::componentt &comp,
     struct_typet &type);
   /*
@@ -268,7 +269,7 @@ protected:
    *
    * This is done the first time we encounter a virtual method in a class
    */
-  void add_vptr(struct_typet &type);
+  void add_vptr(const clang::CXXMethodDecl *md, struct_typet &type);
   /*
    * Add an entry to the virtual table type
    *

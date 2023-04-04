@@ -16,7 +16,7 @@
     CC_DIAGNOSTIC_DISABLE(4146 4244 4267 4291 4624)
 #else
 #define CC_DIAGNOSTIC_PUSH() _Pragma("GCC diagnostic push")
-#define CC_DIAGNOSTIC_POP() _Pragma("GCC diagnostic pop")
+#define CC_DIAGNOSTIC_POP() _Pragma("GCC diagnostic push")
 #define DO_PRAGMA(x) _Pragma(#x)
 
 #define CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()                                     \
