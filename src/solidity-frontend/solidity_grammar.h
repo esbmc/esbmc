@@ -221,8 +221,14 @@ enum ExpressionT
   // Solidity does NOT provide such rule
   IndexAccess,
 
+  // Create a temporary object by keywords 'ew'
+  // equivalent to clang::Stmt::CXXTemporaryObjectExprClass
+  // i.e. Base x = new Base(args);
   NewExpression,
 
+  // Call member functions
+  // equivalent toclang::Stmt::CXXMemberCallExprClass
+  // i.e. x.caller();
   MemberCallClass,
 
   ExpressionTError
@@ -271,14 +277,23 @@ enum ImplicitCastTypeT
 ImplicitCastTypeT get_implicit_cast_type_t(std::string cast);
 const char *implicit_cast_type_to_str(ImplicitCastTypeT type);
 
+// the function visibility
 enum VisibilityT
 {
+  // any contract and account can call
   PublicT,
+
+  // only inside the contract that defines the function
   PrivateT,
+
+  // only other contracts and accounts can call
   ExternalT,
+
+  // only inside contract that inherits an internal function
   InternalT,
+
   UnknownT
-}; // access
+};
 VisibilityT get_access_t(const nlohmann::json &ast_node);
 
 }; // namespace SolidityGrammar

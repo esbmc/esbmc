@@ -7,7 +7,6 @@
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_types.h>
-#include <clang-c-frontend/padding.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
@@ -164,8 +163,9 @@ protected:
   bool convert_string_literal(std::string the_value, exprt &dest);
 
   static constexpr const char *mode = "C++";
+
+  // The prefix for the id of each class
   std::string prefix = "tag-";
-  //exprt new_object_expr;
 
 private:
   bool get_elementary_type_name_uint(
