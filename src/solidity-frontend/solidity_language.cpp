@@ -10,7 +10,7 @@ CC_DIAGNOSTIC_POP()
 #include <solidity-frontend/solidity_convert.h>
 #include <clang-c-frontend/clang_c_main.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
-#include <clang-cpp-frontend/clang_cpp_convert.h>
+#include <clang-c-frontend/clang_c_convert.h>
 #include <c2goto/cprover_library.h>
 #include <clang-c-frontend/expr2c.h>
 #include <util/c_link.h>
@@ -43,7 +43,7 @@ std::string solidity_languaget::get_temp_file()
 
   // populate temp file
   std::ofstream f;
-  p += "/temp_sol.cpp";
+  p += "/temp_sol.c";
   f.open(p.string());
   f << temp_c_file();
   f.close();
@@ -58,7 +58,7 @@ bool solidity_languaget::parse(const std::string &path)
 
   // get AST nodes of ESBMC intrinsics and the dummy main
   // populate ASTs inherited from parent class
-  clang_cpp_languaget::parse(temp_path);
+  clang_c_languaget::parse(temp_path);
 
   // Process AST json file
   std::ifstream ast_json_file_stream(path);
@@ -92,7 +92,7 @@ bool solidity_languaget::parse(const std::string &path)
 
 bool solidity_languaget::convert_intrinsics(contextt &context)
 {
-  clang_cpp_convertert converter(context, ASTs, "C++");
+  clang_c_convertert converter(context, ASTs, "C++");
   if(converter.convert())
     return true;
 
@@ -111,6 +111,10 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   if(converter.convert()) // Add Solidity symbols to the context
     return true;
 
+  // migrate from clang_c_adjust to clang_cpp_adjust
+  // for the reason that we need clang_cpp_adjust::adjust_side_effect
+  // to adjust the created temporary object
+  // otherwise it would raise "unknown side effect: temporary_object"
   clang_cpp_adjust adjuster(new_context);
   if(adjuster.adjust())
     return true;

@@ -358,8 +358,8 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
     }
     case SolidityGrammar::ContractBodyElementT::FunctionDef:
     {
-      // if(get_struct_class_method(*itr, t))
-      //   return true;
+      if(get_struct_class_method(*itr, t))
+        return true;
       break;
     }
     default:
@@ -370,7 +370,6 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
     }
   }
 
-  add_padding(t, ns);
   t.location() = location_begin;
   added_symbol.type = t;
 
@@ -671,17 +670,6 @@ bool solidity_convertert::get_block(
       exprt statement;
       if(get_statement(stmt_kv.value(), statement))
         return true;
-
-      // TODO: FIX ME.
-      // We are now mannually doing the adjustment for NewExpression
-      // by spilting into two expression.
-      // instead we should use the adjustment in clang_cpp_adjust_code.cpp
-      // if(new_object_expr.is_not_nil())
-      // {
-      //   convert_expression_to_code(new_object_expr);
-      //   _block.operands().push_back(new_object_expr);
-      //   new_object_expr.make_nil();
-      // }
 
       convert_expression_to_code(statement);
       _block.operands().push_back(statement);
@@ -1121,8 +1109,12 @@ bool solidity_convertert::get_expr(
   }
   case SolidityGrammar::ExpressionT::NewExpression:
   {
+    // call the constructor
     if(get_constructor_call(expr, new_expr))
       return true;
+
+    // break if the constructor call needs arguments
+    // it would be reckoned as a memeber call.
     side_effect_expr_function_callt e =
       to_side_effect_expr_function_call(new_expr);
     if(e.arguments().size())
@@ -1149,6 +1141,7 @@ bool solidity_convertert::get_expr(
     id = name;
     if(context.find_symbol(id) == nullptr)
       return true;
+
     symbolt s = *context.find_symbol(id);
     typet type = s.type;
 
@@ -1164,8 +1157,8 @@ bool solidity_convertert::get_expr(
     const nlohmann::json caller_expr_json =
       find_decl_ref(callee_expr_json["referencedDeclaration"]);
 
+    // populate params
     auto param_nodes = caller_expr_json["parameters"]["parameters"];
-
     unsigned num_args = 0;
     for(const auto &arg : expr["arguments"].items())
     {
