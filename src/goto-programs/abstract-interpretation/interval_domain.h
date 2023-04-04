@@ -39,8 +39,8 @@ public:
   void dump() const;
 
   // Extensions
-  bool enable_interval_arithmetic = true;
-  bool enable_modular_intervals = true;
+  bool enable_interval_arithmetic = false;
+  bool enable_modular_intervals = false;
   bool enable_assertion_simplification = false;
 
   // Widening options
