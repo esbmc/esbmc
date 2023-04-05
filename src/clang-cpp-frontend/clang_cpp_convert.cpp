@@ -221,10 +221,6 @@ bool clang_cpp_convertert::get_function(
   if(fd.isDependentContext())
     return false;
 
-  // Ignore unamed implicit trivial ctor
-  if(is_ctor_unnamed_implicit_trivial(fd))
-    return false;
-
   if(clang_c_convertert::get_function(fd, new_expr))
     return true;
 
@@ -1367,21 +1363,6 @@ bool clang_cpp_convertert::is_duplicate_method(
   {
     if(method.name() == existing_method.name())
       return true;
-  }
-  return false;
-}
-
-bool clang_cpp_convertert::is_ctor_unnamed_implicit_trivial(
-  const clang::FunctionDecl &fd)
-{
-  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
-  {
-    if(md->getKind() == clang::Decl::CXXConstructor)
-    {
-      std::string name = clang_c_convertert::get_decl_name(fd);
-      bool unnamed = name.empty() ? true : false;
-      return (fd.isTrivial() && fd.isImplicit() && unnamed);
-    }
   }
   return false;
 }
