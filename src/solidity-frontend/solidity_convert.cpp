@@ -1388,7 +1388,10 @@ bool solidity_convertert::get_binary_operator_expr(
   default:
   {
     if(get_compound_assign_expr(expr, new_expr))
+    {
       assert(!"Unimplemented binary operator");
+      return true;
+    }
 
     current_BinOp_type.pop();
 
@@ -1409,6 +1412,8 @@ bool solidity_convertert::get_compound_assign_expr(
   const nlohmann::json &expr,
   exprt &new_expr)
 {
+  // equivalent to clang_c_convertert::get_compound_assign_expr
+
   SolidityGrammar::ExpressionT opcode =
     SolidityGrammar::get_expr_operator_t(expr);
 
