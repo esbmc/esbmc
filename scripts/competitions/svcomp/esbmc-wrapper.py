@@ -117,7 +117,7 @@ def parse_result(the_output, prop):
 
     if prop == Property.memory:
       if memory_leak in the_output:
-        return Result.fail_memtrack
+        return Result.unknown
 
       if invalid_pointer_free in the_output:
         return Result.fail_free
