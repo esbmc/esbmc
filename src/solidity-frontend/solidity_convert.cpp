@@ -2458,8 +2458,7 @@ solidity_convertert::find_constructor_ref(nlohmann::json &contract_def)
     }
   }
   // implicit constructor call
-  nlohmann::json empty;
-  return empty;
+  return empty_json;
 }
 
 void solidity_convertert::get_default_symbol(
