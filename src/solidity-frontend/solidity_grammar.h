@@ -236,6 +236,9 @@ enum ExpressionT
   // rule literal
   Literal,
 
+  // rule Tuple
+  Tuple,
+
   // FunctionCall
   CallExprClass,
 

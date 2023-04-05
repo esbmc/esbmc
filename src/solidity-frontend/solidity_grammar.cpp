@@ -484,6 +484,10 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return Literal;
   }
+  else if(expr["nodeType"] == "TupleExpression")
+  {
+    return Tuple;
+  }
   else if(
     expr["nodeType"] == "FunctionCall" || expr["nodeType"] == "MemberAccess")
   {
@@ -705,6 +709,17 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(BO_LAnd)
     ENUM_TO_STR(BO_LOr)
 
+    ENUM_TO_STR(BO_AddAssign)
+    ENUM_TO_STR(BO_SubAssign)
+    ENUM_TO_STR(BO_MulAssign)
+    ENUM_TO_STR(BO_DivAssign)
+    ENUM_TO_STR(BO_RemAssign)
+    ENUM_TO_STR(BO_ShlAssign)
+    ENUM_TO_STR(BO_ShrAssign)
+    ENUM_TO_STR(BO_AndAssign)
+    ENUM_TO_STR(BO_XorAssign)
+    ENUM_TO_STR(BO_OrAssign)
+
     ENUM_TO_STR(UnaryOperatorClass)
     ENUM_TO_STR(UO_PreDec)
     ENUM_TO_STR(UO_PreInc)
@@ -716,6 +731,7 @@ const char *expression_to_str(ExpressionT type)
 
     ENUM_TO_STR(DeclRefExprClass)
     ENUM_TO_STR(Literal)
+    ENUM_TO_STR(Tuple)
     ENUM_TO_STR(CallExprClass)
     ENUM_TO_STR(ImplicitCastExprClass)
     ENUM_TO_STR(IndexAccess)
