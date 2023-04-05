@@ -167,6 +167,9 @@ protected:
   // The prefix for the id of each class
   std::string prefix = "tag-";
 
+  // json nodes that always empty
+  const nlohmann::json empty_json;
+
 private:
   bool get_elementary_type_name_uint(
     SolidityGrammar::ElementaryTypeNameT &type,
