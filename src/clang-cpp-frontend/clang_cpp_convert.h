@@ -94,8 +94,6 @@ protected:
 
   bool get_expr(const clang::Stmt &stmt, exprt &new_expr) override;
 
-  bool is_ctor_unnamed_implicit_trivial(const clang::FunctionDecl &fd);
-
   void
   build_member_from_component(const clang::FunctionDecl &fd, exprt &component);
 
