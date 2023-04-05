@@ -87,7 +87,7 @@ public:
 
   exception& operator=(const exception&) throw();
 
-  virtual ~exception() throw() {}
+  virtual ~exception() {}
 
   virtual const char* what() const throw() {
     /**
