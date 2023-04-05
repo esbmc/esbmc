@@ -110,7 +110,7 @@ unsigned long int strtoul(const char * str, char ** endptr, int base);
 
 char * getenv(const char * name) {
 	size_t size = strlen(name) + 1;
-	char tmp[size];
+	char* tmp = (char*)malloc(size);
 	strcpy(tmp, name);
 	return tmp;
 }
@@ -154,14 +154,15 @@ char get_char(int digit) {
 	return charstr[digit];
 }
 
-void rev(char *p) {
-	char *q = &p[strlen(p) - 1];
+void rev(char *p) {	
+	char *q = p + strlen(p) - 1;	
 	char *r = p;
 	for (; q > r; q--, r++) {
 		char s = *q;
 		*q = *r;
 		*r = s;
 	}
+	
 }
 
 #endif
