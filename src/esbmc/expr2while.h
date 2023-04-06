@@ -103,16 +103,6 @@ protected:
 
   void convert_index(const exprt &src, unsigned precedence);
 
-  //void convert_byte_extract(const exprt &src, unsigned precedence);
-
-  //void convert_byte_update(const exprt &src, unsigned precedence);
-
-  //void convert_extractbit(const exprt &src, unsigned precedence);
-
-  //void convert_sizeof(const exprt &src, unsigned precedence);
-
-  //void convert_extract(const exprt &src);
-
   void convert_unary(
     const exprt &src,
     const std::string &symbol,
@@ -144,22 +134,20 @@ protected:
   void convert_code_dowhile(const codet &src, unsigned indent);
   void convert_code_block(const codet &src, unsigned indent);
   void convert_code_expression(const codet &src, unsigned indent);
-  void convert_code_return(const codet &src, unsigned indent);
-  void convert_code_goto(const codet &src, unsigned indent);
-  void convert_code_gcc_goto(const codet &src, unsigned indent);
+  //void convert_code_return(const codet &src, unsigned indent);
+  //void convert_code_goto(const codet &src, unsigned indent);
+  //void convert_code_gcc_goto(const codet &src, unsigned indent);
   void convert_code_assume(const codet &src, unsigned indent);
   void convert_code_assert(const codet &src, unsigned indent);
-  void convert_code_break(const codet &src, unsigned indent);
+  //void convert_code_break(const codet &src, unsigned indent);
   void convert_code_switch(const codet &src, unsigned indent);
-  void convert_code_continue(const codet &src, unsigned indent);
+  //void convert_code_continue(const codet &src, unsigned indent);
   void convert_code_decl(const codet &src, unsigned indent);
   void convert_code_decl_block(const codet &src, unsigned indent);
   void convert_code_dead(const codet &src, unsigned indent);
-  void
-  convert_code_function_call(const code_function_callt &src, unsigned indent);
+  //void convert_code_function_call(const code_function_callt &src, unsigned indent);
   void convert_code_lock(const codet &src, unsigned indent);
   void convert_code_unlock(const codet &src, unsigned indent);
-  void convert_code_printf(const codet &src, unsigned indent);
 
   virtual void convert(const exprt &src, unsigned &precedence);
 

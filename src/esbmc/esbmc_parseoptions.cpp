@@ -1205,9 +1205,6 @@ int esbmc_parseoptionst::doit_rapid()
   std::string rapid_file_name = tmpnam(NULL);
   rapid_file_name = rapid_file_name + ".spec";
 
-  printf(rapid_file_name.c_str());
-  printf("\n");
-
   optionst opts;
   get_command_line_options(opts);
 
@@ -1219,9 +1216,48 @@ int esbmc_parseoptionst::doit_rapid()
   if(convert_to_while(context, rapid_file_name))
     return 6;
 
-  // Logic for popping open rapid and running on file
-  // at the end delete the file...
+  if(
+    cmdline.isset("rapid-program-too") ||
+    cmdline.isset("rapid-program-only"))
+  {
+    std::ifstream f(rapid_file_name);
+    if(f) {
+      std::ostringstream oss;
+      oss << f.rdbuf();
+      log_status("{}", oss.str());
+    }
+    if(cmdline.isset("rapid-program-only"))
+      return 0;
+  }
 
+  std::string run_str;
+
+  if(cmdline.isset("rapid-path")){
+    run_str = std::string(cmdline.getval("rapid-path"));
+  } else {
+    log_error("unable to find rapid executable. try setting option rapid-path");
+    // what should this be?
+    return 6;
+  }
+
+  run_str += " -integerIterations on " + rapid_file_name;
+
+  std::array<char, 128> buffer;
+  std::string result;
+  std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(run_str.c_str(), "r"), pclose);
+  if (!pipe) {
+    log_error("unable to run Rapid");
+    return 6;
+  }
+  while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+    result += buffer.data();
+  }
+  log_status(result);
+
+  // delete the file no longer needed
+  remove(rapid_file_name.c_str()); 
+
+  return 0;
 }
 
 
