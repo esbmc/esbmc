@@ -45,6 +45,14 @@ __ESBMC_HIDE:;
   return ret;
 }
 
+int scanf(const char *restrict format, ...)
+{
+__ESBMC_HIDE:;
+  // scanf is unsafe since it disregards the length of the string typed by the user;
+  // it can accept a string longer than the array size that stores the string.
+  __ESBMC_assert(0, "the `scanf' function is unsafe to use.");
+}
+
 // Reads characters from the standard input (stdin)
 // and stores them as a C string into str until a newline character
 // or the end-of-file is reached.
