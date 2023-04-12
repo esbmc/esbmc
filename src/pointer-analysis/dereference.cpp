@@ -1355,7 +1355,9 @@ void dereferencet::construct_from_dyn_struct_offset(
     else
     {
       // Try to resolve this recursively
-      build_reference_rec(field, new_offset, type, guard, mode, alignment);
+      guardt newguard(guard);
+      newguard.add(field_guard);
+      build_reference_rec(field, new_offset, type, newguard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
     }
 
