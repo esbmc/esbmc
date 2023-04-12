@@ -42,10 +42,13 @@ public:
   bool enable_interval_arithmetic = false;
   bool enable_modular_intervals = false;
   bool enable_assertion_simplification = false;
+  bool enable_contraction_for_abstract_states = true;
 
   // Widening options
   unsigned delayed_widening_limit = 50;
   bool widening_underaproximate_bound = false;
+  bool widening_extrapolate = false;
+  bool widening_narrowing = false;
 
 
 protected:
@@ -222,6 +225,33 @@ protected:
   template <class Interval>
   void apply_assignment(const expr2tc &lhs, const expr2tc &rhs);
 
+  /**
+   * @brief Applies Extrapolation widening algorithm
+   *
+   * Given two intervals: (a0, b0) (before the computation) and (a1, b1) (after the computation):
+   *
+   * Widening((a0,b0), (a1,b1)) = (a1 < a0 ? -infinity : a0, b1 > b0 ? infinity : b0 )
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param lhs
+   * @param rhs
+   */
+  template <class Interval>
+  T extrapolate_intervals(const T &before, const T &after);
+
+    /**
+   * @brief Applies Interpolation narrowing algorithm
+   *
+   * Given two intervals: (a0, b0) (before the computation) and (a1, b1) (after the computation):
+   *
+   * Narrowing((a0,b0), (a1,b1)) = (a1 > a0 ? a0 : a1, b1 < b0 ? b0 : b1 )
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param lhs
+   * @param rhs
+   */
+  template <class Interval>
+  T interpolate_intervals(const T &before, const T &after);
+
+  
   /**
    * @brief Applies  LHS < RHS
    *

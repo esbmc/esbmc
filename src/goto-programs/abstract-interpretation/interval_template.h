@@ -384,11 +384,6 @@ public:
       a.intersect_with(tmp_b + y);
       b.intersect_with(tmp_a - y);
 
-      std::ostringstream oss;
-      oss << "[Contractor] Y: " << y;
-      oss << "\n[Contractor] A: " << a;
-      oss << "\n[Contractor] B: " << b;
-      log_debug("\n\n{}", oss.str());
       changed = a.has_changed(tmp_a) || b.has_changed(tmp_b);
     } while(changed);
   }
