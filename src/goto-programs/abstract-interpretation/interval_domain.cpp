@@ -122,28 +122,68 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
   auto a = generate_modular_interval<T>(to_symbol2t(lhs));
   auto b = get_interval<T>(rhs);
 
-  T::contract_interval_le(a, b); // a <= b
-  T::contract_interval_le(b, a); // b <= a
-
+  // TODO: add classic algorithm
+  if(enable_contraction_for_abstract_states)
+    {
+      T::contract_interval_le(a, b); // a <= b
+      T::contract_interval_le(b, a); // b <= a
+    }
+  
   if(fixpoint_counter[to_symbol2t(lhs).thename] >= delayed_widening_limit)
   {
-if(widening_underaproximate_bound) {
     auto previous = get_interval_from_symbol<T>(to_symbol2t(lhs));
-    auto upper_increased =
-      a.upper_set && previous.upper_set && a.upper > previous.upper;
-    auto lower_increased =
-      a.lower_set && previous.lower_set && a.lower < previous.lower;
-    if(upper_increased)
-      a.upper_set = false;
-    if(lower_increased)
-      a.lower_set = false;
-}
-else {
-    a.upper_set = false;
-    a.lower_set = false;
-}
+    // TODO: add an extrapolated check
+    a = T::extrapolate_interval(previous, a);
   }
   update_symbol_interval(to_symbol2t(lhs), a);
+}
+
+template <class T>
+T interval_domaint::extrapolate_intervals(const T &before, const T &after)
+{
+  T result; // Full extrapolation
+
+  bool lower_changed = !after.lower_set || (before.lower_set && after.lower_set && after.lower < before.lower)
+    bool upper_changed = !after.upper_set || (before.upper_set && after.upper_set && after.upper > before.upper);
+
+  if((lower_changed || upper_changed) && !widening_underaproximate_intervals)
+    return result;
+  
+  // Set lower bound: 
+  if(!lower_changed)
+    {
+      result.lower_set = before.lower_set;
+    result.lower = before.lower;
+    }
+
+  // Set upper bound: 
+  if(!upper_changed)
+    {
+      result.upper_set = before.set;
+      result.upper = before.upper;
+      
+    }
+    
+  return result;
+}
+
+template <class T>
+T interval_domaint::interpolate_intervals(const T &before, const T &after)
+{
+  T result; 
+
+  bool lower_changed = !before.lower_set || (before.lower_set && after.lower_set && before.lower < after.lower)
+    bool upper_changed = !before.upper_set || (before.upper_set && after.upper_set && before.upper > after.upper);
+
+  const T& lower = lower_changed ? after : before;
+  const T& upper = upper_changed ? after : before;
+
+  result.lower_set = lower.lower_set;
+  result.lower = lower.lower;
+  result.upper_set = upper.upper_set;
+  result.upper = upper.upper;
+    
+  return result;
 }
 
 template <class T>
