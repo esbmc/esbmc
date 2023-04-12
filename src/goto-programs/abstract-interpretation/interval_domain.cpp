@@ -135,7 +135,7 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
   {
     auto previous = get_interval_from_symbol<T>(to_symbol2t(lhs));
     // TODO: add an extrapolated check
-    a = T::extrapolate_interval(previous, a);
+    a = T::extrapolate_intervals(previous, a);
   }
   update_symbol_interval(to_symbol2t(lhs), a);
 }
