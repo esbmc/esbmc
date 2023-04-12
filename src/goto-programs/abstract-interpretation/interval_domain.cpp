@@ -46,7 +46,7 @@ template <>
 integer_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
 {
   integer_intervalt result; // (-infinity, infinity)
-  if(!is_constant_int2t(e) || !enable_modular_intervals)
+  if(!is_constant_int2t(e))
     return result;
   auto value = to_constant_int2t(e).value;
   result.make_le_than(value);
@@ -58,7 +58,7 @@ template <>
 real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
 {
   real_intervalt result; // (-infinity, infinity)
-  if(!is_constant_floatbv2t(e) || !enable_modular_intervals)
+  if(!is_constant_floatbv2t(e))
     return result;
 
   auto value1 = to_constant_floatbv2t(e).value;
@@ -119,15 +119,17 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
 {
   assert(is_symbol2t(lhs));
   // a = b
-  auto a = generate_modular_interval<T>(to_symbol2t(lhs));
+  T a;
+  if(enable_modular_intervals)
+    generate_modular_interval<T>(to_symbol2t(lhs));
   auto b = get_interval<T>(rhs);
 
   // TODO: add classic algorithm
   if(enable_contraction_for_abstract_states)
-    {
-      T::contract_interval_le(a, b); // a <= b
-      T::contract_interval_le(b, a); // b <= a
-    }
+  {
+    T::contract_interval_le(a, b); // a <= b
+    T::contract_interval_le(b, a); // b <= a
+  }
   
   if(fixpoint_counter[to_symbol2t(lhs).thename] >= delayed_widening_limit)
   {
@@ -244,6 +246,8 @@ void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
 
   // TODO: Add less than equal
   Interval::contract_interval_le(lhs, rhs);
+
+  // TODO: Widening!
   if(is_symbol2t(a))
     update_symbol_interval(to_symbol2t(a), lhs);
 
