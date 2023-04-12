@@ -236,7 +236,7 @@ protected:
    * @param rhs
    */
   template <class Interval>
-  T extrapolate_intervals(const T &before, const T &after);
+  Interval extrapolate_intervals(const Interval &before, const Interval &after);
 
     /**
    * @brief Applies Interpolation narrowing algorithm
@@ -249,7 +249,7 @@ protected:
    * @param rhs
    */
   template <class Interval>
-  T interpolate_intervals(const T &before, const T &after);
+  Interval interpolate_intervals(const Interval &before, const Interval &after);
 
   
   /**
