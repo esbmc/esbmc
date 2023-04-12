@@ -135,7 +135,11 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
   {
     auto previous = get_interval_from_symbol<T>(to_symbol2t(lhs));
     // TODO: add an extrapolated check
-    a = T::extrapolate_intervals(previous, a);
+    bool was_extrapolated = false;
+    if(was_extrapolated && widening_narrowing)
+      a = interpolate_intervals<T>(previous,a);
+    else if(widening_extrapolate)
+      a = extrapolate_intervals<T>(previous, a);
   }
   update_symbol_interval(to_symbol2t(lhs), a);
 }
@@ -145,10 +149,10 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after)
 {
   T result; // Full extrapolation
 
-  bool lower_changed = !after.lower_set || (before.lower_set && after.lower_set && after.lower < before.lower)
+  bool lower_changed = !after.lower_set || (before.lower_set && after.lower_set && after.lower < before.lower);
     bool upper_changed = !after.upper_set || (before.upper_set && after.upper_set && after.upper > before.upper);
 
-  if((lower_changed || upper_changed) && !widening_underaproximate_intervals)
+  if((lower_changed || upper_changed) && !widening_underaproximate_bound)
     return result;
   
   // Set lower bound: 
@@ -161,7 +165,7 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after)
   // Set upper bound: 
   if(!upper_changed)
     {
-      result.upper_set = before.set;
+      result.upper_set = before.upper_set;
       result.upper = before.upper;
       
     }
@@ -174,7 +178,7 @@ T interval_domaint::interpolate_intervals(const T &before, const T &after)
 {
   T result; 
 
-  bool lower_changed = !before.lower_set || (before.lower_set && after.lower_set && before.lower < after.lower)
+  bool lower_changed = !before.lower_set || (before.lower_set && after.lower_set && before.lower < after.lower);
     bool upper_changed = !before.upper_set || (before.upper_set && after.upper_set && before.upper > after.upper);
 
   const T& lower = lower_changed ? after : before;
@@ -247,7 +251,7 @@ void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
   // TODO: Add less than equal
   Interval::contract_interval_le(lhs, rhs);
 
-  // TODO: Widening!
+  // No need for widening, this is a restriction!
   if(is_symbol2t(a))
     update_symbol_interval(to_symbol2t(a), lhs);
 
