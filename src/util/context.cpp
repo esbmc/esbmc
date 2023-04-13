@@ -22,6 +22,23 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
   std::pair<symbolst::iterator, bool> result =
     symbols.insert(std::pair<irep_idt, symbolt>(symbol.id, tmp));
 
+  if(
+    symbol.id.as_string() ==
+    "Vehicle::Vehicle(this,ref_symbol(identifier=tag.Vehicle,#constant=1_1))")
+    printf("Got cpyctor symb\n");
+  if(
+    symbol.id.as_string() ==
+    "Vehicle::Vehicle(this,ref_symbol(identifier=tag.Vehicle,#constant=1_1))::"
+    "Vehicle::Vehicle(this,ref_symbol(identifier=tag.Vehicle,#constant=1_1))::"
+    "this")
+    printf("Got cpyctor this symb\n");
+  if(
+    symbol.id.as_string() ==
+    "Vehicle::Vehicle(this,ref_symbol(identifier=tag.Vehicle,#constant=1_1))::"
+    "Vehicle::Vehicle(this,ref_symbol(identifier=tag.Vehicle,#constant=1_1))::"
+    "ref")
+    printf("Got cpyctor ref symb\n");
+
   if(!result.second)
   {
     new_symbol = &result.first->second;

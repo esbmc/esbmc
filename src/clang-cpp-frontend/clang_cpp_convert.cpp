@@ -1150,6 +1150,7 @@ bool clang_cpp_convertert::annotate_cpp_methods(
                              ? "destructor"
                              : "constructor";
     typet rtn_type(mark_rtn);
+    annotate_cpyctor(cxxmdd, rtn_type);
     component_type.return_type() = rtn_type;
 
     /*
@@ -1365,4 +1366,15 @@ bool clang_cpp_convertert::is_duplicate_method(
       return true;
   }
   return false;
+}
+
+void clang_cpp_convertert::annotate_cpyctor(
+  const clang::CXXMethodDecl *cxxmdd,
+  typet &rtn_type)
+{
+  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(cxxmdd))
+  {
+    if(ctor->isDefaulted() && ctor->isCopyConstructor())
+      rtn_type.set("#default_copy_cons", true);
+  }
 }
