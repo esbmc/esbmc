@@ -1066,10 +1066,12 @@ bool clang_cpp_convertert::get_decl_ref(
     llvm::raw_os_ostream ross(oss);
     decl.dump(ross);
     ross.flush();
-    log_warning(
+    log_error(
       "Conversion of unsupported clang decl ref for: {}\n{}",
       decl.getDeclKindName(),
       oss.str());
+    abort();
+
     return true;
   }
   }
