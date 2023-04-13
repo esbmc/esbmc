@@ -40,7 +40,7 @@ public:
 
   // Extensions
   bool enable_interval_arithmetic = false;
-  bool enable_modular_intervals = false;
+  bool enable_modular_intervals = true;
   bool enable_assertion_simplification = false;
   bool enable_contraction_for_abstract_states = true;
 
