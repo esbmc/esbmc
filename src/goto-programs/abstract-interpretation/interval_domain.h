@@ -39,7 +39,7 @@ public:
   void dump() const;
 
   // Extensions
-  bool enable_interval_arithmetic = true;
+  bool enable_interval_arithmetic = false;
   bool enable_modular_intervals = false;
   bool enable_assertion_simplification = false;
   bool enable_contraction_for_abstract_states = true;
@@ -47,7 +47,7 @@ public:
   // Widening options
   unsigned delayed_widening_limit = 50;
   bool widening_underaproximate_bound = false;
-  bool widening_extrapolate = false;
+  bool widening_extrapolate = true;
   bool widening_narrowing = false;
 
 
