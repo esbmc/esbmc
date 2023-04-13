@@ -24,11 +24,11 @@ protected:
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
 
   /**
-   *  Get reference to declared variabales or functions, e.g:
+   *  Get reference to a declared variable or function, e.g:
    *   - getting the callee for CXXConstructExpr
    *   - getting the object for DeclRefExpr
    */
-  bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
+  bool get_decl_ref(const clang::Decl &decl, exprt &new_expr) override;
 
   bool get_type(const clang::QualType &type, typet &new_type) override;
 
