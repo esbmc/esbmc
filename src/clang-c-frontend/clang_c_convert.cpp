@@ -603,6 +603,9 @@ bool clang_c_convertert::get_function(
   std::string id, name;
   get_decl_name(fd, name, id);
 
+  if(id == "c:@S@Vehicle@F@Vehicle#&1$@S@Vehicle#")
+    printf("Got cpy ctor\n");
+
   symbolt symbol;
   get_default_symbol(
     symbol,

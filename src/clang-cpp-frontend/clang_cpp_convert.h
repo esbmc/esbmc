@@ -132,14 +132,22 @@ protected:
    *    * name: MyMethodName
    *    * #location:
    * Arguments:
-   *  cxxmd:    clang AST node representing the method we are dealing with
+   *  cxxmdd:   clang AST node representing the method we are dealing with
    *  new_expr: the `component` in class/struct/union symbol type
-   *  fd_symb:  function symbol that has been added in symbol table (i.e. the `context`)
+   *  fd: clang AST node representing the function declaration we are dealing with
    */
   bool annotate_cpp_methods(
     const clang::CXXMethodDecl *cxxmdd,
     exprt &new_expr,
     const clang::FunctionDecl &fd);
+  /*
+   * Flag copy constructor.
+   *
+   * Arguments:
+   *  cxxmdd: clang AST node representing the constructor we are dealing with
+   *  rtn_type: the corresponding return type node
+   */
+  void annotate_cpyctor(const clang::CXXMethodDecl *cxxmdd, typet &rtn_type);
 
   /*
    * When getting a function call to ctor, we might call the base ctor from a derived class ctor
