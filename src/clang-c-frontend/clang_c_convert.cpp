@@ -1040,8 +1040,28 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       sub_type = symbol_typet(tag_prefix + t.tag().as_string());
     }
 
+    /*
+     * Note:
+     * isConstQualified() checks the parent node qualifier, NOT the child node qualifier.
+     * e.g
+     * Given
+     *  `-LValueReferenceType 0x55555eda3160 'const class Vehicle &'
+     *    `-QualType 0x55555eda2b21 'const class Vehicle' const
+     * isConstQualified() returns false;
+     *
+     * Given
+     * QualType 0x55555eda3161 'const class Vehicle &const' const
+     *  `-LValueReferenceType 0x55555eda3160 'const class Vehicle &'
+     * isConstQualified() returns true;
+     *
+     * So for a const ref, we need to annotate it here
+     */
+    if(lvrt.getPointeeTypeAsWritten().isConstQualified())
+      sub_type.cmt_constant(true);
+
     new_type = gen_pointer_type(sub_type);
     new_type.set("#reference", true);
+
     break;
   }
 
