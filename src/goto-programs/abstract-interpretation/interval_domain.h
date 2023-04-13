@@ -47,7 +47,7 @@ public:
   // Widening options
   unsigned delayed_widening_limit = 50;
   bool widening_underaproximate_bound = false;
-  bool widening_extrapolate = false;
+  bool widening_extrapolate = true;
   bool widening_narrowing = false;
 
 
