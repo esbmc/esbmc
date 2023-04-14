@@ -1008,23 +1008,6 @@ bool clang_cpp_convertert::get_function_param(
       // let's deal with unnamed parameter in implicit defaulted cpyctor
       assert(!"Got it");
     }
-    else
-    {
-      /*
-       * We might see more of its kind in other places than implicit defaulted cpyctor.
-       * For the time being, let's just give it a clear ERROR message for future extension.
-       */
-      std::ostringstream oss;
-      llvm::raw_os_ostream ross(oss);
-      pd.dump(ross);
-      ross.flush();
-      log_error(
-        "Conversion of unsupported clang function unnamed parameter for: "
-        "{}\n{}",
-        pd.getDeclKindName(),
-        oss.str());
-      abort();
-    }
   }
 
   return clang_c_convertert::get_function_param(pd, param);
