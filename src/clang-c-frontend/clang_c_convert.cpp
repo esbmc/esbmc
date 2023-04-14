@@ -703,12 +703,9 @@ bool clang_c_convertert::get_function_param(
   param.type() = param_type;
   param.cmt_base_name(name);
 
-  // If the name is empty, this is an function definition that we don't
-  // need to worry about as the function params name's will be defined
-  // when the function is defined, the exprt is filled for the sake of
-  // beautification
   if(name.empty())
-    return false;
+    if(!name_param_and_continue(pd, name, id))
+      return false;
 
   locationt location_begin;
   get_location_from_decl(pd, location_begin);
@@ -743,6 +740,20 @@ bool clang_c_convertert::get_function_param(
     return false;
 
   move_symbol_to_context(param_symbol);
+  return false;
+}
+
+bool clang_c_convertert::name_param_and_continue(
+  const clang::ParmVarDecl &,
+  std::string &,
+  std::string &)
+{
+  /*
+   * If the name is empty, this is an function definition that we don't
+   * need to worry about as the function param's name will be defined
+   * when the function is defined, the exprt is filled for the sake of
+   * beautification
+   */
   return false;
 }
 

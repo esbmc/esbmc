@@ -55,7 +55,11 @@ protected:
   bool get_function_params(
     const clang::FunctionDecl &fd,
     code_typet::argumentst &params) override;
-  bool get_function_param(const clang::ParmVarDecl &pd, exprt &param) override;
+
+  bool name_param_and_continue(
+    const clang::ParmVarDecl &pd,
+    std::string &id,
+    std::string &name) override;
 
   /**
    *  Add implicit `this' when parsing C++ class member functions, e.g:
