@@ -119,11 +119,23 @@ protected:
   virtual bool get_function_params(
     const clang::FunctionDecl &fd,
     code_typet::argumentst &params);
-
   /**
    *  Parse each individual parameter of the function
    */
-  virtual bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
+  bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
+  /*
+   * This function determines whether we should name an unnamed function parameter
+   * and continue to add its symbol.
+   *
+   * Params:
+   *  pd: the clang AST node for the function parameter we are currently dealing with
+   *  id: id for this function parameter
+   *  name: name for this function parameter
+   */
+  virtual bool name_param_and_continue(
+    const clang::ParmVarDecl &pd,
+    std::string &id,
+    std::string &name);
 
   virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
 

@@ -978,39 +978,36 @@ bool clang_cpp_convertert::get_function_params(
   return false;
 }
 
-bool clang_cpp_convertert::get_function_param(
+bool clang_cpp_convertert::name_param_and_continue(
   const clang::ParmVarDecl &pd,
-  exprt &param)
+  std::string &id,
+  std::string &name)
 {
   /*
    * A C++ function may contain unnamed function parameter(s).
+   * The base method of clang_c_converter doesn't care about
+   * unnamed function parameter. But we need to deal with it here
+   * because the unnamed function parameter may be used in a function's body.
    * e.g. unnamed const ref in class' defaulted copy constructor
    *      implicitly added by the complier
    *
-   * The base method of clang_c_converter doesn't care about
-   * unnamed function parameter. But we need to deal with it here
-   * because the unnamed function parameter may be used in functions's body.
    * We need to:
-   *  1. Name it
-   *  2. fill the param
-   *  3. add a symbol for it
+   *  1. Name it (done in this function)
+   *  2. fill the param (done as part of the clang_c_converter's get_function_param flow)
+   *  3. add a symbol for it (done as part of the clang_c_converter's get_function_param flow)
    */
 
-  std::string name, id;
-  clang_c_convertert::get_decl_name(pd, name, id);
+  assert(id.empty()); // id should be empty too
 
-  if(id.empty() || name.empty())
+  const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
+  if(is_cpyctor(dcxt) && is_defaulted_ctor(dcxt))
   {
-    const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
-
-    if(is_cpyctor(dcxt) && is_defaulted_ctor(dcxt))
-    {
-      // let's deal with unnamed parameter in implicit defaulted cpyctor
-      assert(!"Got it");
-    }
+    // let's deal with the unnamed parameter for an implicit defaulted cpyctor
+    assert(!"got it");
+    return true;
   }
 
-  return clang_c_convertert::get_function_param(pd, param);
+  return false;
 }
 
 template <typename SpecializationDecl>
