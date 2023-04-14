@@ -981,7 +981,8 @@ bool clang_cpp_convertert::get_function_params(
 bool clang_cpp_convertert::name_param_and_continue(
   const clang::ParmVarDecl &pd,
   std::string &id,
-  std::string &name)
+  std::string &name,
+  exprt &param)
 {
   /*
    * A C++ function may contain unnamed function parameter(s).
@@ -1003,7 +1004,8 @@ bool clang_cpp_convertert::name_param_and_continue(
   if(is_cpyctor(dcxt) && is_defaulted_ctor(dcxt))
   {
     // let's deal with the unnamed parameter for an implicit defaulted cpyctor
-    assert(!"got it");
+    get_cpyctor_name(
+      static_cast<const clang::CXXConstructorDecl *>(dcxt), id, name, param);
     return true;
   }
 
@@ -1431,4 +1433,20 @@ bool clang_cpp_convertert::is_defaulted_ctor(const clang::DeclContext *dcxt)
       return true;
 
   return false;
+}
+
+void clang_cpp_convertert::get_cpyctor_name(
+  const clang::CXXConstructorDecl *cxxctor,
+  std::string &id,
+  std::string &name,
+  exprt &param)
+{
+  get_decl_name(*cxxctor, name, id);
+
+  // name would be just `ref` and id would be "<cpyctor_id>::ref"
+  name.assign(cpyctor_constref_suffix);
+  id = id + "::" + cpyctor_constref_suffix;
+
+  // sync param name
+  param.cmt_base_name(name);
 }
