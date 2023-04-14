@@ -131,11 +131,13 @@ protected:
    *  pd: the clang AST node for the function parameter we are currently dealing with
    *  id: id for this function parameter
    *  name: name for this function parameter
+   *  param: ESBMC's IR representing the function parameter
    */
   virtual bool name_param_and_continue(
     const clang::ParmVarDecl &pd,
     std::string &id,
-    std::string &name);
+    std::string &name,
+    exprt &param);
 
   virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
 

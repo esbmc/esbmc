@@ -704,7 +704,7 @@ bool clang_c_convertert::get_function_param(
   param.cmt_base_name(name);
 
   if(name.empty())
-    if(!name_param_and_continue(pd, name, id))
+    if(!name_param_and_continue(pd, id, name, param))
       return false;
 
   locationt location_begin;
@@ -746,7 +746,8 @@ bool clang_c_convertert::get_function_param(
 bool clang_c_convertert::name_param_and_continue(
   const clang::ParmVarDecl &,
   std::string &,
-  std::string &)
+  std::string &,
+  exprt &)
 {
   /*
    * If the name is empty, this is an function definition that we don't

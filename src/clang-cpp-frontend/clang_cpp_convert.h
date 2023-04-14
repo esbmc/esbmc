@@ -59,7 +59,25 @@ protected:
   bool name_param_and_continue(
     const clang::ParmVarDecl &pd,
     std::string &id,
-    std::string &name) override;
+    std::string &name,
+    exprt &param) override;
+
+  /*
+   * This function assigns a name and an id to the unnamed const ref
+   * in an implicit defaulted copy constructor added by the compiler.
+   *
+   * Params:
+   *  pd: the clang AST node for the function parameter we are currently dealing with
+   *  id: id for this function parameter
+   *  name: name for this function parameter
+   *  param: ESBMC's IR representing the function parameter
+   */
+  void get_cpyctor_name(
+    const clang::CXXConstructorDecl *cxxctor,
+    std::string &id,
+    std::string &name,
+    exprt &param);
+  std::string cpyctor_constref_suffix = "ref";
 
   /**
    *  Add implicit `this' when parsing C++ class member functions, e.g:
