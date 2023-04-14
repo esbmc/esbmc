@@ -1074,24 +1074,37 @@ bool clang_cpp_convertert::get_decl_ref(
   {
   case clang::Decl::ParmVar:
   {
+    // first follow the base conversion flow to fill new_expr
+    if(clang_c_convertert::get_decl_ref(decl, new_expr))
+      return true;
+
     /*
-     * we need to do some additional checks and conversions on function parameters for C++,
+     * Name and id might be empty.
+     * We need to do some additional checks and conversions on function parameters for C++,
      * e.g. unnamed const ref in class' defaulted copy constructor
      */
     const clang::ParmVarDecl &param =
       static_cast<const clang::ParmVarDecl &>(decl);
-
-    get_decl_name(param, name, id);
-
     const clang::DeclContext *dcxt = param.getParentFunctionOrMethod();
 
-    if((id.empty() || name.empty()) && is_cpyctor(dcxt))
+    // try to get its name and id. If empty, we need to manually assign a name and an id.
+    get_decl_name(param, name, id);
+    if(
+      (id.empty() || name.empty()) && is_cpyctor(dcxt) &&
+      is_defaulted_ctor(dcxt))
     {
-      // deal with unnamed ParamVar
-      //assert(!"TODO-961: got it");
+      get_cpyctor_name(
+        static_cast<const clang::CXXConstructorDecl *>(dcxt),
+        id,
+        name,
+        new_expr);
+
+      // assign a name and an id
+      new_expr.name(name);
+      new_expr.identifier(id);
     }
 
-    return clang_c_convertert::get_decl_ref(decl, new_expr);
+    return false;
   }
   case clang::Decl::CXXConstructor:
   {
@@ -1441,6 +1454,7 @@ void clang_cpp_convertert::get_cpyctor_name(
   std::string &name,
   exprt &param)
 {
+  assert(cxxctor->isImplicit());
   get_decl_name(*cxxctor, name, id);
 
   // name would be just `ref` and id would be "<cpyctor_id>::ref"
