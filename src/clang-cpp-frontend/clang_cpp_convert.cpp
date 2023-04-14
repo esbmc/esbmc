@@ -1036,6 +1036,27 @@ bool clang_cpp_convertert::get_decl_ref(
 
   switch(decl.getKind())
   {
+  case clang::Decl::ParmVar:
+  {
+    /*
+     * we need to do some additional checks and conversions on function parameters for C++,
+     * e.g. unnamed const ref in class' defaulted copy constructor
+     */
+    const clang::ParmVarDecl &param =
+      static_cast<const clang::ParmVarDecl &>(decl);
+
+    get_decl_name(param, name, id);
+
+    const clang::DeclContext *dcxt = param.getParentFunctionOrMethod();
+
+    if((id.empty() || name.empty()) && is_cpyctor(dcxt))
+    {
+      // deal with unnamed ParamVar
+      //assert(!"TODO-961: got it");
+    }
+
+    return clang_c_convertert::get_decl_ref(decl, new_expr);
+  }
   case clang::Decl::CXXConstructor:
   {
     const clang::FunctionDecl &fd =
@@ -1356,9 +1377,24 @@ void clang_cpp_convertert::annotate_cpyctor(
   const clang::CXXMethodDecl *cxxmdd,
   typet &rtn_type)
 {
-  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(cxxmdd))
-  {
-    if(ctor->isDefaulted() && ctor->isCopyConstructor())
-      rtn_type.set("#default_copy_cons", true);
-  }
+  if(is_defaulted_ctor(cxxmdd) && is_cpyctor(cxxmdd))
+    rtn_type.set("#default_copy_cons", true);
+}
+
+bool clang_cpp_convertert::is_cpyctor(const clang::DeclContext *dcxt)
+{
+  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(dcxt))
+    if(ctor->isCopyConstructor())
+      return true;
+
+  return false;
+}
+
+bool clang_cpp_convertert::is_defaulted_ctor(const clang::DeclContext *dcxt)
+{
+  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(dcxt))
+    if(ctor->isDefaulted())
+      return true;
+
+  return false;
 }
