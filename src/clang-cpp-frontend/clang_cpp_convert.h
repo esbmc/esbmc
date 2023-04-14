@@ -50,11 +50,12 @@ protected:
 
   /**
    *  Get function params for C++
-   *  contains parsing routines specific to C++ class member functions
+   *  contains conversion routines specific to C++ class member functions
    */
   bool get_function_params(
     const clang::FunctionDecl &fd,
     code_typet::argumentst &params) override;
+  bool get_function_param(const clang::ParmVarDecl &pd, exprt &param) override;
 
   /**
    *  Add implicit `this' when parsing C++ class member functions, e.g:

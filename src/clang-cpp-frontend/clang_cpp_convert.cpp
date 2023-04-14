@@ -964,8 +964,10 @@ bool clang_cpp_convertert::get_function_params(
   // Parse other args
   for(std::size_t i = 0; i < fd.parameters().size(); ++i)
   {
+    const clang::ParmVarDecl &pd = *fd.parameters()[i];
+
     code_typet::argumentt param;
-    if(get_function_param(*fd.parameters()[i], param))
+    if(get_function_param(pd, param))
       return true;
 
     // All args are added shifted by one position, because
@@ -974,6 +976,58 @@ bool clang_cpp_convertert::get_function_params(
   }
 
   return false;
+}
+
+bool clang_cpp_convertert::get_function_param(
+  const clang::ParmVarDecl &pd,
+  exprt &param)
+{
+  /*
+   * A C++ function may contain unnamed function parameter(s).
+   * e.g. unnamed const ref in class' defaulted copy constructor
+   *      implicitly added by the complier
+   *
+   * The base method of clang_c_converter doesn't care about
+   * unnamed function parameter. But we need to deal with it here
+   * because the unnamed function parameter may be used in functions's body.
+   * We need to:
+   *  1. Name it
+   *  2. fill the param
+   *  3. add a symbol for it
+   */
+
+  std::string name, id;
+  clang_c_convertert::get_decl_name(pd, name, id);
+
+  if(id.empty() || name.empty())
+  {
+    const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
+
+    if(is_cpyctor(dcxt) && is_defaulted_ctor(dcxt))
+    {
+      // let's deal with unnamed parameter in implicit defaulted cpyctor
+      assert(!"Got it");
+    }
+    else
+    {
+      /*
+       * We might see more of its kind in other places than implicit defaulted cpyctor.
+       * For the time being, let's just give it a clear ERROR message for future extension.
+       */
+      std::ostringstream oss;
+      llvm::raw_os_ostream ross(oss);
+      pd.dump(ross);
+      ross.flush();
+      log_error(
+        "Conversion of unsupported clang function unnamed parameter for: "
+        "{}\n{}",
+        pd.getDeclKindName(),
+        oss.str());
+      abort();
+    }
+  }
+
+  return clang_c_convertert::get_function_param(pd, param);
 }
 
 template <typename SpecializationDecl>

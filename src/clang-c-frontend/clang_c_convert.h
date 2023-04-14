@@ -123,7 +123,7 @@ protected:
   /**
    *  Parse each individual parameter of the function
    */
-  bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
+  virtual bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
 
   virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
 
