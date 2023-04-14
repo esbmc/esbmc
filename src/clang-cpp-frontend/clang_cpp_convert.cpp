@@ -997,7 +997,7 @@ bool clang_cpp_convertert::name_param_and_continue(
    *  3. add a symbol for it (done as part of the clang_c_converter's get_function_param flow)
    */
 
-  assert(id.empty()); // id should be empty too
+  assert(id.empty() && name.empty());
 
   const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
   if(is_cpyctor(dcxt) && is_defaulted_ctor(dcxt))
