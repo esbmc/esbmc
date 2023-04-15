@@ -995,8 +995,10 @@ bool clang_cpp_convertert::name_param_and_continue(
    *
    * We need to:
    *  1. Name it (done in this function)
-   *  2. fill the param (done as part of the clang_c_converter's get_function_param flow)
-   *  3. add a symbol for it (done as part of the clang_c_converter's get_function_param flow)
+   *  2. fill the param
+   *     (done as part of the clang_c_converter's get_function_param flow)
+   *  3. add a symbol for it
+   *     (done as part of the clang_c_converter's get_function_param flow)
    */
 
   assert(id.empty() && name.empty());
@@ -1081,14 +1083,17 @@ bool clang_cpp_convertert::get_decl_ref(
 
     /*
      * Name and id might be empty.
-     * We need to do some additional checks and conversions on function parameters for C++,
-     * e.g. unnamed const ref in class' defaulted copy constructor
+     * We need to do some additional checks and conversions on function
+     * parameters for C++, e.g. unnamed const ref in a defaulted cpyctor
      */
     const clang::ParmVarDecl &param =
       static_cast<const clang::ParmVarDecl &>(decl);
     const clang::DeclContext *dcxt = param.getParentFunctionOrMethod();
 
-    // try to get its name and id. If empty, we need to manually assign a name and an id.
+    /*
+     * try to get its name and id.
+     * If empty, we need to manually assign a name and an id.
+     */
     get_decl_name(param, name, id);
     if(
       (id.empty() || name.empty()) && is_cpyctor(dcxt) &&
