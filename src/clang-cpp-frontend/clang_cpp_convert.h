@@ -193,7 +193,9 @@ protected:
    * This is an ancillary function deciding whether we need
    * need to build an new_object when dealing with constructor_call
    */
-  bool need_new_object(const clang::Stmt *parentStmt);
+  bool need_new_object(
+    const clang::Stmt *parentStmt,
+    const clang::CXXConstructExpr &call);
 
   /*
    * Methods to pull bases in
