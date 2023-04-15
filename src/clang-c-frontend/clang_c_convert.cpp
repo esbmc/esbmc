@@ -1051,8 +1051,8 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     /*
      * Note:
-     * isConstQualified() checks the parent node qualifier, NOT the child node qualifier.
-     * e.g
+     * isConstQualified() checks the parent node qualifier,
+     * NOT the child node qualifier, e.g
      * Given
      *  `-LValueReferenceType 0x55555eda3160 'const class Vehicle &'
      *    `-QualType 0x55555eda2b21 'const class Vehicle' const
