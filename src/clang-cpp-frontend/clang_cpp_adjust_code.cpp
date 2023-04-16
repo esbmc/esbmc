@@ -149,6 +149,8 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
     if(it->is_code() && (it->statement() == "skip"))
       continue;
 
+    adjust_expr(*it);
+
     code_declt &code_decl = to_code_decl(to_code(*it));
 
     if(code_decl.operands().size() == 2)
