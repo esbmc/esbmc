@@ -21,8 +21,7 @@ public:
       disable_pointer_relation_check(
         options.get_bool_option("no-pointer-relation-check")),
       enable_overflow_check(options.get_bool_option("overflow-check")),
-      enable_undef_behaviour_check(
-        options.get_bool_option("undef-behaviour-check")),
+      enable_shift_ub_check(options.get_bool_option("shift-ub-check")),
       enable_nan_check(options.get_bool_option("nan-check"))
   {
   }
@@ -85,7 +84,7 @@ protected:
   bool disable_div_by_zero_check;
   bool disable_pointer_relation_check;
   bool enable_overflow_check;
-  bool enable_undef_behaviour_check;
+  bool enable_shift_ub_check;
   bool enable_nan_check;
 };
 
@@ -237,7 +236,7 @@ void goto_checkt::shift_check(
   const guardt &guard,
   const locationt &loc)
 {
-  if(!enable_undef_behaviour_check)
+  if(!enable_shift_ub_check)
     return;
 
   assert(is_shl2t(expr));

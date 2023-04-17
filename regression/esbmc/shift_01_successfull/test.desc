@@ -1,4 +1,4 @@
 CORE
 main.c
---undef-behaviour-check
+--shift-ub-check
 ^VERIFICATION SUCCESSFUL$
