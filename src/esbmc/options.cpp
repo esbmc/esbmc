@@ -244,6 +244,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"nan-check", NULL, "check floating-point for NaN"},
     {"memory-leak-check", NULL, "enable memory leak check"},
     {"overflow-check", NULL, "enable arithmetic over- and underflow check"},
+    {"undef-behaviour-check", NULL, "enable undefined behaviour check"},
     {"struct-fields-check",
      NULL,
      "enable over-sized read checks for struct fields"},
