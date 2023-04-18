@@ -698,7 +698,6 @@ void execution_statet::execute_guard()
 
   //target->assumption(
     //guardt().as_expr(), assumpt, get_active_state().source, first_loop);
-  
   if(active_thread != last_active_thread)
    target->assumption(guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
   
