@@ -699,7 +699,8 @@ void execution_statet::execute_guard()
   //target->assumption(
   //  guardt().as_expr(), assumpt, get_active_state().source, first_loop);
   if(active_thread != last_active_thread)
-    target->assumption(guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
+    target->assumption(
+      guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
   
   // Check to see whether or not the state guard is false, indicating we've
   // found an unviable interleaving. However don't do this if we didn't
