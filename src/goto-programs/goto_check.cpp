@@ -334,18 +334,25 @@ void goto_checkt::input_overflow_check(
       switch(stoi(width))
       {
       case 8:
+      {
         if(stoi(limits.at(i)) > 3)
           buf_overflow = true;
+      }
       case 16:
+      {
         if(stoi(limits.at(i)) > 5)
           buf_overflow = true;
+      }
       case 32:
+      {
         if(stoi(limits.at(i)) > 10)
           buf_overflow = true;
-
+      }
       case 64:
+      {
         if(stoi(limits.at(i)) > 19)
           buf_overflow = true;
+      }
       default:
         break;
       }
