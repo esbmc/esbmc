@@ -451,6 +451,9 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   std::string id, name;
   get_decl_name(vd, name, id);
 
+  if(id == "c:@S@istreamX@_gcount")
+    printf("Got static\n");
+
   if(no_slice)
     config.no_slice_names.emplace(id);
 
