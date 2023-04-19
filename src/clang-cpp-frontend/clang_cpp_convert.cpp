@@ -221,10 +221,6 @@ bool clang_cpp_convertert::get_function(
   if(fd.isDependentContext())
     return false;
 
-  // Ignore unamed implicit trivial ctor
-  if(is_ctor_unnamed_implicit_trivial(fd))
-    return false;
-
   if(clang_c_convertert::get_function(fd, new_expr))
     return true;
 
@@ -541,8 +537,14 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::MaterializeTemporaryExpr &mtemp =
       static_cast<const clang::MaterializeTemporaryExpr &>(stmt);
 
-    if(get_expr(*mtemp.getSubExpr(), new_expr))
+    exprt tmp;
+    if(get_expr(*mtemp.getSubExpr(), tmp))
       return true;
+
+    if(mtemp.isBoundToLvalueReference())
+      new_expr = address_of_exprt(tmp);
+    else
+      new_expr.swap(tmp);
 
     break;
   }
@@ -731,12 +733,7 @@ bool clang_cpp_convertert::get_constructor_call(
   auto it = ASTContext->getParents(constructor_call).begin();
   const clang::Decl *objectDecl = it->get<clang::Decl>();
 
-  /*
-   * We only need to build the new_object if:
-   *  1. we are dealing with new operator
-   *  2. we are binding a temporary
-   */
-  if(!objectDecl && need_new_object(it->get<clang::Stmt>()))
+  if(!objectDecl && need_new_object(it->get<clang::Stmt>(), constructor_call))
   {
     address_of_exprt tmp_expr;
     tmp_expr.type() = pointer_typet();
@@ -968,13 +965,51 @@ bool clang_cpp_convertert::get_function_params(
   // Parse other args
   for(std::size_t i = 0; i < fd.parameters().size(); ++i)
   {
+    const clang::ParmVarDecl &pd = *fd.parameters()[i];
+
     code_typet::argumentt param;
-    if(get_function_param(*fd.parameters()[i], param))
+    if(get_function_param(pd, param))
       return true;
 
     // All args are added shifted by one position, because
     // of the this pointer (first arg)
     params[i + 1].swap(param);
+  }
+
+  return false;
+}
+
+bool clang_cpp_convertert::name_param_and_continue(
+  const clang::ParmVarDecl &pd,
+  std::string &id,
+  std::string &name,
+  exprt &param)
+{
+  /*
+   * A C++ function may contain unnamed function parameter(s).
+   * The base method of clang_c_converter doesn't care about
+   * unnamed function parameter. But we need to deal with it here
+   * because the unnamed function parameter may be used in a function's body.
+   * e.g. unnamed const ref in class' defaulted copy constructor
+   *      implicitly added by the complier
+   *
+   * We need to:
+   *  1. Name it (done in this function)
+   *  2. fill the param
+   *     (done as part of the clang_c_converter's get_function_param flow)
+   *  3. add a symbol for it
+   *     (done as part of the clang_c_converter's get_function_param flow)
+   */
+
+  assert(id.empty() && name.empty());
+
+  const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
+  if(is_cpyctor(dcxt) && is_defaulted_ctor(dcxt))
+  {
+    // let's deal with the unnamed parameter for an implicit defaulted cpyctor
+    get_cpyctor_name(
+      static_cast<const clang::CXXConstructorDecl *>(dcxt), id, name, param);
+    return true;
   }
 
   return false;
@@ -1040,10 +1075,42 @@ bool clang_cpp_convertert::get_decl_ref(
 
   switch(decl.getKind())
   {
-  case clang::Decl::Var:
-  case clang::Decl::Field:
+  case clang::Decl::ParmVar:
   {
-    return clang_c_convertert::get_decl_ref(decl, new_expr);
+    // first follow the base conversion flow to fill new_expr
+    if(clang_c_convertert::get_decl_ref(decl, new_expr))
+      return true;
+
+    /*
+     * Name and id might be empty.
+     * We need to do some additional checks and conversions on function
+     * parameters for C++, e.g. unnamed const ref in a defaulted cpyctor
+     */
+    const clang::ParmVarDecl &param =
+      static_cast<const clang::ParmVarDecl &>(decl);
+    const clang::DeclContext *dcxt = param.getParentFunctionOrMethod();
+
+    /*
+     * try to get its name and id.
+     * If empty, we need to manually assign a name and an id.
+     */
+    get_decl_name(param, name, id);
+    if(
+      (id.empty() || name.empty()) && is_cpyctor(dcxt) &&
+      is_defaulted_ctor(dcxt))
+    {
+      get_cpyctor_name(
+        static_cast<const clang::CXXConstructorDecl *>(dcxt),
+        id,
+        name,
+        new_expr);
+
+      // assign a name and an id
+      new_expr.name(name);
+      new_expr.identifier(id);
+    }
+
+    return false;
   }
   case clang::Decl::CXXConstructor:
   {
@@ -1063,18 +1130,7 @@ bool clang_cpp_convertert::get_decl_ref(
 
   default:
   {
-    // Cases not handled above are unknown clang decls; we print an warning.
-    // It might be possible to support them either here or in clang_c_frontend::get_decl_ref()
-    // depending on whether they are C++-specific or not.
-    std::ostringstream oss;
-    llvm::raw_os_ostream ross(oss);
-    decl.dump(ross);
-    ross.flush();
-    log_warning(
-      "Conversion of unsupported clang decl ref for: {}\n{}",
-      decl.getDeclKindName(),
-      oss.str());
-    return true;
+    return clang_c_convertert::get_decl_ref(decl, new_expr);
   }
   }
 
@@ -1154,6 +1210,7 @@ bool clang_cpp_convertert::annotate_cpp_methods(
                              ? "destructor"
                              : "constructor";
     typet rtn_type(mark_rtn);
+    annotate_cpyctor(cxxmdd, rtn_type);
     component_type.return_type() = rtn_type;
 
     /*
@@ -1243,16 +1300,14 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   call.arguments().push_back(implicit_this_symb);
 }
 
-bool clang_cpp_convertert::need_new_object(const clang::Stmt *parentStmt)
+bool clang_cpp_convertert::need_new_object(
+  const clang::Stmt *parentStmt,
+  const clang::CXXConstructExpr &call)
 {
   /*
-   * Example:
-   * Distinguish `Foo foo = new foo();` from `Foo foo = foo();`
-   * This function will return true for the former.
-   * The latter involves a temporary object and copy constructor call
-   * where the the temporary object construction is considered an argument to
-   * the cpy ctor call's AST node, in which case this function will return false,
-   * indicating we shouldn't make a new_object.
+   * We only need to build the new_object if:
+   *  1. we are dealing with new operator
+   *  2. we are binding a temporary
    */
   if(parentStmt)
   {
@@ -1262,7 +1317,14 @@ bool clang_cpp_convertert::need_new_object(const clang::Stmt *parentStmt)
     case clang::Stmt::CXXBindTemporaryExprClass:
       return true;
     default:
-      return false;
+    {
+      /*
+       * A POD temporary is bound to a CXXBindTemporaryExprClass node.
+       * But we still need to build a new_object in this case.
+       */
+      if(call.getStmtClass() == clang::Stmt::CXXTemporaryObjectExprClass)
+        return true;
+    }
     }
   }
 
@@ -1371,17 +1433,45 @@ bool clang_cpp_convertert::is_duplicate_method(
   return false;
 }
 
-bool clang_cpp_convertert::is_ctor_unnamed_implicit_trivial(
-  const clang::FunctionDecl &fd)
+void clang_cpp_convertert::annotate_cpyctor(
+  const clang::CXXMethodDecl *cxxmdd,
+  typet &rtn_type)
 {
-  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
-  {
-    if(md->getKind() == clang::Decl::CXXConstructor)
-    {
-      std::string name = clang_c_convertert::get_decl_name(fd);
-      bool unnamed = name.empty() ? true : false;
-      return (fd.isTrivial() && fd.isImplicit() && unnamed);
-    }
-  }
+  if(is_defaulted_ctor(cxxmdd) && is_cpyctor(cxxmdd))
+    rtn_type.set("#default_copy_cons", true);
+}
+
+bool clang_cpp_convertert::is_cpyctor(const clang::DeclContext *dcxt)
+{
+  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(dcxt))
+    if(ctor->isCopyConstructor())
+      return true;
+
   return false;
+}
+
+bool clang_cpp_convertert::is_defaulted_ctor(const clang::DeclContext *dcxt)
+{
+  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(dcxt))
+    if(ctor->isDefaulted())
+      return true;
+
+  return false;
+}
+
+void clang_cpp_convertert::get_cpyctor_name(
+  const clang::CXXConstructorDecl *cxxctor,
+  std::string &id,
+  std::string &name,
+  exprt &param)
+{
+  assert(cxxctor->isImplicit());
+  get_decl_name(*cxxctor, name, id);
+
+  // name would be just `ref` and id would be "<cpyctor_id>::ref"
+  name.assign(cpyctor_constref_suffix);
+  id = id + "::" + cpyctor_constref_suffix;
+
+  // sync param name
+  param.cmt_base_name(name);
 }

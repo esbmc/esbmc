@@ -1,0 +1,4 @@
+CORE
+main.c
+--shift-ub-check
+^VERIFICATION FAILED$

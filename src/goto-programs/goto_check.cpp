@@ -21,6 +21,7 @@ public:
       disable_pointer_relation_check(
         options.get_bool_option("no-pointer-relation-check")),
       enable_overflow_check(options.get_bool_option("overflow-check")),
+      enable_shift_ub_check(options.get_bool_option("shift-ub-check")),
       enable_nan_check(options.get_bool_option("nan-check"))
   {
   }
@@ -63,6 +64,9 @@ protected:
     const locationt &loc);
 
   void
+  shift_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
+
+  void
   nan_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
 
   void add_guarded_claim(
@@ -80,6 +84,7 @@ protected:
   bool disable_div_by_zero_check;
   bool disable_pointer_relation_check;
   bool enable_overflow_check;
+  bool enable_shift_ub_check;
   bool enable_nan_check;
 };
 
@@ -222,6 +227,38 @@ void goto_checkt::overflow_check(
     overflow,
     "arithmetic overflow on " + get_expr_id(expr),
     "overflow",
+    loc,
+    guard);
+}
+
+void goto_checkt::shift_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
+{
+  if(!enable_shift_ub_check)
+    return;
+
+  assert(is_shl2t(expr));
+
+  auto bv_type = (*expr->get_sub_expr(0))->type;
+  auto constant = (*expr->get_sub_expr(1));
+
+  expr2tc zero = gen_zero(constant->type);
+  assert(!is_nil_expr(zero));
+
+  greaterthanequal2tc const_gte_zero(constant, zero);
+
+  expr2tc bv_type_size(
+    new constant_int2t(bv_type, BigInt(bv_type->get_width())));
+  lessthanequal2tc const_lte_type_size(constant, bv_type_size);
+
+  and2tc ub_check(const_gte_zero, const_lte_type_size);
+
+  add_guarded_claim(
+    ub_check,
+    "undefined behaviour on shift operation " + get_expr_id(expr),
+    "undef-behaviour",
     loc,
     guard);
 }
@@ -500,6 +537,8 @@ void goto_checkt::check_rec(
     /* fallthrough */
 
   case expr2t::shl_id:
+    shift_check(expr, guard, loc);
+    /* fallthrough */
   case expr2t::neg_id:
   case expr2t::add_id:
   case expr2t::sub_id:

@@ -24,11 +24,11 @@ protected:
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
 
   /**
-   *  Get reference to declared variabales or functions, e.g:
+   *  Get reference to a declared variable or function, e.g:
    *   - getting the callee for CXXConstructExpr
    *   - getting the object for DeclRefExpr
    */
-  bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
+  bool get_decl_ref(const clang::Decl &decl, exprt &new_expr) override;
 
   bool get_type(const clang::QualType &type, typet &new_type) override;
 
@@ -50,11 +50,34 @@ protected:
 
   /**
    *  Get function params for C++
-   *  contains parsing routines specific to C++ class member functions
+   *  contains conversion routines specific to C++ class member functions
    */
   bool get_function_params(
     const clang::FunctionDecl &fd,
     code_typet::argumentst &params) override;
+
+  bool name_param_and_continue(
+    const clang::ParmVarDecl &pd,
+    std::string &id,
+    std::string &name,
+    exprt &param) override;
+
+  /*
+   * This function assigns a name and an id to the unnamed const ref
+   * in an implicit defaulted copy constructor added by the compiler.
+   *
+   * Params:
+   *  pd: the clang AST node for the function parameter we are currently dealing with
+   *  id: id for this function parameter
+   *  name: name for this function parameter
+   *  param: ESBMC's IR representing the function parameter
+   */
+  void get_cpyctor_name(
+    const clang::CXXConstructorDecl *cxxctor,
+    std::string &id,
+    std::string &name,
+    exprt &param);
+  std::string cpyctor_constref_suffix = "ref";
 
   /**
    *  Add implicit `this' when parsing C++ class member functions, e.g:
@@ -94,8 +117,6 @@ protected:
 
   bool get_expr(const clang::Stmt &stmt, exprt &new_expr) override;
 
-  bool is_ctor_unnamed_implicit_trivial(const clang::FunctionDecl &fd);
-
   void
   build_member_from_component(const clang::FunctionDecl &fd, exprt &component);
 
@@ -134,14 +155,24 @@ protected:
    *    * name: MyMethodName
    *    * #location:
    * Arguments:
-   *  cxxmd:    clang AST node representing the method we are dealing with
+   *  cxxmdd:   clang AST node representing the method we are dealing with
    *  new_expr: the `component` in class/struct/union symbol type
-   *  fd_symb:  function symbol that has been added in symbol table (i.e. the `context`)
+   *  fd: clang AST node representing the function declaration we are dealing with
    */
   bool annotate_cpp_methods(
     const clang::CXXMethodDecl *cxxmdd,
     exprt &new_expr,
     const clang::FunctionDecl &fd);
+  /*
+   * Flag copy constructor.
+   *
+   * Arguments:
+   *  cxxmdd: clang AST node representing the constructor we are dealing with
+   *  rtn_type: the corresponding return type node
+   */
+  void annotate_cpyctor(const clang::CXXMethodDecl *cxxmdd, typet &rtn_type);
+  bool is_cpyctor(const clang::DeclContext *dcxt);
+  bool is_defaulted_ctor(const clang::DeclContext *dcxt);
 
   /*
    * When getting a function call to ctor, we might call the base ctor from a derived class ctor
@@ -162,7 +193,9 @@ protected:
    * This is an ancillary function deciding whether we need
    * need to build an new_object when dealing with constructor_call
    */
-  bool need_new_object(const clang::Stmt *parentStmt);
+  bool need_new_object(
+    const clang::Stmt *parentStmt,
+    const clang::CXXConstructExpr &call);
 
   /*
    * Methods to pull bases in

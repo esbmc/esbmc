@@ -119,11 +119,25 @@ protected:
   virtual bool get_function_params(
     const clang::FunctionDecl &fd,
     code_typet::argumentst &params);
-
   /**
    *  Parse each individual parameter of the function
    */
   bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
+  /*
+   * This function determines whether we should name an unnamed function parameter
+   * and continue to add its symbol.
+   *
+   * Params:
+   *  pd: the clang AST node for the function parameter we are currently dealing with
+   *  id: id for this function parameter
+   *  name: name for this function parameter
+   *  param: ESBMC's IR representing the function parameter
+   */
+  virtual bool name_param_and_continue(
+    const clang::ParmVarDecl &pd,
+    std::string &id,
+    std::string &name,
+    exprt &param);
 
   virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
 
@@ -143,7 +157,7 @@ protected:
 
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
-  bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
+  virtual bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
 
   bool
   get_binary_operator_expr(const clang::BinaryOperator &binop, exprt &new_expr);

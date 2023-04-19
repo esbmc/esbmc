@@ -196,6 +196,8 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
       }
     }
 
+    adjust_expr(*it);
+
     new_block.copy_to_operands(code_decl);
   }
 

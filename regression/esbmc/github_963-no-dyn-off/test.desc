@@ -1,4 +1,4 @@
 CORE
-main.cpp
-
+gh-963.c
+-D__PASS
 ^VERIFICATION SUCCESSFUL$
