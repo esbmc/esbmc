@@ -141,11 +141,29 @@ protected:
 
   virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
 
+  /*
+   * Get class fields of the type `clang::Decl::Field`
+   *
+   * Params:
+   *  recordd: clang AST of the class we are currently dealing with
+   *  type: ESBMC IR representing the class' type
+   */
   virtual bool get_struct_union_class_fields(
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
-  virtual bool get_struct_union_class_methods(
+  /*
+   * Get the declarations inside a class.
+   * The declarations can be any valid type other than `clang::Decl::Field`,
+   * such as a class' constructor of the type `clang::Decl::CXXConstructor`,
+   * a class' method of the type `clang::Decl::CXXMethod`
+   * or a class' static member of the type `clang::Decl::Var`
+   *
+   * Params:
+   *  recordd: clang AST of the class we are currently dealing with
+   *  type: ESBMC IR representing the class' type
+   */
+  virtual bool get_struct_union_class_methods_decls(
     const clang::RecordDecl &recordd,
     struct_typet &type);
 

@@ -98,7 +98,7 @@ protected:
     const clang::RecordDecl &rd,
     struct_union_typet &type) override;
 
-  bool get_struct_union_class_methods(
+  bool get_struct_union_class_methods_decls(
     const clang::RecordDecl &rd,
     struct_typet &type) override;
 
