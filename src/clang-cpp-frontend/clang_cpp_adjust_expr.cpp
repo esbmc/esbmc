@@ -77,20 +77,21 @@ void clang_cpp_adjust::adjust_member(member_exprt &expr)
   clang_c_adjust::adjust_member(expr);
 
   /*
-   * we got a class/struct member function call via:
+   * Additional adjustment is required for C++ class member access:
+   * e.g. when we got a class/struct member function call via:
    * dot operator, e.g. OBJECT.setX();
    * or arrow operator, e.g.OBJECT->setX();
    */
   if(
     (expr.struct_op().is_symbol() && expr.type().is_code()) ||
     (expr.struct_op().is_dereference() && expr.type().is_code()))
-    adjust_struct_method_call(expr);
+    adjust_cpp_member(expr);
 }
 
-void clang_cpp_adjust::adjust_struct_method_call(member_exprt &expr)
+void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
 {
   /*
-   * member function call:
+   * For class member function call:
    * Replace OBJECT.setX() OR OBJECT->setX() with setX(), where
    * OBJECT.setX() is represented by:
    *    member:
@@ -108,6 +109,10 @@ void clang_cpp_adjust::adjust_struct_method_call(member_exprt &expr)
    *    symbol:
    *      * type: ...
    *      * id: <setX_clang_ID>
+   *
+   * Pretty much the same for class field access.
+   * If the member_exprt refers to a class static member, then
+   * replace "OBJECT.MyStatic = 1" with "MyStatic = 1;"
    */
   const symbolt *method_symb =
     namespacet(context).lookup(expr.component_name());
