@@ -1,6 +1,6 @@
 $success = $false
 while (-not $success) {
-    Write-Host "Installing nsis.portable and winflexbison..."
+    Write-Host "Installing winflexbison..."
     $output = choco install -y winflexbison --ignore-checksums
     if ($LASTEXITCODE -eq 0) {
         $success = $true
