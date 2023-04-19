@@ -298,6 +298,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   std::string id, name;
   get_decl_name(rd, name, id);
 
+  if(id == "tag-istreamX")
+    printf("Got it\n");
+
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context. See next comment
   if(context.find_symbol(id) != nullptr)
@@ -372,7 +375,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  if(get_struct_union_class_methods(*rd_def, to_struct_type(t)))
+  if(get_struct_union_class_methods_decls(*rd_def, to_struct_type(t)))
     return true;
 
   if(rd.isUnion())
@@ -410,11 +413,11 @@ bool clang_c_convertert::get_struct_union_class_fields(
   return false;
 }
 
-bool clang_c_convertert::get_struct_union_class_methods(
+bool clang_c_convertert::get_struct_union_class_methods_decls(
   const clang::RecordDecl &,
   struct_typet &)
 {
-  // We don't add methods to the struct in C
+  // We don't add methods or static members to the struct in C
   return false;
 }
 
