@@ -5,7 +5,7 @@ void CWE191_Integer_Underflow__int64_t_fscanf_multiply_18_bad()
     data = 0LL;
     goto source;
 source:
-    fscanf (stdin, "%" "l" "d", &data);
+    fscanf (stdin, "%" "19l" "d", &data);
     goto sink;
 sink:
     if(data < 0)
