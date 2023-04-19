@@ -46,9 +46,9 @@ public:
 
   // Widening options
   unsigned delayed_widening_limit = 50;
-  bool widening_underaproximate_bound = false;
+  bool widening_underaproximate_bound = true;
   bool widening_extrapolate = true;
-  bool widening_narrowing = false;
+  bool widening_narrowing = true;
 
 
 protected:
@@ -236,7 +236,7 @@ protected:
    * @param rhs
    */
   template <class Interval>
-  Interval extrapolate_intervals(const Interval &before, const Interval &after);
+  Interval extrapolate_intervals(const Interval &before, const Interval &after, const Interval &modulus);
 
     /**
    * @brief Applies Interpolation narrowing algorithm
@@ -249,7 +249,7 @@ protected:
    * @param rhs
    */
   template <class Interval>
-  Interval interpolate_intervals(const Interval &before, const Interval &after);
+  Interval interpolate_intervals(const Interval &before, const Interval &after, const Interval &modulus);
 
   
   /**

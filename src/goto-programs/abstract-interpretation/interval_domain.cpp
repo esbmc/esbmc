@@ -31,6 +31,7 @@ void interval_domaint::update_symbol_interval(
   const symbol2t &sym,
   const integer_intervalt value)
 {
+  //  if(sym.thename)
   int_map[sym.thename] = value;
 }
 
@@ -92,8 +93,8 @@ interval_domaint::generate_modular_interval<integer_intervalt>(
   else if(is_signedbv_type(t))
   {
     b.setPower2(t->get_width() - 1);
-    b = b + 1;
     result.make_le_than(b);
+    b = b + 1;
     result.make_ge_than(-b);
   }
   else
@@ -121,81 +122,103 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
   // a = b
   T a;
   if(enable_modular_intervals)
-    generate_modular_interval<T>(to_symbol2t(lhs));
+    a = generate_modular_interval<T>(to_symbol2t(lhs));
   auto b = get_interval<T>(rhs);
 
-  // TODO: add classic algorithm
-  if(enable_contraction_for_abstract_states)
-  {
-    T::contract_interval_le(a, b); // a <= b
-    T::contract_interval_le(b, a); // b <= a
-  }
+
   
-  if(fixpoint_counter[to_symbol2t(lhs).thename] >= delayed_widening_limit)
+  std::ostringstream oss;
+  oss << "Intersect: " << b.lower << ", " << b.upper << "\n";
+  oss << "With: " << a.lower << ", " << a.upper << "\n";
+
+  // TODO: add classic algorithm
+  b.intersect_with(a);
+  oss << "Resulting: " << (b).lower << ", " << (b).upper << "\n";
+  log_status(oss.str());
+  // Try to extrapolate/interpolate
+  if(1)
   {
     auto previous = get_interval_from_symbol<T>(to_symbol2t(lhs));
+
     // TODO: add an extrapolated check
-    bool was_extrapolated = false;
-    if(was_extrapolated && widening_narrowing)
-      a = interpolate_intervals<T>(previous,a);
-    else if(widening_extrapolate)
-      a = extrapolate_intervals<T>(previous, a);
+    if(widening_narrowing)
+      b = interpolate_intervals<T>(previous,b,a);
+    if(widening_extrapolate)
+      b = extrapolate_intervals<T>(previous, b,a);
   }
-  update_symbol_interval(to_symbol2t(lhs), a);
+
+  update_symbol_interval(to_symbol2t(lhs), b);
 }
 
 template <class T>
-T interval_domaint::extrapolate_intervals(const T &before, const T &after)
+T interval_domaint::extrapolate_intervals(const T &before, const T &after, const T &modulus)
 {
   T result; // Full extrapolation
 
-  bool lower_changed = !after.lower_set || (before.lower_set && after.lower_set && after.lower < before.lower);
-    bool upper_changed = !after.upper_set || (before.upper_set && after.upper_set && after.upper > before.upper);
+  std::ostringstream oss;
+  oss << "Extrapolate before (set): " << before.lower_set << ", " << before.upper_set << "\n";
+  oss << "Extrapolate before (values): " << before.lower << ", " << before.upper << "\n";
+  oss << "Extrapolate after: " << after.lower << ", " << after.upper << "\n";
 
-  if((lower_changed || upper_changed) && !widening_underaproximate_bound)
+
+  bool lower_decreased = !after.lower_set || (before.lower_set && after.lower_set && after.lower < before.lower);
+  bool upper_increased = !after.upper_set || (before.upper_set && after.upper_set && after.upper > before.upper);
+
+  if((lower_decreased || upper_increased) && !widening_underaproximate_bound)
     return result;
   
-  // Set lower bound: 
-  if(!lower_changed)
+  // Set lower bound: if we didn't decrease then just update the interval
+  if(!lower_decreased)
     {
       result.lower_set = before.lower_set;
-    result.lower = before.lower;
+      result.lower = before.lower;
     }
 
   // Set upper bound: 
-  if(!upper_changed)
+  if(!upper_increased)
     {
       result.upper_set = before.upper_set;
       result.upper = before.upper;
       
     }
-    
+
+  result.intersect_with(modulus);
+
+  oss << "Extrapolate result: " << result.lower_set << ", " << result.upper_set << "\n";
+  log_status(oss.str());
   return result;
 }
 
 template <class T>
-T interval_domaint::interpolate_intervals(const T &before, const T &after)
+T interval_domaint::interpolate_intervals(const T &before, const T &after, const T &modulus)
 {
-  T result; 
+  T result;
 
-  bool lower_changed = !before.lower_set || (before.lower_set && after.lower_set && before.lower < after.lower);
-    bool upper_changed = !before.upper_set || (before.upper_set && after.upper_set && before.upper > after.upper);
+    std::ostringstream oss;
+  oss << "Interpolate before (set): " << before.lower_set << ", " << before.upper_set << "\n";
+  oss << "Interpolate before (values): " << before.lower << ", " << before.upper << "\n";
+  oss << "Interpolate after: " << after.lower << ", " << after.upper << "\n";
 
-  const T& lower = lower_changed ? after : before;
-  const T& upper = upper_changed ? after : before;
 
-  result.lower_set = lower.lower_set;
-  result.lower = lower.lower;
-  result.upper_set = upper.upper_set;
-  result.upper = upper.upper;
-    
+  bool change_lower = (enable_modular_intervals && before.lower_set && before.lower == modulus.lower) || (!before.lower_set);
+    bool change_upper = (enable_modular_intervals && before.upper_set && before.upper == modulus.upper) || (!before.upper_set);
+
+  
+  result.lower_set = !change_lower ? before.lower_set : after.lower_set;
+  result.lower = !change_lower ? before.lower : after.lower;
+
+  result.upper_set = !change_upper ? before.upper_set : after.upper_set;
+  result.upper = !change_upper ? before.upper : after.upper;
+
+    oss << "Interpolate result: " << result.lower_set << ", " << result.upper_set << "\n";
+  log_status(oss.str());
+
   return result;
 }
 
 template <class T>
 T interval_domaint::get_interval(const expr2tc &e)
 {
-  log_debug("[interval] getting interval...");
   if(is_symbol2t(e))
     return get_interval_from_symbol<T>(to_symbol2t(e));
 
@@ -212,8 +235,11 @@ T interval_domaint::get_interval(const expr2tc &e)
   // Arithmetic?
   auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
   auto ieee_arith_op = std::dynamic_pointer_cast<ieee_arith_2ops>(e);
+
+  
   if(arith_op && enable_interval_arithmetic) // TODO: add support for float ops
   {
+    
     // It should be safe to mix integers/floats in here.
     // The worst that can happen is an overaproximation
     auto lhs =
@@ -222,7 +248,16 @@ T interval_domaint::get_interval(const expr2tc &e)
       get_interval<T>(arith_op ? arith_op->side_2 : ieee_arith_op->side_2);
 
     if(is_add2t(e) || is_ieee_add2t(e))
-      return lhs + rhs;
+      {
+	std::ostringstream oss;
+	oss << "Got: " << lhs.lower << ", " << lhs.upper << "\n";
+	oss << "Plus: " << rhs.lower  << ", " << rhs.upper  << "\n";								     
+
+	oss << "Resulting: " << (rhs+lhs).lower << ", " << (rhs+lhs).upper << "\n";
+	oss << "Set: " << (rhs+lhs).lower_set << ", " << (rhs+lhs).upper_set << "\n";
+	log_status(oss.str());
+	return lhs + rhs;
+      }
 
     if(is_sub2t(e) || is_ieee_sub2t(e))
       return lhs - rhs;
