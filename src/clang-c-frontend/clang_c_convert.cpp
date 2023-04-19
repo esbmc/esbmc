@@ -298,9 +298,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   std::string id, name;
   get_decl_name(rd, name, id);
 
-  if(id == "tag-istreamX")
-    printf("Got it\n");
-
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context. See next comment
   if(context.find_symbol(id) != nullptr)
@@ -450,9 +447,6 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
   std::string id, name;
   get_decl_name(vd, name, id);
-
-  if(id == "c:@S@istreamX@_gcount")
-    printf("Got static\n");
 
   if(no_slice)
     config.no_slice_names.emplace(id);
