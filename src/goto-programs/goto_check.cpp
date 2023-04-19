@@ -204,7 +204,7 @@ void goto_checkt::overflow_check(
     return;
 
   // Don't check shift right
-  if(!is_shl2t(expr))
+  if(is_lshr2t(expr) || is_ashr2t(expr))
     return;
 
   // First, check type.
