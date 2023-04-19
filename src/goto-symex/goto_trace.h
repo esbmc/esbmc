@@ -49,6 +49,7 @@ public:
     ASSUME,
     ASSERT,
     OUTPUT,
+    INPUT,
     SKIP,
     RENUMBER
   } typet;

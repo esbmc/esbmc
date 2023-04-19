@@ -63,6 +63,9 @@ protected:
     const guardt &guard,
     const locationt &loc);
 
+  /** check for the buffer overflow in scanf/fscanf */
+  void input_overflow_check(const expr2tc &expr, const locationt &loc);
+
   void
   shift_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
 
@@ -233,6 +236,136 @@ void goto_checkt::overflow_check(
     "overflow",
     loc,
     guard);
+}
+
+void goto_checkt::input_overflow_check(
+  const expr2tc &expr,
+  const locationt &loc)
+{
+  code_function_call2t func_call = to_code_function_call2t(expr);
+  if(!is_symbol2t(func_call.function))
+    return;
+  const std::string func_name =
+    to_symbol2t(func_call.function).thename.as_string();
+
+  unsigned number_of_format_args, fmt_idx;
+
+  if(func_name.find("__ESBMC_scanf") != std::string::npos)
+  {
+    fmt_idx = 0;
+    number_of_format_args = func_call.operands.size() - 1;
+  }
+  else if(func_name.find("__ESBMC_fscanf") != std::string::npos)
+  {
+    fmt_idx = 1;
+    number_of_format_args = func_call.operands.size() - 2;
+  }
+  else
+    return;
+
+  // obtain the format string
+  const std::string fmt =
+    get_string_argument(func_call.operands[fmt_idx]).as_string();
+
+  // obtain the length limits in the format string
+  int pos = 0;
+  std::vector<std::string> limits;
+
+  for(std::string tmp_str = ""; pos < fmt.length(); pos++)
+  {
+    if(fmt[pos] == '%' and fmt[pos + 1] != '.')
+    {
+      pos++;
+      while(std::isdigit(fmt[pos]))
+      {
+        tmp_str += fmt[pos];
+        pos++;
+      }
+      if(tmp_str != "")
+        limits.push_back(tmp_str);
+      else
+        limits.push_back("INF");
+      tmp_str = "";
+    }
+  }
+
+  // obtain the arguments name list
+  std::vector<irep_idt> arg_names;
+
+  for(long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
+      i++)
+  {
+    arg_names.push_back(get_string_argument(func_call.operands[i]));
+  }
+
+  assert(
+    (limits.size() == arg_names.size()) &&
+    "the format specifiers do not match with the arguments");
+
+  // do checks
+  bool buf_overflow = false;
+  for(int i = 0; i < arg_names.size(); i++)
+  {
+    const symbolt &arg = *ns.lookup(arg_names.at(i));
+    const irep_idt type_id = arg.type.id();
+    std::string width;
+
+    // if no length limits, then we treat it as a buffer overflow
+    if(limits.at(i) == "INF")
+    {
+      buf_overflow = true;
+      break;
+    }
+
+    if(type_id == "array")
+    {
+      width = to_array_type(arg.type).size().cformat().as_string();
+      if(
+        stoi(limits.at(i)) + 1 >
+        stoi(width)) // plus one as string always ends up with a null char
+      {
+        buf_overflow = true;
+        break;
+      }
+    }
+    else if(type_id == "unsignedbv" || type_id == "signedbv")
+    {
+      width = arg.type.width().as_string();
+      switch(stoi(width))
+      {
+      case 8:
+        if(stoi(limits.at(i)) > 3)
+          buf_overflow = true;
+      case 16:
+        if(stoi(limits.at(i)) > 5)
+          buf_overflow = true;
+      case 32:
+        if(stoi(limits.at(i)) > 10)
+          buf_overflow = true;
+
+      case 64:
+        if(stoi(limits.at(i)) > 19)
+          buf_overflow = true;
+      default:
+        break;
+      }
+    }
+    else if(type_id == "floatbv" || type_id == "fixedbv")
+    {
+      // TODO
+      break;
+    }
+  }
+
+  if(buf_overflow) // FIX ME! add assert(0) to output the error msg
+  {
+    goto_programt::targett t = new_code.add_instruction(ASSERT);
+    t->guard = gen_false_expr();
+    t->location = loc;
+    t->location.user_provided(true);
+    t->location.property("overflow");
+    t->location.comment("buffer overflow on " + func_name);
+  }
 }
 
 void goto_checkt::shift_check(
@@ -630,6 +763,9 @@ void goto_checkt::goto_check(goto_programt &goto_program)
     {
       i.code->foreach_operand(
         [this, &loc](const expr2tc &e) { check(e, loc); });
+
+      if(enable_overflow_check)
+        input_overflow_check(i.code, loc);
     }
     else if(i.is_return())
     {

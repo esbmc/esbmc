@@ -413,6 +413,13 @@ void show_goto_trace(
       break;
     }
 
+    case goto_trace_stept::INPUT:
+    {
+      // TODO
+      // leave empty to avoid assertion failure in default
+      break;
+    }
+
     case goto_trace_stept::RENUMBER:
       out << "Renumbered pointer to ";
       counterexample_value(out, ns, step.lhs, step.value);
