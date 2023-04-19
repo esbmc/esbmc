@@ -337,21 +337,25 @@ void goto_checkt::input_overflow_check(
       {
         if(stoi(limits.at(i)) > 3)
           buf_overflow = true;
+        break;
       }
       case 16:
       {
         if(stoi(limits.at(i)) > 5)
           buf_overflow = true;
+        break;
       }
       case 32:
       {
         if(stoi(limits.at(i)) > 10)
           buf_overflow = true;
+        break;
       }
       case 64:
       {
         if(stoi(limits.at(i)) > 19)
           buf_overflow = true;
+        break;
       }
       default:
         break;
