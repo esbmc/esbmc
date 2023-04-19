@@ -273,7 +273,7 @@ void goto_checkt::input_overflow_check(
 
   for(std::string tmp_str = ""; pos < fmt.length(); pos++)
   {
-    if(fmt[pos] == '%' and fmt[pos + 1] != '.')
+    if(fmt[pos] == '%' && fmt[pos + 1] != '.')
     {
       pos++;
       while(std::isdigit(fmt[pos]))
