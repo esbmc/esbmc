@@ -153,11 +153,11 @@ protected:
     struct_union_typet &type);
 
   /*
-   * Get the declarations inside a class.
-   * The declarations can be any valid type other than `clang::Decl::Field`,
-   * such as a class' constructor of the type `clang::Decl::CXXConstructor`,
-   * a class' method of the type `clang::Decl::CXXMethod`
-   * or a class' static member of the type `clang::Decl::Var`
+   * This function not only gets class method but also gets
+   * the other declarations inside a class. The declarations can be
+   * of any valid type other than `clang::Decl::Field`,
+   * such as a class constructor of the type `clang::Decl::CXXConstructor`,
+   * or a class static member of the type `clang::Decl::Var`
    *
    * Params:
    *  recordd: clang AST of the class we are currently dealing with
