@@ -304,7 +304,7 @@ void goto_checkt::input_overflow_check(
 
   // do checks
   bool buf_overflow = false;
-  for(int i = 0; i < arg_names.size(); i++)
+  for(long unsigned int i = 0; i < arg_names.size(); i++)
   {
     const symbolt &arg = *ns.lookup(arg_names.at(i));
     const irep_idt type_id = arg.type.id();
