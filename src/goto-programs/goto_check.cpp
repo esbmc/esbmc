@@ -259,9 +259,10 @@ void goto_checkt::shift_check(
 
   and2tc ub_check(right_op_non_negative, right_op_size_check);
 
-  if (is_shl2t(expr)) {
-	greaterthanequal2tc left_op_non_negative(left_op, zero);
-	ub_check = and2tc(ub_check, left_op_non_negative);
+  if(is_shl2t(expr))
+  {
+    greaterthanequal2tc left_op_non_negative(left_op, zero);
+    ub_check = and2tc(ub_check, left_op_non_negative);
   }
 
   add_guarded_claim(
