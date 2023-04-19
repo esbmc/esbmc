@@ -473,7 +473,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.static_lifetime =
     (vd.getStorageClass() == clang::SC_Static) || vd.hasGlobalStorage();
   symbol.is_extern = vd.hasExternalStorage();
-  symbol.file_local = (vd.getStorageClass() != clang::SC_Static) ||
+  symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
   if(symbol.static_lifetime && !symbol.is_extern && !vd.hasInit())
