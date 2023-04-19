@@ -301,5 +301,8 @@ const irep_idt get_string_argument(const expr2tc &expr)
   if(is_constant_string2t(expr))
     return to_constant_string2t(expr).value;
 
+  if(is_symbol2t(expr))
+    return to_symbol2t(expr).thename;
+
   return "";
 }

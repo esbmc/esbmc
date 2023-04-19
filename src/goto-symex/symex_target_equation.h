@@ -47,6 +47,13 @@ public:
     const std::string &fmt,
     const std::list<expr2tc> &args) override;
 
+  // input
+  void input(
+    const expr2tc &guard,
+    const sourcet &source,
+    const std::string &fmt,
+    const std::list<expr2tc> &args) override;
+
   // record an assumption
   // cond is destroyed
   void assumption(
@@ -104,6 +111,10 @@ public:
     bool is_output() const
     {
       return type == goto_trace_stept::OUTPUT;
+    }
+    bool is_input() const
+    {
+      return type == goto_trace_stept::INPUT;
     }
     bool is_renumber() const
     {

@@ -401,6 +401,8 @@ int __ESBMC_builtin_constant_p(int);
 
 // TODO: implement this similarly to printf
   #define fscanf __ESBMC_fscanf
+
+  #define scanf __ESBMC_scanf
     )";
 
   return intrinsics;

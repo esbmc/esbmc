@@ -355,6 +355,51 @@ void goto_symext::symex_printf(const expr2tc &, const expr2tc &rhs)
     cur_state->guard.as_expr(), cur_state->source, fmt.as_string(), args);
 }
 
+void goto_symext::symex_scanf(
+  const expr2tc &ret,
+  const std::vector<expr2tc> &op)
+{
+  unsigned number_of_format_args = op.size() - 1;
+
+  if(ret)
+    symex_assign(code_assign2tc(
+      ret, constant_int2tc(int_type2(), BigInt(number_of_format_args))));
+
+  std::string fmt = get_string_argument(op[0]).as_string();
+
+  // TODO: fill / cut off the inputs stream based on the length limits.
+
+  std::list<expr2tc> args;
+  for(long unsigned int i = 1; i < number_of_format_args; i++)
+  {
+    expr2tc operand = op[i];
+    internal_deref_items.clear();
+    dereference2tc deref(get_empty_type(), operand);
+    dereference(deref, dereferencet::INTERNAL);
+
+    for(const auto &item : internal_deref_items)
+    {
+      assert(is_symbol2t(item.object) && "This only works for variables");
+
+      auto type = item.object->type;
+      expr2tc val = sideeffect2tc(
+        type,
+        expr2tc(),
+        expr2tc(),
+        std::vector<expr2tc>(),
+        type2tc(),
+        sideeffect2t::nondet);
+
+      symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
+
+      do_simplify(val);
+      args.push_back(val);
+    }
+  }
+
+  target->input(cur_state->guard.as_expr(), cur_state->source, fmt, args);
+}
+
 void goto_symext::symex_fscanf(
   const expr2tc &ret,
   const std::vector<expr2tc> &op)
@@ -376,6 +421,9 @@ void goto_symext::symex_fscanf(
   if(ret)
     symex_assign(code_assign2tc(
       ret, constant_int2tc(int_type2(), BigInt(number_of_format_args))));
+
+  std::string fmt = get_string_argument(op[1]).as_string();
+  std::list<expr2tc> args;
 
   for(size_t i = 2; i < number_of_format_args + 2; i++)
   {
@@ -401,8 +449,13 @@ void goto_symext::symex_fscanf(
         sideeffect2t::nondet);
 
       symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
+
+      do_simplify(val);
+      args.push_back(val);
     }
   }
+
+  target->input(cur_state->guard.as_expr(), cur_state->source, fmt, args);
 }
 
 void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
