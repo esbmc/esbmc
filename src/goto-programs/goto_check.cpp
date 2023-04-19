@@ -268,7 +268,7 @@ void goto_checkt::input_overflow_check(
     get_string_argument(func_call.operands[fmt_idx]).as_string();
 
   // obtain the length limits in the format string
-  int pos = 0;
+  long unsigned int pos = 0;
   std::vector<std::string> limits;
 
   for(std::string tmp_str = ""; pos < fmt.length(); pos++)
