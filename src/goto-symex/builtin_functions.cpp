@@ -381,9 +381,6 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
       func_call.ret,
       constant_int2tc(int_type2(), BigInt(number_of_format_args))));
 
-  std::string fmt =
-    get_string_argument(func_call.operands[fmt_idx]).as_string();
-
   // TODO: fill / cut off the inputs stream based on the length limits.
 
   for(long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
