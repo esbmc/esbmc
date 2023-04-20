@@ -1592,7 +1592,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if(cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {
-      interval_analysis(goto_functions, ns);
+      interval_analysis(goto_functions, ns, options);
     }
 
     if(
