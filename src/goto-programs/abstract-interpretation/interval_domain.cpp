@@ -125,7 +125,6 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
     a = generate_modular_interval<T>(to_symbol2t(lhs));
   auto b = get_interval<T>(rhs);
 
-
   // TODO: add classic algorithm
   b.intersect_with(a);
 
@@ -239,12 +238,9 @@ void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
   
   // TODO: Add less than equal
   Interval::contract_interval_le(lhs, rhs);
-  
   // No need for widening, this is a restriction!
   if(is_symbol2t(a))
-    {
     update_symbol_interval(to_symbol2t(a), lhs);
-    }
 
   if(is_symbol2t(b))
     update_symbol_interval(to_symbol2t(b), rhs);
@@ -478,19 +474,23 @@ bool interval_domaint::join(const interval_domaint &b)
 	  result = true;
 
 	  // Try to extrapolate
-	  if(widening_extrapolate)
-	    after = extrapolate_intervals(previous, it->second);  // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
+	  if(after != it->second && widening_extrapolate)
+	  {
+		it->second = extrapolate_intervals(previous, it->second);  // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
+	  }
 	}
 
 	else
 	{
 	  // Found a fixpoint, we might try to narrow now!
 	  if(widening_narrowing) {
-	    it->second = interpolate_intervals(it->second, b_it->second); // ([0,100], [1,100] --> [0,100] ... ([0,inf], [1,100] --> [0,100]))
+	    after = interpolate_intervals(it->second, b_it->second); // ([0,100], [1,100] --> [0,100] ... ([0,inf], [1,100] --> [0,100]))
+	    result |= it->second != after;
+    	    it->second = after;	    
 	  }
 
-	  result = it->second != previous;	
 	}
+
         it++;
     }
     }
