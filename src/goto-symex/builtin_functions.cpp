@@ -345,13 +345,11 @@ void goto_symext::symex_printf(const expr2tc &, const expr2tc &rhs)
   new_rhs->operands.erase(new_rhs->operands.begin());
 
   std::list<expr2tc> args;
-  new_rhs->foreach_operand(
-    [this, &args](const expr2tc &e)
-    {
-      expr2tc tmp = e;
-      do_simplify(tmp);
-      args.push_back(tmp);
-    });
+  new_rhs->foreach_operand([this, &args](const expr2tc &e) {
+    expr2tc tmp = e;
+    do_simplify(tmp);
+    args.push_back(tmp);
+  });
 
   target->output(
     cur_state->guard.as_expr(), cur_state->source, fmt.as_string(), args);
@@ -806,8 +804,7 @@ void goto_symext::intrinsic_memset(
 
   // Define a local function for translating to calling the unwinding C
   // implementation of memset
-  auto bump_call = [this, &func_call]() -> void
-  {
+  auto bump_call = [this, &func_call]() -> void {
     // We're going to execute a function call, and that's going to mess with
     // the program counter. Set it back *onto* pointing at this intrinsic, so
     // symex_function_call calculates the right return address. Misery.
@@ -883,8 +880,7 @@ void goto_symext::intrinsic_memset(
 
       std::function<bool(const type2tc &, unsigned int)> right_sized_field;
       right_sized_field = [item, sz, &right_sized_field, &ref_types](
-                            const type2tc &strct, unsigned int offs) -> bool
-      {
+                           const type2tc &strct, unsigned int offs) -> bool {
         const struct_type2t &sref = to_struct_type(strct);
         bool retval = false;
         unsigned int i = 0;
