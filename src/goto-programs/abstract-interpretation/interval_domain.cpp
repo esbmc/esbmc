@@ -126,40 +126,16 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
   auto b = get_interval<T>(rhs);
 
 
-  
-  std::ostringstream oss;
-  oss << "Intersect: " << b.lower << ", " << b.upper << "\n";
-  oss << "With: " << a.lower << ", " << a.upper << "\n";
-
   // TODO: add classic algorithm
   b.intersect_with(a);
-  oss << "Resulting: " << (b).lower << ", " << (b).upper << "\n";
-  log_status(oss.str());
-  // Try to extrapolate/interpolate
-  if(1)
-  {
-    auto previous = get_interval_from_symbol<T>(to_symbol2t(lhs));
-
-    // TODO: add an extrapolated check
-    if(widening_narrowing)
-      b = interpolate_intervals<T>(previous,b,a);
-    if(widening_extrapolate)
-      b = extrapolate_intervals<T>(previous, b,a);
-  }
 
   update_symbol_interval(to_symbol2t(lhs), b);
 }
 
 template <class T>
-T interval_domaint::extrapolate_intervals(const T &before, const T &after, const T &modulus)
+T interval_domaint::extrapolate_intervals(const T &before, const T &after)
 {
   T result; // Full extrapolation
-
-  std::ostringstream oss;
-  oss << "Extrapolate before (set): " << before.lower_set << ", " << before.upper_set << "\n";
-  oss << "Extrapolate before (values): " << before.lower << ", " << before.upper << "\n";
-  oss << "Extrapolate after: " << after.lower << ", " << after.upper << "\n";
-
 
   bool lower_decreased = !after.lower_set || (before.lower_set && after.lower_set && after.lower < before.lower);
   bool upper_increased = !after.upper_set || (before.upper_set && after.upper_set && after.upper > before.upper);
@@ -182,36 +158,23 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after, const
       
     }
 
-  result.intersect_with(modulus);
-
-  oss << "Extrapolate result: " << result.lower_set << ", " << result.upper_set << "\n";
-  log_status(oss.str());
   return result;
 }
 
 template <class T>
-T interval_domaint::interpolate_intervals(const T &before, const T &after, const T &modulus)
+T interval_domaint::interpolate_intervals(const T &before, const T &after)
 {
   T result;
 
-    std::ostringstream oss;
-  oss << "Interpolate before (set): " << before.lower_set << ", " << before.upper_set << "\n";
-  oss << "Interpolate before (values): " << before.lower << ", " << before.upper << "\n";
-  oss << "Interpolate after: " << after.lower << ", " << after.upper << "\n";
-
-
-  bool change_lower = (enable_modular_intervals && before.lower_set && before.lower == modulus.lower) || (!before.lower_set);
-    bool change_upper = (enable_modular_intervals && before.upper_set && before.upper == modulus.upper) || (!before.upper_set);
+  bool lower_increased = !before.lower_set;
+  bool upper_decreased = !before.upper_set;
 
   
-  result.lower_set = !change_lower ? before.lower_set : after.lower_set;
-  result.lower = !change_lower ? before.lower : after.lower;
+  result.lower_set = lower_increased ? after.lower_set : before.lower_set;
+  result.lower = lower_increased ? after.lower : before.lower;
 
-  result.upper_set = !change_upper ? before.upper_set : after.upper_set;
-  result.upper = !change_upper ? before.upper : after.upper;
-
-    oss << "Interpolate result: " << result.lower_set << ", " << result.upper_set << "\n";
-  log_status(oss.str());
+  result.upper_set = upper_decreased ? after.upper_set : before.upper_set;
+  result.upper = upper_decreased ? after.upper : before.upper;
 
   return result;
 }
@@ -248,16 +211,7 @@ T interval_domaint::get_interval(const expr2tc &e)
       get_interval<T>(arith_op ? arith_op->side_2 : ieee_arith_op->side_2);
 
     if(is_add2t(e) || is_ieee_add2t(e))
-      {
-	std::ostringstream oss;
-	oss << "Got: " << lhs.lower << ", " << lhs.upper << "\n";
-	oss << "Plus: " << rhs.lower  << ", " << rhs.upper  << "\n";								     
-
-	oss << "Resulting: " << (rhs+lhs).lower << ", " << (rhs+lhs).upper << "\n";
-	oss << "Set: " << (rhs+lhs).lower_set << ", " << (rhs+lhs).upper_set << "\n";
-	log_status(oss.str());
 	return lhs + rhs;
-      }
 
     if(is_sub2t(e) || is_ieee_sub2t(e))
       return lhs - rhs;
@@ -280,15 +234,17 @@ void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
 {
   // 1. Apply contractor algorithms
   // 2. Update refs
-  auto rhs = get_interval<Interval>(b);
   auto lhs = get_interval<Interval>(a);
-
+  auto rhs = get_interval<Interval>(b);
+  
   // TODO: Add less than equal
   Interval::contract_interval_le(lhs, rhs);
-
+  
   // No need for widening, this is a restriction!
   if(is_symbol2t(a))
+    {
     update_symbol_interval(to_symbol2t(a), lhs);
+    }
 
   if(is_symbol2t(b))
     update_symbol_interval(to_symbol2t(b), rhs);
@@ -498,6 +454,7 @@ bool interval_domaint::join(const interval_domaint &b)
 
   auto f = [&result,this](auto& this_map, const auto& b_map, const auto& b_counter)
   {
+
     for(auto it = this_map.begin(); it != this_map.end();) // no it++
     {
       // search for the variable that needs to be merged
@@ -510,13 +467,30 @@ bool interval_domaint::join(const interval_domaint &b)
       }
       else
       {
-        auto test = b_counter.find(it->first);
-        fixpoint_counter[it->first] =
-          test == b_counter.end() ? 0 : test->second + 1;
-        auto previous = it->second;
-        it->second.join(b_it->second);
-        if(it->second != previous)
-          result = true;
+        auto previous = it->second; // [0,0] ... [0, +inf]
+        auto after = b_it->second; // [1,100] ... [1, 100]
+
+	it->second.join(after); // HULL // [0,100] ... [0, +inf]
+
+	// Did we reach a fixpoint?
+	if(it->second != previous)
+	{
+	  result = true;
+
+	  // Try to extrapolate
+	  if(widening_extrapolate)
+	    after = extrapolate_intervals(previous, it->second);  // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
+	}
+
+	else
+	{
+	  // Found a fixpoint, we might try to narrow now!
+	  if(widening_narrowing) {
+	    it->second = interpolate_intervals(it->second, b_it->second); // ([0,100], [1,100] --> [0,100] ... ([0,inf], [1,100] --> [0,100]))
+	  }
+
+	  result = it->second != previous;	
+	}
         it++;
     }
     }

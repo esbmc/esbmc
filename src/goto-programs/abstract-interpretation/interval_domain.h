@@ -40,7 +40,7 @@ public:
 
   // Extensions
   bool enable_interval_arithmetic = true;
-  bool enable_modular_intervals = true;
+  bool enable_modular_intervals = false;
   bool enable_assertion_simplification = false;
   bool enable_contraction_for_abstract_states = true;
 
@@ -236,7 +236,7 @@ protected:
    * @param rhs
    */
   template <class Interval>
-  Interval extrapolate_intervals(const Interval &before, const Interval &after, const Interval &modulus);
+  Interval extrapolate_intervals(const Interval &before, const Interval &after);
 
     /**
    * @brief Applies Interpolation narrowing algorithm
@@ -249,7 +249,7 @@ protected:
    * @param rhs
    */
   template <class Interval>
-  Interval interpolate_intervals(const Interval &before, const Interval &after, const Interval &modulus);
+  Interval interpolate_intervals(const Interval &before, const Interval &after);
 
   
   /**
