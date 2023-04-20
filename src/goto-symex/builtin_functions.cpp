@@ -345,34 +345,53 @@ void goto_symext::symex_printf(const expr2tc &, const expr2tc &rhs)
   new_rhs->operands.erase(new_rhs->operands.begin());
 
   std::list<expr2tc> args;
-  new_rhs->foreach_operand([this, &args](const expr2tc &e) {
-    expr2tc tmp = e;
-    do_simplify(tmp);
-    args.push_back(tmp);
-  });
+  new_rhs->foreach_operand(
+    [this, &args](const expr2tc &e)
+    {
+      expr2tc tmp = e;
+      do_simplify(tmp);
+      args.push_back(tmp);
+    });
 
   target->output(
     cur_state->guard.as_expr(), cur_state->source, fmt.as_string(), args);
 }
 
-void goto_symext::symex_scanf(
-  const expr2tc &ret,
-  const std::vector<expr2tc> &op)
+void goto_symext::symex_input(const code_function_call2t &func_call)
 {
-  unsigned number_of_format_args = op.size() - 1;
+  assert(is_symbol2t(func_call.function));
 
-  if(ret)
+  unsigned number_of_format_args, fmt_idx;
+  const std::string func_name =
+    to_symbol2t(func_call.function).thename.as_string();
+
+  if(func_name.find("__ESBMC_scanf") != std::string::npos)
+  {
+    assert(func_call.operands.size() >= 2 && "Wrong __ESBMC_scanf signature");
+    fmt_idx = 0;
+    number_of_format_args = func_call.operands.size() - 1;
+  }
+  else if(func_name.find("__ESBMC_fscanf") != std::string::npos)
+  {
+    assert(func_call.operands.size() >= 3 && "Wrong __ESBMC_fscanf signature");
+    fmt_idx = 1;
+    number_of_format_args = func_call.operands.size() - 2;
+  }
+
+  if(func_call.ret)
     symex_assign(code_assign2tc(
-      ret, constant_int2tc(int_type2(), BigInt(number_of_format_args))));
+      func_call.ret,
+      constant_int2tc(int_type2(), BigInt(number_of_format_args))));
 
-  std::string fmt = get_string_argument(op[0]).as_string();
+  std::string fmt =
+    get_string_argument(func_call.operands[fmt_idx]).as_string();
 
   // TODO: fill / cut off the inputs stream based on the length limits.
 
-  std::list<expr2tc> args;
-  for(long unsigned int i = 1; i < number_of_format_args; i++)
+  for(long unsigned int i = fmt_idx + 1; i < number_of_format_args + fmt_idx;
+      i++)
   {
-    expr2tc operand = op[i];
+    expr2tc operand = func_call.operands[i];
     internal_deref_items.clear();
     dereference2tc deref(get_empty_type(), operand);
     dereference(deref, dereferencet::INTERNAL);
@@ -391,71 +410,8 @@ void goto_symext::symex_scanf(
         sideeffect2t::nondet);
 
       symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
-
-      do_simplify(val);
-      args.push_back(val);
     }
   }
-
-  target->input(cur_state->guard.as_expr(), cur_state->source, fmt, args);
-}
-
-void goto_symext::symex_fscanf(
-  const expr2tc &ret,
-  const std::vector<expr2tc> &op)
-{
-  /* TODO: Check input stream
-  auto input_stream = op[0]; // stdin?
-  cur_state->rename(input_stream);
-  */
-
-  /* TODO: Check for Format
-  const irep_idt fmt = get_string_argument(op[1]);
-  std::vector<size_t> alloc_size;
-  */
-
-  // Just a hack while we don't support format
-  unsigned number_of_format_args = op.size() - 2;
-
-  // Set return value
-  if(ret)
-    symex_assign(code_assign2tc(
-      ret, constant_int2tc(int_type2(), BigInt(number_of_format_args))));
-
-  std::string fmt = get_string_argument(op[1]).as_string();
-  std::list<expr2tc> args;
-
-  for(size_t i = 2; i < number_of_format_args + 2; i++)
-  {
-    expr2tc operand = op[i];
-    internal_deref_items.clear();
-    dereference2tc deref(get_empty_type(), operand);
-    dereference(deref, dereferencet::INTERNAL);
-
-    for(const auto &item : internal_deref_items)
-    {
-      assert(is_symbol2t(item.object) && "This only works for variables");
-
-      // TODO: get the correct type by using the format string
-      auto type = item.object->type;
-      // Get the length of the type. This will propagate an exception for dynamic/infinite
-      // sized arrays (as expected)
-      expr2tc val = sideeffect2tc(
-        type,
-        expr2tc(),
-        expr2tc(),
-        std::vector<expr2tc>(),
-        type2tc(),
-        sideeffect2t::nondet);
-
-      symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
-
-      do_simplify(val);
-      args.push_back(val);
-    }
-  }
-
-  target->input(cur_state->guard.as_expr(), cur_state->source, fmt, args);
 }
 
 void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
@@ -850,7 +806,8 @@ void goto_symext::intrinsic_memset(
 
   // Define a local function for translating to calling the unwinding C
   // implementation of memset
-  auto bump_call = [this, &func_call]() -> void {
+  auto bump_call = [this, &func_call]() -> void
+  {
     // We're going to execute a function call, and that's going to mess with
     // the program counter. Set it back *onto* pointing at this intrinsic, so
     // symex_function_call calculates the right return address. Misery.
@@ -926,7 +883,8 @@ void goto_symext::intrinsic_memset(
 
       std::function<bool(const type2tc &, unsigned int)> right_sized_field;
       right_sized_field = [item, sz, &right_sized_field, &ref_types](
-                            const type2tc &strct, unsigned int offs) -> bool {
+                            const type2tc &strct, unsigned int offs) -> bool
+      {
         const struct_type2t &sref = to_struct_type(strct);
         bool retval = false;
         unsigned int i = 0;
