@@ -67,25 +67,6 @@ void symex_target_equationt::output(
     debug_print_step(SSA_step);
 }
 
-void symex_target_equationt::input(
-  const expr2tc &guard,
-  const sourcet &source,
-  const std::string &fmt,
-  const std::list<expr2tc> &args)
-{
-  SSA_steps.emplace_back();
-  SSA_stept &SSA_step = SSA_steps.back();
-
-  SSA_step.guard = guard;
-  SSA_step.type = goto_trace_stept::INPUT;
-  SSA_step.source = source;
-  SSA_step.output_args = args;
-  SSA_step.format_string = fmt;
-
-  if(debug_print)
-    debug_print_step(SSA_step);
-}
-
 void symex_target_equationt::assumption(
   const expr2tc &guard,
   const expr2tc &cond,
@@ -223,13 +204,6 @@ void symex_target_equationt::convert_internal_step(
         step.converted_output_args.push_back(sym);
       }
     }
-  }
-  else if(step.is_input())
-  {
-    // TODO
-    // leave empty for now to avoid
-    // the assertion failure in "else if(!step.is_skip())" below
-    ;
   }
   else if(step.is_renumber())
   {

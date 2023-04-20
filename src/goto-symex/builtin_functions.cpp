@@ -388,7 +388,7 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
   // TODO: fill / cut off the inputs stream based on the length limits.
 
-  for(long unsigned int i = fmt_idx + 1; i < number_of_format_args + fmt_idx;
+  for(long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
       i++)
   {
     expr2tc operand = func_call.operands[i];

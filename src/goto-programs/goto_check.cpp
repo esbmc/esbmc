@@ -20,6 +20,8 @@ public:
         options.get_bool_option("no-div-by-zero-check")),
       disable_pointer_relation_check(
         options.get_bool_option("no-pointer-relation-check")),
+      disable_unlimited_scanf_check(
+        options.get_bool_option("no-unlimited-scanf-check")),
       enable_overflow_check(options.get_bool_option("overflow-check")),
       enable_ub_shift_check(options.get_bool_option("ub-shift-check")),
       enable_nan_check(options.get_bool_option("nan-check"))
@@ -86,6 +88,7 @@ protected:
   bool disable_pointer_check;
   bool disable_div_by_zero_check;
   bool disable_pointer_relation_check;
+  bool disable_unlimited_scanf_check;
   bool enable_overflow_check;
   bool enable_ub_shift_check;
   bool enable_nan_check;
@@ -268,6 +271,7 @@ void goto_checkt::input_overflow_check(
     get_string_argument(func_call.operands[fmt_idx]).as_string();
 
   // obtain the length limits in the format string
+  // TODO: A specific class for the scanf/fscanf format string(e.g scanf_formattert)
   long unsigned int pos = 0;
   std::vector<std::string> limits;
 
@@ -313,6 +317,9 @@ void goto_checkt::input_overflow_check(
     // if no length limits, then we treat it as a buffer overflow
     if(limits.at(i) == "INF")
     {
+      if(disable_unlimited_scanf_check)
+        continue;
+
       buf_overflow = true;
       break;
     }
@@ -473,8 +480,8 @@ static bool has_dereference(const expr2tc &expr)
   // Recurse through all subsequent source objects, which are always operand
   // zero.
   bool found = false;
-  expr->foreach_operand(
-    [&found](const expr2tc &e) { found |= has_dereference(e); });
+  expr->foreach_operand([&found](const expr2tc &e)
+                        { found |= has_dereference(e); });
 
   return found;
 }
@@ -602,9 +609,8 @@ void goto_checkt::check_rec(
       break;
 
     default:
-      expr->foreach_operand([this, &guard, &loc](const expr2tc &e) {
-        check_rec(e, guard, loc, true);
-      });
+      expr->foreach_operand([this, &guard, &loc](const expr2tc &e)
+                            { check_rec(e, guard, loc, true); });
     }
 
     return;
@@ -624,19 +630,21 @@ void goto_checkt::check_rec(
     guardt old_guards(guard);
 
     bool is_or = is_or2t(expr);
-    expr->foreach_operand([this, &is_or, &guard, &loc](const expr2tc &e) {
-      assert(is_bool_type(e));
-      check_rec(e, guard, loc, false);
-
-      if(is_or)
+    expr->foreach_operand(
+      [this, &is_or, &guard, &loc](const expr2tc &e)
       {
-        expr2tc tmp = e;
-        make_not(tmp);
-        guard.add(tmp);
-      }
-      else
-        guard.add(e);
-    });
+        assert(is_bool_type(e));
+        check_rec(e, guard, loc, false);
+
+        if(is_or)
+        {
+          expr2tc tmp = e;
+          make_not(tmp);
+          guard.add(tmp);
+        }
+        else
+          guard.add(e);
+      });
 
     guard.swap(old_guards);
     return;
@@ -675,9 +683,8 @@ void goto_checkt::check_rec(
     break;
   }
 
-  expr->foreach_operand([this, &guard, &loc](const expr2tc &e) {
-    check_rec(e, guard, loc, false);
-  });
+  expr->foreach_operand([this, &guard, &loc](const expr2tc &e)
+                        { check_rec(e, guard, loc, false); });
 
   switch(expr->expr_id)
   {
@@ -757,8 +764,8 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       }
       else if(is_code_printf2t(i.code))
       {
-        i.code->foreach_operand(
-          [this, &loc](const expr2tc &e) { check(e, loc); });
+        i.code->foreach_operand([this, &loc](const expr2tc &e)
+                                { check(e, loc); });
       }
     }
     else if(i.is_assign())
@@ -772,8 +779,8 @@ void goto_checkt::goto_check(goto_programt &goto_program)
     }
     else if(i.is_function_call())
     {
-      i.code->foreach_operand(
-        [this, &loc](const expr2tc &e) { check(e, loc); });
+      i.code->foreach_operand([this, &loc](const expr2tc &e)
+                              { check(e, loc); });
 
       if(enable_overflow_check)
         input_overflow_check(i.code, loc);
