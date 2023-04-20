@@ -880,7 +880,7 @@ void goto_symext::intrinsic_memset(
 
       std::function<bool(const type2tc &, unsigned int)> right_sized_field;
       right_sized_field = [item, sz, &right_sized_field, &ref_types](
-                           const type2tc &strct, unsigned int offs) -> bool {
+                            const type2tc &strct, unsigned int offs) -> bool {
         const struct_type2t &sref = to_struct_type(strct);
         bool retval = false;
         unsigned int i = 0;
