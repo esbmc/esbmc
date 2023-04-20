@@ -127,11 +127,7 @@ void goto_checkt::float_overflow_check(
   const guardt &guard,
   const locationt &loc)
 {
-  if(!enable_overflow_check && !enable_ub_shift_check)
-    return;
-
-  // Don't check shift right
-  if(is_lshr2t(expr) || is_ashr2t(expr))
+  if(!enable_overflow_check)
     return;
 
   // First, check type.
