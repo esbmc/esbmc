@@ -1,4 +1,4 @@
 CORE
 main.c
---shift-ub-check
+--ub-shift-check
 ^VERIFICATION SUCCESSFUL$

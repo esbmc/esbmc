@@ -285,7 +285,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   return false;
 }
 
-bool clang_cpp_convertert::get_struct_union_class_methods(
+bool clang_cpp_convertert::get_struct_union_class_methods_decls(
   const clang::RecordDecl &recordd,
   struct_typet &type)
 {

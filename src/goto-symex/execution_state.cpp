@@ -694,11 +694,10 @@ void execution_statet::execute_guard()
   // Truth of this guard implies the parent is true.
   state_level2->rename(parent_guard);
   do_simplify(parent_guard);
-  implies2tc assumpt(guard_expr, parent_guard);
 
-  target->assumption(
-    guardt().as_expr(), assumpt, get_active_state().source, first_loop);
-
+  if(active_thread != last_active_thread)
+    target->assumption(
+      guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
   // Check to see whether or not the state guard is false, indicating we've
   // found an unviable interleaving. However don't do this if we didn't
   // /actually/ switch between threads, because it's acceptable to have a
