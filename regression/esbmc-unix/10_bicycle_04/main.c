@@ -128,7 +128,7 @@ main()
 		input = 0;
 		scanf("%d", &input);
 
-		switch (input) {
+		switch (0) {
 		default:
 			printf("Not a valid input\n");
 			break;
