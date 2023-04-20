@@ -241,6 +241,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-pointer-check", NULL, "do not do pointer check"},
     {"no-align-check", NULL, "do not check pointer alignment"},
     {"no-pointer-relation-check", NULL, "do not check pointer relations"},
+    {"no-unlimited-scanf-check",
+     NULL,
+     "do not do overflow check for scanf/fscanf with unlimited character "
+     "width."},
     {"nan-check", NULL, "check floating-point for NaN"},
     {"memory-leak-check", NULL, "enable memory leak check"},
     {"overflow-check", NULL, "enable arithmetic over- and underflow check"},

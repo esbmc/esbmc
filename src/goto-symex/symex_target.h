@@ -53,13 +53,6 @@ public:
     const std::string &fmt,
     const std::list<expr2tc> &args) = 0;
 
-  // record input
-  virtual void input(
-    const expr2tc &guard,
-    const sourcet &source,
-    const std::string &fmt,
-    const std::list<expr2tc> &args) = 0;
-
   // record an assumption
   // cond is destroyed
   virtual void assumption(
