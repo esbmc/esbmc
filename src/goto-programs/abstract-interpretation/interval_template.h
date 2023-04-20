@@ -52,6 +52,18 @@ public:
     return upper;
   }
 
+  void dump() const {
+    std::ostringstream oss;
+    if(lower_set) oss << "[" << lower;
+    else oss << "(-inf";
+
+    oss << ",";
+    if(upper_set) oss << upper << "]";
+    else oss << "+inf)";
+
+    log_status(oss.str());
+  }
+
   /**
  * @brief Checks whether there are values that satisfy the
  * the interval.
