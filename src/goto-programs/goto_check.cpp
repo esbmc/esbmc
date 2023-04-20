@@ -23,7 +23,7 @@ public:
       disable_unlimited_scanf_check(
         options.get_bool_option("no-unlimited-scanf-check")),
       enable_overflow_check(options.get_bool_option("overflow-check")),
-      enable_shift_ub_check(options.get_bool_option("shift-ub-check")),
+      enable_ub_shift_check(options.get_bool_option("ub-shift-check")),
       enable_nan_check(options.get_bool_option("nan-check"))
   {
   }
@@ -90,7 +90,7 @@ protected:
   bool disable_pointer_relation_check;
   bool disable_unlimited_scanf_check;
   bool enable_overflow_check;
-  bool enable_shift_ub_check;
+  bool enable_ub_shift_check;
   bool enable_nan_check;
 };
 
@@ -127,7 +127,11 @@ void goto_checkt::float_overflow_check(
   const guardt &guard,
   const locationt &loc)
 {
-  if(!enable_overflow_check)
+  if(!enable_overflow_check && !enable_ub_shift_check)
+    return;
+
+  // Don't check shift right
+  if(is_lshr2t(expr) || is_ashr2t(expr))
     return;
 
   // First, check type.
@@ -206,7 +210,11 @@ void goto_checkt::overflow_check(
   const guardt &guard,
   const locationt &loc)
 {
-  if(!enable_overflow_check)
+  if(!enable_overflow_check && !enable_ub_shift_check)
+    return;
+
+  // Don't check shift right
+  if(is_lshr2t(expr) || is_ashr2t(expr))
     return;
 
   // First, check type.
@@ -387,24 +395,30 @@ void goto_checkt::shift_check(
   const guardt &guard,
   const locationt &loc)
 {
-  if(!enable_shift_ub_check)
+  if(!enable_ub_shift_check)
     return;
 
-  assert(is_shl2t(expr));
+  auto right_op = (*expr->get_sub_expr(1));
 
-  auto bv_type = (*expr->get_sub_expr(0))->type;
-  auto constant = (*expr->get_sub_expr(1));
-
-  expr2tc zero = gen_zero(constant->type);
+  expr2tc zero = gen_zero(right_op->type);
   assert(!is_nil_expr(zero));
 
-  greaterthanequal2tc const_gte_zero(constant, zero);
+  greaterthanequal2tc right_op_non_negative(right_op, zero);
 
-  expr2tc bv_type_size(
-    new constant_int2t(bv_type, BigInt(bv_type->get_width())));
-  lessthanequal2tc const_lte_type_size(constant, bv_type_size);
+  auto left_op = (*expr->get_sub_expr(0));
+  auto left_op_type = left_op->type;
+  expr2tc left_op_type_size(
+    new constant_int2t(left_op_type, BigInt(left_op_type->get_width())));
 
-  and2tc ub_check(const_gte_zero, const_lte_type_size);
+  lessthan2tc right_op_size_check(right_op, left_op_type_size);
+
+  and2tc ub_check(right_op_non_negative, right_op_size_check);
+
+  if(is_shl2t(expr))
+  {
+    greaterthanequal2tc left_op_non_negative(left_op, zero);
+    ub_check = and2tc(ub_check, left_op_non_negative);
+  }
 
   add_guarded_claim(
     ub_check,
@@ -688,6 +702,8 @@ void goto_checkt::check_rec(
     /* fallthrough */
 
   case expr2t::shl_id:
+  case expr2t::ashr_id:
+  case expr2t::lshr_id:
     shift_check(expr, guard, loc);
     /* fallthrough */
   case expr2t::neg_id:
