@@ -1284,10 +1284,10 @@ int esbmc_parseoptionst::do_forward_condition(
 
   opts.set_option("no-unwinding-assertions", false);
   opts.set_option("partial-loops", false);
-
   auto g = goto_functions;
-  if(!opts.get_bool_option("forward-slicer"))
+  if(1 || !opts.get_bool_option("forward-slicer"))
   {
+    log_status("Applying Forward Slicer");
     namespacet ns(context);
     forward_slicer slicer(ns);
     try
@@ -1295,13 +1295,17 @@ int esbmc_parseoptionst::do_forward_condition(
       slicer.run(g);
       remove_skip(g);
       g.update();
+      
+      std::ostringstream oss;
+      g.output(ns, oss);
+      log_debug("{}", oss.str());
     }
     catch(...)
     {
+      abort();
       g = goto_functions;
     }
   }
-
   // We have to disable assertions in the forward condition but
   // restore the previous value after it
   bool no_assertions = opts.get_bool_option("no-assertions");
