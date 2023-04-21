@@ -27,6 +27,11 @@ void clang_cpp_languaget::force_file_type()
   // Force clang see all files as .cpp
   compiler_args.push_back("-x");
   compiler_args.push_back("c++");
+
+  // TODO: remove before submitting a PR
+  //    do not limit the
+  compiler_args.push_back("-ferror-limit=0");
+  //compiler_args.push_back("0");
 }
 
 std::string clang_cpp_languaget::internal_additions()
