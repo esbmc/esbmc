@@ -28,7 +28,8 @@ public:
   int _size;
 
 	class const_iterator;
-	class iterator {
+	class iterator
+  {
 	public:
 		char* pointer;
 		char* it_str;
@@ -205,8 +206,9 @@ public:
 			return buffer;
 		}
 	};
-#if 1
-	class const_iterator {
+
+	class const_iterator
+  {
 	public:
 
 		char* pointer;
@@ -329,7 +331,6 @@ public:
 		//operator adds n positions on pointer address, and returns its address value
 
 	};
-#endif
 
 	string();
 	string(char*);
