@@ -45,7 +45,6 @@ public:
   bool enable_contraction_for_abstract_states = true;
 
   // Widening options
-  unsigned delayed_widening_limit = 50;
   bool widening_underaproximate_bound = true;
   bool widening_extrapolate = false;
   bool widening_narrowing = false;
@@ -80,7 +79,6 @@ public:
   void clear_state() {
     int_map.clear();
     real_map.clear();
-    fixpoint_counter.clear();
   }
 
   // no states
@@ -169,8 +167,6 @@ protected:
   int_mapt int_map;
   /// Map for all real intervals
   real_mapt real_map;
-  // TODO: a proper widening!
-  std::unordered_map<irep_idt, unsigned, irep_id_hash> fixpoint_counter;
 
 
   /**

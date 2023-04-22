@@ -448,7 +448,7 @@ bool interval_domaint::join(const interval_domaint &b)
 
   bool result = false;
 
-  auto f = [&result,this](auto& this_map, const auto& b_map, const auto& b_counter)
+  auto f = [&result,this](auto& this_map, const auto& b_map)
   {
 
     for(auto it = this_map.begin(); it != this_map.end();) // no it++
@@ -495,8 +495,8 @@ bool interval_domaint::join(const interval_domaint &b)
     }
     }
   };
-  f(int_map, b.int_map, b.fixpoint_counter);
-  f(real_map, b.real_map, b.fixpoint_counter);
+  f(int_map, b.int_map);
+  f(real_map, b.real_map);
   return result;
 }
 
@@ -532,7 +532,6 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
     // Reset the interval domain if it is being reasigned (-infinity, +infinity).
     irep_idt identifier = is_symbol2t(expr) ? to_symbol2t(expr).thename
                                             : to_code_decl2t(expr).value;
-    fixpoint_counter[identifier] = 0;
     if(is_bv_type(expr))
       int_map.erase(identifier);
 
