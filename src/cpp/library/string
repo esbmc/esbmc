@@ -441,7 +441,11 @@ CC_DIAGNOSTIC_POP()
 		__ESBMC_assert(s != NULL,
 		    "The parameter must to be different than NULL");
 		if ((pos > sLen) || (pos > n))
-		  throw out_of_range();
+    {
+      // TODO: when we support try-catch, replace the assert with the throw statement below
+		  //throw out_of_range();
+      __ESBMC_assert(0, "string append failed, out_of_range");
+    }
 
 		int totalLength = this->size();
 		totalLength += (n - pos + 1);
@@ -1161,7 +1165,8 @@ string& string::operator=(const char* s) {
 			"The parameter must to be different than NULL");
 	this->_size = strlen(s);
 	this->str = new char[this->_size + 1];
-	return string(strcpy(this->c_str(), s));
+  string tmp = string(strcpy(this->c_str(), s));
+	return tmp;
 }
 
 string& string::operator=(char s) {
