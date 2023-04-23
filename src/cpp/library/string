@@ -48,16 +48,16 @@ public:
 			pointer = p_pointer;
 		}
 
-		iterator& operator=(iterator& left, const_iterator& right) {
-			left.pointer = right.pointer;
-			left.pos = right.pos;
-			return left;
+		iterator& operator=(const_iterator& right) {
+			this->pointer = right.pointer;
+			this->pos = right.pos;
+			return *this;
 		}
 
-		iterator& operator=(iterator& left, iterator& right) {
-			left.pointer = right.pointer;
-			left.pos = right.pos;
-			return left;
+		iterator& operator=(iterator& right) {
+			this->pointer = right.pointer;
+			this->pos = right.pos;
+			return *this;
 		}
 
 		char* operator ->() {
