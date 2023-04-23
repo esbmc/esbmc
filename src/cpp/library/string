@@ -2575,6 +2575,15 @@ string operator+(char* lhs, string rhs) {
 	result._size = totalLength;
 	return result;
 }
+
+/*
+ * The following operator overloading is really obfuscating on standard types (char*, char).
+ * Clang would generate parse error for such thing. For the time being, let's just
+ * comment them to avoid the parse error so that we can progress further.
+ * The purpose of such overloading may become clear when we run benchmarks.
+ * Remove them if they are not affecting the pass rate in our benchmarks
+ */
+#if 0
 string operator+(char * lhs, char rhc) {
 	int lhsLen = strlen(lhs);
 	int totalLength = lhsLen;
@@ -2590,6 +2599,7 @@ string operator+(char * lhs, char rhc) {
 	result._size = totalLength;
 	return result;
 }
+#endif
 string operator+(char lhc, string rhs) {
 	int totalLength = 1;
 	totalLength += rhs.size();
@@ -2604,6 +2614,14 @@ string operator+(char lhc, string rhs) {
 	result._size = totalLength;
 	return result;
 }
+/*
+ * The following operator overloading is really obfuscating on standard types (char*, char).
+ * Clang would generate parse error for such thing. For the time being, let's just
+ * comment them to avoid the parse error so that we can progress further.
+ * The purpose of such overloading may become clear when we run benchmarks.
+ * Remove them if they are not affecting the pass rate in our benchmarks
+ */
+#if 0
 string operator+(char lhc, char * rhs) {
 	int totalLength = 1;
 	totalLength += strlen(rhs);
@@ -2629,6 +2647,7 @@ string operator+(char lhc, char rhc) {
 	result._size = totalLength;
 	return result;
 }
+#endif
 /*
 bool string::operator==(string& b) {
 	__ESBMC_HIDE: __ESBMC_assert(b.str != NULL,
