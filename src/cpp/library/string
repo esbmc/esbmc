@@ -897,8 +897,10 @@ string::string(char *s) {
 }
 
 string::string(const char * s, size_t n) {
-	__ESBMC_HIDE: __ESBMC_assert(n < strlen(s), "string overflow");
-	__ESBMC_HIDE: __ESBMC_assert( s != NULL, "invalid string");
+	__ESBMC_HIDE:
+  __ESBMC_assert(n < strlen(s), "string overflow");
+	__ESBMC_assert( s != NULL, "invalid string");
+
 	int i;
 	str = new char[n + 1];
 	_size = n;
@@ -908,14 +910,15 @@ string::string(const char * s, size_t n) {
 }
 
 string::string(string& s, size_t n) {
-	__ESBMC_HIDE: __ESBMC_assert(n < s.length(), "string overflow");
-	__ESBMC_HIDE: __ESBMC_assert( s.str != NULL, "invalid string");
+	__ESBMC_HIDE:
+  __ESBMC_assert(n < s.length(), "string overflow");
+  __ESBMC_assert( s.str != NULL, "invalid string");
 	int i,j;
 
-        // Avoid allocating a negative amount.
-        int sz = s._size - n + 1;
-        if (sz < 0)
-          sz = 0;
+  // Avoid allocating a negative amount.
+  int sz = s._size - n + 1;
+  if (sz < 0)
+    sz = 0;
 	this->str = new char[sz];
 	this->_size = s._size - n;
 	for (i = n, j = 0; s.str[i] != '\0'; i++,j++)
@@ -944,15 +947,15 @@ char* string::c_str() const {
 	__ESBMC_HIDE: return str;
 }
 
-inline string::ostream& operator <<(ostream& o, string) {
+inline ostream& operator <<(ostream& o, string) {
 	return o;
 }
 
-inline string::ostream& operator <<(ostream& o, struct iterator&) {
+inline ostream& operator <<(ostream& o, struct iterator&) {
 	return o;
 }
 
-inline string::istream& operator >>(istream& is, string) {
+inline istream& operator >>(istream& is, string) {
 	return is;
 }
 
@@ -978,7 +981,7 @@ bool string::operator>(const char* a) {
 	return false;
 }
 
-bool string::operator>(const char* lhs, string& rhs) {
+bool operator>(const char* lhs, string& rhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs.str != NULL,
@@ -991,7 +994,7 @@ bool string::operator>(const char* lhs, string& rhs) {
 	return false;
 }
 
-bool string::operator>(string& lhs, const char* rhs) {
+bool operator>(string& lhs, const char* rhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs.str != NULL,
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs != NULL,
@@ -1026,7 +1029,7 @@ bool string::operator<(const char* a) {
 	return false;
 }
 
-bool string::operator<(const char* lhs, string& rhs) {
+bool operator<(const char* lhs, string& rhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs.str != NULL,
@@ -1039,7 +1042,7 @@ bool string::operator<(const char* lhs, string& rhs) {
 	return false;
 }
 
-bool string::operator<(string& lhs, const char* rhs) {
+bool operator<(string& lhs, const char* rhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs.str != NULL,
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs != NULL,
