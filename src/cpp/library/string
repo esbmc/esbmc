@@ -388,11 +388,11 @@ public:
 	size_t find_first_of(char c, size_t pos = 0) const;
 	size_t find(string& s, size_t pos = 0) const;
 	size_t find(const char* s, size_t pos = 0) const;
-	size_t find(const char* s, size_t pos = 0, size_t n) const;
+	size_t find(const char* s, size_t pos, size_t n) const;
 	size_t find(char c, size_t pos = 0) const;
 	string& assign(string& s);
 	string& assign(const char* s, size_t n);
-	string& assign(string& s, size_t pos = 0, size_t n);
+	string& assign(string& s, size_t pos, size_t n);
 	string& assign(const char* s);
 	string& assign(size_t n, char c);
 	string& assign(iterator one, iterator two) {
@@ -469,7 +469,7 @@ public:
 	size_t rfind(const char* s, size_t pos = npos) const;
 	size_t rfind(char* s) const;
 	size_t rfind(char c, size_t pos = npos) const;
-	size_t rfind(const char* s, size_t pos = 0, size_t n) const;
+	size_t rfind(const char* s, size_t pos, size_t n) const;
 	size_t find_last_of(const string& s, size_t pos = npos) const;
 	size_t find_last_of(const char* s, size_t pos = npos) const;
 	size_t find_last_of(char* s) const;
@@ -477,8 +477,8 @@ public:
 	size_t find_first_not_of(const string& s, size_t pos = 0) const;
 	size_t find_first_not_of(const char* s, size_t pos = 0) const;
 	size_t find_first_not_of(char c, size_t pos = 0) const;
-	string& erase(size_t pos = 0, size_t n);
-	string& erase(size_t pos = 0, size_t n, char* tmp);
+	string& erase(size_t pos, size_t n);
+	string& erase(size_t pos, size_t n, char* tmp);
 	string& erase(size_t pos = 0);
 	string& erase(iterator it) {
 		__ESBMC_assert(it.pos >= 0,
@@ -1337,7 +1337,7 @@ string& string::assign(string& s) {
 	return *this;
 }
 
-string& string::assign(string& s, size_t pos = 0, size_t n) {
+string& string::assign(string& s, size_t pos, size_t n) {
 	__ESBMC_HIDE: __ESBMC_assert(
 			(pos >= 0) && (pos < s.length()) && ((pos + n) < s.length())
 					&& (n > 0), "string overflow");
@@ -1527,7 +1527,7 @@ size_t string::find(string& s, size_t pos = 0) const {
 	return -1;
 }
 
-size_t string::find(const char* s, size_t pos = 0, size_t n) const {
+size_t string::find(const char* s, size_t pos, size_t n) const {
 	__ESBMC_HIDE: __ESBMC_assert(
 			(pos >= 0) && (pos < this->length()) && ((pos + n) < this->length())
 					&& (n > 0), "string overflow");
@@ -1771,7 +1771,7 @@ string& string::insert(size_t pos1, size_t n, char c) {
 	return *this;
 }
 
-string& string::erase(size_t pos = 0, size_t n) {
+string& string::erase(size_t pos, size_t n) {
 	__ESBMC_HIDE: __ESBMC_assert(
 			(pos < this->length()) && ((pos + n) <= this->length()),
 			"overflow");
