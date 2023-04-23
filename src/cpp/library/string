@@ -68,6 +68,9 @@ public:
 			return *pointer;
 		}
 
+CC_DIAGNOSTIC_PUSH()
+DO_PRAGMA(GCC diagnostic ignored "-Wreturn-stack-address")
+
 		iterator& operator -(int n) const {
 			iterator buffer;
 			buffer.pointer = pointer - sizeof(char) * n;
@@ -115,6 +118,8 @@ public:
 			pos--;
 			return buffer;
 		}
+
+CC_DIAGNOSTIC_POP()
 
 		//operator decreases pointer address and returns new value
 		//It's like "c--"
@@ -186,6 +191,9 @@ public:
 			return !(pos < right.pos);
 		}
 
+CC_DIAGNOSTIC_PUSH()
+DO_PRAGMA(GCC diagnostic ignored "-Wreturn-stack-address")
+
 		//operator adds n positions on pointer address, and returns its address value
 
 		iterator& operator +=(int n) {
@@ -205,6 +213,8 @@ public:
 			pos += n;
 			return buffer;
 		}
+
+CC_DIAGNOSTIC_POP()
 	};
 
 	class const_iterator
@@ -241,6 +251,9 @@ public:
 			return *pointer;
 		}
 
+CC_DIAGNOSTIC_PUSH()
+DO_PRAGMA(GCC diagnostic ignored "-Wreturn-stack-address")
+
 		//operator subtracts n positions on pointer address of this
 		const_iterator& operator -(int n) const {
 			const_iterator buffer;
@@ -253,6 +266,8 @@ public:
 			buffer.pointer = pointer + sizeof(char) * n;
 			return buffer;
 		}
+
+CC_DIAGNOSTIC_POP()
 
 		const_iterator& operator ++();
 		const_iterator operator ++(int);
