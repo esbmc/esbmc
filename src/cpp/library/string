@@ -354,12 +354,12 @@ public:
 	//bool operator!=(string& lhs, const char* rhs);
 	bool operator>(string& a);
 	bool operator>(const char* a);
-	bool operator>(const char* lhs, string& rhs);
-	bool operator>(string& lhs, const char* rhs);
+	friend bool operator>(const char* lhs, string& rhs);
+	friend bool operator>(string& lhs, const char* rhs);
 	bool operator<(string& a);
 	bool operator<(const char* a);
-	bool operator<(const char* lhs, string& rhs);
-	bool operator<(string& lhs, const char* rhs);
+	friend bool operator<(const char* lhs, string& rhs);
+	friend bool operator<(string& lhs, const char* rhs);
 	bool operator>=(string& a);
 	bool operator>=(const char* lhs);
 	bool operator<=(string& a);
@@ -452,7 +452,7 @@ public:
 			temp[i] = this->str[i];
 		for (j = i, k = pos; j < temp._size; j++, k++)
 			temp.str[j] = s[k];
-		//*this = temp;
+		// *this = temp;
 		this->_size = temp._size;
 		this->str = temp.str;
 		//assert(this->_size != 16);
