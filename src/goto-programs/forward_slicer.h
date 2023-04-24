@@ -7,12 +7,20 @@
 #include <map>
 #include <util/algorithms.h>
 
+/**
+ * @brief Abstract domain to keep all variables used in asserts
+ *
+ * The domain is the list of symbols that may afffect next statements
+ *
+ * The lattice consists in: TOP - depends on all symbols, BOTTOM - empty dependencies
+ * The meet operator is the union
+ * The transform operator checks whether the current statement affects any of the dependencies
+ * The flow is backwards
+ */
+
 class slicer_domaint : public ai_domain_baset
 {
 public:
-  // Trivial, conjunctive interval domain for both float
-  // and integers. The categorization 'float' and 'integers'
-  // is done by is_int and is_float.
 
   slicer_domaint()
   {
@@ -88,6 +96,6 @@ protected:
   const namespacet &ns;
 
 private:
-  ait<slicer_domaint> sl;
+  ait<slicer_domaint> slicer;
   bool should_skip_function(const std::string &func);
 };

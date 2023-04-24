@@ -1285,9 +1285,9 @@ int esbmc_parseoptionst::do_forward_condition(
   opts.set_option("no-unwinding-assertions", false);
   opts.set_option("partial-loops", false);
   auto g = goto_functions;
-  if(1 || !opts.get_bool_option("forward-slicer"))
+  if(opts.get_bool_option("forward-slicer"))
   {
-    log_status("Applying Forward Slicer");
+    log_status("Trying to apply Forward Slicer...");
     namespacet ns(context);
     forward_slicer slicer(ns);
     try
@@ -1299,11 +1299,12 @@ int esbmc_parseoptionst::do_forward_condition(
       std::ostringstream oss;
       g.output(ns, oss);
       log_debug("{}", oss.str());
+      log_status("Sliced");
     }
     catch(...)
     {
-      abort();
       g = goto_functions;
+      log_status("Unable to slice");
     }
   }
   // We have to disable assertions in the forward condition but

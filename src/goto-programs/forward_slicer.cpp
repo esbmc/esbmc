@@ -2,10 +2,10 @@
 #include <util/prefix.h>
 namespace
 {
+// TODO: Move this to irep2_utils
 // Recursively try to extract symbols from an expression
 void get_symbols(const expr2tc &expr, std::set<std::string> &values)
 {
-  // TODO: This function should return a set!
   if(!expr)
     return;
   switch(expr->expr_id)
@@ -49,24 +49,24 @@ void slicer_domaint::assign(const expr2tc &e)
 {
   auto assignment = to_code_assign2t(e);
 
-  // We don't care about constants
+  // We don't care about non-symbolic LHS
   if(!is_symbol2t(assignment.target))
     return;
 
+  // Hack: This should prevent the atexit handled (Needed as we don't support pointers)
   if(has_prefix(to_symbol2t(assignment.target).get_symbol_name(), "c:stdlib.c"))
      return;
 
   // We do not support pointers
   if(is_pointer_type(assignment.target->type))
   {
-    log_error("Forward slicer does not support pointers");
-    e->dump();
-    throw "TODO: points-to analysis";
+     log_debug("Forward slicer does not support pointers: {}", *e);
+     throw "TODO: points-to analysis";
   }
   
   std::set<std::string> vars;
-  get_symbols(assignment.source, vars);
-  // Some magic to get the vars
+  // Build-up dependencies over the RHS
+  get_symbols(assignment.source, vars);  
   dependencies[to_symbol2t(assignment.target).get_symbol_name()] = vars;
 }
 
@@ -75,12 +75,11 @@ void slicer_domaint::declaration(const expr2tc &e)
   auto A = to_code_decl2t(e);
   if(is_pointer_type(A.type))
   {
-    log_error("Forward slicer does not support pointers");
+    log_debug("Forward slicer does not support pointers: {}", *e);
     throw "TODO: points-to analysis";
   }
 
   std::set<std::string> vars;
-  // Some magic to get the vars
   dependencies[A.value.as_string()] = vars;
 }
 
@@ -109,7 +108,7 @@ void slicer_domaint::transform(
 
 bool slicer_domaint::join(const slicer_domaint &b)
 {
-  // If old domain is empty, do nothing
+  // If old domain was empty, do nothing
   if(b.is_bottom())
     return false;
 
@@ -150,7 +149,8 @@ bool slicer_domaint::join(const slicer_domaint &b)
 
 bool forward_slicer::runOnProgram(goto_functionst &F)
 {
-  sl(F, ns);
+  // Compute all dependencies for all statements
+  slicer(F, ns);
   return true;
 }
 
@@ -171,6 +171,7 @@ bool forward_slicer::runOnLoop(loopst &loop, goto_programt &)
 
 bool forward_slicer::should_skip_function(const std::string &func)
 {
+  // We should skip trying to slice our intrinsic functions
   return has_prefix(func, "c:@F@__ESBMC_") || has_prefix(func, "c:@F@pthread_");
 }
 
@@ -181,6 +182,7 @@ bool forward_slicer::runOnFunction(std::pair<const dstring, goto_functiont> &F)
   if(F.second.body_available)
   {
     std::set<std::string> deps;
+    // Build a dependency set for function call arguments, assumes/asserts and goto guards
     for(auto it = (F.second.body).instructions.rbegin();
         it != (F.second.body).instructions.rend();
         ++it)
@@ -197,7 +199,7 @@ bool forward_slicer::runOnFunction(std::pair<const dstring, goto_functiont> &F)
         get_symbols(it->code, deps);
         auto base = it;
         base++;
-        auto state = sl[base.base()].dependencies;
+        auto state = slicer[base.base()].dependencies;
         for(auto &d : deps)
           for(auto &item : state[d])
             deps.insert(item);
