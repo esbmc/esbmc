@@ -232,7 +232,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   concurrency = (prop == Property.reach) and check_if_benchmark_contains_pthread(benchmark)
 
   if concurrency:
-    command_line += " --no-por --context-bound 2 "
+    command_line += " --no-por --context-bound 2 --no-goto-merge "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
