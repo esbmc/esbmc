@@ -42,7 +42,7 @@ public:
   void adjust_member(member_exprt &expr) override;
   void adjust_side_effect(side_effect_exprt &expr) override;
   void adjust_new(exprt &expr);
-  void adjust_struct_method_call(member_exprt &expr);
+  void adjust_cpp_member(member_exprt &expr);
 
   /**
    * methods for implicit GOTO code generation

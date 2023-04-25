@@ -344,9 +344,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("disable-inductive-step", true);
   }
 
-  if(cmdline.isset("shift-ub-check"))
+  if(cmdline.isset("ub-shift-check"))
   {
-    options.set_option("shift-ub-check", true);
+    options.set_option("ub-shift-check", true);
   }
 
   if(cmdline.isset("timeout"))

@@ -372,7 +372,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  if(get_struct_union_class_methods(*rd_def, to_struct_type(t)))
+  if(get_struct_union_class_methods_decls(*rd_def, to_struct_type(t)))
     return true;
 
   if(rd.isUnion())
@@ -410,11 +410,11 @@ bool clang_c_convertert::get_struct_union_class_fields(
   return false;
 }
 
-bool clang_c_convertert::get_struct_union_class_methods(
+bool clang_c_convertert::get_struct_union_class_methods_decls(
   const clang::RecordDecl &,
   struct_typet &)
 {
-  // We don't add methods to the struct in C
+  // We don't add methods or static members to the struct in C
   return false;
 }
 
@@ -1612,7 +1612,19 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if(get_decl(*member.getMemberDecl(), comp))
         return true;
 
-      new_expr = member_exprt(base, comp.name(), comp.type());
+      if(!comp.name().empty())
+      {
+        // for MemberExpr referring to struct field (an/or method in case of C++)
+        new_expr = member_exprt(base, comp.name(), comp.type());
+      }
+      else
+      {
+        // for MemberExpr in referring to a static member
+        // which is essentially a VarDecl
+        assert(comp.statement() == "decl");
+        assert(comp.op0().is_symbol());
+        new_expr = member_exprt(base, comp.op0().identifier(), comp.type());
+      }
     }
     else
     {

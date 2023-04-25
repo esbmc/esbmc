@@ -128,7 +128,8 @@ jobs:
       run: |
         Write-Host "Set TLS1.2"
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor "Tls12"
-        choco install -y nsis.portable winflexbison --ignore-checksums
+        choco install -y nsis.portable --ignore-checksums
+        ./scripts/winflexbison_install.ps1
     - name: Check if od is on path
       run: od.exe --version
     - name: Update vcpkg
