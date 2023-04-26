@@ -29,7 +29,7 @@ float sqrt(float n) {
 
 float sqrt(int n) {
 	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
-	return nondet_int();
+	return nondet_float();
 }
 
 double sqrt(double n) {
@@ -48,7 +48,7 @@ double sqrt(double n) {
 
 unsigned sqrt(unsigned x) {
 	__ESBMC_assert(x >= 0, "The number must be greater or equal than 0");
-	return nondet_unsigned();
+	return nondet_uint();
 }
 
 float exp(float n) {
