@@ -131,3 +131,22 @@ void symbolt::from_irep(const irept &src)
   file_local = src.file_local();
   is_extern = src.is_extern();
 }
+
+void symbolt::get_expr2_symbols(
+  const expr2tc &expr,
+  std::set<std::string> &values)
+{
+  if(!expr)
+    return;
+  switch(expr->expr_id)
+  {
+  case expr2t::symbol_id:
+
+    values.insert(to_symbol2t(expr).get_symbol_name());
+    return;
+
+  default:
+    expr->foreach_operand([&values](auto &e) { get_expr2_symbols(e, values); });
+    return;
+  }
+}
