@@ -150,6 +150,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"unroll-loops", NULL, ""},
     {"no-slice", NULL, "do not remove unused equations"},
     {"forward-slicer", NULL, "attempt to slice loops that don't affect VCCs"},
+    {"goto-slicer",
+     NULL,
+     "attempt to slice instructions that don't affect VCCs"},
     {"no-slice-name",
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "name"),
