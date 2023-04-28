@@ -391,12 +391,12 @@ void goto_checkt::shift_check(
   const guardt &guard,
   const locationt &loc)
 {
+  overflow_check(expr, guard, loc);
+
   if(!enable_ub_shift_check)
     return;
 
   assert(is_lshr2t(expr) || is_ashr2t(expr) || is_shl2t(expr));
-
-  overflow_check(expr, guard, loc);
 
   auto right_op = (*expr->get_sub_expr(1));
 
