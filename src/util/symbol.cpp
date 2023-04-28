@@ -1,7 +1,7 @@
 #include <util/location.h>
 #include <util/message.h>
 #include <util/symbol.h>
-
+#include <irep2/irep2_utils.h>
 symbolt::symbolt()
 {
   clear();
