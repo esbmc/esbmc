@@ -28,7 +28,7 @@ struct bad_alloc: public exception {
 public:
   bad_alloc() throw() {}
   bad_alloc( const bad_alloc& other ) throw();
-  bad_alloc& operator=( const bad_exception& other ) throw();
+  bad_alloc& operator=( const bad_alloc& other ) throw();
   virtual const char* what() const throw() {
 		return "std::bad_alloc";
 	}
