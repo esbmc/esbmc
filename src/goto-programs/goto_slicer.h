@@ -120,6 +120,8 @@ protected:
   virtual bool runOnProgram(goto_functionst &) override;
   const namespacet &ns;
 
+  bool contains_global_var(std::set<std::string> symbols) const;
+
   /// Instructions that should contribute to the dependency of the slicer
   std::set<GOTO_INSTRUCTION_TYPE> dependency_instruction_type;
 

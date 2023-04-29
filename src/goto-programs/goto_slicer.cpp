@@ -38,7 +38,7 @@ void slicer_domaint::assign(const expr2tc &e)
   // We do not support pointers
   if(is_pointer_type(assignment.target->type))
   {
-    log_debug("Forward slicer does not support pointers: {}", *e);
+    log_debug("Slicer does not support pointers: {}", *e);
     throw "TODO: points-to analysis";
   }
 
@@ -62,7 +62,7 @@ void slicer_domaint::declaration(const expr2tc &e)
   auto A = to_code_decl2t(e);
   if(is_pointer_type(A.type))
   {
-    log_debug("Forward slicer does not support pointers: {}", *e);
+    log_debug("Slicer does not support pointers: {}", *e);
     throw "TODO: points-to analysis";
   }
 
@@ -146,7 +146,6 @@ bool goto_slicer::runOnProgram(goto_functionst &F)
   {
     log_status("Unable to slice the program");
     slicer_failed = true;
-    abort();
   }
 
   return true;
@@ -165,10 +164,13 @@ bool goto_slicer::is_loop_affecting_assertions(const loopst &loop) const
 {
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
+  loop_exit++;
   while(loop_head != loop_exit)
   {
     std::set<std::string> deps;
     symbolt::get_expr2_symbols(loop_head->code, deps);
+    if(contains_global_var(deps))
+      return true;
     for(auto d : deps)
     {
       if(remaining_deps.count(d))
@@ -293,6 +295,9 @@ bool goto_slicer::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       {
         std::set<std::string> local_deps;
         symbolt::get_expr2_symbols(it->code, local_deps);
+        if(contains_global_var(local_deps))
+          continue;
+
         bool contains_dep = false;
         for(auto &item : local_deps)
         {
@@ -319,6 +324,8 @@ bool goto_slicer::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       {
       case ASSERT:
       case ASSUME:
+      case FUNCTION_CALL:
+      case RETURN:
       {
         symbolt::get_expr2_symbols(it->guard, remaining_deps);
         symbolt::get_expr2_symbols(it->code, remaining_deps);
@@ -336,4 +343,23 @@ bool goto_slicer::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     }
   }
   return true;
+}
+
+bool goto_slicer::contains_global_var(std::set<std::string> symbols) const
+{
+  for(auto identifier : symbols)
+  {
+    if(identifier == "NULL")
+      continue;
+    const symbolt *s = ns.get_context().find_symbol(identifier);
+    if(s == nullptr)
+    {
+      log_error("Could not find {}", identifier);
+      abort();
+    }
+
+    if(s->static_lifetime)
+      return true; // this is affecting a global var somehow
+  }
+  return false;
 }
