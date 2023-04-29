@@ -354,8 +354,8 @@ bool goto_slicer::contains_global_var(std::set<std::string> symbols) const
     const symbolt *s = ns.get_context().find_symbol(identifier);
     if(s == nullptr)
     {
-      log_error("Could not find {}", identifier);
-      abort();
+      log_warning("Could not find {}", identifier);
+      continue;
     }
 
     if(s->static_lifetime)
