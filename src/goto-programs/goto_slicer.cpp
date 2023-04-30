@@ -160,7 +160,7 @@ bool goto_slicer::is_loop_empty(const loopst &loop) const
   return loop_head == loop.get_original_loop_exit();
 }
 
-bool goto_slicer::is_loop_affecting_assertions(const loopst &loop) const
+bool goto_slicer::is_loop_affecting_assertions(const loopst &loop)
 {
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
@@ -168,14 +168,11 @@ bool goto_slicer::is_loop_affecting_assertions(const loopst &loop) const
   while(loop_head != loop_exit)
   {
     std::set<std::string> deps;
+    symbolt::get_expr2_symbols(loop_head->guard, deps);
     symbolt::get_expr2_symbols(loop_head->code, deps);
-    if(contains_global_var(deps))
-      return true;
     for(auto d : deps)
-    {
       if(remaining_deps.count(d))
         return true;
-    }
     loop_head++;
   }
 
@@ -203,7 +200,54 @@ bool goto_slicer::is_trivial_loop(const loopst &loop) const
   return unroll.get_loop_bounds(loop) >= 0;
 }
 
-bool goto_slicer::runOnLoop(loopst &loop, goto_programt &)
+bool goto_slicer::runOnLoop(loopst &loop, goto_programt &goto_program)
+{
+  goto_programt::targett loop_head = loop.get_original_loop_head();
+  goto_programt::targett loop_exit = loop.get_original_loop_exit();
+  loop_exit++;
+  while(loop_head != loop_exit)
+  {
+    loop_head->dump();
+    if(loop_head->is_function_call() || loop_head->is_return())
+    {
+      symbolt::get_expr2_symbols(
+        loop.get_original_loop_head()->code, remaining_deps);
+      symbolt::get_expr2_symbols(
+        loop.get_original_loop_exit()->code, remaining_deps);
+      symbolt::get_expr2_symbols(
+        loop.get_original_loop_head()->guard, remaining_deps);
+      symbolt::get_expr2_symbols(
+        loop.get_original_loop_exit()->guard, remaining_deps);
+      break;
+    }
+    loop_head++;
+  }
+  return false;
+}
+
+bool goto_slicer::postProcessing(goto_functionst &F)
+{
+  Forall_goto_functions(it, F)
+  {
+    if(it->second.body_available)
+    {
+      goto_loopst goto_loops(it->first, F, it->second);
+      auto function_loops = goto_loops.get_loops();
+      if(function_loops.size())
+      {
+        goto_functiont &goto_function = it->second;
+        goto_programt &goto_program = goto_function.body;
+
+        // Foreach loop in the function
+        for(auto itt = function_loops.rbegin(); itt != function_loops.rend();
+            ++itt)
+          sliceLoop(*itt, goto_program);
+      }
+    }
+  }
+}
+
+bool goto_slicer::sliceLoop(loopst &loop, goto_programt &goto_program)
 {
   if(slicer_failed)
     return false;
@@ -320,6 +364,7 @@ bool goto_slicer::runOnFunction(std::pair<const dstring, goto_functiont> &F)
         it != (F.second.body).instructions.rend();
         ++it)
     {
+      // TODO: This could be done at the initialization phase
       switch(it->type)
       {
       case ASSERT:
@@ -338,7 +383,7 @@ bool goto_slicer::runOnFunction(std::pair<const dstring, goto_functiont> &F)
         break;
       }
       default:
-        break;
+        continue;
       }
     }
   }

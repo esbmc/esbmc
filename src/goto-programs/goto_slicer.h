@@ -118,7 +118,10 @@ protected:
   runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
   virtual bool runOnLoop(loopst &loop, goto_programt &goto_program) override;
   virtual bool runOnProgram(goto_functionst &) override;
+  virtual bool postProcessing(goto_functionst &) override;
   const namespacet &ns;
+
+  bool sliceLoop(loopst &loop, goto_programt &goto_program);
 
   bool contains_global_var(std::set<std::string> symbols) const;
 
@@ -131,12 +134,10 @@ protected:
   /// Flag to check whether we are slicing a forward condition. This is useful for determining whether we should slice while(1) or while(0) loops.
   bool forward_analysis = false;
   bool is_loop_empty(const loopst &loop) const;
-  bool is_loop_affecting_assertions(const loopst &loop) const;
+  bool is_loop_affecting_assertions(const loopst &loop);
   bool is_trivial_loop(const loopst &loop) const;
 
   std::set<std::string> remaining_deps;
-
-private:
   ait<slicer_domaint> slicer;
   /// TODO: This will be needed until we have support for pointers
   bool slicer_failed = false;
