@@ -391,8 +391,12 @@ void goto_checkt::shift_check(
   const guardt &guard,
   const locationt &loc)
 {
+  overflow_check(expr, guard, loc);
+
   if(!enable_ub_shift_check)
     return;
+
+  assert(is_lshr2t(expr) || is_ashr2t(expr) || is_shl2t(expr));
 
   auto right_op = (*expr->get_sub_expr(1));
 
@@ -692,16 +696,17 @@ void goto_checkt::check_rec(
     bounds_check(expr, guard, loc);
     return;
 
+  case expr2t::shl_id:
+  case expr2t::ashr_id:
+  case expr2t::lshr_id:
+    shift_check(expr, guard, loc);
+    break;
+
   case expr2t::div_id:
   case expr2t::modulus_id:
     div_by_zero_check(expr, guard, loc);
     /* fallthrough */
 
-  case expr2t::shl_id:
-  case expr2t::ashr_id:
-  case expr2t::lshr_id:
-    shift_check(expr, guard, loc);
-    /* fallthrough */
   case expr2t::neg_id:
   case expr2t::add_id:
   case expr2t::sub_id:
