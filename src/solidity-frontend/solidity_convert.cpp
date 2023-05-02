@@ -387,7 +387,7 @@ bool solidity_convertert::get_struct_class_fields(
     SolidityGrammar::VisibilityT::UnknownT)
     return false;
 
-  if(get_var_decl(ast_node, comp))
+  if(get_var_decl_ref(ast_node, comp))
     return true;
   comp.type().set("#member_name", type.name());
   if(get_access_from_decl(ast_node, comp))
@@ -954,6 +954,13 @@ bool solidity_convertert::get_expr(
   case SolidityGrammar::ExpressionT::UnaryOperatorClass:
   {
     if(get_unary_operator_expr(expr, int_literal_type, new_expr))
+      return true;
+    break;
+  }
+  case SolidityGrammar::ExpressionT::ConditionalOperatorClass:
+  {
+    // for Ternary Operator (...?...:...) only
+    if(get_conditional_operator_expr(expr, new_expr))
       return true;
     break;
   }
@@ -1579,6 +1586,34 @@ bool solidity_convertert::get_unary_operator_expr(
   }
 
   new_expr.operands().push_back(unary_sub);
+  return false;
+}
+
+bool solidity_convertert::get_conditional_operator_expr(
+  const nlohmann::json &expr,
+  exprt &new_expr)
+{
+  exprt cond;
+  if(get_expr(expr["condition"], cond))
+    return true;
+
+  exprt then;
+  if(get_expr(expr["trueExpression"], expr["typeDescriptions"], then))
+    return true;
+
+  exprt else_expr;
+  if(get_expr(expr["falseExpression"], expr["typeDescriptions"], else_expr))
+    return true;
+
+  typet t;
+  if(get_type_description(expr["typeDescriptions"], t))
+    return true;
+
+  exprt if_expr("if", t);
+  if_expr.copy_to_operands(cond, then, else_expr);
+
+  new_expr = if_expr;
+
   return false;
 }
 
@@ -2777,39 +2812,28 @@ bool solidity_convertert::get_constructor_call(
 
   const nlohmann::json constructor_ref = find_decl_ref(ref_decl_id);
 
-  // check for implicit constructor
+  // Special handling of implicit constructor
+  // since there is no ast nodes for implicit constructor
   if(constructor_ref.empty())
-  {
-    std::string name, id;
-    if(get_contract_name(ref_decl_id, name))
-      return true;
-    id = name;
-    if(context.find_symbol(id) == nullptr)
-      return true;
-
-    symbolt s = *context.find_symbol(id);
-    typet type = s.type;
-
-    new_expr = exprt("symbol", type);
-    new_expr.identifier(id);
-    new_expr.cmt_lvalue(true);
-    new_expr.name(name);
-
-    side_effect_expr_function_callt call;
-    struct_typet tmp = struct_typet();
-    call.function() = new_expr;
-    call.type() = tmp;
-    new_expr = call;
-    return false;
-  }
+    return get_implicit_ctor_call(ref_decl_id, new_expr);
 
   if(get_func_decl_ref(constructor_ref, callee))
     return true;
 
-  struct_typet tmp = struct_typet();
+  // obtain the type info
+  std::string name, id;
+  if(get_contract_name(ref_decl_id, name))
+    return true;
+  id = prefix + name;
+  if(context.find_symbol(id) == nullptr)
+    return true;
+
+  const symbolt &s = *context.find_symbol(id);
+  typet type = s.type;
+
   side_effect_expr_function_callt call;
   call.function() = callee;
-  call.type() = tmp;
+  call.type() = type;
 
   auto param_nodes = constructor_ref["parameters"]["parameters"];
   unsigned num_args = 0;
@@ -2836,6 +2860,37 @@ bool solidity_convertert::get_constructor_call(
   }
 
   // for adjustment
+  call.set("constructor", 1);
+  new_expr = call;
+
+  return false;
+}
+
+bool solidity_convertert::get_implicit_ctor_call(
+  const int ref_decl_id,
+  exprt &new_expr)
+{
+  // to obtain the type info
+  std::string name, id;
+  if(get_contract_name(ref_decl_id, name))
+    return true;
+  id = name;
+  if(context.find_symbol(id) == nullptr)
+    return true;
+
+  const symbolt &s = *context.find_symbol(id);
+  typet type = s.type;
+
+  new_expr = exprt("symbol", type);
+  new_expr.identifier(id);
+  new_expr.cmt_lvalue(true);
+  new_expr.name(name);
+
+  side_effect_expr_function_callt call;
+  struct_typet tmp = struct_typet();
+  call.function() = new_expr;
+  call.type() = tmp;
+
   call.set("constructor", 1);
   new_expr = call;
 
