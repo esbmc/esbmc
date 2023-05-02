@@ -187,27 +187,27 @@ enum ExpressionT
   // BinaryOperator
   BinaryOperatorClass =
     0, // This type covers all binary operators in Solidity, such as =, +, - .etc
-  BO_Assign,    // =
-  BO_Add,       // +
-  BO_Sub,       // -
-  BO_Mul,       // *
-  BO_Div,       // /
-  BO_Rem,       // %
+  BO_Assign, // =
+  BO_Add,    // +
+  BO_Sub,    // -
+  BO_Mul,    // *
+  BO_Div,    // /
+  BO_Rem,    // %
 
-  BO_Shl,       // <<
-  BO_Shr,       // >>
-  BO_And,       // &
-  BO_Xor,       // ^
-  BO_Or,        // |
+  BO_Shl, // <<
+  BO_Shr, // >>
+  BO_And, // &
+  BO_Xor, // ^
+  BO_Or,  // |
 
-  BO_GT,        // >
-  BO_LT,        // <
-  BO_GE,        // >=
-  BO_LE,        // <=
-  BO_NE,        // !=
-  BO_EQ,        // ==
-  BO_LAnd,      // &&
-  BO_LOr,       // ||
+  BO_GT,   // >
+  BO_LT,   // <
+  BO_GE,   // >=
+  BO_LE,   // <=
+  BO_NE,   // !=
+  BO_EQ,   // ==
+  BO_LAnd, // &&
+  BO_LOr,  // ||
 
   BO_AddAssign, // +=
   BO_SubAssign, // -=
@@ -230,7 +230,7 @@ enum ExpressionT
   UO_Not,     // ~
   UO_LNot,    // !
 
-  //TernaryOperator
+  //TenaryOperator
   ConditionalOperatorClass, // ?...:...
 
   // rule identifier
@@ -329,6 +329,6 @@ enum VisibilityT
 };
 VisibilityT get_access_t(const nlohmann::json &ast_node);
 
-};     // namespace SolidityGrammar
+}; // namespace SolidityGrammar
 
 #endif /* SOLIDITY_GRAMMAR_H_ */
