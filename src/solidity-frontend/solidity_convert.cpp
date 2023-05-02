@@ -1522,7 +1522,6 @@ bool solidity_convertert::get_unary_operator_expr(
   exprt &new_expr)
 {
   // TODO: Fix me! Currently just support prefix == true,e.g. pre-increment
-  //assert(expr["prefix"]);
 
   // 1. get UnaryOperation opcode
   SolidityGrammar::ExpressionT opcode =
