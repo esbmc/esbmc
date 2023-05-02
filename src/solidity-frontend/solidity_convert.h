@@ -60,6 +60,7 @@ protected:
   bool get_function_params(const nlohmann::json &pd, exprt &param);
   bool get_struct_class(const nlohmann::json &ast_node);
   bool add_implicit_constructor();
+  bool get_implicit_ctor_call(const int ref_decl_id, exprt &new_expr);
   bool
   get_struct_class_fields(const nlohmann::json &ast_node, struct_typet &type);
   bool
@@ -83,6 +84,8 @@ protected:
     const nlohmann::json &expr,
     const nlohmann::json &int_literal_type,
     exprt &new_expr);
+  bool
+  get_conditional_operator_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_cast_expr(const nlohmann::json &cast_expr, exprt &new_expr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
@@ -168,6 +171,9 @@ protected:
   std::string prefix = "tag-";
 
   // json nodes that always empty
+  // used as the return value for find_constructor_ref when
+  // dealing with the implicit constructor call
+  // this is to avoid reference to stack memory associated with local variable returned
   const nlohmann::json empty_json;
 
 private:

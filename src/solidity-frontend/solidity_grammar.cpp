@@ -475,6 +475,10 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return UnaryOperatorClass;
   }
+  else if(expr["nodeType"] == "Conditional")
+  {
+    return ConditionalOperatorClass;
+  }
   else if(
     expr["nodeType"] == "Identifier" && expr.contains("referencedDeclaration"))
   {
@@ -728,6 +732,8 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(UO_Minus)
     ENUM_TO_STR(UO_Not)
     ENUM_TO_STR(UO_LNot)
+
+    ENUM_TO_STR(ConditionalOperatorClass)
 
     ENUM_TO_STR(DeclRefExprClass)
     ENUM_TO_STR(Literal)
