@@ -1161,7 +1161,7 @@ bool solidity_convertert::get_expr(
     if(context.find_symbol(id) == nullptr)
       return true;
 
-    symbolt s = *context.find_symbol(id);
+    const symbolt s = *context.find_symbol(id);
     typet type = s.type;
 
     new_expr = exprt("symbol", type);
@@ -1900,7 +1900,7 @@ bool solidity_convertert::get_type_description(
     if(context.find_symbol(id) == nullptr)
       return true;
 
-    symbolt &s = *context.find_symbol(id);
+    const symbolt &s = *context.find_symbol(id);
     new_type = s.type;
 
     break;
