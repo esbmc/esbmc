@@ -172,6 +172,8 @@ protected:
 
   virtual bool get_type(const clang::Type &the_type, typet &new_type);
 
+  void get_ref_to_struct_type(typet &type);
+
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
 
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
