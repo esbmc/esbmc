@@ -104,6 +104,15 @@ public:
     }
   }
 
+  // Sound version (considering over approximations)
+  void make_sound_le(interval_templatet<T> &v)
+  {
+    upper_set = upper_set || v.upper_set;
+    upper = std::min(upper, v.upper);
+    v.lower_set = lower_set && v.lower_set;
+    v.lower = std::max(lower, v.lower);
+  }
+
   void make_ge_than(const T &v) // add lower bound
   {
     if(lower_set)
