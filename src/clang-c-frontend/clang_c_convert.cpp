@@ -304,7 +304,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     printf("Got iterator class\n");
 
   // Check if the symbol is already added to the context, do nothing if it is
-  // already in the context. See next comment
+  // already in the context.
   if(context.find_symbol(id) != nullptr)
     return false;
 
@@ -608,6 +608,9 @@ bool clang_c_convertert::get_function(
   std::string id, name;
   get_decl_name(fd, name, id);
 
+  if(id == "c:@S@string@S@iterator@F@do_something#")
+    printf("Got do_something\n");
+
   symbolt symbol;
   get_default_symbol(
     symbol,
@@ -821,12 +824,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     // Special case, pointers to structs/unions/classes must not
     // have a copy of it, but a reference to the type
-    // TODO: classes
-    if(sub_type.is_struct() || sub_type.is_union())
-    {
-      struct_union_typet t = to_struct_union_type(sub_type);
-      sub_type = symbol_typet(tag_prefix + t.tag().as_string());
-    }
+    get_ref_to_struct_type(sub_type);
 
     new_type = gen_pointer_type(sub_type);
     break;
@@ -3421,4 +3419,17 @@ bool clang_c_convertert::get_vft_binding_expr(
     "MemberExpr call to virtual/overriding function cannot happen in C");
   abort();
   return true;
+}
+
+void clang_c_convertert::get_ref_to_struct_type(typet &type)
+{
+  /*
+   * For some special cases, we need to get a symbol type referring to
+   * a struct/union/class type so that we don't have to copy it
+   */
+  if(type.is_struct() || type.is_union())
+  {
+    struct_union_typet t = to_struct_union_type(type);
+    type = symbol_typet(tag_prefix + t.tag().as_string());
+  }
 }
