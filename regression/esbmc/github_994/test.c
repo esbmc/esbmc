@@ -3,7 +3,7 @@
 
 typedef struct
 {
-  unsigned long int tmp1 : 64;
+  uint64_t tmp1 : 64;
 } struct_1;
 
 typedef union
