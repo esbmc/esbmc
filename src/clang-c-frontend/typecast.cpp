@@ -76,14 +76,18 @@ union_init_component(const struct_union_typet::componentst &u, const typet &t)
   return u[max];
 }
 
-void clang_c_convertert::gen_typecast_to_union(const namespacet &ns, exprt &e, const typet &t)
+void clang_c_convertert::gen_typecast_to_union(
+  const namespacet &ns,
+  exprt &e,
+  const typet &t)
 {
   // If RHS is already of same union type, don't do anything
   if(e.type() == t.type())
     return;
 
   union_exprt new_result(t);
-  auto &component = union_init_component(to_union_type(t).components(), e.type());
+  auto &component =
+    union_init_component(to_union_type(t).components(), e.type());
   // Set the operator and component
   new_result.set_component_name(component.name());
   gen_typecast(ns, e, component.type());
