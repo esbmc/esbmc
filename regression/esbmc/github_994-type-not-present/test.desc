@@ -1,0 +1,4 @@
+CORE
+test.c
+
+error: cast to union type from type( '.+')? not present in union
