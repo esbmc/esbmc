@@ -1,7 +1,9 @@
 #include <goto-programs/abstract-interpretation/interval_template.h>
+#include <goto-programs/abstract-interpretation/wrapped_interval.h>
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
+#include "c_types.h"
 
 TEST_CASE(
   "Interval templates base functions are working for int",
@@ -313,5 +315,145 @@ TEST_CASE(
     REQUIRE(B.upper_set);
     REQUIRE(B.lower == 0);
     REQUIRE(B.upper == 20);
+  }
+}
+
+TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
+{
+  unsigned N1 = 1;
+  auto t1_unsigned = get_uint_type(N1);
+  auto t1_signed = get_int_type(N1);
+
+  unsigned N2 = 2;
+  auto t2_unsigned = get_uint_type(N2);
+  auto t2_signed = get_int_type(N2);
+
+  SECTION("Upper bound test")
+  {
+    unsigned actual =
+      wrapped_interval::get_upper_bound(t1_unsigned).to_uint64();
+    unsigned expected = pow(2, N1 * 8);
+
+    REQUIRE(actual == expected);
+    REQUIRE(
+      wrapped_interval::get_upper_bound(t1_unsigned) ==
+      wrapped_interval::get_upper_bound(t1_signed));
+
+    REQUIRE(
+      wrapped_interval::get_upper_bound(t2_unsigned) ==
+      wrapped_interval::get_upper_bound(t2_signed));
+
+    REQUIRE(
+      wrapped_interval::get_upper_bound(t1_unsigned) !=
+      wrapped_interval::get_upper_bound(t2_signed));
+  }
+
+  SECTION("Wrapped less")
+  {
+    BigInt value1(10);
+    BigInt value2(130);
+
+    REQUIRE(wrapped_interval::wrapped_le(value1, 0, value2, t1_unsigned));
+    REQUIRE(wrapped_interval::wrapped_le(value1, 0, value1, t1_unsigned));
+    REQUIRE(!wrapped_interval::wrapped_le(value2, 0, value1, t1_unsigned));
+  }
+
+  SECTION("Init")
+  {
+    wrapped_interval A(t1_unsigned);
+    wrapped_interval C(t2_unsigned);
+
+    REQUIRE(A.lower == 0);
+    REQUIRE(A.upper.to_uint64() == pow(2, N1 * 8));
+    REQUIRE(!A.is_bottom());
+    REQUIRE(A.is_top());
+
+    REQUIRE(C.lower == 0);
+    REQUIRE(C.upper.to_uint64() == pow(2, N2 * 8));
+    REQUIRE(!C.is_bottom());
+    REQUIRE(C.is_top());
+  }
+
+  SECTION("Non-overlap Interval")
+  {
+    wrapped_interval A(t1_unsigned);
+    A.lower = 10;
+    A.upper = 20;
+    REQUIRE(A.is_member(15));
+    REQUIRE(!A.is_member(150));
+  }
+
+  SECTION("Wrapping Interval")
+  {
+    wrapped_interval A(t1_unsigned);
+    A.lower = 20;
+    A.upper = 10;
+    REQUIRE(!A.is_member(15));
+    REQUIRE(A.is_member(25));
+  }
+
+  wrapped_interval A(t1_unsigned);
+  wrapped_interval B(t1_unsigned);
+
+  SECTION("Join/Meet when A is in B")
+  {
+    A.lower = 30;
+    A.upper = 90;
+    B.lower = 10;
+    B.upper = 150;
+
+    auto over_meet = wrapped_interval::over_meet(A, B);
+    auto over_join = wrapped_interval::over_join(A, B);
+
+    REQUIRE(over_meet.is_equal(A));
+    REQUIRE(over_join.is_equal(B));
+  }
+  SECTION("Join/Meet when A do not overlap and B overlaps meets A in both ends")
+  {
+    A.lower = 10;
+    A.upper = 190;
+    B.lower = 150;
+    B.upper = 20;
+    // [10-190], [150-20]
+    auto over_meet = wrapped_interval::over_meet(A, B);
+    auto under_meet = wrapped_interval::under_meet(A, B);
+    auto over_join = wrapped_interval::over_join(A, B);
+
+    REQUIRE(over_join.is_top());
+    REQUIRE(!under_meet.is_top());
+  }
+  SECTION("Join/Meet when A do not overlap and B overlaps meets A in one end")
+  {
+    A.lower = 10;
+    A.upper = 150;
+    B.lower = 200;
+    B.upper = 100;
+    // [10-150], [200-100]
+    auto over_meet = wrapped_interval::over_meet(A, B);
+    auto under_meet = wrapped_interval::under_meet(A, B);
+    auto over_join = wrapped_interval::over_join(A, B);
+
+    REQUIRE(!over_join.is_top());
+    REQUIRE(over_join.lower == 200);
+    REQUIRE(over_join.upper == 150);
+    REQUIRE(under_meet == over_meet);
+    REQUIRE(under_meet.lower == 10);
+    REQUIRE(under_meet.upper == 100);
+  }
+
+  SECTION("Join/Meet when A do not overlap and B overlaps and no intersection")
+  {
+    A.lower = 20;
+    A.upper = 100;
+    B.lower = 200;
+    B.upper = 10;
+    // [20-100], [200-10]
+    auto over_meet = wrapped_interval::over_meet(A, B);
+    auto under_meet = wrapped_interval::under_meet(A, B);
+    auto over_join = wrapped_interval::over_join(A, B);
+
+    REQUIRE(!over_join.is_top());
+    REQUIRE(over_join.lower == 200);
+    REQUIRE(over_join.upper == 100);
   }
 }

@@ -68,7 +68,7 @@ public:
  * @brief Checks whether there are values that satisfy the
  * the interval.
  */
-  bool empty() const
+  virtual bool empty() const
   {
     return upper_set && lower_set && lower > upper;
   }
@@ -78,7 +78,7 @@ public:
     return empty();
   }
 
-  bool is_top() const // equivalent to 'true'
+  virtual bool is_top() const // equivalent to 'true'
   {
     return !lower_set && !upper_set;
   }
