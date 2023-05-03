@@ -14,6 +14,8 @@ Maintainers:
 #include <fmt/format.h>
 #include <util/message/format.h>
 #include <util/location.h>
+#include <ctime>
+#include <string>
 
 /**
  * @brief Verbosity refers to the max level
@@ -44,8 +46,43 @@ struct messaget
     template <typename... Args>
     static void println(FILE *f, VerbosityLevel lvl, Args &&...args)
     {
-      if(lvl == VerbosityLevel::Error)
-        fmt::print(f, "ERROR: ");
+      struct tm *timestamp_struct;
+      const std::string timestamp_format{"YYYY-MM-DD HH:MM:SS"};
+      static const int timestamp_size = timestamp_format.size() + 1;
+      char timestamp[timestamp_size];
+      std::string log_level;
+
+      std::time_t current_time = time(nullptr);
+      timestamp_struct = localtime(&current_time);
+      std::strftime(
+        timestamp, timestamp_size, "%Y-%m-%d %H:%M:%S", timestamp_struct);
+
+      switch(lvl)
+      {
+      case VerbosityLevel::None:
+        log_level = "";
+        break;
+      case VerbosityLevel::Error:
+        log_level = "[ERROR]:";
+        break;
+      case VerbosityLevel::Warning:
+        log_level = "[WARNING]:";
+        break;
+      case VerbosityLevel::Result:
+        log_level = "[RESULT]:";
+        break;
+      case VerbosityLevel::Progress:
+        log_level = "[PROGRESS]:";
+        break;
+      case VerbosityLevel::Status:
+        log_level = "[STATUS]:";
+        break;
+      case VerbosityLevel::Debug:
+        log_level = "[DEBUG]:";
+        break;
+      }
+
+      std::fprintf(f, "%s %s ", timestamp, log_level.c_str());
       fmt::print(f, std::forward<Args>(args)...);
       fmt::print(f, "\n");
     }
