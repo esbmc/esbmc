@@ -1,4 +1,5 @@
 #include <goto-programs/goto_check.h>
+#include <clang-c-frontend/expr2c.h>
 #include <util/arith_tools.h>
 #include <util/array_name.h>
 #include <util/base_type.h>
@@ -382,7 +383,9 @@ void goto_checkt::input_overflow_check(
     t->location = loc;
     t->location.user_provided(true);
     t->location.property("overflow");
-    t->location.comment("buffer overflow on " + func_name);
+    t->location.comment(
+      "buffer overflow on " +
+      expr2c(migrate_expr_back(func_call.function), ns));
   }
 }
 
