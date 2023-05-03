@@ -924,6 +924,9 @@ std::string expr2ct::convert_symbol(const exprt &src, unsigned &)
   if(src.id() == "next_symbol")
     dest = "NEXT(" + dest + ")";
 
+  if(dest.find("__ESBMC_") == 0)
+    dest.erase(0, 8); // Remove __ESBMC_
+
   return dest;
 }
 
