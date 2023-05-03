@@ -235,9 +235,24 @@ void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
   // 2. Update refs
   auto lhs = get_interval<Interval>(a);
   auto rhs = get_interval<Interval>(b);
-  
+
   // TODO: Add less than equal
-  Interval::contract_interval_le(lhs, rhs);
+  if(enable_contraction_for_abstract_states)
+    Interval::contract_interval_le(lhs, rhs);
+  else
+  {
+    if(is_symbol2t(a) && is_symbol2t(b))
+      lhs.make_sound_le(rhs);
+    else
+    {
+      if(rhs.upper_set)
+        lhs.make_le_than(rhs.upper);
+
+      if(lhs.lower_set)
+        rhs.make_ge_than(lhs.lower);
+    }
+  }
+
   // No need for widening, this is a restriction!
   if(is_symbol2t(a))
     update_symbol_interval(to_symbol2t(a), lhs);
