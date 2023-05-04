@@ -379,8 +379,8 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     wrapped_interval A(t1_unsigned);
     A.lower = 10;
     A.upper = 20;
-    REQUIRE(A.is_member(15));
-    REQUIRE(!A.is_member(150));
+    REQUIRE(A.contains(15));
+    REQUIRE(!A.contains(150));
   }
 
   SECTION("Wrapping Interval")
@@ -388,8 +388,8 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     wrapped_interval A(t1_unsigned);
     A.lower = 20;
     A.upper = 10;
-    REQUIRE(!A.is_member(15));
-    REQUIRE(A.is_member(25));
+    REQUIRE(!A.contains(15));
+    REQUIRE(A.contains(25));
   }
 
   wrapped_interval A(t1_unsigned);
@@ -404,9 +404,11 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
 
     auto over_meet = wrapped_interval::over_meet(A, B);
     auto over_join = wrapped_interval::over_join(A, B);
+    auto intersection = wrapped_interval::intersection(A, B);
 
     REQUIRE(over_meet.is_equal(A));
     REQUIRE(over_join.is_equal(B));
+    REQUIRE(intersection.is_equal(A));
   }
   SECTION("Join/Meet when A do not overlap and B overlaps meets A in both ends")
   {
@@ -418,9 +420,18 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     auto over_meet = wrapped_interval::over_meet(A, B);
     auto under_meet = wrapped_interval::under_meet(A, B);
     auto over_join = wrapped_interval::over_join(A, B);
+    auto intersection = wrapped_interval::intersection(A, B);
 
     REQUIRE(over_join.is_top());
     REQUIRE(!under_meet.is_top());
+    // Real intersection is: [150, 190] U [10, 20]
+    wrapped_interval check(t1_unsigned);
+    check.lower = 150;
+    check.upper = 190;
+    REQUIRE(check.is_included(intersection));
+    check.lower = 10;
+    check.upper = 20;
+    REQUIRE(check.is_included(intersection));
   }
   SECTION("Join/Meet when A do not overlap and B overlaps meets A in one end")
   {
@@ -439,6 +450,13 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     REQUIRE(under_meet == over_meet);
     REQUIRE(under_meet.lower == 10);
     REQUIRE(under_meet.upper == 100);
+
+    // Intersection should be [10, 100]
+    auto intersection = wrapped_interval::intersection(A, B);
+    wrapped_interval check(t1_unsigned);
+    check.lower = 10;
+    check.upper = 100;
+    REQUIRE(check.is_included(intersection));
   }
 
   SECTION("Join/Meet when A do not overlap and B overlaps and no intersection")
@@ -455,5 +473,9 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     REQUIRE(!over_join.is_top());
     REQUIRE(over_join.lower == 200);
     REQUIRE(over_join.upper == 100);
+
+    // Intersection should be bottom
+    auto intersection = wrapped_interval::intersection(A, B);
+    REQUIRE(intersection.is_bottom());
   }
 }
