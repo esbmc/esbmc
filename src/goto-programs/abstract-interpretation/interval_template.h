@@ -42,26 +42,64 @@ public:
   /// Bound value
   T lower, upper;
 
-  const T &get_lower() const
+  T get_lower() const
   {
-    return lower;
+    return get(false);
   }
 
-  const T &get_upper() const
+  T get_upper() const
   {
-    return upper;
+    return get(true);
   }
 
-  void dump() const {
+  T adjust(const T &v) const
+  {
+    // This is just an id function
+    return v;
+  }
+
+  virtual void set(bool is_upper, const T &b)
+  {
+    if(is_upper)
+      upper = b;
+    else
+      lower = b;
+  }
+
+  virtual T get(bool is_upper) const
+  {
+    return is_upper ? upper : lower;
+  }
+
+  void set_upper(const T &b)
+  {
+    set(true, b);
+  }
+  void set_lower(const T &b)
+  {
+    set(false, b);
+  }
+
+  void dump() const
+  {
     std::ostringstream oss;
-    if(lower_set) oss << "[" << lower;
-    else oss << "(-inf";
+    if(lower_set)
+      oss << "[" << lower;
+    else
+      oss << "(-inf";
 
     oss << ",";
-    if(upper_set) oss << upper << "]";
-    else oss << "+inf)";
+    if(upper_set)
+      oss << upper << "]";
+    else
+      oss << "+inf)";
 
     log_status(oss.str());
+  }
+
+  virtual bool is_le_than(const T &a, const T &b) const
+  {
+    return a <= b;
   }
 
   /**
@@ -90,17 +128,18 @@ public:
   }
 
   // constraints
-  void make_le_than(const T &v) // add upper bound
+  virtual void make_le_than(const T &v) // add upper bound
   {
+    auto value = adjust(v);
     if(upper_set)
     {
-      if(upper > v)
-        upper = v;
+      if(is_le_than(value, get_upper()))
+        set_upper(value);
     }
     else
     {
       upper_set = true;
-      upper = v;
+      set_upper(value);
     }
   }
 
@@ -113,17 +152,18 @@ public:
     v.lower = std::max(lower, v.lower);
   }
 
-  void make_ge_than(const T &v) // add lower bound
+  virtual void make_ge_than(const T &v) // add lower bound
   {
+    auto value = adjust(v);
     if(lower_set)
     {
-      if(lower < v)
-        lower = v;
+      if(is_le_than(get_lower(), value))
+        set_lower(value);
     }
     else
     {
       lower_set = true;
-      lower = v;
+      set_lower(value);
     }
   }
 
@@ -505,5 +545,13 @@ bool interval_templatet<ieee_floatt>::is_top() const;
 
 template <>
 bool interval_templatet<const ieee_floatt>::is_top() const;
+
+template <>
+void interval_templatet<const ieee_floatt>::set(
+  bool value,
+  const ieee_floatt &v)
+{
+  assert(0 && "Trying to change the value of const interval");
+}
 
 #endif // CPROVER_ANALYSES_INTERVAL_TEMPLATE_H

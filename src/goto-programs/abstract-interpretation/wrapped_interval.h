@@ -5,24 +5,69 @@
 class wrapped_interval : public interval_templatet<BigInt>
 {
 public:
-  wrapped_interval(const type2tc &t) : t(t)
+  wrapped_interval()
+  {
+  }
+
+  explicit wrapped_interval(const type2tc &t) : t(t)
   {
     assert(is_signedbv_type(t) || is_unsignedbv_type(t));
     lower_set = true;
     upper_set = true;
 
     lower = 0;
-    upper = get_upper_bound(t);
+    upper = get_upper_bound(t) - 1;
   }
 
-  static BigInt get_upper_bound(const type2tc &t) {
+  BigInt convert_to_wrap(const BigInt &b) const
+  {
+    auto is_signed = is_signedbv_type(t);
+    auto value = b;
+    if(is_signed)
+    {
+      assert(value >= (-get_upper_bound(t) / 2));
+      assert(value <= (get_upper_bound(t) / 2 - 1));
+      value += get_upper_bound(t) / 2;
+    }
+    else
+    {
+      assert(value >= 0);
+      assert(value <= get_upper_bound(t));
+    }
+
+    return value;
+  }
+
+  void set(bool is_upper, const BigInt &b) override
+  {
+    auto value = convert_to_wrap(b);
+
+    if(is_upper)
+      upper = value;
+    else
+      lower = value;
+  }
+
+  BigInt get(bool is_upper) const override
+  {
+    auto is_signed = is_signedbv_type(t);
+    auto value = is_upper ? upper : lower;
+
+    if(is_signed)
+      value -= get_upper_bound(t) / 2;
+
+    return value;
+  }
+
+  static BigInt get_upper_bound(const type2tc &t)
+  {
     assert(is_signedbv_type(t) || is_unsignedbv_type(t));
     BigInt r(1);
-    r.setPower2(t->get_width()*8);
+    r.setPower2(t->get_width() * 8);
     return r;
   }
 
-  const type2tc &t;
+  type2tc t;
   bool bottom = false;
   virtual bool empty() const override
   {
@@ -31,7 +76,7 @@ public:
 
   virtual bool is_top() const override
   {
-    return !empty() && lower == 0 && upper == get_upper_bound(t);
+    return !empty() && lower == 0 && upper == (get_upper_bound(t) - 1);
   }
 
   static wrapped_interval complement(const wrapped_interval &w) {
@@ -64,6 +109,22 @@ public:
       rhs = rhs + mod;
 
     return lhs <= rhs;
+  }
+
+  virtual void make_le_than(const BigInt &v) override // add upper bound
+  {
+    wrapped_interval value(t);
+    value.set_upper(v);
+
+    *this = intersection(*this, value);
+  }
+
+  virtual void make_ge_than(const BigInt &v) override // add upper bound
+  {
+    wrapped_interval value(t);
+    value.set_lower(v);
+
+    *this = intersection(*this, value);
   }
 
   BigInt cardinality() const

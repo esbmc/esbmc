@@ -364,14 +364,65 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     wrapped_interval C(t2_unsigned);
 
     REQUIRE(A.lower == 0);
-    REQUIRE(A.upper.to_uint64() == pow(2, N1 * 8));
+    REQUIRE(A.upper.to_uint64() == pow(2, N1 * 8) - 1);
     REQUIRE(!A.is_bottom());
     REQUIRE(A.is_top());
 
     REQUIRE(C.lower == 0);
-    REQUIRE(C.upper.to_uint64() == pow(2, N2 * 8));
+    REQUIRE(C.upper.to_uint64() == pow(2, N2 * 8) - 1);
     REQUIRE(!C.is_bottom());
     REQUIRE(C.is_top());
+
+    // Char initialization
+    for(int c = 0; c < 256; c++)
+    {
+      A.set_lower(c);
+      A.set_upper(c);
+      REQUIRE(A.lower >= 0);
+      REQUIRE(A.upper >= 0);
+      REQUIRE(A.get_lower() == c);
+      REQUIRE(A.get_upper() == c);
+    }
+  }
+
+  SECTION("Init Signed")
+  {
+    wrapped_interval A(t1_signed);
+
+    REQUIRE(A.lower == 0);
+    REQUIRE(A.upper.to_uint64() == pow(2, N1 * 8) - 1);
+    REQUIRE(!A.is_bottom());
+    REQUIRE(A.is_top());
+
+    // Char initialization
+    for(int c = -128; c < 128; c++)
+    {
+      A.set_lower(c);
+      A.set_upper(c);
+      REQUIRE(A.lower >= 0);
+      REQUIRE(A.upper >= 0);
+      REQUIRE(A.get_lower() == c);
+      REQUIRE(A.get_upper() == c);
+    }
+  }
+  SECTION("Relational Operators")
+  {
+    wrapped_interval A(t1_signed);
+    // A: [-128,127]
+    REQUIRE(A.get_lower() == -128);
+    REQUIRE(A.get_upper() == 127);
+
+    A.make_le_than(50);
+    REQUIRE(A.get_upper() == 50);
+    A.make_ge_than(-120);
+    REQUIRE(A.get_lower() == -120);
+
+    // [100, 20]
+    A.set_lower(100);
+    A.set_upper(20);
+    A.make_le_than(10);
+    REQUIRE(A.get_upper() == 10);
+    REQUIRE(A.get_lower() == -128);
   }
 
   SECTION("Non-overlap Interval")
