@@ -30,28 +30,67 @@ void gen_typecast_arithmetic(const namespacet &ns, exprt &expr)
   c_typecast.implicit_typecast_arithmetic(expr);
 }
 
-void clang_c_convertert::gen_typecast_to_union(exprt &e, const typet &t)
+/* GCC supports an extension called cast-to-union.
+ * <https://gcc.gnu.org/onlinedocs/gcc/Cast-to-Union.html>
+ *
+ * It is an rvalue and looks like this:
+ *
+ *   union U { int a; float b; };
+ *   int x;
+ *   float y;
+ *   (union U)x; // initializes component .a
+ *   (union U)y; // initializes component .b
+ *
+ * Clang chose to also support this, but in a more lenient way extending this
+ * support to bitfield components, which GCC does not - unless the bitfield's
+ * width is the same as the underlying type's.
+ *
+ * We'll encode both here.
+ */
+static const struct_union_typet::componentt &
+union_init_component(const struct_union_typet::componentst &u, const typet &t)
+{
+  assert(!u.empty());
+
+  size_t max = u.size();
+  for(size_t i = 0; i < u.size(); i++)
+  {
+    const struct_union_typet::componentt &c = u[i];
+    const typet &s = c.type();
+    if(s == t)
+      return c;
+    if(s.get_bool("#bitfield") && s.subtype() == t)
+      if(
+        max == u.size() ||
+        atoi(s.width().c_str()) > atoi(u[max].type().width().c_str()))
+        max = i;
+  }
+  if(max == u.size())
+  {
+    /* We should never reach here since clang frontend already checks for this
+     * however... we should prevent any funny things to happen */
+    log_error("Couldn't map type {} into the union", t.pretty_name());
+    abort();
+  }
+
+  return u[max];
+}
+
+void clang_c_convertert::gen_typecast_to_union(
+  const namespacet &ns,
+  exprt &e,
+  const typet &t)
 {
   // If RHS is already of same union type, don't do anything
   if(e.type() == t.type())
     return;
 
   union_exprt new_result(t);
-  for(auto component : to_union_type(t).components())
-  {
-    // Search for the component with the same type
-    if(component.type() == e.type())
-    {
-      // Found it. Set the operator and component
-      new_result.set_component_name(component.name());
-      new_result.copy_to_operands(e);
-      e.swap(new_result);
-      return;
-    }
-  }
-
-  /* We should never reach here since clang frontend already checks for this
-   * however... we should prevent any funny things to happen */
-  log_error("Couldn't map type {} into the union", e.type().pretty_name());
-  abort();
+  auto &component =
+    union_init_component(to_union_type(t).components(), e.type());
+  // Set the operator and component
+  new_result.set_component_name(component.name());
+  gen_typecast(ns, e, component.type());
+  new_result.copy_to_operands(e);
+  e.swap(new_result);
 }
