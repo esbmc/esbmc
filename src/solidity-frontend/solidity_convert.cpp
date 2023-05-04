@@ -1196,6 +1196,8 @@ bool solidity_convertert::get_expr(
     new_expr.cmt_lvalue(true);
     new_expr.name(name);
 
+    // obtain the type of return value
+    // Need to "decrypt" the typeDescriptions and manually make a typeDescription
     nlohmann::json callee_rtn_type =
       make_callexpr_return_type(callee_expr_json["typeDescriptions"]);
     typet t;
@@ -1652,7 +1654,7 @@ bool solidity_convertert::get_conditional_operator_expr(
 bool solidity_convertert::get_cast_expr(
   const nlohmann::json &cast_expr,
   exprt &new_expr,
-  const nlohmann::json &int_literal_type = nullptr)
+  const nlohmann::json int_literal_type)
 {
   // 1. convert subexpr
   exprt expr;
@@ -2156,6 +2158,7 @@ bool solidity_convertert::get_elementary_type_name(
   }
   case SolidityGrammar::ElementaryTypeNameT::INT_LITERAL:
   {
+    // for int_const type
     new_type = int_type();
     new_type.set("#cpp_type", "signed_char");
     break;
@@ -2718,7 +2721,7 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(
         type_descrpt["typeString"].get<std::string>().find(
           "returns (contract") != std::string::npos)
       {
-        // TODO: Fix me. We treats contract as void
+        // TODO: Fix me. We treat contract as void
         auto j2 = R"(
             {
               "nodeType": "ParameterList",
