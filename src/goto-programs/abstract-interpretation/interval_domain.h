@@ -6,6 +6,7 @@
 
 #include <goto-programs/abstract-interpretation/ai.h>
 #include <goto-programs/abstract-interpretation/interval_template.h>
+#include <goto-programs/abstract-interpretation/wrapped_interval.h>
 #include <boost/serialization/nvp.hpp>
 #include <boost/multiprecision/cpp_bin_float.hpp>
 #include <util/ieee_float.h>
@@ -43,6 +44,7 @@ public:
   bool enable_modular_intervals = false;
   bool enable_assertion_simplification = false;
   bool enable_contraction_for_abstract_states = false;
+  bool enable_wrapped_intervals = false;
 
   // Widening options
   bool widening_underaproximate_bound = false;
@@ -159,7 +161,8 @@ protected:
     int_mapt;
 
   typedef std::unordered_map<irep_idt, real_intervalt, irep_id_hash> real_mapt;
-
+  typedef std::unordered_map<irep_idt, wrapped_interval, irep_id_hash>
+    wrap_mapt;
   // Abstract state information
   /// Is this state a bottom. I.e., there is a contradiction between an assignment and an assume
   bool bottom;
@@ -167,7 +170,8 @@ protected:
   int_mapt int_map;
   /// Map for all real intervals
   real_mapt real_map;
-
+  /// Map for all wrap intervals
+  wrap_mapt wrap_map;
 
   /**
    * @brief Recursively explores an Expression until it reaches a symbol. If the

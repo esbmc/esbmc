@@ -15,7 +15,7 @@ integer_intervalt
 interval_domaint::get_interval_from_symbol(const symbol2t &sym) const
 {
   auto it = int_map.find(sym.thename);
-  return it != int_map.end() ? int_map.at(sym.thename) : integer_intervalt();
+  return it != int_map.end() ? it->second : integer_intervalt();
 }
 
 template <>
@@ -23,7 +23,15 @@ real_intervalt
 interval_domaint::get_interval_from_symbol(const symbol2t &sym) const
 {
   auto it = real_map.find(sym.thename);
-  return it != real_map.end() ? real_map.at(sym.thename) : real_intervalt();
+  return it != real_map.end() ? it->second : real_intervalt();
+}
+
+template <>
+wrapped_interval
+interval_domaint::get_interval_from_symbol(const symbol2t &sym) const
+{
+  auto it = wrap_map.find(sym.thename);
+  return it != wrap_map.end() ? it->second : wrapped_interval(sym.type);
 }
 
 template <>
@@ -41,6 +49,14 @@ void interval_domaint::update_symbol_interval(
   const real_intervalt value)
 {
   real_map[sym.thename] = value;
+}
+
+template <>
+void interval_domaint::update_symbol_interval(
+  const symbol2t &sym,
+  const wrapped_interval value)
+{
+  wrap_map[sym.thename] = value;
 }
 
 template <>
@@ -73,6 +89,19 @@ real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
   result.make_le_than(value1.to_double());
   result.make_ge_than(value2.to_double());
   assert(value2 <= value1);
+  return result;
+}
+
+template <>
+wrapped_interval interval_domaint::get_interval_from_const(const expr2tc &e)
+{
+  wrapped_interval result(e->type); // (-infinity, infinity)
+  if(!is_constant_int2t(e))
+    return result;
+  auto value = to_constant_int2t(e).value;
+  result.set_lower(value);
+  result.set_upper(value);
+  assert(!result.is_bottom());
   return result;
 }
 
@@ -112,6 +141,15 @@ real_intervalt interval_domaint::generate_modular_interval<real_intervalt>(
 {
   // TODO: Support this
   real_intervalt t;
+  return t;
+}
+
+template <>
+wrapped_interval interval_domaint::generate_modular_interval<wrapped_interval>(
+  const symbol2t sym) const
+{
+  // Wrapped intervals are modular by definition
+  wrapped_interval t(sym.type);
   return t;
 }
 
@@ -228,6 +266,28 @@ T interval_domaint::get_interval(const expr2tc &e)
   return result;
 }
 
+template <>
+wrapped_interval interval_domaint::get_interval(const expr2tc &e)
+{
+  if(is_symbol2t(e))
+    return get_interval_from_symbol<wrapped_interval>(to_symbol2t(e));
+
+  /*
+  if(is_neg2t(e))
+    return -get_interval<T>(to_neg2t(e).value);
+*/
+  // We do not care about overflows/overlaps for now
+  if(is_typecast2t(e))
+    return get_interval<wrapped_interval>(to_typecast2t(e).from);
+
+  if(is_constant_number(e))
+    return get_interval_from_const<wrapped_interval>(e);
+
+  // We could not generate from the expr. Return top
+  wrapped_interval result(e->type); // (-infinity, infinity)
+  return result;
+}
+
 template <class Interval>
 void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
 {
@@ -277,6 +337,12 @@ bool interval_domaint::is_mapped<real_intervalt>(const symbol2t &sym) const
 }
 
 template <>
+bool interval_domaint::is_mapped<wrapped_interval>(const symbol2t &sym) const
+{
+  return wrap_map.find(sym.thename) == wrap_map.end();
+}
+
+template <>
 expr2tc interval_domaint::make_expression_value<integer_intervalt>(
   const integer_intervalt interval,
   const type2tc &type,
@@ -303,6 +369,16 @@ expr2tc interval_domaint::make_expression_value<real_intervalt>(
     value->value.decrement(true);
 
   return value;
+}
+
+template <>
+expr2tc interval_domaint::make_expression_value<wrapped_interval>(
+  const wrapped_interval interval,
+  const type2tc &type,
+  bool upper) const
+{
+  return from_integer(
+    upper ? interval.get_upper() : interval.get_lower(), type);
 }
 
 template <class T>
@@ -372,6 +448,15 @@ void interval_domaint::output(std::ostream &out) const
     out << interval.first;
     if(interval.second.upper_set)
       out << " <= " << interval.second.upper;
+    out << "\n";
+  }
+
+  for(const auto &interval : wrap_map)
+  {
+    out << interval.second.get_lower() << " <= ";
+    out << interval.first;
+
+    out << " <= " << interval.second.get_upper();
     out << "\n";
   }
 
@@ -512,6 +597,7 @@ bool interval_domaint::join(const interval_domaint &b)
   };
   f(int_map, b.int_map);
   f(real_map, b.real_map);
+  f(wrap_map, b.wrap_map);
   return result;
 }
 
@@ -526,7 +612,12 @@ void interval_domaint::assign(const expr2tc &expr)
   if(!is_symbol2t(c.target))
     return;
   if(isbvop)
-    apply_assignment<integer_intervalt>(c.target, c.source);
+  {
+    if(enable_wrapped_intervals)
+      apply_assignment<wrapped_interval>(c.target, c.source);
+    else
+      apply_assignment<integer_intervalt>(c.target, c.source);
+  }
   if(isfloatbvop)
     apply_assignment<real_intervalt>(c.target, c.source);
 }
@@ -548,8 +639,12 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
     irep_idt identifier = is_symbol2t(expr) ? to_symbol2t(expr).thename
                                             : to_code_decl2t(expr).value;
     if(is_bv_type(expr))
-      int_map.erase(identifier);
-
+    {
+      if(enable_wrapped_intervals)
+        wrap_map.erase(identifier);
+      else
+        int_map.erase(identifier);
+    }
     if(is_floatbv_type(expr))
       real_map.erase(identifier);
   }
@@ -590,7 +685,12 @@ void interval_domaint::assume_rec(
   assert(id == expr2t::lessthan_id || id == expr2t::lessthanequal_id);
 
   if(is_bv_type(lhs) && is_bv_type(rhs))
-    apply_assume_less<integer_intervalt>(lhs, rhs);
+  {
+    if(enable_wrapped_intervals)
+      apply_assume_less<wrapped_interval>(lhs, rhs);
+    else
+      apply_assume_less<integer_intervalt>(lhs, rhs);
+  }
   else if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
     apply_assume_less<real_intervalt>(lhs, rhs);
 }
@@ -667,7 +767,12 @@ expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
 {
   assert(is_symbol2t(symbol));
   if(is_bv_type(symbol))
-    return make_expression_helper<integer_intervalt>(symbol);
+  {
+    if(enable_wrapped_intervals)
+      return make_expression_helper<wrapped_interval>(symbol);
+    else
+      return make_expression_helper<integer_intervalt>(symbol);
+  }
   if(is_floatbv_type(symbol))
     return make_expression_helper<real_intervalt>(symbol);
   return gen_true_expr();
