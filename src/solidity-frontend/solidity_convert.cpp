@@ -2603,7 +2603,7 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
 
   if(
     sub_expr["typeString"].get<std::string>().find("function") !=
-      std::string::npos)
+    std::string::npos)
   {
     // Add more special functions here
     if(
