@@ -995,6 +995,8 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     get_decl_name(rd, name, id);
 
     symbolt &s = *context.find_symbol(id);
+    // For the time being we just copy the entire type.
+    // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
     new_type = s.type;
     break;
   }
