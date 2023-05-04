@@ -996,18 +996,6 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     symbolt &s = *context.find_symbol(id);
     new_type = s.type;
-
-    /*
-     * Special case, if the corresponding symbol exists, it implies that we are dealing
-     * with a type referring to the struct/union/class type. Then we shall get a reference
-     * to the type rather than copying it. But it doen't work well for anonymous union.
-     * Hence for the time being it only restricts to class. We would get a c2goto failure
-     * for clib32.goto if this restriction is removed - possibly due to anonymous struct/union.
-     */
-    assert(new_type.is_struct() || new_type.is_union());
-    if(rd.isClass())
-      get_ref_to_struct_type(new_type);
-
     break;
   }
 
