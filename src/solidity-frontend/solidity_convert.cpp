@@ -2603,8 +2603,6 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
 
   if(
     sub_expr["typeString"].get<std::string>().find("function") !=
-      std::string::npos ||
-    sub_expr["typeString"].get<std::string>().find("contract") !=
       std::string::npos)
   {
     // Add more special functions here
@@ -2614,9 +2612,7 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
       sub_expr["typeIdentifier"].get<std::string>().find(
         "t_function_assert_pure$") != std::string::npos ||
       sub_expr["typeIdentifier"].get<std::string>().find(
-        "t_function_internal_pure$") != std::string::npos ||
-      sub_expr["typeString"].get<std::string>().find("contract ") !=
-        std::string::npos)
+        "t_function_internal_pure$") != std::string::npos)
     {
       // e.g. FunctionNoProto: "typeString": "function () returns (uint8)" with () empty after keyword 'function'
       // "function ()" contains the function args in the parentheses.
@@ -2696,26 +2692,7 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(
 {
   nlohmann::json adjusted_expr;
 
-  assert(type_descrpt.contains("typeString"));
-
-  // for new-expression-statement
   if(
-    type_descrpt["typeString"].get<std::string>().find("function") ==
-      std::string::npos &&
-    type_descrpt["typeString"].get<std::string>().find("contract") !=
-      std::string::npos)
-  {
-    auto j2 = R"(
-          {
-            "nodeType": "ParameterList",
-            "parameters": []
-          }
-        )"_json;
-
-    adjusted_expr = j2;
-  }
-
-  else if(
     type_descrpt["typeString"].get<std::string>().find("function") !=
     std::string::npos)
   {
