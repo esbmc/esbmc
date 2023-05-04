@@ -86,7 +86,10 @@ protected:
     exprt &new_expr);
   bool
   get_conditional_operator_expr(const nlohmann::json &expr, exprt &new_expr);
-  bool get_cast_expr(const nlohmann::json &cast_expr, exprt &new_expr);
+  bool get_cast_expr(
+    const nlohmann::json &cast_expr,
+    exprt &new_expr,
+    const nlohmann::json &int_literal_type);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr);
