@@ -56,43 +56,54 @@ public:
   static bool wrapped_le(const BigInt &b, const BigInt &a, const BigInt &c, const type2tc &t) {
     auto mod = get_upper_bound(t);
     // https://torstencurdt.com/tech/posts/modulo-of-negative-numbers/
-    auto lhs = (b-a)%mod;
+    auto lhs = (b - a) % mod;
     if(lhs < 0)
       lhs = lhs + mod;
-    auto rhs = (c-a)%mod;
+    auto rhs = (c - a) % mod;
     if(rhs < 0)
-      rhs = rhs+mod;
+      rhs = rhs + mod;
 
     return lhs <= rhs;
   }
 
-  BigInt cardinality() const {
-    if(is_bottom()) return 0;
-    if(is_top()) return get_upper_bound(t);
+  BigInt cardinality() const
+  {
+    if(is_bottom())
+      return 0;
+    if(is_top())
+      return get_upper_bound(t);
 
     auto mod = get_upper_bound(t);
-    return ((upper-lower)%mod+1)%mod;
+    return ((upper - lower) % mod + 1) % mod;
   }
 
-  bool is_member(const BigInt &e) const {
-    if(is_top()) return true;
+  bool contains(const BigInt &e) const
+  {
+    if(is_top())
+      return true;
 
     return wrapped_le(e, lower, upper, t);
   }
 
-  bool is_equal(const wrapped_interval &rhs) const {
+  bool is_equal(const wrapped_interval &rhs) const
+  {
     return t == rhs.t && lower == rhs.lower && upper == rhs.upper;
   }
 
-  bool is_included(const wrapped_interval &rhs) const {
-    if(is_bottom() || rhs.is_top() || is_equal(rhs)) return true;
-    if(is_top() || rhs.is_bottom()) return false;
+  bool is_included(const wrapped_interval &rhs) const
+  {
+    if(is_bottom() || rhs.is_top() || is_equal(rhs))
+      return true;
+    if(is_top() || rhs.is_bottom())
+      return false;
 
-    return rhs.is_member(lower) && rhs.is_member(upper) && (!is_member(rhs.lower) || !is_member(rhs.upper));
+    return rhs.contains(lower) && rhs.contains(upper) &&
+           (!contains(rhs.lower) || !contains(rhs.upper));
   }
 
   /// Over union
-  static wrapped_interval over_join(const wrapped_interval &s, const wrapped_interval &t)
+  static wrapped_interval
+  over_join(const wrapped_interval &s, const wrapped_interval &t)
   {
     assert(s.t == t.t);
 
@@ -106,17 +117,17 @@ public:
 
     wrapped_interval result(s.t);
 
-    if(t.is_member(a) && t.is_member(b) && s.is_member(c) && s.is_member(d))
+    if(t.contains(a) && t.contains(b) && s.contains(c) && s.contains(d))
       return result;
 
-    if(t.is_member(b) && s.is_member(c))
+    if(t.contains(b) && s.contains(c))
     {
       result.lower = a;
       result.upper = d;
       return result;
     }
 
-    if(s.is_member(d) && t.is_member(a))
+    if(s.contains(d) && t.contains(a))
     {
       result.lower = c;
       result.upper = b;
@@ -143,18 +154,89 @@ public:
   }
 
   // Under meet
-  static wrapped_interval under_meet(const wrapped_interval &s, const wrapped_interval &t)
+  static wrapped_interval
+  under_meet(const wrapped_interval &s, const wrapped_interval &t)
   {
     return complement(over_join(complement(s), complement(t)));
   }
+
+  static wrapped_interval
+  intersection(const wrapped_interval &s, const wrapped_interval &t)
+  {
+    assert(s.t == t.t);
+
+    wrapped_interval result(s.t);
+
+    if(s.is_bottom() || t.is_bottom())
+    {
+      result.bottom = true;
+      return result;
+    }
+
+    if(s.is_equal(t) || s.is_top())
+    {
+      return t;
+    }
+
+    if(t.is_top())
+    {
+      return s;
+    }
+
+    const BigInt a = s.lower;
+    const BigInt b = s.upper;
+    const BigInt c = t.lower;
+    const BigInt d = t.upper;
+
+    if(t.contains(a) && t.contains(b) && s.contains(c) && s.contains(d))
+    {
+      wrapped_interval a_d(s.t);
+      a_d.lower = a;
+      a_d.upper = d;
+
+      wrapped_interval c_b(s.t);
+      c_b.lower = c;
+      c_b.upper = b;
+      // TODO: we can start working with double intervals (more memory though)
+      // Note: We can overaproximate as long as we don't exclude real intersection values
+      return over_join(a_d, c_b);
+    }
+
+    if(t.contains(a) && t.contains(b))
+      return s;
+
+    if(s.contains(c) && s.contains(d))
+      return t;
+
+    if(t.contains(a) && s.contains(d) && !t.contains(b) && !s.contains(c))
+    {
+      result.lower = a;
+      result.upper = d;
+      return result;
+    }
+
+    if(t.contains(b) && s.contains(c) && !t.contains(a) && !s.contains(d))
+    {
+      result.lower = c;
+      result.upper = b;
+      return result;
+    }
+
+    result.bottom = true;
+    return result;
+  }
+
   /// Over meet
-  static wrapped_interval over_meet(const wrapped_interval &s, const wrapped_interval &t)
+  static wrapped_interval
+  over_meet(const wrapped_interval &s, const wrapped_interval &t)
   {
     // TODO: this will probably not be needed!
     assert(s.t == t.t);
 
-    if(s.is_included(t)) return s;
-    if(t.is_included(s)) return t;
+    if(s.is_included(t))
+      return s;
+    if(t.is_included(s))
+      return t;
 
     const BigInt a = s.lower;
     const BigInt b = s.upper;
@@ -163,28 +245,29 @@ public:
 
     wrapped_interval result(s.t);
 
-    if(!t.is_member(a) && !t.is_member(b) && !s.is_member(c) && !s.is_member(d))
+    if(!t.contains(a) && !t.contains(b) && !s.contains(c) && !s.contains(d))
     {
       result.bottom = true;
       return result;
     }
 
-
-    if(s.is_member(d) && t.is_member(a))
+    if(s.contains(d) && t.contains(a))
     {
       result.lower = a;
       result.upper = d;
       return result;
     }
 
-    if(t.is_member(b) && s.is_member(c)){
+    if(t.contains(b) && s.contains(c))
+    {
       result.lower = c;
       result.upper = b;
       return result;
     }
 
-
-    if((s.cardinality() < t.cardinality()) || (s.cardinality() == t.cardinality() && a <= c))
+    if(
+      (s.cardinality() < t.cardinality()) ||
+      (s.cardinality() == t.cardinality() && a <= c))
     {
       return s;
     }
@@ -192,7 +275,5 @@ public:
     result.lower = c;
     result.upper = d;
     return result;
-
-
   }
 };
