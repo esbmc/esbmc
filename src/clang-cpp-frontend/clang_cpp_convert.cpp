@@ -343,7 +343,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
     // This means that we probably just parsed nested class,
     // don't add it to the class
     // TODO: The condition based on "skip" below doesn't look quite right.
-    //       Need to use a proper logic to determine nested class, e.g.
+    //       Need to use a proper logic to confirm a nested class, e.g.
     //       decl->getParent() == recordd, where recordd is the class
     //       we are currently dealing with
     if(comp.is_code() && to_code(comp).statement() == "skip")
