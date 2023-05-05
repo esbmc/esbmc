@@ -1258,15 +1258,10 @@ bool clang_cpp_convertert::annotate_cpp_methods(
   get_location_from_decl(*cxxmdd, location_begin);
   new_expr.location() = location_begin;
 
-  // We still need to add a trivial ctor/dtor as a `component` in class symbol's type
+  // We need to add it as a `component` in class symbol's type
   // remove "statement: skip" otherwise it won't be added
-  if(
-    cxxmdd->getKind() == clang::Decl::CXXDestructor ||
-    cxxmdd->getKind() == clang::Decl::CXXConstructor)
-  {
-    if(to_code(new_expr).statement() == "skip")
-      to_code(new_expr).remove("statement");
-  }
+  if(to_code(new_expr).statement() == "skip")
+    to_code(new_expr).remove("statement");
 
   return false;
 }
