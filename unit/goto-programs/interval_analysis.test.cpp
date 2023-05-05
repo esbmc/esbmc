@@ -18,12 +18,14 @@ public:
 
     SECTION("Baseline")
     {
+      log_status("Baseline");
       set_baseline_config();
       ait<interval_domaint> baseline;
       run_test<interval_domaint::int_mapt>(baseline);
     }
     SECTION("Interval Arithmetic")
     {
+      log_status("Interval Arithmetic");
       set_baseline_config();
       interval_domaint::enable_interval_arithmetic = true;
       ait<interval_domaint> baseline;
@@ -31,6 +33,7 @@ public:
     }
     SECTION("Modular Intervals")
     {
+      log_status("Modular Intervals");
       set_baseline_config();
       interval_domaint::enable_modular_intervals = true;
       ait<interval_domaint> baseline;
@@ -39,6 +42,7 @@ public:
 
     SECTION("Contractor")
     {
+      log_status("Contractors");
       set_baseline_config();
       interval_domaint::enable_contraction_for_abstract_states = true;
       ait<interval_domaint> baseline;
@@ -47,6 +51,7 @@ public:
 
     SECTION("Wrapped Intervals")
     {
+      log_status("Wrapped");
       set_baseline_config();
       interval_domaint::enable_wrapped_intervals = true;
       ait<interval_domaint> baseline;
@@ -352,7 +357,7 @@ TEST_CASE(
 
 
 TEST_CASE(
-  "Interval Analysis - Arithmetic Statement",
+  "Interval Analysis - Add Arithmetic",
   "[ai][interval-analysis]")
 {
   // Setup global options here
@@ -370,5 +375,62 @@ TEST_CASE(
   T.run_configs();
 }
 
+TEST_CASE(
+  "Interval Analysis - Sub Arithmetic",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = 0;\n"
+    "int b = 0;\n" // a: [0,0]
+    "a = b - 1;\n" // a: [-1,-1]
+    "return a;\n"
+    "}";
+  (T.property["3"])["@F@main@a"] = {0,  0};
+  (T.property["5"])["@F@main@a"] = {-1,  -1};
+  T.run_configs();
+}
 
+TEST_CASE(
+  "Interval Analysis - Div Arithmetic",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = 2;\n"
+    "if(nondet_int()) a = 1;"
+    "int b = 8;\n" // a: [0,0]
+    "a = b / a;\n" // a: [4,8]
+    "return a;\n"
+    "}";
+  (T.property["4"])["@F@main@a"] = {1,  2};
+  (T.property["6"])["@F@main@a"] = {4,  8};
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - Mult Arithmetic",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = 2;\n"
+    "if(nondet_int()) a = -1;"
+    "int b = 8;\n" // a: [-1,2]
+    "a = b * a;\n" // a: [-8,16]
+    "return a;\n"
+    "}";
+  (T.property["4"])["@F@main@a"] = {1,  2};
+  (T.property["6"])["@F@main@a"] = {4,  8};
+  T.run_configs();
+}
 
