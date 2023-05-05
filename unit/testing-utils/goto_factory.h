@@ -4,6 +4,17 @@
 #include <goto-programs/goto_functions.h>
 #include <langapi/language_ui.h>
 
+class program
+{
+public:
+  namespacet ns;
+  goto_functionst functions;
+  program(namespacet ns, goto_functionst &functions)
+    : ns(ns), functions(functions)
+  {
+  }
+};
+
 /**
  * @brief This class parses C inputs
  * and generates goto-functions
@@ -25,11 +36,15 @@ public:
      * @param c_inputstream input stream containing the C program
      * @return goto_functionst of the parsed object
      */
-  static goto_functionst get_goto_functions(
+  static program get_goto_functions(
     std::istream &c_inputstream,
     goto_factory::Architecture arch = goto_factory::Architecture::BIT_16);
 
-  static goto_functionst get_goto_functions(
+  static program get_goto_functions(
+    std::string &str,
+    goto_factory::Architecture arch = goto_factory::Architecture::BIT_16);
+
+  static program get_goto_functions(
     std::istream &c_inputstream,
     cmdlinet &cmd,
     optionst &opts,
@@ -42,8 +57,10 @@ private:
   static bool parse(language_uit &l);
   static void
   create_file_from_istream(std::istream &c_inputstream, std::string filename);
+  static void create_file_from_string(std::string &str, std::string filename);
+
   static void
   config_environment(goto_factory::Architecture arch, cmdlinet c, optionst o);
 
-  static goto_functionst get_goto_functions(cmdlinet &cmd, optionst &opts);
+  static program get_goto_functions(cmdlinet &cmd, optionst &opts);
 };
