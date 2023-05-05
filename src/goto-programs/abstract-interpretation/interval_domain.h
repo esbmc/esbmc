@@ -39,18 +39,35 @@ public:
 
   void dump() const;
 
+  // TODO: Add options for ai.h
   // Extensions
-  bool enable_interval_arithmetic = false;
-  bool enable_modular_intervals = false;
-  bool enable_assertion_simplification = false;
-  bool enable_contraction_for_abstract_states = false;
-  bool enable_wrapped_intervals = false;
+  static bool enable_interval_arithmetic;
+  static bool enable_modular_intervals;
+  static bool enable_assertion_simplification;
+  static bool enable_contraction_for_abstract_states;
+  static bool enable_wrapped_intervals;
 
   // Widening options
-  bool widening_underaproximate_bound = false;
-  bool widening_extrapolate = false;
-  bool widening_narrowing = false;
+  static bool widening_underaproximate_bound;
+  static bool widening_extrapolate;
+  static bool widening_narrowing;
 
+  typedef std::unordered_map<irep_idt, integer_intervalt, irep_id_hash>
+    int_mapt;
+
+  typedef std::unordered_map<irep_idt, real_intervalt, irep_id_hash> real_mapt;
+  typedef std::unordered_map<irep_idt, wrapped_interval, irep_id_hash>
+    wrap_mapt;
+
+  int_mapt get_int_map() const
+  {
+    return int_map;
+  }
+
+  wrap_mapt get_wrap_map() const
+  {
+    return wrap_map;
+  }
 
 protected:
   /**
@@ -157,12 +174,7 @@ public:
   ai_simplify(expr2tc &condition, const namespacet &ns) const override;
 
 protected:
-  typedef std::unordered_map<irep_idt, integer_intervalt, irep_id_hash>
-    int_mapt;
 
-  typedef std::unordered_map<irep_idt, real_intervalt, irep_id_hash> real_mapt;
-  typedef std::unordered_map<irep_idt, wrapped_interval, irep_id_hash>
-    wrap_mapt;
   // Abstract state information
   /// Is this state a bottom. I.e., there is a contradiction between an assignment and an assume
   bool bottom;
