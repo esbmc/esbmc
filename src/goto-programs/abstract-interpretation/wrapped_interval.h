@@ -63,7 +63,7 @@ public:
   {
     assert(is_signedbv_type(t) || is_unsignedbv_type(t));
     BigInt r(1);
-    r.setPower2(t->get_width() * 8);
+    r.setPower2(t->get_width());
     return r;
   }
 
@@ -138,7 +138,7 @@ public:
     return ((upper - lower) % mod + 1) % mod;
   }
 
-  bool contains(const BigInt &e) const
+  bool contains(const BigInt &e) const override
   {
     if(is_top())
       return true;
@@ -212,6 +212,15 @@ public:
     result.lower = c;
     result.upper = b;
     return result;
+  }
+
+  virtual void approx_union_with(const interval_templatet<BigInt> &i) override
+  {
+    wrapped_interval rhs(t);
+    rhs.lower = i.lower;
+    rhs.upper = i.upper;
+
+    *this = over_join(rhs, *this);
   }
 
   // Under meet
