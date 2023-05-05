@@ -22,7 +22,7 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
   GIVEN("An empty goto-functions")
   {
     std::istringstream empty("");
-    auto goto_function = goto_factory::get_goto_functions(empty);
+    auto goto_function = goto_factory::get_goto_functions(empty).functions;
     unsigned functions = 0;
     Forall_goto_functions(it, goto_function)
     {
@@ -37,7 +37,7 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
       "int a = nondet_int();"
       "return a;"
       "}");
-    auto goto_functions = goto_factory::get_goto_functions(program);
+    auto goto_functions = goto_factory::get_goto_functions(program).functions;
 
     bounded_loop_unroller unwind_loops;
     unwind_loops.run(goto_functions);
@@ -52,7 +52,7 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
       "while(1) __ESBMC_assert(1,\"\");"
       "return 0;"
       "}");
-    auto goto_functions = goto_factory::get_goto_functions(program);
+    auto goto_functions = goto_factory::get_goto_functions(program).functions;
     bounded_loop_unroller unwind_loops;
     unwind_loops.run(goto_functions);
 
@@ -68,7 +68,7 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
       "  for(int i = 0; i < 5; i++) a = i; "
       "  return 0; "
       "}");
-    auto goto_functions = goto_factory::get_goto_functions(program);
+    auto goto_functions = goto_factory::get_goto_functions(program).functions;
     bounded_loop_unroller unwind_loops;
     unwind_loops.run(goto_functions);
 
@@ -85,7 +85,7 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
       "    if(i == 2) a = 3;"
       "  return 0; "
       "}");
-    auto goto_functions = goto_factory::get_goto_functions(program);
+    auto goto_functions = goto_factory::get_goto_functions(program).functions;
     bounded_loop_unroller unwind_loops;
     unwind_loops.run(goto_functions);
 
@@ -102,7 +102,7 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
       "    for(int j = 0; j < 4; j++) a = 4;"
       "  return 0; "
       "}");
-    auto goto_functions = goto_factory::get_goto_functions(program);
+    auto goto_functions = goto_factory::get_goto_functions(program).functions;
     bounded_loop_unroller unwind_loops;
     unwind_loops.run(goto_functions);
 
