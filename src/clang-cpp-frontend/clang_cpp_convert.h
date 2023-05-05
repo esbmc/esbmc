@@ -121,6 +121,18 @@ protected:
   build_member_from_component(const clang::FunctionDecl &fd, exprt &component);
 
   /*
+   * Add additional annotations for class/struct/union fields
+   * Arguments:
+   *  field: clang AST node representing the field we are dealing with
+   *  type:  ESBMC's typet representing the type of the class we are currently dealing with
+   *  comp: the `component` representing the field
+   */
+  bool annotate_class_field(
+    const clang::FieldDecl *field,
+    const struct_union_typet &type,
+    struct_typet::componentt &comp);
+
+  /*
    * Add access in class symbol type's component:
    *  0: component:
    *    * access: public
@@ -159,7 +171,7 @@ protected:
    *  new_expr: the `component` in class/struct/union symbol type
    *  fd: clang AST node representing the function declaration we are dealing with
    */
-  bool annotate_cpp_methods(
+  bool annotate_class_method(
     const clang::CXXMethodDecl *cxxmdd,
     exprt &new_expr,
     const clang::FunctionDecl &fd);
