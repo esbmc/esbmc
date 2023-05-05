@@ -158,14 +158,14 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
 {
   assert(is_symbol2t(lhs));
   // a = b
-  T a;
-  if(enable_modular_intervals)
-    a = generate_modular_interval<T>(to_symbol2t(lhs));
   auto b = get_interval<T>(rhs);
+  if(enable_modular_intervals)
+  {
+    auto a = generate_modular_interval<T>(to_symbol2t(lhs));
+    b.intersect_with(a);
+  }
 
   // TODO: add classic algorithm
-  b.intersect_with(a);
-
   update_symbol_interval(to_symbol2t(lhs), b);
 }
 
@@ -272,16 +272,20 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
   if(is_symbol2t(e))
     return get_interval_from_symbol<wrapped_interval>(to_symbol2t(e));
 
+  if(is_constant_number(e))
+    return get_interval_from_const<wrapped_interval>(e);
   /*
   if(is_neg2t(e))
     return -get_interval<T>(to_neg2t(e).value);
 */
   // We do not care about overflows/overlaps for now
   if(is_typecast2t(e))
-    return get_interval<wrapped_interval>(to_typecast2t(e).from);
-
-  if(is_constant_number(e))
-    return get_interval_from_const<wrapped_interval>(e);
+  {
+    ///abort();
+    //auto intersection = wrapped_interval(to_typecast2t(e).type);
+    //auto inner = get_interval<wrapped_interval>(to_typecast2t(e).from);
+    //return intersection.intersection(intersection, inner);
+  }
 
   // We could not generate from the expr. Return top
   wrapped_interval result(e->type); // (-infinity, infinity)
@@ -306,13 +310,12 @@ void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
     else
     {
       if(rhs.upper_set)
-        lhs.make_le_than(rhs.upper);
+        lhs.make_le_than(rhs.get_upper());
 
       if(lhs.lower_set)
-        rhs.make_ge_than(lhs.lower);
+        rhs.make_ge_than(lhs.get_lower());
     }
   }
-
   // No need for widening, this is a restriction!
   if(is_symbol2t(a))
     update_symbol_interval(to_symbol2t(a), lhs);
@@ -538,9 +541,9 @@ void interval_domaint::transform(
 
 bool interval_domaint::join(const interval_domaint &b)
 {
-  if(b.bottom)
+  if(b.is_bottom())
     return false;
-  if(bottom)
+  if(is_bottom())
   {
     *this = b;
     return true;
@@ -548,9 +551,8 @@ bool interval_domaint::join(const interval_domaint &b)
 
   bool result = false;
 
-  auto f = [&result,this](auto& this_map, const auto& b_map)
+  auto f = [&result, this](auto &this_map, const auto &b_map)
   {
-
     for(auto it = this_map.begin(); it != this_map.end();) // no it++
     {
       // search for the variable that needs to be merged
@@ -564,35 +566,38 @@ bool interval_domaint::join(const interval_domaint &b)
       else
       {
         auto previous = it->second; // [0,0] ... [0, +inf]
-        auto after = b_it->second; // [1,100] ... [1, 100]
+        auto after = b_it->second;  // [1,100] ... [1, 100]
+        it->second.join(after);     // HULL // [0,100] ... [0, +inf]
+        // Did we reach a fixpoint?
+        if(it->second != previous)
+        {
+          result = true;
 
-	it->second.join(after); // HULL // [0,100] ... [0, +inf]
+          // Try to extrapolate
+          if(after != it->second && widening_extrapolate)
+          {
+            it->second = extrapolate_intervals(
+              previous,
+              it->second); // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
+          }
+        }
 
-	// Did we reach a fixpoint?
-	if(it->second != previous)
-	{
-	  result = true;
-
-	  // Try to extrapolate
-	  if(after != it->second && widening_extrapolate)
-	  {
-		it->second = extrapolate_intervals(previous, it->second);  // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
-	  }
-	}
-
-	else
-	{
-	  // Found a fixpoint, we might try to narrow now!
-	  if(widening_narrowing) {
-	    after = interpolate_intervals(it->second, b_it->second); // ([0,100], [1,100] --> [0,100] ... ([0,inf], [1,100] --> [0,100]))
-	    result |= it->second != after;
-    	    it->second = after;	    
-	  }
-
-	}
+        else
+        {
+          // Found a fixpoint, we might try to narrow now!
+          if(widening_narrowing)
+          {
+            after = interpolate_intervals(
+              it->second,
+              b_it
+                ->second); // ([0,100], [1,100] --> [0,100] ... ([0,inf], [1,100] --> [0,100]))
+            result |= it->second != after;
+            it->second = after;
+          }
+        }
 
         it++;
-    }
+      }
     }
   };
   f(int_map, b.int_map);
@@ -824,3 +829,15 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
 
   return unchanged;
 }
+
+// Options
+bool interval_domaint::enable_interval_arithmetic = false;
+bool interval_domaint::enable_modular_intervals = false;
+bool interval_domaint::enable_assertion_simplification = false;
+bool interval_domaint::enable_contraction_for_abstract_states = false;
+bool interval_domaint::enable_wrapped_intervals = false;
+
+// Widening options
+bool interval_domaint::widening_underaproximate_bound = false;
+bool interval_domaint::widening_extrapolate = false;
+bool interval_domaint::widening_narrowing = false;
