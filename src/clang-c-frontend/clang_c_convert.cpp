@@ -380,10 +380,21 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if(get_struct_union_class_methods_decls(*rd_def, to_struct_type(t)))
     return true;
 
-  if(rd.isUnion())
-    add_padding(to_union_type(t), ns);
-  else
-    add_padding(to_struct_type(t), ns);
+  /*
+   * TODO: this is a workaround for Issue991, issue1:
+   * https://github.com/esbmc/esbmc/issues/991#issuecomment-1523413991
+   *
+   * The padding code for C++ is not correct anyway.
+   * In order to use a reference to existing struct/union/class type.
+   * Need to look at padding later.
+   */
+  if(mode != "C++")
+  {
+    if(rd.isUnion())
+      add_padding(to_union_type(t), ns);
+    else
+      add_padding(to_struct_type(t), ns);
+  }
 
   t.location() = location_begin;
   added_symbol.type = t;
@@ -997,9 +1008,17 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
         return true;
 
     symbolt &s = *context.find_symbol(id);
-    // For the time being we just copy the entire type.
-    // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
     new_type = s.type;
+
+    assert(new_type.is_struct() || new_type.is_union());
+    /*
+     * Avoid copying the type referring to a struct/union/class, just make a reference to it.
+     * For the time being it restricts to C++ mode because `type_byte_size_bits` is not
+     * happy about `symbol_id`.
+     */
+    if(mode == "C++")
+      get_ref_to_struct_type(new_type);
+
     break;
   }
 
