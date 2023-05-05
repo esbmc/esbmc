@@ -226,7 +226,7 @@ bool clang_cpp_convertert::get_function(
 
   // add additional annotations for class/struct/union methods
   if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
-    if(annotate_cpp_methods(md, new_expr, fd))
+    if(annotate_class_method(md, new_expr, fd))
       return true;
 
   return false;
@@ -273,10 +273,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if(is_field_global_storage(field))
       continue;
 
-    // [C++ annotation]: set parent in component's type
-    comp.type().set("#member_name", type.name());
-    // [C++ annotation]: set access in component
-    if(annotate_class_field_access(field, comp))
+    if(annotate_class_field(field, type, comp))
       return true;
 
     type.components().push_back(comp);
@@ -1146,6 +1143,30 @@ bool clang_cpp_convertert::get_decl_ref(
   return false;
 }
 
+bool clang_cpp_convertert::annotate_class_field(
+  const clang::FieldDecl *field,
+  const struct_union_typet &type,
+  struct_typet::componentt &comp)
+{
+  // set parent in component's type
+  if(type.tag().empty())
+  {
+    log_error("Goto empty tag in parent class type in {}", __func__);
+    return true;
+  }
+  std::string parent_class_id = tag_prefix + type.tag().as_string();
+  comp.type().set("#member_name", parent_class_id);
+
+  // set access in component
+  if(annotate_class_field_access(field, comp))
+  {
+    log_error("Failed to annotate class field access in {}", __func__);
+    return true;
+  }
+
+  return false;
+}
+
 bool clang_cpp_convertert::annotate_class_field_access(
   const clang::FieldDecl *field,
   struct_typet::componentt &comp)
@@ -1190,7 +1211,7 @@ bool clang_cpp_convertert::get_access_from_decl(
   return false;
 }
 
-bool clang_cpp_convertert::annotate_cpp_methods(
+bool clang_cpp_convertert::annotate_class_method(
   const clang::CXXMethodDecl *cxxmdd,
   exprt &new_expr,
   const clang::FunctionDecl &fd)
