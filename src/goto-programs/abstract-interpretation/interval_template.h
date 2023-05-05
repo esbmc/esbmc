@@ -84,13 +84,13 @@ public:
   {
     std::ostringstream oss;
     if(lower_set)
-      oss << "[" << lower;
+      oss << "[" << get_lower();
     else
       oss << "(-inf";
 
     oss << ",";
     if(upper_set)
-      oss << upper << "]";
+      oss << get_upper() << "]";
     else
       oss << "+inf)";
 
@@ -141,6 +141,20 @@ public:
       upper_set = true;
       set_upper(value);
     }
+  }
+
+  virtual bool contains(const T &e) const
+  {
+    if(is_top())
+      return true;
+
+    if(lower_set && e < get_lower())
+      return false;
+
+    if(upper_set && e > get_upper())
+      return false;
+
+    return true;
   }
 
   // Sound version (considering over approximations)
@@ -208,7 +222,7 @@ public:
     }
   }
 
-  void approx_union_with(const interval_templatet &i)
+  virtual void approx_union_with(const interval_templatet &i)
   {
     if(i.lower_set && lower_set)
       lower = std::min(lower, i.lower);
@@ -550,6 +564,13 @@ template <>
 void interval_templatet<const ieee_floatt>::set(
   bool value,
   const ieee_floatt &v)
+{
+  assert(0 && "Trying to change the value of const interval");
+}
+
+template <>
+void interval_templatet<const ieee_floatt>::approx_union_with(
+  const interval_templatet<const ieee_floatt> &i)
 {
   assert(0 && "Trying to change the value of const interval");
 }
