@@ -988,11 +988,13 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::RecordDecl &rd =
       *(static_cast<const clang::RecordType &>(the_type)).getDecl();
 
-    if(get_struct_union_class(rd))
-      return true;
-
     std::string id, name;
     get_decl_name(rd, name, id);
+
+    // avoid unnecessary conversion if symbol already exists
+    if(!context.find_symbol(id))
+      if(get_struct_union_class(rd))
+        return true;
 
     symbolt &s = *context.find_symbol(id);
     // For the time being we just copy the entire type.
