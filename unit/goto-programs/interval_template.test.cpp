@@ -320,11 +320,12 @@ TEST_CASE(
 
 TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
 {
-  unsigned N1 = 1;
+  config.ansi_c.set_data_model(configt::ILP32);
+  unsigned N1 = 8;
   auto t1_unsigned = get_uint_type(N1);
   auto t1_signed = get_int_type(N1);
 
-  unsigned N2 = 2;
+  unsigned N2 = 16;
   auto t2_unsigned = get_uint_type(N2);
   auto t2_signed = get_int_type(N2);
 
@@ -332,7 +333,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
   {
     unsigned actual =
       wrapped_interval::get_upper_bound(t1_unsigned).to_uint64();
-    unsigned expected = pow(2, N1 * 8);
+    unsigned expected = pow(2, N1);
 
     REQUIRE(actual == expected);
     REQUIRE(
@@ -364,12 +365,12 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     wrapped_interval C(t2_unsigned);
 
     REQUIRE(A.lower == 0);
-    REQUIRE(A.upper.to_uint64() == pow(2, N1 * 8) - 1);
+    REQUIRE(A.upper.to_uint64() == pow(2, N1) - 1);
     REQUIRE(!A.is_bottom());
     REQUIRE(A.is_top());
 
     REQUIRE(C.lower == 0);
-    REQUIRE(C.upper.to_uint64() == pow(2, N2 * 8) - 1);
+    REQUIRE(C.upper.to_uint64() == pow(2, N2) - 1);
     REQUIRE(!C.is_bottom());
     REQUIRE(C.is_top());
 
@@ -390,7 +391,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     wrapped_interval A(t1_signed);
 
     REQUIRE(A.lower == 0);
-    REQUIRE(A.upper.to_uint64() == pow(2, N1 * 8) - 1);
+    REQUIRE(A.upper.to_uint64() == pow(2, N1) - 1);
     REQUIRE(!A.is_bottom());
     REQUIRE(A.is_top());
 
