@@ -274,10 +274,11 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
 
   if(is_constant_number(e))
     return get_interval_from_const<wrapped_interval>(e);
-  /*
+
   if(is_neg2t(e))
-    return -get_interval<T>(to_neg2t(e).value);
-*/
+    return -get_interval<wrapped_interval>(to_neg2t(e).value);
+
+
   // We do not care about overflows/overlaps for now
   if(is_typecast2t(e))
   {
@@ -285,6 +286,32 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
     //auto intersection = wrapped_interval(to_typecast2t(e).type);
     //auto inner = get_interval<wrapped_interval>(to_typecast2t(e).from);
     //return intersection.intersection(intersection, inner);
+  }
+
+  auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
+  if(arith_op && enable_interval_arithmetic)
+  {
+
+    // It should be safe to mix integers/floats in here.
+    // The worst that can happen is an overaproximation
+    auto lhs =
+      get_interval<wrapped_interval>( arith_op->side_1 );
+    auto rhs =
+      get_interval<wrapped_interval>( arith_op->side_2 );
+
+    if(is_add2t(e))
+      return lhs + rhs;
+
+    if(is_sub2t(e) )
+      return lhs - rhs;
+
+    if(is_mul2t(e) )
+      return lhs * rhs;
+
+    if(is_div2t(e) )
+      return lhs / rhs;
+
+    // TODO: Add more as needed.
   }
 
   // We could not generate from the expr. Return top
@@ -326,6 +353,31 @@ void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
   if(rhs.is_bottom() || lhs.is_bottom())
     make_bottom();
 }
+
+template <>
+void interval_domaint::apply_assume_less<wrapped_interval>(const expr2tc &a, const expr2tc &b)
+{
+  // 1. Apply contractor algorithms
+  // 2. Update refs
+  auto lhs = get_interval<wrapped_interval>(a);
+  auto rhs = get_interval<wrapped_interval>(b);
+
+  auto s = lhs;
+  s.make_le_than(rhs);
+  auto t = rhs;
+  t.make_ge_than(lhs);
+
+  // No need for widening, this is a restriction!
+  if(is_symbol2t(a))
+    update_symbol_interval(to_symbol2t(a), s);
+
+  if(is_symbol2t(b))
+    update_symbol_interval(to_symbol2t(b), t);
+
+  if(s.is_bottom() || t.is_bottom())
+    make_bottom();
+}
+
 
 template <>
 bool interval_domaint::is_mapped<integer_intervalt>(const symbol2t &sym) const

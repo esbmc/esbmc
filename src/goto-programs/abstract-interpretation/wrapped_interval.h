@@ -19,6 +19,8 @@ public:
     upper = get_upper_bound(t) - 1;
   }
 
+
+
   BigInt convert_to_wrap(const BigInt &b) const
   {
     auto is_signed = is_signedbv_type(t);
@@ -27,7 +29,8 @@ public:
     {
       assert(value >= (-get_upper_bound(t) / 2));
       assert(value <= (get_upper_bound(t) / 2 - 1));
-      value += get_upper_bound(t) / 2;
+      if(b.is_negative() && !b.is_zero())
+        value += get_upper_bound(t);
     }
     else
     {
@@ -54,7 +57,12 @@ public:
     auto value = is_upper ? upper : lower;
 
     if(is_signed)
-      value -= get_upper_bound(t) / 2;
+    {
+      auto middle = get_upper_bound(t)/2; // [128] 256
+      if(value >= middle)
+        value -= middle*2;
+
+    }
 
     return value;
   }
@@ -76,7 +84,7 @@ public:
 
   virtual bool is_top() const override
   {
-    return !empty() && lower == 0 && upper == (get_upper_bound(t) - 1);
+    return cardinality() == get_upper_bound(t);
   }
 
   static wrapped_interval complement(const wrapped_interval &w) {
@@ -111,32 +119,79 @@ public:
     return lhs <= rhs;
   }
 
-  virtual void make_le_than(const BigInt &v) override // add upper bound
+  void make_le_than(const BigInt &v) override // add upper bound
   {
     wrapped_interval value(t);
+    value.lower = get_min();
     value.set_upper(v);
 
-    *this = intersection(*this, value);
+    *this = over_meet(*this, value);
   }
 
-  virtual void make_ge_than(const BigInt &v) override // add upper bound
+  void make_le_than(const wrapped_interval &rhs)
+  {
+
+    if(rhs.is_bottom()) {
+      bottom = true;
+      return;
+    }
+
+    // RHS contains upper bound (MAX_INT) we are always less than that
+    if(rhs.contains(get_max()))
+      return;
+
+    wrapped_interval value(t);
+    value.lower = get_min();
+    value.upper = rhs.upper;
+
+    *this = over_meet(*this, value);
+  }
+
+  void make_ge_than(const BigInt &v) override // add upper bound
   {
     wrapped_interval value(t);
     value.set_lower(v);
+    value.upper = get_max();
+    *this = over_meet(*this, value);
+  }
 
-    *this = intersection(*this, value);
+  void make_ge_than(const wrapped_interval &rhs)  // add upper bound
+  {
+    if(rhs.is_bottom())
+    {
+      bottom = true;
+      return;
+    }
+
+    // RHS contains lower bound (MIN_INT) we are always greater than that
+    if(rhs.contains(get_min())) return;
+
+    wrapped_interval value(t);
+    value.lower = rhs.lower;
+    value.upper = get_max();
+
+    *this = over_meet(*this, value);
+  }
+
+  BigInt get_min() const {
+    // 0^w or 10^(w-1)
+    return is_signedbv_type(t) ? get_upper_bound(t)/2 : 0;
+  }
+
+  BigInt get_max() const {
+    // 1^w or 01^(w-1)
+    return is_signedbv_type(t) ? get_upper_bound(t)/2-1 : get_upper_bound(t)-1;
   }
 
   BigInt cardinality() const
   {
     if(is_bottom())
       return 0;
-    if(is_top())
-      return get_upper_bound(t);
 
     auto mod = get_upper_bound(t);
-    return ((upper - lower) % mod + 1) % mod;
+    return ((upper - lower)%mod + 1);
   }
+
 
   bool contains(const BigInt &e) const override
   {
@@ -214,13 +269,16 @@ public:
     return result;
   }
 
-  virtual void approx_union_with(const interval_templatet<BigInt> &i) override
+  void approx_union_with(const interval_templatet<BigInt> &i) override
   {
     wrapped_interval rhs(t);
     rhs.lower = i.lower;
     rhs.upper = i.upper;
 
-    *this = over_join(rhs, *this);
+   if(1)
+      *this = complement(over_meet(complement(rhs), complement(*this)));
+      else
+     *this = over_join(rhs, *this);
   }
 
   // Under meet
@@ -346,4 +404,100 @@ public:
     result.upper = d;
     return result;
   }
+
+  friend wrapped_interval operator-(const wrapped_interval &lhs)
+  {
+    wrapped_interval result(lhs.t);
+    // Probably just a -1 mult
+    // Hack for singletons
+    if(lhs.singleton())
+    {
+      auto v = lhs.get_lower();
+      result.set_lower(-v);
+      result.set_upper(-v);
+    }
+
+    return result;
+  }
+
+  friend wrapped_interval
+  operator+(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    assert(lhs.t->get_width() == rhs.t->get_width());
+    wrapped_interval result(lhs.t);
+
+    if(lhs.is_bottom() || rhs.is_bottom())
+    {
+      result.bottom = true;
+      return result;
+    }
+
+    auto mod = get_upper_bound(lhs.t);
+    if(lhs.cardinality() + rhs.cardinality() <= mod)
+    {
+      result.lower = (lhs.lower + rhs.lower) % mod;
+      result.upper = (lhs.upper + rhs.upper) % mod;
+      assert(result.lower >= 0);
+      assert(result.upper >= 0);
+    }
+
+    return result;
+  }
+
+  friend wrapped_interval
+  operator-(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
+    wrapped_interval result(lhs.t);
+    return result;
+  }
+
+  friend wrapped_interval
+  operator*(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
+    wrapped_interval result(lhs.t);
+    return result;
+  }
+
+  friend wrapped_interval
+  operator/(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
+    wrapped_interval result(lhs.t);
+    return result;
+  }
+
+  friend wrapped_interval
+  operator|(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
+    wrapped_interval result(lhs.t);
+    return result;
+  }
+
+  friend wrapped_interval
+  operator&(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
+    wrapped_interval result(lhs.t);
+    return result;
+  }
+
+  friend wrapped_interval
+  operator<<(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
+    wrapped_interval result(lhs.t);
+    return result;
+  }
+
+  friend wrapped_interval
+  operator>>(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
+    wrapped_interval result(lhs.t);
+    return result;
+  }
+
 };
