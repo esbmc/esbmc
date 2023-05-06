@@ -1323,3 +1323,18 @@ bool interval_templatet<ieee_floatt>::is_top() const
   return (!lower_set || lower.is_infinity()) &&
          (!upper_set || upper.is_infinity());
 }
+
+template <>
+void interval_templatet<const ieee_floatt>::set(
+  bool value,
+  const ieee_floatt &v)
+{
+  assert(0 && "Trying to change the value of const interval");
+}
+
+template <>
+void interval_templatet<const ieee_floatt>::approx_union_with(
+  const interval_templatet<const ieee_floatt> &i)
+{
+  assert(0 && "Trying to change the value of const interval");
+}
