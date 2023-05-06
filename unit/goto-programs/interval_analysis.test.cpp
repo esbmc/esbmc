@@ -15,7 +15,7 @@ public:
 
   void run_configs()
   {
-
+    // Common Interval Analysis (Linear from -infinity into +infinity)
     SECTION("Baseline")
     {
       log_status("Baseline");
@@ -49,11 +49,44 @@ public:
       run_test<interval_domaint::int_mapt>(baseline);
     }
 
+
+  SECTION("Interval Arithmetic + Modular")
+  {
+    log_status("Interval Arithmetic");
+    set_baseline_config();
+    interval_domaint::enable_interval_arithmetic = true;
+    interval_domaint::enable_modular_intervals = true;
+    ait<interval_domaint> baseline;
+    run_test<interval_domaint::int_mapt>(baseline);
+  }
+
+
+  SECTION("Interval Arithmetic + Modular + Contractor")
+  {
+    log_status("Interval Arithmetic");
+    set_baseline_config();
+    interval_domaint::enable_interval_arithmetic = true;
+    interval_domaint::enable_modular_intervals = true;
+    interval_domaint::enable_contraction_for_abstract_states = true;
+    ait<interval_domaint> baseline;
+    run_test<interval_domaint::int_mapt>(baseline);
+  }
+    // Wrapped Intervals logic (see "Interval Analysis and Machine Arithmetic 2015" paper)
     SECTION("Wrapped Intervals")
     {
       log_status("Wrapped");
       set_baseline_config();
       interval_domaint::enable_wrapped_intervals = true;
+      ait<interval_domaint> baseline;
+      run_test<interval_domaint::wrap_mapt>(baseline);
+    }
+
+    SECTION("Wrapped Intervals + Arithmetic")
+    {
+      log_status("Wrapped");
+      set_baseline_config();
+      interval_domaint::enable_wrapped_intervals = true;
+      interval_domaint::enable_interval_arithmetic = true;
       ait<interval_domaint> baseline;
       run_test<interval_domaint::wrap_mapt>(baseline);
     }
@@ -75,15 +108,7 @@ public:
   template <class T>
     T get_map(interval_domaint &d) const;
 
-  template<>
-  interval_domaint::int_mapt get_map(interval_domaint &d) const {
-    return d.get_int_map();
-  }
 
-  template<>
-  interval_domaint::wrap_mapt get_map(interval_domaint &d) const {
-    return d.get_wrap_map();
-  }
 
   template<class IntervalMap>
   void run_test(ait<interval_domaint> &interval_analysis) {
@@ -126,12 +151,11 @@ public:
               if(interval == state.end())
                 continue; // Var not present means TOP (which is always correct)
 
-              interval->second.dump();
               // Hack to get values!
               auto cpy = interval->second;
               cpy.set_lower(real_lower_bound);
               cpy.set_upper(real_upper_bound);
-              CAPTURE (cpy.get_lower(), cpy.get_upper(), property_it->first, i_it->location.get_line().as_string() );
+              CAPTURE (interval->second.get_lower(),interval->second.get_upper(), cpy.get_lower(), cpy.get_upper(), property_it->first, i_it->location.get_line().as_string() );
 
               REQUIRE(interval->second.contains(cpy.lower));
               REQUIRE(interval->second.contains(cpy.upper));
@@ -142,6 +166,16 @@ public:
     }
   }
 };
+
+template<>
+interval_domaint::int_mapt test_program::get_map(interval_domaint &d) const {
+  return d.get_int_map();
+}
+
+template<>
+interval_domaint::wrap_mapt test_program::get_map(interval_domaint &d) const {
+  return d.get_wrap_map();
+}
 
 TEST_CASE(
   "Interval Analysis - Base Sign",
@@ -181,7 +215,37 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "Interval Analysis - If/Else Statement LHS",
+  "Interval Analysis - If/Else Statement LHS (Unsigned)",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned int a = nondet_uint(); unsigned int b=0;\n "
+    "if(a < 50){\n"
+    "b = 2;\n" // a: [0, 50)
+    "a = 52;\n"
+    "b = 2;\n" // a: [52, 52]
+    "} else {\n"
+    "b = 4;\n" // a: [50, MAX_UINT]
+    "a = 51;\n"
+    "b = 4;\n" // a: [51, 51]
+    "}\n"
+    "return a;\n" // a : [51,52]
+    "}";
+  (T.property["4"])["@F@main@a"] = {0,  49};
+  (T.property["6"])["@F@main@a"] = {52, 52};
+  (T.property["8"])["@F@main@a"] = {50, pow(2, 31) - 1};
+  (T.property["10"])["@F@main@a"] = {51, 51};
+  (T.property["12"])["@F@main@a"] = {51, 52};
+
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - If/Else Statement LHS (Signed)",
   "[ai][interval-analysis]")
 {
   // Setup global options here
@@ -235,7 +299,7 @@ TEST_CASE(
   (T.property["6"])["@F@main@a"] = {-52, -52};
   (T.property["8"])["@F@main@a"] = {-50, pow(2, 31) - 1};
   (T.property["10"])["@F@main@a"] = {51, 51};
-  (T.property["12"])["@F@main@a"] = {-52, 51};
+  (T.property["13"])["@F@main@a"] = {-52, 51};
 
   T.run_configs();
 }
@@ -317,7 +381,7 @@ TEST_CASE(
     "b = 5;\n"
     "a = 10;\n"
     "}\n"
-    "c = 0;\n" // a: [1,10] b: [0,5]
+    "c = 0;\n" // a: [1,10] or [10,1] b: [0,5] or [5,0]
     "if(a < b) {\n"
     "c = 5;\n" // a: [1,4] b: [1,5]
     "}\n"
@@ -429,8 +493,8 @@ TEST_CASE(
     "a = b * a;\n" // a: [-8,16]
     "return a;\n"
     "}";
-  (T.property["4"])["@F@main@a"] = {1, 2};
-  (T.property["6"])["@F@main@a"] = {4, 8};
+  (T.property["4"])["@F@main@a"] = {-1, 2};
+  (T.property["6"])["@F@main@a"] = {-8, 16};
   T.run_configs();
 }
 

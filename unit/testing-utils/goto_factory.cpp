@@ -179,12 +179,13 @@ program goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
 {
   goto_functionst goto_functions;
   language_uit lui(cmd);
+  migrate_namespace_lookup = new namespacet(lui.context);
   if(!goto_factory::parse(lui))
   {
     return program(lui.context, goto_functions);
   }
 
-  migrate_namespace_lookup = new namespacet(lui.context);
+
   goto_convert(lui.context, opts, goto_functions);
 
   namespacet ns(lui.context);

@@ -367,6 +367,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     REQUIRE(A.lower == 0);
     REQUIRE(A.upper.to_uint64() == pow(2, N1) - 1);
     REQUIRE(!A.is_bottom());
+    CAPTURE(A.cardinality());
     REQUIRE(A.is_top());
 
     REQUIRE(C.lower == 0);
@@ -389,7 +390,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
   SECTION("Init Signed")
   {
     wrapped_interval A(t1_signed);
-
+    CAPTURE(A.lower.to_int64(), A.upper.to_uint64());
     REQUIRE(A.lower == 0);
     REQUIRE(A.upper.to_uint64() == pow(2, N1) - 1);
     REQUIRE(!A.is_bottom());
@@ -406,24 +407,45 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
       REQUIRE(A.get_upper() == c);
     }
   }
-  SECTION("Relational Operators")
+
+  SECTION("Relational Operators (Unsigned)")
+  {
+    wrapped_interval A(t1_unsigned);
+    // [10, 250]
+    A.set_lower(10);
+    A.set_upper(250);
+    A.make_le_than(50);
+    REQUIRE(A.get_upper() == 50);
+    REQUIRE(A.get_lower() == 10);
+
+    // A: [250, 20]
+    A.set_upper(20);
+    A.set_lower(250);
+
+    A.make_le_than(50); // [0, 20]
+
+    REQUIRE(A.get_upper() == 20);
+    A.make_ge_than(10);
+
+    REQUIRE(A.get_lower() == 10);
+
+  }
+
+  SECTION("Relational Operators (Signed)")
   {
     wrapped_interval A(t1_signed);
     // A: [-128,127]
-    REQUIRE(A.get_lower() == -128);
-    REQUIRE(A.get_upper() == 127);
 
+    REQUIRE(A.get_upper() == -1);
+    REQUIRE(A.get_lower() == 0);
+
+    A.make_le_than(500);
     A.make_le_than(50);
+    // [-128,50]
     REQUIRE(A.get_upper() == 50);
     A.make_ge_than(-120);
     REQUIRE(A.get_lower() == -120);
 
-    // [100, 20]
-    A.set_lower(100);
-    A.set_upper(20);
-    A.make_le_than(10);
-    REQUIRE(A.get_upper() == 10);
-    REQUIRE(A.get_lower() == -128);
   }
 
   SECTION("Non-overlap Interval")
@@ -446,6 +468,9 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
 
   wrapped_interval A(t1_unsigned);
   wrapped_interval B(t1_unsigned);
+  wrapped_interval As(t1_signed);
+  wrapped_interval Bs(t1_signed);
+
 
   SECTION("Join/Meet when A is in B")
   {
@@ -462,6 +487,21 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     REQUIRE(over_join.is_equal(B));
     REQUIRE(intersection.is_equal(A));
   }
+
+  SECTION("Join/Meet from bug")
+  {
+    As.set_lower(-52);
+    As.set_upper(-52);
+
+    Bs.set_lower(51);
+    Bs.set_upper(51);
+
+    auto over_meet = wrapped_interval::over_meet(As, Bs);
+
+    REQUIRE(over_meet.contains(-52));
+    REQUIRE(over_meet.contains(51));
+  }
+
   SECTION("Join/Meet when A do not overlap and B overlaps meets A in both ends")
   {
     A.lower = 10;
@@ -530,4 +570,70 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     auto intersection = wrapped_interval::intersection(A, B);
     REQUIRE(intersection.is_bottom());
   }
+
+  SECTION("Addition Unsigned")
+  {
+    REQUIRE(A.lower == 0);
+    REQUIRE(A.upper.to_uint64() == pow(2, N1) - 1);
+    REQUIRE(!A.is_bottom());
+    REQUIRE(A.is_top());
+
+    // No Wrap
+    A.set_lower(100);
+    A.set_upper(150);
+
+    B.set_lower(0);
+    B.set_upper(1);
+
+    auto C = A + B;
+    REQUIRE(C.get_lower() == 100);
+    REQUIRE(C.get_upper() == 151);
+
+    // Wrap around
+    A.set_lower(100);
+    A.set_upper((long long)(pow(2,N1)-1));
+
+    B.set_lower(1);
+    B.set_upper(2);
+
+    C = A + B;
+    REQUIRE(C.get_lower() == 101);
+    REQUIRE(C.get_upper() == 1);
+  }
+
+  SECTION("Addition Signed")
+  {
+    REQUIRE(As.contains((long long) -pow(2, N1)/2));
+    REQUIRE(As.contains((long long) pow(2, N1)/2 - 1));
+    REQUIRE(!As.is_bottom());
+    REQUIRE(As.is_top());
+
+    // No Wrap
+    As.set_lower(-100);
+    As.set_upper(120);
+
+    Bs.set_lower(-5);
+    Bs.set_upper(5);
+
+
+    auto C = As + Bs;
+    As.dump();
+    Bs.dump();
+    C.dump();
+    CAPTURE(As.cardinality(), Bs.cardinality());
+    REQUIRE(C.get_lower() == -105);
+    REQUIRE(C.get_upper() == 125);
+
+    // Wrap around
+    As.set_lower(100);
+    As.set_upper((long long)(pow(2,N1-1)-1));
+
+    Bs.set_lower(-1);
+    Bs.set_upper(1);
+
+    C = As + Bs;
+    REQUIRE(C.get_lower() == 99);
+    REQUIRE(C.get_upper().to_int64() == -pow(2, N1)/2);
+  }
+
 }
