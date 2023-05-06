@@ -887,7 +887,7 @@ bool interval_domaint::enable_interval_arithmetic = false;
 bool interval_domaint::enable_modular_intervals = false;
 bool interval_domaint::enable_assertion_simplification = false;
 bool interval_domaint::enable_contraction_for_abstract_states = false;
-bool interval_domaint::enable_wrapped_intervals = false;
+bool interval_domaint::enable_wrapped_intervals = true;
 
 // Widening options
 bool interval_domaint::widening_underaproximate_bound = false;
