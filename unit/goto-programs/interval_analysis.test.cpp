@@ -429,8 +429,79 @@ TEST_CASE(
     "a = b * a;\n" // a: [-8,16]
     "return a;\n"
     "}";
-  (T.property["4"])["@F@main@a"] = {1,  2};
-  (T.property["6"])["@F@main@a"] = {4,  8};
+  (T.property["4"])["@F@main@a"] = {1, 2};
+  (T.property["6"])["@F@main@a"] = {4, 8};
   T.run_configs();
 }
 
+TEST_CASE("Interval Analysis - Bitand", "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = 1;\n"
+    "if(nondet_int()) a = 2;"
+    "int b = 2;\n" // a: [0001,0010]
+    "a = a & b;\n" // a: [0,0]
+    "return a;\n"
+    "}";
+  (T.property["4"])["@F@main@a"] = {1, 2};
+  (T.property["6"])["@F@main@a"] = {0, 2};
+  T.run_configs();
+}
+
+TEST_CASE("Interval Analysis - Bitor", "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = 1;\n"
+    "if(nondet_int()) a = 2;"
+    "int b = 4;\n" // a: [0001,0010]
+    "a = a | b;\n" // a: [5,6]
+    "return a;\n"
+    "}";
+  (T.property["4"])["@F@main@a"] = {1, 2};
+  (T.property["6"])["@F@main@a"] = {5, 6};
+  T.run_configs();
+}
+
+TEST_CASE("Interval Analysis - Left Shift", "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = 1;\n"
+    "if(nondet_int()) a = 2;"
+    "int b = 2;\n"  // a: [0001,0010]
+    "a = b << a;\n" // a: [4,8]
+    "return a;\n"
+    "}";
+  (T.property["4"])["@F@main@a"] = {1, 2};
+  (T.property["6"])["@F@main@a"] = {4, 8};
+  T.run_configs();
+}
+
+TEST_CASE("Interval Analysis - Right Shift", "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = 1;\n"
+    "if(nondet_int()) a = 2;"
+    "int b = 8;\n"  // a: [0001,0010]
+    "a = b >> a;\n" // a: [2,4]
+    "return a;\n"
+    "}";
+  (T.property["4"])["@F@main@a"] = {1, 2};
+  (T.property["6"])["@F@main@a"] = {2, 4};
+  T.run_configs();
+}
