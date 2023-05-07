@@ -130,8 +130,6 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
   // sideeffect assign got be representing a binary operator
   assert(expr.operands().size() == 2);
 
-  assert(!"cool");
-
   //exprt &lhs = expr.op0();
   exprt &rhs = expr.op1();
 
