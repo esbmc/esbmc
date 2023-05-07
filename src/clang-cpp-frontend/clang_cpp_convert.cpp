@@ -1123,8 +1123,14 @@ bool clang_cpp_convertert::get_decl_ref(
     if(get_type(fd.getType(), type))
       return true;
 
-    if(get_function_params(fd, to_code_type(type).arguments()))
+    code_typet &fd_type = to_code_type(type);
+    if(get_function_params(fd, fd_type.arguments()))
       return true;
+
+    // annotate return type - will be used to adjust the initiliazer or decl-derived stmt
+    const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd);
+    assert(md);
+    annotate_cdtor_rtn_type(md, fd_type.return_type());
 
     break;
   }
@@ -1231,12 +1237,7 @@ bool clang_cpp_convertert::annotate_class_method(
   if(is_ConstructorOrDestructor(fd))
   {
     // annotate ctor and dtor return type
-    std::string mark_rtn = (cxxmdd->getKind() == clang::Decl::CXXDestructor)
-                             ? "destructor"
-                             : "constructor";
-    typet rtn_type(mark_rtn);
-    annotate_cpyctor(cxxmdd, rtn_type);
-    component_type.return_type() = rtn_type;
+    annotate_cdtor_rtn_type(cxxmdd, component_type.return_type());
 
     /*
      * We also have a `component` in class type representing the ctor/dtor.
@@ -1495,4 +1496,16 @@ void clang_cpp_convertert::get_cpyctor_name(
 
   // sync param name
   param.cmt_base_name(name);
+}
+
+void clang_cpp_convertert::annotate_cdtor_rtn_type(
+  const clang::CXXMethodDecl *cxxmdd,
+  typet &rtn_type)
+{
+  std::string mark_rtn = (cxxmdd->getKind() == clang::Decl::CXXDestructor)
+                           ? "destructor"
+                           : "constructor";
+  typet tmp_rtn_type(mark_rtn);
+  annotate_cpyctor(cxxmdd, tmp_rtn_type);
+  rtn_type = tmp_rtn_type;
 }
