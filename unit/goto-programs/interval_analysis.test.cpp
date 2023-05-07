@@ -19,74 +19,74 @@ public:
   std::string code;
   std::map<std::string, std::vector<test_item> > property;
 
-  void run_configs()
+  void run_configs(bool precise_only = false)
   {
-    // Common Interval Analysis (Linear from -infinity into +infinity)
-    SECTION("Baseline")
+    if(!precise_only)
     {
-      log_status("Baseline");
-      set_baseline_config();
-      ait<interval_domaint> baseline;
-      run_test<interval_domaint::int_mapt>(baseline);
+      // Common Interval Analysis (Linear from -infinity into +infinity)
+      SECTION("Baseline")
+      {
+        log_status("Baseline");
+        set_baseline_config();
+        ait<interval_domaint> baseline;
+        run_test<interval_domaint::int_mapt>(baseline);
+      }
+      SECTION("Interval Arithmetic")
+      {
+        log_status("Interval Arithmetic");
+        set_baseline_config();
+        interval_domaint::enable_interval_arithmetic = true;
+        ait<interval_domaint> baseline;
+        run_test<interval_domaint::int_mapt>(baseline);
+      }
+      SECTION("Modular Intervals")
+      {
+        log_status("Modular Intervals");
+        set_baseline_config();
+        interval_domaint::enable_modular_intervals = true;
+        ait<interval_domaint> baseline;
+        run_test<interval_domaint::int_mapt>(baseline);
+      }
+
+      SECTION("Contractor")
+      {
+        log_status("Contractors");
+        set_baseline_config();
+        interval_domaint::enable_contraction_for_abstract_states = true;
+        ait<interval_domaint> baseline;
+        run_test<interval_domaint::int_mapt>(baseline);
+      }
+
+      SECTION("Interval Arithmetic + Modular")
+      {
+        log_status("Interval Arithmetic");
+        set_baseline_config();
+        interval_domaint::enable_interval_arithmetic = true;
+        interval_domaint::enable_modular_intervals = true;
+        ait<interval_domaint> baseline;
+        run_test<interval_domaint::int_mapt>(baseline);
+      }
+
+      SECTION("Interval Arithmetic + Modular + Contractor")
+      {
+        log_status("Interval Arithmetic");
+        set_baseline_config();
+        interval_domaint::enable_interval_arithmetic = true;
+        interval_domaint::enable_modular_intervals = true;
+        interval_domaint::enable_contraction_for_abstract_states = true;
+        ait<interval_domaint> baseline;
+        run_test<interval_domaint::int_mapt>(baseline);
+      }
+      // Wrapped Intervals logic (see "Interval Analysis and Machine Arithmetic 2015" paper)
+      SECTION("Wrapped Intervals")
+      {
+        log_status("Wrapped");
+        set_baseline_config();
+        interval_domaint::enable_wrapped_intervals = true;
+        ait<interval_domaint> baseline;
+        run_test<interval_domaint::wrap_mapt>(baseline);
+      }
     }
-    SECTION("Interval Arithmetic")
-    {
-      log_status("Interval Arithmetic");
-      set_baseline_config();
-      interval_domaint::enable_interval_arithmetic = true;
-      ait<interval_domaint> baseline;
-      run_test<interval_domaint::int_mapt>(baseline);
-    }
-    SECTION("Modular Intervals")
-    {
-      log_status("Modular Intervals");
-      set_baseline_config();
-      interval_domaint::enable_modular_intervals = true;
-      ait<interval_domaint> baseline;
-      run_test<interval_domaint::int_mapt>(baseline);
-    }
-
-    SECTION("Contractor")
-    {
-      log_status("Contractors");
-      set_baseline_config();
-      interval_domaint::enable_contraction_for_abstract_states = true;
-      ait<interval_domaint> baseline;
-      run_test<interval_domaint::int_mapt>(baseline);
-    }
-
-
-  SECTION("Interval Arithmetic + Modular")
-  {
-    log_status("Interval Arithmetic");
-    set_baseline_config();
-    interval_domaint::enable_interval_arithmetic = true;
-    interval_domaint::enable_modular_intervals = true;
-    ait<interval_domaint> baseline;
-    run_test<interval_domaint::int_mapt>(baseline);
-  }
-
-
-  SECTION("Interval Arithmetic + Modular + Contractor")
-  {
-    log_status("Interval Arithmetic");
-    set_baseline_config();
-    interval_domaint::enable_interval_arithmetic = true;
-    interval_domaint::enable_modular_intervals = true;
-    interval_domaint::enable_contraction_for_abstract_states = true;
-    ait<interval_domaint> baseline;
-    run_test<interval_domaint::int_mapt>(baseline);
-  }
-    // Wrapped Intervals logic (see "Interval Analysis and Machine Arithmetic 2015" paper)
-    SECTION("Wrapped Intervals")
-    {
-      log_status("Wrapped");
-      set_baseline_config();
-      interval_domaint::enable_wrapped_intervals = true;
-      ait<interval_domaint> baseline;
-      run_test<interval_domaint::wrap_mapt>(baseline);
-    }
-
     SECTION("Wrapped Intervals + Arithmetic")
     {
       log_status("Wrapped + Arithmetic");
@@ -157,8 +157,14 @@ public:
                   break;
               }
 
+
               if(interval == state.end())
+              {
+                CAPTURE(precise_intervals, property_it->should_contain, i_it->location.get_line().as_string(), value );
+                REQUIRE((!precise_intervals || property_it->should_contain));
                 continue; // Var not present means TOP (which is always correct)
+              }
+
 
               // Hack to get values!
               auto cpy = interval->second;
@@ -472,9 +478,81 @@ TEST_CASE(
     "return a;\n"
     "}";
   T.property["3"].push_back({"@F@main@a", 0, true});
+  T.property["3"].push_back({"@F@main@a", 1, false});
   T.property["5"].push_back({"@F@main@a", 1, true});
+  T.property["5"].push_back({"@F@main@a", 0, false});
+  T.property["5"].push_back({"@F@main@a", 2, false});
   T.run_configs();
 }
+
+TEST_CASE(
+  "Interval Analysis - Add Range Arithmetic",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a;\n"
+    "int b;\n"
+    "if(a > 5) a = 2; else a = 4;"
+    "if(b > 5) b = 1; else b = 3;\n"
+    "int c = 0;\n" // a: [2,4], b: [1,3]
+    "a = a + b;\n" // a: [3,7]
+    "return a;\n"
+    "}";
+  T.property["5"].push_back({"@F@main@a", 2, true});
+  T.property["5"].push_back({"@F@main@a", 4, true});
+  T.property["5"].push_back({"@F@main@b", 1, true});
+  T.property["5"].push_back({"@F@main@b", 3, true});
+  T.property["7"].push_back({"@F@main@a", 3, true});
+  T.property["7"].push_back({"@F@main@a", 7, true});
+  T.property["7"].push_back({"@F@main@a", 8, false});
+  T.property["7"].push_back({"@F@main@a", 2, false});
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - Add Arithmetic (Overflow)",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "char a = 127;\n"
+    "char b = 0;\n" // a: [0,0]
+    "a = a + 1;\n" // a: [1,1]
+    "return a;\n"
+    "}";
+  T.property["3"].push_back({"@F@main@a", 127, true});
+  T.property["3"].push_back({"@F@main@a", -128, false});
+  T.property["5"].push_back({"@F@main@a", -128, true});
+  T.run_configs(true); // Needs to take overflow into account
+}
+
+TEST_CASE(
+  "Interval Analysis - Add Arithmetic (Overlap)",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned char a = 255;\n"
+    "char b = 0;\n" // a: [255,255]
+    "a = a + 1;\n" // a: [0,0]
+    "return a;\n"
+    "}";
+  T.property["3"].push_back({"@F@main@a", 255, true});
+  T.property["3"].push_back({"@F@main@a", 0, false});
+  T.property["5"].push_back({"@F@main@a", 0, true});
+  T.run_configs(true); // Needs to take overflow into account
+}
+
 
 TEST_CASE(
   "Interval Analysis - Sub Arithmetic",
@@ -486,19 +564,21 @@ TEST_CASE(
   T.code =
     "int main() {\n"
     "int a = 0;\n"
-    "int b = 0;\n" // a: [0,0]
+    "int b = 2;\n" // a: [0,0]
     "a = b - 1;\n" // a: [-1,-1]
     "return a;\n"
     "}";
 
   T.property["3"].push_back({"@F@main@a", 0, true});
-  T.property["5"].push_back({"@F@main@a", -1, true});
+  T.property["5"].push_back({"@F@main@a", 1, true});
+  T.property["5"].push_back({"@F@main@a", 0, false});
+  T.property["5"].push_back({"@F@main@a", 3, false});
 
   T.run_configs();
 }
 
 TEST_CASE(
-  "Interval Analysis - Div Arithmetic",
+  "Interval Analysis - Sub Arithmetic (Underflow)",
   "[ai][interval-analysis]")
 {
   // Setup global options here
@@ -506,19 +586,19 @@ TEST_CASE(
   test_program T;
   T.code =
     "int main() {\n"
-    "int a = 2;\n"
-    "if(nondet_int()) a = 1;"
-    "int b = 8;\n" // a: [0,0]
-    "a = b / a;\n" // a: [4,8]
+    "char a = -128;\n"
+    "char b = 1;\n" // a: [-128,-128]
+    "a = a - 1;\n" // a: [127,127]
     "return a;\n"
     "}";
 
-  T.property["4"].push_back({"@F@main@a", 1, true});
-  T.property["4"].push_back({"@F@main@a", 2, true});
-  T.property["6"].push_back({"@F@main@a", 4, true});
-  T.property["6"].push_back({"@F@main@a", 8, true});
+  T.property["3"].push_back({"@F@main@a", -128, true});
+  T.property["5"].push_back({"@F@main@a", 127, true});
+  // Underflows are becoming an overaproximation
+  //T.property["5"].push_back({"@F@main@a", -128, false});
+  //T.property["5"].push_back({"@F@main@a", 126, false});
 
-  T.run_configs();
+  T.run_configs(true);
 }
 
 TEST_CASE(
@@ -544,6 +624,33 @@ TEST_CASE(
 
   T.run_configs();
 }
+
+
+TEST_CASE(
+  "Interval Analysis - Div Arithmetic",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = 2;\n"
+    "if(nondet_int()) a = 1;"
+    "int b = 8;\n" // a: [0,0]
+    "a = b / a;\n" // a: [4,8]
+    "return a;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", 1, true});
+  T.property["4"].push_back({"@F@main@a", 2, true});
+  T.property["6"].push_back({"@F@main@a", 4, true});
+  T.property["6"].push_back({"@F@main@a", 8, true});
+
+  T.run_configs();
+}
+
+
 
 TEST_CASE("Interval Analysis - Bitand", "[ai][interval-analysis]")
 {
