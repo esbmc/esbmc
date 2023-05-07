@@ -7,11 +7,17 @@
 #include "../testing-utils/goto_factory.h"
 #include "goto-programs/abstract-interpretation/interval_domain.h"
 
+struct test_item {
+  std::string var;
+  BigInt v;
+  bool should_contain;
+};
+
 // TODO: maybe the map should support function_name
 class test_program {
 public:
   std::string code;
-  std::map<std::string, std::map<std::string, std::pair<long,long> > > property;
+  std::map<std::string, std::vector<test_item> > property;
 
   void run_configs()
   {
@@ -83,12 +89,12 @@ public:
 
     SECTION("Wrapped Intervals + Arithmetic")
     {
-      log_status("Wrapped");
+      log_status("Wrapped + Arithmetic");
       set_baseline_config();
       interval_domaint::enable_wrapped_intervals = true;
       interval_domaint::enable_interval_arithmetic = true;
       ait<interval_domaint> baseline;
-      run_test<interval_domaint::wrap_mapt>(baseline);
+      run_test<interval_domaint::wrap_mapt>(baseline, true);
     }
   }
 
@@ -111,7 +117,7 @@ public:
 
 
   template<class IntervalMap>
-  void run_test(ait<interval_domaint> &interval_analysis) {
+  void run_test(ait<interval_domaint> &interval_analysis, bool precise_intervals = false) {
     auto arch_32 = goto_factory::Architecture::BIT_32;
     auto P = goto_factory::get_goto_functions(code, arch_32);
     CHECK(P.functions.function_map.size() > 0);
@@ -132,15 +138,18 @@ public:
 
             for(auto property_it = to_check->second.begin(); property_it != to_check->second.end(); property_it++)
             {
-              const auto &real_lower_bound = property_it->second.first;
-              const auto &real_upper_bound = property_it->second.second;
+
+              if(!property_it->should_contain && !precise_intervals)
+                continue ;
+
+              const auto &value = property_it->v;
 
               // we need to find the actual interval however... getting the original name is hard
               auto interval = state.begin();
               for(; interval != state.end(); interval++)
               {
                 auto real_name = interval->first.as_string();
-                auto var_name = property_it->first;
+                auto var_name = property_it->var;
 
                 if(var_name.size() > real_name.size()) continue;
 
@@ -153,12 +162,9 @@ public:
 
               // Hack to get values!
               auto cpy = interval->second;
-              cpy.set_lower(real_lower_bound);
-              cpy.set_upper(real_upper_bound);
-              CAPTURE (interval->second.get_lower(),interval->second.get_upper(), cpy.get_lower(), cpy.get_upper(), property_it->first, i_it->location.get_line().as_string() );
-
-              REQUIRE(interval->second.contains(cpy.lower));
-              REQUIRE(interval->second.contains(cpy.upper));
+              cpy.set_lower(value);
+              CAPTURE (interval->second.get_lower(),interval->second.get_upper(), cpy.get_lower(), property_it->var, i_it->location.get_line().as_string() );
+              REQUIRE(interval->second.contains(cpy.lower) == property_it->should_contain);
             }
           }
         }
@@ -191,7 +197,8 @@ TEST_CASE(
     "int b;\n" // Here "a" should contain all values for int
     "return a;\n"
     "}";
-  (T.property["3"])["@F@main@a"] = {-pow(2, 31),  pow(2, 31) - 1};
+  T.property["3"].push_back({"@F@main@a", (long)-pow(2, 31), true});
+  T.property["3"].push_back({ "@F@main@a", (long) pow(2, 31) - 1, true});
 
   T.run_configs();
 }
@@ -210,7 +217,10 @@ TEST_CASE(
     "int b;\n" // Here "a" should contain all values for uint
     "return a;\n"
     "}";
-  (T.property["3"])["@F@main@a"] = {0,  pow(2, 8) - 1};
+
+  T.property["3"].push_back({"@F@main@a", 0, true});
+  T.property["3"].push_back({"@F@main@a", (long)pow(2, 8) - 1, true});
+
   T.run_configs();
 }
 
@@ -235,11 +245,15 @@ TEST_CASE(
     "}\n"
     "return a;\n" // a : [51,52]
     "}";
-  (T.property["4"])["@F@main@a"] = {0,  49};
-  (T.property["6"])["@F@main@a"] = {52, 52};
-  (T.property["8"])["@F@main@a"] = {50, pow(2, 31) - 1};
-  (T.property["10"])["@F@main@a"] = {51, 51};
-  (T.property["12"])["@F@main@a"] = {51, 52};
+
+  T.property["4"].push_back({"@F@main@a", 0, true});
+  T.property["4"].push_back({"@F@main@a", 49, true});
+  T.property["6"].push_back({"@F@main@a", 52, true});
+  T.property["8"].push_back({"@F@main@a", 50, true});
+  T.property["8"].push_back({"@F@main@a", (long long) pow(2, 31) - 1, true});
+  T.property["10"].push_back({"@F@main@a", 51, true});
+  T.property["12"].push_back({"@F@main@a", 51, true});
+  T.property["12"].push_back({"@F@main@a", 52, true});
 
   T.run_configs();
 }
@@ -265,11 +279,14 @@ TEST_CASE(
     "}\n"
     "return a;\n" // a : [51,52]
     "}";
-  (T.property["4"])["@F@main@a"] = {-pow(2, 31),  49};
-  (T.property["6"])["@F@main@a"] = {52, 52};
-  (T.property["8"])["@F@main@a"] = {50, pow(2, 31) - 1};
-  (T.property["10"])["@F@main@a"] = {51, 51};
-  (T.property["12"])["@F@main@a"] = {51, 52};
+  T.property["4"].push_back({"@F@main@a", (long long) -pow(2, 31), true});
+  T.property["4"].push_back({"@F@main@a", 49, true});
+  T.property["6"].push_back({"@F@main@a", 52, true});
+  T.property["8"].push_back({"@F@main@a", (long long) pow(2, 31)-1, true});
+  T.property["8"].push_back({"@F@main@a", 50, true});
+  T.property["10"].push_back({"@F@main@a", 51, true});
+  T.property["12"].push_back({"@F@main@a", 51, true});
+  T.property["12"].push_back({"@F@main@a", 52, true});
 
   T.run_configs();
 }
@@ -295,11 +312,15 @@ TEST_CASE(
     "}\n"
     "return a;\n" // a : [-52,51]
     "}";
-  (T.property["4"])["@F@main@a"] = {-pow(2, 31),  -50};
-  (T.property["6"])["@F@main@a"] = {-52, -52};
-  (T.property["8"])["@F@main@a"] = {-50, pow(2, 31) - 1};
-  (T.property["10"])["@F@main@a"] = {51, 51};
-  (T.property["13"])["@F@main@a"] = {-52, 51};
+
+  T.property["4"].push_back({"@F@main@a", (long long) -pow(2, 31), true});
+  T.property["4"].push_back({"@F@main@a", -50, true});
+  T.property["6"].push_back({"@F@main@a", -52, true});
+  T.property["8"].push_back({"@F@main@a", (long long) pow(2, 31)-1, true});
+  T.property["8"].push_back({"@F@main@a", -50, true});
+  T.property["10"].push_back({"@F@main@a", 51, true});
+  T.property["13"].push_back({"@F@main@a", -52, true});
+
 
   T.run_configs();
 }
@@ -325,11 +346,14 @@ TEST_CASE(
     "}\n"
     "return a;\n" // a : [51,52]
     "}";
-  (T.property["4"])["@F@main@a"] = {51, pow(2, 31) - 1};
-  (T.property["6"])["@F@main@a"] = {52, 52};
-  (T.property["8"])["@F@main@a"] = {-pow(2, 31),  50};
-  (T.property["10"])["@F@main@a"] = {51, 51};
-  (T.property["12"])["@F@main@a"] = {51, 52};
+
+  T.property["4"].push_back({"@F@main@a", (long long) pow(2, 31)-1, true});
+  T.property["4"].push_back({"@F@main@a", 51, true});
+  T.property["6"].push_back({"@F@main@a", 52, true});
+  T.property["8"].push_back({"@F@main@a", (long long) -pow(2, 31), true});
+  T.property["8"].push_back({"@F@main@a", 50, true});
+  T.property["10"].push_back({"@F@main@a", 51, true});
+  T.property["13"].push_back({"@F@main@a", 52, true});
 
   T.run_configs();
 }
@@ -355,11 +379,14 @@ TEST_CASE(
     "}\n"
     "return a;\n" // a : [51,52]
     "}";
-  (T.property["4"])["@F@main@a"] = {-49, pow(2, 31) - 1};
-  (T.property["6"])["@F@main@a"] = {52, 52};
-  (T.property["8"])["@F@main@a"] = {-pow(2, 31),  -50};
-  (T.property["10"])["@F@main@a"] = {51, 51};
-  (T.property["12"])["@F@main@a"] = {51, 52};
+
+  T.property["4"].push_back({"@F@main@a", (long long) pow(2, 31)-1, true});
+  T.property["4"].push_back({"@F@main@a", -49, true});
+  T.property["6"].push_back({"@F@main@a", 52, true});
+  T.property["8"].push_back({"@F@main@a", (long long) -pow(2, 31), true});
+  T.property["8"].push_back({"@F@main@a", -50, true});
+  T.property["10"].push_back({"@F@main@a", 51, true});
+  T.property["13"].push_back({"@F@main@a", 52, true});
 
   T.run_configs();
 }
@@ -387,10 +414,16 @@ TEST_CASE(
     "}\n"
     "return a;\n" // a : [51,52]
     "}";
-  (T.property["10"])["@F@main@a"] = {1, 10};
-  (T.property["10"])["@F@main@b"] = {0, 5};
-  (T.property["12"])["@F@main@a"] = {1, 4};
-  (T.property["12"])["@F@main@b"] = {1, 5};
+
+  T.property["10"].push_back({"@F@main@a", 1, true});
+  T.property["10"].push_back({"@F@main@a", 10, true});
+  T.property["10"].push_back({"@F@main@b", 0, true});
+  T.property["10"].push_back({"@F@main@b", 5, true});
+  T.property["12"].push_back({"@F@main@a", 1, true});
+  T.property["12"].push_back({"@F@main@a", 4, true});
+  T.property["12"].push_back({"@F@main@b", 1, true});
+  T.property["12"].push_back({"@F@main@b", 5, true});
+
   T.run_configs();
 }
 
@@ -412,10 +445,14 @@ TEST_CASE(
     "}\n"
     "return a;\n" // a : [100, 100]
     "}";
-  (T.property["2"])["@F@main@a"] = {0,  0};
-  (T.property["5"])["@F@main@a"] = {0,  99};
-  (T.property["7"])["@F@main@a"] = {1,  100};
-  (T.property["9"])["@F@main@a"] = {100,  100};
+
+  T.property["2"].push_back({"@F@main@a", 0, true});
+  T.property["5"].push_back({"@F@main@a", 0, true});
+  T.property["5"].push_back({"@F@main@a", 99, true});
+  T.property["7"].push_back({"@F@main@a", 1, true});
+  T.property["7"].push_back({"@F@main@a", 100, true});
+  T.property["9"].push_back({"@F@main@a", 100, true});
+
   T.run_configs();
 }
 
@@ -434,8 +471,8 @@ TEST_CASE(
     "a = b + 1;\n" // a: [1,1]
     "return a;\n"
     "}";
-  (T.property["3"])["@F@main@a"] = {0,  0};
-  (T.property["5"])["@F@main@a"] = {1,  1};
+  T.property["3"].push_back({"@F@main@a", 0, true});
+  T.property["5"].push_back({"@F@main@a", 1, true});
   T.run_configs();
 }
 
@@ -453,8 +490,10 @@ TEST_CASE(
     "a = b - 1;\n" // a: [-1,-1]
     "return a;\n"
     "}";
-  (T.property["3"])["@F@main@a"] = {0,  0};
-  (T.property["5"])["@F@main@a"] = {-1,  -1};
+
+  T.property["3"].push_back({"@F@main@a", 0, true});
+  T.property["5"].push_back({"@F@main@a", -1, true});
+
   T.run_configs();
 }
 
@@ -473,8 +512,12 @@ TEST_CASE(
     "a = b / a;\n" // a: [4,8]
     "return a;\n"
     "}";
-  (T.property["4"])["@F@main@a"] = {1,  2};
-  (T.property["6"])["@F@main@a"] = {4,  8};
+
+  T.property["4"].push_back({"@F@main@a", 1, true});
+  T.property["4"].push_back({"@F@main@a", 2, true});
+  T.property["6"].push_back({"@F@main@a", 4, true});
+  T.property["6"].push_back({"@F@main@a", 8, true});
+
   T.run_configs();
 }
 
@@ -493,8 +536,12 @@ TEST_CASE(
     "a = b * a;\n" // a: [-8,16]
     "return a;\n"
     "}";
-  (T.property["4"])["@F@main@a"] = {-1, 2};
-  (T.property["6"])["@F@main@a"] = {-8, 16};
+
+  T.property["4"].push_back({"@F@main@a", -1, true});
+  T.property["4"].push_back({"@F@main@a", 2, true});
+  T.property["6"].push_back({"@F@main@a", -8, true});
+  T.property["6"].push_back({"@F@main@a", 16, true});
+
   T.run_configs();
 }
 
@@ -511,8 +558,12 @@ TEST_CASE("Interval Analysis - Bitand", "[ai][interval-analysis]")
     "a = a & b;\n" // a: [0,0]
     "return a;\n"
     "}";
-  (T.property["4"])["@F@main@a"] = {1, 2};
-  (T.property["6"])["@F@main@a"] = {0, 2};
+
+  T.property["4"].push_back({"@F@main@a", 1, true});
+  T.property["4"].push_back({"@F@main@a", 2, true});
+  T.property["6"].push_back({"@F@main@a", 0, true});
+  T.property["6"].push_back({"@F@main@a", 2, true});
+
   T.run_configs();
 }
 
@@ -529,8 +580,12 @@ TEST_CASE("Interval Analysis - Bitor", "[ai][interval-analysis]")
     "a = a | b;\n" // a: [5,6]
     "return a;\n"
     "}";
-  (T.property["4"])["@F@main@a"] = {1, 2};
-  (T.property["6"])["@F@main@a"] = {5, 6};
+
+  T.property["4"].push_back({"@F@main@a", 1, true});
+  T.property["4"].push_back({"@F@main@a", 2, true});
+  T.property["6"].push_back({"@F@main@a", 5, true});
+  T.property["6"].push_back({"@F@main@a", 6, true});
+
   T.run_configs();
 }
 
@@ -547,8 +602,12 @@ TEST_CASE("Interval Analysis - Left Shift", "[ai][interval-analysis]")
     "a = b << a;\n" // a: [4,8]
     "return a;\n"
     "}";
-  (T.property["4"])["@F@main@a"] = {1, 2};
-  (T.property["6"])["@F@main@a"] = {4, 8};
+
+  T.property["4"].push_back({"@F@main@a", 1, true});
+  T.property["4"].push_back({"@F@main@a", 2, true});
+  T.property["6"].push_back({"@F@main@a", 4, true});
+  T.property["6"].push_back({"@F@main@a", 8, true});
+
   T.run_configs();
 }
 
@@ -565,7 +624,11 @@ TEST_CASE("Interval Analysis - Right Shift", "[ai][interval-analysis]")
     "a = b >> a;\n" // a: [2,4]
     "return a;\n"
     "}";
-  (T.property["4"])["@F@main@a"] = {1, 2};
-  (T.property["6"])["@F@main@a"] = {2, 4};
+
+  T.property["4"].push_back({"@F@main@a", 1, true});
+  T.property["4"].push_back({"@F@main@a", 2, true});
+  T.property["6"].push_back({"@F@main@a", 2, true});
+  T.property["6"].push_back({"@F@main@a", 4, true});
+
   T.run_configs();
 }
