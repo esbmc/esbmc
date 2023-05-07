@@ -147,8 +147,15 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     // callee must be a constructor
     assert(f_op.type().return_type().id() == "constructor");
 
-    // TODO: add adjustment here - need to adjust assign to function_call for this sideeffect expression
-    assert(!"cool");
+    // just populate rhs' argument and replace the entire expression
+    exprt &lhs = expr.op0();
+    exprt arg = address_of_exprt(lhs);
+    exprt base_symbol = arg.op0();
+    assert(base_symbol.op0().id() == "symbol");
+    // TODO: wrap base symbol into dereference if it's a member
+    rhs_func_call.arguments().push_back(arg);
+
+    expr.swap(rhs);
 
     // let's go through C's side_effect_function_call to make sure
     // there's no missing adjustment we need to carry out
