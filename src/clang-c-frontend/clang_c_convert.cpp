@@ -298,11 +298,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   std::string id, name;
   get_decl_name(rd, name, id);
 
-  if(id == "tag-string")
-    printf("Got string class\n");
-  if(id == "tag-string::iterator")
-    printf("Got iterator class\n");
-
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context.
   if(context.find_symbol(id) != nullptr)
@@ -607,9 +602,6 @@ bool clang_c_convertert::get_function(
 
   std::string id, name;
   get_decl_name(fd, name, id);
-
-  if(id == "c:@S@string@S@iterator@F@do_something#")
-    printf("Got do_something\n");
 
   symbolt symbol;
   get_default_symbol(
