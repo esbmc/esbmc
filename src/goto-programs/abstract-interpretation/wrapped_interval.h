@@ -447,8 +447,26 @@ public:
   friend wrapped_interval
   operator-(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
+    assert(lhs.t->get_width() == rhs.t->get_width());
     wrapped_interval result(lhs.t);
+
+    if(lhs.is_bottom() || rhs.is_bottom())
+    {
+      result.bottom = true;
+      return result;
+    }
+
+    auto mod = get_upper_bound(lhs.t);
+    if(lhs.cardinality() + rhs.cardinality() <= mod)
+    {
+      result.lower = (lhs.lower - rhs.upper) % mod;
+      result.upper = (lhs.upper - rhs.lower) % mod;
+      if(result.lower < 0) result.lower+=mod;
+      if(result.upper < 0) result.upper+=mod;
+      assert(result.lower >= 0);
+      assert(result.upper >= 0);
+    }
+
     return result;
   }
 
