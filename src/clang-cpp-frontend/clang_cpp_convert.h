@@ -183,6 +183,18 @@ protected:
    *  rtn_type: the corresponding return type node
    */
   void annotate_cpyctor(const clang::CXXMethodDecl *cxxmdd, typet &rtn_type);
+  /*
+   * Flag return type in ctor or dtor, e.g.
+   * A default copy constructor would have the return type below:
+   * * return_type: constructor
+   *   #default_copy_cons: 1
+   *
+   * Arguments:
+   *  cxxmdd: clang AST node representing the ctor/dtor we are dealing with
+   *  rtn_type: the corresponding return type node
+   */
+  void
+  annotate_cdtor_rtn_type(const clang::CXXMethodDecl *cxxmdd, typet &rtn_type);
   bool is_cpyctor(const clang::DeclContext *dcxt);
   bool is_defaulted_ctor(const clang::DeclContext *dcxt);
 
