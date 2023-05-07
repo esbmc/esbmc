@@ -556,13 +556,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else if(expr.id() == irept::id_symbol)
   {
-    if(
-      expr.identifier() ==
-        "c:main.cpp@163@S@string@S@iterator@F@do_something#@buffer" ||
-      expr.identifier() ==
-        "string::iterator::do_something(this)::string::iterator::do_something("
-        "this)::1::buffer")
-      printf("got it\n");
     type = migrate_type(expr.type());
     new_expr_ref = sym_name_to_symbol(expr.identifier(), type);
   }
