@@ -159,7 +159,7 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
         rhs.id() == "sideeffect" && rhs.statement() == "function_call" &&
         rhs.get_bool("constructor"))
       {
-        // turn struct BLAH bleh = BLAH() into two instructions:
+        // turn declaration struct BLAH bleh = BLAH() into two instructions:
         // struct BLAH bleh;
         // BLAH(&bleh);
 
