@@ -335,7 +335,7 @@ protected:
 
   template <class Interval>
   expr2tc make_expression_value(
-    const Interval interval,
+    const Interval &interval,
     const type2tc &type,
     bool upper) const;
 };

@@ -2,10 +2,8 @@
 /// Interval Domain
 // TODO: Ternary operators, lessthan into lessthanequal for integers
 #include <goto-programs/abstract-interpretation/interval_domain.h>
-#include <langapi/language_util.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
-#include <util/simplify_expr.h>
 #include <util/std_expr.h>
 
 // Let's start with all templates specializations.
@@ -345,10 +343,10 @@ void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
   }
   // No need for widening, this is a restriction!
   if(is_symbol2t(a))
-    update_symbol_interval(to_symbol2t(a), lhs);
+    update_symbol_interval<Interval>(to_symbol2t(a), lhs);
 
   if(is_symbol2t(b))
-    update_symbol_interval(to_symbol2t(b), rhs);
+    update_symbol_interval<Interval>(to_symbol2t(b), rhs);
 
   if(rhs.is_bottom() || lhs.is_bottom())
     make_bottom();
@@ -382,24 +380,24 @@ void interval_domaint::apply_assume_less<wrapped_interval>(const expr2tc &a, con
 template <>
 bool interval_domaint::is_mapped<integer_intervalt>(const symbol2t &sym) const
 {
-  return int_map.find(sym.thename) == int_map.end();
+  return int_map.find(sym.thename) != int_map.end();
 }
 
 template <>
 bool interval_domaint::is_mapped<real_intervalt>(const symbol2t &sym) const
 {
-  return real_map.find(sym.thename) == real_map.end();
+  return real_map.find(sym.thename) != real_map.end();
 }
 
 template <>
 bool interval_domaint::is_mapped<wrapped_interval>(const symbol2t &sym) const
 {
-  return wrap_map.find(sym.thename) == wrap_map.end();
+  return wrap_map.find(sym.thename) != wrap_map.end();
 }
 
 template <>
 expr2tc interval_domaint::make_expression_value<integer_intervalt>(
-  const integer_intervalt interval,
+  const integer_intervalt &interval,
   const type2tc &type,
   bool upper) const
 {
@@ -408,14 +406,14 @@ expr2tc interval_domaint::make_expression_value<integer_intervalt>(
 
 template <>
 expr2tc interval_domaint::make_expression_value<real_intervalt>(
-  const real_intervalt interval,
+  const real_intervalt &interval,
   const type2tc &type,
   bool upper) const
 {
   constant_floatbv2tc value(ieee_floatt(ieee_float_spect(
     to_floatbv_type(type).fraction, to_floatbv_type(type).exponent)));
 
-  const double d =
+  const auto d =
     (upper ? interval.upper : interval.lower).convert_to<double>();
   value->value.from_double(d);
   if(upper)
@@ -428,7 +426,7 @@ expr2tc interval_domaint::make_expression_value<real_intervalt>(
 
 template <>
 expr2tc interval_domaint::make_expression_value<wrapped_interval>(
-  const wrapped_interval interval,
+  const wrapped_interval &interval,
   const type2tc &type,
   bool upper) const
 {
@@ -443,7 +441,6 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
 
   if(!is_mapped<T>(src))
     return gen_true_expr();
-
   const auto interval = get_interval_from_symbol<T>(src);
   if(interval.is_top())
     return gen_true_expr();
@@ -818,7 +815,7 @@ void interval_domaint::dump() const
 {
   std::ostringstream oss;
   output(oss);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }
 expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
 {
