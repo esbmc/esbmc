@@ -193,8 +193,9 @@ protected:
    *  cxxmdd: clang AST node representing the ctor/dtor we are dealing with
    *  rtn_type: the corresponding return type node
    */
-  void
-  annotate_cdtor_rtn_type(const clang::CXXMethodDecl *cxxmdd, typet &rtn_type);
+  void annotate_ctor_dtor_rtn_type(
+    const clang::CXXMethodDecl *cxxmdd,
+    typet &rtn_type);
   bool is_cpyctor(const clang::DeclContext *dcxt);
   bool is_defaulted_ctor(const clang::DeclContext *dcxt);
 
