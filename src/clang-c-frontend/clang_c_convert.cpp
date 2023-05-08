@@ -3421,7 +3421,19 @@ void clang_c_convertert::get_ref_to_struct_type(typet &type)
 {
   /*
    * For some special cases, we need to get a symbol type referring to
-   * a struct/union/class type so that we don't have to copy it
+   * a struct/union/class type so that we don't have to copy it, e.g.
+   * A pointer to an object of class BLAH would have:
+   * * type: pointer
+   *   * subtype: symbol
+   *      * identifier: tag-BLAH
+   * instead of copying the struct type:
+   * * type: pointer
+   *   * subtype: struct
+   *      * tag: BLAH
+   *      * components:
+   *        * <BLAH components 0,1,2,3...>
+   *      * methods:
+   *        * <BLAH method 0,1,2,3...>
    */
   if(type.is_struct() || type.is_union())
   {

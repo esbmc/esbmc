@@ -1130,7 +1130,7 @@ bool clang_cpp_convertert::get_decl_ref(
     // annotate return type - will be used to adjust the initiliazer or decl-derived stmt
     const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd);
     assert(md);
-    annotate_cdtor_rtn_type(md, fd_type.return_type());
+    annotate_ctor_dtor_rtn_type(md, fd_type.return_type());
 
     break;
   }
@@ -1237,7 +1237,7 @@ bool clang_cpp_convertert::annotate_class_method(
   if(is_ConstructorOrDestructor(fd))
   {
     // annotate ctor and dtor return type
-    annotate_cdtor_rtn_type(cxxmdd, component_type.return_type());
+    annotate_ctor_dtor_rtn_type(cxxmdd, component_type.return_type());
 
     /*
      * We also have a `component` in class type representing the ctor/dtor.
@@ -1498,7 +1498,7 @@ void clang_cpp_convertert::get_cpyctor_name(
   param.cmt_base_name(name);
 }
 
-void clang_cpp_convertert::annotate_cdtor_rtn_type(
+void clang_cpp_convertert::annotate_ctor_dtor_rtn_type(
   const clang::CXXMethodDecl *cxxmdd,
   typet &rtn_type)
 {
