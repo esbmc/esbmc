@@ -598,7 +598,7 @@ bool solidity_convertert::get_function_params(
   bool is_array = SolidityGrammar::get_type_name_t(pd["typeDescriptions"]);
   if(is_array)
   {
-    assert(!"Unimplemented - funciton parameter is array type");
+    assert(!"Unimplemented - function parameter is array type");
   }
 
   // 3a. get id and name
