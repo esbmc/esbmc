@@ -1190,8 +1190,8 @@ bool solidity_convertert::get_expr(
     // Function symbol id is c:@C@referenced_function_contract_name@F@function_name#referenced_function_id
     // Using referencedDeclaration will point us to the original declared function. This works even for inherited function and overrided functions. 
   
-    const nlohmann::json &decl = find_decl_ref(callee_expr_json["referencedDeclaration"]);
-    const int contract_id = decl["scope"].get<std::uint16_t>();
+    const nlohmann::json caller_expr_json = find_decl_ref(callee_expr_json["referencedDeclaration"]);
+    const int contract_id = caller_expr_json["scope"].get<std::uint16_t>();
 
     std::string ref_contract_name;
     get_contract_name(contract_id, ref_contract_name);
@@ -1215,9 +1215,6 @@ bool solidity_convertert::get_expr(
       side_effect_expr_function_callt call;
       call.function() = new_expr;
       call.type() = t;
-
-    const nlohmann::json caller_expr_json =
-      find_decl_ref(callee_expr_json["referencedDeclaration"]);
 
     // populate params
     auto param_nodes = caller_expr_json["parameters"]["parameters"];
