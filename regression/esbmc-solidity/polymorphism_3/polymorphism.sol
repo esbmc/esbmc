@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.5.0;
 
+// Polymorphism: method overrides another virtual method with the same name from parent.
 contract A {
     function poly() public virtual returns (int8) {
         return 21;

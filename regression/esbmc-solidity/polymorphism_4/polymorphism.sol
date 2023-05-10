@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.5.0;
 
-// Methods overloading, contract_A.poly(-2) should call the poly(int8) while contract_A.poly(300) should call poly(uint16).
+// Methods overloadin: contract_A.poly(-2) should call the poly(int8) 
+// while contract_A.poly(300) should call poly(uint16).
 contract A {
 
     function poly(uint16 b) public pure returns (uint16) {
