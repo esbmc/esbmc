@@ -23,6 +23,7 @@ solidity_convertert::solidity_convertert(
     sol_func(_sol_func),
     contract_path(_contract_path),
     global_scope_id(0),
+    current_contractName(""),
     current_scope_var_num(1),
     current_functionDecl(nullptr),
     current_forStmt(nullptr),
@@ -147,7 +148,7 @@ bool solidity_convertert::get_decl(
   }
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
   {
-    return get_function_definition(ast_node); // rule function-definition
+    return get_function_definition(ast_node, new_expr); // rule function-definition
   }
   default:
   {
@@ -471,7 +472,8 @@ bool solidity_convertert::get_access_from_decl(
 }
 
 bool solidity_convertert::get_function_definition(
-  const nlohmann::json &ast_node)
+  const nlohmann::json &ast_node,
+  exprt &new_expr)
 {
   // For Solidity rule function-definition:
   // Order matters! do not change!
@@ -566,6 +568,7 @@ bool solidity_convertert::get_function_definition(
   }
 
   added_symbol.type = type;
+  new_expr.type() = type;
 
   // 12. Convert body and embed the body into the same symbol
   if(ast_node.contains("body"))
@@ -794,14 +797,16 @@ bool solidity_convertert::get_statement(
     },
     "nodeType": "Return",
     }
-    Therefore, we need to pass the int_literal_type value.
-    */
+    else
+    {
+      // use typeDescriptions of return parameters instead of literal to get full type.
 
-    exprt val;
-    if(get_expr(
-         implicit_cast_expr, stmt["expression"]["typeDescriptions"], val))
-      return true;
-
+      const nlohmann::json &rtn_prm = (*current_functionDecl)["returnParameters"];
+      // the functionReturnParameters field should point to current function's return parameter. 
+      assert(stmt["functionReturnParameters"].get<std::int16_t>() == rtn_prm["id"].get<std::int16_t>());
+      if(get_expr(rtn_expr, rtn_prm["parameters"].at(0)["typeName"]["typeDescriptions"], val))
+        return true;
+    }
     solidity_gen_typecast(ns, val, return_type);
     ret_expr.return_value() = val;
 
@@ -1179,12 +1184,36 @@ bool solidity_convertert::get_expr(
   case SolidityGrammar::ExpressionT::MemberCallClass:
   {
     assert(expr.contains("expression"));
+    expr.dump(4, ' ', false, nlohmann::detail::error_handler_t::strict).c_str();
     const nlohmann::json &callee_expr_json = expr["expression"];
 
-    // obtain type info from symbol table
+    // exprt callee_expr;
+    // if(get_expr(callee_expr_json, callee_expr))
+    //   return true;
+
+    // // 2. Get type
+    // // Need to "decrypt" the typeDescriptions and manually make a typeDescription
+    // nlohmann::json callee_rtn_type =
+    //   make_callexpr_return_type(callee_expr_json["typeDescriptions"]);
+    // typet type;
+    // if(get_type_description(callee_rtn_type, type))
+    //   return true;
+
+    std::string ref_contract_name;
+    std::string caller_type_id = callee_expr_json["expression"]["typeDescriptions"]["typeIdentifier"].get<std::string>();
+    size_t pos = caller_type_id.find_last_of('$');
+    std::string contract_id_str = caller_type_id.substr(pos+1);
+    int contract_id = std::stoi(contract_id_str);
+  
+    if(!contract_id)
+      throw "cannot get contract id from type identifier " + caller_type_id;
+  
+    get_contract_name(contract_id, ref_contract_name);
+
     std::string name, id;
     name = callee_expr_json["memberName"];
-    id = name;
+    id = "c:@C@" + ref_contract_name + "@F@" + name + "#";
+
     if(context.find_symbol(id) == nullptr)
       return true;
 
@@ -1195,18 +1224,11 @@ bool solidity_convertert::get_expr(
     new_expr.identifier(id);
     new_expr.cmt_lvalue(true);
     new_expr.name(name);
+    new_expr.set("#member_name", prefix + ref_contract_name);
 
-    // obtain the type of return value
-    // Need to "decrypt" the typeDescriptions and manually make a typeDescription
-    nlohmann::json callee_rtn_type =
-      make_callexpr_return_type(callee_expr_json["typeDescriptions"]);
-    typet t;
-    if(get_type_description(callee_rtn_type, t))
-      return true;
-
-    side_effect_expr_function_callt call;
-    call.function() = new_expr;
-    call.type() = t;
+      side_effect_expr_function_callt call;
+      call.function() = new_expr;
+      call.type() = t;
 
     const nlohmann::json caller_expr_json =
       find_decl_ref(callee_expr_json["referencedDeclaration"]);
@@ -2280,11 +2302,14 @@ void solidity_convertert::get_function_definition_name(
   // Follow the way in clang:
   //  - For function name, just use the ast_node["name"]
   // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
+  std::string contract_name;
+  get_contract_name(ast_node["scope"], contract_name);
+
   if(ast_node["kind"].get<std::string>() == "constructor")
-    get_contract_name(ast_node["scope"], name);
+    name = contract_name;
   else
     name = ast_node["name"].get<std::string>();
-  id = name;
+  id = "c:@C@" + contract_name + "@F@" + name + "#";
 }
 
 unsigned int solidity_convertert::add_offset(
