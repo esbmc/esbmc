@@ -417,8 +417,9 @@ void goto_checkt::shift_check(
 
   and2tc ub_check(right_op_non_negative, right_op_size_check);
 
-  if(is_shl2t(expr))
+  if(is_shl2t(expr) && is_signedbv_type(left_op))
   {
+    zero = gen_zero(left_op->type);
     greaterthanequal2tc left_op_non_negative(left_op, zero);
     ub_check = and2tc(ub_check, left_op_non_negative);
   }
