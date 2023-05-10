@@ -1319,7 +1319,6 @@ void dereferencet::construct_from_dyn_struct_offset(
 
     // Compute some kind of guard
     BigInt field_size = type_byte_size_bits(it);
-
     // Lets compute field size manually for fam :)
     if(
       is_array_type(it) &&
@@ -1327,19 +1326,24 @@ void dereferencet::construct_from_dyn_struct_offset(
        !to_array_type(it).get_width()))
     {
       auto fam = ns.lookup(to_symbol2t(value).thename);
-      auto last_operand =
-        to_array_type(fam->value.operands().back().type()).size();
-      BigInt quantity(
-        to_constant_expr(last_operand).get_value().as_string().c_str(), 2);
-      auto base_type_width = type_byte_size_bits(to_array_type(it).subtype);
-      field_size = quantity * base_type_width;
+      auto fam_value_ops = fam->value.operands();
+      if(!fam_value_ops.empty())
+      {
+        auto last_operand =
+          to_array_type(fam->value.operands().back().type()).size();
+        BigInt quantity(
+          to_constant_expr(last_operand).get_value().as_string().c_str(), 2);
+        auto base_type_width = type_byte_size_bits(to_array_type(it).subtype);
+        field_size = quantity * base_type_width;
 
-      log_debug(
-        "Adding field size: {}, quantity: {}, base_type: {}, offs: {}",
-        field_size,
-        quantity,
-        base_type_width,
-        offs);
+
+        log_debug(
+          "Adding field size: {}, quantity: {}, base_type: {}, offs: {}",
+          field_size,
+          quantity,
+          base_type_width,
+          offs);
+      }
     }
 
     // Round up to word size
@@ -2245,10 +2249,14 @@ void dereferencet::check_data_obj_access(
       // Here we are checking for a dynamic index of a FAM!
       auto &v = to_struct_type(value->type);
       auto last = v.members.back();
-      if(is_array_type(last) && !to_array_type(last).get_width())
+      auto fam_value_ops = fam->value.operands();
+      if(is_array_type(last) && !to_array_type(last).get_width() && !fam_value_ops.empty())
+      {
         data_sz +=
-          type_byte_size_bits(migrate_type(fam->value.operands().back().type()))
+          type_byte_size_bits(migrate_type(fam_value_ops.back().type()))
             .to_uint64();
+      }
+
     }
   }
 
