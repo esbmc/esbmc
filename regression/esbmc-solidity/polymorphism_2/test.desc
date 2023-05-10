@@ -1,0 +1,14 @@
+CORE
+polymorphism.solast
+--function test_poly --contract polymorphism.sol
+Counterexample:
+
+State 1 file polymorphism.sol line 24 function test_poly thread 0
+----------------------------------------------------
+Violated property:
+  file polymorphism.sol line 24 function test_poly
+  assertion
+  (signed int)return_value$_poly$4 == 21
+
+
+^VERIFICATION FAILED$

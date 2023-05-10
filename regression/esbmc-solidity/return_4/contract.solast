@@ -1,0 +1,1219 @@
+JSON AST (compact format):
+
+
+======= contract.sol =======
+{
+  "absolutePath": "contract.sol",
+  "exportedSymbols":
+  {
+    "A":
+    [
+      102
+    ]
+  },
+  "id": 103,
+  "license": "GPL-3.0",
+  "nodeType": "SourceUnit",
+  "nodes":
+  [
+    {
+      "id": 1,
+      "literals":
+      [
+        "solidity",
+        ">=",
+        "0.5",
+        ".0"
+      ],
+      "nodeType": "PragmaDirective",
+      "src": "36:24:0"
+    },
+    {
+      "abstract": false,
+      "baseContracts": [],
+      "canonicalName": "A",
+      "contractDependencies": [],
+      "contractKind": "contract",
+      "fullyImplemented": true,
+      "id": 102,
+      "linearizedBaseContracts":
+      [
+        102
+      ],
+      "name": "A",
+      "nameLocation": "127:1:0",
+      "nodeType": "ContractDefinition",
+      "nodes":
+      [
+        {
+          "body":
+          {
+            "id": 8,
+            "nodeType": "Block",
+            "src": "186:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 6,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "203:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 5,
+                "id": 7,
+                "nodeType": "Return",
+                "src": "196:9:0"
+              }
+            ]
+          },
+          "functionSelector": "f8dad6d1",
+          "id": 9,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "int8_call",
+          "nameLocation": "144:9:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 2,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "153:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 5,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 4,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 9,
+                "src": "180:4:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_int8",
+                  "typeString": "int8"
+                },
+                "typeName":
+                {
+                  "id": 3,
+                  "name": "int8",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "180:4:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_int8",
+                    "typeString": "int8"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "179:6:0"
+          },
+          "scope": 102,
+          "src": "135:77:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        },
+        {
+          "body":
+          {
+            "id": 16,
+            "nodeType": "Block",
+            "src": "270:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 14,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "287:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 13,
+                "id": 15,
+                "nodeType": "Return",
+                "src": "280:9:0"
+              }
+            ]
+          },
+          "functionSelector": "f9d21e8e",
+          "id": 17,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "int16_call",
+          "nameLocation": "226:10:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 10,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "236:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 13,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 12,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 17,
+                "src": "263:5:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_int16",
+                  "typeString": "int16"
+                },
+                "typeName":
+                {
+                  "id": 11,
+                  "name": "int16",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "263:5:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_int16",
+                    "typeString": "int16"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "262:7:0"
+          },
+          "scope": 102,
+          "src": "217:79:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        },
+        {
+          "body":
+          {
+            "id": 24,
+            "nodeType": "Block",
+            "src": "354:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 22,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "371:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 21,
+                "id": 23,
+                "nodeType": "Return",
+                "src": "364:9:0"
+              }
+            ]
+          },
+          "functionSelector": "e04c3c15",
+          "id": 25,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "int32_call",
+          "nameLocation": "310:10:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 18,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "320:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 21,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 20,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 25,
+                "src": "347:5:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_int32",
+                  "typeString": "int32"
+                },
+                "typeName":
+                {
+                  "id": 19,
+                  "name": "int32",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "347:5:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_int32",
+                    "typeString": "int32"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "346:7:0"
+          },
+          "scope": 102,
+          "src": "301:79:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        },
+        {
+          "body":
+          {
+            "id": 32,
+            "nodeType": "Block",
+            "src": "438:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 30,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "455:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 29,
+                "id": 31,
+                "nodeType": "Return",
+                "src": "448:9:0"
+              }
+            ]
+          },
+          "functionSelector": "c68003c7",
+          "id": 33,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "int64_call",
+          "nameLocation": "394:10:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 26,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "404:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 29,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 28,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 33,
+                "src": "431:5:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_int64",
+                  "typeString": "int64"
+                },
+                "typeName":
+                {
+                  "id": 27,
+                  "name": "int64",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "431:5:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_int64",
+                    "typeString": "int64"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "430:7:0"
+          },
+          "scope": 102,
+          "src": "385:79:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        },
+        {
+          "body":
+          {
+            "id": 40,
+            "nodeType": "Block",
+            "src": "524:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 38,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "541:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 37,
+                "id": 39,
+                "nodeType": "Return",
+                "src": "534:9:0"
+              }
+            ]
+          },
+          "functionSelector": "b92e0c57",
+          "id": 41,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "int128_call",
+          "nameLocation": "478:11:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 34,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "489:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 37,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 36,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 41,
+                "src": "516:6:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_int128",
+                  "typeString": "int128"
+                },
+                "typeName":
+                {
+                  "id": 35,
+                  "name": "int128",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "516:6:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_int128",
+                    "typeString": "int128"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "515:8:0"
+          },
+          "scope": 102,
+          "src": "469:81:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        },
+        {
+          "body":
+          {
+            "id": 48,
+            "nodeType": "Block",
+            "src": "610:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 46,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "627:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 45,
+                "id": 47,
+                "nodeType": "Return",
+                "src": "620:9:0"
+              }
+            ]
+          },
+          "functionSelector": "493e2348",
+          "id": 49,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "int256_call",
+          "nameLocation": "564:11:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 42,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "575:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 45,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 44,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 49,
+                "src": "602:6:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_int256",
+                  "typeString": "int256"
+                },
+                "typeName":
+                {
+                  "id": 43,
+                  "name": "int256",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "602:6:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_int256",
+                    "typeString": "int256"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "601:8:0"
+          },
+          "scope": 102,
+          "src": "555:81:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        },
+        {
+          "body":
+          {
+            "id": 56,
+            "nodeType": "Block",
+            "src": "694:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 54,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "711:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 53,
+                "id": 55,
+                "nodeType": "Return",
+                "src": "704:9:0"
+              }
+            ]
+          },
+          "functionSelector": "1c3ae351",
+          "id": 57,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "uint8_call",
+          "nameLocation": "650:10:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 50,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "660:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 53,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 52,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 57,
+                "src": "687:5:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_uint8",
+                  "typeString": "uint8"
+                },
+                "typeName":
+                {
+                  "id": 51,
+                  "name": "uint8",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "687:5:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_uint8",
+                    "typeString": "uint8"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "686:7:0"
+          },
+          "scope": 102,
+          "src": "641:79:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        },
+        {
+          "body":
+          {
+            "id": 64,
+            "nodeType": "Block",
+            "src": "780:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 62,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "797:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 61,
+                "id": 63,
+                "nodeType": "Return",
+                "src": "790:9:0"
+              }
+            ]
+          },
+          "functionSelector": "c7af2d7d",
+          "id": 65,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "uint16_call",
+          "nameLocation": "734:11:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 58,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "745:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 61,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 60,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 65,
+                "src": "772:6:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_uint16",
+                  "typeString": "uint16"
+                },
+                "typeName":
+                {
+                  "id": 59,
+                  "name": "uint16",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "772:6:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_uint16",
+                    "typeString": "uint16"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "771:8:0"
+          },
+          "scope": 102,
+          "src": "725:81:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        },
+        {
+          "body":
+          {
+            "id": 72,
+            "nodeType": "Block",
+            "src": "866:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 70,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "883:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 69,
+                "id": 71,
+                "nodeType": "Return",
+                "src": "876:9:0"
+              }
+            ]
+          },
+          "functionSelector": "3df9f5ca",
+          "id": 73,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "uint32_call",
+          "nameLocation": "820:11:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 66,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "831:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 69,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 68,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 73,
+                "src": "858:6:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_uint32",
+                  "typeString": "uint32"
+                },
+                "typeName":
+                {
+                  "id": 67,
+                  "name": "uint32",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "858:6:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_uint32",
+                    "typeString": "uint32"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "857:8:0"
+          },
+          "scope": 102,
+          "src": "811:81:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        },
+        {
+          "body":
+          {
+            "id": 80,
+            "nodeType": "Block",
+            "src": "952:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 78,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "969:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 77,
+                "id": 79,
+                "nodeType": "Return",
+                "src": "962:9:0"
+              }
+            ]
+          },
+          "functionSelector": "16219488",
+          "id": 81,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "uint64_call",
+          "nameLocation": "906:11:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 74,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "917:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 77,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 76,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 81,
+                "src": "944:6:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_uint64",
+                  "typeString": "uint64"
+                },
+                "typeName":
+                {
+                  "id": 75,
+                  "name": "uint64",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "944:6:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_uint64",
+                    "typeString": "uint64"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "943:8:0"
+          },
+          "scope": 102,
+          "src": "897:81:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        },
+        {
+          "body":
+          {
+            "id": 88,
+            "nodeType": "Block",
+            "src": "1040:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 86,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "1057:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 85,
+                "id": 87,
+                "nodeType": "Return",
+                "src": "1050:9:0"
+              }
+            ]
+          },
+          "functionSelector": "9986c937",
+          "id": 89,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "uint128_call",
+          "nameLocation": "992:12:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 82,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "1004:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 85,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 84,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 89,
+                "src": "1031:7:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_uint128",
+                  "typeString": "uint128"
+                },
+                "typeName":
+                {
+                  "id": 83,
+                  "name": "uint128",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "1031:7:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_uint128",
+                    "typeString": "uint128"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "1030:9:0"
+          },
+          "scope": 102,
+          "src": "983:83:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        },
+        {
+          "body":
+          {
+            "id": 96,
+            "nodeType": "Block",
+            "src": "1128:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 94,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "1145:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 93,
+                "id": 95,
+                "nodeType": "Return",
+                "src": "1138:9:0"
+              }
+            ]
+          },
+          "functionSelector": "88e4fa7a",
+          "id": 97,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "uint256_call",
+          "nameLocation": "1080:12:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 90,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "1092:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 93,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 92,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 97,
+                "src": "1119:7:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_uint256",
+                  "typeString": "uint256"
+                },
+                "typeName":
+                {
+                  "id": 91,
+                  "name": "uint256",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "1119:7:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "1118:9:0"
+          },
+          "scope": 102,
+          "src": "1071:83:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        },
+        {
+          "body":
+          {
+            "id": 100,
+            "nodeType": "Block",
+            "src": "1188:2:0",
+            "statements": []
+          },
+          "functionSelector": "f2a75fe4",
+          "id": 101,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "empty",
+          "nameLocation": "1168:5:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 98,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "1173:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 99,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "1188:0:0"
+          },
+          "scope": 102,
+          "src": "1159:31:0",
+          "stateMutability": "pure",
+          "virtual": false,
+          "visibility": "public"
+        }
+      ],
+      "scope": 103,
+      "src": "118:1074:0",
+      "usedErrors": []
+    }
+  ],
+  "src": "36:1156:0"
+}
