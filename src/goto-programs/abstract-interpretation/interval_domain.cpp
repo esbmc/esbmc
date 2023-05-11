@@ -880,7 +880,7 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
 }
 
 // Options
-bool interval_domaint::enable_interval_arithmetic = false;
+bool interval_domaint::enable_interval_arithmetic = true;
 bool interval_domaint::enable_modular_intervals = false;
 bool interval_domaint::enable_assertion_simplification = false;
 bool interval_domaint::enable_contraction_for_abstract_states = false;
