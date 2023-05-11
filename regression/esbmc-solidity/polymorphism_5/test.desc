@@ -1,0 +1,4 @@
+CORE
+polymorphism.solast
+--function test_poly --contract polymorphism.sol
+^VERIFICATION SUCCESSFUL$
