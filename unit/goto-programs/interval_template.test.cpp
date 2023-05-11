@@ -756,6 +756,23 @@ TEST_CASE(
     REQUIRE(!w.most_significant_bit(w.lower));
     REQUIRE(w.most_significant_bit(w.upper));
   }
+
+  SECTION("Difference")
+  {
+    wrapped_interval w1(t1_signed);
+    w1.lower = 100;
+    w1.upper = 120;
+
+    wrapped_interval w2(t1_signed);
+    w2.lower = 90;
+    w2.upper = 110;
+
+
+    auto result = w1.difference(w1,w2);
+    CAPTURE(result.lower, result.upper);
+    REQUIRE(result.lower == 111);
+    REQUIRE(result.upper == 120);
+  }
 }
 
 TEST_CASE(
@@ -812,3 +829,59 @@ TEST_CASE(
     REQUIRE(w3.upper == 255);
   }
 }
+
+TEST_CASE(
+  "Interval templates division",
+  "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+  unsigned N1 = 8;
+  auto t1_unsigned = get_uint_type(N1);
+  auto t1_signed = get_int_type(N1);
+
+  SECTION("Division unsigned")
+  {
+    wrapped_interval w1(t1_unsigned);
+    w1.lower = 5;
+    w1.upper = 20;
+
+    wrapped_interval w2(t1_unsigned);
+    w2.lower = 2;
+    w2.upper = 10;
+
+    auto w3 = w1 / w2;
+
+    CAPTURE(w3.lower, w3.upper);
+    REQUIRE(w3.lower == 0);
+    REQUIRE(w3.upper == 10);
+
+    w1.lower = 10;
+    w1.upper = 20;
+
+    w2.lower = 2;
+    w2.upper = 10;
+
+    w3 = w1 / w2;
+    CAPTURE(w3.lower, w3.upper);
+    REQUIRE(w3.lower == 1);
+    REQUIRE(w3.upper == 10);
+  }
+
+  SECTION("Division signed")
+  {
+    wrapped_interval w1(t1_signed);
+    w1.lower = 10;
+    w1.upper = 20; // 10, 20
+
+    wrapped_interval w2(t1_signed);
+    w2.lower = 254; // -2
+    w2.upper = 255; // -1
+    // -5 (251), -20: (236)
+    auto w3 = w1 / w2;
+
+    CAPTURE(w3.lower, w3.upper);
+    REQUIRE(w3.lower == 236);
+    REQUIRE(w3.upper == 251);
+  }
+}
+
