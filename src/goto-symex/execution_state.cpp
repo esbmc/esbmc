@@ -293,7 +293,9 @@ void execution_statet::symex_step(reachability_treet &art)
     state.source.pc++;
     break;
   case FUNCTION_CALL:
-    if(has_prefix(from_expr(ns, "", migrate_expr_back(instruction.code)), "__VERIFIER_atomic_"))
+    if(has_prefix(
+         from_expr(ns, "", migrate_expr_back(instruction.code)),
+         "__VERIFIER_atomic_"))
       cswitch_forced = true;
     goto_symext::symex_step(art);
     break;    
