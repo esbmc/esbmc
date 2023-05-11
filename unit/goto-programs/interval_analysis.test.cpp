@@ -176,6 +176,8 @@ public:
         }
       }
     }
+
+    log_status("Success");
   }
 };
 
@@ -602,6 +604,54 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "Interval Analysis - Mult Arithmetic (signed)",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "char a = 10;\n"
+    "if(nondet_int()) a = 1;"
+    "char b = -1;\n" // b: [-1,-1]
+    "a = b * a;\n" // a: [-10,-1]
+    "return a;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", 1, true});
+  T.property["4"].push_back({"@F@main@a", 10, true});
+  T.property["6"].push_back({"@F@main@a", -1, true});
+  T.property["6"].push_back({"@F@main@a", -10, true});
+  //T.property["6"].push_back({"@F@main@a", 0, false});
+  //T.property["6"].push_back({"@F@main@a", -11, false});
+
+  T.run_configs(true);
+}
+
+TEST_CASE(
+  "Interval Analysis - Mult Arithmetic (signed overflow)",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "char a = 100;\n"
+    "char b = 2;\n" // b: [3,3]
+    "a = b * a;\n" // a: [-10,-1]
+    "return a;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", 100, true});
+  T.property["6"].push_back({"@F@main@a", -127, true});
+  T.run_configs(true);
+}
+
+
+
+TEST_CASE(
   "Interval Analysis - Mult Arithmetic",
   "[ai][interval-analysis]")
 {
@@ -622,7 +672,7 @@ TEST_CASE(
   T.property["6"].push_back({"@F@main@a", -8, true});
   T.property["6"].push_back({"@F@main@a", 16, true});
 
-  T.run_configs();
+  T.run_configs(true);
 }
 
 
