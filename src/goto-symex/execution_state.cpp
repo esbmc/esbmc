@@ -298,7 +298,7 @@ void execution_statet::symex_step(reachability_treet &art)
          "__VERIFIER_atomic_"))
       cswitch_forced = true;
     goto_symext::symex_step(art);
-    break;    
+    break;
   default:
     goto_symext::symex_step(art);
   }
