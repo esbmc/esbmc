@@ -1,0 +1,4 @@
+CORE
+function_overload.solast
+--function test_overload --contract function_overload.sol
+^VERIFICATION FAILED$

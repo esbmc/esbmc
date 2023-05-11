@@ -1,0 +1,4 @@
+CORE
+inheritance.solast
+--function test_inheritance --contract inheritance.sol
+^VERIFICATION FAILED$
