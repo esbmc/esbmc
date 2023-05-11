@@ -5,22 +5,22 @@ pragma solidity >=0.5.0;
 
 contract A {
 
-    function poly() public pure returns (uint8) {
+    function func_1() public pure returns (uint8) {
         return 21;
     }
 }
 
 contract B {
-    function poly() public pure returns (uint8) {
+    function func_1() public pure returns (uint8) {
         return 42;
     }
 }
 
 contract C {
-    function test_poly() public {
+    function test_overload() public {
         A contract_A = new A();
         B contract_B = new B();
-        assert(contract_A.poly() == 21);
-        assert(contract_B.poly() == 42);
+        assert(contract_A.func_1() == 21);
+        assert(contract_B.func_1() == 21); // FAIL because should return 42.
     }
 }
