@@ -637,3 +637,178 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
   }
 
 }
+
+TEST_CASE(
+  "Interval templates arithmetic operations",
+  "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+  unsigned N1 = 8;
+  auto t1_unsigned = get_uint_type(N1);
+  auto t1_signed = get_int_type(N1);
+
+
+  SECTION("North Pole")
+  {
+    auto np = wrapped_interval::north_pole(t1_signed);
+    REQUIRE((np.lower == 127 && np.upper == 128));
+  }
+
+  SECTION("South Pole")
+  {
+    auto np = wrapped_interval::south_pole(t1_signed);
+    REQUIRE((np.upper == 0 && np.lower == 255));
+  }
+
+  SECTION("North Split")
+  {
+    wrapped_interval w1(t1_signed);
+    w1.lower = 100;
+    w1.upper = 120;
+
+    auto w1_split = w1.nsplit();
+    REQUIRE(w1_split.size() == 1);
+    REQUIRE(w1_split[0] == w1);
+
+    w1.lower = 100;
+    w1.upper = 150;
+    w1_split = w1.nsplit();
+    REQUIRE(w1_split.size() == 2);
+
+    // The right part is returned as first element! (not a rule though)
+    REQUIRE(w1_split[0].lower == 128);
+    REQUIRE(w1_split[0].upper == 150);
+    REQUIRE(w1_split[1].lower == 100);
+    REQUIRE(w1_split[1].upper == 127);
+  }
+
+  SECTION("South Split")
+  {
+    wrapped_interval w1(t1_signed);
+    w1.lower = 100;
+    w1.upper = 250;
+
+    auto w1_split = w1.ssplit();
+    REQUIRE(w1_split.size() == 1);
+    REQUIRE(w1_split[0] == w1);
+
+    w1.lower = 200;
+    w1.upper = 150;
+    w1_split = w1.ssplit();
+    REQUIRE(w1.contains(0));
+    REQUIRE(w1.contains(255));
+    REQUIRE(w1_split.size() == 2);
+
+    // The left part is returned as first element! (not a rule though)
+    REQUIRE(w1_split[0].lower == 0);
+    REQUIRE(w1_split[0].upper == 150);
+    REQUIRE(w1_split[1].lower == 200);
+    REQUIRE(w1_split[1].upper == 255);
+  }
+
+  SECTION("Cut")
+  {
+    wrapped_interval w(t1_signed);
+    w.lower = 255;
+    w.upper = 129;
+
+    auto cut = wrapped_interval::cut(w);
+
+    bool check1 = false;
+    bool check2 = false;
+    bool check3 = false;
+
+    wrapped_interval w1(t1_signed),w2(t1_signed), w3(t1_signed);
+    w1.lower = 255;
+    w1.upper = 255;
+
+    w2.lower = 0;
+    w2.upper = 127;
+
+    w3.lower = 128;
+    w3.upper = 129;
+
+    // There is no way for me to check the order
+    for(auto &c: cut)
+    {
+      if(c == w1) check1=true;
+      if(c == w2) check2=true;
+      if(c == w3) check3=true;
+    }
+
+    REQUIRE(check1);
+    REQUIRE(check2);
+    REQUIRE(check3);
+  }
+
+  SECTION("MSB")
+  {
+    wrapped_interval w(t1_signed);
+    w.lower = 255;
+    w.upper = 127;
+
+    REQUIRE(w.most_significant_bit(w.lower));
+    REQUIRE(!w.most_significant_bit(w.upper));
+
+    w.lower = 25;
+    w.upper = 130;
+
+    REQUIRE(!w.most_significant_bit(w.lower));
+    REQUIRE(w.most_significant_bit(w.upper));
+  }
+}
+
+TEST_CASE(
+  "Interval templates multiplication",
+  "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+  unsigned N1 = 8;
+  auto t1_unsigned = get_uint_type(N1);
+  auto t1_signed = get_int_type(N1);
+
+  SECTION("Multiply unsigned")
+  {
+    wrapped_interval w1(t1_unsigned);
+    w1.lower = 5;
+    w1.upper = 10;
+
+    wrapped_interval w2(t1_unsigned);
+    w2.lower = 2;
+    w2.upper = 10;
+
+    auto w3 = w1 * w2;
+
+    CAPTURE(w3.lower, w3.upper);
+    REQUIRE(w3.lower == 10);
+    REQUIRE(w3.upper == 100);
+
+    w1.lower = 1;
+    w1.upper = 2;
+
+    w2.lower = 1;
+    w2.upper = 250;
+
+    w3 = w1 * w2;
+    CAPTURE(w3.lower, w3.upper);
+    REQUIRE(w3.lower == 0);
+    REQUIRE(w3.upper == 254);
+  }
+
+  SECTION("Multiply signed")
+  {
+    wrapped_interval w1(t1_signed);
+    w1.lower = 1;
+    w1.upper = 10;
+
+    wrapped_interval w2(t1_signed);
+    w2.lower = 255;
+    w2.upper = 255;
+
+    auto w3 = w1 * w2;
+
+    CAPTURE(w3.lower, w3.upper);
+    REQUIRE(w3.lower == 246);
+    REQUIRE(w3.upper == 255);
+  }
+}
