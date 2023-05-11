@@ -554,7 +554,7 @@ public:
 
   static wrapped_interval difference(const wrapped_interval &s, const wrapped_interval &t)
   {
-    return over_join(s, complement(t));
+    return over_meet(s, complement(t));
   }
 
   std::vector<wrapped_interval> nsplit() const
@@ -673,8 +673,64 @@ public:
   operator/(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
-    wrapped_interval result(lhs.t);
-    return result;
+    std::vector<wrapped_interval> r;
+
+    wrapped_interval zero(lhs.t);
+    zero.lower = 0;
+    zero.upper = 0;
+    if(!is_signedbv_type(lhs.t))
+    {
+
+      for(const auto& u: lhs.ssplit())
+        for(const auto& v: rhs.ssplit())
+        {
+          auto non_zero = difference(v, zero);
+          wrapped_interval temp(lhs.t);
+          temp.lower = u.lower / non_zero.upper;
+          temp.upper = u.upper / non_zero.lower;
+          r.push_back(temp);
+        }
+    }
+    else
+    {
+      for(const auto& u : cut(lhs))
+        for(const auto& v : cut(rhs))
+        {
+          auto non_zero = difference(v, zero);
+          wrapped_interval temp(lhs.t);
+
+          auto msb_a = temp.most_significant_bit(u.lower);
+          auto msb_c = temp.most_significant_bit(non_zero.lower);
+
+          if(!msb_a && !msb_c)
+          {
+            temp.set_lower(u.get_lower() / non_zero.get_upper());
+            temp.set_upper(u.get_upper() / non_zero.get_lower());
+          }
+          else if(msb_a && msb_c)
+          {
+            temp.set_lower( u.get_upper() / non_zero.get_lower());
+            temp.set_upper(u.get_lower() / non_zero.get_upper());
+          }
+          else if(!msb_a && msb_c)
+          {
+            temp.set_lower(u.get_upper() / non_zero.get_upper());
+            temp.set_upper(u.get_lower() / non_zero.get_lower());
+          }
+          else if(msb_a && !msb_c)
+          {
+            temp.set_lower( u.get_lower() / non_zero.get_lower());
+            temp.set_upper(u.get_upper() / non_zero.get_upper());
+          }
+          else {
+            log_error("This should never happen");
+            abort();
+          }
+
+          r.push_back(temp);
+        }
+    }
+    return over_join(r);
   }
 
   friend wrapped_interval

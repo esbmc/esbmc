@@ -677,7 +677,7 @@ TEST_CASE(
 
 
 TEST_CASE(
-  "Interval Analysis - Div Arithmetic",
+  "Interval Analysis - Div Arithmetic (signed)",
   "[ai][interval-analysis]")
 {
   // Setup global options here
@@ -685,17 +685,19 @@ TEST_CASE(
   test_program T;
   T.code =
     "int main() {\n"
-    "int a = 2;\n"
-    "if(nondet_int()) a = 1;"
-    "int b = 8;\n" // a: [0,0]
-    "a = b / a;\n" // a: [4,8]
+    "int a = 5;\n"
+    "if(nondet_int()) a = 10;"
+    "int b = -1;\n" // a: [5,10]
+    "a = a / b;\n" // a: [-5,-10]
     "return a;\n"
     "}";
 
-  T.property["4"].push_back({"@F@main@a", 1, true});
-  T.property["4"].push_back({"@F@main@a", 2, true});
-  T.property["6"].push_back({"@F@main@a", 4, true});
-  T.property["6"].push_back({"@F@main@a", 8, true});
+  T.property["4"].push_back({"@F@main@a", 5, true});
+  T.property["4"].push_back({"@F@main@a", 10, true});
+  T.property["6"].push_back({"@F@main@a", -5, true});
+  T.property["6"].push_back({"@F@main@a", -10, true});
+  T.property["6"].push_back({"@F@main@a", -11, false});
+  T.property["6"].push_back({"@F@main@a", -4, false});
 
   T.run_configs();
 }
