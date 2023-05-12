@@ -280,10 +280,8 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
   // We do not care about overflows/overlaps for now
   if(is_typecast2t(e))
   {
-    ///abort();
-    //auto intersection = wrapped_interval(to_typecast2t(e).type);
-    //auto inner = get_interval<wrapped_interval>(to_typecast2t(e).from);
-    //return intersection.intersection(intersection, inner);
+    auto inner = get_interval<wrapped_interval>(to_typecast2t(e).from);
+    return wrapped_interval::cast(inner, to_typecast2t(e).type);
   }
 
   auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);

@@ -702,6 +702,55 @@ TEST_CASE(
   T.run_configs();
 }
 
+TEST_CASE(
+  "Interval Analysis - Truncation (unsigned)",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned a = 250;\n"
+    "if(nondet_int()) a = 260;"
+    "unsigned char b = (unsigned char) a;\n"
+    "return a;\n" // a: [250, 260], b: [250,5]
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", 250, true});
+  T.property["4"].push_back({"@F@main@a", 260, true});
+  T.property["5"].push_back({"@F@main@b", 250, true});
+  T.property["5"].push_back({"@F@main@b", 4, true});
+  T.property["5"].push_back({"@F@main@b", 5, false});
+  T.property["5"].push_back({"@F@main@b", 249, false});
+
+  T.run_configs(true);
+}
+
+TEST_CASE(
+  "Interval Analysis - Truncation (signed)",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = 250;\n"
+    "if(nondet_int()) a = 260;"
+    "char b = (char) a;\n"
+    "return a;\n" // a: [250, 260], b: [-6,4]
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", 250, true});
+  T.property["4"].push_back({"@F@main@a", 260, true});
+  T.property["5"].push_back({"@F@main@b", -6, true});
+  T.property["5"].push_back({"@F@main@b", 4, true});
+  T.property["5"].push_back({"@F@main@b", -7, false});
+  T.property["5"].push_back({"@F@main@b", 5, false});
+
+  T.run_configs(true);
+}
 
 
 TEST_CASE("Interval Analysis - Bitand", "[ai][interval-analysis]")
