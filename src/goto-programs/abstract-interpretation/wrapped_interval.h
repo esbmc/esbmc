@@ -298,7 +298,7 @@ public:
     rhs.lower = i.lower;
     rhs.upper = i.upper;
 
-    if(1)
+    if(0)
       *this = complement(over_meet(complement(rhs), complement(*this)));
     else
       *this = over_join(rhs, *this);
