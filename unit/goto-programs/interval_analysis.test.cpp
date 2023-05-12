@@ -752,6 +752,100 @@ TEST_CASE(
   T.run_configs(true);
 }
 
+TEST_CASE(
+  "Interval Analysis - Typecast (unsigned)",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned char a = 0;\n"
+    "if(nondet_int()) a = 250;"
+    "unsigned  b = (unsigned ) a;\n"
+    "return a;\n" // a: [0, 250], b: [0,250]
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", 0, true});
+  T.property["4"].push_back({"@F@main@a", 250, true});
+  T.property["5"].push_back({"@F@main@b", 0, true});
+  T.property["5"].push_back({"@F@main@b", 250, true});
+  T.property["5"].push_back({"@F@main@b", 251, false});
+
+  T.run_configs(true);
+}
+
+TEST_CASE(
+  "Interval Analysis - Typecast (signed)",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "char a = -1;\n"
+    "if(nondet_int()) a = 50;"
+    "int  b = (int ) a;\n"
+    "return a;\n" // a: [0, 250], b: [0,250]
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", -1, true});
+  T.property["4"].push_back({"@F@main@a", 50, true});
+  T.property["5"].push_back({"@F@main@b", -1, true});
+  T.property["5"].push_back({"@F@main@b", 50, true});
+  T.property["5"].push_back({"@F@main@b", -2, false});
+  T.property["5"].push_back({"@F@main@b", 51, false});
+
+  T.run_configs(true);
+}
+
+TEST_CASE(
+  "Interval Analysis - Typecast (unsigned to signed)",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned char a = 250;\n"
+    "if(nondet_int()) a = 255;"
+    "char  b = (char ) a;\n"
+    "return a;\n" // a: [250, 255], b: [-6,-1]
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", 250, true});
+  T.property["4"].push_back({"@F@main@a", 255, true});
+  T.property["5"].push_back({"@F@main@b", -6, true});
+  T.property["5"].push_back({"@F@main@b", -1, true});
+  T.run_configs(true);
+}
+
+TEST_CASE(
+  "Interval Analysis - Typecast (signed to unsigned)",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "char a = 100;\n"
+    "if(nondet_int()) a = -2;"
+    "unsigned char  b = (unsigned char ) a;\n"
+    "return a;\n" // a: [-1, 5], b: [5,128]
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", -2, true});
+  T.property["4"].push_back({"@F@main@a", 100, true});
+  T.property["5"].push_back({"@F@main@b", 100, true});
+  T.property["5"].push_back({"@F@main@b", 254, true});
+  T.property["5"].push_back({"@F@main@b", 255, false});
+
+  T.run_configs(true);
+}
 
 TEST_CASE("Interval Analysis - Bitand", "[ai][interval-analysis]")
 {
