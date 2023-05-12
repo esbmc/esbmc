@@ -56,7 +56,7 @@ protected:
   // get decl in rule variable-declaration-statement, e.g. function local declaration
   bool get_var_decl_stmt(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
-  bool get_function_definition(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_function_definition(const nlohmann::json &ast_node);
   bool get_function_params(const nlohmann::json &pd, exprt &param);
   bool get_struct_class(const nlohmann::json &ast_node);
   bool add_implicit_constructor();

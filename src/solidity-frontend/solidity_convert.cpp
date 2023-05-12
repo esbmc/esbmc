@@ -148,7 +148,7 @@ bool solidity_convertert::get_decl(
   }
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
   {
-    return get_function_definition(ast_node, new_expr); // rule function-definition
+    return get_function_definition(ast_node); // rule function-definition
   }
   default:
   {
@@ -476,8 +476,7 @@ bool solidity_convertert::get_access_from_decl(
 }
 
 bool solidity_convertert::get_function_definition(
-  const nlohmann::json &ast_node,
-  exprt &new_expr)
+  const nlohmann::json &ast_node)
 {
   // For Solidity rule function-definition:
   // Order matters! do not change!
@@ -572,7 +571,6 @@ bool solidity_convertert::get_function_definition(
   }
 
   added_symbol.type = type;
-  new_expr.type() = type;
 
   // 12. Convert body and embed the body into the same symbol
   if(ast_node.contains("body"))
@@ -1188,7 +1186,6 @@ bool solidity_convertert::get_expr(
   case SolidityGrammar::ExpressionT::MemberCallClass:
   {
     assert(expr.contains("expression"));
-    expr.dump(4, ' ', false, nlohmann::detail::error_handler_t::strict).c_str();
     const nlohmann::json &callee_expr_json = expr["expression"];
 
     // Function symbol id is c:@C@referenced_function_contract_name@F@function_name#referenced_function_id
@@ -1202,8 +1199,7 @@ bool solidity_convertert::get_expr(
     get_contract_name(contract_id, ref_contract_name);
 
     std::string name, id;
-    name = callee_expr_json["memberName"];
-    id = "c:@C@" + ref_contract_name + "@F@" + name + "#" + i2string(caller_id);
+    get_function_definition_name(caller_expr_json, name, id);
 
     if(context.find_symbol(id) == nullptr)
       return true;
