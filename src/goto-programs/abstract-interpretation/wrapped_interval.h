@@ -610,6 +610,49 @@ public:
     return (b >> (t->get_width() - 1)) == 1;
   }
 
+  static BigInt trunc(const BigInt &b, unsigned k)
+  {
+    // TODO: and operation for bigint
+    BigInt r =1;
+    r.setPower2(k);
+
+    return b.to_uint64() & (r.to_uint64()-1);
+  }
+
+  static wrapped_interval cast(const wrapped_interval &old, const type2tc &new_type)
+  {
+    if(new_type->get_width() < old.t->get_width())
+    {
+      return old.trunc(new_type);
+    }
+
+    wrapped_interval result(new_type);
+    result.set_lower(old.get_lower());
+    result.set_upper(old.get_upper());
+    return result;
+  }
+
+  wrapped_interval trunc(const type2tc &cast) const
+  {
+    wrapped_interval result(cast);
+    auto k = cast->get_width();
+    assert(k <= t->get_width());
+    if(is_bottom())
+      result.bottom = true;
+
+    else if((lower >> k) == (upper >> k) && (trunc(lower,k) <= trunc(upper,k)))
+    {
+      result.lower = trunc(lower,k);
+      result.upper = trunc(upper,k);
+    }
+    else if(((lower >> k)+1 % 2) == (upper >> k)%2 && (trunc(lower,k) > trunc(upper,k)))
+    {
+      result.lower = trunc(lower,k);
+      result.upper = trunc(upper,k);
+    }
+    return result;
+  }
+
   static wrapped_interval multiply_us(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     wrapped_interval result(lhs.t);

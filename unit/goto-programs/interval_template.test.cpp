@@ -885,3 +885,55 @@ TEST_CASE(
   }
 }
 
+TEST_CASE(
+  "Wrapped Interval Typecast",
+  "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+  unsigned N1 = 8, N2 = 16;
+  auto t1_unsigned = get_uint_type(N1);
+  auto t1_signed = get_int_type(N1);
+  auto t2_unsigned = get_uint_type(N2);
+  auto t2_signed = get_int_type(N2);
+
+  SECTION("Truncation (unsigned)")
+  {
+    wrapped_interval w1(t2_unsigned);
+    w1.lower = 30;
+    w1.upper = 250;
+
+    auto result1 = w1.trunc(t1_unsigned);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.lower == 30);
+    REQUIRE(result1.upper == 250);
+
+    w1.lower = 256;
+    w1.upper = 260;
+
+    result1 = w1.trunc(t1_unsigned);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.lower == 0);
+    REQUIRE(result1.upper == 4);
+  }
+
+  SECTION("Truncation (signed)")
+  {
+    wrapped_interval w1(t2_signed);
+    w1.lower = 30;
+    w1.upper = 128;
+
+    auto result1 = w1.trunc(t1_signed);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.lower == 30);
+    REQUIRE(result1.upper == 128);
+
+    w1.lower = 30;
+    w1.upper = 257;
+
+    result1 = w1.trunc(t1_signed);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.lower == 30);
+    REQUIRE(result1.upper == 1);
+  }
+}
+
