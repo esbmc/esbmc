@@ -622,14 +622,50 @@ public:
   static wrapped_interval cast(const wrapped_interval &old, const type2tc &new_type)
   {
     if(new_type->get_width() < old.t->get_width())
-    {
       return old.trunc(new_type);
+
+    if(is_unsignedbv_type(new_type))
+      return old.zero_extension(new_type);
+
+    return old.sign_extension(new_type);
+  }
+
+  wrapped_interval zero_extension(const type2tc &cast) const {
+    std::vector<wrapped_interval> parts;
+
+    for(auto &interval : ssplit())
+    {
+      wrapped_interval result(cast);
+      result.lower = interval.lower;
+      result.upper = interval.upper;
+      parts.push_back(result);
     }
 
-    wrapped_interval result(new_type);
-    result.set_lower(old.get_lower());
-    result.set_upper(old.get_upper());
-    return result;
+    return over_join(parts);
+  }
+
+  wrapped_interval sign_extension(const type2tc &cast) const {
+    std::vector<wrapped_interval> parts;
+
+    auto compute_outer_region = [this, &cast]( bool bit)
+    {
+      BigInt result = 0;
+      if(bit)
+        result = (get_upper_bound(cast)-1) - (get_upper_bound(t)-1);
+
+      log_status("Base value: {}", result);
+      return result;
+    };
+
+    for(auto &interval : nsplit())
+    {
+      wrapped_interval result(cast);
+      result.lower = compute_outer_region(most_significant_bit(interval.lower)) + interval.lower;
+      result.upper = compute_outer_region(most_significant_bit(interval.upper)) + interval.upper;
+      parts.push_back(result);
+    }
+
+    return over_join(parts);
   }
 
   wrapped_interval trunc(const type2tc &cast) const
