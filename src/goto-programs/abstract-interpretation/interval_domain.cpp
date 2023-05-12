@@ -276,6 +276,27 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
   if(is_neg2t(e))
     return -get_interval<wrapped_interval>(to_neg2t(e).value);
 
+  if(is_shl2t(e))
+  {
+    auto k = get_interval<wrapped_interval>(to_shl2t(e).side_2);
+    auto i = get_interval<wrapped_interval>(to_shl2t(e).side_1);
+    return i.left_shift(k);
+  }
+
+  if(is_ashr2t(e))
+  {
+    auto k = get_interval<wrapped_interval>(to_ashr2t(e).side_2);
+    auto i = get_interval<wrapped_interval>(to_ashr2t(e).side_1);
+    return i.arithmetic_right_shift(k);
+  }
+
+  if(is_lshr2t(e))
+  {
+    auto k = get_interval<wrapped_interval>(to_lshr2t(e).side_2);
+    auto i = get_interval<wrapped_interval>(to_lshr2t(e).side_1);
+    return i.logical_right_shift(k);
+  }
+
 
   // We do not care about overflows/overlaps for now
   if(is_typecast2t(e))

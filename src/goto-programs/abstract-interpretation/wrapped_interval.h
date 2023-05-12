@@ -644,6 +644,89 @@ public:
     return over_join(parts);
   }
 
+  wrapped_interval left_shift(unsigned  k) const {
+    if(is_bottom()) return *this;
+
+    wrapped_interval result(t);
+    if(trunc(lower,t->get_width() - k) == lower && trunc(upper, t->get_width() - k) == upper)
+    {
+      result.lower = lower << k;
+      result.upper = upper << k;
+    }
+    else {
+      result.lower = 0;
+      BigInt m(1);
+      m.setPower2(k);
+      result.upper = (get_upper_bound(t)-1) - (m - 1);
+    }
+    return result;
+  }
+
+  wrapped_interval left_shift(const wrapped_interval &k) const {
+    if(is_bottom()) return *this;
+
+    if(k.lower == k.upper && !k.is_bottom())
+      return left_shift(k.get_lower().to_uint64());
+
+    wrapped_interval result(t);
+    return result;
+  }
+
+  wrapped_interval logical_right_shift(unsigned  k) const {
+    if(is_bottom()) return *this;
+
+    wrapped_interval result(t);
+    if(south_pole(t).is_included(*this))
+    {
+      result.lower = 0;
+      BigInt m(1);
+      m.setPower2(t->get_width()-k);
+      result.upper =  (m - 1);
+    } else {
+      result.lower = lower >> k;
+      result.upper = upper >> k;
+    }
+    return result;
+  }
+
+  wrapped_interval logical_right_shift(const wrapped_interval &k) const {
+    if(is_bottom()) return *this;
+
+    if(k.lower == k.upper && !k.is_bottom())
+      return logical_right_shift(k.get_lower().to_uint64());
+
+    wrapped_interval result(t);
+    return result;
+  }
+
+  wrapped_interval arithmetic_right_shift(unsigned  k) const {
+    if(is_bottom()) return *this;
+
+    wrapped_interval result(t);
+    if(north_pole(t).is_included(*this))
+    {
+      BigInt m(1);
+      m.setPower2(t->get_width() - k);
+      result.lower = (get_upper_bound(t)-1) - (m - 1);
+
+      result.upper =  (m - 1);
+    } else {
+      result.set_lower(get_lower() >> k);
+      result.set_upper(get_upper() >> k);
+    }
+    return result;
+  }
+
+  wrapped_interval arithmetic_right_shift(const wrapped_interval &k) const {
+    if(is_bottom()) return *this;
+
+    if(k.lower == k.upper && !k.is_bottom())
+      return arithmetic_right_shift(k.get_lower().to_uint64());
+
+    wrapped_interval result(t);
+    return result;
+  }
+
   wrapped_interval sign_extension(const type2tc &cast) const {
     std::vector<wrapped_interval> parts;
 
