@@ -901,7 +901,7 @@ TEST_CASE("Interval Analysis - Left Shift", "[ai][interval-analysis]")
     "int a = 1;\n"
     "if(nondet_int()) a = 2;"
     "int b = 2;\n"  // a: [0001,0010]
-    "a = b << a;\n" // a: [4,8]
+    "a = a << b;\n" // a: [4,8]
     "return a;\n"
     "}";
 
@@ -909,6 +909,8 @@ TEST_CASE("Interval Analysis - Left Shift", "[ai][interval-analysis]")
   T.property["4"].push_back({"@F@main@a", 2, true});
   T.property["6"].push_back({"@F@main@a", 4, true});
   T.property["6"].push_back({"@F@main@a", 8, true});
+  T.property["6"].push_back({"@F@main@a", 3, false});
+  T.property["6"].push_back({"@F@main@a", 9, false});
 
   T.run_configs();
 }
@@ -920,17 +922,40 @@ TEST_CASE("Interval Analysis - Right Shift", "[ai][interval-analysis]")
   test_program T;
   T.code =
     "int main() {\n"
-    "int a = 1;\n"
-    "if(nondet_int()) a = 2;"
-    "int b = 8;\n"  // a: [0001,0010]
-    "a = b >> a;\n" // a: [2,4]
+    "int a = 10;\n"
+    "if(nondet_int()) a = 20;"
+    "int b = 1;\n"  // a: [0001,0010]
+    "a = a >> b;\n" // a: [5,10]
     "return a;\n"
     "}";
 
-  T.property["4"].push_back({"@F@main@a", 1, true});
-  T.property["4"].push_back({"@F@main@a", 2, true});
-  T.property["6"].push_back({"@F@main@a", 2, true});
-  T.property["6"].push_back({"@F@main@a", 4, true});
+  T.property["4"].push_back({"@F@main@a", 10, true});
+  T.property["4"].push_back({"@F@main@a", 20, true});
+  T.property["6"].push_back({"@F@main@a", 5, true});
+  T.property["6"].push_back({"@F@main@a", 10, true});
+
+  T.run_configs();
+}
+
+TEST_CASE("Interval Analysis - Arithmetic Right Shift", "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = -20;\n"
+    "if(nondet_int()) a = -10;"
+    "int b = 1;\n"  // a: [0001,0010]
+    "a = a >> b;\n" // a: [-5,-10]
+    "return a;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", -10, true});
+  T.property["4"].push_back({"@F@main@a", -20, true});
+  T.property["6"].push_back({"@F@main@a", -5, true});
+  T.property["6"].push_back({"@F@main@a", -10, true});
+  T.property["6"].push_back({"@F@main@a", -11, false});
 
   T.run_configs();
 }

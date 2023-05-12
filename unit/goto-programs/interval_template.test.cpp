@@ -937,3 +937,84 @@ TEST_CASE(
   }
 }
 
+TEST_CASE(
+  "Wrapped Interval Left Shift",
+  "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+  unsigned N1 = 8;
+  auto t1_unsigned = get_uint_type(N1);
+  auto t1_signed = get_int_type(N1);
+  SECTION("Left shift")
+  {
+    wrapped_interval w(t1_unsigned);
+    w.lower = 30;
+    w.upper = 80;
+
+    auto result1 = w.left_shift(1);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.lower == 60);
+    REQUIRE(result1.upper == 160);
+
+    w.lower = 50;
+    w.upper = 100;
+
+    auto result2 = w.left_shift(3);
+    CAPTURE(result2.lower, result2.upper);
+    REQUIRE(result2.lower == 0);
+    REQUIRE(result2.upper == 248);
+  }
+
+  SECTION("Left shift signed")
+  {
+    wrapped_interval w(t1_signed);
+    w.lower = 252; // -4
+    w.upper = 254; // -2
+
+    auto result1 = w.left_shift(1);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.lower == 0);
+    REQUIRE(result1.upper == 254);
+
+  }
+
+  SECTION("Logical right shift")
+  {
+    wrapped_interval w(t1_unsigned);
+    w.lower = 30;
+    w.upper = 80;
+
+    auto result1 = w.logical_right_shift(1);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.lower == 15);
+    REQUIRE(result1.upper == 40);
+
+    w.lower = 250;
+    w.upper = 20; // [0, 127]
+
+    auto result2 = w.logical_right_shift(1);
+    CAPTURE(result2.lower, result2.upper);
+    REQUIRE(result2.lower == 0);
+    REQUIRE(result2.upper == 127);
+  }
+
+  SECTION("Arithmetic right shift")
+  {
+    wrapped_interval w(t1_signed);
+    w.lower = 30;
+    w.upper = 80;
+
+    auto result1 = w.arithmetic_right_shift(1);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.lower == 15);
+    REQUIRE(result1.upper == 40);
+
+    w.lower = 252;
+    w.upper = 254;
+
+    auto result2 = w.arithmetic_right_shift(1);
+    CAPTURE(result2.lower, result2.upper);
+    REQUIRE(result2.lower == 254);
+    REQUIRE(result2.upper == 255);
+  }
+}
