@@ -1,10 +1,10 @@
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #undef exit
 #undef abort
 #undef calloc
-#undef atoi
 #undef atol
 #undef getenv
 
@@ -86,9 +86,25 @@ __ESBMC_HIDE:;
 int atoi(const char *nptr)
 {
 __ESBMC_HIDE:;
-  int res;
-  /* XXX - does nothing without strabs */
-  return res;
+  int result = 0;
+  //1: positive sign, -1: negative sign
+  int sign = 1;
+  int i = 0;
+
+  // we must not consider whitespace characters
+  while(isspace(nptr[i]))
+    i++;
+
+  // we must verify whether there exists a sign character
+  if(nptr[i] == '+' || nptr[i] == '-')
+    sign = (nptr[i++] == '+') ? 1 : -1;
+
+  // we must read the digits until a non-digit is found
+  while(isdigit(nptr[i]))
+    result = result * 10 + (nptr[i++] - '0');
+
+  // lastly, we must apply the sign
+  return sign * result;
 }
 
 long atol(const char *nptr)
