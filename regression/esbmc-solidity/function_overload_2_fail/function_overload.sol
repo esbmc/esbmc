@@ -18,6 +18,6 @@ contract C {
     function test_overload() public {
         A contract_A = new A();
         assert(contract_A.func_1(-2) == -2);
-        assert(contract_A.func_1(300) == 300);
+        assert(contract_A.func_1(300) < 300); // Fail because 300 is in range of uint16
     }
 }
