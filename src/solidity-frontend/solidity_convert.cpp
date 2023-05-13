@@ -772,12 +772,23 @@ bool solidity_convertert::get_statement(
     // TODO: Fix me! Assumptions:
     //  a). It's "return <expr>;" not "return;"
     //  b). <expr> is pointing to a DeclRefExpr, we need to wrap it in an ImplicitCastExpr as a subexpr
+    //  c). For multiple return type, the return statement represented as a tuple expression using a components field.
+    //      Besides, tuple can only be declared literally. https://docs.soliditylang.org/en/latest/control-structures.html#assignment
+    //      e.g. return (false, 123)
     assert(stmt.contains("expression"));
 
     typet return_type;
+    assert((*current_functionDecl)["returnParameters"]["id"].get<std::uint16_t>() == stmt["functionReturnParameters"].get<std::uint16_t>());
     if(get_type_description(
-         stmt["expression"]["typeDescriptions"], return_type))
+         (*current_functionDecl)["returnParameters"], return_type))
       return true;
+
+    nlohmann::json int_literal_type = nullptr;
+
+    auto expr_type = SolidityGrammar::get_expression_t(stmt["expression"]);
+    bool expr_is_literal = expr_type == SolidityGrammar::Literal;
+    if(expr_is_literal)
+      int_literal_type = make_return_type_from_typet(return_type);
 
     // 2. get return value
     code_returnt ret_expr;
@@ -799,16 +810,14 @@ bool solidity_convertert::get_statement(
     },
     "nodeType": "Return",
     }
-    else
-    {
-      // use typeDescriptions of return parameters instead of literal to get full type.
+    Therefore, we need to pass the int_literal_type value.
+    */
 
-      const nlohmann::json &rtn_prm = (*current_functionDecl)["returnParameters"];
-      // the functionReturnParameters field should point to current function's return parameter. 
-      assert(stmt["functionReturnParameters"].get<std::int16_t>() == rtn_prm["id"].get<std::int16_t>());
-      if(get_expr(rtn_expr, rtn_prm["parameters"].at(0)["typeName"]["typeDescriptions"], val))
-        return true;
-    }
+    exprt val;
+    if(get_expr(
+         implicit_cast_expr, int_literal_type, val))
+      return true;
+
     solidity_gen_typecast(ns, val, return_type);
     ret_expr.return_value() = val;
 
@@ -1688,6 +1697,10 @@ bool solidity_convertert::get_cast_expr(
       make_array_to_pointer_type(cast_expr["subExpr"]["typeDescriptions"]);
     if(get_type_description(adjusted_type, type))
       return true;
+  }
+  // TODO: Maybe can just type = expr.type() for other types as well?
+  else if (cast_expr["subExpr"]["nodeType"] == "Literal" && int_literal_type != nullptr && !expr.type().is_nil()){
+    type = expr.type();
   }
   else
   {
@@ -2702,6 +2715,25 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
     assert(!"Unsupported pointee - currently we only support the semantics of function to pointer decay");
 
   return adjusted_expr;
+}
+
+// Parse typet object into a typeDescriptions json
+nlohmann::json solidity_convertert::make_return_type_from_typet(
+  typet type)
+{
+  // Useful to get the width of a int literal type for return statement
+  nlohmann::json adjusted_expr;
+  if(type.is_signedbv() || type.is_unsignedbv()) {
+    std::string width = type.width().as_string();
+    std::string type_name = (type.is_signedbv() ? "int" : "uint") + width;
+    auto j2 = nlohmann::json::parse(R"({
+            "typeIdentifier": "t_)" + type_name + R"(",
+            "typeString": ")" + type_name + R"("
+          })"
+        );
+        adjusted_expr = j2;
+  }
+  return adjusted_expr; 
 }
 
 nlohmann::json solidity_convertert::make_callexpr_return_type(

@@ -139,6 +139,7 @@ protected:
   nlohmann::json make_implicit_cast_expr(
     const nlohmann::json &sub_expr,
     std::string cast_type);
+  nlohmann::json make_return_type_from_typet(typet type);
   nlohmann::json make_pointee_type(const nlohmann::json &sub_expr);
   nlohmann::json make_callexpr_return_type(const nlohmann::json &type_descrpt);
   nlohmann::json make_array_elementary_type(const nlohmann::json &type_descrpt);
