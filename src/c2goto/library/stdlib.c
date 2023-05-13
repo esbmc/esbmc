@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <limits.h>
 
 #undef exit
 #undef abort
@@ -83,28 +84,82 @@ __ESBMC_HIDE:;
   return res;
 }
 
+long strtol(const char *nptr, char **endptr, int base)
+{
+__ESBMC_HIDE:;
+  if(base == 1 || base < 0 || base > 36)
+    return 0;
+
+  long res = 0;
+  _Bool in_number = 0;
+  char sign = 0;
+
+  // 32 chars is an arbitrarily chosen limit
+  int i = 0;
+  for(; i < 31; ++i)
+  {
+    char ch = nptr[i];
+    char sub = 0;
+    if(ch == 0)
+      break;
+    else if(
+      (base == 0 || base == 16) && !in_number && ch == '0' &&
+      (nptr[i + 1] == 'x' || nptr[i + 1] == 'X'))
+    {
+      base = 16;
+      in_number = 1;
+      ++i;
+      continue;
+    }
+    else if(base == 0 && !in_number && ch == '0')
+    {
+      base = 8;
+      in_number = 1;
+      continue;
+    }
+    else if(!in_number && !sign && isspace(ch))
+      continue;
+    else if(!in_number && !sign && (ch == '-' || ch == '+'))
+    {
+      sign = ch;
+      continue;
+    }
+    else if(base > 10 && ch >= 'a' && ch - 'a' < base - 10)
+      sub = 'a' - 10;
+    else if(base > 10 && ch >= 'A' && ch - 'A' < base - 10)
+      sub = 'A' - 10;
+    else if(isdigit(ch))
+    {
+      sub = '0';
+      base = base == 0 ? 10 : base;
+    }
+    else
+      break;
+
+    in_number = 1;
+    _Bool overflow = __ESBMC_overflow_smull(res, (long)base, &res);
+    if(overflow || __ESBMC_overflow_saddl(res, (long)(ch - sub), &res))
+    {
+      if(sign == '-')
+        return LONG_MIN;
+      else
+        return LONG_MAX;
+    }
+  }
+
+  if(endptr != 0)
+    *endptr = (char *)nptr + i;
+
+  if(sign == '-')
+    res *= -1;
+
+  return res;
+}
+
 int atoi(const char *nptr)
 {
 __ESBMC_HIDE:;
-  int result = 0;
-  //1: positive sign, -1: negative sign
-  int sign = 1;
-  int i = 0;
-
-  // we must not consider whitespace characters
-  while(isspace(nptr[i]))
-    i++;
-
-  // we must verify whether there exists a sign character
-  if(nptr[i] == '+' || nptr[i] == '-')
-    sign = (nptr[i++] == '+') ? 1 : -1;
-
-  // we must read the digits until a non-digit is found
-  while(isdigit(nptr[i]))
-    result = result * 10 + (nptr[i++] - '0');
-
-  // lastly, we must apply the sign
-  return sign * result;
+  return (int)strtol(nptr, (char **)0, 10);
 }
 
 long atol(const char *nptr)
