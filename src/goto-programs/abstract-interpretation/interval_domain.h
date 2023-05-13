@@ -42,6 +42,7 @@ public:
   // TODO: Add options for ai.h
   // Extensions
   static bool enable_interval_arithmetic;
+  static bool enable_interval_bitwise_arithmetic;
   static bool enable_modular_intervals;
   static bool enable_assertion_simplification;
   static bool enable_contraction_for_abstract_states;

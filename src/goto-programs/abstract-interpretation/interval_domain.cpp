@@ -276,27 +276,29 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
   if(is_neg2t(e))
     return -get_interval<wrapped_interval>(to_neg2t(e).value);
 
-  if(is_shl2t(e))
+  if(enable_interval_bitwise_arithmetic)
   {
-    auto k = get_interval<wrapped_interval>(to_shl2t(e).side_2);
-    auto i = get_interval<wrapped_interval>(to_shl2t(e).side_1);
-    return i.left_shift(k);
-  }
+    if(is_shl2t(e))
+    {
+      auto k = get_interval<wrapped_interval>(to_shl2t(e).side_2);
+      auto i = get_interval<wrapped_interval>(to_shl2t(e).side_1);
+      return i.left_shift(k);
+    }
 
-  if(is_ashr2t(e))
-  {
-    auto k = get_interval<wrapped_interval>(to_ashr2t(e).side_2);
-    auto i = get_interval<wrapped_interval>(to_ashr2t(e).side_1);
-    return i.arithmetic_right_shift(k);
-  }
+    if(is_ashr2t(e))
+    {
+      auto k = get_interval<wrapped_interval>(to_ashr2t(e).side_2);
+      auto i = get_interval<wrapped_interval>(to_ashr2t(e).side_1);
+      return i.arithmetic_right_shift(k);
+    }
 
-  if(is_lshr2t(e))
-  {
-    auto k = get_interval<wrapped_interval>(to_lshr2t(e).side_2);
-    auto i = get_interval<wrapped_interval>(to_lshr2t(e).side_1);
-    return i.logical_right_shift(k);
+    if(is_lshr2t(e))
+    {
+      auto k = get_interval<wrapped_interval>(to_lshr2t(e).side_2);
+      auto i = get_interval<wrapped_interval>(to_lshr2t(e).side_1);
+      return i.logical_right_shift(k);
+    }
   }
-
 
   // We do not care about overflows/overlaps for now
   if(is_typecast2t(e))
@@ -900,10 +902,12 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
 
 // Options
 bool interval_domaint::enable_interval_arithmetic = true;
+bool interval_domaint::enable_interval_bitwise_arithmetic = true;
 bool interval_domaint::enable_modular_intervals = false;
 bool interval_domaint::enable_assertion_simplification = false;
 bool interval_domaint::enable_contraction_for_abstract_states = false;
 bool interval_domaint::enable_wrapped_intervals = true;
+
 
 // Widening options
 bool interval_domaint::widening_underaproximate_bound = false;
