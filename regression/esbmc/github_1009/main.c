@@ -23,6 +23,9 @@ int main()
 
   result = atoi("2147483647");
   assert(result == 2147483647);
-  
+
+  result = atoi("");
+  assert(result == 0);
+
   return 0;
 }
