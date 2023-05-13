@@ -455,6 +455,54 @@ expr2tc interval_domaint::make_expression_value<wrapped_interval>(
     upper ? interval.get_upper() : interval.get_lower(), type);
 }
 
+template <>
+expr2tc interval_domaint::make_expression_helper<wrapped_interval>(const expr2tc &symbol) const
+{
+  symbol2t src = to_symbol2t(symbol);
+
+  if(!is_mapped<wrapped_interval>(src))
+    return gen_true_expr();
+  const auto interval = get_interval_from_symbol<wrapped_interval>(src);
+  if(interval.is_top())
+    return gen_true_expr();
+
+  if(interval.is_bottom())
+    return gen_false_expr();
+
+  std::vector<expr2tc> conjuncts;
+  assert(src.type == interval.t);
+
+  if(interval.singleton())
+  {
+    expr2tc value = make_expression_value(interval, src.type, true);
+    conjuncts.push_back(equality2tc(symbol, value));
+  }
+  else
+  {
+    assert(interval.upper_set && interval.lower_set);
+    if(interval.get_lower() <= interval.get_upper())
+    {
+      expr2tc value1 = make_expression_value(interval, src.type, true);
+      conjuncts.push_back(lessthanequal2tc(symbol, value1));
+      
+      expr2tc value2 = make_expression_value(interval, src.type, false);
+      conjuncts.push_back(lessthanequal2tc(value2, symbol));
+    }
+    else {
+      std::vector<expr2tc> disjuncts;
+      expr2tc value1 = make_expression_value(interval, src.type, true);
+      disjuncts.push_back(lessthanequal2tc(value1, symbol));
+
+      expr2tc value2 = make_expression_value(interval, src.type, false);
+      disjuncts.push_back(lessthanequal2tc(symbol, value2));
+
+      conjuncts.push_back(disjunction(disjuncts));
+
+    }
+  }
+  return conjunction(conjuncts);
+}
+
 template <class T>
 expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
 {
