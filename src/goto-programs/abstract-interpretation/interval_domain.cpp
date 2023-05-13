@@ -276,6 +276,13 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
   if(is_neg2t(e))
     return -get_interval<wrapped_interval>(to_neg2t(e).value);
 
+  if(is_if2t(e))
+  {
+    auto lhs = get_interval_from_const<wrapped_interval>(to_if2t(e).false_value);
+    auto rhs = get_interval_from_const<wrapped_interval>(to_if2t(e).true_value);
+    return wrapped_interval::over_join(lhs,rhs);
+  }
+
   if(enable_interval_bitwise_arithmetic)
   {
     if(is_shl2t(e))
@@ -463,6 +470,7 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(const expr2tc
   if(!is_mapped<wrapped_interval>(src))
     return gen_true_expr();
   const auto interval = get_interval_from_symbol<wrapped_interval>(src);
+
   if(interval.is_top())
     return gen_true_expr();
 
@@ -480,25 +488,36 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(const expr2tc
   else
   {
     assert(interval.upper_set && interval.lower_set);
-    if(interval.get_lower() <= interval.get_upper())
+    // Interval: [a,b]
+    std::vector<expr2tc> disjuncts;
+
+    auto convert = [this,&src,&symbol,&disjuncts](wrapped_interval &w)
     {
-      expr2tc value1 = make_expression_value(interval, src.type, true);
-      conjuncts.push_back(lessthanequal2tc(symbol, value1));
-      
-      expr2tc value2 = make_expression_value(interval, src.type, false);
-      conjuncts.push_back(lessthanequal2tc(value2, symbol));
+      assert(w.lower <= w.upper);
+
+      std::vector<expr2tc> s_conjuncts;
+      expr2tc value1 = make_expression_value(w, src.type, true);
+      if(w.singleton()){
+        disjuncts.push_back(equality2tc(symbol, value1));
+        return;
+      }
+      s_conjuncts.push_back(lessthanequal2tc(symbol, value1));
+      expr2tc value2 = make_expression_value(w, src.type, false);
+      s_conjuncts.push_back(lessthanequal2tc(value2, symbol));
+      disjuncts.push_back(conjunction(s_conjuncts));
+    };
+
+    for(auto &ss : interval.ssplit())
+    {
+      if(is_signedbv_type(interval.t))
+        for(auto &ns : ss.nsplit())
+          convert(ns);
+      else
+        convert(ss);
     }
-    else {
-      std::vector<expr2tc> disjuncts;
-      expr2tc value1 = make_expression_value(interval, src.type, true);
-      disjuncts.push_back(lessthanequal2tc(value1, symbol));
+    conjuncts.push_back(disjunction(disjuncts));
 
-      expr2tc value2 = make_expression_value(interval, src.type, false);
-      disjuncts.push_back(lessthanequal2tc(symbol, value2));
 
-      conjuncts.push_back(disjunction(disjuncts));
-
-    }
   }
   return conjunction(conjuncts);
 }
