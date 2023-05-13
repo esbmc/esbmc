@@ -1,21 +1,25 @@
 JSON AST (compact format):
 
 
-======= function_overload.sol =======
+======= inheritance.sol =======
 {
-  "absolutePath": "function_overload.sol",
+  "absolutePath": "inheritance.sol",
   "exportedSymbols":
   {
     "A":
+    [
+      10
+    ],
+    "B":
     [
       22
     ],
     "C":
     [
-      55
+      59
     ]
   },
-  "id": 56,
+  "id": 60,
   "license": "GPL-3.0",
   "nodeType": "SourceUnit",
   "nodes":
@@ -39,191 +43,80 @@ JSON AST (compact format):
       "contractDependencies": [],
       "contractKind": "contract",
       "fullyImplemented": true,
-      "id": 22,
+      "id": 10,
       "linearizedBaseContracts":
       [
-        22
+        10
       ],
       "name": "A",
-      "nameLocation": "199:1:0",
+      "nameLocation": "118:1:0",
       "nodeType": "ContractDefinition",
       "nodes":
       [
         {
           "body":
           {
-            "id": 10,
+            "id": 8,
             "nodeType": "Block",
-            "src": "263:25:0",
+            "src": "174:26:0",
             "statements":
             [
               {
                 "expression":
                 {
-                  "id": 8,
-                  "name": "b",
-                  "nodeType": "Identifier",
-                  "overloadedDeclarations": [],
-                  "referencedDeclaration": 3,
-                  "src": "280:1:0",
+                  "hexValue": "3231",
+                  "id": 6,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "191:2:0",
                   "typeDescriptions":
                   {
-                    "typeIdentifier": "t_uint16",
-                    "typeString": "uint16"
-                  }
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
                 },
-                "functionReturnParameters": 7,
-                "id": 9,
+                "functionReturnParameters": 5,
+                "id": 7,
                 "nodeType": "Return",
-                "src": "273:8:0"
+                "src": "184:9:0"
               }
             ]
           },
-          "functionSelector": "5cc5d54a",
-          "id": 11,
+          "functionSelector": "3f7eb0fe",
+          "id": 9,
           "implemented": true,
           "kind": "function",
           "modifiers": [],
           "name": "func_1",
-          "nameLocation": "217:6:0",
+          "nameLocation": "135:6:0",
           "nodeType": "FunctionDefinition",
           "parameters":
           {
-            "id": 4,
+            "id": 2,
             "nodeType": "ParameterList",
-            "parameters":
-            [
-              {
-                "constant": false,
-                "id": 3,
-                "mutability": "mutable",
-                "name": "b",
-                "nameLocation": "231:1:0",
-                "nodeType": "VariableDeclaration",
-                "scope": 11,
-                "src": "224:8:0",
-                "stateVariable": false,
-                "storageLocation": "default",
-                "typeDescriptions":
-                {
-                  "typeIdentifier": "t_uint16",
-                  "typeString": "uint16"
-                },
-                "typeName":
-                {
-                  "id": 2,
-                  "name": "uint16",
-                  "nodeType": "ElementaryTypeName",
-                  "src": "224:6:0",
-                  "typeDescriptions":
-                  {
-                    "typeIdentifier": "t_uint16",
-                    "typeString": "uint16"
-                  }
-                },
-                "visibility": "internal"
-              }
-            ],
-            "src": "223:10:0"
+            "parameters": [],
+            "src": "141:2:0"
           },
           "returnParameters":
           {
-            "id": 7,
+            "id": 5,
             "nodeType": "ParameterList",
             "parameters":
             [
               {
                 "constant": false,
-                "id": 6,
+                "id": 4,
                 "mutability": "mutable",
                 "name": "",
                 "nameLocation": "-1:-1:-1",
                 "nodeType": "VariableDeclaration",
-                "scope": 11,
-                "src": "255:6:0",
-                "stateVariable": false,
-                "storageLocation": "default",
-                "typeDescriptions":
-                {
-                  "typeIdentifier": "t_uint16",
-                  "typeString": "uint16"
-                },
-                "typeName":
-                {
-                  "id": 5,
-                  "name": "uint16",
-                  "nodeType": "ElementaryTypeName",
-                  "src": "255:6:0",
-                  "typeDescriptions":
-                  {
-                    "typeIdentifier": "t_uint16",
-                    "typeString": "uint16"
-                  }
-                },
-                "visibility": "internal"
-              }
-            ],
-            "src": "254:8:0"
-          },
-          "scope": 22,
-          "src": "208:80:0",
-          "stateMutability": "pure",
-          "virtual": false,
-          "visibility": "public"
-        },
-        {
-          "body":
-          {
-            "id": 20,
-            "nodeType": "Block",
-            "src": "345:25:0",
-            "statements":
-            [
-              {
-                "expression":
-                {
-                  "id": 18,
-                  "name": "a",
-                  "nodeType": "Identifier",
-                  "overloadedDeclarations": [],
-                  "referencedDeclaration": 13,
-                  "src": "362:1:0",
-                  "typeDescriptions":
-                  {
-                    "typeIdentifier": "t_int8",
-                    "typeString": "int8"
-                  }
-                },
-                "functionReturnParameters": 17,
-                "id": 19,
-                "nodeType": "Return",
-                "src": "355:8:0"
-              }
-            ]
-          },
-          "functionSelector": "6887477a",
-          "id": 21,
-          "implemented": true,
-          "kind": "function",
-          "modifiers": [],
-          "name": "func_1",
-          "nameLocation": "303:6:0",
-          "nodeType": "FunctionDefinition",
-          "parameters":
-          {
-            "id": 14,
-            "nodeType": "ParameterList",
-            "parameters":
-            [
-              {
-                "constant": false,
-                "id": 13,
-                "mutability": "mutable",
-                "name": "a",
-                "nameLocation": "315:1:0",
-                "nodeType": "VariableDeclaration",
-                "scope": 21,
-                "src": "310:6:0",
+                "scope": 9,
+                "src": "168:4:0",
                 "stateVariable": false,
                 "storageLocation": "default",
                 "typeDescriptions":
@@ -233,10 +126,10 @@ JSON AST (compact format):
                 },
                 "typeName":
                 {
-                  "id": 12,
+                  "id": 3,
                   "name": "int8",
                   "nodeType": "ElementaryTypeName",
-                  "src": "310:4:0",
+                  "src": "168:4:0",
                   "typeDescriptions":
                   {
                     "typeIdentifier": "t_int8",
@@ -246,7 +139,115 @@ JSON AST (compact format):
                 "visibility": "internal"
               }
             ],
-            "src": "309:8:0"
+            "src": "167:6:0"
+          },
+          "scope": 10,
+          "src": "126:74:0",
+          "stateMutability": "nonpayable",
+          "virtual": true,
+          "visibility": "public"
+        }
+      ],
+      "scope": 60,
+      "src": "109:93:0",
+      "usedErrors": []
+    },
+    {
+      "abstract": false,
+      "baseContracts":
+      [
+        {
+          "baseName":
+          {
+            "id": 11,
+            "name": "A",
+            "nameLocations":
+            [
+              "218:1:0"
+            ],
+            "nodeType": "IdentifierPath",
+            "referencedDeclaration": 10,
+            "src": "218:1:0"
+          },
+          "id": 12,
+          "nodeType": "InheritanceSpecifier",
+          "src": "218:1:0"
+        }
+      ],
+      "canonicalName": "B",
+      "contractDependencies": [],
+      "contractKind": "contract",
+      "fullyImplemented": true,
+      "id": 22,
+      "linearizedBaseContracts":
+      [
+        22,
+        10
+      ],
+      "name": "B",
+      "nameLocation": "213:1:0",
+      "nodeType": "ContractDefinition",
+      "nodes":
+      [
+        {
+          "baseFunctions":
+          [
+            9
+          ],
+          "body":
+          {
+            "id": 20,
+            "nodeType": "Block",
+            "src": "280:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3432",
+                  "id": 18,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "297:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_42_by_1",
+                    "typeString": "int_const 42"
+                  },
+                  "value": "42"
+                },
+                "functionReturnParameters": 17,
+                "id": 19,
+                "nodeType": "Return",
+                "src": "290:9:0"
+              }
+            ]
+          },
+          "functionSelector": "3f7eb0fe",
+          "id": 21,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "func_1",
+          "nameLocation": "235:6:0",
+          "nodeType": "FunctionDefinition",
+          "overrides":
+          {
+            "id": 14,
+            "nodeType": "OverrideSpecifier",
+            "overrides": [],
+            "src": "251:8:0"
+          },
+          "parameters":
+          {
+            "id": 13,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "241:2:0"
           },
           "returnParameters":
           {
@@ -262,7 +263,7 @@ JSON AST (compact format):
                 "nameLocation": "-1:-1:-1",
                 "nodeType": "VariableDeclaration",
                 "scope": 21,
-                "src": "339:4:0",
+                "src": "274:4:0",
                 "stateVariable": false,
                 "storageLocation": "default",
                 "typeDescriptions":
@@ -275,7 +276,7 @@ JSON AST (compact format):
                   "id": 15,
                   "name": "int8",
                   "nodeType": "ElementaryTypeName",
-                  "src": "339:4:0",
+                  "src": "274:4:0",
                   "typeDescriptions":
                   {
                     "typeIdentifier": "t_int8",
@@ -285,17 +286,17 @@ JSON AST (compact format):
                 "visibility": "internal"
               }
             ],
-            "src": "338:6:0"
+            "src": "273:6:0"
           },
           "scope": 22,
-          "src": "294:76:0",
+          "src": "226:80:0",
           "stateMutability": "pure",
           "virtual": false,
           "visibility": "public"
         }
       ],
-      "scope": 56,
-      "src": "190:182:0",
+      "scope": 60,
+      "src": "204:104:0",
       "usedErrors": []
     },
     {
@@ -304,26 +305,27 @@ JSON AST (compact format):
       "canonicalName": "C",
       "contractDependencies":
       [
+        10,
         22
       ],
       "contractKind": "contract",
       "fullyImplemented": true,
-      "id": 55,
+      "id": 59,
       "linearizedBaseContracts":
       [
-        55
+        59
       ],
       "name": "C",
-      "nameLocation": "383:1:0",
+      "nameLocation": "319:1:0",
       "nodeType": "ContractDefinition",
       "nodes":
       [
         {
           "body":
           {
-            "id": 53,
+            "id": 57,
             "nodeType": "Block",
-            "src": "423:131:0",
+            "src": "359:210:0",
             "statements":
             [
               {
@@ -338,15 +340,15 @@ JSON AST (compact format):
                     "id": 27,
                     "mutability": "mutable",
                     "name": "contract_A",
-                    "nameLocation": "435:10:0",
+                    "nameLocation": "371:10:0",
                     "nodeType": "VariableDeclaration",
-                    "scope": 53,
-                    "src": "433:12:0",
+                    "scope": 57,
+                    "src": "369:12:0",
                     "stateVariable": false,
                     "storageLocation": "default",
                     "typeDescriptions":
                     {
-                      "typeIdentifier": "t_contract$_A_$22",
+                      "typeIdentifier": "t_contract$_A_$10",
                       "typeString": "contract A"
                     },
                     "typeName":
@@ -359,17 +361,17 @@ JSON AST (compact format):
                         "name": "A",
                         "nameLocations":
                         [
-                          "433:1:0"
+                          "369:1:0"
                         ],
                         "nodeType": "IdentifierPath",
-                        "referencedDeclaration": 22,
-                        "src": "433:1:0"
+                        "referencedDeclaration": 10,
+                        "src": "369:1:0"
                       },
-                      "referencedDeclaration": 22,
-                      "src": "433:1:0",
+                      "referencedDeclaration": 10,
+                      "src": "369:1:0",
                       "typeDescriptions":
                       {
-                        "typeIdentifier": "t_contract$_A_$22",
+                        "typeIdentifier": "t_contract$_A_$10",
                         "typeString": "contract A"
                       }
                     },
@@ -389,10 +391,10 @@ JSON AST (compact format):
                     "isPure": false,
                     "lValueRequested": false,
                     "nodeType": "NewExpression",
-                    "src": "448:5:0",
+                    "src": "384:5:0",
                     "typeDescriptions":
                     {
-                      "typeIdentifier": "t_function_creation_nonpayable$__$returns$_t_contract$_A_$22_$",
+                      "typeIdentifier": "t_function_creation_nonpayable$__$returns$_t_contract$_A_$10_$",
                       "typeString": "function () returns (contract A)"
                     },
                     "typeName":
@@ -405,17 +407,17 @@ JSON AST (compact format):
                         "name": "A",
                         "nameLocations":
                         [
-                          "452:1:0"
+                          "388:1:0"
                         ],
                         "nodeType": "IdentifierPath",
-                        "referencedDeclaration": 22,
-                        "src": "452:1:0"
+                        "referencedDeclaration": 10,
+                        "src": "388:1:0"
                       },
-                      "referencedDeclaration": 22,
-                      "src": "452:1:0",
+                      "referencedDeclaration": 10,
+                      "src": "388:1:0",
                       "typeDescriptions":
                       {
-                        "typeIdentifier": "t_contract$_A_$22",
+                        "typeIdentifier": "t_contract$_A_$10",
                         "typeString": "contract A"
                       }
                     }
@@ -429,16 +431,130 @@ JSON AST (compact format):
                   "nameLocations": [],
                   "names": [],
                   "nodeType": "FunctionCall",
-                  "src": "448:7:0",
+                  "src": "384:7:0",
                   "tryCall": false,
                   "typeDescriptions":
                   {
-                    "typeIdentifier": "t_contract$_A_$22",
+                    "typeIdentifier": "t_contract$_A_$10",
                     "typeString": "contract A"
                   }
                 },
                 "nodeType": "VariableDeclarationStatement",
-                "src": "433:22:0"
+                "src": "369:22:0"
+              },
+              {
+                "assignments":
+                [
+                  35
+                ],
+                "declarations":
+                [
+                  {
+                    "constant": false,
+                    "id": 35,
+                    "mutability": "mutable",
+                    "name": "contract_B",
+                    "nameLocation": "403:10:0",
+                    "nodeType": "VariableDeclaration",
+                    "scope": 57,
+                    "src": "401:12:0",
+                    "stateVariable": false,
+                    "storageLocation": "default",
+                    "typeDescriptions":
+                    {
+                      "typeIdentifier": "t_contract$_B_$22",
+                      "typeString": "contract B"
+                    },
+                    "typeName":
+                    {
+                      "id": 34,
+                      "nodeType": "UserDefinedTypeName",
+                      "pathNode":
+                      {
+                        "id": 33,
+                        "name": "B",
+                        "nameLocations":
+                        [
+                          "401:1:0"
+                        ],
+                        "nodeType": "IdentifierPath",
+                        "referencedDeclaration": 22,
+                        "src": "401:1:0"
+                      },
+                      "referencedDeclaration": 22,
+                      "src": "401:1:0",
+                      "typeDescriptions":
+                      {
+                        "typeIdentifier": "t_contract$_B_$22",
+                        "typeString": "contract B"
+                      }
+                    },
+                    "visibility": "internal"
+                  }
+                ],
+                "id": 40,
+                "initialValue":
+                {
+                  "arguments": [],
+                  "expression":
+                  {
+                    "argumentTypes": [],
+                    "id": 38,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "nodeType": "NewExpression",
+                    "src": "416:5:0",
+                    "typeDescriptions":
+                    {
+                      "typeIdentifier": "t_function_creation_nonpayable$__$returns$_t_contract$_B_$22_$",
+                      "typeString": "function () returns (contract B)"
+                    },
+                    "typeName":
+                    {
+                      "id": 37,
+                      "nodeType": "UserDefinedTypeName",
+                      "pathNode":
+                      {
+                        "id": 36,
+                        "name": "B",
+                        "nameLocations":
+                        [
+                          "420:1:0"
+                        ],
+                        "nodeType": "IdentifierPath",
+                        "referencedDeclaration": 22,
+                        "src": "420:1:0"
+                      },
+                      "referencedDeclaration": 22,
+                      "src": "420:1:0",
+                      "typeDescriptions":
+                      {
+                        "typeIdentifier": "t_contract$_B_$22",
+                        "typeString": "contract B"
+                      }
+                    }
+                  },
+                  "id": 39,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": false,
+                  "kind": "functionCall",
+                  "lValueRequested": false,
+                  "nameLocations": [],
+                  "names": [],
+                  "nodeType": "FunctionCall",
+                  "src": "416:7:0",
+                  "tryCall": false,
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_contract$_B_$22",
+                    "typeString": "contract B"
+                  }
+                },
+                "nodeType": "VariableDeclarationStatement",
+                "src": "401:22:0"
               },
               {
                 "expression":
@@ -451,90 +567,48 @@ JSON AST (compact format):
                         "typeIdentifier": "t_int8",
                         "typeString": "int8"
                       },
-                      "id": 41,
+                      "id": 46,
                       "isConstant": false,
                       "isLValue": false,
                       "isPure": false,
                       "lValueRequested": false,
                       "leftExpression":
                       {
-                        "arguments":
-                        [
-                          {
-                            "id": 37,
-                            "isConstant": false,
-                            "isLValue": false,
-                            "isPure": true,
-                            "lValueRequested": false,
-                            "nodeType": "UnaryOperation",
-                            "operator": "-",
-                            "prefix": true,
-                            "src": "490:2:0",
-                            "subExpression":
-                            {
-                              "hexValue": "32",
-                              "id": 36,
-                              "isConstant": false,
-                              "isLValue": false,
-                              "isPure": true,
-                              "kind": "number",
-                              "lValueRequested": false,
-                              "nodeType": "Literal",
-                              "src": "491:1:0",
-                              "typeDescriptions":
-                              {
-                                "typeIdentifier": "t_rational_2_by_1",
-                                "typeString": "int_const 2"
-                              },
-                              "value": "2"
-                            },
-                            "typeDescriptions":
-                            {
-                              "typeIdentifier": "t_rational_minus_2_by_1",
-                              "typeString": "int_const -2"
-                            }
-                          }
-                        ],
+                        "arguments": [],
                         "expression":
                         {
-                          "argumentTypes":
-                          [
-                            {
-                              "typeIdentifier": "t_rational_minus_2_by_1",
-                              "typeString": "int_const -2"
-                            }
-                          ],
+                          "argumentTypes": [],
                           "expression":
                           {
-                            "id": 34,
+                            "id": 42,
                             "name": "contract_A",
                             "nodeType": "Identifier",
                             "overloadedDeclarations": [],
                             "referencedDeclaration": 27,
-                            "src": "472:10:0",
+                            "src": "440:10:0",
                             "typeDescriptions":
                             {
-                              "typeIdentifier": "t_contract$_A_$22",
+                              "typeIdentifier": "t_contract$_A_$10",
                               "typeString": "contract A"
                             }
                           },
-                          "id": 35,
+                          "id": 43,
                           "isConstant": false,
                           "isLValue": false,
                           "isPure": false,
                           "lValueRequested": false,
-                          "memberLocation": "483:6:0",
+                          "memberLocation": "451:6:0",
                           "memberName": "func_1",
                           "nodeType": "MemberAccess",
-                          "referencedDeclaration": 21,
-                          "src": "472:17:0",
+                          "referencedDeclaration": 9,
+                          "src": "440:17:0",
                           "typeDescriptions":
                           {
-                            "typeIdentifier": "t_function_external_pure$_t_int8_$returns$_t_int8_$",
-                            "typeString": "function (int8) pure external returns (int8)"
+                            "typeIdentifier": "t_function_external_nonpayable$__$returns$_t_int8_$",
+                            "typeString": "function () external returns (int8)"
                           }
                         },
-                        "id": 38,
+                        "id": 44,
                         "isConstant": false,
                         "isLValue": false,
                         "isPure": false,
@@ -543,7 +617,7 @@ JSON AST (compact format):
                         "nameLocations": [],
                         "names": [],
                         "nodeType": "FunctionCall",
-                        "src": "472:21:0",
+                        "src": "440:19:0",
                         "tryCall": false,
                         "typeDescriptions":
                         {
@@ -555,40 +629,23 @@ JSON AST (compact format):
                       "operator": "==",
                       "rightExpression":
                       {
-                        "id": 40,
+                        "hexValue": "3432",
+                        "id": 45,
                         "isConstant": false,
                         "isLValue": false,
                         "isPure": true,
+                        "kind": "number",
                         "lValueRequested": false,
-                        "nodeType": "UnaryOperation",
-                        "operator": "-",
-                        "prefix": true,
-                        "src": "497:2:0",
-                        "subExpression":
-                        {
-                          "hexValue": "32",
-                          "id": 39,
-                          "isConstant": false,
-                          "isLValue": false,
-                          "isPure": true,
-                          "kind": "number",
-                          "lValueRequested": false,
-                          "nodeType": "Literal",
-                          "src": "498:1:0",
-                          "typeDescriptions":
-                          {
-                            "typeIdentifier": "t_rational_2_by_1",
-                            "typeString": "int_const 2"
-                          },
-                          "value": "2"
-                        },
+                        "nodeType": "Literal",
+                        "src": "463:2:0",
                         "typeDescriptions":
                         {
-                          "typeIdentifier": "t_rational_minus_2_by_1",
-                          "typeString": "int_const -2"
-                        }
+                          "typeIdentifier": "t_rational_42_by_1",
+                          "typeString": "int_const 42"
+                        },
+                        "value": "42"
                       },
-                      "src": "472:27:0",
+                      "src": "440:25:0",
                       "typeDescriptions":
                       {
                         "typeIdentifier": "t_bool",
@@ -605,19 +662,19 @@ JSON AST (compact format):
                         "typeString": "bool"
                       }
                     ],
-                    "id": 33,
+                    "id": 41,
                     "name": "assert",
                     "nodeType": "Identifier",
                     "overloadedDeclarations": [],
                     "referencedDeclaration": -3,
-                    "src": "465:6:0",
+                    "src": "433:6:0",
                     "typeDescriptions":
                     {
                       "typeIdentifier": "t_function_assert_pure$_t_bool_$returns$__$",
                       "typeString": "function (bool) pure"
                     }
                   },
-                  "id": 42,
+                  "id": 47,
                   "isConstant": false,
                   "isLValue": false,
                   "isPure": false,
@@ -626,7 +683,7 @@ JSON AST (compact format):
                   "nameLocations": [],
                   "names": [],
                   "nodeType": "FunctionCall",
-                  "src": "465:35:0",
+                  "src": "433:33:0",
                   "tryCall": false,
                   "typeDescriptions":
                   {
@@ -634,9 +691,9 @@ JSON AST (compact format):
                     "typeString": "tuple()"
                   }
                 },
-                "id": 43,
+                "id": 48,
                 "nodeType": "ExpressionStatement",
-                "src": "465:35:0"
+                "src": "433:33:0"
               },
               {
                 "expression":
@@ -646,76 +703,51 @@ JSON AST (compact format):
                     {
                       "commonType":
                       {
-                        "typeIdentifier": "t_uint16",
-                        "typeString": "uint16"
+                        "typeIdentifier": "t_int8",
+                        "typeString": "int8"
                       },
-                      "id": 50,
+                      "id": 54,
                       "isConstant": false,
                       "isLValue": false,
                       "isPure": false,
                       "lValueRequested": false,
                       "leftExpression":
                       {
-                        "arguments":
-                        [
-                          {
-                            "hexValue": "333030",
-                            "id": 47,
-                            "isConstant": false,
-                            "isLValue": false,
-                            "isPure": true,
-                            "kind": "number",
-                            "lValueRequested": false,
-                            "nodeType": "Literal",
-                            "src": "535:3:0",
-                            "typeDescriptions":
-                            {
-                              "typeIdentifier": "t_rational_300_by_1",
-                              "typeString": "int_const 300"
-                            },
-                            "value": "300"
-                          }
-                        ],
+                        "arguments": [],
                         "expression":
                         {
-                          "argumentTypes":
-                          [
-                            {
-                              "typeIdentifier": "t_rational_300_by_1",
-                              "typeString": "int_const 300"
-                            }
-                          ],
+                          "argumentTypes": [],
                           "expression":
                           {
-                            "id": 45,
-                            "name": "contract_A",
+                            "id": 50,
+                            "name": "contract_B",
                             "nodeType": "Identifier",
                             "overloadedDeclarations": [],
-                            "referencedDeclaration": 27,
-                            "src": "517:10:0",
+                            "referencedDeclaration": 35,
+                            "src": "536:10:0",
                             "typeDescriptions":
                             {
-                              "typeIdentifier": "t_contract$_A_$22",
-                              "typeString": "contract A"
+                              "typeIdentifier": "t_contract$_B_$22",
+                              "typeString": "contract B"
                             }
                           },
-                          "id": 46,
+                          "id": 51,
                           "isConstant": false,
                           "isLValue": false,
                           "isPure": false,
                           "lValueRequested": false,
-                          "memberLocation": "528:6:0",
+                          "memberLocation": "547:6:0",
                           "memberName": "func_1",
                           "nodeType": "MemberAccess",
-                          "referencedDeclaration": 11,
-                          "src": "517:17:0",
+                          "referencedDeclaration": 21,
+                          "src": "536:17:0",
                           "typeDescriptions":
                           {
-                            "typeIdentifier": "t_function_external_pure$_t_uint16_$returns$_t_uint16_$",
-                            "typeString": "function (uint16) pure external returns (uint16)"
+                            "typeIdentifier": "t_function_external_pure$__$returns$_t_int8_$",
+                            "typeString": "function () pure external returns (int8)"
                           }
                         },
-                        "id": 48,
+                        "id": 52,
                         "isConstant": false,
                         "isLValue": false,
                         "isPure": false,
@@ -724,35 +756,35 @@ JSON AST (compact format):
                         "nameLocations": [],
                         "names": [],
                         "nodeType": "FunctionCall",
-                        "src": "517:22:0",
+                        "src": "536:19:0",
                         "tryCall": false,
                         "typeDescriptions":
                         {
-                          "typeIdentifier": "t_uint16",
-                          "typeString": "uint16"
+                          "typeIdentifier": "t_int8",
+                          "typeString": "int8"
                         }
                       },
                       "nodeType": "BinaryOperation",
                       "operator": "==",
                       "rightExpression":
                       {
-                        "hexValue": "333030",
-                        "id": 49,
+                        "hexValue": "3432",
+                        "id": 53,
                         "isConstant": false,
                         "isLValue": false,
                         "isPure": true,
                         "kind": "number",
                         "lValueRequested": false,
                         "nodeType": "Literal",
-                        "src": "543:3:0",
+                        "src": "559:2:0",
                         "typeDescriptions":
                         {
-                          "typeIdentifier": "t_rational_300_by_1",
-                          "typeString": "int_const 300"
+                          "typeIdentifier": "t_rational_42_by_1",
+                          "typeString": "int_const 42"
                         },
-                        "value": "300"
+                        "value": "42"
                       },
-                      "src": "517:29:0",
+                      "src": "536:25:0",
                       "typeDescriptions":
                       {
                         "typeIdentifier": "t_bool",
@@ -769,19 +801,19 @@ JSON AST (compact format):
                         "typeString": "bool"
                       }
                     ],
-                    "id": 44,
+                    "id": 49,
                     "name": "assert",
                     "nodeType": "Identifier",
                     "overloadedDeclarations": [],
                     "referencedDeclaration": -3,
-                    "src": "510:6:0",
+                    "src": "529:6:0",
                     "typeDescriptions":
                     {
                       "typeIdentifier": "t_function_assert_pure$_t_bool_$returns$__$",
                       "typeString": "function (bool) pure"
                     }
                   },
-                  "id": 51,
+                  "id": 55,
                   "isConstant": false,
                   "isLValue": false,
                   "isPure": false,
@@ -790,7 +822,7 @@ JSON AST (compact format):
                   "nameLocations": [],
                   "names": [],
                   "nodeType": "FunctionCall",
-                  "src": "510:37:0",
+                  "src": "529:33:0",
                   "tryCall": false,
                   "typeDescriptions":
                   {
@@ -798,45 +830,45 @@ JSON AST (compact format):
                     "typeString": "tuple()"
                   }
                 },
-                "id": 52,
+                "id": 56,
                 "nodeType": "ExpressionStatement",
-                "src": "510:37:0"
+                "src": "529:33:0"
               }
             ]
           },
-          "functionSelector": "51ca081b",
-          "id": 54,
+          "functionSelector": "81be0a20",
+          "id": 58,
           "implemented": true,
           "kind": "function",
           "modifiers": [],
-          "name": "test_overload",
-          "nameLocation": "400:13:0",
+          "name": "test_override",
+          "nameLocation": "336:13:0",
           "nodeType": "FunctionDefinition",
           "parameters":
           {
             "id": 23,
             "nodeType": "ParameterList",
             "parameters": [],
-            "src": "413:2:0"
+            "src": "349:2:0"
           },
           "returnParameters":
           {
             "id": 24,
             "nodeType": "ParameterList",
             "parameters": [],
-            "src": "423:0:0"
+            "src": "359:0:0"
           },
-          "scope": 55,
-          "src": "391:163:0",
+          "scope": 59,
+          "src": "327:242:0",
           "stateMutability": "nonpayable",
           "virtual": false,
           "visibility": "public"
         }
       ],
-      "scope": 56,
-      "src": "374:182:0",
+      "scope": 60,
+      "src": "310:261:0",
       "usedErrors": []
     }
   ],
-  "src": "36:520:0"
+  "src": "36:535:0"
 }
