@@ -16,7 +16,7 @@ public:
     upper_set = true;
 
     lower = 0;
-    upper = get_upper_bound(t) - 1;
+    upper = is_bool_type(t) ? 1 :  get_upper_bound(t) - 1;
   }
 
   BigInt convert_to_wrap(const BigInt &b) const
