@@ -23,11 +23,11 @@ solidity_convertert::solidity_convertert(
     sol_func(_sol_func),
     contract_path(_contract_path),
     global_scope_id(0),
-    current_contractName(""),
     current_scope_var_num(1),
     current_functionDecl(nullptr),
     current_forStmt(nullptr),
-    current_functionName("")
+    current_functionName(""),
+    current_contractName("")
 {
   std::ifstream in(_contract_path);
   contract_contents.assign(
