@@ -1366,6 +1366,9 @@ static expr2tc do_bit_munge_operation(
   expr2tc simplified_side_1 = try_simplification(side_1);
   expr2tc simplified_side_2 = try_simplification(side_2);
 
+  // Disabling bit_munge for now as its broken (see #1015)
+  return expr2tc();
+
   /* Only support constant folding for integer and's. If you're a float,
    * pointer, or whatever, you're on your own. */
   if(
