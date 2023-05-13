@@ -11,7 +11,7 @@ public:
 
   explicit wrapped_interval(const type2tc &t) : t(t)
   {
-    assert(is_signedbv_type(t) || is_unsignedbv_type(t));
+    assert(is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t));
     lower_set = true;
     upper_set = true;
 
@@ -66,7 +66,6 @@ public:
 
   static BigInt get_upper_bound(const type2tc &t)
   {
-    assert(is_signedbv_type(t) || is_unsignedbv_type(t));
     BigInt r(1);
     r.setPower2(t->get_width());
     return r;
@@ -624,7 +623,7 @@ public:
     if(new_type->get_width() < old.t->get_width())
       return old.trunc(new_type);
 
-    if(is_unsignedbv_type(new_type))
+    if(is_unsignedbv_type(old.t))
       return old.zero_extension(new_type);
 
     return old.sign_extension(new_type);
@@ -736,7 +735,6 @@ public:
       if(bit)
         result = (get_upper_bound(cast)-1) - (get_upper_bound(t)-1);
 
-      log_status("Base value: {}", result);
       return result;
     };
 

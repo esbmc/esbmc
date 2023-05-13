@@ -935,6 +935,61 @@ TEST_CASE(
     REQUIRE(result1.lower == 30);
     REQUIRE(result1.upper == 1);
   }
+
+  SECTION("Unsigned to unsigned")
+  {
+    wrapped_interval w1(t1_unsigned);
+    w1.lower = 255;
+    w1.upper = 255;
+
+    auto result1 = wrapped_interval::cast(w1, t2_unsigned);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.upper == 255);
+  }
+
+  SECTION("Signed to Signed 1")
+  {
+    wrapped_interval w1(t1_signed);
+    w1.lower = 0xff;
+    w1.upper = 0xff;
+
+    auto result1 = wrapped_interval::cast(w1, t2_signed);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.upper == 0xffff);
+  }
+
+  SECTION("Signed to Signed 2")
+  {
+    wrapped_interval w1(t1_signed);
+    w1.lower = 20;
+    w1.upper = 20;
+
+    auto result1 = wrapped_interval::cast(w1, t2_signed);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.upper == 20);
+  }
+
+  SECTION("Unsigned to signed")
+  {
+    wrapped_interval w1(t1_unsigned);
+    w1.lower = 255;
+    w1.upper = 255;
+
+    auto result1 = wrapped_interval::cast(w1, t2_signed);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.upper == 255);
+  }
+
+  SECTION("Signed to Unsigned")
+  {
+    wrapped_interval w1(t1_signed);
+    w1.lower = 0xff;
+    w1.upper = 0xff;
+
+    auto result1 = wrapped_interval::cast(w1, t2_unsigned);
+    CAPTURE(result1.lower, result1.upper);
+    REQUIRE(result1.upper == 0xffff);
+  }
 }
 
 TEST_CASE(
