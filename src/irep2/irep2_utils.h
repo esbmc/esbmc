@@ -280,6 +280,18 @@ inline expr2tc conjunction(std::vector<expr2tc> cs)
   return res;
 }
 
+inline expr2tc disjunction(std::vector<expr2tc> cs)
+{
+  if(cs.empty())
+    return gen_true_expr();
+
+  expr2tc res = cs[0];
+  for(std::size_t i = 1; i < cs.size(); ++i)
+    res = or2tc(res, cs[i]);
+
+  return res;
+}
+
 inline expr2tc gen_nondet(const type2tc &type)
 {
   return sideeffect2tc(
