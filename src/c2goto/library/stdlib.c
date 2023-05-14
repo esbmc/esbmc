@@ -6,7 +6,6 @@
 #undef exit
 #undef abort
 #undef calloc
-#undef atol
 #undef getenv
 
 typedef struct atexit_key
@@ -165,9 +164,7 @@ __ESBMC_HIDE:;
 long atol(const char *nptr)
 {
 __ESBMC_HIDE:;
-  long res;
-  /* XXX - does nothing without strabs */
-  return res;
+  return strtol(nptr, (char **)0, 10);
 }
 
 char *getenv(const char *name)
