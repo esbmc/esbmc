@@ -842,7 +842,43 @@ public:
     return over_join(r);
   }
 
+  static wrapped_interval amb(const wrapped_interval &rhs)
+  {
+    wrapped_interval r(rhs.t);
+    r.lower = 0;
+    r.upper = rhs.upper - 1;
+    return r;
+  }
+
   friend wrapped_interval
+  operator%(const wrapped_interval &s, const wrapped_interval &t)
+  {
+    std::vector<wrapped_interval> r;
+
+    wrapped_interval zero(s.t);
+    zero.lower = 0;
+    zero.upper = 0;
+
+    for(auto &u : s.ssplit())
+      for(auto &v : t.ssplit())
+      {
+                // Only optimize if its singleton
+        auto v_non_zero = difference(v, zero);
+         if((u/v_non_zero).cardinality() == 1)
+         {
+           r.push_back(u - ((u/v_non_zero)*v_non_zero));
+           continue;
+         }
+         if(is_signedbv_type(u.t) && s.most_significant_bit(u.upper))
+           r.push_back(-amb(v));
+         else
+           r.push_back(amb(v));
+      }
+
+    return over_join(r);
+  }
+
+    friend wrapped_interval
   operator/(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]

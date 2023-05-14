@@ -95,11 +95,11 @@ void interval_analysis(goto_functionst &goto_functions, const namespacet &ns,
   //  interval_analysis.set_options(options);
   interval_analysis(goto_functions, ns);
 
-  /*
+#if 0
   std::ostringstream oss;
   interval_analysis.output(goto_functions, oss);
   log_status(oss.str());
-*/
+#endif
   Forall_goto_functions(f_it, goto_functions)
     instrument_intervals(interval_analysis, f_it->second);
 
