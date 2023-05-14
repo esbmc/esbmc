@@ -234,7 +234,7 @@ T interval_domaint::get_interval(const expr2tc &e)
   auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
   auto ieee_arith_op = std::dynamic_pointer_cast<ieee_arith_2ops>(e);
 
-  
+
   if(arith_op && enable_interval_arithmetic) // TODO: add support for float ops
   {
     
@@ -246,7 +246,7 @@ T interval_domaint::get_interval(const expr2tc &e)
       get_interval<T>(arith_op ? arith_op->side_2 : ieee_arith_op->side_2);
 
     if(is_add2t(e) || is_ieee_add2t(e))
-	return lhs + rhs;
+      return lhs + rhs;
 
     if(is_sub2t(e) || is_ieee_sub2t(e))
       return lhs - rhs;
@@ -312,6 +312,14 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
   {
     auto inner = get_interval<wrapped_interval>(to_typecast2t(e).from);
     return wrapped_interval::cast(inner, to_typecast2t(e).type);
+  }
+
+
+  if(is_modulus2t(e) && enable_interval_arithmetic)
+  {
+   auto lhs = get_interval<wrapped_interval>(to_modulus2t(e).side_1);
+   auto rhs = get_interval<wrapped_interval>(to_modulus2t(e).side_1);
+   return lhs % rhs;
   }
 
   auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);

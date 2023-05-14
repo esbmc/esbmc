@@ -1073,3 +1073,167 @@ TEST_CASE(
     REQUIRE(result2.upper == 255);
   }
 }
+
+TEST_CASE(
+  "Remainder Operations",
+  "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+  unsigned N1 = 8;
+  auto t1_unsigned = get_uint_type(N1);
+  auto t1_signed = get_int_type(N1);
+
+  SECTION("Singletons")
+  {
+    wrapped_interval w1(t1_unsigned);
+    wrapped_interval w2(t1_unsigned);
+
+    w1.lower = 10;
+    w1.upper = 10;
+
+    w2.lower = 10;
+    w2.upper = 10;
+
+    auto result1 = w1 % w2;
+    REQUIRE(result1.lower == 0);
+    REQUIRE(result1.upper == 0);
+
+    w2.lower = 9;
+    w2.upper = 9;
+
+    auto result2 = w1 % w2;
+    REQUIRE(result2.lower == 1);
+    REQUIRE(result2.upper == 1);
+
+    w2.lower = 11;
+    w2.upper = 11;
+
+    auto result3 = w1 % w2;
+    REQUIRE(result3.lower == 10);
+    REQUIRE(result3.upper == 10);
+
+    wrapped_interval w3(t1_signed);
+    wrapped_interval w4(t1_signed);
+
+    w3.lower = 10;
+    w3.upper = 10;
+
+    w4.lower = 10;
+    w4.upper = 10;
+
+    auto result4 = w3 % w4;
+    REQUIRE(result4.lower == 0);
+    REQUIRE(result4.upper == 0);
+
+    w4.lower = 9;
+    w4.upper = 9;
+
+    auto result5 = w3 % w4;
+    REQUIRE(result5.lower == 1);
+    REQUIRE(result5.upper == 1);
+
+    w4.lower = 11;
+    w4.upper = 11;
+
+    auto result6 = w3 % w4;
+    REQUIRE(result6.lower == 10);
+    REQUIRE(result6.upper == 10);
+
+    w3.set_lower(-10);
+    w3.set_upper(-10);
+
+    w4.lower = 10;
+    w4.upper = 10;
+
+    auto result7 = w3 % w4;
+    REQUIRE(result7.lower == 0);
+    REQUIRE(result7.upper == 0);
+
+    w4.lower = 9;
+    w4.upper = 9;
+
+    auto result8 = w3 % w4;
+    REQUIRE(result8.get_lower() == -1);
+    REQUIRE(result8.get_lower() == -1);
+
+    w4.lower = 11;
+    w4.upper = 11;
+
+    auto result9 = w3 % w4;
+    REQUIRE(result9.get_lower() == -10);
+    REQUIRE(result9.get_lower() == -10);
+  }
+
+  SECTION("Non singletons (unsigned)") {
+    wrapped_interval w1(t1_unsigned);
+    wrapped_interval w2(t1_unsigned);
+
+    w1.lower = 9;
+    w1.upper = 10;
+
+    w2.lower = 5;
+    w2.upper = 5;
+
+    auto result1 = w1 % w2;
+    REQUIRE(result1.lower == 0);
+    REQUIRE(result1.upper == 4);
+
+    w1.lower = 10;
+    w1.upper = 8;
+
+    auto result2 = w1 % w2;
+    REQUIRE(result2.lower == 0);
+    REQUIRE(result2.upper == 4);
+
+    w1.lower = 10;
+    w1.upper = 10;
+
+    w2.lower = 4;
+    w2.upper = 5;
+
+    auto result3 = w1 % w2;
+    REQUIRE(result3.lower == 0);
+    REQUIRE(result3.upper == 2);
+
+    w2.lower = 5;
+    w2.upper = 1;
+
+    // TODO: we can probably optimize this!
+    auto result4 = w1 % w2;
+    REQUIRE(result4.lower == 0);
+    REQUIRE(result4.upper == 254);
+  }
+
+  SECTION("Non singletons (signed)") {
+    wrapped_interval w1(t1_signed);
+    wrapped_interval w2(t1_signed);
+
+    w1.lower = 9;
+    w1.upper = 10;
+
+    w2.lower = 5;
+    w2.upper = 5;
+
+    auto result1 = w1 % w2;
+    REQUIRE(result1.lower == 0);
+    REQUIRE(result1.upper == 4);
+
+    w1.lower = 10;
+    w1.upper = 8;
+
+    auto result2 = w1 % w2;
+    REQUIRE(result2.lower == 252);
+    REQUIRE(result2.upper == 4);
+
+    w1.lower = 200;
+    w1.upper = 250;
+
+    w2.lower = 4; // [-3,0]
+    w2.upper = 4;
+
+    auto result3 = w1 % w2;
+    REQUIRE(result3.lower == 253);
+    REQUIRE(result3.upper == 0);
+
+  }
+}

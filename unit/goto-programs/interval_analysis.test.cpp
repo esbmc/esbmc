@@ -702,6 +702,28 @@ TEST_CASE(
   T.run_configs();
 }
 
+
+TEST_CASE(
+  "Interval Analysis - Remainder (unsigned, singleton)",
+  "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = 10;\n"
+    "int b = a % 2;\n" //
+    "return a;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@b", 0, true});
+  T.property["4"].push_back({"@F@main@b", 1, false});
+
+  T.run_configs();
+}
+
+
 TEST_CASE(
   "Interval Analysis - Truncation (unsigned)",
   "[ai][interval-analysis]")
