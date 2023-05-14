@@ -23,19 +23,12 @@ public:
   {
     auto is_signed = is_signedbv_type(t);
     auto value = b;
-    if(is_signed)
-    {
-      assert(value >= (-get_upper_bound(t) / 2));
-      assert(value <= (get_upper_bound(t) / 2 - 1));
-      if(b.is_negative() && !b.is_zero())
-        value += get_upper_bound(t);
-    }
-    else
-    {
-      assert(value >= 0);
-      assert(value <= get_upper_bound(t));
-    }
+    // TODO: I could use a better way here!
+    if(b.is_negative() && !b.is_zero())
+      value += get_upper_bound(t);
 
+    assert(value >= 0);
+    assert(value <= get_upper_bound(t));
     return value;
   }
 
@@ -525,8 +518,17 @@ public:
 
     if(is_top())
     {
-      r.push_back(south_pole(t));
-      r.push_back(north_pole(t));
+      wrapped_interval north(t);
+      wrapped_interval south(t);
+
+      north.lower = get_upper_bound(t)/2;
+      north.upper = get_upper_bound(t) - 1;
+
+      south.lower = 0;
+      south.upper = get_upper_bound(t)/2 - 1;
+
+      r.push_back(north);
+      r.push_back(south);
       return r;
     }
 
@@ -564,8 +566,17 @@ public:
 
     if(is_top())
     {
-      r.push_back(south_pole(t));
-      r.push_back(north_pole(t));
+      wrapped_interval north(t);
+      wrapped_interval south(t);
+
+      north.lower = get_upper_bound(t)/2;
+      north.upper = get_upper_bound(t) - 1;
+
+      south.lower = 0;
+      south.upper = get_upper_bound(t)/2 - 1;
+
+      r.push_back(north);
+      r.push_back(south);
       return r;
     }
 
@@ -623,10 +634,11 @@ public:
     if(new_type->get_width() < old.t->get_width())
       return old.trunc(new_type);
 
-    if(is_unsignedbv_type(old.t))
-      return old.zero_extension(new_type);
+    if(is_signedbv_type(old.t))
+      return old.sign_extension(new_type);
 
-    return old.sign_extension(new_type);
+    return old.zero_extension(new_type);
+
   }
 
   wrapped_interval zero_extension(const type2tc &cast) const {
@@ -762,6 +774,7 @@ public:
       result.lower = trunc(lower,k);
       result.upper = trunc(upper,k);
     }
+
     else if(((lower >> k)+1 % 2) == (upper >> k)%2 && (trunc(lower,k) > trunc(upper,k)))
     {
       result.lower = trunc(lower,k);
