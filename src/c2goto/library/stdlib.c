@@ -83,6 +83,7 @@ __ESBMC_HIDE:;
   return res;
 }
 
+#if 0
 long strtol(const char *nptr, char **endptr, int base)
 {
 __ESBMC_HIDE:;
@@ -154,6 +155,82 @@ __ESBMC_HIDE:;
 
   return res;
 }
+#endif
+#if 1
+long int strtol(const char *str, char **endptr, int base)
+{
+  long int result = 0;
+  int sign = 1;
+  int i = 0;
+
+  // Handle whitespace
+  while(str[i] == ' ' || str[i] == '\t' || str[i] == '\n')
+  {
+    i++;
+  }
+
+  // Handle sign
+  if(str[i] == '-')
+  {
+    sign = -1;
+    i++;
+  }
+  else if(str[i] == '+')
+  {
+    i++;
+  }
+
+  // Handle base
+  if(base == 0)
+  {
+    if(str[i] == '0')
+    {
+      if(str[i + 1] == 'x' || str[i + 1] == 'X')
+      {
+        base = 16;
+        i += 2;
+      }
+      else
+      {
+        base = 8;
+        i++;
+      }
+    }
+    else
+    {
+      base = 10;
+    }
+  }
+  else if(
+    base == 16 && str[i] == '0' && (str[i + 1] == 'x' || str[i + 1] == 'X'))
+  {
+    i += 2;
+  }
+
+  // Convert digits
+  while((str[i] >= '0' && str[i] <= '9') ||
+        (base == 16 && str[i] >= 'a' && str[i] <= 'f') ||
+        (base == 16 && str[i] >= 'A' && str[i] <= 'F'))
+  {
+    if(result > (LONG_MAX / base))
+      return sign == -1 ? LONG_MIN : LONG_MAX;
+    result = result * base;
+    int digit = str[i] >= 'a'   ? str[i] - 'a' + 10
+                : str[i] >= 'A' ? str[i] - 'A' + 10
+                                : str[i] - '0';
+    result += digit;
+    i++;
+  }
+
+  // Set end pointer
+  if(endptr != NULL)
+  {
+    *endptr = (char *)&str[i];
+  }
+
+  return sign * result;
+}
+#endif
 
 int atoi(const char *nptr)
 {
