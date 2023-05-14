@@ -15,9 +15,6 @@
 #include <util/std_expr.h>
 #include <util/string2array.h>
 #include <vector>
-#include <util/prefix.h>
-#include <util/migrate.h>
-#include <langapi/language_util.h>
 
 unsigned int execution_statet::node_count = 0;
 unsigned int execution_statet::dynamic_counter = 0;
@@ -291,13 +288,6 @@ void execution_statet::symex_step(reachability_treet &art)
       analyze_assign(assign);
     }
     state.source.pc++;
-    break;
-  case FUNCTION_CALL:
-    if(has_prefix(
-         from_expr(ns, "", migrate_expr_back(instruction.code)),
-         "__VERIFIER_atomic_"))
-      cswitch_forced = true;
-    goto_symext::symex_step(art);
     break;
   default:
     goto_symext::symex_step(art);
@@ -892,6 +882,7 @@ void execution_statet::get_expr_globals(
           art1->vars_map.insert(
             std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
           globals_list.insert(expr);
+          art1->is_global.insert(expr);
         }
       }
     }
