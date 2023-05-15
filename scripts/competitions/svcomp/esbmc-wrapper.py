@@ -267,7 +267,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   elif strat == "fixed":
     command_line += "--k-induction --max-inductive-step 3 "
   elif strat == "kinduction":
-    command_line += "--k-induction --max-inductive-step 3 "
+    command_line += "--k-induction "
   elif strat == "falsi":
     command_line += "--falsification "
   elif strat == "incr":
