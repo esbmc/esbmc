@@ -1293,8 +1293,11 @@ TEST_CASE(
   "[ai][interval-analysis]")
 {
   config.ansi_c.set_data_model(configt::ILP32);
-  unsigned N1 = 8;
+  unsigned N1 = 32;
   auto t1_unsigned = get_uint_type(N1);
+
+  uint64_t m = (uint64_t)1 << 31;
+  REQUIRE(m == 0x80000000);
 
   wrapped_interval w1(t1_unsigned);
   wrapped_interval w2(t1_unsigned);
@@ -1335,6 +1338,19 @@ TEST_CASE(
     CAPTURE(result.lower, result.upper);
     REQUIRE(result.lower == 0);
     REQUIRE(result.upper == 2);
+  }
+
+  SECTION("Hardware issue")
+  {
+    w1.lower = 0; // 0x00
+    w1.upper = 1; // 0x01
+    w2.lower = 1; // 0x01
+    w2.upper = 1; // 0x01
+
+    auto result = w1 & w2;
+    CAPTURE(result.lower, result.upper);
+    REQUIRE(result.lower == 0);
+    REQUIRE(result.upper == 1);
   }
 }
 
