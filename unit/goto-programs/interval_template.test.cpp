@@ -1237,3 +1237,181 @@ TEST_CASE(
 
   }
 }
+
+
+TEST_CASE(
+  "Bitor Operations",
+  "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+  unsigned N1 = 8;
+  auto t1_unsigned = get_uint_type(N1);
+
+  wrapped_interval w1(t1_unsigned);
+  wrapped_interval w2(t1_unsigned);
+  SECTION("Singletons")
+  {
+    w1.lower = 10; // 0x0A
+    w1.upper = 10; // 0x0A
+    w2.lower = 160; // 0xA0
+    w2.upper = 160; // 0xA0
+
+    auto result = w1 | w2;
+    CAPTURE(result.lower, result.upper);
+    REQUIRE(result.lower == 170); // 0xAA
+    REQUIRE(result.upper == 170); // 0xAA
+  }
+
+  SECTION("Intervals")
+  {
+    w1.lower = 10; // 0x0A
+    w1.upper = 12; // 0x0C
+    w2.lower = 161; // 0xA1
+    w2.upper = 162; // 0xA2
+
+    auto result = w1 | w2;
+    CAPTURE(result.lower, result.upper);
+    REQUIRE(result.lower == 170);
+    REQUIRE(result.upper == 174);
+  }
+  SECTION("Intervals Overlap")
+  {
+    w1.lower = 250; // 0xFA
+    w1.upper = 2; // 0x02
+    w2.lower = 1; // 0xA1
+    w2.upper = 1; // 0xA2
+
+    auto result = w1 | w2;
+    CAPTURE(result.lower, result.upper);
+    REQUIRE(result.lower == 251);
+    REQUIRE(result.upper == 3);
+  }
+}
+
+TEST_CASE(
+  "Bitand Operations",
+  "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+  unsigned N1 = 8;
+  auto t1_unsigned = get_uint_type(N1);
+
+  wrapped_interval w1(t1_unsigned);
+  wrapped_interval w2(t1_unsigned);
+  SECTION("Singletons disjunct")
+  {
+    w1.lower = 10; // 0x0A
+    w1.upper = 10; // 0x0A
+    w2.lower = 160; // 0xA0
+    w2.upper = 160; // 0xA0
+
+    auto result = w1 & w2;
+    CAPTURE(result.lower, result.upper);
+    REQUIRE(result.lower == 0); // 0x00
+    REQUIRE(result.upper == 0); // 0x00
+  }
+
+  SECTION("Singletons")
+  {
+    w1.lower = 11; // 0x0B
+    w1.upper = 11; // 0x0B
+    w2.lower = 161; // 0xA1
+    w2.upper = 161; // 0xA1
+
+    auto result = w1 & w2;
+    CAPTURE(result.lower, result.upper);
+    REQUIRE(result.lower == 1); // 0x01
+    REQUIRE(result.upper == 1); // 0x01
+  }
+
+  SECTION("Intervals")
+  {
+    w1.lower = 10; // 0x0A
+    w1.upper = 12; // 0x0C
+    w2.lower = 161; // 0xA1
+    w2.upper = 162; // 0xA2
+
+    auto result = w1 & w2;
+    CAPTURE(result.lower, result.upper);
+    REQUIRE(result.lower == 0);
+    REQUIRE(result.upper == 2);
+  }
+}
+
+TEST_CASE(
+  "Bitxor Operations",
+  "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+  unsigned N1 = 8;
+  auto t1_unsigned = get_uint_type(N1);
+
+  wrapped_interval w1(t1_unsigned);
+  wrapped_interval w2(t1_unsigned);
+  SECTION("Singletons disjunct")
+  {
+    w1.lower = 10; // 0x0A
+    w1.upper = 10; // 0x0A
+    w2.lower = 160; // 0xA0
+    w2.upper = 160; // 0xA0
+
+    auto result = w1 ^ w2;
+    CAPTURE(result.lower, result.upper);
+    REQUIRE(result.lower == 170); // 0xAA
+    REQUIRE(result.upper == 170); // 0xAA
+  }
+
+  SECTION("Singletons")
+  {
+    w1.lower = 1; // 0x01
+    w1.upper = 1; // 0x01
+    w2.lower = 161; // 0xA1
+    w2.upper = 161; // 0xA1
+
+    auto result = w1 ^ w2;
+    CAPTURE(result.lower, result.upper);
+    REQUIRE(result.lower == 160); // 0xA0
+    REQUIRE(result.upper == 160); // 0xA0
+  }
+
+  SECTION("Intervals")
+  {
+    w1.lower = 10; // 0x0A   0000 1010
+    w1.upper = 12; // 0x0C   0000 1100
+    w2.lower = 161; // 0xA1  1011 0001
+    w2.upper = 162; // 0xA2  1011 0010
+
+    auto result = w1 ^ w2;
+    CAPTURE(result.lower, result.upper);
+    REQUIRE(result.lower == 168); // 1010 1100
+    REQUIRE(result.upper == 174); // 1010 1110
+  }
+}
+
+TEST_CASE(
+  "Bitneh Operations",
+  "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+  unsigned N1 = 8;
+  auto t1_unsigned = get_uint_type(N1);
+  wrapped_interval w(t1_unsigned);
+  SECTION("Singletons")
+  {
+    w.lower = 1; // 0x01
+    w.upper = 1; // 0x01
+
+    auto r = wrapped_interval::bitneg(w);
+    CAPTURE(r.lower, r.upper);
+    REQUIRE(r.lower == 254);
+    REQUIRE(r.upper == 254);
+
+    w.lower = 250; // 0xFA
+    w.upper = 250; // 0xFA
+
+    r = wrapped_interval::bitneg(w);
+    CAPTURE(r.lower, r.upper);
+    REQUIRE(r.lower == 5); // 0x05
+    REQUIRE(r.upper == 5); // 0x05
+  }
+}

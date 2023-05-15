@@ -16,7 +16,7 @@ public:
     upper_set = true;
 
     lower = 0;
-    upper = is_bool_type(t) ? 1 :  get_upper_bound(t) - 1;
+    upper = is_bool_type(t) ? 1 : get_upper_bound(t) - 1;
   }
 
   BigInt convert_to_wrap(const BigInt &b) const
@@ -216,8 +216,7 @@ public:
   }
 
   /// Over union
-  static wrapped_interval
-  over_join(const std::vector<wrapped_interval> &r)
+  static wrapped_interval over_join(const std::vector<wrapped_interval> &r)
   {
     assert(!r.empty());
     auto result = r[0];
@@ -435,7 +434,7 @@ public:
 
     result.set_lower(-1);
     result.set_upper(-1);
-    return result*lhs;
+    return result * lhs;
   }
 
   friend wrapped_interval
@@ -521,11 +520,11 @@ public:
       wrapped_interval north(t);
       wrapped_interval south(t);
 
-      north.lower = get_upper_bound(t)/2;
+      north.lower = get_upper_bound(t) / 2;
       north.upper = get_upper_bound(t) - 1;
 
       south.lower = 0;
-      south.upper = get_upper_bound(t)/2 - 1;
+      south.upper = get_upper_bound(t) / 2 - 1;
 
       r.push_back(north);
       r.push_back(south);
@@ -553,7 +552,8 @@ public:
     return r;
   }
 
-  static wrapped_interval difference(const wrapped_interval &s, const wrapped_interval &t)
+  static wrapped_interval
+  difference(const wrapped_interval &s, const wrapped_interval &t)
   {
     return over_meet(s, complement(t));
   }
@@ -569,11 +569,11 @@ public:
       wrapped_interval north(t);
       wrapped_interval south(t);
 
-      north.lower = get_upper_bound(t)/2;
+      north.lower = get_upper_bound(t) / 2;
       north.upper = get_upper_bound(t) - 1;
 
       south.lower = 0;
-      south.upper = get_upper_bound(t)/2 - 1;
+      south.upper = get_upper_bound(t) / 2 - 1;
 
       r.push_back(north);
       r.push_back(south);
@@ -623,13 +623,14 @@ public:
   static BigInt trunc(const BigInt &b, unsigned k)
   {
     // TODO: and operation for bigint
-    BigInt r =1;
+    BigInt r = 1;
     r.setPower2(k);
 
-    return b.to_uint64() & (r.to_uint64()-1);
+    return b.to_uint64() & (r.to_uint64() - 1);
   }
 
-  static wrapped_interval cast(const wrapped_interval &old, const type2tc &new_type)
+  static wrapped_interval
+  cast(const wrapped_interval &old, const type2tc &new_type)
   {
     if(new_type->get_width() < old.t->get_width())
       return old.trunc(new_type);
@@ -638,10 +639,10 @@ public:
       return old.sign_extension(new_type);
 
     return old.zero_extension(new_type);
-
   }
 
-  wrapped_interval zero_extension(const type2tc &cast) const {
+  wrapped_interval zero_extension(const type2tc &cast) const
+  {
     std::vector<wrapped_interval> parts;
 
     for(auto &interval : ssplit())
@@ -655,26 +656,33 @@ public:
     return over_join(parts);
   }
 
-  wrapped_interval left_shift(unsigned  k) const {
-    if(is_bottom()) return *this;
+  wrapped_interval left_shift(unsigned k) const
+  {
+    if(is_bottom())
+      return *this;
 
     wrapped_interval result(t);
-    if(trunc(lower,t->get_width() - k) == lower && trunc(upper, t->get_width() - k) == upper)
+    if(
+      trunc(lower, t->get_width() - k) == lower &&
+      trunc(upper, t->get_width() - k) == upper)
     {
       result.lower = lower << k;
       result.upper = upper << k;
     }
-    else {
+    else
+    {
       result.lower = 0;
       BigInt m(1);
       m.setPower2(k);
-      result.upper = (get_upper_bound(t)-1) - (m - 1);
+      result.upper = (get_upper_bound(t) - 1) - (m - 1);
     }
     return result;
   }
 
-  wrapped_interval left_shift(const wrapped_interval &k) const {
-    if(is_bottom()) return *this;
+  wrapped_interval left_shift(const wrapped_interval &k) const
+  {
+    if(is_bottom())
+      return *this;
 
     if(k.lower == k.upper && !k.is_bottom())
       return left_shift(k.get_lower().to_uint64());
@@ -683,25 +691,31 @@ public:
     return result;
   }
 
-  wrapped_interval logical_right_shift(unsigned  k) const {
-    if(is_bottom()) return *this;
+  wrapped_interval logical_right_shift(unsigned k) const
+  {
+    if(is_bottom())
+      return *this;
 
     wrapped_interval result(t);
     if(south_pole(t).is_included(*this))
     {
       result.lower = 0;
       BigInt m(1);
-      m.setPower2(t->get_width()-k);
-      result.upper =  (m - 1);
-    } else {
+      m.setPower2(t->get_width() - k);
+      result.upper = (m - 1);
+    }
+    else
+    {
       result.lower = lower >> k;
       result.upper = upper >> k;
     }
     return result;
   }
 
-  wrapped_interval logical_right_shift(const wrapped_interval &k) const {
-    if(is_bottom()) return *this;
+  wrapped_interval logical_right_shift(const wrapped_interval &k) const
+  {
+    if(is_bottom())
+      return *this;
 
     if(k.lower == k.upper && !k.is_bottom())
       return logical_right_shift(k.get_lower().to_uint64());
@@ -710,26 +724,32 @@ public:
     return result;
   }
 
-  wrapped_interval arithmetic_right_shift(unsigned  k) const {
-    if(is_bottom()) return *this;
+  wrapped_interval arithmetic_right_shift(unsigned k) const
+  {
+    if(is_bottom())
+      return *this;
 
     wrapped_interval result(t);
     if(north_pole(t).is_included(*this))
     {
       BigInt m(1);
       m.setPower2(t->get_width() - k);
-      result.lower = (get_upper_bound(t)-1) - (m - 1);
+      result.lower = (get_upper_bound(t) - 1) - (m - 1);
 
-      result.upper =  (m - 1);
-    } else {
+      result.upper = (m - 1);
+    }
+    else
+    {
       result.set_lower(get_lower() >> k);
       result.set_upper(get_upper() >> k);
     }
     return result;
   }
 
-  wrapped_interval arithmetic_right_shift(const wrapped_interval &k) const {
-    if(is_bottom()) return *this;
+  wrapped_interval arithmetic_right_shift(const wrapped_interval &k) const
+  {
+    if(is_bottom())
+      return *this;
 
     if(k.lower == k.upper && !k.is_bottom())
       return arithmetic_right_shift(k.get_lower().to_uint64());
@@ -738,14 +758,15 @@ public:
     return result;
   }
 
-  wrapped_interval sign_extension(const type2tc &cast) const {
+  wrapped_interval sign_extension(const type2tc &cast) const
+  {
     std::vector<wrapped_interval> parts;
 
-    auto compute_outer_region = [this, &cast]( bool bit)
+    auto compute_outer_region = [this, &cast](bool bit)
     {
       BigInt result = 0;
       if(bit)
-        result = (get_upper_bound(cast)-1) - (get_upper_bound(t)-1);
+        result = (get_upper_bound(cast) - 1) - (get_upper_bound(t) - 1);
 
       return result;
     };
@@ -753,8 +774,12 @@ public:
     for(auto &interval : nsplit())
     {
       wrapped_interval result(cast);
-      result.lower = compute_outer_region(most_significant_bit(interval.lower)) + interval.lower;
-      result.upper = compute_outer_region(most_significant_bit(interval.upper)) + interval.upper;
+      result.lower =
+        compute_outer_region(most_significant_bit(interval.lower)) +
+        interval.lower;
+      result.upper =
+        compute_outer_region(most_significant_bit(interval.upper)) +
+        interval.upper;
       parts.push_back(result);
     }
 
@@ -769,21 +794,25 @@ public:
     if(is_bottom())
       result.bottom = true;
 
-    else if((lower >> k) == (upper >> k) && (trunc(lower,k) <= trunc(upper,k)))
+    else if(
+      (lower >> k) == (upper >> k) && (trunc(lower, k) <= trunc(upper, k)))
     {
-      result.lower = trunc(lower,k);
-      result.upper = trunc(upper,k);
+      result.lower = trunc(lower, k);
+      result.upper = trunc(upper, k);
     }
 
-    else if(((lower >> k)+1 % 2) == (upper >> k)%2 && (trunc(lower,k) > trunc(upper,k)))
+    else if(
+      ((lower >> k) + 1 % 2) == (upper >> k) % 2 &&
+      (trunc(lower, k) > trunc(upper, k)))
     {
-      result.lower = trunc(lower,k);
-      result.upper = trunc(upper,k);
+      result.lower = trunc(lower, k);
+      result.upper = trunc(upper, k);
     }
     return result;
   }
 
-  static wrapped_interval multiply_us(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  static wrapped_interval
+  multiply_us(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     wrapped_interval result(lhs.t);
 
@@ -838,7 +867,7 @@ public:
     std::vector<wrapped_interval> r;
     for(auto &u : cut(lhs))
       for(auto &v : cut(rhs))
-        r.push_back(multiply_us(u,v));
+        r.push_back(multiply_us(u, v));
     return over_join(r);
   }
 
@@ -862,23 +891,23 @@ public:
     for(auto &u : s.ssplit())
       for(auto &v : t.ssplit())
       {
-                // Only optimize if its singleton
+        // Only optimize if its singleton
         auto v_non_zero = difference(v, zero);
-         if((u/v_non_zero).cardinality() == 1)
-         {
-           r.push_back(u - ((u/v_non_zero)*v_non_zero));
-           continue;
-         }
-         if(is_signedbv_type(u.t) && s.most_significant_bit(u.upper))
-           r.push_back(-amb(v));
-         else
-           r.push_back(amb(v));
+        if((u / v_non_zero).cardinality() == 1)
+        {
+          r.push_back(u - ((u / v_non_zero) * v_non_zero));
+          continue;
+        }
+        if(is_signedbv_type(u.t) && s.most_significant_bit(u.upper))
+          r.push_back(-amb(v));
+        else
+          r.push_back(amb(v));
       }
 
     return over_join(r);
   }
 
-    friend wrapped_interval
+  friend wrapped_interval
   operator/(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
@@ -889,9 +918,8 @@ public:
     zero.upper = 0;
     if(!is_signedbv_type(lhs.t))
     {
-
-      for(const auto& u: lhs.ssplit())
-        for(const auto& v: rhs.ssplit())
+      for(const auto &u : lhs.ssplit())
+        for(const auto &v : rhs.ssplit())
         {
           auto non_zero = difference(v, zero);
           wrapped_interval temp(lhs.t);
@@ -902,8 +930,8 @@ public:
     }
     else
     {
-      for(const auto& u : cut(lhs))
-        for(const auto& v : cut(rhs))
+      for(const auto &u : cut(lhs))
+        for(const auto &v : cut(rhs))
         {
           auto non_zero = difference(v, zero);
           wrapped_interval temp(lhs.t);
@@ -918,7 +946,7 @@ public:
           }
           else if(msb_a && msb_c)
           {
-            temp.set_lower( u.get_upper() / non_zero.get_lower());
+            temp.set_lower(u.get_upper() / non_zero.get_lower());
             temp.set_upper(u.get_lower() / non_zero.get_upper());
           }
           else if(!msb_a && msb_c)
@@ -928,10 +956,11 @@ public:
           }
           else if(msb_a && !msb_c)
           {
-            temp.set_lower( u.get_lower() / non_zero.get_lower());
+            temp.set_lower(u.get_lower() / non_zero.get_lower());
             temp.set_upper(u.get_upper() / non_zero.get_upper());
           }
-          else {
+          else
+          {
             log_error("This should never happen");
             abort();
           }
@@ -942,12 +971,90 @@ public:
     return over_join(r);
   }
 
+  BigInt approx_bit_and(const BigInt &lhs, const BigInt &rhs) const
+  {
+    assert(t->get_width() <= 64);
+
+    auto v1 = lhs.to_uint64();
+    auto v2 = rhs.to_uint64();
+
+    return (v1 & v2);
+  }
+
+  BigInt approx_bit_xor(const BigInt &lhs, const BigInt &rhs) const
+  {
+    assert(t->get_width() <= 64);
+
+    auto v1 = lhs.to_uint64();
+    auto v2 = rhs.to_uint64();
+
+    return (v1 ^ v2);
+  }
+
   friend wrapped_interval
   operator|(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
     wrapped_interval result(lhs.t);
-    return result;
+    if(lhs.t->get_width() > 64)
+      return result;
+
+    const unsigned width = lhs.t->get_width();
+    auto min_or = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
+    {
+      uint64_t m, temp;
+
+      m = 1 << (width-1);
+
+      while(m != 0)
+      {
+        if(~a & c & m)
+        {
+          temp = (a | m) & -m;
+          if(temp <= b) { a = temp; break;}
+        }
+        else if (a & ~c & m) {
+          temp = (c | m) & -m;
+          if (temp <= d) { c = temp; break;}
+        }
+        m = m >> 1;
+      }
+      return a | c;
+    };
+    auto max_or = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+      uint64_t m, temp;
+
+      m = 1 << (width - 1);
+      while(m != 0)
+      {
+        if(b & d & m) {
+          temp = (b - m) | (m -1);
+          if (temp >= a) { b = temp; break;}
+          temp = (d - m) | (m-1);
+          if (temp >= c) { d = temp; break;}
+        }
+        m = m >> 1;
+      }
+      return b | d;
+    };
+
+    std::vector<wrapped_interval> r;
+    for( auto &u : lhs.ssplit())
+      for (auto &v : rhs.ssplit())
+      {
+        auto u_lower = u.lower.to_uint64();
+        auto u_upper = u.upper.to_uint64();
+
+        auto v_lower = v.lower.to_uint64();
+        auto v_upper = v.upper.to_uint64();
+
+        wrapped_interval temp(lhs.t);
+        temp.lower = min_or(u_lower, u_upper, v_lower, v_upper);
+        temp.upper = max_or(u_lower, u_upper, v_lower, v_upper);
+        r.push_back(temp);
+      }
+
+    return over_join(r);
   }
 
   friend wrapped_interval
@@ -955,22 +1062,157 @@ public:
   {
     // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
     wrapped_interval result(lhs.t);
-    return result;
+    if(lhs.t->get_width() > 64)
+      return result;
+
+    const unsigned width = lhs.t->get_width();
+    auto min_and = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
+    {
+      uint64_t m, temp;
+
+      m = 1 << (width-1);
+
+      while(m != 0)
+      {
+        if(~a & ~c & m)
+        {
+          temp = (a | m) & -m;
+          if(temp <= b)
+          {
+            a = temp;
+            break;
+          }
+          temp = (c | m) & -m;
+          if(temp <= d) { c = temp; break;}
+        }
+        m = m >> 1;
+      }
+      return a & c;
+    };
+    auto max_and = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+      uint64_t m, temp;
+
+      m = 1 << (width - 1);
+      while(m != 0)
+      {
+        if(b & ~d & m) {
+          temp = (b & ~m) | (m -1);
+          if (temp >= a) { b = temp; break;}
+        }
+        else if (~b & d & m)
+        {
+          temp = (d & ~m) | (m-1);
+          if (temp >= c) { d = temp; break;}
+        }
+        m = m >> 1;
+      }
+      return b & d;
+    };
+
+    std::vector<wrapped_interval> r;
+    for( auto &u : lhs.ssplit())
+      for (auto &v : rhs.ssplit())
+      {
+        auto u_lower = u.lower.to_uint64();
+        auto u_upper = u.upper.to_uint64();
+
+        auto v_lower = v.lower.to_uint64();
+        auto v_upper = v.upper.to_uint64();
+
+        wrapped_interval temp(lhs.t);
+        temp.lower = min_and(u_lower, u_upper, v_lower, v_upper);
+        temp.upper = max_and(u_lower, u_upper, v_lower, v_upper);
+        r.push_back(temp);
+      }
+
+    return over_join(r);
   }
 
   friend wrapped_interval
-  operator<<(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  operator^(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
     wrapped_interval result(lhs.t);
-    return result;
+    if(lhs.t->get_width() > 64)
+      return result;
+
+    const unsigned width = lhs.t->get_width();
+
+    auto min_xor = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
+    {
+      uint64_t m, temp;
+
+      m = 1 << (width-1);
+
+      while(m != 0)
+      {
+        if(~a & c & m)
+        {
+          temp = (a | m) & -m;
+          if(temp <= b) { a = temp; }
+        }
+        else if (a & ~c & m) {
+          temp = (c | m) & -m;
+          if (temp <= d) { c = temp; }
+        }
+        m = m >> 1;
+      }
+      return a ^ c;
+    };
+
+
+    auto max_xor = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+      uint64_t m, temp;
+
+      m = 1 << (width - 1);
+      while(m != 0)
+      {
+        if(b & d & m) {
+          temp = (b - m) | (m -1);
+          if (temp >= a) { b = temp;}
+          else {
+            temp = (d - m) | (m-1);
+            if (temp >= c) { d = temp; }
+          }
+
+        }
+        m = m >> 1;
+      }
+      return b ^ d;
+    };
+
+
+    std::vector<wrapped_interval> r;
+    for( auto &u : lhs.ssplit())
+      for (auto &v : rhs.ssplit())
+      {
+        auto u_lower = u.lower.to_uint64();
+        auto u_upper = u.upper.to_uint64();
+
+        auto v_lower = v.lower.to_uint64();
+        auto v_upper = v.upper.to_uint64();
+
+        wrapped_interval temp(lhs.t);
+        temp.lower = min_xor(u_lower, u_upper, v_lower, v_upper);
+        temp.upper = max_xor(u_lower, u_upper, v_lower, v_upper);
+        r.push_back(temp);
+      }
+
+    return over_join(r);
   }
 
-  friend wrapped_interval
-  operator>>(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  static wrapped_interval bitneg(const wrapped_interval &w)
   {
-    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
-    wrapped_interval result(lhs.t);
-    return result;
+    std::vector<wrapped_interval> result;
+    for( auto &u : w.ssplit())
+    {
+
+      wrapped_interval one(w.t);
+      one.lower = 1;
+      one.upper = 1;
+      auto  w_new = (-w ) - one;
+      result.push_back(w_new);
+    }
+    return over_join(result);
   }
 };
