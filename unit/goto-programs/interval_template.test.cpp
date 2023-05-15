@@ -597,7 +597,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     B.set_lower(1);
     B.set_upper(2);
 
-    C.set(A + B);
+    C = A + B;
     REQUIRE(C.get_lower() == 101);
     REQUIRE(C.get_upper() == 1);
   }
@@ -629,7 +629,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     Bs.set_lower(-1);
     Bs.set_upper(1);
 
-    C.set(As + Bs);
+    C = As + Bs;
     REQUIRE(C.get_lower() == 99);
     REQUIRE(C.get_upper().to_int64() == -pow(2, N1)/2);
   }
@@ -1415,7 +1415,7 @@ TEST_CASE(
     w.lower = 1; // 0x01
     w.upper = 1; // 0x01
 
-    auto r = wrapped_interval::bitneg(w);
+    auto r = wrapped_interval::bitnot(w);
     CAPTURE(r.lower, r.upper);
     REQUIRE(r.lower == 254);
     REQUIRE(r.upper == 254);
@@ -1423,7 +1423,7 @@ TEST_CASE(
     w.lower = 250; // 0xFA
     w.upper = 250; // 0xFA
 
-    r = wrapped_interval::bitneg(w);
+    r = wrapped_interval::bitnot(w);
     CAPTURE(r.lower, r.upper);
     REQUIRE(r.lower == 5); // 0x05
     REQUIRE(r.upper == 5); // 0x05

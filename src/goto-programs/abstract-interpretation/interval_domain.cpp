@@ -330,7 +330,7 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
     if(is_bitnor2t(e))
     {
       auto lhs = get_interval<wrapped_interval>(to_bitnot2t(e).value);
-      return wrapped_interval::bitneg(lhs);
+      return wrapped_interval::bitnot(lhs);
     }
   }
 
