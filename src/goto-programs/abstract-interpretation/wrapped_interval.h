@@ -968,23 +968,17 @@ public:
     return over_join(r);
   }
 
+  typedef std::function<uint64_t(uint64_t,uint64_t,uint64_t,uint64_t)> warren_approximation_function;
+
 
   friend wrapped_interval
   operator|(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
-    wrapped_interval result(lhs.t);
-    if(lhs.t->get_width() > 64)
-      return result;
-
     const unsigned width = lhs.t->get_width();
-    auto min_or = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
+    const auto min_or = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
     {
       uint64_t m, temp;
-
-      m = (uint64_t)1 << (width-1);
-      if(width == 32)
-        assert(m == 0x80000000);
+      m = compute_m(width);
       while(m != 0)
       {
         if(~a & c & m)
@@ -1000,9 +994,9 @@ public:
       }
       return a | c;
     };
-    auto max_or = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+    const auto max_or = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
       uint64_t m, temp;
-      m = (uint64_t)1 << (width-1);
+      m = compute_m(width);
       if(width == 32)
         assert(m == 0x80000000);
       while(m != 0)
@@ -1017,42 +1011,18 @@ public:
       }
       return b | d;
     };
-
-    std::vector<wrapped_interval> r;
-    for( auto &u : lhs.ssplit())
-      for (auto &v : rhs.ssplit())
-      {
-        auto u_lower = u.lower.to_uint64();
-        auto u_upper = u.upper.to_uint64();
-
-        auto v_lower = v.lower.to_uint64();
-        auto v_upper = v.upper.to_uint64();
-
-        wrapped_interval temp(lhs.t);
-        temp.lower = min_or(u_lower, u_upper, v_lower, v_upper);
-        temp.upper = max_or(u_lower, u_upper, v_lower, v_upper);
-        r.push_back(temp);
-      }
-
-    return over_join(r);
+    return warren_approximation(lhs, rhs, min_or, max_or);
   }
 
   friend wrapped_interval
   operator&(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
-    wrapped_interval result(lhs.t);
-    if(lhs.t->get_width() > 64)
-      return result;
-
     const unsigned width = lhs.t->get_width();
-    auto min_and = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
+    const auto min_and = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
     {
       uint64_t m, temp;
 
-      m = (uint64_t)1 << (width-1);
-      if(width == 32)
-        assert(m == 0x80000000);
+      m = compute_m(width);
       while(m != 0)
       {
         if(~a & ~c & m)
@@ -1070,12 +1040,10 @@ public:
       }
       return a & c;
     };
-    auto max_and = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+    const auto max_and = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
       uint64_t m, temp;
 
-      m = (uint64_t)1 << (width-1);
-      if(width == 32)
-        assert(m == 0x80000000);
+      m = compute_m(width);
       while(m != 0)
       {
         if(b & ~d & m) {
@@ -1091,42 +1059,17 @@ public:
       }
       return b & d;
     };
-
-    std::vector<wrapped_interval> r;
-    for( auto &u : lhs.ssplit())
-      for (auto &v : rhs.ssplit())
-      {
-        auto u_lower = u.lower.to_uint64();
-        auto u_upper = u.upper.to_uint64();
-
-        auto v_lower = v.lower.to_uint64();
-        auto v_upper = v.upper.to_uint64();
-
-        wrapped_interval temp(lhs.t);
-        temp.lower = min_and(u_lower, u_upper, v_lower, v_upper);
-        temp.upper = max_and(u_lower, u_upper, v_lower, v_upper);
-        r.push_back(temp);
-      }
-
-    return over_join(r);
+    return warren_approximation(lhs, rhs, min_and, max_and);
   }
 
   friend wrapped_interval
   operator^(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
-    wrapped_interval result(lhs.t);
-    if(lhs.t->get_width() > 64)
-      return result;
-
     const unsigned width = lhs.t->get_width();
-
-    auto min_xor = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
+    const auto min_xor = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
     {
       uint64_t m, temp;
-      m = (uint64_t)1 << (width-1);
-      if(width == 32)
-        assert(m == 0x80000000);
+      m = compute_m(width);
       while(m != 0)
       {
         if(~a & c & m)
@@ -1142,11 +1085,9 @@ public:
       }
       return a ^ c;
     };
-
-
-    auto max_xor = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+    const auto max_xor = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
       uint64_t m, temp;
-      m = (uint64_t)1 << (width-1);
+      m = compute_m(width);
       if(width == 32)
         assert(m == 0x80000000);
       while(m != 0)
@@ -1164,28 +1105,10 @@ public:
       }
       return b ^ d;
     };
-
-
-    std::vector<wrapped_interval> r;
-    for( auto &u : lhs.ssplit())
-      for (auto &v : rhs.ssplit())
-      {
-        auto u_lower = u.lower.to_uint64();
-        auto u_upper = u.upper.to_uint64();
-
-        auto v_lower = v.lower.to_uint64();
-        auto v_upper = v.upper.to_uint64();
-
-        wrapped_interval temp(lhs.t);
-        temp.lower = min_xor(u_lower, u_upper, v_lower, v_upper);
-        temp.upper = max_xor(u_lower, u_upper, v_lower, v_upper);
-        r.push_back(temp);
-      }
-
-    return over_join(r);
+    return warren_approximation(lhs, rhs, min_xor, max_xor);
   }
 
-  static wrapped_interval bitneg(const wrapped_interval &w)
+  static wrapped_interval bitnot(const wrapped_interval &w)
   {
     std::vector<wrapped_interval> result;
     for( auto &u : w.ssplit())
@@ -1216,5 +1139,39 @@ private:
     BigInt r(1);
     r.setPower2(t->get_width());
     return r;
+  }
+
+  // For bitwise intervals approximations (Warren 2002)
+  static uint64_t compute_m(unsigned width) {
+    uint64_t m = (uint64_t)1 << (width-1);
+    if(width == 32)
+      assert(m == 0x80000000);
+    return m;
+  }
+
+  static wrapped_interval warren_approximation(const wrapped_interval &lhs, const wrapped_interval &rhs, const warren_approximation_function &min, const warren_approximation_function &max)
+  {
+    // TODO: BigInt has no support for bitwise operators
+    wrapped_interval result(lhs.t);
+    if(lhs.t->get_width() > 64)
+      return result;
+
+    std::vector<wrapped_interval> r;
+    for( auto &u : lhs.ssplit())
+      for (auto &v : rhs.ssplit())
+      {
+        auto u_lower = u.lower.to_uint64();
+        auto u_upper = u.upper.to_uint64();
+
+        auto v_lower = v.lower.to_uint64();
+        auto v_upper = v.upper.to_uint64();
+
+        wrapped_interval temp(lhs.t);
+        temp.lower = min(u_lower, u_upper, v_lower, v_upper);
+        temp.upper = max(u_lower, u_upper, v_lower, v_upper);
+        r.push_back(temp);
+      }
+
+    return over_join(r);
   }
 };
