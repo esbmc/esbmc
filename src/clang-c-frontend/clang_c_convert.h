@@ -94,8 +94,11 @@ protected:
 
   const clang::FunctionDecl *current_functionDecl;
 
+  std::vector<std::pair<irep_idt, const clang::Decl *>> tu_symtype_decls;
+
   bool convert_builtin_types();
   bool convert_top_level_decl();
+  bool resolve_symtype_decl(irep_idt id, const clang::Decl *decl);
 
   /**
    *  Since this class is inherited by clang-cpp-frontend,

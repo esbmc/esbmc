@@ -234,8 +234,10 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::RecordDecl &record =
       static_cast<const clang::RecordDecl &>(decl);
 
-    if(get_struct_union_class(record))
-      return true;
+    std::string id, name;
+    get_decl_name(record, name, id);
+
+    tu_symtype_decls.emplace_back(id, &decl);
 
     break;
   }
@@ -245,6 +247,8 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::TranslationUnitDecl &tu =
       static_cast<const clang::TranslationUnitDecl &>(decl);
 
+    assert(tu_symtype_decls.empty());
+
     for(auto const &decl : tu.decls())
     {
       // This is a global declaration (variable, function, struct, etc)
@@ -253,6 +257,14 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       exprt dummy_decl;
       if(get_decl(*decl, dummy_decl))
         return true;
+
+      while(!tu_symtype_decls.empty())
+      {
+        auto [id,decl] = tu_symtype_decls.back();
+        tu_symtype_decls.pop_back();
+        if(resolve_symtype_decl(id, decl))
+          return true;
+      }
     }
 
     break;
@@ -293,6 +305,31 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
+bool clang_c_convertert::resolve_symtype_decl(
+  irep_idt id,
+  const clang::Decl *decl)
+{
+  symbolt *sym = context.find_symbol(id);
+  if(sym && !sym->type.incomplete())
+    return false;
+
+  fprintf(stdout, "C: resolving symbolic type '%s'\n", id.c_str());
+
+  switch(decl->getKind())
+  {
+  case clang::Decl::Record:
+    if(get_struct_union_class(*static_cast<const clang::RecordDecl *>(decl)))
+      return true;
+
+    break;
+
+  default:
+    abort();
+  }
+
+  return false;
+}
+
 template <typename Func>
 static void for_decl_annot(const clang::Decl &decl, Func func)
 {
@@ -313,6 +350,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
   std::string id, name;
   get_decl_name(rd, name, id);
+
+  // fprintf(stdout, "C: getting %s id '%s'\n", complete ? "complete" : "incomplete", id.c_str());
 
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context.
@@ -440,7 +479,11 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 {
   // Get type
   typet t;
+//<<<<<<< HEAD
   if(get_type(vd.getType(), t))
+/*=======
+  if(get_type(vd.getType(), t, false))
+>>>>>>> 67ad332dda (keep more types symbolic)*/
     return true;
 
   // Check if we annotated it to be have an infinity size
@@ -993,15 +1036,40 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     std::string id, name;
     get_decl_name(rd, name, id);
 
-    // avoid unnecessary conversion if symbol already exists
-    if(!context.find_symbol(id))
-      if(get_struct_union_class(rd))
-        return true;
+    if(get_struct_union_class(rd))
+      return true;
 
+#if 1 /* solution to merge problem */
+    symbolt *s = context.find_symbol(id);
+    if(s)
+      new_type = s->type;
+    else {
+      tu_symtype_decls.emplace_back(id, &rd);
+      new_type = symbol_typet(id);
+    }
+
+#else /* original merge problem */
+#if 1
+    if(!complete)
+      tu_symtype_decls.emplace_back(id, &rd);
+
+<<<<<<< HEAD
     symbolt &s = *context.find_symbol(id);
     // For the time being we just copy the entire type.
     // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
     new_type = s.type;
+=======
+    if(get_struct_union_class(rd, complete))
+      return true;
+    // complete = false;
+#endif
+    if(complete)
+      new_type = context.find_symbol(id)->type;
+    else
+      new_type = symbol_typet(id);
+
+>>>>>>> 67ad332dda (keep more types symbolic)
+#endif /* original merge problem end */
     break;
   }
 

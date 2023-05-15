@@ -139,7 +139,7 @@ bool c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
   if(worse(in_context, new_symbol))
   {
     // replace old symbol
-    in_context.type = new_symbol.type;
+    in_context = new_symbol;
     return true;
   }
 
@@ -412,8 +412,34 @@ void c_linkt::move(symbolt &new_symbol)
 }
 } /* end anonymous namespace */
 
+#include <fstream>
+
 bool c_link(contextt &context, contextt &new_context, const std::string &module)
 {
+  static size_t link_no = 0;
+  link_no++;
+
+  struct dump {
+    mutable std::ofstream out;
+
+    dump(const char *prefix, const contextt &ctx)
+    : out(prefix + std::to_string(link_no))
+    { ctx.foreach_operand(*this); }
+
+    void operator()(const symbolt &s) const
+    {
+      s.show(out);
+      out << "\n----------------------------------------------------------------------------\n";
+    }
+  };
+
+  dump("tgt-", context);
+  dump("src-", new_context);
+
   c_linkt c_link(context, new_context, module);
-  return c_link.typecheck_main();
+  bool r = c_link.typecheck_main();
+
+  dump("res-", context);
+
+  return r;
 }

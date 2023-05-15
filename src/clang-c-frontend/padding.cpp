@@ -298,7 +298,7 @@ void add_padding(struct_typet &type, const namespacet &ns)
     }
 
     type2tc thetype = migrate_type(it_type);
-    offset += type_byte_size(thetype);
+    offset += type_byte_size(ns.follow(thetype, true));
   }
 
   // any explicit alignment for the struct?
