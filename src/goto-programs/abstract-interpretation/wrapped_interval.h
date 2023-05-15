@@ -21,7 +21,6 @@ public:
 
   BigInt convert_to_wrap(const BigInt &b) const
   {
-    auto is_signed = is_signedbv_type(t);
     auto value = b;
     // TODO: I could use a better way here!
     if(b.is_negative() && !b.is_zero())
@@ -62,12 +61,12 @@ public:
 
 
   bool bottom = false;
-  virtual bool empty() const override
+  bool empty() const override
   {
     return bottom;
   }
 
-  virtual bool is_top() const override
+  bool is_top() const override
   {
     return cardinality() == get_upper_bound();
   }
@@ -603,9 +602,9 @@ public:
   {
     std::vector<wrapped_interval> r;
 
-    for(auto w : u.nsplit())
+    for(const auto& w : u.nsplit())
     {
-      for(auto s : w.ssplit())
+      for(const auto& s : w.ssplit())
       {
         r.push_back(s);
       }
@@ -969,25 +968,6 @@ public:
     return over_join(r);
   }
 
-  BigInt approx_bit_and(const BigInt &lhs, const BigInt &rhs) const
-  {
-    assert(t->get_width() <= 64);
-
-    auto v1 = lhs.to_uint64();
-    auto v2 = rhs.to_uint64();
-
-    return (v1 & v2);
-  }
-
-  BigInt approx_bit_xor(const BigInt &lhs, const BigInt &rhs) const
-  {
-    assert(t->get_width() <= 64);
-
-    auto v1 = lhs.to_uint64();
-    auto v2 = rhs.to_uint64();
-
-    return (v1 ^ v2);
-  }
 
   friend wrapped_interval
   operator|(const wrapped_interval &lhs, const wrapped_interval &rhs)
