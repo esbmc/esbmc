@@ -305,6 +305,33 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
       auto i = get_interval<wrapped_interval>(to_lshr2t(e).side_1);
       return i.logical_right_shift(k);
     }
+
+    if(is_bitor2t(e))
+    {
+      auto rhs = get_interval<wrapped_interval>(to_bitor2t(e).side_2);
+      auto lhs = get_interval<wrapped_interval>(to_bitor2t(e).side_1);
+      return lhs | rhs;
+    }
+
+    if(is_bitand2t(e))
+    {
+      auto rhs = get_interval<wrapped_interval>(to_bitand2t(e).side_2);
+      auto lhs = get_interval<wrapped_interval>(to_bitand2t(e).side_1);
+      return lhs & rhs;
+    }
+
+    if(is_bitxor2t(e))
+    {
+      auto rhs = get_interval<wrapped_interval>(to_bitxor2t(e).side_2);
+      auto lhs = get_interval<wrapped_interval>(to_bitxor2t(e).side_1);
+      return lhs ^ rhs;
+    }
+
+    if(is_bitnor2t(e))
+    {
+      auto lhs = get_interval<wrapped_interval>(to_bitnot2t(e).value);
+      return wrapped_interval::bitneg(lhs);
+    }
   }
 
   // We do not care about overflows/overlaps for now
