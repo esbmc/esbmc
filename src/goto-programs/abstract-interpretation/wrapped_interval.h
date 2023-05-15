@@ -5,18 +5,18 @@
 class wrapped_interval : public interval_templatet<BigInt>
 {
 public:
-  wrapped_interval()
+  wrapped_interval() : upper_bound(0)
   {
   }
 
-  explicit wrapped_interval(const type2tc &t) : t(t)
+  explicit wrapped_interval(const type2tc &t) : t(t), upper_bound(compute_upper_bound(t))
   {
     assert(is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t));
     lower_set = true;
     upper_set = true;
 
     lower = 0;
-    upper = is_bool_type(t) ? 1 : get_upper_bound(t) - 1;
+    upper = is_bool_type(t) ? 1 : compute_upper_bound(t) - 1;
   }
 
   BigInt convert_to_wrap(const BigInt &b) const
@@ -25,10 +25,10 @@ public:
     auto value = b;
     // TODO: I could use a better way here!
     if(b.is_negative() && !b.is_zero())
-      value += get_upper_bound(t);
+      value += get_upper_bound();
 
     assert(value >= 0);
-    assert(value <= get_upper_bound(t));
+    assert(value <= get_upper_bound());
     return value;
   }
 
@@ -42,6 +42,7 @@ public:
       lower = value;
   }
 
+
   BigInt get(bool is_upper) const override
   {
     auto is_signed = is_signedbv_type(t);
@@ -49,7 +50,7 @@ public:
 
     if(is_signed)
     {
-      auto middle = get_upper_bound(t) / 2; // [128] 256
+      auto middle = get_upper_bound() / 2; // [128] 256
       if(value >= middle)
         value -= middle * 2;
     }
@@ -57,14 +58,9 @@ public:
     return value;
   }
 
-  static BigInt get_upper_bound(const type2tc &t)
-  {
-    BigInt r(1);
-    r.setPower2(t->get_width());
-    return r;
-  }
 
-  type2tc t;
+
+
   bool bottom = false;
   virtual bool empty() const override
   {
@@ -73,7 +69,7 @@ public:
 
   virtual bool is_top() const override
   {
-    return cardinality() == get_upper_bound(t);
+    return cardinality() == get_upper_bound();
   }
 
   static wrapped_interval complement(const wrapped_interval &w)
@@ -85,7 +81,7 @@ public:
 
     if(!w.is_top() && !w.is_bottom())
     {
-      auto mod = get_upper_bound(w.t);
+      auto mod = w.get_upper_bound();
       result.lower = (w.upper + 1) % mod;
       result.upper = (w.lower - 1) % mod;
       if(result.upper < 0)
@@ -102,7 +98,7 @@ public:
     const BigInt &c,
     const type2tc &t)
   {
-    auto mod = get_upper_bound(t);
+    auto mod = compute_upper_bound(t);
     // https://torstencurdt.com/tech/posts/modulo-of-negative-numbers/
     auto lhs = (b - a) % mod;
     if(lhs < 0)
@@ -116,8 +112,10 @@ public:
 
   void make_le_than(const BigInt &v) override // add upper bound
   {
+    if(get_upper_bound() <= v) return;
     wrapped_interval value(t);
     value.lower = get_min();
+
     value.set_upper(v);
 
     *this = over_meet(*this, value);
@@ -172,14 +170,14 @@ public:
   BigInt get_min() const
   {
     // 0^w or 10^(w-1)
-    return is_signedbv_type(t) ? get_upper_bound(t) / 2 : 0;
+    return is_signedbv_type(t) ? get_upper_bound() / 2 : 0;
   }
 
   BigInt get_max() const
   {
     // 1^w or 01^(w-1)
-    return is_signedbv_type(t) ? get_upper_bound(t) / 2 - 1
-                               : get_upper_bound(t) - 1;
+    return is_signedbv_type(t) ? get_upper_bound() / 2 - 1
+                               : get_upper_bound() - 1;
   }
 
   BigInt cardinality() const
@@ -187,7 +185,7 @@ public:
     if(is_bottom())
       return 0;
 
-    auto mod = get_upper_bound(t);
+    auto mod = get_upper_bound();
     return ((upper - lower) % mod + 1);
   }
 
@@ -449,7 +447,7 @@ public:
       return result;
     }
 
-    auto mod = get_upper_bound(lhs.t);
+    auto mod = lhs.get_upper_bound();
     if(lhs.cardinality() + rhs.cardinality() <= mod)
     {
       result.lower = (lhs.lower + rhs.lower) % mod;
@@ -473,7 +471,7 @@ public:
       return result;
     }
 
-    auto mod = get_upper_bound(lhs.t);
+    auto mod = lhs.get_upper_bound();
     if(lhs.cardinality() + rhs.cardinality() <= mod)
     {
       result.lower = (lhs.lower - rhs.upper) % mod;
@@ -493,8 +491,8 @@ public:
   {
     wrapped_interval result(t);
 
-    result.lower = get_upper_bound(t) / 2 - 1;
-    result.upper = get_upper_bound(t) / 2;
+    result.lower = result.get_upper_bound() / 2 - 1;
+    result.upper = result.get_upper_bound() / 2;
 
     return result;
   }
@@ -504,7 +502,7 @@ public:
     wrapped_interval result(t);
 
     result.upper = 0;
-    result.lower = get_upper_bound(t) - 1;
+    result.lower = result.get_upper_bound() - 1;
 
     return result;
   }
@@ -520,11 +518,11 @@ public:
       wrapped_interval north(t);
       wrapped_interval south(t);
 
-      north.lower = get_upper_bound(t) / 2;
-      north.upper = get_upper_bound(t) - 1;
+      north.lower = get_upper_bound() / 2;
+      north.upper = get_upper_bound() - 1;
 
       south.lower = 0;
-      south.upper = get_upper_bound(t) / 2 - 1;
+      south.upper = get_upper_bound() / 2 - 1;
 
       r.push_back(north);
       r.push_back(south);
@@ -544,7 +542,7 @@ public:
     north.lower = 0;
 
     south.lower = lower;
-    south.upper = get_upper_bound(t) - 1;
+    south.upper = get_upper_bound() - 1;
 
     r.push_back(north);
     r.push_back(south);
@@ -569,11 +567,11 @@ public:
       wrapped_interval north(t);
       wrapped_interval south(t);
 
-      north.lower = get_upper_bound(t) / 2;
-      north.upper = get_upper_bound(t) - 1;
+      north.lower = get_upper_bound() / 2;
+      north.upper = get_upper_bound() - 1;
 
       south.lower = 0;
-      south.upper = get_upper_bound(t) / 2 - 1;
+      south.upper = get_upper_bound() / 2 - 1;
 
       r.push_back(north);
       r.push_back(south);
@@ -590,10 +588,10 @@ public:
     wrapped_interval south(t);
 
     north.upper = upper;
-    north.lower = get_upper_bound(t) / 2;
+    north.lower = get_upper_bound() / 2;
 
     south.lower = lower;
-    south.upper = get_upper_bound(t) / 2 - 1;
+    south.upper = get_upper_bound() / 2 - 1;
 
     r.push_back(north);
     r.push_back(south);
@@ -674,7 +672,7 @@ public:
       result.lower = 0;
       BigInt m(1);
       m.setPower2(k);
-      result.upper = (get_upper_bound(t) - 1) - (m - 1);
+      result.upper = (get_upper_bound() - 1) - (m - 1);
     }
     return result;
   }
@@ -734,7 +732,7 @@ public:
     {
       BigInt m(1);
       m.setPower2(t->get_width() - k);
-      result.lower = (get_upper_bound(t) - 1) - (m - 1);
+      result.lower = (get_upper_bound() - 1) - (m - 1);
 
       result.upper = (m - 1);
     }
@@ -766,7 +764,7 @@ public:
     {
       BigInt result = 0;
       if(bit)
-        result = (get_upper_bound(cast) - 1) - (get_upper_bound(t) - 1);
+        result = (compute_upper_bound(cast) - 1) - (get_upper_bound() - 1);
 
       return result;
     };
@@ -819,7 +817,7 @@ public:
     wrapped_interval w_u(lhs.t);
     wrapped_interval w_s(lhs.t);
 
-    auto up = get_upper_bound(lhs.t);
+    auto up = lhs.get_upper_bound();
 
     auto &a = lhs.lower;
     auto &b = lhs.upper;
@@ -1125,7 +1123,6 @@ public:
         auto v_upper = v.upper.to_uint64();
 
         wrapped_interval temp(lhs.t);
-        log_status("BitAND: {} {} {} {}", u_lower, u_upper, v_lower, v_upper);
         temp.lower = min_and(u_lower, u_upper, v_lower, v_upper);
         temp.upper = max_and(u_lower, u_upper, v_lower, v_upper);
         r.push_back(temp);
@@ -1217,9 +1214,27 @@ public:
       wrapped_interval one(w.t);
       one.lower = 1;
       one.upper = 1;
-      auto  w_new = (-w ) - one;
+      auto  w_new = (-u ) - one;
       result.push_back(w_new);
     }
     return over_join(result);
+  }
+
+  const BigInt& get_upper_bound() const
+  {
+    return upper_bound;
+  }
+
+
+  type2tc t;
+protected:
+  BigInt upper_bound;
+
+private:
+  static BigInt compute_upper_bound(const type2tc &t)
+  {
+    BigInt r(1);
+    r.setPower2(t->get_width());
+    return r;
   }
 };

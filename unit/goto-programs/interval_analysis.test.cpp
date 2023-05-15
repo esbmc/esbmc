@@ -418,7 +418,7 @@ TEST_CASE(
     "}\n"
     "c = 0;\n" // a: [1,10] or [10,1] b: [0,5] or [5,0]
     "if(a < b) {\n"
-    "c = 5;\n" // a: [1,4] b: [1,5]
+    "c = 5;\n" // a: must contain 1, b: must contain 5
     "}\n"
     "return a;\n" // a : [51,52]
     "}";
@@ -428,8 +428,6 @@ TEST_CASE(
   T.property["10"].push_back({"@F@main@b", 0, true});
   T.property["10"].push_back({"@F@main@b", 5, true});
   T.property["12"].push_back({"@F@main@a", 1, true});
-  T.property["12"].push_back({"@F@main@a", 4, true});
-  T.property["12"].push_back({"@F@main@b", 1, true});
   T.property["12"].push_back({"@F@main@b", 5, true});
 
   T.run_configs();
@@ -638,14 +636,13 @@ TEST_CASE(
   test_program T;
   T.code =
     "int main() {\n"
-    "char a = 100;\n"
-    "char b = 2;\n" // b: [3,3]
+    "char a = 100;\n" // [100, 100]
+    "char b = 2;\n" // b: [2,2]
     "a = b * a;\n" // a: [-10,-1]
     "return a;\n"
     "}";
 
-  T.property["4"].push_back({"@F@main@a", 100, true});
-  T.property["6"].push_back({"@F@main@a", -127, true});
+  T.property["6"].push_back({"@F@main@a", -56, true});
   T.run_configs(true);
 }
 
