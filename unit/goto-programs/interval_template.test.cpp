@@ -331,22 +331,23 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
 
   SECTION("Upper bound test")
   {
+
     unsigned actual =
-      wrapped_interval::get_upper_bound(t1_unsigned).to_uint64();
+      wrapped_interval(t1_unsigned).get_upper_bound().to_uint64();
     unsigned expected = pow(2, N1);
 
     REQUIRE(actual == expected);
     REQUIRE(
-      wrapped_interval::get_upper_bound(t1_unsigned) ==
-      wrapped_interval::get_upper_bound(t1_signed));
+      wrapped_interval(t1_unsigned).get_upper_bound() ==
+      wrapped_interval(t1_signed).get_upper_bound());
 
     REQUIRE(
-      wrapped_interval::get_upper_bound(t2_unsigned) ==
-      wrapped_interval::get_upper_bound(t2_signed));
+      wrapped_interval(t2_unsigned).get_upper_bound() ==
+      wrapped_interval(t2_signed).get_upper_bound());
 
     REQUIRE(
-      wrapped_interval::get_upper_bound(t1_unsigned) !=
-      wrapped_interval::get_upper_bound(t2_signed));
+      wrapped_interval(t1_unsigned).get_upper_bound() !=
+      wrapped_interval(t2_signed).get_upper_bound());
   }
 
   SECTION("Wrapped less")
@@ -596,7 +597,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     B.set_lower(1);
     B.set_upper(2);
 
-    C = A + B;
+    C.set(A + B);
     REQUIRE(C.get_lower() == 101);
     REQUIRE(C.get_upper() == 1);
   }
@@ -617,9 +618,6 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
 
 
     auto C = As + Bs;
-    As.dump();
-    Bs.dump();
-    C.dump();
     CAPTURE(As.cardinality(), Bs.cardinality());
     REQUIRE(C.get_lower() == -105);
     REQUIRE(C.get_upper() == 125);
@@ -631,7 +629,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     Bs.set_lower(-1);
     Bs.set_upper(1);
 
-    C = As + Bs;
+    C.set(As + Bs);
     REQUIRE(C.get_lower() == 99);
     REQUIRE(C.get_upper().to_int64() == -pow(2, N1)/2);
   }
