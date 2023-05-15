@@ -988,6 +988,42 @@ TEST_CASE(
     CAPTURE(result1.lower, result1.upper);
     REQUIRE(result1.upper == 0xffff);
   }
+
+  SECTION("Unsigned to BOOL")
+  {
+    wrapped_interval w1(t1_unsigned);
+
+    w1.lower = 0xff;
+    w1.upper = 0xff;
+
+    auto result1 = wrapped_interval::cast(w1, get_bool_type());
+    CAPTURE(result1.lower, 1);
+    REQUIRE(result1.upper == 1);
+  }
+
+  SECTION("Unsigned to BOOL 2")
+  {
+    wrapped_interval w1(t1_unsigned);
+
+    w1.lower = 0;
+    w1.upper = 0;
+
+    auto result1 = wrapped_interval::cast(w1, get_bool_type());
+    CAPTURE(result1.lower, 0);
+    REQUIRE(result1.upper == 0);
+  }
+
+  SECTION("Unsigned to BOOL 3")
+  {
+    wrapped_interval w1(t1_unsigned);
+
+    w1.lower = 0;
+    w1.upper = 254;
+
+    auto result1 = wrapped_interval::cast(w1, get_bool_type());
+    CAPTURE(result1.lower, 0);
+    REQUIRE(result1.upper == 1);
+  }
 }
 
 TEST_CASE(
@@ -1350,6 +1386,19 @@ TEST_CASE(
     REQUIRE(result.lower == 0);
     REQUIRE(result.upper == 1);
   }
+
+  SECTION("Hardware issue 2")
+  {
+    auto t2_unsigned = get_uint_type(64);
+    auto w_ulong(t2_unsigned);
+    w2.lower = 1; // 0x01
+    w2.upper = 1; // 0x01
+
+    auto result = w1 & w2;
+    CAPTURE(result.lower, result.upper);
+    REQUIRE(result.lower == 0);
+    REQUIRE(result.upper == 1);
+  }
 }
 
 TEST_CASE(
@@ -1403,7 +1452,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "Bitneh Operations",
+  "Bitnot Operations",
   "[ai][interval-analysis]")
 {
   config.ansi_c.set_data_model(configt::ILP32);

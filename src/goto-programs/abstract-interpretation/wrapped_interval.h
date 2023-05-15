@@ -629,6 +629,23 @@ public:
   static wrapped_interval
   cast(const wrapped_interval &old, const type2tc &new_type)
   {
+    // Special case for Bool!
+    if(is_bool_type(new_type))
+    {
+      wrapped_interval boolean(new_type);
+      boolean.lower = 0;
+      boolean.upper = 1;
+
+      if(!old.contains(0))
+        boolean.lower = 1;
+
+      else if(old.singleton())
+        boolean.upper = 0;
+
+      return boolean;
+    }
+
+
     if(new_type->get_width() < old.t->get_width())
       return old.trunc(new_type);
 
