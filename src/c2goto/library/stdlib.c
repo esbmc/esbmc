@@ -156,7 +156,7 @@ __ESBMC_HIDE:;
   return res;
 }
 #endif
-#if 1
+#if 0
 long int strtol(const char *str, char **endptr, int base)
 {
   long int result = 0;
@@ -231,6 +231,79 @@ long int strtol(const char *str, char **endptr, int base)
   return sign * result;
 }
 #endif
+
+long int strtol(const char *str, char **endptr, int base)
+{
+  long int result = 0;
+  int sign = 1;
+
+  // Handle whitespace
+  while(isspace(*str))
+  {
+    str++;
+  }
+
+  // Handle sign
+  if(*str == '-')
+  {
+    sign = -1;
+    str++;
+  }
+  else if(*str == '+')
+  {
+    str++;
+  }
+
+  // Handle base
+  if(base == 0)
+  {
+    if(*str == '0')
+    {
+      base = 8;
+      if(tolower(str[1]) == 'x')
+      {
+        base = 16;
+        str += 2;
+      }
+      else
+      {
+        str++;
+      }
+    }
+    else
+    {
+      base = 10;
+    }
+  }
+  else if(base == 16 && *str == '0' && tolower(str[1]) == 'x')
+  {
+    str += 2;
+  }
+
+  // Convert digits
+  while(isdigit(*str) || (base == 16 && isxdigit(*str)))
+  {
+    int digit = tolower(*str) - '0';
+    if(digit > 9)
+    {
+      digit -= 7;
+    }
+    if(result > (LONG_MAX - digit) / base)
+    {
+      return sign == -1 ? LONG_MIN : LONG_MAX;
+    }
+    result = result * base + digit;
+    str++;
+  }
+
+  // Set end pointer
+  if(endptr != NULL)
+  {
+    *endptr = (char *)str;
+  }
+
+  return sign * result;
+}
 
 int atoi(const char *nptr)
 {
