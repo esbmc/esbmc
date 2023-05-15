@@ -267,6 +267,16 @@ T interval_domaint::get_interval(const expr2tc &e)
 template <>
 wrapped_interval interval_domaint::get_interval(const expr2tc &e)
 {
+
+  // This needs to come before constant number
+  if(is_constant_bool2t(e))
+  {
+    wrapped_interval r(e->type);
+    r.lower = to_constant_bool2t(e).is_true();
+    r.upper = to_constant_bool2t(e).is_true();
+    return r;
+  }
+
   if(is_symbol2t(e))
     return get_interval_from_symbol<wrapped_interval>(to_symbol2t(e));
 
@@ -278,8 +288,12 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
 
   if(is_if2t(e))
   {
-    auto lhs = get_interval_from_const<wrapped_interval>(to_if2t(e).false_value);
-    auto rhs = get_interval_from_const<wrapped_interval>(to_if2t(e).true_value);
+    auto cond = get_interval<wrapped_interval>(to_if2t(e).cond);
+    auto lhs = get_interval<wrapped_interval>(to_if2t(e).false_value);
+    auto rhs = get_interval<wrapped_interval>(to_if2t(e).true_value);
+    if(cond.is_bottom() || (cond.cardinality() == 1 && cond.contains(0))) return lhs;
+
+    else if(!cond.contains(0)) return rhs;
     return wrapped_interval::over_join(lhs,rhs);
   }
 
@@ -334,7 +348,6 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
     }
   }
 
-  // We do not care about overflows/overlaps for now
   if(is_typecast2t(e))
   {
     auto inner = get_interval<wrapped_interval>(to_typecast2t(e).from);
