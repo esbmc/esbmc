@@ -1004,8 +1004,9 @@ public:
     {
       uint64_t m, temp;
 
-      m = 1 << (width-1);
-
+      m = (uint64_t)1 << (width-1);
+      if(width == 32)
+        assert(m == 0x80000000);
       while(m != 0)
       {
         if(~a & c & m)
@@ -1023,8 +1024,9 @@ public:
     };
     auto max_or = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
       uint64_t m, temp;
-
-      m = 1 << (width - 1);
+      m = (uint64_t)1 << (width-1);
+      if(width == 32)
+        assert(m == 0x80000000);
       while(m != 0)
       {
         if(b & d & m) {
@@ -1070,8 +1072,9 @@ public:
     {
       uint64_t m, temp;
 
-      m = 1 << (width-1);
-
+      m = (uint64_t)1 << (width-1);
+      if(width == 32)
+        assert(m == 0x80000000);
       while(m != 0)
       {
         if(~a & ~c & m)
@@ -1092,7 +1095,9 @@ public:
     auto max_and = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
       uint64_t m, temp;
 
-      m = 1 << (width - 1);
+      m = (uint64_t)1 << (width-1);
+      if(width == 32)
+        assert(m == 0x80000000);
       while(m != 0)
       {
         if(b & ~d & m) {
@@ -1120,6 +1125,7 @@ public:
         auto v_upper = v.upper.to_uint64();
 
         wrapped_interval temp(lhs.t);
+        log_status("BitAND: {} {} {} {}", u_lower, u_upper, v_lower, v_upper);
         temp.lower = min_and(u_lower, u_upper, v_lower, v_upper);
         temp.upper = max_and(u_lower, u_upper, v_lower, v_upper);
         r.push_back(temp);
@@ -1141,9 +1147,9 @@ public:
     auto min_xor = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
     {
       uint64_t m, temp;
-
-      m = 1 << (width-1);
-
+      m = (uint64_t)1 << (width-1);
+      if(width == 32)
+        assert(m == 0x80000000);
       while(m != 0)
       {
         if(~a & c & m)
@@ -1163,8 +1169,9 @@ public:
 
     auto max_xor = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
       uint64_t m, temp;
-
-      m = 1 << (width - 1);
+      m = (uint64_t)1 << (width-1);
+      if(width == 32)
+        assert(m == 0x80000000);
       while(m != 0)
       {
         if(b & d & m) {
