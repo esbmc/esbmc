@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 inheritance.solast
 --function test_inheritance --contract inheritance.sol
 ^VERIFICATION SUCCESSFUL$
