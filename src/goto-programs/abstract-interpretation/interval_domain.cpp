@@ -285,25 +285,24 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
 
   if(is_neg2t(e))
     return -get_interval<wrapped_interval>(to_neg2t(e).value);
+
 /*
   if(is_if2t(e))
   {
     auto cond = get_interval<wrapped_interval>(to_if2t(e).cond);
-    auto lhs = get_interval<wrapped_interval>(to_if2t(e).false_value);
-    auto rhs = get_interval<wrapped_interval>(to_if2t(e).true_value);
-    if(cond.is_bottom() || (cond.cardinality() == 1 && cond.contains(0))) return lhs;
+    auto lhs = get_interval<wrapped_interval>(to_if2t(e).true_value);
+    auto rhs = get_interval<wrapped_interval>(to_if2t(e).false_value);
 
-    else if(!cond.contains(0)) return rhs;
+    // Cond is always false
+    assert(is_bool_type(to_if2t(e).cond->type));
+    if(cond.is_bottom() || (cond.cardinality() == 1 && cond.contains(0))) return rhs;
+
+    else if(!cond.contains(0)) return lhs;
     return wrapped_interval::over_join(lhs,rhs);
   }
 */
   if(enable_interval_bitwise_arithmetic)
   {
-    if(is_bitnor2t(e))
-    {
-      auto lhs = get_interval<wrapped_interval>(to_bitnot2t(e).value);
-      return wrapped_interval::bitnot(lhs);
-    }
 
     if(is_shl2t(e))
     {
@@ -347,7 +346,7 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
       return lhs ^ rhs;
     }
 
-    if(is_bitnor2t(e))
+    if(is_bitnot2t(e))
     {
       auto lhs = get_interval<wrapped_interval>(to_bitnot2t(e).value);
       return wrapped_interval::bitnot(lhs);
