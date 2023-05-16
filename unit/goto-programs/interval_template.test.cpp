@@ -602,6 +602,21 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     REQUIRE(C.get_upper() == 1);
   }
 
+  SECTION("Addition Unsigned wrap")
+  {
+    REQUIRE(A.lower == 0);
+    REQUIRE(A.upper.to_uint64() == pow(2, N1) - 1);
+    REQUIRE(!A.is_bottom());
+    REQUIRE(A.is_top());
+
+
+    B.set_lower(0);
+    B.set_upper(1);
+
+    auto C = A + B;
+    REQUIRE(C.is_top());
+}
+
   SECTION("Addition Signed")
   {
     REQUIRE(As.contains((long long) -pow(2, N1)/2));
