@@ -34,7 +34,6 @@ z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
             z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "smt"))
              .mk_solver())
 {
-
   z3::params p(z3_ctx);
   p.set("relevancy", 0U);
   p.set("model", true);
