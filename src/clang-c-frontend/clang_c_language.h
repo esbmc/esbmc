@@ -38,6 +38,11 @@ public:
   bool from_type(const typet &type, std::string &code, const namespacet &ns)
     override;
 
+  // This map stores <path, list> pairs, where
+  // "list" - list of \#include's (both using angled brackets
+  // and quotation marks) contained in the file at "path"
+  static std::map<std::string, std::vector<std::string>> includes_map;
+
   languaget *new_language() const override
   {
     return new clang_c_languaget();
