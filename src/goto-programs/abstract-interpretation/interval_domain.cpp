@@ -285,7 +285,7 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
 
   if(is_neg2t(e))
     return -get_interval<wrapped_interval>(to_neg2t(e).value);
-
+/*
   if(is_if2t(e))
   {
     auto cond = get_interval<wrapped_interval>(to_if2t(e).cond);
@@ -296,9 +296,15 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
     else if(!cond.contains(0)) return rhs;
     return wrapped_interval::over_join(lhs,rhs);
   }
-
+*/
   if(enable_interval_bitwise_arithmetic)
   {
+    if(is_bitnor2t(e))
+    {
+      auto lhs = get_interval<wrapped_interval>(to_bitnot2t(e).value);
+      return wrapped_interval::bitnot(lhs);
+    }
+
     if(is_shl2t(e))
     {
       auto k = get_interval<wrapped_interval>(to_shl2t(e).side_2);
@@ -555,13 +561,9 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(const expr2tc
       disjuncts.push_back(conjunction(s_conjuncts));
     };
 
-    for(auto &ss : interval.ssplit())
+    for(auto &c : wrapped_interval::cut(interval))
     {
-      if(is_signedbv_type(interval.t))
-        for(auto &ns : ss.nsplit())
-          convert(ns);
-      else
-        convert(ss);
+        convert(c);
     }
     conjuncts.push_back(disjunction(disjuncts));
 

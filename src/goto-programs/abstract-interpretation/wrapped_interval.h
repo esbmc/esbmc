@@ -1105,8 +1105,6 @@ public:
     const auto max_xor = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
       uint64_t m, temp;
       m = compute_m(width);
-      if(width == 32)
-        assert(m == 0x80000000);
       while(m != 0)
       {
         if(b & d & m) {
@@ -1127,17 +1125,10 @@ public:
 
   static wrapped_interval bitnot(const wrapped_interval &w)
   {
-    std::vector<wrapped_interval> result;
-    for( auto &u : w.ssplit())
-    {
-
-      wrapped_interval one(w.t);
-      one.lower = 1;
-      one.upper = 1;
-      auto  w_new = (-u ) - one;
-      result.push_back(w_new);
-    }
-    return over_join(result);
+      wrapped_interval result(w.t);
+      result.set_lower(-w.get_upper()-1);
+      result.set_upper(-w.get_lower()-1);
+    return result;
   }
 
   const BigInt& get_upper_bound() const
