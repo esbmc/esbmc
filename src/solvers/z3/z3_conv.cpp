@@ -16,8 +16,9 @@ smt_convt *create_new_z3_solver(
   array_iface **array_api,
   fp_convt **fp_api)
 {
+  std::string z3_file = options.get_option("z3-debug-dump-file");
   if(options.get_bool_option("z3-debug"))
-    Z3_open_log("z3.log");
+    Z3_open_log(z3_file.empty() ? "z3.log" : z3_file.c_str());
   z3_convt *conv = new z3_convt(ns, options);
   *tuple_api = static_cast<tuple_iface *>(conv);
   *array_api = static_cast<array_iface *>(conv);
@@ -38,8 +39,9 @@ z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
   p.set("relevancy", 0U);
   p.set("model", true);
   p.set("proof", false);
+  std::string z3_smt_file = options.get_option("z3-debug-smt-file");
   if(options.get_bool_option("z3-debug"))
-    p.set("smtlib2_log", "log.smt2");
+    p.set("smtlib2_log", z3_smt_file.empty() ? "log.smt2" : z3_smt_file.c_str());
   solver.set(p);
 
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
