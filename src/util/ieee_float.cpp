@@ -152,9 +152,9 @@ std::string ieee_floatt::to_string_decimal(unsigned precision) const
 
   // special cases
   if(NaN_flag)
-    result += "NaN";
+    result += "NAN";
   else if(infinity_flag)
-    result += "inf";
+    result += "INFINITY";
   else if(is_zero())
   {
     result += '0';
