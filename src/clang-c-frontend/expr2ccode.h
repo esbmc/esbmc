@@ -23,6 +23,11 @@ expr2ccode(const exprt &expr, const namespacet &ns, bool fullname = false);
 std::string
 type2ccode(const typet &type, const namespacet &ns, bool fullname = false);
 
+std::string typedef2ccode(
+  const struct_union_typet &type,
+  const namespacet &ns,
+  bool fullname = false);
+
 class expr2ccodet : public expr2ct
 {
 public:
@@ -34,13 +39,14 @@ public:
 
   std::string convert(const typet &src) override;
   std::string convert(const exprt &src) override;
+  std::string convert_struct_union_typedef(const struct_union_typet &src);
 
-  // Static list to keep track of the global compound types that have
-  // already been declared declared
-  static std::list<std::string> declared_types;
-
-  // A method for removing a type from the list of declared types
-  static void remove_declared_type(std::string type);
+  // Some static methods that we should probably redesign in the future
+  static std::string get_name_shorthand(std::string fullname);
+  static bool is_anonymous_tag(std::string tag);
+  static bool is_padding(std::string tag);
+  static bool is_anonymous_member(std::string tag);
+  static bool is_typedef_struct_union(std::string tag);
 
 protected:
   std::string convert_rec(
@@ -56,9 +62,6 @@ protected:
   std::string convert_union(const exprt &src, unsigned &precedence) override;
 
   std::string convert_typecast(const exprt &src, unsigned &precedence) override;
-  std::string convert_struct_typedef(const typet &src);
-  std::string convert_union_typedef(const typet &src);
-  std::string convert_struct_union_typedef(const typet &src);
 
   std::string convert_code_printf(const codet &src, unsigned indent) override;
   std::string convert_code_free(const codet &src, unsigned indent) override;
@@ -66,6 +69,7 @@ protected:
   std::string convert_realloc(const exprt &src, unsigned &precedence) override;
   std::string convert_alloca(const exprt &src, unsigned &precedence) override;
   std::string convert_symbol(const exprt &src, unsigned &precedence) override;
+  std::string convert_constant(const exprt &src, unsigned &precedence) override;
 
   std::string convert_member(const exprt &src, unsigned precedence) override;
 
