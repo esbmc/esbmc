@@ -41,9 +41,9 @@ z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
   p.set("proof", false);
   std::string z3_smt_file = options.get_option("z3-debug-smt-file");
   if(options.get_bool_option("z3-debug"))
-    p.set("smtlib2_log", z3_smt_file.empty() ? "log.smt2" : z3_smt_file.c_str());
+    p.set(
+      "smtlib2_log", z3_smt_file.empty() ? "log.smt2" : z3_smt_file.c_str());
   solver.set(p);
-
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
   Z3_set_error_handler(z3_ctx, error_handler);
 }
