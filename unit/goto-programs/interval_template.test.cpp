@@ -1477,4 +1477,15 @@ TEST_CASE(
     REQUIRE(r.lower == 5); // 0x05
     REQUIRE(r.upper == 5); // 0x05
   }
+
+  SECTION("Intervals")
+  {
+    w.lower = 0; // 0x00
+    w.upper = 1; // 0x01
+
+    auto r = wrapped_interval::bitnot(w);
+    CAPTURE(r.lower, r.upper);
+    REQUIRE(r.lower == 254); // 0xFE
+    REQUIRE(r.upper == 255); // 0xFF
+  }
 }
