@@ -280,13 +280,14 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
   if(is_symbol2t(e))
     return get_interval_from_symbol<wrapped_interval>(to_symbol2t(e));
 
+
   if(is_constant_number(e))
     return get_interval_from_const<wrapped_interval>(e);
 
   if(is_neg2t(e))
     return -get_interval<wrapped_interval>(to_neg2t(e).value);
-/*
-  if(is_if2t(e))
+
+  if(0 && is_if2t(e))
   {
     auto cond = get_interval<wrapped_interval>(to_if2t(e).cond);
     auto lhs = get_interval<wrapped_interval>(to_if2t(e).true_value);
@@ -299,7 +300,7 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
     else if(!cond.contains(0)) return lhs;
     return wrapped_interval::over_join(lhs,rhs);
   }
-*/
+
   if(enable_interval_bitwise_arithmetic)
   {
 
@@ -330,21 +331,19 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
       auto lhs = get_interval<wrapped_interval>(to_bitor2t(e).side_1);
       return lhs | rhs;
     }
-    /*
+
     if(is_bitand2t(e))
     {
       auto rhs = get_interval<wrapped_interval>(to_bitand2t(e).side_2);
       auto lhs = get_interval<wrapped_interval>(to_bitand2t(e).side_1);
       return lhs & rhs;
     }
-*/
     if(is_bitxor2t(e))
     {
       auto rhs = get_interval<wrapped_interval>(to_bitxor2t(e).side_2);
       auto lhs = get_interval<wrapped_interval>(to_bitxor2t(e).side_1);
       return lhs ^ rhs;
     }
-
 
     if(is_bitnot2t(e))
     {
@@ -359,11 +358,10 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
     return wrapped_interval::cast(inner, to_typecast2t(e).type);
   }
 
-
   if(is_modulus2t(e) && enable_interval_arithmetic)
   {
    auto lhs = get_interval<wrapped_interval>(to_modulus2t(e).side_1);
-   auto rhs = get_interval<wrapped_interval>(to_modulus2t(e).side_1);
+   auto rhs = get_interval<wrapped_interval>(to_modulus2t(e).side_2);
    return lhs % rhs;
   }
 
@@ -378,11 +376,11 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
     auto rhs =
       get_interval<wrapped_interval>( arith_op->side_2 );
 
-    if(is_add2t(e))
-      return lhs + rhs;
-
     if(is_sub2t(e) )
       return lhs - rhs;
+
+    if(is_add2t(e))
+      return lhs + rhs;
 
     if(is_mul2t(e) )
       return lhs * rhs;

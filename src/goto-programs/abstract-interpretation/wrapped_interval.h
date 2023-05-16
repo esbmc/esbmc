@@ -212,18 +212,62 @@ public:
            (!contains(rhs.lower) || !contains(rhs.upper));
   }
 
+  static wrapped_interval extend(const wrapped_interval &s, const wrapped_interval &t) {
+    if(s.is_included(t)) return t;
+    if(t.is_included(s)) return s;
+
+    wrapped_interval result(s.t);
+    if(complement(s).is_included(t)) {
+      return result;
+    }
+
+    result.lower = s.lower;
+    result.upper = t.upper;
+    return result;
+  }
+
+  static wrapped_interval gap(const wrapped_interval &s, const wrapped_interval &t) {
+    wrapped_interval result(s.t);
+    if(!t.contains(s.upper) && !s.contains(t.lower))
+    {
+      result.lower = t.lower;
+      result.upper = s.upper;
+      return complement(result);
+    }
+    result.bottom = true;
+    return result;
+  }
+
+  static wrapped_interval bigger(const wrapped_interval &s, const wrapped_interval &t)
+  {
+    return t.cardinality() > s.cardinality() ? t : s;
+  }
+
   /// Over union
   static wrapped_interval over_join(const std::vector<wrapped_interval> &r)
   {
-    assert(!r.empty());
-    auto result = r[0];
+    if(r.empty())
+    {
+      wrapped_interval r;
+      r.bottom = true;
+      return r;
+    }
+    auto f = r[0];
+    auto g = r[0];
+    for(unsigned i = 1; i < r.size(); ++i)
+    {
+      if(r[i].is_top() || (wrapped_le(r[i].upper,0,r[i].lower, r[i].t)))
+      {
+        f = extend(f, r[i]);
+      }
+    }
 
     for(unsigned i = 1; i < r.size(); ++i)
     {
-      result = over_join(result, r[i]);
+      g = bigger(g, gap(f,r[i]));
+      f = extend(f, r[i]);
     }
-
-    return result;
+    return bigger(g, f);
   }
   static wrapped_interval
   over_join(const wrapped_interval &s, const wrapped_interval &t)
@@ -421,13 +465,13 @@ public:
     wrapped_interval result(lhs.t);
     // Probably just a -1 mult
     // Hack for singletons
-    if(lhs.singleton())
+    /*if(lhs.singleton())
     {
       auto v = lhs.get_lower();
       result.set_lower(-v);
       result.set_upper(-v);
       return result;
-    }
+    }*/
 
     result.set_lower(-1);
     result.set_upper(-1);

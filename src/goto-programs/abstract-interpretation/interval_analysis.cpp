@@ -63,14 +63,14 @@ void instrument_intervals(
     }
 
     const interval_domaint &d = interval_analysis[i_it];
-
+/*
     if(d.is_bottom()) {
       goto_programt::targett t = goto_function.body.insert(i_it);
       t->make_assumption(gen_false_expr());
       t->inductive_step_instruction = config.options.is_kind();
       continue;
     }
-
+*/
     std::vector<expr2tc> assertion;
     for(const auto &symbol_expr : symbols)
     {
