@@ -27,6 +27,8 @@ CC_DIAGNOSTIC_POP()
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
+#include <iostream>
+
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
@@ -3182,10 +3184,8 @@ void clang_c_convertert::get_decl_name(
     {
       // Anonymous fields, generate a name based on the type
       const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(nd);
-      name = "anon";
-      //id = getFullyQualifiedName(fd.getType(), *ASTContext) + "$" +
-      //     std::to_string(fd.getFieldIndex());
-      id = name + "$" + std::to_string(fd.getFieldIndex());
+      name = "__anon_field_" + std::to_string(fd.getFieldIndex());
+      id = name;
     }
     return;
 
@@ -3195,10 +3195,9 @@ void clang_c_convertert::get_decl_name(
       // Anonymous fields, generate a name based on the type
       const clang::IndirectFieldDecl &fd =
         static_cast<const clang::IndirectFieldDecl &>(nd);
-      name = "anon";
-      //id = getFullyQualifiedName(fd.getType(), *ASTContext) + "$" +
-      //     std::to_string(fd.getAnonField()->getFieldIndex());
-      id = name + "$" + std::to_string(fd.getAnonField()->getFieldIndex());
+      name = "__anon_indirect_field_" +
+             std::to_string(fd.getAnonField()->getFieldIndex());
+      id = name;
       return;
     }
     break;
@@ -3208,8 +3207,50 @@ void clang_c_convertert::get_decl_name(
   case clang::Decl::ClassTemplateSpecialization:
   {
     const clang::RecordDecl &rd = static_cast<const clang::RecordDecl &>(nd);
-    name = getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
-    id = tag_prefix + name;
+    std::string kind_name = rd.getKindName().str();
+    clang::TypedefNameDecl *tnd =
+      rd.getCanonicalDecl()->getTypedefNameForAnonDecl();
+
+    // Checking if it is not a typedef, but the tag name is empty. If so we give it a new
+    // unique name based on its location
+    if(
+      rd.getCanonicalDecl()->getNameAsString().empty() &&
+      !rd.getCanonicalDecl()->getTypedefNameForAnonDecl())
+    {
+      locationt location_begin;
+      get_location_from_decl(rd, location_begin);
+      std::string location_begin_str = location_begin.file().as_string() + "_" +
+                                       location_begin.function().as_string() +
+                                       "_" + location_begin.line().as_string() +
+                                       "_" +
+                                       location_begin.column().as_string();
+      std::string kind_name = rd.getKindName().str();
+      name = kind_name + " __anon_" + kind_name + "_at_" + location_begin_str;
+      std::replace(name.begin(), name.end(), '.', '_');
+    }
+    else if(
+      rd.getCanonicalDecl()->getNameAsString().empty() &&
+      rd.getCanonicalDecl()->getTypedefNameForAnonDecl())
+    {
+      locationt location_begin;
+      get_location_from_decl(rd, location_begin);
+      std::string location_begin_str = location_begin.file().as_string() + "_" +
+                                       location_begin.function().as_string() +
+                                       "_" + location_begin.line().as_string() +
+                                       "_" +
+                                       location_begin.column().as_string();
+      std::string kind_name = rd.getKindName().str();
+      std::string tag_name =
+        getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
+      name =
+        kind_name + " __anon_typedef_" + tag_name + "_at_" + location_begin_str;
+      std::replace(name.begin(), name.end(), '.', '_');
+    }
+    else
+      name =
+        getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
+
+    id = "tag-" + name;
     return;
   }
 
@@ -3219,7 +3260,14 @@ void clang_c_convertert::get_decl_name(
       // Anonymous variable, generate a name based on the type,
       // see regression union1
       const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(nd);
-      name = "anon";
+      locationt location_begin;
+      get_location_from_decl(vd, location_begin);
+      std::string location_begin_str = location_begin.file().as_string() + "_" +
+                                       location_begin.function().as_string() +
+                                       "_" + location_begin.line().as_string() +
+                                       "_" +
+                                       location_begin.column().as_string();
+      name = "__anon_var_at_" + location_begin_str;
       id = getFullyQualifiedName(vd.getType(), *ASTContext);
       return;
     }
@@ -3334,6 +3382,7 @@ void clang_c_convertert::set_location(
 
   location.set_line(PLoc.getLine());
   location.set_file(get_filename_from_path(PLoc.getFilename()));
+  location.set_column(PLoc.getColumn());
 
   if(!function_name.empty())
     location.set_function(function_name);

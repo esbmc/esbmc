@@ -598,7 +598,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
 
       new_symbol.id = identifier;
       new_symbol.name = f_op.name();
-      new_symbol.location = expr.location();
+      // Leaving the location empty for now
       new_symbol.type = f_op.type();
       new_symbol.mode = "C";
 
