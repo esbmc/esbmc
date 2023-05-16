@@ -1395,7 +1395,8 @@ static expr2tc do_bit_munge_operation(
     {
       /* do we have a small enough LHS to evaluate on uint64_t? */
       can_eval &=
-        is_signedbv_type(simplified_side_1) ? bl.is_int64() : bl.is_uint64();
+        br == 0 ||
+        (is_signedbv_type(simplified_side_1) ? bl.is_int64() : bl.is_uint64());
       is_shift = true;
     }
     else
@@ -1406,7 +1407,7 @@ static expr2tc do_bit_munge_operation(
 
     /* Evaluating shifts with the shift amount >= 64 on (u)int64_t is undefined
      * behaviour in C++, we should avoid doing that during simplification. */
-    can_eval &= !is_shift || r < 64;
+    can_eval &= !is_shift || br < 64;
     if(can_eval)
     {
       uint64_t res = opfunc(l, r);
