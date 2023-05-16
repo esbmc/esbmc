@@ -383,6 +383,13 @@ public:
     //! This is -1 if it's not a target.
     unsigned target_number;
 
+    //! Id of the scope within which a variable is declared (i.e., DECL).
+    //! It does not have a lot of meaning for other types of instructions.
+    unsigned int scope_id = 0;
+
+    //! Id of the parent scope for the current "scope_id".
+    unsigned int parent_scope_id = 0;
+
     //! Returns true if the instruction is a backwards branch.
     bool is_backwards_goto() const
     {
