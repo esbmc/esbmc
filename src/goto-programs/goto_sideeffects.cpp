@@ -854,6 +854,11 @@ void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
 
   new_symbol.mode = expr.mode();
 
+  // declare this symbol first
+  code_declt decl(symbol_expr(new_symbol));
+  decl.location() = expr.location();
+  convert_decl(decl, dest);
+
   if(expr.operands().size() == 1)
   {
     codet assignment("assign");
@@ -912,6 +917,11 @@ void goto_convertt::remove_statement_expression(
   locationt location = last.location();
 
   symbolt &new_symbol = new_tmp_symbol(expr.type());
+
+  // declare this symbol first
+  code_declt decl(symbol_expr(new_symbol));
+  decl.location() = location;
+  convert_decl(decl, dest);
 
   symbol_exprt tmp_symbol_expr(new_symbol.id, new_symbol.type);
   tmp_symbol_expr.location() = location;
