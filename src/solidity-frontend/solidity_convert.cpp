@@ -1698,14 +1698,9 @@ bool solidity_convertert::get_cast_expr(
     if(get_type_description(adjusted_type, type))
       return true;
   }
-  // TODO: Maybe can just type = expr.type() for other types as well?
-  else if (cast_expr["subExpr"]["nodeType"] == "Literal" && int_literal_type != nullptr && !expr.type().is_nil()){
+  // TODO: Maybe can just type = expr.type() for other types as well. Need to make sure types are all set in get_expr (many functions are called multiple times to perform the same action).
+  else {
     type = expr.type();
-  }
-  else
-  {
-    if(get_type_description(cast_expr["subExpr"]["typeDescriptions"], type))
-      return true;
   }
 
   // 3. get cast type and generate typecast
@@ -2631,6 +2626,7 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
   // make a mapping for JSON object creation latter
   // based on the usage of get_func_decl_ref_t() in get_func_decl_ref_type()
   nlohmann::json adjusted_expr;
+
 
   if(
     sub_expr["typeString"].get<std::string>().find("function") !=
