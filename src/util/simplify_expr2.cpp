@@ -1389,15 +1389,17 @@ static expr2tc do_bit_munge_operation(
     /* For &, |, ^, ~, << our low bits are determined only by the corresponding
      * low bits of the arguments, however for >> this is not necessarily true!
      */
-    if constexpr (std::is_same_v<constructor,lshr2t> ||
-                  std::is_same_v<constructor,ashr2t>)
+    if constexpr(
+      std::is_same_v<constructor, lshr2t> ||
+      std::is_same_v<constructor, ashr2t>)
     {
       /* do we have a small enough LHS to evaluate on uint64_t? */
-      can_eval &= is_signedbv_type(simplified_side_1) ? bl.is_int64()
-                                                      : bl.is_uint64();
+      can_eval &=
+        is_signedbv_type(simplified_side_1) ? bl.is_int64() : bl.is_uint64();
       is_shift = true;
-    } else
-      is_shift = std::is_same_v<constructor,shl2t>;
+    }
+    else
+      is_shift = std::is_same_v<constructor, shl2t>;
 
     /* TODO fbrausse: In C, a << b is undefined for signed a if the result is
      * not representable. */
@@ -1405,7 +1407,8 @@ static expr2tc do_bit_munge_operation(
     /* Evaluating shifts with the shift amount >= 64 on (u)int64_t is undefined
      * behaviour in C++, we should avoid doing that during simplification. */
     can_eval &= !is_shift || r < 64;
-    if (can_eval) {
+    if(can_eval)
+    {
       uint64_t res = opfunc(l, r);
 
       uint64_t trunc_mask = 0;
@@ -1417,12 +1420,14 @@ static expr2tc do_bit_munge_operation(
       }
 
       BigInt z;
-      if(is_signedbv_type(type)) {
+      if(is_signedbv_type(type))
+      {
         // if res's sign-bit is set, sign-extend it
         if(res >> (type->get_width() - 1))
           res |= trunc_mask;
         z = BigInt((int64_t)res);
-      } else
+      }
+      else
         z = BigInt((uint64_t)res);
 
       return constant_int2tc(type, z);
@@ -1440,9 +1445,7 @@ static expr2tc do_bit_munge_operation(
 
 expr2tc bitand2t::do_simplify() const
 {
-  auto op = [](uint64_t op1, uint64_t op2) {
-    return (op1 & op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return (op1 & op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1458,9 +1461,7 @@ expr2tc bitand2t::do_simplify() const
 
 expr2tc bitor2t::do_simplify() const
 {
-  auto op = [](uint64_t op1, uint64_t op2) {
-    return (op1 | op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1476,9 +1477,7 @@ expr2tc bitor2t::do_simplify() const
 
 expr2tc bitxor2t::do_simplify() const
 {
-  auto op = [](uint64_t op1, uint64_t op2) {
-    return (op1 ^ op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return (op1 ^ op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1494,9 +1493,7 @@ expr2tc bitxor2t::do_simplify() const
 
 expr2tc bitnand2t::do_simplify() const
 {
-  auto op = [](uint64_t op1, uint64_t op2) {
-    return ~(op1 & op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 & op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1512,9 +1509,7 @@ expr2tc bitnand2t::do_simplify() const
 
 expr2tc bitnor2t::do_simplify() const
 {
-  auto op = [](uint64_t op1, uint64_t op2) {
-    return ~(op1 | op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 | op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1530,9 +1525,7 @@ expr2tc bitnor2t::do_simplify() const
 
 expr2tc bitnxor2t::do_simplify() const
 {
-  auto op = [](uint64_t op1, uint64_t op2) {
-    return ~(op1 ^ op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 ^ op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1548,9 +1541,7 @@ expr2tc bitnxor2t::do_simplify() const
 
 expr2tc bitnot2t::do_simplify() const
 {
-  auto op = [](uint64_t op1, uint64_t) {
-    return ~(op1);
-  };
+  auto op = [](uint64_t op1, uint64_t) { return ~(op1); };
 
   if(is_constant_vector2t(value))
   {
@@ -1569,9 +1560,7 @@ expr2tc bitnot2t::do_simplify() const
 
 expr2tc shl2t::do_simplify() const
 {
-  auto op = [](uint64_t op1, uint64_t op2) {
-    return op1 << op2;
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return op1 << op2; };
 
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
@@ -1586,9 +1575,7 @@ expr2tc shl2t::do_simplify() const
 
 expr2tc lshr2t::do_simplify() const
 {
-  auto op = [](uint64_t op1, uint64_t op2) {
-    return op1 >> op2;
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return op1 >> op2; };
 
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
