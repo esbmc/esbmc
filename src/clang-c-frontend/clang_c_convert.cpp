@@ -27,8 +27,6 @@ CC_DIAGNOSTIC_POP()
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-#include <iostream>
-
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
