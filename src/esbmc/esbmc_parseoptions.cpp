@@ -40,6 +40,7 @@ extern "C"
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/mark_decl_as_non_det.h>
+#include <goto2c/goto2c.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -1706,8 +1707,11 @@ bool esbmc_parseoptionst::process_goto_program(
     // translate it?
     if(cmdline.isset("goto2c"))
     {
-      std::ostringstream oss;
-      goto_functions.convert_to_c(ns, oss);
+      // Creating a translator here
+      goto2ct goto2c(ns, goto_functions);
+      goto2c.preprocess();
+      goto2c.check();
+      std::string res = goto2c.translate();
 
       const std::string &filename = options.get_option("output");
       if(!filename.empty())
@@ -1716,12 +1720,12 @@ bool esbmc_parseoptionst::process_goto_program(
         std::ofstream out(filename.c_str());
         if(out)
         {
-          out << oss.str();
+          out << res;
           out.close();
         }
       }
       else
-        log_status("{}", oss.str());
+        log_status("{}", res);
       return true;
     }
   }
