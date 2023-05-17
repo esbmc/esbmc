@@ -1538,15 +1538,12 @@ void goto_convertt::convert_return(
     migrate_expr(new_code, t->code);
     t->location = new_code.location();
   }
-  else
+  else if(
+    new_code.has_return_value() &&
+    new_code.return_value().type().id() != "empty")
   {
-    if(
-      new_code.has_return_value() &&
-      new_code.return_value().type().id() != "empty")
-    {
-      log_error("function must not return value");
-      abort();
-    }
+    log_warning("function should not return value");
+    code.location().dump();
   }
 
   // add goto to end-of-function
