@@ -1233,9 +1233,9 @@ bool solidity_convertert::get_expr(
     if(get_type_description(caller_expr_json["returnParameters"], t))
       return true;
 
-      side_effect_expr_function_callt call;
-      call.function() = new_expr;
-      call.type() = t;
+    side_effect_expr_function_callt call;
+    call.function() = new_expr;
+    call.type() = t;
 
     // populate params
     auto param_nodes = caller_expr_json["parameters"]["parameters"];
