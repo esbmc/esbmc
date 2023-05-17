@@ -2661,6 +2661,16 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
         sub_expr["typeString"].get<std::string>().find("returns") !=
         std::string::npos)
       {
+
+        adjusted_expr = R"(
+          {
+            "nodeType": "FunctionDefinition",
+            "parameters":
+              {
+                "parameters" : []
+              }
+          }
+        )"_json;
         // e.g. for typeString like:
         // "typeString": "function () returns (uint8)"
         // use regex to capture the type and convert it to shorter form.
@@ -2673,7 +2683,7 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
               "typeString": ")" + matches[1].str() + R"("
             })"
           );
-          adjusted_expr = j2;
+          adjusted_expr["returnParameters"]["parameters"][0]["typeDescriptions"] = j2;
         }
         else if(
           sub_expr["typeString"].get<std::string>().find("returns (contract") !=
