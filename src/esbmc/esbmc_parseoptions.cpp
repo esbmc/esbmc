@@ -405,9 +405,12 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
-  // If multi-property is on, we should set result-only
+  // If multi-property is on, we should set result-only and base-step
   if(cmdline.isset("multi-property"))
+  {
     options.set_option("result-only", true);
+    options.set_option("base-step", true);
+  }
 
   config.options = options;
 }
