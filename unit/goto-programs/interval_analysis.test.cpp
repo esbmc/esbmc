@@ -256,12 +256,21 @@ TEST_CASE(
 
   T.property["4"].push_back({"@F@main@a", 0, true});
   T.property["4"].push_back({"@F@main@a", 49, true});
+  T.property["4"].push_back({"@F@main@a", 51, false});
+  // TODO: ESBMC needs to convert < into <=
+  //T.property["4"].push_back({"@F@main@a", 50, false});
   T.property["6"].push_back({"@F@main@a", 52, true});
+  T.property["6"].push_back({"@F@main@a", 53, false});
+  T.property["6"].push_back({"@F@main@a", 51, false});
   T.property["8"].push_back({"@F@main@a", 50, true});
   T.property["8"].push_back({"@F@main@a", (long long) pow(2, 31) - 1, true});
+  T.property["8"].push_back({"@F@main@a", 49, false});
+  T.property["8"].push_back({"@F@main@a", 0, false});
   T.property["10"].push_back({"@F@main@a", 51, true});
   T.property["12"].push_back({"@F@main@a", 51, true});
   T.property["12"].push_back({"@F@main@a", 52, true});
+  T.property["12"].push_back({"@F@main@a", 53, false});
+  //T.property["12"].push_back({"@F@main@a", 50, false});
 
   T.run_configs();
 }
@@ -595,8 +604,8 @@ TEST_CASE(
   T.property["3"].push_back({"@F@main@a", -128, true});
   T.property["5"].push_back({"@F@main@a", 127, true});
   // Underflows are becoming an overaproximation
-  //T.property["5"].push_back({"@F@main@a", -128, false});
-  //T.property["5"].push_back({"@F@main@a", 126, false});
+  T.property["5"].push_back({"@F@main@a", -128, false});
+  T.property["5"].push_back({"@F@main@a", 126, false});
 
   T.run_configs(true);
 }
