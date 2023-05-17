@@ -267,6 +267,7 @@ T interval_domaint::get_interval(const expr2tc &e)
 template <>
 wrapped_interval interval_domaint::get_interval(const expr2tc &e)
 {
+  e->do_simplify();
 
   // This needs to come before constant number
   if(is_constant_bool2t(e))
@@ -287,18 +288,14 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
   if(is_neg2t(e))
     return -get_interval<wrapped_interval>(to_neg2t(e).value);
 
-  if(0 && is_if2t(e))
+  if(is_if2t(e))
   {
     auto cond = get_interval<wrapped_interval>(to_if2t(e).cond);
     auto lhs = get_interval<wrapped_interval>(to_if2t(e).true_value);
     auto rhs = get_interval<wrapped_interval>(to_if2t(e).false_value);
 
-    // Cond is always false
-    assert(is_bool_type(to_if2t(e).cond->type));
-    if(cond.is_bottom() || (cond.cardinality() == 1 && cond.contains(0))) return rhs;
-
-    else if(!cond.contains(0)) return lhs;
-    return wrapped_interval::over_join(lhs,rhs);
+    auto result = wrapped_interval::over_join(lhs,rhs);
+    return result;
   }
 
   if(enable_interval_bitwise_arithmetic)
