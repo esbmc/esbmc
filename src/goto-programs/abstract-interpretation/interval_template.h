@@ -83,17 +83,22 @@ public:
   void dump() const
   {
     std::ostringstream oss;
-    if(lower_set)
-      oss << "[" << get_lower();
-    else
-      oss << "(-inf";
 
-    oss << ",";
-    if(upper_set)
-      oss << get_upper() << "]";
+    if(is_bottom())
+      oss << "EMPTY";
     else
-      oss << "+inf)";
+      {
+        if(lower_set)
+          oss << "[" << get_lower();
+        else
+          oss << "(-inf";
 
+        oss << ",";
+        if(upper_set)
+          oss << get_upper() << "]";
+        else
+          oss << "+inf)";
+      }
     log_status(oss.str());
   }
 

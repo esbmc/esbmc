@@ -68,7 +68,8 @@ public:
 
   bool is_top() const override
   {
-    return cardinality() == get_upper_bound();
+
+    return !is_bottom() && cardinality() == get_upper_bound();
   }
 
   static wrapped_interval complement(const wrapped_interval &w)
@@ -78,7 +79,7 @@ public:
     if(w.is_top())
       result.bottom = true;
 
-    if(!w.is_top() && !w.is_bottom())
+    if(!w.is_bottom())
     {
       auto mod = w.get_upper_bound();
       result.lower = (w.upper + 1) % mod;
@@ -86,7 +87,6 @@ public:
       if(result.upper < 0)
         result.upper += mod;
     }
-
     return result;
   }
 
@@ -185,7 +185,10 @@ public:
       return 0;
 
     auto mod = get_upper_bound();
-    return ((upper - lower) % mod + 1);
+    assert(mod != 0);
+    auto card = (((upper - lower) % mod) + 1);
+    if(card < 0) card += mod;
+    return card;
   }
 
   bool contains(const BigInt &e) const override
@@ -228,7 +231,7 @@ public:
 
   static wrapped_interval gap(const wrapped_interval &s, const wrapped_interval &t) {
     wrapped_interval result(s.t);
-    if(!t.contains(s.upper) && !s.contains(t.lower))
+    if(!t.is_bottom() && !s.is_bottom() && !t.contains(s.upper) && !s.contains(t.lower))
     {
       result.lower = t.lower;
       result.upper = s.upper;
@@ -244,17 +247,27 @@ public:
   }
 
   /// Over union
-  static wrapped_interval over_join(const std::vector<wrapped_interval> &r)
+  static wrapped_interval over_join(std::vector<wrapped_interval> &r)
   {
-    if(r.empty())
-    {
-      wrapped_interval r;
-      r.bottom = true;
-      return r;
-    }
-    auto f = r[0];
-    auto g = r[0];
-    for(unsigned i = 1; i < r.size(); ++i)
+
+    wrapped_interval bottom;
+    bottom.bottom = true;
+
+    if(r.empty()) return bottom;
+    bottom.t = r[0].t;
+    auto f = bottom;
+    auto g = bottom;
+
+    // Sort by left bound
+    std::sort(r.begin(), r.end(), [](auto a, auto b)
+              {
+                if(a.is_bottom()) return true;
+                if(b.is_bottom()) return false;
+
+                return a.lower < b.lower;
+              });
+
+    for(unsigned i = 0; i < r.size(); ++i)
     {
       if(r[i].is_top() || (wrapped_le(r[i].upper,0,r[i].lower, r[i].t)))
       {
@@ -262,17 +275,20 @@ public:
       }
     }
 
-    for(unsigned i = 1; i < r.size(); ++i)
+    for(unsigned i = 0; i < r.size(); ++i)
     {
       g = bigger(g, gap(f,r[i]));
       f = extend(f, r[i]);
     }
-    return bigger(g, f);
+    auto rr = complement(bigger(g, complement(f)));
+
+    return rr;
   }
   static wrapped_interval
   over_join(const wrapped_interval &s, const wrapped_interval &t)
   {
     assert(s.t == t.t);
+#if 0
 
     if(s.is_included(t))
       return t;
@@ -321,19 +337,26 @@ public:
 
     result.lower = c;
     result.upper = b;
+
     return result;
+#else
+    std::vector<wrapped_interval> r;
+    r.push_back(s);
+    r.push_back(t);
+    auto result = over_join(r);
+    return result;
+#endif
   }
 
   void approx_union_with(const interval_templatet<BigInt> &i) override
   {
     wrapped_interval rhs(t);
+    rhs.bottom = i.is_bottom();
     rhs.lower = i.lower;
     rhs.upper = i.upper;
 
-    if(0)
-      *this = complement(over_meet(complement(rhs), complement(*this)));
-    else
-      *this = over_join(rhs, *this);
+    *this = over_join(rhs, *this);
+
   }
 
   // Under meet
@@ -343,27 +366,26 @@ public:
     return complement(over_join(complement(s), complement(t)));
   }
 
-  static wrapped_interval
+  static std::vector<wrapped_interval>
   intersection(const wrapped_interval &s, const wrapped_interval &t)
   {
     assert(s.t == t.t);
 
-    wrapped_interval result(s.t);
+    std::vector<wrapped_interval> result;
 
     if(s.is_bottom() || t.is_bottom())
-    {
-      result.bottom = true;
       return result;
-    }
 
     if(s.is_equal(t) || s.is_top())
     {
-      return t;
+      result.push_back(t);
+      return result;
     }
 
     if(t.is_top())
     {
-      return s;
+      result.push_back(s);
+      return result;
     }
 
     const BigInt a = s.lower;
@@ -380,32 +402,44 @@ public:
       wrapped_interval c_b(s.t);
       c_b.lower = c;
       c_b.upper = b;
-      // TODO: we can start working with double intervals (more memory though)
-      // Note: We can overaproximate as long as we don't exclude real intersection values
-      return over_join(a_d, c_b);
+
+      result.push_back(a_d);
+      result.push_back(c_b);
+      return result;
     }
 
     if(t.contains(a) && t.contains(b))
-      return s;
+    {
+      result.push_back(s);
+      return result;
+    }
 
     if(s.contains(c) && s.contains(d))
-      return t;
+    {
+      result.push_back(t);
+      return result;
+    }
 
     if(t.contains(a) && s.contains(d) && !t.contains(b) && !s.contains(c))
     {
-      result.lower = a;
-      result.upper = d;
+      wrapped_interval a_d(s.t);
+      a_d.lower = a;
+      a_d.upper = d;
+
+      result.push_back(a_d);
       return result;
     }
 
     if(t.contains(b) && s.contains(c) && !t.contains(a) && !s.contains(d))
     {
-      result.lower = c;
-      result.upper = b;
+      wrapped_interval c_b(s.t);
+      c_b.lower = c;
+      c_b.upper = b;
+
+      result.push_back(c_b);
       return result;
     }
 
-    result.bottom = true;
     return result;
   }
 
@@ -869,7 +903,7 @@ public:
     return result;
   }
 
-  static wrapped_interval
+  static std::vector<wrapped_interval>
   multiply_us(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     wrapped_interval result(lhs.t);
@@ -925,7 +959,8 @@ public:
     std::vector<wrapped_interval> r;
     for(auto &u : cut(lhs))
       for(auto &v : cut(rhs))
-        r.push_back(multiply_us(u, v));
+        for(auto &m: multiply_us(u, v))
+          r.push_back(m);
     return over_join(r);
   }
 
