@@ -753,15 +753,9 @@ bool interval_domaint::join(const interval_domaint &b)
         if(it->second != previous)
         {
           if(f_it != fixpoint_map.end())
-          {
             f_it->second += 1;
-            log_status("Got {} tries for {}", f_it->second, it->first);
-          }
           else
-          {
             fixpoint_map[it->first] = 0;
-            log_status("First time for {}", it->first);
-          }
 
           result = true;
           // Try to extrapolate
@@ -770,7 +764,6 @@ bool interval_domaint::join(const interval_domaint &b)
             it->second = extrapolate_intervals(
               previous,
               it->second); // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
-            //fixpoint_map[it->first] = 0;
           }
         }
 
