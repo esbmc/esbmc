@@ -39,6 +39,7 @@
 #include <util/time_stopping.h>
 #include <util/cache.h>
 #include <atomic>
+#include <util/ansi_color.h>
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -112,7 +113,7 @@ void bmct::error_trace(
   if(options.get_bool_option("result-only"))
     return;
 
-  log_status("Building error trace");
+  log_progress("Building error trace");
 
   bool is_compact_trace = true;
   if(
@@ -135,7 +136,7 @@ void bmct::error_trace(
     violation_graphml_goto_trace(options, ns, goto_trace);
 
   std::ostringstream oss;
-  oss << "\nCounterexample:\n";
+  oss << "\n" << ansi_green << "[Counterexample]" << ansi_clr << "\n";
   show_goto_trace(oss, ns, goto_trace);
   log_result("{}", oss.str());
 }
@@ -179,7 +180,7 @@ smt_convt::resultt bmct::run_decision_procedure(
       return smt_convt::P_SMTLIB;
   }
 
-  log_status("Solving with solver {}", smt_conv->solver_text());
+  log_progress("Solving with solver {}", smt_conv->solver_text());
 
   fine_timet sat_start = current_time();
   smt_convt::resultt dec_result = smt_conv->dec_solve();
@@ -315,7 +316,7 @@ void bmct::report_multi_property_trace(
 
   case smt_convt::P_SATISFIABLE:
     // SAT means that we found a error!
-    log_status("Claim '{}' fails", msg);
+    log_fail("Claim '{}' fails", msg);
     break;
 
   default:

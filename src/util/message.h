@@ -14,6 +14,7 @@ Maintainers:
 #include <fmt/format.h>
 #include <util/message/format.h>
 #include <util/location.h>
+#include <util/ansi_color.h>
 
 /**
  * @brief Verbosity refers to the max level
@@ -33,6 +34,7 @@ enum class VerbosityLevel : char
   Warning,  // warnings are printend
   Result,   // results of the analysis (including CE)
   Progress, // progress notifications
+  Fail,     // claim fails (in multi-property checking)
   Status,   // all kinds of things esbmc is doing that may be useful to the user
   Debug     // messages that are only useful if you need to debug.
 };
@@ -44,8 +46,22 @@ struct messaget
     template <typename... Args>
     static void println(FILE *f, VerbosityLevel lvl, Args &&...args)
     {
-      if(lvl == VerbosityLevel::Error)
-        fmt::print(f, "ERROR: ");
+      switch(lvl)
+      {
+      case VerbosityLevel::Error:
+        fmt::print(f, ansi_red "[ERROR] " ansi_clr);
+        break;
+      case VerbosityLevel::Fail:
+        fmt::print(f, ansi_red "[FAIL] " ansi_clr);
+        break;
+      case VerbosityLevel::Warning:
+        fmt::print(f, ansi_yellow "[WARNING] " ansi_clr);
+        break;
+      case VerbosityLevel::Progress:
+        fmt::print(f, ansi_blue "[PROGRESS] " ansi_clr);
+      default:
+        break;
+      }
       fmt::print(f, std::forward<Args>(args)...);
       fmt::print(f, "\n");
     }
@@ -102,6 +118,7 @@ log_message(result, VerbosityLevel::Result);
 log_message(warning, VerbosityLevel::Warning);
 log_message(progress, VerbosityLevel::Progress);
 log_message(status, VerbosityLevel::Status);
+log_message(fail, VerbosityLevel::Fail);
 log_message(debug, VerbosityLevel::Debug);
 
 #undef log_message

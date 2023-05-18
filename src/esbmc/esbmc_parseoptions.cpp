@@ -412,6 +412,12 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("base-case", true);
   }
 
+  // parallel solving activates "--multi-property"
+  if(cmdline.isset("parallel-solving"))
+  {
+    options.set_option("multi-property", true);
+  }
+
   config.options = options;
 }
 
@@ -1468,7 +1474,7 @@ bool esbmc_parseoptionst::get_goto_program(
           return true;
       }
 
-      log_status("Generating GOTO Program");
+      log_progress("Generating GOTO Program");
 
       goto_convert(context, options, goto_functions);
     }
@@ -1723,7 +1729,7 @@ bool esbmc_parseoptionst::process_goto_program(
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
 { // do actual BMC
 
-  log_status("Starting Bounded Model Checking");
+  log_progress("Starting Bounded Model Checking");
 
   smt_convt::resultt res = bmc.start_bmc();
   if(res == smt_convt::P_ERROR)
