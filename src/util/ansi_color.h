@@ -6,6 +6,7 @@
 */
 
 #define ansi_red "\033[31m"    // Error, Failed
+#define ansi_green "\033[32m"  // Success, Counterexample
 #define ansi_yellow "\033[33m" // Warning
 #define ansi_blue "\033[34m"   // Status, Result
 #define ansi_clr                                                               \
