@@ -349,7 +349,8 @@ const struct group_opt_templ all_cmd_options[] = {
      {"no-propagation", NULL, "disable constant propagation"},
      {"interval-analysis",
       NULL,
-      "enable interval analysis for integer and float variables and add assumes to the "
+      "enable interval analysis for integer and float variables and add "
+      "assumes to the "
       "program"},
      {"interval-analysis-arithmetic",
       NULL,

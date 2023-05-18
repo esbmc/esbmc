@@ -172,32 +172,37 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after)
 {
   T result; // Full extrapolation
 
-  bool lower_decreased = !after.lower_set || (before.lower_set && after.lower_set && after.lower < before.lower);
-  bool upper_increased = !after.upper_set || (before.upper_set && after.upper_set && after.upper > before.upper);
+  bool lower_decreased =
+    !after.lower_set ||
+    (before.lower_set && after.lower_set && after.lower < before.lower);
+  bool upper_increased =
+    !after.upper_set ||
+    (before.upper_set && after.upper_set && after.upper > before.upper);
 
   if((lower_decreased || upper_increased) && !widening_underaproximate_bound)
     return result;
-  
+
   // Set lower bound: if we didn't decrease then just update the interval
   if(!lower_decreased)
-    {
-      result.lower_set = before.lower_set;
-      result.lower = before.lower;
-    }
+  {
+    result.lower_set = before.lower_set;
+    result.lower = before.lower;
+  }
 
-  // Set upper bound: 
+  // Set upper bound:
   if(!upper_increased)
-    {
-      result.upper_set = before.upper_set;
-      result.upper = before.upper;
-      
-    }
+  {
+    result.upper_set = before.upper_set;
+    result.upper = before.upper;
+  }
 
   return result;
 }
 
 template <>
-wrapped_interval interval_domaint::extrapolate_intervals(const wrapped_interval &before, const wrapped_interval &after)
+wrapped_interval interval_domaint::extrapolate_intervals(
+  const wrapped_interval &before,
+  const wrapped_interval &after)
 {
   return wrapped_interval::extrapolate_to(before, after);
 }
@@ -210,7 +215,6 @@ T interval_domaint::interpolate_intervals(const T &before, const T &after)
   bool lower_increased = !before.lower_set;
   bool upper_decreased = !before.upper_set;
 
-  
   result.lower_set = lower_increased ? after.lower_set : before.lower_set;
   result.lower = lower_increased ? after.lower : before.lower;
 
@@ -240,10 +244,8 @@ T interval_domaint::get_interval(const expr2tc &e)
   auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
   auto ieee_arith_op = std::dynamic_pointer_cast<ieee_arith_2ops>(e);
 
-
   if(arith_op && enable_interval_arithmetic) // TODO: add support for float ops
   {
-    
     // It should be safe to mix integers/floats in here.
     // The worst that can happen is an overaproximation
     auto lhs =
@@ -297,13 +299,12 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
     auto lhs = get_interval<wrapped_interval>(to_if2t(e).true_value);
     auto rhs = get_interval<wrapped_interval>(to_if2t(e).false_value);
 
-    auto result = wrapped_interval::over_join(lhs,rhs);
+    auto result = wrapped_interval::over_join(lhs, rhs);
     return result;
   }
 
   if(enable_interval_bitwise_arithmetic)
   {
-
     if(is_shl2t(e))
     {
       auto k = get_interval<wrapped_interval>(to_shl2t(e).side_2);
@@ -363,26 +364,23 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
   {
     // It should be safe to mix integers/floats in here.
     // The worst that can happen is an overaproximation
-    auto lhs =
-      get_interval<wrapped_interval>( arith_op->side_1 );
-    auto rhs =
-      get_interval<wrapped_interval>( arith_op->side_2 );
+    auto lhs = get_interval<wrapped_interval>(arith_op->side_1);
+    auto rhs = get_interval<wrapped_interval>(arith_op->side_2);
 
-    if(is_sub2t(e) )
+    if(is_sub2t(e))
       return lhs - rhs;
 
     if(is_add2t(e))
       return lhs + rhs;
 
-    if(is_mul2t(e) )
+    if(is_mul2t(e))
       return lhs * rhs;
 
-    if(is_div2t(e) )
+    if(is_div2t(e))
       return lhs / rhs;
 
     if(is_modulus2t(e))
       return lhs % rhs;
-
 
     // TODO: Add more as needed.
   }
@@ -428,7 +426,9 @@ void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
 }
 
 template <>
-void interval_domaint::apply_assume_less<wrapped_interval>(const expr2tc &a, const expr2tc &b)
+void interval_domaint::apply_assume_less<wrapped_interval>(
+  const expr2tc &a,
+  const expr2tc &b)
 {
   // 1. Apply contractor algorithms
   // 2. Update refs
@@ -450,7 +450,6 @@ void interval_domaint::apply_assume_less<wrapped_interval>(const expr2tc &a, con
   if(s.is_bottom() || t.is_bottom())
     make_bottom();
 }
-
 
 template <>
 bool interval_domaint::is_mapped<integer_intervalt>(const symbol2t &sym) const
@@ -488,8 +487,7 @@ expr2tc interval_domaint::make_expression_value<real_intervalt>(
   constant_floatbv2tc value(ieee_floatt(ieee_float_spect(
     to_floatbv_type(type).fraction, to_floatbv_type(type).exponent)));
 
-  const auto d =
-    (upper ? interval.upper : interval.lower).convert_to<double>();
+  const auto d = (upper ? interval.upper : interval.lower).convert_to<double>();
   value->value.from_double(d);
   if(upper)
     value->value.increment(true);
@@ -510,7 +508,8 @@ expr2tc interval_domaint::make_expression_value<wrapped_interval>(
 }
 
 template <>
-expr2tc interval_domaint::make_expression_helper<wrapped_interval>(const expr2tc &symbol) const
+expr2tc interval_domaint::make_expression_helper<wrapped_interval>(
+  const expr2tc &symbol) const
 {
   symbol2t src = to_symbol2t(symbol);
 
@@ -538,13 +537,14 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(const expr2tc
     // Interval: [a,b]
     std::vector<expr2tc> disjuncts;
 
-    auto convert = [this,&src,&symbol,&disjuncts](wrapped_interval &w)
+    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w)
     {
       assert(w.lower <= w.upper);
 
       std::vector<expr2tc> s_conjuncts;
       expr2tc value1 = make_expression_value(w, src.type, true);
-      if(w.singleton()){
+      if(w.singleton())
+      {
         disjuncts.push_back(equality2tc(symbol, value1));
         return;
       }
@@ -556,11 +556,9 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(const expr2tc
 
     for(auto &c : wrapped_interval::cut(interval))
     {
-        convert(c);
+      convert(c);
     }
     conjuncts.push_back(disjunction(disjuncts));
-
-
   }
   return conjunction(conjuncts);
 }
@@ -759,7 +757,8 @@ bool interval_domaint::join(const interval_domaint &b)
             f_it->second += 1;
             log_status("Got {} tries for {}", f_it->second, it->first);
           }
-          else {
+          else
+          {
             fixpoint_map[it->first] = 0;
             log_status("First time for {}", it->first);
           }
@@ -1030,7 +1029,6 @@ bool interval_domaint::enable_modular_intervals = false;
 bool interval_domaint::enable_assertion_simplification = false;
 bool interval_domaint::enable_contraction_for_abstract_states = false;
 bool interval_domaint::enable_wrapped_intervals = true;
-
 
 // Widening options
 unsigned interval_domaint::fixpoint_limit = 5;
