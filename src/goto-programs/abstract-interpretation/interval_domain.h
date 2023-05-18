@@ -37,6 +37,8 @@ public:
 
   void output(std::ostream &out) const override;
 
+  static void set_options(const optionst &options);
+
   void dump() const;
 
   // TODO: Add options for ai.h
@@ -58,7 +60,7 @@ public:
   static unsigned
     fixpoint_limit; /// Sets a limit for number of iteartions before widening
   static bool
-    widening_underaproximate_bound; /// Whether to considers overflows for Integers
+    widening_under_approximate_bound; /// Whether to considers overflows for Integers
   static bool
     widening_extrapolate; /// Extrapolate bound to infinity based on previous iteration
   static bool widening_narrowing; /// Interpolate bound back after fixpoint

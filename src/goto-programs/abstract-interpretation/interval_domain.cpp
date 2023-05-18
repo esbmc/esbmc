@@ -179,7 +179,7 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after)
     !after.upper_set ||
     (before.upper_set && after.upper_set && after.upper > before.upper);
 
-  if((lower_decreased || upper_increased) && !widening_underaproximate_bound)
+  if((lower_decreased || upper_increased) && !widening_under_approximate_bound)
     return result;
 
   // Set lower bound: if we didn't decrease then just update the interval
@@ -1015,6 +1015,32 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
   return unchanged;
 }
 
+void interval_domaint::set_options(const optionst &options)
+{
+  enable_interval_arithmetic =
+    options.get_bool_option("interval-analysis-arithmetic");
+  enable_interval_bitwise_arithmetic =
+    options.get_bool_option("interval-analysis-bitwise-arithmetic");
+  enable_modular_intervals =
+    options.get_bool_option("interval-analysis-modular");
+  enable_assertion_simplification =
+    options.get_bool_option("interval-analysis-simplify");
+  enable_contraction_for_abstract_states =
+    !options.get_bool_option("interval-analysis-no-contract");
+  enable_wrapped_intervals =
+    options.get_bool_option("interval-analysis-wrapped");
+
+  auto fixpoint_str = options.get_option("interval-analysis-extrapolate-limit");
+  if(!fixpoint_str.empty())
+    fixpoint_limit = atoi(fixpoint_str.c_str());
+
+  widening_extrapolate =
+    options.get_bool_option("interval-analysis-extrapolate");
+  widening_under_approximate_bound =
+    options.get_bool_option("interval-analysis-extrapolate-under-approximate");
+  widening_narrowing = options.get_bool_option("interval-analysis-narrowing");
+}
+
 // Options
 bool interval_domaint::enable_interval_arithmetic = true;
 bool interval_domaint::enable_interval_bitwise_arithmetic = true;
@@ -1025,6 +1051,6 @@ bool interval_domaint::enable_wrapped_intervals = true;
 
 // Widening options
 unsigned interval_domaint::fixpoint_limit = 5;
-bool interval_domaint::widening_underaproximate_bound = false;
+bool interval_domaint::widening_under_approximate_bound = false;
 bool interval_domaint::widening_extrapolate = true;
 bool interval_domaint::widening_narrowing = false;

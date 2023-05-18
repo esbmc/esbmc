@@ -107,7 +107,7 @@ public:
     interval_domaint::enable_contraction_for_abstract_states = false;
     interval_domaint::enable_wrapped_intervals = false;
 
-    interval_domaint::widening_underaproximate_bound = false;
+    interval_domaint::widening_under_approximate_bound = false;
     interval_domaint::widening_extrapolate = false;
     interval_domaint::widening_narrowing = false;
   }
