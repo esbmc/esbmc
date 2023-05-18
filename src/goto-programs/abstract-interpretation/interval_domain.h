@@ -356,6 +356,9 @@ protected:
     const Interval &interval,
     const type2tc &type,
     bool upper) const;
+
+  template <class IntervalMap>
+  bool join(IntervalMap &new_map, const IntervalMap &previous_map);
 };
 
 #endif // CPROVER_ANALYSES_INTERVAL_DOMAIN_H

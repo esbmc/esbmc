@@ -717,6 +717,69 @@ void interval_domaint::transform(
   }
 }
 
+template <class IntervalMap>
+bool interval_domaint::join(
+  IntervalMap &new_map,
+  const IntervalMap &previous_map)
+{
+  bool result = false;
+  for(auto new_it = new_map.begin(); new_it != new_map.end();) // no new_it++
+  {
+    // search for the variable that needs to be merged
+    // containers have different sizes and ordering
+    const auto b_it = previous_map.find(new_it->first);
+    const auto f_it = fixpoint_map.find(new_it->first);
+    if(b_it == previous_map.end())
+    {
+      new_it = new_map.erase(new_it);
+      if(f_it != fixpoint_map.end())
+        fixpoint_map.erase(f_it);
+      result = true;
+    }
+    else
+    {
+      auto previous = new_it->second; // [0,0] ... [0, +inf]
+      auto after = b_it->second;      // [1,100] ... [1, 100]
+      new_it->second.join(after);     // HULL // [0,100] ... [0, +inf]
+      // Did we reach a fixpoint?
+      if(new_it->second != previous)
+      {
+        if(f_it != fixpoint_map.end())
+          f_it->second += 1;
+        else
+          fixpoint_map[new_it->first] = 0;
+
+        result = true;
+        // Try to extrapolate
+        if(widening_extrapolate && fixpoint_map[new_it->first] > fixpoint_limit)
+        {
+          new_it->second = extrapolate_intervals(
+            previous,
+            new_it
+              ->second); // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
+        }
+      }
+
+      else
+      {
+        // Found a fixpoint, we might try to narrow now!
+        if(widening_narrowing)
+        {
+          after = interpolate_intervals(
+            new_it->second,
+            b_it
+              ->second); // ([0,100], [1,100] --> [0,100] ... ([0,inf], [1,100] --> [0,100]))
+          result |= new_it->second != after;
+          new_it->second = after;
+        }
+      }
+
+      new_it++;
+    }
+  }
+  return result;
+}
+
 bool interval_domaint::join(const interval_domaint &b)
 {
   if(b.is_bottom())
@@ -727,67 +790,8 @@ bool interval_domaint::join(const interval_domaint &b)
     return true;
   }
 
-  bool result = false;
-
-  auto f = [&result, this](auto &this_map, const auto &b_map)
-  {
-    for(auto it = this_map.begin(); it != this_map.end();) // no it++
-    {
-      // search for the variable that needs to be merged
-      // containers have different size and variable order
-      const auto b_it = b_map.find(it->first);
-      const auto f_it = fixpoint_map.find(it->first);
-      if(b_it == b_map.end())
-      {
-        it = this_map.erase(it);
-        if(f_it != fixpoint_map.end())
-          fixpoint_map.erase(f_it);
-        result = true;
-      }
-      else
-      {
-        auto previous = it->second; // [0,0] ... [0, +inf]
-        auto after = b_it->second;  // [1,100] ... [1, 100]
-        it->second.join(after);     // HULL // [0,100] ... [0, +inf]
-        // Did we reach a fixpoint?
-        if(it->second != previous)
-        {
-          if(f_it != fixpoint_map.end())
-            f_it->second += 1;
-          else
-            fixpoint_map[it->first] = 0;
-
-          result = true;
-          // Try to extrapolate
-          if(widening_extrapolate && fixpoint_map[it->first] > fixpoint_limit)
-          {
-            it->second = extrapolate_intervals(
-              previous,
-              it->second); // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
-          }
-        }
-
-        else
-        {
-          // Found a fixpoint, we might try to narrow now!
-          if(widening_narrowing)
-          {
-            after = interpolate_intervals(
-              it->second,
-              b_it
-                ->second); // ([0,100], [1,100] --> [0,100] ... ([0,inf], [1,100] --> [0,100]))
-            result |= it->second != after;
-            it->second = after;
-          }
-        }
-
-        it++;
-      }
-    }
-  };
-  f(int_map, b.int_map);
-  f(real_map, b.real_map);
-  f(wrap_map, b.wrap_map);
+  bool result = join(int_map, b.int_map) || join(real_map, b.real_map) ||
+                join(wrap_map, b.wrap_map);
   return result;
 }
 
@@ -797,7 +801,6 @@ void interval_domaint::assign(const expr2tc &expr)
   auto const &c = to_code_assign2t(expr);
   auto isbvop = is_bv_type(c.source) && is_bv_type(c.target);
   auto isfloatbvop = is_floatbv_type(c.source) && is_floatbv_type(c.target);
-  auto ispointer = is_symbol2t(c.source);
 
   if(!is_symbol2t(c.target))
     return;
@@ -1020,7 +1023,7 @@ void interval_domaint::set_options(const optionst &options)
   enable_interval_arithmetic =
     options.get_bool_option("interval-analysis-arithmetic");
   enable_interval_bitwise_arithmetic =
-    options.get_bool_option("interval-analysis-bitwise-arithmetic");
+    options.get_bool_option("interval-analysis-bitwise");
   enable_modular_intervals =
     options.get_bool_option("interval-analysis-modular");
   enable_assertion_simplification =
@@ -1031,8 +1034,7 @@ void interval_domaint::set_options(const optionst &options)
     options.get_bool_option("interval-analysis-wrapped");
 
   auto fixpoint_str = options.get_option("interval-analysis-extrapolate-limit");
-  if(!fixpoint_str.empty())
-    fixpoint_limit = atoi(fixpoint_str.c_str());
+  fixpoint_limit = fixpoint_str.empty() ? 5 : atoi(fixpoint_str.c_str());
 
   widening_extrapolate =
     options.get_bool_option("interval-analysis-extrapolate");
@@ -1052,5 +1054,5 @@ bool interval_domaint::enable_wrapped_intervals = true;
 // Widening options
 unsigned interval_domaint::fixpoint_limit = 5;
 bool interval_domaint::widening_under_approximate_bound = false;
-bool interval_domaint::widening_extrapolate = true;
+bool interval_domaint::widening_extrapolate = false;
 bool interval_domaint::widening_narrowing = false;
