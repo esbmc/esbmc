@@ -52,7 +52,7 @@ struct messaget
         fmt::print(f, ansi_red "[ERROR] " ansi_clr);
         break;
       case VerbosityLevel::Fail:
-        fmt::print(f, ansi_red "[FAIL] " ansi_clr);
+        fmt::print(f, ansi_red "[FAILED] " ansi_clr);
         break;
       case VerbosityLevel::Warning:
         fmt::print(f, ansi_yellow "[WARNING] " ansi_clr);
