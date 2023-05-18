@@ -41,17 +41,18 @@ public:
 
   // TODO: Add options for ai.h
   // Extensions
-  static bool enable_interval_arithmetic;
-  static bool enable_interval_bitwise_arithmetic;
-  static bool enable_modular_intervals;
-  static bool enable_assertion_simplification;
-  static bool enable_contraction_for_abstract_states;
-  static bool enable_wrapped_intervals;
+  static bool enable_interval_arithmetic; /// Enable simplification for arithmetic operators
+  static bool enable_interval_bitwise_arithmetic; /// Enable simplfication for bitwise opeations
+  static bool enable_modular_intervals; /// Make a modular operation after every assignment
+  static bool enable_assertion_simplification; /// Simplify condition and assertions with the intervals
+  static bool enable_contraction_for_abstract_states; /// Use contractor for <= operations
+  static bool enable_wrapped_intervals; /// Enabled wrapped intervals (disables Integers)
 
   // Widening options
-  static bool widening_underaproximate_bound;
-  static bool widening_extrapolate;
-  static bool widening_narrowing;
+  static unsigned fixpoint_limit; /// Sets a limit for number of iteartions before widening
+  static bool widening_underaproximate_bound; /// Whether to considers overflows for Integers
+  static bool widening_extrapolate; /// Extrapolate bound to infinity based on previous iteration
+  static bool widening_narrowing; /// Interpolate bound back after fixpoint
 
   typedef std::unordered_map<irep_idt, integer_intervalt, irep_id_hash>
     int_mapt;
@@ -59,6 +60,9 @@ public:
   typedef std::unordered_map<irep_idt, real_intervalt, irep_id_hash> real_mapt;
   typedef std::unordered_map<irep_idt, wrapped_interval, irep_id_hash>
     wrap_mapt;
+
+  typedef std::unordered_map<irep_idt, unsigned, irep_id_hash>
+    fixpoint_counter;
 
   int_mapt get_int_map() const
   {
@@ -99,6 +103,8 @@ public:
   void clear_state() {
     int_map.clear();
     real_map.clear();
+    wrap_map.clear();
+    fixpoint_map.clear();
   }
 
   // no states
@@ -185,6 +191,8 @@ protected:
   real_mapt real_map;
   /// Map for all wrap intervals
   wrap_mapt wrap_map;
+  /// Map for all fixpoint counters
+  fixpoint_counter fixpoint_map;
 
   /**
    * @brief Recursively explores an Expression until it reaches a symbol. If the

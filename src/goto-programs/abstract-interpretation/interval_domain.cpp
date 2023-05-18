@@ -738,9 +738,12 @@ bool interval_domaint::join(const interval_domaint &b)
       // search for the variable that needs to be merged
       // containers have different size and variable order
       const auto b_it = b_map.find(it->first);
+      const auto f_it = fixpoint_map.find(it->first);
       if(b_it == b_map.end())
       {
         it = this_map.erase(it);
+        if(f_it != fixpoint_map.end())
+          fixpoint_map.erase(f_it);
         result = true;
       }
       else
@@ -751,13 +754,24 @@ bool interval_domaint::join(const interval_domaint &b)
         // Did we reach a fixpoint?
         if(it->second != previous)
         {
+          if(f_it != fixpoint_map.end())
+          {
+            f_it->second += 1;
+            log_status("Got {} tries for {}", f_it->second, it->first);
+          }
+          else {
+            fixpoint_map[it->first] = 0;
+            log_status("First time for {}", it->first);
+          }
+
           result = true;
           // Try to extrapolate
-          if(widening_extrapolate)
+          if(widening_extrapolate && fixpoint_map[it->first] > fixpoint_limit)
           {
             it->second = extrapolate_intervals<wrapped_interval>(
               previous,
               it->second); // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
+            fixpoint_map[it->first] = 0;
           }
         }
 
@@ -1019,6 +1033,7 @@ bool interval_domaint::enable_wrapped_intervals = true;
 
 
 // Widening options
+unsigned interval_domaint::fixpoint_limit = 100;
 bool interval_domaint::widening_underaproximate_bound = false;
 bool interval_domaint::widening_extrapolate = true;
 bool interval_domaint::widening_narrowing = false;
