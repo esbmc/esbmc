@@ -250,7 +250,7 @@ const struct group_opt_templ all_cmd_options[] = {
   {"Property checking",
    {{"multi-property",
      NULL,
-     "verify satisfability of all claims of the current bound"},
+     "verify satisfiability of all claims of the current bound"},
     {"no-assertions", NULL, "ignore assertions"},
     {"no-bounds-check", NULL, "do not do array bounds check"},
     {"no-div-by-zero-check", NULL, "do not do division by zero check"},
