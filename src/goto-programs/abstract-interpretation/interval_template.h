@@ -87,18 +87,18 @@ public:
     if(is_bottom())
       oss << "EMPTY";
     else
-      {
-        if(lower_set)
-          oss << "[" << get_lower();
-        else
-          oss << "(-inf";
+    {
+      if(lower_set)
+        oss << "[" << get_lower();
+      else
+        oss << "(-inf";
 
-        oss << ",";
-        if(upper_set)
-          oss << get_upper() << "]";
-        else
-          oss << "+inf)";
-      }
+      oss << ",";
+      if(upper_set)
+        oss << get_upper() << "]";
+      else
+        oss << "+inf)";
+    }
     log_status(oss.str());
   }
 
@@ -352,7 +352,8 @@ public:
     result.lower = a0_b0;
     result.upper = a0_b0;
 
-    auto update_value = [&result](T value) {
+    auto update_value = [&result](T value)
+    {
       result.lower = std::min(value, result.lower);
       result.upper = std::max(value, result.upper);
     };
@@ -391,7 +392,8 @@ public:
     result.lower = a0_b0;
     result.upper = a0_b0;
 
-    auto update_value = [&result](T value) {
+    auto update_value = [&result](T value)
+    {
       result.lower = std::min(value, result.lower);
       result.upper = std::max(value, result.upper);
     };

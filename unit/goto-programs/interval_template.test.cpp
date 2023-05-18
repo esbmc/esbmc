@@ -284,7 +284,6 @@ TEST_CASE(
     REQUIRE(result.upper == 10);
   }
 
-
   SECTION("Copy constructor")
   {
     // Just to be sure
@@ -331,7 +330,6 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
 
   SECTION("Upper bound test")
   {
-
     unsigned actual =
       wrapped_interval(t1_unsigned).get_upper_bound().to_uint64();
     unsigned expected = pow(2, N1);
@@ -429,7 +427,6 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     A.make_ge_than(10);
 
     REQUIRE(A.get_lower() == 10);
-
   }
 
   SECTION("Relational Operators (Signed)")
@@ -446,7 +443,6 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     REQUIRE(A.get_upper() == 50);
     A.make_ge_than(-120);
     REQUIRE(A.get_lower() == -120);
-
   }
 
   SECTION("Non-overlap Interval")
@@ -471,7 +467,6 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
   wrapped_interval B(t1_unsigned);
   wrapped_interval As(t1_signed);
   wrapped_interval Bs(t1_signed);
-
 
   SECTION("Join/Meet when A is in B")
   {
@@ -531,9 +526,13 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     auto intersection = wrapped_interval::intersection(A, B);
 
     // OVER_JOIN = [190, 150]
-    CAPTURE(over_join.lower, over_join.upper, over_join.cardinality(), over_join.get_upper_bound(), over_join.is_bottom());
+    CAPTURE(
+      over_join.lower,
+      over_join.upper,
+      over_join.cardinality(),
+      over_join.get_upper_bound(),
+      over_join.is_bottom());
     REQUIRE(over_join.is_top());
-
   }
   SECTION("Join/Meet when A do not overlap and B overlaps meets A in one end")
   {
@@ -597,7 +596,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
 
     // Wrap around
     A.set_lower(100);
-    A.set_upper((long long)(pow(2,N1)-1));
+    A.set_upper((long long)(pow(2, N1) - 1));
 
     B.set_lower(1);
     B.set_upper(2);
@@ -614,18 +613,17 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     REQUIRE(!A.is_bottom());
     REQUIRE(A.is_top());
 
-
     B.set_lower(0);
     B.set_upper(1);
 
     auto C = A + B;
     REQUIRE(C.is_top());
-}
+  }
 
   SECTION("Addition Signed")
   {
-    REQUIRE(As.contains((long long) -pow(2, N1)/2));
-    REQUIRE(As.contains((long long) pow(2, N1)/2 - 1));
+    REQUIRE(As.contains((long long)-pow(2, N1) / 2));
+    REQUIRE(As.contains((long long)pow(2, N1) / 2 - 1));
     REQUIRE(!As.is_bottom());
     REQUIRE(As.is_top());
 
@@ -636,7 +634,6 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     Bs.set_lower(-5);
     Bs.set_upper(5);
 
-
     auto C = As + Bs;
     CAPTURE(As.cardinality(), Bs.cardinality());
     REQUIRE(C.get_lower() == -105);
@@ -644,27 +641,23 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
 
     // Wrap around
     As.set_lower(100);
-    As.set_upper((long long)(pow(2,N1-1)-1));
+    As.set_upper((long long)(pow(2, N1 - 1) - 1));
 
     Bs.set_lower(-1);
     Bs.set_upper(1);
 
     C = As + Bs;
     REQUIRE(C.get_lower() == 99);
-    REQUIRE(C.get_upper().to_int64() == -pow(2, N1)/2);
+    REQUIRE(C.get_upper().to_int64() == -pow(2, N1) / 2);
   }
-
 }
 
-TEST_CASE(
-  "Interval templates arithmetic operations",
-  "[ai][interval-analysis]")
+TEST_CASE("Interval templates arithmetic operations", "[ai][interval-analysis]")
 {
   config.ansi_c.set_data_model(configt::ILP32);
   unsigned N1 = 8;
   auto t1_unsigned = get_uint_type(N1);
   auto t1_signed = get_int_type(N1);
-
 
   SECTION("North Pole")
   {
@@ -736,7 +729,7 @@ TEST_CASE(
     bool check2 = false;
     bool check3 = false;
 
-    wrapped_interval w1(t1_signed),w2(t1_signed), w3(t1_signed);
+    wrapped_interval w1(t1_signed), w2(t1_signed), w3(t1_signed);
     w1.lower = 255;
     w1.upper = 255;
 
@@ -747,11 +740,14 @@ TEST_CASE(
     w3.upper = 129;
 
     // There is no way for me to check the order
-    for(auto &c: cut)
+    for(auto &c : cut)
     {
-      if(c == w1) check1=true;
-      if(c == w2) check2=true;
-      if(c == w3) check3=true;
+      if(c == w1)
+        check1 = true;
+      if(c == w2)
+        check2 = true;
+      if(c == w3)
+        check3 = true;
     }
 
     REQUIRE(check1);
@@ -785,17 +781,14 @@ TEST_CASE(
     w2.lower = 90;
     w2.upper = 110;
 
-
-    auto result = w1.difference(w1,w2);
+    auto result = w1.difference(w1, w2);
     CAPTURE(result.lower, result.upper);
     REQUIRE(result.lower == 111);
     REQUIRE(result.upper == 120);
   }
 }
 
-TEST_CASE(
-  "Interval templates multiplication",
-  "[ai][interval-analysis]")
+TEST_CASE("Interval templates multiplication", "[ai][interval-analysis]")
 {
   config.ansi_c.set_data_model(configt::ILP32);
   unsigned N1 = 8;
@@ -848,9 +841,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE(
-  "Interval templates division",
-  "[ai][interval-analysis]")
+TEST_CASE("Interval templates division", "[ai][interval-analysis]")
 {
   config.ansi_c.set_data_model(configt::ILP32);
   unsigned N1 = 8;
@@ -903,9 +894,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE(
-  "Wrapped Interval Typecast",
-  "[ai][interval-analysis]")
+TEST_CASE("Wrapped Interval Typecast", "[ai][interval-analysis]")
 {
   config.ansi_c.set_data_model(configt::ILP32);
   unsigned N1 = 8, N2 = 16;
@@ -1046,9 +1035,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE(
-  "Wrapped Interval Left Shift",
-  "[ai][interval-analysis]")
+TEST_CASE("Wrapped Interval Left Shift", "[ai][interval-analysis]")
 {
   config.ansi_c.set_data_model(configt::ILP32);
   unsigned N1 = 8;
@@ -1084,7 +1071,6 @@ TEST_CASE(
     CAPTURE(result1.lower, result1.upper);
     REQUIRE(result1.lower == 0);
     REQUIRE(result1.upper == 254);
-
   }
 
   SECTION("Logical right shift")
@@ -1128,9 +1114,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE(
-  "Remainder Operations",
-  "[ai][interval-analysis]")
+TEST_CASE("Remainder Operations", "[ai][interval-analysis]")
 {
   config.ansi_c.set_data_model(configt::ILP32);
   unsigned N1 = 8;
@@ -1218,7 +1202,8 @@ TEST_CASE(
     REQUIRE(result9.get_lower() == -10);
   }
 
-  SECTION("Non singletons (unsigned)") {
+  SECTION("Non singletons (unsigned)")
+  {
     wrapped_interval w1(t1_unsigned);
     wrapped_interval w2(t1_unsigned);
 
@@ -1258,7 +1243,8 @@ TEST_CASE(
     REQUIRE(result4.upper == 254);
   }
 
-  SECTION("Non singletons (signed)") {
+  SECTION("Non singletons (signed)")
+  {
     wrapped_interval w1(t1_signed);
     wrapped_interval w2(t1_signed);
 
@@ -1278,7 +1264,7 @@ TEST_CASE(
     auto result2 = w1 % w2;
     CAPTURE(result2.upper, result2.lower);
     REQUIRE(result2.lower == 252); // -4
-    REQUIRE(result2.upper == 4); // 4
+    REQUIRE(result2.upper == 4);   // 4
 
     w1.lower = 200;
     w1.upper = 250;
@@ -1289,14 +1275,10 @@ TEST_CASE(
     auto result3 = w1 % w2;
     REQUIRE(result3.lower == 253);
     REQUIRE(result3.upper == 0);
-
   }
 }
 
-
-TEST_CASE(
-  "Bitor Operations",
-  "[ai][interval-analysis]")
+TEST_CASE("Bitor Operations", "[ai][interval-analysis]")
 {
   config.ansi_c.set_data_model(configt::ILP32);
   unsigned N1 = 8;
@@ -1306,8 +1288,8 @@ TEST_CASE(
   wrapped_interval w2(t1_unsigned);
   SECTION("Singletons")
   {
-    w1.lower = 10; // 0x0A
-    w1.upper = 10; // 0x0A
+    w1.lower = 10;  // 0x0A
+    w1.upper = 10;  // 0x0A
     w2.lower = 160; // 0xA0
     w2.upper = 160; // 0xA0
 
@@ -1319,8 +1301,8 @@ TEST_CASE(
 
   SECTION("Intervals")
   {
-    w1.lower = 10; // 0x0A
-    w1.upper = 12; // 0x0C
+    w1.lower = 10;  // 0x0A
+    w1.upper = 12;  // 0x0C
     w2.lower = 161; // 0xA1
     w2.upper = 162; // 0xA2
 
@@ -1345,9 +1327,7 @@ TEST_CASE(
    */
 }
 
-TEST_CASE(
-  "Bitand Operations",
-  "[ai][interval-analysis]")
+TEST_CASE("Bitand Operations", "[ai][interval-analysis]")
 {
   config.ansi_c.set_data_model(configt::ILP32);
   unsigned N1 = 32;
@@ -1360,8 +1340,8 @@ TEST_CASE(
   wrapped_interval w2(t1_unsigned);
   SECTION("Singletons disjunct")
   {
-    w1.lower = 10; // 0x0A
-    w1.upper = 10; // 0x0A
+    w1.lower = 10;  // 0x0A
+    w1.upper = 10;  // 0x0A
     w2.lower = 160; // 0xA0
     w2.upper = 160; // 0xA0
 
@@ -1373,8 +1353,8 @@ TEST_CASE(
 
   SECTION("Singletons")
   {
-    w1.lower = 11; // 0x0B
-    w1.upper = 11; // 0x0B
+    w1.lower = 11;  // 0x0B
+    w1.upper = 11;  // 0x0B
     w2.lower = 161; // 0xA1
     w2.upper = 161; // 0xA1
 
@@ -1386,8 +1366,8 @@ TEST_CASE(
 
   SECTION("Intervals")
   {
-    w1.lower = 10; // 0x0A
-    w1.upper = 12; // 0x0C
+    w1.lower = 10;  // 0x0A
+    w1.upper = 12;  // 0x0C
     w2.lower = 161; // 0xA1
     w2.upper = 162; // 0xA2
 
@@ -1424,9 +1404,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE(
-  "Bitxor Operations",
-  "[ai][interval-analysis]")
+TEST_CASE("Bitxor Operations", "[ai][interval-analysis]")
 {
   config.ansi_c.set_data_model(configt::ILP32);
   unsigned N1 = 8;
@@ -1436,8 +1414,8 @@ TEST_CASE(
   wrapped_interval w2(t1_unsigned);
   SECTION("Singletons disjunct")
   {
-    w1.lower = 10; // 0x0A
-    w1.upper = 10; // 0x0A
+    w1.lower = 10;  // 0x0A
+    w1.upper = 10;  // 0x0A
     w2.lower = 160; // 0xA0
     w2.upper = 160; // 0xA0
 
@@ -1449,8 +1427,8 @@ TEST_CASE(
 
   SECTION("Singletons")
   {
-    w1.lower = 1; // 0x01
-    w1.upper = 1; // 0x01
+    w1.lower = 1;   // 0x01
+    w1.upper = 1;   // 0x01
     w2.lower = 161; // 0xA1
     w2.upper = 161; // 0xA1
 
@@ -1462,8 +1440,8 @@ TEST_CASE(
 
   SECTION("Intervals")
   {
-    w1.lower = 10; // 0x0A   0000 1010
-    w1.upper = 12; // 0x0C   0000 1100
+    w1.lower = 10;  // 0x0A   0000 1010
+    w1.upper = 12;  // 0x0C   0000 1100
     w2.lower = 161; // 0xA1  1011 0001
     w2.upper = 162; // 0xA2  1011 0010
 
@@ -1474,9 +1452,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE(
-  "Bitnot Operations",
-  "[ai][interval-analysis]")
+TEST_CASE("Bitnot Operations", "[ai][interval-analysis]")
 {
   config.ansi_c.set_data_model(configt::ILP32);
   unsigned N1 = 8;

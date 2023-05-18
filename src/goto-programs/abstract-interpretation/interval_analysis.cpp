@@ -63,7 +63,7 @@ void instrument_intervals(
     }
 
     const interval_domaint &d = interval_analysis[i_it];
-/*
+    /*
     if(d.is_bottom()) {
       goto_programt::targett t = goto_function.body.insert(i_it);
       t->make_assumption(gen_false_expr());
@@ -95,8 +95,10 @@ void instrument_intervals(
   }
 }
 
-void interval_analysis(goto_functionst &goto_functions, const namespacet &ns,
-		       const optionst &options)
+void interval_analysis(
+  goto_functionst &goto_functions,
+  const namespacet &ns,
+  const optionst &options)
 {
   ait<interval_domaint> interval_analysis;
   //  interval_analysis.set_options(options);

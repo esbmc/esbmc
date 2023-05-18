@@ -41,17 +41,26 @@ public:
 
   // TODO: Add options for ai.h
   // Extensions
-  static bool enable_interval_arithmetic; /// Enable simplification for arithmetic operators
-  static bool enable_interval_bitwise_arithmetic; /// Enable simplfication for bitwise opeations
-  static bool enable_modular_intervals; /// Make a modular operation after every assignment
-  static bool enable_assertion_simplification; /// Simplify condition and assertions with the intervals
-  static bool enable_contraction_for_abstract_states; /// Use contractor for <= operations
-  static bool enable_wrapped_intervals; /// Enabled wrapped intervals (disables Integers)
+  static bool
+    enable_interval_arithmetic; /// Enable simplification for arithmetic operators
+  static bool
+    enable_interval_bitwise_arithmetic; /// Enable simplfication for bitwise opeations
+  static bool
+    enable_modular_intervals; /// Make a modular operation after every assignment
+  static bool
+    enable_assertion_simplification; /// Simplify condition and assertions with the intervals
+  static bool
+    enable_contraction_for_abstract_states; /// Use contractor for <= operations
+  static bool
+    enable_wrapped_intervals; /// Enabled wrapped intervals (disables Integers)
 
   // Widening options
-  static unsigned fixpoint_limit; /// Sets a limit for number of iteartions before widening
-  static bool widening_underaproximate_bound; /// Whether to considers overflows for Integers
-  static bool widening_extrapolate; /// Extrapolate bound to infinity based on previous iteration
+  static unsigned
+    fixpoint_limit; /// Sets a limit for number of iteartions before widening
+  static bool
+    widening_underaproximate_bound; /// Whether to considers overflows for Integers
+  static bool
+    widening_extrapolate; /// Extrapolate bound to infinity based on previous iteration
   static bool widening_narrowing; /// Interpolate bound back after fixpoint
 
   typedef std::unordered_map<irep_idt, integer_intervalt, irep_id_hash>
@@ -61,8 +70,7 @@ public:
   typedef std::unordered_map<irep_idt, wrapped_interval, irep_id_hash>
     wrap_mapt;
 
-  typedef std::unordered_map<irep_idt, unsigned, irep_id_hash>
-    fixpoint_counter;
+  typedef std::unordered_map<irep_idt, unsigned, irep_id_hash> fixpoint_counter;
 
   int_mapt get_int_map() const
   {
@@ -100,7 +108,8 @@ public:
     return join(b);
   }
 
-  void clear_state() {
+  void clear_state()
+  {
     int_map.clear();
     real_map.clear();
     wrap_map.clear();
@@ -181,7 +190,6 @@ public:
   ai_simplify(expr2tc &condition, const namespacet &ns) const override;
 
 protected:
-
   // Abstract state information
   /// Is this state a bottom. I.e., there is a contradiction between an assignment and an assume
   bool bottom;
@@ -259,7 +267,7 @@ protected:
   template <class Interval>
   Interval extrapolate_intervals(const Interval &before, const Interval &after);
 
-    /**
+  /**
    * @brief Applies Interpolation narrowing algorithm
    *
    * Given two intervals: (a0, b0) (before the computation) and (a1, b1) (after the computation):
@@ -272,7 +280,6 @@ protected:
   template <class Interval>
   Interval interpolate_intervals(const Interval &before, const Interval &after);
 
-  
   /**
    * @brief Applies  LHS < RHS
    *
