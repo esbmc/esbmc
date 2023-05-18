@@ -363,7 +363,6 @@ public:
 
   void approx_union_with(const interval_templatet<BigInt> &i) override
   {
-    log_status("Union");
     wrapped_interval rhs(t);
     rhs.bottom = i.is_bottom();
     rhs.lower = i.lower;
