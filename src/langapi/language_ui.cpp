@@ -96,7 +96,7 @@ bool language_uit::parse(const std::string &filename)
 
 bool language_uit::typecheck()
 {
-  log_status("Converting");
+  log_progress("Converting");
 
   if(language_files.typecheck(context))
   {

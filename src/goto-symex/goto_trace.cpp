@@ -246,7 +246,7 @@ void violation_graphml_goto_trace(
   grapht graph(grapht::VIOLATION);
   graph.verified_file = options.get_option("input-file");
 
-  log_status("Generating Violation Witness for: {}", graph.verified_file);
+  log_progress("Generating Violation Witness for: {}", graph.verified_file);
 
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
@@ -319,7 +319,7 @@ void correctness_graphml_goto_trace(
 {
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = options.get_option("input-file");
-  log_status("Generating Correctness Witness for: {}", graph.verified_file);
+  log_progress("Generating Correctness Witness for: {}", graph.verified_file);
 
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;

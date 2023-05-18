@@ -104,7 +104,7 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   contextt new_context;
   convert_intrinsics(
     new_context); // Add ESBMC and TACAS intrinsic symbols to the context
-  log_progress("Done conversion of intrinsics...");
+  log_status("Done conversion of intrinsics...");
 
   solidity_convertert converter(
     new_context, ast_json, func_name, smart_contract);
