@@ -802,13 +802,10 @@ smt_convt::resultt bmct::multi_property_check(
             std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
             show_goto_trace(out, ns, goto_trace);
           }
-          
-          // show counterexample
           std::ostringstream oss;
           oss << "\nCounterexample:\n";
           show_goto_trace(oss, ns, goto_trace);
           log_result("{}", oss.str());
-
           final_result = result;
         }
         // TODO: This is the place to store into a cache
