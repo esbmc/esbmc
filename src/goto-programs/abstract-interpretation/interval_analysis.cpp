@@ -101,14 +101,15 @@ void interval_analysis(
   const optionst &options)
 {
   ait<interval_domaint> interval_analysis;
-  //  interval_analysis.set_options(options);
+  interval_domaint::set_options(options);
   interval_analysis(goto_functions, ns);
 
-#if 0
-  std::ostringstream oss;
-  interval_analysis.output(goto_functions, oss);
-  log_status(oss.str());
-#endif
+  if(options.get_bool_option("interval-analysis-dump"))
+  {
+    std::ostringstream oss;
+    interval_analysis.output(goto_functions, oss);
+    log_status(oss.str());
+  }
   Forall_goto_functions(f_it, goto_functions)
     instrument_intervals(interval_analysis, f_it->second);
 
