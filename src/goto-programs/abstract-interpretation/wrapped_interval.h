@@ -517,14 +517,13 @@ public:
 
   static wrapped_interval extrapolate_to(const wrapped_interval &f1, const wrapped_interval &f2)
   {
-    abort();
-    log_status("Widening");
-    f1.dump();
-    f2.dump();
+    assert(f1.t == f2.t);
+    wrapped_interval result(f2.t);
+#if 0
     if(f2.is_included(f1)) return f1;
 
     log_status("Checking cases");
-    wrapped_interval result(f1.t);
+
 
     // The interval is too big already, give up to TOP
     if(f1.cardinality() >= f1.get_upper_bound()/2) return result;
@@ -535,7 +534,6 @@ public:
     // Lower bound keeps the same but upper increases
     if(f1_to_f2.lower == f1.lower && f1_to_f2.upper == f2.upper)
     {
-      log_status("Double upper");
       wrapped_interval double_upper(f1.t);
       double_upper.lower = f1_to_f2.lower;
       double_upper.upper = ((((2 * f1.upper) - f1.lower) % f1.get_upper_bound()) + 1) % f1.get_upper_bound();
@@ -566,6 +564,7 @@ public:
 
       return over_join(f1_to_f2, magic);
     }
+#endif
 
     // Give up return top
     return result;
