@@ -350,13 +350,16 @@ public:
 
   void approx_union_with(const interval_templatet<BigInt> &i) override
   {
+    log_status("Union");
     wrapped_interval rhs(t);
     rhs.bottom = i.is_bottom();
     rhs.lower = i.lower;
     rhs.upper = i.upper;
 
+    dump();
+    rhs.dump();
     *this = over_join(rhs, *this);
-
+    dump();
   }
 
   // Under meet
@@ -510,6 +513,62 @@ public:
     result.set_lower(-1);
     result.set_upper(-1);
     return result * lhs;
+  }
+
+  static wrapped_interval extrapolate_to(const wrapped_interval &f1, const wrapped_interval &f2)
+  {
+    abort();
+    log_status("Widening");
+    f1.dump();
+    f2.dump();
+    if(f2.is_included(f1)) return f1;
+
+    log_status("Checking cases");
+    wrapped_interval result(f1.t);
+
+    // The interval is too big already, give up to TOP
+    if(f1.cardinality() >= f1.get_upper_bound()/2) return result;
+
+    auto f1_to_f2 = over_join(f1,f2);
+    assert(!f1_to_f2.is_bottom());
+
+    // Lower bound keeps the same but upper increases
+    if(f1_to_f2.lower == f1.lower && f1_to_f2.upper == f2.upper)
+    {
+      log_status("Double upper");
+      wrapped_interval double_upper(f1.t);
+      double_upper.lower = f1_to_f2.lower;
+      double_upper.upper = ((((2 * f1.upper) - f1.lower) % f1.get_upper_bound()) + 1) % f1.get_upper_bound();
+      return over_join(f1_to_f2, double_upper);
+    }
+
+    // Upper bound keeps the same but lower decreases
+    if(f1_to_f2.lower == f2.lower && f1_to_f2.upper == f1.upper)
+    {
+      log_status("Double lower");
+      wrapped_interval double_lower(f1.t);
+      double_lower.lower = ((((2*f1.lower)- f1.upper) %f1.get_upper_bound()) - 1) % f1.get_upper_bound();
+      double_lower.upper = f1.upper;
+      return over_join(f1_to_f2, double_lower);
+    }
+
+    // Lower and upper bound of f1 is included in f2
+    if(f2.contains(f1.lower) && f2.contains(f1.upper))
+    {
+      log_status("Magic");
+      wrapped_interval magic(f1.t);
+
+      // Maintain the lower
+      magic.lower = f2.lower;
+
+      // Increase the upper by the difference between uppers
+      magic.upper = (((f2.upper + (((2*f1.upper) - (2*f1.lower))%f1.get_upper_bound())) % f1.get_upper_bound()) + 1) % f1.get_upper_bound();
+
+      return over_join(f1_to_f2, magic);
+    }
+
+    // Give up return top
+    return result;
   }
 
   friend wrapped_interval
