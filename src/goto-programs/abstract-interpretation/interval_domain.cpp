@@ -767,7 +767,7 @@ bool interval_domaint::join(const interval_domaint &b)
           // Try to extrapolate
           if(widening_extrapolate && fixpoint_map[it->first] > fixpoint_limit)
           {
-            it->second = extrapolate_intervals<wrapped_interval>(
+            it->second = extrapolate_intervals(
               previous,
               it->second); // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
             //fixpoint_map[it->first] = 0;
@@ -792,8 +792,8 @@ bool interval_domaint::join(const interval_domaint &b)
       }
     }
   };
-  //f(int_map, b.int_map);
-  //f(real_map, b.real_map);
+  f(int_map, b.int_map);
+  f(real_map, b.real_map);
   f(wrap_map, b.wrap_map);
   return result;
 }
