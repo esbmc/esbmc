@@ -196,6 +196,12 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after)
   return result;
 }
 
+template <>
+wrapped_interval interval_domaint::extrapolate_intervals(const wrapped_interval &before, const wrapped_interval &after)
+{
+  return wrapped_interval::extrapolate_to(before, after);
+}
+
 template <class T>
 T interval_domaint::interpolate_intervals(const T &before, const T &after)
 {
@@ -267,8 +273,6 @@ T interval_domaint::get_interval(const expr2tc &e)
 template <>
 wrapped_interval interval_domaint::get_interval(const expr2tc &e)
 {
-  e->do_simplify();
-
   // This needs to come before constant number
   if(is_constant_bool2t(e))
   {
@@ -280,7 +284,6 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
 
   if(is_symbol2t(e))
     return get_interval_from_symbol<wrapped_interval>(to_symbol2t(e));
-
 
   if(is_constant_number(e))
     return get_interval_from_const<wrapped_interval>(e);
@@ -355,17 +358,9 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
     return wrapped_interval::cast(inner, to_typecast2t(e).type);
   }
 
-  if(is_modulus2t(e) && enable_interval_arithmetic)
-  {
-   auto lhs = get_interval<wrapped_interval>(to_modulus2t(e).side_1);
-   auto rhs = get_interval<wrapped_interval>(to_modulus2t(e).side_2);
-   return lhs % rhs;
-  }
-
   auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
   if(arith_op && enable_interval_arithmetic)
   {
-
     // It should be safe to mix integers/floats in here.
     // The worst that can happen is an overaproximation
     auto lhs =
@@ -384,6 +379,10 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e)
 
     if(is_div2t(e) )
       return lhs / rhs;
+
+    if(is_modulus2t(e))
+      return lhs % rhs;
+
 
     // TODO: Add more as needed.
   }
@@ -753,11 +752,10 @@ bool interval_domaint::join(const interval_domaint &b)
         if(it->second != previous)
         {
           result = true;
-
           // Try to extrapolate
-          if(after != it->second && widening_extrapolate)
+          if(widening_extrapolate)
           {
-            it->second = extrapolate_intervals(
+            it->second = extrapolate_intervals<wrapped_interval>(
               previous,
               it->second); // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
           }
@@ -781,8 +779,8 @@ bool interval_domaint::join(const interval_domaint &b)
       }
     }
   };
-  f(int_map, b.int_map);
-  f(real_map, b.real_map);
+  //f(int_map, b.int_map);
+  //f(real_map, b.real_map);
   f(wrap_map, b.wrap_map);
   return result;
 }
@@ -1022,5 +1020,5 @@ bool interval_domaint::enable_wrapped_intervals = true;
 
 // Widening options
 bool interval_domaint::widening_underaproximate_bound = false;
-bool interval_domaint::widening_extrapolate = false;
+bool interval_domaint::widening_extrapolate = true;
 bool interval_domaint::widening_narrowing = false;
