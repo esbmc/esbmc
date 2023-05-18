@@ -356,10 +356,7 @@ public:
     rhs.lower = i.lower;
     rhs.upper = i.upper;
 
-    dump();
-    rhs.dump();
     *this = over_join(rhs, *this);
-    dump();
   }
 
   // Under meet
@@ -500,16 +497,6 @@ public:
   friend wrapped_interval operator-(const wrapped_interval &lhs)
   {
     wrapped_interval result(lhs.t);
-    // Probably just a -1 mult
-    // Hack for singletons
-    /*if(lhs.singleton())
-    {
-      auto v = lhs.get_lower();
-      result.set_lower(-v);
-      result.set_upper(-v);
-      return result;
-    }*/
-
     result.set_lower(-1);
     result.set_upper(-1);
     return result * lhs;
@@ -519,11 +506,8 @@ public:
   {
     assert(f1.t == f2.t);
     wrapped_interval result(f2.t);
-#if 0
+#if 1
     if(f2.is_included(f1)) return f1;
-
-    log_status("Checking cases");
-
 
     // The interval is too big already, give up to TOP
     if(f1.cardinality() >= f1.get_upper_bound()/2) return result;
@@ -543,7 +527,6 @@ public:
     // Upper bound keeps the same but lower decreases
     if(f1_to_f2.lower == f2.lower && f1_to_f2.upper == f1.upper)
     {
-      log_status("Double lower");
       wrapped_interval double_lower(f1.t);
       double_lower.lower = ((((2*f1.lower)- f1.upper) %f1.get_upper_bound()) - 1) % f1.get_upper_bound();
       double_lower.upper = f1.upper;
@@ -553,15 +536,11 @@ public:
     // Lower and upper bound of f1 is included in f2
     if(f2.contains(f1.lower) && f2.contains(f1.upper))
     {
-      log_status("Magic");
       wrapped_interval magic(f1.t);
-
       // Maintain the lower
       magic.lower = f2.lower;
-
       // Increase the upper by the difference between uppers
       magic.upper = (((f2.upper + (((2*f1.upper) - (2*f1.lower))%f1.get_upper_bound())) % f1.get_upper_bound()) + 1) % f1.get_upper_bound();
-
       return over_join(f1_to_f2, magic);
     }
 #endif

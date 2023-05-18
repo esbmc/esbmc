@@ -771,7 +771,7 @@ bool interval_domaint::join(const interval_domaint &b)
             it->second = extrapolate_intervals<wrapped_interval>(
               previous,
               it->second); // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
-            fixpoint_map[it->first] = 0;
+            //fixpoint_map[it->first] = 0;
           }
         }
 
@@ -1033,7 +1033,7 @@ bool interval_domaint::enable_wrapped_intervals = true;
 
 
 // Widening options
-unsigned interval_domaint::fixpoint_limit = 100;
+unsigned interval_domaint::fixpoint_limit = 5;
 bool interval_domaint::widening_underaproximate_bound = false;
 bool interval_domaint::widening_extrapolate = true;
 bool interval_domaint::widening_narrowing = false;
