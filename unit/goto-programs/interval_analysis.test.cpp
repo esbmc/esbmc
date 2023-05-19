@@ -804,17 +804,19 @@ TEST_CASE("Interval Analysis - Typecast (signed)", "[ai][interval-analysis]")
   T.code =
     "int main() {\n"
     "char a = -1;\n"
-    "if(nondet_int()) a = 50;"
+    "if(nondet_int()) a = -128;"
     "int  b = (int ) a;\n"
     "return a;\n" // a: [0, 250], b: [0,250]
     "}";
 
-  T.property["4"].push_back({"@F@main@a", -1, true});
-  T.property["4"].push_back({"@F@main@a", 50, true});
+  T.property["4"].push_back({"@F@main@a", -1, true}); // 255
+  T.property["4"].push_back({"@F@main@a", -128, true}); // 128
+  T.property["4"].push_back({"@F@main@a", 127, false}); // 127
+  T.property["4"].push_back({"@F@main@a", 0, false}); // 0
   T.property["5"].push_back({"@F@main@b", -1, true});
-  T.property["5"].push_back({"@F@main@b", 50, true});
-  T.property["5"].push_back({"@F@main@b", -2, false});
-  T.property["5"].push_back({"@F@main@b", 51, false});
+  T.property["5"].push_back({"@F@main@b", -128, true});
+  T.property["5"].push_back({"@F@main@b", 128, false});
+  T.property["5"].push_back({"@F@main@b", 0, false});
 
   T.run_configs(true);
 }
