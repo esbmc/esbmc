@@ -39,7 +39,7 @@ _Bool __ESBMC_pthread_thread_detach[1];
 static __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
 
-static void(
+void(
   __attribute__((annotate("__ESBMC_inf_size"))) *
   __ESBMC_thread_key_destructors[1])(void *);
 
