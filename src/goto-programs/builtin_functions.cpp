@@ -480,9 +480,12 @@ void goto_convertt::do_function_call_symbol(
       id2string(identifier));
   }
 
+  std::string base_name = symbol->name.as_string();
   // If the symbol is not nil, i.e., the user defined the expected behaviour of
   // the builtin function, we should honour the user function and call it
-  if(symbol->value.is_not_nil())
+  if(
+    symbol->value.is_not_nil() && base_name != "reach_error" &&
+    base_name != "__VERIFIER_error")
   {
     // insert function call
     code_function_callt function_call;
@@ -495,7 +498,6 @@ void goto_convertt::do_function_call_symbol(
     return;
   }
 
-  std::string base_name = symbol->name.as_string();
 
   bool is_assume =
     (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");

@@ -40,6 +40,7 @@ extern "C"
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/mark_decl_as_non_det.h>
+#include <goto-programs/goto_slicer.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -452,6 +453,11 @@ int esbmc_parseoptionst::doit()
 
   // initialize goto_functions algorithms
   {
+    // slicer
+    if(cmdline.isset("goto-slicer"))
+      goto_preprocess_algorithms.push_back(
+        std::make_unique<goto_slicer>(context));
+
     // loop unroll
     if(cmdline.isset("goto-unwind") && !cmdline.isset("unwind"))
     {
@@ -1283,7 +1289,15 @@ int esbmc_parseoptionst::do_forward_condition(
 
   opts.set_option("no-unwinding-assertions", false);
   opts.set_option("partial-loops", false);
-
+  if(opts.get_bool_option("forward-slicer"))
+  {
+    log_status("Applying Forward Slicer");
+    namespacet ns(context);
+    goto_slicer slicer(context, false);
+    slicer.run(goto_functions);
+    remove_skip(goto_functions);
+    goto_functions.update();
+  }
   // We have to disable assertions in the forward condition but
   // restore the previous value after it
   bool no_assertions = opts.get_bool_option("no-assertions");
