@@ -677,8 +677,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       options.get_bool_option("multi-property") &&
       options.get_bool_option("base-case"))
       return multi_property_check(eq, result->remaining_claims);
-    else
-      return run_decision_procedure(runtime_solver, eq);
+
+    return run_decision_procedure(runtime_solver, eq);
   }
 
   catch(std::string &error_str)
@@ -774,8 +774,8 @@ smt_convt::resultt bmct::multi_property_check(
         while(!solver_job.joinable())
         {
           // Try again 100ms later
-          using namespace std::chrono_literals;
-          std::this_thread::sleep_for(100ms);
+          std::this_thread::sleep_for(
+            std::chrono::duration<int, std::chrono::milliseconds>(100));
           // Did someone finished already?
           if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
           {
