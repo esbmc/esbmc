@@ -788,7 +788,7 @@ smt_convt::resultt bmct::multi_property_check(
         if(result == smt_convt::P_SATISFIABLE)
         {
           const std::lock_guard<std::mutex> lock(result_mutex);
-          // First, check if someone else find the solution!
+          // Check if someone else found the solution
           if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
           {
             log_status(
@@ -814,7 +814,7 @@ smt_convt::resultt bmct::multi_property_check(
       }
       catch(...)
       {
-        log_status("Failing Fast");
+        log_debug("Failing Fast");
       }
     };
 
@@ -848,7 +848,7 @@ smt_convt::resultt bmct::multi_property_check(
           not_finished--;
         }
       }
-      // We could filter out parallel_jobs for the ones that were already joined.
+      // We could remove joined jobs from the parallel_jobs vector.
       // However, its probably not worth for small vectors.
     }
   }
@@ -856,6 +856,5 @@ smt_convt::resultt bmct::multi_property_check(
   else
     std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
-  // TODO: Add a proper report for the current K!
   return final_result;
 }
