@@ -18,7 +18,26 @@ smt_convt *create_new_z3_solver(
 {
   std::string z3_file = options.get_option("z3-debug-dump-file");
   if(options.get_bool_option("z3-debug"))
+  {
+    // Generate Z3 API file
     Z3_open_log(z3_file.empty() ? "z3.log" : z3_file.c_str());
+
+    // Add Type checker
+    z3::config().set("stats", "true");
+
+    // Add typecheck
+    z3::config().set("type_check", "true");
+    z3::config().set("well_sorted_check", "true");
+
+    // SMT2 Compliant
+    z3::config().set("smtlib2_compliant", "true");
+  }
+
+  if(
+    options.get_bool_option("--smt-formula-only") ||
+    options.get_bool_option("--smt-formula-too"))
+    z3::config().set("smtlib2_compliant", "true");
+
   z3_convt *conv = new z3_convt(ns, options);
   *tuple_api = static_cast<tuple_iface *>(conv);
   *array_api = static_cast<array_iface *>(conv);
@@ -39,10 +58,6 @@ z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
   p.set("relevancy", 0U);
   p.set("model", true);
   p.set("proof", false);
-  std::string z3_smt_file = options.get_option("z3-debug-smt-file");
-  if(options.get_bool_option("z3-debug"))
-    p.set(
-      "smtlib2_log", z3_smt_file.empty() ? "log.smt2" : z3_smt_file.c_str());
   solver.set(p);
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
   Z3_set_error_handler(z3_ctx, error_handler);
@@ -1284,7 +1299,6 @@ void z3_convt::dump_smt()
   else
   {
     // print to screen
-
     std::ostringstream oss;
     print_smt_formulae(oss);
     log_debug("{}", oss.str());
@@ -1293,21 +1307,28 @@ void z3_convt::dump_smt()
 
 void z3_convt::print_smt_formulae(std::ostream &dest)
 {
+  /*
+   * HACK: ESBMC uses backslash (\) for some of its symbols, this is fine for
+   * Z3 but not for all solvers. Maybe we should consider using another naming
+   * for those symbols
+   */
+  auto smt_formula = solver.to_smt2();
+  std::replace(smt_formula.begin(), smt_formula.end(), '\\', '_');
+
   Z3_ast_vector __z3_assertions = Z3_solver_get_assertions(z3_ctx, solver);
   // Add whatever logic is needed.
-  // Add sovler specific declarations as well.
+  // Add solver specific declarations as well.
   dest << "(set-info :smt-lib-version 2.6)\n";
-  dest << "(set-option :print-success true)\n";
   dest << "(set-option :produce-models true)\n";
   dest << "; Asserts from ESMBC starts\n";
-  dest << solver; // All VCC conditions in SMTLIB format.
+  dest << smt_formula; // All VCC conditions in SMTLIB format.
   dest << "; Asserts from ESMBC ends\n";
-  dest << "(apply (then simplify solve-eqs))\n";
   dest << "(check-sat)\n";
   dest << "(get-model)\n";
   dest << "(exit)\n";
-  dest << "Total number of safety properties: "
-       << Z3_ast_vector_size(z3_ctx, __z3_assertions) << std::endl;
+  log_status(
+    "Total number of safety properties: {}",
+    Z3_ast_vector_size(z3_ctx, __z3_assertions));
 }
 
 smt_astt z3_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
