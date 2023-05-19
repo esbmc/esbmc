@@ -26,7 +26,8 @@ solidity_convertert::solidity_convertert(
     current_scope_var_num(1),
     current_functionDecl(nullptr),
     current_forStmt(nullptr),
-    current_functionName("")
+    current_functionName(""),
+    current_contractName("")
 {
   std::ifstream in(_contract_path);
   contract_contents.assign(
@@ -292,6 +293,13 @@ bool solidity_convertert::get_var_decl(
                                     SolidityGrammar::Literal;
     if(expr_is_literal || (expr_is_un_op && subexpr_is_literal))
       int_literal_type = ast_node["typeDescriptions"];
+    else if(
+      init_value["isInlineArray"] != nullptr && init_value["isInlineArray"])
+    {
+      // TODO: make a function to convert inline array initialisation to index access assignment.
+      int_literal_type =
+        make_array_elementary_type(init_value["typeDescriptions"]);
+    }
 
     exprt val;
     if(get_expr(init_value, int_literal_type, val))
@@ -387,7 +395,7 @@ bool solidity_convertert::get_struct_class_fields(
     SolidityGrammar::VisibilityT::UnknownT)
     return false;
 
-  if(get_var_decl(ast_node, comp))
+  if(get_var_decl_ref(ast_node, comp))
     return true;
   comp.type().set("#member_name", type.name());
   if(get_access_from_decl(ast_node, comp))
@@ -420,11 +428,11 @@ bool solidity_convertert::add_implicit_constructor()
 
   nlohmann::json ast_node;
   auto j2 = R"(
-          {
-            "nodeType": "ParameterList",
-            "parameters": []
-          }
-        )"_json;
+            {
+              "nodeType": "ParameterList",
+              "parameters": []
+            }
+          )"_json;
   ast_node["returnParameters"] = j2;
 
   code_typet type;
@@ -494,7 +502,8 @@ bool solidity_convertert::get_function_definition(
     (*current_functionDecl)["name"].get<std::string>() == "" &&
     (*current_functionDecl)["kind"] == "constructor")
   {
-    if(get_contract_name(*current_functionDecl, current_functionName))
+    if(get_contract_name(
+         (*current_functionDecl)["scope"], current_functionName))
       return true;
   }
   else
@@ -597,7 +606,7 @@ bool solidity_convertert::get_function_params(
   bool is_array = SolidityGrammar::get_type_name_t(pd["typeDescriptions"]);
   if(is_array)
   {
-    assert(!"Unimplemented - funciton parameter is array type");
+    assert(!"Unimplemented - function parameter is array type");
   }
 
   // 3a. get id and name
@@ -766,13 +775,25 @@ bool solidity_convertert::get_statement(
     // TODO: Fix me! Assumptions:
     //  a). It's "return <expr>;" not "return;"
     //  b). <expr> is pointing to a DeclRefExpr, we need to wrap it in an ImplicitCastExpr as a subexpr
+    //  c). For multiple return type, the return statement represented as a tuple expression using a components field.
+    //      Besides, tuple can only be declared literally. https://docs.soliditylang.org/en/latest/control-structures.html#assignment
+    //      e.g. return (false, 123)
     assert(stmt.contains("expression"));
-    assert(stmt["expression"].contains("referencedDeclaration"));
 
     typet return_type;
+    assert(
+      (*current_functionDecl)["returnParameters"]["id"].get<std::uint16_t>() ==
+      stmt["functionReturnParameters"].get<std::uint16_t>());
     if(get_type_description(
-         stmt["expression"]["typeDescriptions"], return_type))
+         (*current_functionDecl)["returnParameters"], return_type))
       return true;
+
+    nlohmann::json int_literal_type = nullptr;
+
+    auto expr_type = SolidityGrammar::get_expression_t(stmt["expression"]);
+    bool expr_is_literal = expr_type == SolidityGrammar::Literal;
+    if(expr_is_literal)
+      int_literal_type = make_return_type_from_typet(return_type);
 
     // 2. get return value
     code_returnt ret_expr;
@@ -781,14 +802,31 @@ bool solidity_convertert::get_statement(
     nlohmann::json implicit_cast_expr =
       make_implicit_cast_expr(rtn_expr, "LValueToRValue");
 
+    /* There could be case like
+    {
+    "expression": {
+        "kind": "number",
+        "nodeType": "Literal",
+        "typeDescriptions": {
+            "typeIdentifier": "t_rational_11_by_1",
+            "typeString": "int_const 11"
+        },
+        "value": "12345"
+    },
+    "nodeType": "Return",
+    }
+    Therefore, we need to pass the int_literal_type value.
+    */
+
     exprt val;
-    if(get_expr(implicit_cast_expr, val))
+    if(get_expr(implicit_cast_expr, int_literal_type, val))
       return true;
 
     solidity_gen_typecast(ns, val, return_type);
     ret_expr.return_value() = val;
 
     new_expr = ret_expr;
+
     break;
   }
   case SolidityGrammar::StatementT::ForStatement:
@@ -901,30 +939,30 @@ bool solidity_convertert::get_statement(
 }
 
 /**
- * @brief Populate the out parameter with the expression based on
- * the solidity expression grammar
- *
- * @param expr The expression ast is to be converted to the IR
- * @param new_expr Out parameter to hold the conversion
- * @return true iff the conversion has failed
- * @return false iff the conversion was successful
- */
+   * @brief Populate the out parameter with the expression based on
+   * the solidity expression grammar
+   *
+   * @param expr The expression ast is to be converted to the IR
+   * @param new_expr Out parameter to hold the conversion
+   * @return true iff the conversion has failed
+   * @return false iff the conversion was successful
+   */
 bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 {
   return get_expr(expr, nullptr, new_expr);
 }
 
 /**
- * @brief Populate the out parameter with the expression based on
- * the solidity expression grammar
- *
- * @param expr The expression that is to be converted to the IR
- * @param int_literal_type Type information ast to create the the literal
- * type in the IR (only needed for when the expression is a literal)
- * @param new_expr Out parameter to hold the conversion
- * @return true iff the conversion has failed
- * @return false iff the conversion was successful
- */
+   * @brief Populate the out parameter with the expression based on
+   * the solidity expression grammar
+   *
+   * @param expr The expression that is to be converted to the IR
+   * @param int_literal_type Type information ast to create the the literal
+   * type in the IR (only needed for when the expression is a literal)
+   * @param new_expr Out parameter to hold the conversion
+   * @return true iff the conversion has failed
+   * @return false iff the conversion was successful
+   */
 bool solidity_convertert::get_expr(
   const nlohmann::json &expr,
   const nlohmann::json &int_literal_type,
@@ -956,10 +994,26 @@ bool solidity_convertert::get_expr(
       return true;
     break;
   }
+  case SolidityGrammar::ExpressionT::ConditionalOperatorClass:
+  {
+    // for Ternary Operator (...?...:...) only
+    if(get_conditional_operator_expr(expr, new_expr))
+      return true;
+    break;
+  }
   case SolidityGrammar::ExpressionT::DeclRefExprClass:
   {
     if(expr["referencedDeclaration"] > 0)
     {
+      // for Contract Type Identifier Only
+      if(
+        expr["typeDescriptions"]["typeString"].get<std::string>().find(
+          "contract") != std::string::npos)
+      {
+        // TODO
+        assert(!"we do not handle contract type identifier for now");
+      }
+
       // Soldity uses +ve odd numbers to refer to var or functions declared in the contract
       const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
 
@@ -1035,6 +1089,17 @@ bool solidity_convertert::get_expr(
 
     break;
   }
+  case SolidityGrammar::ExpressionT::Tuple:
+  {
+    // This is an expr surrounded by parenthesis, we'll ignore it for
+    // now, and check its subexpression
+    for(const auto &arg : expr["components"].items())
+    {
+      if(get_expr(arg.value(), int_literal_type, new_expr))
+        return true;
+    }
+    break;
+  }
   case SolidityGrammar::ExpressionT::CallExprClass:
   {
     // 1. Get callee expr
@@ -1079,7 +1144,7 @@ bool solidity_convertert::get_expr(
   }
   case SolidityGrammar::ExpressionT::ImplicitCastExprClass:
   {
-    if(get_cast_expr(expr, new_expr))
+    if(get_cast_expr(expr, new_expr, int_literal_type))
       return true;
     break;
   }
@@ -1136,26 +1201,41 @@ bool solidity_convertert::get_expr(
     assert(expr.contains("expression"));
     const nlohmann::json &callee_expr_json = expr["expression"];
 
+    // Function symbol id is c:@C@referenced_function_contract_name@F@function_name#referenced_function_id
+    // Using referencedDeclaration will point us to the original declared function. This works even for inherited function and overrided functions.
+
+    const int caller_id =
+      callee_expr_json["referencedDeclaration"].get<std::uint16_t>();
+    const nlohmann::json caller_expr_json = find_decl_ref(caller_id);
+    const int contract_id = caller_expr_json["scope"].get<std::uint16_t>();
+
+    std::string ref_contract_name;
+    get_contract_name(contract_id, ref_contract_name);
+
     std::string name, id;
-    name = callee_expr_json["memberName"];
-    id = name;
+    get_function_definition_name(caller_expr_json, name, id);
+
     if(context.find_symbol(id) == nullptr)
       return true;
 
-    symbolt s = *context.find_symbol(id);
+    const symbolt s = *context.find_symbol(id);
     typet type = s.type;
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
     new_expr.cmt_lvalue(true);
     new_expr.name(name);
+    new_expr.set("#member_name", prefix + ref_contract_name);
+
+    // obtain the type of return value
+    // It can be retrieved directly from the original function declaration
+    typet t;
+    if(get_type_description(caller_expr_json["returnParameters"], t))
+      return true;
 
     side_effect_expr_function_callt call;
     call.function() = new_expr;
-    call.type() = type;
-
-    const nlohmann::json caller_expr_json =
-      find_decl_ref(callee_expr_json["referencedDeclaration"]);
+    call.type() = t;
 
     // populate params
     auto param_nodes = caller_expr_json["parameters"]["parameters"];
@@ -1198,10 +1278,9 @@ bool solidity_convertert::get_expr(
 }
 
 bool solidity_convertert::get_contract_name(
-  const nlohmann::json &ast_node,
+  const int ref_decl_id,
   std::string &contract_name)
 {
-  int ref_decl_id = ast_node["scope"];
   nlohmann::json &nodes = ast_json["nodes"];
 
   unsigned index = 0;
@@ -1264,6 +1343,7 @@ bool solidity_convertert::get_binary_operator_expr(
   log_debug(
     "	@@@ got binop.getOpcode: SolidityGrammar::{}",
     SolidityGrammar::expression_to_str(opcode));
+
   switch(opcode)
   {
   case SolidityGrammar::ExpressionT::BO_Assign:
@@ -1287,6 +1367,52 @@ bool solidity_convertert::get_binary_operator_expr(
       new_expr = exprt("-", t);
     break;
   }
+  case SolidityGrammar::ExpressionT::BO_Mul:
+  {
+    if(t.is_floatbv())
+      assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
+    else
+      new_expr = exprt("*", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_Div:
+  {
+    if(t.is_floatbv())
+      assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
+    else
+      new_expr = exprt("/", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_Rem:
+  {
+    new_expr = exprt("mod", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_Shl:
+  {
+    new_expr = exprt("shl", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_Shr:
+  {
+    new_expr = exprt("shr", t);
+    break;
+  }
+  case SolidityGrammar::BO_And:
+  {
+    new_expr = exprt("bitand", t);
+    break;
+  }
+  case SolidityGrammar::BO_Xor:
+  {
+    new_expr = exprt("bitxor", t);
+    break;
+  }
+  case SolidityGrammar::BO_Or:
+  {
+    new_expr = exprt("bitor", t);
+    break;
+  }
   case SolidityGrammar::ExpressionT::BO_GT:
   {
     new_expr = exprt(">", t);
@@ -1295,6 +1421,16 @@ bool solidity_convertert::get_binary_operator_expr(
   case SolidityGrammar::ExpressionT::BO_LT:
   {
     new_expr = exprt("<", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_GE:
+  {
+    new_expr = exprt(">=", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_LE:
+  {
+    new_expr = exprt("<=", t);
     break;
   }
   case SolidityGrammar::ExpressionT::BO_NE:
@@ -1307,19 +1443,27 @@ bool solidity_convertert::get_binary_operator_expr(
     new_expr = exprt("=", t);
     break;
   }
-  case SolidityGrammar::ExpressionT::BO_Rem:
-  {
-    new_expr = exprt("mod", t);
-    break;
-  }
   case SolidityGrammar::ExpressionT::BO_LAnd:
   {
     new_expr = exprt("and", t);
     break;
   }
+  case SolidityGrammar::ExpressionT::BO_LOr:
+  {
+    new_expr = exprt("or", t);
+    break;
+  }
   default:
   {
-    assert(!"Unimplemented binary operator");
+    if(get_compound_assign_expr(expr, new_expr))
+    {
+      assert(!"Unimplemented binary operator");
+      return true;
+    }
+
+    current_BinOp_type.pop();
+
+    return false;
   }
   }
 
@@ -1332,13 +1476,113 @@ bool solidity_convertert::get_binary_operator_expr(
   return false;
 }
 
+bool solidity_convertert::get_compound_assign_expr(
+  const nlohmann::json &expr,
+  exprt &new_expr)
+{
+  // equivalent to clang_c_convertert::get_compound_assign_expr
+
+  SolidityGrammar::ExpressionT opcode =
+    SolidityGrammar::get_expr_operator_t(expr);
+
+  switch(opcode)
+  {
+  case SolidityGrammar::ExpressionT::BO_AddAssign:
+  {
+    new_expr = side_effect_exprt("assign+");
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_SubAssign:
+  {
+    new_expr = side_effect_exprt("assign-");
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_MulAssign:
+  {
+    new_expr = side_effect_exprt("assign*");
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_DivAssign:
+  {
+    new_expr = side_effect_exprt("assign_div");
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_RemAssign:
+  {
+    new_expr = side_effect_exprt("assign_mod");
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_ShlAssign:
+  {
+    new_expr = side_effect_exprt("assign_shl");
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_ShrAssign:
+  {
+    new_expr = side_effect_exprt("assign_shr");
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_AndAssign:
+  {
+    new_expr = side_effect_exprt("assign_bitand");
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_XorAssign:
+  {
+    new_expr = side_effect_exprt("assign_bitxor");
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_OrAssign:
+  {
+    new_expr = side_effect_exprt("assign_bitor");
+    break;
+  }
+  default:
+    return true;
+  }
+
+  exprt lhs, rhs;
+  if(expr.contains("leftHandSide"))
+  {
+    nlohmann::json literalType = expr["leftHandSide"]["typeDescriptions"];
+
+    if(get_expr(expr["leftHandSide"], lhs))
+      return true;
+
+    if(get_expr(expr["rightHandSide"], literalType, rhs))
+      return true;
+  }
+  else if(expr.contains("leftExpression"))
+  {
+    nlohmann::json commonType = expr["commonType"];
+
+    if(get_expr(expr["leftExpression"], commonType, lhs))
+      return true;
+
+    if(get_expr(expr["rightExpression"], commonType, rhs))
+      return true;
+  }
+  else
+    assert(!"should not be here - unrecognized LHS and RHS keywords in expression JSON");
+
+  assert(current_BinOp_type.size());
+  const nlohmann::json &binop_type = *(current_BinOp_type.top());
+  if(get_type_description(binop_type, new_expr.type()))
+    return true;
+
+  if(!lhs.type().is_pointer())
+    solidity_gen_typecast(ns, rhs, lhs.type());
+
+  new_expr.copy_to_operands(lhs, rhs);
+  return false;
+}
+
 bool solidity_convertert::get_unary_operator_expr(
   const nlohmann::json &expr,
   const nlohmann::json &int_literal_type,
   exprt &new_expr)
 {
   // TODO: Fix me! Currently just support prefix == true,e.g. pre-increment
-  assert(expr["prefix"]);
 
   // 1. get UnaryOperation opcode
   SolidityGrammar::ExpressionT opcode =
@@ -1369,9 +1613,30 @@ bool solidity_convertert::get_unary_operator_expr(
     new_expr = side_effect_exprt("preincrement", uniop_type);
     break;
   }
+  case SolidityGrammar::UO_PostDec:
+  {
+    new_expr = side_effect_exprt("postdecrement", uniop_type);
+    break;
+  }
+  case SolidityGrammar::UO_PostInc:
+  {
+    new_expr = side_effect_exprt("postincrement", uniop_type);
+    break;
+  }
   case SolidityGrammar::ExpressionT::UO_Minus:
   {
     new_expr = exprt("unary-", uniop_type);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::UO_Not:
+  {
+    new_expr = exprt("bitnot", uniop_type);
+    break;
+  }
+
+  case SolidityGrammar::ExpressionT::UO_LNot:
+  {
+    new_expr = exprt("not", bool_type());
     break;
   }
   default:
@@ -1384,13 +1649,42 @@ bool solidity_convertert::get_unary_operator_expr(
   return false;
 }
 
+bool solidity_convertert::get_conditional_operator_expr(
+  const nlohmann::json &expr,
+  exprt &new_expr)
+{
+  exprt cond;
+  if(get_expr(expr["condition"], cond))
+    return true;
+
+  exprt then;
+  if(get_expr(expr["trueExpression"], expr["typeDescriptions"], then))
+    return true;
+
+  exprt else_expr;
+  if(get_expr(expr["falseExpression"], expr["typeDescriptions"], else_expr))
+    return true;
+
+  typet t;
+  if(get_type_description(expr["typeDescriptions"], t))
+    return true;
+
+  exprt if_expr("if", t);
+  if_expr.copy_to_operands(cond, then, else_expr);
+
+  new_expr = if_expr;
+
+  return false;
+}
+
 bool solidity_convertert::get_cast_expr(
   const nlohmann::json &cast_expr,
-  exprt &new_expr)
+  exprt &new_expr,
+  const nlohmann::json int_literal_type)
 {
   // 1. convert subexpr
   exprt expr;
-  if(get_expr(cast_expr["subExpr"], expr))
+  if(get_expr(cast_expr["subExpr"], int_literal_type, expr))
     return true;
 
   // 2. get type
@@ -1409,10 +1703,10 @@ bool solidity_convertert::get_cast_expr(
     if(get_type_description(adjusted_type, type))
       return true;
   }
+  // TODO: Maybe can just type = expr.type() for other types as well. Need to make sure types are all set in get_expr (many functions are called multiple times to perform the same action).
   else
   {
-    if(get_type_description(cast_expr["subExpr"]["typeDescriptions"], type))
-      return true;
+    type = expr.type();
   }
 
   // 3. get cast type and generate typecast
@@ -1563,7 +1857,9 @@ bool solidity_convertert::get_type_description(
     // This part is for FunctionToPointer decay only
     assert(
       type_name["typeString"].get<std::string>().find("function") !=
-      std::string::npos);
+        std::string::npos ||
+      type_name["typeString"].get<std::string>().find("contract") !=
+        std::string::npos);
 
     // Since Solidity does not have this, first make a pointee
     nlohmann::json pointee = make_pointee_type(type_name);
@@ -1667,7 +1963,7 @@ bool solidity_convertert::get_type_description(
     if(context.find_symbol(id) == nullptr)
       return true;
 
-    symbolt &s = *context.find_symbol(id);
+    const symbolt &s = *context.find_symbol(id);
     new_type = s.type;
 
     break;
@@ -1762,13 +2058,13 @@ bool solidity_convertert::get_array_to_pointer_type(
 }
 
 /**
- * @brief Populate the out `typet` parameter with the uint type specified by type parameter
- *
- * @param type The type of the uint to be poulated
- * @param out The variable that holds the resulting type
- * @return true iff population failed
- * @return false iff population was successful
- */
+   * @brief Populate the out `typet` parameter with the uint type specified by type parameter
+   *
+   * @param type The type of the uint to be poulated
+   * @param out The variable that holds the resulting type
+   * @return true iff population failed
+   * @return false iff population was successful
+   */
 bool solidity_convertert::get_elementary_type_name_uint(
   SolidityGrammar::ElementaryTypeNameT &type,
   typet &out)
@@ -1780,12 +2076,12 @@ bool solidity_convertert::get_elementary_type_name_uint(
 }
 
 /**
- * @brief Populate the out `typet` parameter with the int type specified by type parameter
- *
- * @param type The type of the int to be poulated
- * @param out The variable that holds the resulting type
- * @return false iff population was successful
- */
+   * @brief Populate the out `typet` parameter with the int type specified by type parameter
+   *
+   * @param type The type of the int to be poulated
+   * @param out The variable that holds the resulting type
+   * @return false iff population was successful
+   */
 bool solidity_convertert::get_elementary_type_name_int(
   SolidityGrammar::ElementaryTypeNameT &type,
   typet &out)
@@ -1888,6 +2184,9 @@ bool solidity_convertert::get_elementary_type_name(
   }
   case SolidityGrammar::ElementaryTypeNameT::INT_LITERAL:
   {
+    // for int_const type
+    new_type = int_type();
+    new_type.set("#cpp_type", "signed_char");
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::BOOL:
@@ -1949,7 +2248,7 @@ bool solidity_convertert::get_parameter_list(
       1); // TODO: Fix me! assuming one return parameter
     const nlohmann::json &rtn_type =
       type_name["parameters"].at(0)["typeName"]["typeDescriptions"];
-    return get_elementary_type_name(rtn_type, new_type);
+    return get_type_description(rtn_type, new_type);
 
     break;
   }
@@ -2007,11 +2306,15 @@ void solidity_convertert::get_function_definition_name(
   // Follow the way in clang:
   //  - For function name, just use the ast_node["name"]
   // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
+  std::string contract_name;
+  get_contract_name(ast_node["scope"], contract_name);
+
   if(ast_node["kind"].get<std::string>() == "constructor")
-    get_contract_name(ast_node, name);
+    name = contract_name;
   else
     name = ast_node["name"].get<std::string>();
-  id = name;
+  id = "c:@C@" + contract_name + "@F@" + name + "#" +
+       i2string(ast_node["id"].get<std::int16_t>());
 }
 
 unsigned int solidity_convertert::add_offset(
@@ -2259,7 +2562,8 @@ solidity_convertert::find_constructor_ref(nlohmann::json &contract_def)
       return nodes.at(index);
     }
   }
-  assert(!"could not find the constructor reference");
+  // implicit constructor call
+  return empty_json;
 }
 
 void solidity_convertert::get_default_symbol(
@@ -2349,34 +2653,46 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
       // Note that when calling "assert(.)", it's like "typeIdentifier": "t_function_assert_pure$......",
       //  it's also treated as "FunctionNoProto".
       auto j2 = R"(
-        {
-          "nodeType": "FunctionDefinition",
-          "parameters":
-            {
-              "parameters" : []
-            }
-        }
-      )"_json;
+          {
+            "nodeType": "FunctionDefinition",
+            "parameters":
+              {
+                "parameters" : []
+              }
+          }
+        )"_json;
       adjusted_expr = j2;
 
       if(
         sub_expr["typeString"].get<std::string>().find("returns") !=
         std::string::npos)
       {
+        adjusted_expr = R"(
+          {
+            "nodeType": "FunctionDefinition",
+            "parameters":
+              {
+                "parameters" : []
+              }
+          }
+        )"_json;
         // e.g. for typeString like:
         // "typeString": "function () returns (uint8)"
-        // TODO: currently we only assume one parameters
-        if(
-          sub_expr["typeString"].get<std::string>().find("returns (uint8)") !=
-          std::string::npos)
+        // use regex to capture the type and convert it to shorter form.
+        std::smatch matches;
+        std::regex e("returns \\((\\w+)\\)");
+        std::string typeString = sub_expr["typeString"].get<std::string>();
+        if(std::regex_search(typeString, matches, e))
         {
-          auto j2 = R"(
-            {
-              "typeIdentifier": "t_uint8",
-              "typeString": "uint8"
-            }
-          )"_json;
-          adjusted_expr["returnParameters"] = j2;
+          auto j2 = nlohmann::json::parse(
+            R"({
+              "typeIdentifier": "t_)" +
+            matches[1].str() + R"(",
+              "typeString": ")" +
+            matches[1].str() + R"("
+            })");
+          adjusted_expr["returnParameters"]["parameters"][0]
+                       ["typeDescriptions"] = j2;
         }
         else if(
           sub_expr["typeString"].get<std::string>().find("returns (contract") !=
@@ -2384,11 +2700,11 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
         {
           // TODO: Fix me
           auto j2 = R"(
-          {
-            "nodeType": "ParameterList",
-            "parameters": []
-          }
-        )"_json;
+            {
+              "nodeType": "ParameterList",
+              "parameters": []
+            }
+          )"_json;
           adjusted_expr["returnParameters"] = j2;
         }
         else
@@ -2399,11 +2715,11 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
         // e.g. for typeString like:
         // "typeString": "function (bool) pure"
         auto j2 = R"(
-          {
-            "nodeType": "ParameterList",
-            "parameters": []
-          }
-        )"_json;
+            {
+              "nodeType": "ParameterList",
+              "parameters": []
+            }
+          )"_json;
         adjusted_expr["returnParameters"] = j2;
       }
     }
@@ -2416,10 +2732,32 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
   return adjusted_expr;
 }
 
+// Parse typet object into a typeDescriptions json
+nlohmann::json solidity_convertert::make_return_type_from_typet(typet type)
+{
+  // Useful to get the width of a int literal type for return statement
+  nlohmann::json adjusted_expr;
+  if(type.is_signedbv() || type.is_unsignedbv())
+  {
+    std::string width = type.width().as_string();
+    std::string type_name = (type.is_signedbv() ? "int" : "uint") + width;
+    auto j2 = nlohmann::json::parse(
+      R"({
+            "typeIdentifier": "t_)" +
+      type_name + R"(",
+            "typeString": ")" +
+      type_name + R"("
+          })");
+    adjusted_expr = j2;
+  }
+  return adjusted_expr;
+}
+
 nlohmann::json solidity_convertert::make_callexpr_return_type(
   const nlohmann::json &type_descrpt)
 {
   nlohmann::json adjusted_expr;
+
   if(
     type_descrpt["typeString"].get<std::string>().find("function") !=
     std::string::npos)
@@ -2430,31 +2768,33 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(
     {
       // e.g. for typeString like:
       // "typeString": "function () returns (uint8)"
-      if(
-        type_descrpt["typeString"].get<std::string>().find("returns (uint8)") !=
-        std::string::npos)
+      // use regex to capture the type and convert it to shorter form.
+      std::smatch matches;
+      std::regex e("returns \\((\\w+)\\)");
+      std::string typeString = type_descrpt["typeString"].get<std::string>();
+      if(std::regex_search(typeString, matches, e))
       {
-        auto j2 = R"(
-            {
-              "typeIdentifier": "t_uint8",
-              "typeString": "uint8"
-            }
-          )"_json;
+        auto j2 = nlohmann::json::parse(
+          R"({
+            "typeIdentifier": "t_)" +
+          matches[1].str() + R"(",
+            "typeString": ")" +
+          matches[1].str() + R"("
+          })");
         adjusted_expr = j2;
       }
       else if(
         type_descrpt["typeString"].get<std::string>().find(
           "returns (contract") != std::string::npos)
       {
-        // TODO: Fix me
+        // TODO: Fix me. We treat contract as void
         auto j2 = R"(
-          {
-            "nodeType": "ParameterList",
-            "parameters": []
-          }
-        )"_json;
+            {
+              "nodeType": "ParameterList",
+              "parameters": []
+            }
+          )"_json;
 
-        //adjusted_expr["returnParameters"] = j2;
         adjusted_expr = j2;
       }
       else
@@ -2466,11 +2806,11 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(
       // we need to use "parameters" in conjunction with "returnParameters" to convert.
       // the following configuration will lead to "void".
       auto j2 = R"(
-          {
-            "nodeType": "ParameterList",
-            "parameters": []
-          }
-        )"_json;
+            {
+              "nodeType": "ParameterList",
+              "parameters": []
+            }
+          )"_json;
       adjusted_expr = j2;
     }
   }
@@ -2494,11 +2834,11 @@ nlohmann::json solidity_convertert::make_array_elementary_type(
     std::string::npos)
   {
     auto j = R"(
-      {
-        "typeIdentifier": "t_uint8",
-        "typeString": "uint8"
-      }
-    )"_json;
+        {
+          "typeIdentifier": "t_uint8",
+          "typeString": "uint8"
+        }
+      )"_json;
     elementary_type = j;
   }
   else
@@ -2578,13 +2918,28 @@ bool solidity_convertert::get_constructor_call(
 
   const nlohmann::json constructor_ref = find_decl_ref(ref_decl_id);
 
+  // Special handling of implicit constructor
+  // since there is no ast nodes for implicit constructor
+  if(constructor_ref.empty())
+    return get_implicit_ctor_call(ref_decl_id, new_expr);
+
   if(get_func_decl_ref(constructor_ref, callee))
     return true;
 
-  struct_typet tmp = struct_typet();
+  // obtain the type info
+  std::string name, id;
+  if(get_contract_name(ref_decl_id, name))
+    return true;
+  id = prefix + name;
+  if(context.find_symbol(id) == nullptr)
+    return true;
+
+  const symbolt &s = *context.find_symbol(id);
+  typet type = s.type;
+
   side_effect_expr_function_callt call;
   call.function() = callee;
-  call.type() = tmp;
+  call.type() = type;
 
   auto param_nodes = constructor_ref["parameters"]["parameters"];
   unsigned num_args = 0;
@@ -2611,6 +2966,37 @@ bool solidity_convertert::get_constructor_call(
   }
 
   // for adjustment
+  call.set("constructor", 1);
+  new_expr = call;
+
+  return false;
+}
+
+bool solidity_convertert::get_implicit_ctor_call(
+  const int ref_decl_id,
+  exprt &new_expr)
+{
+  // to obtain the type info
+  std::string name, id;
+  if(get_contract_name(ref_decl_id, name))
+    return true;
+  id = name;
+  if(context.find_symbol(id) == nullptr)
+    return true;
+
+  const symbolt &s = *context.find_symbol(id);
+  typet type = s.type;
+
+  new_expr = exprt("symbol", type);
+  new_expr.identifier(id);
+  new_expr.cmt_lvalue(true);
+  new_expr.name(name);
+
+  side_effect_expr_function_callt call;
+  struct_typet tmp = struct_typet();
+  call.function() = new_expr;
+  call.type() = tmp;
+
   call.set("constructor", 1);
   new_expr = call;
 

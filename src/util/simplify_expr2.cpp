@@ -1355,9 +1355,9 @@ expr2tc implies2t::do_simplify() const
   return simplify_logic_2ops<Impliestor, implies2t>(type, side_1, side_2);
 }
 
-template <typename constructor>
+template <typename constructor, typename U64Op>
 static expr2tc do_bit_munge_operation(
-  const std::function<int64_t(int64_t, int64_t)> &opfunc,
+  U64Op opfunc,
   const type2tc &type,
   const expr2tc &side_1,
   const expr2tc &side_2)
@@ -1372,27 +1372,67 @@ static expr2tc do_bit_munge_operation(
     is_constant_int2t(simplified_side_1) &&
     is_constant_int2t(simplified_side_2) && type->get_width() <= 64)
   {
-    // So - we can't make BigInt by itself do the operation. But we can map it
-    // to the corresponding operation on our native types.
+    // So - we can't make BigInt by itself do the operation. But we can try to
+    // map it to the corresponding operation on our native types.
     const constant_int2t &int1 = to_constant_int2t(simplified_side_1);
     const constant_int2t &int2 = to_constant_int2t(simplified_side_2);
+    const BigInt &bl = int1.value;
+    const BigInt &br = int2.value;
 
-    // Dump will zero-prefix and right align the output number.
-    int64_t val1 = int1.value.to_int64();
-    int64_t val2 = int2.value.to_int64();
+    /* the bit pattern in two's complement, including the sign */
+    uint64_t l = bl.to_int64();
+    uint64_t r = br.to_int64();
 
-    uint64_t r = opfunc(val1, val2);
+    bool is_shift = false;
+    bool can_eval = true;
 
-    if(type->get_width() < 64)
+    /* For &, |, ^, ~, << our low bits are determined only by the corresponding
+     * low bits of the arguments, however for >> this is not necessarily true!
+     */
+    if constexpr(
+      std::is_same_v<constructor, lshr2t> ||
+      std::is_same_v<constructor, ashr2t>)
     {
-      // truncate the result to the type's width
-      uint64_t trunc_mask = ~(uint64_t)0 << type->get_width();
-      r &= ~trunc_mask;
-      // if the type is signed and r's sign-bit is set, sign-extend it
-      if(is_signedbv_type(type) && r >> (type->get_width() - 1))
-        r |= trunc_mask;
+      /* do we have a small enough LHS to evaluate on uint64_t? */
+      can_eval &=
+        br == 0 ||
+        (is_signedbv_type(simplified_side_1) ? bl.is_int64() : bl.is_uint64());
+      is_shift = true;
     }
-    return constant_int2tc(type, BigInt((int64_t)r));
+    else
+      is_shift = std::is_same_v<constructor, shl2t>;
+
+    /* TODO fbrausse: In C, a << b is undefined for signed a if the result is
+     * not representable. */
+
+    /* Evaluating shifts with the shift amount >= 64 on (u)int64_t is undefined
+     * behaviour in C++, we should avoid doing that during simplification. */
+    can_eval &= !is_shift || br < 64;
+    if(can_eval)
+    {
+      uint64_t res = opfunc(l, r);
+
+      uint64_t trunc_mask = 0;
+      if(type->get_width() < 64)
+      {
+        // truncate the result to the type's width
+        trunc_mask = ~(uint64_t)0 << type->get_width();
+        res &= ~trunc_mask;
+      }
+
+      BigInt z;
+      if(is_signedbv_type(type))
+      {
+        // if res's sign-bit is set, sign-extend it
+        if(res >> (type->get_width() - 1))
+          res |= trunc_mask;
+        z = BigInt((int64_t)res);
+      }
+      else
+        z = BigInt((uint64_t)res);
+
+      return constant_int2tc(type, z);
+    }
   }
 
   // Were we able to simplify any side?
@@ -1406,9 +1446,7 @@ static expr2tc do_bit_munge_operation(
 
 expr2tc bitand2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 & op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return (op1 & op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1424,9 +1462,7 @@ expr2tc bitand2t::do_simplify() const
 
 expr2tc bitor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 | op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1442,9 +1478,7 @@ expr2tc bitor2t::do_simplify() const
 
 expr2tc bitxor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 ^ op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return (op1 ^ op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1460,9 +1494,7 @@ expr2tc bitxor2t::do_simplify() const
 
 expr2tc bitnand2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ~(op1 & op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 & op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1478,9 +1510,7 @@ expr2tc bitnand2t::do_simplify() const
 
 expr2tc bitnor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ~(op1 | op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 | op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1496,9 +1526,7 @@ expr2tc bitnor2t::do_simplify() const
 
 expr2tc bitnxor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ~(op1 ^ op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 ^ op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1514,9 +1542,7 @@ expr2tc bitnxor2t::do_simplify() const
 
 expr2tc bitnot2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t) {
-    return ~(op1);
-  };
+  auto op = [](uint64_t op1, uint64_t) { return ~(op1); };
 
   if(is_constant_vector2t(value))
   {
@@ -1535,9 +1561,7 @@ expr2tc bitnot2t::do_simplify() const
 
 expr2tc shl2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ((uint64_t)op1 << op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return op1 << op2; };
 
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
@@ -1552,9 +1576,7 @@ expr2tc shl2t::do_simplify() const
 
 expr2tc lshr2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ((uint64_t)op1) >> ((uint64_t)op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return op1 >> op2; };
 
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
@@ -1569,8 +1591,9 @@ expr2tc lshr2t::do_simplify() const
 
 expr2tc ashr2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 >> op2);
+  auto op = [](uint64_t op1, uint64_t op2) {
+    /* simulating the arithmetic right shift in C++ requires LHS to be signed */
+    return (int64_t)op1 >> op2;
   };
 
   // Is a vector operation ? Apply the op

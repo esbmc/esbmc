@@ -355,31 +355,38 @@ void goto_symext::symex_printf(const expr2tc &, const expr2tc &rhs)
     cur_state->guard.as_expr(), cur_state->source, fmt.as_string(), args);
 }
 
-void goto_symext::symex_fscanf(
-  const expr2tc &ret,
-  const std::vector<expr2tc> &op)
+void goto_symext::symex_input(const code_function_call2t &func_call)
 {
-  /* TODO: Check input stream
-  auto input_stream = op[0]; // stdin?
-  cur_state->rename(input_stream);
-  */
+  assert(is_symbol2t(func_call.function));
 
-  /* TODO: Check for Format
-  const irep_idt fmt = get_string_argument(op[1]);
-  std::vector<size_t> alloc_size;
-  */
+  unsigned number_of_format_args, fmt_idx;
+  const std::string func_name =
+    to_symbol2t(func_call.function).thename.as_string();
 
-  // Just a hack while we don't support format
-  unsigned number_of_format_args = op.size() - 2;
-
-  // Set return value
-  if(ret)
-    symex_assign(code_assign2tc(
-      ret, constant_int2tc(int_type2(), BigInt(number_of_format_args))));
-
-  for(size_t i = 2; i < number_of_format_args + 2; i++)
+  if(func_name.find("__ESBMC_scanf") != std::string::npos)
   {
-    expr2tc operand = op[i];
+    assert(func_call.operands.size() >= 2 && "Wrong __ESBMC_scanf signature");
+    fmt_idx = 0;
+    number_of_format_args = func_call.operands.size() - 1;
+  }
+  else if(func_name.find("__ESBMC_fscanf") != std::string::npos)
+  {
+    assert(func_call.operands.size() >= 3 && "Wrong __ESBMC_fscanf signature");
+    fmt_idx = 1;
+    number_of_format_args = func_call.operands.size() - 2;
+  }
+
+  if(func_call.ret)
+    symex_assign(code_assign2tc(
+      func_call.ret,
+      constant_int2tc(int_type2(), BigInt(number_of_format_args))));
+
+  // TODO: fill / cut off the inputs stream based on the length limits.
+
+  for(long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
+      i++)
+  {
+    expr2tc operand = func_call.operands[i];
     internal_deref_items.clear();
     dereference2tc deref(get_empty_type(), operand);
     dereference(deref, dereferencet::INTERNAL);
@@ -388,10 +395,7 @@ void goto_symext::symex_fscanf(
     {
       assert(is_symbol2t(item.object) && "This only works for variables");
 
-      // TODO: get the correct type by using the format string
       auto type = item.object->type;
-      // Get the length of the type. This will propagate an exception for dynamic/infinite
-      // sized arrays (as expected)
       expr2tc val = sideeffect2tc(
         type,
         expr2tc(),

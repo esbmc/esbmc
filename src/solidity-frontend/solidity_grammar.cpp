@@ -475,6 +475,10 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return UnaryOperatorClass;
   }
+  else if(expr["nodeType"] == "Conditional")
+  {
+    return ConditionalOperatorClass;
+  }
   else if(
     expr["nodeType"] == "Identifier" && expr.contains("referencedDeclaration"))
   {
@@ -483,6 +487,10 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   else if(expr["nodeType"] == "Literal")
   {
     return Literal;
+  }
+  else if(expr["nodeType"] == "TupleExpression")
+  {
+    return Tuple;
   }
   else if(
     expr["nodeType"] == "FunctionCall" || expr["nodeType"] == "MemberAccess")
@@ -517,25 +525,36 @@ ExpressionT get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre)
   {
     if(uo_pre)
       return UO_PreDec;
-
-    assert(!"Unsupported - UO_PostDec");
+    else
+      return UO_PostDec;
   }
-  if(expr["operator"] == "++")
+  else if(expr["operator"] == "++")
   {
     if(uo_pre)
       return UO_PreInc;
-
-    assert(!"Unsupported - UO_PostDec");
+    else
+      return UO_PostInc;
   }
-  if(expr["operator"] == "-")
+  else if(expr["operator"] == "-")
   {
     return UO_Minus;
   }
-  log_error(
-    "Got expression operator={}. Unsupported expression operator",
-    expr["operator"].get<std::string>());
+  else if(expr["operator"] == "~")
+  {
+    return UO_Not;
+  }
+  else if(expr["operator"] == "!")
+  {
+    return UO_LNot;
+  }
+  else
+  {
+    log_error(
+      "Got expression operator={}. Unsupported expression operator",
+      expr["operator"].get<std::string>());
 
-  abort();
+    abort();
+  }
 }
 
 ExpressionT get_expr_operator_t(const nlohmann::json &expr)
@@ -552,6 +571,38 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr)
   {
     return BO_Sub;
   }
+  else if(expr["operator"] == "*")
+  {
+    return BO_Mul;
+  }
+  else if(expr["operator"] == "/")
+  {
+    return BO_Div;
+  }
+  else if(expr["operator"] == "%")
+  {
+    return BO_Rem;
+  }
+  else if(expr["operator"] == "<<")
+  {
+    return BO_Shl;
+  }
+  else if(expr["operator"] == ">>")
+  {
+    return BO_Shr;
+  }
+  else if(expr["operator"] == "&")
+  {
+    return BO_And;
+  }
+  else if(expr["operator"] == "^")
+  {
+    return BO_Xor;
+  }
+  else if(expr["operator"] == "|")
+  {
+    return BO_Or;
+  }
   else if(expr["operator"] == ">")
   {
     return BO_GT;
@@ -559,6 +610,14 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr)
   else if(expr["operator"] == "<")
   {
     return BO_LT;
+  }
+  else if(expr["operator"] == ">=")
+  {
+    return BO_GE;
+  }
+  else if(expr["operator"] == "<=")
+  {
+    return BO_LE;
   }
   else if(expr["operator"] == "!=")
   {
@@ -568,13 +627,53 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr)
   {
     return BO_EQ;
   }
-  else if(expr["operator"] == "%")
-  {
-    return BO_Rem;
-  }
   else if(expr["operator"] == "&&")
   {
     return BO_LAnd;
+  }
+  else if(expr["operator"] == "||")
+  {
+    return BO_LOr;
+  }
+  else if(expr["operator"] == "+=")
+  {
+    return BO_AddAssign;
+  }
+  else if(expr["operator"] == "-=")
+  {
+    return BO_SubAssign;
+  }
+  else if(expr["operator"] == "*=")
+  {
+    return BO_MulAssign;
+  }
+  else if(expr["operator"] == "/=")
+  {
+    return BO_DivAssign;
+  }
+  else if(expr["operator"] == "%=")
+  {
+    return BO_RemAssign;
+  }
+  else if(expr["operator"] == "<<=")
+  {
+    return BO_ShlAssign;
+  }
+  else if(expr["operator"] == ">>=")
+  {
+    return BO_ShrAssign;
+  }
+  else if(expr["operator"] == "&=")
+  {
+    return BO_AndAssign;
+  }
+  else if(expr["operator"] == "^=")
+  {
+    return BO_XorAssign;
+  }
+  else if(expr["operator"] == "|=")
+  {
+    return BO_OrAssign;
   }
   else
   {
@@ -595,18 +694,50 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(BO_Assign)
     ENUM_TO_STR(BO_Add)
     ENUM_TO_STR(BO_Sub)
+    ENUM_TO_STR(BO_Mul)
+    ENUM_TO_STR(BO_Div)
+    ENUM_TO_STR(BO_Rem)
+
+    ENUM_TO_STR(BO_Shl)
+    ENUM_TO_STR(BO_Shr)
+    ENUM_TO_STR(BO_And)
+    ENUM_TO_STR(BO_Xor)
+    ENUM_TO_STR(BO_Or)
+
     ENUM_TO_STR(BO_GT)
     ENUM_TO_STR(BO_LT)
+    ENUM_TO_STR(BO_GE)
+    ENUM_TO_STR(BO_LE)
     ENUM_TO_STR(BO_NE)
     ENUM_TO_STR(BO_EQ)
-    ENUM_TO_STR(BO_Rem)
     ENUM_TO_STR(BO_LAnd)
+    ENUM_TO_STR(BO_LOr)
+
+    ENUM_TO_STR(BO_AddAssign)
+    ENUM_TO_STR(BO_SubAssign)
+    ENUM_TO_STR(BO_MulAssign)
+    ENUM_TO_STR(BO_DivAssign)
+    ENUM_TO_STR(BO_RemAssign)
+    ENUM_TO_STR(BO_ShlAssign)
+    ENUM_TO_STR(BO_ShrAssign)
+    ENUM_TO_STR(BO_AndAssign)
+    ENUM_TO_STR(BO_XorAssign)
+    ENUM_TO_STR(BO_OrAssign)
+
     ENUM_TO_STR(UnaryOperatorClass)
     ENUM_TO_STR(UO_PreDec)
     ENUM_TO_STR(UO_PreInc)
+    ENUM_TO_STR(UO_PostDec)
+    ENUM_TO_STR(UO_PostInc)
     ENUM_TO_STR(UO_Minus)
+    ENUM_TO_STR(UO_Not)
+    ENUM_TO_STR(UO_LNot)
+
+    ENUM_TO_STR(ConditionalOperatorClass)
+
     ENUM_TO_STR(DeclRefExprClass)
     ENUM_TO_STR(Literal)
+    ENUM_TO_STR(Tuple)
     ENUM_TO_STR(CallExprClass)
     ENUM_TO_STR(ImplicitCastExprClass)
     ENUM_TO_STR(IndexAccess)

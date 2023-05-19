@@ -66,7 +66,8 @@ public:
  * @param type Union type
  * @param msg  Message object
  */
-  static void gen_typecast_to_union(exprt &dest, const typet &type);
+  static void
+  gen_typecast_to_union(const namespacet &ns, exprt &dest, const typet &type);
 
   static std::string get_decl_name(const clang::NamedDecl &nd);
 
@@ -170,6 +171,8 @@ protected:
   virtual bool get_type(const clang::QualType &type, typet &new_type);
 
   virtual bool get_type(const clang::Type &the_type, typet &new_type);
+
+  void get_ref_to_struct_type(typet &type);
 
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
 

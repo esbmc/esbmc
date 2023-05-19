@@ -53,6 +53,10 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
 
     adjust_function_call_arguments(constructor_call);
   }
+  else if(statement == "assign")
+  {
+    adjust_side_effect_assign(expr);
+  }
   else
     clang_c_adjust::adjust_side_effect(expr);
 }
@@ -119,4 +123,45 @@ void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
   assert(method_symb);
   exprt method_call = symbol_expr(*method_symb);
   expr.swap(method_call);
+}
+
+void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
+{
+  // sideeffect assign got be representing a binary operator
+  assert(expr.operands().size() == 2);
+
+  //exprt &lhs = expr.op0();
+  exprt &rhs = expr.op1();
+
+  if(
+    rhs.id() == "sideeffect" && rhs.statement() == "function_call" &&
+    rhs.get_bool("constructor"))
+  {
+    // turn assign expression bleh = BLAH() into one instruction:
+    // BLAH(&bleh);
+    // where bleh has been declared and there exists a corresponding symbol
+    side_effect_expr_function_callt &rhs_func_call =
+      to_side_effect_expr_function_call(rhs);
+    exprt &f_op = rhs_func_call.function();
+
+    // callee must be a constructor
+    assert(f_op.type().return_type().id() == "constructor");
+
+    // just populate rhs' argument and replace the entire expression
+    exprt &lhs = expr.op0();
+    exprt arg = address_of_exprt(lhs);
+    exprt base_symbol = arg.op0();
+    assert(base_symbol.op0().id() == "symbol");
+    // TODO: wrap base symbol into dereference if it's a member
+    rhs_func_call.arguments().push_back(arg);
+
+    expr.swap(rhs);
+
+    // let's go through C's side_effect_function_call to make sure
+    // there's no missing adjustment we need to carry out
+    clang_c_adjust::adjust_side_effect_function_call(
+      to_side_effect_expr_function_call(expr));
+  }
+  else
+    clang_c_adjust::adjust_side_effect(expr);
 }

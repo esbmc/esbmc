@@ -21,33 +21,36 @@ struct nothrow_t {
 extern const nothrow_t nothrow;
 
 namespace std {
+/**
+ *source: https://en.cppreference.com/w/cpp/memory/new/bad_alloc
+ **/
 struct bad_alloc: public exception {
 public:
-	bad_alloc() throw ();
-	bad_alloc(const bad_alloc&) throw ();
-	bad_alloc& operator=(const bad_alloc&) throw ();
-	const char* what() const throw () :
-			message("std::bad_alloc") {
-		return message;
+  bad_alloc() throw() {}
+  bad_alloc( const bad_alloc& other ) throw();
+  bad_alloc& operator=( const bad_alloc& other ) throw();
+  virtual const char* what() const throw() {
+		return "std::bad_alloc";
 	}
 };
+}
 
 new_handler set_new_handler(new_handler new_p) throw ();
-void* operator new(std::size_t size) throw (std::bad_alloc);
-void* operator new(std::size_t size,
-		const std::nothrow_t& nothrow_constant) throw ();
-void* operator new(std::size_t size, void* ptr) throw ();
-void* operator new[](std::size_t size) throw (std::bad_alloc);
-void* operator new[](std::size_t size,
-		const std::nothrow_t& nothrow_constant) throw ();
-void* operator new[](std::size_t size, void* ptr) throw ();
+void* operator new(size_t size) throw (std::bad_alloc);
+void* operator new(size_t size,
+		const nothrow_t& nothrow_constant) throw ();
+void* operator new(size_t size, void* ptr) throw ();
+void* operator new[](size_t size) throw (std::bad_alloc);
+void* operator new[](size_t size,
+		const nothrow_t& nothrow_constant) throw ();
+void* operator new[](size_t size, void* ptr) throw ();
 void operator delete(void* ptr) throw ();
-void operator delete(void* ptr, const std::nothrow_t& nothrow_constant) throw ();
+void operator delete(void* ptr, const nothrow_t& nothrow_constant) throw ();
 void operator delete(void* ptr, void* voidptr2) throw ();
 void operator delete[](void* ptr) throw ();
 void operator delete[](void* ptr,
-		const std::nothrow_t& nothrow_constant) throw ();
+		const nothrow_t& nothrow_constant) throw ();
 void operator delete[](void* ptr, void* voidptr2) throw ();
-}
+
 
 #endif

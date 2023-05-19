@@ -28,7 +28,8 @@ public:
   int _size;
 
 	class const_iterator;
-	class iterator {
+	class iterator
+  {
 	public:
 		char* pointer;
 		char* it_str;
@@ -47,16 +48,16 @@ public:
 			pointer = p_pointer;
 		}
 
-		iterator& operator=(iterator& left, const_iterator& right) {
-			left.pointer = right.pointer;
-			left.pos = right.pos;
-			return left;
+		iterator& operator=(const_iterator& right) {
+			this->pointer = right.pointer;
+			this->pos = right.pos;
+			return *this;
 		}
 
-		iterator& operator=(iterator& left, iterator& right) {
-			left.pointer = right.pointer;
-			left.pos = right.pos;
-			return left;
+		iterator& operator=(iterator& right) {
+			this->pointer = right.pointer;
+			this->pos = right.pos;
+			return *this;
 		}
 
 		char* operator ->() {
@@ -66,6 +67,9 @@ public:
 		char& operator *() {
 			return *pointer;
 		}
+
+CC_DIAGNOSTIC_PUSH()
+DO_PRAGMA(GCC diagnostic ignored "-Wreturn-stack-address")
 
 		iterator& operator -(int n) const {
 			iterator buffer;
@@ -114,6 +118,8 @@ public:
 			pos--;
 			return buffer;
 		}
+
+CC_DIAGNOSTIC_POP()
 
 		//operator decreases pointer address and returns new value
 		//It's like "c--"
@@ -185,6 +191,9 @@ public:
 			return !(pos < right.pos);
 		}
 
+CC_DIAGNOSTIC_PUSH()
+DO_PRAGMA(GCC diagnostic ignored "-Wreturn-stack-address")
+
 		//operator adds n positions on pointer address, and returns its address value
 
 		iterator& operator +=(int n) {
@@ -204,9 +213,12 @@ public:
 			pos += n;
 			return buffer;
 		}
+
+CC_DIAGNOSTIC_POP()
 	};
-#if 1
-	class const_iterator {
+
+	class const_iterator
+  {
 	public:
 
 		char* pointer;
@@ -239,6 +251,9 @@ public:
 			return *pointer;
 		}
 
+CC_DIAGNOSTIC_PUSH()
+DO_PRAGMA(GCC diagnostic ignored "-Wreturn-stack-address")
+
 		//operator subtracts n positions on pointer address of this
 		const_iterator& operator -(int n) const {
 			const_iterator buffer;
@@ -251,6 +266,8 @@ public:
 			buffer.pointer = pointer + sizeof(char) * n;
 			return buffer;
 		}
+
+CC_DIAGNOSTIC_POP()
 
 		const_iterator& operator ++();
 		const_iterator operator ++(int);
@@ -329,7 +346,6 @@ public:
 		//operator adds n positions on pointer address, and returns its address value
 
 	};
-#endif
 
 	string();
 	string(char*);
@@ -353,12 +369,12 @@ public:
 	//bool operator!=(string& lhs, const char* rhs);
 	bool operator>(string& a);
 	bool operator>(const char* a);
-	bool operator>(const char* lhs, string& rhs);
-	bool operator>(string& lhs, const char* rhs);
+	friend bool operator>(const char* lhs, string& rhs);
+	friend bool operator>(string& lhs, const char* rhs);
 	bool operator<(string& a);
 	bool operator<(const char* a);
-	bool operator<(const char* lhs, string& rhs);
-	bool operator<(string& lhs, const char* rhs);
+	friend bool operator<(const char* lhs, string& rhs);
+	friend bool operator<(string& lhs, const char* rhs);
 	bool operator>=(string& a);
 	bool operator>=(const char* lhs);
 	bool operator<=(string& a);
@@ -387,11 +403,11 @@ public:
 	size_t find_first_of(char c, size_t pos = 0) const;
 	size_t find(string& s, size_t pos = 0) const;
 	size_t find(const char* s, size_t pos = 0) const;
-	size_t find(const char* s, size_t pos = 0, size_t n) const;
+	size_t find(const char* s, size_t pos, size_t n) const;
 	size_t find(char c, size_t pos = 0) const;
 	string& assign(string& s);
 	string& assign(const char* s, size_t n);
-	string& assign(string& s, size_t pos = 0, size_t n);
+	string& assign(string& s, size_t pos, size_t n);
 	string& assign(const char* s);
 	string& assign(size_t n, char c);
 	string& assign(iterator one, iterator two) {
@@ -425,7 +441,11 @@ public:
 		__ESBMC_assert(s != NULL,
 		    "The parameter must to be different than NULL");
 		if ((pos > sLen) || (pos > n))
-		  throw out_of_range();
+    {
+      // TODO: when we support try-catch, replace the assert with the throw statement below
+		  //throw out_of_range();
+      __ESBMC_assert(0, "string append failed, out_of_range");
+    }
 
 		int totalLength = this->size();
 		totalLength += (n - pos + 1);
@@ -451,7 +471,7 @@ public:
 			temp[i] = this->str[i];
 		for (j = i, k = pos; j < temp._size; j++, k++)
 			temp.str[j] = s[k];
-		//*this = temp;
+		// *this = temp;
 		this->_size = temp._size;
 		this->str = temp.str;
 		//assert(this->_size != 16);
@@ -468,7 +488,7 @@ public:
 	size_t rfind(const char* s, size_t pos = npos) const;
 	size_t rfind(char* s) const;
 	size_t rfind(char c, size_t pos = npos) const;
-	size_t rfind(const char* s, size_t pos = 0, size_t n) const;
+	size_t rfind(const char* s, size_t pos, size_t n) const;
 	size_t find_last_of(const string& s, size_t pos = npos) const;
 	size_t find_last_of(const char* s, size_t pos = npos) const;
 	size_t find_last_of(char* s) const;
@@ -476,8 +496,8 @@ public:
 	size_t find_first_not_of(const string& s, size_t pos = 0) const;
 	size_t find_first_not_of(const char* s, size_t pos = 0) const;
 	size_t find_first_not_of(char c, size_t pos = 0) const;
-	string& erase(size_t pos = 0, size_t n);
-	string& erase(size_t pos = 0, size_t n, char* tmp);
+	string& erase(size_t pos, size_t n);
+	string& erase(size_t pos, size_t n, char* tmp);
 	string& erase(size_t pos = 0);
 	string& erase(iterator it) {
 		__ESBMC_assert(it.pos >= 0,
@@ -610,9 +630,8 @@ public:
 				"The second parameter must to be different than NULL");
 		int pos1 = p.pos;
 		int n = 1;
-		int i;
 		char *s = new char[n + 1];
-		for (i = 0; i < n; i++) {
+		for (int i = 0; i < n; i++) {
 			s[i] = c;
 		}
 		int len = this->length(), i, k;
@@ -656,9 +675,8 @@ public:
     __ESBMC_assert(c != NULL,
         "The third parameter must to be different than NULL");
     int pos1 = p.pos;
-    int i;
     char *s = new char[n + 1];
-    for (i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++) {
       s[i] = c;
     }
     int len = this->length(), i, k;
@@ -716,9 +734,8 @@ public:
 		__ESBMC_assert(c != NULL,
 				"The third parameter must to be different than NULL");
 		int pos1 = p.pos;
-		int i;
 		char *s = new char[n + 1];
-		for (i = 0; i < n; i++) {
+		for (int i = 0; i < n; i++) {
 			s[i] = c;
 		}
 		int len = this->length(), i, k;
@@ -884,8 +901,10 @@ string::string(char *s) {
 }
 
 string::string(const char * s, size_t n) {
-	__ESBMC_HIDE: __ESBMC_assert(n < strlen(s), "string overflow");
-	__ESBMC_HIDE: __ESBMC_assert( s != NULL, "invalid string");
+	__ESBMC_HIDE:
+  __ESBMC_assert(n < strlen(s), "string overflow");
+	__ESBMC_assert( s != NULL, "invalid string");
+
 	int i;
 	str = new char[n + 1];
 	_size = n;
@@ -895,14 +914,15 @@ string::string(const char * s, size_t n) {
 }
 
 string::string(string& s, size_t n) {
-	__ESBMC_HIDE: __ESBMC_assert(n < s.length(), "string overflow");
-	__ESBMC_HIDE: __ESBMC_assert( s.str != NULL, "invalid string");
+	__ESBMC_HIDE:
+  __ESBMC_assert(n < s.length(), "string overflow");
+  __ESBMC_assert( s.str != NULL, "invalid string");
 	int i,j;
 
-        // Avoid allocating a negative amount.
-        int sz = s._size - n + 1;
-        if (sz < 0)
-          sz = 0;
+  // Avoid allocating a negative amount.
+  int sz = s._size - n + 1;
+  if (sz < 0)
+    sz = 0;
 	this->str = new char[sz];
 	this->_size = s._size - n;
 	for (i = n, j = 0; s.str[i] != '\0'; i++,j++)
@@ -931,15 +951,15 @@ char* string::c_str() const {
 	__ESBMC_HIDE: return str;
 }
 
-inline string::ostream& operator <<(ostream& o, string) {
+inline ostream& operator <<(ostream& o, string) {
 	return o;
 }
 
-inline string::ostream& operator <<(ostream& o, struct iterator&) {
+inline ostream& operator <<(ostream& o, struct iterator&) {
 	return o;
 }
 
-inline string::istream& operator >>(istream& is, string) {
+inline istream& operator >>(istream& is, string) {
 	return is;
 }
 
@@ -965,7 +985,7 @@ bool string::operator>(const char* a) {
 	return false;
 }
 
-bool string::operator>(const char* lhs, string& rhs) {
+bool operator>(const char* lhs, string& rhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs.str != NULL,
@@ -978,7 +998,7 @@ bool string::operator>(const char* lhs, string& rhs) {
 	return false;
 }
 
-bool string::operator>(string& lhs, const char* rhs) {
+bool operator>(string& lhs, const char* rhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs.str != NULL,
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs != NULL,
@@ -1013,7 +1033,7 @@ bool string::operator<(const char* a) {
 	return false;
 }
 
-bool string::operator<(const char* lhs, string& rhs) {
+bool operator<(const char* lhs, string& rhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs.str != NULL,
@@ -1026,7 +1046,7 @@ bool string::operator<(const char* lhs, string& rhs) {
 	return false;
 }
 
-bool string::operator<(string& lhs, const char* rhs) {
+bool operator<(string& lhs, const char* rhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs.str != NULL,
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs != NULL,
@@ -1145,7 +1165,8 @@ string& string::operator=(const char* s) {
 			"The parameter must to be different than NULL");
 	this->_size = strlen(s);
 	this->str = new char[this->_size + 1];
-	return string(strcpy(this->c_str(), s));
+  string tmp = string(strcpy(this->c_str(), s));
+	return tmp;
 }
 
 string& string::operator=(char s) {
@@ -1336,7 +1357,7 @@ string& string::assign(string& s) {
 	return *this;
 }
 
-string& string::assign(string& s, size_t pos = 0, size_t n) {
+string& string::assign(string& s, size_t pos, size_t n) {
 	__ESBMC_HIDE: __ESBMC_assert(
 			(pos >= 0) && (pos < s.length()) && ((pos + n) < s.length())
 					&& (n > 0), "string overflow");
@@ -1378,7 +1399,7 @@ string& string::assign(size_t n, char c) {
 	return *this;
 }
 
-size_t string::copy(char* s, size_t n, size_t pos = 0) const {
+size_t string::copy(char* s, size_t n, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert(pos >= 0, "string overflow");
 	__ESBMC_assert(pos < this->length(), "string overflow");
 	__ESBMC_assert(n <= this->length(), "string overflow");
@@ -1482,7 +1503,7 @@ string& string::append(size_t n, char c) {
 	return *this;
 }
 
-size_t string::find(char c, size_t pos = 0) const {
+size_t string::find(char c, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos >= 0) && (pos < this->length()),
 			"string overflow");
 	__ESBMC_assert(c != NULL, "The parameter must to be different than NULL");
@@ -1493,7 +1514,7 @@ size_t string::find(char c, size_t pos = 0) const {
 			return i;
 }
 
-size_t string::find(string& s, size_t pos = 0) const {
+size_t string::find(string& s, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos >= 0) && (pos < this->length()),
 			"string overflow");
 	__ESBMC_assert(s.str != NULL,
@@ -1526,7 +1547,7 @@ size_t string::find(string& s, size_t pos = 0) const {
 	return -1;
 }
 
-size_t string::find(const char* s, size_t pos = 0, size_t n) const {
+size_t string::find(const char* s, size_t pos, size_t n) const {
 	__ESBMC_HIDE: __ESBMC_assert(
 			(pos >= 0) && (pos < this->length()) && ((pos + n) < this->length())
 					&& (n > 0), "string overflow");
@@ -1565,7 +1586,7 @@ size_t string::find(const char* s, size_t pos = 0, size_t n) const {
 	return -1;
 }
 
-size_t string::find(const char* s, size_t pos = 0) const {
+size_t string::find(const char* s, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos >= 0) && (pos < this->length()),
 			"string overflow");
 	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
@@ -1770,7 +1791,7 @@ string& string::insert(size_t pos1, size_t n, char c) {
 	return *this;
 }
 
-string& string::erase(size_t pos = 0, size_t n) {
+string& string::erase(size_t pos, size_t n) {
 	__ESBMC_HIDE: __ESBMC_assert(
 			(pos < this->length()) && ((pos + n) <= this->length()),
 			"overflow");
@@ -1798,7 +1819,7 @@ string& string::erase(size_t pos = 0, size_t n) {
 	return *this;
 }
 
-string& string::erase(size_t pos = 0) {
+string& string::erase(size_t pos) {
 	__ESBMC_HIDE: int n = this->length() - 1;
 	__ESBMC_assert((pos < this->length()) && ((pos + n) <= this->length()),
 			"overflow");
@@ -2089,7 +2110,7 @@ int string::compare(size_t pos1, size_t n1, string& s, size_t pos2,
 
 	return 0;
 }
-size_t string::find_first_of(const char* s, size_t pos = 0) const {
+size_t string::find_first_of(const char* s, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
 	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
@@ -2116,7 +2137,7 @@ size_t string::find_first_of(const char* s, size_t pos = 0) const {
 	}
 }
 
-size_t string::find_first_of(const string& s, size_t pos = 0) const {
+size_t string::find_first_of(const string& s, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
 	__ESBMC_assert(s.str != NULL,
@@ -2144,7 +2165,7 @@ size_t string::find_first_of(const string& s, size_t pos = 0) const {
 	}
 }
 
-size_t string::find_first_of(char c, size_t pos = 0) const {
+size_t string::find_first_of(char c, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
 	__ESBMC_assert(c != NULL, "The parameter must to be different than NULL");
@@ -2162,7 +2183,7 @@ size_t string::find_first_of(char c, size_t pos = 0) const {
 	}
 }
 
-size_t string::find_first_not_of(const string& s, size_t pos = 0) const {
+size_t string::find_first_not_of(const string& s, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
 	__ESBMC_assert(s.str != NULL,
@@ -2195,7 +2216,7 @@ size_t string::find_first_not_of(const string& s, size_t pos = 0) const {
 	}
 }
 
-size_t string::find_first_not_of(const char* s, size_t pos = 0) const {
+size_t string::find_first_not_of(const char* s, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
 	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
@@ -2227,7 +2248,7 @@ size_t string::find_first_not_of(const char* s, size_t pos = 0) const {
 	}
 }
 
-size_t string::find_first_not_of(char c, size_t pos = 0) const {
+size_t string::find_first_not_of(char c, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
 	__ESBMC_assert(c != NULL, "The parameter must to be different than NULL");
@@ -2251,7 +2272,7 @@ size_t string::find_first_not_of(char c, size_t pos = 0) const {
 	}
 }
 
-size_t string::find_last_of(const string& s, size_t pos = npos) const {
+size_t string::find_last_of(const string& s, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
 	__ESBMC_assert(s.str != NULL,
@@ -2279,7 +2300,7 @@ size_t string::find_last_of(const string& s, size_t pos = npos) const {
 	}
 }
 
-size_t string::find_last_of(const char* s, size_t pos = npos) const {
+size_t string::find_last_of(const char* s, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
 	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
@@ -2334,7 +2355,7 @@ size_t string::find_last_of(char* s) const {
 	}
 }
 
-size_t string::find_last_of(char c, size_t pos = npos) const {
+size_t string::find_last_of(char c, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
 	__ESBMC_assert(c != NULL, "The parameter must to be different than NULL");
@@ -2352,7 +2373,7 @@ size_t string::find_last_of(char c, size_t pos = npos) const {
 	}
 }
 
-size_t string::rfind(char c, size_t pos = 0) const {
+size_t string::rfind(char c, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert(c != NULL,
 			"The parameter must to be different than NULL");
 	int i;
@@ -2362,7 +2383,7 @@ size_t string::rfind(char c, size_t pos = 0) const {
 			return i;
 }
 
-size_t string::rfind(string& s, size_t pos = 0) const {
+size_t string::rfind(string& s, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
 	__ESBMC_assert(s.str != NULL,
@@ -2395,7 +2416,7 @@ size_t string::rfind(string& s, size_t pos = 0) const {
 	return -1;
 }
 
-size_t string::rfind(const char* s, size_t pos = 0, size_t n) const {
+size_t string::rfind(const char* s, size_t pos, size_t n) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
 	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
@@ -2430,7 +2451,7 @@ size_t string::rfind(const char* s, size_t pos = 0, size_t n) const {
 	return -1;
 }
 
-size_t string::rfind(const char* s, size_t pos = 0) const {
+size_t string::rfind(const char* s, size_t pos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
 	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
@@ -2559,6 +2580,15 @@ string operator+(char* lhs, string rhs) {
 	result._size = totalLength;
 	return result;
 }
+
+/*
+ * The following operator overloading is really obfuscating on standard types (char*, char).
+ * Clang would generate parse error for such thing. For the time being, let's just
+ * comment them to avoid the parse error so that we can progress further.
+ * The purpose of such overloading may become clear when we run benchmarks.
+ * Remove them if they are not affecting the pass rate in our benchmarks
+ */
+#if 0
 string operator+(char * lhs, char rhc) {
 	int lhsLen = strlen(lhs);
 	int totalLength = lhsLen;
@@ -2574,6 +2604,7 @@ string operator+(char * lhs, char rhc) {
 	result._size = totalLength;
 	return result;
 }
+#endif
 string operator+(char lhc, string rhs) {
 	int totalLength = 1;
 	totalLength += rhs.size();
@@ -2588,6 +2619,14 @@ string operator+(char lhc, string rhs) {
 	result._size = totalLength;
 	return result;
 }
+/*
+ * The following operator overloading is really obfuscating on standard types (char*, char).
+ * Clang would generate parse error for such thing. For the time being, let's just
+ * comment them to avoid the parse error so that we can progress further.
+ * The purpose of such overloading may become clear when we run benchmarks.
+ * Remove them if they are not affecting the pass rate in our benchmarks
+ */
+#if 0
 string operator+(char lhc, char * rhs) {
 	int totalLength = 1;
 	totalLength += strlen(rhs);
@@ -2613,6 +2652,7 @@ string operator+(char lhc, char rhc) {
 	result._size = totalLength;
 	return result;
 }
+#endif
 /*
 bool string::operator==(string& b) {
 	__ESBMC_HIDE: __ESBMC_assert(b.str != NULL,

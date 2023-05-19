@@ -1,0 +1,4 @@
+CORE
+inheritance.solast 
+--function test_override --contract inheritance.sol
+^VERIFICATION SUCCESSFUL$

@@ -190,24 +190,57 @@ enum ExpressionT
   BO_Assign, // =
   BO_Add,    // +
   BO_Sub,    // -
-  BO_GT,     // >
-  BO_LT,     // <
-  BO_NE,     // !=
-  BO_EQ,     // ==
+  BO_Mul,    // *
+  BO_Div,    // /
   BO_Rem,    // %
-  BO_LAnd,   // &&
+
+  BO_Shl, // <<
+  BO_Shr, // >>
+  BO_And, // &
+  BO_Xor, // ^
+  BO_Or,  // |
+
+  BO_GT,   // >
+  BO_LT,   // <
+  BO_GE,   // >=
+  BO_LE,   // <=
+  BO_NE,   // !=
+  BO_EQ,   // ==
+  BO_LAnd, // &&
+  BO_LOr,  // ||
+
+  BO_AddAssign, // +=
+  BO_SubAssign, // -=
+  BO_MulAssign, // *=
+  BO_DivAssign, // /=
+  BO_RemAssign, // %=
+  BO_ShlAssign, // <<=
+  BO_ShrAssign, // >>=
+  BO_AndAssign, // &=
+  BO_XorAssign, // ^=
+  BO_OrAssign,  // |=
 
   // UnaryOperator
   UnaryOperatorClass,
-  UO_PreDec,
-  UO_PreInc,
-  UO_Minus,
+  UO_PreDec,  // --
+  UO_PreInc,  // ++
+  UO_PostDec, // --
+  UO_PostInc, // ++
+  UO_Minus,   // -
+  UO_Not,     // ~
+  UO_LNot,    // !
+
+  //TenaryOperator
+  ConditionalOperatorClass, // ?...:...
 
   // rule identifier
   DeclRefExprClass,
 
   // rule literal
   Literal,
+
+  // rule Tuple
+  Tuple,
 
   // FunctionCall
   CallExprClass,

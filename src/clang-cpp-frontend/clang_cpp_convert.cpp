@@ -226,7 +226,7 @@ bool clang_cpp_convertert::get_function(
 
   // add additional annotations for class/struct/union methods
   if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
-    if(annotate_cpp_methods(md, new_expr, fd))
+    if(annotate_class_method(md, new_expr, fd))
       return true;
 
   return false;
@@ -273,10 +273,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if(is_field_global_storage(field))
       continue;
 
-    // [C++ annotation]: set parent in component's type
-    comp.type().set("#member_name", type.name());
-    // [C++ annotation]: set access in component
-    if(annotate_class_field_access(field, comp))
+    if(annotate_class_field(field, type, comp))
       return true;
 
     type.components().push_back(comp);
@@ -342,6 +339,10 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
 
     // This means that we probably just parsed nested class,
     // don't add it to the class
+    // TODO: The condition based on "skip" below doesn't look quite right.
+    //       Need to use a proper logic to confirm a nested class, e.g.
+    //       decl->getParent() == recordd, where recordd is the class
+    //       we are currently dealing with
     if(comp.is_code() && to_code(comp).statement() == "skip")
       continue;
 
@@ -1122,8 +1123,14 @@ bool clang_cpp_convertert::get_decl_ref(
     if(get_type(fd.getType(), type))
       return true;
 
-    if(get_function_params(fd, to_code_type(type).arguments()))
+    code_typet &fd_type = to_code_type(type);
+    if(get_function_params(fd, fd_type.arguments()))
       return true;
+
+    // annotate return type - will be used to adjust the initiliazer or decl-derived stmt
+    const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd);
+    assert(md);
+    annotate_ctor_dtor_rtn_type(md, fd_type.return_type());
 
     break;
   }
@@ -1138,6 +1145,30 @@ bool clang_cpp_convertert::get_decl_ref(
   new_expr.identifier(id);
   new_expr.cmt_lvalue(true);
   new_expr.name(name);
+
+  return false;
+}
+
+bool clang_cpp_convertert::annotate_class_field(
+  const clang::FieldDecl *field,
+  const struct_union_typet &type,
+  struct_typet::componentt &comp)
+{
+  // set parent in component's type
+  if(type.tag().empty())
+  {
+    log_error("Goto empty tag in parent class type in {}", __func__);
+    return true;
+  }
+  std::string parent_class_id = tag_prefix + type.tag().as_string();
+  comp.type().set("#member_name", parent_class_id);
+
+  // set access in component
+  if(annotate_class_field_access(field, comp))
+  {
+    log_error("Failed to annotate class field access in {}", __func__);
+    return true;
+  }
 
   return false;
 }
@@ -1186,7 +1217,7 @@ bool clang_cpp_convertert::get_access_from_decl(
   return false;
 }
 
-bool clang_cpp_convertert::annotate_cpp_methods(
+bool clang_cpp_convertert::annotate_class_method(
   const clang::CXXMethodDecl *cxxmdd,
   exprt &new_expr,
   const clang::FunctionDecl &fd)
@@ -1206,12 +1237,7 @@ bool clang_cpp_convertert::annotate_cpp_methods(
   if(is_ConstructorOrDestructor(fd))
   {
     // annotate ctor and dtor return type
-    std::string mark_rtn = (cxxmdd->getKind() == clang::Decl::CXXDestructor)
-                             ? "destructor"
-                             : "constructor";
-    typet rtn_type(mark_rtn);
-    annotate_cpyctor(cxxmdd, rtn_type);
-    component_type.return_type() = rtn_type;
+    annotate_ctor_dtor_rtn_type(cxxmdd, component_type.return_type());
 
     /*
      * We also have a `component` in class type representing the ctor/dtor.
@@ -1258,15 +1284,11 @@ bool clang_cpp_convertert::annotate_cpp_methods(
   get_location_from_decl(*cxxmdd, location_begin);
   new_expr.location() = location_begin;
 
-  // We still need to add a trivial ctor/dtor as a `component` in class symbol's type
+  // We need to add a non-static method as a `component` to class symbol's type
   // remove "statement: skip" otherwise it won't be added
-  if(
-    cxxmdd->getKind() == clang::Decl::CXXDestructor ||
-    cxxmdd->getKind() == clang::Decl::CXXConstructor)
-  {
+  if(!cxxmdd->isStatic())
     if(to_code(new_expr).statement() == "skip")
       to_code(new_expr).remove("statement");
-  }
 
   return false;
 }
@@ -1474,4 +1496,16 @@ void clang_cpp_convertert::get_cpyctor_name(
 
   // sync param name
   param.cmt_base_name(name);
+}
+
+void clang_cpp_convertert::annotate_ctor_dtor_rtn_type(
+  const clang::CXXMethodDecl *cxxmdd,
+  typet &rtn_type)
+{
+  std::string mark_rtn = (cxxmdd->getKind() == clang::Decl::CXXDestructor)
+                           ? "destructor"
+                           : "constructor";
+  typet tmp_rtn_type(mark_rtn);
+  annotate_cpyctor(cxxmdd, tmp_rtn_type);
+  rtn_type = tmp_rtn_type;
 }

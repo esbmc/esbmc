@@ -60,6 +60,7 @@ protected:
   bool get_function_params(const nlohmann::json &pd, exprt &param);
   bool get_struct_class(const nlohmann::json &ast_node);
   bool add_implicit_constructor();
+  bool get_implicit_ctor_call(const int ref_decl_id, exprt &new_expr);
   bool
   get_struct_class_fields(const nlohmann::json &ast_node, struct_typet &type);
   bool
@@ -78,11 +79,17 @@ protected:
     const nlohmann::json &expr_common_type,
     exprt &new_expr);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
+  bool get_compound_assign_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_unary_operator_expr(
     const nlohmann::json &expr,
     const nlohmann::json &int_literal_type,
     exprt &new_expr);
-  bool get_cast_expr(const nlohmann::json &cast_expr, exprt &new_expr);
+  bool
+  get_conditional_operator_expr(const nlohmann::json &expr, exprt &new_expr);
+  bool get_cast_expr(
+    const nlohmann::json &cast_expr,
+    exprt &new_expr,
+    const nlohmann::json int_literal_type = nullptr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr);
@@ -105,8 +112,7 @@ protected:
     std::string &name,
     std::string &id);
   bool get_constructor_call(const nlohmann::json &ast_node, exprt &new_expr);
-  bool
-  get_contract_name(const nlohmann::json &ast_node, std::string &contract_name);
+  bool get_contract_name(const int ref_decl_id, std::string &contract_name);
   // line number and locations
   void
   get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
@@ -133,6 +139,7 @@ protected:
   nlohmann::json make_implicit_cast_expr(
     const nlohmann::json &sub_expr,
     std::string cast_type);
+  nlohmann::json make_return_type_from_typet(typet type);
   nlohmann::json make_pointee_type(const nlohmann::json &sub_expr);
   nlohmann::json make_callexpr_return_type(const nlohmann::json &type_descrpt);
   nlohmann::json make_array_elementary_type(const nlohmann::json &type_descrpt);
@@ -166,6 +173,12 @@ protected:
 
   // The prefix for the id of each class
   std::string prefix = "tag-";
+
+  // json nodes that always empty
+  // used as the return value for find_constructor_ref when
+  // dealing with the implicit constructor call
+  // this is to avoid reference to stack memory associated with local variable returned
+  const nlohmann::json empty_json;
 
 private:
   bool get_elementary_type_name_uint(

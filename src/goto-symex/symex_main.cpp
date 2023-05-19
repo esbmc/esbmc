@@ -625,9 +625,15 @@ void goto_symext::run_intrinsic(
     // Already modelled in builtin_libs
     return;
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_fscanf"))
+  else if(
+    has_prefix(symname, "c:@F@__ESBMC_scanf") ||
+    has_prefix(symname, "c:@F@__ESBMC_fscanf"))
   {
-    symex_fscanf(func_call.ret, func_call.operands);
+    auto &ex_state = art.get_cur_state();
+    if(ex_state.cur_state->guard.is_false())
+      return;
+
+    symex_input(func_call);
     return;
   }
   else if(has_prefix(symname, "c:@F@__ESBMC_init_object"))

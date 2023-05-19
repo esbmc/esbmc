@@ -299,7 +299,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   get_decl_name(rd, name, id);
 
   // Check if the symbol is already added to the context, do nothing if it is
-  // already in the context. See next comment
+  // already in the context.
   if(context.find_symbol(id) != nullptr)
     return false;
 
@@ -816,12 +816,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     // Special case, pointers to structs/unions/classes must not
     // have a copy of it, but a reference to the type
-    // TODO: classes
-    if(sub_type.is_struct() || sub_type.is_union())
-    {
-      struct_union_typet t = to_struct_union_type(sub_type);
-      sub_type = symbol_typet(tag_prefix + t.tag().as_string());
-    }
+    get_ref_to_struct_type(sub_type);
 
     new_type = gen_pointer_type(sub_type);
     break;
@@ -985,13 +980,17 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::RecordDecl &rd =
       *(static_cast<const clang::RecordType &>(the_type)).getDecl();
 
-    if(get_struct_union_class(rd))
-      return true;
-
     std::string id, name;
     get_decl_name(rd, name, id);
 
+    // avoid unnecessary conversion if symbol already exists
+    if(!context.find_symbol(id))
+      if(get_struct_union_class(rd))
+        return true;
+
     symbolt &s = *context.find_symbol(id);
+    // For the time being we just copy the entire type.
+    // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
     new_type = s.type;
     break;
   }
@@ -2537,7 +2536,7 @@ bool clang_c_convertert::get_cast_expr(
     break;
 
   case clang::CK_ToUnion:
-    gen_typecast_to_union(expr, type);
+    gen_typecast_to_union(ns, expr, type);
     break;
 
   case clang::CK_VectorSplat:
@@ -3416,4 +3415,29 @@ bool clang_c_convertert::get_vft_binding_expr(
     "MemberExpr call to virtual/overriding function cannot happen in C");
   abort();
   return true;
+}
+
+void clang_c_convertert::get_ref_to_struct_type(typet &type)
+{
+  /*
+   * For some special cases, we need to get a symbol type referring to
+   * a struct/union/class type so that we don't have to copy it, e.g.
+   * A pointer to an object of class BLAH would have:
+   * * type: pointer
+   *   * subtype: symbol
+   *      * identifier: tag-BLAH
+   * instead of copying the struct type:
+   * * type: pointer
+   *   * subtype: struct
+   *      * tag: BLAH
+   *      * components:
+   *        * <BLAH components 0,1,2,3...>
+   *      * methods:
+   *        * <BLAH method 0,1,2,3...>
+   */
+  if(type.is_struct() || type.is_union())
+  {
+    struct_union_typet t = to_struct_union_type(type);
+    type = symbol_typet(tag_prefix + t.tag().as_string());
+  }
 }

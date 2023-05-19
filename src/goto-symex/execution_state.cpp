@@ -882,6 +882,7 @@ void execution_statet::get_expr_globals(
           art1->vars_map.insert(
             std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
           globals_list.insert(expr);
+          art1->is_global.insert(expr);
         }
       }
     }
