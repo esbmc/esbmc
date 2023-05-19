@@ -984,8 +984,8 @@ public:
     }
 
     if(
-      (w_s.most_significant_bit(a) == w_s.most_significant_bit(b) ==
-       w_s.most_significant_bit(c) == w_s.most_significant_bit(d)) &&
+      ((w_s.most_significant_bit(a) == w_s.most_significant_bit(b)) ==
+       (w_s.most_significant_bit(c) == w_s.most_significant_bit(d))) &&
       (b * d - a * c < up))
     {
       w_s.lower = a * c % up;
