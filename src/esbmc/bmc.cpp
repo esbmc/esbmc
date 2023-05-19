@@ -39,7 +39,6 @@
 #include <util/time_stopping.h>
 #include <util/cache.h>
 #include <atomic>
-#include <util/ansi_color.h>
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -100,7 +99,7 @@ void bmct::successful_trace()
   if(witness_output != "")
   {
     goto_tracet goto_trace;
-    log_status("Building successful trace");
+    log_progress("Building successful trace");
     /* build_successful_goto_trace(eq, ns, goto_trace); */
     correctness_graphml_goto_trace(options, ns, goto_trace);
   }
@@ -136,7 +135,7 @@ void bmct::error_trace(
     violation_graphml_goto_trace(options, ns, goto_trace);
 
   std::ostringstream oss;
-  oss << "\n" << ansi_green << "[Counterexample]" << ansi_clr << "\n";
+  log_fail("\n[Counterexample]\n");
   show_goto_trace(oss, ns, goto_trace);
   log_result("{}", oss.str());
 }
@@ -195,12 +194,12 @@ smt_convt::resultt bmct::run_decision_procedure(
 
 void bmct::report_success()
 {
-  log_status("\nVERIFICATION SUCCESSFUL");
+  log_success("\nVERIFICATION SUCCESSFUL");
 }
 
 void bmct::report_failure()
 {
-  log_status("\nVERIFICATION FAILED");
+  log_fail("\nVERIFICATION FAILED");
 }
 
 void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
@@ -311,7 +310,7 @@ void bmct::report_multi_property_trace(
   {
   case smt_convt::P_UNSATISFIABLE:
     // UNSAT means that the property was correct up to K
-    log_status("Claim '{}' holds up to the current K", msg);
+    log_success("Claim '{}' holds up to the current K", msg);
     break;
 
   case smt_convt::P_SATISFIABLE:
@@ -320,7 +319,7 @@ void bmct::report_multi_property_trace(
     break;
 
   default:
-    log_status("Claim '{}' could not be solved", msg);
+    log_fail("Claim '{}' could not be solved", msg);
     break;
   }
 }
@@ -806,7 +805,7 @@ smt_convt::resultt bmct::multi_property_check(
             show_goto_trace(out, ns, goto_trace);
           }
           std::ostringstream oss;
-          oss << "\n" << ansi_green << "[Counterexample]" << ansi_clr << "\n";
+          log_fail("\n[Counterexample]\n");
           show_goto_trace(oss, ns, goto_trace);
           log_result("{}", oss.str());
           final_result = result;

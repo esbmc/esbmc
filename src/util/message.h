@@ -12,9 +12,11 @@ Maintainers:
 
 #include <cstdio>
 #include <fmt/format.h>
+#include <fmt/color.h>
 #include <util/message/format.h>
 #include <util/location.h>
-#include <util/ansi_color.h>
+
+static bool ENABLE_COLOR = false;
 
 /**
  * @brief Verbosity refers to the max level
@@ -34,7 +36,8 @@ enum class VerbosityLevel : char
   Warning,  // warnings are printend
   Result,   // results of the analysis (including CE)
   Progress, // progress notifications
-  Fail,     // claim fails (in multi-property checking)
+  Success,  // verification success/claim holds
+  Fail,     // verification/claim fails
   Status,   // all kinds of things esbmc is doing that may be useful to the user
   Debug     // messages that are only useful if you need to debug.
 };
@@ -46,23 +49,44 @@ struct messaget
     template <typename... Args>
     static void println(FILE *f, VerbosityLevel lvl, Args &&...args)
     {
-      switch(lvl)
+      if(ENABLE_COLOR)
       {
-      case VerbosityLevel::Error:
-        fmt::print(f, ansi_red "[ERROR] " ansi_clr);
-        break;
-      case VerbosityLevel::Fail:
-        fmt::print(f, ansi_red "[FAILED] " ansi_clr);
-        break;
-      case VerbosityLevel::Warning:
-        fmt::print(f, ansi_yellow "[WARNING] " ansi_clr);
-        break;
-      case VerbosityLevel::Progress:
-        fmt::print(f, ansi_blue "[PROGRESS] " ansi_clr);
-      default:
-        break;
+        switch(lvl)
+        {
+        case VerbosityLevel::Error:
+          fmt::print(
+            f, fmt::fg(fmt::color::red) | fmt::emphasis::bold, "[ERROR] ");
+          fmt::print(f, std::forward<Args>(args)...);
+          break;
+        case VerbosityLevel::Warning:
+          fmt::print(
+            f, fmt::fg(fmt::color::yellow) | fmt::emphasis::bold, "[WARNING] ");
+          fmt::print(f, std::forward<Args>(args)...);
+          break;
+        case VerbosityLevel::Progress:
+          fmt::print(
+            f, fmt::fg(fmt::color::blue) | fmt::emphasis::bold, "[PROGRESS] ");
+          fmt::print(f, std::forward<Args>(args)...);
+          break;
+        case VerbosityLevel::Fail:
+          fmt::print(f, fmt::fg(fmt::color::red), std::forward<Args>(args)...);
+          break;
+        case VerbosityLevel::Success:
+          fmt::print(
+            f, fmt::fg(fmt::color::green), std::forward<Args>(args)...);
+          break;
+        default:
+          fmt::print(f, std::forward<Args>(args)...);
+          break;
+        }
       }
-      fmt::print(f, std::forward<Args>(args)...);
+      else
+      {
+        if(lvl == VerbosityLevel::Error)
+          fmt::print(f, "ERROR: ");
+        fmt::print(f, std::forward<Args>(args)...);
+      }
+
       fmt::print(f, "\n");
     }
 
@@ -117,8 +141,9 @@ log_message(error, VerbosityLevel::Error);
 log_message(result, VerbosityLevel::Result);
 log_message(warning, VerbosityLevel::Warning);
 log_message(progress, VerbosityLevel::Progress);
-log_message(status, VerbosityLevel::Status);
+log_message(success, VerbosityLevel::Success);
 log_message(fail, VerbosityLevel::Fail);
+log_message(status, VerbosityLevel::Status);
 log_message(debug, VerbosityLevel::Debug);
 
 #undef log_message
