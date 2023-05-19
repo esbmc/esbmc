@@ -207,7 +207,7 @@ esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets "
-esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps --multi-property --multi-fail-fast "
+esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps  "
 
 import re
 def check_if_benchmark_contains_pthread(benchmark):
