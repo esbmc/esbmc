@@ -16,8 +16,6 @@ Maintainers:
 #include <util/message/format.h>
 #include <util/location.h>
 
-static bool ENABLE_COLOR = false;
-
 /**
  * @brief Verbosity refers to the max level
  * of which inputs are going to be printed out
@@ -49,7 +47,7 @@ struct messaget
     template <typename... Args>
     static void println(FILE *f, VerbosityLevel lvl, Args &&...args)
     {
-      if(ENABLE_COLOR)
+      if(config.options.get_bool_option("color"))
       {
         switch(lvl)
         {
