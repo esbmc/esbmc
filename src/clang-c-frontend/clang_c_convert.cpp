@@ -477,11 +477,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 {
   // Get type
   typet t;
-//<<<<<<< HEAD
   if(get_type(vd.getType(), t))
-/*=======
-  if(get_type(vd.getType(), t, false))
->>>>>>> 67ad332dda (keep more types symbolic)*/
     return true;
 
   // Check if we annotated it to be have an infinity size
