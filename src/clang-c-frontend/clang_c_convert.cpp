@@ -313,8 +313,6 @@ bool clang_c_convertert::resolve_symtype_decl(
   if(sym && !sym->type.incomplete())
     return false;
 
-  fprintf(stdout, "C: resolving symbolic type '%s'\n", id.c_str());
-
   switch(decl->getKind())
   {
   case clang::Decl::Record:
@@ -352,13 +350,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
   std::string id, name;
   get_decl_name(rd, name, id);
-
-  /*
-  fprintf(
-    stdout,
-    "C: getting %s id '%s'\n",
-    complete ? "complete" : "incomplete",
-    id.c_str());*/
 
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context.
