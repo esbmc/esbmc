@@ -426,8 +426,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 int esbmc_parseoptionst::doit()
 {
   // Configure msg output
+  
   // first check if the color mode is enabled
-  if(cmdline.isset("color"))  
+  if(cmdline.isset("color"))
   {
     ENABLE_COLOR = true; // false by default
   }
