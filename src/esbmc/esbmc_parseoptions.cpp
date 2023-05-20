@@ -1609,7 +1609,8 @@ bool esbmc_parseoptionst::process_goto_program(
 #else
       log_error(
         "Current build does not support contractors. If ibex is installed, add "
-        "-DENABLE_IBEX = ON");
+        "to your build process "
+        "-DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=path-to-ibex");
       abort();
 #endif
     }
