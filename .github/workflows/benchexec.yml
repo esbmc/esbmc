@@ -70,7 +70,7 @@ jobs:
           chmod +x ./esbmc         
           chmod +x ./esbmc-wrapper.py
           ls -l
-          /usr/bin/benchexec -o ../esbmc-output/ -N 9 ./esbmc.xml --read-only-dir / --overlay-dir /home  -T ${{ github.event.inputs.timeout }} --container -r SV-COMP23_unreach-call
+          /usr/bin/benchexec -o ../esbmc-output/ -N 9 ./esbmc.xml --read-only-dir / --overlay-dir /home  -T ${{ github.event.inputs.timeout }} --container
           zip -r run-output.zip ../esbmc-output
           cp run-output.zip $HOME
       - name: Copy files
