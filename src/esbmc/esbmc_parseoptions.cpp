@@ -428,8 +428,7 @@ int esbmc_parseoptionst::doit()
   // Configure msg output
   if(cmdline.isset("color"))
   {
-    // false by default
-    ENABLE_COLOR = true; 
+    ENABLE_COLOR = true;
   }
 
   if(cmdline.isset("file-output"))
