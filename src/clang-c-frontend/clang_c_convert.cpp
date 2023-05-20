@@ -1054,7 +1054,6 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if(get_struct_union_class(rd))
       return true;
 
-#if 1 /* solution to merge problem */
     symbolt *s = context.find_symbol(id);
     if(s)
       new_type = s->type;
@@ -1063,28 +1062,6 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       new_type = symbol_typet(id);
     }
 
-#else /* original merge problem */
-#if 1
-    if(!complete)
-      tu_symtype_decls.emplace_back(id, &rd);
-
-<<<<<<< HEAD
-    symbolt &s = *context.find_symbol(id);
-    // For the time being we just copy the entire type.
-    // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
-    new_type = s.type;
-=======
-    if(get_struct_union_class(rd, complete))
-      return true;
-    // complete = false;
-#endif
-    if(complete)
-      new_type = context.find_symbol(id)->type;
-    else
-      new_type = symbol_typet(id);
-
->>>>>>> 67ad332dda (keep more types symbolic)
-#endif /* original merge problem end */
     break;
   }
 
