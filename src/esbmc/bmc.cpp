@@ -775,7 +775,7 @@ smt_convt::resultt bmct::multi_property_check(
         {
           // Try again 100ms later
           std::this_thread::sleep_for(
-            std::chrono::duration<int, std::chrono::milliseconds>(100));
+            std::chrono::duration<int, std::milli>(100));
           // Did someone finished already?
           if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
           {
@@ -836,21 +836,15 @@ smt_convt::resultt bmct::multi_property_check(
       parallel_jobs.push_back(std::thread(job_function, i));
 
     // Main driver
-    size_t not_finished = parallel_jobs.size();
-    while(not_finished)
+    for(auto &t : parallel_jobs)
     {
-      for(auto &t : parallel_jobs)
+      if(t.joinable())
       {
-        if(t.joinable())
-        {
-          t.join();
-          // There is no data-race in this loop, we should be fine.
-          not_finished--;
-        }
+        t.join();
       }
-      // We could remove joined jobs from the parallel_jobs vector.
-      // However, its probably not worth for small vectors.
     }
+    // We could remove joined jobs from the parallel_jobs vector.
+    // However, its probably not worth for small vectors.
   }
   // SEQUENTIAL
   else
