@@ -838,10 +838,7 @@ smt_convt::resultt bmct::multi_property_check(
     // Main driver
     for(auto &t : parallel_jobs)
     {
-      if(t.joinable())
-      {
-        t.join();
-      }
+      t.join();
     }
     // We could remove joined jobs from the parallel_jobs vector.
     // However, its probably not worth for small vectors.
