@@ -184,8 +184,9 @@ bool exprt::is_zero(bool compound) const
         return true;
     }
   }
-  else if(compound && (type_id == "array" || type_id == "vector" ||
-                       type_id == "struct" || type_id == "union"))
+  else if(
+    compound && (type_id == "array" || type_id == "vector" ||
+                 type_id == "struct" || type_id == "union"))
   {
     for(const exprt &op : operands())
       if(!op.is_zero(true))

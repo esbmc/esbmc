@@ -888,7 +888,8 @@ void dereferencet::build_reference_rec(
     break;
   case flag_src_struct | flag_dst_struct | flag_is_const_offs:
     // Extract a structure from inside another struct.
-    construct_struct_ref_from_const_offset(value, offset, type, guard, mode, alignment);
+    construct_struct_ref_from_const_offset(
+      value, offset, type, guard, mode, alignment);
     break;
   case flag_src_array | flag_dst_struct | flag_is_const_offs:
     // Extract a structure from inside an array.
@@ -904,7 +905,8 @@ void dereferencet::build_reference_rec(
     break;
   case flag_src_struct | flag_dst_union | flag_is_const_offs:
     // Extract a union from inside a structure.
-    construct_struct_ref_from_const_offset(value, offset, type, guard, mode, alignment);
+    construct_struct_ref_from_const_offset(
+      value, offset, type, guard, mode, alignment);
     break;
   case flag_src_array | flag_dst_union | flag_is_const_offs:
     // Extract a union from inside an array.
@@ -953,7 +955,8 @@ void dereferencet::build_reference_rec(
     break;
 
   case flag_src_union | flag_dst_union | flag_is_const_offs:
-    construct_struct_ref_from_const_offset(value, offset, type, guard, mode, alignment);
+    construct_struct_ref_from_const_offset(
+      value, offset, type, guard, mode, alignment);
     break;
   case flag_src_union | flag_dst_union | flag_is_dyn_offs:
     construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);

@@ -409,12 +409,13 @@ void c_linkt::typecheck()
       symbol_fixer.fix_symbol(s);
       /* For the types having static initializers defined, replace any such
        * static initialization */
-      if(!s.is_type &&
-         (s.type.tag() == "pthread_mutex_t" ||
-          s.type.tag() == "pthread_cond_t" ||
-          s.type.tag() == "pthread_rwlock_t" ||
-          s.type.tag() == "pthread_once_t") &&
-         s.static_lifetime && !s.value.zero_initializer())
+      if(
+        !s.is_type &&
+        (s.type.tag() == "pthread_mutex_t" ||
+         s.type.tag() == "pthread_cond_t" ||
+         s.type.tag() == "pthread_rwlock_t" ||
+         s.type.tag() == "pthread_once_t") &&
+        s.static_lifetime && !s.value.zero_initializer())
       {
         assert(s.value.is_zero(true));
         s.value = gen_zero(ns.follow(s.type, true), true);
