@@ -1043,8 +1043,13 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     symbolt *s = context.find_symbol(id);
     if(s)
+    {
+      // For the time being we just copy the entire type.
+      // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
       new_type = s->type;
-    else {
+    }
+    else
+    {
       tu_symtype_decls.emplace_back(id, &rd);
       new_type = symbol_typet(id);
     }

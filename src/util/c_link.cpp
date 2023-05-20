@@ -406,7 +406,6 @@ void c_linkt::typecheck()
 
   if(context_needs_fixing)
     context.Foreach_operand([this](symbolt &s) {
-#if 1
       symbol_fixer.fix_symbol(s);
       /* For the types having static initializers defined, replace any such
        * static initialization */
@@ -420,11 +419,6 @@ void c_linkt::typecheck()
         assert(s.value.is_zero(true));
         s.value = gen_zero(ns.follow(s.type, true), true);
       }
-#else
-      symbol_fixer.replace(s.type);
-      if(!s.is_type)
-        symbol_fixer.replace(s.value);
-#endif
     });
 }
 
@@ -440,41 +434,8 @@ symbolt *c_linkt::move(symbolt &new_symbol)
 }
 } /* end anonymous namespace */
 
-#include <fstream>
-
 bool c_link(contextt &context, contextt &new_context, const std::string &module)
 {
-  static size_t link_no = 0;
-  link_no++;
-
-  struct dump
-  {
-    mutable std::ofstream out;
-
-    dump(const char *prefix, const contextt &ctx)
-      : out(prefix + std::to_string(link_no))
-    {
-      ctx.foreach_operand(*this);
-    }
-
-    void operator()(const symbolt &s) const
-    {
-      s.show(out);
-      out << "\n---------------------------------------------------------------"
-             "-------------\n";
-    }
-  };
-
-  if(messaget::state.verbosity >= VerbosityLevel::Debug)
-    dump("tgt-", context);
-  if(messaget::state.verbosity >= VerbosityLevel::Debug)
-    dump("src-", new_context);
-
   c_linkt c_link(context, new_context, module);
-  bool r = c_link.typecheck_main();
-
-  if(messaget::state.verbosity >= VerbosityLevel::Debug)
-    dump("res-", context);
-
-  return r;
+  return c_link.typecheck_main();
 }
