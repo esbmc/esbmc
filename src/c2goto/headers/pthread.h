@@ -23,8 +23,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef _MSVC
-#define NULL 0
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /* Forward declaration required because the type is used in pthread function
@@ -130,10 +130,6 @@ typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 #if __WORDSIZE == 32
 /* Extra attributes for the cleanup functions.  */
 # define __cleanup_fct_attribute __attribute__ ((__regparm__ (1)))
-#endif
-
-#ifdef __cplusplus
-extern "C" {
 #endif
 
 /* Detach state.  */
