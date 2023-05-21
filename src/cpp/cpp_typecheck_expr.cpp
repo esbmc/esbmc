@@ -1630,8 +1630,8 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
       irep_idt vtable_name =
         this_type.subtype().identifier().as_string() + "::@vtable_pointer";
 
-      const struct_typet &vt_struct =
-        to_struct_type(follow(this_type.subtype()));
+      typet vt_struct_t = follow(this_type.subtype());
+      const struct_typet &vt_struct = to_struct_type(vt_struct_t);
 
       const struct_typet::componentt &vt_compo =
         vt_struct.get_component(vtable_name);
