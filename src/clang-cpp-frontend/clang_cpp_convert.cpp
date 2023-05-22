@@ -563,9 +563,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       new_expr = side_effect_exprt("cpp_new[]", t);
 
       // TODO: Implement support when the array size is empty
-      assert(ne.getArraySize().hasValue());
+      assert(ne.getArraySize());
       exprt size;
-      if(get_expr(*(ne.getArraySize().getValue()), size))
+      if(get_expr(**ne.getArraySize(), size))
         return true;
 
       new_expr.size(size);
