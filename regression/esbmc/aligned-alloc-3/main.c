@@ -4,6 +4,8 @@
 #include <errno.h>
 #include <stdint.h>
 
+void * aligned_alloc(size_t, size_t);
+
 typedef struct {
 	_Alignas(64)
 	uint64_t x;

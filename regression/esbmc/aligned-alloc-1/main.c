@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
+#include <stdint.h>
+
+void * aligned_alloc(size_t, size_t);
 
 int main()
 {
