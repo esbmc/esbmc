@@ -1325,9 +1325,7 @@ bool interval_templatet<ieee_floatt>::is_top() const
 }
 
 template <>
-void interval_templatet<const ieee_floatt>::set(
-  bool ,
-  const ieee_floatt &)
+void interval_templatet<const ieee_floatt>::set(bool, const ieee_floatt &)
 {
   assert(0 && "Trying to change the value of const interval");
 }

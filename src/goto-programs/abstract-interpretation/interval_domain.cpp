@@ -537,8 +537,7 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(
     // Interval: [a,b]
     std::vector<expr2tc> disjuncts;
 
-    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w)
-    {
+    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w) {
       assert(w.lower <= w.upper);
 
       std::vector<expr2tc> s_conjuncts;
@@ -578,8 +577,7 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
     return gen_false_expr();
 
   std::vector<expr2tc> conjuncts;
-  auto typecast = [&symbol](expr2tc v)
-  {
+  auto typecast = [&symbol](expr2tc v) {
     expr2tc new_expr = symbol;
     c_implicit_typecast_arithmetic(new_expr, v, *migrate_namespace_lookup);
     return new_expr;
@@ -1048,7 +1046,7 @@ bool interval_domaint::enable_interval_arithmetic = true;
 bool interval_domaint::enable_interval_bitwise_arithmetic = true;
 bool interval_domaint::enable_modular_intervals = false;
 bool interval_domaint::enable_assertion_simplification = false;
-bool interval_domaint::enable_contraction_for_abstract_states = false;
+bool interval_domaint::enable_contraction_for_abstract_states = true;
 bool interval_domaint::enable_wrapped_intervals = true;
 
 // Widening options
