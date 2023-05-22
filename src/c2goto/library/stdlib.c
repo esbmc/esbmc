@@ -7,6 +7,9 @@
 #undef abort
 #undef calloc
 #undef getenv
+#undef atoi
+#undef atol
+#undef atoll
 
 typedef struct atexit_key
 {
@@ -141,17 +144,51 @@ __ESBMC_HIDE:;
   return sign * result;
 }
 
-int atoi(const char *nptr)
-{
-__ESBMC_HIDE:;
-  return (int)strtol(nptr, (char **)0, 10);
-}
+/* one plus the numeric value, rest is zero */
+static const unsigned char ATOI_MAP[256] = {
+  ['0'] = 1,
+  ['1'] = 2,
+  ['2'] = 3,
+  ['3'] = 4,
+  ['4'] = 5,
+  ['5'] = 6,
+  ['6'] = 7,
+  ['7'] = 8,
+  ['8'] = 9,
+  ['9'] = 10,
+};
 
-long atol(const char *nptr)
-{
-__ESBMC_HIDE:;
-  return strtol(nptr, (char **)0, 10);
-}
+#define ATOI_DEF(name, type, TYPE)                                             \
+  type name(const char *s)                                                     \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    while(isspace(*s))                                                         \
+      s++;                                                                     \
+    int neg = 0;                                                               \
+    if(*s == '-')                                                              \
+    {                                                                          \
+      neg = 1;                                                                 \
+      s++;                                                                     \
+    }                                                                          \
+    else if(*s == '+')                                                         \
+      s++;                                                                     \
+    unsigned type r = 0;                                                       \
+    for(unsigned char c; (c = ATOI_MAP[(unsigned char)*s]); s++)               \
+    {                                                                          \
+      c--;                                                                     \
+      if(r > (TYPE##_MAX - c) / 10)                                            \
+        return neg ? TYPE##_MIN : TYPE##_MAX;                                  \
+      r *= 10;                                                                 \
+      r += c;                                                                  \
+    }                                                                          \
+    return neg ? -r : r;                                                       \
+  }
+
+ATOI_DEF(atoi, int, INT)
+ATOI_DEF(atol, long, LONG)
+ATOI_DEF(atoll, long long, LLONG)
+
+#undef ATOI_DEF
 
 char *getenv(const char *name)
 {
