@@ -2,6 +2,10 @@
 #include <string.h>
 #include <ctype.h>
 #include <limits.h>
+#include <errno.h>
+
+#undef errno
+extern _Thread_local int errno;
 
 #undef exit
 #undef abort
@@ -243,4 +247,18 @@ size_t strlcat(char *dst, const char *src, size_t siz)
   *d = '\0';
 
   return (dlen + (s - src)); /* count does not include NUL */
+}
+
+void * aligned_alloc(size_t align, size_t size)
+{
+__ESBMC_HIDE:;
+  if (!align || (align & (align - 1)) || /* alignment must be a power of 2 */
+      (size & (align - 1)) /* size must be a multiple of alignment */
+     ) {
+    errno = EINVAL;
+    return NULL;
+  }
+  void *r = malloc(size);
+  __ESBMC_assume(!((uintptr_t)r & (align - 1)));
+  return r;
 }
