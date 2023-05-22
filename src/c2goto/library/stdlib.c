@@ -249,12 +249,14 @@ size_t strlcat(char *dst, const char *src, size_t siz)
   return (dlen + (s - src)); /* count does not include NUL */
 }
 
-void * aligned_alloc(size_t align, size_t size)
+void *aligned_alloc(size_t align, size_t size)
 {
 __ESBMC_HIDE:;
-  if (!align || (align & (align - 1)) || /* alignment must be a power of 2 */
-      (size & (align - 1)) /* size must be a multiple of alignment */
-     ) {
+  if(
+    !align || (align & (align - 1)) || /* alignment must be a power of 2 */
+    (size & (align - 1)) /* size must be a multiple of alignment */
+  )
+  {
     errno = EINVAL;
     return NULL;
   }
