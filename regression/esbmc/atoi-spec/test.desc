@@ -1,4 +1,0 @@
-THOROUGH
-main.c
---k-induction --k-step 10 --force-malloc-success
-^VERIFICATION SUCCESSFUL$
