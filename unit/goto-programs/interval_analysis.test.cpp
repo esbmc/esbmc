@@ -257,13 +257,13 @@ TEST_CASE(
     "int main() {\n"
     "unsigned int a = nondet_uint(); unsigned int b=0;\n "
     "if(a < 50){\n"
-    "b = 2;\n"    // a: [0, 50)
+    "b = 2;\n" // a: [0, 50)
     "a = 52;\n"
-    "b = 2;\n"    // a: [52, 52]
+    "b = 2;\n" // a: [52, 52]
     "} else {\n"
-    "b = 4;\n"    // a: [50, MAX_UINT]
+    "b = 4;\n" // a: [50, MAX_UINT]
     "a = 51;\n"
-    "b = 4;\n"    // a: [51, 51]
+    "b = 4;\n" // a: [51, 51]
     "}\n"
     "return a;\n" // a : [51,52]
     "}";
@@ -300,13 +300,13 @@ TEST_CASE(
     "int main() {\n"
     "int a = nondet_int(); int b=0;\n "
     "if(a < 50){\n"
-    "b = 2;\n"    // a: [MIN_INT, 50)
+    "b = 2;\n" // a: [MIN_INT, 50)
     "a = 52;\n"
-    "b = 2;\n"    // a: [52, 52]
+    "b = 2;\n" // a: [52, 52]
     "} else {\n"
-    "b = 4;\n"    // a: [50, MAX_INT]
+    "b = 4;\n" // a: [50, MAX_INT]
     "a = 51;\n"
-    "b = 4;\n"    // a: [51, 51]
+    "b = 4;\n" // a: [51, 51]
     "}\n"
     "return a;\n" // a : [51,52]
     "}";
@@ -333,13 +333,13 @@ TEST_CASE(
     "int main() {\n"
     "int a = nondet_int(); int b=0;\n "
     "if(a < -50){\n"
-    "b = 2;\n"    // a: [MIN_INT, -50)
+    "b = 2;\n" // a: [MIN_INT, -50)
     "a = -52;\n"
-    "b = 2;\n"    // a: [-52, -52]
+    "b = 2;\n" // a: [-52, -52]
     "} else {\n"
-    "b = 4;\n"    // a: [-50, MAX_INT]
+    "b = 4;\n" // a: [-50, MAX_INT]
     "a = 51;\n"
-    "b = 4;\n"    // a: [51, 51]
+    "b = 4;\n" // a: [51, 51]
     "}\n"
     "return a;\n" // a : [-52,51]
     "}";
@@ -366,13 +366,13 @@ TEST_CASE(
     "int main() {\n"
     "int a = nondet_int(); int b=0;\n "
     "if(50 < a){\n"
-    "b = 2;\n"    // a: [51, MAX_INT)
+    "b = 2;\n" // a: [51, MAX_INT)
     "a = 52;\n"
-    "b = 2;\n"    // a: [52, 52]
+    "b = 2;\n" // a: [52, 52]
     "} else {\n"
-    "b = 4;\n"    // a: [MIN_INT, 50]
+    "b = 4;\n" // a: [MIN_INT, 50]
     "a = 51;\n"
-    "b = 4;\n"    // a: [51, 51]
+    "b = 4;\n" // a: [51, 51]
     "}\n"
     "return a;\n" // a : [51,52]
     "}";
@@ -399,13 +399,13 @@ TEST_CASE(
     "int main() {\n"
     "int a = nondet_int(); int b=0;\n "
     "if(-50 < a){\n"
-    "b = 2;\n"    // a: [-49, MAX_INT)
+    "b = 2;\n" // a: [-49, MAX_INT)
     "a = 52;\n"
-    "b = 2;\n"    // a: [52, 52]
+    "b = 2;\n" // a: [52, 52]
     "} else {\n"
-    "b = 4;\n"    // a: [MIN_INT, -50]
+    "b = 4;\n" // a: [MIN_INT, -50]
     "a = 51;\n"
-    "b = 4;\n"    // a: [51, 51]
+    "b = 4;\n" // a: [51, 51]
     "}\n"
     "return a;\n" // a : [51,52]
     "}";
@@ -438,9 +438,9 @@ TEST_CASE(
     "b = 5;\n"
     "a = 10;\n"
     "}\n"
-    "c = 0;\n"    // a: [1,10] or [10,1] b: [0,5] or [5,0]
+    "c = 0;\n" // a: [1,10] or [10,1] b: [0,5] or [5,0]
     "if(a < b) {\n"
-    "c = 5;\n"    // a: must contain 1, b: must contain 5
+    "c = 5;\n" // a: must contain 1, b: must contain 5
     "}\n"
     "return a;\n" // a : [51,52]
     "}";
@@ -467,9 +467,9 @@ TEST_CASE("Interval Analysis - While Statement", "[ai][interval-analysis]")
     "while(a < 100) {\n" // a: [0,100]
     "b = 1;\n"           // a: [0, 99]
     "a++;\n"
-    "b = 1;\n"           // a: [1, 100]
+    "b = 1;\n" // a: [1, 100]
     "}\n"
-    "return a;\n"        // a : [100, 100]
+    "return a;\n" // a : [100, 100]
     "}";
 
   T.property["2"].push_back({"@F@main@a", 0, true});
@@ -809,10 +809,10 @@ TEST_CASE("Interval Analysis - Typecast (signed)", "[ai][interval-analysis]")
     "return a;\n" // a: [0, 250], b: [0,250]
     "}";
 
-  T.property["4"].push_back({"@F@main@a", -1, true}); // 255
+  T.property["4"].push_back({"@F@main@a", -1, true});   // 255
   T.property["4"].push_back({"@F@main@a", -128, true}); // 128
   T.property["4"].push_back({"@F@main@a", 127, false}); // 127
-  T.property["4"].push_back({"@F@main@a", 0, false}); // 0
+  T.property["4"].push_back({"@F@main@a", 0, false});   // 0
   T.property["5"].push_back({"@F@main@b", -1, true});
   T.property["5"].push_back({"@F@main@b", -128, true});
   T.property["5"].push_back({"@F@main@b", 128, false});

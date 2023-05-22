@@ -352,8 +352,7 @@ public:
     result.lower = a0_b0;
     result.upper = a0_b0;
 
-    auto update_value = [&result](T value)
-    {
+    auto update_value = [&result](T value) {
       result.lower = std::min(value, result.lower);
       result.upper = std::max(value, result.upper);
     };
@@ -392,8 +391,7 @@ public:
     result.lower = a0_b0;
     result.upper = a0_b0;
 
-    auto update_value = [&result](T value)
-    {
+    auto update_value = [&result](T value) {
       result.lower = std::min(value, result.lower);
       result.upper = std::max(value, result.upper);
     };

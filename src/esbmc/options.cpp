@@ -360,7 +360,8 @@ const struct group_opt_templ all_cmd_options[] = {
       "enable analysis using wrapped intervals (disables Integers)"},
      {"interval-analysis-arithmetic",
       NULL,
-      "enable interval arithmetic for integer variables (Integers and Wrapped)"},
+      "enable interval arithmetic for integer variables (Integers and "
+      "Wrapped)"},
      {"interval-analysis-bitwise",
       NULL,
       "enable interval bitwise for integer variables (Integers and Wrapped"},

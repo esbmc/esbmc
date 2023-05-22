@@ -267,18 +267,14 @@ public:
     auto g = bottom;
 
     // Sort by left bound
-    std::sort(
-      r.begin(),
-      r.end(),
-      [](auto a, auto b)
-      {
-        if(a.is_bottom())
-          return true;
-        if(b.is_bottom())
-          return false;
+    std::sort(r.begin(), r.end(), [](auto a, auto b) {
+      if(a.is_bottom())
+        return true;
+      if(b.is_bottom())
+        return false;
 
-        return a.lower < b.lower;
-      });
+      return a.lower < b.lower;
+    });
 
     for(unsigned i = 0; i < r.size(); ++i)
     {
@@ -913,8 +909,7 @@ public:
   {
     std::vector<wrapped_interval> parts;
 
-    auto compute_outer_region = [this, &cast](bool bit)
-    {
+    auto compute_outer_region = [this, &cast](bool bit) {
       BigInt result = 0;
       if(bit)
         result = (compute_upper_bound(cast) - 1) - (get_upper_bound() - 1);
@@ -1130,61 +1125,61 @@ public:
   operator|(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     const unsigned width = lhs.t->get_width();
-    const auto min_or = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
-    {
-      uint64_t m, temp;
-      m = compute_m(width);
-      while(m != 0)
-      {
-        if(~a & c & m)
+    const auto min_or =
+      [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+        uint64_t m, temp;
+        m = compute_m(width);
+        while(m != 0)
         {
-          temp = (a | m) & -m;
-          if(temp <= b)
+          if(~a & c & m)
           {
-            a = temp;
-            break;
+            temp = (a | m) & -m;
+            if(temp <= b)
+            {
+              a = temp;
+              break;
+            }
           }
+          else if(a & ~c & m)
+          {
+            temp = (c | m) & -m;
+            if(temp <= d)
+            {
+              c = temp;
+              break;
+            }
+          }
+          m = m >> 1;
         }
-        else if(a & ~c & m)
+        return a | c;
+      };
+    const auto max_or =
+      [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+        uint64_t m, temp;
+        m = compute_m(width);
+        if(width == 32)
+          assert(m == 0x80000000);
+        while(m != 0)
         {
-          temp = (c | m) & -m;
-          if(temp <= d)
+          if(b & d & m)
           {
-            c = temp;
-            break;
+            temp = (b - m) | (m - 1);
+            if(temp >= a)
+            {
+              b = temp;
+              break;
+            }
+            temp = (d - m) | (m - 1);
+            if(temp >= c)
+            {
+              d = temp;
+              break;
+            }
           }
+          m = m >> 1;
         }
-        m = m >> 1;
-      }
-      return a | c;
-    };
-    const auto max_or = [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
-    {
-      uint64_t m, temp;
-      m = compute_m(width);
-      if(width == 32)
-        assert(m == 0x80000000);
-      while(m != 0)
-      {
-        if(b & d & m)
-        {
-          temp = (b - m) | (m - 1);
-          if(temp >= a)
-          {
-            b = temp;
-            break;
-          }
-          temp = (d - m) | (m - 1);
-          if(temp >= c)
-          {
-            d = temp;
-            break;
-          }
-        }
-        m = m >> 1;
-      }
-      return b | d;
-    };
+        return b | d;
+      };
     return warren_approximation(lhs, rhs, min_or, max_or);
   }
 
@@ -1193,62 +1188,60 @@ public:
   {
     const unsigned width = lhs.t->get_width();
     const auto min_and =
-      [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
-    {
-      uint64_t m, temp;
+      [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+        uint64_t m, temp;
 
-      m = compute_m(width);
-      while(m != 0)
-      {
-        if(~a & ~c & m)
+        m = compute_m(width);
+        while(m != 0)
         {
-          temp = (a | m) & -m;
-          if(temp <= b)
+          if(~a & ~c & m)
           {
-            a = temp;
-            break;
+            temp = (a | m) & -m;
+            if(temp <= b)
+            {
+              a = temp;
+              break;
+            }
+            temp = (c | m) & -m;
+            if(temp <= d)
+            {
+              c = temp;
+              break;
+            }
           }
-          temp = (c | m) & -m;
-          if(temp <= d)
-          {
-            c = temp;
-            break;
-          }
+          m = m >> 1;
         }
-        m = m >> 1;
-      }
-      return a & c;
-    };
+        return a & c;
+      };
     const auto max_and =
-      [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
-    {
-      uint64_t m, temp;
+      [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+        uint64_t m, temp;
 
-      m = compute_m(width);
-      while(m != 0)
-      {
-        if(b & ~d & m)
+        m = compute_m(width);
+        while(m != 0)
         {
-          temp = (b & ~m) | (m - 1);
-          if(temp >= a)
+          if(b & ~d & m)
           {
-            b = temp;
-            break;
+            temp = (b & ~m) | (m - 1);
+            if(temp >= a)
+            {
+              b = temp;
+              break;
+            }
           }
-        }
-        else if(~b & d & m)
-        {
-          temp = (d & ~m) | (m - 1);
-          if(temp >= c)
+          else if(~b & d & m)
           {
-            d = temp;
-            break;
+            temp = (d & ~m) | (m - 1);
+            if(temp >= c)
+            {
+              d = temp;
+              break;
+            }
           }
+          m = m >> 1;
         }
-        m = m >> 1;
-      }
-      return b & d;
-    };
+        return b & d;
+      };
     return warren_approximation(lhs, rhs, min_and, max_and);
   }
 
@@ -1257,59 +1250,57 @@ public:
   {
     const unsigned width = lhs.t->get_width();
     const auto min_xor =
-      [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
-    {
-      uint64_t m, temp;
-      m = compute_m(width);
-      while(m != 0)
-      {
-        if(~a & c & m)
+      [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+        uint64_t m, temp;
+        m = compute_m(width);
+        while(m != 0)
         {
-          temp = (a | m) & -m;
-          if(temp <= b)
+          if(~a & c & m)
           {
-            a = temp;
-          }
-        }
-        else if(a & ~c & m)
-        {
-          temp = (c | m) & -m;
-          if(temp <= d)
-          {
-            c = temp;
-          }
-        }
-        m = m >> 1;
-      }
-      return a ^ c;
-    };
-    const auto max_xor =
-      [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d)
-    {
-      uint64_t m, temp;
-      m = compute_m(width);
-      while(m != 0)
-      {
-        if(b & d & m)
-        {
-          temp = (b - m) | (m - 1);
-          if(temp >= a)
-          {
-            b = temp;
-          }
-          else
-          {
-            temp = (d - m) | (m - 1);
-            if(temp >= c)
+            temp = (a | m) & -m;
+            if(temp <= b)
             {
-              d = temp;
+              a = temp;
             }
           }
+          else if(a & ~c & m)
+          {
+            temp = (c | m) & -m;
+            if(temp <= d)
+            {
+              c = temp;
+            }
+          }
+          m = m >> 1;
         }
-        m = m >> 1;
-      }
-      return b ^ d;
-    };
+        return a ^ c;
+      };
+    const auto max_xor =
+      [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+        uint64_t m, temp;
+        m = compute_m(width);
+        while(m != 0)
+        {
+          if(b & d & m)
+          {
+            temp = (b - m) | (m - 1);
+            if(temp >= a)
+            {
+              b = temp;
+            }
+            else
+            {
+              temp = (d - m) | (m - 1);
+              if(temp >= c)
+              {
+                d = temp;
+              }
+            }
+          }
+          m = m >> 1;
+        }
+        return b ^ d;
+      };
     return warren_approximation(lhs, rhs, min_xor, max_xor);
   }
 

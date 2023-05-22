@@ -185,7 +185,6 @@ program goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
     return program(lui.context, goto_functions);
   }
 
-
   goto_convert(lui.context, opts, goto_functions);
 
   namespacet ns(lui.context);
