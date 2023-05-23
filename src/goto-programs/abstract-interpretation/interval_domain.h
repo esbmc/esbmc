@@ -8,14 +8,9 @@
 #include <goto-programs/abstract-interpretation/interval_template.h>
 #include <goto-programs/abstract-interpretation/wrapped_interval.h>
 #include <boost/serialization/nvp.hpp>
-#include <boost/multiprecision/cpp_bin_float.hpp>
 #include <util/ieee_float.h>
 #include <irep2/irep2_utils.h>
 #include <util/mp_arith.h>
-
-typedef interval_templatet<BigInt> integer_intervalt;
-using real_intervalt =
-  interval_templatet<boost::multiprecision::cpp_bin_float_100>;
 
 /**
  * @brief Trivial, conjunctive interval domain for both float
@@ -55,6 +50,8 @@ public:
     enable_contraction_for_abstract_states; /// Use contractor for <= operations
   static bool
     enable_wrapped_intervals; /// Enabled wrapped intervals (disables Integers)
+  static bool
+    enable_real_intervals; /// Enabled wrapped intervals (disables Integers)
 
   // Widening options
   static unsigned

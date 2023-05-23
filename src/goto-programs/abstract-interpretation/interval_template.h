@@ -113,7 +113,7 @@ public:
  */
   virtual bool empty() const
   {
-    return upper_set && lower_set && lower > upper;
+    return !is_top() && (upper_set && lower_set && lower > upper);
   }
 
   bool is_bottom() const // equivalent to 'false'
@@ -556,21 +556,9 @@ std::ostream &operator<<(std::ostream &out, const interval_templatet<T> &i)
   return out;
 }
 
-template <>
-void interval_templatet<ieee_floatt>::make_lower_interval();
+#include <boost/multiprecision/cpp_bin_float.hpp>
+typedef interval_templatet<BigInt> integer_intervalt;
+using real_intervalt =
+  interval_templatet<boost::multiprecision::cpp_bin_float_100>;
 
-template <>
-bool interval_templatet<ieee_floatt>::is_top() const;
-
-template <>
-bool interval_templatet<const ieee_floatt>::is_top() const;
-
-template <>
-void interval_templatet<const ieee_floatt>::set(
-  bool value,
-  const ieee_floatt &v);
-
-template <>
-void interval_templatet<const ieee_floatt>::approx_union_with(
-  const interval_templatet<const ieee_floatt> &i);
 #endif // CPROVER_ANALYSES_INTERVAL_TEMPLATE_H
