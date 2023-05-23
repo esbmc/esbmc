@@ -1645,7 +1645,7 @@ smt_astt smt_convt::convert_member(const expr2tc &expr)
     expr2tc to_bv =
       bitcast2tc(get_uint_type(size.to_uint64()), member.source_value);
     type2tc type = expr->type;
-    if (is_multi_dimensional_array(type))
+    if(is_multi_dimensional_array(type))
       type = flatten_array_type(type);
     return convert_ast(bitcast2tc(
       type,
