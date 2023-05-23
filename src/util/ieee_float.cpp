@@ -497,6 +497,8 @@ void ieee_floatt::from_integer(const BigInt &i)
   NaN_flag = infinity_flag = sign_flag = false;
   exponent = spec.f;
   fraction = i;
+  log_status(
+    "From integer with {}, exponent {}, fraction {}", i, exponent, fraction);
   align();
 }
 
@@ -549,7 +551,14 @@ void ieee_floatt::align()
   }
 
   BigInt biased_exponent = exponent + exponent_offset + spec.bias();
-
+  log_status(
+    "Usual case, f_power {}, f_power_next {}, lowPower2 {}, biased_exponent "
+    "{}, max {}",
+    f_power,
+    f_power_next,
+    lowPower2,
+    biased_exponent,
+    spec.max_exponent());
   // exponent too large (infinity)?
   if(biased_exponent >= spec.max_exponent())
   {
@@ -605,6 +614,7 @@ void ieee_floatt::align()
 
   exponent += exponent_offset;
 
+  log_status("Exponent {}, exponent_offset {}", exponent, exponent_offset);
   if(exponent_offset > 0)
   {
     divide_and_round(fraction, power(2, exponent_offset));
@@ -1183,7 +1193,7 @@ double ieee_floatt::to_double() const
   union
   {
     double f;
-    unsigned int i;
+    unsigned long long i;
   } a;
 
   if(infinity_flag)
