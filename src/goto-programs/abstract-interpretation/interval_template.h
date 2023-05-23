@@ -556,9 +556,4 @@ std::ostream &operator<<(std::ostream &out, const interval_templatet<T> &i)
   return out;
 }
 
-#include <boost/multiprecision/cpp_bin_float.hpp>
-typedef interval_templatet<BigInt> integer_intervalt;
-using real_intervalt =
-  interval_templatet<boost::multiprecision::cpp_bin_float_100>;
-
 #endif // CPROVER_ANALYSES_INTERVAL_TEMPLATE_H
