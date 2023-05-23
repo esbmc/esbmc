@@ -72,9 +72,8 @@ void symex_slicet::run_on_assignment(
 
   if(!get_symbols<false>(SSA_step.lhs))
   {
-    // Are we generating a testcase?
-    auto is_test_mode = true;
-    if(is_test_mode)
+    // Should we add nondet to the dependency list (mostly for test cases)?
+    if(!slice_nondet)
     {
       auto expr = get_nondet_symbol(SSA_step.rhs);
       if(expr && is_symbol2t(expr))
@@ -188,6 +187,7 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
     time2string(algorithm_stop - algorithm_start));
 
   return true;
+}
 // Recursively try to extract the nondet symbol of an expression
 expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
 {
