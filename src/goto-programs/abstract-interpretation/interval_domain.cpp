@@ -69,6 +69,8 @@ integer_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
   return result;
 }
 
+#include <cmath>
+
 template <>
 real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
 {
@@ -76,24 +78,43 @@ real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
   if(!is_constant_floatbv2t(e))
     return result;
 
+  auto real_value = to_constant_floatbv2t(e).value;
+
+  // Health check, is the convertion to double ok? See #1037
+  if(!isnormal(real_value.to_double()) || !iszero(real_value.to_double()))
+  {
+    if(real_value.is_double())
+      log_warning("ESBMC fails to to convert {} into double", *e);
+
+    // Give up for top!
+    return result;
+  }
+
   auto value1 = to_constant_floatbv2t(e).value;
   auto value2 = to_constant_floatbv2t(e).value;
-
-  if(value1.is_NaN() || value1.is_infinity())
-    return result;
-
   value1.increment(true);
   value2.decrement(true);
+
+  if(value1.is_NaN() || value1.is_infinity())
+  {
+    assert(result.is_top() && !result.is_bottom());
+    return result;
+  }
+
+  // [value2, value1]
+  // a <= value1
   result.make_le_than(value1.to_double());
+  // a >= value2
   result.make_ge_than(value2.to_double());
-  assert(value2 <= value1);
+
+  assert(!result.is_bottom());
   return result;
 }
 
 template <>
 wrapped_interval interval_domaint::get_interval_from_const(const expr2tc &e)
 {
-  wrapped_interval result(e->type); // (-infinity, infinity)
+  wrapped_interval result(e->type); // [0, 2^(length(e->type)) - 1]
   if(!is_constant_int2t(e))
     return result;
   auto value = to_constant_int2t(e).value;
@@ -139,6 +160,7 @@ real_intervalt interval_domaint::generate_modular_interval<real_intervalt>(
 {
   // TODO: Support this
   real_intervalt t;
+  assert(t.is_top() && !t.is_bottom());
   return t;
 }
 
@@ -489,6 +511,7 @@ expr2tc interval_domaint::make_expression_value<real_intervalt>(
 
   const auto d = (upper ? interval.upper : interval.lower).convert_to<double>();
   value->value.from_double(d);
+  assert(!value->value.is_NaN() && !value->value.is_infinity());
   if(upper)
     value->value.increment(true);
   else
@@ -809,7 +832,7 @@ void interval_domaint::assign(const expr2tc &expr)
     else
       apply_assignment<integer_intervalt>(c.target, c.source);
   }
-  if(isfloatbvop)
+  if(isfloatbvop && enable_real_intervals)
     apply_assignment<real_intervalt>(c.target, c.source);
 }
 
@@ -882,7 +905,7 @@ void interval_domaint::assume_rec(
     else
       apply_assume_less<integer_intervalt>(lhs, rhs);
   }
-  else if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
+  else if(is_floatbv_type(lhs) && is_floatbv_type(rhs) && enable_real_intervals)
     apply_assume_less<real_intervalt>(lhs, rhs);
 }
 
@@ -964,7 +987,7 @@ expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
     else
       return make_expression_helper<integer_intervalt>(symbol);
   }
-  if(is_floatbv_type(symbol))
+  if(is_floatbv_type(symbol) && enable_real_intervals)
     return make_expression_helper<real_intervalt>(symbol);
   return gen_true_expr();
 }
@@ -1042,12 +1065,13 @@ void interval_domaint::set_options(const optionst &options)
 }
 
 // Options
-bool interval_domaint::enable_interval_arithmetic = true;
-bool interval_domaint::enable_interval_bitwise_arithmetic = true;
+bool interval_domaint::enable_interval_arithmetic = false;
+bool interval_domaint::enable_interval_bitwise_arithmetic = false;
 bool interval_domaint::enable_modular_intervals = false;
 bool interval_domaint::enable_assertion_simplification = false;
 bool interval_domaint::enable_contraction_for_abstract_states = true;
-bool interval_domaint::enable_wrapped_intervals = true;
+bool interval_domaint::enable_wrapped_intervals = false;
+bool interval_domaint::enable_real_intervals = true;
 
 // Widening options
 unsigned interval_domaint::fixpoint_limit = 5;
