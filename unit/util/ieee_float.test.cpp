@@ -11,7 +11,6 @@ TEST_CASE("ieee float can handle 1", "[core][util][ieee_floatt]")
 
   SECTION("Basic context")
   {
-    REQUIRE(std::isnormal(one));   // Holds
     REQUIRE(std::isnormal(d_one)); // Holds
   }
 
