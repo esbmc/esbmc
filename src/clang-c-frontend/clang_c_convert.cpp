@@ -420,15 +420,6 @@ bool clang_c_convertert::get_struct_union_class_methods_decls(
 
 bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 {
-  // Get id and name
-  std::string id, name;
-  get_decl_name(vd, name, id);
-
-  if(id == "c:@beans")
-  {
-    printf("Got it\n");
-  }
-
   // Get type
   typet t;
   if(get_type(vd.getType(), t))
@@ -454,6 +445,10 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     }
   }
 
+  // Get id and name
+  std::string id, name;
+  get_decl_name(vd, name, id);
+
   if(no_slice)
     config.no_slice_names.emplace(id);
 
@@ -476,11 +471,13 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
-  bool cpp_value_init = is_aggregate_type(vd.getType()) && mode == "C++";
+  bool aggregate_value_init = false;
+  if(mode == "C++")
+    aggregate_value_init = is_aggregate_type(vd.getType());
 
   if(
     symbol.static_lifetime && !symbol.is_extern &&
-    (!vd.hasInit() || cpp_value_init))
+    (!vd.hasInit() || aggregate_value_init))
   {
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
@@ -530,12 +527,12 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
     added_symbol = move_symbol_to_context(symbol);
     gen_typecast(ns, val, t);
-    if(!cpp_value_init)
+    if(!aggregate_value_init)
       added_symbol->value = val;
 
     code_declt decl(symbol_expr(*added_symbol));
     decl.location() = location_begin;
-    if(!cpp_value_init)
+    if(!aggregate_value_init)
       decl.operands().push_back(val);
 
     new_expr = decl;
