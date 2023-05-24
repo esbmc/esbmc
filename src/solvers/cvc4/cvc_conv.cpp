@@ -58,7 +58,9 @@ ieee_floatt cvc_convt::get_fpbv(smt_astt a)
   CVC4::FloatingPoint foo = e.getConst<CVC4::FloatingPoint>();
 
   ieee_floatt number(ieee_float_spect(
-    a->sort->get_significand_width(), a->sort->get_exponent_width()));
+    /* in mk_bvfp_sort() we added +1 for the sign bit */
+    a->sort->get_significand_width() - 1,
+    a->sort->get_exponent_width()));
 
   if(foo.isNaN())
     number.make_NaN();
