@@ -3206,8 +3206,6 @@ void clang_c_convertert::get_decl_name(
   {
     const clang::RecordDecl &rd = static_cast<const clang::RecordDecl &>(nd);
     std::string kind_name = rd.getKindName().str();
-    clang::TypedefNameDecl *tnd =
-      rd.getCanonicalDecl()->getTypedefNameForAnonDecl();
 
     // Checking if it is not a typedef, but the tag name is empty. If so we give it a new
     // unique name based on its location
