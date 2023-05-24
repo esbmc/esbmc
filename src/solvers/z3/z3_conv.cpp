@@ -1281,7 +1281,7 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
 
 void z3_smt_ast::dump() const
 {
-  log_debug(
+  log_status(
     "{}\nsort is {}",
     Z3_ast_to_string(a.ctx(), a),
     Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a)));
@@ -1301,7 +1301,7 @@ void z3_convt::dump_smt()
     // print to screen
     std::ostringstream oss;
     print_smt_formulae(oss);
-    log_debug("{}", oss.str());
+    log_status("{}", oss.str());
   }
 }
 

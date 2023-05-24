@@ -1281,5 +1281,5 @@ void cvc_smt_ast::dump() const
 {
   std::ostringstream oss;
   a.printAst(oss, 0);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }
