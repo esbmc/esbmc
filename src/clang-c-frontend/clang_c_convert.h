@@ -313,6 +313,8 @@ protected:
    * For C, it always return false.
    */
   virtual bool is_fd_virtual_or_overriding(const clang::FunctionDecl &fd);
+
+  bool has_aggregate_type(const clang::QualType &type);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
