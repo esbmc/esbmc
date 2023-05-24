@@ -424,9 +424,9 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   std::string id, name;
   get_decl_name(vd, name, id);
 
-  if(id == "c:@indexOfThread")
+  if(id == "c:@beans")
   {
-    printf("got vardecl\n");
+    printf("Got it\n");
   }
 
   // Get type
@@ -476,7 +476,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
-  bool cpp_value_init = has_aggregate_type(vd.getType()) && mode == "C++";
+  bool cpp_value_init = is_aggregate_type(vd.getType()) && mode == "C++";
 
   if(
     symbol.static_lifetime && !symbol.is_extern &&
@@ -3454,7 +3454,7 @@ void clang_c_convertert::get_ref_to_struct_type(typet &type)
   }
 }
 
-bool clang_c_convertert::has_aggregate_type(const clang::QualType &q_type)
+bool clang_c_convertert::is_aggregate_type(const clang::QualType &q_type)
 {
   const clang::Type &the_type = *q_type.getTypePtrOrNull();
   switch(the_type.getTypeClass())
@@ -3466,6 +3466,23 @@ bool clang_c_convertert::has_aggregate_type(const clang::QualType &q_type)
       static_cast<const clang::ArrayType &>(the_type);
 
     return aryType.isAggregateType();
+  }
+  case clang::Type::Elaborated:
+  {
+    const clang::ElaboratedType &et =
+      static_cast<const clang::ElaboratedType &>(the_type);
+    return (is_aggregate_type(et.getNamedType()));
+  }
+  case clang::Type::Record:
+  {
+    const clang::RecordDecl &rd =
+      *(static_cast<const clang::RecordType &>(the_type)).getDecl();
+    if(
+      const clang::CXXRecordDecl *cxxrd =
+        llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
+      return cxxrd->isPOD();
+
+    return false;
   }
   default:
     return false;
