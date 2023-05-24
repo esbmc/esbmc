@@ -677,12 +677,34 @@ void goto_convertt::remove_post(
   dest.destructive_append(tmp);
 }
 
+// The below code introduces some special treatment for function calls.
+// For example, the following code:
+//    ...
+//    a = b + foo();
+//    ...
+// is transformed to:
+//    ...
+//    <type> return_value$_foo;
+//    return_value$_foo = foo();
+//    a = b + return_value$_foo;
+//    ...
+//  However, if the return value of function "foo()" is never
+//  used in the program, or the return type <type> of "foo()"
+//  is void, the same code is tranformed to:
+//    ...
+//    foo();
+//    a = b;
+//    ...
 void goto_convertt::remove_function_call(
   exprt &expr,
   goto_programt &dest,
   bool result_is_used)
 {
-  if(!result_is_used)
+  // If the result of the function call is never used
+  // or the return type of the invoked function is "void",
+  // we can just call the above function without any
+  // further modifications.
+  if(!result_is_used || expr.type().id() == "empty")
   {
     assert(expr.operands().size() == 2);
     code_function_callt call;
