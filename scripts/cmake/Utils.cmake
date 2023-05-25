@@ -121,3 +121,17 @@ function(download_zip_and_extract ID URL)
   endif()
 
 endfunction()
+
+function(download_tar_zip_and_extract ID URL)
+  # TODO: might be a good idea to add sha1 checks
+  if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID}.tar.xz)
+    message(STATUS "Downloading ${ID} from ${URL}")
+    file(DOWNLOAD ${URL} ${CMAKE_BINARY_DIR}/${ID}.tar.xz SHOW_PROGRESS)
+  endif()
+
+  if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID})
+    message(STATUS "Extracting ${ID}") 
+    file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/${ID}.tar.xz DESTINATION ${CMAKE_BINARY_DIR}/${ID})
+  endif()
+
+endfunction()

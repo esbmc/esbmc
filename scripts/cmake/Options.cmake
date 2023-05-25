@@ -45,9 +45,21 @@ option(ENABLE_FUZZER "Add fuzzing targets (default: OFF)" OFF)
 option(ENABLE_CLANG_TIDY "Activate clang tidy analysis (default: OFF)" OFF)
 option(ENABLE_CSMITH "Add csmith Tests (default: OFF) (depends: ENABLE_REGRESSION)" OFF)
 option(BENCHBRINGUP "Run a user-specified benchmark in Github workflow" OFF)
+option(DOWNLOAD_DEPENDENCIES "Download and build dpendencies if needed (default: OFF)" OFF)
+
+#############################
+# DEPENDENCIES
+#############################
 if(WIN32)
-    option(DOWNLOAD_WINDOWS_DEPENDENCIES "Download Windows LLVM and Z3 through CMake (default: OFF)" OFF)
+set(DEFAULT_LLVM_URL "https://gitlab.com/Anthonysdu/llvm11/-/raw/main/llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt.zip")
+set(DEFAULT_LLVM_NAME "llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt")
+else()
+set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-14.0.0/clang+llvm-14.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz")
+set(DEFAULT_LLVM_NAME "clang+llvm-14.0.0-x86_64-linux-gnu-ubuntu-18.04")
 endif()
+
+set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")
+set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of LLVM")
 
 #############################
 # CMake extra Vars
