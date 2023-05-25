@@ -471,9 +471,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
-  bool aggregate_value_init = false;
-  if(mode == "C++")
-    aggregate_value_init = is_aggregate_type(vd.getType());
+  bool aggregate_value_init =
+    mode == "C++" ? is_aggregate_type(vd.getType()) : false;
 
   if(
     symbol.static_lifetime && !symbol.is_extern &&
@@ -3451,39 +3450,7 @@ void clang_c_convertert::get_ref_to_struct_type(typet &type)
   }
 }
 
-bool clang_c_convertert::is_aggregate_type(const clang::QualType &q_type)
+bool clang_c_convertert::is_aggregate_type(const clang::QualType &)
 {
-  const clang::Type &the_type = *q_type.getTypePtrOrNull();
-  switch(the_type.getTypeClass())
-  {
-  case clang::Type::ConstantArray:
-  case clang::Type::VariableArray:
-  {
-    const clang::ArrayType &aryType =
-      static_cast<const clang::ArrayType &>(the_type);
-
-    return aryType.isAggregateType();
-  }
-  case clang::Type::Elaborated:
-  {
-    const clang::ElaboratedType &et =
-      static_cast<const clang::ElaboratedType &>(the_type);
-    return (is_aggregate_type(et.getNamedType()));
-  }
-  case clang::Type::Record:
-  {
-    const clang::RecordDecl &rd =
-      *(static_cast<const clang::RecordType &>(the_type)).getDecl();
-    if(
-      const clang::CXXRecordDecl *cxxrd =
-        llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
-      return cxxrd->isPOD();
-
-    return false;
-  }
-  default:
-    return false;
-  }
-
   return false;
 }
