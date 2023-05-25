@@ -58,7 +58,7 @@ jobs:
     - name: Fix dubious ownership
       run: git config --global --add safe.directory /__w/esbmc/esbmc
     - name: Configure CMake
-      run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_YICES=On -DYices_DIR=/workspace/yices -DCVC4_DIR=/workspace/cvc4 -DGMP_DIR=/workspace/gmp -DBitwuzla_DIR=/workspace/bitwuzla-release -DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=/workspace/ibex -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_OLD_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On
+      run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_YICES=On -DYices_DIR=/workspace/yices -DCVC4_DIR=/workspace/cvc4 -DGMP_DIR=/workspace/gmp -DBitwuzla_DIR=/workspace/bitwuzla-release -DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=/workspace/ibex -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_OLD_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On
     - name: Build ESBMC
       run: cd build && cmake --build . && ninja install
     - uses: actions/upload-artifact@v1
@@ -146,7 +146,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake.exe .. -A x64 -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On -DDOWNLOAD_WINDOWS_DEPENDENCIES=On
+        cmake.exe .. -A x64 -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On -DDOWNLOAD_DEPENDENCIES=On
     - name: Build ESBMC
       run: |
         cd build
