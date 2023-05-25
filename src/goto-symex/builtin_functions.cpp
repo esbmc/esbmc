@@ -836,7 +836,7 @@ expr2tc gen_byte_expression_byte_update(
 }
 
 // Computes the equivalent object value when considering a memset operation on it
-expr2tc gen_byte_expression(
+static inline expr2tc gen_byte_expression(
   const type2tc &type,
   const expr2tc &src,
   const expr2tc &value,
@@ -847,8 +847,7 @@ expr2tc gen_byte_expression(
    * The idea of this expression is to compute the object value
    * in the case where every byte `value` was set set up until num_of_bytes
    *
-   * @warning this function does not add any pointer/memory/bounds check!
-   *          they should be added before calling this function!
+   * Note: this function assumes that all memory checks have been done!
    *
    * In summary, there are two main computations here:
    *
@@ -857,7 +856,7 @@ expr2tc gen_byte_expression(
    *    and then, until the num_of_bytes is reached it will do a full byte
    *    left-shift followed by an bitor operation with the byte value:
    *
-   *    Example, for a integer(4 bytes) with memset using 3 bytes and value 0xF1
+   *    For example, for a integer(4 bytes) with memset using 3 bytes and value 0xF1
    *
    *    step 1: 0x00000000 -- left-shift 8 -- 0x00000000 -- bitor -- 0x000000F1
    *    step 2: 0x000000F1 -- left-shift 8 -- 0x0000F100 -- bitor -- 0x0000F1F1
@@ -867,7 +866,7 @@ expr2tc gen_byte_expression(
    *
    * B. Generate a mask of the bits that were not set, this is done because skipped bits
    *    need to be returned back. The computation of this is simple, we initialize every
-   *    bit that was changed by the byte-representation computation with a 1. Which is then
+   *    bit that was changed by the byte-representation computation with a 1, which is then
    *    negated to be applied with an bitand in the original value:
    *
    *    Back to the example in A, we had the byte-representation of  0x00F1F1F1. If the
@@ -903,8 +902,8 @@ expr2tc gen_byte_expression(
 
   expr2tc mask = gen_zero(type);
 
-  auto eight = constant_int2tc(int_type2(), BigInt(8));
-  auto one = constant_int2tc(int_type2(), BigInt(1));
+  const auto eight = constant_int2tc(int_type2(), BigInt(8));
+  const auto one = constant_int2tc(int_type2(), BigInt(1));
   for(unsigned i = 0; i < num_of_bytes; i++)
   {
     result = shl2tc(type, result, eight);
@@ -932,7 +931,7 @@ expr2tc gen_byte_expression(
   return result;
 }
 
-inline expr2tc gen_value_by_byte(
+static inline expr2tc gen_value_by_byte(
   const type2tc &type,
   const expr2tc &src,
   const expr2tc &value,
@@ -1179,9 +1178,7 @@ void goto_symext::intrinsic_memset(
      * arg2: number of bytes to be set */
   expr2tc arg0 = func_call.operands[0];
   expr2tc arg1 = func_call.operands[1];
-  expr2tc arg2 = func_call.operands[2];
-
-  log_debug("[memset] started call");
+  expr2tc arg2 = func_call.operands[2];  
 
   // Checks where arg0 points to
   internal_deref_items.clear();
@@ -1214,9 +1211,7 @@ void goto_symext::intrinsic_memset(
     return;
   }
 
-  auto number_of_bytes = to_constant_int2t(arg2).as_ulong();
-
-  // If no byte was changed... we are finished
+  auto number_of_bytes = to_constant_int2t(arg2).as_ulong();  
 
   // Where are we pointing to?
   for(auto &item : internal_deref_items)

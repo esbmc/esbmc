@@ -437,7 +437,15 @@ protected:
     reachability_treet &art);
   /** Terminate the monitor thread */
   void intrinsic_kill_monitor(reachability_treet &art);
-  /** Memset optimiser */
+  /**
+   * @brief Intrinsic call for C memset function call
+   * 
+   * This will either invoke our operational model (at string.c)
+   * or try to compute the resulting value directly
+   * 
+   * @param art 
+   * @param func_call memset function call
+   */
   void intrinsic_memset(
     reachability_treet &art,
     const code_function_call2t &func_call);
