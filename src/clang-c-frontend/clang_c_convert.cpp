@@ -471,8 +471,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
-  bool aggregate_value_init =
-    mode == "C++" ? is_aggregate_type(vd.getType()) : false;
+  bool aggregate_value_init = is_aggregate_type(vd.getType());
 
   if(
     symbol.static_lifetime && !symbol.is_extern &&
