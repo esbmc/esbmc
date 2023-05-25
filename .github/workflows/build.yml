@@ -57,6 +57,7 @@ jobs:
       uses: hendrikmuhs/ccache-action@v1.2
     - name: Fix dubious ownership
       run: git config --global --add safe.directory /__w/esbmc/esbmc
+    - uses: lukka/get-cmake@latest  # TODO: Remove this before merging!
     - name: Configure CMake
       run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_YICES=On -DYices_DIR=/workspace/yices -DCVC4_DIR=/workspace/cvc4 -DGMP_DIR=/workspace/gmp -DBitwuzla_DIR=/workspace/bitwuzla-release -DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=/workspace/ibex -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_OLD_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On
     - name: Build ESBMC
