@@ -1509,3 +1509,40 @@ void clang_cpp_convertert::annotate_ctor_dtor_rtn_type(
   annotate_cpyctor(cxxmdd, tmp_rtn_type);
   rtn_type = tmp_rtn_type;
 }
+
+bool clang_cpp_convertert::is_aggregate_type(const clang::QualType &q_type)
+{
+  const clang::Type &the_type = *q_type.getTypePtrOrNull();
+  switch(the_type.getTypeClass())
+  {
+  case clang::Type::ConstantArray:
+  case clang::Type::VariableArray:
+  {
+    const clang::ArrayType &aryType =
+      static_cast<const clang::ArrayType &>(the_type);
+
+    return aryType.isAggregateType();
+  }
+  case clang::Type::Elaborated:
+  {
+    const clang::ElaboratedType &et =
+      static_cast<const clang::ElaboratedType &>(the_type);
+    return (is_aggregate_type(et.getNamedType()));
+  }
+  case clang::Type::Record:
+  {
+    const clang::RecordDecl &rd =
+      *(static_cast<const clang::RecordType &>(the_type)).getDecl();
+    if(
+      const clang::CXXRecordDecl *cxxrd =
+        llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
+      return cxxrd->isPOD();
+
+    return false;
+  }
+  default:
+    return false;
+  }
+
+  return false;
+}

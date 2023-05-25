@@ -508,6 +508,8 @@ protected:
     const clang::MemberExpr &member,
     exprt &new_expr,
     const exprt &vtable_ptr_deref);
+
+  bool is_aggregate_type(const clang::QualType &q_type) override;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
