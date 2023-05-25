@@ -966,10 +966,9 @@ static inline expr2tc gen_value_by_byte(
 
     constant_array2tc result = gen_zero(type);
 
-    auto base_size = type_byte_size(to_array_type(type).subtype).to_uint64();
-
-    auto bytes_left = num_of_bytes;
-    auto offset_left = offset;
+    uint64_t base_size = type_byte_size(to_array_type(type).subtype).to_uint64();
+    uint64_t bytes_left = num_of_bytes;
+    uint64_t offset_left = offset;
 
     for(unsigned i = 0; i < result->datatype_members.size(); i++)
     {
@@ -987,7 +986,7 @@ static inline expr2tc gen_value_by_byte(
       else
       {
         assert(offset_left < base_size);
-        auto bytes_to_write = bytes_left < base_size ? bytes_left : base_size;
+        uint64_t bytes_to_write = bytes_left < base_size ? bytes_left : base_size;
         result->datatype_members[i] = gen_value_by_byte(
           to_array_type(type).subtype,
           local_member,
@@ -1011,8 +1010,8 @@ static inline expr2tc gen_value_by_byte(
      */
     constant_struct2tc result = gen_zero(type);
 
-    auto bytes_left = num_of_bytes;
-    auto offset_left = offset;
+    uint64_t bytes_left = num_of_bytes;
+    uint64_t offset_left = offset;
 
     for(unsigned i = 0; i < result->datatype_members.size(); i++)
     {
@@ -1037,7 +1036,7 @@ static inline expr2tc gen_value_by_byte(
       else
       {
         assert(offset_left < current_member_size);
-        auto bytes_to_write = std::min(bytes_left, current_member_size);
+        uint64_t bytes_to_write = std::min(bytes_left, current_member_size);
         result->datatype_members[i] = gen_value_by_byte(
           current_member_type,
           local_member,
@@ -1076,7 +1075,7 @@ static inline expr2tc gen_value_by_byte(
      */
     constant_union2tc result = gen_zero(type);
 
-    auto union_total_size = type_byte_size(type).to_uint64();
+    uint64_t union_total_size = type_byte_size(type).to_uint64();
     // Let's find a member with the biggest size
     int selected_member_index;
 
@@ -1091,9 +1090,9 @@ static inline expr2tc gen_value_by_byte(
       }
     }
 
-    auto name = to_union_type(type).member_names[selected_member_index];
-    auto member_type = to_union_type(type).members[selected_member_index];
-    member2tc member(member_type, src, name);
+    const irep_idt &name = to_union_type(type).member_names[selected_member_index];
+    const type2tc &member_type = to_union_type(type).members[selected_member_index];
+    const member2tc member(member_type, src, name);
 
     result->init_field = name;
     result->datatype_members[0] =
@@ -1150,7 +1149,7 @@ void goto_symext::intrinsic_memset(
   // 1. Check for the functions parameters and do the deref and processing!
 
   assert(func_call.operands.size() == 3 && "Wrong memset signature");
-  auto &ex_state = art.get_cur_state();
+  const execution_statet &ex_state = art.get_cur_state();
   if(ex_state.cur_state->guard.is_false())
     return;
 
@@ -1211,14 +1210,14 @@ void goto_symext::intrinsic_memset(
     return;
   }
 
-  auto number_of_bytes = to_constant_int2t(arg2).as_ulong();  
+  unsigned long number_of_bytes = to_constant_int2t(arg2).as_ulong();  
 
   // Where are we pointing to?
   for(auto &item : internal_deref_items)
   {
-    auto guard = ex_state.cur_state->guard;
-    auto item_object = item.object;
-    auto item_offset = item.offset;
+    guardt guard = ex_state.cur_state->guard;
+    expr2tc item_object = item.object;
+    expr2tc item_offset = item.offset;
     guard.add(item.guard);
 
     cur_state->rename(item_object);
@@ -1245,7 +1244,9 @@ void goto_symext::intrinsic_memset(
       return;
     }
 
-    // TODO: Why (X*Y)/Y is not X?
+    /* TODO: Shouldn't the simplifier be able to solve pointer arithmethic
+     *  when it multiplies and divides for the same value?
+     */
     if(is_div2t(item_offset))
     {
       auto as_div = to_div2t(item_offset);
@@ -1285,22 +1286,22 @@ void goto_symext::intrinsic_memset(
 
     if(is_code_type(item_object->type))
     {
-      auto error_msg =
+      std::string error_msg =
         fmt::format("dereference failure: trying to deref a ptr code");
 
-      auto false_expr = gen_false_expr();
+      expr2tc false_expr = gen_false_expr();
       guard.guard_expr(false_expr);
       claim(false_expr, error_msg);
       continue;
     }
 
-    auto is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
+    bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
                          (number_of_offset > type_size);
     if(
       is_out_bounds && !options.get_bool_option("no-pointer-check") &&
       !options.get_bool_option("no-bounds-check"))
     {
-      auto error_msg = fmt::format(
+      std::string error_msg = fmt::format(
         "dereference failure: memset of memory segment of size {} with {} "
         "bytes",
         type_size - number_of_offset,
@@ -1311,7 +1312,7 @@ void goto_symext::intrinsic_memset(
       continue;
     }
 
-    auto new_object = gen_value_by_byte(
+    expr2tc new_object = gen_value_by_byte(
       item_object->type, item_object, arg1, number_of_bytes, number_of_offset);
 
     // Where we able to optimize it? If not... bump call
@@ -1344,7 +1345,7 @@ void goto_symext::intrinsic_get_object_size(
   reachability_treet &)
 {
   assert(func_call.operands.size() == 1 && "Wrong get_object_size signature");
-  auto ptr = func_call.operands[0];
+  expr2tc ptr = func_call.operands[0];
 
   // Work out what the ptr points at.
   internal_deref_items.clear();
@@ -1352,7 +1353,7 @@ void goto_symext::intrinsic_get_object_size(
   dereference(deref, dereferencet::INTERNAL);
 
   assert(is_array_type(internal_deref_items.front().object->type));
-  auto obj_size =
+  expr2tc obj_size =
     to_array_type(internal_deref_items.front().object->type).array_size;
 
   expr2tc ret_ref = func_call.ret;
