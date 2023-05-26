@@ -2,6 +2,44 @@ set(Yices_MIN_VERSION "2.6.1")
 
 if(DEFINED Yices_DIR)
     set(ENABLE_YICES ON)
+else()
+    if(ENABLE_YICES AND DOWNLOAD_DEPENDENCIES)
+    # Yices does not support CMake
+    CPMAddPackage(
+        NAME yices
+        DOWNLOAD_ONLY YES
+        GITHUB_REPOSITORY SRI-CSL/yices2
+        GIT_TAG Yices-2.6.4)
+
+    # We can't use ExternalProject because we need it ready
+    # at configuration time
+
+    message("[yices] Preparing")
+    execute_process(COMMAND "autoreconf"
+                WORKING_DIRECTORY ${yices_SOURCE_DIR})
+
+    message("[yices] Configuring build")
+    execute_process(COMMAND ${yices_SOURCE_DIR}/configure --prefix ${yices_BINARY_DIR}
+                WORKING_DIRECTORY ${yices_SOURCE_DIR})
+
+    message("[yices] Building...")
+    execute_process(COMMAND make -j4
+        WORKING_DIRECTORY ${yices_SOURCE_DIR})
+
+    message("[yices] Building...")
+    execute_process(COMMAND make static-lib
+        WORKING_DIRECTORY ${yices_SOURCE_DIR})
+
+    message("[yices] Installing...")
+    execute_process(COMMAND make install
+        WORKING_DIRECTORY ${yices_SOURCE_DIR})
+
+    file(COPY ${yices_SOURCE_DIR}/build/x86_64-pc-linux-gnu-release/static_lib/libyices.a 
+        DESTINATION ${yices_BINARY_DIR}/lib/)
+
+    set(Yices_DIR ${yices_BINARY_DIR})
+endif()
+
 endif()
 
 if(EXISTS $ENV{HOME}/yices)
