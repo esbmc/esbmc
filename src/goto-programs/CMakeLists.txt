@@ -11,10 +11,9 @@ add_library(gotoalgorithms loop_unroll.cpp mark_decl_as_non_det.cpp)
 
 if(ENABLE_GOTO_CONTRACTOR)
     include(FindIbex)
-    add_library(gotocontractor goto_contractor.cpp)
-    target_compile_options(gotocontractor PUBLIC -I${IBEX_INCLUDE_DIRS}/ibex/3rd -I${IBEX_INCLUDE_DIRS} -I${IBEX_INCLUDE_DIRS}/ibex )
+    add_library(gotocontractor goto_contractor.cpp)    
     target_include_directories(gotocontractor PUBLIC ${IBEX_INCLUDE_DIRS} ${IBEX_INCLUDE_DIRS}/ibex ${IBEX_INCLUDE_DIRS}/ibex/3rd)
-    target_link_libraries(gotocontractor PUBLIC algorithms gotoprograms ${IBEX_LIB} ${IBEX_LIB_GAOL} ${IBEX_LIB_GDTOA} ${IBEX_LIB_ULTIM} ${IBEX_LIB_SOPLEX} -lz)
+    target_link_libraries(gotocontractor PUBLIC algorithms gotoprograms ${IBEX_LINK_LIBRARIES} -lz)
 endif()
 
 add_subdirectory(abstract-interpretation)
