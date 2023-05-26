@@ -984,7 +984,6 @@ static inline expr2tc gen_value_by_byte(
       }
       else
       {
-        assert(offset_left < base_size);
         uint64_t bytes_to_write =
           bytes_left < base_size ? bytes_left : base_size;
         result->datatype_members[i] = gen_value_by_byte(
@@ -995,8 +994,7 @@ static inline expr2tc gen_value_by_byte(
           offset_left);
         bytes_left =
           bytes_left <= base_size ? 0 : bytes_left - (base_size - offset_left);
-        offset_left = offset_left <= base_size ? 0 : offset_left - base_size;
-        assert(offset_left == 0);
+        offset_left = 0;
       }
     }
 
@@ -1050,10 +1048,7 @@ static inline expr2tc gen_value_by_byte(
         bytes_left = bytes_left < current_member_size
                        ? 0
                        : bytes_left - (current_member_size - offset_left);
-        offset_left = offset_left <= current_member_size
-                        ? 0
-                        : offset_left - current_member_size;
-        assert(offset_left == 0);
+        offset_left = 0;
       }
     }
     return result;
