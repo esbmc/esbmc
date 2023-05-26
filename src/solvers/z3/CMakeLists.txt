@@ -2,6 +2,12 @@ set(Z3_MIN_VERSION "4.8.9")
 
 if(DEFINED Z3_DIR)
     set(ENABLE_Z3 ON)
+else()    
+    if(ENABLE_Z3 AND DOWNLOAD_DEPENDENCIES)
+        message("Downloading Z3")
+        download_zip_and_extract(Z3 ${ESBMC_Z3_URL})
+        set(Z3_DIR ${CMAKE_BINARY_DIR}/Z3/${ESBMC_Z3_NAME})
+    endif()
 endif()
 
 if(EXISTS $ENV{HOME}/z3)
