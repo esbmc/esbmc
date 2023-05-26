@@ -1008,13 +1008,15 @@ static inline expr2tc gen_value_by_byte(
      * each component
      */
     constant_struct2tc result = gen_zero(type);
-
     uint64_t bytes_left = num_of_bytes;
     uint64_t offset_left = offset;
-
+    
     for(unsigned i = 0; i < result->datatype_members.size(); i++)
     {
       irep_idt name = to_struct_type(type).member_names[i];
+      // TODO: We need a better way to detect bitfields
+      if(has_prefix(name.as_string(), "bit_field_pad$")) 
+        return expr2tc();
       member2tc local_member(to_struct_type(type).members[i], src, name);
 
       // Since it is a symbol, lets start from the old value
