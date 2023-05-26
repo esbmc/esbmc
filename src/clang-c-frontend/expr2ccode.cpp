@@ -2,7 +2,7 @@
 
 Module:
 
-Author: Daniel Kroening, kroening@kroening.com
+Author:
 
 \*******************************************************************/
 
@@ -271,22 +271,13 @@ std::string expr2ccodet::convert_rec(
     {
       // Can cast "src.subtype()" to "code_typet"
       const code_typet type = to_code_type(src.subtype());
-
-      // Converting the return type and the function name.
-      // "d" holds the name of the function
-      // "q" holds the type qualifier
-      // "rst_q" holds the "__restrict" keyword if used
-      // (unused so far but should be used)
-      //std::string dest = q + convert(type.return_type()) + " (*" + d + ")";
-
-      std::string dest =
-        q + convert_rec(type.return_type(), c_qualifierst(), "(*" + d + ")");
-
+      // Buidling the resulting string
+      std::string dest = "";
+      // Starting with the function parameters
       dest += "(";
       // Converting the function parameters just as
       // regular variable declarations (perhaps we should implement
-      // a separate method in the future for converting the
-      // function parameters)
+      // a separate method in the future for this)
       for(unsigned int i = 0; i < type.arguments().size(); i++)
       {
         code_typet::argumentt arg = type.arguments()[i];
@@ -298,11 +289,19 @@ std::string expr2ccodet::convert_rec(
         if(i != type.arguments().size() - 1)
           dest += ", ";
       }
-      // Before finishing, check if it is a variadic function
-      if(type.has_ellipsis())
+      // Before finishing with the parameters list,
+      // check if it is a variadic function
+      if(type.has_ellipsis() && type.arguments().size() > 0)
         dest += ", ... ";
-
       dest += ")";
+
+      // Now converting everything else (the return type and the function name)
+      // "d" holds the declarator (e.g., function name)
+      // "q" holds the type qualifier
+      // "rst_q" holds the "__restrict" keyword if used
+      // (unused so far but should be used)
+      dest = q + convert_rec(
+                   type.return_type(), c_qualifierst(), "(*" + d + ")" + dest);
 
       return dest;
     }
@@ -311,17 +310,17 @@ std::string expr2ccodet::convert_rec(
       // The base type might contain a struct/union tag of symbol type
       // instead of the actual underlying struct/union type.
       // Thus, we derive the underlying struct/union type through a
-      // call to base_type
+      // call to "base_type"
       typet subtype = src.subtype();
       base_type(subtype, ns);
 
-      if(q == "")
-        return convert_rec(subtype, new_qualifiers, " * " + rst_q + d);
-
-      // This is the old way of doing things.
-      // Come back to it and have a look at it!!!
-      std::string tmp = convert(src.subtype());
-      return q + " " + tmp + " * " + rst_q + d;
+      // Now can just convert
+      // "d" holds the declarator (e.g., pointer name)
+      // "q" holds the type qualifier
+      // "rst_q" holds the "__restrict" keyword if used
+      std::string dest =
+        q + convert_rec(subtype, new_qualifiers, "*" + rst_q + d);
+      return dest;
     }
   }
   else if(src.is_array())
@@ -356,36 +355,36 @@ std::string expr2ccodet::convert_rec(
     // This is a function declaration.
     // Can cast "src" to "code_typet"
     const code_typet type = to_code_type(src);
-
-    // Converting the return type and the function name.
-    // "d" holds the name of the function at this point
-    // "q" holds the type qualifier
-    //std::string dest = q + convert(type.return_type()) + d;
-    //std::string dest = q + convert_rec(type.return_type(), c_qualifierst(), d);
-
-    d += "(";
+    // Buidling the resulting string
+    std::string dest = "";
+    // Starting with the function parameters
+    dest += "(";
     // Converting the function parameters just as
     // regular variable declarations (perhaps we should implement
-    // a separate method in the future for converting the
-    // function parameters)
+    // a separate method in the future for this)
     for(unsigned int i = 0; i < type.arguments().size(); i++)
     {
       code_typet::argumentt arg = type.arguments()[i];
       std::string arg_name =
         get_name_shorthand(arg.get_identifier().as_string());
 
-      d += convert_rec(arg.type(), c_qualifierst(), arg_name);
+      dest += convert_rec(arg.type(), c_qualifierst(), arg_name);
 
       if(i != type.arguments().size() - 1)
-        d += ", ";
+        dest += ", ";
     }
-    // Before finishing, check if it is a variadic function
+    // Before finishing with the parameters list,
+    // check if it is a variadic function
     if(type.has_ellipsis() && type.arguments().size() > 0)
-      d += ", ... ";
+      dest += ", ... ";
+    dest += ")";
 
-    d += ")";
-
-    std::string dest = q + convert_rec(type.return_type(), c_qualifierst(), d);
+    // Now converting everything else (the return type and the function name)
+    // "d" holds the declarator (e.g., function name)
+    // "q" holds the type qualifier
+    // "rst_q" holds the "__restrict" keyword if used
+    // (unused so far but should be used)
+    dest = q + convert_rec(type.return_type(), c_qualifierst(), d + dest);
 
     return dest;
   }
@@ -917,7 +916,6 @@ expr2ccodet::convert_typecast(const exprt &src, unsigned &precedence)
     return convert_norep(src, precedence);
 
   // some special cases
-
   const typet &type = ns.follow(src.type());
 
   if(
@@ -929,7 +927,7 @@ expr2ccodet::convert_typecast(const exprt &src, unsigned &precedence)
   std::string dest;
   dest = "(" + convert(type) + ")";
 
-  // Fedor: another special case here. ESBMC produces expressions
+  // Another special case here. ESBMC produces expressions
   // like "&{}[0]" and "&{1,2}[0]" which are illegal in C.
   // So we just replace it with the underlying constant array
   if(
@@ -946,7 +944,7 @@ expr2ccodet::convert_typecast(const exprt &src, unsigned &precedence)
     src.op0().id() == "struct" || src.op0().id() == "union")
     dest += tmp;
   else
-    dest += '(' + tmp + ')';
+    dest += "(" + tmp + ")";
 
   return dest;
 }
@@ -1010,7 +1008,7 @@ std::string expr2ccodet::convert_union(const exprt &src, unsigned &precedence)
     return convert_norep(src, precedence);
 
   const exprt::operandst &operands = src.operands();
-  const irep_idt &init [[gnu::unused]] = src.component_name();
+  const irep_idt &init = src.component_name();
 
   if(operands.size() == 1)
   {
@@ -1025,13 +1023,13 @@ std::string expr2ccodet::convert_union(const exprt &src, unsigned &precedence)
     assert(!init.empty());
 
     std::string dest = "(" + to_union_type(full_type).tag().as_string() + ")";
-    dest += "{ ";
+    dest += "{";
     std::string tmp = convert(src.op0());
     dest += ".";
     dest += init.as_string();
     dest += "=";
     dest += tmp;
-    dest += " }";
+    dest += "}";
 
     return dest;
   }
@@ -1056,7 +1054,7 @@ std::string expr2ccodet::convert_struct_union_body(
   assert(n == operands.size());
   assert(src.type().id() == "struct" || src.type().id() == "union");
 
-  std::string dest;
+  std::string dest = "";
   struct_union_typet struct_union_type;
 
   if(src.type().id() == "struct")
@@ -1069,10 +1067,10 @@ std::string expr2ccodet::convert_struct_union_body(
 
   dest += "(" + tag + ")";
 
-  if(struct_union_type.components().size() == 0)
-    return dest;
+  //if(struct_union_type.components().size() == 0)
+  //  return dest;
 
-  dest += "{ ";
+  dest += "{";
 
   for(size_t i = 0; i < n; i++)
   {
@@ -1104,7 +1102,7 @@ std::string expr2ccodet::convert_struct_union_body(
       dest += ", ";
   }
 
-  dest += " }";
+  dest += "}";
 
   return dest;
 }
@@ -1235,7 +1233,7 @@ expr2ccodet::convert_constant(const exprt &src, unsigned &precedence)
   }
   else if(is_array_like(type))
   {
-    dest = "{ ";
+    dest = "{";
 
     forall_operands(it, src)
     {
@@ -1247,7 +1245,7 @@ expr2ccodet::convert_constant(const exprt &src, unsigned &precedence)
       dest += tmp;
     }
 
-    dest += " }";
+    dest += "}";
   }
   else if(type.id() == "pointer")
   {
@@ -1436,9 +1434,7 @@ std::string expr2ccodet::convert_array_of(const exprt &src, unsigned precedence)
   std::string dest = "";
   dest += "{";
   if(!src.op0().is_zero() && !src.op0().is_false())
-  {
     dest += convert(src.op0());
-  }
   dest += "}";
 
   return dest;

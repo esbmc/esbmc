@@ -2,7 +2,7 @@
 
 Module:
 
-Author: Daniel Kroening, kroening@kroening.com
+Author:
 
 \*******************************************************************/
 
