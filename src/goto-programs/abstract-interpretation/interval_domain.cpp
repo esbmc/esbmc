@@ -81,7 +81,7 @@ real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
   auto real_value = to_constant_floatbv2t(e).value;
 
   // Health check, is the convertion to double ok? See #1037
-  if(!isnormal(real_value.to_double()) && !iszero(real_value.to_double()))
+  if(!isnormal(real_value.to_double()) || real_value.is_zero())
   {
     if(real_value.is_double())
       log_warning("ESBMC fails to to convert {} into double", *e);
@@ -601,9 +601,8 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
 
   std::vector<expr2tc> conjuncts;
   auto typecast = [&symbol](expr2tc v) {
-    expr2tc new_expr = symbol;
-    c_implicit_typecast_arithmetic(new_expr, v, *migrate_namespace_lookup);
-    return new_expr;
+    c_implicit_typecast(v, symbol->type, *migrate_namespace_lookup);
+    return v;
   };
   if(interval.singleton())
   {
@@ -616,15 +615,13 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
     if(interval.upper_set)
     {
       expr2tc value = make_expression_value(interval, src.type, true);
-      expr2tc new_expr = typecast(value);
-      conjuncts.push_back(lessthanequal2tc(new_expr, value));
+      conjuncts.push_back(lessthanequal2tc(symbol, typecast(value)));
     }
 
     if(interval.lower_set)
     {
       expr2tc value = make_expression_value(interval, src.type, false);
-      expr2tc new_expr = typecast(value);
-      conjuncts.push_back(lessthanequal2tc(value, new_expr));
+      conjuncts.push_back(lessthanequal2tc(typecast(value), symbol));
     }
   }
   return conjunction(conjuncts);
