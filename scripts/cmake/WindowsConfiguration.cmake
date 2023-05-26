@@ -38,11 +38,6 @@ if (WIN32)
 	  message(AUTHOR_WARNING "${CMAKE_CXX_COMPILER_ID} is not tested in Windows. You may run into issues.")
 	endif()
 
-  if(DOWNLOAD_DEPENDENCIES)
-    download_zip_and_extract(Z3 https://github.com/Z3Prover/z3/releases/download/z3-4.11.2/z3-4.11.2-x64-win.zip)
-    set(Z3_DIR ${CMAKE_BINARY_DIR}/Z3/z3-4.11.2-x64-win)
-  endif()
-
   # Produce static builds in windows
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
   set(Boost_USE_STATIC_LIBS        ON)

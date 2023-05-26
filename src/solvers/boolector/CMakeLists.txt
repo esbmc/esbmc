@@ -5,13 +5,20 @@ if(DEFINED Boolector_DIR)
   set(ENABLE_BOOLECTOR ON)
 else()
   if(ENABLE_BOOLECTOR AND DOWNLOAD_DEPENDENCIES)
-
-  CPMAddPackage(
+    # Sadly... Boolector requires some manual execution 
+    # before invoking its scripts. Thus, we can't use
+    # FetchContent here
+    CPMAddPackage(
       NAME boolector
       DOWNLOAD_ONLY YES
       GITHUB_REPOSITORY Boolector/boolector
       GIT_TAG 3.2.2)
 
+    # We can't use ExternalProject because we need it ready
+    # at configuration time
+
+    # TODO: Maybe we should do a PR to boolector repo and make our
+    # life easier in here.
     message("[boolector] Setting up boolector lingeling")
     execute_process(COMMAND "./contrib/setup-lingeling.sh"
                     WORKING_DIRECTORY ${boolector_SOURCE_DIR})

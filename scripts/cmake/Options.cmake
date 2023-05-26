@@ -48,18 +48,28 @@ option(BENCHBRINGUP "Run a user-specified benchmark in Github workflow" OFF)
 option(DOWNLOAD_DEPENDENCIES "Download and build dpendencies if needed (default: OFF)" OFF)
 
 #############################
-# DEPENDENCIES
+# PRE-BUILT DEPENDENCIES
 #############################
 if(WIN32)
 set(DEFAULT_LLVM_URL "https://gitlab.com/Anthonysdu/llvm11/-/raw/main/llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt.zip")
 set(DEFAULT_LLVM_NAME "llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt")
+
+set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.12.2/z3-4.12.2-x86-win.zip")
+set(DEFAULT_Z3_NAME z3-4.12.2-x86-win)
+
 else()
-set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-14.0.0/clang+llvm-14.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz")
-set(DEFAULT_LLVM_NAME "clang+llvm-14.0.0-x86_64-linux-gnu-ubuntu-18.04")
+set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz")
+set(DEFAULT_LLVM_NAME "clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04")
+
+set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.12.2/z3-4.12.2-x64-glibc-2.35.zip")
+set(DEFAULT_Z3_NAME z3-4.12.2-x64-glibc-2.35)
 endif()
 
 set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")
 set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of LLVM")
+
+set(ESBMC_Z3_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt Z3")
+set(ESBMC_Z3_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of Z3")
 
 #############################
 # CMake extra Vars
