@@ -21,6 +21,7 @@
 #include <util/prefix.h>
 #include <util/std_types.h>
 #include <vector>
+#include <algorithm>
 
 expr2tc goto_symext::symex_malloc(const expr2tc &lhs, const sideeffect2t &code)
 {
