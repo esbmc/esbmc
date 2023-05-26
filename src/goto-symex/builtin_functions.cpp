@@ -345,13 +345,11 @@ void goto_symext::symex_printf(const expr2tc &, const expr2tc &rhs)
   new_rhs->operands.erase(new_rhs->operands.begin());
 
   std::list<expr2tc> args;
-  new_rhs->foreach_operand(
-    [this, &args](const expr2tc &e)
-    {
-      expr2tc tmp = e;
-      do_simplify(tmp);
-      args.push_back(tmp);
-    });
+  new_rhs->foreach_operand([this, &args](const expr2tc &e) {
+    expr2tc tmp = e;
+    do_simplify(tmp);
+    args.push_back(tmp);
+  });
 
   target->output(
     cur_state->guard.as_expr(), cur_state->source, fmt.as_string(), args);
@@ -966,7 +964,8 @@ static inline expr2tc gen_value_by_byte(
 
     constant_array2tc result = gen_zero(type);
 
-    uint64_t base_size = type_byte_size(to_array_type(type).subtype).to_uint64();
+    uint64_t base_size =
+      type_byte_size(to_array_type(type).subtype).to_uint64();
     uint64_t bytes_left = num_of_bytes;
     uint64_t offset_left = offset;
 
@@ -986,7 +985,8 @@ static inline expr2tc gen_value_by_byte(
       else
       {
         assert(offset_left < base_size);
-        uint64_t bytes_to_write = bytes_left < base_size ? bytes_left : base_size;
+        uint64_t bytes_to_write =
+          bytes_left < base_size ? bytes_left : base_size;
         result->datatype_members[i] = gen_value_by_byte(
           to_array_type(type).subtype,
           local_member,
@@ -1090,8 +1090,10 @@ static inline expr2tc gen_value_by_byte(
       }
     }
 
-    const irep_idt &name = to_union_type(type).member_names[selected_member_index];
-    const type2tc &member_type = to_union_type(type).members[selected_member_index];
+    const irep_idt &name =
+      to_union_type(type).member_names[selected_member_index];
+    const type2tc &member_type =
+      to_union_type(type).members[selected_member_index];
     const member2tc member(member_type, src, name);
 
     result->init_field = name;
@@ -1155,8 +1157,7 @@ void goto_symext::intrinsic_memset(
 
   // Define a local function for translating to calling the unwinding C
   // implementation of memset
-  auto bump_call = [this, &func_call]() -> void
-  {
+  auto bump_call = [this, &func_call]() -> void {
     // We're going to execute a function call, and that's going to mess with
     // the program counter. Set it back *onto* pointing at this intrinsic, so
     // symex_function_call calculates the right return address. Misery.
@@ -1177,7 +1178,7 @@ void goto_symext::intrinsic_memset(
      * arg2: number of bytes to be set */
   expr2tc arg0 = func_call.operands[0];
   expr2tc arg1 = func_call.operands[1];
-  expr2tc arg2 = func_call.operands[2];  
+  expr2tc arg2 = func_call.operands[2];
 
   // Checks where arg0 points to
   internal_deref_items.clear();
@@ -1210,7 +1211,7 @@ void goto_symext::intrinsic_memset(
     return;
   }
 
-  unsigned long number_of_bytes = to_constant_int2t(arg2).as_ulong();  
+  unsigned long number_of_bytes = to_constant_int2t(arg2).as_ulong();
 
   // Where are we pointing to?
   for(auto &item : internal_deref_items)
