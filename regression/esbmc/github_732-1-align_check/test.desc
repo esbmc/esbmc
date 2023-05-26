@@ -1,5 +1,5 @@
 CORE
 main.c
 
-^WARNING: not checking alignment .* packed struct s4$
+^WARNING: not checking alignment .* packed struct .*s4.*$
 ^VERIFICATION SUCCESSFUL$
