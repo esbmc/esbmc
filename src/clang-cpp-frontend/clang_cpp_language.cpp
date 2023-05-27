@@ -21,8 +21,8 @@ languaget *new_clang_cpp_language()
 
 void clang_cpp_languaget::force_file_type()
 {
-  // We also force the standard to be c++98
-  compiler_args.push_back("-std=c++98");
+  // We also force the standard to be c++14
+  compiler_args.push_back("-std=c++14");
 
   // Force clang see all files as .cpp
   compiler_args.push_back("-x");
