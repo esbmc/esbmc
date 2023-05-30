@@ -337,6 +337,7 @@ void bmct::report_result(smt_convt::resultt &res)
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
   bool term = options.get_bool_option("termination");
+  bool mul = options.get_bool_option("multi-property");
 
   switch(res)
   {
@@ -345,7 +346,7 @@ void bmct::report_result(smt_convt::resultt &res)
     {
       report_failure();
     }
-    else if(!bs)
+    else if(!bs || (bs && mul))
     {
       report_success();
     }
