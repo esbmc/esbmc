@@ -421,7 +421,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"interactive-ileaves", NULL, ""},
     {"add-false-assert",
      NULL,
-     "add an false assertion before each RETRUN/END_FUNCTION statement"},
+     "add a false assertion before each RETRUN/END_FUNCTION statement"},
     {"make-assert-false", NULL, "convert every assertion to false"},
     {"goto-coverage",
      NULL,
