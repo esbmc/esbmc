@@ -426,7 +426,7 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "add an false assertion before each RETRUN/END_FUNCTION statement"},
     {"make-assert-false", NULL, "convert every assertion to false"},
-    {"goto-coverage", NULL, ""}}},
+    {"goto-coverage", NULL, "this activates --add-false-assert and --make-assert-false"}}},
   {"end", {{"", NULL, "end of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "instruction"},
