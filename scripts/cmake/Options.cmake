@@ -69,8 +69,8 @@ endif()
 set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")
 set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of LLVM")
 
-set(ESBMC_Z3_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt Z3")
-set(ESBMC_Z3_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of Z3")
+set(ESBMC_Z3_URL ${DEFAULT_Z3_URL} CACHE STRING "URL to download prebuilt Z3")
+set(ESBMC_Z3_NAME ${DEFAULT_Z3_NAME} CACHE STRING "Name of the extracted directory of Z3")
 
 #############################
 # CMake extra Vars
