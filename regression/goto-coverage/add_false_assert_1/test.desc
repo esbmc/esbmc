@@ -1,4 +1,4 @@
 CORE
 main.c
 --multi-property
-^VERIFICATION SUCCESS$
+^VERIFICATION SUCCESSFUL$
