@@ -40,6 +40,7 @@ extern "C"
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/mark_decl_as_non_det.h>
+#include <goto-programs/goto_coverage.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -1673,6 +1674,18 @@ bool esbmc_parseoptionst::process_goto_program(
       add_race_assertions(value_set_analysis, context, goto_functions);
 
       value_set_analysis.update(goto_functions);
+    }
+
+    if(cmdline.isset("goto-coverage"))
+    {
+      goto_coverage(goto_functions);
+      // Forall_goto_functions(it, goto_functions)
+      //   if(it->second.body_available)
+      //   {
+      //     goto_programt &goto_program = it->second.body;
+      //     if(goto_program.add_false_assertion() || goto_program.make_assertion_false())
+      //       log_error("fail to perfom assertion mutation.");
+      //   }
     }
 
     // show it?
