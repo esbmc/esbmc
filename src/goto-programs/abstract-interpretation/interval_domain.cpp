@@ -607,8 +607,7 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
   if(interval.singleton())
   {
     expr2tc value = make_expression_value(interval, src.type, true);
-    expr2tc new_expr = typecast(value);
-    conjuncts.push_back(equality2tc(new_expr, value));
+    conjuncts.push_back(equality2tc(typecast(value), symbol));
   }
   else
   {
