@@ -14,8 +14,10 @@ Release Notes of the ESBMC model checker
 * Operational models:
   ** Added model for aligned_alloc() via the combination of malloc and __ESBMC_assume on the address (#1035).
   ** Added lookup-based atoi, atol and atoll (#957, #958, #960, #1014, #1033).
+  ** Optimize memset operations by initializing the entire object with the result of the C memset function (#640).
 * Property Checking
   ** Added support for checking undefined behavior for shift operations  (#996, #1024).
+  ** Added support for multiple property verification with three options: --multi-property, --multi-fail-fast, and  --parallel-solving (#1022)
 * Concurrency support:
   ** Added missing global variable information for a context switch (#1012).
   ** Fixed guard issues for multi-threaded goto programs (#974).
