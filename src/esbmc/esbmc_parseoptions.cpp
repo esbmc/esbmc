@@ -1678,7 +1678,18 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if(cmdline.isset("goto-coverage"))
     {
-      goto_coverage(goto_functions);
+      options.set_option("add-false-assert", true);
+      options.set_option("make-assert-false", true);
+    }
+
+    if(cmdline.isset("add-false-assert"))
+    {
+      add_false_assert(goto_functions);
+    }
+
+    if(cmdline.isset("make-assert-false"))
+    {
+      make_assert_false(goto_functions);
     }
 
     // show it?
