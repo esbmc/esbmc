@@ -1679,13 +1679,6 @@ bool esbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("goto-coverage"))
     {
       goto_coverage(goto_functions);
-      // Forall_goto_functions(it, goto_functions)
-      //   if(it->second.body_available)
-      //   {
-      //     goto_programt &goto_program = it->second.body;
-      //     if(goto_program.add_false_assertion() || goto_program.make_assertion_false())
-      //       log_error("fail to perfom assertion mutation.");
-      //   }
     }
 
     // show it?
