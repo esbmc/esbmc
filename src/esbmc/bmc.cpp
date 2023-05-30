@@ -346,7 +346,7 @@ void bmct::report_result(smt_convt::resultt &res)
     {
       report_failure();
     }
-    else if(!bs || (bs && mul))
+    else if(!bs || mul)
     {
       report_success();
     }
