@@ -1,5 +1,35 @@
 Release Notes of the ESBMC model checker
 
+*** Version 7.2
+* Clang C++ frontend:
+  ** Added support for polymorphism (#919, #922, #923, #926, #927)
+  ** Fixed crash regarding the definition of template functions in structs (#1045).
+  ** Used value initialization for aggregate, including Plain Old Data (#1040).
+  ** Fixed object composition, turning "this->itr = iterator()" into "iterator(&this->itr)" (#1007).
+  ** Fixed various issues in our C++ operational models (e..g, #948, #995, #993, #988).
+* Solidity frontend:
+  ** Extended solidity-frontend to support Method Overload, Inheritance, and more return types for function calls (#1013).
+  ** Added support for the solidity constructor and multiple contracts #949
+  ** Fixed an error when calling a member function to get the Solidity return value (#1002).
+* Operational models:
+  ** Added model for aligned_alloc() via the combination of malloc and __ESBMC_assume on the address (#1035).
+  ** Added lookup-based atoi, atol and atoll (#957, #958, #960, #1014, #1033).
+* Property Checking
+  ** Added support for checking undefined behavior for shift operations  (#996, #1024).
+* Concurrency support:
+  ** Added missing global variable information for a context switch (#1012).
+  ** Fixed guard issues for multi-threaded goto programs (#974).
+* General fixes:
+  ** Fixed the union used to generate doubles (Fix ieee_floatt to_double() #1038).
+  ** Fixed access to multi-dim array members of unions (#1036).
+  ** Added support for LLVM-16 compat (#1034).
+  ** Made Z3 SMT formulas compatible with other solvers (#1023).
+  ** Relaxed return instruction requirements that are legal by GCC and Clang (#1020).
+  ** Improved bit mungling in the simplifier by adding a check that the operation can actually be performed meaningfully (#1019).
+  ** Removed __ESBMC prefix when generating CE for intrinsic functions (#999).
+  ** Do not call tuple_node_flattener for constant arrays of unions (#917).
+  ** Fixed union initializer for cast-to-union cases supported by Clang and GCC (#1000).
+
 *** Version 7.1
 * Added an experimental flag to cache SSA assertions with `--cache-asserts` (SSA caching #827).
 * Support for macOS M1 architecture (Fixed macOS M1 build #810).
