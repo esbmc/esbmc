@@ -419,6 +419,10 @@ const struct group_opt_templ all_cmd_options[] = {
     // transition to. Useful again for trying to replicate a particular context
     // switch order, or quickly explore what's reachable.
     {"interactive-ileaves", NULL, ""},
+    {"add-false-assert",
+     NULL,
+     "add an false assertion before each RETRUN/END_FUNCTION statement"},
+    {"make-assert-false", NULL, "convert every assertion to false"},
     {"goto-coverage", NULL, ""}}},
   {"end", {{"", NULL, "end of options"}}},
   {"Hidden Options",
