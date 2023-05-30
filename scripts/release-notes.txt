@@ -1,7 +1,7 @@
 Release Notes of the ESBMC model checker
 
 *** Version 7.2
-* Clang C++ frontend:
+* Clang-C++ frontend:
   ** Added support for polymorphism (#919, #922, #923, #926, #927)
   ** Fixed crash regarding the definition of template functions in structs (#1045).
   ** Used value initialization for aggregate, including Plain Old Data (#1040).
@@ -12,6 +12,7 @@ Release Notes of the ESBMC model checker
   ** Added support for the solidity constructor and multiple contracts #949
   ** Fixed an error when calling a member function to get the Solidity return value (#1002).
 * Operational models:
+  ** Added overflow checks for the C functions scanf and fscanf (#976).
   ** Added model for aligned_alloc() via the combination of malloc and __ESBMC_assume on the address (#1035).
   ** Added lookup-based atoi, atol and atoll (#957, #958, #960, #1014, #1033).
   ** Optimize memset operations by initializing the entire object with the result of the C memset function (#640).
