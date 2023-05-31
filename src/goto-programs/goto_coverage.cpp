@@ -12,6 +12,8 @@ void make_asserts_false(goto_functionst &goto_functions)
         if(it->is_assert())
         {
           it->guard = gen_false_expr();
+          it->location.property("Instrumentation ASSERT(0)");
+          it->location.comment("Instrumentation ASSERT(0)");
         }
       }
     }
@@ -51,5 +53,7 @@ void insert_false_assert(
   t->type = ASSERT;
   t->guard = gen_false_expr();
   t->location = it->location;
+  t->location.property("Instrumentation ASSERT(0)");
+  t->location.comment("Instrumentation ASSERT(0)");
   it = ++t;
 }
