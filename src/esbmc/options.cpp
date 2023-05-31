@@ -74,7 +74,7 @@ const struct group_opt_templ all_cmd_options[] = {
      ""},
     {"cppstd",
      boost::program_options::value<std::string>()->value_name("version"),
-     "set C++ standard"},
+     "set C++ standard (available: 98, 03, 11, 14, or 17)"},
     {"sysroot",
      boost::program_options::value<std::string>()->value_name("<path>"),
      "set the sysroot for the frontend"},
