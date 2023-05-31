@@ -34,6 +34,7 @@ public:
 protected:
   std::string internal_additions() override;
   void force_file_type() override;
+  std::list<std::string> standards{"98", "03", "11", "14", "17"};
 };
 
 languaget *new_clang_cpp_language();
