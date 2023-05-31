@@ -21,8 +21,20 @@ languaget *new_clang_cpp_language()
 
 void clang_cpp_languaget::force_file_type()
 {
-  // We also force the standard to be c++98
-  compiler_args.push_back("-std=c++98");
+  // C++ standard
+  std::string cppstd = config.options.get_option("cppstd");
+  if(!cppstd.empty())
+  {
+    auto it = std::find(standards.begin(), standards.end(), cppstd);
+    if(it == standards.end())
+    {
+      log_error("Invalid C++ standard: {}", cppstd);
+      abort();
+    }
+  }
+
+  std::string clangstd = cppstd.empty() ? "-std=c++03" : "-std=c++" + cppstd;
+  compiler_args.push_back(clangstd);
 
   // Force clang see all files as .cpp
   compiler_args.push_back("-x");
