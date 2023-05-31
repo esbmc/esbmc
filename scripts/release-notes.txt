@@ -18,7 +18,8 @@ Release Notes of the ESBMC model checker
   ** Optimize memset operations by initializing the entire object with the result of the C memset function (#640).
 * Property Checking
   ** Added support for checking undefined behavior for shift operations  (#996, #1024).
-  ** Added support for multiple property verification with three options: --multi-property, --multi-fail-fast, and  --parallel-solving (#1022)
+  ** Added support for multiple property verification with three options: --multi-property, --multi-fail-fast, and  --parallel-solving (#1022).
+  ** Added a color scheme when printing a message if a property has been successful or violated (#1022).
 * Concurrency support:
   ** Added missing global variable information for a context switch (#1012).
   ** Fixed guard issues for multi-threaded goto programs (#974).
@@ -29,7 +30,7 @@ Release Notes of the ESBMC model checker
   ** Fixed access to multi-dim array members of unions (#1036).
   ** Added support for LLVM-16 compat (#1034).
   ** Made Z3 SMT formulas compatible with other solvers (#1023).
-  ** Relaxed return instruction requirements that are legal by GCC and Clang (#1020).
+  ** ESBMC no longer throws errors for returning void expressions. (#1020).
   ** Improved bit mungling in the simplifier by adding a check that the operation can actually be performed meaningfully (#1019).
   ** Removed __ESBMC prefix when generating CE for intrinsic functions (#999).
   ** Do not call tuple_node_flattener for constant arrays of unions (#917).
