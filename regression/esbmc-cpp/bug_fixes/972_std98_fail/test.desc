@@ -2,4 +2,4 @@ CORE
 main.cpp
 --cppstd 98
 
-^VERIFICATION FAILED$
+^ERROR: PARSING ERROR$
