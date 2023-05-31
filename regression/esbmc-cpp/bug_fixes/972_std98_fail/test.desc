@@ -1,5 +1,5 @@
 CORE
 main.cpp
---cppstd 14
+--cppstd 98
 
 ^VERIFICATION FAILED$
