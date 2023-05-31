@@ -510,7 +510,6 @@ protected:
     const exprt &vtable_ptr_deref);
 
   bool is_aggregate_type(const clang::QualType &q_type) override;
-  bool is_move_constructor(clang::Decl &decl);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

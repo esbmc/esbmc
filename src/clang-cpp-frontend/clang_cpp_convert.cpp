@@ -321,14 +321,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
         continue;
     }
 
-    // A quick workaround to use mordern C++ AST.
-    // skip the move constructor
-    if(is_move_constructor(*decl))
-    {
-      log_warning("Skip move constructor");
-      continue;
-    }
-
     struct_typet::componentt comp;
 
     if(
@@ -1549,20 +1541,6 @@ bool clang_cpp_convertert::is_aggregate_type(const clang::QualType &q_type)
   }
   default:
     return false;
-  }
-
-  return false;
-}
-
-bool clang_cpp_convertert::is_move_constructor(clang::Decl &decl)
-{
-  if(decl.getKind() == clang::Decl::CXXConstructor)
-  {
-    if(const auto ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(&decl))
-    {
-      if(ctor->isMoveConstructor())
-        return true;
-    }
   }
 
   return false;
