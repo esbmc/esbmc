@@ -1,4 +1,5 @@
 CORE
-main.cpp --cppstd 14
+main.cpp
+--cppstd 14
 
 ^VERIFICATION SUCCESSFUL$
