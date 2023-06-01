@@ -40,7 +40,6 @@ extern "C"
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/mark_decl_as_non_det.h>
-#include <goto-programs/goto_coverage.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -1678,12 +1677,14 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if(cmdline.isset("goto-coverage") || cmdline.isset("make-assert-false"))
     {
-      make_asserts_false(goto_functions);
+      goto_coveraget tmp;
+      tmp.make_asserts_false(goto_functions);
     }
 
     if(cmdline.isset("goto-coverage") || cmdline.isset("add-false-assert"))
     {
-      add_false_asserts(goto_functions);
+      goto_coveraget tmp;
+      tmp.add_false_asserts(goto_functions);
     }
 
     // show it?
