@@ -34,7 +34,6 @@ function(add_esbmc_regression_test folder modes test)
     set_tests_properties(${test_name} PROPERTIES SKIP_RETURN_CODE 10)
 endfunction()
 
-
 function(add_esbmc_regression folder modes)
     SUBDIRLIST(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
     foreach(test ${SUBDIRS})
@@ -59,6 +58,13 @@ if(ENABLE_JIMPLE_FRONTEND)
     set(REGRESSIONS_JIMPLE jimple)
 endif()
 
+# list of C++98/03 test suites
+set(REGRESSIONS_CPP03 esbmc-cpp/cpp esbmc-cpp/cbmc
+                      esbmc-cpp/polymorphism_bringup
+                      esbmc-cpp/inheritance_bringup
+                      esbmc-cpp/bug_fixes
+                      esbmc-cpp/OM_sanity_checks)
+
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)
     set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc ${REGRESSIONS_SOLIDITY}
@@ -73,12 +79,10 @@ else()
     set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc ${REGRESSIONS_SOLIDITY}
                     ${REGRESSIONS_OLD_FRONTEND}
                     cbmc cstd llvm floats floats-regression
-                    k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith
+                    k-induction csmith
                     k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
-                    incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors esbmc-cpp11/new-delete esbmc-cpp11/reference esbmc-cpp/inheritance_bringup
-                    esbmc-cpp/polymorphism_bringup
-                    esbmc-cpp/bug_fixes
-                    esbmc-cpp/OM_sanity_checks
+                    incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors esbmc-cpp11/new-delete esbmc-cpp11/reference
+                    ${REGRESSIONS_CPP03}
                     ${REGRESSIONS_GOTO_CONTRACTOR} ${REGRESSIONS_JIMPLE} extensions cuda)
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
