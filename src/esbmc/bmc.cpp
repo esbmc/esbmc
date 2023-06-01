@@ -743,7 +743,8 @@ smt_convt::resultt bmct::multi_property_check(
    * if final_result is set to SAT
    */
   auto job_function =
-    [this, &eq, &ce_counter, &final_result, &result_mutex, &tracked_instrument](const size_t &i) {
+    [this, &eq, &ce_counter, &final_result, &result_mutex, &tracked_instrument](
+      const size_t &i) {
       // Since this is just a copy, we probably don't need a lock
       auto local_eq = std::make_shared<symex_target_equationt>(*eq);
 
@@ -818,7 +819,7 @@ smt_convt::resultt bmct::multi_property_check(
           std::ostringstream oss;
           log_fail("\n[Counterexample]\n");
           show_goto_trace(oss, ns, goto_trace);
-          log_result("{}", oss.str());  
+          log_result("{}", oss.str());
           final_result = result;
 
           // collect the tracked instrumentation which is verified failed
