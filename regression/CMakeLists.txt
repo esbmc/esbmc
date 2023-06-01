@@ -63,7 +63,9 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp esbmc-cpp/cbmc
                       esbmc-cpp/polymorphism_bringup
                       esbmc-cpp/inheritance_bringup
                       esbmc-cpp/bug_fixes
-                      esbmc-cpp/OM_sanity_checks)
+                      esbmc-cpp/OM_sanity_checks
+                      esbmc-cpp/string
+                      )
 
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)
