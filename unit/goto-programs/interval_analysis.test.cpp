@@ -81,7 +81,7 @@ public:
       // Wrapped Intervals logic (see "Interval Analysis and Machine Arithmetic 2015" paper)
       SECTION("Wrapped Intervals")
       {
-        log_status("Wrapped");        
+        log_status("Wrapped");
         set_baseline_config();
         interval_domaint::enable_wrapped_intervals = true;
         ait<interval_domaint> baseline;
@@ -942,7 +942,7 @@ TEST_CASE("Interval Analysis - Left Shift", "[ai][interval-analysis]")
   test_program T;
   T.code =
     "int main() {\n"
-    "int a = nondet_int() ? 1 : 4;\n"    
+    "int a = nondet_int() ? 1 : 4;\n"
     "int b = a << 2;\n" // a: [4,16] or [16 ,4]
     "return a;\n"
     "}";
@@ -951,12 +951,12 @@ TEST_CASE("Interval Analysis - Left Shift", "[ai][interval-analysis]")
   T.property["4"].push_back({"@F@main@a", 4, true});
   T.property["4"].push_back({"@F@main@a", 5, false});
   T.property["4"].push_back({"@F@main@a", 0, false});
-  
+
   T.property["4"].push_back({"@F@main@b", 4, true});
   T.property["4"].push_back({"@F@main@b", 16, true});
   T.property["4"].push_back({"@F@main@b", 17, false});
   T.property["4"].push_back({"@F@main@b", 3, false});
-  
+
   T.run_configs();
 }
 
@@ -967,7 +967,7 @@ TEST_CASE("Interval Analysis - Right Shift", "[ai][interval-analysis]")
   test_program T;
   T.code =
     "int main() {\n"
-    "int a = nondet_int() ? 10 : 20;\n"        
+    "int a = nondet_int() ? 10 : 20;\n"
     "int b = a >> 1;\n" // a: [5,10]
     "return a;\n"
     "}";
@@ -993,7 +993,7 @@ TEST_CASE(
   test_program T;
   T.code =
     "int main() {\n"
-    "int a = nondet_int() ? -20 : -10;\n"          
+    "int a = nondet_int() ? -20 : -10;\n"
     "int b = a >> b;\n" // a: [-5,-10]
     "return a;\n"
     "}";
