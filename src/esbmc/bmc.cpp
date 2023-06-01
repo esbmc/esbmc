@@ -876,7 +876,7 @@ smt_convt::resultt bmct::multi_property_check(
     options.get_bool_option("add-false-assert"))
   {
     int total = goto_coveraget().get_total_instrument();
-    if(tracked_instrument && total)
+    if(total)
     {
       log_success("\n[Coverage]\n");
       log_result("  Total Instrumented Assertion: {}", total);
