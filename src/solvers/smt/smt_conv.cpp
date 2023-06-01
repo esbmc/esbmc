@@ -389,7 +389,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     if(is_struct_type(arr.subtype) || is_pointer_type(arr.subtype))
     {
-      // Domain sort may be mesed with:
+      // Domain sort may be messed with:
       smt_sortt domain = mk_int_bv_sort(
         int_encoding ? config.ansi_c.int_width
                      : calculate_array_domain_width(arr));

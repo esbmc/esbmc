@@ -1166,12 +1166,11 @@ std::string expr2ct::convert_union(const exprt &src, unsigned &precedence)
     return convert_norep(src, precedence);
 
   const exprt::operandst &operands = src.operands();
-  const irep_idt &init [[maybe_unused]] = src.component_name();
+  const irep_idt &init = src.component_name();
 
-  if(operands.size() == 1)
+  if(operands.size() == 1 && !init.empty())
   {
     /* Initializer known */
-    assert(!init.empty());
     std::string dest = "{ ";
 
     std::string tmp = convert(src.op0());
@@ -1189,7 +1188,6 @@ std::string expr2ct::convert_union(const exprt &src, unsigned &precedence)
   {
     /* Initializer unknown, expect operands assigned to each member and convert
      * all of them */
-    assert(init.empty());
     return convert_struct_union_body(
       operands, to_union_type(full_type).components());
   }

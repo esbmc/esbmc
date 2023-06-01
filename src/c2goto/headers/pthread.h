@@ -23,67 +23,74 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef _MSVC
-#define NULL 0
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /* Forward declaration required because the type is used in pthread function
  * parameters below. */
-struct timespec;
+struct timespec __attribute__((annotate("__ESBMC_ODR-override")));
 
-typedef int32_t __clockid_t;
+typedef int32_t __clockid_t __attribute__((annotate("__ESBMC_ODR-override")));
 
-typedef unsigned long int pthread_t;
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
+{
+   unsigned long int tid;
+} pthread_t;
 
-typedef union pthread_attr_t
+#ifndef __have_pthread_attr_t
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   long int __align;
 } pthread_attr_t;
+# define __have_pthread_attr_t 1
+#endif
 
-
-typedef struct
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   int __lock;
-  unsigned int __count;
-  int __owner;
 } pthread_mutex_t;
 
 /* Mutex initializer. */
-#define PTHREAD_MUTEX_INITIALIZER { 0, 0, 0, }
+#define PTHREAD_MUTEX_INITIALIZER { 0, }
 
-typedef union
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   int __align;
 } pthread_mutexattr_t;
 
 
-typedef struct pthread_cond_t
+typedef struct __attribute__((annotate("__ESBMC_ODR-override"))) pthread_cond_t
 {
   int __lock;
-  unsigned int __futex;
-  unsigned int __nwaiters;
 } pthread_cond_t;
 
 /* Conditional variable handling. */
-#define PTHREAD_COND_INITIALIZER { 0, 0, 0, }
+#define PTHREAD_COND_INITIALIZER { 0, }
 
-typedef union
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   int __align;
 } pthread_condattr_t;
 
 
 /* Keys for thread-specific data */
-typedef unsigned int pthread_key_t;
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
+{
+  unsigned int key;
+} pthread_key_t;
 
 
 /* Once-only execution */
-typedef int pthread_once_t;
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
+{
+  int once;
+} pthread_once_t;
 
 
 //#if defined __USE_UNIX98 || defined __USE_XOPEN2K
 //jmorse - we always want this, regardless of feature flags.
-typedef struct
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   int __lock;
 } pthread_rwlock_t;
@@ -91,7 +98,7 @@ typedef struct
 /* Read-write lock initializer. */
 #define PTHREAD_RWLOCK_INITIALIZER { 0, }
 
-typedef union
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   long int __align;
 } pthread_rwlockattr_t;
@@ -100,17 +107,20 @@ typedef union
 
 #ifdef __USE_XOPEN2K
 /* POSIX spinlock data type.  */
-typedef volatile int pthread_spinlock_t;
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
+{
+  volatile int lock;
+} pthread_spinlock_t;
 
 
 /* POSIX barriers data type.  The structure of the type is
    deliberately not exposed.  */
-typedef union
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   long int __align;
 } pthread_barrier_t;
 
-typedef union
+typedef struct __attribute__((annotate("__ESBMC_ODR-override")))
 {
   int __align;
 } pthread_barrierattr_t;
@@ -120,10 +130,6 @@ typedef union
 #if __WORDSIZE == 32
 /* Extra attributes for the cleanup functions.  */
 # define __cleanup_fct_attribute __attribute__ ((__regparm__ (1)))
-#endif
-
-#ifdef __cplusplus
-extern "C" {
 #endif
 
 /* Detach state.  */
@@ -215,16 +221,6 @@ enum
 };
 
 
-
-
-/* Cleanup buffers */
-struct _pthread_cleanup_buffer
-{
-  void (*__routine) (void *);             /* Function to call.  */
-  void *__arg;                            /* Its argument.  */
-  int __canceltype;                       /* Saved cancellation type. */
-  struct _pthread_cleanup_buffer *__prev; /* Chaining of cleanup functions.  */
-};
 
 /* Cancellation */
 enum

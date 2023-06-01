@@ -15,30 +15,28 @@ struct __pthread_start_data
   void *start_arg;
 };
 
-struct __pthread_start_data __ESBMC_get_thread_internal_data(pthread_t tid);
+struct __pthread_start_data
+__ESBMC_get_thread_internal_data(unsigned long int tid);
+
 void __ESBMC_set_thread_internal_data(
-  pthread_t tid,
+  unsigned long int tid,
   struct __pthread_start_data data);
 
 #define __ESBMC_mutex_lock_field(a) ((a).__lock)
-#define __ESBMC_mutex_count_field(a) ((a).__count)
-#define __ESBMC_mutex_owner_field(a) ((a).__owner)
 #define __ESBMC_cond_lock_field(a) ((a).__lock)
-#define __ESBMC_cond_futex_field(a) ((a).__futex)
-#define __ESBMC_cond_nwaiters_field(a) ((a).__nwaiters)
 #define __ESBMC_rwlock_field(a) ((a).__lock)
 
 /* Global tracking data. Should all initialize to 0 / false */
-__attribute__((annotate("__ESBMC_inf_size")))
+static __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_running[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
+static __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_ended[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
+static __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_detach[1];
 
-__attribute__((
+static __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
 
 void(
@@ -46,13 +44,13 @@ void(
   __ESBMC_thread_key_destructors[1])(void *);
 
 /* TODO: these should be 'static', right? */
-pthread_key_t __ESBMC_next_thread_key = 0;
+static pthread_key_t __ESBMC_next_thread_key = {0};
 
-unsigned int __ESBMC_num_total_threads = 0;
-unsigned int __ESBMC_num_threads_running = 0;
-unsigned int __ESBMC_blocked_threads_count = 0;
+static unsigned int __ESBMC_num_total_threads = 0;
+static unsigned int __ESBMC_num_threads_running = 0;
+static unsigned int __ESBMC_blocked_threads_count = 0;
 
-pthread_t __ESBMC_get_thread_id(void);
+unsigned long int __ESBMC_get_thread_id(void);
 
 void __ESBMC_really_atomic_begin(void);
 void __ESBMC_really_atomic_end(void);
@@ -69,13 +67,13 @@ typedef struct thread_key
 
 static __ESBMC_thread_key *head = NULL;
 
-int insert_key_value(pthread_key_t key, const void *value)
+static int insert_key_value(pthread_key_t key, const void *value)
 {
   __ESBMC_thread_key *l =
     (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key));
   if(l == NULL)
     return -1;
-  l->thread = __ESBMC_get_thread_id();
+  l->thread.tid = __ESBMC_get_thread_id();
   l->key = key;
   l->value = value;
   l->next = (head == NULL) ? NULL : head;
@@ -83,18 +81,19 @@ int insert_key_value(pthread_key_t key, const void *value)
   return 0;
 }
 
-__ESBMC_thread_key *search_key(pthread_key_t key)
+static __ESBMC_thread_key *search_key(unsigned int key)
 {
+  /* TODO: argument 'key' is unused? */
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_thread_key *l = head;
-  while(l != NULL && l->thread != __ESBMC_get_thread_id())
+  while(l != NULL && l->thread.tid != __ESBMC_get_thread_id())
     l = l->next;
   return ((l == NULL) ? 0 : l);
   __ESBMC_atomic_end();
 }
 
-int delete_key(__ESBMC_thread_key *l)
+static int delete_key(__ESBMC_thread_key *l)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
@@ -135,7 +134,7 @@ void pthread_end_main_hook(void)
   __ESBMC_num_threads_running--;
 }
 
-void pthread_exec_key_destructors(void)
+static void pthread_exec_key_destructors(void)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
@@ -146,7 +145,7 @@ __ESBMC_HIDE:;
   // The order of destructor calls is unspecified if more than one destructor
   // exists for a thread when it exits.
   // source: https://linux.die.net/man/3/pthread_key_create
-  for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
+  for(unsigned long i = 0; i < __ESBMC_next_thread_key.key; ++i)
   {
     __ESBMC_thread_key *l = search_key(i);
     if(__ESBMC_thread_key_destructors[i] && l->value)
@@ -158,10 +157,10 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_end();
 }
 
-void pthread_trampoline(void)
+static void pthread_trampoline(void)
 {
 __ESBMC_HIDE:;
-  pthread_t threadid = __ESBMC_get_thread_id();
+  unsigned long int threadid = __ESBMC_get_thread_id();
   struct __pthread_start_data startdata =
     __ESBMC_get_thread_internal_data(threadid);
 
@@ -192,7 +191,7 @@ __ESBMC_HIDE:;
   struct __pthread_start_data startdata = {start_routine, arg};
 
   __ESBMC_atomic_begin();
-  pthread_t threadid = __ESBMC_spawn_thread(pthread_trampoline);
+  unsigned long int threadid = __ESBMC_spawn_thread(pthread_trampoline);
   __ESBMC_num_total_threads++;
   __ESBMC_num_threads_running++;
   __ESBMC_pthread_thread_running[threadid] = 1;
@@ -200,9 +199,9 @@ __ESBMC_HIDE:;
   __ESBMC_pthread_end_values[threadid] = NULL;
   __ESBMC_set_thread_internal_data(threadid, startdata);
 
-  // pthread_t is actually an unsigned long int; identify a thread using just
+  // pthread_t holds an unsigned long int; identify a thread using just by
   // its thread number.
-  *thread = threadid;
+  thread->tid = threadid;
 
   __ESBMC_atomic_end();
   return 0; // We never fail
@@ -213,7 +212,7 @@ void pthread_exit(void *retval)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   pthread_exec_key_destructors();
-  pthread_t threadid = __ESBMC_get_thread_id();
+  unsigned long int threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_end_values[(int)threadid] = retval;
   __ESBMC_pthread_thread_ended[(int)threadid] = 1;
   __ESBMC_num_threads_running--;
@@ -227,7 +226,7 @@ __ESBMC_HIDE:;
 
 pthread_t pthread_self(void)
 {
-  return __ESBMC_get_thread_id();
+  return (pthread_t){__ESBMC_get_thread_id()};
 }
 
 int pthread_join_switch(pthread_t thread, void **retval)
@@ -238,7 +237,7 @@ __ESBMC_HIDE:;
   // Detect whether the target thread has ended or not. If it isn't, mark us as
   // waiting for its completion. That fact can be used for deadlock detection
   // elsewhere.
-  _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
+  _Bool ended = __ESBMC_pthread_thread_ended[(int)thread.tid];
   if(!ended)
   {
     __ESBMC_blocked_threads_count++;
@@ -250,7 +249,7 @@ __ESBMC_HIDE:;
 
   // Fetch exit code
   if(retval != NULL)
-    *retval = __ESBMC_pthread_end_values[(int)thread];
+    *retval = __ESBMC_pthread_end_values[(int)thread.tid];
 
   // In all circumstances, allow a switch away from this thread to permit
   // deadlock checking,
@@ -270,12 +269,12 @@ __ESBMC_HIDE:;
   // If the other thread hasn't ended, assume false, because further progress
   // isn't going to be made. Wait for an interleaving where this is true
   // instead. This function isn't designed for deadlock detection.
-  _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
+  _Bool ended = __ESBMC_pthread_thread_ended[(int)thread.tid];
   __ESBMC_assume(ended);
 
   // Fetch exit code
   if(retval != NULL)
-    *retval = __ESBMC_pthread_end_values[(int)thread];
+    *retval = __ESBMC_pthread_end_values[(int)thread.tid];
 
   __ESBMC_atomic_end();
 
@@ -291,13 +290,11 @@ int pthread_mutex_init(
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
-  __ESBMC_mutex_count_field(*mutex) = 0;
-  __ESBMC_mutex_owner_field(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
 
-int pthread_mutex_initializer(pthread_mutex_t *mutex)
+static int pthread_mutex_initializer(pthread_mutex_t *mutex)
 {
   // check whether this mutex has been initialized via
   // PTHREAD_MUTEX_INITIALIZER
@@ -638,9 +635,9 @@ __ESBMC_HIDE:;
     "In pthread_key_create, key parameter must be different than NULL.");
   // the value NULL shall be associated with the new key in all active threads
   int result = insert_key_value(__ESBMC_next_thread_key, NULL);
-  __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
+  __ESBMC_thread_key_destructors[__ESBMC_next_thread_key.key] = destructor;
   // store the newly created key value at *key
-  *key = __ESBMC_next_thread_key++;
+  key->key = __ESBMC_next_thread_key.key++;
   // check whether we have failed to insert the key into our list.
   if(result < 0)
   {
@@ -673,11 +670,11 @@ __ESBMC_HIDE:;
   // If no thread-specific data value is associated with key,
   // then the value NULL shall be returned.
   void *result = NULL;
-  if(key <= __ESBMC_next_thread_key)
+  if(key.key <= __ESBMC_next_thread_key.key)
   {
     // Return the thread-specific data value associated
     // with the given key.
-    __ESBMC_thread_key *l = search_key(key);
+    __ESBMC_thread_key *l = search_key(key.key);
     result = (l == NULL) ? NULL : (void *)l->value;
   }
   __ESBMC_atomic_end();
@@ -719,7 +716,7 @@ __ESBMC_HIDE:;
   // it returns a nonzero value;
   // otherwise, it returns 0.
   __ESBMC_atomic_begin();
-  _Bool res = tid1 == tid2;
+  _Bool res = tid1.tid == tid2.tid;
   __ESBMC_atomic_end();
   // This function always succeeds.
   return res;
@@ -739,15 +736,15 @@ __ESBMC_HIDE:;
   int result = 0;
   // This assert also checks whether this thread is not a joinable thread.
   __ESBMC_assert(
-    !__ESBMC_pthread_thread_detach[(int)threadid],
+    !__ESBMC_pthread_thread_detach[(int)threadid.tid],
     "Attempting to detach an already detached thread results in unspecified "
     "behavior");
   if(
-    __ESBMC_pthread_thread_ended[(int)threadid] ||
-    (int)threadid > __ESBMC_num_total_threads)
+    __ESBMC_pthread_thread_ended[(int)threadid.tid] ||
+    (int)threadid.tid > __ESBMC_num_total_threads)
     result = ESRCH; // No thread with the ID thread could be found.
   else
-    __ESBMC_pthread_thread_detach[(int)threadid] = 1;
+    __ESBMC_pthread_thread_detach[(int)threadid.tid] = 1;
   __ESBMC_atomic_end();
   return result; // no error occurred
 }

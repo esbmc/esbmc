@@ -185,7 +185,7 @@ public:
   bool is_constant() const;
   bool is_true() const;
   bool is_false() const;
-  bool is_zero() const;
+  bool is_zero(bool compound = false) const;
   bool is_one() const;
   bool is_boolean() const;
 

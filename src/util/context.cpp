@@ -78,38 +78,6 @@ void contextt::erase_symbol(irep_idt name)
   symbols.erase(it);
 }
 
-void contextt::foreach_operand_impl_const(const_symbol_delegate &expr) const
-{
-  for(const auto &symbol : symbols)
-  {
-    expr(symbol.second);
-  }
-}
-
-void contextt::foreach_operand_impl(symbol_delegate &expr)
-{
-  for(auto &symbol : symbols)
-  {
-    expr(symbol.second);
-  }
-}
-
-void contextt::foreach_operand_impl_in_order_const(
-  const_symbol_delegate &expr) const
-{
-  for(auto ordered_symbol : ordered_symbols)
-  {
-    expr(*ordered_symbol);
-  }
-}
-
-void contextt::foreach_operand_impl_in_order(symbol_delegate &expr)
-{
-  for(auto &ordered_symbol : ordered_symbols)
-  {
-    expr(*ordered_symbol);
-  }
-}
 symbolt *contextt::move_symbol_to_context(symbolt &symbol)
 {
   symbolt *s = find_symbol(symbol.id);

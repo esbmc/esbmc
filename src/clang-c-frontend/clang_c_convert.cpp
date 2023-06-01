@@ -45,10 +45,7 @@ clang_c_convertert::clang_c_convertert(
 
 bool clang_c_convertert::convert()
 {
-  if(convert_top_level_decl())
-    return true;
-
-  return false;
+  return convert_top_level_decl();
 }
 
 bool clang_c_convertert::convert_builtin_types()
@@ -77,15 +74,18 @@ bool clang_c_convertert::convert_top_level_decl()
   for(auto const &translation_unit : ASTs)
   {
     // Update ASTContext as it changes for each source file
-    ASTContext = &(*translation_unit).getASTContext();
+    ASTContext = &translation_unit->getASTContext();
+
+    current_block = nullptr;
+    current_functionDecl = nullptr;
 
     // This is the whole translation unit. We don't represent it internally
     exprt dummy_decl;
     if(get_decl(*ASTContext->getTranslationUnitDecl(), dummy_decl))
       return true;
-  }
 
-  assert(current_functionDecl == nullptr);
+    assert(current_functionDecl == nullptr);
+  }
 
   return false;
 }
@@ -116,7 +116,9 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::Var:
   {
     const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(decl);
-    return get_var(vd, new_expr);
+    if(get_var(vd, new_expr))
+      return true;
+    break;
   }
 
   // Declaration of function's parameter
@@ -124,7 +126,9 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   {
     const clang::ParmVarDecl &param =
       static_cast<const clang::ParmVarDecl &>(decl);
-    return get_function_param(param, new_expr);
+    if(get_function_param(param, new_expr))
+      return true;
+    break;
   }
 
   // Declaration of functions
@@ -137,7 +141,9 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     // In C++ mode, methods are initially parsed as function and
     // need to be added to the class scope
     exprt dummy;
-    return get_function(fd, dummy);
+    if(get_function(fd, dummy))
+      return true;
+    break;
   }
 
   // Field inside a struct/union
@@ -228,8 +234,10 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::RecordDecl &record =
       static_cast<const clang::RecordDecl &>(decl);
 
-    if(get_struct_union_class(record))
-      return true;
+    std::string id, name;
+    get_decl_name(record, name, id);
+
+    tu_symtype_decls.emplace_back(id, &decl);
 
     break;
   }
@@ -239,6 +247,8 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::TranslationUnitDecl &tu =
       static_cast<const clang::TranslationUnitDecl &>(decl);
 
+    assert(tu_symtype_decls.empty());
+
     for(auto const &decl : tu.decls())
     {
       // This is a global declaration (variable, function, struct, etc)
@@ -247,6 +257,14 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       exprt dummy_decl;
       if(get_decl(*decl, dummy_decl))
         return true;
+
+      while(!tu_symtype_decls.empty())
+      {
+        auto [id, decl] = tu_symtype_decls.back();
+        tu_symtype_decls.pop_back();
+        if(resolve_symtype_decl(id, decl))
+          return true;
+      }
     }
 
     break;
@@ -285,6 +303,41 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   }
 
   return false;
+}
+
+bool clang_c_convertert::resolve_symtype_decl(
+  irep_idt id,
+  const clang::Decl *decl)
+{
+  symbolt *sym = context.find_symbol(id);
+  if(sym && !sym->type.incomplete())
+    return false;
+
+  switch(decl->getKind())
+  {
+  case clang::Decl::Record:
+  case clang::Decl::CXXRecord:
+    if(get_struct_union_class(*static_cast<const clang::RecordDecl *>(decl)))
+      return true;
+
+    break;
+
+  default:
+    decl->dump();
+    abort();
+  }
+
+  return false;
+}
+
+template <typename Func>
+static void for_decl_annot(const clang::Decl &decl, Func func)
+{
+  if(!decl.hasAttrs())
+    return;
+  for(auto const &attr : decl.getAttrs())
+    if(const auto *a = llvm::dyn_cast<clang::AnnotateAttr>(attr))
+      func(a->getAnnotation().str());
 }
 
 bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
@@ -333,16 +386,18 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   // the code at get_type, case clang::Type::Record, needs to find the correct
   // type (itself). Note that the type is incomplete at this stage, it doesn't
   // contain the fields, which are added to the symbol later on this method.
-  move_symbol_to_context(symbol);
+  symbolt *s = move_symbol_to_context(symbol);
+
+  for_decl_annot(rd, [s](const std::string &annot) {
+    if(annot == "__ESBMC_ODR-override")
+      s->odr_override = true;
+  });
 
   // Don't continue to parse if it doesn't have a complete definition
   // Try to get the definition
   clang::RecordDecl *rd_def = rd.getDefinition();
   if(!rd_def)
     return false;
-
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
 
   // We have to add fields before methods as the fields are likely to be used
   // in the methods
@@ -381,7 +436,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     add_padding(to_struct_type(t), ns);
 
   t.location() = location_begin;
-  added_symbol.type = t;
+  s->type = t;
   return false;
 }
 
@@ -427,23 +482,15 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
   // Check if we annotated it to be have an infinity size
   bool no_slice = false;
-  if(vd.hasAttrs())
-  {
-    for(auto const &attr : vd.getAttrs())
+  for_decl_annot(vd, [&t, &no_slice](const std::string &annot) {
+    if(annot == "__ESBMC_inf_size")
     {
-      if(const auto *a = llvm::dyn_cast<clang::AnnotateAttr>(attr))
-      {
-        const std::string &name = a->getAnnotation().str();
-        if(name == "__ESBMC_inf_size")
-        {
-          assert(t.is_array());
-          t.size(exprt("infinity", uint_type()));
-        }
-        else if(name == "__ESBMC_no_slice")
-          no_slice = true;
-      }
+      assert(t.is_array());
+      t.size(exprt("infinity", uint_type()));
     }
-  }
+    else if(annot == "__ESBMC_no_slice")
+      no_slice = true;
+  });
 
   // Get id and name
   std::string id, name;
@@ -479,7 +526,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   {
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    symbol.value = gen_zero(t, true);
+    symbol.value = gen_zero(ns.follow(t, true), true);
     symbol.value.zero_initializer(true);
   }
 
@@ -690,7 +737,15 @@ bool clang_c_convertert::get_function_param(
   exprt &param)
 {
   typet param_type;
-  if(get_type(pd.getOriginalType(), param_type))
+  /* Instead of .getOriginalType(), we want to keep the implicitly decayed
+   * parameter types. Otherwise we would fail to recognize the call to g()
+   * below as (*g)() in
+   *
+   *   void f(void g(int)) { g(1); }
+   *
+   * See, e.g., sv-benchmarks/c/ldv-regression/callfpointer.i
+   */
+  if(get_type(pd.getType(), param_type))
     return true;
 
   if(param_type.is_array())
@@ -990,15 +1045,22 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     std::string id, name;
     get_decl_name(rd, name, id);
 
-    // avoid unnecessary conversion if symbol already exists
-    if(!context.find_symbol(id))
-      if(get_struct_union_class(rd))
-        return true;
+    if(get_struct_union_class(rd))
+      return true;
 
-    symbolt &s = *context.find_symbol(id);
-    // For the time being we just copy the entire type.
-    // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
-    new_type = s.type;
+    symbolt *s = context.find_symbol(id);
+    if(s)
+    {
+      // For the time being we just copy the entire type.
+      // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
+      new_type = s->type;
+    }
+    else
+    {
+      tu_symtype_decls.emplace_back(id, &rd);
+      new_type = symbol_typet(id);
+    }
+
     break;
   }
 

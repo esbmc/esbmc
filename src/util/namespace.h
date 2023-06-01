@@ -16,11 +16,11 @@ public:
 
   void follow_symbol(irept &irep) const;
 
-  const typet &follow(const typet &src) const;
-  const type2tc follow(const type2tc &src) const
+  typet follow(const typet &src, bool deep = false) const;
+  const type2tc follow(const type2tc &src, bool deep = false) const
   {
     typet back = migrate_type_back(src);
-    typet followed = follow(back);
+    typet followed = follow(back, deep);
     type2tc tmp = migrate_type(followed);
     return tmp;
   }

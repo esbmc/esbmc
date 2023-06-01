@@ -10,16 +10,16 @@ void __VERIFIER_assert(int cond) { if (!(cond)) { ERROR: __VERIFIER_error(); } r
 int main(void)
 {
     float from1 = 0, to1 = nextafterf(from1, 1);
-    assert(to1 == 0x1p-149);
+    assert(to1 == 0x1p-149f);
  
     float from2 = 1;
     float to21 = nextafterf(from2, 2);
     printf("%.64f (%a)\n", to21, to21);
-    assert(to21 == 0x1.000002p+0);
+    assert(to21 == 0x1.000002p+0f);
 
     float to22 = nextafterf(from2, 2);
     printf("%.64f (%a)\n", to22, to22);
-    assert(to22 == 0x1.000002p+0);
+    assert(to22 == 0x1.000002p+0f);
 
 //    float inc = FLT_MIN * FLT_EPSILON;
 //    float a = 1.0 + inc;

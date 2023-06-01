@@ -44,7 +44,7 @@ void namespacet::follow_symbol(irept &irep) const
   }
 }
 
-const typet &namespacet::follow(const typet &src) const
+typet namespacet::follow(const typet &src, bool deep) const
 {
   if(!src.is_symbol())
     return src;
@@ -57,7 +57,18 @@ const typet &namespacet::follow(const typet &src) const
     assert(symbol);
     assert(symbol->is_type);
     if(!symbol->type.is_symbol())
-      return symbol->type;
+      break;
     symbol = lookup(symbol->type);
   }
+
+  typet res = symbol->type;
+  if(!deep)
+    return res;
+
+  if(res.id() == "struct" || res.id() == "union")
+    for(struct_union_typet::componentt &comp :
+        to_struct_union_type(res).components())
+      comp.type() = follow(comp.type(), true);
+
+  return res;
 }
