@@ -20,9 +20,9 @@ public:
   std::string code;
   std::map<std::string, std::vector<test_item>> property;
 
-  void run_configs(bool precise_only = false)
+  void run_configs(bool needs_overflow_support = false)
   {
-    if(!precise_only)
+    if(!needs_overflow_support)
     {
       // Common Interval Analysis (Linear from -infinity into +infinity)
       SECTION("Baseline")
@@ -81,19 +81,20 @@ public:
       // Wrapped Intervals logic (see "Interval Analysis and Machine Arithmetic 2015" paper)
       SECTION("Wrapped Intervals")
       {
-        log_status("Wrapped");
+        log_status("Wrapped");        
         set_baseline_config();
         interval_domaint::enable_wrapped_intervals = true;
         ait<interval_domaint> baseline;
         run_test<interval_domaint::wrap_mapt>(baseline);
       }
     }
-    SECTION("Wrapped Intervals + Arithmetic")
+    SECTION("Wrapped Intervals + Arithmetic + Bitwise")
     {
-      log_status("Wrapped + Arithmetic");
+      log_status("Wrapped + Arithmetic + Bitwise");
       set_baseline_config();
       interval_domaint::enable_wrapped_intervals = true;
       interval_domaint::enable_interval_arithmetic = true;
+      interval_domaint::enable_interval_bitwise_arithmetic = true;
       ait<interval_domaint> baseline;
       run_test<interval_domaint::wrap_mapt>(baseline, true);
     }
@@ -102,6 +103,7 @@ public:
   static void set_baseline_config()
   {
     interval_domaint::enable_interval_arithmetic = false;
+    interval_domaint::enable_interval_bitwise_arithmetic = false;
     interval_domaint::enable_modular_intervals = false;
     interval_domaint::enable_assertion_simplification = false;
     interval_domaint::enable_contraction_for_abstract_states = false;
@@ -633,8 +635,8 @@ TEST_CASE(
   T.property["4"].push_back({"@F@main@a", 10, true});
   T.property["6"].push_back({"@F@main@a", -1, true});
   T.property["6"].push_back({"@F@main@a", -10, true});
-  //T.property["6"].push_back({"@F@main@a", 0, false});
-  //T.property["6"].push_back({"@F@main@a", -11, false});
+  T.property["6"].push_back({"@F@main@a", 0, false});
+  T.property["6"].push_back({"@F@main@a", -11, false});
 
   T.run_configs(true);
 }
@@ -716,7 +718,7 @@ TEST_CASE(
   T.code =
     "int main() {\n"
     "int a = 10;\n"
-    "int b = a % 2;\n" //
+    "int b = a % 2;\n" // [0,1]
     "return a;\n"
     "}";
 
@@ -933,7 +935,6 @@ TEST_CASE("Interval Analysis - Bitor", "[ai][interval-analysis]")
   T.run_configs();
 }
 
-#if 0
 TEST_CASE("Interval Analysis - Left Shift", "[ai][interval-analysis]")
 {
   // Setup global options here
@@ -941,23 +942,24 @@ TEST_CASE("Interval Analysis - Left Shift", "[ai][interval-analysis]")
   test_program T;
   T.code =
     "int main() {\n"
-    "int a = 1;\n"
-    "if(nondet_int()) a = 2;"
-    "int b = 2;\n"  // a: [0001,0010]
-    "a = a << b;\n" // a: [4,8]
+    "int a = nondet_int() ? 1 : 4;\n"    
+    "int b = a << 2;\n" // a: [4,16] or [16 ,4]
     "return a;\n"
     "}";
 
   T.property["4"].push_back({"@F@main@a", 1, true});
-  T.property["4"].push_back({"@F@main@a", 2, true});
-  T.property["6"].push_back({"@F@main@a", 4, true});
-  T.property["6"].push_back({"@F@main@a", 8, true});
-  T.property["6"].push_back({"@F@main@a", 3, false});
-  T.property["6"].push_back({"@F@main@a", 9, false});
-
+  T.property["4"].push_back({"@F@main@a", 4, true});
+  T.property["4"].push_back({"@F@main@a", 5, false});
+  T.property["4"].push_back({"@F@main@a", 0, false});
+  
+  T.property["4"].push_back({"@F@main@b", 4, true});
+  T.property["4"].push_back({"@F@main@b", 16, true});
+  T.property["4"].push_back({"@F@main@b", 17, false});
+  T.property["4"].push_back({"@F@main@b", 3, false});
+  
   T.run_configs();
 }
-#endif
+
 TEST_CASE("Interval Analysis - Right Shift", "[ai][interval-analysis]")
 {
   // Setup global options here
@@ -965,22 +967,23 @@ TEST_CASE("Interval Analysis - Right Shift", "[ai][interval-analysis]")
   test_program T;
   T.code =
     "int main() {\n"
-    "int a = 10;\n"
-    "if(nondet_int()) a = 20;"
-    "int b = 1;\n"  // a: [0001,0010]
-    "a = a >> b;\n" // a: [5,10]
+    "int a = nondet_int() ? 10 : 20;\n"        
+    "int b = a >> 1;\n" // a: [5,10]
     "return a;\n"
     "}";
 
   T.property["4"].push_back({"@F@main@a", 10, true});
   T.property["4"].push_back({"@F@main@a", 20, true});
-  T.property["6"].push_back({"@F@main@a", 5, true});
-  T.property["6"].push_back({"@F@main@a", 10, true});
+  T.property["4"].push_back({"@F@main@a", 21, false});
+  T.property["4"].push_back({"@F@main@a", 9, false});
+  T.property["4"].push_back({"@F@main@b", 5, true});
+  T.property["4"].push_back({"@F@main@b", 10, true});
+  T.property["4"].push_back({"@F@main@b", 11, false});
+  T.property["4"].push_back({"@F@main@b", 4, false});
 
   T.run_configs();
 }
-// Disabling for now
-#if 0
+
 TEST_CASE(
   "Interval Analysis - Arithmetic Right Shift",
   "[ai][interval-analysis]")
@@ -990,19 +993,20 @@ TEST_CASE(
   test_program T;
   T.code =
     "int main() {\n"
-    "int a = -20;\n"
-    "if(nondet_int()) a = -10;"
-    "int b = 1;\n"  
-    "a = a >> b;\n" // a: [-5,-10]
+    "int a = nondet_int() ? -20 : -10;\n"          
+    "int b = a >> b;\n" // a: [-5,-10]
     "return a;\n"
     "}";
 
   T.property["4"].push_back({"@F@main@a", -10, true});
   T.property["4"].push_back({"@F@main@a", -20, true});
-  T.property["6"].push_back({"@F@main@a", -5, true});
-  T.property["6"].push_back({"@F@main@a", -10, true});
-  T.property["6"].push_back({"@F@main@a", -11, false});
+  T.property["4"].push_back({"@F@main@a", -21, false});
+  T.property["4"].push_back({"@F@main@a", -9, false});
+
+  T.property["4"].push_back({"@F@main@b", -5, true});
+  T.property["6"].push_back({"@F@main@b", -10, true});
+  T.property["6"].push_back({"@F@main@b", -11, false});
+  T.property["6"].push_back({"@F@main@b", -4, false});
 
   T.run_configs();
 }
-#endif
