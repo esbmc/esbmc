@@ -135,7 +135,7 @@ interval_domaint::generate_modular_interval<integer_intervalt>(
   if(is_unsignedbv_type(t))
   {
     b.setPower2(t->get_width());
-    result.make_le_than(b-1);
+    result.make_le_than(b - 1);
     result.make_ge_than(0);
   }
   else if(is_signedbv_type(t))
