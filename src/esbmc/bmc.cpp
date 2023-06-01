@@ -874,14 +874,14 @@ smt_convt::resultt bmct::multi_property_check(
     options.get_bool_option("make-assert-false") ||
     options.get_bool_option("add-false-assert"))
   {
-    log_success("\n[Coverage]\n");
-    log_result(
-      "  Total Instrumented Assertion: {}",
-      goto_coveraget().get_total_instrument());
-    log_result("  Tracked Instrumented Assertion: {}", tracked_instrument);
-    log_result(
-      "  Coverage: {}%",
-      tracked_instrument * 100.0 / goto_coveraget().get_total_instrument());
+    int total = goto_coveraget().get_total_instrument();
+    if(tracked_instrument && total)
+    {
+      log_success("\n[Coverage]\n");
+      log_result("  Total Instrumented Assertion: {}", total);
+      log_result("  Tracked Instrumented Assertion: {}", tracked_instrument);
+      log_result("  Coverage: {}%", tracked_instrument * 100.0 / total);
+    }
   }
 
   return final_result;
