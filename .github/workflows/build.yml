@@ -66,6 +66,8 @@ jobs:
         name: release-linux
         path: ./release
     - name: Run tests
+      env:
+        ESBMC_OPTS: '-I /__w/esbmc/esbmc/src/cpp/library'
       run: cd build/ && ctest -j4 --output-on-failure --progress .
     - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
       with:
