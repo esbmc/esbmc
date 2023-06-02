@@ -64,7 +64,7 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp esbmc-cpp/cbmc
                       esbmc-cpp/inheritance_bringup
                       esbmc-cpp/bug_fixes
                       esbmc-cpp/OM_sanity_checks
-                      esbmc-cpp/string
+                      esbmc-cpp/stream
                       )
 
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
