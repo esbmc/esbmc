@@ -10,6 +10,7 @@
 #include <goto-programs/remove_skip.h>
 #include <util/cmdline.h>
 #include <util/message.h>
+#include <util/filesystem.h>
 
 const mode_table_et mode_table[] = {
   LANGAPI_MODE_CLANG_C,
@@ -92,8 +93,8 @@ program goto_factory::get_goto_functions(
      */
 
   // Create tmp file
-  std::string filename(
-    "tmp.c"); // TODO: Make this unique and add support for CPP
+  std::string filename(file_operations::get_unique_tmp_path("esbmc-test-%%%%%%.c"));
+  log_debug("Creating {}", filename);
   goto_factory::create_file_from_istream(c_file, filename);
 
   cmdlinet cmd = goto_factory::get_default_cmdline(filename);
