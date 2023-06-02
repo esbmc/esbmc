@@ -59,19 +59,34 @@ if(ENABLE_JIMPLE_FRONTEND)
 endif()
 
 # list of C++98/03 test suites
-set(REGRESSIONS_CPP03 esbmc-cpp/cpp esbmc-cpp/cbmc
+set(REGRESSIONS_CPP03 esbmc-cpp/cpp
+                      esbmc-cpp/cbmc
                       esbmc-cpp/polymorphism_bringup
                       esbmc-cpp/inheritance_bringup
                       esbmc-cpp/bug_fixes
                       esbmc-cpp/OM_sanity_checks
                       esbmc-cpp/string
-                      #esbmc-cpp/stream
-                      #esbmc-cpp/gcc-template-tests
-                      #esbmc-cpp/template
+                      esbmc-cpp/stream
+                      esbmc-cpp/gcc-template-tests
+                      esbmc-cpp/template
+                      esbmc-cpp/algorithm
+                      esbmc-cpp/deque
+                      esbmc-cpp/list
+                      esbmc-cpp/map
+                      esbmc-cpp/multimap
+                      esbmc-cpp/multiset
+                      esbmc-cpp/priority_queue
+                      esbmc-cpp/queue
+                      esbmc-cpp/set
+                      esbmc-cpp/stack
+                      esbmc-cpp/unix
+                      esbmc-cpp/vector
                       )
 # list of C++11 test suites
-set(REGRESSIONS_CPP11 esbmc-cpp11/cpp esbmc-cpp11/constructors
-                      esbmc-cpp11/new-delete esbmc-cpp11/reference
+set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
+                      esbmc-cpp11/constructors
+                      esbmc-cpp11/new-delete
+                      esbmc-cpp11/reference
                       )
 
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
