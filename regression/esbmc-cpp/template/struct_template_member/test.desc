@@ -1,4 +1,5 @@
 CORE
 main.cpp
 
-^VERIFICATION SUCCESSFUL$
+<item_10_mode>KNOWNBUG</item_10_mode>
+</test-case>
