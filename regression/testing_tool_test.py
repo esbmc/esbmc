@@ -177,7 +177,7 @@ class XMLTest1(ParseTest):
     def _argument_list_checks(self, test_obj: BaseTest):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         expected = ['__test__', './esbmc-cpp/cpp/ch1_0/main.cpp', '--unwind',
-                    '10', '--no-unwinding-assertions']
+                    '10', '--no-unwinding-assertions', '-I', '/__w/esbmc/esbmc/src/cpp/library/']
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
