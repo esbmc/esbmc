@@ -4,22 +4,23 @@
 #include <util/expr_util.h>
 #include <util/c_sizeof.h>
 
-#include <iostream>
-
-
+// Here we apply a sequence of preprocessing procedures
+// to prepare the given GOTO program for translation
 void goto2ct::preprocess()
 {
-  // Updating all symbol tables
+  // Extracting all symbol tables
   extract_symbol_tables();
-  // Update the initializers for variables with static lifetime
+  // Extracting all initializers for variables with static lifetime
   extract_initializers();
-  // Sorting all compound types
-  std::set<typet> fwd_decls = sort_compound_types(ns, global_types);
+  // Sorting all compound (i.e., struct/union) types (global and local)
+  sort_compound_types(ns, global_types);
   for(auto &it : local_types)
     sort_compound_types(ns, local_types[it.first]);
-  // Performing all adjustments on GOTO programs
+  // Performing adjustments to each GOTO function individually
   for(auto &it : goto_functions.function_map)
   {
+    remove_unsupported_instructions(it.second.body);
+    // Dealing with assignments to struct, union, array variables
     adjust_compound_assignments(it.second.body);
     // Updating scope ids to the variables within the program
     it.second.body.compute_location_numbers();
@@ -27,11 +28,11 @@ void goto2ct::preprocess()
   }
 }
 
-// When dealing with "pointer" and "array" types 
+// When dealing with "pointer" and "array" types
 // and "typedef"s sometimes it is
 // necessary to know the "underlying" type of the corresponding
 // array/pointer type or typedef. This method returns such "underlying" type,
-// or resolve an incomplete type if there is a corresponding type definition
+// or resolves an incomplete type if there is a corresponding type definition
 // in the symbol table.
 typet goto2ct::get_base_type(typet type, namespacet ns)
 {
@@ -46,7 +47,7 @@ typet goto2ct::get_base_type(typet type, namespacet ns)
     if(symbol && symbol->is_type && !symbol->type.is_nil())
       return get_base_type(symbol->type, ns);
   }
-  
+
   // This is to deal with incomplete types and unions
   if(type.id() == "struct" || type.id() == "union")
   {
@@ -72,49 +73,50 @@ expr2tc goto2ct::get_base_expr(expr2tc expr)
   return expr;
 }
 
+// This method recursivelly iterates through all members of the given
+// struct/union "type" and builds a list "sorted_types" of all
+// struct/union types appearing in "type" in the order where each
+// successive element does not feature a struct/union member whose
+// type has not already been included in the list.
 void goto2ct::sort_compound_types_rec(
   const namespacet &ns,
   std::list<typet> &sorted_types,
-  std::set<typet> &fwd_decls,
   std::set<typet> &observed_types,
   typet &type)
 {
-  // Getting the base type in case we are dealing with a pointer or an array
+  // Getting the base struct/union type in case we are dealing
+  // with an array or a typedef
   typet base_type = get_base_type(type, ns);
 
-  // The compound type have not been seen before
+  // The compound type have not been seen before by now
   if(observed_types.count(base_type) == 0)
   {
     observed_types.insert(base_type);
+    // If "base_type" is struct/union, then iterate through its members.
     if(base_type.id() == "struct" || base_type.id() == "union")
     {
       struct_union_typet struct_union_type = to_struct_union_type(base_type);
 
-      // Iterating through the fields of the struct/union type
       for(auto comp : struct_union_type.components())
-        sort_compound_types_rec(ns, sorted_types, fwd_decls, observed_types, comp.type());
-        
+        sort_compound_types_rec(ns, sorted_types, observed_types, comp.type());
+
       sorted_types.push_back(struct_union_type);
-    }
-    else if(base_type.id() == "code")
-    {
-      for(auto arg : to_code_type(base_type).arguments())
-        sort_compound_types_rec(ns, sorted_types, fwd_decls, observed_types, arg.type());
     }
   }
 }
 
-std::set<typet> goto2ct::sort_compound_types(const namespacet &ns, std::list<typet> &types)
+// This method iterates through the given list "types" of compound
+// (i.e., struct/union) types and sorts them in the order they should
+// be defined in the program.
+void goto2ct::sort_compound_types(const namespacet &ns, std::list<typet> &types)
 {
   std::list<typet> sorted_types;
-  std::set<typet> fwd_decls;
   std::set<typet> observed_types;
-  
+
   for(auto it = types.begin(); it != types.end(); it++)
-    sort_compound_types_rec(ns, sorted_types, fwd_decls, observed_types, *it);
-  
+    sort_compound_types_rec(ns, sorted_types, observed_types, *it);
+
   types = sorted_types;
-  return fwd_decls;
 }
 
 void goto2ct::extract_symbol_tables()
@@ -134,12 +136,10 @@ void goto2ct::extract_symbol_tables()
   // data structures
   ns.get_context().foreach_operand_in_order(
     [this, &input_files](const symbolt &s) {
-      if(input_files.find(s.location.file().as_string()) == input_files.end() &&
-          s.location.file().as_string() != "esbmc_intrinsics.h" &&
-          s.location.file().as_string() != "pthread_lib.c" &&
-          s.location.file().as_string() != "string.c")
+      // Skipping everything that appears in "esbmc_intrinsics.h"
+      if(s.location.file().as_string() == "esbmc_intrinsics.h")
         return;
-      
+
       // Extracting the name of the function where this symbol is declared.
       // It has a global scope if the location function name is empty.
       std::string sym_fun_name = s.location.function().as_string();
@@ -176,12 +176,12 @@ void goto2ct::extract_initializers()
   if(goto_functions.function_map.count("c:@F@main") == 0)
     return;
 
-  for(auto instr : goto_functions.function_map["__ESBMC_main"].body.instructions)
+  for(auto instr :
+      goto_functions.function_map["__ESBMC_main"].body.instructions)
   {
     if(instr.type == ASSIGN)
     {
       code_assign2tc assign = to_code_assign2t(instr.code);
-      //std::cerr << ">>>>> assign->target = " << assign->target << "\n";
       if(is_symbol2t(assign->target))
       {
         const symbolt *sym = ns.lookup(to_symbol2t(assign->target).thename);
@@ -195,14 +195,14 @@ void goto2ct::extract_initializers()
               global_const_initializers[sym->id.as_string()] = init;
             else
               local_const_initializers[sym->id.as_string()] = init;
+          else if(fun_name.empty())
+          {
+            global_static_initializers[sym->id.as_string()] = init;
+            goto_functions.function_map["c:@F@main"]
+              .body.instructions.push_front(instr);
+          }
           else
-            if(fun_name.empty())
-            {
-              global_static_initializers[sym->id.as_string()] = init;
-              goto_functions.function_map["c:@F@main"].body.instructions.push_front(instr);
-            }
-            else
-              local_static_initializers[sym->id.as_string()] = init;
+            local_static_initializers[sym->id.as_string()] = init;
         }
       }
     }
@@ -212,32 +212,35 @@ void goto2ct::extract_initializers()
 // This function assigns a unique scope ID to each GOTO instruction
 // within the program. Such ID's are useful for identifying
 // the lifetime of each declared variable within the program
-// which is necessary to produce a correct translation into 
+// which is necessary to produce a correct translation into
 // languages like C/C++.
 // GOTO syntax does provide the means of solving the above problem
-// by tracking all DECL instructions and the corresponding DEAD 
+// by tracking all DECL instructions and the corresponding DEAD
 // instructions. Here we use this information to preform some additional
 // analysis for cases when there are multiple DEAD instructions
 // for a single DECL (e.g., when there "break"'s inside the loop, GOTO
 // converter will declare all loop local variables as DEAD at every
-// exit point of the loop). Moreover, there may be clusters of 
+// exit point of the loop). Moreover, there may be clusters of
 // DECL and DEAD instructions which means that we can
 // place all corresponding variables in the same scope, instead
 // of declaring a new scope for each individual pairs of DECL and DEAD.
-// Finally, the produced scope ID's may be useful for various 
+// Finally, the produced scope ID's may be useful for various
 // analyses prior to and during symbolic execution.
 void goto2ct::assign_scope_ids(goto_programt &goto_program)
 {
   // Fedor: first try to identify and separate DEAD clusters
   std::vector<std::string> scope_cluster;
-  for(auto it = goto_program.instructions.rbegin(); it != goto_program.instructions.rend(); it++)
+  for(auto it = goto_program.instructions.rbegin();
+      it != goto_program.instructions.rend();
+      it++)
   {
     if(it->type == DEAD && std::next(it)->type == DEAD)
     {
       std::string sym_name = to_code_dead2t(it->code).value.as_string();
-      std::string sym_name_short =  expr2ccodet::get_name_shorthand(sym_name);
-      if(std::find(scope_cluster.begin(), scope_cluster.end(), sym_name_short) !=
-          scope_cluster.end())
+      std::string sym_name_short = expr2ccodet::get_name_shorthand(sym_name);
+      if(
+        std::find(scope_cluster.begin(), scope_cluster.end(), sym_name_short) !=
+        scope_cluster.end())
       {
         scope_cluster.clear();
         goto_programt::instructiont skip;
@@ -262,10 +265,12 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
   // scope ID for all GOTO instruction within a body of
   // a GOTO program is equal to 1.
   std::vector<unsigned int> scope_ids_stack = {scope_count};
-  // List of all scopes recorded until the current instruction is processed. 
+  // List of all scopes recorded until the current instruction is processed.
   std::vector<std::vector<std::string>> scope_syms_stack = {{}, {}};
   // Iterating through the GOTO instructions in reverse order
-  for(auto it = goto_program.instructions.rbegin(); it != goto_program.instructions.rend(); it++)
+  for(auto it = goto_program.instructions.rbegin();
+      it != goto_program.instructions.rend();
+      it++)
   {
     unsigned int cur_scope_id = scope_ids_stack.back();
     unsigned int parent_scope_id = 0;
@@ -296,7 +301,9 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
         // If the previous instruction wasn't a DEAD
         // then we are entering a new scope.
         // Hence, creating a new unique scope ID
-        if(std::prev(it)->type != DEAD && it != goto_program.instructions.rbegin())
+        if(
+          std::prev(it)->type != DEAD &&
+          it != goto_program.instructions.rbegin())
         {
           parent_scope_id = scope_ids_stack.at(scope_ids_stack.size() - 1);
           scope_ids_stack.push_back(++scope_count);
@@ -351,18 +358,17 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
     it->parent_scope_id = parent_scope_id;
     goto_scope_id[it->location_number] = cur_scope_id;
     goto_parent_scope_id[it->location_number] = parent_scope_id;
-    //std::cerr << ">>>>> it = " << *it << "\n";
-    //std::cerr << ">>>>> it.base() = " << it.base() << "\n";
   }
 }
 
 void goto2ct::adjust_compound_assignment_rec(
-    goto_programt::instructionst &new_instructions,
-    goto_programt::instructiont instruction,
-    const namespacet &ns)
+  goto_programt::instructionst &new_instructions,
+  goto_programt::instructiont instruction,
+  const namespacet &ns)
 {
   assert(is_code_assign2t(instruction.code));
   code_assign2tc assign = to_code_assign2t(instruction.code);
+  // Assignment to a typecast
   if(is_typecast2t(assign->target))
   {
     expr2tc new_lhs = to_typecast2t(assign->target).from;
@@ -372,6 +378,7 @@ void goto2ct::adjust_compound_assignment_rec(
 
     adjust_compound_assignment_rec(new_instructions, new_instruction, ns);
   }
+  // Assignment to a struct variable
   else if(
     is_symbol2t(assign->target) && is_struct_type(assign->target->type) &&
     is_constant_struct2t(assign->source))
@@ -381,6 +388,7 @@ void goto2ct::adjust_compound_assignment_rec(
     instruction.code = new_assign;
     new_instructions.push_back(instruction);
   }
+  // Assignment to a union variable
   else if(
     is_symbol2t(assign->target) && is_union_type(assign->target->type) &&
     is_constant_union2t(assign->source))
@@ -390,6 +398,19 @@ void goto2ct::adjust_compound_assignment_rec(
     instruction.code = new_assign;
     new_instructions.push_back(instruction);
   }
+  // Assignment to an array variable.
+  // Turning it into a function call to "memcpy"
+  /*
+  else if(is_array_type(assign->target->type))
+  {
+    exprt fun_call = convert_array_assignment_to_function_call(assign);
+    expr2tc fun_call2;
+    migrate_expr(fun_call, fun_call2);
+    instruction.code = fun_call2;
+    instruction.type = FUNCTION_CALL;
+    new_instructions.push_back(instruction);
+  }
+  */
   else
     new_instructions.push_back(instruction);
 }
@@ -409,11 +430,12 @@ void goto2ct::adjust_compound_assignment_rec(
 void goto2ct::adjust_compound_assignments(goto_programt &goto_program)
 {
   goto_programt::instructionst new_instructions;
-  for(auto it = goto_program.instructions.begin(); it != goto_program.instructions.end(); it++)
+  for(auto it = goto_program.instructions.begin();
+      it != goto_program.instructions.end();
+      it++)
   {
     if(it->type == ASSIGN)
     {
-      //goto_program.replace_compound_assign_rec(new_instructions, *it, ns);
       adjust_compound_assignment_rec(new_instructions, *it, ns);
       // Now to preserve the tarets we cannot remove any instructions.
       // Hence, we replace the "value" in the original instruction
@@ -422,6 +444,27 @@ void goto2ct::adjust_compound_assignments(goto_programt &goto_program)
       new_instructions.pop_front();
       it->code = tmp_front.code;
       goto_program.instructions.splice(it, new_instructions);
+    }
+  }
+}
+
+// This method iterates through the instructions in the given GOTO program
+// and removes all GOTO instructions that cannot be currently
+// translated
+void goto2ct::remove_unsupported_instructions(goto_programt &goto_program)
+{
+  goto_programt::instructionst new_instructions;
+  for(auto it = goto_program.instructions.begin();
+      it != goto_program.instructions.end();
+      it++)
+  {
+    // Unsupported assignment instructions
+    if(it->type == ASSIGN)
+    {
+      code_assign2tc assign = to_code_assign2t(it->code);
+      // Removing assignments to "dynamic_type2t"
+      if(is_dynamic_size2t(assign->target))
+        it = goto_program.instructions.erase(it);
     }
   }
 }
@@ -447,7 +490,6 @@ exprt goto2ct::convert_array_assignment_to_function_call(code_assign2tc assign)
     memcpy_sym.id = "c:@F@memcpy";
     memcpy_sym.name = "c:@F@memcpy";
     memcpy_sym.type = function_call.type();
-    //memcpy_sym.location = assign.location();
   }
   // Creating the arguments for the function call:
   //   1 - the array symbol being assigned to,
@@ -461,10 +503,10 @@ exprt goto2ct::convert_array_assignment_to_function_call(code_assign2tc assign)
   expr2tc source = get_base_expr(assign->source);
 
   typecast2tc type_cast(assign->source->type, source);
+
   arguments.push_back(migrate_expr_back(assign->target));
   arguments.push_back(migrate_expr_back(type_cast));
-  arguments.push_back(
-    c_sizeof(migrate_type_back(assign->source->type), ns));
+  arguments.push_back(c_sizeof(migrate_type_back(assign->source->type), ns));
   // Populating the function call
   function_call.function() = symbol_expr(memcpy_sym);
   function_call.arguments() = arguments;
