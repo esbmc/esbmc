@@ -323,8 +323,8 @@ std::vector<std::string> get_list_of_headers(const std::string &path)
         res.push_back(match[1]);
 
       // This will contain the match for the "#include "..."" pattern
-      //if(!match[2].str().empty())
-      //  res.push_back(match[2]);
+      if(!match[2].str().empty())
+        res.push_back(match[2]);
     }
   }
   return res;
