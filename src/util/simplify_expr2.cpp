@@ -1003,17 +1003,14 @@ expr2tc index2t::do_simplify() const
 
 expr2tc not2t::do_simplify() const
 {
-  expr2tc simp = try_simplification(value);
-
-  if(is_not2t(simp))
+  if(is_not2t(value))
     // These negate.
-    return to_not2t(simp).value;
+    return to_not2t(value).value;
 
-  if(!is_constant_bool2t(simp))
+  if(!is_constant_bool2t(value))
     return expr2tc();
 
-  const constant_bool2t &val = to_constant_bool2t(simp);
-  return expr2tc(new constant_bool2t(!val.value));
+  return expr2tc(new constant_bool2t(!to_constant_bool2t(value).value));
 }
 
 template <template <typename> class TFunctor, typename constructor>
