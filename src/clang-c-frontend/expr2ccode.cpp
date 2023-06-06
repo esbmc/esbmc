@@ -1283,7 +1283,6 @@ expr2ccodet::convert_same_object(const exprt &src, unsigned &precedence)
   assert(
     is_pointer_type(same->side_1->type) && is_pointer_type(same->side_2->type));
   pointer_type2tc ptr_type = to_pointer_type(same->side_1->type);
-  unsigned int ptr_subtype_size = type_byte_size(ptr_type->subtype).to_uint64();
 
   if(is_address_of2t(same->side_2))
   {
@@ -1291,8 +1290,6 @@ expr2ccodet::convert_same_object(const exprt &src, unsigned &precedence)
     if(is_array_type(addr->ptr_obj->type))
     {
       array_type2tc arr_type = to_array_type(addr->ptr_obj->type);
-      unsigned int arr_subtype_size =
-        type_byte_size(arr_type->subtype).to_uint64();
       // this arr_size is equal to the number of elements of the given array
       expr2tc arr_size = arr_type->array_size;
       greaterthan2tc gt(addr->ptr_obj, same->side_1);
