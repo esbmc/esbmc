@@ -339,7 +339,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", false);
   }
 
-  if(cmdline.isset("overflow-check"))
+  if(
+    cmdline.isset("overflow-check") || cmdline.isset("unsigned-overflow-check"))
   {
     options.set_option("disable-inductive-step", true);
   }

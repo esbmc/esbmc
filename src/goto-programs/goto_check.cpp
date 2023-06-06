@@ -24,6 +24,8 @@ public:
       disable_unlimited_scanf_check(
         options.get_bool_option("no-unlimited-scanf-check")),
       enable_overflow_check(options.get_bool_option("overflow-check")),
+      enable_unsigned_overflow_check(
+        options.get_bool_option("unsigned-overflow-check")),
       enable_ub_shift_check(options.get_bool_option("ub-shift-check")),
       enable_nan_check(options.get_bool_option("nan-check"))
   {
@@ -91,6 +93,7 @@ protected:
   bool disable_pointer_relation_check;
   bool disable_unlimited_scanf_check;
   bool enable_overflow_check;
+  bool enable_unsigned_overflow_check;
   bool enable_ub_shift_check;
   bool enable_nan_check;
 };
@@ -207,7 +210,9 @@ void goto_checkt::overflow_check(
   const guardt &guard,
   const locationt &loc)
 {
-  if(!enable_overflow_check && !enable_ub_shift_check)
+  if(
+    !enable_overflow_check && !enable_unsigned_overflow_check &&
+    !enable_ub_shift_check)
     return;
 
   // Don't check shift right
@@ -221,7 +226,7 @@ void goto_checkt::overflow_check(
     if(!is_signedbv_type(type) && !is_unsignedbv_type(type))
       return;
   }
-  else if(!is_signedbv_type(type))
+  else if(!is_signedbv_type(type) && !enable_unsigned_overflow_check)
     return;
 
   // Don't check pointer overflow
