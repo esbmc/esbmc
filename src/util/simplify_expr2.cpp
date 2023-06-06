@@ -615,19 +615,8 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
   if(!is_number_type(type) && !is_vector_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operation, if any
-  expr2tc to_simplify = try_simplification(value);
-  if(!is_constant_expr(to_simplify))
-  {
-    // Were we able to simplify anything?
-    if(value != to_simplify)
-    {
-      expr2tc new_neg = expr2tc(new constructor(type, to_simplify));
-      return typecast_check_return(type, new_neg);
-    }
-
+  if(!is_constant_expr(value))
     return expr2tc();
-  }
 
   expr2tc simpl_res;
   if(is_bv_type(value))
@@ -635,23 +624,21 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
     std::function<constant_int2t &(expr2tc &)> to_constant =
       (constant_int2t & (*)(expr2tc &)) to_constant_int2t;
 
-    simpl_res = TFunctor<constant_int2t>::simplify(to_simplify, to_constant);
+    simpl_res = TFunctor<constant_int2t>::simplify(value, to_constant);
   }
   else if(is_fixedbv_type(value))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
       (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
 
-    simpl_res =
-      TFunctor<constant_fixedbv2t>::simplify(to_simplify, to_constant);
+    simpl_res = TFunctor<constant_fixedbv2t>::simplify(value, to_constant);
   }
   else if(is_floatbv_type(value))
   {
     std::function<constant_floatbv2t &(expr2tc &)> to_constant =
       (constant_floatbv2t & (*)(expr2tc &)) to_constant_floatbv2t;
 
-    simpl_res =
-      TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
+    simpl_res = TFunctor<constant_floatbv2t>::simplify(value, to_constant);
   }
   else
     return expr2tc();
