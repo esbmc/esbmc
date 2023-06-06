@@ -2767,19 +2767,10 @@ expr2tc ieee_sqrt2t::do_simplify() const
   if(!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operation, if any
-  expr2tc to_simplify = try_simplification(value);
-  if(!is_constant_floatbv2t(to_simplify))
-  {
-    // Were we able to simplify anything?
-    if(value != to_simplify)
-      return typecast_check_return(
-        type, ieee_sqrt2tc(type, to_simplify, rounding_mode));
-
+  if(!is_constant_floatbv2t(value))
     return expr2tc();
-  }
 
-  ieee_floatt n = to_constant_floatbv2t(to_simplify).value;
+  ieee_floatt n = to_constant_floatbv2t(value).value;
   if(n < 0)
   {
     n.make_NaN();
