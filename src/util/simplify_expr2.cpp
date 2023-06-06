@@ -573,48 +573,31 @@ expr2tc modulus2t::do_simplify() const
   if(!is_number_type(type) && !is_vector_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_side_1 = try_simplification(side_1);
-  expr2tc simplied_side_2 = try_simplification(side_2);
-
-  if(!is_constant_expr(simplied_side_1) && !is_constant_expr(simplied_side_2))
-  {
-    // Were we able to simplify the sides?
-    if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
-    {
-      expr2tc new_mod =
-        expr2tc(new modulus2t(type, simplied_side_1, simplied_side_2));
-
-      return typecast_check_return(type, new_mod);
-    }
-
+  if(!is_constant_expr(side_1) && !is_constant_expr(side_2))
     return expr2tc();
-  }
 
   // Is a vector operation ? Apply the op
-  if(
-    is_constant_vector2t(simplied_side_1) ||
-    is_constant_vector2t(simplied_side_2))
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
     auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
       return modulus2tc(t, e1, e2);
     };
-    return distribute_vector_operation(op, simplied_side_1, simplied_side_2);
+    return distribute_vector_operation(op, side_1, side_2);
   }
 
   if(is_bv_type(type))
   {
-    if(is_constant_int2t(simplied_side_2))
+    if(is_constant_int2t(side_2))
     {
       // Denominator is one? Simplify to zero
-      if(to_constant_int2t(simplied_side_2).value == 1)
+      if(to_constant_int2t(side_2).value == 1)
         return constant_int2tc(type, BigInt(0));
     }
 
-    if(is_constant_int2t(simplied_side_1) && is_constant_int2t(simplied_side_2))
+    if(is_constant_int2t(side_1) && is_constant_int2t(side_2))
     {
-      const constant_int2t &numerator = to_constant_int2t(simplied_side_1);
-      const constant_int2t &denominator = to_constant_int2t(simplied_side_2);
+      const constant_int2t &numerator = to_constant_int2t(side_1);
+      const constant_int2t &denominator = to_constant_int2t(side_2);
 
       auto c = numerator.value;
       c %= denominator.value;
