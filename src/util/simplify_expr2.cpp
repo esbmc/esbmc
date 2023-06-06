@@ -1258,20 +1258,16 @@ static expr2tc do_bit_munge_operation(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplified_side_1 = try_simplification(side_1);
-  expr2tc simplified_side_2 = try_simplification(side_2);
-
   /* Only support constant folding for integer and's. If you're a float,
    * pointer, or whatever, you're on your own. */
   if(
-    is_constant_int2t(simplified_side_1) &&
-    is_constant_int2t(simplified_side_2) && type->get_width() <= 64)
+    is_constant_int2t(side_1) && is_constant_int2t(side_2) &&
+    type->get_width() <= 64)
   {
     // So - we can't make BigInt by itself do the operation. But we can try to
     // map it to the corresponding operation on our native types.
-    const constant_int2t &int1 = to_constant_int2t(simplified_side_1);
-    const constant_int2t &int2 = to_constant_int2t(simplified_side_2);
+    const constant_int2t &int1 = to_constant_int2t(side_1);
+    const constant_int2t &int2 = to_constant_int2t(side_2);
     const BigInt &bl = int1.value;
     const BigInt &br = int2.value;
 
@@ -1291,8 +1287,7 @@ static expr2tc do_bit_munge_operation(
     {
       /* do we have a small enough LHS to evaluate on uint64_t? */
       can_eval &=
-        br == 0 ||
-        (is_signedbv_type(simplified_side_1) ? bl.is_int64() : bl.is_uint64());
+        br == 0 || (is_signedbv_type(side_1) ? bl.is_int64() : bl.is_uint64());
       is_shift = true;
     }
     else
@@ -1330,12 +1325,6 @@ static expr2tc do_bit_munge_operation(
       return constant_int2tc(type, z);
     }
   }
-
-  // Were we able to simplify any side?
-  if(side_1 != simplified_side_1 || side_2 != simplified_side_2)
-    return typecast_check_return(
-      type,
-      expr2tc(new constructor(type, simplified_side_1, simplified_side_2)));
 
   return expr2tc();
 }
