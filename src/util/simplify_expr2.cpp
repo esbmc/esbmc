@@ -1712,18 +1712,10 @@ expr2tc nearbyint2t::do_simplify() const
   if(!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operation, if any
-  expr2tc to_simplify = try_simplification(from);
-  if(!is_constant_floatbv2t(to_simplify))
-  {
-    // Were we able to simplify anything?
-    if(from != to_simplify)
-      return typecast_check_return(type, nearbyint2tc(type, to_simplify));
-
+  if(!is_constant_floatbv2t(from))
     return expr2tc();
-  }
 
-  ieee_floatt n = to_constant_floatbv2t(to_simplify).value;
+  ieee_floatt n = to_constant_floatbv2t(from).value;
   if(n.is_NaN() || n.is_zero() || n.is_infinity())
     return typecast_check_return(type, from);
 
