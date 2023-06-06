@@ -1306,8 +1306,9 @@ expr2ccodet::convert_same_object(const exprt &src, unsigned &precedence)
   return convert(migrate_expr_back(not2tc(eq)), precedence);
 }
 
-std::string
-expr2ccodet::convert_pointer_offset(const exprt &src, unsigned &precedence)
+std::string expr2ccodet::convert_pointer_offset(
+  const exprt &src,
+  unsigned &precedence [[maybe_unused]])
 {
   std::string dest = "pointer_offset";
   dest += '(';
@@ -1454,9 +1455,11 @@ expr2ccodet::convert_dynamic_size(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string
-expr2ccodet::convert_infinity(const exprt &src, unsigned &precedence)
+std::string expr2ccodet::convert_infinity(
+  const exprt &src [[maybe_unused]],
+  unsigned &precedence [[maybe_unused]])
 {
+  // Fedor: just an arbitrary value for now
   return "10000";
 }
 
