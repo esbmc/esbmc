@@ -1834,44 +1834,27 @@ static expr2tc simplify_floatbv_relations(
   if(!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_side_1 = try_simplification(side_1);
-  expr2tc simplied_side_2 = try_simplification(side_2);
+  if(!(is_constant_expr(side_1) || is_constant_expr(side_2) ||
+       (side_1 == side_2)))
+    return expr2tc();
 
-  if(
-    is_constant_expr(simplied_side_1) || is_constant_expr(simplied_side_2) ||
-    (simplied_side_1 == simplied_side_2))
+  expr2tc simpl_res;
+  if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
   {
-    expr2tc simpl_res = expr2tc();
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-    if(is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
-    {
-      std::function<bool(const expr2tc &)> is_constant =
-        (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
-
-      std::function<ieee_floatt &(expr2tc &)> get_value =
-        [](expr2tc &c) -> ieee_floatt & {
-        return to_constant_floatbv2t(c).value;
-      };
-
-      simpl_res = TFunctor<ieee_floatt>::simplify(
-        simplied_side_1, simplied_side_2, is_constant, get_value);
-    }
-    else
-      assert(0);
-
-    return typecast_check_return(type, simpl_res);
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
+    simpl_res =
+      TFunctor<ieee_floatt>::simplify(side_1, side_2, is_constant, get_value);
   }
+  else
+    assert(0);
 
-  // Were we able to simplify the sides?
-  if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
-  {
-    expr2tc new_op = expr2tc(new constructor(simplied_side_1, simplied_side_2));
-
-    return typecast_check_return(type, new_op);
-  }
-
-  return expr2tc();
+  return typecast_check_return(type, simpl_res);
 }
 
 template <class constant_type>
