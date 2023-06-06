@@ -2464,34 +2464,19 @@ static expr2tc simplify_floatbv_2ops(
   if(!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_side_1 = try_simplification(side_1);
-  expr2tc simplied_side_2 = try_simplification(side_2);
-
   // Try to handle NaN
-  if(is_constant_floatbv2t(simplied_side_1))
-    if(to_constant_floatbv2t(simplied_side_1).value.is_NaN())
-      return simplied_side_1;
+  if(is_constant_floatbv2t(side_1))
+    if(to_constant_floatbv2t(side_1).value.is_NaN())
+      return side_1;
 
-  if(is_constant_floatbv2t(simplied_side_2))
-    if(to_constant_floatbv2t(simplied_side_2).value.is_NaN())
-      return simplied_side_2;
+  if(is_constant_floatbv2t(side_2))
+    if(to_constant_floatbv2t(side_2).value.is_NaN())
+      return side_2;
 
   if(
-    !is_constant_expr(simplied_side_1) || !is_constant_expr(simplied_side_2) ||
+    !is_constant_expr(side_1) || !is_constant_expr(side_2) ||
     !is_constant_int2t(rounding_mode))
-  {
-    // Were we able to simplify the sides?
-    if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
-    {
-      expr2tc new_op = expr2tc(
-        new constructor(type, simplied_side_1, simplied_side_2, rounding_mode));
-
-      return typecast_check_return(type, new_op);
-    }
-
     return expr2tc();
-  }
 
   expr2tc simpl_res = expr2tc();
 
@@ -2506,9 +2491,9 @@ static expr2tc simplify_floatbv_2ops(
     };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
-      simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);
+      side_1, side_2, rounding_mode, is_constant, get_value);
   }
-  else if(is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
+  else if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
@@ -2519,7 +2504,7 @@ static expr2tc simplify_floatbv_2ops(
     };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
-      simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);
+      side_1, side_2, rounding_mode, is_constant, get_value);
   }
   else
     assert(0);
