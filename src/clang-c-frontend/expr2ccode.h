@@ -77,8 +77,12 @@ protected:
   std::string convert(const exprt &src, unsigned &precedence) override;
 
   std::string convert_same_object(const exprt &src, unsigned &precedence);
-  std::string convert_pointer_offset(const exprt &src, unsigned &precedence);
-  std::string convert_infinity(const exprt &src, unsigned &precedence);
+  std::string convert_pointer_offset(
+    const exprt &src,
+    unsigned &precedence [[maybe_unused]]);
+  std::string convert_infinity(
+    const exprt &src [[maybe_unused]],
+    unsigned &precedence [[maybe_unused]]);
   std::string convert_dynamic_size(const exprt &src, unsigned &precedence);
 
   std::string convert_ieee_div(const exprt &src, unsigned &precedence);
@@ -88,7 +92,6 @@ protected:
   std::string convert_ieee_sqrt(const exprt &src, unsigned &precedence);
 
   std::string convert_nondet(const exprt &src, unsigned &precedence) override;
-
   std::string convert_array_of(const exprt &src, unsigned precedence) override;
 
 private:
