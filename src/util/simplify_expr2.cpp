@@ -2714,37 +2714,14 @@ expr2tc ieee_fma2t::do_simplify() const
   if(!is_number_type(type) && !is_pointer_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_value_1 = try_simplification(value_1);
-  expr2tc simplied_value_2 = try_simplification(value_2);
-  expr2tc simplied_value_3 = try_simplification(value_3);
-
   if(
-    !is_constant_expr(simplied_value_1) ||
-    !is_constant_expr(simplied_value_2) ||
-    !is_constant_expr(simplied_value_3) || !is_constant_int2t(rounding_mode))
-  {
-    // Were we able to simplify the sides?
-    if(
-      (value_1 != simplied_value_1) || (value_2 != simplied_value_2) ||
-      (value_3 != simplied_value_3))
-    {
-      expr2tc new_op = ieee_fma2tc(
-        type,
-        simplied_value_1,
-        simplied_value_2,
-        simplied_value_3,
-        rounding_mode);
-
-      return typecast_check_return(type, new_op);
-    }
-
+    !is_constant_expr(value_1) || !is_constant_expr(value_2) ||
+    !is_constant_expr(value_3) || !is_constant_int2t(rounding_mode))
     return expr2tc();
-  }
 
-  ieee_floatt n1 = to_constant_floatbv2t(simplied_value_1).value;
-  ieee_floatt n2 = to_constant_floatbv2t(simplied_value_2).value;
-  ieee_floatt n3 = to_constant_floatbv2t(simplied_value_3).value;
+  ieee_floatt n1 = to_constant_floatbv2t(value_1).value;
+  ieee_floatt n2 = to_constant_floatbv2t(value_2).value;
+  ieee_floatt n3 = to_constant_floatbv2t(value_3).value;
 
   // If x or y are NaN, NaN is returned
   if(n1.is_NaN() || n2.is_NaN())
