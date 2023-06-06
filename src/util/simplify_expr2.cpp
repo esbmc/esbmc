@@ -55,7 +55,7 @@ expr2tc expr2t::simplify() const
     // the size of simplification code in that case.
   }
   return expr2tc();
-  }
+}
 
 static expr2tc try_simplification(const expr2tc &expr)
 {
@@ -244,8 +244,8 @@ static expr2tc simplify_arith_2ops(
       return to_constant_int2t(c).value;
     };
 
-    simpl_res = TFunctor<BigInt>::simplify(
-      side_1, side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<BigInt>::simplify(side_1, side_2, is_constant, get_value);
   }
   else if(is_bv_type(side_1) || is_bv_type(side_2))
   {
@@ -256,8 +256,8 @@ static expr2tc simplify_arith_2ops(
       return to_constant_int2t(c).value;
     };
 
-    simpl_res = TFunctor<BigInt>::simplify(
-      side_1, side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<BigInt>::simplify(side_1, side_2, is_constant, get_value);
 
     // Fix rounding when an overflow occurs
     if(!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
@@ -275,8 +275,8 @@ static expr2tc simplify_arith_2ops(
     std::function<fixedbvt &(expr2tc &)> get_value =
       [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
 
-    simpl_res = TFunctor<fixedbvt>::simplify(
-      side_1, side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<fixedbvt>::simplify(side_1, side_2, is_constant, get_value);
   }
   else if(is_bool_type(side_1) || is_bool_type(side_2))
   {
@@ -287,8 +287,8 @@ static expr2tc simplify_arith_2ops(
       return to_constant_bool2t(c).value;
     };
 
-    simpl_res = TFunctor<bool>::simplify(
-      side_1, side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<bool>::simplify(side_1, side_2, is_constant, get_value);
   }
   else
     return expr2tc();
@@ -588,7 +588,7 @@ expr2tc modulus2t::do_simplify() const
       return typecast_check_return(type, new_mod);
     }
 
-    return expr2tc();  
+    return expr2tc();
   }
 
   // Is a vector operation ? Apply the op
@@ -947,7 +947,7 @@ expr2tc pointer_offset2t::do_simplify() const
     // further though.
     expr2tc tmp = new_add->simplify();
     if(is_nil_expr(tmp))
-    return new_add;
+      return new_add;
 
     return tmp;
   }
@@ -2853,7 +2853,7 @@ expr2tc ieee_fma2t::do_simplify() const
     !is_constant_expr(simplied_value_3) || !is_constant_int2t(rounding_mode))
   {
     // Were we able to simplify the sides?
-  if(
+    if(
       (value_1 != simplied_value_1) || (value_2 != simplied_value_2) ||
       (value_3 != simplied_value_3))
     {
