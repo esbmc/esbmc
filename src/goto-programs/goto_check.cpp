@@ -216,10 +216,13 @@ void goto_checkt::overflow_check(
 
   // First, check type.
   const type2tc &type = ns.follow(expr->type);
-  if(!is_signedbv_type(type) && !is_unsignedbv_type(type))
+  if(config.language == language_idt::SOLIDITY)
   {
-    return;
+    if(!is_signedbv_type(type) && !is_unsignedbv_type(type))
+      return;
   }
+  else if(!is_signedbv_type(type))
+    return;
 
   // Don't check pointer overflow
   if(is_pointer_type(*expr->get_sub_expr(0)))
