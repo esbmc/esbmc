@@ -691,8 +691,7 @@ void interval_domaint::transform(
 
   case ASSERT:
   {
-    expr2tc code = instruction.code;
-    ai_simplify(code, ns);
+    assume(instruction.guard);
     break;
   }
 
@@ -878,8 +877,137 @@ void interval_domaint::assume(const expr2tc &cond)
   assume_rec(new_cond, false);
 }
 
+bool interval_domaint::forward_check(const expr2tc &cond)
+{
+  if(enable_wrapped_intervals)
+  {
+    log_debug("[forward] Forward check is disabled for wrapped");
+    return false;
+  }
+
+  bool result = false;
+  if(is_and2t(cond))
+  {
+    cond->foreach_operand(
+      [this, &result](const expr2tc &e) { result &= forward_check(e); });
+    return result;
+  }
+
+  else if(is_or2t(cond))
+  {
+    cond->foreach_operand(
+      [this, &result](const expr2tc &e) { result |= forward_check(e); });
+    return result;
+  }
+
+  if(is_not2t(cond))
+  {
+    // Sadly, we are doing over approximations, so we are limited to what we can do here
+    auto value = to_not2t(cond).value;
+    if(is_comp_expr(value))
+    {
+      const expr2tc &lhs = *value->get_sub_expr(0);
+      const expr2tc &rhs = *value->get_sub_expr(1);
+
+      if(!is_bv_type(lhs->type))
+      {
+        log_debug("[forward] Support for only bv types {}", *lhs->type);
+        return false;
+      }
+
+      auto lhs_i = get_interval<integer_intervalt>(lhs);
+      auto rhs_i = get_interval<integer_intervalt>(rhs);
+
+      if(is_greaterthanequal2t(value))
+        return lhs_i.upper_set && rhs_i.lower_set && lhs_i.upper < rhs_i.lower;
+
+      if(is_greaterthan2t(value))
+        return lhs_i.upper_set && rhs_i.lower_set && lhs_i.upper <= rhs_i.lower;
+
+      if(is_lessthanequal2t(value))
+        return lhs_i.lower_set && rhs_i.upper_set && lhs_i.lower > rhs_i.upper;
+
+      if(is_lessthan2t(value))
+        return lhs_i.lower_set && rhs_i.upper_set && lhs_i.lower >= rhs_i.upper;
+
+      if(is_notequal2t(value))
+        return lhs_i.singleton() && rhs_i.singleton() &&
+               lhs_i.lower == rhs_i.lower;
+
+      if(is_equality2t(value))
+      {
+        lhs_i.intersect_with(rhs_i);
+        return lhs_i.empty();
+      }
+    }
+    return false;
+  }
+
+  if(is_symbol2t(cond))
+  {
+    log_debug("[forward] Missing support: {}", *cond);
+  }
+
+  if(is_comp_expr(cond))
+  {
+    const expr2tc &lhs = *cond->get_sub_expr(0);
+    const expr2tc &rhs = *cond->get_sub_expr(1);
+
+    if(!is_bv_type(lhs->type))
+    {
+      log_debug("[forward] Support for only bv types {}", *lhs->type);
+      return false;
+    }
+
+    log_status("Checking for {}", *cond);
+
+    auto lhs_i = get_interval<integer_intervalt>(lhs);
+    auto rhs_i = get_interval<integer_intervalt>(rhs);
+
+    lhs_i.dump();
+    rhs_i.dump();
+
+    if(is_lessthan2t(cond))
+      return lhs_i.upper_set && rhs_i.lower_set && lhs_i.upper < rhs_i.lower;
+
+    if(is_lessthanequal2t(cond))
+      return lhs_i.upper_set && rhs_i.lower_set && lhs_i.upper <= rhs_i.lower;
+
+    if(is_greaterthan2t(cond))
+      return lhs_i.lower_set && rhs_i.upper_set && lhs_i.lower > rhs_i.upper;
+
+    if(is_greaterthanequal2t(cond))
+      return lhs_i.lower_set && rhs_i.upper_set && lhs_i.lower >= rhs_i.upper;
+
+    if(is_equality2t(cond))
+      return lhs_i.singleton() && rhs_i.singleton() &&
+             lhs_i.lower == rhs_i.lower;
+
+    if(is_notequal2t(cond))
+    {
+      lhs_i.intersect_with(rhs_i);
+      return lhs_i.empty();
+    }
+  }
+  else
+    log_debug("[forward] Missing support: {}", *cond);
+  return false;
+}
+
 void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
 {
+  if(forward_check(cond))
+  {
+    log_status("Condition is always true");
+  }
+
+  expr2tc cpy = cond;
+  make_not(cpy);
+  if(forward_check(cpy))
+  {
+    log_status("Condition is always false");
+  }
+
   if(is_comp_expr(cond))
   {
     assert(cond->get_num_sub_exprs() == 2);
