@@ -85,6 +85,9 @@ public:
     return wrap_map;
   }
 
+  // Compute whether `cond` is a tautology for the abstract state
+  bool forward_check(const expr2tc &cond);
+
 protected:
   /**
   * Sets *this to the mathematical join between the two domains. This can be
