@@ -441,8 +441,25 @@ void goto_checkt::input_overflow_check(
         // int *arr = (int*) malloc(10 * sizeof(int));
         // scanf("%12d",&arr[0]);  --> overflow
         const exprt &it = operands[0].op1();
-        width = it.c_sizeof_type().width().as_string();
-        input_overflow_check_int(stoi(width), stoi(limits.at(i)), buf_overflow);
+
+        if(
+          it.c_sizeof_type().id() == typet::t_signedbv ||
+          it.c_sizeof_type().id() == typet::t_unsignedbv)
+        {
+          width = it.c_sizeof_type().width().as_string();
+          input_overflow_check_int(
+            stoi(width), stoi(limits.at(i)), buf_overflow);
+        }
+
+        else if(
+          it.c_sizeof_type().id() == typet::t_floatbv ||
+          it.c_sizeof_type().id() == typet::t_fixedbv)
+        {
+          // TODO
+          break;
+        }
+        else
+          return;
       }
 
       else
