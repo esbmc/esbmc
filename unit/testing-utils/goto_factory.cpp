@@ -93,8 +93,10 @@ program goto_factory::get_goto_functions(
      */
 
   // Create tmp file
-  std::string filename(file_operations::get_unique_tmp_path("esbmc-test-%%%%%%.c"));
-  log_debug("Creating {}", filename);
+  std::string filename(
+    file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
+  filename += "/test.c";
+  log_status("Creating {}", filename);
   goto_factory::create_file_from_istream(c_file, filename);
 
   cmdlinet cmd = goto_factory::get_default_cmdline(filename);
@@ -116,7 +118,8 @@ program goto_factory::get_goto_functions(
 
   // Create tmp file
   std::string filename(
-    "tmp.c"); // TODO: Make this unique and add support for CPP
+    file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
+  filename += "/test.c";
   goto_factory::create_file_from_string(str, filename);
 
   cmdlinet cmd = goto_factory::get_default_cmdline(filename);
@@ -139,8 +142,11 @@ program goto_factory::get_goto_functions(
      */
 
   // Create tmp file
+
+  // Create tmp file
   std::string filename(
-    "tmp.c"); // TODO: Make this unique and add support for CPP
+    file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
+  filename += "/test.c";
   goto_factory::create_file_from_istream(c_file, filename);
   goto_factory::config_environment(arch, cmd, opts);
   return goto_factory::get_goto_functions(cmd, opts);
