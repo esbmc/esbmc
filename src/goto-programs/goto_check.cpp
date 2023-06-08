@@ -360,7 +360,7 @@ void goto_checkt::input_overflow_check(
 
     // e.g
     // int *arr = (int*) malloc(10 * sizeof(int));
-    // scanf("%10d",&arr[0]);  --> overflow
+    // scanf("%13d",&arr[0]);  --> overflow
     if(arg_name.empty())
     {
       expr2tc deref = get_base_object(func_call.operands[i]);
