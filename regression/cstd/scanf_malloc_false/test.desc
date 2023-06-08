@@ -1,0 +1,4 @@
+CORE
+main.c
+--overflow-check --k-induction --no-unlimited-scanf-check
+^VERIFICATION FAILED$
