@@ -963,7 +963,16 @@ void interval_domaint::assign(const expr2tc &expr)
   auto isfloatbvop = is_floatbv_type(c.source) && is_floatbv_type(c.target);
 
   if(!is_symbol2t(c.target))
+  {
+    log_debug("Non-trackable assignment at {}", *expr);
+    if(is_dereference2t(c.target))
+    {
+      log_debug("Dereference: make TOP");
+      clear_state();
+    }
     return;
+  }
+    
   if(isbvop)
   {
     if(enable_wrapped_intervals)
