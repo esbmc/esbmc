@@ -637,6 +637,22 @@ void interval_domaint::output(std::ostream &out) const
   }
 }
 
+bool contains_float(const expr2tc &e)
+{
+  if(is_floatbv_type(e->type))
+    return true;
+
+  bool inner_float = false;
+  e->foreach_operand(
+    [&inner_float](auto &it){
+      if(contains_float(it))
+        inner_float = true;
+    }
+  );
+
+  return inner_float;
+}
+
 void interval_domaint::transform(
   goto_programt::const_targett from,
   goto_programt::const_targett to,
@@ -691,7 +707,9 @@ void interval_domaint::transform(
 
   case ASSERT:
   {
-    assume(instruction.guard);
+    // There is a bug in Floats that need to be investigated! regression-float/nextafter
+    if(!contains_float(instruction.guard))
+      assume(instruction.guard);
     break;
   }
 
