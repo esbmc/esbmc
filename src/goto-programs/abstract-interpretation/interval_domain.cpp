@@ -272,6 +272,12 @@ T interval_domaint::get_interval(const expr2tc &e) const
     return T::ternary_if(cond, lhs, rhs);
   }
 
+  if(is_typecast2t(e))
+  {
+    auto inner = get_interval<T>(to_typecast2t(e).from);
+    return T::cast(inner, to_typecast2t(e).type);
+  }
+
   // Arithmetic?
   auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
   auto ieee_arith_op = std::dynamic_pointer_cast<ieee_arith_2ops>(e);

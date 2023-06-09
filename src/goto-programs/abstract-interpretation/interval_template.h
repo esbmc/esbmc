@@ -419,6 +419,13 @@ public:
     return result;
   }
 
+  static interval_templatet<T>
+  cast(const interval_templatet<T> &old, const type2tc &)
+  {
+    log_debug("No support for typecasting");
+    return old;
+  }
+
   /// This is just to check if a value has changed. This is not the same as an interval comparation!
   bool inline has_changed(const interval_templatet<T> &i)
   {
