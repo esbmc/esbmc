@@ -58,7 +58,8 @@ void interval_domaint::update_symbol_interval(
 }
 
 template <>
-integer_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
+integer_intervalt
+interval_domaint::get_interval_from_const(const expr2tc &e) const
 {
   integer_intervalt result; // (-infinity, infinity)
   if(!is_constant_int2t(e))
@@ -72,7 +73,7 @@ integer_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
 #include <cmath>
 
 template <>
-real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
+real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) const
 {
   real_intervalt result; // (-infinity, infinity)
   if(!is_constant_floatbv2t(e))
@@ -112,7 +113,8 @@ real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e)
 }
 
 template <>
-wrapped_interval interval_domaint::get_interval_from_const(const expr2tc &e)
+wrapped_interval
+interval_domaint::get_interval_from_const(const expr2tc &e) const
 {
   wrapped_interval result(e->type); // [0, 2^(length(e->type)) - 1]
   if(!is_constant_int2t(e))
@@ -247,7 +249,7 @@ T interval_domaint::interpolate_intervals(const T &before, const T &after)
 }
 
 template <class T>
-T interval_domaint::get_interval(const expr2tc &e)
+T interval_domaint::get_interval(const expr2tc &e) const
 {
   if(is_symbol2t(e))
     return get_interval_from_symbol<T>(to_symbol2t(e));
@@ -295,7 +297,7 @@ T interval_domaint::get_interval(const expr2tc &e)
 }
 
 template <>
-wrapped_interval interval_domaint::get_interval(const expr2tc &e)
+wrapped_interval interval_domaint::get_interval(const expr2tc &e) const
 {
   // This needs to come before constant number
   if(is_constant_bool2t(e))

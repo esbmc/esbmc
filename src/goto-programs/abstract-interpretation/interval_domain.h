@@ -314,7 +314,7 @@ protected:
    * @return Interval
    */
   template <class Interval>
-  Interval get_interval(const expr2tc &e);
+  Interval get_interval(const expr2tc &e) const;
 
   /**
    * @brief Get the interval from symbol object or top
@@ -334,7 +334,7 @@ protected:
    * @return Interval
    */
   template <class Interval>
-  Interval get_interval_from_const(const expr2tc &sym);
+  Interval get_interval_from_const(const expr2tc &sym) const;
 
   /**
    * @brief Sets new interval for symbol
