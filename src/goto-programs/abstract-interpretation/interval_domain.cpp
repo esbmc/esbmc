@@ -231,6 +231,21 @@ wrapped_interval interval_domaint::extrapolate_intervals(
   return wrapped_interval::extrapolate_to(before, after);
 }
 
+template <class Interval>
+Interval interval_domaint::get_top_interval_from_expr(const expr2tc &) const
+{
+  Interval result;
+  return result;
+}
+
+template <>
+wrapped_interval
+interval_domaint::get_top_interval_from_expr(const expr2tc &e) const
+{
+  wrapped_interval result(e->type);
+  return result;
+}
+
 template <class T>
 T interval_domaint::interpolate_intervals(const T &before, const T &after)
 {
@@ -251,15 +266,20 @@ T interval_domaint::interpolate_intervals(const T &before, const T &after)
 template <class T>
 T interval_domaint::get_interval(const expr2tc &e) const
 {
+  // This needs to come before constant number
+  if(is_constant_bool2t(e))
+  {
+    auto r = get_top_interval_from_expr<T>(e);
+    r.lower = to_constant_bool2t(e).is_true();
+    r.upper = to_constant_bool2t(e).is_true();
+    return r;
+  }
+
   if(is_symbol2t(e))
     return get_interval_from_symbol<T>(to_symbol2t(e));
 
   if(is_neg2t(e))
     return -get_interval<T>(to_neg2t(e).value);
-
-  // We do not care about overflows/overlaps for now
-  if(is_typecast2t(e))
-    return get_interval<T>(to_typecast2t(e).from);
 
   if(is_constant_number(e))
     return get_interval_from_const<T>(e);
@@ -355,125 +375,7 @@ T interval_domaint::get_interval(const expr2tc &e) const
   }
 
   // We could not generate from the expr. Return top
-  T result; // (-infinity, infinity)
-  return result;
-}
-
-template <>
-wrapped_interval interval_domaint::get_interval(const expr2tc &e) const
-{
-  // This needs to come before constant number
-  if(is_constant_bool2t(e))
-  {
-    wrapped_interval r(e->type);
-    r.lower = to_constant_bool2t(e).is_true();
-    r.upper = to_constant_bool2t(e).is_true();
-    return r;
-  }
-
-  if(is_symbol2t(e))
-    return get_interval_from_symbol<wrapped_interval>(to_symbol2t(e));
-
-  if(is_constant_number(e))
-    return get_interval_from_const<wrapped_interval>(e);
-
-  if(is_neg2t(e))
-    return -get_interval<wrapped_interval>(to_neg2t(e).value);
-
-  if(is_if2t(e))
-  {
-    auto cond = get_interval<wrapped_interval>(to_if2t(e).cond);
-    auto lhs = get_interval<wrapped_interval>(to_if2t(e).true_value);
-    auto rhs = get_interval<wrapped_interval>(to_if2t(e).false_value);
-
-    return wrapped_interval::ternary_if(cond, lhs, rhs);
-  }
-
-  if(enable_interval_bitwise_arithmetic)
-  {
-    if(is_shl2t(e))
-    {
-      auto k = get_interval<wrapped_interval>(to_shl2t(e).side_2);
-      auto i = get_interval<wrapped_interval>(to_shl2t(e).side_1);
-      return wrapped_interval::left_shift(i, k);
-    }
-
-    if(is_ashr2t(e))
-    {
-      auto k = get_interval<wrapped_interval>(to_ashr2t(e).side_2);
-      auto i = get_interval<wrapped_interval>(to_ashr2t(e).side_1);
-      return wrapped_interval::arithmetic_right_shift(i, k);
-    }
-
-    if(is_lshr2t(e))
-    {
-      auto k = get_interval<wrapped_interval>(to_lshr2t(e).side_2);
-      auto i = get_interval<wrapped_interval>(to_lshr2t(e).side_1);
-      return wrapped_interval::logical_right_shift(i, k);
-    }
-
-    if(is_bitor2t(e))
-    {
-      auto rhs = get_interval<wrapped_interval>(to_bitor2t(e).side_2);
-      auto lhs = get_interval<wrapped_interval>(to_bitor2t(e).side_1);
-      return lhs | rhs;
-    }
-
-    if(is_bitand2t(e))
-    {
-      auto rhs = get_interval<wrapped_interval>(to_bitand2t(e).side_2);
-      auto lhs = get_interval<wrapped_interval>(to_bitand2t(e).side_1);
-      return lhs & rhs;
-    }
-    if(is_bitxor2t(e))
-    {
-      auto rhs = get_interval<wrapped_interval>(to_bitxor2t(e).side_2);
-      auto lhs = get_interval<wrapped_interval>(to_bitxor2t(e).side_1);
-      return lhs ^ rhs;
-    }
-
-    if(is_bitnot2t(e))
-    {
-      auto lhs = get_interval<wrapped_interval>(to_bitnot2t(e).value);
-      return wrapped_interval::bitnot(lhs);
-    }
-  }
-
-  if(is_typecast2t(e))
-  {
-    auto inner = get_interval<wrapped_interval>(to_typecast2t(e).from);
-    return wrapped_interval::cast(inner, to_typecast2t(e).type);
-  }
-
-  auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
-  if(arith_op && enable_interval_arithmetic)
-  {
-    // It should be safe to mix integers/floats in here.
-    // The worst that can happen is an overaproximation
-    auto lhs = get_interval<wrapped_interval>(arith_op->side_1);
-    auto rhs = get_interval<wrapped_interval>(arith_op->side_2);
-
-    if(is_sub2t(e))
-      return lhs - rhs;
-
-    if(is_add2t(e))
-      return lhs + rhs;
-
-    if(is_mul2t(e))
-      return lhs * rhs;
-
-    if(is_div2t(e))
-      return lhs / rhs;
-
-    if(is_modulus2t(e))
-      return lhs % rhs;
-
-    // TODO: Add more as needed.
-  }
-
-  // We could not generate from the expr. Return top
-  wrapped_interval result(e->type); // (-infinity, infinity)
-  return result;
+  return get_top_interval_from_expr<T>(e);
 }
 
 template <class Interval>

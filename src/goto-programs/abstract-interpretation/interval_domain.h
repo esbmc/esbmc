@@ -336,6 +336,9 @@ protected:
   template <class Interval>
   Interval get_interval_from_const(const expr2tc &sym) const;
 
+  template <class Interval>
+  Interval get_top_interval_from_expr(const expr2tc &sym) const;
+
   /**
    * @brief Sets new interval for symbol
    *
