@@ -426,6 +426,13 @@ public:
     return old;
   }
 
+  friend interval_templatet<T>
+  operator%(const interval_templatet<T> &s, const interval_templatet<T> &)
+  {
+    log_debug("No support for mod");
+    return s;
+  }
+
   /// This is just to check if a value has changed. This is not the same as an interval comparation!
   bool inline has_changed(const interval_templatet<T> &i)
   {
