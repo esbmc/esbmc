@@ -780,7 +780,7 @@ TEST_CASE(
   T.property["4"].push_back({"@F@main@b", 0, true});
   T.property["4"].push_back({"@F@main@b", 1, false});
 
-  T.run_configs();
+  T.run_configs(true);
 }
 
 TEST_CASE(

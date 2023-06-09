@@ -303,6 +303,9 @@ T interval_domaint::get_interval(const expr2tc &e) const
     if(is_div2t(e) || is_ieee_div2t(e))
       return lhs / rhs;
 
+    if(is_modulus2t(e))
+      return lhs % rhs;
+
     // TODO: Add more as needed.
   }
   // We could not generate from the expr. Return top
