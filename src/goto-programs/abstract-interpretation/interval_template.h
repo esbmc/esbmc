@@ -457,6 +457,32 @@ public:
     return result;
   }
 
+  static interval_templatet<T> logical_right_shift(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &)
+  {
+    log_debug("No support for logical right shift");
+    interval_templatet<T> result;
+    return result;
+  }
+
+  static interval_templatet<T>
+  left_shift(const interval_templatet<T> &, const interval_templatet<T> &)
+  {
+    log_debug("No support for left shift");
+    interval_templatet<T> result;
+    return result;
+  }
+
+  static interval_templatet<T> arithmetic_right_shift(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &)
+  {
+    log_debug("No support for arithmetic right shift");
+    interval_templatet<T> result;
+    return result;
+  }
+
   static interval_templatet<T> bitnot(const interval_templatet<T> &w)
   {
     interval_templatet<T> result;

@@ -306,29 +306,26 @@ T interval_domaint::get_interval(const expr2tc &e) const
 
   if(enable_interval_bitwise_arithmetic)
   {
-#if 0
     if(is_shl2t(e))
     {
-      auto k = get_interval<wrapped_interval>(to_shl2t(e).side_2);
-      auto i = get_interval<wrapped_interval>(to_shl2t(e).side_1);
-      return i.left_shift(k);
+      auto k = get_interval<T>(to_shl2t(e).side_2);
+      auto i = get_interval<T>(to_shl2t(e).side_1);
+      return T::left_shift(i, k);
     }
 
     if(is_ashr2t(e))
     {
-      auto k = get_interval<wrapped_interval>(to_ashr2t(e).side_2);
-      auto i = get_interval<wrapped_interval>(to_ashr2t(e).side_1);
-      return i.arithmetic_right_shift(k);
+      auto k = get_interval<T>(to_ashr2t(e).side_2);
+      auto i = get_interval<T>(to_ashr2t(e).side_1);
+      return T::arithmetic_right_shift(i, k);
     }
 
     if(is_lshr2t(e))
     {
-      auto k = get_interval<wrapped_interval>(to_lshr2t(e).side_2);
-      auto i = get_interval<wrapped_interval>(to_lshr2t(e).side_1);
-      return i.logical_right_shift(k);
+      auto k = get_interval<T>(to_lshr2t(e).side_2);
+      auto i = get_interval<T>(to_lshr2t(e).side_1);
+      return T::logical_right_shift(i, k);
     }
-
-#endif
 
     if(is_bitor2t(e))
     {
@@ -398,21 +395,21 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e) const
     {
       auto k = get_interval<wrapped_interval>(to_shl2t(e).side_2);
       auto i = get_interval<wrapped_interval>(to_shl2t(e).side_1);
-      return i.left_shift(k);
+      return wrapped_interval::left_shift(i, k);
     }
 
     if(is_ashr2t(e))
     {
       auto k = get_interval<wrapped_interval>(to_ashr2t(e).side_2);
       auto i = get_interval<wrapped_interval>(to_ashr2t(e).side_1);
-      return i.arithmetic_right_shift(k);
+      return wrapped_interval::arithmetic_right_shift(i, k);
     }
 
     if(is_lshr2t(e))
     {
       auto k = get_interval<wrapped_interval>(to_lshr2t(e).side_2);
       auto i = get_interval<wrapped_interval>(to_lshr2t(e).side_1);
-      return i.logical_right_shift(k);
+      return wrapped_interval::logical_right_shift(i, k);
     }
 
     if(is_bitor2t(e))
