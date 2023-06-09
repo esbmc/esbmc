@@ -826,15 +826,16 @@ public:
     return result;
   }
 
-  wrapped_interval left_shift(const wrapped_interval &k) const
+  static wrapped_interval
+  left_shift(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    if(is_bottom())
-      return *this;
+    if(lhs.is_bottom())
+      return lhs;
 
-    if(k.lower == k.upper && !k.is_bottom())
-      return left_shift(k.get_lower().to_uint64());
+    if(rhs.lower == rhs.upper && !rhs.is_bottom())
+      return lhs.left_shift(rhs.get_lower().to_uint64());
 
-    wrapped_interval result(t);
+    wrapped_interval result(lhs.t);
     return result;
   }
 
@@ -859,15 +860,16 @@ public:
     return result;
   }
 
-  wrapped_interval logical_right_shift(const wrapped_interval &k) const
+  static wrapped_interval
+  logical_right_shift(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    if(is_bottom())
-      return *this;
+    if(lhs.is_bottom())
+      return lhs;
 
-    if(k.lower == k.upper && !k.is_bottom())
-      return logical_right_shift(k.get_lower().to_uint64());
+    if(rhs.lower == rhs.upper && !rhs.is_bottom())
+      return lhs.logical_right_shift(rhs.get_lower().to_uint64());
 
-    wrapped_interval result(t);
+    wrapped_interval result(lhs.t);
     return result;
   }
 
@@ -893,15 +895,17 @@ public:
     return result;
   }
 
-  wrapped_interval arithmetic_right_shift(const wrapped_interval &k) const
+  static wrapped_interval arithmetic_right_shift(
+    const wrapped_interval &lhs,
+    const wrapped_interval &rhs)
   {
-    if(is_bottom())
-      return *this;
+    if(lhs.is_bottom())
+      return lhs;
 
-    if(k.lower == k.upper && !k.is_bottom())
-      return arithmetic_right_shift(k.get_lower().to_uint64());
+    if(rhs.lower == rhs.upper && !rhs.is_bottom())
+      return lhs.arithmetic_right_shift(rhs.get_lower().to_uint64());
 
-    wrapped_interval result(t);
+    wrapped_interval result(lhs.t);
     return result;
   }
 
