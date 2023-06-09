@@ -433,6 +433,30 @@ public:
     return s;
   }
 
+  friend interval_templatet<T>
+  operator&(const interval_templatet<T> &, const interval_templatet<T> &)
+  {
+    log_debug("No support for bitand");
+    interval_templatet<T> result;
+    return result;
+  }
+
+  friend interval_templatet<T>
+  operator|(const interval_templatet<T> &, const interval_templatet<T> &)
+  {
+    log_debug("No support for bitor");
+    interval_templatet<T> result;
+    return result;
+  }
+
+  friend interval_templatet<T>
+  operator^(const interval_templatet<T> &, const interval_templatet<T> &)
+  {
+    log_debug("No support for bitxor");
+    interval_templatet<T> result;
+    return result;
+  }
+
   static interval_templatet<T> bitnot(const interval_templatet<T> &w)
   {
     interval_templatet<T> result;
