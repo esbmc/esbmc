@@ -328,7 +328,9 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
         llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
     {
       assert(ftd->isThisDeclarationADefinition());
-      get_template_decl(ftd, true, comp);
+      //get_template_decl(ftd, true, comp);
+      log_error("template is not supported in {}", __func__);
+      abort();
     }
     else
     {
