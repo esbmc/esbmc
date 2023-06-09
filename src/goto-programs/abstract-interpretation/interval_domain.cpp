@@ -304,6 +304,58 @@ T interval_domaint::get_interval(const expr2tc &e) const
     }
   }
 
+  if(enable_interval_bitwise_arithmetic)
+  {
+#if 0
+    if(is_shl2t(e))
+    {
+      auto k = get_interval<wrapped_interval>(to_shl2t(e).side_2);
+      auto i = get_interval<wrapped_interval>(to_shl2t(e).side_1);
+      return i.left_shift(k);
+    }
+
+    if(is_ashr2t(e))
+    {
+      auto k = get_interval<wrapped_interval>(to_ashr2t(e).side_2);
+      auto i = get_interval<wrapped_interval>(to_ashr2t(e).side_1);
+      return i.arithmetic_right_shift(k);
+    }
+
+    if(is_lshr2t(e))
+    {
+      auto k = get_interval<wrapped_interval>(to_lshr2t(e).side_2);
+      auto i = get_interval<wrapped_interval>(to_lshr2t(e).side_1);
+      return i.logical_right_shift(k);
+    }
+
+    if(is_bitor2t(e))
+    {
+      auto rhs = get_interval<wrapped_interval>(to_bitor2t(e).side_2);
+      auto lhs = get_interval<wrapped_interval>(to_bitor2t(e).side_1);
+      return lhs | rhs;
+    }
+
+    if(is_bitand2t(e))
+    {
+      auto rhs = get_interval<wrapped_interval>(to_bitand2t(e).side_2);
+      auto lhs = get_interval<wrapped_interval>(to_bitand2t(e).side_1);
+      return lhs & rhs;
+    }
+    if(is_bitxor2t(e))
+    {
+      auto rhs = get_interval<wrapped_interval>(to_bitxor2t(e).side_2);
+      auto lhs = get_interval<wrapped_interval>(to_bitxor2t(e).side_1);
+      return lhs ^ rhs;
+    }
+#endif
+
+    if(is_bitnot2t(e))
+    {
+      auto lhs = get_interval<T>(to_bitnot2t(e).value);
+      return T::bitnot(lhs);
+    }
+  }
+
   // We could not generate from the expr. Return top
   T result; // (-infinity, infinity)
   return result;
