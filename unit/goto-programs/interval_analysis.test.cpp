@@ -248,6 +248,61 @@ TEST_CASE("Interval Analysis - Base Unsigned", "[ai][interval-analysis]")
   T.run_configs();
 }
 
+TEST_CASE("Interval Analysis - Ternary", "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "char a = nondet_uchar() ? 2 : 4;\n"
+    "return a;\n"
+    "}";
+
+  T.property["3"].push_back({"@F@main@a", 2, true});
+  T.property["3"].push_back({"@F@main@a", 4, true});
+  T.property["3"].push_back({"@F@main@a", 10, false});
+
+  T.run_configs();
+}
+
+TEST_CASE("Interval Analysis - Ternary (false)", "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "char a = 0 ? 2 : 4;\n"
+    "return a;\n"
+    "}";
+
+  T.property["3"].push_back({"@F@main@a", 2, false});
+  T.property["3"].push_back({"@F@main@a", 4, true});
+
+  T.run_configs();
+}
+
+TEST_CASE("Interval Analysis - Ternary (true)", "[ai][interval-analysis]")
+{
+  // Setup global options here
+  ait<interval_domaint> interval_analysis;
+
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "char a = 1 ? 2 : 4;\n"
+    "return a;\n"
+    "}";
+
+  T.property["3"].push_back({"@F@main@a", 2, true});
+  T.property["3"].push_back({"@F@main@a", 4, false});
+
+  T.run_configs();
+}
+
 TEST_CASE(
   "Interval Analysis - If/Else Statement LHS (Unsigned)",
   "[ai][interval-analysis]")
