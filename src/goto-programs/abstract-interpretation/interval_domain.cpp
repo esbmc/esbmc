@@ -328,26 +328,27 @@ T interval_domaint::get_interval(const expr2tc &e) const
       return i.logical_right_shift(k);
     }
 
+#endif
+
     if(is_bitor2t(e))
     {
-      auto rhs = get_interval<wrapped_interval>(to_bitor2t(e).side_2);
-      auto lhs = get_interval<wrapped_interval>(to_bitor2t(e).side_1);
+      auto rhs = get_interval<T>(to_bitor2t(e).side_2);
+      auto lhs = get_interval<T>(to_bitor2t(e).side_1);
       return lhs | rhs;
     }
 
     if(is_bitand2t(e))
     {
-      auto rhs = get_interval<wrapped_interval>(to_bitand2t(e).side_2);
-      auto lhs = get_interval<wrapped_interval>(to_bitand2t(e).side_1);
+      auto rhs = get_interval<T>(to_bitand2t(e).side_2);
+      auto lhs = get_interval<T>(to_bitand2t(e).side_1);
       return lhs & rhs;
     }
     if(is_bitxor2t(e))
     {
-      auto rhs = get_interval<wrapped_interval>(to_bitxor2t(e).side_2);
-      auto lhs = get_interval<wrapped_interval>(to_bitxor2t(e).side_1);
+      auto rhs = get_interval<T>(to_bitxor2t(e).side_2);
+      auto lhs = get_interval<T>(to_bitxor2t(e).side_1);
       return lhs ^ rhs;
     }
-#endif
 
     if(is_bitnot2t(e))
     {
