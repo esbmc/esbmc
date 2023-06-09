@@ -280,34 +280,30 @@ T interval_domaint::get_interval(const expr2tc &e) const
 
   // Arithmetic?
   auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
-  auto ieee_arith_op = std::dynamic_pointer_cast<ieee_arith_2ops>(e);
-
-  if(arith_op && enable_interval_arithmetic) // TODO: add support for float ops
+  if(arith_op && enable_interval_arithmetic)
   {
-    // It should be safe to mix integers/floats in here.
-    // The worst that can happen is an overaproximation
-    auto lhs =
-      get_interval<T>(arith_op ? arith_op->side_1 : ieee_arith_op->side_1);
-    auto rhs =
-      get_interval<T>(arith_op ? arith_op->side_2 : ieee_arith_op->side_2);
+    auto lhs = get_interval<T>(arith_op->side_1);
+    auto rhs = get_interval<T>(arith_op->side_2);
 
-    if(is_add2t(e) || is_ieee_add2t(e))
-      return lhs + rhs;
+    if(enable_interval_arithmetic)
+    {
+      if(is_add2t(e))
+        return lhs + rhs;
 
-    if(is_sub2t(e) || is_ieee_sub2t(e))
-      return lhs - rhs;
+      if(is_sub2t(e))
+        return lhs - rhs;
 
-    if(is_mul2t(e) || is_ieee_mul2t(e))
-      return lhs * rhs;
+      if(is_mul2t(e))
+        return lhs * rhs;
 
-    if(is_div2t(e) || is_ieee_div2t(e))
-      return lhs / rhs;
+      if(is_div2t(e))
+        return lhs / rhs;
 
-    if(is_modulus2t(e))
-      return lhs % rhs;
-
-    // TODO: Add more as needed.
+      if(is_modulus2t(e))
+        return lhs % rhs;
+    }
   }
+
   // We could not generate from the expr. Return top
   T result; // (-infinity, infinity)
   return result;
