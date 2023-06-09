@@ -1319,6 +1319,20 @@ public:
 
   type2tc t;
 
+  static wrapped_interval ternary_if(
+    const wrapped_interval &cond,
+    const wrapped_interval &true_value,
+    const wrapped_interval &false_value)
+  {
+    if(!cond.contains(0))
+      return true_value;
+
+    if(cond.singleton())
+      return false_value;
+
+    return over_join(true_value, false_value);
+  }
+
 protected:
   BigInt upper_bound;
 

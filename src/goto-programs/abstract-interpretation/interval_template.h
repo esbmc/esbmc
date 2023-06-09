@@ -403,6 +403,22 @@ public:
     return result;
   }
 
+  static interval_templatet<T> ternary_if(
+    const interval_templatet<T> &cond,
+    const interval_templatet<T> &true_value,
+    const interval_templatet<T> &false_value)
+  {
+    if(!cond.contains(0))
+      return true_value;
+
+    if(cond.singleton())
+      return false_value;
+
+    interval_templatet<T> result = true_value;
+    result.join(false_value);
+    return result;
+  }
+
   /// This is just to check if a value has changed. This is not the same as an interval comparation!
   bool inline has_changed(const interval_templatet<T> &i)
   {

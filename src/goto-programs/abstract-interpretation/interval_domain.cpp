@@ -264,6 +264,14 @@ T interval_domaint::get_interval(const expr2tc &e) const
   if(is_constant_number(e))
     return get_interval_from_const<T>(e);
 
+  if(is_if2t(e))
+  {
+    auto cond = get_interval<T>(to_if2t(e).cond);
+    auto lhs = get_interval<T>(to_if2t(e).true_value);
+    auto rhs = get_interval<T>(to_if2t(e).false_value);
+    return T::ternary_if(cond, lhs, rhs);
+  }
+
   // Arithmetic?
   auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
   auto ieee_arith_op = std::dynamic_pointer_cast<ieee_arith_2ops>(e);
@@ -323,8 +331,7 @@ wrapped_interval interval_domaint::get_interval(const expr2tc &e) const
     auto lhs = get_interval<wrapped_interval>(to_if2t(e).true_value);
     auto rhs = get_interval<wrapped_interval>(to_if2t(e).false_value);
 
-    auto result = wrapped_interval::over_join(lhs, rhs);
-    return result;
+    return wrapped_interval::ternary_if(cond, lhs, rhs);
   }
 
   if(enable_interval_bitwise_arithmetic)
