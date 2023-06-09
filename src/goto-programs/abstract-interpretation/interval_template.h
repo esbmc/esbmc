@@ -433,6 +433,14 @@ public:
     return s;
   }
 
+  static interval_templatet<T> bitnot(const interval_templatet<T> &w)
+  {
+    interval_templatet<T> result;
+    result.set_lower(-w.get_upper() - 1);
+    result.set_upper(-w.get_lower() - 1);
+    return result;
+  }
+
   /// This is just to check if a value has changed. This is not the same as an interval comparation!
   bool inline has_changed(const interval_templatet<T> &i)
   {
