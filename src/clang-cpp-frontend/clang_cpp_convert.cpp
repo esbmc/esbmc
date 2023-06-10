@@ -327,10 +327,17 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
       const clang::FunctionTemplateDecl *ftd =
         llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
     {
-      assert(ftd->isThisDeclarationADefinition());
-      //get_template_decl(ftd, true, comp);
-      log_error("template is not supported in {}", __func__);
-      abort();
+      for(auto *spec : ftd->specializations())
+      {
+        if(get_template_decl_specialization(spec, true, comp))
+          return true;
+
+        // Add only if it isn't static
+        if(spec->getStorageClass() != clang::SC_Static)
+          to_struct_type(type).methods().push_back(comp);
+      }
+
+      continue;
     }
     else
     {
@@ -1021,7 +1028,6 @@ template <typename SpecializationDecl>
 bool clang_cpp_convertert::get_template_decl_specialization(
   const SpecializationDecl *D,
   bool DumpExplicitInst,
-  bool,
   exprt &new_expr)
 {
   for(auto *redecl_with_bad_type : D->redecls())
@@ -1061,8 +1067,7 @@ bool clang_cpp_convertert::get_template_decl(
   exprt &new_expr)
 {
   for(auto *Child : D->specializations())
-    if(get_template_decl_specialization(
-         Child, DumpExplicitInst, !D->isCanonicalDecl(), new_expr))
+    if(get_template_decl_specialization(Child, DumpExplicitInst, new_expr))
       return true;
 
   return false;

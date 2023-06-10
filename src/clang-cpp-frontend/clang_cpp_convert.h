@@ -118,7 +118,6 @@ protected:
   bool get_template_decl_specialization(
     const SpecializationDecl *D,
     bool DumpExplicitInst,
-    bool DumpRefOnly,
     exprt &new_expr);
 
   bool get_expr(const clang::Stmt &stmt, exprt &new_expr) override;
