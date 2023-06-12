@@ -44,6 +44,29 @@ void instrument_intervals(
     }
     else
     {
+      if(i_it->is_assume() || i_it->is_assert() || i_it->is_goto())
+      {
+        // We may be able to simplify here
+        const interval_domaint &d = interval_analysis[i_it];
+        tvt guard = interval_domaint::eval_boolean_expression(i_it->guard, d);
+        if(i_it->is_goto())
+          guard = !guard;
+        // If guard is always true... convert it into a skip!
+        if(guard.is_true() && interval_domaint::enable_assertion_simplification)
+        {
+          i_it->make_skip();
+          continue;
+        }
+
+        // If guard is always false... convert it to trivial!
+        if(
+          guard.is_false() && interval_domaint::enable_assertion_simplification)
+        {
+          i_it->guard = i_it->is_goto() ? gen_true_expr() : gen_false_expr();
+          continue;
+        }
+      }
+
       goto_programt::const_targett previous = i_it;
       previous--;
       if(previous->is_goto() && !is_true(previous->guard))
