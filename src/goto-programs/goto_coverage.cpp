@@ -40,12 +40,14 @@ void goto_coveraget::add_false_asserts(goto_functionst &goto_functions)
         if(it->is_end_function())
         {
           insert_false_assert(goto_program, it);
+          continue;
         }
 
-        if((it->is_goto() && !is_true(it->guard)) || it->is_target())
+        if((!is_true(it->guard) && it->is_goto()) || it->is_target())
         {
           it++; // add an assertion behind the instruciton
           insert_false_assert(goto_program, it);
+          continue;
         }
       }
 
