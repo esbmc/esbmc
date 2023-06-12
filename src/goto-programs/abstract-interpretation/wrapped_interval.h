@@ -909,6 +909,64 @@ public:
     return result;
   }
 
+  static wrapped_interval
+  equality(const wrapped_interval &lhs, const wrapped_interval &)
+  {
+    log_debug("[wrapped] no support for equality");
+    wrapped_interval result(lhs.t);
+    return result;
+  }
+
+  static wrapped_interval invert_bool(const wrapped_interval &i)
+  {
+    if(!i.singleton())
+      return i;
+
+    auto result = i;
+    auto inverted = result.get_lower() == 0 ? 1 : 0;
+    result.set_lower(inverted);
+    result.set_upper(inverted);
+    return result;
+  }
+
+  static wrapped_interval
+  not_equal(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    return invert_bool(equality(lhs, rhs));
+  }
+
+  static wrapped_interval
+  less_than(const wrapped_interval &lhs, const wrapped_interval &)
+  {
+    log_debug("[wrapped] no support for less than");
+    wrapped_interval result(lhs.t);
+    return result;
+  }
+
+  static wrapped_interval
+  less_than_equal(const wrapped_interval &lhs, const wrapped_interval &)
+  {
+    log_debug("[wrapped] no support for less than");
+    wrapped_interval result(lhs.t);
+    return result;
+  }
+
+  static wrapped_interval
+  greater_than_equal(const wrapped_interval &lhs, const wrapped_interval &)
+  {
+    log_debug("[wrapped] no support for greater than equal");
+    wrapped_interval result(lhs.t);
+    return result;
+  }
+
+  static wrapped_interval
+  greater_than(const wrapped_interval &lhs, const wrapped_interval &)
+  {
+    log_debug("[wrapped] no support for greater than");
+    wrapped_interval result(lhs.t);
+    return result;
+  }
+
   wrapped_interval sign_extension(const type2tc &cast) const
   {
     std::vector<wrapped_interval> parts;
