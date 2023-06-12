@@ -70,8 +70,6 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
   return result;
 }
 
-#include <cmath>
-
 template <>
 real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) const
 {
@@ -82,7 +80,7 @@ real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) const
   auto real_value = to_constant_floatbv2t(e).value;
 
   // Health check, is the convertion to double ok? See #1037
-  if(!isnormal(real_value.to_double()) || real_value.is_zero())
+  if(!std::isnormal(real_value.to_double()) || real_value.is_zero())
   {
     if(real_value.is_double())
       log_warning("ESBMC fails to to convert {} into double", *e);
