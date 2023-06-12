@@ -72,8 +72,10 @@ protected:
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
   /* check for signed/unsigned_bv */
-  void
-  input_overflow_check_int(std::string width, BigInt limit, bool &buf_overflow);
+  void input_overflow_check_int(
+    const std::string width,
+    BigInt limit,
+    bool &buf_overflow);
   /* check for string/malloc array */
   void input_overflow_check_arr(BigInt width, BigInt limit, bool &buf_overflow);
 
@@ -254,7 +256,7 @@ void goto_checkt::overflow_check(
 }
 
 void goto_checkt::input_overflow_check_int(
-  std::string width,
+  const std::string width,
   BigInt limit,
   bool &buf_overflow)
 {
