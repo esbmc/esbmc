@@ -11,6 +11,7 @@
 #include <util/ieee_float.h>
 #include <irep2/irep2_utils.h>
 #include <util/mp_arith.h>
+#include <util/threeval.h>
 #include <boost/multiprecision/cpp_bin_float.hpp>
 typedef interval_templatet<BigInt> integer_intervalt;
 using real_intervalt =
@@ -85,8 +86,9 @@ public:
     return wrap_map;
   }
 
-  // Compute whether `cond` is a tautology for the abstract state
-  bool forward_check(const expr2tc &cond);
+  /// Eval whether a boolean expression is always true, always false, or either (for the current state)
+  static tvt
+  eval_boolean_expression(const expr2tc &cond, const interval_domaint &id);
 
 protected:
   /**
