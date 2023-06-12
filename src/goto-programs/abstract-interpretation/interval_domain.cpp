@@ -270,8 +270,60 @@ T interval_domaint::get_interval(const expr2tc &e) const
   if(is_constant_bool2t(e))
   {
     auto r = get_top_interval_from_expr<T>(e);
-    r.lower = to_constant_bool2t(e).is_true();
-    r.upper = to_constant_bool2t(e).is_true();
+    r.set_lower(to_constant_bool2t(e).is_true());
+    r.set_upper(to_constant_bool2t(e).is_true());
+    return r;
+  }
+
+  if(is_and2t(e))
+  {
+    auto r = get_top_interval_from_expr<T>(e);
+
+    tvt lhs = eval_boolean_expression(to_and2t(e).side_1, *this);
+    tvt rhs = eval_boolean_expression(to_and2t(e).side_2, *this);
+
+    // If any side is false, then false
+    if(lhs.is_false() || rhs.is_false())
+    {
+      r.set_lower(0);
+      r.set_upper(0);
+      return r;
+    }
+
+    // Both sides are true, then true
+    if(lhs.is_true() && rhs.is_true())
+    {
+      r.set_lower(1);
+      r.set_upper(1);
+      return r;
+    }
+
+    return r;
+  }
+
+  if(is_or2t(e))
+  {
+    auto r = get_top_interval_from_expr<T>(e);
+
+    tvt lhs = eval_boolean_expression(to_or2t(e).side_1, *this);
+    tvt rhs = eval_boolean_expression(to_or2t(e).side_2, *this);
+
+    // If any side is true, then true
+    if(lhs.is_true() || rhs.is_true())
+    {
+      r.set_lower(1);
+      r.set_upper(1);
+      return r;
+    }
+
+    // Both sides are false, then false
+    if(lhs.is_false() && rhs.is_false())
+    {
+      r.set_lower(0);
+      r.set_upper(0);
+      return r;
+    }
+
     return r;
   }
 
@@ -292,8 +344,36 @@ T interval_domaint::get_interval(const expr2tc &e) const
     return T::ternary_if(cond, lhs, rhs);
   }
 
+  if(is_not2t(e))
+  {
+    auto cond = get_interval<T>(to_not2t(e).value);
+    return T::invert_bool(cond);
+  }
+
   if(is_typecast2t(e))
   {
+    // Special case: boolean
+    if(is_bool_type(to_typecast2t(e).type))
+    {
+      tvt truth = eval_boolean_expression(to_typecast2t(e).from, *this);
+      T r;
+      r.set_lower(0);
+      r.set_upper(1);
+
+      if(truth.is_true())
+      {
+        r.set_lower(1);
+        return r;
+      }
+
+      if(truth.is_false())
+      {
+        r.set_upper(0);
+        return r;
+      }
+
+      return r;
+    }
     auto inner = get_interval<T>(to_typecast2t(e).from);
     return T::cast(inner, to_typecast2t(e).type);
   }
@@ -374,6 +454,32 @@ T interval_domaint::get_interval(const expr2tc &e) const
     }
   }
 
+  if(is_comp_expr(e))
+  {
+    const expr2tc &lhs = *e->get_sub_expr(0);
+    const expr2tc &rhs = *e->get_sub_expr(1);
+
+    auto lhs_i = get_interval<T>(lhs);
+    auto rhs_i = get_interval<T>(rhs);
+
+    if(is_equality2t(e))
+      return T::equality(lhs_i, rhs_i);
+
+    if(is_notequal2t(e))
+      return T::not_equal(lhs_i, rhs_i);
+
+    if(is_lessthan2t(e))
+      return T::less_than(lhs_i, rhs_i);
+
+    if(is_greaterthan2t(e))
+      return T::greater_than(lhs_i, rhs_i);
+
+    if(is_lessthanequal2t(e))
+      return T::less_than_equal(lhs_i, rhs_i);
+
+    if(is_greaterthanequal2t(e))
+      return T::greater_than_equal(lhs_i, rhs_i);
+  }
   // We could not generate from the expr. Return top
   return get_top_interval_from_expr<T>(e);
 }
@@ -643,12 +749,10 @@ bool contains_float(const expr2tc &e)
     return true;
 
   bool inner_float = false;
-  e->foreach_operand(
-    [&inner_float](auto &it){
-      if(contains_float(it))
-        inner_float = true;
-    }
-  );
+  e->foreach_operand([&inner_float](auto &it) {
+    if(contains_float(it))
+      inner_float = true;
+  });
 
   return inner_float;
 }
@@ -892,140 +996,49 @@ void interval_domaint::assume(const expr2tc &cond)
 {
   expr2tc new_cond = cond;
   simplify(new_cond);
+  // Let's check whether this condition is always false
+  if(eval_boolean_expression(new_cond, *this).is_false())
+  {
+    log_debug("The expr {} is always false. Returning bottom", *cond);
+    make_bottom();
+    return;
+  }
+
   assume_rec(new_cond, false);
 }
 
-bool interval_domaint::forward_check(const expr2tc &cond)
+tvt interval_domaint::eval_boolean_expression(
+  const expr2tc &cond,
+  const interval_domaint &id)
 {
+  // TODO: for now we will only support integer expressions (no mix!)
   if(enable_wrapped_intervals)
   {
-    log_debug("[forward] Forward check is disabled for wrapped");
-    return false;
+    log_debug("[eval_boolean_expression] Disabled for wrapped");
+    return tvt(tvt::TV_UNKNOWN);
   }
 
-  bool result = false;
-  if(is_and2t(cond))
+  if(contains_float(cond))
   {
-    cond->foreach_operand(
-      [this, &result](const expr2tc &e) { result &= forward_check(e); });
-    return result;
+    log_debug("[eval_boolean_expression] No support for floats/mixing");
+    return tvt(tvt::TV_UNKNOWN);
   }
 
-  else if(is_or2t(cond))
-  {
-    cond->foreach_operand(
-      [this, &result](const expr2tc &e) { result |= forward_check(e); });
-    return result;
-  }
+  auto interval = id.get_interval<integer_intervalt>(cond);
 
-  if(is_not2t(cond))
-  {
-    // Sadly, we are doing over approximations, so we are limited to what we can do here
-    auto value = to_not2t(cond).value;
-    if(is_comp_expr(value))
-    {
-      const expr2tc &lhs = *value->get_sub_expr(0);
-      const expr2tc &rhs = *value->get_sub_expr(1);
+  // If the interval does not contain zero then it's always true
+  if(!interval.contains(0))
+    return tvt(tvt::TV_TRUE);
 
-      if(!is_bv_type(lhs->type))
-      {
-        log_debug("[forward] Support for only bv types {}", *lhs->type);
-        return false;
-      }
+  // If it does contain zero and its singleton then it's always false
+  if(interval.singleton())
+    return tvt(tvt::TV_FALSE);
 
-      auto lhs_i = get_interval<integer_intervalt>(lhs);
-      auto rhs_i = get_interval<integer_intervalt>(rhs);
-
-      if(is_greaterthanequal2t(value))
-        return lhs_i.upper_set && rhs_i.lower_set && lhs_i.upper < rhs_i.lower;
-
-      if(is_greaterthan2t(value))
-        return lhs_i.upper_set && rhs_i.lower_set && lhs_i.upper <= rhs_i.lower;
-
-      if(is_lessthanequal2t(value))
-        return lhs_i.lower_set && rhs_i.upper_set && lhs_i.lower > rhs_i.upper;
-
-      if(is_lessthan2t(value))
-        return lhs_i.lower_set && rhs_i.upper_set && lhs_i.lower >= rhs_i.upper;
-
-      if(is_notequal2t(value))
-        return lhs_i.singleton() && rhs_i.singleton() &&
-               lhs_i.lower == rhs_i.lower;
-
-      if(is_equality2t(value))
-      {
-        lhs_i.intersect_with(rhs_i);
-        return lhs_i.empty();
-      }
-    }
-    return false;
-  }
-
-  if(is_symbol2t(cond))
-  {
-    log_debug("[forward] Missing support: {}", *cond);
-  }
-
-  if(is_comp_expr(cond))
-  {
-    const expr2tc &lhs = *cond->get_sub_expr(0);
-    const expr2tc &rhs = *cond->get_sub_expr(1);
-
-    if(!is_bv_type(lhs->type))
-    {
-      log_debug("[forward] Support for only bv types {}", *lhs->type);
-      return false;
-    }
-
-    log_status("Checking for {}", *cond);
-
-    auto lhs_i = get_interval<integer_intervalt>(lhs);
-    auto rhs_i = get_interval<integer_intervalt>(rhs);
-
-    lhs_i.dump();
-    rhs_i.dump();
-
-    if(is_lessthan2t(cond))
-      return lhs_i.upper_set && rhs_i.lower_set && lhs_i.upper < rhs_i.lower;
-
-    if(is_lessthanequal2t(cond))
-      return lhs_i.upper_set && rhs_i.lower_set && lhs_i.upper <= rhs_i.lower;
-
-    if(is_greaterthan2t(cond))
-      return lhs_i.lower_set && rhs_i.upper_set && lhs_i.lower > rhs_i.upper;
-
-    if(is_greaterthanequal2t(cond))
-      return lhs_i.lower_set && rhs_i.upper_set && lhs_i.lower >= rhs_i.upper;
-
-    if(is_equality2t(cond))
-      return lhs_i.singleton() && rhs_i.singleton() &&
-             lhs_i.lower == rhs_i.lower;
-
-    if(is_notequal2t(cond))
-    {
-      lhs_i.intersect_with(rhs_i);
-      return lhs_i.empty();
-    }
-  }
-  else
-    log_debug("[forward] Missing support: {}", *cond);
-  return false;
+  return tvt(tvt::TV_UNKNOWN);
 }
 
 void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
 {
-  if(forward_check(cond))
-  {
-    log_status("Condition is always true");
-  }
-
-  expr2tc cpy = cond;
-  make_not(cpy);
-  if(forward_check(cpy))
-  {
-    log_status("Condition is always false");
-  }
-
   if(is_comp_expr(cond))
   {
     assert(cond->get_num_sub_exprs() == 2);
