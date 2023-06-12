@@ -873,7 +873,6 @@ smt_convt::resultt bmct::multi_property_check(
   if(
     options.get_bool_option("make-assert-false") &&
     !(options.get_bool_option("goto-coverage") ||
-
       options.get_bool_option("add-false-assert")))
   {
     int total = goto_coveraget().get_total_instrument();
