@@ -1122,42 +1122,20 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
   if(!enable_assertion_simplification)
     return true;
 
-  bool unchanged = true;
-  interval_domaint d(*this);
-
-  // merge intervals to properly handle conjunction
-  if(is_and2t(condition)) // May be directly representable
+  tvt eval = eval_boolean_expression(condition, *this);
+  if(eval.is_true())
   {
-    // TODO: This is not working, reimplement this using other logic
-    log_debug("[interval] Conjuction");
-    interval_domaint a;
-    a.make_top();        // a is everything
-    a.assume(condition); // Restrict a to an over-approximation
-                         //  of when condition is true
-    if(!a.join(d))       // If d (this) is included in a...
-    {                    // Then the condition is always true
-      unchanged = is_true(condition);
-      condition = gen_true_expr();
-    }
-  }
-  else if(is_symbol2t(condition))
-  {
-    // TODO: we have to handle symbol expression
-  }
-  else // Less likely to be representable
-  {
-    log_debug("[interval] not");
-    expr2tc not_condition = condition;
-    make_not(not_condition);
-    d.assume(not_condition); // Restrict to when condition is false
-    if(d.is_bottom())        // If there there are none...
-    {                        // Then the condition is always true
-      unchanged = is_true(condition);
-      condition = gen_true_expr();
-    }
+    // TODO: convert to 1?
   }
 
-  return unchanged;
+  if(eval.is_false())
+  {
+    // TODO: convert to 0?
+  }
+
+  // TODO: contract expression (implication?)
+
+  return false;
 }
 
 void interval_domaint::set_options(const optionst &options)
