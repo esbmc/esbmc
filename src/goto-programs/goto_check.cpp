@@ -8,6 +8,7 @@
 #include <util/i2string.h>
 #include <util/location.h>
 #include <util/simplify_expr.h>
+#include <util/mp_arith.h>
 
 class goto_checkt
 {
@@ -71,9 +72,10 @@ protected:
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
   /* check for signed/unsigned_bv */
-  void input_overflow_check_int(int width, int limit, bool &buf_overflow);
+  void
+  input_overflow_check_int(std::string width, BigInt limit, bool &buf_overflow);
   /* check for string/malloc array */
-  void input_overflow_check_arr(int width, int limit, bool &buf_overflow);
+  void input_overflow_check_arr(BigInt width, BigInt limit, bool &buf_overflow);
 
   void
   shift_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
@@ -252,44 +254,19 @@ void goto_checkt::overflow_check(
 }
 
 void goto_checkt::input_overflow_check_int(
-  int width,
-  int limit,
+  std::string width,
+  BigInt limit,
   bool &buf_overflow)
 {
-  switch(width)
-  {
-  case 8:
-  {
-    if(limit > 3)
-      buf_overflow = true;
-    break;
-  }
-  case 16:
-  {
-    if(limit > 5)
-      buf_overflow = true;
-    break;
-  }
-  case 32:
-  {
-    if(limit > 10)
-      buf_overflow = true;
-    break;
-  }
-  case 64:
-  {
-    if(limit > 19)
-      buf_overflow = true;
-    break;
-  }
-  default:
-    break;
-  }
+  if(
+    (width == "8" && limit > 3) || (width == "16" && limit > 5) ||
+    (width == "32" && limit > 10) || (width == "64" && limit > 19))
+    buf_overflow = true;
 }
 
 void goto_checkt::input_overflow_check_arr(
-  int width,
-  int limit,
+  BigInt width,
+  BigInt limit,
   bool &buf_overflow)
 {
   if(limit + 1 > width) // plus one as string always ends up with a null char
@@ -405,12 +382,14 @@ void goto_checkt::input_overflow_check(
     if(type_id == "array")
     {
       width = to_array_type(arg.type).size().cformat().as_string();
-      input_overflow_check_arr(stoi(width), stoi(limits.at(i)), buf_overflow);
+      input_overflow_check_arr(
+        string2integer(width), string2integer(limits.at(i)), buf_overflow);
     }
     else if(type_id == "unsignedbv" || type_id == "signedbv")
     {
       width = arg.type.width().as_string();
-      input_overflow_check_int(stoi(width), stoi(limits.at(i)), buf_overflow);
+      input_overflow_check_int(
+        width, string2integer(limits.at(i)), buf_overflow);
     }
     else if(type_id == "floatbv" || type_id == "fixedbv")
     {
@@ -432,7 +411,8 @@ void goto_checkt::input_overflow_check(
         const exprt &it = operands[0];
         width = integer2string(
           binary2integer(it.value().as_string(), it.id() == "signedbv"));
-        input_overflow_check_arr(stoi(width), stoi(limits.at(i)), buf_overflow);
+        input_overflow_check_arr(
+          string2integer(width), string2integer(limits.at(i)), buf_overflow);
       }
 
       else if(operands[0].operands().size() == 2)
@@ -448,7 +428,7 @@ void goto_checkt::input_overflow_check(
         {
           width = it.c_sizeof_type().width().as_string();
           input_overflow_check_int(
-            stoi(width), stoi(limits.at(i)), buf_overflow);
+            width, string2integer(limits.at(i)), buf_overflow);
         }
 
         else if(
