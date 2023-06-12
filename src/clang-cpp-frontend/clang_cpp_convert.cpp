@@ -313,6 +313,10 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
     if(decl->getKind() == clang::Decl::Field)
       continue;
 
+    // ignore self-referring implicit class node
+    if(decl->getKind() == clang::Decl::CXXRecord && decl->isImplicit())
+      continue;
+
     // virtual methods were already added
     if(decl->getKind() == clang::Decl::CXXMethod)
     {
@@ -900,6 +904,14 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   const clang::CXXMethodDecl &cxxmd,
   code_typet::argumentst &params)
 {
+  std::string id, name;
+  get_decl_name(cxxmd, name, id);
+
+  if(id == "c:@S@int_array>#VI3@F@int_array#")
+  {
+    printf("Got ctor\n");
+  }
+
   // Parse this pointer
   code_typet::argumentt this_param;
   if(get_type(cxxmd.getThisType(), this_param.type()))
@@ -908,8 +920,8 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   locationt location_begin;
   get_location_from_decl(cxxmd, location_begin);
 
-  std::string id, name;
-  get_decl_name(cxxmd, name, id);
+  //std::string id, name;
+  //get_decl_name(cxxmd, name, id);
 
   name = "this";
   id += name;
