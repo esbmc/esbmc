@@ -70,6 +70,8 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
   return result;
 }
 
+#include <cmath>
+
 template <>
 real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) const
 {
