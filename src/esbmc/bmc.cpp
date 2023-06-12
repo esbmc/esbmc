@@ -871,16 +871,17 @@ smt_convt::resultt bmct::multi_property_check(
     std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
   if(
-    options.get_bool_option("goto-coverage") ||
-    options.get_bool_option("make-assert-false") ||
-    options.get_bool_option("add-false-assert"))
+    options.get_bool_option("make-assert-false") &&
+    !(options.get_bool_option("goto-coverage") ||
+
+      options.get_bool_option("add-false-assert")))
   {
     int total = goto_coveraget().get_total_instrument();
     if(total)
     {
       log_success("\n[Coverage]\n");
-      log_result("  Total Instrumented Assertion: {}", total);
-      log_result("  Tracked Instrumented Assertion: {}", tracked_instrument);
+      log_result("  Total Asserts: {}", total);
+      log_result("  Reached Asserts: {}", tracked_instrument);
       log_result("  Coverage: {}%", tracked_instrument * 100.0 / total);
     }
   }
