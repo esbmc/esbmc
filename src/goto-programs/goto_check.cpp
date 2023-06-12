@@ -73,11 +73,14 @@ protected:
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
   /* check for signed/unsigned_bv */
   void input_overflow_check_int(
-    const std::string width,
-    BigInt limit,
+    const BigInt &width,
+    const BigInt &limit,
     bool &buf_overflow);
   /* check for string/malloc array */
-  void input_overflow_check_arr(BigInt width, BigInt limit, bool &buf_overflow);
+  void input_overflow_check_arr(
+    const BigInt &width,
+    const BigInt &limit,
+    bool &buf_overflow);
 
   void
   shift_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
@@ -256,19 +259,19 @@ void goto_checkt::overflow_check(
 }
 
 void goto_checkt::input_overflow_check_int(
-  const std::string width,
-  BigInt limit,
+  const BigInt &width,
+  const BigInt &limit,
   bool &buf_overflow)
 {
   if(
-    (width == "8" && limit > 3) || (width == "16" && limit > 5) ||
-    (width == "32" && limit > 10) || (width == "64" && limit > 19))
+    (width == 8 && limit > 3) || (width == 16 && limit > 5) ||
+    (width == 32 && limit > 10) || (width == 64 && limit > 19))
     buf_overflow = true;
 }
 
 void goto_checkt::input_overflow_check_arr(
-  BigInt width,
-  BigInt limit,
+  const BigInt &width,
+  const BigInt &limit,
   bool &buf_overflow)
 {
   if(limit + 1 > width) // plus one as string always ends up with a null char
@@ -391,7 +394,7 @@ void goto_checkt::input_overflow_check(
     {
       width = arg.type.width().as_string();
       input_overflow_check_int(
-        width, string2integer(limits.at(i)), buf_overflow);
+        string2integer(width), string2integer(limits.at(i)), buf_overflow);
     }
     else if(type_id == "floatbv" || type_id == "fixedbv")
     {
@@ -430,7 +433,7 @@ void goto_checkt::input_overflow_check(
         {
           width = it.c_sizeof_type().width().as_string();
           input_overflow_check_int(
-            width, string2integer(limits.at(i)), buf_overflow);
+            string2integer(width), string2integer(limits.at(i)), buf_overflow);
         }
 
         else if(
