@@ -73,10 +73,12 @@ public:
 
   void set_upper(const T &b)
   {
+    upper_set = true;
     set(true, b);
   }
   void set_lower(const T &b)
   {
+    lower_set = true;
     set(false, b);
   }
 
@@ -489,6 +491,112 @@ public:
     result.set_lower(-w.get_upper() - 1);
     result.set_upper(-w.get_lower() - 1);
     return result;
+  }
+
+  static interval_templatet<T>
+  equality(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
+  {
+    interval_templatet<T> result;
+    result.set_lower(0);
+    result.set_upper(1);
+
+    // If the intervals are singletons and equal then it's always true
+    if(lhs.singleton() && rhs.singleton() && lhs.get_lower() == rhs.get_lower())
+    {
+      result.set_lower(1);
+      return result;
+    }
+
+    // If the intervals don't intersect, then they are always empty
+    auto lhs_cpy = lhs;
+    lhs_cpy.intersect_with(rhs);
+    if(lhs_cpy.empty())
+      result.set_upper(0);
+
+    return result;
+  }
+
+  static interval_templatet<T> invert_bool(const interval_templatet<T> &i)
+  {
+    if(!i.singleton())
+      return i;
+
+    auto result = i;
+    auto inverted = result.get_lower() == 0 ? 1 : 0;
+    result.set_lower(inverted);
+    result.set_upper(inverted);
+    return result;
+  }
+
+  static interval_templatet<T>
+  not_equal(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
+  {
+    return invert_bool(equality(lhs, rhs));
+  }
+
+  static interval_templatet<T>
+  less_than(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
+  {
+    interval_templatet<T> result;
+    result.set_lower(0);
+    result.set_upper(1);
+
+    // MAX LHS < MIN RHS => TRUE
+    if(lhs.upper_set && rhs.lower_set && lhs.get_upper() < rhs.get_lower())
+    {
+      result.set_lower(1);
+      return result;
+    }
+
+    // MIN LHS >= MAX RHS => FALSE
+    if(lhs.lower_set && rhs.upper_set && lhs.get_lower() >= rhs.get_upper())
+    {
+      result.set_upper(0);
+      return result;
+    }
+
+    assert(!result.singleton() && !result.is_bottom());
+    return result;
+  }
+
+  static interval_templatet<T> less_than_equal(
+    const interval_templatet<T> &lhs,
+    const interval_templatet<T> &rhs)
+  {
+    interval_templatet<T> result;
+    result.set_lower(0);
+    result.set_upper(1);
+
+    // MAX LHS <= MIN RHS => TRUE
+    if(lhs.upper_set && rhs.lower_set && lhs.get_upper() <= rhs.get_lower())
+    {
+      result.set_lower(1);
+      return result;
+    }
+
+    // MIN LHS > MAX RHS => FALSE
+    if(lhs.lower_set && rhs.upper_set && lhs.get_lower() > rhs.get_upper())
+    {
+      result.set_upper(0);
+      return result;
+    }
+
+    assert(!result.singleton() && !result.is_bottom());
+    return result;
+  }
+
+  static interval_templatet<T> greater_than_equal(
+    const interval_templatet<T> &lhs,
+    const interval_templatet<T> &rhs)
+  {
+    return less_than(rhs, lhs);
+  }
+
+  static interval_templatet<T> greater_than(
+    const interval_templatet<T> &lhs,
+    const interval_templatet<T> &rhs)
+  {
+    return less_than_equal(rhs, lhs);
   }
 
   /// This is just to check if a value has changed. This is not the same as an interval comparation!
