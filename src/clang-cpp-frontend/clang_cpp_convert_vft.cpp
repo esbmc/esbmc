@@ -180,6 +180,8 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
   component.set("access", "public");
   // add to the class' type
   type.components().push_back(component);
+
+  has_vptr_component = true;
 }
 
 void clang_cpp_convertert::add_vtable_type_entry(

@@ -373,6 +373,8 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
     }
   }
 
+  has_vptr_component = false;
+
   return false;
 }
 
@@ -1273,7 +1275,7 @@ bool clang_cpp_convertert::annotate_class_method(
        * we indicate the need for vptr initializations in contructor.
        * vptr initializations will be added in the adjuster.
        */
-      fd_symb->value.need_vptr_init(true);
+      fd_symb->value.need_vptr_init(has_vptr_component);
     }
   }
 

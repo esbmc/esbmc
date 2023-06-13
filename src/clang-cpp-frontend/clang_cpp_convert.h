@@ -277,6 +277,8 @@ protected:
    */
   std::string vtable_type_prefix = "virtual_table::";
   std::string vtable_ptr_suffix = "@vtable_pointer";
+  // if a class/struct has vptr component, it needs to be initialized in ctor
+  bool has_vptr_component = false;
   std::string thunk_prefix = "thunk::";
   using function_switch = std::map<irep_idt, exprt>;
   using switch_table = std::map<irep_idt, function_switch>;
