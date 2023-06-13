@@ -22,15 +22,6 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
   std::pair<symbolst::iterator, bool> result =
     symbols.insert(std::pair<irep_idt, symbolt>(symbol.id, tmp));
 
-  if(symbol.id == "c:@S@int_array>#VI3")
-  {
-    printf("Moving c:@S@int_array>#VI3\n");
-  }
-  if(symbol.id == "tag-int_array<3>")
-  {
-    printf("Moving tag-int_array<3>\n");
-  }
-
   if(!result.second)
   {
     new_symbol = &result.first->second;
