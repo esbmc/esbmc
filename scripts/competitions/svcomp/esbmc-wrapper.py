@@ -264,7 +264,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
-      command_line += "--no-pointer-check --no-bounds-check --interval-analysis --error-label ERROR --goto-unwind --unlimited-goto-unwind "
+      command_line += "--no-pointer-check --no-bounds-check --interval-analysis --interval-analysis-simplify --error-label ERROR --goto-unwind --unlimited-goto-unwind "
   else:
     print("Unknown property")
     exit(1)
