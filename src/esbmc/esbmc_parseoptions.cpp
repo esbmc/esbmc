@@ -451,21 +451,6 @@ int esbmc_parseoptionst::doit()
     return 0;
   }
 
-  // initialize goto_functions algorithms
-  {
-    // loop unroll
-    if(cmdline.isset("goto-unwind") && !cmdline.isset("unwind"))
-    {
-      size_t unroll_limit = cmdline.isset("unlimited-goto-unwind") ? -1 : 1000;
-      goto_preprocess_algorithms.push_back(
-        std::make_unique<bounded_loop_unroller>(unroll_limit));
-    }
-
-    // mark declarations as nondet
-    if(cmdline.isset("initialize-nondet-variables"))
-      goto_preprocess_algorithms.emplace_back(
-        std::make_unique<mark_decl_as_non_det>(context));
-  }
   if(cmdline.isset("termination"))
     return doit_termination();
 
@@ -1579,6 +1564,23 @@ bool esbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {
       interval_analysis(goto_functions, ns, options);
+    }
+
+    // initialize goto_functions algorithms
+    {
+      // loop unroll
+      if(cmdline.isset("goto-unwind") && !cmdline.isset("unwind"))
+      {
+        size_t unroll_limit =
+          cmdline.isset("unlimited-goto-unwind") ? -1 : 1000;
+        goto_preprocess_algorithms.push_back(
+          std::make_unique<bounded_loop_unroller>(unroll_limit));
+      }
+
+      // mark declarations as nondet
+      if(cmdline.isset("initialize-nondet-variables"))
+        goto_preprocess_algorithms.emplace_back(
+          std::make_unique<mark_decl_as_non_det>(context));
     }
 
     if(
