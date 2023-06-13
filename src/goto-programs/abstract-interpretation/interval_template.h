@@ -403,6 +403,94 @@ public:
     return result;
   }
 
+  static interval_templatet<T> ternary_if(
+    const interval_templatet<T> &cond,
+    const interval_templatet<T> &true_value,
+    const interval_templatet<T> &false_value)
+  {
+    if(!cond.contains(0))
+      return true_value;
+
+    if(cond.singleton())
+      return false_value;
+
+    interval_templatet<T> result = true_value;
+    result.join(false_value);
+    return result;
+  }
+
+  static interval_templatet<T>
+  cast(const interval_templatet<T> &old, const type2tc &)
+  {
+    log_debug("No support for typecasting");
+    return old;
+  }
+
+  friend interval_templatet<T>
+  operator%(const interval_templatet<T> &s, const interval_templatet<T> &)
+  {
+    log_debug("No support for mod");
+    return s;
+  }
+
+  friend interval_templatet<T>
+  operator&(const interval_templatet<T> &, const interval_templatet<T> &)
+  {
+    log_debug("No support for bitand");
+    interval_templatet<T> result;
+    return result;
+  }
+
+  friend interval_templatet<T>
+  operator|(const interval_templatet<T> &, const interval_templatet<T> &)
+  {
+    log_debug("No support for bitor");
+    interval_templatet<T> result;
+    return result;
+  }
+
+  friend interval_templatet<T>
+  operator^(const interval_templatet<T> &, const interval_templatet<T> &)
+  {
+    log_debug("No support for bitxor");
+    interval_templatet<T> result;
+    return result;
+  }
+
+  static interval_templatet<T> logical_right_shift(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &)
+  {
+    log_debug("No support for logical right shift");
+    interval_templatet<T> result;
+    return result;
+  }
+
+  static interval_templatet<T>
+  left_shift(const interval_templatet<T> &, const interval_templatet<T> &)
+  {
+    log_debug("No support for left shift");
+    interval_templatet<T> result;
+    return result;
+  }
+
+  static interval_templatet<T> arithmetic_right_shift(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &)
+  {
+    log_debug("No support for arithmetic right shift");
+    interval_templatet<T> result;
+    return result;
+  }
+
+  static interval_templatet<T> bitnot(const interval_templatet<T> &w)
+  {
+    interval_templatet<T> result;
+    result.set_lower(-w.get_upper() - 1);
+    result.set_upper(-w.get_lower() - 1);
+    return result;
+  }
+
   /// This is just to check if a value has changed. This is not the same as an interval comparation!
   bool inline has_changed(const interval_templatet<T> &i)
   {

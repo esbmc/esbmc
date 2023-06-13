@@ -8,6 +8,7 @@
 #include <util/i2string.h>
 #include <util/location.h>
 #include <util/simplify_expr.h>
+#include <util/mp_arith.h>
 
 class goto_checkt
 {
@@ -70,6 +71,16 @@ protected:
 
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
+  /* check for signed/unsigned_bv */
+  void input_overflow_check_int(
+    const BigInt &width,
+    const BigInt &limit,
+    bool &buf_overflow);
+  /* check for string/malloc array */
+  void input_overflow_check_arr(
+    const BigInt &width,
+    const BigInt &limit,
+    bool &buf_overflow);
 
   void
   shift_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
@@ -247,6 +258,28 @@ void goto_checkt::overflow_check(
     guard);
 }
 
+void goto_checkt::input_overflow_check_int(
+  const BigInt &width,
+  const BigInt &limit,
+  bool &buf_overflow)
+{
+  if(
+    (width == 8 && limit > 3) || (width == 16 && limit > 5) ||
+    (width == 32 && limit > 10) || (width == 64 && limit > 19))
+    buf_overflow = true;
+}
+
+void goto_checkt::input_overflow_check_arr(
+  const BigInt &width,
+  const BigInt &limit,
+  bool &buf_overflow)
+{
+  if(limit + 1 > width) // plus one as string always ends up with a null char
+  {
+    buf_overflow = true;
+  }
+}
+
 void goto_checkt::input_overflow_check(
   const expr2tc &expr,
   const locationt &loc)
@@ -305,17 +338,38 @@ void goto_checkt::input_overflow_check(
   for(long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
       i++)
   {
-    arg_names.push_back(get_string_argument(func_call.operands[i]));
+    irep_idt arg_name = get_string_argument(func_call.operands[i]);
+
+    // e.g
+    // int *arr = (int*) malloc(10 * sizeof(int));
+    // scanf("%13d",&arr[0]);  --> overflow
+    if(arg_name.empty())
+    {
+      expr2tc deref = get_base_object(func_call.operands[i]);
+      exprt ptr = migrate_expr_back(deref);
+
+      // not the format we expected
+      if(!ptr.type().is_pointer())
+        return;
+
+      arg_name = ptr.operands()[0].identifier();
+    }
+    arg_names.push_back(arg_name);
   }
 
-  assert(
-    (limits.size() == arg_names.size()) &&
-    "the format specifiers do not match with the arguments");
+  if(limits.size() != arg_names.size())
+  {
+    log_error("the format specifiers do not match with the arguments");
+    return;
+  }
 
   // do checks
   bool buf_overflow = false;
   for(long unsigned int i = 0; i < arg_names.size(); i++)
   {
+    if(arg_names.at(i).empty())
+      return;
+
     const symbolt &arg = *ns.lookup(arg_names.at(i));
     const irep_idt type_id = arg.type.id();
     std::string width;
@@ -333,52 +387,72 @@ void goto_checkt::input_overflow_check(
     if(type_id == "array")
     {
       width = to_array_type(arg.type).size().cformat().as_string();
-      if(
-        stoi(limits.at(i)) + 1 >
-        stoi(width)) // plus one as string always ends up with a null char
-      {
-        buf_overflow = true;
-        break;
-      }
+      input_overflow_check_arr(
+        string2integer(width), string2integer(limits.at(i)), buf_overflow);
     }
     else if(type_id == "unsignedbv" || type_id == "signedbv")
     {
       width = arg.type.width().as_string();
-      switch(stoi(width))
-      {
-      case 8:
-      {
-        if(stoi(limits.at(i)) > 3)
-          buf_overflow = true;
-        break;
-      }
-      case 16:
-      {
-        if(stoi(limits.at(i)) > 5)
-          buf_overflow = true;
-        break;
-      }
-      case 32:
-      {
-        if(stoi(limits.at(i)) > 10)
-          buf_overflow = true;
-        break;
-      }
-      case 64:
-      {
-        if(stoi(limits.at(i)) > 19)
-          buf_overflow = true;
-        break;
-      }
-      default:
-        break;
-      }
+      input_overflow_check_int(
+        string2integer(width), string2integer(limits.at(i)), buf_overflow);
     }
     else if(type_id == "floatbv" || type_id == "fixedbv")
     {
       // TODO
       break;
     }
+    else if(type_id == "pointer")
+    {
+      // remove typecast
+      assert(arg.value.is_typecast());
+      const exprt out_operands = to_typecast_expr(arg.value).op();
+      const exprt::operandst operands = out_operands.op1().operands();
+
+      if(!operands[0].has_operands())
+      {
+        // e.g
+        // char *toParseStr = (char*)malloc(11);
+        // scanf("%13s",toParseStr);  --> overflow
+        const exprt &it = operands[0];
+        width = integer2string(
+          binary2integer(it.value().as_string(), it.id() == "signedbv"));
+        input_overflow_check_arr(
+          string2integer(width), string2integer(limits.at(i)), buf_overflow);
+      }
+
+      else if(operands[0].operands().size() == 2)
+      {
+        // e.g
+        // int *arr = (int*) malloc(10 * sizeof(int));
+        // scanf("%12d",&arr[0]);  --> overflow
+        const exprt &it = operands[0].op1();
+
+        if(
+          it.c_sizeof_type().id() == typet::t_signedbv ||
+          it.c_sizeof_type().id() == typet::t_unsignedbv)
+        {
+          width = it.c_sizeof_type().width().as_string();
+          input_overflow_check_int(
+            string2integer(width), string2integer(limits.at(i)), buf_overflow);
+        }
+
+        else if(
+          it.c_sizeof_type().id() == typet::t_floatbv ||
+          it.c_sizeof_type().id() == typet::t_fixedbv)
+        {
+          // TODO
+          break;
+        }
+        else
+          return;
+      }
+
+      else
+        return;
+    }
+    else
+      log_status(
+        "Unsupported type {}, skip overflow checking", type_id.as_string());
   }
 
   if(buf_overflow) // FIX ME! add assert(0) to output the error msg

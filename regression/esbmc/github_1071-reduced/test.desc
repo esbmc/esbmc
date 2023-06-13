@@ -1,0 +1,5 @@
+CORE
+main.c
+--function c
+^VERIFICATION FAILED$
+\bdereference failure: NULL pointer$

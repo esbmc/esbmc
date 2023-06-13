@@ -193,11 +193,17 @@ void goto_convert_functionst::collect_type(
 
   if(type.id() == "symbol")
   {
+    assert(type.identifier() != "");
     deps.insert(type.identifier());
     return;
   }
 
   collect_expr(type, deps);
+}
+
+static bool denotes_thrashable_subtype(const irep_idt &id)
+{
+  return id == "type" || id == "subtype";
 }
 
 void goto_convert_functionst::collect_expr(
@@ -214,12 +220,18 @@ void goto_convert_functionst::collect_expr(
 
   forall_named_irep(it, expr.get_named_sub())
   {
-    collect_type(it->second, deps);
+    if(denotes_thrashable_subtype(it->first))
+      collect_type(it->second, deps);
+    else
+      collect_expr(it->second, deps);
   }
 
   forall_named_irep(it, expr.get_comments())
   {
-    collect_type(it->second, deps);
+    if(denotes_thrashable_subtype(it->first))
+      collect_type(it->second, deps);
+    else
+      collect_expr(it->second, deps);
   }
 }
 
@@ -307,7 +319,7 @@ void goto_convert_functionst::rename_exprs(
 
   Forall_named_irep(it, expr.get_named_sub())
   {
-    if(it->first == "type" || it->first == "subtype")
+    if(denotes_thrashable_subtype(it->first))
     {
       rename_types(it->second, cur_name_sym, sname);
     }
@@ -323,11 +335,13 @@ void goto_convert_functionst::rename_exprs(
 
 void goto_convert_functionst::wallop_type(
   irep_idt name,
-  std::map<irep_idt, std::set<irep_idt>> &typenames,
+  typename_mapt &typenames,
   const irep_idt &sname)
 {
   // If this type doesn't depend on anything, no need to rename anything.
-  std::set<irep_idt> &deps = typenames.find(name)->second;
+  typename_mapt::iterator it = typenames.find(name);
+  assert(it != typenames.end());
+  std::set<irep_idt> &deps = it->second;
   if(deps.size() == 0)
     return;
 

@@ -87,6 +87,35 @@ void instrument_intervals(
   }
 }
 
+void dump_intervals(
+  std::ostringstream &out,
+  const goto_functiont &goto_function,
+  const ait<interval_domaint> &interval_analysis)
+{
+  forall_goto_program_instructions(i_it, goto_function.body)
+  {
+    const interval_domaint &d = interval_analysis[i_it];
+    auto print_vars = [&out, &i_it](const auto &map) {
+      for(const auto &interval : map)
+      {
+        // "state,var,min,max,bot,top";
+        out << fmt::format(
+          "{},{},{},{},{},{}\n",
+          i_it->location_number,
+          interval.first,
+          (interval.second.lower_set ? interval.second.lower : "-inf"),
+          (interval.second.upper_set ? interval.second.upper : "inf"),
+          interval.second.is_bottom(),
+          interval.second.is_top());
+      }
+    };
+    d.enable_wrapped_intervals ? print_vars(d.get_wrap_map())
+                               : print_vars(d.get_int_map());
+  }
+}
+
+#include <fstream>
+
 void interval_analysis(
   goto_functionst &goto_functions,
   const namespacet &ns,
@@ -102,6 +131,18 @@ void interval_analysis(
     interval_analysis.output(goto_functions, oss);
     log_status(oss.str());
   }
+
+  if(options.get_bool_option("interval-analysis-csv-dump"))
+  {
+    std::ostringstream oss;
+    oss << "state,var,min,max,bot,top\n";
+    Forall_goto_functions(f_it, goto_functions)
+      dump_intervals(oss, f_it->second, interval_analysis);
+
+    std::ofstream csv("intervals.csv");
+    csv << oss.str();
+  }
+
   Forall_goto_functions(f_it, goto_functions)
     instrument_intervals(interval_analysis, f_it->second);
 
