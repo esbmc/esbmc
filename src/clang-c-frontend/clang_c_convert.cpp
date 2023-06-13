@@ -297,17 +297,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
   std::string id, name;
   get_decl_name(rd, name, id);
-  if(id == "c:@S@int_array>#VI3")
-  {
-    printf("Got c:@S@int_array>#VI3\n");
-  }
-  if(id == "tag-int_array<3>")
-  {
-    printf("Got tag-int_array<3>\n");
-  }
-
-  std::string id1, name1;
-  get_decl_name(rd, name1, id1);
 
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context.
