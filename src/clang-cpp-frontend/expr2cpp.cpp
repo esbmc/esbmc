@@ -177,7 +177,7 @@ std::string expr2cppt::convert_rec(
     const symbolt *symbol = ns.lookup(identifier);
     if(!symbol)
     {
-      log_error("could not find symbol {} in the context", identifier);
+      log_error("could not find symbol {} in the context in {}", identifier, __func__);
       abort();
     }
 

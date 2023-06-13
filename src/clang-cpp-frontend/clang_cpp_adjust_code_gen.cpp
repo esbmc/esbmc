@@ -23,9 +23,8 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
    *  copied to the `components` list in its type, which should have been
    *  done in the converter.
    */
-  if(
-    !symbol.value.need_vptr_init() || symbol.value.is_nil() ||
-    !symbol.value.has_operands())
+  if(!symbol.value.need_vptr_init() || symbol.value.is_nil() ||
+     !symbol.value.has_operands())
     return;
 
   /*
