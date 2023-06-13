@@ -220,7 +220,7 @@ void goto_convert_functionst::collect_expr(
 
   forall_named_irep(it, expr.get_named_sub())
   {
-    if (denotes_thrashable_subtype(it->first))
+    if(denotes_thrashable_subtype(it->first))
       collect_type(it->second, deps);
     else
       collect_expr(it->second, deps);
@@ -228,7 +228,7 @@ void goto_convert_functionst::collect_expr(
 
   forall_named_irep(it, expr.get_comments())
   {
-    if (denotes_thrashable_subtype(it->first))
+    if(denotes_thrashable_subtype(it->first))
       collect_type(it->second, deps);
     else
       collect_expr(it->second, deps);
