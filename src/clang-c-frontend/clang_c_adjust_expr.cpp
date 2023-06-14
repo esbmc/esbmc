@@ -53,6 +53,8 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
 
   if(symbol.type.is_code() && has_prefix(symbol.id.as_string(), "c:@F@main"))
     adjust_argc_argv(symbol);
+
+  adjust_type(symbol.type);
 }
 
 void clang_c_adjust::adjust_expr(exprt &expr)
@@ -534,6 +536,15 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(symbol.is_macro)
       type = symbol.type; // overwrite
+  }
+  else if(is_array_like(type))
+  {
+    const irept &size = type.size_irep();
+    if(size.is_not_nil() && size.id() != "infinity")
+    {
+      /* adjust the size expression for VLAs */
+      adjust_expr((exprt &)size);
+    }
   }
 }
 
