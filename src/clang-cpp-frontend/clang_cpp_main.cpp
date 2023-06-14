@@ -11,7 +11,6 @@ void clang_cpp_maint::adjust_init(code_assignt &assignment, codet &adjusted)
   assert(assignment.operands().size() == 2);
 
   exprt &rhs = assignment.rhs();
-  exprt &lhs = assignment.lhs();
   if(
     rhs.id() == "sideeffect" && rhs.statement() == "function_call" &&
     rhs.get_bool("constructor"))
