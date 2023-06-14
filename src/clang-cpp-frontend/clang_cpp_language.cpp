@@ -7,7 +7,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <util/c_link.h>
 #include <c2goto/cprover_library.h>
-#include <clang-c-frontend/clang_c_main.h>
+#include <clang-cpp-frontend/clang_cpp_main.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <clang-cpp-frontend/clang_cpp_language.h>
@@ -63,25 +63,9 @@ bool clang_cpp_languaget::typecheck(
   if(converter.convert())
     return true;
 
-#if 0
-  // DEBUG: before adjustment
-  printf("@@ before adjustment\n");
-  std::ostringstream oss;
-  ::show_symbol_table_plain(namespacet(new_context), oss);
-  std::cout << oss.str() << std::endl;
-#endif
-
   clang_cpp_adjust adjuster(new_context);
   if(adjuster.adjust())
     return true;
-
-#if 0
-  // DEBUG: after adjustment
-  printf("@@ after adjustment\n");
-  std::ostringstream oss_out2;
-  ::show_symbol_table_plain(namespacet(new_context), oss_out2);
-  std::cout << oss_out2.str() << std::endl;
-#endif
 
   if(c_link(context, new_context, module))
     return true;
@@ -92,8 +76,8 @@ bool clang_cpp_languaget::typecheck(
 bool clang_cpp_languaget::final(contextt &context)
 {
   add_cprover_library(context);
-  clang_c_maint c_main(context);
-  return c_main.clang_c_main();
+  clang_cpp_maint cpp_main(context);
+  return cpp_main.clang_cpp_main();
 }
 
 bool clang_cpp_languaget::from_expr(
