@@ -339,7 +339,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", false);
   }
 
-  if(cmdline.isset("overflow-check"))
+  if(
+    cmdline.isset("overflow-check") || cmdline.isset("unsigned-overflow-check"))
   {
     options.set_option("disable-inductive-step", true);
   }
@@ -1672,6 +1673,18 @@ bool esbmc_parseoptionst::process_goto_program(
       add_race_assertions(value_set_analysis, context, goto_functions);
 
       value_set_analysis.update(goto_functions);
+    }
+
+    if(cmdline.isset("goto-coverage") || cmdline.isset("make-assert-false"))
+    {
+      goto_coveraget tmp;
+      tmp.make_asserts_false(goto_functions);
+    }
+
+    if(cmdline.isset("goto-coverage") || cmdline.isset("add-false-assert"))
+    {
+      goto_coveraget tmp;
+      tmp.add_false_asserts(goto_functions);
     }
 
     // show it?

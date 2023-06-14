@@ -5,5 +5,5 @@ bool True(){return true;}
 
 int main()
 {
-  assert(True<int,0>()==true);
+  assert((True<int,0>()));
 }

@@ -313,6 +313,10 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
     if(decl->getKind() == clang::Decl::Field)
       continue;
 
+    // ignore self-referring implicit class node
+    if(decl->getKind() == clang::Decl::CXXRecord && decl->isImplicit())
+      continue;
+
     // virtual methods were already added
     if(decl->getKind() == clang::Decl::CXXMethod)
     {
@@ -327,8 +331,17 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
       const clang::FunctionTemplateDecl *ftd =
         llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
     {
-      assert(ftd->isThisDeclarationADefinition());
-      get_template_decl(ftd, true, comp);
+      for(auto *spec : ftd->specializations())
+      {
+        if(get_template_decl_specialization(spec, true, comp))
+          return true;
+
+        // Add only if it isn't static
+        if(spec->getStorageClass() != clang::SC_Static)
+          to_struct_type(type).methods().push_back(comp);
+      }
+
+      continue;
     }
     else
     {
@@ -359,6 +372,8 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
       }
     }
   }
+
+  has_vptr_component = false;
 
   return false;
 }
@@ -1019,7 +1034,6 @@ template <typename SpecializationDecl>
 bool clang_cpp_convertert::get_template_decl_specialization(
   const SpecializationDecl *D,
   bool DumpExplicitInst,
-  bool,
   exprt &new_expr)
 {
   for(auto *redecl_with_bad_type : D->redecls())
@@ -1059,8 +1073,7 @@ bool clang_cpp_convertert::get_template_decl(
   exprt &new_expr)
 {
   for(auto *Child : D->specializations())
-    if(get_template_decl_specialization(
-         Child, DumpExplicitInst, !D->isCanonicalDecl(), new_expr))
+    if(get_template_decl_specialization(Child, DumpExplicitInst, new_expr))
       return true;
 
   return false;
@@ -1254,7 +1267,7 @@ bool clang_cpp_convertert::annotate_class_method(
        * we indicate the need for vptr initializations in contructor.
        * vptr initializations will be added in the adjuster.
        */
-      fd_symb->value.need_vptr_init(true);
+      fd_symb->value.need_vptr_init(has_vptr_component);
     }
   }
 

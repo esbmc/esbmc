@@ -3144,6 +3144,7 @@ void clang_c_convertert::get_decl_name(
 
   case clang::Decl::Record:
   case clang::Decl::CXXRecord:
+  case clang::Decl::ClassTemplateSpecialization:
   {
     const clang::RecordDecl &rd = static_cast<const clang::RecordDecl &>(nd);
     name = getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);

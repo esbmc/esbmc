@@ -337,6 +337,7 @@ void bmct::report_result(smt_convt::resultt &res)
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
   bool term = options.get_bool_option("termination");
+  bool mul = options.get_bool_option("multi-property");
 
   switch(res)
   {
@@ -345,7 +346,7 @@ void bmct::report_result(smt_convt::resultt &res)
     {
       report_failure();
     }
-    else if(!bs)
+    else if(!bs || mul)
     {
       report_success();
     }
@@ -721,6 +722,8 @@ smt_convt::resultt bmct::multi_property_check(
   std::atomic_size_t ce_counter = 0;
   std::unordered_set<size_t> jobs;
   std::mutex result_mutex;
+  // For coverage info
+  int tracked_instrument = 0;
 
   // TODO: This is the place to check a cache
   for(size_t i = 1; i <= remaining_claims; i++)
@@ -740,7 +743,8 @@ smt_convt::resultt bmct::multi_property_check(
    * if final_result is set to SAT
    */
   auto job_function =
-    [this, &eq, &ce_counter, &final_result, &result_mutex](const size_t &i) {
+    [this, &eq, &ce_counter, &final_result, &result_mutex, &tracked_instrument](
+      const size_t &i) {
       // Since this is just a copy, we probably don't need a lock
       auto local_eq = std::make_shared<symex_target_equationt>(*eq);
 
@@ -763,7 +767,7 @@ smt_convt::resultt bmct::multi_property_check(
       generate_smt_from_equation(runtime_solver, local_eq);
 
       log_status(
-        "Solving claim {} with solver {}",
+        "Solving claim '{}' with solver {}",
         claim.claim_msg,
         runtime_solver->solver_text());
 
@@ -791,7 +795,8 @@ smt_convt::resultt bmct::multi_property_check(
           }
         }
         solver_job.join();
-        report_multi_property_trace(result, claim.claim_msg);
+        // TODO: Fix the unordered output
+        // report_multi_property_trace(result, claim.claim_msg);
         if(result == smt_convt::P_SATISFIABLE)
         {
           const std::lock_guard<std::mutex> lock(result_mutex);
@@ -816,6 +821,17 @@ smt_convt::resultt bmct::multi_property_check(
           show_goto_trace(oss, ns, goto_trace);
           log_result("{}", oss.str());
           final_result = result;
+
+          // collect the tracked instrumentation which is verified failed
+          // we assume it always works in multi-property checking mode
+          if(
+            options.get_bool_option("goto-coverage") ||
+            options.get_bool_option("make-assert-false") ||
+            options.get_bool_option("add-false-assert"))
+          {
+            if(claim.claim_msg.find("Instrumentation") != std::string::npos)
+              tracked_instrument++;
+          }
         }
         // TODO: This is the place to store into a cache
       }
@@ -853,6 +869,21 @@ smt_convt::resultt bmct::multi_property_check(
   // SEQUENTIAL
   else
     std::for_each(std::begin(jobs), std::end(jobs), job_function);
+
+  if(
+    options.get_bool_option("make-assert-false") &&
+    !(options.get_bool_option("goto-coverage") ||
+      options.get_bool_option("add-false-assert")))
+  {
+    int total = goto_coveraget().get_total_instrument();
+    if(total)
+    {
+      log_success("\n[Coverage]\n");
+      log_result("  Total Asserts: {}", total);
+      log_result("  Reached Asserts: {}", tracked_instrument);
+      log_result("  Coverage: {}%", tracked_instrument * 100.0 / total);
+    }
+  }
 
   return final_result;
 }

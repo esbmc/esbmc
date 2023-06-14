@@ -174,30 +174,37 @@ std::string expr2cppt::convert_rec(
   {
     const irep_idt &identifier = src.identifier();
 
-    const symbolt &symbol = *ns.lookup(identifier);
+    const symbolt *symbol = ns.lookup(identifier);
+    if(!symbol)
+    {
+      log_error(
+        "could not find symbol {} in the context in {}", identifier, __func__);
+      abort();
+    }
 
-    if(symbol.type.id() == "struct" || symbol.type.id() == "incomplete_struct")
+    if(
+      symbol->type.id() == "struct" || symbol->type.id() == "incomplete_struct")
     {
       std::string dest = new_qualifiers.as_string();
 
-      if(symbol.type.get_bool("#class"))
+      if(symbol->type.get_bool("#class"))
         dest += "class";
-      else if(symbol.type.get_bool("#interface"))
+      else if(symbol->type.get_bool("#interface"))
         dest += "__interface"; // MS-specific
       else
         dest += "struct";
 
-      dest += " " + id2string(symbol.name);
+      dest += " " + id2string(symbol->name);
       dest += d;
       return dest;
     }
-    if(symbol.type.id() == "c_enum")
+    if(symbol->type.id() == "c_enum")
     {
       std::string dest = new_qualifiers.as_string();
 
       dest += "enum";
 
-      dest += " " + id2string(symbol.name);
+      dest += " " + id2string(symbol->name);
       dest += d;
       return dest;
     }
