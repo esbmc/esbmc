@@ -42,13 +42,7 @@ void clang_c_maint::static_lifetime_init(const contextt &context, codet &dest)
   // Do assignments based on "value".
   context.foreach_operand_in_order([&dest, this](const symbolt &s) {
     if(s.static_lifetime)
-    {
-      if(s.id == "c:@some_instance2")
-      {
-        printf("Got it in clang main\n");
-      }
       init_variable(dest, s);
-    }
   });
 
   // call designated "initialization" functions
