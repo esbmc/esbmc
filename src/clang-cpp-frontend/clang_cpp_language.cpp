@@ -13,6 +13,8 @@ CC_DIAGNOSTIC_POP()
 #include <clang-cpp-frontend/clang_cpp_language.h>
 #include <clang-cpp-frontend/expr2cpp.h>
 #include <regex>
+#include <util/show_symbol_table.h>
+#include <iostream>
 
 languaget *new_clang_cpp_language()
 {
@@ -61,9 +63,25 @@ bool clang_cpp_languaget::typecheck(
   if(converter.convert())
     return true;
 
+#if 0
+  // DEBUG: before adjustment
+  printf("@@ before adjustment\n");
+  std::ostringstream oss;
+  ::show_symbol_table_plain(namespacet(new_context), oss);
+  std::cout << oss.str() << std::endl;
+#endif
+
   clang_cpp_adjust adjuster(new_context);
   if(adjuster.adjust())
     return true;
+
+#if 0
+  // DEBUG: after adjustment
+  printf("@@ after adjustment\n");
+  std::ostringstream oss_out2;
+  ::show_symbol_table_plain(namespacet(new_context), oss_out2);
+  std::cout << oss_out2.str() << std::endl;
+#endif
 
   if(c_link(context, new_context, module))
     return true;
@@ -74,7 +92,8 @@ bool clang_cpp_languaget::typecheck(
 bool clang_cpp_languaget::final(contextt &context)
 {
   add_cprover_library(context);
-  return clang_main(context);
+  clang_c_maint c_main(context);
+  return c_main.clang_c_main();
 }
 
 bool clang_cpp_languaget::from_expr(

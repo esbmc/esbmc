@@ -7,8 +7,9 @@
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <clang-c-frontend/clang_c_main.h>
 
-static inline void init_variable(codet &dest, const symbolt &sym)
+void clang_c_maint::init_variable(codet &dest, const symbolt &sym)
 {
   const exprt &value = sym.value;
 
@@ -26,14 +27,20 @@ static inline void init_variable(codet &dest, const symbolt &sym)
   dest.move_to_operands(code);
 }
 
-static inline void static_lifetime_init(const contextt &context, codet &dest)
+void clang_c_maint::static_lifetime_init(const contextt &context, codet &dest)
 {
   dest = code_blockt();
 
   // Do assignments based on "value".
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
+  context.foreach_operand_in_order([&dest, this](const symbolt &s) {
     if(s.static_lifetime)
+    {
+      if(s.id == "c:@some_instance2")
+      {
+        printf("Got it in clang main\n");
+      }
       init_variable(dest, s);
+    }
   });
 
   // call designated "initialization" functions
@@ -47,7 +54,7 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
-bool clang_main(contextt &context)
+bool clang_c_maint::clang_c_main()
 {
   irep_idt main_symbol;
 
