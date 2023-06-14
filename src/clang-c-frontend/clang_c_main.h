@@ -1,5 +1,5 @@
-#ifndef CLANG_C_FRONTEND_CLANG_MAIN_H_
-#define CLANG_C_FRONTEND_CLANG_MAIN_H_
+#ifndef CLANG_C_FRONTEND_CLANG_C_MAIN_H_
+#define CLANG_C_FRONTEND_CLANG_C_MAIN_H_
 
 #include <util/context.h>
 #include <util/message.h>
@@ -20,4 +20,4 @@ protected:
   contextt &context;
 };
 
-#endif /* CLANG_C_FRONTEND_CLANG_MAIN_H_ */
+#endif /* CLANG_C_FRONTEND_CLANG_C_MAIN_H_ */
