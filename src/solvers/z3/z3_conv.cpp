@@ -1102,7 +1102,7 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
 {
   const struct_union_data &strct = get_type_def(type);
 
-  assert(is_pointer_type(type));
+  if(is_pointer_type(type))
   {
     // Pointer have two fields, a base address and an offset, so we just
     // need to get the two numbers and call the pointer API
