@@ -22,6 +22,11 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
   std::pair<symbolst::iterator, bool> result =
     symbols.insert(std::pair<irep_idt, symbolt>(symbol.id, tmp));
 
+  if(symbol.id == "__ESBMC_main")
+  {
+    printf("Got ESBMC_main\n");
+  }
+
   if(!result.second)
   {
     new_symbol = &result.first->second;
