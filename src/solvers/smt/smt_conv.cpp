@@ -2334,6 +2334,9 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
       type, "" /* TODO: which field assigned last? */, members);
   }
 
+  case type2t::array_id:
+    return get_array(type, a);
+
   default:
     if(!options.get_bool_option("non-supported-models-as-zero"))
     {
@@ -2387,11 +2390,9 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
   }
 }
 
-expr2tc smt_convt::get_array(const expr2tc &expr)
+expr2tc smt_convt::get_array(const type2tc &type, smt_astt array)
 {
   // XXX -- printing multidimensional arrays?
-
-  smt_astt array = convert_ast(expr);
 
   // Fetch the array bounds, if it's huge then assume this is a 1024 element
   // array. Then fetch all elements and formulate a constant_array.
@@ -2399,7 +2400,7 @@ expr2tc smt_convt::get_array(const expr2tc &expr)
   if(w > 10)
     w = 10;
 
-  array_type2t ar = to_array_type(flatten_array_type(expr->type));
+  array_type2t ar = to_array_type(flatten_array_type(type));
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
   type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
   std::vector<expr2tc> fields;
@@ -2410,6 +2411,12 @@ expr2tc smt_convt::get_array(const expr2tc &expr)
   }
 
   return constant_array2tc(arr_type, fields);
+}
+
+expr2tc smt_convt::get_array(const expr2tc &expr)
+{
+  smt_astt array = convert_ast(expr);
+  return get_array(expr->type, array);
 }
 
 const struct_union_data &smt_convt::get_type_def(const type2tc &type) const
