@@ -137,7 +137,7 @@ bool solidity_languaget::final(contextt &context)
 {
   add_cprover_library(context);
   clang_c_maint c_main(context);
-  return c_main.clang_c_main();
+  return c_main.clang_main();
 }
 
 std::string solidity_languaget::temp_c_file()

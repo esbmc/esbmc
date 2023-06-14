@@ -6,11 +6,11 @@
 class clang_cpp_maint : public clang_c_maint
 {
 public:
-  clang_cpp_maint(contextt &_context) : clang_c_maint(_context)
-  {
-  }
+  clang_cpp_maint(contextt &_context);
 
-  bool clang_cpp_main();
+  // code adjustment for C++, e.g. adding implicit this in ctor when
+  // adjusting the object initialization
+  void adjust_init(code_assignt &assignment, codet &adjusted) override;
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_MAIN_H_ */
