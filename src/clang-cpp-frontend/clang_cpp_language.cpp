@@ -77,7 +77,7 @@ bool clang_cpp_languaget::final(contextt &context)
 {
   add_cprover_library(context);
   clang_cpp_maint cpp_main(context);
-  return cpp_main.clang_cpp_main();
+  return cpp_main.clang_main();
 }
 
 bool clang_cpp_languaget::from_expr(

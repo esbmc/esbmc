@@ -274,7 +274,7 @@ bool clang_c_languaget::final(contextt &context)
 {
   add_cprover_library(context, this);
   clang_c_maint c_main(context);
-  return c_main.clang_c_main();
+  return c_main.clang_main();
 }
 
 std::string clang_c_languaget::internal_additions()

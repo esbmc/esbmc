@@ -24,7 +24,15 @@ void clang_c_maint::init_variable(codet &dest, const symbolt &sym)
   code_assignt code(symbol, sym.value);
   code.location() = sym.location;
 
-  dest.move_to_operands(code);
+  codet adjusted("decl-block");
+  adjust_init(code, adjusted);
+
+  dest.move_to_operands(adjusted.has_operands() ? adjusted : code);
+}
+
+void clang_c_maint::adjust_init(code_assignt &, codet &)
+{
+  // currently nothing to be adjusted for C
 }
 
 void clang_c_maint::static_lifetime_init(const contextt &context, codet &dest)
@@ -54,7 +62,7 @@ void clang_c_maint::static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
-bool clang_c_maint::clang_c_main()
+bool clang_c_maint::clang_main()
 {
   irep_idt main_symbol;
 
