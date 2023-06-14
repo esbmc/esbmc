@@ -1283,9 +1283,7 @@ void z3_smt_ast::dump() const
 {
   std::string ast(Z3_ast_to_string(a.ctx(), a));
   log_status(
-    "{}\nsort is {}",
-    ast,
-    Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a)));
+    "{}\nsort is {}", ast, Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a)));
 }
 
 void z3_convt::dump_smt()
