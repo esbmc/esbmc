@@ -45,6 +45,15 @@ endfunction()
 if(ENABLE_BITWUZLA)
     set(REGRESSIONS_BITWUZLA bitwuzla)
 endif()
+if(ENABLE_CVC4)
+    set(REGRESSIONS_CVC cvc)
+endif()
+if(ENABLE_MATHSAT)
+    set(REGRESSIONS_MATHSAT mathsat)
+endif()
+if(ENABLE_Z3)
+    set(REGRESSIONS_Z3 z3)
+endif()
 if(ENABLE_SOLIDITY_FRONTEND)
     set(REGRESSIONS_SOLIDITY esbmc-solidity)
 endif()
@@ -105,6 +114,9 @@ if(APPLE)
                     k-induction-parallel
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
+                    ${REGRESSIONS_CVC}
+                    ${REGRESSIONS_MATHSAT}
+                    ${REGRESSIONS_Z3}
                     incremental-smt
                     esbmc-cpp11/cpp
                     esbmc-cpp11/cbmc-constructors
@@ -119,6 +131,10 @@ elseif(WIN32)
                     floats
                     k-induction
                     ${REGRESSIONS_JIMPLE}
+                    ${REGRESSIONS_BITWUZLA}
+                    ${REGRESSIONS_CVC}
+                    ${REGRESSIONS_MATHSAT}
+                    ${REGRESSIONS_Z3}
        )
 else()
   if(NOT BENCHBRINGUP)
@@ -137,6 +153,9 @@ else()
                     k-induction-parallel
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
+                    ${REGRESSIONS_CVC}
+                    ${REGRESSIONS_MATHSAT}
+                    ${REGRESSIONS_Z3}
                     incremental-smt
                     ${REGRESSIONS_CPP11}
                     ${REGRESSIONS_CPP03}
