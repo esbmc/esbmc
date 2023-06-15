@@ -862,14 +862,14 @@ enum target_flags
  *    A  |  s  |  d  | construct_from_array                           | rec, st
  *  -----+-----+-----+------------------------------------------------+---------
  *    s  |  S  |  d  | <bad>: "Struct pointer pointed at scalar"      |
- *    S  |  S  |  d  | construct_struct_ref_from_dyn_offset           | rec
+ *    S  |  S  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  *    U  |  S  |  d  | <ad-hoc>                                       | rec
- *    A  |  S  |  d  | construct_struct_ref_from_dyn_offset           | rec
+ *    A  |  S  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  *  -----+-----+-----+------------------------------------------------+---------
  *    s  |  U  |  d  | <bad>: "Union pointer pointed at scalar"       |
- *    S  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec
- *    U  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec
- *    A  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec
+ *    S  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
+ *    U  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
+ *    A  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  */
 
 void dereferencet::build_reference_rec(
@@ -1814,13 +1814,15 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     assert(is_struct_type(type));
     const struct_type2t &structtype = to_struct_type(type);
     expr2tc array_offset = offs;
-    for(auto const &it : structtype.members)
+    for(const type2tc &target_type : structtype.members)
     {
-      const type2tc &target_type = it;
       expr2tc target = value; // The byte array;
 
       simplify(array_offset);
-      build_reference_rec(target, array_offset, target_type, tmp, mode);
+      if(is_array_type(target_type))
+        construct_from_array(target, array_offset, target_type, tmp, mode);
+      else
+        build_reference_rec(target, array_offset, target_type, tmp, mode);
       fields.push_back(target);
 
       // Update dynamic offset into array
