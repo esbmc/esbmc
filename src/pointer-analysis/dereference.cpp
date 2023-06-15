@@ -813,6 +813,65 @@ enum target_flags
   flag_is_dyn_offs = 0,
 };
 
+
+/*
+ * Legend:
+ * - src = value
+ * - dst = type
+ * - off = offset
+ *   - c = constant, constant_int2t
+ *   - d = dynamic, any other expr2t
+ * - note:
+ *   - st = uses stitching via stitch_together_from_byte_array()
+ *   - rec = recurses into build_reference_rec()
+ *   - rec* = same as rec*, but also restricted recursion into itself or others
+ *   - rec' = only restricted recursion into itself
+ *
+ * src and dst categories:
+ * - s: scalar
+ * - S: struct
+ * - U: union
+ * - A: array or string
+ * - c: code
+ *
+ *   src | dst | off | method                                         | note
+ *  -----+-----+-----+------------------------------------------------+---------
+ *    c  |  *  |  *  | <none>                                         |
+ *    *  |  c  |  *  | <none>                                         |
+ *  -----+-----+-----+------------------------------------------------+---------
+ *    *  |  A  |  *  | <unsupported>: "Can't construct rvalue ref..." |
+ *  -----+-----+-----+------------------------------------------------+---------
+ *    s  |  s  |  c  | construct_from_const_offset                    | st
+ *    S  |  s  |  c  | construct_from_const_struct_offset             | rec
+ *    U  |  s  |  c  | <ad-hoc>                                       | rec
+ *    A  |  s  |  c  | construct_from_array                           | rec, st
+ *  -----+-----+-----+------------------------------------------------+---------
+ *    s  |  S  |  c  | <bad>: "Structure pointer pointed at scalar"   |
+ *    S  |  S  |  c  | construct_struct_ref_from_const_offset         | rec'
+ *    U  |  S  |  c  | <ad-hoc>                                       | rec
+ *    A  |  S  |  c  | construct_struct_ref_from_const_offset_array   | rec, st
+ *  -----+-----+-----+------------------------------------------------+---------
+ *    s  |  U  |  c  | <bad>: "Union pointer pointed at scalar"       |
+ *    S  |  U  |  c  | construct_struct_ref_from_const_offset         | rec'
+ *    U  |  U  |  c  | construct_struct_ref_from_const_offset         | rec'
+ *    A  |  U  |  c  | construct_struct_ref_from_const_offset_array   | rec, st
+ *  -----+-----+-----+------------------------------------------------+---------
+ *    s  |  s  |  d  | construct_from_dyn_offset                      | st
+ *    S  |  s  |  d  | construct_from_dyn_struct_offset               | rec
+ *    U  |  s  |  d  | <ad-hoc>                                       | rec
+ *    A  |  s  |  d  | construct_from_array                           | rec, st
+ *  -----+-----+-----+------------------------------------------------+---------
+ *    s  |  S  |  d  | <bad>: "Struct pointer pointed at scalar"      |
+ *    S  |  S  |  d  | construct_struct_ref_from_dyn_offset           | rec
+ *    U  |  S  |  d  | <ad-hoc>                                       | rec
+ *    A  |  S  |  d  | construct_struct_ref_from_dyn_offset           | rec
+ *  -----+-----+-----+------------------------------------------------+---------
+ *    s  |  U  |  d  | <bad>: "Union pointer pointed at scalar"       |
+ *    S  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec
+ *    U  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec
+ *    A  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec
+ */
+
 void dereferencet::build_reference_rec(
   expr2tc &value,
   const expr2tc &offset,
