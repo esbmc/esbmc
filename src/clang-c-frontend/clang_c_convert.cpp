@@ -298,11 +298,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   std::string id, name;
   get_decl_name(rd, name, id);
 
-  if(id == "tag-A<10>")
-  {
-    printf("Got struct\n");
-  }
-
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context.
   if(context.find_symbol(id) != nullptr)
