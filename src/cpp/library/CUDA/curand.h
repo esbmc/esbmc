@@ -1,6 +1,8 @@
 #if !defined(CURAND_H_)
 #define CURAND_H_
 
+#include "builtin_types.h"
+
 /**
  * \file
  * \name CURAND Host API
