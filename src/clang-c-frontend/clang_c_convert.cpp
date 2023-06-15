@@ -1608,6 +1608,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::MemberExpr &member =
       static_cast<const clang::MemberExpr &>(stmt);
 
+    exprt comp;
+    if(get_decl(*member.getMemberDecl(), comp))
+      return true;
+
     if(!perform_virtual_dispatch(member))
     {
       if(!is_member_decl_static(member))
@@ -1616,22 +1620,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         if(get_expr(*member.getBase(), base))
           return true;
 
-        exprt comp;
-        if(get_decl(*member.getMemberDecl(), comp))
-          return true;
-
         assert(!comp.name().empty());
         // for MemberExpr referring to struct field (or method in case of C++ class)
         new_expr = member_exprt(base, comp.name(), comp.type());
       }
       else
       {
-        // if a MemberExpr refers to a static member decl,
-        // we directly get the member decl symbol.
-        exprt comp;
-        if(get_decl(*member.getMemberDecl(), comp))
-          return true;
-
         // for static members, use the member decl symbol directly
         // without making a member_exprt, e.g.
         // If the member_exprt refers to a class static member, then
