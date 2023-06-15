@@ -813,7 +813,6 @@ enum target_flags
   flag_is_dyn_offs = 0,
 };
 
-
 /*
  * Legend:
  * - src = value
