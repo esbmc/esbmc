@@ -1615,27 +1615,35 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if(!perform_virtual_dispatch(member))
     {
-      exprt base;
-      if(get_expr(*member.getBase(), base))
-        return true;
-
-      exprt comp;
-      if(get_decl(*member.getMemberDecl(), comp))
-        return true;
-
       if(!is_member_decl_static(member))
       {
+        exprt base;
+        if(get_expr(*member.getBase(), base))
+          return true;
+
+        exprt comp;
+        if(get_decl(*member.getMemberDecl(), comp))
+          return true;
+
         assert(!comp.name().empty());
         // for MemberExpr referring to struct field (or method in case of C++ class)
         new_expr = member_exprt(base, comp.name(), comp.type());
       }
       else
       {
-        // for MemberExpr in referring to a static member
-        // which is essentially a VarDecl
+        // if a MemberExpr refers to a static member decl,
+        // we directly get the member decl symbol.
+        exprt comp;
+        if(get_decl(*member.getMemberDecl(), comp))
+          return true;
+
+        // for static members, use the member decl symbol directly
+        // without making a member_exprt, e.g.
+        // If the member_exprt refers to a class static member, then
+        // replace "OBJECT.MyStatic = 1" with "MyStatic = 1;"
         assert(comp.statement() == "decl");
         assert(comp.op0().is_symbol());
-        new_expr = member_exprt(base, comp.op0().identifier(), comp.type());
+        new_expr = comp.op0();
       }
     }
     else

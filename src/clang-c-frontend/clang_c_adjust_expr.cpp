@@ -148,6 +148,11 @@ void clang_c_adjust::adjust_symbol(exprt &expr)
 {
   const irep_idt &identifier = expr.identifier();
 
+  if(identifier == "c:@S@A>#Vi10@n")
+  {
+    printf("Got static in clang_c_adjust\n");
+  }
+
   // look it up
   symbolt *s = context.find_symbol(identifier);
 
