@@ -1,0 +1,5 @@
+CORE
+main.cu
+-I /__w/esbmc/esbmc/src/cpp/library -I /__w/esbmc/esbmc/src/cpp/library/CUDA --memlimit 14000000 --timeout 900
+
+^VERIFICATION SUCCESSFUL$

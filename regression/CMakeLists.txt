@@ -162,7 +162,7 @@ else()
                     ${REGRESSIONS_GOTO_CONTRACTOR}
                     ${REGRESSIONS_JIMPLE}
                     extensions
-                    cuda
+                    cuda/COM_sanity_checks
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
