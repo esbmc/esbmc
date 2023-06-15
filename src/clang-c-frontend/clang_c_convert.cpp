@@ -298,6 +298,11 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   std::string id, name;
   get_decl_name(rd, name, id);
 
+  if(id == "tag-A<10>")
+  {
+    printf("Got struct\n");
+  }
+
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context.
   if(context.find_symbol(id) != nullptr)
@@ -1618,9 +1623,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if(get_decl(*member.getMemberDecl(), comp))
         return true;
 
-      if(!comp.name().empty())
+      if(!is_member_decl_static(member))
       {
-        // for MemberExpr referring to struct field (an/or method in case of C++)
+        assert(!comp.name().empty());
+        // for MemberExpr referring to struct field (or method in case of C++ class)
         new_expr = member_exprt(base, comp.name(), comp.type());
       }
       else
@@ -3452,5 +3458,22 @@ void clang_c_convertert::get_ref_to_struct_type(typet &type)
 
 bool clang_c_convertert::is_aggregate_type(const clang::QualType &)
 {
+  return false;
+}
+
+bool clang_c_convertert::is_member_decl_static(const clang::MemberExpr &member)
+{
+  // follow the MemberExpr node (might be nested) to check
+  // whether it's ultimately referring to a static member decl
+  // which is essentially a VarDecl with static life time
+  // Note that in a nested MemberExpr node, e.g. `X.Y.data`
+  // `getMemberDecl` will give the ultimate MemberDecl representing `data`.
+  if(member.getMemberDecl()->getKind() == clang::Decl::Var)
+  {
+    const clang::VarDecl &vd =
+      static_cast<const clang::VarDecl &>(*member.getMemberDecl());
+    return (vd.getStorageClass() == clang::SC_Static) || vd.hasGlobalStorage();
+  }
+
   return false;
 }
