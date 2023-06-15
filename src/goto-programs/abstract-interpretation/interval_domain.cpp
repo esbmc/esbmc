@@ -1000,7 +1000,7 @@ void interval_domaint::assume(const expr2tc &cond)
   if(eval_boolean_expression(new_cond, *this).is_false())
   {
     log_debug("The expr {} is always false. Returning bottom", *cond);
-    make_bottom();
+    //make_bottom();
     return;
   }
 
