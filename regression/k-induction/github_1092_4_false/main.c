@@ -13,6 +13,8 @@ int main()
       status = 2;
     }
   } // status = 1 U 2
+
+  // Kind struggles with do-while(0) loops
   do
   {
     __ESBMC_assert(status != 2, "");

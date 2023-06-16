@@ -14,6 +14,7 @@ int main()
     }
   } // status = 1 U 2
 
+  // Kind algorithm struggles with this
   do
   {
     __ESBMC_assert(status != 3, "");

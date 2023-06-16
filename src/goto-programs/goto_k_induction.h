@@ -16,8 +16,10 @@ public:
   goto_k_inductiont(
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
-    goto_functiont &_goto_function)
-    : goto_loopst(_function_name, _goto_functions, _goto_function)
+    goto_functiont &_goto_function,
+    loopst::loop_varst _inductive_vars)
+    : goto_loopst(_function_name, _goto_functions, _goto_function),
+      inductive_vars(_inductive_vars)
   {
     if(function_loops.size())
       goto_k_induction();
@@ -29,6 +31,8 @@ protected:
 
   typedef std::unordered_map<unsigned, guardt> guardst;
   guardst guards;
+
+  loopst::loop_varst &inductive_vars;
 
   void goto_k_induction();
 

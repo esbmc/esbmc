@@ -1,4 +1,4 @@
 CORE
 main.c
---k-induction
+--k-induction --interval-analysis
 ^VERIFICATION SUCCESSFUL$

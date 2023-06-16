@@ -7,18 +7,20 @@
 
 void goto_k_induction(goto_functionst &goto_functions)
 {
+  loopst::loop_varst inductive_vars;
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
-      goto_k_inductiont(it->first, goto_functions, it->second);
+      goto_k_inductiont(it->first, goto_functions, it->second, inductive_vars);
 
   goto_functions.update();
 }
 
 void goto_termination(goto_functionst &goto_functions)
 {
+  loopst::loop_varst inductive_vars;
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
-      goto_k_inductiont(it->first, goto_functions, it->second);
+      goto_k_inductiont(it->first, goto_functions, it->second, inductive_vars);
   goto_functions.update();
 
   auto function = goto_functions.function_map.find("__ESBMC_main");
@@ -50,13 +52,32 @@ void goto_termination(goto_functionst &goto_functions)
   function->second.body.insert_swap(it, dest);
 }
 
+// TODO: change this to reverse_view when we go for C++20
+#include <boost/range/adaptor/reversed.hpp>
+
 void goto_k_inductiont::goto_k_induction()
 {
   // Full unwind the program
-  for(auto &function_loop : function_loops)
+  for(auto &function_loop : boost::adaptors::reverse(function_loops))
   {
+    for(auto &v : function_loop.get_modified_loop_vars())
+      inductive_vars.insert(v);
+
     if(function_loop.get_modified_loop_vars().empty())
-      continue;
+    {
+      bool should_skip = true;
+
+      for(auto v : function_loop.get_unmodified_loop_vars())
+      {
+        if(inductive_vars.count(v))
+        {
+          should_skip = false;
+          break;
+        }
+      }
+      if(should_skip)
+        continue;
+    }
 
     // Start the loop conversion
     convert_finite_loop(function_loop);
