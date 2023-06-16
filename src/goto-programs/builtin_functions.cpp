@@ -566,6 +566,12 @@ void goto_convertt::do_function_call_symbol(
       log_error("{} expected not to have LHS", id2string(base_name));
       abort();
     }
+
+    // ASSERTIONS BECOME ASSUMES :)
+    goto_programt::targett a = dest.add_instruction(ASSUME);
+    a->guard = t->guard;
+    a->location = function.location();
+    a->location.user_provided(true);
   }
   else if(
     base_name == "__VERIFIER_error" || base_name == "reach_error" ||
