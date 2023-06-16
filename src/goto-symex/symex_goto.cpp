@@ -435,7 +435,7 @@ bool goto_symext::get_unwind(
   const BigInt &unwind)
 {
   unsigned id = source.pc->loop_number;
-  BigInt this_loop_max_unwind = max_unwind;
+  BigInt this_loop_max_unwind = inductive_step ? max_unwind : max_unwind + 1;
 
   if(unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
