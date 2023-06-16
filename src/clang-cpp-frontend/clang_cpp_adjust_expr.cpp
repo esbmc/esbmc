@@ -113,10 +113,6 @@ void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
    *    symbol:
    *      * type: ...
    *      * id: <setX_clang_ID>
-   *
-   * Pretty much the same for class field access.
-   * If the member_exprt refers to a class static member, then
-   * replace "OBJECT.MyStatic = 1" with "MyStatic = 1;"
    */
   const symbolt *method_symb =
     namespacet(context).lookup(expr.component_name());

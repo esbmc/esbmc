@@ -1608,28 +1608,31 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::MemberExpr &member =
       static_cast<const clang::MemberExpr &>(stmt);
 
+    exprt comp;
+    if(get_decl(*member.getMemberDecl(), comp))
+      return true;
+
     if(!perform_virtual_dispatch(member))
     {
-      exprt base;
-      if(get_expr(*member.getBase(), base))
-        return true;
-
-      exprt comp;
-      if(get_decl(*member.getMemberDecl(), comp))
-        return true;
-
-      if(!comp.name().empty())
+      if(!is_member_decl_static(member))
       {
-        // for MemberExpr referring to struct field (an/or method in case of C++)
+        exprt base;
+        if(get_expr(*member.getBase(), base))
+          return true;
+
+        assert(!comp.name().empty());
+        // for MemberExpr referring to struct field (or method in case of C++ class)
         new_expr = member_exprt(base, comp.name(), comp.type());
       }
       else
       {
-        // for MemberExpr in referring to a static member
-        // which is essentially a VarDecl
+        // for static members, use the member decl symbol directly
+        // without making a member_exprt, e.g.
+        // If the member_exprt refers to a class static member, then
+        // replace "OBJECT.MyStatic = 1" with "MyStatic = 1;"
         assert(comp.statement() == "decl");
         assert(comp.op0().is_symbol());
-        new_expr = member_exprt(base, comp.op0().identifier(), comp.type());
+        new_expr = comp.op0();
       }
     }
     else
@@ -3452,5 +3455,22 @@ void clang_c_convertert::get_ref_to_struct_type(typet &type)
 
 bool clang_c_convertert::is_aggregate_type(const clang::QualType &)
 {
+  return false;
+}
+
+bool clang_c_convertert::is_member_decl_static(const clang::MemberExpr &member)
+{
+  // follow the MemberExpr node (might be nested) to check
+  // whether it's ultimately referring to a static member decl
+  // which is essentially a VarDecl with static life time
+  // Note that in a nested MemberExpr node, e.g. `X.Y.data`
+  // `getMemberDecl` will give the ultimate MemberDecl representing `data`.
+  if(member.getMemberDecl()->getKind() == clang::Decl::Var)
+  {
+    const clang::VarDecl &vd =
+      static_cast<const clang::VarDecl &>(*member.getMemberDecl());
+    return (vd.getStorageClass() == clang::SC_Static) || vd.hasGlobalStorage();
+  }
+
   return false;
 }
