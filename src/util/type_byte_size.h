@@ -10,9 +10,15 @@
 BigInt member_offset_bits(const type2tc &type, const irep_idt &member);
 BigInt member_offset(const type2tc &type, const irep_idt &member);
 
+/* These can throw array_type2t::inf_sized_array_excp or
+ * array_type2t::dyn_sized_array_excp */
 BigInt type_byte_size_bits(const type2tc &type);
 BigInt type_byte_size(const type2tc &type);
 BigInt type_byte_size_default(const type2tc &type, const BigInt &defaultval);
+
+/* type_byte_size*_expr() can throw array_type2t::inf_sized_array_excp */
+expr2tc type_byte_size_bits_expr(const type2tc &type);
+expr2tc type_byte_size_expr(const type2tc &type);
 
 expr2tc compute_pointer_offset(const expr2tc &expr);
 expr2tc compute_pointer_offset_bits(const expr2tc &expr);
