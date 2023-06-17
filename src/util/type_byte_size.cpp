@@ -152,6 +152,146 @@ BigInt type_byte_size_bits(const type2tc &type)
   }
 }
 
+expr2tc type_byte_size_bits_expr(const type2tc &type)
+{
+  /* The structure of this function is the same as that of
+   * type_byte_size_bits(). We don't call that and just handle the exception
+   * though, since that would mean we'd unnecessarily recurse multiple times
+   * into the type. */
+
+  switch(type->type_id)
+  {
+  // This is a gcc extension.
+  // https://gcc.gnu.org/onlinedocs/gcc-4.8.0/gcc/Pointer-Arith.html
+  case type2t::empty_id:
+    return gen_ulong(1);
+
+  case type2t::code_id:
+    return gen_ulong(0);
+
+  case type2t::symbol_id:
+    log_error("Symbolic type id in type_byte_size\n{}", *type);
+    abort();
+
+  case type2t::cpp_name_id:
+    log_error("C++ symbolic type id in type_byte_size\n{}", *type);
+    abort();
+
+  case type2t::bool_id:
+  case type2t::unsignedbv_id:
+  case type2t::signedbv_id:
+  case type2t::fixedbv_id:
+  case type2t::floatbv_id:
+  case type2t::pointer_id:
+    return gen_ulong(type->get_width());
+
+  case type2t::string_id:
+    // TODO: Strings of wchar will return the wrong result here
+    return gen_ulong(to_string_type(type).width * config.ansi_c.char_width);
+
+  case type2t::array_id:
+  case type2t::vector_id:
+  {
+    const array_data *t2;
+    if(type->type_id == type2t::vector_id)
+      t2 = &to_vector_type(type);
+    else
+      t2 = &to_array_type(type);
+
+    if(t2->size_is_infinite)
+      throw array_type2t::inf_sized_array_excp();
+
+    expr2tc arrsize = t2->array_size;
+    simplify(arrsize);
+
+    expr2tc subsize = type_byte_size_bits_expr(t2->subtype);
+    simplify(subsize);
+
+    if(is_constant_int2t(arrsize) && is_constant_int2t(subsize))
+      return gen_ulong(
+        to_constant_int2t(subsize).value * to_constant_int2t(arrsize).value);
+
+    type2tc t = pointer_type2();
+    if(arrsize->type != t)
+      arrsize = typecast2tc(t, arrsize);
+    return mul2tc(t, subsize, arrsize);
+  }
+
+  case type2t::struct_id:
+  {
+    // Compute the size of all members of this struct, and add padding bytes
+    // so that they all start on wourd boundries. Also add any trailing bytes
+    // necessary to make arrays align properly if malloc'd, see C89 6.3.3.4.
+    BigInt acc_cnst = 0;
+    expr2tc acc_dyn;
+    type2tc t = pointer_type2();
+    for(const type2tc &member : to_struct_type(type).members)
+    {
+      expr2tc s = type_byte_size_bits_expr(member);
+      if(is_constant_int2t(s))
+        acc_cnst += to_constant_int2t(s).value;
+      else if(acc_dyn)
+        acc_dyn = add2tc(t, acc_dyn, s);
+      else
+        acc_dyn = s;
+    }
+
+    // At the end of that, the tests above should have rounded accumulated size
+    // up to a size that contains the required trailing padding for array
+    // allocation alignment.
+
+    if(!acc_dyn)
+      return gen_ulong(acc_cnst);
+
+    if(acc_cnst == 0)
+      return acc_dyn;
+
+    return add2tc(t, gen_ulong(acc_cnst), acc_dyn);
+  }
+
+  case type2t::union_id:
+  {
+    // Very simple: the largest field size, rounded up to a word boundry for
+    // array allocation alignment.
+    BigInt max_cnst = 0;
+    expr2tc max_dyn;
+    type2tc t = pointer_type2();
+    for(const type2tc &elem : to_union_type(type).members)
+    {
+      expr2tc s = type_byte_size_bits_expr(elem);
+      if(is_constant_int2t(s))
+        max_cnst = std::max(max_cnst, to_constant_int2t(s).value);
+      else if(max_dyn)
+        max_dyn = if2tc(t, greaterthan2tc(max_dyn, s), max_dyn, s);
+      else
+        max_dyn = s;
+    }
+
+    if(!max_dyn)
+      return gen_ulong(max_cnst);
+
+    if(max_cnst == 0)
+      return max_dyn;
+
+    expr2tc c = gen_ulong(max_cnst);
+    return if2tc(t, greaterthan2tc(max_dyn, c), max_dyn, c);
+  }
+
+  default:
+    log_error("Unrecognised type in type_byte_size_bits_expr:\n{}", *type);
+    abort();
+  }
+}
+
+expr2tc type_byte_size_expr(const type2tc &type)
+{
+  expr2tc n = type_byte_size_bits_expr(type);
+  if(is_constant_int2t(n))
+    return gen_ulong((to_constant_int2t(n).value + 7) / 8);
+  type2tc t = pointer_type2();
+  return div2tc(t, add2tc(t, n, gen_ulong(7)), gen_ulong(8));
+}
+
 expr2tc compute_pointer_offset_bits(const expr2tc &expr)
 {
   if(is_symbol2t(expr))
@@ -161,15 +301,15 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
   {
     const index2t &index = to_index2t(expr);
 
-    BigInt sub_size;
+    expr2tc sub_size;
     if(is_array_type(index.source_value))
     {
       const array_type2t &arr_type = to_array_type(index.source_value->type);
-      sub_size = type_byte_size_bits(arr_type.subtype);
+      sub_size = type_byte_size_bits_expr(arr_type.subtype);
     }
     else if(is_string_type(index.source_value))
     {
-      sub_size = 64;
+      sub_size = gen_ulong(64);
     }
     else
     {
@@ -178,10 +318,11 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
     }
 
     expr2tc result;
-    if(is_constant_int2t(index.index))
+    if(is_constant_int2t(sub_size) && is_constant_int2t(index.index))
     {
       const constant_int2t &index_val = to_constant_int2t(index.index);
-      result = gen_ulong(BigInt(sub_size * index_val.value).to_uint64());
+      const constant_int2t &ss_val = to_constant_int2t(sub_size);
+      result = gen_ulong(ss_val.value * index_val.value);
     }
     else
     {
@@ -192,8 +333,7 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
       if(the_index->type != zero_ulong->type)
         the_index = typecast2tc(zero_ulong->type, the_index);
 
-      constant_int2tc tmp_size(zero_ulong->type, sub_size);
-      result = mul2tc(zero_ulong->type, tmp_size, the_index);
+      result = mul2tc(zero_ulong->type, sub_size, the_index);
     }
 
     // Also accumulate any pointer offset in the source object.

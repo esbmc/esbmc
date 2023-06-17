@@ -1494,15 +1494,14 @@ void dereferencet::construct_from_multidir_array(
   // is an alignment violation as that can possess extra padding.
   // So, divide the offset by size of the inner dimention, make an index2t, and
   // construct a reference to that.
-  BigInt subtype_sz = type_byte_size_bits(arr_type.subtype);
-  constant_int2tc subtype_sz_expr(pointer_type2(), subtype_sz);
-  div2tc div(pointer_type2(), offset, subtype_sz_expr);
+  expr2tc subtype_sz = type_byte_size_bits_expr(arr_type.subtype);
+  div2tc div(pointer_type2(), offset, subtype_sz);
   simplify(div);
 
   index2tc outer_idx(arr_type.subtype, value, div);
   value = outer_idx;
 
-  modulus2tc mod(pointer_type2(), offset, subtype_sz_expr);
+  modulus2tc mod(pointer_type2(), offset, subtype_sz);
   simplify(mod);
 
   build_reference_rec(value, mod, type, guard, mode, alignment);

@@ -208,10 +208,14 @@ inline expr2tc gen_false_expr()
   return c;
 }
 
+inline expr2tc gen_ulong(BigInt v)
+{
+  return constant_int2tc(get_uint_type(config.ansi_c.word_size), std::move(v));
+}
+
 inline expr2tc gen_ulong(unsigned long val)
 {
-  constant_int2tc v(get_uint_type(config.ansi_c.word_size), BigInt(val));
-  return v;
+  return gen_ulong(BigInt(val));
 }
 
 inline const type2tc &get_array_subtype(const type2tc &type)
