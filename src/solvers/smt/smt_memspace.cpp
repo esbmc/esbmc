@@ -162,7 +162,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     if(non_ptr_op->type->get_width() < config.ansi_c.pointer_width())
       non_ptr_op = typecast2tc(machine_ptr, non_ptr_op);
 
-    expr2tc mul = mul2tc(inttype, typecast2tc(inttype, non_ptr_op), constant);
+    expr2tc mul = mul2tc(inttype, non_ptr_op, pointee_size);
 
     // Add or sub that value
     expr2tc ptr_offset =
