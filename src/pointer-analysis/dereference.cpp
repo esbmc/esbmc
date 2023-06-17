@@ -1504,6 +1504,8 @@ void dereferencet::construct_from_multidir_array(
   // So, divide the offset by size of the inner dimention, make an index2t, and
   // construct a reference to that.
   expr2tc subtype_sz = type_byte_size_bits_expr(arr_type.subtype);
+  if(subtype_sz->type != offset->type)
+    subtype_sz = typecast2tc(offset->type, subtype_sz);
 
   div2tc div(offset->type, offset, subtype_sz);
   simplify(div);
