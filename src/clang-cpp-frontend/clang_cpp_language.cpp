@@ -13,10 +13,6 @@ CC_DIAGNOSTIC_POP()
 #include <clang-cpp-frontend/clang_cpp_language.h>
 #include <clang-cpp-frontend/expr2cpp.h>
 #include <regex>
-#include <util/show_symbol_table.h>
-#include <iostream>
-#include <util/show_symbol_table.h>
-#include <iostream>
 
 languaget *new_clang_cpp_language()
 {

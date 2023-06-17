@@ -86,8 +86,10 @@ void clang_cpp_adjust::adjust_member(member_exprt &expr)
    * dot operator, e.g. OBJECT.setX();
    * or arrow operator, e.g.OBJECT->setX();
    */
-  if((expr.struct_op().is_symbol() || expr.struct_op().is_dereference()) && expr.type().is_code())
+  if(expr.type().is_code() && !expr.get_string("component_name").empty())
+  {
     adjust_cpp_member(expr);
+  }
 }
 
 void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
@@ -112,10 +114,12 @@ void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
    *      * type: ...
    *      * id: <setX_clang_ID>
    */
-  const symbolt *method_symb =
-    namespacet(context).lookup(expr.component_name());
-  assert(method_symb);
-  exprt method_call = symbol_expr(*method_symb);
+  const symbolt *comp_symb = namespacet(context).lookup(expr.component_name());
+  assert(comp_symb);
+  // compoment's type shall be the same as member_exprt's type
+  // and both are of the type `code`
+  assert(comp_symb->type.is_code());
+  exprt method_call = symbol_expr(*comp_symb);
   expr.swap(method_call);
 }
 
