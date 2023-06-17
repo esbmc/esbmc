@@ -16,6 +16,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/show_symbol_table.h>
 #include <iostream>
 #include <util/show_symbol_table.h>
+#include <iostream>
 
 languaget *new_clang_cpp_language()
 {
