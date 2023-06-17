@@ -13,9 +13,7 @@ exprt c_sizeof(const typet &src, const namespacet &ns)
   // Array size simplification and so forth will have already occurred in
   // migration, but we might still run into a nondeterministically sized
   // array.
-  BigInt size;
+  expr2tc size = type_byte_size_expr(t);
 
-  size = type_byte_size(t); // let the exception propagate
-  constant_int2tc theval(get_uint32_type(), size);
-  return migrate_expr_back(theval);
+  return migrate_expr_back(size);
 }
