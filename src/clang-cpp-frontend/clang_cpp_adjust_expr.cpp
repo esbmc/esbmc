@@ -86,9 +86,7 @@ void clang_cpp_adjust::adjust_member(member_exprt &expr)
    * dot operator, e.g. OBJECT.setX();
    * or arrow operator, e.g.OBJECT->setX();
    */
-  if(
-    (expr.struct_op().is_symbol() && expr.type().is_code()) ||
-    (expr.struct_op().is_dereference() && expr.type().is_code()))
+  if((expr.struct_op().is_symbol() || expr.struct_op().is_dereference()) && expr.type().is_code())
     adjust_cpp_member(expr);
 }
 
