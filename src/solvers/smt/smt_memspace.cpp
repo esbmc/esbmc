@@ -294,11 +294,7 @@ smt_astt smt_convt::convert_identifier_pointer(
     expr2tc size;
     try
     {
-      size = constant_int2tc(ptr_loc_type, type_byte_size(expr->type));
-    }
-    catch(const array_type2t::dyn_sized_array_excp &e)
-    {
-      size = e.size;
+      size = type_byte_size_expr(expr->type);
     }
     catch(const array_type2t::inf_sized_array_excp &e)
     {
@@ -306,14 +302,6 @@ smt_astt smt_convt::convert_identifier_pointer(
       // in that case, make a reasonable assumption on how large they might be,
       // say, 64k.
       size = constant_int2tc(ptr_loc_type, BigInt(0x10000));
-    }
-    catch(const type2t::symbolic_type_excp &e)
-    {
-      // Type is empty or code -- something that we can never have a real size
-      // for. In that case, create an object of size 1: this means we have a
-      // valid entry in the address map, but that any modification of the
-      // pointer leads to invalidness, because there's no size to think about.
-      size = constant_int2tc(ptr_loc_type, BigInt(1));
     }
 
     smt_astt output = init_pointer_obj(obj_num, size);
