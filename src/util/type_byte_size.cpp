@@ -90,13 +90,13 @@ BigInt type_byte_size_bits(const type2tc &type)
   {
     const vector_type2t &t2 = to_vector_type(type);
     if(t2.size_is_infinite)
-      throw new array_type2t::inf_sized_array_excp();
+      throw array_type2t::inf_sized_array_excp();
 
     expr2tc arrsize = t2.array_size;
     simplify(arrsize);
 
     if(!is_constant_int2t(arrsize))
-      throw new array_type2t::dyn_sized_array_excp(arrsize);
+      throw array_type2t::dyn_sized_array_excp(arrsize);
 
     BigInt subsize = type_byte_size_bits(t2.subtype);
     const constant_int2t &arrsize_int = to_constant_int2t(arrsize);
