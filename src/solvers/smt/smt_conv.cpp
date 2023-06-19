@@ -2735,7 +2735,8 @@ smt_astt smt_ast::project(
 
 void smt_convt::dump_smt()
 {
-  log_status("SMT dump was sent to --output file");  
+  log_error("SMT dump not implemented for {}", solver_text());
+  abort();
 }
 
 void smt_convt::print_model()
