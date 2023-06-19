@@ -58,7 +58,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   if(inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
   {
     BigInt unwind = cur_state->loop_iterations[first_loop];
-    if(unwind < (max_unwind - 1))
+    if(unwind < (max_unwind - 2))
     {
       assume(claim_expr);
       return;
