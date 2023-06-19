@@ -271,6 +271,8 @@ public:
   void push_ctx() override;
   void pop_ctx() override;
 
+  void dump_smt() override;
+
   // Members
   FILE *out_stream;
   FILE *in_stream;
