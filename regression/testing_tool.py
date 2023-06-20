@@ -54,6 +54,13 @@ class BaseTest:
             if x != "":
                 p = os.path.join(self.test_dir, x)
                 result.append(p if os.path.exists(p) else x)
+        if BaseTest.SMT_ONLY:
+            result.append("--smtlib")
+            result.append("--smt-formula-only")
+            result.append("--output")
+            result.append(f"{self.test_dir}.smt2")
+            result.append("--array-flattener")
+
         return result
 
     def mark_test_as_knownbug(self, issue: str):
@@ -72,8 +79,13 @@ class BaseTest:
         self.test_dir = test_dir
         self.test_args = None
         self.test_file = None
-        self.test_mode = "CORE"
+        self.test_mode = "CORE"        
         self._initialize_test_case()
+    
+    """Ignore regex and only check for crashes"""
+    RUN_ONLY = False
+    """SMT only test"""
+    SMT_ONLY = False
 
 
 class CTestCase(BaseTest):
@@ -212,8 +224,8 @@ class Executor:
             process.stderr.close()
             process.kill()
             process.wait()
-            return None, None
-        return stdout, stderr
+            return None, None, 0        
+        return stdout, stderr, process.returncode
 
 
 def get_test_objects(base_dir: str):
@@ -249,10 +261,17 @@ def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
 
     def test(self):
-        stdout, stderr = executor.run(test_case)
+        stdout, stderr, rc = executor.run(test_case)
+
         if stdout == None:
             timeout_message ="\nTIMEOUT TEST: " + str(test_case.test_dir)
             self.fail(timeout_message)
+
+        if BaseTest.RUN_ONLY:
+            if rc != 0:
+                self.fail(f"Wrong output for process. Exitted with {rc}")                
+            return
+
         output_to_validate = stdout.decode() + stderr.decode()
         error_message_prefix = "\nTEST: " + \
             str(test_case.test_dir) + "\nEXPECTED TO FIND: " + \
@@ -329,6 +348,9 @@ def _arg_parsing():
     parser.add_argument("--benchbringup", default=False, action="store_true",
             help="Flag to run a specific benchmark and collect logs in Github workflow")
 
+    parser.add_argument("--smt_test", default=False, action="store_true",
+            help="Replaces usual tests with crash check while producing formulas (adds --smt-formula-only).")
+
     main_args = parser.parse_args()
     if main_args.timeout:
         RegressionBase.TIMEOUT = int(main_args.timeout)
@@ -341,6 +363,11 @@ def _arg_parsing():
     global BENCHMARK_BRINGUP
     if(main_args.benchbringup):
         BENCHMARK_BRINGUP = True
+
+    if(main_args.smt_test):
+        print("Checking SMT generation only")
+        BaseTest.RUN_ONLY = True
+        BaseTest.SMT_ONLY = True
 
     if main_args.file:
         gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
