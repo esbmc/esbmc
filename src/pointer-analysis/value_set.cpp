@@ -1068,7 +1068,8 @@ void value_sett::assign(
   if(is_array_type(lhs_type))
   {
     const array_type2t &arr_type = to_array_type(lhs_type);
-    unknown2tc unknown(index_type2());
+    unknown2tc unknown(
+      arr_type.array_size ? arr_type.array_size->type : index_type2());
     index2tc lhs_index(arr_type.subtype, lhs, unknown);
 
     if(is_unknown2t(rhs) || is_invalid2t(rhs))
@@ -1105,7 +1106,6 @@ void value_sett::assign(
       }
       else
       {
-        unknown2tc unknown(index_type2());
         index2tc rhs_idx(arr_type.subtype, rhs, unknown);
         assign(lhs_index, rhs_idx, true);
       }

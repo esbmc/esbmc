@@ -173,7 +173,7 @@ expr2tc goto_symext::symex_mem(
   {
     type2tc subtype = migrate_type(symbol.type.subtype());
     expr2tc sym = symbol2tc(new_type, symbol.id);
-    expr2tc idx_val = gen_ulong(0);
+    expr2tc idx_val = gen_long(size->type, 0L);
     expr2tc idx = index2tc(subtype, sym, idx_val);
     rhs_addrof->type = migrate_type(pointer_typet(symbol.type.subtype()));
     rhs_addrof->ptr_obj = idx;

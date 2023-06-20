@@ -1125,6 +1125,8 @@ void dereferencet::construct_from_array(
   {
     // Just extract an element and apply other standard extraction stuff.
     // No scope for stitching being required.
+    if(arr_type.array_size && arr_type.array_size->type != div->type)
+      div = typecast2tc(arr_type.array_size->type, div);
     value = index2tc(arr_subtype, value, div);
     build_reference_rec(value, mod, type, guard, mode, alignment);
   }
