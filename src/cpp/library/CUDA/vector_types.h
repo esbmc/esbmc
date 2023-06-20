@@ -309,12 +309,6 @@ __cuda_builtin_vector_align8(float2, float x; float y;);
 
 #endif /* !__CUDACC__ && !__CUDABE__ && _WIN32 && !_WIN64 */
 
-  /*******************************************************************************
-  *                                                                              *
-  *                                                                              *
-  *                                                                              *
-  *******************************************************************************/
-
   typedef __device_builtin__ struct char1 char1;
   typedef __device_builtin__ struct uchar1 uchar1;
   typedef __device_builtin__ struct char2 char2;
@@ -363,12 +357,6 @@ __cuda_builtin_vector_align8(float2, float x; float y;);
   typedef __device_builtin__ struct double2 double2;
   typedef __device_builtin__ struct double3 double3;
   typedef __device_builtin__ struct double4 double4;
-
-  /*******************************************************************************
-  *                                                                              *
-  *                                                                              *
-  *                                                                              *
-  *******************************************************************************/
 
   struct __device_builtin__ __dim3
   {
