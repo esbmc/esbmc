@@ -135,6 +135,8 @@ class smtlib_smt_sort : public smt_sort
 {
 public:
   explicit smtlib_smt_sort(smt_sort_kind k, unsigned int w) : smt_sort(k, w){};
+  explicit smtlib_smt_sort(smt_sort_kind k, unsigned int w1, unsigned int w2)
+    : smt_sort(k, w1, w2){};
   explicit smtlib_smt_sort(smt_sort_kind k) : smt_sort(k)
   {
   }
@@ -142,9 +144,7 @@ public:
     smt_sort_kind k,
     const smtlib_smt_sort *dom,
     const smtlib_smt_sort *rag)
-    : smt_sort(k, dom->get_data_width(), rag->get_domain_width()),
-      domain(dom),
-      range(rag)
+    : smt_sort(k, dom->get_data_width(), rag), domain(dom), range(rag)
   {
   }
 

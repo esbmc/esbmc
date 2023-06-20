@@ -1462,41 +1462,43 @@ smtlib_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 smt_sortt smtlib_convt::mk_bool_sort()
 {
-  return new smt_sort(SMT_SORT_BOOL, 1);
+  return new smtlib_smt_sort(SMT_SORT_BOOL);
 }
 
 smt_sortt smtlib_convt::mk_real_sort()
 {
-  return new smt_sort(SMT_SORT_INT);
+  return new smtlib_smt_sort(SMT_SORT_INT);
 }
 
 smt_sortt smtlib_convt::mk_int_sort()
 {
-  return new smt_sort(SMT_SORT_REAL);
+  return new smtlib_smt_sort(SMT_SORT_REAL);
 }
 
 smt_sortt smtlib_convt::mk_bv_sort(std::size_t width)
 {
-  return new smt_sort(SMT_SORT_BV, width);
+  return new smtlib_smt_sort(SMT_SORT_BV, width);
 }
 
 smt_sortt smtlib_convt::mk_fbv_sort(std::size_t width)
 {
+  return new smtlib_smt_sort(SMT_SORT_FIXEDBV, width);
   return new smt_sort(SMT_SORT_FIXEDBV, width);
 }
 
 smt_sortt smtlib_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
-  return new smt_sort(
-    SMT_SORT_ARRAY, domain->get_data_width(), range->get_data_width());
+  const smtlib_smt_sort *d = static_cast<const smtlib_smt_sort *>(domain);
+  const smtlib_smt_sort *r = static_cast<const smtlib_smt_sort *>(range);
+  return new smtlib_smt_sort(SMT_SORT_ARRAY, d, r);
 }
 
 smt_sortt smtlib_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
 {
-  return new smt_sort(SMT_SORT_BVFP, ew + sw + 1, sw + 1);
+  return new smtlib_smt_sort(SMT_SORT_BVFP, ew + sw + 1, sw + 1);
 }
 
 smt_sortt smtlib_convt::mk_bvfp_rm_sort()
 {
-  return new smt_sort(SMT_SORT_BVFP_RM, 3);
+  return new smtlib_smt_sort(SMT_SORT_BVFP_RM, 3);
 }
