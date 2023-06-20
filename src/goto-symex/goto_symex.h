@@ -750,7 +750,7 @@ protected:
   /** Symbolic implementation of c++'s new. */
   void symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code);
   /** Symbolic implementation of printf */
-  void symex_printf(const expr2tc &lhs, const expr2tc &code);
+  void symex_printf(const expr2tc &lhs, expr2tc &code);
   /** Symbolic implementation of scanf and fscanf */
   void symex_input(const code_function_call2t &expr);
   /** Symbolic implementation of va_arg */

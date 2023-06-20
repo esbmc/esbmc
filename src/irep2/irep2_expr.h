@@ -980,6 +980,7 @@ public:
     cpp_new_arr,
     nondet,
     va_arg,
+    printf2,
     function_call,
     preincrement,
     postincrement,

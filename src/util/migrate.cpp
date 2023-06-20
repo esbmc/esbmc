@@ -1605,6 +1605,16 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       new_expr_ref = code_printf2tc(args);
       return;
     }
+    else if(expr.statement() == "printf2")
+    {
+      t = sideeffect2t::printf2;
+      for(auto const &it : expr.operands())
+      {
+        expr2tc tmp_op;
+        migrate_expr(it, tmp_op);
+        args.push_back(tmp_op);
+      }
+    }
     else if(expr.statement() == "preincrement")
     {
       t = sideeffect2t::preincrement;
