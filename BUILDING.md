@@ -87,7 +87,7 @@ In order to verify Solidity smart contract, ESBMC should be built with the optio
 
 ## Preparing IBEX as the constraint programming solver for interval contraction
 
-ESBMC can use the forward and backward operations from constraint programming to contract the search space exploration from the program's entry point to the property being verified and vice-versa. This (interval) contraction is enabled via the option --goto-contractor. First, the IBEX library must be installed using the instructions available at http://www.ibex-lib.org/doc/install.html#standard-install. Once IBEX is installed on your computer, ESBMC should be built with the option:
+ESBMC can use the forward and backward operations from constraint programming to contract the search space exploration from the program's entry point to the property being verified and vice-versa. This (interval) contraction is enabled via the option --goto-contractor. First, the IBEX library must be installed using the instructions available at http://ibex-team.github.io/ibex-lib/install.html. Once IBEX is installed on your computer, ESBMC should be built with the option:
 
 ```
 -DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=path-to-ibex 
