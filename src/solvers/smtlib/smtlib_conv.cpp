@@ -909,13 +909,22 @@ smt_astt smtlib_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 
 smt_astt smtlib_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
+  log_debug("[smt_ast] mk_zero_ext with {} width", topwidth);
   smt_astt z = mk_smt_bv(0, mk_bv_sort(topwidth));
   return mk_concat(z, a);
 }
 
 smt_astt smtlib_convt::mk_concat(smt_astt a, smt_astt b)
 {
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_CONCAT);
+  /**
+   * (concat (_ BitVec i) (_ BitVec j) (_ BitVec m))
+      - concatenation of bitvectors of size i and j to get a new bitvector of
+        size m, where m = i + j
+  */
+  smtlib_smt_ast *ast = new smtlib_smt_ast(
+    this,
+    mk_bv_sort(a->sort->get_data_width() + b->sort->get_data_width()),
+    SMT_FUNC_CONCAT);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
