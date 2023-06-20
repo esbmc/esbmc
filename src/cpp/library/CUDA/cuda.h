@@ -1,19 +1,19 @@
 #ifndef _CUDA_H
 #define _CUDA_H 1
 
-#include <sm_atomic_functions.h>
-#include <curand_kernel.h>
-#include <curand.h>
-#include <cuda_runtime_api.h>
-#include <call_kernel.h>
+#include "cuda_error.h"
+#include "sm_atomic_functions.h"
+#include "curand_kernel.h"
+#include "curand.h"
+#include "call_kernel.h"
+#include "vector_types.h"
+#include "device_launch_parameters.h"
 
 #include <stddef.h>
 #include <cstdlib>
 #include <string.h>
 #include <pthread.h>
 #include <assert.h>
-#include "vector_types.h"
-#include "device_launch_parameters.h"
 #include <new>
 
 //Structure that represents the threads of CUDA.
