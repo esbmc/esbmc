@@ -9,12 +9,10 @@ extern "C"
 {
 #endif
 
-  /**
+  /*
  * \defgroup CUDART_TYPES Data types used by CUDA Runtime
  * \ingroup CUDART
- *
- * @{
- */
+*/
 
 #if !defined(__CUDA_INTERNAL_COMPILATION__)
 
@@ -30,9 +28,10 @@ extern "C"
     cudaMemcpyDefault = 4 /**< Default based unified virtual address space */
   };
 
-  /**
- * CUDA stream
- */
+  /*
+  * CUDA stream
+  */
+
   /*DEVICE_BUILTIN*/
   typedef struct CUstream_st *cudaStream_t;
 
@@ -121,9 +120,9 @@ extern "C"
       multiGpuBoardGroupID; /**< Unique identifier for a group of devices on the same multi-GPU board */
   };
 
-  /**
- * CUDA device attributes
- */
+  /*
+   * CUDA device attributes
+  */
   enum __device_builtin__ cudaDeviceAttr
   {
     cudaDevAttrMaxThreadsPerBlock =
