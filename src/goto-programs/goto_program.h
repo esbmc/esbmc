@@ -581,43 +581,9 @@ public:
   //! Copy a full goto program, preserving targets
   void copy_from(const goto_programt &src);
 
-  //! Does the goto program have an assertion?
-  bool has_assertion() const;
-
   typedef std::set<irep_idt> decl_identifierst;
   /// get the variables in decl statements
   void get_decl_identifiers(decl_identifierst &decl_identifiers) const;
-
-  // Template for extracting instructions /from/ a goto program, to a type
-  // abstract something else.
-  template <
-    typename OutList,
-    typename ListAppender,
-    typename OutElem,
-    typename SetAttrObj,
-    typename SetAttrNil>
-  void extract_instructions(
-    OutList &list,
-    ListAppender listappend,
-    SetAttrObj setattrobj,
-    SetAttrNil setattrnil) const;
-
-  // Template for extracting instructions /from/ a type abstract something,
-  // to a goto program.
-  template <
-    typename InList,
-    typename InElem,
-    typename FetchElem,
-    typename ElemToInsn,
-    typename GetAttr,
-    typename IsAttrNil>
-  void inject_instructions(
-    InList list,
-    unsigned int len,
-    FetchElem fetchelem,
-    ElemToInsn elemtoinsn,
-    GetAttr getattr,
-    IsAttrNil isattrnil);
 };
 
 bool operator<(
