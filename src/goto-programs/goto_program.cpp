@@ -465,6 +465,12 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case ASSIGN:
     out << "ASSIGN";
     break;
+  case DECL:
+    out << "DECL";
+    break;
+  case DEAD:
+    out << "DEAD";
+    break;
   case FUNCTION_CALL:
     out << "FUNCTION_CALL";
     break;
@@ -477,8 +483,12 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case THROW_DECL:
     out << "THROW_DECL";
     break;
+  case THROW_DECL_END:
+    out << "THROW_DECL_END";
+    break;
   default:
-    out << "? (number: " << t << ")";
+    assert(!"Unknown instruction type");
+    out << "unknown instruction";
   }
 
   return out;
