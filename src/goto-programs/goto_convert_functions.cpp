@@ -83,6 +83,8 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   irep_idt identifier = symbol.id;
 
   // Apply a SFINAE test: discard unused C++ templates.
+  // Note: can be removed probably? as the new clang-cpp-frontend should've
+  // done a pretty good job at resolving template overloading
   if(
     symbol.value.get("#speculative_template") == "1" &&
     symbol.value.get("#template_in_use") != "1")
@@ -363,7 +365,7 @@ void goto_convert_functionst::thrash_type_symbols()
   // in a struct to itself, this breaks down. Therefore, don't rename types of
   // pointers; they have a type already; they're pointers.
 
-  // Collect a list of all type names. This it required before this entire
+  // Collect a list of all type names. This is required before this entire
   // thing has no types, and there's no way (in C++ converted code at least)
   // to decide what name is a type or not.
   typename_sett names;
