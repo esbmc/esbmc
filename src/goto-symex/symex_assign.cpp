@@ -160,6 +160,12 @@ void goto_symext::symex_assign(
   replace_dynamic_allocation(lhs);
   replace_dynamic_allocation(rhs);
 
+  // printf expression that has lhs
+  if(is_code_printf2t(rhs))
+  {
+    symex_printf(lhs, rhs);
+  }
+
   if(is_sideeffect2t(rhs))
   {
     const sideeffect2t &effect = to_sideeffect2t(rhs);

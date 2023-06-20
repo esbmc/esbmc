@@ -332,7 +332,7 @@ void goto_symext::symex_free(const expr2tc &expr)
   symex_assign(code_assign2tc(valid_index_expr, falsity), true);
 }
 
-void goto_symext::symex_printf(const expr2tc &, const expr2tc &rhs)
+void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 {
   assert(is_code_printf2t(rhs));
 
@@ -351,6 +351,25 @@ void goto_symext::symex_printf(const expr2tc &, const expr2tc &rhs)
     do_simplify(tmp);
     args.push_back(tmp);
   });
+
+  if(!is_nil_expr(lhs))
+  {
+    // 1. covert code_printf2tc to sideeffect2tc
+    exprt rhs_expr = migrate_expr_back(rhs);
+    exprt printf_code("sideeffect", migrate_type_back(lhs->type));
+
+    printf_code.statement("printf2");
+    printf_code.operands() = rhs_expr.operands();
+    printf_code.location() = rhs_expr.location();
+
+    migrate_expr(printf_code, rhs);
+
+    // 2. get the number of characters output (return value)
+    
+
+    // 3. create a new assign statement
+    symex_assign(code_assign2tc(lhs, constant_int2tc(int_type2(), BigInt(10))));
+  }
 
   target->output(
     cur_state->guard.as_expr(), cur_state->source, fmt.as_string(), args);
