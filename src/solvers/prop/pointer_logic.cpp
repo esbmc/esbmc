@@ -75,7 +75,7 @@ expr2tc pointer_logict::object_rec(
   if(src->type->type_id == type2t::array_id)
   {
     const array_type2t &arrtype =
-      dynamic_cast<const array_type2t &>(*src->type.get());
+      static_cast<const array_type2t &>(*src->type.get());
     BigInt size = type_byte_size(arrtype.subtype);
 
     if(size == 0)
@@ -84,7 +84,11 @@ expr2tc pointer_logict::object_rec(
     BigInt index = offset / size;
     BigInt rest = offset % size;
 
-    type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
+    type2tc inttype;
+    if(arrtype.array_size)
+      inttype = arrtype.array_size->type;
+    else
+      inttype = unsignedbv_type2tc(config.ansi_c.int_width);
     index2tc newindex(arrtype.subtype, src, constant_int2tc(inttype, index));
 
     return object_rec(rest, pointer_type, newindex);
