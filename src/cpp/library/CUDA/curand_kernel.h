@@ -1,7 +1,6 @@
 #if !defined(CURAND_KERNEL_H_)
 #define CURAND_KERNEL_H_
 
-//#include "curand.h"
 #include "curand_precalc.h"
 #include <math.h>
 #include <curand.h>
@@ -17,12 +16,6 @@
   (1.1102230246251565e-16 * 6.2831853071795860)
 #define CURAND_SQRT2 (-1.4142135f)
 #define CURAND_SQRT2_DOUBLE (-1.4142135623730951)
-
-//Insert of curand.h
-//typedef unsigned long long curandDirectionVectors64_t[64];
-//typedef unsigned int curandDirectionVectors32_t[32];
-
-//defines of curand_precalc.h
 #define PRECALC_NUM_MATRICES (8)
 #define PRECALC_BLOCK_SIZE (2)
 #define PRECALC_BLOCK_MASK ((1 << PRECALC_BLOCK_SIZE) - 1)

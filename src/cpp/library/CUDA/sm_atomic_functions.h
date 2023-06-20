@@ -509,11 +509,9 @@ extern __device__ unsigned long long int __ullAtomicCAS(
 }
 
 /*
-extern __device__ int                    __any(int cond){
-}
+extern __device__ int __any(int cond){}
 
-extern __device__ int                    __all(int cond){
-}
+extern __device__ int __all(int cond){}
 */
 
 /***********/

@@ -27,11 +27,6 @@ extern "C"
 
   __device_builtin__ __STORAGE__ int warpSize = 32;
 
-  /*
-uint3 __device_builtin__ __STORAGE__ threadIdx;
-uint3 __device_builtin__ __STORAGE__ blockIdx;
-*/
-
   uint3 indexOfThread[1024];
   uint3 indexOfBlock[1024];
 
@@ -93,54 +88,11 @@ uint3 __device_builtin__ __STORAGE__ blockIdx;
     __ESBMC_atomic_end();
     return block_index;
   }
-  extern "C++"
-  {
-    dim3 cudaGet_blockDim();
-    dim3 cudaGet_gridDim();
-  }
-  /*
-#define blockDim cudaGet_blockDim()
-#define gridDim cudaGet_gridDim();
-*/
 
 #undef __STORAGE__
 
 #ifdef __cplusplus
 }
-
-#endif
-
-#if 0
-
-#if !defined(__cudaGet_threadIdx)
-
-#define __cudaGet_threadIdx() threadIdx
-
-#endif /* __cudaGet_threadIdx */
-
-#if !defined(__cudaGet_blockIdx)
-
-#define __cudaGet_blockIdx() blockIdx
-
-#endif /* __cudaGet_blockIdx */
-
-#if !defined(__cudaGet_blockDim)
-
-#define __cudaGet_blockDim() blockDim
-
-#endif /* __cudaGet_blockDim */
-
-#if !defined(__cudaGet_gridDim)
-
-#define __cudaGet_gridDim() gridDim
-
-#endif /* __cudaGet_gridDim */
-
-#if !defined(__cudaGet_warpSize)
-
-#define __cudaGet_warpSize() warpSize
-
-#endif /* __cudaGet_warpSize */
 #endif
 
 #endif /* !__DEVICE_LAUNCH_PARAMETERS_H__ */
