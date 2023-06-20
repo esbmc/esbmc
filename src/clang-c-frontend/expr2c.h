@@ -123,7 +123,7 @@ protected:
   std::string
   convert_code_switch_case(const code_switch_caset &src, unsigned indent);
   std::string convert_code_asm(const codet &src, unsigned indent);
-  std::string convert_code_assign(const codet &src, unsigned indent);
+  virtual std::string convert_code_assign(const codet &src, unsigned indent);
   virtual std::string convert_code_free(const codet &src, unsigned indent);
   std::string convert_code_init(const codet &src, unsigned indent);
   std::string convert_code_ifthenelse(const codet &src, unsigned indent);
@@ -132,11 +132,11 @@ protected:
   std::string convert_code_dowhile(const codet &src, unsigned indent);
   std::string convert_code_block(const codet &src, unsigned indent);
   std::string convert_code_expression(const codet &src, unsigned indent);
-  std::string convert_code_return(const codet &src, unsigned indent);
+  virtual std::string convert_code_return(const codet &src, unsigned indent);
   std::string convert_code_goto(const codet &src, unsigned indent);
   std::string convert_code_gcc_goto(const codet &src, unsigned indent);
-  std::string convert_code_assume(const codet &src, unsigned indent);
-  std::string convert_code_assert(const codet &src, unsigned indent);
+  virtual std::string convert_code_assume(const codet &src, unsigned indent);
+  virtual std::string convert_code_assert(const codet &src, unsigned indent);
   std::string convert_code_break(const codet &src, unsigned indent);
   std::string convert_code_switch(const codet &src, unsigned indent);
   std::string convert_code_continue(const codet &src, unsigned indent);

@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author:
-
-\*******************************************************************/
-
 #include <clang-c-frontend/expr2ccode.h>
 #include <util/arith_tools.h>
 #include <util/c_misc.h>
@@ -84,13 +76,14 @@ std::string type2ccode(const typet &type, const namespacet &ns, bool fullname)
   return expr2ccode.convert(type);
 }
 
-std::string typedef2ccode(
-  const struct_union_typet &type,
-  const namespacet &ns,
-  bool fullname)
+std::string
+typedef2ccode(const typet &type, const namespacet &ns, bool fullname)
 {
   expr2ccodet expr2ccode(ns, fullname);
-  return expr2ccode.convert_struct_union_typedef(type);
+  if(type.id() == "struct" || type.id() == "union")
+    return expr2ccode.convert_struct_union_typedef(to_struct_union_type(type));
+  else
+    return type2ccode(type, ns);
 }
 
 std::string expr2ccodet::convert(const typet &src)
@@ -408,7 +401,7 @@ std::string expr2ccodet::convert_code_printf(const codet &src, unsigned indent)
     dest += arg_str;
   }
 
-  dest += ");";
+  dest += ")";
 
   return dest;
 }
@@ -421,7 +414,64 @@ std::string expr2ccodet::convert_code_free(const codet &src, unsigned indent)
     return convert_norep(src, precedence);
   }
 
-  return indent_str(indent) + "free(" + convert(src.op0()) + ");";
+  return indent_str(indent) + "free(" + convert(src.op0()) + ")";
+}
+
+std::string expr2ccodet::convert_code_return(const codet &src, unsigned indent)
+{
+  if(src.operands().size() != 0 && src.operands().size() != 1)
+  {
+    unsigned precedence;
+    return convert_norep(src, precedence);
+  }
+
+  std::string dest = indent_str(indent);
+  dest += "return";
+
+  if(to_code_return(src).has_return_value())
+    dest += " " + convert(src.op0());
+
+  return dest;
+}
+
+std::string expr2ccodet::convert_code_assign(const codet &src, unsigned indent)
+{
+  unsigned int precedence = 15;
+  std::string dest = convert(src.op0(), precedence);
+  dest += "=";
+
+  exprt rhs = src.op1();
+  // Form a compound literal if assigning to a struct/union
+  if(
+    src.op1().id() == "array" || src.op1().id() == "array_of" ||
+    src.op1().id() == "struct" || src.op1().id() == "union")
+    rhs.make_typecast(src.op0().type());
+
+  dest += convert(rhs, precedence);
+
+  return indent_str(indent) + dest;
+}
+
+std::string expr2ccodet::convert_code_assert(const codet &src, unsigned indent)
+{
+  if(src.operands().size() != 1)
+  {
+    unsigned precedence;
+    return convert_norep(src, precedence);
+  }
+
+  return indent_str(indent) + "assert(" + convert(src.op0()) + ")";
+}
+
+std::string expr2ccodet::convert_code_assume(const codet &src, unsigned indent)
+{
+  if(src.operands().size() != 1)
+  {
+    unsigned precedence;
+    return convert_norep(src, precedence);
+  }
+
+  return indent_str(indent) + "assume(" + convert(src.op0()) + ")";
 }
 
 std::string expr2ccodet::convert_symbol(const exprt &src, unsigned &)
@@ -977,8 +1027,8 @@ std::string expr2ccodet::convert_code_decl(const codet &src, unsigned indent)
 
   dest += convert_rec(src.op0().type(), c_qualifierst(), declarator);
 
-  // Checking if there is an initializer
-  if(src.operands().size() == 2)
+  // Checking if there is a non-empty initializer
+  if(src.operands().size() == 2 && src.op1() != exprt())
     dest += "=" + convert(src.op1());
 
   return dest;
@@ -1460,7 +1510,7 @@ std::string expr2ccodet::convert_infinity(
   unsigned &precedence [[maybe_unused]])
 {
   // Fedor: just an arbitrary value for now
-  return "10000";
+  return "__ESBMC_INF_SIZE";
 }
 
 std::string

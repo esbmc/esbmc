@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author:
-
-\*******************************************************************/
-
 #ifndef CPROVER_EXPR2CCODE_H
 #define CPROVER_EXPR2CCODE_H
 
@@ -23,10 +15,8 @@ expr2ccode(const exprt &expr, const namespacet &ns, bool fullname = false);
 std::string
 type2ccode(const typet &type, const namespacet &ns, bool fullname = false);
 
-std::string typedef2ccode(
-  const struct_union_typet &type,
-  const namespacet &ns,
-  bool fullname = false);
+std::string
+typedef2ccode(const typet &type, const namespacet &ns, bool fullname = false);
 
 class expr2ccodet : public expr2ct
 {
@@ -65,6 +55,11 @@ protected:
 
   std::string convert_code_printf(const codet &src, unsigned indent) override;
   std::string convert_code_free(const codet &src, unsigned indent) override;
+  std::string convert_code_return(const codet &src, unsigned indent) override;
+  std::string convert_code_assign(const codet &src, unsigned indent) override;
+  std::string convert_code_assume(const codet &src, unsigned indent) override;
+  std::string convert_code_assert(const codet &src, unsigned indent) override;
+
   std::string convert_malloc(const exprt &src, unsigned &precedence) override;
   std::string convert_realloc(const exprt &src, unsigned &precedence) override;
   std::string convert_alloca(const exprt &src, unsigned &precedence) override;
