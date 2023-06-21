@@ -457,7 +457,7 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
   }
   else
   {
-    remove_sideeffects(expr, dest, false); // result not used
+    remove_sideeffects(expr, dest, false);
 
     if(expr.is_not_nil())
     {

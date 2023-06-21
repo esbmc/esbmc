@@ -272,7 +272,7 @@ void goto_convertt::remove_sideeffects(
   {
     const irep_idt &statement = expr.statement();
 
-    if(statement == "function_call") // might do anything
+    if(statement == "function_call")
       remove_function_call(expr, dest, result_is_used);
     else if(
       statement == "assign" || statement == "assign+" ||
@@ -703,25 +703,47 @@ void goto_convertt::remove_function_call(
   new_name(new_symbol);
 
   {
+    // temporary declaration:
+    // T return_value$_BLAH$1;
+    // where T denotes the type of the return value from the function,
+    // BLAH denotes the name of the function
     code_declt decl(symbol_expr(new_symbol));
     decl.location() = new_symbol.location;
     convert_decl(decl, dest);
   }
 
+  // up to this point, we've got the declaration for the temporary return value
+  // The next step is to flatten the side effect of this function call
   code_function_callt call;
   call.lhs() = symbol_expr(new_symbol);
   call.function() = expr.op0();
   call.arguments() = expr.op1().operands();
   call.location() = new_symbol.location;
 
-  codet assignment("assign");
-  assignment.reserve_operands(2);
-  assignment.copy_to_operands(symbol_expr(new_symbol));
-  assignment.move_to_operands(call);
+  const typet &ftype = call.function().type();
+  if(
+    ftype.return_type().id() == "constructor" &&
+    ftype.return_type().get_bool("#default_copy_cons"))
+  {
+    // for copy constructor, we need to add the implicit `this` as the first argument,
+    // so convert to:
+    // BLAH(&return_value$_BLAH$1, ...)
+    assert(!"Got default copy cons");
+  }
+  else
+  {
+    // otherwise just convert to something like:
+    // return_value$_BLAH$1 = BLAH(...),
+    // where BLAH denotes the function name
+    codet assignment("assign");
+    assignment.reserve_operands(2);
+    assignment.copy_to_operands(symbol_expr(new_symbol));
+    assignment.move_to_operands(call);
 
-  goto_programt tmp_program;
-  convert(assignment, tmp_program);
-  dest.destructive_append(tmp_program);
+    goto_programt tmp_program;
+    convert(assignment, tmp_program);
+    dest.destructive_append(tmp_program);
+  }
 
   expr = symbol_expr(new_symbol);
 }
