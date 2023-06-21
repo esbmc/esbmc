@@ -4,6 +4,7 @@
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
+#include <goto-symex/printf_formatter.h>
 #include <iomanip>
 #include <limits>
 #include <sstream>
@@ -354,7 +355,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 
   if(!is_nil_expr(lhs))
   {
-    // 1. covert code_printf2tc to sideeffect2tc
+    // 1. covert code_printf2tc back to sideeffect2tc
     exprt rhs_expr = migrate_expr_back(rhs);
     exprt printf_code("sideeffect", migrate_type_back(lhs->type));
 
@@ -365,10 +366,13 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     migrate_expr(printf_code, rhs);
 
     // 2. get the number of characters output (return value)
-    
+    printf_formattert printf_formatter;
+    printf_formatter(fmt.as_string(), args);
+    size_t outlen = printf_formatter.as_string().length();
 
-    // 3. create a new assign statement
-    symex_assign(code_assign2tc(lhs, constant_int2tc(int_type2(), BigInt(10))));
+    // 3. do assign
+    symex_assign(
+      code_assign2tc(lhs, constant_int2tc(int_type2(), BigInt(outlen))));
   }
 
   target->output(
