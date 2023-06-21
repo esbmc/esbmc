@@ -97,6 +97,26 @@ int smtlibparse(int startval);
 extern int smtlib_send_start_code;
 extern sexpr *smtlib_output;
 
+static std::string unquote(const std::string_view &s)
+{
+  size_t n = s.size();
+  assert(n >= 2);
+  assert(s[0] == '"');
+  assert(s[n - 1] == '"');
+  std::string r;
+  r.reserve(n - 2);
+  for(size_t i = 1; i < n - 1; i++)
+  {
+    if(s[i] == '\\')
+    {
+      assert(i + 1 < n - 1);
+      i++;
+    }
+    r.insert(r.end(), s[i]);
+  }
+  return r;
+}
+
 smt_convt *create_new_smtlib_solver(
   const optionst &options,
   const namespacet &ns,
@@ -135,7 +155,6 @@ void smtlib_convt::dump_smt()
 
 smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   : smt_convt(_ns, _options), array_iface(false, false), fp_convt(this)
-
 {
   temp_sym_count.push_back(1);
   std::string cmd;
@@ -269,7 +288,7 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   }
 
   assert(value.token == TOK_STRINGLIT && "Non-string solver name response");
-  solver_name = value.data;
+  solver_name = unquote(value.data);
   delete smtlib_output;
 
   // Duplicate / boilerplate;
@@ -295,8 +314,14 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
     std::runtime_error("Bad get-info :version response from solver");
 
   assert(val.token == TOK_STRINGLIT && "Non-string solver version response");
-  solver_version = val.data;
+  solver_version = unquote(val.data);
   delete smtlib_output;
+
+  log_status(
+    "Using external solver '{}' version '{}' with PID {}",
+    solver_name,
+    solver_version,
+    solver_proc_pid);
 }
 
 smtlib_convt::~smtlib_convt()
