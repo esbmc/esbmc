@@ -131,8 +131,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   targets.has_return_value = f.type.return_type().id() != "empty" &&
                              f.type.return_type().id() != "constructor" &&
                              f.type.return_type().id() != "destructor";
-  if(symbol.id == "c:@F@main#")
-    printf("Got it\n");
+
   goto_convert_rec(code, f.body);
 
   // add non-det return value, if needed
