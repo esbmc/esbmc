@@ -187,6 +187,9 @@ void goto_symext::symex_assign(
     case sideeffect2t::va_arg:
       symex_va_arg(lhs, effect);
       break;
+    case sideeffect2t::printf2:
+      // do nothing here
+      break;
     // No nondet side effect?
     default:
       assert(0 && "unexpected side effect");
