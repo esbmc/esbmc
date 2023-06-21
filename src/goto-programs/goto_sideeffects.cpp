@@ -720,6 +720,7 @@ void goto_convertt::remove_function_call(
   call.arguments() = expr.op1().operands();
   call.location() = new_symbol.location;
 
+  goto_programt tmp_program;
   const typet &ftype = call.function().type();
   if(
     ftype.return_type().id() == "constructor" &&
@@ -728,7 +729,21 @@ void goto_convertt::remove_function_call(
     // for copy constructor, we need to add the implicit `this` as the first argument,
     // so convert to:
     // BLAH(&return_value$_BLAH$1, ...)
-    assert(!"Got default copy cons");
+    side_effect_expr_function_callt cpy_ctor_call;
+    cpy_ctor_call.function() = call.function();
+    exprt::operandst &args = cpy_ctor_call.arguments();
+    address_of_exprt tmp_result = address_of_exprt(call.lhs());
+    // first push the implicit `this` arg
+    args.push_back(tmp_result);
+    // then append the remaining operands
+    args.insert(args.end(), call.arguments().begin(), call.arguments().end());
+    cpy_ctor_call.location() = call.location();
+    // now convert this expr to code
+    codet cpy_ctor_call_code("expression");
+    cpy_ctor_call_code.location() = call.location();
+    cpy_ctor_call_code.move_to_operands(cpy_ctor_call);
+
+    convert(cpy_ctor_call_code, tmp_program);
   }
   else
   {
@@ -740,10 +755,10 @@ void goto_convertt::remove_function_call(
     assignment.copy_to_operands(symbol_expr(new_symbol));
     assignment.move_to_operands(call);
 
-    goto_programt tmp_program;
     convert(assignment, tmp_program);
-    dest.destructive_append(tmp_program);
   }
+
+  dest.destructive_append(tmp_program);
 
   expr = symbol_expr(new_symbol);
 }
