@@ -2,3 +2,4 @@ KNOWNBUG
 main.c
 --overflow-check --64
 ^VERIFICATION FAILED$
+\bdereference failure: NULL pointer\b

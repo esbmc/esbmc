@@ -7,5 +7,5 @@ int main()
   int x = printf("%d", s);
   int y = printf("%f\n", ss);
   assert(x == 6);
-  assert(y == 3);
+  assert(y == 13);
 }
