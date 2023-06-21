@@ -241,9 +241,9 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   // Point lexer input at output stream
   smtlib_tokin = in_stream;
 
+  fprintf(out_stream, "(set-option :produce-models true)\n");
   fprintf(out_stream, "(set-logic %s)\n", logic.c_str());
   fprintf(out_stream, "(set-info :status unknown)\n");
-  fprintf(out_stream, "(set-option :produce-models true)\n");
 
   // Fetch solver name and version.
   fprintf(out_stream, "(get-info :name)\n");
