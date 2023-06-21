@@ -127,11 +127,18 @@ void printf_formattert::process_format(std::ostream &out)
       out << format_constant(to_address_of2t(op).ptr_obj);
     else
     {
-      // char array
       const expr2tc symbol2 = get_base_object(op);
       exprt char_array = migrate_expr_back(symbol2);
+
+      // string
       if(char_array.id() == "string-constant")
         out << char_array.value().as_string();
+
+      // char array
+      else if(char_array.id() == "symbol" && char_array.type().is_array())
+      {
+        // TODO
+      }
     }
   }
   break;
