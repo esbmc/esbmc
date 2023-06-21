@@ -7,7 +7,7 @@
 
 #include <pthread.h>
 
-unsigned int __ESBMC_get_thread_id(void);
+pthread_t __ESBMC_get_thread_id(void);
 
 #if !defined(__STORAGE__)
 

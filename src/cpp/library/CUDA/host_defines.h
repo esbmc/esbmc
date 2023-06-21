@@ -111,8 +111,7 @@ extern "C"
 #define __host__ __location__(host)
 #define __device__ __location__(device)
 #define __global__ __location__(global)
-//#define __shared__ \
-        __location__(shared)
+#define __shared__ __location__(shared)
 #define __constant__ __location__(constant)
 #define __managed__ __location__(managed)
 
