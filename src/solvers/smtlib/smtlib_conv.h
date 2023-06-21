@@ -273,9 +273,14 @@ public:
 
   void dump_smt() override;
 
+  template <typename... Ts>
+  void emit(Ts &&...);
+  void flush();
+
   // Members
   FILE *out_stream;
   FILE *in_stream;
+  void *org_sigpipe_handler;
   std::string solver_name;
   std::string solver_version;
 
@@ -305,6 +310,11 @@ public:
 
   /** Mapping of SMT function IDs to their names. XXX, incorrect size. */
   static const std::string smt_func_name_table[expr2t::end_expr_id];
+
+  struct external_process_died : std::runtime_error
+  {
+    using std::runtime_error::runtime_error;
+  };
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H */

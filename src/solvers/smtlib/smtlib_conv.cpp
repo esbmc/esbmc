@@ -7,8 +7,10 @@
 #include <smtlib_tok.hpp>
 #include <sstream>
 #ifndef _WIN32
-#include <unistd.h>
+# include <unistd.h>
+# include <signal.h>
 #endif
+
 const std::string smtlib_convt::smt_func_name_table[expr2t::end_expr_id] = {
   "hack_func_id",
   "invalid_func_id",
@@ -141,8 +143,8 @@ void smtlib_convt::dump_smt()
   {
     // TODO: this is a hack, in time we should fix this whole interface
     pre_solve();
-    fprintf(out_stream, "(check-sat)\n");
-    fflush(out_stream);
+    emit("(check-sat)\n");
+    flush();
     fclose(out_stream);
     log_status("SMT formula generated into output file {}", cmd);
     return;
@@ -184,9 +186,9 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
     solver_name = "Text output";
     solver_version = "";
 
-    fprintf(out_stream, "(set-logic %s)\n", logic.c_str());
-    fprintf(out_stream, "(set-info :status unknown)\n");
-    fprintf(out_stream, "(set-option :produce-models true)\n");
+    emit("(set-option :produce-models true)\n");
+    emit("(set-logic %s)\n", logic.c_str());
+    emit("(set-info :status unknown)\n");
 
     return;
   }
@@ -251,6 +253,13 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
     close(inpipe[1]);
     out_stream = fdopen(outpipe[1], "w");
     in_stream = fdopen(inpipe[0], "r");
+
+    org_sigpipe_handler = (void *)signal(SIGPIPE, SIG_IGN);
+    if(org_sigpipe_handler == SIG_ERR)
+    {
+      log_error("registering SIGPIPE handler: {}", strerror(errno));
+      abort();
+    }
   }
 #endif
   // Execution continues as the parent ESBMC process. Child dying will
@@ -260,13 +269,13 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   // Point lexer input at output stream
   smtlib_tokin = in_stream;
 
-  fprintf(out_stream, "(set-option :produce-models true)\n");
-  fprintf(out_stream, "(set-logic %s)\n", logic.c_str());
-  fprintf(out_stream, "(set-info :status unknown)\n");
+  emit("(set-option :produce-models true)\n");
+  emit("(set-logic %s)\n", logic.c_str());
+  emit("(set-info :status unknown)\n");
 
   // Fetch solver name and version.
-  fprintf(out_stream, "(get-info :name)\n");
-  fflush(out_stream);
+  emit("(get-info :name)\n");
+  flush();
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_INFO);
 
@@ -292,8 +301,8 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   delete smtlib_output;
 
   // Duplicate / boilerplate;
-  fprintf(out_stream, "(get-info :version)\n");
-  fflush(out_stream);
+  emit("(get-info :version)\n");
+  flush();
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_INFO);
 
@@ -327,6 +336,7 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
 smtlib_convt::~smtlib_convt()
 {
   delete_all_asts();
+  signal(SIGPIPE, (sighandler_t)org_sigpipe_handler);
 }
 
 std::string smtlib_convt::sort_to_string(const smt_sort *s) const
@@ -441,27 +451,26 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
 
   // Emit a let, assigning the result of this AST func to the sym.
   // For some reason let requires a double-braced operand.
-  fprintf(out_stream, "(let ((%s (", tempname.c_str());
+  emit("(let ((%s (", tempname.c_str());
 
   // This asts function
   assert(static_cast<int>(ast->kind) <= static_cast<int>(expr2t::end_expr_id));
   if(ast->kind == SMT_FUNC_EXTRACT)
   {
     // Extract is an indexed function
-    fprintf(
-      out_stream, "(_ extract %d %d)", ast->extract_high, ast->extract_low);
+    emit("(_ extract %d %d)", ast->extract_high, ast->extract_low);
   }
   else
   {
-    fprintf(out_stream, "%s", smt_func_name_table[ast->kind].c_str());
+    emit("%s", smt_func_name_table[ast->kind].c_str());
   }
 
   // Its operands
   for(unsigned long int i = 0; i < ast->args.size(); i++)
-    fprintf(out_stream, " %s", args[i].c_str());
+    emit(" %s", args[i].c_str());
 
   // End func enclosing brace, then operand to let (two braces).
-  fprintf(out_stream, ")))\n");
+  emit(")))\n");
 
   // We end with one additional brace level.
   output = tempname;
@@ -477,10 +486,10 @@ smt_convt::resultt smtlib_convt::dec_solve()
   // Emit constraints
   // check-sat
 
-  fprintf(out_stream, "(check-sat)\n");
+  emit("(check-sat)\n");
 
   // Flush out command, starting model check
-  fflush(out_stream);
+  flush();
 
   // If we're just outputing to a file, this is where we terminate.
   if(in_stream == nullptr)
@@ -518,8 +527,8 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
   assert(sa->kind == SMT_FUNC_SYMBOL && "Non-symbol in smtlib expr get_bv()");
   std::string name = sa->symname;
 
-  fprintf(out_stream, "(get-value (|%s|))\n", name.c_str());
-  fflush(out_stream);
+  emit("(get-value (|%s|))\n", name.c_str());
+  flush();
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_VALUE);
 
@@ -593,13 +602,12 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
 
   // XXX -- double bracing this may be a Z3 ecentricity
   uint64_t domain_width = array->sort->get_domain_width();
-  fprintf(
-    out_stream,
+  emit(
     "(get-value ((select |%s| (_ bv%" PRIu64 " %" PRIu64 "))))\n",
     name.c_str(),
     index,
     domain_width);
-  fflush(out_stream);
+  flush();
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_VALUE);
 
@@ -734,22 +742,46 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
   return result;
 }
 
+static std::string read_all(FILE *in)
+{
+  std::string r;
+  char buf[4096];
+  for (size_t rd; (rd = fread(buf, 1, sizeof(buf), in));)
+    r.insert(r.size(), buf, rd);
+  return r;
+}
+
+template <typename... Ts>
+void smtlib_convt::emit(Ts &&... ts)
+{
+  errno = 0;
+  if(fprintf(out_stream, ts...) < 0 && errno == EPIPE)
+    throw external_process_died(read_all(in_stream));
+}
+
+void smtlib_convt::flush()
+{
+  errno = 0;
+  if(fflush(out_stream) == EOF && errno == EPIPE)
+    throw external_process_died(read_all(in_stream));
+}
+
 bool smtlib_convt::get_bool(smt_astt a)
 {
-  fprintf(out_stream, "(get-value (");
+  emit("(get-value (");
 
   std::string output;
   unsigned int brace_level =
     emit_ast(static_cast<const smtlib_smt_ast *>(a), output);
-  fprintf(out_stream, "%s", output.c_str());
+  emit("%s", output.c_str());
 
   // Emit a ton of end braces.
   for(unsigned int i = 0; i < brace_level; i++)
-    fputc(')', out_stream);
+    emit("%c", ')');
 
-  fprintf(out_stream, "))\n");
+  emit("))\n");
 
-  fflush(out_stream);
+  flush();
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_VALUE);
 
@@ -813,7 +845,7 @@ void smtlib_convt::assert_ast(smt_astt a)
   const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(a);
 
   // Encode an assertion
-  fprintf(out_stream, "(assert\n");
+  emit("(assert\n");
 
   // The algorithm: descend through the AST operands, binding values to
   // temporary symbols, then emit functions on those temporary symbols.
@@ -824,14 +856,14 @@ void smtlib_convt::assert_ast(smt_astt a)
   unsigned int brace_level = emit_ast(sa, output);
 
   // Emit the final temporary symbol - this is what gets asserted.
-  fprintf(out_stream, "%s", output.c_str());
+  emit("%s", output.c_str());
 
   // Emit a ton of end braces.
   for(unsigned int i = 0; i < brace_level; i++)
-    fputc(')', out_stream);
+    emit("%c", ')');
 
   // Final brace for closing the 'assert'.
-  fprintf(out_stream, ")\n");
+  emit(")\n");
 }
 
 smt_astt smtlib_convt::mk_smt_int(const BigInt &theint)
@@ -890,8 +922,7 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     return a;
 
   // As this is the first time, declare that symbol to the solver.
-  fprintf(
-    out_stream,
+  emit(
     "(declare-fun |%s| () %s)\n",
     name.c_str(),
     sort_to_string(s).c_str());
@@ -983,7 +1014,7 @@ void smtlib_convt::push_ctx()
   smt_convt::push_ctx();
   temp_sym_count.push_back(temp_sym_count.back());
 
-  fprintf(out_stream, "(push 1)\n");
+  emit("(push 1)\n");
 }
 
 smt_astt smtlib_convt::mk_add(smt_astt a, smt_astt b)
@@ -1483,7 +1514,7 @@ smt_astt smtlib_convt::mk_isint(smt_astt a)
 
 void smtlib_convt::pop_ctx()
 {
-  fprintf(out_stream, "(pop 1)\n");
+  emit("(pop 1)\n");
 
   // Wipe this level of symbol table.
   symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();
