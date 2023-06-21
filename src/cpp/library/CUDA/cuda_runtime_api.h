@@ -5,6 +5,7 @@
 #include "host_defines.h"
 #include "builtin_types.h"
 #include "cuda_device_runtime_api.h"
+#include "sm_atomic_functions.h"
 #include "cuda_error.h"
 #include "call_kernel.h"
 
@@ -48,6 +49,37 @@ template <class T1, class T2>
 cudaError_t cudaMemcpy(T1 dst, T2 src, size_t count, enum cudaMemcpyKind kind)
 {
   return __cudaMemcpy(dst, src, count, kind);
+}
+
+cudaError_t cudaMalloc(void **devPtr, size_t size)
+{
+  cudaError_t tmp;
+  //pre-conditions
+  __ESBMC_assert(size > 0, "Size to be allocated may not be less than zero");
+  *devPtr = malloc(size);
+
+  if(*devPtr == NULL)
+  {
+    tmp = CUDA_ERROR_OUT_OF_MEMORY;
+    exit(1);
+  }
+  else
+  {
+    tmp = CUDA_SUCCESS;
+  }
+
+  //post-conditions
+  __ESBMC_assert(tmp == CUDA_SUCCESS, "Memory was not allocated");
+
+  lastError = tmp;
+  return tmp;
+}
+
+cudaError_t cudaFree(void *devPtr)
+{
+  free(devPtr);
+  lastError = CUDA_SUCCESS;
+  return CUDA_SUCCESS;
 }
 
 const char *cudaGetErrorString(cudaError_t error)
@@ -487,6 +519,69 @@ cudaGetDeviceProperties(struct cudaDeviceProp *prop, int device)
 cudaError_t cudaGetLastError()
 {
   return lastError;
+}
+
+typedef struct threadsList
+{
+  pthread_t thread;
+  struct threadsList *prox;
+} threadsList_t;
+
+threadsList_t *cudaThreadList = NULL;
+
+cudaError_t cudaThreadSynchronize()
+{
+  cudaError_t tmp;
+
+  while(cudaThreadList != NULL)
+  {
+    threadsList_t *node;
+    pthread_join(cudaThreadList->thread, NULL);
+    node = cudaThreadList;
+    cudaThreadList = cudaThreadList->prox;
+    free(node);
+  }
+  lastError = CUDA_SUCCESS;
+  return CUDA_SUCCESS;
+}
+
+extern __device__ __cudart_builtin__ cudaError_t CUDARTAPI
+cudaDeviceGetAttribute(int *value, enum cudaDeviceAttr attr, int device)
+{
+  lastError = CUDA_SUCCESS;
+  return CUDA_SUCCESS;
+}
+
+cudaError_t cudaDeviceGetLimit(int device)
+{
+  lastError = CUDA_SUCCESS;
+  return CUDA_SUCCESS;
+}
+
+cudaError_t cudaDeviceGetCacheConfig(int device)
+{
+  lastError = CUDA_SUCCESS;
+  return CUDA_SUCCESS;
+}
+
+cudaError_t cudaDeviceGetSharedMemConfig(int device)
+{
+  lastError = CUDA_SUCCESS;
+  return CUDA_SUCCESS;
+}
+
+cudaError_t cudaPeekAtLastError(int device)
+{
+  lastError = CUDA_SUCCESS;
+  return CUDA_SUCCESS;
+}
+
+void __syncthreads()
+{
+}
+
+void __threadfence()
+{
 }
 
 extern __host__ __cudart_builtin__ cudaError_t CUDARTAPI

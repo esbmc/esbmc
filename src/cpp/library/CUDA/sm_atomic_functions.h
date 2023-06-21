@@ -1,3 +1,6 @@
+#if !defined(__SM_ATOMIC_FUNCTIONS_H__)
+#define __SM_ATOMIC_FUNCTIONS_H__
+
 #include "vector_types.h"
 
 /*DEVICE_BUILTIN*/
@@ -730,3 +733,5 @@ atomicXor(unsigned long long *address, unsigned long long val)
 {
   return __ullAtomicXor(address, val);
 }
+
+#endif /* !__SM_ATOMIC_FUNCTIONS_H__ */
