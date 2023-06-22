@@ -284,15 +284,51 @@ public:
   void dump_smt() override;
 
   template <typename... Ts>
-  void emit(Ts &&...) const;
+  void emit(const Ts &...) const;
   void flush() const;
 
   // Members
-  FILE *out_stream;
-  FILE *in_stream;
-  void *org_sigpipe_handler;
-  std::string solver_name;
-  std::string solver_version;
+
+  struct process_emitter
+  {
+    FILE *out_stream;
+    FILE *in_stream;
+    void *org_sigpipe_handler; /* TODO: static */
+
+    std::string solver_name;
+    std::string solver_version;
+
+    explicit process_emitter(const std::string &cmd);
+    process_emitter(const process_emitter &) = delete;
+
+    ~process_emitter() noexcept;
+
+    process_emitter & operator=(const process_emitter &) = delete;
+
+    template <typename... Ts>
+    void emit(Ts &&...) const;
+    void flush() const;
+
+    explicit operator bool() const noexcept;
+  } emit_proc;
+
+  struct file_emitter
+  {
+    FILE *out_stream;
+
+    explicit file_emitter(const std::string &path);
+    file_emitter(const file_emitter &) = delete;
+
+    ~file_emitter() noexcept;
+
+    file_emitter & operator=(const file_emitter &) = delete;
+
+    template <typename... Ts>
+    void emit(Ts &&...) const;
+    void flush() const;
+
+    explicit operator bool() const noexcept;
+  } emit_opt_output;
 
   // Actual solving data
   // The set of symbols and their sorts.

@@ -139,71 +139,45 @@ smt_convt *create_new_smtlib_solver(
 
 void smtlib_convt::dump_smt()
 {
-  auto cmd = config.options.get_option("output");
-  if(cmd != "")
-  {
-    // TODO: this is a hack, in time we should fix this whole interface
-    pre_solve();
-    emit("(check-sat)\n");
-    flush();
-    fclose(out_stream);
-    log_status("SMT formula generated into output file {}", cmd);
-    return;
-  }
-  log_error(
-    "[smtlib] current interface is limited to output only. Please, specify "
-    "(--output)");
-  abort();
+  auto path = config.options.get_option("output");
+  if(path != "")
+    log_status("SMT formula written to output file {}", path);
 }
 
-smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
-  : smt_convt(_ns, _options), array_iface(false, false), fp_convt(this)
+smtlib_convt::file_emitter::file_emitter(const std::string &path)
+: out_stream(nullptr)
 {
-  std::string cmd;
-
-  std::string logic =
-    (options.get_bool_option("int-encoding")) ? "QF_AUFLIRA" : "QF_AUFBV";
-
   // We may be being instructed to just output to a file.
-  cmd = config.options.get_option("output");
-  if(cmd != "")
-  {
-    if(config.options.get_option("smtlib-solver-prog") != "")
-    {
-      log_error("Can't solve SMTLIB output and write to a file, sorry");
-      abort();
-    }
-
-    // Open a file, do nothing else.
-    out_stream = fopen(cmd.c_str(), "w");
-    if(!out_stream)
-    {
-      log_error("Failed to open \"{}\"", cmd);
-      abort();
-    }
-
-    in_stream = nullptr;
-    solver_name = "Text output";
-    solver_version = "";
-
-    emit("(set-option :produce-models true)\n");
-    emit("(set-logic %s)\n", logic.c_str());
-    emit("(set-info :status unknown)\n");
-
+  if(path == "")
     return;
+
+  // Open a file, do nothing else.
+  out_stream = fopen(path.c_str(), "w");
+  if(!out_stream)
+  {
+    log_error("Failed to open \"{}\": {}", path, strerror(errno));
+    abort();
   }
+}
+
+smtlib_convt::file_emitter::~file_emitter()
+{
+  if(out_stream)
+    fclose(out_stream);
+}
+
+smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
+: out_stream(nullptr)
+, in_stream(nullptr)
+, org_sigpipe_handler(nullptr)
+{
+  if(cmd == "")
+    return;
 
   // Setup: open a pipe to the smtlib solver. There seems to be no standard C++
   // way of opening a stream from an fd, so use C file streams.
 
   int inpipe[2], outpipe[2];
-
-  cmd = config.options.get_option("smtlib-solver-prog");
-  if(cmd == "")
-  {
-    log_error("Must specify an smtlib solver program in smtlib mode");
-    abort();
-  }
 
 #ifdef _WIN32
   // TODO: The current implementation uses UNIX Process
@@ -269,10 +243,6 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   // Point lexer input at output stream
   smtlib_tokin = in_stream;
 
-  emit("(set-option :produce-models true)\n");
-  emit("(set-logic %s)\n", logic.c_str());
-  emit("(set-info :status unknown)\n");
-
   // Fetch solver name and version.
   emit("(get-info :name)\n");
   flush();
@@ -333,10 +303,34 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
     solver_proc_pid);
 }
 
+smtlib_convt::process_emitter::~process_emitter()
+{
+  if(out_stream)
+    fclose(out_stream);
+  if(in_stream)
+    fclose(in_stream);
+  if(org_sigpipe_handler)
+    signal(SIGPIPE, (sighandler_t)org_sigpipe_handler);
+}
+
+smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
+  : smt_convt(_ns, _options),
+    array_iface(false, false),
+    fp_convt(this),
+    emit_proc(_options.get_option("smtlib-solver-prog")),
+    emit_opt_output(_options.get_option("output"))
+{
+  std::string logic =
+    options.get_bool_option("int-encoding") ? "QF_AUFLIRA" : "QF_AUFBV";
+
+  emit("(set-option :produce-models true)\n");
+  emit("(set-logic %s)\n", logic.c_str());
+  emit("(set-info :status unknown)\n");
+}
+
 smtlib_convt::~smtlib_convt()
 {
   delete_all_asts();
-  signal(SIGPIPE, (sighandler_t)org_sigpipe_handler);
 }
 
 std::string smtlib_convt::sort_to_string(const smt_sort *s) const
@@ -507,16 +501,15 @@ void smtlib_smt_ast::dump() const
   /* XXX fbrausse: Hack. No worries though, the context is dynamically allocated
    * and we're restoring its state at the end of this function. */
   smtlib_convt *ctx_m = const_cast<smtlib_convt *>(ctx);
-  FILE *tmp_out = std::exchange(ctx_m->out_stream, stderr);
-  FILE *tmp_in = std::exchange(ctx_m->in_stream, nullptr);
+  FILE *tmp_file = std::exchange(ctx_m->emit_opt_output.out_stream, stderr);
+  FILE *tmp_proc = std::exchange(ctx_m->emit_proc.out_stream, nullptr);
 
   ctx->emit_ast(this);
-
   ctx->emit("\n");
   ctx->flush();
 
-  ctx_m->out_stream = tmp_out;
-  ctx_m->in_stream = tmp_in;
+  ctx_m->emit_opt_output.out_stream = tmp_file;
+  ctx_m->emit_proc.out_stream = tmp_proc;
 }
 
 smt_convt::resultt smtlib_convt::dec_solve()
@@ -534,7 +527,7 @@ smt_convt::resultt smtlib_convt::dec_solve()
   flush();
 
   // If we're just outputing to a file, this is where we terminate.
-  if(in_stream == nullptr)
+  if(!emit_proc)
     return smt_convt::P_SMTLIB;
 
   // And read in the output
@@ -564,6 +557,8 @@ smt_convt::resultt smtlib_convt::dec_solve()
 
 BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
 {
+  assert(emit_proc);
+
   // This should always be a symbol.
   const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(a);
   assert(sa->kind == SMT_FUNC_SYMBOL && "Non-symbol in smtlib expr get_bv()");
@@ -637,6 +632,8 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
 expr2tc
 smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
 {
+  assert(emit_proc);
+
   // This should always be a symbol.
   const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(array);
   assert(sa->kind == SMT_FUNC_SYMBOL && "Non-symbol in smtlib get_array_elem");
@@ -794,22 +791,66 @@ static std::string read_all(FILE *in)
 }
 
 template <typename... Ts>
-void smtlib_convt::emit(Ts &&... ts) const
+void smtlib_convt::emit(const Ts &... ts) const
 {
+  if(emit_proc)
+    emit_proc.emit(ts...);
+  if(emit_opt_output)
+    emit_opt_output.emit(ts...);
+}
+
+void smtlib_convt::flush() const
+{
+  if(emit_proc)
+    emit_proc.flush();
+  if(emit_opt_output)
+    emit_opt_output.flush();
+}
+
+smtlib_convt::process_emitter::operator bool() const noexcept
+{
+  return out_stream != nullptr;
+}
+
+template <typename... Ts>
+void smtlib_convt::process_emitter::emit(Ts &&... ts) const
+{
+  /* TODO: other error handling */
   errno = 0;
   if(fprintf(out_stream, ts...) < 0 && errno == EPIPE)
     throw external_process_died(read_all(in_stream));
 }
 
-void smtlib_convt::flush() const
+void smtlib_convt::process_emitter::flush() const
 {
+  /* TODO: other error handling */
   errno = 0;
   if(fflush(out_stream) == EOF && errno == EPIPE)
     throw external_process_died(read_all(in_stream));
 }
 
+smtlib_convt::file_emitter::operator bool() const noexcept
+{
+  return out_stream != nullptr;
+}
+
+template <typename... Ts>
+void smtlib_convt::file_emitter::emit(Ts &&... ts) const
+{
+  /* TODO: error handling */
+  fprintf(out_stream, ts...);
+}
+
+void smtlib_convt::file_emitter::flush() const
+{
+  /* TODO: error handling */
+  fflush(out_stream);
+}
+
 bool smtlib_convt::get_bool(smt_astt a)
 {
+  assert(emit_proc);
+
   emit("(get-value (");
 
   emit_ast(static_cast<const smtlib_smt_ast *>(a));
@@ -866,13 +907,13 @@ bool smtlib_convt::get_bool(smt_astt a)
 
 const std::string smtlib_convt::solver_text()
 {
-  if(in_stream == nullptr)
-  {
-    // Text output
-    return solver_name;
-  }
+  if(emit_proc)
+    return emit_proc.solver_name + " version " + emit_proc.solver_version;
 
-  return solver_name + " version " + solver_version;
+  if(emit_opt_output)
+    return "Text output";
+
+  return "<smtlib:none>";
 }
 
 void smtlib_convt::assert_ast(smt_astt a)
