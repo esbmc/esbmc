@@ -6,7 +6,7 @@ int main()
   double ss= 10000.21;
   int x = printf("%d", s);
   int y = printf("%f\n", ss);
-#ifndef WIN32
+#ifndef _WIN32
   assert(x == 6);
   assert(y == 13);
 #endif
