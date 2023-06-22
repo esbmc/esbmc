@@ -6,14 +6,12 @@ void array2string(const symbolt &src, exprt &dest)
     return;
 
   std::string value_str;
-  int cnt = 0;
+  size_t cnt = 0;
   forall_operands(it, src.value)
   {
     std::string op_str = it->cformat().as_string();
     if(cnt < src.value.operands().size() - 1)
       value_str.push_back(op_str[1]);
-    else
-      value_str.push_back('\0');
     cnt++;
   }
 
