@@ -267,12 +267,16 @@ public:
   get_array_elem(smt_astt array, uint64_t index, const type2tc &type) override;
 
   std::string sort_to_string(const smt_sort *s) const;
+
   unsigned int
   emit_terminal_ast(const smtlib_smt_ast *a, std::string &output) const;
+
   unsigned int emit_ast(
     const smtlib_smt_ast *ast,
     std::string &output,
     unsigned long &temp_sym_counter) const;
+
+  void emit_ast(const smtlib_smt_ast *ast) const;
 
   void push_ctx() override;
   void pop_ctx() override;
