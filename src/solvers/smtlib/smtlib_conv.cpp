@@ -7,8 +7,8 @@
 #include <smtlib_tok.hpp>
 #include <sstream>
 #ifndef _WIN32
-# include <unistd.h>
-# include <signal.h>
+#include <unistd.h>
+#include <signal.h>
 #endif
 
 /** Mapping of SMT function IDs to their names. */
@@ -145,7 +145,7 @@ void smtlib_convt::dump_smt()
 }
 
 smtlib_convt::file_emitter::file_emitter(const std::string &path)
-: out_stream(nullptr)
+  : out_stream(nullptr)
 {
   // We may be being instructed to just output to a file.
   if(path == "")
@@ -167,9 +167,7 @@ smtlib_convt::file_emitter::~file_emitter()
 }
 
 smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
-: out_stream(nullptr)
-, in_stream(nullptr)
-, org_sigpipe_handler(nullptr)
+  : out_stream(nullptr), in_stream(nullptr), org_sigpipe_handler(nullptr)
 {
   if(cmd == "")
     return;
@@ -360,9 +358,9 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
   }
 }
 
-unsigned int
-smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
-  const
+unsigned int smtlib_convt::emit_terminal_ast(
+  const smtlib_smt_ast *ast,
+  std::string &output) const
 {
   std::stringstream ss;
   const smtlib_smt_sort *sort = static_cast<const smtlib_smt_sort *>(ast->sort);
