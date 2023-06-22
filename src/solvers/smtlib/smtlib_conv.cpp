@@ -226,7 +226,7 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
     out_stream = fdopen(outpipe[1], "w");
     in_stream = fdopen(inpipe[0], "r");
 
-    org_sigpipe_handler = (void *)signal(SIGPIPE, SIG_IGN);
+    org_sigpipe_handler = reinterpret_cast<void *>(signal(SIGPIPE, SIG_IGN));
     if(org_sigpipe_handler == SIG_ERR)
     {
       log_error("registering SIGPIPE handler: {}", strerror(errno));
@@ -308,7 +308,7 @@ smtlib_convt::process_emitter::~process_emitter() noexcept
   if(in_stream)
     fclose(in_stream);
   if(org_sigpipe_handler)
-    signal(SIGPIPE, (sighandler_t)org_sigpipe_handler);
+    signal(SIGPIPE, reinterpret_cast<void (*)(int)>(org_sigpipe_handler));
 }
 
 smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
