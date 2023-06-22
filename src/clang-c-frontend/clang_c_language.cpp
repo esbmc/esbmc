@@ -14,15 +14,11 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/clang_c_main.h>
 #include <clang-c-frontend/expr2c.h>
 #include <sstream>
-#include <fstream>
-#include <regex>
 #include <util/c_link.h>
 
 #include <util/filesystem.h>
 
 #include <ac_config.h>
-
-std::map<std::string, std::vector<std::string>> clang_c_languaget::includes_map;
 
 languaget *new_clang_c_language()
 {
@@ -305,36 +301,8 @@ void clang_c_languaget::force_file_type()
   compiler_args.push_back("c");
 }
 
-std::vector<std::string> get_list_of_headers(const std::string &path)
-{
-  std::ifstream input_file(path);
-  std::string line;
-  std::vector<std::string> res;
-  std::regex reg("^\\s*\\#\\s*include\\s*(?:<(.+)>|\"(.+)\")");
-  while(std::getline(input_file, line))
-  {
-    std::smatch match;
-    // If succesful, "match" will have 3 strings in it
-    // (with either the second or the third string being empty)
-    if(std::regex_search(line, match, reg))
-    {
-      // This will contain the match for the "#include <...>" pattern
-      if(!match[1].str().empty())
-        res.push_back(match[1]);
-
-      // This will contain the match for the "#include "..."" pattern
-      if(!match[2].str().empty())
-        res.push_back(match[2]);
-    }
-  }
-  return res;
-}
-
 bool clang_c_languaget::parse(const std::string &path)
 {
-  std::vector<std::string> includes = get_list_of_headers(path);
-  includes_map[path].insert(
-    includes_map[path].end(), includes.begin(), includes.end());
   // preprocessing
 
   std::ostringstream o_preprocessed;
