@@ -159,7 +159,6 @@ void smtlib_convt::dump_smt()
 smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   : smt_convt(_ns, _options), array_iface(false, false), fp_convt(this)
 {
-  temp_sym_count.push_back(1);
   std::string cmd;
 
   std::string logic =
@@ -802,8 +801,9 @@ bool smtlib_convt::get_bool(smt_astt a)
   emit("(get-value (");
 
   std::string output;
+  unsigned long temp_sym_counter = 1UL;
   unsigned int brace_level =
-    emit_ast(static_cast<const smtlib_smt_ast *>(a), output, temp_sym_count.back());
+    emit_ast(static_cast<const smtlib_smt_ast *>(a), output, temp_sym_counter);
   emit("%s", output.c_str());
 
   // Emit a ton of end braces.
@@ -884,7 +884,8 @@ void smtlib_convt::assert_ast(smt_astt a)
   // braces are required.
   // This is inspired by the output from Z3 that I've seen.
   std::string output;
-  unsigned int brace_level = emit_ast(sa, output, temp_sym_count.back());
+  unsigned long temp_sym_counter = 1UL;
+  unsigned int brace_level = emit_ast(sa, output, temp_sym_counter);
 
   // Emit the final temporary symbol - this is what gets asserted.
   emit("%s", output.c_str());
@@ -1043,7 +1044,6 @@ int smtliberror(int startsym [[maybe_unused]], const std::string &error)
 void smtlib_convt::push_ctx()
 {
   smt_convt::push_ctx();
-  temp_sym_count.push_back(temp_sym_count.back());
 
   emit("(push 1)\n");
 }
@@ -1550,7 +1550,6 @@ void smtlib_convt::pop_ctx()
   // Wipe this level of symbol table.
   symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();
   syms_numindex.erase(ctx_level);
-  temp_sym_count.pop_back();
 
   smt_convt::pop_ctx();
 }

@@ -311,7 +311,7 @@ public:
     symbol_tablet;
 
   symbol_tablet symbol_table;
-  std::vector<unsigned long> temp_sym_count;
+
   static const std::string temp_prefix;
 
   struct external_process_died : std::runtime_error
