@@ -161,6 +161,8 @@ public:
   }
   ~smtlib_smt_ast() override = default;
 
+  void dump() const override;
+
   smt_func_kind kind;
   std::string symname;
   BigInt intval;

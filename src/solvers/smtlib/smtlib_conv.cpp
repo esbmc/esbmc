@@ -480,6 +480,34 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output, unsigned 
   return brace_level + 1;
 }
 
+void smtlib_smt_ast::dump() const
+{
+  const smtlib_convt *ctx = static_cast<const smtlib_convt *>(context);
+
+  /* XXX fbrausse: Hack. No worries though, the context is dynamically allocated
+   * and we're restoring its state at the end of this function. */
+  smtlib_convt *ctx_m = const_cast<smtlib_convt *>(ctx);
+  FILE *tmp_out = std::exchange(ctx_m->out_stream, stderr);
+  FILE *tmp_in = std::exchange(ctx_m->in_stream, nullptr);
+
+  std::string output;
+  unsigned long temp_sym_count = 1UL;
+  unsigned brace_level = ctx->emit_ast(this, output, temp_sym_count);
+
+  // Emit the final temporary symbol - this is what gets asserted.
+  ctx->emit("%s", output.c_str());
+
+  // Emit a ton of end braces.
+  for(unsigned int i = 0; i < brace_level; i++)
+    ctx->emit("%c", ')');
+
+  ctx->emit("\n");
+  ctx->flush();
+
+  ctx_m->out_stream = tmp_out;
+  ctx_m->in_stream = tmp_in;
+}
+
 smt_convt::resultt smtlib_convt::dec_solve()
 {
   pre_solve();
