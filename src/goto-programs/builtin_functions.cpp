@@ -649,8 +649,9 @@ void goto_convertt::do_function_call_symbol(
   }
   else if(
     base_name == "printf" || base_name == "fprintf" || base_name == "sprintf" ||
-    base_name == "snprintf")
+    base_name == "snprintf" || base_name == "__stdio_common_vfprintf")
   {
+    // "__stdio_common_vfprintf" for WINDOWS
     do_printf(lhs, function, arguments, dest);
   }
   else if(base_name == "__assert_rtn" || base_name == "__assert_fail")

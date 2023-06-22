@@ -8,4 +8,5 @@ int main()
   int y = printf("%f\n", ss);
   assert(x == 6);
   assert(y == 13);
+  x+=1;
 }

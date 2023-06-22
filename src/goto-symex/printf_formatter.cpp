@@ -121,25 +121,15 @@ void printf_formattert::process_format(std::ostream &out)
     if(next_operand == operands.end())
       break;
 
-    // this is the address of a string
+    // 1. address_of2t -> constant_string2t
+    // 2. address_of2t -> index2taddress_of2t -> constant_string2t
     const expr2tc &op = *(next_operand++);
-    if(is_address_of2t(op) && is_string_type(to_address_of2t(op).ptr_obj))
-      out << format_constant(to_address_of2t(op).ptr_obj);
-    else
-    {
-      const expr2tc symbol2 = get_base_object(op);
-      exprt char_array = migrate_expr_back(symbol2);
+    const expr2tc symbol2 = get_base_object(op);
+    exprt char_array = migrate_expr_back(symbol2);
 
-      // string
-      if(char_array.id() == "string-constant")
-        out << char_array.value().as_string();
-
-      // char array
-      else if(char_array.id() == "symbol" && char_array.type().is_array())
-      {
-        // TODO
-      }
-    }
+    // string
+    if(char_array.id() == "string-constant")
+      out << char_array.value().as_string();
   }
   break;
 
