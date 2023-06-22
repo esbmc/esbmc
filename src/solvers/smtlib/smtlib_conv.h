@@ -306,7 +306,7 @@ public:
     process_emitter &operator=(const process_emitter &) = delete;
 
     template <typename... Ts>
-    void emit(Ts &&...) const;
+    void emit(const char *fmt, Ts &&...) const;
     void flush() const;
 
     explicit operator bool() const noexcept;
@@ -324,7 +324,7 @@ public:
     file_emitter &operator=(const file_emitter &) = delete;
 
     template <typename... Ts>
-    void emit(Ts &&...) const;
+    void emit(const char *fmt, Ts &&...) const;
     void flush() const;
 
     explicit operator bool() const noexcept;
