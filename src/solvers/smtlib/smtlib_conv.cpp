@@ -105,12 +105,9 @@ smt_convt *create_new_smtlib_solver(
   fp_convt **fp_api)
 {
   if(!options.get_bool_option("smt-formula-only"))
-  {
-    log_error(
-      "[smtlib] the smtlib interface does not support solving for now. Please, "
-      "use it with --smt-formula-only");
-    abort();
-  }
+    log_warning(
+      "[smtlib] the smtlib interface solving is unstable. Please, "
+      "use it with --smt-formula-only for production");
   smtlib_convt *conv = new smtlib_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
