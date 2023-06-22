@@ -392,10 +392,10 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
         sort->get_data_width() <= 64 &&
         "smtlib printer assumes no numbers more "
         "than 64 bits wide, sorry");
-      unsigned int theval = ast->intval.to_uint64();
+      uint64_t theval = ast->intval.to_uint64();
       if(sort->get_data_width() < 64)
       {
-        unsigned int mask = 1ULL << sort->get_data_width();
+        uint64_t mask = 1ULL << sort->get_data_width();
         mask -= 1;
         theval &= mask;
       }
