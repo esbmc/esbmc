@@ -242,7 +242,7 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
   smtlib_tokin = in_stream;
 
   // Fetch solver name and version.
-  emit("(get-info :name)\n");
+  emit("%s", "(get-info :name)\n");
   flush();
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_INFO);
@@ -321,9 +321,9 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   std::string logic =
     options.get_bool_option("int-encoding") ? "QF_AUFLIRA" : "QF_AUFBV";
 
-  emit("(set-option :produce-models true)\n");
+  emit("%s", "(set-option :produce-models true)\n");
   emit("(set-logic %s)\n", logic.c_str());
-  emit("(set-info :status unknown)\n");
+  emit("%s", "(set-info :status unknown)\n");
 }
 
 smtlib_convt::~smtlib_convt()
