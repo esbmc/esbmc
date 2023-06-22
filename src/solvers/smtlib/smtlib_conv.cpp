@@ -233,7 +233,6 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
       abort();
     }
   }
-#endif
   // Execution continues as the parent ESBMC process. Child dying will
   // trigger SIGPIPE or an EOF eventually, which we'll be able to detect
   // and crash upon.
@@ -299,6 +298,7 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
     solver_name,
     solver_version,
     solver_proc_pid);
+#endif
 }
 
 smtlib_convt::process_emitter::~process_emitter() noexcept
@@ -307,8 +307,10 @@ smtlib_convt::process_emitter::~process_emitter() noexcept
     fclose(out_stream);
   if(in_stream)
     fclose(in_stream);
+#ifndef _WIN32
   if(org_sigpipe_handler)
     signal(SIGPIPE, reinterpret_cast<void (*)(int)>(org_sigpipe_handler));
+#endif
 }
 
 smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
