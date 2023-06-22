@@ -1,4 +1,4 @@
 CORE
 main.c
---64 --k-induction
+--32 --k-induction
 ^VERIFICATION SUCCESSFUL$

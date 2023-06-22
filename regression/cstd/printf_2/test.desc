@@ -1,4 +1,4 @@
 CORE
 main.c
---overflow-check --64
+--overflow-check --32
 ^VERIFICATION SUCCESSFUL$
