@@ -303,7 +303,7 @@ public:
 
     ~process_emitter() noexcept;
 
-    process_emitter & operator=(const process_emitter &) = delete;
+    process_emitter &operator=(const process_emitter &) = delete;
 
     template <typename... Ts>
     void emit(Ts &&...) const;
@@ -321,7 +321,7 @@ public:
 
     ~file_emitter() noexcept;
 
-    file_emitter & operator=(const file_emitter &) = delete;
+    file_emitter &operator=(const file_emitter &) = delete;
 
     template <typename... Ts>
     void emit(Ts &&...) const;
