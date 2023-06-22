@@ -369,6 +369,7 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
 
 unsigned int
 smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
+  const
 {
   std::stringstream ss;
   const smtlib_smt_sort *sort = static_cast<const smtlib_smt_sort *>(ast->sort);
@@ -422,7 +423,7 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
 }
 
 unsigned int
-smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
+smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output, unsigned long &temp_sym_counter) const
 {
   unsigned int brace_level = 0;
   assert(ast->args.size() <= 4);
@@ -443,10 +444,10 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
 
   for(unsigned long int i = 0; i < ast->args.size(); i++)
     brace_level +=
-      emit_ast(static_cast<const smtlib_smt_ast *>(ast->args[i]), args[i]);
+      emit_ast(static_cast<const smtlib_smt_ast *>(ast->args[i]), args[i], temp_sym_counter);
 
   // Get a temporary sym name
-  unsigned int tempnum = temp_sym_count.back()++;
+  unsigned int tempnum = temp_sym_counter++;
   std::stringstream ss;
   ss << "?x" << tempnum;
   std::string tempname = ss.str();
@@ -754,14 +755,14 @@ static std::string read_all(FILE *in)
 }
 
 template <typename... Ts>
-void smtlib_convt::emit(Ts &&... ts)
+void smtlib_convt::emit(Ts &&... ts) const
 {
   errno = 0;
   if(fprintf(out_stream, ts...) < 0 && errno == EPIPE)
     throw external_process_died(read_all(in_stream));
 }
 
-void smtlib_convt::flush()
+void smtlib_convt::flush() const
 {
   errno = 0;
   if(fflush(out_stream) == EOF && errno == EPIPE)
@@ -774,7 +775,7 @@ bool smtlib_convt::get_bool(smt_astt a)
 
   std::string output;
   unsigned int brace_level =
-    emit_ast(static_cast<const smtlib_smt_ast *>(a), output);
+    emit_ast(static_cast<const smtlib_smt_ast *>(a), output, temp_sym_count.back());
   emit("%s", output.c_str());
 
   // Emit a ton of end braces.
@@ -855,7 +856,7 @@ void smtlib_convt::assert_ast(smt_astt a)
   // braces are required.
   // This is inspired by the output from Z3 that I've seen.
   std::string output;
-  unsigned int brace_level = emit_ast(sa, output);
+  unsigned int brace_level = emit_ast(sa, output, temp_sym_count.back());
 
   // Emit the final temporary symbol - this is what gets asserted.
   emit("%s", output.c_str());
