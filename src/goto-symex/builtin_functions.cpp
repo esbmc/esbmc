@@ -23,6 +23,7 @@
 #include <util/std_types.h>
 #include <vector>
 #include <algorithm>
+#include <util/array2string.h>
 
 expr2tc goto_symext::symex_malloc(const expr2tc &lhs, const sideeffect2t &code)
 {
@@ -355,6 +356,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 
   if(!is_nil_expr(lhs))
   {
+    // get the return value from code_printf2tc
     // 1. covert code_printf2tc back to sideeffect2tc
     exprt rhs_expr = migrate_expr_back(rhs);
     exprt printf_code("sideeffect", migrate_type_back(lhs->type));
@@ -365,12 +367,27 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 
     migrate_expr(printf_code, rhs);
 
-    // 2. get the number of characters output (return value)
+    // 2 check if it is a char array. if so, convert it to a string
+    // this is due to printf_formatter does not handle the char array.
+    for(auto &arg : args)
+    {
+      if(is_array_type(get_base_object(arg)))
+      {
+        // the current expression "arg" does not hold the value info (might be a bug)
+        // thus we need to look it up from the symbol table
+        symbolt s = *ns.lookup(get_string_argument(arg));
+        exprt dest;
+        array2string(s, dest);
+        migrate_expr(dest, arg);
+      }
+    }
+
+    // 3 get the number of characters output (return value)
     printf_formattert printf_formatter;
     printf_formatter(fmt.as_string(), args);
     size_t outlen = printf_formatter.as_string().length();
 
-    // 3. do assign
+    // 4. do assign
     symex_assign(
       code_assign2tc(lhs, constant_int2tc(int_type2(), BigInt(outlen))));
   }
