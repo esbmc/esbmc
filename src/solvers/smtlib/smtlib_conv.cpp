@@ -269,7 +269,7 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
   delete smtlib_output;
 
   // Duplicate / boilerplate;
-  emit("(get-info :version)\n");
+  emit("%s", "(get-info :version)\n");
   flush();
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_INFO);
@@ -468,7 +468,7 @@ unsigned int smtlib_convt::emit_ast(
     emit(" %s", args[i].c_str());
 
   // End func enclosing brace, then operand to let (two braces).
-  emit(")))\n");
+  emit("%s", ")))\n");
 
   // We end with one additional brace level.
   output = tempname;
@@ -507,7 +507,7 @@ void smtlib_smt_ast::dump() const
   FILE *tmp_proc = std::exchange(ctx_m->emit_proc.out_stream, nullptr);
 
   ctx->emit_ast(this);
-  ctx->emit("\n");
+  ctx->emit("%s", "\n");
   ctx->flush();
 
   ctx_m->emit_opt_output.out_stream = tmp_file;
@@ -523,7 +523,7 @@ smt_convt::resultt smtlib_convt::dec_solve()
   // Emit constraints
   // check-sat
 
-  emit("(check-sat)\n");
+  emit("%s", "(check-sat)\n");
 
   // Flush out command, starting model check
   flush();
@@ -853,11 +853,11 @@ bool smtlib_convt::get_bool(smt_astt a)
 {
   assert(emit_proc);
 
-  emit("(get-value (");
+  emit("%s", "(get-value (");
 
   emit_ast(static_cast<const smtlib_smt_ast *>(a));
 
-  emit("))\n");
+  emit("%s", "))\n");
   flush();
 
   smtlib_send_start_code = 1;
@@ -923,12 +923,12 @@ void smtlib_convt::assert_ast(smt_astt a)
   const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(a);
 
   // Encode an assertion
-  emit("(assert\n");
+  emit("%s", "(assert\n");
 
   emit_ast(sa);
 
   // Final brace for closing the 'assert'.
-  emit(")\n");
+  emit("%s", ")\n");
 }
 
 smt_astt smtlib_convt::mk_smt_int(const BigInt &theint)
@@ -1075,7 +1075,7 @@ void smtlib_convt::push_ctx()
 {
   smt_convt::push_ctx();
 
-  emit("(push 1)\n");
+  emit("%s", "(push 1)\n");
 }
 
 smt_astt smtlib_convt::mk_add(smt_astt a, smt_astt b)
@@ -1575,7 +1575,7 @@ smt_astt smtlib_convt::mk_isint(smt_astt a)
 
 void smtlib_convt::pop_ctx()
 {
-  emit("(pop 1)\n");
+  emit("%s", "(pop 1)\n");
 
   // Wipe this level of symbol table.
   symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();
