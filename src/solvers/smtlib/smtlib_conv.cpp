@@ -413,8 +413,10 @@ unsigned int smtlib_convt::emit_terminal_ast(
   }
 }
 
-unsigned int
-smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output, unsigned long &temp_sym_counter) const
+unsigned int smtlib_convt::emit_ast(
+  const smtlib_smt_ast *ast,
+  std::string &output,
+  unsigned long &temp_sym_counter) const
 {
   unsigned int brace_level = 0;
   assert(ast->args.size() <= 4);
@@ -434,8 +436,10 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output, unsigned 
   }
 
   for(unsigned long int i = 0; i < ast->args.size(); i++)
-    brace_level +=
-      emit_ast(static_cast<const smtlib_smt_ast *>(ast->args[i]), args[i], temp_sym_counter);
+    brace_level += emit_ast(
+      static_cast<const smtlib_smt_ast *>(ast->args[i]),
+      args[i],
+      temp_sym_counter);
 
   // Get a temporary sym name
   unsigned int tempnum = temp_sym_counter++;
@@ -783,13 +787,13 @@ static std::string read_all(FILE *in)
 {
   std::string r;
   char buf[4096];
-  for (size_t rd; (rd = fread(buf, 1, sizeof(buf), in));)
+  for(size_t rd; (rd = fread(buf, 1, sizeof(buf), in));)
     r.insert(r.size(), buf, rd);
   return r;
 }
 
 template <typename... Ts>
-void smtlib_convt::emit(const Ts &... ts) const
+void smtlib_convt::emit(const Ts &...ts) const
 {
   if(emit_proc)
     emit_proc.emit(ts...);
@@ -811,7 +815,7 @@ smtlib_convt::process_emitter::operator bool() const noexcept
 }
 
 template <typename... Ts>
-void smtlib_convt::process_emitter::emit(Ts &&... ts) const
+void smtlib_convt::process_emitter::emit(Ts &&...ts) const
 {
   /* TODO: other error handling */
   errno = 0;
@@ -833,7 +837,7 @@ smtlib_convt::file_emitter::operator bool() const noexcept
 }
 
 template <typename... Ts>
-void smtlib_convt::file_emitter::emit(Ts &&... ts) const
+void smtlib_convt::file_emitter::emit(Ts &&...ts) const
 {
   /* TODO: error handling */
   fprintf(out_stream, ts...);
@@ -983,10 +987,7 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     return a;
 
   // As this is the first time, declare that symbol to the solver.
-  emit(
-    "(declare-fun |%s| () %s)\n",
-    name.c_str(),
-    sort_to_string(s).c_str());
+  emit("(declare-fun |%s| () %s)\n", name.c_str(), sort_to_string(s).c_str());
 
   return a;
 }
