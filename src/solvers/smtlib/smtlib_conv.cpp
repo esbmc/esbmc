@@ -11,7 +11,8 @@
 # include <signal.h>
 #endif
 
-const std::string smtlib_convt::smt_func_name_table[expr2t::end_expr_id] = {
+/** Mapping of SMT function IDs to their names. */
+static const std::array smt_func_name_table = {
   "hack_func_id",
   "invalid_func_id",
   "int_func_id",
@@ -424,6 +425,7 @@ unsigned int
 smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
 {
   unsigned int brace_level = 0;
+  assert(ast->args.size() <= 4);
   std::string args[4];
 
   switch(ast->kind)
@@ -454,7 +456,7 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
   emit("(let ((%s (", tempname.c_str());
 
   // This asts function
-  assert(static_cast<int>(ast->kind) <= static_cast<int>(expr2t::end_expr_id));
+  assert(static_cast<size_t>(ast->kind) < smt_func_name_table.size());
   if(ast->kind == SMT_FUNC_EXTRACT)
   {
     // Extract is an indexed function
@@ -462,7 +464,7 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
   }
   else
   {
-    emit("%s", smt_func_name_table[ast->kind].c_str());
+    emit("%s", smt_func_name_table[ast->kind]);
   }
 
   // Its operands
