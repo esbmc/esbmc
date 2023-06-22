@@ -815,11 +815,11 @@ smtlib_convt::process_emitter::operator bool() const noexcept
 }
 
 template <typename... Ts>
-void smtlib_convt::process_emitter::emit(Ts &&...ts) const
+void smtlib_convt::process_emitter::emit(const char *fmt, Ts &&...ts) const
 {
   /* TODO: other error handling */
   errno = 0;
-  if(fprintf(out_stream, ts...) < 0 && errno == EPIPE)
+  if(fprintf(out_stream, fmt, ts...) < 0 && errno == EPIPE)
     throw external_process_died(read_all(in_stream));
 }
 
@@ -837,10 +837,10 @@ smtlib_convt::file_emitter::operator bool() const noexcept
 }
 
 template <typename... Ts>
-void smtlib_convt::file_emitter::emit(Ts &&...ts) const
+void smtlib_convt::file_emitter::emit(const char *fmt, Ts &&...ts) const
 {
   /* TODO: error handling */
-  fprintf(out_stream, ts...);
+  fprintf(out_stream, fmt, ts...);
 }
 
 void smtlib_convt::file_emitter::flush() const
