@@ -479,6 +479,27 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output, unsigned 
   return brace_level + 1;
 }
 
+void smtlib_convt::emit_ast(const smtlib_smt_ast *ast) const
+{
+  // The algorithm: descend through the AST operands, binding values to
+  // temporary symbols, then emit functions on those temporary symbols.
+  // All recursively. The non-trivial bit is tracking how many ending
+  // braces are required.
+  // This is inspired by the output from Z3 that I've seen.
+
+  std::string output;
+  unsigned long temp_symbol_counter = 1UL;
+  unsigned int brace_level = emit_ast(ast, output, temp_symbol_counter);
+
+  /* Emit the final representation of the root, either a (possibly temporary)
+   * symbol, or that of a terminal. */
+  emit("%s", output.c_str());
+
+  // Emit a ton of end braces.
+  for(unsigned int i = 0; i < brace_level; i++)
+    emit("%c", ')');
+}
+
 void smtlib_smt_ast::dump() const
 {
   const smtlib_convt *ctx = static_cast<const smtlib_convt *>(context);
@@ -489,16 +510,7 @@ void smtlib_smt_ast::dump() const
   FILE *tmp_out = std::exchange(ctx_m->out_stream, stderr);
   FILE *tmp_in = std::exchange(ctx_m->in_stream, nullptr);
 
-  std::string output;
-  unsigned long temp_sym_count = 1UL;
-  unsigned brace_level = ctx->emit_ast(this, output, temp_sym_count);
-
-  // Emit the final temporary symbol - this is what gets asserted.
-  ctx->emit("%s", output.c_str());
-
-  // Emit a ton of end braces.
-  for(unsigned int i = 0; i < brace_level; i++)
-    ctx->emit("%c", ')');
+  ctx->emit_ast(this);
 
   ctx->emit("\n");
   ctx->flush();
@@ -800,19 +812,11 @@ bool smtlib_convt::get_bool(smt_astt a)
 {
   emit("(get-value (");
 
-  std::string output;
-  unsigned long temp_sym_counter = 1UL;
-  unsigned int brace_level =
-    emit_ast(static_cast<const smtlib_smt_ast *>(a), output, temp_sym_counter);
-  emit("%s", output.c_str());
-
-  // Emit a ton of end braces.
-  for(unsigned int i = 0; i < brace_level; i++)
-    emit("%c", ')');
+  emit_ast(static_cast<const smtlib_smt_ast *>(a));
 
   emit("))\n");
-
   flush();
+
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_VALUE);
 
@@ -878,21 +882,7 @@ void smtlib_convt::assert_ast(smt_astt a)
   // Encode an assertion
   emit("(assert\n");
 
-  // The algorithm: descend through the AST operands, binding values to
-  // temporary symbols, then emit functions on those temporary symbols.
-  // All recursively. The non-trivial bit is tracking how many ending
-  // braces are required.
-  // This is inspired by the output from Z3 that I've seen.
-  std::string output;
-  unsigned long temp_sym_counter = 1UL;
-  unsigned int brace_level = emit_ast(sa, output, temp_sym_counter);
-
-  // Emit the final temporary symbol - this is what gets asserted.
-  emit("%s", output.c_str());
-
-  // Emit a ton of end braces.
-  for(unsigned int i = 0; i < brace_level; i++)
-    emit("%c", ')');
+  emit_ast(sa);
 
   // Final brace for closing the 'assert'.
   emit(")\n");
