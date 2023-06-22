@@ -160,7 +160,7 @@ smtlib_convt::file_emitter::file_emitter(const std::string &path)
   }
 }
 
-smtlib_convt::file_emitter::~file_emitter()
+smtlib_convt::file_emitter::~file_emitter() noexcept
 {
   if(out_stream)
     fclose(out_stream);
@@ -301,7 +301,7 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
     solver_proc_pid);
 }
 
-smtlib_convt::process_emitter::~process_emitter()
+smtlib_convt::process_emitter::~process_emitter() noexcept
 {
   if(out_stream)
     fclose(out_stream);
