@@ -3482,8 +3482,7 @@ bool clang_c_convertert::is_member_decl_static(const clang::MemberExpr &member)
   return false;
 }
 
-bool clang_c_convertert::is_member_decl_enum(
-  const clang::MemberExpr &member)
+bool clang_c_convertert::is_member_decl_enum(const clang::MemberExpr &member)
 {
   // returns true if a MemberExpr refers to an enumerator
   // coming from an enum
