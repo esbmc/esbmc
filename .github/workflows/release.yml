@@ -14,13 +14,13 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_JIMPLE_FRONTEND=On -DENABLE_SOLIDITY_FRONTEND=On
-      - name: Build ESBMC
-        run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Linux.sh
-      - uses: actions/upload-artifact@v1
-        with:
-          name: release-linux
-          path: ./build/ESBMC-Linux.sh
+      run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_JIMPLE_FRONTEND=On -DENABLE_SOLIDITY_FRONTEND=On
+    - name: Build ESBMC
+      run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Linux.sh
+    - uses: actions/upload-artifact@v1
+      with:
+        name: release-linux
+        path: ./build/ESBMC-Linux.sh
 
 
   build-macos:
