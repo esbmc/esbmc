@@ -1,7 +1,4 @@
-/*
- * TC descirption:
- * class template, UDT for type parameter
- */
+// This is the original TC for cbmc/Templates36, WITH zero init assumption
 #include<cassert>
 
 // The orering of the following matters!
@@ -31,7 +28,6 @@ my_Z z;
 
 int main()
 {
-  z.some = 36;
-  assert(z.some==36);
+  assert(z.some==0);
   return 0;
 }

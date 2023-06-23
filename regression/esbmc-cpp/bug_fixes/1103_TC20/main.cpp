@@ -1,7 +1,4 @@
-/*
- * TC description:
- *  class template, type parameter, explicit specialization, inheritance
- */
+// This is the original TC for cbmc/Templates20, WITH zero init assumption
 #include <cassert>
 
 struct A
@@ -40,8 +37,7 @@ B<int> b1;
 
 int main()
 {
-  b1.t = 20;
-  assert(b1.t == 20);
+  assert(b1.t == 0);
   B<bool> b2;
   assert(b2.b == true);
 }

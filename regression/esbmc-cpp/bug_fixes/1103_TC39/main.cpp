@@ -1,7 +1,4 @@
-/*
- * TC description:
- *  class template, UDT(class) for type parameter, implicit template instantiation, data member has dependent type
- */
+// This is the original TC for cbmc/Templates, WITH zero init assumption
 #include<cassert>
 
 // define Z<>
@@ -30,7 +27,6 @@ my_Z z;
 
 int main()
 {
-  z.some = 39;
-  assert(z.some==39);
+  assert(z.some==0);
   return 0;
 }
