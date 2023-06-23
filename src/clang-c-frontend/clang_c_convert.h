@@ -40,6 +40,7 @@ class FloatingLiteral;
 class TagDecl;
 class FieldDecl;
 class MemberExpr;
+class EnumConstantDecl;
 } // namespace clang
 
 std::string
@@ -177,6 +178,8 @@ protected:
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
 
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
+
+  void get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
 
   virtual bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
 
