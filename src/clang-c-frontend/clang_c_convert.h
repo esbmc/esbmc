@@ -320,6 +320,11 @@ protected:
    * Function to check whether a MemberExpr references to a static variable
    */
   bool is_member_decl_static(const clang::MemberExpr &member);
+
+  /*
+   * Function to check whether a MemberExor references to an enumerator
+   */
+  bool is_member_decl_enum(const clang::MemberExpr &member);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
