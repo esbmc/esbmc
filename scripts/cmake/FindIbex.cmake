@@ -1,18 +1,18 @@
 # Module to find IBEX
 
-if(DOWNLOAD_DEPENDENCIES AND (NOT DEFINED IBEX_DIR))   
+if(DOWNLOAD_DEPENDENCIES AND (NOT DEFINED IBEX_DIR))
    include(CPM)
    CPMAddPackage(
       NAME ibex
       DOWNLOAD_ONLY YES
-      URL http://www.ibex-lib.org/ibex-2.8.9.tgz)   
-      
+      URL https://github.com/ibex-team/ibex-lib/archive/refs/tags/ibex-2.8.9.tar.gz)
+
    message("[ibex] Setting up ibex")
    if(ACADEMIC_BUILD)
-      execute_process(COMMAND ./waf --prefix=${ibex_BINARY_DIR} --lp-lib=soplex  configure 
+      execute_process(COMMAND ./waf --prefix=${ibex_BINARY_DIR} --lp-lib=soplex  configure
          WORKING_DIRECTORY ${ibex_SOURCE_DIR})
    else()
-      execute_process(COMMAND ./waf --prefix=${ibex_BINARY_DIR} configure 
+      execute_process(COMMAND ./waf --prefix=${ibex_BINARY_DIR} configure
          WORKING_DIRECTORY ${ibex_SOURCE_DIR})
    endif()
    message("[ibex] Installing ibex")
