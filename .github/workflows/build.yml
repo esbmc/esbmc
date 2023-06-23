@@ -1,4 +1,4 @@
-name: Build All Solvers
+name: Build ESBMC
 
 on: [pull_request]
 
@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest]
-    name: Build ESBMC with all Solvers ( ${{ matrix.os }} )
+    name: Build ESBMC (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
