@@ -266,195 +266,181 @@ T interval_domaint::interpolate_intervals(const T &before, const T &after)
 template <class T>
 T interval_domaint::get_interval(const expr2tc &e) const
 {
-  // This needs to come before constant number
-  if(is_constant_bool2t(e))
+  T result = get_top_interval_from_expr<T>(e);
+  switch(e->expr_id)
   {
-    auto r = get_top_interval_from_expr<T>(e);
-    r.set_lower(to_constant_bool2t(e).is_true());
-    r.set_upper(to_constant_bool2t(e).is_true());
-    return r;
-  }
+  case expr2t::constant_bool_id:
+    result.set_lower(to_constant_bool2t(e).is_true());
+    result.set_upper(to_constant_bool2t(e).is_true());
+    break;
 
-  if(is_and2t(e))
+  case expr2t::constant_int_id:
+  case expr2t::constant_fixedbv_id:
+  case expr2t::constant_floatbv_id:
+    result = get_interval_from_const<T>(e);
+    break;
+
+  case expr2t::symbol_id:
+    result = get_interval_from_symbol<T>(to_symbol2t(e));
+    break;
+
+  case expr2t::neg_id:
+    result = -get_interval<T>(to_neg2t(e).value);
+    break;
+
+  case expr2t::not_id:
+    result = T::invert_bool(get_interval<T>(to_not2t(e).value));
+    break;
+
+  case expr2t::or_id:
+  case expr2t::and_id:
   {
-    auto r = get_top_interval_from_expr<T>(e);
-
     tvt lhs = eval_boolean_expression(to_and2t(e).side_1, *this);
     tvt rhs = eval_boolean_expression(to_and2t(e).side_2, *this);
 
-    // If any side is false, then false
-    if(lhs.is_false() || rhs.is_false())
+    if(is_and2t(e))
     {
-      r.set_lower(0);
-      r.set_upper(0);
-      return r;
+      // If any side is false, (and => false)
+      if((lhs.is_false() || rhs.is_false()))
+      {
+        result.set_lower(0);
+        result.set_upper(0);
+        break;
+      }
+
+      // Both sides are true, then true
+      if(lhs.is_true() && rhs.is_true())
+      {
+        result.set_lower(1);
+        result.set_upper(1);
+        break;
+      }
     }
 
-    // Both sides are true, then true
-    if(lhs.is_true() && rhs.is_true())
+    else if(is_or2t(e))
     {
-      r.set_lower(1);
-      r.set_upper(1);
-      return r;
+      if(lhs.is_true() || rhs.is_true())
+      {
+        result.set_lower(1);
+        result.set_upper(1);
+        break;
+      }
+
+      // Both sides are false, then false
+      if(lhs.is_false() && rhs.is_false())
+      {
+        result.set_lower(0);
+        result.set_upper(0);
+        break;
+      }
     }
 
-    return r;
+    // TODO: implies
+
+    break;
   }
 
-  if(is_or2t(e))
-  {
-    auto r = get_top_interval_from_expr<T>(e);
-
-    tvt lhs = eval_boolean_expression(to_or2t(e).side_1, *this);
-    tvt rhs = eval_boolean_expression(to_or2t(e).side_2, *this);
-
-    // If any side is true, then true
-    if(lhs.is_true() || rhs.is_true())
-    {
-      r.set_lower(1);
-      r.set_upper(1);
-      return r;
-    }
-
-    // Both sides are false, then false
-    if(lhs.is_false() && rhs.is_false())
-    {
-      r.set_lower(0);
-      r.set_upper(0);
-      return r;
-    }
-
-    return r;
-  }
-
-  if(is_symbol2t(e))
-    return get_interval_from_symbol<T>(to_symbol2t(e));
-
-  if(is_neg2t(e))
-    return -get_interval<T>(to_neg2t(e).value);
-
-  if(is_constant_number(e))
-    return get_interval_from_const<T>(e);
-
-  if(is_if2t(e))
+  case expr2t::if_id:
   {
     auto cond = get_interval<T>(to_if2t(e).cond);
     auto lhs = get_interval<T>(to_if2t(e).true_value);
     auto rhs = get_interval<T>(to_if2t(e).false_value);
-    return T::ternary_if(cond, lhs, rhs);
+    result = T::ternary_if(cond, lhs, rhs);
+    break;
   }
 
-  if(is_not2t(e))
-  {
-    auto cond = get_interval<T>(to_not2t(e).value);
-    return T::invert_bool(cond);
-  }
-
-  if(is_typecast2t(e))
+  case expr2t::typecast_id:
   {
     // Special case: boolean
     if(is_bool_type(to_typecast2t(e).type))
     {
       tvt truth = eval_boolean_expression(to_typecast2t(e).from, *this);
-      T r;
-      r.set_lower(0);
-      r.set_upper(1);
+      result.set_lower(0);
+      result.set_upper(1);
 
       if(truth.is_true())
-      {
-        r.set_lower(1);
-        return r;
-      }
+        result.set_lower(1);
 
       if(truth.is_false())
-      {
-        r.set_upper(0);
-        return r;
-      }
+        result.set_upper(0);
 
-      return r;
+      break;
     }
     auto inner = get_interval<T>(to_typecast2t(e).from);
-    return T::cast(inner, to_typecast2t(e).type);
+    result = T::cast(inner, to_typecast2t(e).type);
+    break;
   }
 
-  // Arithmetic?
-  auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
-  if(arith_op && enable_interval_arithmetic)
-  {
-    auto lhs = get_interval<T>(arith_op->side_1);
-    auto rhs = get_interval<T>(arith_op->side_2);
-
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  case expr2t::mul_id:
+  case expr2t::div_id:
+  case expr2t::modulus_id:
     if(enable_interval_arithmetic)
     {
+      auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
+      auto lhs = get_interval<T>(arith_op->side_1);
+      auto rhs = get_interval<T>(arith_op->side_2);
+
       if(is_add2t(e))
-        return lhs + rhs;
+        result = lhs + rhs;
 
-      if(is_sub2t(e))
-        return lhs - rhs;
+      else if(is_sub2t(e))
+        result = lhs - rhs;
 
-      if(is_mul2t(e))
-        return lhs * rhs;
+      else if(is_mul2t(e))
+        result = lhs * rhs;
 
-      if(is_div2t(e))
-        return lhs / rhs;
+      else if(is_div2t(e))
+        result = lhs / rhs;
 
-      if(is_modulus2t(e))
-        return lhs % rhs;
+      else if(is_modulus2t(e))
+        result = lhs % rhs;
     }
-  }
+    break;
 
-  if(enable_interval_bitwise_arithmetic)
-  {
-    if(is_shl2t(e))
+  case expr2t::shl_id:
+  case expr2t::ashr_id:
+  case expr2t::lshr_id:
+  case expr2t::bitor_id:
+  case expr2t::bitand_id:
+  case expr2t::bitxor_id:
+    if(enable_interval_bitwise_arithmetic)
     {
-      auto k = get_interval<T>(to_shl2t(e).side_2);
-      auto i = get_interval<T>(to_shl2t(e).side_1);
-      return T::left_shift(i, k);
-    }
+      auto bit_op = std::dynamic_pointer_cast<bit_2ops>(e);
+      auto lhs = get_interval<T>(bit_op->side_1);
+      auto rhs = get_interval<T>(bit_op->side_2);
 
-    if(is_ashr2t(e))
-    {
-      auto k = get_interval<T>(to_ashr2t(e).side_2);
-      auto i = get_interval<T>(to_ashr2t(e).side_1);
-      return T::arithmetic_right_shift(i, k);
-    }
+      if(is_shl2t(e))
+        result = T::left_shift(lhs, rhs);
 
-    if(is_lshr2t(e))
-    {
-      auto k = get_interval<T>(to_lshr2t(e).side_2);
-      auto i = get_interval<T>(to_lshr2t(e).side_1);
-      return T::logical_right_shift(i, k);
-    }
+      else if(is_ashr2t(e))
+        result = T::arithmetic_right_shift(lhs, rhs);
 
-    if(is_bitor2t(e))
-    {
-      auto rhs = get_interval<T>(to_bitor2t(e).side_2);
-      auto lhs = get_interval<T>(to_bitor2t(e).side_1);
-      return lhs | rhs;
-    }
+      else if(is_lshr2t(e))
+        result = T::logical_right_shift(lhs, rhs);
 
-    if(is_bitand2t(e))
-    {
-      auto rhs = get_interval<T>(to_bitand2t(e).side_2);
-      auto lhs = get_interval<T>(to_bitand2t(e).side_1);
-      return lhs & rhs;
-    }
-    if(is_bitxor2t(e))
-    {
-      auto rhs = get_interval<T>(to_bitxor2t(e).side_2);
-      auto lhs = get_interval<T>(to_bitxor2t(e).side_1);
-      return lhs ^ rhs;
-    }
+      else if(is_bitor2t(e))
+        result = lhs | rhs;
 
-    if(is_bitnot2t(e))
-    {
-      auto lhs = get_interval<T>(to_bitnot2t(e).value);
-      return T::bitnot(lhs);
+      else if(is_bitand2t(e))
+        result = lhs & rhs;
+      else if(is_bitxor2t(e))
+        result = lhs ^ rhs;
     }
-  }
+    break;
 
-  if(is_comp_expr(e))
+  case expr2t::bitnot_id:
+    if(enable_interval_bitwise_arithmetic)
+      result = T::bitnot(get_interval<T>(to_bitnot2t(e).value));
+    break;
+
+  case expr2t::lessthan_id:
+  case expr2t::lessthanequal_id:
+  case expr2t::greaterthan_id:
+  case expr2t::greaterthanequal_id:
+  case expr2t::equality_id:
+  case expr2t::notequal_id:
   {
     const expr2tc &lhs = *e->get_sub_expr(0);
     const expr2tc &rhs = *e->get_sub_expr(1);
@@ -463,25 +449,31 @@ T interval_domaint::get_interval(const expr2tc &e) const
     auto rhs_i = get_interval<T>(rhs);
 
     if(is_equality2t(e))
-      return T::equality(lhs_i, rhs_i);
+      result = T::equality(lhs_i, rhs_i);
 
-    if(is_notequal2t(e))
-      return T::not_equal(lhs_i, rhs_i);
+    else if(is_notequal2t(e))
+      result = T::not_equal(lhs_i, rhs_i);
 
-    if(is_lessthan2t(e))
-      return T::less_than(lhs_i, rhs_i);
+    else if(is_lessthan2t(e))
+      result = T::less_than(lhs_i, rhs_i);
 
-    if(is_greaterthan2t(e))
-      return T::greater_than(lhs_i, rhs_i);
+    else if(is_greaterthan2t(e))
+      result = T::greater_than(lhs_i, rhs_i);
 
-    if(is_lessthanequal2t(e))
-      return T::less_than_equal(lhs_i, rhs_i);
+    else if(is_lessthanequal2t(e))
+      result = T::less_than_equal(lhs_i, rhs_i);
 
-    if(is_greaterthanequal2t(e))
-      return T::greater_than_equal(lhs_i, rhs_i);
+    else if(is_greaterthanequal2t(e))
+      result = T::greater_than_equal(lhs_i, rhs_i);
+
+    break;
   }
-  // We could not generate from the expr. Return top
-  return get_top_interval_from_expr<T>(e);
+
+  default:
+    log_debug("Could't compute interval for expr: {}", *e);
+  }
+
+  return result;
 }
 
 template <class Interval>
@@ -632,7 +624,8 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(
     // Interval: [a,b]
     std::vector<expr2tc> disjuncts;
 
-    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w) {
+    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w)
+    {
       assert(w.lower <= w.upper);
 
       std::vector<expr2tc> s_conjuncts;
@@ -672,7 +665,8 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
     return gen_false_expr();
 
   std::vector<expr2tc> conjuncts;
-  auto typecast = [&symbol](expr2tc v) {
+  auto typecast = [&symbol](expr2tc v)
+  {
     c_implicit_typecast(v, symbol->type, *migrate_namespace_lookup);
     return v;
   };
@@ -749,10 +743,12 @@ bool contains_float(const expr2tc &e)
     return true;
 
   bool inner_float = false;
-  e->foreach_operand([&inner_float](auto &it) {
-    if(contains_float(it))
-      inner_float = true;
-  });
+  e->foreach_operand(
+    [&inner_float](auto &it)
+    {
+      if(contains_float(it))
+        inner_float = true;
+    });
 
   return inner_float;
 }
