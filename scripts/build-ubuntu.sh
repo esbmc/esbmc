@@ -19,17 +19,19 @@ macos_setup () {
 
 # TODO: windows? win32
 
-if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    echo "Setting up Ubuntu mode"
-    # TODO: we should support other Linux as well
+# Detect the platform ($OSTYPE was not working on github actions for ubuntu)
+OS="`uname`"
+case $OS in
+  'Linux')
     ubuntu_setup
-elif [[ "$OSTYPE" == "darwin"* ]]; then
-    echo "Setting up MacOS mode"
-    # TODO: M1/M2 mode?
+    ;;
+#   'WindowsNT')
+#     ;;
+  'Darwin')
     macos_setup
-else
-    echo "Unsupported OS $OSTYPE" ; exit 1;
-fi
+    ;;
+  *) echo "Unsupported OS $OSTYPE" ; exit 1; ;;
+esac
 
 
 COMPILER_ARGS=''
