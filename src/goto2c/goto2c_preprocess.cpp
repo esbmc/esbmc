@@ -160,8 +160,22 @@ void goto2ct::extract_symbol_tables()
   });
 }
 
-// This method performs a "single-step" simplification ...
-// Fedor: add more description here.
+// This methods tries to resolve one step in the chains of initializers.
+//
+// In other words, the following "two-step" initializtion
+// (which is also illegal in C, but allowed in GOTO programs
+// that ESBMC produces):
+//
+//  const static int tmp = 10;
+//  const static int b = tmp;
+//
+// is converted to:
+//
+//  const static int a = 10;
+//  const static int b = 10;
+//
+// This will not resolve chains with 3 and more initializers,
+// which never seem to appear in our GOTO programs.
 void goto2ct::simplify_initializers()
 {
   for(auto init : initializers)
