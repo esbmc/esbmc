@@ -14,10 +14,10 @@ macos_setup () {
    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex && pip3 install PySMT toml
    wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz
    tar xf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-apple-darwin ../clang
-   BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=Off -DBUILD_STATIC=Off -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
+   BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=Off -DBUILD_STATIC=Off -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
 }
 
-# TODO: windows? win32
+
 
 # Detect the platform ($OSTYPE was not working on github actions for ubuntu)
 OS="`uname`"
@@ -25,6 +25,7 @@ case $OS in
   'Linux')
     ubuntu_setup
     ;;
+    # TODO: windows?
 #   'WindowsNT')
 #     ;;
   'Darwin')
