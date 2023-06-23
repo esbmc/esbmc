@@ -13,86 +13,103 @@
 
 /** Mapping of SMT function IDs to their names. */
 static const std::array smt_func_name_table = {
-  "hack_func_id",
-  "invalid_func_id",
-  "int_func_id",
-  "bool_func_id",
-  "bvint_func_id",
-  "real_func_id",
-  "symbol_func_id",
-  "+",
-  "bvadd",
-  "-",
-  "bvsub",
-  "*",
-  "bvmul",
-  "/",
-  "bvudiv",
-  "bvsdiv",
-  "%",
-  "bvsmod",
-  "bvurem",
-  "shl",
-  "bvshl",
-  "bvashr",
-  "-",
-  "bvneg",
-  "bvlshr",
-  "bvnot",
-  "bvnxor",
-  "bvnor",
-  "vnand",
-  "bvxor",
-  "bvor",
-  "bvand",
-  "=>",
-  "xor",
-  "or",
-  "and",
-  "not",
-  "<",
-  "bvslt",
-  "bvult",
-  ">",
-  "bvsgt",
-  "bvugt",
-  "<=",
-  "bvsle",
-  "bvule",
-  ">=",
-  "bvsge",
-  "bvuge",
-  "=",
-  "distinct",
-  "ite",
-  "store",
-  "select",
-  "concat",
-  "extract",
-  "int2real",
-  "real2int",
-  "is_int",
-  "fneg",
-  "fabs",
-  "fp.isZero",
-  "fp.isNaN",
-  "fp.isInfinite",
-  "fp.isNormal",
-  "fp.isNegative",
-  "fp.isPositive",
-  "fp.eq",
-  "fp.add",
-  "fp.sub",
-  "fp.mul",
-  "fp.div",
-  "fp.fma",
-  "fp.sqrt",
-  "RNE RoundingMode",
-  "RTZ RoundingMode",
-  "RTP RoundingMode",
-  "RTN RoundingMode",
-  "bv2fp_cast",
-  "fp2bv_cast",
+  "hack_func_id",           /*  */
+  "invalid_func_id",        /*  */
+
+  // Terminals
+  "int_func_id",            /* SMT_FUNC_INT, */
+  "bool_func_id",           /* SMT_FUNC_BOOL, */
+  "bvint_func_id",          /* SMT_FUNC_BVINT, */
+  "real_func_id",           /* SMT_FUNC_REAL, */
+  "symbol_func_id",         /* SMT_FUNC_SYMBOL, */
+
+  // Nonterminals
+  "+",                      /* SMT_FUNC_ADD, */
+  "bvadd",                  /* SMT_FUNC_BVADD, */
+  "-",                      /* SMT_FUNC_SUB, */
+  "bvsub",                  /* SMT_FUNC_BVSUB, */
+  "*",                      /* SMT_FUNC_MUL, */
+  "bvmul",                  /* SMT_FUNC_BVMUL, */
+  "/",                      /* SMT_FUNC_DIV, */
+  "bvudiv",                 /* SMT_FUNC_BVUDIV, */
+  "bvsdiv",                 /* SMT_FUNC_BVSDIV, */
+  "%",                      /* SMT_FUNC_MOD, */
+  "bvsmod",                 /* SMT_FUNC_BVSMOD, */
+  "bvurem",                 /* SMT_FUNC_BVUMOD, */
+  "shl",                    /* SMT_FUNC_SHL, */
+  "bvshl",                  /* SMT_FUNC_BVSHL, */
+  "bvashr",                 /* SMT_FUNC_BVASHR, */
+  "-",                      /* SMT_FUNC_NEG, */
+  "bvneg",                  /* SMT_FUNC_BVNEG, */
+  "bvlshr",                 /* SMT_FUNC_BVLSHR, */
+  "bvnot",                  /* SMT_FUNC_BVNOT, */
+  "bvnxor",                 /* SMT_FUNC_BVNXOR, */
+  "bvnor",                  /* SMT_FUNC_BVNOR, */
+  "vnand",                  /* SMT_FUNC_BVNAND, */
+  "bvxor",                  /* SMT_FUNC_BVXOR, */
+  "bvor",                   /* SMT_FUNC_BVOR, */
+  "bvand",                  /* SMT_FUNC_BVAND, */
+
+  // Logic
+  "=>",                     /* SMT_FUNC_IMPLIES, */
+  "xor",                    /* SMT_FUNC_XOR, */
+  "or",                     /* SMT_FUNC_OR, */
+  "and",                    /* SMT_FUNC_AND, */
+  "not",                    /* SMT_FUNC_NOT, */
+
+  // Comparisons
+  "<",                      /* SMT_FUNC_LT, */
+  "bvslt",                  /* SMT_FUNC_BVSLT, */
+  "bvult",                  /* SMT_FUNC_BVULT, */
+  ">",                      /* SMT_FUNC_GT, */
+  "bvsgt",                  /* SMT_FUNC_BVSGT, */
+  "bvugt",                  /* SMT_FUNC_BVUGT, */
+  "<=",                     /* SMT_FUNC_LTE, */
+  "bvsle",                  /* SMT_FUNC_BVSLTE, */
+  "bvule",                  /* SMT_FUNC_BVULTE, */
+  ">=",                     /* SMT_FUNC_GTE, */
+  "bvsge",                  /* SMT_FUNC_BVSGTE, */
+  "bvuge",                  /* SMT_FUNC_BVUGTE, */
+
+  "=",                      /* SMT_FUNC_EQ, */
+  "distinct",               /* SMT_FUNC_NOTEQ, */
+
+  "ite",                    /* SMT_FUNC_ITE, */
+
+  "store",                  /* SMT_FUNC_STORE, */
+  "select",                 /* SMT_FUNC_SELECT, */
+
+  "concat",                 /* SMT_FUNC_CONCAT, */
+  "extract",                /* SMT_FUNC_EXTRACT, */
+
+  "int2real",               /* SMT_FUNC_INT2REAL, */
+  "real2int",               /* SMT_FUNC_REAL2INT, */
+  "is_int",                 /* SMT_FUNC_IS_INT, */
+
+  // floatbv operations
+  "fneg",                   /* SMT_FUNC_FNEG, */
+  "fabs",                   /* SMT_FUNC_FABS, */
+  "fp.isZero",              /* SMT_FUNC_ISZERO, */
+  "fp.isNaN",               /* SMT_FUNC_ISNAN, */
+  "fp.isInfinite",          /* SMT_FUNC_ISINF, */
+  "fp.isNormal",            /* SMT_FUNC_ISNORMAL, */
+  "fp.isNegative",          /* SMT_FUNC_ISNEG, */
+  "fp.isPositive",          /* SMT_FUNC_ISPOS, */
+  "fp.eq",                  /* SMT_FUNC_IEEE_EQ, */
+  "fp.add",                 /* SMT_FUNC_IEEE_ADD, */
+  "fp.sub",                 /* SMT_FUNC_IEEE_SUB, */
+  "fp.mul",                 /* SMT_FUNC_IEEE_MUL, */
+  "fp.div",                 /* SMT_FUNC_IEEE_DIV, */
+  "fp.fma",                 /* SMT_FUNC_IEEE_FMA, */
+  "fp.sqrt",                /* SMT_FUNC_IEEE_SQRT, */
+
+  "RNE RoundingMode",       /* SMT_FUNC_IEEE_RM_NE, */
+  "RTZ RoundingMode",       /* SMT_FUNC_IEEE_RM_ZR, */
+  "RTP RoundingMode",       /* SMT_FUNC_IEEE_RM_PI, */
+  "RTN RoundingMode",       /* SMT_FUNC_IEEE_RM_MI, */
+
+  "bv2fp_cast",             /* SMT_FUNC_BV2FLOAT, */
+  "fp2bv_cast",             /* SMT_FUNC_FLOAT2BV, */
 };
 
 // Dec of external lexer input stream
