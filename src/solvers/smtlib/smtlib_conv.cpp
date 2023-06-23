@@ -1,11 +1,14 @@
 // "Standards" workaround
 #define __STDC_FORMAT_MACROS
 
-#include <cinttypes>
 #include <smtlib_conv.h>
 #include <smtlib.hpp>
 #include <smtlib_tok.hpp>
+
+#include <cinttypes>
+#include <regex>
 #include <sstream>
+
 #ifndef _WIN32
 #include <unistd.h>
 #include <signal.h>
@@ -374,6 +377,7 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
   }
 }
 
+/* TODO: misnomer, it does not emit anything */
 unsigned int smtlib_convt::emit_terminal_ast(
   const smtlib_smt_ast *ast,
   std::string &output) const
@@ -419,10 +423,26 @@ unsigned int smtlib_convt::emit_terminal_ast(
     output = ss.str();
     return 0;
   case SMT_FUNC_SYMBOL:
-    // All symbols to be emitted braced within |'s
-    ss << "|" << ast->symname << "|";
+  {
+    /* from smt-lib 2.6:
+     * A quoted symbol is any sequence of whitespace characters and printable
+     * characters that starts and ends with | and does not contain | or \ */
+
+    /* All symbols to be emitted as quoted symbols (braced within |'s),
+     * therefore replace (in order):
+     *   / -> //
+     *   \ -> /b
+     *   | -> /p
+     */
+    std::string replaced = ast->symname;
+    replaced = std::regex_replace(replaced, std::regex("/"), "//");
+    replaced = std::regex_replace(replaced, std::regex("\\\\"), "/b");
+    replaced = std::regex_replace(replaced, std::regex("\\|"), "/p");
+
+    ss << "|" << replaced << "|";
     output = ss.str();
     return 0;
+  }
   default:
     log_error("Invalid terminal AST kind");
     abort();
@@ -1003,7 +1023,9 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     return a;
 
   // As this is the first time, declare that symbol to the solver.
-  emit("(declare-fun |%s| () %s)\n", name.c_str(), sort_to_string(s).c_str());
+  std::string output;
+  emit_terminal_ast(a, output);
+  emit("(declare-fun %s () %s)\n", output.c_str(), sort_to_string(s).c_str());
 
   return a;
 }
