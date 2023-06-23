@@ -14,6 +14,7 @@
 #include <signal.h>
 #endif
 
+// clang-format off
 /** Mapping of SMT function IDs to their names. */
 static const std::array smt_func_name_table = {
   // Terminals
@@ -111,6 +112,7 @@ static const std::array smt_func_name_table = {
   "bv2fp_cast",             /* SMT_FUNC_BV2FLOAT, */
   "fp2bv_cast",             /* SMT_FUNC_FLOAT2BV, */
 };
+// clang-format on
 
 // Dec of external lexer input stream
 int smtlibparse(int startval);
