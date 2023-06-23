@@ -295,8 +295,9 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::or_id:
   case expr2t::and_id:
   {
-    tvt lhs = eval_boolean_expression(to_and2t(e).side_1, *this);
-    tvt rhs = eval_boolean_expression(to_and2t(e).side_2, *this);
+    auto logic_op = std::dynamic_pointer_cast<logic_2ops>(e);
+    tvt lhs = eval_boolean_expression(logic_op->side_1, *this);
+    tvt rhs = eval_boolean_expression(logic_op->side_2, *this);
 
     if(is_and2t(e))
     {
