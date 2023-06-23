@@ -1608,12 +1608,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::MemberExpr &member =
       static_cast<const clang::MemberExpr &>(stmt);
 
-    exprt comp;
-    if(get_decl(*member.getMemberDecl(), comp))
-      return true;
-
     if(!perform_virtual_dispatch(member))
     {
+      exprt comp;
+      if(get_decl(*member.getMemberDecl(), comp))
+        return true;
+
       if(!is_member_decl_static(member))
       {
         exprt base;
