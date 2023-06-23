@@ -57,7 +57,7 @@ private:
 
   // Preprocessing methods
   void extract_symbol_tables();
-  void extract_initializers();
+  void extract_initializers_from_esbmc_main();
   void simplify_initializers();
   void sort_compound_types(const namespacet &ns, std::list<typet> &types);
   void sort_compound_types_rec(

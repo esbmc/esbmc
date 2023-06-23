@@ -11,21 +11,32 @@ void goto2ct::preprocess()
   // Extracting all symbol tables
   extract_symbol_tables();
   // Extracting all initializers for variables with static lifetime
-  extract_initializers();
+  extract_initializers_from_esbmc_main();
+  // Simplifying initializers
+  simplify_initializers();
   // Sorting all compound (i.e., struct/union) types (global and local)
   sort_compound_types(ns, global_types);
   for(auto &it : local_types)
     sort_compound_types(ns, local_types[it.first]);
-  // Performing adjustments to each GOTO function individually
+  // Iterating through all GOTO functions
   for(auto &it : goto_functions.function_map)
-  {
-    remove_unsupported_instructions(it.second.body);
-    // Dealing with assignments to struct, union, array variables
-    adjust_compound_assignments(it.second.body);
-    // Updating scope ids to the variables within the program
-    it.second.body.compute_location_numbers();
-    assign_scope_ids(it.second.body);
-  }
+    preprocess(it.second);
+}
+
+void goto2ct::preprocess(goto_functiont &goto_function)
+{
+  if(goto_function.body_available)
+    preprocess(goto_function.body);
+}
+
+void goto2ct::preprocess(goto_programt &goto_program)
+{
+  // Removing instructions that cannot be currently translated
+  remove_unsupported_instructions(goto_program);
+  // Dealing with assignments to struct, union, array variables
+  adjust_invalid_assignments(goto_program);
+  // Updating scope ids to the variables within the program
+  assign_scope_ids(goto_program);
 }
 
 // When dealing with "pointer" and "array" types
@@ -57,20 +68,6 @@ typet goto2ct::get_base_type(typet type, namespacet ns)
   }
 
   return type;
-}
-
-expr2tc goto2ct::get_base_expr(expr2tc expr)
-{
-  if(is_typecast2t(expr))
-    return get_base_expr(to_typecast2t(expr).from);
-
-  if(is_address_of2t(expr))
-    return get_base_expr(to_address_of2t(expr).ptr_obj);
-
-  if(is_index2t(expr))
-    return get_base_expr(to_index2t(expr).source_value);
-
-  return expr;
 }
 
 // This method recursivelly iterates through all members of the given
@@ -119,61 +116,79 @@ void goto2ct::sort_compound_types(const namespacet &ns, std::list<typet> &types)
   types = sorted_types;
 }
 
+// This method simply goes through all symbols in the program and places
+// them into separate lists/tables for easier/quicker access.
 void goto2ct::extract_symbol_tables()
 {
-  // Generating a list of input file names from the list
-  // of input file paths
-  std::unordered_set<std::string> input_files;
-  for(auto it = clang_c_languaget::includes_map.begin();
-      it != clang_c_languaget::includes_map.end();
-      it++)
-  {
-    std::string filename = it->first.substr(it->first.find_last_of("/\\") + 1);
-    input_files.insert(filename);
-  }
+  // Going throught the symbol table
+  ns.get_context().foreach_operand_in_order([this](const symbolt &s) {
+    // Skipping everything that appears in "esbmc_intrinsics.h"
+    // or with an empty location.
+    if(
+      s.location.file().as_string() == "esbmc_intrinsics.h" ||
+      s.location.as_string() == "")
+      return;
 
-  // Going throught the symbol table and initialising the program
-  // data structures
-  ns.get_context().foreach_operand_in_order(
-    [this, &input_files](const symbolt &s) {
-      // Skipping everything that appears in "esbmc_intrinsics.h"
-      if(s.location.file().as_string() == "esbmc_intrinsics.h")
-        return;
+    // Extracting the name of the function where this symbol is declared.
+    // The symbol will be considered to belong to global scope if
+    // the location function name is empty.
+    std::string sym_fun_name = s.location.function().as_string();
 
-      // Extracting the name of the function where this symbol is declared.
-      // It has a global scope if the location function name is empty.
-      std::string sym_fun_name = s.location.function().as_string();
-      // This is a type definition
-      if(s.is_type)
-      {
-        if(sym_fun_name.empty())
-          global_types.push_back(s.type);
-        else
-          local_types[sym_fun_name].push_back(s.type);
-      }
-      // This is a function declaration
-      else if(s.type.id() == "code")
-        fun_decls.push_back(s);
-      // This is an extern or static variable
-      else if(s.is_extern || s.static_lifetime)
-      {
-        // This is a global variabl
-        if(sym_fun_name.empty())
-          global_vars.push_back(s);
-        else
-          local_static_vars[sym_fun_name].push_back(s);
-      }
-    });
+    // This is a type definition
+    if(s.is_type)
+    {
+      if(sym_fun_name.empty())
+        global_types.push_back(s.type);
+      else
+        local_types[sym_fun_name].push_back(s.type);
+    }
+    // This is a function declaration
+    else if(s.type.id() == "code")
+      fun_decls.push_back(s);
+    // This is an extern variable
+    else if(s.is_extern)
+      extern_vars.push_back(s);
+    // This is a static variable
+    else if(s.static_lifetime)
+    {
+      // This is a global variable
+      if(sym_fun_name.empty())
+        global_vars.push_back(s);
+      else
+        local_static_vars[sym_fun_name].push_back(s);
+    }
+  });
 }
 
-// We assume that all initializers are inside the "__ESBMC_main" function
-void goto2ct::extract_initializers()
+// This method performs a "single-step" simplification ...
+// Fedor: add more description here.
+void goto2ct::simplify_initializers()
+{
+  for(auto init : initializers)
+  {
+    if(init.second.id() == "symbol")
+    {
+      std::string init_sym = init.second.identifier().as_string();
+      if(initializers.count(init_sym) > 0)
+        initializers[init.first] = initializers[init_sym];
+    }
+  }
+}
+
+// This method is to deal with ESBMC splitting variables declarations
+// with initializers into two separate instructions: 1) declaration
+// without an initializer, 2) assignment of the initializer to the declared
+// variable. Some of the issues caused by this include:
+// initialization of arrays, and constant variables.
+// Here we extract all initializers that appear
+// inside the "__ESBMC_main" function. Note that they
+// include initializers for global and local static variables.
+// This method however, does not deal with locating initializers
+// for local variables.
+void goto2ct::extract_initializers_from_esbmc_main()
 {
   // The program does not feature a goto function "__ESBMC_main"
   if(goto_functions.function_map.count("__ESBMC_main") == 0)
-    return;
-
-  if(goto_functions.function_map.count("c:@F@main") == 0)
     return;
 
   for(auto instr :
@@ -185,24 +200,10 @@ void goto2ct::extract_initializers()
       if(is_symbol2t(assign->target))
       {
         const symbolt *sym = ns.lookup(to_symbol2t(assign->target).thename);
-        exprt init = migrate_expr_back(get_base_expr(assign->source));
+        exprt init = migrate_expr_back(assign->source);
         if(sym && (sym->static_lifetime || sym->is_extern))
         {
-          c_qualifierst c_qual(sym->type);
-          std::string fun_name = sym->location.function().as_string();
-          if(c_qual.is_constant)
-            if(fun_name.empty())
-              global_const_initializers[sym->id.as_string()] = init;
-            else
-              local_const_initializers[sym->id.as_string()] = init;
-          else if(fun_name.empty())
-          {
-            global_static_initializers[sym->id.as_string()] = init;
-            goto_functions.function_map["c:@F@main"]
-              .body.instructions.push_front(instr);
-          }
-          else
-            local_static_initializers[sym->id.as_string()] = init;
+          initializers[sym->id.as_string()] = init;
         }
       }
     }
@@ -228,7 +229,7 @@ void goto2ct::extract_initializers()
 // analyses prior to and during symbolic execution.
 void goto2ct::assign_scope_ids(goto_programt &goto_program)
 {
-  // Fedor: first try to identify and separate DEAD clusters
+  // First try to identify and separate DEAD clusters
   std::vector<std::string> scope_cluster;
   for(auto it = goto_program.instructions.rbegin();
       it != goto_program.instructions.rend();
@@ -356,12 +357,19 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
     }
     it->scope_id = cur_scope_id;
     it->parent_scope_id = parent_scope_id;
-    goto_scope_id[it->location_number] = cur_scope_id;
-    goto_parent_scope_id[it->location_number] = parent_scope_id;
   }
 }
 
-void goto2ct::adjust_compound_assignment_rec(
+// Recursive method for removing invalid assignments
+//
+// 1) Assignments to typecasts. For example, GOTO often has
+// constructs like (int) i = (int) i + 1, which come from adjusting
+// expressions like i += 1.
+//
+// 2) The variables initialisers are converted into assignments
+// by the GOTO converter, and they become sintactically invalid
+// assignments in C syntax.
+void goto2ct::adjust_invalid_assignment_rec(
   goto_programt::instructionst &new_instructions,
   goto_programt::instructiont instruction,
   const namespacet &ns)
@@ -376,58 +384,29 @@ void goto2ct::adjust_compound_assignment_rec(
     goto_programt::instructiont new_instruction(instruction);
     new_instruction.code = new_assign;
 
-    adjust_compound_assignment_rec(new_instructions, new_instruction, ns);
-  }
-  // Assignment to a struct variable
-  else if(
-    is_symbol2t(assign->target) && is_struct_type(assign->target->type) &&
-    is_constant_struct2t(assign->source))
-  {
-    typecast2tc type_cast(assign->target->type, assign->source);
-    code_assign2tc new_assign(assign->target, type_cast);
-    instruction.code = new_assign;
-    new_instructions.push_back(instruction);
-  }
-  // Assignment to a union variable
-  else if(
-    is_symbol2t(assign->target) && is_union_type(assign->target->type) &&
-    is_constant_union2t(assign->source))
-  {
-    typecast2tc type_cast(assign->target->type, assign->source);
-    code_assign2tc new_assign(assign->target, type_cast);
-    instruction.code = new_assign;
-    new_instructions.push_back(instruction);
+    adjust_invalid_assignment_rec(new_instructions, new_instruction, ns);
   }
   // Assignment to an array variable.
   // Turning it into a function call to "memcpy"
-  /*
   else if(is_array_type(assign->target->type))
   {
-    exprt fun_call = convert_array_assignment_to_function_call(assign);
-    expr2tc fun_call2;
-    migrate_expr(fun_call, fun_call2);
-    instruction.code = fun_call2;
+    expr2tc fun_call = replace_array_assignment_with_memcpy(assign);
+    instruction.code = fun_call;
     instruction.type = FUNCTION_CALL;
     new_instructions.push_back(instruction);
   }
-  */
   else
     new_instructions.push_back(instruction);
 }
 
-// Below we implement some temporary solutions for dealing with
-// some issues introduced during GOTO conversion.
+// This method adjusts assignments that appear in GOTO, but
+// their direct translation into C/C++ syntax produces
+// invalid assignments.
 //
-// 1) Assignments to typecasts. For example, GOTO often has
-// constructs like (int) i = (int) i + 1, which come from the
-// expressions like i += 1.
-//
-// 2) The variables initialisers are converted into assignments
-// by the GOTO converter, and they become sintactically invalid
-// assignments in C syntax. The below should be revisited when
-// we decide on how to deal with declarations containing
-// initialisers at the GOTO level.
-void goto2ct::adjust_compound_assignments(goto_programt &goto_program)
+// Note, that each such "invalid assignment" instruction may be
+// transformed into multiple instructions.
+// See "goto2ct::adjust_invalid_assignment_rec" for more information.
+void goto2ct::adjust_invalid_assignments(goto_programt &goto_program)
 {
   goto_programt::instructionst new_instructions;
   for(auto it = goto_program.instructions.begin();
@@ -436,13 +415,15 @@ void goto2ct::adjust_compound_assignments(goto_programt &goto_program)
   {
     if(it->type == ASSIGN)
     {
-      adjust_compound_assignment_rec(new_instructions, *it, ns);
-      // Now to preserve the tarets we cannot remove any instructions.
+      // Apply the recursive method first to the given ASSIGN instruction.
+      adjust_invalid_assignment_rec(new_instructions, *it, ns);
+      // Now to preserve the targets we cannot remove any instructions.
       // Hence, we replace the "value" in the original instruction
       // and insert the rest straight in.
       goto_programt::instructiont tmp_front = new_instructions.front();
       new_instructions.pop_front();
       it->code = tmp_front.code;
+      it->type = tmp_front.type;
       goto_program.instructions.splice(it, new_instructions);
     }
   }
@@ -450,7 +431,7 @@ void goto2ct::adjust_compound_assignments(goto_programt &goto_program)
 
 // This method iterates through the instructions in the given GOTO program
 // and removes all GOTO instructions that cannot be currently
-// translated
+// translated into C/C++.
 void goto2ct::remove_unsupported_instructions(goto_programt &goto_program)
 {
   goto_programt::instructionst new_instructions;
@@ -458,7 +439,6 @@ void goto2ct::remove_unsupported_instructions(goto_programt &goto_program)
       it != goto_program.instructions.end();
       it++)
   {
-    // Unsupported assignment instructions
     if(it->type == ASSIGN)
     {
       code_assign2tc assign = to_code_assign2t(it->code);
@@ -469,47 +449,41 @@ void goto2ct::remove_unsupported_instructions(goto_programt &goto_program)
   }
 }
 
-exprt goto2ct::convert_array_assignment_to_function_call(code_assign2tc assign)
+// This methods replaces assignments to array symbols
+// (which are not allowed in C) with function calls to "memcpy".
+// For example,
+//
+//      "array1 = array2;"
+//
+// is replaced by
+//
+//      "memcpy(array1, array2, <size_of_array2>);"
+//
+expr2tc goto2ct::replace_array_assignment_with_memcpy(code_assign2tc assign)
 {
-  // Creating a function call to the provided "memcpy" here
-  // (with the empty left-hand side)
-  code_function_callt function_call;
-  // Creating a symbol for the "memcpy" function.
-  // If the ESBMC version of "memcpy" is used in the program,
-  // we just use it. Otherwise, we create a new symbol without adding
-  // it to the symbol table.
-  // (Probably the former is unnecessary! Need to test!)
-  symbolt memcpy_sym;
-  const symbolt *sym = ns.get_context().find_symbol("c:@F@memcpy");
-  if(sym)
-  {
-    memcpy_sym = *sym;
-  }
-  else
-  {
-    memcpy_sym.id = "c:@F@memcpy";
-    memcpy_sym.name = "c:@F@memcpy";
-    memcpy_sym.type = function_call.type();
-  }
-  // Creating the arguments for the function call:
-  //   1 - the array symbol being assigned to,
-  //   2 - the typecasted compound argument (i.e., constant array)
-  //     which value is being assigned,
-  //   3 - the size of the constant array that is being assigned.
-  exprt::operandst arguments;
+  // Creating a compound literal from the RHS
+  typecast2tc type_cast(assign->source->type, assign->source);
 
-  // Getting the base expression in case we assign
-  // a typecast/address of/index of an expression
-  expr2tc source = get_base_expr(assign->source);
+  // Creating a "void*" type frequently used below
+  type2tc pointertype(new pointer_type2t(get_empty_type()));
 
-  typecast2tc type_cast(assign->source->type, source);
+  // Creating a function signature here: arguments types,
+  // return type, function arguments names, function name
+  std::vector<type2tc> args = {pointertype, pointertype, get_uint64_type()};
+  type2tc ret_type = get_empty_type();
+  std::vector<irep_idt> arg_names = {"d", "s", "n"};
+  type2tc fun_type(new code_type2t(args, pointertype, arg_names, false));
+  symbol2tc fun_sym(fun_type, "c:@F@memcpy");
 
-  arguments.push_back(migrate_expr_back(assign->target));
-  arguments.push_back(migrate_expr_back(type_cast));
-  arguments.push_back(c_sizeof(migrate_type_back(assign->source->type), ns));
-  // Populating the function call
-  function_call.function() = symbol_expr(memcpy_sym);
-  function_call.arguments() = arguments;
-  function_call.location() = memcpy_sym.location;
-  return function_call;
+  // Now defining the function inputs
+  std::vector<expr2tc> ops = {
+    assign->target, type_cast, c_sizeof(assign->source->type, ns)};
+
+  // Returning a function call (with the empty left-hand side)
+  // to the newly generated "memcpy" function with the inputs
+  // defined in "ops".
+  code_function_call2tc fun_call =
+    new code_function_call2t(symbol2tc(), fun_sym, ops);
+
+  return fun_call;
 }
