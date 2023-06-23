@@ -1611,7 +1611,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // special treatment for MemberExpr referring to an enumerator
     if(is_member_decl_enum(member))
     {
-      get_decl_ref(*member.getMemberDecl(), new_expr);
+      const auto *e =
+        llvm::dyn_cast<clang::EnumConstantDecl>(member.getMemberDecl());
+      get_enum_value(e, new_expr);
       break;
     }
 
@@ -2457,18 +2459,25 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   return false;
 }
 
+void clang_c_convertert::get_enum_value(
+  const clang::EnumConstantDecl *e,
+  exprt &new_expr)
+{
+  assert(e);
+  // For enum constants, we get their value directly
+  new_expr = constant_exprt(
+    integer2binary(e->getInitVal().getSExtValue(), bv_width(int_type())),
+    integer2string(e->getInitVal().getSExtValue()),
+    int_type());
+}
+
 bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 {
   // Special case for Enums, we return the constant instead of a reference
   // to the name
   if(const auto *e = llvm::dyn_cast<clang::EnumConstantDecl>(&d))
   {
-    // For enum constants, we get their value directly
-    new_expr = constant_exprt(
-      integer2binary(e->getInitVal().getSExtValue(), bv_width(int_type())),
-      integer2string(e->getInitVal().getSExtValue()),
-      int_type());
-
+    get_enum_value(e, new_expr);
     return false;
   }
 
