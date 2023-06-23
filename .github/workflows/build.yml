@@ -99,6 +99,11 @@ jobs:
         cd C:/vcpkg
         git.exe pull
         .\bootstrap-vcpkg.bat
+    - name: Make git use LF only
+      run: |
+        git config --system core.autocrlf false
+        git config --system core.eol lf
+    - uses: actions/checkout@v2
     - name: Configure ESBMC
       run: ./scripts/build.ps1
     - uses: actions/upload-artifact@v2
