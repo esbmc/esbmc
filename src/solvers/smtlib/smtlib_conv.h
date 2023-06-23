@@ -135,6 +135,8 @@ class smtlib_smt_sort : public smt_sort
 {
 public:
   explicit smtlib_smt_sort(smt_sort_kind k, unsigned int w) : smt_sort(k, w){};
+  explicit smtlib_smt_sort(smt_sort_kind k, unsigned int w1, unsigned int w2)
+    : smt_sort(k, w1, w2){};
   explicit smtlib_smt_sort(smt_sort_kind k) : smt_sort(k)
   {
   }
@@ -142,9 +144,7 @@ public:
     smt_sort_kind k,
     const smtlib_smt_sort *dom,
     const smtlib_smt_sort *rag)
-    : smt_sort(k, dom->get_data_width(), rag->get_domain_width()),
-      domain(dom),
-      range(rag)
+    : smt_sort(k, dom->get_data_width(), rag), domain(dom), range(rag)
   {
   }
 
@@ -160,6 +160,8 @@ public:
   {
   }
   ~smtlib_smt_ast() override = default;
+
+  void dump() const override;
 
   smt_func_kind kind;
   std::string symname;
@@ -265,17 +267,68 @@ public:
   get_array_elem(smt_astt array, uint64_t index, const type2tc &type) override;
 
   std::string sort_to_string(const smt_sort *s) const;
-  unsigned int emit_terminal_ast(const smtlib_smt_ast *a, std::string &output);
-  unsigned int emit_ast(const smtlib_smt_ast *ast, std::string &output);
+
+  unsigned int
+  emit_terminal_ast(const smtlib_smt_ast *a, std::string &output) const;
+
+  unsigned int emit_ast(
+    const smtlib_smt_ast *ast,
+    std::string &output,
+    unsigned long &temp_sym_counter) const;
+
+  void emit_ast(const smtlib_smt_ast *ast) const;
 
   void push_ctx() override;
   void pop_ctx() override;
 
+  void dump_smt() override;
+
+  template <typename... Ts>
+  void emit(const Ts &...) const;
+  void flush() const;
+
   // Members
-  FILE *out_stream;
-  FILE *in_stream;
-  std::string solver_name;
-  std::string solver_version;
+
+  struct process_emitter
+  {
+    FILE *out_stream;
+    FILE *in_stream;
+    void *org_sigpipe_handler; /* TODO: static */
+
+    std::string solver_name;
+    std::string solver_version;
+
+    explicit process_emitter(const std::string &cmd);
+    process_emitter(const process_emitter &) = delete;
+
+    ~process_emitter() noexcept;
+
+    process_emitter &operator=(const process_emitter &) = delete;
+
+    template <typename... Ts>
+    void emit(const char *fmt, Ts &&...) const;
+    void flush() const;
+
+    explicit operator bool() const noexcept;
+  } emit_proc;
+
+  struct file_emitter
+  {
+    FILE *out_stream;
+
+    explicit file_emitter(const std::string &path);
+    file_emitter(const file_emitter &) = delete;
+
+    ~file_emitter() noexcept;
+
+    file_emitter &operator=(const file_emitter &) = delete;
+
+    template <typename... Ts>
+    void emit(const char *fmt, Ts &&...) const;
+    void flush() const;
+
+    explicit operator bool() const noexcept;
+  } emit_opt_output;
 
   // Actual solving data
   // The set of symbols and their sorts.
@@ -298,11 +351,13 @@ public:
     symbol_tablet;
 
   symbol_tablet symbol_table;
-  std::vector<unsigned long> temp_sym_count;
+
   static const std::string temp_prefix;
 
-  /** Mapping of SMT function IDs to their names. XXX, incorrect size. */
-  static const std::string smt_func_name_table[expr2t::end_expr_id];
+  struct external_process_died : std::runtime_error
+  {
+    using std::runtime_error::runtime_error;
+  };
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H */
