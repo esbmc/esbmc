@@ -7,28 +7,8 @@ on:
 name: Upload Release Asset
 
 jobs:
-  build-linux:
-    name: Build Linux Release
-    runs-on: ubuntu-latest
-    container: rafaelsamenezes/esbmc-ci:clang11
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@master
-      - run: apt update  # Only for Docker jobs
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-      - name: Fix dubious ownership
-        run: git config --global --add safe.directory /__w/esbmc/esbmc
-      - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_JIMPLE_FRONTEND=On -DENABLE_SOLIDITY_FRONTEND=On
-      - name: Build ESBMC
-        run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Linux.sh
-      - uses: actions/upload-artifact@v1
-        with:
-          name: release-linux
-          path: ./build/ESBMC-Linux.sh
 
-     build-linux:
+  build-linux:
     name: Build ESBMC with all Solvers (Linux)
     runs-on: ubuntu-latest
     steps:
