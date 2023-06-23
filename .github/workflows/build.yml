@@ -52,7 +52,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Build ESBMC
-      run: ./scripts/build.sh
+      run: ./scripts/build-ubuntu.sh
     - uses: actions/upload-artifact@v1
       with:
         name: release-linux
