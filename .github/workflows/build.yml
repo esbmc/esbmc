@@ -31,42 +31,6 @@ jobs:
         path: ./build/csmith-error
         if-no-files-found: ignore
 
-  build-macos:
-    name: Build ESBMC with all Solvers (macOS)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-java@v1
-        with:
-          java-version: '9.0.4'
-      - name: Install Dependencies
-        run: brew install gmp csmith cmake boost ninja python3 automake bison flex && pip3 install PySMT toml
-      - name: Download Clang 11
-        run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz
-      - name: Extract Clang 11
-        run: tar xf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-apple-darwin clang
-      - name: Setup boolector
-        run: git clone --depth=1 --branch=3.2.2 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j4 && make install
-      - name: Setup Z3
-        run: brew install z3
-      - name: Get current folder and files
-        run: pwd && ls
-      - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=Off -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=Off -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On
-      - name: Build ESBMC
-        run: cd build && cmake --build . && cmake --install .
-      - uses: actions/upload-artifact@v1
-        with:
-          name: release-macos
-          path: ./release
-      - name: Run tests
-        run: cd build && ctest -j4 --output-on-failure --progress .
-      - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
-        with:
-          name: csmith-macos
-          path: ./build/csmith-error
-          if-no-files-found: ignore
-
   build-windows:
     name: Build ESBMC with Z3 (Windows)
     runs-on: windows-latest
