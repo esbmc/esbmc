@@ -9,12 +9,9 @@
 #include <util/prefix.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
-
 #include <util/base_type.h>
 #include <util/type_byte_size.h>
-
 #include <irep2/irep2_utils.h>
-
 #include <algorithm>
 #include <regex>
 
@@ -27,12 +24,6 @@ std::string expr2ccodet::get_name_shorthand(std::string fullname)
     shorthand.erase(0, pos + 1);
 
   return shorthand;
-}
-
-bool expr2ccodet::is_anonymous_tag(std::string tag)
-{
-  std::smatch m;
-  return std::regex_search(tag, m, std::regex(" __anon_type_at_"));
 }
 
 bool expr2ccodet::is_padding(std::string tag)
@@ -171,15 +162,20 @@ std::string expr2ccodet::convert_rec(
   {
     BigInt width = string2integer(src.width().as_string());
 
-    // Sometimes there is no way of distinguishing between
-    // types based on their width. For example,
+    // Inferring the type "name" from its width may result in
+    // an incorrect/imprecise translation as
+    // there is no way of distinguishing between
+    // types with the same width. For example,
     // "long" and "long long" are both 64 bits on
-    // 64-bit platforms. However, in many cases the type contains
-    // a non-empty "#cpp_type" field with a string
+    // 64-bit platforms. This may cause issues such as incorrect redeclarations
+    // of system libraries, for example.
+    //
+    // To resolve this problem,
+    // we rely on the "#cpp_type" field which contains a string
     // representation of the corresponding type in the original
-    // program. Hence, if "#cpp_type" is not empty, we try to use
+    // program. If "#cpp_type" is not empty, we try to use
     // this information first, and only resort to infering the type name
-    // from its width otherwise
+    // from its width otherwise.
     std::string cpp_type = src.get("#cpp_type").as_string();
     if(!cpp_type.empty() && width % 8 == 0)
     {
@@ -192,12 +188,14 @@ std::string expr2ccodet::convert_rec(
       return q + sign_str + type_name + d;
     }
 
-    // We cannot have a signed type with a 1 bit width.
-    // So setting "sign_str" to "unsigned" to allow _ExtInt(1)
+    // Since the above is unsuccessful at this point,
+    // we try to infer the type "name" from its size.
+    // Identifying the signedness first
     bool is_signed = src.id() == "signedbv";
 
-    // Also we do not add the "signed" keyword for signed types.
-    // Only unsigned is being added.
+    // We do not add the "signed" keyword for signed types.
+    // Also types with the width of 1 bit or less cannot be "signed".
+    // And if none of the above is the case we add the "unsigned" keyword.
     std::string sign_str = (is_signed && width > 1) ? "" : "unsigned ";
 
     if(width == config.ansi_c.int_width)
@@ -215,6 +213,15 @@ std::string expr2ccodet::convert_rec(
     if(width == config.ansi_c.short_int_width)
       return q + sign_str + "short int" + d;
 
+    // By this point we could not match the type width to any of the above.
+    // So we treat it as a bit-vector of "custom" size.
+    // We use now deprecated Clang extension "_ExtInt" (for backward
+    // compatibility with ESBMC frontend that uses Clang11)
+    // which has since been replaced by "_BigInt".
+    //
+    // Note that this can also be a source of issues for translating
+    // struct/union's with bitfields for compiling with GCC that does
+    // not have the "_ExtInt/_BigInt" syntactic constructs.
     return q + sign_str + "_ExtInt(" + std::to_string(width.to_uint64()) + ")" +
            d;
   }
@@ -224,10 +231,14 @@ std::string expr2ccodet::convert_rec(
 
     if(width == config.ansi_c.single_width)
       return q + "float" + d;
+
     if(width == config.ansi_c.double_width)
       return q + "double" + d;
-    else if(width == config.ansi_c.long_double_width)
+
+    if(width == config.ansi_c.long_double_width)
       return q + "long double" + d;
+
+    assert(!"Unsupported width for floating point types");
   }
   else if(src.id() == "struct" || src.id() == "union")
   {
@@ -487,18 +498,16 @@ std::string expr2ccodet::convert_symbol(const exprt &src, unsigned &)
   if(src.id() == "next_symbol")
     dest = "next_symbol(" + dest + ")";
 
+  // Replacing some characters in the names of identifiers with underscores
   std::replace(dest.begin(), dest.end(), '$', '_');
-  //std::replace(dest.begin(), dest.end(), '?', '_');
-  //std::replace(dest.begin(), dest.end(), '!', '_');
-  //std::replace(dest.begin(), dest.end(), '&', '_');
-  //std::replace(dest.begin(), dest.end(), '#', '_');
-  std::replace(dest.begin(), dest.end(), '\'', ' ');
+  std::replace(dest.begin(), dest.end(), '?', '_');
+  std::replace(dest.begin(), dest.end(), '!', '_');
+  std::replace(dest.begin(), dest.end(), '&', '_');
+  std::replace(dest.begin(), dest.end(), '#', '_');
   std::replace(dest.begin(), dest.end(), '@', '_');
   std::replace(dest.begin(), dest.end(), '.', '_');
   std::replace(dest.begin(), dest.end(), ':', '_');
   std::replace(dest.begin(), dest.end(), '-', '_');
-
-  dest = convert_from_ssa_form(dest);
 
   return dest;
 }
@@ -1312,14 +1321,9 @@ expr2ccodet::convert_constant(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2ccodet::convert_from_ssa_form(const std::string symbol)
-{
-  std::string new_symbol = symbol;
-  std::regex symbol_ssa_addon("(\\?[0-9]+![0-9]+)|(&[0-9]+#[0-9]+)");
-  new_symbol = std::regex_replace(new_symbol, symbol_ssa_addon, "");
-  return new_symbol;
-}
-
+// This is an attempt of encoding and translating ESBMC intrinsic
+// function "_Bool __ESBMC_same_object(void *, void *)" that returns true
+// when both pointers point to the same object in memory.
 std::string
 expr2ccodet::convert_same_object(const exprt &src, unsigned &precedence)
 {
@@ -1430,13 +1434,14 @@ std::string expr2ccodet::convert_alloca(const exprt &src, unsigned &precedence)
   return dest;
 }
 
+// This method contains all "__VERIFIER_nondet_" cases
+// that appear in "esbmc_intrinsics.h".
 std::string expr2ccodet::convert_nondet(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 0)
     return convert_norep(src, precedence);
 
   std::string type_str = "";
-
   if(src.type().is_bool())
   {
     type_str += "bool";

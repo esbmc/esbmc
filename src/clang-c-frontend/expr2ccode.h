@@ -33,7 +33,6 @@ public:
 
   // Some static methods that we should probably redesign in the future
   static std::string get_name_shorthand(std::string fullname);
-  static bool is_anonymous_tag(std::string tag);
   static bool is_padding(std::string tag);
   static bool is_anonymous_member(std::string tag);
   static bool is_typedef_struct_union(std::string tag);
@@ -90,7 +89,6 @@ protected:
   std::string convert_array_of(const exprt &src, unsigned precedence) override;
 
 private:
-  std::string convert_from_ssa_form(const std::string symbol);
 };
 
 #endif
