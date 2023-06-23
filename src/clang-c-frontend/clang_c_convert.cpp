@@ -1608,6 +1608,13 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::MemberExpr &member =
       static_cast<const clang::MemberExpr &>(stmt);
 
+    // special treatment for MemberExpr referring to an enumerator
+    if(is_member_decl_enum(member))
+    {
+      get_decl_ref(*member.getMemberDecl(), new_expr);
+      break;
+    }
+
     if(!perform_virtual_dispatch(member))
     {
       exprt comp;
@@ -3473,4 +3480,14 @@ bool clang_c_convertert::is_member_decl_static(const clang::MemberExpr &member)
   }
 
   return false;
+}
+
+bool clang_c_convertert::is_member_decl_enum(
+  const clang::MemberExpr &member)
+{
+  // returns true if a MemberExpr refers to an enumerator
+  // coming from an enum
+  const clang::ValueDecl &mbr_vd = *member.getMemberDecl();
+  const clang::Decl &mbrd = static_cast<const clang::Decl &>(mbr_vd);
+  return (mbrd.getKind() == clang::Decl::EnumConstant);
 }
