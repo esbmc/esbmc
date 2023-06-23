@@ -12,22 +12,25 @@ jobs:
     - name: Runs testing tool unit test
       run: cd regression && python3 testing_tool_test.py
 
-  build-linux:
-    name: Build ESBMC with all Solvers (Linux)
-    runs-on: ubuntu-latest
+  build-unix:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    name: Build ESBMC with all Solvers ( ${{ matrix.os }} )
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
     - name: Build ESBMC
       run: ./scripts/build.sh -b Debug
     - uses: actions/upload-artifact@v1
       with:
-        name: release-linux
+        name: release-unix
         path: ./release
     - name: Run tests
       run: cd build/ && ctest -j4 --output-on-failure --progress .
     - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
       with:
-        name: csmith-linux
+        name: csmith-unix
         path: ./build/csmith-error
         if-no-files-found: ignore
 
