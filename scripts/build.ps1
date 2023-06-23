@@ -1,6 +1,3 @@
-git config --system core.autocrlf false
-git config --system core.eol lf
-
 Write-Host "Set TLS1.2"
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor "Tls12"
 choco install -y nsis.portable --ignore-checksums
