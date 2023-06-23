@@ -28,6 +28,20 @@ jobs:
           name: release-linux
           path: ./build/ESBMC-Linux.sh
 
+     build-linux:
+    name: Build ESBMC with all Solvers (Linux)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Configure CMake
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_JIMPLE_FRONTEND=On -DENABLE_SOLIDITY_FRONTEND=On
+      - name: Build ESBMC
+        run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Linux.sh
+      - uses: actions/upload-artifact@v1
+        with:
+          name: release-linux
+          path: ./build/ESBMC-Linux.sh
+
 
   build-macos:
     name: Build Darwin Release
@@ -59,49 +73,24 @@ jobs:
     name: Build ESBMC with Z3 (Windows)
     runs-on: windows-latest
     steps:
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
-      - name: check python
-        run: python --version
-      - name: Make git use LF only
-        run: |
-          git config --system core.autocrlf false
-          git config --system core.eol lf
-      - uses: actions/checkout@v2
-      - name: Install dependencies (flex, bison, od)
-        run: |
-          Write-Host "Set TLS1.2"
-          [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor "Tls12"
-          choco install -y nsis.portable --ignore-checksums
-          ./scripts/winflexbison_install.ps1
-      - name: Check if od is on path
-        run: od.exe --version
-      - name: Update vcpkg
-        run: |
-          vcpkg.exe update
-          cd C:/vcpkg
-          git.exe pull
-          .\bootstrap-vcpkg.bat
-      - name: vcpkg integrate
-        run: vcpkg.exe integrate install
-      - name: Install Boost
-        run: vcpkg.exe install boost-filesystem:x64-windows-static boost-multiprecision:x64-windows-static boost-date-time:x64-windows-static boost-test:x64-windows-static boost-multi-index:x64-windows-static boost-crc:x64-windows-static boost-property-tree:x64-windows-static boost-uuid:x64-windows-static boost-program-options:x64-windows-static boost-iostreams:x64-windows-static
-      - name: Configure CMake
-        run: |
-          mkdir build
-          cd build
-          cmake.exe .. -A x64 -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On -DDOWNLOAD_DEPENDENCIES=On
-      - name: Build ESBMC
-        run: |
-          cd build
-          cmake --build . --target INSTALL  --config RelWithDebInfo
-          cpack -G ZIP -C RelWithDebInfo
-      - uses: actions/upload-artifact@v2
-        with:
-          name: release-windows
-          path: C:/deps/esbmc
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+    - name: check python
+      run: python --version
+    - name: Update vcpkg
+      run: |
+        vcpkg.exe update
+        cd C:/vcpkg
+        git.exe pull
+        .\bootstrap-vcpkg.bat
+    - name: Configure ESBMC
+      run: ./scripts/build.ps1
+    - uses: actions/upload-artifact@v2
+      with:
+        name: release-windows
+        path: C:/deps/esbmc
 
 
   create-release:
