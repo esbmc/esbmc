@@ -13,9 +13,6 @@
 
 /** Mapping of SMT function IDs to their names. */
 static const std::array smt_func_name_table = {
-  "hack_func_id",           /*  */
-  "invalid_func_id",        /*  */
-
   // Terminals
   "int_func_id",            /* SMT_FUNC_INT, */
   "bool_func_id",           /* SMT_FUNC_BOOL, */
