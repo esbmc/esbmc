@@ -2,6 +2,9 @@ set(Yices_MIN_VERSION "2.6.1")
 
 if(DEFINED Yices_DIR)
     set(ENABLE_YICES ON)
+elseif(EXISTS $ENV{HOME}/yices)
+    set(ENABLE_YICES ON)
+
 else()
     if(ENABLE_YICES AND DOWNLOAD_DEPENDENCIES)
     # Yices does not support CMake
@@ -34,7 +37,7 @@ else()
     execute_process(COMMAND make install
         WORKING_DIRECTORY ${yices_SOURCE_DIR})
 
-    file(COPY ${yices_SOURCE_DIR}/build/x86_64-pc-linux-gnu-release/static_lib/libyices.a 
+    file(COPY ${yices_SOURCE_DIR}/build/x86_64-pc-linux-gnu-release/static_lib/libyices.a
         DESTINATION ${yices_BINARY_DIR}/lib/)
 
     set(Yices_DIR ${yices_BINARY_DIR})
@@ -42,9 +45,7 @@ endif()
 
 endif()
 
-if(EXISTS $ENV{HOME}/yices)
-    set(ENABLE_YICES ON)
-endif()
+
 
 if(ENABLE_YICES)
     find_path(Yices_INCLUDE_DIRS yices.h HINTS "${Yices_DIR}" $ENV{HOME}/yices PATH_SUFFIXES include)

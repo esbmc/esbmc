@@ -5,7 +5,7 @@ if(DEFINED Boolector_DIR)
   set(ENABLE_BOOLECTOR ON)
 else()
   if(ENABLE_BOOLECTOR AND DOWNLOAD_DEPENDENCIES)
-    # Sadly... Boolector requires some manual execution 
+    # Sadly... Boolector requires some manual execution
     # before invoking its scripts. Thus, we can't use
     # FetchContent here
     CPMAddPackage(
@@ -19,22 +19,22 @@ else()
 
     # TODO: Maybe we should do a PR to boolector repo and make our
     # life easier in here.
-    message("[boolector] Setting up boolector lingeling")
+    message("[boolector] Setting up lingeling")
     execute_process(COMMAND "./contrib/setup-lingeling.sh"
                     WORKING_DIRECTORY ${boolector_SOURCE_DIR})
-    
+
     message("[boolector] Setting up btor2tools")
     execute_process(COMMAND "./contrib/setup-btor2tools.sh"
                     WORKING_DIRECTORY ${boolector_SOURCE_DIR})
-    
+
     message("[boolector] Configuring build")
     execute_process(COMMAND ${boolector_SOURCE_DIR}/configure.sh --prefix ${boolector_BINARY_DIR}
                     WORKING_DIRECTORY ${boolector_SOURCE_DIR})
-    
+
     message("[boolector] Building...")
     execute_process(COMMAND make -j4 install
       WORKING_DIRECTORY ${boolector_SOURCE_DIR}/build)
-    
+
     set(Boolector_DIR ${boolector_BINARY_DIR})
     endif()
 
