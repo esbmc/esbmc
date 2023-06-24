@@ -119,8 +119,6 @@ class XMLTestCase(BaseTest):
     """This specialization will parse XML test descriptions"""
 
     UNSUPPORTED_OPTIONS = ["--timeout", "--memlimit"]
-    # Custom library for CPP abstract libraries
-    CPP_INCLUDE_DIR: str = None
 
     def __init__(self, test_dir: str, name: str):
         super().__init__(test_dir, name)
@@ -162,17 +160,6 @@ class XMLTestCase(BaseTest):
 
     def generate_run_argument_list(self, *tool):
         result = super().generate_run_argument_list(*tool)
-        # Some sins were committed into test.desc hack them here
-        try:
-            index = result.index("~/libraries/")
-            if XMLTestCase.CPP_INCLUDE_DIR is None:
-                result.pop(index-1)
-                result.pop(index-1)
-            else:
-                result[index] = XMLTestCase.CPP_INCLUDE_DIR
-        except ValueError:
-            pass
-
         for x in self.__class__.UNSUPPORTED_OPTIONS:
             try:
                 index = result.index(x)
@@ -341,8 +328,6 @@ def _arg_parsing():
     parser.add_argument("--mode", required=False, help="tests to be executed [CORE, "
                                                       "KNOWNBUG, FUTURE, THOROUGH")
     parser.add_argument("--file", required=False, help="specific test to be executed")
-    parser.add_argument("--library", required=False,
-                        help="Path for the Standard C++ Libraries abstractions")
     parser.add_argument("--mark_knownbug_with_word", required=False,
                         help="If test fails with word then mark it as a knownbug")
     parser.add_argument("--benchbringup", default=False, action="store_true",
@@ -354,7 +339,6 @@ def _arg_parsing():
     main_args = parser.parse_args()
     if main_args.timeout:
         RegressionBase.TIMEOUT = int(main_args.timeout)
-    XMLTestCase.CPP_INCLUDE_DIR = main_args.library
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
 
     regression_path = os.path.join(os.path.dirname(os.path.relpath(__file__)),
