@@ -736,8 +736,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     // Only attempt to handle struct.s
     const if2t &if_ref = to_if2t(expr);
     args[0] = convert_ast(if_ref.cond);
-    args[1] = convert_ast(if_ref.true_value);
-    args[2] = convert_ast(if_ref.false_value);
+    args[1] = convert_ast(typecast2tc(if_ref.type, if_ref.true_value));
+    args[2] = convert_ast(typecast2tc(if_ref.type, if_ref.false_value));
     a = args[1]->ite(this, args[0], args[2]);
     break;
   }

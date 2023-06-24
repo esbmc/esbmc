@@ -634,6 +634,23 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     abort();
   }
 
+  if(is_array_type(cast.type) && is_array_type(cast.from->type))
+  {
+    const array_type2t &to_array = to_array_type(cast.type);
+    const array_type2t &from_array = to_array_type(cast.from->type);
+    if(to_array.subtype == from_array.subtype &&
+       !to_array.size_is_infinite && !from_array.size_is_infinite)
+    {
+      /* One side's size is probably a symbol; assert equality between both
+       * sides' sizes. */
+      assert(to_array.array_size != from_array.array_size);
+      assert_expr(equality2tc(to_array.array_size, from_array.array_size));
+      expr2tc from = cast.from;
+      from->type = cast.type;
+      return convert_ast(from);
+    }
+  }
+
   log_error("Typecast for unexpected type\n{}", *expr);
   abort();
 }
