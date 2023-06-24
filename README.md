@@ -6,23 +6,23 @@
 ![Build All Solvers](https://github.com/esbmc/esbmc/workflows/Build%20All%20Solvers/badge.svg)
 [![codecov](https://codecov.io/gh/esbmc/esbmc/branch/master/graph/badge.svg)](https://codecov.io/gh/esbmc/esbmc)
 
-ESBMC (the Efficient SMT-based Context-Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++, Kotlin, and Solidity programs. It can automatically verify both predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions. In addition, ESBMC supports the Clang compiler as its C/C++ frontend, the Soot framework via Jimple as its Java/Kotlin frontend, IEEE floating-point arithmetic for various SMT solvers, implements the Solidity grammar production rules as its Solidity frontend.  In addition, ESBMC implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
+ESBMC (the Efficient SMT-based Context-Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++, Kotlin, and Solidity programs. It can automatically verify predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions. In addition, ESBMC supports the Clang compiler as its C/C++ frontend, the Soot framework via Jimple as its Java/Kotlin frontend, IEEE floating-point arithmetic for various SMT solvers, implements the Solidity grammar production rules as its Solidity frontend.  In addition, ESBMC implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
 
-To build ESBMC, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. For getting started, we recommend first reading some of the background material / publications, to understand exactly what this technique can provide, for example our SV-COMP papers, which are available [online](https://ssvlab.github.io/esbmc/publications.html).
+To build ESBMC, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. To get started, we recommend first reading some of the background material/publications to understand exactly what this technique can provide, for example, our SV-COMP papers, which are available [online](https://ssvlab.github.io/esbmc/publications.html).
 
 We also provide a short video that explains ESBMC: 
 
 https://www.youtube.com/watch?v=uJ5Jn0sxm08&t=2182s
 
-This video was delivered as part of a technical talk on exploiting the SAT revolution for automated software verification in a workshop between Arm Research and the University of Manchester.
+In a workshop between Arm Research and the University of Manchester, this video was delivered as part of a technical talk on exploiting the SAT revolution for automated software verification.
 
 We offer a post-graduate course in software security that explains the internals of ESBMC. 
 
 https://ssvlab.github.io/lucasccordeiro/courses/2020/01/software-security/index.html
 
-This course unit introduces students to basic and advanced approaches to formally build verified trustworthy software systems, where trustworthy comprise five attributes: *reliability*, *availability*, *safety*, *resilience* and *security*.
+This course unit introduces students to basic and advanced approaches to formally building verified trustworthy software systems, where trustworthiness comprises five attributes: *reliability*, *availability*, *safety*, *resilience* and *security*.
 
-The cannonical public location of ESBMCs source is on github:
+The canonical public location of ESBMCs source is on GitHub:
 
     https://github.com/esbmc/esbmc
 
@@ -59,28 +59,28 @@ The figure below illustrates the current ESBMC architecture.
 ### Features
 
 ESBMC aims to support all of C99/C11, and detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of problems that can be detected include:
- * User specified assertion failures
- * Out of bounds array access
+ * User-specified assertion failures
+ * Out-of-bounds array access
  * Illegal pointer dereferences, such as:
    * Dereferencing null
-   * Performing an out-of bounds dereference
+   * Performing an out-of-bounds dereference
    * Double-free of malloc'd memory
    * Misaligned memory access
  * Integer overflows
- * Undefined behaviour on shift operations
+ * Undefined behavior on shift operations
  * Floating-point for NaN
  * Divide by zero
  * Memory leaks
 
-Concurrent software (using the pthread api) is verified by explicit exploration of interleavings, producing one symbolic execution per interleaving. By default, pointer-safety, array-out-of-bounds, division-by-zero, and user-specified assertions will be checked for; one can also specify options to check concurrent programs for:
+Concurrent software (using the pthread api) is verified by explicitly exploring interleavings, producing one symbolic execution per interleaving. By default, pointer-safety, array-out-of-bounds, division-by-zero, and user-specified assertions will be checked for; one can also specify options to check concurrent programs for:
  * Deadlock (only on pthread mutexes and convars)
  * Data races (i.e. competing writes)
  * Atomicity violations at visible assignments
  * Lock acquisition ordering
 
-By default ESBMC performs a "lazy" depth first search of interleavings -- it can also encode (explicitly) all interleavings into a single SMT formula.
+By default, ESBMC performs a "lazy" depth-first search of interleavings -- it can also encode (explicitly) all interleavings into a single SMT formula.
 
-A number of SMT solvers are currently supported:
+Many SMT solvers are currently supported:
  * Z3 4.8+
  * Bitwuzla
  * Boolector 3.0+
@@ -88,16 +88,16 @@ A number of SMT solvers are currently supported:
  * CVC4
  * Yices 2.2+
 
-In addition, ESBMC can be configured to use the SMTLIB interactive text format with a pipe, to communicate with an arbitary solver process, although not-insignificant overheads are involved.
+In addition, ESBMC can be configured to use the SMTLIB interactive text format with a pipe to communicate with an arbitrary solver process, although not-insignificant overheads are involved.
 
-A limited subset of C++98 is supported too -- a library modelling the STL is also available.
+A limited subset of C++98/03 is supported, too -- a library modeling the STL is also available.
 
 ### Differences from CBMC
 
 ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary differences between the two are:
 
-* CBMC focuses on SAT-based encodings of unrolled programs while ESBMC targets SMT-based encodings.
-* CBMC's concurrency support is an entirely symbolic encoding of a concurrent program in one SAT formulae, while ESBMC explores each interleaving individually using context-bounded verification.
+* CBMC focuses on SAT-based encodings of unrolled programs, while ESBMC targets SMT-based encodings.
+* CBMC's concurrency support is an entirely symbolic encoding of a concurrent program in one SAT formula, while ESBMC explores each interleaving individually using context-bounded verification.
 * CBMC uses a modified C parser written by James Roskind and a C++ parser based on OpenC++, while ESBMC relies on the Clang front-end.
 * ESBMC implements the Solidity grammar production rules as its Solidity frontend, while CBMC does not implement a Solidity frontend.
 * ESBMC verifies Kotlin programs with a model of the standard Kotlin libraries and checks a set of safety properties, while CBMC cannot handle Kotlin programs.
@@ -106,13 +106,13 @@ ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary di
 
 # Open source
 
-ESBMC has now been released as open source software -- mainly distributed under the terms of the Apache License 2.0. ESBMC contains a signficant amount of other peoples software, however, please see the COPYING file for an explanation of who-owns-what, and under what terms they are distributed.
+ESBMC has now been released as open-source software -- mainly distributed under the terms of the Apache License 2.0. ESBMC contains a significant amount of other people's software. However, please see the COPYING file for an explanation of who-owns-what and under what terms they are distributed.
 
-We'd be extremely happy to receive contributions to make ESBMC better (under the terms of the Apache License 2.0). If you'd like to submit anything, please file a pull request against the public github repo. General discussion and release announcements will be made via GitHub. To contact us about research or collaboration, please post an issue in GitHub.
+We'd be extremely happy to receive contributions to make ESBMC better (under the terms of the Apache License 2.0). Please file a pull request against the public GitHub repo if you'd like to submit anything. General discussion and release announcements will be made via GitHub. Please post an issue on GitHub to contact us about research or collaboration.
 
 ### Getting started
 
-Currently, we don't have a good guide for getting started with ESBMC, although we hope to improve this in the future. Examining some of the benchmarks in the SV-COMP competition (http://sv-comp.sosy-lab.org/) would be a good start, using the esbmc command line for the relevant competition year.
+We need a better guide for getting started with ESBMC, although we hope to improve this in the future. Examining some of the benchmarks in the SV-COMP competition (http://sv-comp.sosy-lab.org/) would be a good start, using the ESBMC command line for the relevant competition year.
 
 ### Contributing to the code base
 
@@ -127,10 +127,10 @@ Here are some steps to contributing to the code base:
   1. Push your changes to your branch
   1. Create a Pull Request targeting the master branch
 
-Here is an example to prepare a pull request (PR)
+Here is an example of preparing a pull request (PR)
 
 
-A) Make sure that you are in the `master` branch and your fork is updated.
+A) Ensure you are in the `master` branch and your fork is updated.
 
 ```
 git checkout master
@@ -172,11 +172,11 @@ New contributors can check issues marked with `good first issue` by clicking [he
 
 ### Documentation
 
-A limited number of classes have been marked up with doxygen documentation headers. Comments are put in the header files declaring classes and methods. HTML documation can be generated by running:
+A limited number of classes have been marked up with doxygen documentation headers. Comments are put in the header files declaring classes and methods. HTML documentation can be generated by running:
 
     doxygen .doxygen
 
-Output will be in docs/html, open index.html to get started.
+The output will be in docs/HTML; open index.html to get started.
 
 ### Acknowledgments
 
