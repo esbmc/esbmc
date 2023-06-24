@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 gh-1070.c
 --unwind 1 --z3
 ^VERIFICATION FAILED$
