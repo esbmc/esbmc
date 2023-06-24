@@ -1,16 +1,24 @@
 #!/bin/sh
 
+# Create build directory
 mkdir build && cd build
 
+# Set arguments that should be available for every OS
 BASE_ARGS="-DDOWNLOAD_DEPENDENCIES=On -GNinja -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release"
-SOLVER_FLAGS="-DENABLE_BOOLECTOR=On -DENABLE_Z3=On -DENABLE_YICES=Off -DENABLE_CVC4=OFF  -DENABLE_BITWUZLA=OFF -DENABLE_GOTO_CONTRACTOR=OFF"
-
+SOLVER_FLAGS="-DENABLE_BOOLECTOR=On -DENABLE_YICES=Off -DENABLE_CVC4=OFF  -DENABLE_BITWUZLA=OFF -DENABLE_GOTO_CONTRACTOR=OFF"
+COMPILER_ARGS=''
+# Ubuntu setup (pre-config)
 ubuntu_setup () {
+    # Tested on ubuntu 22.04
+    echo "Configuring Ubuntu build"
     sudo apt-get update && sudo apt-get install -y clang clang-tidy python-is-python3 csmith python3 git ccache unzip wget curl libcsmith-dev gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev pkg-config python3-pip python3-toml python-is-python3 openjdk-11-jdk
     BASE_ARGS="$BASE_ARGS -DENABLE_OLD_FRONTEND=On  -DENABLE_WERROR=ON -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On"
+    SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=ON"
 }
 
+# macOS setup (pre-config)
 macos_setup () {
+  echo "Configuring macOS build"
    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex && pip3 install PySMT toml
    wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz
    tar xf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-apple-darwin ../clang
@@ -18,34 +26,32 @@ macos_setup () {
 }
 
 
-
 # Detect the platform ($OSTYPE was not working on github actions for ubuntu)
+# Note: Linux here means Ubuntu, this will mostly not work anywhere else.
 OS="`uname`"
 case $OS in
   'Linux')
     ubuntu_setup
     ;;
-    # TODO: windows?
-#   'WindowsNT')
-#     ;;
   'Darwin')
     macos_setup
     ;;
   *) echo "Unsupported OS $OSTYPE" ; exit 1; ;;
 esac
 
-
-COMPILER_ARGS=''
+# Setup build flags (release, debug, sanitizer, ...)
 while getopts b:s: flag
 do
     case "${flag}" in
         b) BASE_ARGS="$BASE_ARGS -DCMAKE_BUILD_TYPE=${OPTARG}";;
         s) BASE_ARGS="$BASE_ARGS -DSANITIZER_TYPE=${OPTARG}"
-           COMPILER_ARGS="CC=clang CXX=clang++";;
+           COMPILER_ARGS="$COMPILER_ARGS CC=clang CXX=clang++";;
     esac
 done
 
-$COMPILER_ARGS cmake .. $BASE_ARGS
+# Configure ESBMC
+$COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS
+# Compile ESBMC
 cmake --build . && ninja install
 
 ubuntu_post_setup () {
