@@ -15,7 +15,7 @@ jobs:
   build-unix:
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [ubuntu-latest]
     name: Build ESBMC (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     steps:
