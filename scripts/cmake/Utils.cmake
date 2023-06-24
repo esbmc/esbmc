@@ -39,6 +39,7 @@ function(mangle output_c dir)
   # optional 1-parameter keywords to this function
   set(kw1 MACRO            # sets flail.py --macro parameter to the given argument
           ACC_HEADERS_INTO # generates a header that #include-s all generated headers
+          RECURSIVE
           WILDCARD         # globs ${dir}/${MANGLE_WILDCARD} instead of using the unparsed arguments as filenames under ${dir}
           PREFIX           # sets flail.py --prefix parameter to the given argument
      )
@@ -48,9 +49,14 @@ function(mangle output_c dir)
     set(single_file_desc "${MANGLE_WILDCARD} in ${dir}/")
     file(GLOB inputs RELATIVE ${dir} CONFIGURE_DEPENDS ${dir}/${MANGLE_WILDCARD} ${MANGLE_UNPARSED_ARGUMENTS})
   else()
-    set(inputs ${MANGLE_UNPARSED_ARGUMENTS})
-    list(JOIN ", " inputs single_file_desc)
-    set(single_file_desc "${inputs} in ${dir}")
+    if(MANGLE_RECURSIVE)
+      set(single_file_desc "${MANGLE_WILDCARD} in ${dir}/")
+      file(GLOB_RECURSE inputs RELATIVE ${dir} CONFIGURE_DEPENDS ${MANGLE_UNPARSED_ARGUMENTS} "${dir}/*")
+    else()
+      set(inputs ${MANGLE_UNPARSED_ARGUMENTS})
+      list(JOIN ", " inputs single_file_desc)
+      set(single_file_desc "${inputs} in ${dir}")
+    endif()
   endif()
 
   set(cmd0 ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py)
