@@ -4,7 +4,7 @@
   <item_02_id>esbmc-algorithm</item_02_id>
   <item_03_summary>Aims to analyze the main function from module: esbmc-algorithm</item_03_summary>
   <item_04_file_C_to_test>main.cpp </item_04_file_C_to_test>
-  <item_05_option_to_run_esbmc>--unwind 10 --no-unwinding-assertions -I ~/libraries/</item_05_option_to_run_esbmc>
+  <item_05_option_to_run_esbmc>--unwind 10 --no-unwinding-assertions </item_05_option_to_run_esbmc>
   <item_06_expected_result>^VERIFICATION SUCCESSFUL$</item_06_expected_result>
   <item_07_test_importance>High</item_07_test_importance>
   <item_08_execution_type>Automated</item_08_execution_type>

@@ -171,13 +171,13 @@ class XMLTest1(ParseTest):
         self.assertEqual(self.test_case.test_mode, "CORE")
         self.assertEqual(self.test_case.test_file, "main.cpp")
         self.assertEqual(self.test_case.test_args,
-                         "--unwind 10 --no-unwinding-assertions -I /__w/esbmc/esbmc/src/cpp/library/ --memlimit 14000000 --timeout 900")
+                         "--unwind 10 --no-unwinding-assertions  --memlimit 14000000 --timeout 900")
         self.assertEqual(self.test_case.test_regex, ["^VERIFICATION FAILED$"])
 
     def _argument_list_checks(self, test_obj: BaseTest):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         expected = ['__test__', './esbmc-cpp/cpp/ch1_0/main.cpp', '--unwind',
-                    '10', '--no-unwinding-assertions', '-I', '/__w/esbmc/esbmc/src/cpp/library/']
+                    '10', '--no-unwinding-assertions']
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
