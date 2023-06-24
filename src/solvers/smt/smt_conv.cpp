@@ -736,6 +736,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     // Only attempt to handle struct.s
     const if2t &if_ref = to_if2t(expr);
     args[0] = convert_ast(if_ref.cond);
+    /* The typecasts here are a workaround for the fact that, for instance, the
+     * renaming modifies if2t expressions in such a way that its type does no
+     * longer match that of either of the if2t's branches. This leads to
+     * problems in particular for symbolic array sizes that during symex get
+     * assigned a concrete value, but the branches are not getting one. See also
+     * github#1085. */
     args[1] = convert_ast(typecast2tc(if_ref.type, if_ref.true_value));
     args[2] = convert_ast(typecast2tc(if_ref.type, if_ref.false_value));
     a = args[1]->ite(this, args[0], args[2]);
