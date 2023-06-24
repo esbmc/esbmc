@@ -47,3 +47,22 @@ done
 
 $COMPILER_ARGS cmake .. $BASE_ARGS
 cmake --build . && ninja install
+
+ubuntu_post_setup () {
+  echo "No further steps needed for ubuntu"
+}
+
+# macOS needs an extra step before testing
+macos_post_setup () {
+  chmod +x build/macos-wrapper.sh
+}
+
+case $OS in
+  'Linux')
+    ubuntu_post_setup
+    ;;
+  'Darwin')
+    macos_post_setup
+    ;;
+  *) echo "Unsupported OS $OSTYPE" ; exit 1; ;;
+esac
