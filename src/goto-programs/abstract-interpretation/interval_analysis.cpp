@@ -24,6 +24,20 @@ static inline void get_symbols(
     [&symbols](const expr2tc &e) -> void { get_symbols(e, symbols); });
 }
 
+static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
+{
+  expr->Foreach_operand([&state](expr2tc &e) -> void {
+    tvt result = interval_domaint::eval_boolean_expression(e, state);
+    if(result.is_true())
+      e = gen_true_expr();
+    else if(result.is_false())
+      e = gen_false_expr();
+    else
+      simplify_guard(e, state);
+  });
+  simplify(expr);
+}
+
 void instrument_intervals(
   const ait<interval_domaint> &interval_analysis,
   goto_functiont &goto_function)
@@ -48,6 +62,12 @@ void instrument_intervals(
       {
         // We may be able to simplify here
         const interval_domaint &d = interval_analysis[i_it];
+
+        // Let's try to simplify first
+        if(interval_domaint::enable_assertion_simplification)
+          simplify_guard(i_it->guard, d);
+
+        // Evaluate the simplified expression
         tvt guard = interval_domaint::eval_boolean_expression(i_it->guard, d);
         if(i_it->is_goto())
           guard = !guard;
@@ -57,7 +77,6 @@ void instrument_intervals(
           i_it->make_skip();
           continue;
         }
-
         // If guard is always false... convert it to trivial!
         if(
           guard.is_false() && interval_domaint::enable_assertion_simplification)
