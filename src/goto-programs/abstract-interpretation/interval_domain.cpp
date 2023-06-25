@@ -2,6 +2,7 @@
 /// Interval Domain
 // TODO: Ternary operators, lessthan into lessthanequal for integers
 #include <goto-programs/abstract-interpretation/interval_domain.h>
+#include <goto-programs/abstract-interpretation/bitwise_bounds.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/std_expr.h>
@@ -452,6 +453,9 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::bitor_id:
   case expr2t::bitand_id:
   case expr2t::bitxor_id:
+  case expr2t::bitnand_id:
+  case expr2t::bitnor_id:
+  case expr2t::bitnxor_id:
     if(enable_interval_bitwise_arithmetic)
     {
       auto bit_op = std::dynamic_pointer_cast<bit_2ops>(e);
@@ -474,6 +478,13 @@ T interval_domaint::get_interval(const expr2tc &e) const
         result = lhs & rhs;
       else if(is_bitxor2t(e))
         result = lhs ^ rhs;
+
+      else if(is_bitnand2t(e))
+        result = T::bitnot(lhs & rhs);
+      else if(is_bitnor2t(e))
+        result = T::bitnot(lhs | rhs);
+      else if(is_bitnxor2t(e))
+        result = T::bitnot(lhs ^ rhs);
     }
     break;
 
