@@ -910,10 +910,19 @@ public:
   }
 
   static wrapped_interval
-  equality(const wrapped_interval &lhs, const wrapped_interval &)
+  equality(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    log_debug("[wrapped] no support for equality");
     wrapped_interval result(lhs.t);
+    if(lhs.singleton() && rhs.singleton() && lhs.get_lower() == rhs.get_lower())
+    {
+      result.set_lower(1);
+      result.set_upper(1);
+    }
+    else if(intersection(lhs, rhs).empty())
+    {
+      result.set_lower(0);
+      result.set_upper(0);
+    }
     return result;
   }
 
@@ -936,35 +945,59 @@ public:
   }
 
   static wrapped_interval
-  less_than(const wrapped_interval &lhs, const wrapped_interval &)
+  less_than(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    log_debug("[wrapped] no support for less than");
     wrapped_interval result(lhs.t);
+    if(lhs.get_upper() < rhs.get_lower())
+    {
+      result.set_lower(1);
+      result.set_upper(1);
+    }
+    else if(lhs.get_lower() >= rhs.get_upper())
+    {
+      result.set_lower(0);
+      result.set_upper(0);
+    }
+    else
+    {
+      result.set_lower(0);
+      result.set_upper(1);
+    }
     return result;
   }
 
   static wrapped_interval
-  less_than_equal(const wrapped_interval &lhs, const wrapped_interval &)
+  less_than_equal(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    log_debug("[wrapped] no support for less than");
     wrapped_interval result(lhs.t);
+    if(lhs.get_upper() <= rhs.get_lower())
+    {
+      result.set_lower(1);
+      result.set_upper(1);
+    }
+    else if(lhs.get_lower() > rhs.get_upper())
+    {
+      result.set_lower(0);
+      result.set_upper(0);
+    }
+    else
+    {
+      result.set_lower(0);
+      result.set_upper(1);
+    }
     return result;
   }
 
   static wrapped_interval
-  greater_than_equal(const wrapped_interval &lhs, const wrapped_interval &)
+  greater_than_equal(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    log_debug("[wrapped] no support for greater than equal");
-    wrapped_interval result(lhs.t);
-    return result;
+    return less_than(rhs, lhs);
   }
 
   static wrapped_interval
-  greater_than(const wrapped_interval &lhs, const wrapped_interval &)
+  greater_than(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    log_debug("[wrapped] no support for greater than");
-    wrapped_interval result(lhs.t);
-    return result;
+    return less_than_equal(rhs, lhs);
   }
 
   wrapped_interval sign_extension(const type2tc &cast) const
