@@ -435,8 +435,9 @@ public:
     return s;
   }
 
-  friend interval_templatet<T>
-  operator&(const interval_templatet<T> &, const interval_templatet<T> &)
+  interval_templatet<T> interval_bitand(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &) const
   {
     log_debug("No support for bitand");
     interval_templatet<T> result;
@@ -444,7 +445,14 @@ public:
   }
 
   friend interval_templatet<T>
-  operator|(const interval_templatet<T> &, const interval_templatet<T> &)
+  operator&(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
+  {
+    return lhs.interval_bitand(lhs, rhs);
+  }
+
+  interval_templatet<T> interval_bitor(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &) const
   {
     log_debug("No support for bitor");
     interval_templatet<T> result;
@@ -452,37 +460,62 @@ public:
   }
 
   friend interval_templatet<T>
-  operator^(const interval_templatet<T> &, const interval_templatet<T> &)
+  operator|(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
+  {
+    return lhs.interval_bitor(lhs, rhs);
+  }
+
+  interval_templatet<T> interval_bitxor(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &) const
   {
     log_debug("No support for bitxor");
     interval_templatet<T> result;
     return result;
   }
 
-  static interval_templatet<T> logical_right_shift(
-    const interval_templatet<T> &,
-    const interval_templatet<T> &)
+  friend interval_templatet<T>
+  operator^(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
   {
-    log_debug("No support for logical right shift");
+    return lhs.interval_bitxor(lhs, rhs);
+  }
+
+  interval_templatet<T> interval_logical_right_shift(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &) const
+  {
+    log_debug("No support for lshr");
+    interval_templatet<T> result;
+    return result;
+  }
+
+  static interval_templatet<T> logical_right_shift(
+    const interval_templatet<T> &lhs,
+    const interval_templatet<T> &rhs)
+  {
+    return lhs.interval_logical_right_shift(lhs, rhs);
+  }
+
+  interval_templatet<T> interval_left_shift(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &) const
+  {
+    log_debug("No support for shl");
     interval_templatet<T> result;
     return result;
   }
 
   static interval_templatet<T>
-  left_shift(const interval_templatet<T> &, const interval_templatet<T> &)
+  left_shift(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
   {
-    log_debug("No support for left shift");
-    interval_templatet<T> result;
-    return result;
+    return lhs.interval_left_shift(lhs, rhs);
   }
 
   static interval_templatet<T> arithmetic_right_shift(
-    const interval_templatet<T> &,
-    const interval_templatet<T> &)
+    const interval_templatet<T> &lhs,
+    const interval_templatet<T> &rhs)
   {
-    log_debug("No support for arithmetic right shift");
-    interval_templatet<T> result;
-    return result;
+    return lhs.interval_left_shift(lhs, rhs);
   }
 
   static interval_templatet<T> bitnot(const interval_templatet<T> &w)
@@ -751,5 +784,4 @@ std::ostream &operator<<(std::ostream &out, const interval_templatet<T> &i)
 
   return out;
 }
-
 #endif // CPROVER_ANALYSES_INTERVAL_TEMPLATE_H
