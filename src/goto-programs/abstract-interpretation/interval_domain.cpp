@@ -267,6 +267,8 @@ template <class T>
 T interval_domaint::get_interval(const expr2tc &e) const
 {
   T result = get_top_interval_from_expr<T>(e);
+
+  // TODO: I probably can refactor these in a better way
   switch(e->expr_id)
   {
   case expr2t::constant_bool_id:
@@ -294,6 +296,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
 
   case expr2t::or_id:
   case expr2t::and_id:
+  case expr2t::xor_id:
+  case expr2t::implies_id:
   {
     auto logic_op = std::dynamic_pointer_cast<logic_2ops>(e);
     tvt lhs = eval_boolean_expression(logic_op->side_1, *this);
@@ -336,9 +340,51 @@ T interval_domaint::get_interval(const expr2tc &e) const
       }
     }
 
-    // TODO: implies
+    else if(is_xor2t(e))
+    {
+      if(lhs.is_unknown() || rhs.is_unknown())
+      {
+        result.set_lower(0);
+        result.set_upper(1);
+      }
+      else if(lhs == rhs)
+      {
+        result.set_lower(0);
+        result.set_upper(0);
+      }
+      else
+      {
+        result.set_lower(1);
+        result.set_upper(1);
+      }
 
-    break;
+      break;
+    }
+
+    else if(is_implies2t(e))
+    {
+      // A --> B <=== > ¬A or B
+      if(lhs.is_true() && rhs.is_false())
+      {
+        result.set_lower(0);
+        result.set_upper(0);
+      }
+      else if(lhs.is_false() || rhs.is_true())
+      {
+        result.set_lower(1);
+        result.set_upper(1);
+      }
+      else
+      {
+        result.set_lower(0);
+        result.set_upper(1);
+      }
+      break;
+    }
+
+    log_error(
+      "[interval] Arrived at get_interval with unsupported expression: {}", *e);
+    abort();
   }
 
   case expr2t::if_id:
@@ -626,8 +672,7 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(
     // Interval: [a,b]
     std::vector<expr2tc> disjuncts;
 
-    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w)
-    {
+    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w) {
       assert(w.lower <= w.upper);
 
       std::vector<expr2tc> s_conjuncts;
@@ -667,8 +712,7 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
     return gen_false_expr();
 
   std::vector<expr2tc> conjuncts;
-  auto typecast = [&symbol](expr2tc v)
-  {
+  auto typecast = [&symbol](expr2tc v) {
     c_implicit_typecast(v, symbol->type, *migrate_namespace_lookup);
     return v;
   };
@@ -745,12 +789,10 @@ bool contains_float(const expr2tc &e)
     return true;
 
   bool inner_float = false;
-  e->foreach_operand(
-    [&inner_float](auto &it)
-    {
-      if(contains_float(it))
-        inner_float = true;
-    });
+  e->foreach_operand([&inner_float](auto &it) {
+    if(contains_float(it))
+      inner_float = true;
+  });
 
   return inner_float;
 }
