@@ -73,19 +73,52 @@ void instrument_intervals(
           guard = !guard;
         // If guard is always true... convert it into a skip!
         if(guard.is_true() && interval_domaint::enable_assertion_simplification)
-        {
           i_it->make_skip();
-          continue;
-        }
         // If guard is always false... convert it to trivial!
         if(
           guard.is_false() && interval_domaint::enable_assertion_simplification)
-        {
           i_it->guard = i_it->is_goto() ? gen_true_expr() : gen_false_expr();
-          continue;
+
+        // Let's instrument an assumption with symbols that affect the guard
+        std::vector<expr2tc> assumption;
+        std::unordered_set<expr2tc, irep2_hash> guard_symbols;
+        get_symbols(i_it->guard, guard_symbols);
+        for(const auto &symbol_expr : guard_symbols)
+        {
+          expr2tc tmp = d.make_expression(symbol_expr);
+          if(!is_true(tmp))
+            assumption.push_back(tmp);
         }
+
+        if(!assumption.empty())
+        {
+          goto_programt::targett t = goto_function.body.insert(i_it);
+          t->make_assumption(conjunction(assumption));
+          t->inductive_step_instruction = config.options.is_kind();
+        }
+
+        continue;
       }
 
+      /**
+       * The instrumentation of the assume will happen in:
+       * 
+       * 1. After IF
+       *  IF !(a > 42) GOTO 5
+       *    +++ ASSUME (a > 42)
+       * 
+       * 2. After a function call
+       *  FUCTION_CALL(FOO)
+       *    +++ ASSUME(state-after-foo)
+       * 
+       * 3. Before a function call
+       *  +++ ASSUME(state-before-foo)
+       *  FUCNTION_CALL(FOO)
+       * 
+       * 4. Before a location
+       *  +++ ASSUME(current-state)
+       *  1: ....  
+      */
       goto_programt::const_targett previous = i_it;
       previous--;
       if(previous->is_goto() && !is_true(previous->guard))
