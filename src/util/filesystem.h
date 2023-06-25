@@ -101,4 +101,12 @@ tmp_file create_tmp_file(
 
 tmp_path create_tmp_dir(const std::string &format = "esbmc.%%%%-%%%%-%%%%");
 
+/**
+ *  @brief Creates all folders needed for a path
+ * 
+ * std::ofstream will not create folders needed for a
+ * complete path. This will generate the folder and the file
+ * contents
+ */
+void create_path_and_write(const std::string &path, const char *s, size_t n);
 } // namespace file_operations
