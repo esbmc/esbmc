@@ -383,9 +383,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
       break;
     }
 
-    log_error(
-      "[interval] Arrived at get_interval with unsupported expression: {}", *e);
-    abort();
+    log_debug("Could not simplify: {}", *e);
+    break;
   }
 
   case expr2t::if_id:
