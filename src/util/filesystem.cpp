@@ -1,5 +1,6 @@
 #include <util/filesystem.h>
 #include <boost/filesystem.hpp>
+#include <fstream>
 
 using namespace file_operations;
 
