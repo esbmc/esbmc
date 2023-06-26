@@ -148,13 +148,15 @@ void goto2ct::check_assign(goto_programt::instructiont instruction)
   assert(is_code_assign2t(instruction.code));
 }
 
-void goto2ct::check_location(goto_programt::instructiont instruction)
+void goto2ct::check_location(goto_programt::instructiont instruction
+                             [[maybe_unused]])
 {
   // Fedor: maybe use it just for targets in the attempt
   // to establish a unique "target" type of instruction
 }
 
-void goto2ct::check_skip(goto_programt::instructiont instruction)
+void goto2ct::check_skip(goto_programt::instructiont instruction
+                         [[maybe_unused]])
 {
   // Fedor: at the moment SKIP's can have code of type "code_skip2t"
   // or something else
@@ -170,11 +172,13 @@ void goto2ct::check_catch(goto_programt::instructiont instruction)
   assert(is_code_cpp_catch2t(instruction.code));
 }
 
-void goto2ct::check_atomic_begin(goto_programt::instructiont instruction)
+void goto2ct::check_atomic_begin(goto_programt::instructiont instruction
+                                 [[maybe_unused]])
 {
 }
 
-void goto2ct::check_atomic_end(goto_programt::instructiont instruction)
+void goto2ct::check_atomic_end(goto_programt::instructiont instruction
+                               [[maybe_unused]])
 {
 }
 
@@ -188,7 +192,8 @@ void goto2ct::check_throw_decl_end(goto_programt::instructiont instruction)
   assert(is_code_cpp_throw_decl_end2t(instruction.code));
 }
 
-void goto2ct::check_other(goto_programt::instructiont instruction)
+void goto2ct::check_other(goto_programt::instructiont instruction
+                          [[maybe_unused]])
 {
 }
 
