@@ -2,6 +2,7 @@
 mangle(mangled_cpp "${CMAKE_SOURCE_DIR}/src/cpp/library"
     RECURSIVE 1
     PREFIX esbmc_libcpp_header_
+    WILDCARD *
     MACRO ESBMC_FLAIL
     ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/cpp_includes.h
     LIST_DIRECTORIES FALSE)
