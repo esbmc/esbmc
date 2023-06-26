@@ -126,11 +126,7 @@ class Flail:
                                       .replace('.goto', '_buf')
                                       .replace('.txt', '_buf')
                                       .replace('buildidobj', 'buildidstring')
-                                      .replace('-', '_')
-                                      # CPP THINGS
-                                      .replace('vector', '__esbmc_om_vector') 
-                                      .replace('new', '__esbmc_om_new')
-                                      .replace('ctime', '__esbmc_om_ctime'))
+                                      .replace('-', '_'))
 
     def _step_2(self, content: str):
         return Flail.REGEX_REMOVE_ADDR.sub('', content)
