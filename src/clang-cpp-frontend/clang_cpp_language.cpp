@@ -105,7 +105,7 @@ bool clang_cpp_languaget::from_type(
 
 extern "C"
 {
-#include <optimized_includes/cpp_includes.h>
+#include <abstract_includes/cpp_includes.h>
 #undef ESBMC_FLAIL
 }
 
