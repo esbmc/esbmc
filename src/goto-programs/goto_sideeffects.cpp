@@ -802,6 +802,7 @@ void goto_convertt::remove_function_call(
     assignment.reserve_operands(2);
     assignment.copy_to_operands(symbol_expr(new_symbol));
     assignment.move_to_operands(call);
+    assignment.location() = new_symbol.location;
 
     convert(assignment, tmp_program);
   }
