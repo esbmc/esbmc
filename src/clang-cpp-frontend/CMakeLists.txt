@@ -1,4 +1,4 @@
-add_subdirectory(optimized_includes)
+add_subdirectory(abstract_includes)
 add_library(clangcppfrontend clang_cpp_language.cpp
             clang_cpp_convert.cpp clang_cpp_adjust_expr.cpp clang_cpp_adjust_code.cpp expr2cpp.cpp
             clang_cpp_adjust_code_gen.cpp clang_cpp_convert_vft.cpp clang_cpp_convert_bind.cpp clang_cpp_main.cpp)

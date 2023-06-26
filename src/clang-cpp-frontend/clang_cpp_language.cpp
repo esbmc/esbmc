@@ -39,7 +39,7 @@ void clang_cpp_languaget::force_file_type()
   compiler_args.push_back(clangstd);
 
   if(
-    !config.options.get_bool_option("no-optimized-cpp-includes") &&
+    !config.options.get_bool_option("no-abstracted-cpp-includes") &&
     !config.options.get_bool_option("no-library"))
     compiler_args.push_back("-isystem" + esbmc_cpp_includes());
 
