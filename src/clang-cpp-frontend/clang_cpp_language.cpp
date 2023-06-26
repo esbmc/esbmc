@@ -111,14 +111,14 @@ extern "C"
 
 const std::string &clang_cpp_languaget::esbmc_cpp_includes()
 {
-  // Dump clang headers into a temporary directory
+  // Dump CPP headers into a temporary directory
   static bool dumped = false;
   /* About the path being static:
    * The static member 'dumped' above is used to check whether the headers were
    * ever extracted before. This guarantees that the same path is used
    * during a run. And no more than one is required anyway */
   static auto p =
-    file_operations::create_tmp_dir("esbmc-headers-%%%%-%%%%-%%%%");
+    file_operations::create_tmp_dir("esbmc-cpp-headers-%%%%-%%%%-%%%%");
   if(!dumped)
   {
     dumped = true;
