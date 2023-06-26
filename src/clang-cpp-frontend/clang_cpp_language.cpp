@@ -38,8 +38,10 @@ void clang_cpp_languaget::force_file_type()
   std::string clangstd = cppstd.empty() ? "-std=c++03" : "-std=c++" + cppstd;
   compiler_args.push_back(clangstd);
 
-  if(!config.options.get_bool_option("no-optimized-cpp-includes"))
-    compiler_args.push_back("-I" + esbmc_cpp_includes());
+  if(
+    !config.options.get_bool_option("no-optimized-cpp-includes") &&
+    !config.options.get_bool_option("no-library"))
+    compiler_args.push_back("-isystem" + esbmc_cpp_includes());
 
   // Force clang see all files as .cpp
   compiler_args.push_back("-x");
