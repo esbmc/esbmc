@@ -39,24 +39,22 @@ function(mangle output_c dir)
   # optional 1-parameter keywords to this function
   set(kw1 MACRO            # sets flail.py --macro parameter to the given argument
           ACC_HEADERS_INTO # generates a header that #include-s all generated headers
-          RECURSIVE
+          RECURSIVE        # Recursively explores all subdirectories of the path
           WILDCARD         # globs ${dir}/${MANGLE_WILDCARD} instead of using the unparsed arguments as filenames under ${dir}
           PREFIX           # sets flail.py --prefix parameter to the given argument
      )
   cmake_parse_arguments(MANGLE "${kw0}" "${kw1}" "" ${ARGN})
 
-  if (MANGLE_WILDCARD)
+  if(MANGLE_RECURSIVE)
+    set(single_file_desc "${MANGLE_WILDCARD} in ${dir}/ (recursively)")
+    file(GLOB_RECURSE inputs RELATIVE ${dir} CONFIGURE_DEPENDS ${MANGLE_UNPARSED_ARGUMENTS} "${dir}/${MANGLE_WILDCARD}")
+  elseif(MANGLE_WILDCARD)
     set(single_file_desc "${MANGLE_WILDCARD} in ${dir}/")
     file(GLOB inputs RELATIVE ${dir} CONFIGURE_DEPENDS ${dir}/${MANGLE_WILDCARD} ${MANGLE_UNPARSED_ARGUMENTS})
   else()
-    if(MANGLE_RECURSIVE)
-      set(single_file_desc "${MANGLE_WILDCARD} in ${dir}/")
-      file(GLOB_RECURSE inputs RELATIVE ${dir} CONFIGURE_DEPENDS ${MANGLE_UNPARSED_ARGUMENTS} "${dir}/*")
-    else()
-      set(inputs ${MANGLE_UNPARSED_ARGUMENTS})
-      list(JOIN ", " inputs single_file_desc)
-      set(single_file_desc "${inputs} in ${dir}")
-    endif()
+    set(inputs ${MANGLE_UNPARSED_ARGUMENTS})
+    list(JOIN ", " inputs single_file_desc)
+    set(single_file_desc "${inputs} in ${dir}")
   endif()
 
   set(cmd0 ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py)
@@ -122,7 +120,7 @@ function(download_zip_and_extract ID URL)
   endif()
 
   if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID})
-    message(STATUS "Extracting ${ID}") 
+    message(STATUS "Extracting ${ID}")
     file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/${ID}.zip DESTINATION ${CMAKE_BINARY_DIR}/${ID})
   endif()
 
