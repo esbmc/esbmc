@@ -638,6 +638,9 @@ bool clang_c_convertert::get_function(
   added_symbol.type = type;
   new_expr.type() = type;
 
+  if(id == "c:@F@Value1#&I#")
+    printf("Got it\n");
+
   // We need: a type, a name, and an optional body
   if(fd.hasBody())
   {
@@ -677,7 +680,7 @@ bool clang_c_convertert::get_function_params(
   {
     code_typet::argumentt param;
     if(get_function_param(*pdecl, param))
-      return true; // return true if failling to parse a parameter
+      return true; // return true if failing to parse a parameter
 
     params.push_back(param);
   }
@@ -738,7 +741,7 @@ bool clang_c_convertert::get_function_param(
   const clang::FunctionDecl &fd =
     static_cast<const clang::FunctionDecl &>(*pd.getParentFunctionOrMethod());
 
-  // If the function is not defined, we don't need to add it's parameter
+  // If the function is not defined, we don't need to add its parameter
   // to the context, they will never be used
   if(!fd.isDefined())
     return false;
