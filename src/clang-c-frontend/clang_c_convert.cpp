@@ -638,9 +638,6 @@ bool clang_c_convertert::get_function(
   added_symbol.type = type;
   new_expr.type() = type;
 
-  if(id == "c:@F@Value1#&I#")
-    printf("Got it\n");
-
   // We need: a type, a name, and an optional body
   if(fd.hasBody())
   {
