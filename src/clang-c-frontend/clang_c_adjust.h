@@ -49,7 +49,7 @@ protected:
   void adjust_expr_shifts(exprt &expr);
   void adjust_expr_unary_boolean(exprt &expr);
   void adjust_expr_binary_boolean(exprt &expr);
-  void adjust_expr_rel(exprt &expr);
+  virtual void adjust_expr_rel(exprt &expr);
   void adjust_float_arith(exprt &expr);
   void adjust_index(index_exprt &index);
   void adjust_dereference(exprt &deref);

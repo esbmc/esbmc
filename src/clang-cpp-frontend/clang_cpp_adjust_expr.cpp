@@ -165,10 +165,34 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     // since we modelled lvalue reference as pointers
     // turn assign expression r = 1, where r is an lvalue reference
     // into *r = 1
-    dereference_exprt tmp(lhs, lhs.type());
-    tmp.location() = expr.location();
-    lhs.swap(tmp);
+    convert_lvalue_ref_to_deref(lhs);
   }
   else
     clang_c_adjust::adjust_side_effect(expr);
+}
+
+void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
+{
+  clang_c_adjust::adjust_expr_rel(expr);
+
+  exprt &op0 = expr.op0();
+  if(op0.is_typecast())
+  {
+    // special treatment for lvalue reference
+    // if lhs is a typecast of lvalue reference, e.g. (int)r == 1
+    // where r is a reference
+    // we turn it into (int)*r == 1
+    exprt &tp_op0 = op0.op0();
+    if(tp_op0.is_symbol() && tp_op0.type().get_bool("#reference"))
+      convert_lvalue_ref_to_deref(tp_op0);
+  }
+}
+
+void clang_cpp_adjust::convert_lvalue_ref_to_deref(exprt &expr)
+{
+  assert(expr.is_symbol() && expr.type().get_bool("#reference"));
+
+  dereference_exprt tmp(expr, expr.type());
+  tmp.location() = expr.location();
+  expr.swap(tmp);
 }
