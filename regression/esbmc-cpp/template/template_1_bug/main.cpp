@@ -1,3 +1,5 @@
+// TC description:
+//  - lvalue reference to an array in function template argument
 #include<cassert>
 
 template< class T >
