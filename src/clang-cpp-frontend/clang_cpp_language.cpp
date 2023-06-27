@@ -81,7 +81,7 @@ bool clang_cpp_languaget::typecheck(
   if(adjuster.adjust())
     return true;
 
-#if 1
+#if 0
   printf("symbol table after adjust\n");
   std::ostringstream oss;
   ::show_symbol_table_plain(namespacet(new_context), oss);

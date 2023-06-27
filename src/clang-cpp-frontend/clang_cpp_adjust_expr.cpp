@@ -128,7 +128,7 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
   // sideeffect assign got be representing a binary operator
   assert(expr.operands().size() == 2);
 
-  //exprt &lhs = expr.op0();
+  exprt &lhs = expr.op0();
   exprt &rhs = expr.op1();
 
   if(
@@ -159,6 +159,15 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     // there's no missing adjustment we need to carry out
     clang_c_adjust::adjust_side_effect_function_call(
       to_side_effect_expr_function_call(expr));
+  }
+  else if(lhs.is_symbol() && lhs.type().get_bool("#reference"))
+  {
+    // since we modelled lvalue reference as pointers
+    // turn assign expression r = 1, where r is an lvalue reference
+    // into *r = 1
+    dereference_exprt tmp(lhs, lhs.type());
+    tmp.location() = expr.location();
+    lhs.swap(tmp);
   }
   else
     clang_c_adjust::adjust_side_effect(expr);
