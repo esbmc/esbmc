@@ -42,6 +42,7 @@ public:
   void adjust_member(member_exprt &expr) override;
   void adjust_side_effect(side_effect_exprt &expr) override;
   void adjust_side_effect_assign(side_effect_exprt &expr);
+  void adjust_expr_rel(exprt &expr) override;
   void adjust_new(exprt &expr);
   void adjust_cpp_member(member_exprt &expr);
 
@@ -74,6 +75,7 @@ public:
    * ancillary methods to support the expr/code adjustments above
    */
   void convert_expression_to_code(exprt &expr);
+  void convert_lvalue_ref_to_deref(exprt &expr);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
