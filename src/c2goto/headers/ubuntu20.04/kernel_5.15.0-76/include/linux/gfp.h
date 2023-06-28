@@ -1,5 +1,16 @@
-
+/* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * Written by Mark Hemment, 1996 (markhe@nextd.demon.co.uk).
+ *
+ * (C) SGI 2006, Christoph Lameter
+ * 	Cleaned up and restructured to ease the addition of alternative
+ * 	implementations of SLAB allocators.
+ * (C) Linux Foundation 2008-2013
+ *      Unified interface for all slab allocators
+ */
+// TODO: Replace hardcoded MAX_ALLOC_SIZE with a dynamically obtained value
 #define MAX_ALLOC_SIZE 1024*1024 // Maximum allocatable size set to 1MB for example
+
 
 #define ZERO_SIZE_PTR ((void *)16)
 

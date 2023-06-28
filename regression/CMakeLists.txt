@@ -163,6 +163,7 @@ else()
                     ${REGRESSIONS_JIMPLE}
                     extensions
                     cuda/COM_sanity_checks
+                    linux
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
