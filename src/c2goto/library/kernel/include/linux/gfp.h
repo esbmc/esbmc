@@ -62,7 +62,6 @@
 
 // Define size_t if it's not already defined. This is often
 // done in stddef.h or sys/types.h, so you might #include one of those instead.
-typedef unsigned long size_t;
 
 // Define gfp_t and a few example flags.
 typedef unsigned int gfp_t;
