@@ -42,6 +42,8 @@ public:
   void adjust_member(member_exprt &expr) override;
   void adjust_side_effect(side_effect_exprt &expr) override;
   void adjust_side_effect_assign(side_effect_exprt &expr);
+  void adjust_function_call_arguments(
+    side_effect_expr_function_callt &expr) override;
   void adjust_expr_rel(exprt &expr) override;
   void adjust_new(exprt &expr);
   void adjust_cpp_member(member_exprt &expr);

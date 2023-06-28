@@ -618,7 +618,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
     }
     else
     {
-      if(s->id == "c:@F@Value#&$@S@FixedArray25#I#")
+      if(s->id == "c:@F@Value1#&I#")
         printf("Got callsite\n");
       // Pull symbol informations, like parameter types and location
 
