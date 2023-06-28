@@ -15,6 +15,9 @@ set(inputs limits.h pthread.h stdarg.h stdbool.h stddef.h
            sys/_pthread/_pthread_rwlockattr_t.h
            sys/_pthread/_pthread_t.h
            sys/_pthread/_pthread_types.h
+           ubuntu20.04/kernel_5.15.0-76/include/linux/gfp.h
+           ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h
+
    )
 mangle(mangled_files ${CMAKE_CURRENT_SOURCE_DIR} ${inputs}
        PREFIX esbmc_libc_header_
