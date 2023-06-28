@@ -192,6 +192,16 @@ void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
   clang_c_adjust::adjust_expr_rel(expr);
 
   exprt &op0 = expr.op0();
+  if(op0.is_typecast())
+  {
+    // special treatment for lvalue reference typecasting
+    // if lhs is a typecast of lvalue reference, e.g. (int)r == 1
+    // where r is a reference
+    // we turn it into (int)*r == 1
+    exprt &tp_op0 = op0.op0();
+    if(tp_op0.is_symbol() && tp_op0.type().get_bool("#reference"))
+      convert_lvalue_ref_to_deref(tp_op0);
+  }
   if(op0.type().get_bool("#reference"))
   {
     // special treatment for lvalue reference
@@ -240,7 +250,6 @@ void clang_cpp_adjust::adjust_function_call_arguments(
       assert(op.type().is_pointer());
       tmp_expr.type() = op.type();
       tmp_expr.operands().resize(0);
-      assert(op.op0().is_symbol());
       tmp_expr.move_to_operands(op.op0());
       tmp_expr.location() = op.location();
       op.swap(tmp_expr);
