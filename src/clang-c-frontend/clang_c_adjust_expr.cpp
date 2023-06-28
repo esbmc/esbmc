@@ -48,6 +48,9 @@ bool clang_c_adjust::adjust()
 
 void clang_c_adjust::adjust_symbol(symbolt &symbol)
 {
+  if(symbol.id == "c:@F@main#")
+    printf("Got main\n");
+
   if(!symbol.value.is_nil())
     adjust_expr(symbol.value);
 
@@ -615,6 +618,8 @@ void clang_c_adjust::adjust_side_effect_function_call(
     }
     else
     {
+      if(s->id == "c:@F@Value#&$@S@FixedArray25#I#")
+        printf("Got callsite\n");
       // Pull symbol informations, like parameter types and location
 
       // Save previous location
@@ -628,6 +633,11 @@ void clang_c_adjust::adjust_side_effect_function_call(
 
       if(symbol.lvalue)
         f_op.cmt_lvalue(true);
+
+      // align the side effect's type at callsite with the
+      // function return type
+      const typet &return_type = (typet &)f_op.type().return_type();
+      expr.type() = return_type;
     }
   }
   else
