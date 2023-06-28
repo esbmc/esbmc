@@ -59,7 +59,8 @@ protected:
   void adjust_symbol(exprt &expr);
   void adjust_comma(exprt &expr);
   void adjust_builtin_va_arg(exprt &expr);
-  void adjust_function_call_arguments(side_effect_expr_function_callt &expr);
+  virtual void
+  adjust_function_call_arguments(side_effect_expr_function_callt &expr);
   void do_special_functions(side_effect_expr_function_callt &expr);
   void adjust_operands(exprt &expr);
 

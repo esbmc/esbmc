@@ -212,3 +212,37 @@ void clang_cpp_adjust::convert_lvalue_ref_to_deref(exprt &expr)
   tmp.location() = expr.location();
   expr.swap(tmp);
 }
+
+void clang_cpp_adjust::adjust_function_call_arguments(
+  side_effect_expr_function_callt &expr)
+{
+  clang_c_adjust::adjust_function_call_arguments(expr);
+
+  exprt &f_op = expr.function();
+  const code_typet &code_type = to_code_type(f_op.type());
+  exprt::operandst &arguments = expr.arguments();
+  const code_typet::argumentst &argument_types = code_type.arguments();
+
+  for(unsigned i = 0; i < arguments.size(); i++)
+  {
+    exprt &op = arguments[i];
+    if(op.is_typecast() && op.type().get_bool("#reference"))
+    {
+      // special treatment for lvalue reference in function parameter list
+      // e.g. for F(a), where F is a function taking an int lvalue reference.
+      // Since we've modelled lvalue references as pointers, clang_c_aduster
+      // would have adjusted the parameter to a typecasting expression:
+      //  F((int &)a);
+      // but what we really want is an address_of expression:
+      //  F(*a);
+      address_of_exprt tmp_expr;
+      assert(op.type().is_pointer());
+      tmp_expr.type() = op.type();
+      tmp_expr.operands().resize(0);
+      assert(op.op0().is_symbol());
+      tmp_expr.move_to_operands(op.op0());
+      tmp_expr.location() = op.location();
+      op.swap(tmp_expr);
+    }
+  }
+}
