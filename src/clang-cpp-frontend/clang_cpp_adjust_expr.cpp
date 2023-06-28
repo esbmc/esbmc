@@ -167,6 +167,22 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     // into *r = 1
     convert_lvalue_ref_to_deref(lhs);
   }
+  else if(lhs.id() == "sideeffect" && lhs.statement() == "function_call")
+  {
+    // deal with X(a) = 5; where X(a) returns an lvalue reference which
+    // is modelled as a pointer. Hence we got to align the LHS with RHS:
+    // *X(a) = 5;
+    // rather than align RHS with LHS:
+    // X(a) = (int &)5; // which is far removed from the original symatics
+
+    // first adjust LHS to make sure its type aligns with the
+    // function return type
+    adjust_side_effect_function_call(to_side_effect_expr_function_call(lhs));
+    if(lhs.type().get_bool("#reference"))
+    {
+      assert(!"Got it");
+    }
+  }
   else
     clang_c_adjust::adjust_side_effect(expr);
 }
