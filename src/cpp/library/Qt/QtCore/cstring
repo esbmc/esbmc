@@ -10,27 +10,34 @@
 #ifndef STL_CSTRING
 #define STL_CSTRING
 
-typedef int size_t;
+#ifndef _SIZE_T_DEFINED
+typedef unsigned int size_t;
+#define _SIZE_T_DEFINED
+#endif
 
-char *strcpy(char *d, const char *s) {
-	int i;
+char *strcpy(char *d, const char *s)
+{
+  int i;
 
-	for (i = 0; s[i] != 0; i++) {
-		d[i] = s[i];
-	}
+  for(i = 0; s[i] != 0; i++)
+  {
+    d[i] = s[i];
+  }
 
-	d[i] = '\0';
+  d[i] = '\0';
 
-	return d;
+  return d;
 }
 
-size_t strlen(const char *s) {
-	size_t len = 0;
-	while (*s != '\0') {
-		s++;
-		len++;
-	}
-	return len;
+size_t strlen(const char *s)
+{
+  size_t len = 0;
+  while(*s != '\0')
+  {
+    s++;
+    len++;
+  }
+  return len;
 }
 
 #endif
