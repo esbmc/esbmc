@@ -222,10 +222,7 @@ void clang_cpp_adjust::adjust_function_call_arguments(
 {
   clang_c_adjust::adjust_function_call_arguments(expr);
 
-  exprt &f_op = expr.function();
-  const code_typet &code_type = to_code_type(f_op.type());
   exprt::operandst &arguments = expr.arguments();
-  const code_typet::argumentst &argument_types = code_type.arguments();
 
   for(unsigned i = 0; i < arguments.size(); i++)
   {
