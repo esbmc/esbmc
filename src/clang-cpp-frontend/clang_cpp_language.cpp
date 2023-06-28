@@ -15,6 +15,8 @@ CC_DIAGNOSTIC_POP()
 #include <regex>
 #include <util/filesystem.h>
 #include <fstream>
+#include <util/show_symbol_table.h>
+#include <iostream>
 
 languaget *new_clang_cpp_language()
 {
@@ -68,9 +70,23 @@ bool clang_cpp_languaget::typecheck(
   if(converter.convert())
     return true;
 
+#if 0
+  printf("symbol table before adjust\n");
+  std::ostringstream oss;
+  ::show_symbol_table_plain(namespacet(new_context), oss);
+  std::cout << oss.str() << std::endl;
+#endif
+
   clang_cpp_adjust adjuster(new_context);
   if(adjuster.adjust())
     return true;
+
+#if 0
+  printf("symbol table after adjust\n");
+  std::ostringstream oss;
+  ::show_symbol_table_plain(namespacet(new_context), oss);
+  std::cout << oss.str() << std::endl;
+#endif
 
   if(c_link(context, new_context, module))
     return true;
