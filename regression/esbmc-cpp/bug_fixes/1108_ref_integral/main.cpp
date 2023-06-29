@@ -1,5 +1,6 @@
 // TC description:
 //  Test function argument and return are both lvalue references.
+//  This TC is a simplified version of esbmc-cpp/template/template_2
 
 #include<cassert>
 
