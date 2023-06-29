@@ -1219,7 +1219,8 @@ void clang_c_adjust::adjust_operands(exprt &expr)
 }
 
 void clang_c_adjust::align_se_function_call_return_type(
-  exprt &, side_effect_expr_function_callt &)
+  exprt &,
+  side_effect_expr_function_callt &)
 {
   // nothing to be aligned for C
 }

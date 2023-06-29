@@ -80,7 +80,8 @@ public:
   void convert_lvalue_ref_to_deref_symbol(exprt &expr);
   void convert_lvalue_ref_to_deref_sideeffect(exprt &expr);
   void align_se_function_call_return_type(
-    exprt &f_op, side_effect_expr_function_callt &expr) override;
+    exprt &f_op,
+    side_effect_expr_function_callt &expr) override;
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */

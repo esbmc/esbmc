@@ -268,7 +268,8 @@ void clang_cpp_adjust::adjust_function_call_arguments(
 }
 
 void clang_cpp_adjust::align_se_function_call_return_type(
-  exprt &f_op, side_effect_expr_function_callt &expr)
+  exprt &f_op,
+  side_effect_expr_function_callt &expr)
 {
   // align the side effect's type at callsite with the
   // function return type. But ignore constructors
