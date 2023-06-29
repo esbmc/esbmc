@@ -77,7 +77,8 @@ public:
    * ancillary methods to support the expr/code adjustments above
    */
   void convert_expression_to_code(exprt &expr);
-  void convert_lvalue_ref_to_deref(exprt &expr);
+  void convert_lvalue_ref_to_deref_symbol(exprt &expr);
+  void convert_lvalue_ref_to_deref_sideeffect(exprt &expr);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
