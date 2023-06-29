@@ -165,7 +165,16 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
 
   if(config.ansi_c.target.is_macos())
   {
+    /* NOTE: clang cannot deduce the sysroot automatically
+     *  we could invoke system's clang and try to find out
+     * the correct place... but that seems an overkill
+     */
+    if(sysroot.empty())
+      compiler_args.emplace_back(
+        "--sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/"
+        "MacOSX.platform/Developer/SDKs/MacOSX.sdk");
     compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
+    compiler_args.push_back("-D_DONT_USE_CTYPE_INLINE_");
     compiler_args.push_back("-D_SECURE__STRING_H_");
     compiler_args.push_back("-U__BLOCKS__");
     compiler_args.push_back("-Wno-nullability-completeness");
