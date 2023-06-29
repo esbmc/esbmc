@@ -8,11 +8,9 @@ void assertion_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
   auto [it, ins] = db.emplace(std::make_pair(step.cond, step.guard));
   if(!ins)
   {
-    log_debug("Cache hits: {}", ++hits);
-    step.cond = constant_bool2tc(trivial_value);
+    ++hits;
+    step.ignore = true;
   }
-  else
-    log_debug("Cache missed");
 }
 
 bool assertion_cache::run(symex_target_equationt::SSA_stepst &eq)
