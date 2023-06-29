@@ -3,7 +3,11 @@
 #include <ctype.h>
 #include <limits.h>
 #include <errno.h>
+<<<<<<< HEAD
 #include <ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h>
+=======
+#include "..headers/kernel/include/linux/gfp.h"
+>>>>>>> fix structure issues and macro definition in kernel directory
 #include <assert.h>
 
 #undef errno
@@ -256,8 +260,26 @@ void *kmalloc(int size, int flags)
     return __kmalloc_large(size, flags);
   }
 
+<<<<<<< HEAD
   (void)flags; // Ignore flags.
   return __kmalloc(size, flags);
+=======
+    // Check size greater than  zero and less than max
+    assert(size > 0 && size <= MAX_ALLOC_SIZE);
+    //check flags greater than zero
+    assert(flags > 0);
+
+    //check if flags have corresponding valid values
+    check_gfp_flags(flags);
+    // If the size is larger than the KMALLOC_MAX_CACHE_SIZE, then handle in kmalloc_large
+    if (size > KMALLOC_MAX_CACHE_SIZE) {
+        // Call to kmalloc_large or equivalent function can be here.
+		return __kmalloc_large(size, flags);
+    }
+
+	  (void)flags;  // Ignore flags.
+    return malloc(size);
+>>>>>>> fix structure issues and macro definition in kernel directory
 }
 
 void kfree(const void *ptr)
@@ -265,6 +287,11 @@ void kfree(const void *ptr)
   free((void *)ptr);
 }
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> fix structure issues and macro definition in kernel directory
 void *ldv_malloc(size_t size)
 {
   return malloc(size);
@@ -286,6 +313,10 @@ void *kcalloc(size_t n, size_t size, gfp_t flags)
   return calloc(n, size);
 }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> fix structure issues and macro definition in kernel directory
 size_t strlcat(char *dst, const char *src, size_t siz)
 {
   char *d = dst;
