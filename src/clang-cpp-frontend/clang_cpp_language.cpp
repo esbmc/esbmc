@@ -70,7 +70,7 @@ bool clang_cpp_languaget::typecheck(
   if(converter.convert())
     return true;
 
-#if 1
+#if 0
   printf("symbol table before adjust\n");
   std::ostringstream oss;
   ::show_symbol_table_plain(namespacet(new_context), oss);
