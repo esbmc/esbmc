@@ -19,7 +19,7 @@ void bmct::show_vcc(
       it != eq->SSA_steps.end();
       it++)
   {
-    if(!it->is_assert())
+    if(!it->is_assert() || it->ignore)
       continue;
 
     if(it->source.pc->location.is_not_nil())
