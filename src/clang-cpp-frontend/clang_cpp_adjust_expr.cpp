@@ -165,7 +165,7 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     // since we modelled lvalue reference as pointers
     // turn assign expression r = 1, where r is an lvalue reference
     // into *r = 1
-    convert_lvalue_ref_to_deref(lhs);
+    convert_lvalue_ref_to_deref_symbol(lhs);
   }
   else if(lhs.id() == "sideeffect" && lhs.statement() == "function_call")
   {
@@ -180,7 +180,7 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     adjust_side_effect_function_call(to_side_effect_expr_function_call(lhs));
     if(lhs.type().get_bool("#reference"))
     {
-      assert(!"Got it");
+      convert_lvalue_ref_to_deref_sideeffect(lhs);
     }
   }
   else
@@ -200,16 +200,16 @@ void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
     // we turn it into (int)*r == 1
     exprt &tp_op0 = op0.op0();
     if(tp_op0.is_symbol() && tp_op0.type().get_bool("#reference"))
-      convert_lvalue_ref_to_deref(tp_op0);
+      convert_lvalue_ref_to_deref_symbol(tp_op0);
   }
   if(op0.type().get_bool("#reference"))
   {
     // special treatment for lvalue reference
     // if LHS is an lvalue reference, e.g.
-    //  r == 1
+    //  r == 1 or F(a) == 1 where F is a function that returns a reference
     // but RHS is not a pointer. We got to dereference the LHS
     // and turn it into:
-    //  *r == 1
+    //  *r == 1 *F(a) == 1
     dereference_exprt tmp_deref(op0, op0.type());
     tmp_deref.location() = op0.location();
     tmp_deref.set("#lvalue", true);
@@ -218,13 +218,23 @@ void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
   }
 }
 
-void clang_cpp_adjust::convert_lvalue_ref_to_deref(exprt &expr)
+void clang_cpp_adjust::convert_lvalue_ref_to_deref_symbol(exprt &expr)
 {
   assert(expr.is_symbol() && expr.type().get_bool("#reference"));
 
   dereference_exprt tmp(expr, expr.type());
   tmp.location() = expr.location();
   expr.swap(tmp);
+}
+
+void clang_cpp_adjust::convert_lvalue_ref_to_deref_sideeffect(exprt &expr)
+{
+  assert(expr.id() == "sideeffect" && expr.type().get_bool("#reference"));
+  dereference_exprt tmp_deref(expr, expr.type());
+  tmp_deref.location() = expr.location();
+  tmp_deref.set("#lvalue", true);
+  tmp_deref.set("#implicit", true);
+  expr.swap(tmp_deref);
 }
 
 void clang_cpp_adjust::adjust_function_call_arguments(
