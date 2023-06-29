@@ -77,6 +77,12 @@ protected:
   void adjust_decl(codet &code);
   // For class instantiation in C++, we need to adjust the side-effect of constructor
   virtual void adjust_decl_block(codet &code);
+
+  /**
+   * ancillary methods to support the expr/code adjustments above
+   */
+  virtual void align_se_function_call_return_type(
+    exprt &f_op, side_effect_expr_function_callt &expr);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */

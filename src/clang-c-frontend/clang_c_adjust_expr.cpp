@@ -634,10 +634,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
       if(symbol.lvalue)
         f_op.cmt_lvalue(true);
 
-      // align the side effect's type at callsite with the
-      // function return type
-      const typet &return_type = (typet &)f_op.type().return_type();
-      expr.type() = return_type;
+      align_se_function_call_return_type(f_op, expr);
     }
   }
   else
@@ -1219,4 +1216,10 @@ void clang_c_adjust::adjust_operands(exprt &expr)
 
   for(auto &op : expr.operands())
     adjust_expr(op);
+}
+
+void clang_c_adjust::align_se_function_call_return_type(
+  exprt &, side_effect_expr_function_callt &)
+{
+  // nothing to be aligned for C
 }
