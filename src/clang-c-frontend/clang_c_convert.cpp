@@ -610,6 +610,9 @@ bool clang_c_convertert::get_function(
   std::string id, name;
   get_decl_name(fd, name, id);
 
+  if(id == "c:@F@Value#&$@S@FixedArray25#I#")
+    printf("Got Value\n");
+
   symbolt symbol;
   get_default_symbol(
     symbol,

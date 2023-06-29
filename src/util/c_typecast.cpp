@@ -663,6 +663,29 @@ void c_typecastt::implicit_typecast_followed(
       base_ptr.location() = expr.location();
       expr.swap(base_ptr);
     }
+
+    if(dest_type.get_bool("#reference"))
+    {
+      // if a destination type is an lvalue reference,
+      // which has been modelled as a pointer, but
+      // source type is not a pointer, then we just need to take
+      // the address of the source. e.g. the return statement
+      // of a function that returns an lvalue reference:
+      //    T& F(T& a) { return a; }
+      // is converted to `return &a;` rather than `return (int *)a;`
+      // See TC: regression/esbmc-cpp/template/template_1/3
+
+      // got to make sure the subtypes match each other
+      // to prevent anything that may surprise us.
+      if(dest_type.subtype().id() == src_type.id())
+      {
+        address_of_exprt tmp_addr;
+        tmp_addr.type() = dest_type;
+        tmp_addr.object() = expr;
+        tmp_addr.location() = expr.location();
+        expr.swap(tmp_addr);
+      }
+    }
   }
   else if(dest_type.id() == "array")
   {
