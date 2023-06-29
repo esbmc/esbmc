@@ -1,3 +1,4 @@
+<<<<<<< HEAD:src/c2goto/headers/ubuntu20.04/kernel_5.15.0-76/include/linux/gfp.h
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Written by Mark Hemment, 1996 (markhe@nextd.demon.co.uk).
@@ -8,6 +9,8 @@
  * (C) Linux Foundation 2008-2013
  *      Unified interface for all slab allocators
  */
+=======
+>>>>>>> fix structure issues and macro definition in kernel directory:src/c2goto/headers/kernel/include/linux/gfp.h
 // TODO: Replace hardcoded MAX_ALLOC_SIZE with a dynamically obtained value
 #define MAX_ALLOC_SIZE 1024*1024 // Maximum allocatable size set to 1MB for example
 
