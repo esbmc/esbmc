@@ -170,9 +170,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
      * the correct place... but that seems an overkill
      */
     if(sysroot.empty())
-      compiler_args.emplace_back(
-        "--sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/"
-        "MacOSX.platform/Developer/SDKs/MacOSX.sdk");
+      compiler_args.emplace_back("--sysroot=" ESBMC_C2GOTO_SYSROOT);
     compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
     compiler_args.push_back("-D_DONT_USE_CTYPE_INLINE_");
     compiler_args.push_back("-D_SECURE__STRING_H_");
