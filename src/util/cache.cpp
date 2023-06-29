@@ -5,6 +5,7 @@
 
 void assertion_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
 {
+  ++total;
   auto [it, ins] = db.emplace(std::make_pair(step.cond, step.guard));
   if(!ins)
   {
@@ -20,8 +21,9 @@ bool assertion_cache::run(symex_target_equationt::SSA_stepst &eq)
     run_on_step(step);
   fine_timet algorithm_stop = current_time();
   log_status(
-    "Caching time: {}s (removed {} assignments)",
+    "Caching time: {}s (removed {}/{} assertions)",
     time2string(algorithm_stop - algorithm_start),
-    hits);
+    hits,
+    total);
   return true;
 }
