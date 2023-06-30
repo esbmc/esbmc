@@ -35,7 +35,6 @@ protected:
   std::string internal_additions() override;
   void force_file_type() override;
   std::list<std::string> standards{"98", "03", "11", "14", "17"};
-  static const std::string &esbmc_cpp_includes();
 };
 
 languaget *new_clang_cpp_language();
