@@ -142,7 +142,10 @@ class XMLTestCase(BaseTest):
         self.module: str = root[1].text.strip()
         self.description: str = root[2].text.strip()
         self.test_file: str = root[3].text.strip()
-        self.test_args: str = root[4].text.strip()
+        try:
+            self.test_args: str = root[4].text.strip()
+        except:
+            self.test_args: str = ""
         # TODO: Multiline regex
         self.test_regex = [root[5].text.strip()]
         self.priority = root[6].text.strip()
