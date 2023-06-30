@@ -1,4 +1,3 @@
 CORE
 test.c
--I /home/kai/PGT/ESBMC_Project/esbmc/src/c2goto/library/  
 ^VERIFICATION SUCCESSFUL$

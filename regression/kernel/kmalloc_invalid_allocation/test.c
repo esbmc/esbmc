@@ -1,4 +1,4 @@
-#include "stdlib.c"
+#include "slab.h"
 int main(void)
 {
     void * ptr =  kmalloc(-100,2);

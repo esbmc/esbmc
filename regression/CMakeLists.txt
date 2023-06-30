@@ -163,7 +163,11 @@ else()
                     ${REGRESSIONS_JIMPLE}
                     extensions
                     cuda/COM_sanity_checks
+<<<<<<< HEAD
                     linux
+=======
+                    kernel
+>>>>>>> fix the addressed issue: license, declare function in header files, make function definition static, remove include dir for regression
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
