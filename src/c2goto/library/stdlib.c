@@ -240,7 +240,7 @@ static void *__kmalloc_large(size_t size, gfp_t flags)
   return malloc(size);
 }
 
-void *kmalloc(int size, int flags)
+static void *kmalloc(int size, int flags)
 {
   // Check size greater than  zero and less than max
   assert(size > 0 && size <= MAX_ALLOC_SIZE);
@@ -260,7 +260,7 @@ void *kmalloc(int size, int flags)
   return __kmalloc(size, flags);
 }
 
-void kfree(const void *ptr)
+static void kfree(const void *ptr)
 {
   free((void *)ptr);
 }
