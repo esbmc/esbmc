@@ -10,7 +10,10 @@
 #ifndef STL_CSTRING
 #define STL_CSTRING
 
-typedef int size_t;
+#ifndef _SIZE_T_DEFINED
+typedef unsigned int size_t;
+#define _SIZE_T_DEFINED
+#endif
 
 char *strcpy(char *d, const char *s) {
 	int i;
