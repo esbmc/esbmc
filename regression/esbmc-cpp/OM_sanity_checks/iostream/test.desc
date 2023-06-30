@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.cpp
 -I /__w/esbmc/esbmc/src/cpp/library --memlimit 14000000 --timeout 900
 
