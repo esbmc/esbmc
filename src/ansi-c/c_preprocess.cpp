@@ -19,7 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <util/config.h>
 #include <util/i2string.h>
-
+#include <clang-cpp-frontend/esbmc_internal_cpp.h>
 extern "C"
 {
 #include <cpp/iface.h>
@@ -340,6 +340,7 @@ int configure_and_run_cpp(
   for(auto const &it : config.ansi_c.include_paths)
     record_include(it.c_str());
 
+  record_include(ESBMC::esbmc_cpp_includes().c_str());
   record_include("/usr/include");
   record_builtin_macros();
 
