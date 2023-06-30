@@ -8,4 +8,11 @@ target_include_directories(clangcppfrontend
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-target_link_libraries(clangcppfrontend cpp_includes fmt::fmt)
+add_library(esbmc_internal_cpp esbmc_internal_cpp.cpp)
+target_include_directories(esbmc_internal_cpp
+    PRIVATE ${Boost_INCLUDE_DIRS}
+    PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
+)
+target_link_libraries(esbmc_internal_cpp cpp_includes)
+
+target_link_libraries(clangcppfrontend esbmc_internal_cpp fmt::fmt)
