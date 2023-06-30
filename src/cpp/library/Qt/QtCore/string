@@ -12,11 +12,6 @@
 
 #include "cstring"
 
-#ifndef _SIZE_T_DEFINED
-typedef unsigned int size_t;
-#define _SIZE_T_DEFINED
-#endif
-
 static const size_t npos = -1;
 
 namespace std
