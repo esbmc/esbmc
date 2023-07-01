@@ -237,7 +237,9 @@ void goto_checkt::overflow_check(
     if(!is_signedbv_type(type) && !is_unsignedbv_type(type))
       return;
   }
-  else if(!is_signedbv_type(type) && !enable_unsigned_overflow_check)
+  else if(
+    !is_signedbv_type(type) &&
+    (!enable_unsigned_overflow_check || !is_unsignedbv_type(type)))
     return;
 
   // Don't check pointer overflow
