@@ -340,7 +340,8 @@ int configure_and_run_cpp(
   for(auto const &it : config.ansi_c.include_paths)
     record_include(it.c_str());
 
-  record_include(ESBMC::esbmc_cpp_includes().c_str());
+  if(is_cpp)
+    record_include(ESBMC::esbmc_cpp_includes().c_str());
   record_include("/usr/include");
   record_builtin_macros();
 
