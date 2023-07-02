@@ -13,7 +13,7 @@ jobs:
       run: cd regression && python3 testing_tool_test.py
  
   # Build developer doc
-  build_dev-doc:
+  build-developer-doc:
     runs-on: ubuntu-latest
     steps:
     - name: Set up Git repository
@@ -26,7 +26,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: Developer-Manual
-        path: docs/manual.pdf    
+        path: manual.pdf    
 
   build-unix:
     strategy:
