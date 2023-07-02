@@ -26,7 +26,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: Developer-Manual
-        path: main.pdf    
+        path: docs/manual.pdf    
 
   build-unix:
     strategy:
