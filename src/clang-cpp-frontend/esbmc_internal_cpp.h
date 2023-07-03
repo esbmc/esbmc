@@ -1,5 +1,5 @@
 #include <sstream>
-namespace ESBMC
+namespace esbmct
 {
-const std::string &esbmc_cpp_includes();
+const std::string &abstract_cpp_includes();
 }
