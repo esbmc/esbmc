@@ -1,5 +1,4 @@
-set(inputs limits.h pthread.h stdarg.h stdbool.h stddef.h gfp.h
-           # Glibc
+set(inputs limits.h pthread.h stdarg.h stdbool.h stddef.h 
            bits/pthreadtypes.h bits/thread-shared-types.h
            # MacOSX10.x
            sys/_types/_pthread_attr_t.h
@@ -15,11 +14,8 @@ set(inputs limits.h pthread.h stdarg.h stdbool.h stddef.h gfp.h
            sys/_pthread/_pthread_rwlockattr_t.h
            sys/_pthread/_pthread_t.h
            sys/_pthread/_pthread_types.h
-<<<<<<< HEAD
            ubuntu20.04/kernel_5.15.0-76/include/linux/gfp.h
            ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h
-=======
->>>>>>> fix the issues with licence in gfp.h, reconstruct the directory, modify the cmakelist in headers diretory to set gfp.h as input, all tests passed locally
 
    )
 mangle(mangled_files ${CMAKE_CURRENT_SOURCE_DIR} ${inputs}
