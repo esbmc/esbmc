@@ -3,7 +3,12 @@
 #include <ctype.h>
 #include <limits.h>
 #include <errno.h>
+<<<<<<< HEAD
 #include <ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h>
+=======
+// #include <ubuntu20.04_5.15.0-73-generic/include/linux/slab.h>
+#include <gfp.h>
+>>>>>>> fix the issues with licence in gfp.h, reconstruct the directory, modify the cmakelist in headers diretory to set gfp.h as input, all tests passed locally
 #include <assert.h>
 
 #undef errno
@@ -215,7 +220,7 @@ __ESBMC_HIDE:;
 
 typedef unsigned int gfp_t;
 
-static void check_gfp_flags(gfp_t flags)
+ void check_gfp_flags(gfp_t flags)
 {
   // Define all valid flags
   gfp_t valid_flags =
@@ -229,18 +234,18 @@ static void check_gfp_flags(gfp_t flags)
   // Check if any flag is set that is not in the list of valid flags
   assert((flags & ~valid_flags) == 0);
 }
-static void *__kmalloc(size_t size, gfp_t flags)
+ void *__kmalloc(size_t size, gfp_t flags)
 {
   return malloc(size);
 }
 
-static void *__kmalloc_large(size_t size, gfp_t flags)
+ void *__kmalloc_large(size_t size, gfp_t flags)
 {
   (void)flags; // Ignore flags.
   return malloc(size);
 }
 
-static void *kmalloc(int size, int flags)
+ void *kmalloc(int size, int flags)
 {
   // Check size greater than  zero and less than max
   assert(size > 0 && size <= MAX_ALLOC_SIZE);
@@ -260,7 +265,7 @@ static void *kmalloc(int size, int flags)
   return __kmalloc(size, flags);
 }
 
-static void kfree(const void *ptr)
+void kfree(const void *ptr)
 {
   free((void *)ptr);
 }
