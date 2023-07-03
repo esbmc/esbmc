@@ -43,12 +43,13 @@ void clang_cpp_languaget::force_file_type()
     !config.options.get_bool_option("no-abstracted-cpp-includes") &&
     !config.options.get_bool_option("no-library"))
   {
-    log_debug("[CPP] Adding CPP includes: {}", ESBMC::esbmc_cpp_includes());
+    log_debug("[CPP] Adding CPP includes: {}", esbmct::abstract_cpp_includes());
     compiler_args.push_back("-cxx-isystem");
-    compiler_args.push_back(ESBMC::esbmc_cpp_includes());
-    compiler_args.push_back("-I" + ESBMC::esbmc_cpp_includes() + "/CUDA");
-    compiler_args.push_back("-I" + ESBMC::esbmc_cpp_includes() + "/Qt");
-    compiler_args.push_back("-I" + ESBMC::esbmc_cpp_includes() + "/Qt/QtCore");
+    compiler_args.push_back(esbmct::abstract_cpp_includes());
+    compiler_args.push_back("-I" + esbmct::abstract_cpp_includes() + "/CUDA");
+    compiler_args.push_back("-I" + esbmct::abstract_cpp_includes() + "/Qt");
+    compiler_args.push_back(
+      "-I" + esbmct::abstract_cpp_includes() + "/Qt/QtCore");
   }
 
   // Force clang see all files as .cpp

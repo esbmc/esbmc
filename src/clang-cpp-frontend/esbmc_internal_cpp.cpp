@@ -6,7 +6,7 @@ extern "C"
 #undef ESBMC_FLAIL
 }
 
-const std::string &ESBMC::esbmc_cpp_includes()
+const std::string &esbmct::abstract_cpp_includes()
 {
   // Dump CPP headers into a temporary directory
   static bool dumped = false;
