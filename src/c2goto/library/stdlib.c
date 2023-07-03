@@ -220,7 +220,7 @@ __ESBMC_HIDE:;
 
 typedef unsigned int gfp_t;
 
- void check_gfp_flags(gfp_t flags)
+void check_gfp_flags(gfp_t flags)
 {
   // Define all valid flags
   gfp_t valid_flags =
@@ -234,18 +234,18 @@ typedef unsigned int gfp_t;
   // Check if any flag is set that is not in the list of valid flags
   assert((flags & ~valid_flags) == 0);
 }
- void *__kmalloc(size_t size, gfp_t flags)
+void *__kmalloc(size_t size, gfp_t flags)
 {
   return malloc(size);
 }
 
- void *__kmalloc_large(size_t size, gfp_t flags)
+void *__kmalloc_large(size_t size, gfp_t flags)
 {
   (void)flags; // Ignore flags.
   return malloc(size);
 }
 
- void *kmalloc(int size, int flags)
+void *kmalloc(int size, int flags)
 {
   // Check size greater than  zero and less than max
   assert(size > 0 && size <= MAX_ALLOC_SIZE);
