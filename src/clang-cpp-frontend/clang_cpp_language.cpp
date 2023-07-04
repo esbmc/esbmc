@@ -44,8 +44,12 @@ void clang_cpp_languaget::force_file_type()
     !config.options.get_bool_option("no-library"))
   {
     log_debug("[CPP] Adding CPP includes: {}", esbmct::abstract_cpp_includes());
-    compiler_args.push_back("-cxx-isystem");
-    compiler_args.push_back(esbmct::abstract_cpp_includes());
+    //compiler_args.push_back("-cxx-isystem");
+    //compiler_args.push_back(esbmct::abstract_cpp_includes());
+    // Let the cpp include "overtake" others.
+    // Bear in mind that this is just a workaround to make sure we include the right headers we want,
+    // and to get consistent error signatures in standalone runs and CIs
+    compiler_args.push_back("-I" + esbmct::abstract_cpp_includes());
     compiler_args.push_back("-I" + esbmct::abstract_cpp_includes() + "/CUDA");
     compiler_args.push_back("-I" + esbmct::abstract_cpp_includes() + "/Qt");
     compiler_args.push_back(
