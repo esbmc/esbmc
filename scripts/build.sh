@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Create build directory
-mkdir build && cd build
+mkdir build && cd build || exit $?
 
 # Set arguments that should be available for every OS
 BASE_ARGS="-DDOWNLOAD_DEPENDENCIES=On -GNinja -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release"
@@ -11,18 +11,18 @@ COMPILER_ARGS=''
 ubuntu_setup () {
     # Tested on ubuntu 22.04
     echo "Configuring Ubuntu build"
-    sudo apt-get update && sudo apt-get install -y clang clang-tidy python-is-python3 csmith python3 git ccache unzip wget curl libcsmith-dev gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev pkg-config python3-pip python3-toml python-is-python3 openjdk-11-jdk
-    BASE_ARGS="$BASE_ARGS -DENABLE_OLD_FRONTEND=On  -DENABLE_WERROR=ON -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On"
+    sudo apt-get update && sudo apt-get install -y clang clang-tidy python-is-python3 csmith python3 git ccache unzip wget curl libcsmith-dev gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev pkg-config python3-pip python3-toml python-is-python3 openjdk-11-jdk &&
+    BASE_ARGS="$BASE_ARGS -DENABLE_OLD_FRONTEND=On  -DENABLE_WERROR=ON -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On" &&
     SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=ON"
 }
 
 # macOS setup (pre-config)
 macos_setup () {
-  echo "Configuring macOS build"
-   brew install z3 gmp csmith cmake boost ninja python3 automake bison flex && pip3 install PySMT toml
-   wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz
-   tar xf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-apple-darwin ../clang
-   BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=Off -DBUILD_STATIC=Off -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
+    echo "Configuring macOS build"
+    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex && pip3 install PySMT toml &&
+    wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz &&
+    tar xf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-apple-darwin ../clang &&
+    BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=Off -DBUILD_STATIC=Off -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
 }
 
 
@@ -37,7 +37,7 @@ case $OS in
     macos_setup
     ;;
   *) echo "Unsupported OS $OSTYPE" ; exit 1; ;;
-esac
+esac || exit $?
 
 # Setup build flags (release, debug, sanitizer, ...)
 while getopts b:s: flag
@@ -50,9 +50,12 @@ do
 done
 
 # Configure ESBMC
-$COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS
+printf "Running CMake:"
+printf " '%s'" $COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS
+echo
+$COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS &&
 # Compile ESBMC
-cmake --build . && ninja install
+cmake --build . && ninja install || exit $?
 
 ubuntu_post_setup () {
   echo "No further steps needed for ubuntu"
@@ -71,4 +74,4 @@ case $OS in
     macos_post_setup
     ;;
   *) echo "Unsupported OS $OSTYPE" ; exit 1; ;;
-esac
+esac || exit $?
