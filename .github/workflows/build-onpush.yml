@@ -1,3 +1,5 @@
+# For a quick check-up on dev branch pushes, giving early warning or good news.
+# just a duplicate of build.yml with Linux job only
 name: Build ESBMC - early warning on push
 
 on: [push]
