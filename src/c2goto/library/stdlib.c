@@ -3,11 +3,8 @@
 #include <ctype.h>
 #include <limits.h>
 #include <errno.h>
-<<<<<<< HEAD
 #include <ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h>
-=======
-#include <ubuntu20.04/kernel_5.15.0-76/include/slab.h>
->>>>>>> fix regression, fix c2goto.cpp,add lines for test.desc
+
 #include <assert.h>
 
 #undef errno

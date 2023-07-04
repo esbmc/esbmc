@@ -58,10 +58,7 @@ public:
       create_directory(headers + "/ubuntu20.04");
       create_directory(headers + "/ubuntu20.04/kernel_5.15.0-76");
       create_directory(headers + "/ubuntu20.04/kernel_5.15.0-76/include");
-<<<<<<< HEAD
       create_directory(headers + "/ubuntu20.04/kernel_5.15.0-76/include/linux");
-=======
->>>>>>> modify cprover_source cpp to support kernel directory headers, fix static function declaration
 #define ESBMC_FLAIL(body, size, ...)                                           \
   std::ofstream(headers + "/" #__VA_ARGS__).write(body, size);
 #include <headers/libc_hdr.h>
