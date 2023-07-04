@@ -398,7 +398,7 @@ void goto_symext::run_intrinsic(
   {
     intrinsic_switch_from(art);
   }
-  else if(symname == "c:@F@__ESBMC_get_thread_id")
+  else if(has_prefix(symname, "c:@F@__ESBMC_get_thread_id"))
   {
     intrinsic_get_thread_id(func_call, art);
   }
