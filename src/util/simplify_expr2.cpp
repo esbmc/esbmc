@@ -8,6 +8,15 @@
 #include <irep2/irep2_utils.h>
 #include <util/type_byte_size.h>
 
+static unsigned get_pointer_object_length(const type2tc &t)
+{
+  if(is_pointer_type(t))
+  {
+    return get_pointer_object_length(to_pointer_type(t).subtype);
+  }
+  return t->get_width();
+}
+
 expr2tc expr2t::do_simplify() const
 {
   return expr2tc();
@@ -578,6 +587,22 @@ struct Divtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Are we dividing by a multiplication of the same value?
+    if(is_mul2t(op1))
+    {
+      if((to_mul2t(op1).side_1 == op2))
+      {
+        log_debug("[Divtor] Simplifying a*b/a = b");
+        return to_mul2t(op1).side_2;
+      }
+
+      if((to_mul2t(op1).side_2 == op2))
+      {
+        log_debug("[Divtor] Simplifying b*a/a = b");
+        return to_mul2t(op2).side_1;
+      }
+    }
+
     // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
@@ -1080,6 +1105,25 @@ expr2tc index2t::do_simplify() const
   // Only thing this index can evaluate to is the default value of this array
   if(is_constant_array_of2t(src))
     return to_constant_array_of2t(src).initializer;
+
+  // Are we trying to obtain a size?
+  if(is_symbol2t(src))
+  {
+    auto name = to_symbol2t(src).thename.as_string();
+    log_debug("[Simplifier index2t] name: {}", name);
+    if(name == "c:@__ESBMC_alloc_size")
+    {
+      // Just get the size now
+      if(is_pointer_object2t(new_index))
+      {
+        return constant_int2tc(
+          get_uint64_type(),
+          BigInt(get_pointer_object_length(
+            to_pointer_object2t(new_index).ptr_obj->type)) /
+            8);
+      }
+    }
+  }
 
   if(src != source_value || new_index != index)
     return index2tc(type, src, new_index);
@@ -2386,6 +2430,81 @@ static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
   return expr2tc();
 }
 
+static bool
+can_replace_address_of_with_zero(const expr2tc &a, std::string &last_addr_of)
+{
+  if(is_nil_expr(a))
+    return true;
+
+  if(is_address_of2t(a) && is_symbol2t(to_address_of2t(a).ptr_obj))
+  {
+    std::string ptr_name =
+      to_symbol2t(to_address_of2t(a).ptr_obj).thename.as_string();
+    if(last_addr_of == "")
+      last_addr_of = ptr_name;
+
+    return last_addr_of == ptr_name;
+  }
+
+  bool result = true;
+  a->foreach_operand([&last_addr_of, &result](const expr2tc &e) {
+    result &= can_replace_address_of_with_zero(e, last_addr_of);
+  });
+  return result;
+}
+#include <util/message.h>
+static expr2tc is_dynamic_addr_same_object(const expr2tc &s1, const expr2tc &s2)
+{
+  // For an expr: (SAME-OBJECT((signed int *)(&dynamic_1_array[0]) + 5, &dynamic_1_array
+  // side_2 must be an address of symbol and equal to the same symbol of side_1
+
+  std::string empty("");
+  if(!can_replace_address_of_with_zero(s1, empty))
+    return expr2tc();
+
+  if(!is_address_of2t(s2) || (!is_symbol2t(to_address_of2t(s2).ptr_obj)))
+    return expr2tc();
+
+  log_debug("[Simplified same-obj] trying to replace same-object to {}", empty);
+  if(empty.empty())
+  {
+    log_debug("[Simplified same-obj] No address-of found in the expression");
+  }
+
+  unsigned upper_bound = get_pointer_object_length(s2->type);
+
+  if(!is_add2t(s1) && !is_typecast2t(s1))
+  {
+    log_debug("[Simplified same-obj] something is not supported");
+    return expr2tc();
+  }
+
+  auto typecast = is_add2t(s1) ? to_add2t(s1).side_1 : to_typecast2t(s1).from;
+
+  if(!is_typecast2t(typecast))
+  {
+    log_debug("[Simplified same-obj] something is not a typecast");
+    return expr2tc();
+  }
+
+  // We should arrive here with the same symbol-only
+  if(!is_add2t(s1))
+  {
+    log_debug("[Simplified same-obj] replaced something with true");
+    return gen_true_expr();
+  }
+
+  auto limit = to_add2t(s1).side_2;
+  unsigned obj_bound = (to_constant_int2t(limit).value.to_uint64() + 1) *
+                       get_pointer_object_length(to_typecast2t(typecast).type);
+  // Pointer arithmetic
+  log_debug("[Simplified same-obj] replaced something");
+
+  if(obj_bound <= upper_bound)
+    return gen_true_expr();
+  return gen_false_expr();
+}
+
 expr2tc same_object2t::do_simplify() const
 {
   if(is_address_of2t(side_1) && is_address_of2t(side_2))
@@ -2398,7 +2517,11 @@ expr2tc same_object2t::do_simplify() const
     to_symbol2t(side_1).get_symbol_name() == "NULL")
     return gen_true_expr();
 
-  return expr2tc();
+  /* The bounds check of ESBMC might create something like SAME-OBJECT(&dynamic_addr[0] + const, &dynamic_addr[0])
+  * the problem being that will generate a broken expression: (SAME-OBJECT((signed int *)(&dynamic_1_array[0]) + 5, &dynamic_1_array
+  * We can hack our way though, if both sides contains the same addressof operand, we can replace it with an 0
+  */
+  return is_dynamic_addr_same_object(side_1, side_2);
 }
 
 expr2tc concat2t::do_simplify() const

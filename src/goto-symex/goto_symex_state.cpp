@@ -94,10 +94,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     if(s.thename == "NULL")
       return true;
 
-    // By propagation nondet symbols, we can achieve some speed up but the
-    // counterexample will be missing a lot of information, so not really worth it
-    if(s.thename.as_string().find("nondet$symex::nondet") != std::string::npos)
-      return false;
+    //At this point we have an SSA, so just propagate it
+    return constant_propagation_reference(expr);
   }
 
   if(is_address_of2t(expr))

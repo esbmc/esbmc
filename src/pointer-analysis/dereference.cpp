@@ -490,8 +490,8 @@ expr2tc dereferencet::dereference(
     known_exhaustive &= !(is_unknown2t(target) || is_invalid2t(target));
 
   expr2tc value;
-  if(!known_exhaustive)
-    value = make_failed_symbol(type);
+  //if(!known_exhaustive)
+  //  value = make_failed_symbol(type);
 
   for(const expr2tc &target : points_to_set)
   {
@@ -2094,6 +2094,9 @@ void dereferencet::valid_check(
     const symbolt &sym = *ns.lookup(to_symbol2t(symbol).thename);
     if(has_prefix(sym.id.as_string(), "symex_dynamic::"))
     {
+      if(has_prefix(sym.id.as_string(), "symex_dynamic::alloca"))
+        log_debug("trying to check a non-dynamic thing");
+      return;
       // Assert thtat it hasn't (nondeterministically) been invalidated.
       address_of2tc addrof(symbol->type, symbol);
       valid_object2tc valid_expr(addrof);
@@ -2212,6 +2215,7 @@ bool dereferencet::check_code_access(
   const guardt &guard,
   modet mode)
 {
+  return false;
   assert(is_code_type(value) || is_code_type(type));
 
   if(!is_code_type(type))
