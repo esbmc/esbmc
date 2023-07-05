@@ -132,14 +132,15 @@ void interval_analysis(
     log_status(oss.str());
   }
 
-  if(options.get_bool_option("interval-analysis-csv-dump"))
+  std::string csv_file = options.get_option("interval-analysis-csv-dump");
+  if(!csv_file.empty())
   {
     std::ostringstream oss;
     oss << "state,var,min,max,bot,top\n";
     Forall_goto_functions(f_it, goto_functions)
       dump_intervals(oss, f_it->second, interval_analysis);
 
-    std::ofstream csv("intervals.csv");
+    std::ofstream csv(csv_file);
     csv << oss.str();
   }
 
