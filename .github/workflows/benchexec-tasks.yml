@@ -28,7 +28,7 @@ on:
         - ConcurrencySafety-NoOverflows
         - NoDataRace-Main
         - NoOverflows-Main
-        - NoOverflows-Juliet        
+        - NoOverflows-Juliet
         - MemSafety-MemCleanup
         - MemSafety-Arrays
         - MemSafety-Heap
@@ -111,7 +111,7 @@ jobs:
           cd $HOME/output-action
           cp $HOME/esbmc-wrapper.py .
           cp $HOME/esbmc.xml .
-          chmod +x ./esbmc         
+          chmod +x ./esbmc
           chmod +x ./esbmc-wrapper.py
           ls -l
           /usr/bin/benchexec -o ../esbmc-output/ -N 9 ./esbmc.xml --read-only-dir / --overlay-dir /home  -T ${{ github.event.inputs.timeout }} --container -t ${{ github.event.inputs.task }}
@@ -124,7 +124,3 @@ jobs:
           NUM_OF_THREADS: ${{ inputs.num_of_threads }}
         run: |
           cp $HOME/run-output.zip .
-      - uses: actions/upload-artifact@v2
-        with:
-          name: benchexec-result
-          path: run-output.zip
