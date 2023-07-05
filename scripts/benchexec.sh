@@ -3,7 +3,6 @@
 BENCHEXEC_BIN=/usr/bin/benchexec
 BENCHEXEC_COMMON_FLAGS="-o ../esbmc-output/ -N $THREADS ./esbmc.xml --read-only-dir / --overlay-dir /home  -T $TIMEOUT --container"
 
-
 # Prepare Environment to run benchexec
 setup_folder () {
     echo "Setting up machine folder..."
@@ -21,34 +20,38 @@ setup_folder () {
     echo
 }
 
-benchexec_run_full_set() {
+benchexec_run_full_set () {
     echo "$BENCHEXEC_BIN $BENCHEXEC_COMMON_FLAGS"
     $BENCHEXEC_BIN $BENCHEXEC_COMMON_FLAGS
 }
 
-benchexec_run_set() {
-    echo "$BENCHEXEC_BIN $BENCHEXEC_COMMON_FLAGS -r $set"
-    $BENCHEXEC_BIN $BENCHEXEC_COMMON_FLAGS -r $set
+benchexec_run_set () {
+    echo "$BENCHEXEC_BIN $BENCHEXEC_COMMON_FLAGS -r $1"
+    $BENCHEXEC_BIN $BENCHEXEC_COMMON_FLAGS -r $1
 }
 
-benchexec_run_task() {
-    echo "$BENCHEXEC_BIN $BENCHEXEC_COMMON_FLAGS -t $task"
-    $BENCHEXEC_BIN $BENCHEXEC_COMMON_FLAGS -t $task
+benchexec_run_task () {
+    echo "$BENCHEXEC_BIN $BENCHEXEC_COMMON_FLAGS -t $1"
+    $BENCHEXEC_BIN $BENCHEXEC_COMMON_FLAGS -t $1
 }
 
-save_files() {
+save_files () {
     echo "Saving files in $out_dir"
     zip -r run-output.zip ../esbmc-output
     cp run-output.zip $HOME/$out_dir
 }
 
-# Setup build flags (release, debug, sanitizer, ...)
+# Select analysis mode
 while getopts r:t:f flag
 do
     case "${flag}" in
-        r) echo "Running run-set ${OPTARG}";;
-        t) echo "Running run-task ${OPTARG}";;
-        f) echo "Running full-mode";;
+        r) echo "Running run-set ${OPTARG}"
+           benchexec_run_set ${OPTARG};;
+        t) echo "Running run-task ${OPTARG}"
+            benchexec_run_task ${OPTARG};;
+        f) echo "Running full-mode"
+            benchexec_run_full_set;;
     esac
 done
 
+save_files
