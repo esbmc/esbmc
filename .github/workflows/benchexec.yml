@@ -10,16 +10,20 @@ on:
         description: 'Command-line flags to pass via ESBMC_OPTS'
         required: false
         default: ''
+      output:
+        description: 'File output name (to keep the logs)'
+        required: false
+        default: ''
       mode:
         type: choice
-        description: Mode
+        description: Benchecex run mode
         options:
         - Full
         - Task
         - RunSet
       runset:
         type: choice
-        description: Run-set to use
+        description: Run-set to use (be sure to set mode to "RunSet")
         options:
         - SV-COMP23_unreach-call
         - SV-COMP23_no-data-race
@@ -29,7 +33,7 @@ on:
         - SV-COMP23_no-overflow
       task:
         type: choice
-        description: Task to use
+        description: Task to use Run-set to use (be sure to set mode to "Task")
         options:
         - ReachSafety-Arrays
         - ReachSafety-BitVectors
@@ -78,53 +82,53 @@ on:
 
 jobs:
 
-  # build-unix:
-  #   strategy:
-  #     matrix:
-  #       os: [ubuntu-latest]
-  #   name: Build ESBMC (${{ matrix.os }})
-  #   runs-on: ${{ matrix.os }}
-  #   steps:
-  #   - uses: actions/checkout@v2
-  #   - name: Build ESBMC
-  #     run: ./scripts/build.sh -b Debug
-  #   - uses: actions/upload-artifact@v3
-  #       with:
-  #         name: release-linux
-  #         path: ./build/src/esbmc/esbmc
+  build-unix:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    name: Build ESBMC (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build ESBMC
+      run: ./scripts/build.sh -b RelWithDebInfo
+    - uses: actions/upload-artifact@v3
+        with:
+          name: release-linux
+          path: ./build/src/esbmc/esbmc
 
   run-benchexec:
-    runs-on: ubuntu-latest
+    runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
     timeout-minutes: 12000
-    # needs: build-linux
+    needs: build-unix
     steps:
-      # - name: Download Linux Build
-      #   uses: actions/download-artifact@v3
-      #   with:
-      #     name: release-linux
-      #     path: ./
+      - name: Download Linux Build
+        uses: actions/download-artifact@v3
+        with:
+          name: release-linux
+          path: ./
       - name: Checkout code
         uses: actions/checkout@master
         with:
           path: esbmc-src
       - name: Run Benchexec (Full)
         if: ${{ inputs.mode == 'Full' }}
-        run: echo 'Running full benchexec'
+        run: ./esbmc-src/scripts/benchexec.sh -f
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
-          NUM_OF_THREADS: ${{ inputs.num_of_threads }}
       - name: Run Benchexec (RunSet)
         if: ${{ inputs.mode == 'RunSet' }}
-        run: echo 'Running RunSet benchexec'
+        run: ./esbmc-src/scripts/benchexec.sh -r ${{ inputs.runset }}
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
-          NUM_OF_THREADS: ${{ inputs.num_of_threads }}
       - name: Run Benchexec (Task)
         if: ${{ inputs.mode == 'Task' }}
-        run: echo 'Running Task benchexec'
+        run: ./esbmc-src/scripts/benchexec.sh -t ${{ inputs.task }}
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
-          NUM_OF_THREADS: ${{ inputs.num_of_threads }}
+      - name: Save logs
+        if: ${{ inputs.output != '' }}
+        run: mv $HOME/output.zip $HOME/${{ inputs.output }}

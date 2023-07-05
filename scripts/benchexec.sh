@@ -1,7 +1,7 @@
 #!/bin/sh
 
 BENCHEXEC_BIN=/usr/bin/benchexec
-BENCHEXEC_COMMON_FLAGS="-o ../esbmc-output/ -N $THREADS ./esbmc.xml --read-only-dir / --overlay-dir /home  -T $TIMEOUT --container"
+BENCHEXEC_COMMON_FLAGS="-o ../esbmc-output/ -N 9 ./esbmc.xml --read-only-dir / --overlay-dir /home  -T $TIMEOUT --container"
 
 # Prepare Environment to run benchexec
 setup_folder () {
@@ -36,9 +36,8 @@ benchexec_run_task () {
 }
 
 save_files () {
-    echo "Saving files in $out_dir"
     zip -r run-output.zip ../esbmc-output
-    cp run-output.zip $HOME/$out_dir
+    cp run-output.zip $HOME/output.zip
 }
 
 # Select analysis mode
