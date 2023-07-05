@@ -526,8 +526,13 @@ T interval_domaint::get_interval(const expr2tc &e) const
     break;
   }
 
+  case expr2t::sideeffect_id:
+    // This is probably a nondet
+    log_debug("[Interval] returning top for side effect {}", *e);
+    break;
+
   default:
-    log_error("Could't compute interval for expr: {}", *e);
+    log_error("Couldn't compute interval for expr: {}", *e);
     abort();
   }
 
@@ -682,7 +687,8 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(
     // Interval: [a,b]
     std::vector<expr2tc> disjuncts;
 
-    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w) {
+    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w)
+    {
       assert(w.lower <= w.upper);
 
       std::vector<expr2tc> s_conjuncts;
@@ -722,7 +728,8 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
     return gen_false_expr();
 
   std::vector<expr2tc> conjuncts;
-  auto typecast = [&symbol](expr2tc v) {
+  auto typecast = [&symbol](expr2tc v)
+  {
     c_implicit_typecast(v, symbol->type, *migrate_namespace_lookup);
     return v;
   };
@@ -799,10 +806,12 @@ bool contains_float(const expr2tc &e)
     return true;
 
   bool inner_float = false;
-  e->foreach_operand([&inner_float](auto &it) {
-    if(contains_float(it))
-      inner_float = true;
-  });
+  e->foreach_operand(
+    [&inner_float](auto &it)
+    {
+      if(contains_float(it))
+        inner_float = true;
+    });
 
   return inner_float;
 }
