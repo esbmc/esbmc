@@ -103,7 +103,7 @@ jobs:
     needs: build-unix
     steps:
       - name: Download Linux Build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v1
         with:
           name: release-linux
           path: ./
