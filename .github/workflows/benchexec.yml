@@ -1,4 +1,4 @@
-name: Run Benchexec (SV-Comp)
+name: Run Benchexec
 on:
   workflow_dispatch:
     inputs:
@@ -91,7 +91,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Build ESBMC
-      run: ./scripts/build.sh -b RelWithDebInfo
+      run: ./scripts/build.sh -b Debug # TODO: esbmc is not building in release mode
     - uses: actions/upload-artifact@v3
       with:
         name: release-linux
