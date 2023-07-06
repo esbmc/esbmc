@@ -129,6 +129,10 @@ jobs:
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
+      - uses: actions/upload-artifact@v1
+        with:
+          name: benchexec-result
+          path: run-output.zip
       - name: Save logs
         if: ${{ inputs.output != '' }}
         run: mv $HOME/output.zip $HOME/${{ inputs.output }}
