@@ -2,7 +2,7 @@ set(inputs limits.h pthread.h stdarg.h stdbool.h stddef.h
            bits/pthreadtypes.h bits/thread-shared-types.h
            # MacOSX10.x
            sys/_types/_pthread_attr_t.h
-           # MacOSX11.0 and abovegit 
+           # MacOSX11.0 and above
            sys/_pthread/_pthread_attr_t.h
            sys/_pthread/_pthread_cond_t.h
            sys/_pthread/_pthread_condattr_t.h
