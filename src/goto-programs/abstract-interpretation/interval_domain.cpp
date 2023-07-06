@@ -532,8 +532,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
     break;
 
   default:
-    log_error("Couldn't compute interval for expr: {}", *e);
-    abort();
+    log_debug("[Interval] Couldn't compute interval for expr: {}", *e);
+    break;
   }
 
   return result;
