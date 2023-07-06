@@ -19,6 +19,11 @@ list(APPEND CMAKE_MODULE_PATH
 )
 include(Catch)
 set(UNIT_TEST_LIB Catch2::Catch2)
+if(EXISTS ${Catch2_SOURCE_DIR}/src/catch2/catch_all.hpp)
+  file(CREATE_LINK ${Catch2_SOURCE_DIR}/src/catch2/catch_all.hpp
+                   ${Catch2_SOURCE_DIR}/src/catch2/catch.hpp)
+  set(UNIT_TEST_LIB ${UNIT_TEST_LIB} Catch2::Catch2WithMain)
+endif()
 
 # FUNCTIONS DEFINED
 
