@@ -93,9 +93,9 @@ jobs:
     - name: Build ESBMC
       run: ./scripts/build.sh -b RelWithDebInfo
     - uses: actions/upload-artifact@v3
-        with:
-          name: release-linux
-          path: ./build/src/esbmc/esbmc
+      with:
+        name: release-linux
+        path: ./build/src/esbmc/esbmc
 
   run-benchexec:
     runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
