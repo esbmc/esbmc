@@ -299,6 +299,11 @@ type2tc ptraddr_type2()
   return get_uint_type(config.ansi_c.address_width);
 }
 
+type2tc bitsize_type2()
+{
+  return get_uint_type(config.ansi_c.pointer_width() + 3);
+}
+
 type2tc get_uint8_type()
 {
   static type2tc ubv8(new unsignedbv_type2t(8));
