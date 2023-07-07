@@ -163,6 +163,15 @@ bool configt::set(const cmdlinet &cmdline)
     }
   }
   ansi_c.cheri_concentrate = !cmdline.isset("cheri-uncompressed");
+#ifndef ESBMC_CHERI_CLANG
+  if(ansi_c.cheri)
+  {
+    log_error(
+      "This build of ESBMC does not have CHERI support, can't honour "
+      "'--cheri'.");
+    abort();
+  }
+#endif /* !def ESBMC_CHERI_CLANG */
 
   // this is the default
   std::string arch = this_architecture(), os = this_operating_system(), flavor;
