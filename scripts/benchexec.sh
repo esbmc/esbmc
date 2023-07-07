@@ -40,6 +40,8 @@ save_files () {
     cp run-output.zip $HOME/output.zip
 }
 
+setup_folder
+
 # Select analysis mode
 while getopts r:t:f flag
 do
