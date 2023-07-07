@@ -56,8 +56,6 @@ if(BUILD_STATIC)
   include(BuildStatic)
 endif()
 
-include(ExternalDependencies)
-
 # Copied from https://stackoverflow.com/questions/53877344/cannot-configure-cmake-to-look-for-homebrew-installed-version-of-bison
 # On macOS, search Homebrew for keg-only versions of Bison and Flex. Xcode does
 # not provide new enough versions for us to use.
@@ -91,6 +89,8 @@ find_package(FLEX 2.6.1 REQUIRED)
 # This MUST be executed after BuildStatic since it sets Boost Static flags
 find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options iostreams)
 include(FindLocalLLVM)
+
+include(ExternalDependencies)
 
 # Optimization
 include(OptimizationCCache)
