@@ -287,7 +287,6 @@ to be recompiled.
 It is advised to keep the default setting `detect` for `CLANG_HEADERS_BUNDLED`,
 which decides to bundle headers only when linking statically against __clang__.
 
-
 ## Setting up the sysroot for CHERI clang
 
 CHERI clang is used as frontend by CHERI-enabled ESBMC.
