@@ -225,7 +225,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "output VCCs in SMT lib format to given file"},
     {"floatbv",
      NULL,
-     "encode floating-point using the SMT floating-point theory(default)"},
+     "encode floating-point using the SMT floating-point theory (default)"},
     {"fixedbv", NULL, "encode floating-point as fixed bit-vectors"},
     {"fp2bv",
      NULL,
