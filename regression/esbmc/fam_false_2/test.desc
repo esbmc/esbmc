@@ -1,4 +1,5 @@
-KNOWNBUG
+CORE
 main.c
 --compact-trace  --force-malloc-success
+^\s*dereference failure:
 ^VERIFICATION FAILED$

@@ -4,10 +4,9 @@ typedef struct {
   int arr[]; // Array of size 0
 } FAM;
 
-
+#include <stdlib.h>
 main() {
   FAM *ptr = (FAM*) malloc(sizeof(FAM) + sizeof(int)*3);
-  FAM deref = *ptr;
-  deref.arr[2] = 42; // out-of-bounds
+  ptr->arr[2] = 42; // out-of-bounds
   free(ptr);
 }

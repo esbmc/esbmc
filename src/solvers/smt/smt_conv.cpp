@@ -1760,6 +1760,24 @@ expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
   if(domain_width == config.ansi_c.int_width)
     return idx;
 
+  // If both the index and the array are constant, we should check if the index is being lost
+  if(is_constant_int2t(idx))
+  {
+    auto index_value = to_constant_int2t(idx).value.to_uint64();
+    auto limit = pow(2, domain_width);
+    if(index_value >= limit && options.get_bool_option("no-bounds-check"))
+    {
+      // TODO: Maybe we should propagate an invalid expression here?
+      log_warning(
+        "ESBMC relies on bounds check to guarantee that arrays are not "
+        "overlaping!"
+        "You have an array with an index limit of {}. \nArray: {}\nIndex: {}",
+        limit,
+        *arr_sort,
+        *idx);
+    }
+  }
+
   // Otherwise, we need to extract the lower bits out of this.
   return typecast2tc(
     get_uint_type(domain_width), idx, gen_zero(get_int32_type()));
@@ -1792,9 +1810,10 @@ unsigned long smt_convt::calculate_array_domain_width(const array_type2t &arr)
   if(!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size))
   {
     constant_int2tc thesize = arr.array_size;
-    return size_to_bit_width(thesize->value.to_uint64());
+    uint64_t width = thesize->value.to_uint64();
+    if(width)
+      return size_to_bit_width(width);
   }
-
   return config.ansi_c.word_size;
 }
 

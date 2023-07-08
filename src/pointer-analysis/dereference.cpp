@@ -469,10 +469,8 @@ expr2tc dereferencet::dereference(
     src = typecast2tc(type2tc(new pointer_type2t(get_empty_type())), src);
 
   type2tc type = to_type;
-
   // collect objects dest may point to
   value_setst::valuest points_to_set;
-
   dereference_callback.get_value_set(src, points_to_set);
 
   // now build big case split
@@ -1243,6 +1241,19 @@ void dereferencet::construct_from_const_struct_offset(
       // is supposed to point at.
       // If user is seeking a reference to this substruct, a different method
       // should have been called (construct_struct_ref_from_const_offset).
+      if(is_array_type(it))
+      {
+        // Array of size 0 in a struct, means FAM
+        // TODO: Check for allignment.
+        expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
+        constant_int2tc new_offs(pointer_type2(), int_offset - m_offs);
+
+        // Extract.
+        build_reference_rec(memb, new_offs, type, guard, mode);
+        value = memb;
+
+        return;
+      }
       assert(is_struct_type(it));
       assert(!is_struct_type(type));
       i++;
@@ -1366,6 +1377,32 @@ void dereferencet::construct_from_dyn_struct_offset(
 
     // Compute some kind of guard
     BigInt field_size = type_byte_size_bits(it);
+    // Lets compute field size manually for fam :)
+    if(
+      is_array_type(it) &&
+      (to_array_type(it).array_size->expr_id != expr2t::constant_int_id ||
+       !to_array_type(it).get_width()))
+    {
+      auto fam = ns.lookup(to_symbol2t(value).thename);
+      auto fam_value_ops = fam->value.operands();
+      if(!fam_value_ops.empty())
+      {
+        auto last_operand =
+          to_array_type(fam->value.operands().back().type()).size();
+        BigInt quantity(
+          to_constant_expr(last_operand).get_value().as_string().c_str(), 2);
+        auto base_type_width = type_byte_size_bits(to_array_type(it).subtype);
+        field_size = quantity * base_type_width;
+
+
+        log_debug(
+          "Adding field size: {}, quantity: {}, base_type: {}, offs: {}",
+          field_size,
+          quantity,
+          base_type_width,
+          offs);
+      }
+    }
 
     // Round up to word size
     expr2tc field_offset = constant_int2tc(offset->type, offs);
@@ -2037,6 +2074,9 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   simplify(offset_bytes);
 
   BigInt num_bits = type_byte_size_bits(type);
+  // If the destination is a zero-sized array then we can just return anything
+  if(!num_bits.compare(0))
+    return gen_zero(type);
   assert(num_bits.is_uint64());
   uint64_t num_bits64 = num_bits.to_uint64();
   assert(num_bits64 <= ULONG_MAX);
@@ -2260,6 +2300,27 @@ void dereferencet::check_data_obj_access(
 
   expr2tc offset = typecast2tc(pointer_type2(), src_offset);
   unsigned int data_sz = type_byte_size_bits(value->type).to_uint64();
+  // Check for FAM struct
+  if(is_struct_type(value->type) && is_symbol2t(value))
+  {
+    auto fam = ns.lookup(to_symbol2t(value).thename);
+    // Is FAM pointing to a static object?
+    if(!has_prefix(fam->id.as_string(), "symex_dynamic::"))
+    {
+      // Here we are checking for a dynamic index of a FAM!
+      auto &v = to_struct_type(value->type);
+      auto last = v.members.back();
+      auto fam_value_ops = fam->value.operands();
+      if(is_array_type(last) && !to_array_type(last).get_width() && !fam_value_ops.empty())
+      {
+        data_sz +=
+          type_byte_size_bits(migrate_type(fam_value_ops.back().type()))
+            .to_uint64();
+      }
+
+    }
+  }
+
   unsigned int access_sz = type_byte_size_bits(type).to_uint64();
   expr2tc data_sz_e = gen_ulong(data_sz);
   expr2tc access_sz_e = gen_ulong(access_sz);
