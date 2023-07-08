@@ -144,7 +144,11 @@ function(mangle_clib output)
       set(inputs_c ${c2goto_library_files})
     endif()
 
-    set(run_c2goto c2goto -I "${cheri_compressed_cap_SOURCE_DIR}" ${multiarch_flags} ${OS_C2GOTO_FLAGS}
+    if(ESBMC_CHERI_CLANG)
+      list(APPEND in_flags -I "${cheri_compressed_cap_SOURCE_DIR}")
+    endif()
+
+    set(run_c2goto c2goto ${multiarch_flags} ${OS_C2GOTO_FLAGS}
                    ${inputs_c} ${in_flags} --output ${out_goto})
 
     # Convert a list of C operational models (e.g. *.c) into a single goto binary file (e.g. clib32.goto) at CMake build time
