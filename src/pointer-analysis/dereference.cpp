@@ -1974,13 +1974,16 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_scalar(
     index2tc new_index = to_index2t(object);
     new_object = new_index->source_value;
     // Adjust the offset taking into account the array subtype
+    expr2tc index = new_index->index;
+    if(index->type != accuml_offs->type)
+      index = typecast2tc(accuml_offs->type, index);
     accuml_offs = add2tc(
       accuml_offs->type,
       accuml_offs,
       mul2tc(
-        new_index->index->type,
-        new_index->index,
-        gen_ulong(new_index->type->get_width() / 8)));
+        accuml_offs->type,
+        index,
+        gen_long(accuml_offs->type, new_index->type->get_width() / 8)));
     simplify(accuml_offs);
   }
 
