@@ -95,6 +95,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"document-subgoals", NULL, "generate subgoals documentation"},
     {"no-arch", NULL, "don't set up an architecture"},
     {"no-library", NULL, "disable built-in abstract C library"},
+    {"no-string-literal", NULL, "ignores string literals (replace to NULL)"},
     {"output-goto",
      boost::program_options::value<std::string>(),
      "export generated goto program"},

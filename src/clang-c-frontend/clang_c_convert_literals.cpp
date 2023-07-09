@@ -37,8 +37,16 @@ bool clang_c_convertert::convert_string_literal(
   if(get_type(string_literal.getType(), type))
     return true;
 
-  string_constantt string(string_literal.getBytes().str(), type);
-  dest.swap(string);
+  if(config.options.get_bool_option("no-string-literal"))
+  {
+    auto value = gen_zero(type);
+    dest.swap(value);
+  }
+  else
+  {
+    string_constantt string(string_literal.getBytes().str(), type);
+    dest.swap(string);
+  }
 
   return false;
 }
