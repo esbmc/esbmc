@@ -31,18 +31,20 @@ jobs:
   build-unix:
     strategy:
       matrix:
+        build: [Release, RelWithDebInfo, Debug]
         os: [ubuntu-latest]
     name: Build ESBMC (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
     - name: Build ESBMC
-      run: ./scripts/build.sh -b Debug
+      run: ./scripts/build.sh -b ${{ matrix.build }}
     - uses: actions/upload-artifact@v1
       with:
         name: release-unix
         path: ./release
     - name: Run tests
+      if: ${{ matrix.build == 'Debug' }}
       run: cd build/ && ctest -j4 --output-on-failure --progress .
     - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
       with:
