@@ -74,7 +74,12 @@ bool solidity_convertert::convert()
         return true; // 'true' indicates something goes wrong.
     }
   }
-  assert(found_contract_def);
+
+  if(!found_contract_def)
+  {
+    log_error("[Solidity] Could not find contract");
+    abort();
+  }
 
   // reasoning-based verification
   index = 0;
