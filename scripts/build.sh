@@ -12,7 +12,7 @@ ubuntu_setup () {
     # Tested on ubuntu 22.04
     echo "Configuring Ubuntu build"
     sudo apt-get update && sudo apt-get install -y clang clang-tidy python-is-python3 csmith python3 git ccache unzip wget curl libcsmith-dev gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev pkg-config python3-pip python3-toml python-is-python3 openjdk-11-jdk &&
-    BASE_ARGS="$BASE_ARGS -DENABLE_OLD_FRONTEND=On  -DENABLE_WERROR=ON -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On" &&
+    BASE_ARGS="$BASE_ARGS -DENABLE_OLD_FRONTEND=On  -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On" &&
     SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=ON"
 }
 
@@ -40,12 +40,13 @@ case $OS in
 esac || exit $?
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts b:s: flag
+while getopts b:s:e: flag
 do
     case "${flag}" in
         b) BASE_ARGS="$BASE_ARGS -DCMAKE_BUILD_TYPE=${OPTARG}";;
         s) BASE_ARGS="$BASE_ARGS -DSANITIZER_TYPE=${OPTARG}"
            COMPILER_ARGS="$COMPILER_ARGS CC=clang CXX=clang++";;
+        e) BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=${OPTARG}"
     esac
 done
 
