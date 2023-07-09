@@ -618,7 +618,9 @@ void clang_cpp_convertert::get_overriden_methods(
     if(map.find(method_id) != map.end())
       continue;
 
+#ifndef NDEBUG
     auto status = map.insert({method_id, md_overriden});
     assert(status.second);
+#endif
   }
 }

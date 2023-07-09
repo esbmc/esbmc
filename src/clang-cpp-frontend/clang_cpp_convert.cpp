@@ -1397,9 +1397,10 @@ void clang_cpp_convertert::get_base_map(
     // avoid adding the same base, e.g. in case of diamond problem
     if(map.find(class_id) != map.end())
       continue;
-
+#ifndef NDEBUG
     auto status = map.insert({class_id, base_cxxrd});
     assert(status.second);
+#endif
   }
 }
 

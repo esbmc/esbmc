@@ -18,7 +18,7 @@ template <class T>
 class interval_templatet
 {
 public:
-  interval_templatet() : lower_set(false), upper_set(false)
+  interval_templatet() : lower_set(false), upper_set(false), lower(0), upper(0)
   {
     // this is 'top'
   }

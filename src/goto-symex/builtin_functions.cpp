@@ -400,7 +400,7 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 {
   assert(is_symbol2t(func_call.function));
 
-  unsigned number_of_format_args, fmt_idx;
+  int number_of_format_args, fmt_idx = -1;
   const std::string func_name =
     to_symbol2t(func_call.function).thename.as_string();
 
@@ -417,6 +417,13 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
     number_of_format_args = func_call.operands.size() - 2;
   }
 
+  if(fmt_idx == -1)
+  {
+    log_error(
+      "[Symex] input instruction called from invalid function: {}", func_name);
+    abort();
+  }
+
   if(func_call.ret)
     symex_assign(code_assign2tc(
       func_call.ret,
@@ -424,8 +431,7 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
   // TODO: fill / cut off the inputs stream based on the length limits.
 
-  for(long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
-      i++)
+  for(int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx; i++)
   {
     expr2tc operand = func_call.operands[i];
     internal_deref_items.clear();
@@ -1115,7 +1121,7 @@ static inline expr2tc gen_value_by_byte(
 
     uint64_t union_total_size = type_byte_size(type).to_uint64();
     // Let's find a member with the biggest size
-    int selected_member_index;
+    int selected_member_index = -1;
 
     for(unsigned i = 0; i < to_union_type(type).members.size(); i++)
     {
@@ -1128,6 +1134,10 @@ static inline expr2tc gen_value_by_byte(
       }
     }
 
+    if(selected_member_index == -1)
+      return expr2tc();
+
+    assert(selected_member_index <= to_union_type(type).member_names.size());
     const irep_idt &name =
       to_union_type(type).member_names[selected_member_index];
     const type2tc &member_type =
