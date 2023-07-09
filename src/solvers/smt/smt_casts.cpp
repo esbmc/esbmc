@@ -380,7 +380,7 @@ static expr2tc capability_struct2(const expr2tc &pesbt, const expr2tc &cursor)
 
 static expr2tc capability_struct_from_cap(const expr2tc &cap)
 {
-  // assert(is_pointer_type(cap));
+  /* CHERI-TODO: enable assert(is_pointer_type(cap)); */
   assert(cap->type->get_width() == config.ansi_c.capability_width());
   std::vector<expr2tc> member = {cap};
   return member2tc(
