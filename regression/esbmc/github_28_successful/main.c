@@ -1,3 +1,5 @@
+#include <limits.h>
+
 struct aws_string
 {
   const unsigned long len;
@@ -6,7 +8,7 @@ struct aws_string
 
 void *bounded_malloc(unsigned long size)
 {
-  __ESBMC_assume(size <= ((18446744073709551615UL) >> (8 + 1)));
+  __ESBMC_assume(size <= (ULONG_MAX >> (8 + 1)));
   return malloc(size);
 }
 
@@ -20,7 +22,7 @@ int main()
 {
   unsigned long len;
   __ESBMC_assume(
-    len < ((18446744073709551615UL) - 1 - sizeof(struct aws_string)));
+    len < (ULONG_MAX - 1 - sizeof(struct aws_string)));
 
   struct aws_string *str = bounded_malloc(sizeof(struct aws_string) + len + 1);
   *(unsigned long *)(&str->len) = len;

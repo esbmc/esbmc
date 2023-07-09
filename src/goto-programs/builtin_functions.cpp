@@ -745,7 +745,7 @@ void goto_convertt::do_function_call_symbol(
 
     do_cpp_new(lhs, new_function, dest);
   }
-  else if(base_name == "builtin_va_arg")
+  else if(base_name == "__ESBMC_va_arg")
   {
     // This does two things.
     // 1) Move list pointer to next argument.
@@ -784,7 +784,7 @@ void goto_convertt::do_function_call_symbol(
       t2->location = function.location();
     }
   }
-  else if(base_name == "__builtin_va_copy")
+  else if(base_name == "__ESBMC_va_copy")
   {
     if(arguments.size() != 2)
     {
@@ -806,7 +806,7 @@ void goto_convertt::do_function_call_symbol(
     migrate_expr(assign_expr, t->code);
     t->location = function.location();
   }
-  else if(base_name == "__builtin_va_start")
+  else if(base_name == "__ESBMC_va_start")
   {
     // Set the list argument to be the address of the
     // parameter argument.
@@ -831,7 +831,7 @@ void goto_convertt::do_function_call_symbol(
     migrate_expr(assign_expr, t->code);
     t->location = function.location();
   }
-  else if(base_name == "__builtin_va_end")
+  else if(base_name == "__ESBMC_va_end")
   {
     // Invalidates the argument. We do so by setting it to NULL.
     if(arguments.size() != 1)

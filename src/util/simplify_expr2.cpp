@@ -405,7 +405,7 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
   bool p1 = is_pointer_type(a);
   bool p2 = is_pointer_type(b);
   if(p1 && p2)
-    return get_int_type(config.ansi_c.pointer_width);
+    return get_int_type(config.ansi_c.address_width);
   if(p1)
     return a;
   if(p2)
@@ -988,11 +988,9 @@ expr2tc pointer_offset2t::do_simplify() const
     expr2tc new_ptr_op = pointer_offset2tc(type, ptr_op);
     // And multiply the non pointer one by the type size.
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
-    BigInt thesize = type_byte_size(ptr_subtype);
-    constant_int2tc type_size(type, thesize);
+    expr2tc type_size = type_byte_size_expr(ptr_subtype);
 
-    // SV-Comp workaround
-    if(non_ptr_op->type->get_width() != type->get_width())
+    if(non_ptr_op->type != type)
       non_ptr_op = typecast2tc(type, non_ptr_op);
 
     mul2tc new_non_ptr_op(type, non_ptr_op, type_size);

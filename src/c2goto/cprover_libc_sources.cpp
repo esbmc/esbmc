@@ -95,12 +95,30 @@ const std::string *internal_libc_header_dir()
            : &internal_libc.header_dir();
 }
 
+/* copy of clang_c_convertert::get_filename_from_path(); TODO: unify */
+static std::string get_filename_from_path(std::string path)
+{
+  if(path.find_last_of('/') != std::string::npos)
+    return path.substr(path.find_last_of('/') + 1);
+
+  return path;
+}
+
 void add_bundled_library_sources(contextt &context, const languaget &c_language)
 {
   /* First extract headers (if not already done) */
   if(internal_libc_header_dir())
+  {
+    bool skip_fenv = false;
+#ifdef ESBMC_CHERI_CLANG_MORELLO
+    /* Morello is hard-float, which has an incompatible <fenv.h> */
+    skip_fenv = config.ansi_c.cheri != configt::ansi_ct::CHERI_OFF;
+#endif
+
     /* Next, extract (if not already done) and process every libc/libm file. */
     internal_libc.foreach_libc_libm([&](const std::string &path) {
+      if(skip_fenv && get_filename_from_path(path) == "fenv.c")
+        return;
       languaget *l = c_language.new_language();
       log_status("file " + path + ": Parsing");
       if(l->parse(path) || l->typecheck(context, path))
@@ -110,4 +128,5 @@ void add_bundled_library_sources(contextt &context, const languaget &c_language)
       }
       delete l;
     });
+  }
 }

@@ -1,6 +1,7 @@
 #ifndef IREP2_EXPR_H_
 #define IREP2_EXPR_H_
 
+#include <util/config.h>
 #include <util/c_types.h>
 #include <util/fixedbv.h>
 #include <util/ieee_float.h>
@@ -1494,6 +1495,7 @@ irep_typedefs(ashr, bit_2ops);
 irep_typedefs(same_object, same_object_data);
 irep_typedefs(pointer_offset, pointer_ops);
 irep_typedefs(pointer_object, pointer_ops);
+irep_typedefs(pointer_capability, pointer_ops);
 irep_typedefs(address_of, pointer_ops);
 irep_typedefs(byte_extract, byte_extract_data);
 irep_typedefs(byte_update, byte_update_data);
@@ -2402,6 +2404,10 @@ public:
   mul2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : mul_expr_methods(type, mul_id, v1, v2)
   {
+#if 0
+    assert(is_signedbv_type(v1) == is_signedbv_type(v2));
+    assert(is_unsignedbv_type(v1) == is_unsignedbv_type(v2));
+#endif
   }
   mul2t(const mul2t &ref) = default;
 
@@ -2423,6 +2429,10 @@ public:
   div2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : div_expr_methods(type, div_id, v1, v2)
   {
+#if 0
+    assert(is_signedbv_type(v1) == is_signedbv_type(v2));
+    assert(is_unsignedbv_type(v1) == is_unsignedbv_type(v2));
+#endif
   }
   div2t(const div2t &ref) = default;
 
@@ -2679,6 +2689,8 @@ public:
   pointer_offset2t(const type2tc &type, const expr2tc &ptrobj)
     : pointer_offset_expr_methods(type, pointer_offset_id, ptrobj)
   {
+    assert(type->type_id == type2t::signedbv_id);
+    assert(type->get_width() == config.ansi_c.address_width);
   }
   pointer_offset2t(const pointer_offset2t &ref) = default;
 
@@ -2700,6 +2712,19 @@ public:
   {
   }
   pointer_object2t(const pointer_object2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** @extends pointer_ops */
+class pointer_capability2t : public pointer_capability_expr_methods
+{
+public:
+  pointer_capability2t(const type2tc &type, const expr2tc &ptrobj)
+    : pointer_capability_expr_methods(type, pointer_capability_id, ptrobj)
+  {
+  }
+  pointer_capability2t(const pointer_capability2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2873,6 +2898,13 @@ public:
     assert(
       is_array_type(source) || is_string_type(source) ||
       is_vector_type(source));
+#if 0
+    assert(
+      is_array_type(source)
+        ? type == to_array_type(source->type).subtype
+        : ((is_unsignedbv_type(type) || is_signedbv_type(type)) &&
+           type->get_width() == config.ansi_c.char_width));
+#endif
   }
   index2t(const index2t &ref) = default;
 

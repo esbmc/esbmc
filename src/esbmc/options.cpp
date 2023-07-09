@@ -61,6 +61,7 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "path"),
      "set include path"},
+    {"nostdinc", NULL, "do not include from standard system paths"},
     {"idirafter",
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "path"),
@@ -102,6 +103,12 @@ const struct group_opt_templ all_cmd_options[] = {
     {"16", NULL, "set width of machine word (default is 64)"},
     {"32", NULL, "set width of machine word (default is 64)"},
     {"64", NULL, "set width of machine word (default is 64)"},
+    {"cheri",
+     boost::program_options::value<std::string>()->value_name("mode"),
+     "enable CHERI-C in 'hybrid' or 'purecap' mode (default is off)"},
+    {"cheri-uncompressed",
+     NULL,
+     "use full CHERI capabilites instead of the concentrate format"},
     {"version", NULL, "show current ESBMC version and exit"},
     {"cex-output",
      boost::program_options::value<std::string>(),

@@ -35,9 +35,9 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Sanitizer")
 endif()
 
-if(CMAKE_COMPILER_IS_GNUCXX)
-  add_compile_options(-Wall -Wextra)
-endif()
+set(ESBMC_CXX_Clang_DEFAULTS -Wall -Wextra -pipe)
+set(ESBMC_CXX_GNU_DEFAULTS -Wall -Wextra -pipe)
+add_compile_options(${ESBMC_CXX_${CMAKE_CXX_COMPILER_ID}_DEFAULTS})
 
 include(CheckIncludeFile)
 check_include_file(unistd.h HAVE_UNISTD)
@@ -55,8 +55,6 @@ include(Coverage)
 if(BUILD_STATIC)
   include(BuildStatic)
 endif()
-
-include(ExternalDependencies)
 
 # Copied from https://stackoverflow.com/questions/53877344/cannot-configure-cmake-to-look-for-homebrew-installed-version-of-bison
 # On macOS, search Homebrew for keg-only versions of Bison and Flex. Xcode does
@@ -91,6 +89,8 @@ find_package(FLEX 2.6.1 REQUIRED)
 # This MUST be executed after BuildStatic since it sets Boost Static flags
 find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options iostreams)
 include(FindLocalLLVM)
+
+include(ExternalDependencies)
 
 # Optimization
 include(OptimizationCCache)

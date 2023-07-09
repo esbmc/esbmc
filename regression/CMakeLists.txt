@@ -67,6 +67,12 @@ if(ENABLE_JIMPLE_FRONTEND)
     set(REGRESSIONS_JIMPLE jimple)
 endif()
 
+if(ESBMC_CHERI_CLANG)
+    set(REGRESSIONS_CHERI cheri-c
+                          cheri-128
+       )
+endif()
+
 # list of C++98/03 test suites
 set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/cbmc
@@ -121,6 +127,7 @@ if(APPLE)
                     esbmc-cpp11/cpp
                     esbmc-cpp11/cbmc-constructors
                     extensions
+                    ${REGRESSIONS_CHERI}
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -164,7 +171,7 @@ else()
                     extensions
                     cuda/COM_sanity_checks
                     linux
-
+                    ${REGRESSIONS_CHERI}
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

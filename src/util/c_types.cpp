@@ -80,7 +80,7 @@ typet index_type()
 
 type2tc index_type2()
 {
-  return get_int_type(config.ansi_c.int_width);
+  return get_int_type(config.ansi_c.address_width);
 }
 
 typet enum_type()
@@ -266,22 +266,42 @@ type2tc long_double_type2()
 
 typet size_type()
 {
-  return unsignedbv_typet(config.ansi_c.pointer_width);
+  return unsignedbv_typet(config.ansi_c.address_width);
+}
+
+type2tc size_type2()
+{
+  return get_uint_type(config.ansi_c.address_width);
 }
 
 typet signed_size_type()
 {
-  return signedbv_typet(config.ansi_c.pointer_width);
+  return signedbv_typet(config.ansi_c.address_width);
+}
+
+type2tc signed_size_type2()
+{
+  return get_int_type(config.ansi_c.address_width);
 }
 
 typet pointer_type()
 {
-  return unsignedbv_typet(config.ansi_c.pointer_width);
+  return unsignedbv_typet(config.ansi_c.pointer_width());
 }
 
 type2tc pointer_type2()
 {
-  return type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width));
+  return type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width()));
+}
+
+type2tc ptraddr_type2()
+{
+  return get_uint_type(config.ansi_c.address_width);
+}
+
+type2tc bitsize_type2()
+{
+  return get_uint_type(config.ansi_c.pointer_width() + 3);
 }
 
 type2tc get_uint8_type()

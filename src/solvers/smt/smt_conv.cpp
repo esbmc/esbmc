@@ -74,10 +74,16 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
 
-  members.push_back(get_uint_type(config.ansi_c.pointer_width));
-  members.push_back(get_uint_type(config.ansi_c.pointer_width));
+  /* TODO: pointer_object is actually identified by an 'unsigned int' number */
+  members.push_back(ptraddr_type2()); /* CHERI-TODO */
+  members.push_back(ptraddr_type2());
   names.emplace_back("pointer_object");
   names.emplace_back("pointer_offset");
+  if(config.ansi_c.cheri)
+  {
+    members.push_back(ptraddr_type2());
+    names.emplace_back("pointer_cap_info");
+  }
 
   pointer_struct = {members, names, names, "pointer_struct"};
 
@@ -89,17 +95,18 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
 
   members.clear();
   names.clear();
-  members.push_back(get_uint_type(config.ansi_c.pointer_width));
-  members.push_back(get_uint_type(config.ansi_c.pointer_width));
+  members.push_back(ptraddr_type2()); /* CHERI-TODO */
+  members.push_back(ptraddr_type2()); /* CHERI-TODO */
   names.emplace_back("start");
   names.emplace_back("end");
   addr_space_type = {members, names, names, "addr_space_type"};
 
+  /* indexed by pointer_object2t expressions */
   addr_space_arr_type = {addr_space_type, expr2tc(), true};
 
   addr_space_data.emplace_back();
 
-  machine_ptr = type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width));
+  machine_ptr = get_uint_type(config.ansi_c.pointer_width()); /* CHERI-TODO */
 
   ptr_foo_inited = false;
 }
@@ -300,11 +307,14 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::ieee_div_id:
   case expr2t::ieee_fma_id:
   case expr2t::ieee_sqrt_id:
+  case expr2t::pointer_offset_id:
+  case expr2t::pointer_object_id:
+  case expr2t::pointer_capability_id:
     break; // Don't convert their operands
 
   default:
   {
-    // Convert /all the arguments/. Via magical delegates.
+    // Convert all the arguments and store them in 'args'.
     unsigned int i = 0;
     expr->foreach_operand(
       [this, &args, &i](const expr2tc &e) { args[i++] = convert_ast(e); });
@@ -346,7 +356,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const union_type2t &ut = to_union_type(expr->type);
       unsigned c = ut.get_component_number(cu.init_field);
       /* Can only initialize unions by expressions of same type as init_field */
-      assert(src_expr->type == ut.members[c]);
+      assert(src_expr->type->type_id == ut.members[c]->type_id);
     }
 #endif
     a = convert_ast(typecast2tc(
@@ -699,7 +709,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     const pointer_offset2t &obj = to_pointer_offset2t(expr);
     // Potentially walk through some typecasts
     const expr2tc *ptr = &obj.ptr_obj;
-    while(is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
+    while(is_typecast2t(*ptr) && !is_pointer_type(*ptr))
       ptr = &to_typecast2t(*ptr).from;
 
     args[0] = convert_ast(*ptr);
@@ -716,6 +726,19 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     args[0] = convert_ast(*ptr);
     a = args[0]->project(this, 0);
+    break;
+  }
+  case expr2t::pointer_capability_id:
+  {
+    assert(config.ansi_c.cheri);
+    const pointer_capability2t &obj = to_pointer_capability2t(expr);
+    // Potentially walk through some typecasts
+    const expr2tc *ptr = &obj.ptr_obj;
+    while(is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
+      ptr = &to_typecast2t(*ptr).from;
+
+    args[0] = convert_ast(*ptr);
+    a = args[0]->project(this, 2);
     break;
   }
   case expr2t::typecast_id:
@@ -1387,13 +1410,20 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
   }
   case expr2t::symbol_id:
   {
+    const symbol2t &sym = to_symbol2t(expr);
+
+    /* The `__ESBMC_alloc` symbol is required for finalize_pointer_chain() to
+     * work, see #775. We should actually ensure here, that this is the version
+     * of the symbol active when smt_memspace allocates the new object.
+     *
+     * XXXfbrausse: How can we ensure this? */
+    if(sym.thename == "c:@__ESBMC_alloc")
+      current_valid_objects_sym = expr;
+
     // Special case for tuple symbols
     if(is_tuple_ast_type(expr))
-    {
-      const symbol2t &sym = to_symbol2t(expr);
       return tuple_api->mk_tuple_symbol(
         sym.get_symbol_name(), convert_sort(sym.type));
-    }
 
     if(is_array_type(expr))
     {
@@ -1406,9 +1436,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     }
 
     // Just a normal symbol. Possibly an array symbol.
-    const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
-
     smt_sortt sort = convert_sort(sym.type);
 
     if(is_array_type(expr))
@@ -1765,7 +1793,9 @@ expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
     get_uint_type(domain_width), idx, gen_zero(get_int32_type()));
 }
 
-unsigned long smt_convt::size_to_bit_width(unsigned long sz)
+/** Convert the size of an array to its bit width. Essential log2 with
+ *  some rounding. */
+static unsigned long size_to_bit_width(unsigned long sz)
 {
   uint64_t domwidth = 2;
   unsigned int dombits = 1;
@@ -1784,7 +1814,7 @@ unsigned long smt_convt::size_to_bit_width(unsigned long sz)
   return dombits;
 }
 
-unsigned long smt_convt::calculate_array_domain_width(const array_type2t &arr)
+unsigned long calculate_array_domain_width(const array_type2t &arr)
 {
   // Index arrays by the smallest integer required to represent its size.
   // Unless it's either infinite or dynamic in size, in which case use the
@@ -1798,13 +1828,13 @@ unsigned long smt_convt::calculate_array_domain_width(const array_type2t &arr)
   return config.ansi_c.word_size;
 }
 
-type2tc smt_convt::make_array_domain_type(const array_type2t &arr)
+type2tc make_array_domain_type(const array_type2t &arr)
 {
   // Start special casing if this is an array of arrays.
   if(!is_array_type(arr.subtype))
   {
     // Normal array, work out what the domain sort is.
-    if(int_encoding)
+    if(config.options.get_bool_option("int-encoding"))
       return get_uint_type(config.ansi_c.int_width);
 
     return get_uint_type(calculate_array_domain_width(arr));

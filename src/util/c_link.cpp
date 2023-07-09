@@ -220,6 +220,7 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
           "Location: {}",
           in_context.name,
           in_context.module,
+          new_symbol.module,
           new_symbol.value.location());
       }
     }

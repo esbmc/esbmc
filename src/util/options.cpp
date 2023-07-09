@@ -42,6 +42,15 @@ const std::string optionst::get_option(const std::string &option) const
   return "";
 }
 
+bool optionst::get_option(const std::string &option, std::string &value) const
+{
+  auto it = option_map.find(option);
+  if(it == option_map.end())
+    return false;
+  value = it->second;
+  return true;
+}
+
 void optionst::cmdline(cmdlinet &cmds)
 {
   // Pump command line options into options list

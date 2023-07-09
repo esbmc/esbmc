@@ -68,6 +68,16 @@ public:
     return (const typet &)find(name);
   }
 
+  bool can_carry_provenance() const
+  {
+    return get_bool(f_can_carry_provenance);
+  }
+
+  void can_carry_provenance(bool yes)
+  {
+    set(f_can_carry_provenance, yes);
+  }
+
   static irep_idt t_integer;
   static irep_idt t_signedbv;
   static irep_idt t_unsignedbv;
@@ -92,6 +102,9 @@ public:
   static irep_idt t_string;
   static irep_idt t_vector;
 
+  static irep_idt t_intcap;
+  static irep_idt t_uintcap;
+
   static irep_idt a_identifier;
   static irep_idt a_name;
   static irep_idt a_components;
@@ -107,6 +120,7 @@ protected:
   static irep_idt f_subtype;
   static irep_idt f_subtypes;
   static irep_idt f_location;
+  static irep_idt f_can_carry_provenance;
 };
 
 typedef std::list<typet> type_listt;

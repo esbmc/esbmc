@@ -173,7 +173,7 @@ expr2tc goto_symext::symex_mem(
   {
     type2tc subtype = migrate_type(symbol.type.subtype());
     expr2tc sym = symbol2tc(new_type, symbol.id);
-    expr2tc idx_val = gen_ulong(0);
+    expr2tc idx_val = gen_long(size->type, 0L);
     expr2tc idx = index2tc(subtype, sym, idx_val);
     rhs_addrof->type = migrate_type(pointer_typet(symbol.type.subtype()));
     rhs_addrof->ptr_obj = idx;
@@ -240,27 +240,12 @@ void goto_symext::track_new_pointer(
   symex_assign(code_assign2tc(valid_index_expr, truth), true);
 
   type2tc sz_sym_type =
-    type2tc(new array_type2t(uint_type2(), expr2tc(), true));
+    type2tc(new array_type2t(size_type2(), expr2tc(), true));
   symbol2tc sz_sym(sz_sym_type, alloc_size_arr_name);
-  index2tc sz_index_expr(get_bool_type(), sz_sym, ptr_obj);
+  index2tc sz_index_expr(size_type2(), sz_sym, ptr_obj);
 
-  expr2tc object_size_exp;
-  if(is_nil_expr(size))
-  {
-    try
-    {
-      BigInt object_size = type_byte_size(new_type);
-      object_size_exp = constant_int2tc(uint_type2(), object_size.to_uint64());
-    }
-    catch(const array_type2t::dyn_sized_array_excp &e)
-    {
-      object_size_exp = typecast2tc(uint_type2(), e.size);
-    }
-  }
-  else
-  {
-    object_size_exp = size;
-  }
+  expr2tc object_size_exp =
+    is_nil_expr(size) ? type_byte_size_expr(new_type) : size;
 
   symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true);
 }

@@ -711,15 +711,6 @@ public:
   /** Given an array index, extract the lower n bits of it, where n is the
    *  bitwidth of the array domain. */
   expr2tc fix_array_idx(const expr2tc &idx, const type2tc &array_type);
-  /** Convert the size of an array to its bit width. Essential log2 with
-   *  some rounding. */
-  unsigned long size_to_bit_width(unsigned long sz);
-  /** Given an array type, calculate the domain bitwidth it should have. For
-   *  nondeterministically or infinite sized arrays, this defaults to the
-   *  machine integer width. */
-  unsigned long calculate_array_domain_width(const array_type2t &arr);
-  /** Given an array type, create a type2tc representing its domain. */
-  type2tc make_array_domain_type(const array_type2t &arr);
   /** For a multi-dimensional array, convert the type into a single dimension
    *  array. This works by concatenating the domain widths together into one
    *  large domain. */
@@ -844,6 +835,10 @@ public:
    *  popping. */
   std::list<std::map<unsigned, unsigned>> addr_space_data;
 
+  /** Holds the `__ESBMC_alloc` symbol convert_terminal() was last invoked with.
+   */
+  expr2tc current_valid_objects_sym;
+
   // XXX - push-pop will break here.
   typedef std::map<std::string, smt_astt> renumber_mapt;
   std::vector<renumber_mapt> renumber_map;
@@ -864,6 +859,14 @@ public:
   // up to 2^64.
   smt_astt int_shift_op_array;
 };
+
+/** Given an array type, create a type2tc representing its domain. */
+type2tc make_array_domain_type(const array_type2t &arr);
+
+/** Given an array type, calculate the domain bitwidth it should have. For
+ *  nondeterministically or infinite sized arrays, this defaults to the
+ *  machine integer width. */
+unsigned long calculate_array_domain_width(const array_type2t &arr);
 
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)

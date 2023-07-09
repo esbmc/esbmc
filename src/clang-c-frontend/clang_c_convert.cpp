@@ -13,6 +13,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <llvm/Support/raw_os_ostream.h>
 CC_DIAGNOSTIC_POP()
 
+#include <ac_config.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
@@ -779,6 +780,11 @@ bool clang_c_convertert::get_type(
   if(q_type.isRestrictQualified())
     new_type.restricted(true);
 
+#ifdef ESBMC_CHERI_CLANG
+  if(the_type.canCarryProvenance(*ASTContext))
+    new_type.can_carry_provenance(true);
+#endif
+
   return false;
 }
 
@@ -825,6 +831,28 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     // have a copy of it, but a reference to the type
     get_ref_to_struct_type(sub_type);
 
+#if 0
+    // true for pointers that are implemented as CHERI capabilities
+    // and _Atomic with capability pointers as the underlying type.
+    bool is_cap = pt.isCapabilityPointerType();
+
+    // Whether this type can hold tagged capability values.
+    // This is true for capability types that have not been annotated with
+    // attr::CHERINoProvenance.
+    // In hybrid mode this also returns true for pointer types since they can
+    // be converted to capabilities.
+    bool can_prov = pt.canCarryProvenance(*ASTContext);
+
+    // true if this type is a CHERI capability type.
+    // If \p IncludeIntCap
+    // is true this also includes __uintcap_t and __intcap_t, otherwise it will
+    // return false for these types. This is useful for cases such as checking
+    // the validity of casts where __uintcap_t is not handled the same way as
+    // pointers.
+    bool IncludeIntCap = true;
+    bool is_cheri = pt.isCHERICapabilityType(*ASTContext, IncludeIntCap);
+#endif
+
     new_type = gen_pointer_type(sub_type);
     break;
   }
@@ -863,9 +891,9 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     new_type = array_typet(
       the_type,
       constant_exprt(
-        integer2binary(val.getSExtValue(), bv_width(int_type())),
+        integer2binary(val.getSExtValue(), bv_width(size_type())),
         integer2string(val.getSExtValue()),
-        int_type()));
+        size_type()));
     break;
   }
 
@@ -879,7 +907,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if(get_type(arr.getElementType(), sub_type))
       return true;
 
-    new_type = array_typet(sub_type, gen_one(index_type()));
+    new_type = array_typet(sub_type, gen_one(size_type()));
     break;
   }
 
@@ -1333,6 +1361,18 @@ bool clang_c_convertert::get_builtin_type(
     new_type = uint128_type();
     c_type = "__uint128";
     break;
+
+#ifdef ESBMC_CHERI_CLANG
+  case clang::BuiltinType::IntCap:
+    new_type = intcap_typet();
+    c_type = "__intcap";
+    break;
+
+  case clang::BuiltinType::UIntCap:
+    new_type = uintcap_typet();
+    c_type = "unsigned __intcap";
+    break;
+#endif
 
   default:
   {
@@ -2567,6 +2607,15 @@ bool clang_c_convertert::get_cast_expr(
 
   case clang::CK_VectorSplat:
     break;
+
+#ifdef ESBMC_CHERI_CLANG
+  case clang::CK_PointerToCHERICapability:
+    /* An explicit __cheri_tocap means this value might be tagged. */
+  case clang::CK_CHERICapabilityToPointer:
+    /* both should not be generated in purecap mode */
+    break;
+#endif
+
   default:
   {
     std::ostringstream oss;

@@ -30,6 +30,7 @@ expr_typedefs2(shl, bit_2ops);
 expr_typedefs2(ashr, bit_2ops);
 expr_typedefs1(pointer_offset, pointer_ops);
 expr_typedefs1(pointer_object, pointer_ops);
+expr_typedefs1(pointer_capability, pointer_ops);
 expr_typedefs1(address_of, pointer_ops);
 expr_typedefs1(overflow, overflow_ops);
 expr_typedefs1(valid_object, object_ops);

@@ -41,9 +41,9 @@ smt_astt smt_convt::convert_ptr_cmp(
   type2tc int_type = machine_ptr;
 
   pointer_object2tc ptr_obj1(int_type, side1);
-  pointer_offset2tc ptr_offs1(int_type, side1);
+  pointer_offset2tc ptr_offs1(signed_size_type2(), side1);
   pointer_object2tc ptr_obj2(int_type, side2);
-  pointer_offset2tc ptr_offs2(int_type, side2);
+  pointer_offset2tc ptr_offs2(signed_size_type2(), side2);
 
   symbol2tc addrspacesym(addr_space_arr_type, get_cur_addrspace_ident());
   index2tc obj1_data(addr_space_type, addrspacesym, ptr_obj1);
@@ -109,8 +109,8 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     // already asserted for elsewhere.
     if(expr->expr_id == expr2t::sub_id)
     {
-      pointer_offset2tc offs1(machine_ptr, side1);
-      pointer_offset2tc offs2(machine_ptr, side2);
+      pointer_offset2tc offs1(signed_size_type2(), side1);
+      pointer_offset2tc offs2(signed_size_type2(), side2);
       sub2tc the_ptr_offs(offs1->type, offs1, offs2);
 
       if(ret_is_ptr)
@@ -157,14 +157,16 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     type2tc followed_type = migrate_type(followed_type_old);
     expr2tc pointee_size = type_byte_size_expr(followed_type);
     type2tc inttype = machine_ptr;
+    type2tc difftype = get_int_type(config.ansi_c.address_width);
 
-    if(non_ptr_op->type->get_width() < config.ansi_c.pointer_width)
+    if(non_ptr_op->type->get_width() < config.ansi_c.pointer_width())
       non_ptr_op = typecast2tc(machine_ptr, non_ptr_op);
 
     expr2tc mul = mul2tc(inttype, non_ptr_op, pointee_size);
 
     // Add or sub that value
-    expr2tc ptr_offset = pointer_offset2tc(inttype, ptr_op);
+    expr2tc ptr_offset =
+      typecast2tc(inttype, pointer_offset2tc(difftype, ptr_op));
 
     expr2tc newexpr;
     if(is_add2t(expr))
@@ -264,7 +266,7 @@ smt_astt smt_convt::convert_identifier_pointer(
   address_of2tc new_addr_of(expr->type, expr);
   smt_cachet::const_iterator cache_result = smt_cache.find(new_addr_of);
   if(cache_result != smt_cache.end())
-    return (cache_result->ast);
+    return cache_result->ast;
 
   // Has this been touched by realloc / been re-numbered?
   renumber_mapt::iterator it = renumber_map.back().find(symbol);
@@ -288,15 +290,11 @@ smt_astt smt_convt::convert_identifier_pointer(
   if(addr_space_data.back().find(obj_num) == addr_space_data.back().end())
   {
     // Fetch a size.
-    type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.word_size));
+    type2tc ptr_loc_type = size_type2();
     expr2tc size;
     try
     {
-      size = constant_int2tc(ptr_loc_type, type_byte_size(expr->type));
-    }
-    catch(const array_type2t::dyn_sized_array_excp &e)
-    {
-      size = e.size;
+      size = type_byte_size_expr(expr->type);
     }
     catch(const array_type2t::inf_sized_array_excp &e)
     {
@@ -305,21 +303,9 @@ smt_astt smt_convt::convert_identifier_pointer(
       // say, 64k.
       size = constant_int2tc(ptr_loc_type, BigInt(0x10000));
     }
-    catch(const type2t::symbolic_type_excp &e)
-    {
-      // Type is empty or code -- something that we can never have a real size
-      // for. In that case, create an object of size 1: this means we have a
-      // valid entry in the address map, but that any modification of the
-      // pointer leads to invalidness, because there's no size to think about.
-      size = constant_int2tc(ptr_loc_type, BigInt(1));
-    }
 
     smt_astt output = init_pointer_obj(obj_num, size);
-    smt_astt args[2];
-    args[0] = a;
-    args[1] = output;
-
-    assert_ast(args[0]->eq(this, args[1]));
+    assert_ast(a->eq(this, output));
   }
 
   // Insert canonical address-of this expression.
@@ -332,12 +318,15 @@ smt_astt smt_convt::convert_identifier_pointer(
 smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
 {
   std::vector<expr2tc> membs;
-  membs.push_back(constant_int2tc(machine_ptr, BigInt(obj_num)));
-  membs.push_back(constant_int2tc(machine_ptr, BigInt(0)));
+  membs.push_back(constant_int2tc(pointer_struct->members[0], BigInt(obj_num)));
+  membs.push_back(constant_int2tc(pointer_struct->members[1], BigInt(0)));
+  if(config.ansi_c.cheri)
+    membs.push_back(
+      constant_int2tc(pointer_struct->members[2], BigInt(0))); /* CHERI-TODO */
   constant_struct2tc ptr_val_s(pointer_struct, membs);
   smt_astt ptr_val = tuple_api->tuple_create(ptr_val_s);
 
-  type2tc ptr_loc_type = machine_ptr;
+  type2tc ptr_loc_type = ptraddr_type2();
 
   std::stringstream sse1, sse2;
   sse1 << "__ESBMC_ptr_obj_start_" << obj_num;
@@ -352,7 +341,7 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   // from start. Express this in irep.
   expr2tc endisequal;
   expr2tc the_offs;
-  the_offs = typecast2tc(machine_ptr, size);
+  the_offs = typecast2tc(ptr_loc_type, size);
   add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
   endisequal = equality2tc(start_plus_offs, end_sym);
 
@@ -392,7 +381,7 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
 
 void smt_convt::finalize_pointer_chain(unsigned int objnum)
 {
-  type2tc inttype = machine_ptr;
+  type2tc inttype = ptraddr_type2();
   unsigned int num_ptrs = addr_space_data.back().size();
   if(num_ptrs == 0)
     return;
@@ -419,8 +408,29 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     // Previous assertions ensure start < end for all objs.
     lessthan2tc lt1(end_i, start_j);
     greaterthan2tc gt1(start_i, end_j);
-    or2tc or1(lt1, gt1);
-    assert_expr(or1);
+    or2tc no_overlap(lt1, gt1);
+
+    expr2tc e = no_overlap;
+
+    /* If a `__ESBMC_alloc` has already been seen, we use it to make the address
+     * space constraints on all objects except NULL (j == 0) and INVALID
+     * (j == 1) dependent on whether the object is still alive:
+     *   (__ESBMC_alloc[j] == true) => (i_end < j_start || i_start > j_end)
+     * In case the object j was free'd, it no longer restricts the addresses of
+     * the new object i.
+     *
+     * XXXfbrausse: This is crucially relies on the fact that the current
+     * version of the __ESBMC_alloc symbol stored in `current_valid_objects_sym`
+     * is the one this new object i gets registered with.
+     */
+    if(j && current_valid_objects_sym)
+    {
+      expr2tc alive =
+        index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j));
+      e = implies2tc(alive, e);
+    }
+
+    assert_expr(e);
   }
 }
 
@@ -439,6 +449,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     address_of2tc addrof(obj.type, base);
     smt_astt a = convert_ast(addrof);
 
+    /* constant 1 refers to member 'pointer_offset' of 'pointer_struct' */
     // Update pointer offset to offset to that field.
     return a->update(this, convert_ast(offs), 1);
   }
@@ -503,16 +514,21 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   abort();
 }
 
+static BigInt ones(unsigned n_bits)
+{
+  BigInt r;
+  r.setPower2(n_bits);
+  return r -= 1;
+}
+
 void smt_convt::init_addr_space_array()
 {
   addr_space_sym_num.back() = 1;
 
-  type2tc ptr_int_type = machine_ptr;
+  type2tc ptr_int_type = ptraddr_type2(); /* CHERI-TODO */
   constant_int2tc zero_ptr_int(ptr_int_type, BigInt(0));
   constant_int2tc one_ptr_int(ptr_int_type, BigInt(1));
-  BigInt allones(
-    (config.ansi_c.pointer_width == 32) ? 0xFFFFFFFF : 0xFFFFFFFFFFFFFFFFULL);
-  constant_int2tc obj1_end_const(ptr_int_type, allones);
+  constant_int2tc obj1_end_const(ptr_int_type, ones(ptr_int_type->get_width()));
 
   symbol2tc obj0_start(ptr_int_type, "__ESBMC_ptr_obj_start_0");
   symbol2tc obj0_end(ptr_int_type, "__ESBMC_ptr_obj_end_0");
@@ -539,10 +555,23 @@ void smt_convt::init_addr_space_array()
   bump_addrspace_array(pointer_logic.back().get_null_object(), addr0_tuple);
   bump_addrspace_array(pointer_logic.back().get_invalid_object(), addr1_tuple);
 
-  constant_struct2tc null_ptr_tuple(
-    pointer_struct, std::vector<expr2tc>{zero_ptr_int, zero_ptr_int});
-  constant_struct2tc invalid_ptr_tuple(
-    pointer_struct, std::vector<expr2tc>{one_ptr_int, zero_ptr_int});
+  std::vector<expr2tc> null_members =
+                         {
+                           constant_int2tc(pointer_struct->members[0], 0),
+                           constant_int2tc(pointer_struct->members[1], 0),
+                         },
+                       inv_members = {
+                         constant_int2tc(pointer_struct->members[0], 1),
+                         constant_int2tc(pointer_struct->members[1], 0),
+                       };
+  if(config.ansi_c.cheri)
+  {
+    null_members.emplace_back(constant_int2tc(pointer_struct->members[2], 0));
+    /* same as NULL capability */
+    inv_members.emplace_back(constant_int2tc(pointer_struct->members[2], 0));
+  }
+  constant_struct2tc null_ptr_tuple(pointer_struct, null_members);
+  constant_struct2tc invalid_ptr_tuple(pointer_struct, inv_members);
 
   null_ptr_ast = convert_ast(null_ptr_tuple);
   invalid_ptr_ast = convert_ast(invalid_ptr_tuple);

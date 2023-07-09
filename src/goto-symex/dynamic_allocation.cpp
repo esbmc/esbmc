@@ -95,7 +95,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc alloc_arr_2;
     migrate_expr(symbol_expr(*ns.lookup(alloc_size_arr_name)), alloc_arr_2);
 
-    index2tc index_expr(uint_type2(), alloc_arr_2, obj_expr);
+    index2tc index_expr(size_type2(), alloc_arr_2, obj_expr);
     expr = index_expr;
   }
 }

@@ -57,7 +57,7 @@ static expr2tc fixup_containerof_in_sizeof(const expr2tc &_expr)
   return compute_pointer_offset(addrof.ptr_obj);
 }
 
-type2tc migrate_type(const typet &type)
+static type2tc migrate_type0(const typet &type)
 {
   if(type.id() == typet::t_bool)
     return get_bool_type();
@@ -84,6 +84,12 @@ type2tc migrate_type(const typet &type)
     signedbv_type2t *s = new signedbv_type2t(config.ansi_c.int_width);
     return type2tc(s);
   }
+
+  if(type.id() == typet::t_intcap)
+    return type2tc(new signedbv_type2t(config.ansi_c.capability_width()));
+
+  if(type.id() == typet::t_uintcap)
+    return type2tc(new unsignedbv_type2t(config.ansi_c.capability_width()));
 
   if(type.id() == typet::t_array)
   {
@@ -235,7 +241,7 @@ type2tc migrate_type(const typet &type)
     // Don't migrate return type if it's a symbol. There are a variety of C++
     // things where a method returns itself, or similar.
     type2tc ret_type;
-    if(type.return_type().id() == "symbol")
+    if(type.return_type().id() == typet::t_symbol)
     {
       ret_type = type2tc(new symbol_type2t(type.return_type().identifier()));
     }
@@ -318,7 +324,7 @@ type2tc migrate_type(const typet &type)
     return type2tc(new array_type2t(get_uint8_type(), expr2tc(), true));
   }
 
-  if(type.id() == "string")
+  if(type.id() == typet::t_string)
   {
     irep_idt width = type.width();
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
@@ -327,6 +333,16 @@ type2tc migrate_type(const typet &type)
 
   log_error("{}", type);
   abort();
+}
+
+type2tc migrate_type(const typet &type)
+{
+  if(type.can_carry_provenance())
+    assert(
+      type.id() == typet::t_pointer || type.id() == "c_enum" ||
+      type.id() == typet::t_intcap || type.id() == typet::t_uintcap);
+  type2tc ty2 = migrate_type0(type);
+  return ty2;
 }
 
 static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)

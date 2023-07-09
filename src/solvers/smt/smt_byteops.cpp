@@ -127,11 +127,15 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   {
     expr2tc source = data.source_value;
     unsigned int src_width = source->type->get_width();
-    if(!is_bv_type(source))
-      source = typecast2tc(get_uint_type(src_width), source);
+    type2tc org_type;
+    if(!is_unsignedbv_type(source))
+    {
+      org_type = source->type;
+      source = bitcast2tc(get_uint_type(src_width), source);
+    }
 
     expr2tc offs = data.source_offset;
-    if(offs->type->get_width() != src_width)
+    if(!is_unsignedbv_type(offs) || offs->type->get_width() != src_width)
       offs = typecast2tc(get_uint_type(src_width), offs);
 
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
@@ -145,7 +149,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     }
 
     expr2tc update = data.update_value;
-    if(update->type->get_width() != src_width)
+    if(!is_unsignedbv_type(update) || update->type->get_width() != src_width)
       update = typecast2tc(get_uint_type(src_width), update);
 
     // The approach: mask, shift and or. Quite inefficient.
@@ -159,7 +163,12 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     source = bitand2tc(source->type, source, noteffs);
 
     expr2tc shl2 = shl2tc(offs->type, update, offs);
-    return convert_ast(bitor2tc(offs->type, shl2, source));
+    expr2tc e = bitor2tc(offs->type, shl2, source);
+
+    if(org_type)
+      e = bitcast2tc(org_type, e);
+
+    return convert_ast(e);
   }
 
   // We are merging two values: an 8 bit update value, and a larger source
