@@ -33,7 +33,7 @@ clang_c_languaget::clang_c_languaget()
   if(FILE *f = messaget::state.target(VerbosityLevel::Debug))
   {
     fprintf(f, "clang invocation:");
-    for (const std::string &s : compiler_args)
+    for(const std::string &s : compiler_args)
       fprintf(f, " '%s'", s.c_str());
     fprintf(f, "\n");
   }
