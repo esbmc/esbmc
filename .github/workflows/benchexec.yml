@@ -91,7 +91,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Build ESBMC
-      run: ./scripts/build.sh -b Debug # TODO: esbmc is not building in release mode
+      run: ./scripts/build.sh -b Release
     - uses: actions/upload-artifact@v3
       with:
         name: release-linux
