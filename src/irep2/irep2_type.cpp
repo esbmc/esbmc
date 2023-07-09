@@ -175,7 +175,8 @@ unsigned int vector_type2t::get_width() const
 
 unsigned int pointer_type2t::get_width() const
 {
-  return config.ansi_c.pointer_width(); /* CHERI-TODO */
+  /* CHERI-TODO: take into account whether we can-carry-provenance. */
+  return config.ansi_c.pointer_width();
 }
 
 unsigned int empty_type2t::get_width() const
