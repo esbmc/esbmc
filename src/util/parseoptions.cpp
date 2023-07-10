@@ -6,6 +6,7 @@
 #endif
 
 #include <util/cmdline.h>
+#include <util/message.h>
 #include <util/parseoptions.h>
 #include <util/signal_catcher.h>
 #include <boost/program_options.hpp>
@@ -18,6 +19,22 @@ parseoptions_baset::parseoptions_baset(
   : executable_path(argv[0])
 {
   exception_occured = cmdline.parse(argc, argv, opts);
+}
+
+void parseoptions_baset::set_verbosity_msg()
+{
+  VerbosityLevel v = VerbosityLevel::Status;
+
+  if(cmdline.isset("verbosity"))
+  {
+    v = (VerbosityLevel)atoi(cmdline.getval("verbosity"));
+    if(v < VerbosityLevel::None)
+      v = VerbosityLevel::None;
+    else if(v > VerbosityLevel::Debug)
+      v = VerbosityLevel::Debug;
+  }
+
+  messaget::state.verbosity = v;
 }
 
 void parseoptions_baset::help()

@@ -65,8 +65,6 @@ protected:
 
   bool set_claims(goto_functionst &goto_functions);
 
-  void set_verbosity_msg();
-
   uint64_t read_time_spec(const char *str);
   uint64_t read_mem_spec(const char *str);
 

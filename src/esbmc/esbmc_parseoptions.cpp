@@ -88,22 +88,6 @@ void timeout_handler(int)
 }
 #endif
 
-void esbmc_parseoptionst::set_verbosity_msg()
-{
-  VerbosityLevel v = VerbosityLevel::Status;
-
-  if(cmdline.isset("verbosity"))
-  {
-    v = (VerbosityLevel)atoi(cmdline.getval("verbosity"));
-    if(v < VerbosityLevel::None)
-      v = VerbosityLevel::None;
-    else if(v > VerbosityLevel::Debug)
-      v = VerbosityLevel::Debug;
-  }
-
-  messaget::state.verbosity = v;
-}
-
 extern "C" const uint8_t *const esbmc_version_string;
 
 uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
