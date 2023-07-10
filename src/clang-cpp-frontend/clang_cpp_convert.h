@@ -34,6 +34,8 @@ protected:
 
   bool get_type(const clang::Type &the_type, typet &new_type) override;
 
+  bool get_method(const clang::FunctionDecl &fd, exprt &new_expr);
+
   bool get_function(const clang::FunctionDecl &fd, exprt &new_expr) override;
 
   /**
@@ -517,6 +519,14 @@ protected:
     const exprt &vtable_ptr_deref);
 
   bool is_aggregate_type(const clang::QualType &q_type) override;
+
+  /*
+   * check if a method is Copy assignment Operator or 
+   * Move assignment Operator
+   * Arguments:
+   *  fd: clang AST representing a C++ method
+   */
+  bool is_CopyOrMoveOperator(const clang::FunctionDecl &fd);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
