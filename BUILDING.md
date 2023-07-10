@@ -14,6 +14,7 @@ Before starting, note that ESBMC is mainly distributed under the terms of the [A
 |-----------|----------|-----------------|
 | clang     | yes      | 11.0.0          |
 | boost     | yes      | 1.77            |
+| CMake     | yes      | 3.18.0          |
 | Boolector | no       | 3.2.2           |
 | CVC4      | no       | 1.8             |
 | MathSAT   | no       | 5.5.4           |
