@@ -42,7 +42,9 @@ void goto2ct::preprocess(goto_functionst &goto_functions)
   }
 }
 
-void goto2ct::preprocess(std::string function_id, goto_functiont &goto_function)
+void goto2ct::preprocess(
+  std::string function_id [[maybe_unused]],
+  goto_functiont &goto_function)
 {
   preprocess(goto_function.body);
 }
