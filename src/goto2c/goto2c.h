@@ -15,19 +15,22 @@ public:
 
   // Preprocessing methods
   void preprocess();
-  void preprocess(goto_functiont &goto_function);
+  void preprocess(goto_functionst &goto_functions);
+  void preprocess(std::string function_id, goto_functiont &goto_function);
   void preprocess(goto_programt &goto_program);
   void preprocess(goto_programt::instructiont &instruction);
 
   // Checking methods
   void check();
-  void check(goto_functiont &goto_function);
+  void check(goto_functionst &goto_functions);
+  void check(std::string function_id, goto_functiont &goto_function);
   void check(goto_programt &goto_program);
   void check(goto_programt::instructiont &instruction);
 
   // Translation methods
   std::string translate();
-  std::string translate(goto_functiont &goto_function);
+  std::string translate(goto_functionst &goto_functions);
+  std::string translate(std::string function_id, goto_functiont &goto_function);
   std::string translate(goto_programt &goto_program);
   std::string translate(goto_programt::instructiont &instruction);
 
@@ -37,11 +40,16 @@ public:
     return goto_functions;
   }
 
-protected:
-  const namespacet &ns;
-  goto_functionst goto_functions;
-  std::list<symbolt> fun_decls;
+  namespacet get_namespace()
+  {
+    return ns;
+  }
 
+protected:
+  namespacet &ns;
+  goto_functionst goto_functions;
+
+  std::list<symbolt> fun_decls;
   std::list<typet> global_types;
   std::list<symbolt> global_vars;
   std::list<symbolt> extern_vars;
@@ -53,15 +61,14 @@ protected:
 private:
   // Auxiliary methods
   typet get_base_type(typet type, namespacet ns);
-  expr2tc get_base_expr(expr2tc expr);
 
   // Preprocessing methods
   void extract_symbol_tables();
   void extract_initializers_from_esbmc_main();
   void simplify_initializers();
-  void sort_compound_types(const namespacet &ns, std::list<typet> &types);
+  void sort_compound_types(namespacet &ns, std::list<typet> &types);
   void sort_compound_types_rec(
-    const namespacet &ns,
+    namespacet &ns,
     std::list<typet> &sorted_types,
     std::set<typet> &observed_types,
     typet &type);
@@ -72,7 +79,7 @@ private:
   void adjust_invalid_assignment_rec(
     goto_programt::instructionst &new_instructions,
     goto_programt::instructiont instruction,
-    const namespacet &ns);
+    namespacet &ns);
 
   // Checking methods for each individual instruction type
   void check_assert(goto_programt::instructiont instruction);

@@ -18,15 +18,33 @@ void goto2ct::preprocess()
   sort_compound_types(ns, global_types);
   for(auto &it : local_types)
     sort_compound_types(ns, local_types[it.first]);
-  // Iterating through all GOTO functions
-  for(auto &it : goto_functions.function_map)
-    preprocess(it.second);
+  // Preprocessing the functions now
+  preprocess(goto_functions);
 }
 
-void goto2ct::preprocess(goto_functiont &goto_function)
+void goto2ct::preprocess(goto_functionst &goto_functions)
 {
-  if(goto_function.body_available)
-    preprocess(goto_function.body);
+  // Remove ESBMC main first
+  goto_functions.function_map.erase("__ESBMC_main");
+  // Iterating through all GOTO functions
+  for(auto it = goto_functions.function_map.begin();
+      it != goto_functions.function_map.end();)
+  {
+    // Preprocess the function if its body is available
+    if(it->second.body_available)
+    {
+      preprocess(it->first.as_string(), it->second);
+      ++it;
+    }
+    // Remove the function otherwise
+    else
+      goto_functions.function_map.erase(it++);
+  }
+}
+
+void goto2ct::preprocess(std::string function_id, goto_functiont &goto_function)
+{
+  preprocess(goto_function.body);
 }
 
 void goto2ct::preprocess(goto_programt &goto_program)
@@ -76,7 +94,7 @@ typet goto2ct::get_base_type(typet type, namespacet ns)
 // successive element does not feature a struct/union member whose
 // type has not already been included in the list.
 void goto2ct::sort_compound_types_rec(
-  const namespacet &ns,
+  namespacet &ns,
   std::list<typet> &sorted_types,
   std::set<typet> &observed_types,
   typet &type)
@@ -105,7 +123,7 @@ void goto2ct::sort_compound_types_rec(
 // This method iterates through the given list "types" of compound
 // (i.e., struct/union) types and sorts them in the order they should
 // be defined in the program.
-void goto2ct::sort_compound_types(const namespacet &ns, std::list<typet> &types)
+void goto2ct::sort_compound_types(namespacet &ns, std::list<typet> &types)
 {
   std::list<typet> sorted_types;
   std::set<typet> observed_types;
@@ -215,7 +233,7 @@ void goto2ct::extract_initializers_from_esbmc_main()
       {
         const symbolt *sym = ns.lookup(to_symbol2t(assign->target).thename);
         exprt init = migrate_expr_back(assign->source);
-        if(sym && (sym->static_lifetime || sym->is_extern))
+        if(sym && sym->static_lifetime)
         {
           initializers[sym->id.as_string()] = init;
         }
@@ -386,7 +404,7 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
 void goto2ct::adjust_invalid_assignment_rec(
   goto_programt::instructionst &new_instructions,
   goto_programt::instructiont instruction,
-  const namespacet &ns)
+  namespacet &ns)
 {
   assert(is_code_assign2t(instruction.code));
   code_assign2tc assign = to_code_assign2t(instruction.code);

@@ -4,11 +4,21 @@ void goto2ct::check()
 {
   // Iterating through all available functions
   for(auto &goto_function : goto_functions.function_map)
-    check(goto_function.second);
+    check(goto_function.first.as_string(), goto_function.second);
 }
 
-void goto2ct::check(goto_functiont &goto_function)
+void goto2ct::check(std::string function_id, goto_functiont &goto_function)
 {
+  if(!goto_function.body_available)
+    return;
+
+  // Checks for when the function body is available
+  assert(
+    goto_function.body.instructions.size() > 0 &&
+    "A non-empty GOTO must contain at least one instruction");
+  assert(
+    goto_function.body.instructions.back().type == END_FUNCTION &&
+    "Last instruction in the GOTO function body must be END_FUNCTION");
   check(goto_function.body);
 }
 
@@ -25,7 +35,9 @@ void goto2ct::check(goto_programt::instructiont &instruction)
 
   // Only GOTO instructions can have targets
   if(instruction.type != GOTO)
-    assert(!instruction.has_target());
+    assert(
+      !instruction.has_target() &&
+      "A non-GOTO instruction cannot have targets");
 
   // Now specific checks for each instruction
   switch(instruction.type)
@@ -87,27 +99,30 @@ void goto2ct::check(goto_programt::instructiont &instruction)
     check_other(instruction);
     break;
   default:
-    throw "unknown GOTO instruction type";
+    assert(!"Unknown instruction type");
   }
 }
 
 void goto2ct::check_assert(goto_programt::instructiont instruction)
 {
-  assert(!is_nil_expr(instruction.guard));
-  assert(is_nil_expr(instruction.code));
+  assert(
+    !is_nil_expr(instruction.guard) && "The ASSERT guard must contain a value");
+  assert(is_nil_expr(instruction.code) && "The ASSERT code must be empty");
   check_guard(instruction.guard);
 }
 
 void goto2ct::check_assume(goto_programt::instructiont instruction)
 {
-  assert(!is_nil_expr(instruction.guard));
-  assert(is_nil_expr(instruction.code));
+  assert(
+    !is_nil_expr(instruction.guard) && "The ASSUME guard must contain a value");
+  assert(is_nil_expr(instruction.code) && "The ASSUME code must be empty");
   check_guard(instruction.guard);
 }
 
 void goto2ct::check_goto(goto_programt::instructiont instruction)
 {
-  assert(!is_nil_expr(instruction.guard));
+  assert(
+    !is_nil_expr(instruction.guard) && "The GOTO guard must contain a value");
   check_guard(instruction.guard);
   // Fedor: I think it will be best if we harmonise both:
   // each GOTO instruction must contain a code expression
