@@ -213,7 +213,7 @@ bool clang_cpp_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return clang_c_convertert::get_var(vd, new_expr);
 }
 
-bool clang_cpp_convertert::get_function(
+bool clang_cpp_convertert::get_method(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
 {
@@ -221,7 +221,23 @@ bool clang_cpp_convertert::get_function(
   if(fd.isDependentContext())
     return false;
 
-  if(clang_c_convertert::get_function(fd, new_expr))
+  // Don't convert if implicit, unless it's a constructor/destructor/
+  // Copy assignment Operator/Move assignment Operator
+  // A compiler-generated default ctor/dtor is considered implicit, but we have
+  // to parse it.
+  if(
+    fd.isImplicit() &&
+    !is_ConstructorOrDestructor(fd) /*&& !is_CopyOrMoveOperator(fd)*/)
+    return false;
+
+  return clang_c_convertert::get_function(fd, new_expr);
+}
+
+bool clang_cpp_convertert::get_function(
+  const clang::FunctionDecl &fd,
+  exprt &new_expr)
+{
+  if(get_method(fd, new_expr))
     return true;
 
   // add additional annotations for class/struct/union methods
@@ -1555,6 +1571,14 @@ bool clang_cpp_convertert::is_aggregate_type(const clang::QualType &q_type)
   default:
     return false;
   }
+
+  return false;
+}
+
+bool clang_cpp_convertert::is_CopyOrMoveOperator(const clang::FunctionDecl &fd)
+{
+  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+    return md->isCopyAssignmentOperator() || md->isMoveAssignmentOperator();
 
   return false;
 }

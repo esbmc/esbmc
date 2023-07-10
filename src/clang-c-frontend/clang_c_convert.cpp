@@ -580,12 +580,6 @@ bool clang_c_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
 {
-  // Don't convert if implicit, unless it's a constructor or destructor
-  // A compiler-generated default ctor/dtor is considered implicit, but we have
-  // to parse it.
-  if(fd.isImplicit() && !is_ConstructorOrDestructor(fd))
-    return false;
-
   // If the function is not defined but this is not the definition, skip it
   if(fd.isDefined() && !fd.isThisDeclarationADefinition())
   {
