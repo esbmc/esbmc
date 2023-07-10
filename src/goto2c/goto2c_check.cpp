@@ -7,7 +7,9 @@ void goto2ct::check()
     check(goto_function.first.as_string(), goto_function.second);
 }
 
-void goto2ct::check(std::string function_id, goto_functiont &goto_function)
+void goto2ct::check(
+  std::string function_id [[maybe_unused]],
+  goto_functiont &goto_function)
 {
   if(!goto_function.body_available)
     return;
