@@ -20,6 +20,8 @@ public:
   virtual int main();
   virtual ~parseoptions_baset() = default;
 
+  void set_verbosity_msg();
+
 protected:
   // Path to esbmc binary
   boost::filesystem::path executable_path;

@@ -47,8 +47,8 @@ const struct group_opt_templ c2goto_options[] = {
      "define preprocessor macro"},
     {"sysroot",
      boost::program_options::value<std::string>()->value_name("<path>"),
-     "set the sysroot for the frontend"}
-
+     "set the sysroot for the frontend"},
+    {"verbosity", boost::program_options::value<int>(), ""},
    }},
   {"end", {{"", NULL, "end of options"}}},
   {"Hidden Options", {{"", NULL, ""}}}};
@@ -68,7 +68,7 @@ public:
     if(config.set(cmdline))
       return 1;
     config.options.cmdline(cmdline);
-    messaget::state.verbosity = VerbosityLevel::Result;
+    set_verbosity_msg();
 
     if(!cmdline.isset("output"))
     {
