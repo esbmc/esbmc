@@ -69,7 +69,7 @@ public:
     if(config.set(cmdline))
       return 1;
     config.options.cmdline(cmdline);
-    set_verbosity_msg();
+    set_verbosity_msg(VerbosityLevel::Result);
 
     if(!cmdline.isset("output"))
     {
