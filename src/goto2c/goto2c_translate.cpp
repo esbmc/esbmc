@@ -65,57 +65,60 @@ std::string goto2ct::translate()
 
   // Function definitions
   out << "/////////////////   FUNCTION DEFINITIONS   ////////////////////\n";
+  out << translate(goto_functions) << "\n";
+
+  out << "////////////////////// PROGRAM END /////////////////////////////\n";
+  return out.str();
+}
+
+// Convert GOTO functions (without the context) to C
+std::string goto2ct::translate(goto_functionst &goto_functions)
+{
+  std::ostringstream out;
+
   // Iterating through the available GOTO functions
   for(auto &it : goto_functions.function_map)
+    out << translate(it.first.as_string(), it.second) << "\n";
+
+  return out.str();
+}
+
+// Convert GOTO function (without the context) to C
+std::string
+goto2ct::translate(std::string function_id, goto_functiont &goto_function)
+{
+  std::ostringstream out;
+
+  std::string fun_name_short = expr2ccodet::get_name_shorthand(function_id);
+  // Creating a function symbol
+  symbolt fun_sym;
+  fun_sym.id = function_id;
+  fun_sym.type = goto_function.type;
+  // Translating the function declaration
+  out << expr2ccode(code_declt(symbol_expr(fun_sym)), ns) << "\n";
+  // Translating the function body
+  out << "{\n";
+  // Translating local types if there are any
+  if(local_types[fun_name_short].size() > 0)
   {
-    // First making sure that the GOTO function name can
-    // be found in the symbol table
-    const symbolt *symbol = ns.lookup(it.first);
-    assert(symbol);
-
-    // Ignoring some functions based on their location
-    if(
-      symbol->location.as_string() == "" ||
-      symbol->location.file().as_string() == "esbmc_intrinsics.h")
-      continue;
-
-    // Checking if the function has a definition
-    if(it.second.body_available)
+    out << "////////////////////   LOCAL TYPES  ///////////////////////\n";
+    for(auto type : local_types[fun_name_short])
+      out << typedef2ccode(type, ns) << "; // " << type.location() << "\n";
+  }
+  // Translating local static variables if there are any
+  if(local_static_vars[fun_name_short].size() > 0)
+  {
+    out << "///////////////   LOCAL STATIC VARIABLES /////////////////\n";
+    for(auto s : local_static_vars[fun_name_short])
     {
-      std::string fun_name_short =
-        expr2ccodet::get_name_shorthand(it.first.as_string());
-      // Using the location of the first instruction in the function body
-      locationt loc = it.second.body.instructions.front().location;
-      //out << "// From \"" << loc << "\"\n";
-      // Translating the function declaration part first
-      out << expr2ccode(code_declt(symbol_expr(*symbol)), ns) << " // "
-          << "\n";
-      // Translating the function body
-      out << "{\n";
-      // Translating local types if there are any
-      if(local_types[fun_name_short].size() > 0)
-      {
-        out << "////////////////////   LOCAL TYPES  ///////////////////////\n";
-        for(auto type : local_types[fun_name_short])
-          out << typedef2ccode(type, ns) << "; // " << type.location() << "\n";
-      }
-      // Translating local static variables if there are any
-      if(local_static_vars[fun_name_short].size() > 0)
-      {
-        out << "///////////////   LOCAL STATIC VARIABLES /////////////////\n";
-        for(auto s : local_static_vars[fun_name_short])
-        {
-          out << expr2ccode(
-                   code_declt(symbol_expr(s), initializers[s.id.as_string()]),
-                   ns)
-              << "; // " << s.location << "\n";
-        }
-      }
-      // Translating the rest of the function body
-      out << translate(it.second.body);
-      out << "}\n\n";
+      out << expr2ccode(
+               code_declt(symbol_expr(s), initializers[s.id.as_string()]), ns)
+          << "; // " << s.location << "\n";
     }
   }
+  // Translating the rest of the function body
+  out << translate(goto_function.body);
+  out << "}\n";
   return out.str();
 }
 
@@ -161,7 +164,7 @@ std::string goto2ct::translate(goto_programt &goto_program)
         }
       }
     }
-    out << translate(*it);
+    out << translate(*it) << "\n";
   }
   return out.str();
 }
