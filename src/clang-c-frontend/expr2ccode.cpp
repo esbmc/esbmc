@@ -28,16 +28,13 @@ std::string expr2ccodet::get_name_shorthand(std::string fullname)
 
 bool expr2ccodet::is_padding(std::string tag)
 {
-  std::smatch m;
-  return std::regex_search(tag, m, std::regex("anon_pad\\$\\d+")) ||
-         std::regex_search(tag, m, std::regex("\\$pad")) ||
-         std::regex_search(tag, m, std::regex("anon_bit_field_pad\\$\\d+"));
+  return has_prefix(tag, "anon_pad$") || has_prefix(tag, "$pad") ||
+         has_prefix(tag, "anon_bit_field_pad$");
 }
 
 bool expr2ccodet::is_anonymous_member(std::string tag)
 {
-  std::smatch m;
-  return std::regex_search(tag, m, std::regex("anon\\$\\d+"));
+  return has_prefix(tag, "anon$");
 }
 
 // The following is a simple workaround to determine when a struct/union
