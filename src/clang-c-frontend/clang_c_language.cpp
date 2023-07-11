@@ -391,7 +391,7 @@ long int __ESBMC_labs(long int);
 long long int __ESBMC_llabs(long long int);
 
 // pointers
-unsigned __ESBMC_POINTER_OBJECT(const void *);
+__UINTPTR_TYPE__ __ESBMC_POINTER_OBJECT(const void *);
 __PTRDIFF_TYPE__ __ESBMC_POINTER_OFFSET(const void *);
 
 // malloc
@@ -405,7 +405,7 @@ __attribute__((annotate("__ESBMC_inf_size")))
 __SIZE_TYPE__ __ESBMC_alloc_size[1];
 
 // Get object size
-unsigned __ESBMC_get_object_size(const void *);
+__SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
 
 _Bool __ESBMC_is_little_endian();

@@ -2898,6 +2898,13 @@ public:
     assert(
       is_array_type(source) || is_string_type(source) ||
       is_vector_type(source));
+    if(0 && is_array_type(source))
+    {
+      const array_type2t &arr_type = to_array_type(source->type);
+      if(arr_type.array_size)
+        assert(
+          index->type->get_width() == arr_type.array_size->type->get_width());
+    }
 #if 0
     assert(
       is_array_type(source)
@@ -3117,7 +3124,7 @@ class dynamic_size2t : public dynamic_size_expr_methods
 public:
   /** Primary constructor. @param operand Pointer object to fetch size for. */
   dynamic_size2t(const expr2tc &operand)
-    : dynamic_size_expr_methods(get_uint32_type(), dynamic_size_id, operand)
+    : dynamic_size_expr_methods(size_type2(), dynamic_size_id, operand)
   {
   }
   dynamic_size2t(const dynamic_size2t &ref) = default;

@@ -1400,5 +1400,8 @@ void goto_symext::intrinsic_get_object_size(
 
   expr2tc ret_ref = func_call.ret;
   dereference(ret_ref, dereferencet::READ);
-  symex_assign(code_assign2tc(ret_ref, obj_size), false, cur_state->guard);
+  symex_assign(
+    code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
+    false,
+    cur_state->guard);
 }
