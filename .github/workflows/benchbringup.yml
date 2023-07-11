@@ -37,7 +37,7 @@ jobs:
           TEST_TIMEOUT: ${{ inputs.timeout }}
           BENCHMARK_TO_RUN: ${{ inputs.benchmark }}
           LOG_DIR: ${{ inputs.logdirectory }}
-        run: ./scripts/build.sh -b Debug
+        run: ./scripts/build.sh -b Release -e On -r On
       - uses: actions/upload-artifact@v1
         with:
           name: release-linux
