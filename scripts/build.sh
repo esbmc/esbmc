@@ -18,9 +18,9 @@ ubuntu_setup () {
     # Additional set ups for BASE_ARGS in ubuntu
 
     # run a single benchmark user specified
-    if [[ ! -z "${BENCHMARK_TO_RUN}" ]]; then
-      BASE_ARGS="$BASE_ARGS -DBENCHBRINGUP=On"
-    fi
+    #if [[ ! -z "${BENCHMARK_TO_RUN}" ]]; then
+    BASE_ARGS="$BASE_ARGS -DBENCHBRINGUP=On"
+    #fi
 }
 
 # macOS setup (pre-config)
