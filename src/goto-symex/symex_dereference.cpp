@@ -7,6 +7,32 @@
 
 expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
 {
+  auto size_type = [this](expr2tc &e) -> unsigned {
+    // Lets's check whether this symbol was reallocated
+    // this is important because now we need to be able to check the entire
+    // symbolic expression of alloc_size to know what is the actual size
+    // as we don't update the TYPE of the char array allocated
+    // If in the future we start propagating WITH for alloc and alloc_size
+    // we might be able to deal with it
+    for(auto x : goto_symex.cur_state->realloc_map)
+    {
+      auto index = x.first;
+      /* At this point, ESBMC will have already renamed the address. 
+           * We need to do the same for the realloc map index
+           */
+      goto_symex.cur_state->rename_address(index);
+      if(index == e)
+        return 0; // gave up, can't get the reallocation size
+    }
+    try
+    {
+      return e->type->get_width() / 8;
+    }
+    catch(...)
+    {
+      return 0;
+    }
+  };
   if(is_index2t(expr))
   {
     // Are we trying to get the object size?
@@ -16,45 +42,62 @@ expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
       if(to_symbol2t(i.source_value).thename == "c:@__ESBMC_alloc_size")
       {
         auto value = i.source_value;
-        auto obj = to_pointer_object2t(i.index).ptr_obj;
         auto ptr =
           to_address_of2t(to_pointer_object2t(i.index).ptr_obj).ptr_obj;
 
-        // Lets's check whether this symbol was reallocated
-        // this is important because now we need to be able to check the entire
-        // symbolic expression of alloc_size to know what is the actual size
-        // as we don't update the TYPE of the char array allocated
-        // If in the future we start propagating WITH for alloc and alloc_size
-        // we might be able to deal with it
-        for(auto x : goto_symex.cur_state->realloc_map)
-        {
-          auto index = x.first;
-          /* At this point, ESBMC will have already renamed the address. 
-           * We need to do the same for the realloc map index
-           */
-          goto_symex.cur_state->rename_address(index);
-          if(index == ptr)
-            return expr; // gave up, can't get the reallocation size
-        }
-
         // Can we compute the size type?
-        try
-        {
-          return constant_int2tc(
-            expr->type, BigInt(ptr->type->get_width() / 8));
-        }
-        catch(...)
-        {
-          // this probably means that the size is symbolic, we can't compute it then.
-          return expr;
-        }
+        auto size = size_type(ptr);
+        return size ? constant_int2tc(expr->type, BigInt(size)) : expr;
       }
     }
   }
 
   if(is_same_object2t(expr))
   {
-    //log_status("Same-object: {}", *expr);
+    //   Most of times this just do some basic arithmetic to check if we are
+    //   still inside the object bounds e.g. same-object(&sym + 5,  &ptr)
+    same_object2t &obj = to_same_object2t(expr);
+
+    // Case 1: same-object(&ptr[0] + 5,  &ptr)
+    if(is_add2t(obj.side_1) && is_address_of2t(obj.side_2))
+    {
+      auto origin = to_address_of2t(obj.side_2).ptr_obj;
+      auto size = size_type(origin);
+      if(!size)
+        return expr;
+
+      auto symbol = to_add2t(obj.side_1).side_1;
+
+      if(!is_constant_int2t(to_add2t(obj.side_1).side_2))
+        return expr;
+
+      auto add = to_constant_int2t(to_add2t(obj.side_1).side_2).value;
+
+      goto_symex.cur_state->rename(symbol);
+      // At this moment, sym is replaced with (type*)(&ptr[0])
+      if(
+        !is_typecast2t(symbol) ||
+        !is_address_of2t(to_typecast2t(symbol).from) ||
+        !is_index2t(to_address_of2t(to_typecast2t(symbol).from).ptr_obj))
+        return expr;
+
+      index2t &i =
+        to_index2t(to_address_of2t(to_typecast2t(symbol).from).ptr_obj);
+
+      if(!is_constant_int2t(i.index) || !is_symbol2t(i.source_value))
+        return expr;
+
+      // Is the ref equal?
+      if(origin != i.source_value)
+        return expr;
+
+      // It should be OK to continue now :)
+      // index + add_side_2 < size
+      auto total = to_constant_int2t(i.index).value + add;
+      if(total < size)
+        return gen_true_expr();
+      return gen_false_expr();
+    }
   }
 
   expr->Foreach_operand([this](expr2tc &e) { e = constant_propagation(e); });
