@@ -616,7 +616,7 @@ expr2tc dereferencet::build_reference_to(
   const expr2tc &deref_expr,
   const type2tc &type,
   const guardt &guard,
-  const expr2tc &lexical_offset,
+  expr2tc lexical_offset,
   expr2tc &pointer_guard)
 {
   expr2tc value;
@@ -718,7 +718,12 @@ expr2tc dereferencet::build_reference_to(
   // or index exprs, like foo->bar[3]. If bar is of integer type, we translate
   // that to be a dereference of foo + extra_offset, resulting in an integer.
   if(!is_nil_expr(lexical_offset))
+  {
+    /* lexical_offset is in bytes, not bits */
+    assert(lexical_offset->type != offset_type);
+    lexical_offset = typecast2tc(offset_type, lexical_offset);
     final_offset = add2tc(final_offset->type, final_offset, lexical_offset);
+  }
 
   // If we're in internal mode, collect all of our data into one struct, insert
   // it into the list of internal data, and then bail. The caller does not want

@@ -390,7 +390,7 @@ private:
     const expr2tc &deref_expr,
     const type2tc &type,
     const guardt &guard,
-    const expr2tc &lexical_offset,
+    expr2tc lexical_offset,
     expr2tc &pointer_guard);
 
   void

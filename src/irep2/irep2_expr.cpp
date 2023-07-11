@@ -388,6 +388,10 @@ void with2t::assert_consistency() const
   {
     assert(is_bv_type(update_field->type));
     const array_type2t &arr_type = to_array_type(source_value->type);
+    if(0 && arr_type.array_size)
+      assert(
+        update_field->type->get_width() ==
+        arr_type.array_size->type->get_width());
     assert_type_compat_for_with(arr_type.subtype, update_value->type);
   }
   else if(is_vector_type(source_value))
