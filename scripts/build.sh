@@ -40,20 +40,16 @@ case $OS in
 esac || exit $?
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts b:s:e: flag
+while getopts b:s:e:r: flag
 do
     case "${flag}" in
         b) BASE_ARGS="$BASE_ARGS -DCMAKE_BUILD_TYPE=${OPTARG}";;
         s) BASE_ARGS="$BASE_ARGS -DSANITIZER_TYPE=${OPTARG}"
            COMPILER_ARGS="$COMPILER_ARGS CC=clang CXX=clang++";;
-        e) BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=${OPTARG}"
+        e) BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=${OPTARG}";;
+        r) BASE_ARGS="$BASE_ARGS -DBENCHBRINGUP=${OPTARG}"
     esac
 done
-
-# run a single benchmark user specified
-#if [[ ! -z "${BENCHMARK_TO_RUN}" ]]; then
-BASE_ARGS="$BASE_ARGS -DBENCHBRINGUP=On"
-#fi
 
 # Configure ESBMC
 printf "Running CMake:"
