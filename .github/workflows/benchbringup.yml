@@ -27,7 +27,6 @@ jobs:
     name: Build ESBMC (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 720 # 12h
-    #container: rafaelsamenezes/esbmc-ci:clang11
     steps:
       - name: Confirm the benchmark
         run: echo ${{ github.event.inputs.benchmark }}
@@ -37,7 +36,7 @@ jobs:
           TEST_TIMEOUT: ${{ inputs.timeout }}
           BENCHMARK_TO_RUN: ${{ inputs.benchmark }}
           LOG_DIR: ${{ inputs.logdirectory }}
-        run: ./scripts/build.sh -b Release -e On -r On
+        run: ./scripts/build.sh -b Release -r On
       - uses: actions/upload-artifact@v1
         with:
           name: release-linux
