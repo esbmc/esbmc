@@ -4,6 +4,7 @@
 #include <pointer-analysis/dereference.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
+#include <util/prefix.h>
 
 expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
 {
@@ -33,6 +34,34 @@ expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
       return 0;
     }
   };
+
+  auto deref_symbol = [this](expr2tc &e) -> expr2tc {
+    if(!is_symbol2t(e))
+      return expr2tc();
+    goto_symex.internal_deref_items.clear();
+    dereference2tc deref(get_empty_type(), e);
+    goto_symex.dereference(deref, dereferencet::INTERNAL);
+    if(goto_symex.internal_deref_items.size() != 1)
+      return expr2tc();
+
+    return (goto_symex.internal_deref_items.begin())->object;
+  };
+
+  if(is_equality2t(expr))
+  {
+    equality2t &eq = to_equality2t(expr);
+    if(
+      !is_symbol2t(eq.side_1) && !is_symbol2t(eq.side_2) &&
+      (to_symbol2t(eq.side_2).thename.as_string() != "INVALID"))
+      return expr;
+
+    auto symbol = deref_symbol(eq.side_1);
+    if(!symbol)
+      return expr;
+
+    return gen_false_expr();
+  }
+
   if(is_index2t(expr))
   {
     // Are we trying to get the object size?
@@ -49,6 +78,32 @@ expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
         auto size = size_type(ptr);
         return size ? constant_int2tc(expr->type, BigInt(size)) : expr;
       }
+
+      if(to_symbol2t(i.source_value).thename == "c:@__ESBMC_is_dynamic")
+      {
+        auto symbol = deref_symbol(to_pointer_object2t(i.index).ptr_obj);
+        if(!symbol)
+          return expr;
+
+        if(has_prefix(to_symbol2t(symbol).thename.as_string(), "dynamic_"))
+          return expr;
+
+        return gen_false_expr();
+      }
+
+      if(to_symbol2t(i.source_value).thename == "c:@__ESBMC_alloc")
+      {
+        auto symbol = deref_symbol(to_pointer_object2t(i.index).ptr_obj);
+        if(!symbol)
+          return expr;
+
+        if(has_prefix(to_symbol2t(symbol).thename.as_string(), "dynamic_"))
+          return expr;
+
+        return gen_true_expr();
+      }
+
+      log_status("{}", to_symbol2t(i.source_value).thename);
     }
   }
 
@@ -97,6 +152,29 @@ expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
       if(total < size)
         return gen_true_expr();
       return gen_false_expr();
+    }
+
+    // Case 2: !(SAME-OBJECT(symbol, &dynamic_1_value)
+    if(is_symbol2t(obj.side_1) && is_address_of2t(obj.side_2))
+    {
+      auto symbol = deref_symbol(obj.side_1);
+      if(!symbol)
+        return expr;
+
+      auto origin = to_address_of2t(obj.side_2).ptr_obj;
+      auto size = size_type(origin);
+      if(!size)
+        return expr;
+
+      if(origin == symbol)
+      {
+        return gen_true_expr();
+      }
+      else
+      {
+        log_debug("Could not simplify! {} != {}", *origin, *symbol);
+        return gen_false_expr();
+      }
     }
   }
 
