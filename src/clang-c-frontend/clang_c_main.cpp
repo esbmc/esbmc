@@ -154,6 +154,9 @@ bool clang_c_maint::clang_main()
       else
         assert(false);
 
+      // The argv array of MAX elements of pointer type has to fit
+      max /= config.ansi_c.pointer_width() / 8;
+
       exprt max_minus_one = from_integer(max - 1, argc_symbol.type);
 
       exprt le("<=", bool_type());
