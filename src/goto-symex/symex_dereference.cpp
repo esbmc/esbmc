@@ -5,6 +5,63 @@
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 
+expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
+{
+  if(is_index2t(expr))
+  {
+    // Are we trying to get the object size?
+    index2t &i = to_index2t(expr);
+    if(is_symbol2t(i.source_value))
+    {
+      if(to_symbol2t(i.source_value).thename == "c:@__ESBMC_alloc_size")
+      {
+        auto value = i.source_value;
+        auto obj = to_pointer_object2t(i.index).ptr_obj;
+        auto ptr =
+          to_address_of2t(to_pointer_object2t(i.index).ptr_obj).ptr_obj;
+
+        // Lets's check whether this symbol was reallocated
+        // this is important because now we need to be able to check the entire
+        // symbolic expression of alloc_size to know what is the actual size
+        // as we don't update the TYPE of the char array allocated
+        // If in the future we start propagating WITH for alloc and alloc_size
+        // we might be able to deal with it
+        for(auto x : goto_symex.cur_state->realloc_map)
+        {
+          auto index = x.first;
+          /* At this point, ESBMC will have already renamed the address. 
+           * We need to do the same for the realloc map index
+           */
+          goto_symex.cur_state->rename_address(index);
+          if(index == ptr)
+            return expr; // gave up, can't get the reallocation size
+        }
+
+        // Can we compute the size type?
+        try
+        {
+          return constant_int2tc(
+            expr->type, BigInt(ptr->type->get_width() / 8));
+        }
+        catch(...)
+        {
+          // this probably means that the size is symbolic, we can't compute it then.
+          return expr;
+        }
+      }
+    }
+  }
+
+  if(is_same_object2t(expr))
+  {
+    //log_status("Same-object: {}", *expr);
+  }
+
+  expr->Foreach_operand([this](expr2tc &e) { e = constant_propagation(e); });
+
+  return expr;
+}
+
 void symex_dereference_statet::dereference_failure(
   const std::string &property [[maybe_unused]],
   const std::string &msg,
@@ -12,7 +69,10 @@ void symex_dereference_statet::dereference_failure(
 {
   expr2tc g = guard.as_expr();
   goto_symex.replace_dynamic_allocation(g);
-  goto_symex.claim(not2tc(g), "dereference failure: " + msg);
+  // Can we optimize this?
+  simplify(g);
+  goto_symex.claim(
+    not2tc(constant_propagation(g)), "dereference failure: " + msg);
 }
 
 void symex_dereference_statet::dereference_assume(const guardt &guard)
