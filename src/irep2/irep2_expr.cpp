@@ -387,8 +387,8 @@ void with2t::assert_consistency() const
   if(is_array_type(source_value))
   {
     assert(is_bv_type(update_field->type));
-    assert_type_compat_for_with(
-      to_array_type(source_value->type).subtype, update_value->type);
+    const array_type2t &arr_type = to_array_type(source_value->type);
+    assert_type_compat_for_with(arr_type.subtype, update_value->type);
   }
   else if(is_vector_type(source_value))
   {

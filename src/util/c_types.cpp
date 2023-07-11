@@ -301,7 +301,7 @@ type2tc ptraddr_type2()
 
 type2tc bitsize_type2()
 {
-  return get_uint_type(config.ansi_c.pointer_width() + 3);
+  return get_uint_type(config.ansi_c.address_width + 3);
 }
 
 type2tc get_uint8_type()
