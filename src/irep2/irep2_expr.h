@@ -2898,13 +2898,6 @@ public:
     assert(
       is_array_type(source) || is_string_type(source) ||
       is_vector_type(source));
-    if(0 && is_array_type(source))
-    {
-      const array_type2t &arr_type = to_array_type(source->type);
-      if(arr_type.array_size)
-        assert(
-          index->type->get_width() == arr_type.array_size->type->get_width());
-    }
 #if 0
     assert(
       is_array_type(source)
