@@ -1212,8 +1212,8 @@ void dereferencet::construct_from_const_offset(
     compute_num_bytes_to_extract(offset, type_byte_size_bits(type).to_uint64());
 
   // Converting offset to bytes before bytes extraction
-  expr2tc offset_bytes =
-    typecast2tc(size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
+  expr2tc offset_bytes = typecast2tc(
+    size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
   simplify(offset_bytes);
 
   // Extracting and stitching bytes together
