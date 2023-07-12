@@ -294,14 +294,14 @@ expr2tc type_byte_size_expr(const type2tc &type)
   if(is_constant_int2t(n))
     return gen_ulong((to_constant_int2t(n).value + 7) / 8);
   type2tc s = bitsize_type2();
-  type2tc t = pointer_type2();
+  type2tc t = size_type2();
   return typecast2tc(t, div2tc(s, add2tc(s, n, bitsize(7)), bitsize(8)));
 }
 
 expr2tc compute_pointer_offset_bits(const expr2tc &expr)
 {
   if(is_symbol2t(expr))
-    return gen_ulong(0);
+    return bitsize(0);
 
   if(is_index2t(expr))
   {
@@ -323,30 +323,30 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
         "Unexpected index type in computer_pointer_offset");
     }
 
+    /* Expression needs to be of the bitwidth capable of addressing bits in the
+     * standard address space. */
     expr2tc result;
+    type2tc t = bitsize_type2();
     if(is_constant_int2t(sub_size) && is_constant_int2t(index.index))
     {
       const constant_int2t &index_val = to_constant_int2t(index.index);
       const constant_int2t &ss_val = to_constant_int2t(sub_size);
-      result = gen_ulong(ss_val.value * index_val.value);
+      result = bitsize(ss_val.value * index_val.value);
     }
     else
     {
-      // Non constant, create multiply.
-      // Index operand needs to be the bitwidth of a 'long'.
-      expr2tc zero_ulong = gen_ulong(0);
+      /* Non constant, create multiply. */
       expr2tc the_index = index.index;
-      if(sub_size->type != zero_ulong->type)
-        sub_size = typecast2tc(zero_ulong->type, sub_size);
-      if(the_index->type != zero_ulong->type)
-        the_index = typecast2tc(zero_ulong->type, the_index);
+      if(sub_size->type != t)
+        sub_size = typecast2tc(t, sub_size);
+      if(the_index->type != t)
+        the_index = typecast2tc(t, the_index);
 
-      result = mul2tc(zero_ulong->type, sub_size, the_index);
+      result = mul2tc(t, sub_size, the_index);
     }
 
     // Also accumulate any pointer offset in the source object.
-    result = add2tc(
-      result->type, result, compute_pointer_offset_bits(index.source_value));
+    result = add2tc(t, result, compute_pointer_offset_bits(index.source_value));
 
     return result;
   }
@@ -366,7 +366,7 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
     }
 
     // Also accumulate any pointer offset in the source object.
-    expr2tc res_expr = gen_ulong(result.to_uint64());
+    expr2tc res_expr = bitsize(result);
     res_expr = add2tc(
       res_expr->type, res_expr, compute_pointer_offset_bits(memb.source_value));
 
@@ -377,7 +377,7 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
   {
     // This is a constant struct, array, union, string, etc. There's nothing
     // at a lower level; the offset is zero.
-    return gen_ulong(0);
+    return bitsize(0);
   }
 
   if(is_typecast2t(expr))
@@ -390,7 +390,7 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
   {
     // This is a dynamic object represented something allocated; from the static
     // pointer analysis. Assume that this is the bottom of the expression.
-    return gen_ulong(0);
+    return bitsize(0);
   }
 
   if(is_dereference2t(expr))
@@ -399,7 +399,7 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
     // can in theory end up evaluating across a large set of object types. So
     // there's no point continuing further or attempting to dereference, leave
     // it up to the caller to handle that.
-    return gen_ulong(0);
+    return bitsize(0);
   }
 
   log_error("compute_pointer_offset, unexpected irep:\n{}", expr->pretty());
@@ -408,11 +408,9 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
 
 expr2tc compute_pointer_offset(const expr2tc &expr)
 {
-  expr2tc pointer_offset_bits = compute_pointer_offset_bits(expr);
-
-  expr2tc result =
-    div2tc(pointer_offset_bits->type, pointer_offset_bits, gen_ulong(8));
-  return result;
+  expr2tc bits = compute_pointer_offset_bits(expr);
+  expr2tc bytes = div2tc(bits->type, bits, bitsize(8));
+  return typecast2tc(size_type2(), bytes);
 }
 
 const expr2tc &get_base_object(const expr2tc &expr)
@@ -435,6 +433,7 @@ const expr2tc &get_base_object(const expr2tc &expr)
   return expr;
 }
 
+/* XXX fbrausse: what does this function compute? */
 const irep_idt get_string_argument(const expr2tc &expr)
 {
   // Remove typecast
