@@ -1131,7 +1131,7 @@ void dereferencet::construct_from_array(
   if(!is_correctly_aligned)
     check_alignment(deref_size, std::move(mod), guard);
 
-  if(!overflows_boundaries)
+  if(is_correctly_aligned && !overflows_boundaries)
   {
     // Just extract an element and apply other standard extraction stuff.
     // No scope for stitching being required.
@@ -1901,6 +1901,34 @@ void dereferencet::alignment_failure(
     dereference_failure("Pointer alignment", error_name, guard);
 }
 
+void dereferencet::internal_extract_bytes(
+  const expr2tc &object,
+  unsigned int num_bytes,
+  const expr2tc &offset,
+  std::vector<expr2tc> &bytes) const
+{
+  assert(!is_array_type(object));
+  if(!num_bytes)
+    return;
+
+  // Don't produce a byte update of a byte.
+  if(is_byte_type(object))
+  {
+    assert(num_bytes == 1);
+    bytes.push_back(object);
+    return;
+  }
+
+  const type2tc &bytetype = get_uint8_type();
+  expr2tc accuml_offs = offset;
+  for(unsigned i = 0; i < num_bytes; i++)
+  {
+    bytes.emplace_back(
+      byte_extract2tc(bytetype, object, accuml_offs, is_big_endian));
+    accuml_offs = add2tc(accuml_offs->type, accuml_offs, gen_ulong(1));
+  }
+}
+
 std::vector<expr2tc> dereferencet::extract_bytes_from_array(
   const expr2tc &array,
   unsigned int num_bytes,
@@ -1912,6 +1940,7 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
   assert(
     (is_array_type(array) || is_string_type(array)) &&
     "Can only extract bytes for stitching from arrays");
+
   if(is_array_type(array))
   {
     const array_type2t &arr_type = to_array_type(array->type);
@@ -1927,34 +1956,25 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
     subtype = get_uint8_type(); //XXX signedness of chars
   }
 
-  bool is_big_endian =
-    config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
-
   // Calculating how many bytes are occupied by each array element
   unsigned int bytes_per_index = subtype->get_width() / 8;
-  std::vector<expr2tc> exprs(num_bytes);
+  std::vector<expr2tc> exprs;
+  exprs.reserve(num_bytes);
+
   // Calculating the array index based on the given byte offset
-  expr2tc accuml_offs = typecast2tc(
+  expr2tc elem_idx = typecast2tc(
     idx_type,
     div2tc(offset->type, offset, gen_long(offset->type, bytes_per_index)));
-  for(unsigned int i = 0; i < num_bytes; i++)
+  expr2tc zero = gen_zero(offset->type);
+  expr2tc elem_offs =
+    modulus2tc(offset->type, offset, gen_long(offset->type, bytes_per_index));
+  for(unsigned i = 0, n; i < num_bytes; i += n)
   {
-    expr2tc the_index = index2tc(subtype, array, accuml_offs);
-    if(subtype->get_width() <= 8)
-    {
-      // This is a byte array
-      exprs[i] = the_index;
-    }
-    else
-    {
-      const type2tc &bytetype = get_uint8_type();
-      // Extracting bytes from the current index
-      for(unsigned int j = 0; i < num_bytes && j < bytes_per_index; i++, j++)
-        exprs[i] =
-          byte_extract2tc(bytetype, the_index, gen_ulong(j), is_big_endian);
-    }
-    accuml_offs =
-      add2tc(accuml_offs->type, accuml_offs, gen_long(accuml_offs->type, 1));
+    n = std::min(num_bytes, i + bytes_per_index) - i;
+    expr2tc the_index = index2tc(subtype, array, elem_idx);
+    internal_extract_bytes(the_index, n, elem_offs, exprs);
+    elem_offs = zero;
+    elem_idx = add2tc(idx_type, elem_idx, gen_long(idx_type, 1));
   }
 
   return exprs;
@@ -1967,56 +1987,9 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_scalar(
 {
   assert(num_bytes != 0);
 
-  const type2tc &bytetype = get_uint8_type();
-
-  std::vector<expr2tc> bytes(num_bytes);
-
-  // Don't produce a byte update of a byte.
-  if(is_bv_type(object) && num_bytes == 1 && object->type->get_width() == 8)
-  {
-    bytes[0] = object;
-    return bytes;
-  }
-
-  // Get the source_object and update the index. This is so that
-  // the extraction process does not get stuck on the same index.
-  expr2tc new_object = object;
-  expr2tc accuml_offs = offset;
-
-  if(is_index2t(object))
-  {
-    const index2t &new_index = to_index2t(object);
-    new_object = new_index.source_value;
-
-    // Adjust the offset taking into account the array subtype
-    expr2tc index = new_index.index;
-    if(index->type != accuml_offs->type)
-      index = typecast2tc(accuml_offs->type, index);
-    accuml_offs = add2tc(
-      accuml_offs->type,
-      accuml_offs,
-      mul2tc(
-        accuml_offs->type,
-        index,
-        gen_long(accuml_offs->type, new_index.type->get_width() / 8)));
-    simplify(accuml_offs);
-  }
-
-  /* The SMT backend doesn't know how to byte-extract from
-   * dynamically sized arrays such as VLAs, see
-   * <https://github.com/esbmc/esbmc/issues/169>.
-   * Avoid byte-extracting from the underlying symbol directly. */
-  if(
-    contains_symbol_expr(new_object) &&
-    is_sym_sized_array_type(new_object->type))
-    return extract_bytes_from_array(new_object, num_bytes, accuml_offs);
-
-  for(auto &byte : bytes)
-  {
-    byte = byte_extract2tc(bytetype, new_object, accuml_offs, is_big_endian);
-    accuml_offs = add2tc(offset->type, accuml_offs, gen_long(offset->type, 1));
-  }
-
+  std::vector<expr2tc> bytes;
+  bytes.reserve(num_bytes);
+  internal_extract_bytes(object, num_bytes, offset, bytes);
   return bytes;
 }
 
