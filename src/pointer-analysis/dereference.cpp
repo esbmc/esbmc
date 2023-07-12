@@ -1108,30 +1108,32 @@ void dereferencet::construct_from_array(
   //     byte extracts applied to it
   //  2) Stitch everything together with extracts and concats.
 
+  unsigned int deref_size = type->get_width();
+
   // Can we just select this out?
   bool is_correctly_aligned = false;
+  // Additional complexity occurs if it's aligned but overflows boundaries
+  bool overflows_boundaries;
   if(is_constant_int2t(offset))
   {
     // Constant offset is aligned with array boundaries?
     unsigned int offs = to_constant_int2t(offset).value.to_uint64();
-    is_correctly_aligned = ((offs % subtype_size) == 0);
+    unsigned int elem_offs = offs % subtype_size;
+    is_correctly_aligned = (elem_offs == 0);
+    overflows_boundaries = (elem_offs + deref_size > subtype_size);
   }
   else
   {
     // Dyn offset -- is alignment guarantee strong enough?
     is_correctly_aligned = (alignment >= subtype_size);
+    overflows_boundaries = !is_correctly_aligned || deref_size > subtype_size;
   }
-
-  // Additional complexity occurs if it's aligned but overflows boundaries
-  unsigned int deref_size = type->get_width();
-
-  bool overflows_boundaries = (deref_size > subtype_size);
 
   // No alignment guarantee: assert that it's correct.
   if(!is_correctly_aligned)
     check_alignment(deref_size, std::move(mod), guard);
 
-  if(is_correctly_aligned && !overflows_boundaries)
+  if(!overflows_boundaries)
   {
     // Just extract an element and apply other standard extraction stuff.
     // No scope for stitching being required.
