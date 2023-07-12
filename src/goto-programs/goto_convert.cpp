@@ -544,7 +544,7 @@ void goto_convertt::generate_dynamic_size_vla(
   assert(var.type().is_array());
 
   array_typet arr_type = to_array_type(var.type());
-  exprt size = to_array_type(var.type()).size();
+  exprt size = typecast_exprt(to_array_type(var.type()).size(), size_type());
 
   // First, if it's a multidimensional vla, the size will be the
   // multiplication of the dimensions
@@ -553,7 +553,8 @@ void goto_convertt::generate_dynamic_size_vla(
     array_typet arr_subtype = to_array_type(arr_type.subtype());
 
     exprt mult(exprt::mult, size.type());
-    mult.copy_to_operands(size, arr_subtype.size());
+    mult.copy_to_operands(
+      size, typecast_exprt(arr_subtype.size(), size.type()));
     size.swap(mult);
 
     arr_type = arr_subtype;
@@ -569,15 +570,23 @@ void goto_convertt::generate_dynamic_size_vla(
   exprt st_size_expr = from_integer(st_size, size.type());
   exprt mult(exprt::mult, size.type());
   mult.copy_to_operands(size, st_size_expr);
+  expr2tc mult2;
+  migrate_expr(mult, mult2);
 
   // Set the array to have a dynamic size
   address_of_exprt addrof(var);
-  exprt dynamic_size("dynamic_size", uint_type());
-  dynamic_size.copy_to_operands(addrof);
+  expr2tc addrof2;
+  migrate_expr(addrof, addrof2);
+  expr2tc dynamic_size = dynamic_size2tc(addrof2);
+
+  goto_programt::targett ovfl_tgt = dest.add_instruction(ASSERT);
+  ovfl_tgt->guard = not2tc(expr2tc(new overflow2t(mult2)));
+  ovfl_tgt->location = loc;
+  ovfl_tgt->location.comment(
+    "array size in bytes overflows address space size");
 
   goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
-  exprt assign = code_assignt(dynamic_size, typecast_exprt(mult, uint_type()));
-  migrate_expr(assign, t_s_s->code);
+  t_s_s->code = code_assign2tc(dynamic_size, mult2);
   t_s_s->location = loc;
 }
 
