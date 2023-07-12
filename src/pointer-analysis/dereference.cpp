@@ -1213,7 +1213,7 @@ void dereferencet::construct_from_const_offset(
 
   // Converting offset to bytes before bytes extraction
   expr2tc offset_bytes =
-    div2tc(offset->type, offset, gen_long(offset->type, 8));
+    typecast2tc(size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
   simplify(offset_bytes);
 
   // Extracting and stitching bytes together
