@@ -56,8 +56,10 @@ public:
   static bool
     enable_wrapped_intervals; /// Enabled wrapped intervals (disables Integers)
   static bool
-    enable_real_intervals; /// Enabled wrapped intervals (disables Integers)
-
+    enable_real_intervals;    /// Enabled wrapped intervals (disables Integers)
+  static bool enable_assume_asserts; /// Asserts are propagates as assumptions
+  static bool
+    enable_eval_assumptions; /// Try to evaluate in a guard in a TVT to accelerate bottoms
   // Widening options
   static unsigned
     fixpoint_limit; /// Sets a limit for number of iteartions before widening
