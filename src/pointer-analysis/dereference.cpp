@@ -1987,6 +1987,7 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_scalar(
   {
     const index2t &new_index = to_index2t(object);
     new_object = new_index.source_value;
+
     // Adjust the offset taking into account the array subtype
     expr2tc index = new_index.index;
     if(index->type != accuml_offs->type)
@@ -2000,6 +2001,15 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_scalar(
         gen_long(accuml_offs->type, new_index.type->get_width() / 8)));
     simplify(accuml_offs);
   }
+
+  /* The SMT backend doesn't know how to byte-extract from
+   * dynamically sized arrays such as VLAs, see
+   * <https://github.com/esbmc/esbmc/issues/169>.
+   * Avoid byte-extracting from the underlying symbol directly. */
+  if(
+    contains_symbol_expr(new_object) &&
+    is_sym_sized_array_type(new_object->type))
+    return extract_bytes_from_array(new_object, num_bytes, accuml_offs);
 
   for(auto &byte : bytes)
   {
