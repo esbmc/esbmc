@@ -275,8 +275,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   elif strat == "fixed":
     command_line += "--k-induction --max-inductive-step 3 "
   elif strat == "kinduction":
-    command_line += "--incremental-bmc "
-   # command_line += "--k-induction --max-inductive-step 3 "
+    command_line += "--k-induction --max-inductive-step 3 "
   elif strat == "falsi":
     command_line += "--falsification "
   elif strat == "incr":
@@ -304,16 +303,16 @@ def witness_to_sha256(benchmark):
     data = f.read().encode('utf-8')
     sha256hash = sha256(data).hexdigest()
   witness = os.path.basename(benchmark) + ".graphml"
-  
+
   fin = open(witness, "rt")
   data = fin.readlines()
   fin.close()
-  
+
   fin = open(witness, "wt")
   for line in data:
     if '<data key="programhash">' in line:
       line = line.replace(line[line.index('>')+1:line.index('</data>')], sha256hash)
-      
+
     if '<data key="creationtime">' in line:
       time = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
       line = line.replace(line[line.index('>')+1:line.index('</data>')], time)
