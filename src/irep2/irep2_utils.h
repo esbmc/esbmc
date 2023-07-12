@@ -112,6 +112,26 @@ inline bool is_sym_sized_array_type(const type2tc &t)
   return contains_symbol_expr(a.array_size);
 }
 
+inline bool is_byte_type(const type2tc &t)
+{
+  return is_bv_type(t) && t->get_width() == 8;
+}
+
+inline bool is_byte_type(const expr2tc &e)
+{
+  return is_byte_type(e->type);
+}
+
+inline bool is_byte_array(const type2tc &t)
+{
+  return is_array_type(t) && is_byte_type(to_array_type(t).subtype);
+}
+
+inline bool is_byte_array(const expr2tc &e)
+{
+  return is_byte_array(e->type);
+}
+
 inline bool is_constant_number(const expr2tc &t)
 {
   return t->expr_id == expr2t::constant_int_id ||
