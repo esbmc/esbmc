@@ -91,6 +91,27 @@ inline bool is_multi_dimensional_array(const expr2tc &e)
   return is_multi_dimensional_array(e->type);
 }
 
+inline bool contains_symbol_expr(const expr2tc &e)
+{
+  if(is_symbol2t(e))
+    return true;
+
+  bool r = false;
+  e->foreach_operand(
+    [&r](const expr2tc &f) { r = r || contains_symbol_expr(f); });
+  return r;
+}
+
+inline bool is_sym_sized_array_type(const type2tc &t)
+{
+  if(!is_array_type(t))
+    return false;
+  const array_type2t &a = to_array_type(t);
+  if(!a.array_size)
+    return false;
+  return contains_symbol_expr(a.array_size);
+}
+
 inline bool is_constant_number(const expr2tc &t)
 {
   return t->expr_id == expr2t::constant_int_id ||

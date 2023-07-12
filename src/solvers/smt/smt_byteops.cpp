@@ -65,8 +65,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   smt_astt source_ast = convert_ast(source);
 
-  unsigned int sort_sz = data.source_value->type->get_width();
-  if(sort_sz <= upper)
+  if(width <= upper)
   {
     smt_sortt s = mk_int_bv_sort(8);
     return mk_smt_symbol("out_of_bounds_byte_extract", s);
