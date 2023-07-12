@@ -384,6 +384,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"interval-analysis-no-contract",
      NULL,
      "disables use of contractors in abstract states (Integers, Reals)"},
+    {"interval-analysis-assume-asserts",
+     NULL,
+     "propagates asserts as being assertions (Integers, Reals)"},
+    {"interval-analysis-eval-assumptions",
+     NULL,
+     "evaluates assumptions/guards as boolean operators, accelerating the "
+     "convergence (Integers, Reals)"},
     {"interval-analysis-extrapolate",
      NULL,
      "enables use of extrapolation in abstract states (all)"},

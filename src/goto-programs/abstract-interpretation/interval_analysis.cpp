@@ -4,6 +4,7 @@
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <unordered_set>
+#include <util/prefix.h>
 
 static inline void get_symbols(
   const expr2tc &expr,
@@ -26,15 +27,17 @@ static inline void get_symbols(
 
 static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
 {
-  expr->Foreach_operand([&state](expr2tc &e) -> void {
-    tvt result = interval_domaint::eval_boolean_expression(e, state);
-    if(result.is_true())
-      e = gen_true_expr();
-    else if(result.is_false())
-      e = gen_false_expr();
-    else
-      simplify_guard(e, state);
-  });
+  expr->Foreach_operand(
+    [&state](expr2tc &e) -> void
+    {
+      tvt result = interval_domaint::eval_boolean_expression(e, state);
+      if(result.is_true())
+        e = gen_true_expr();
+      else if(result.is_false())
+        e = gen_false_expr();
+      else
+        simplify_guard(e, state);
+    });
   simplify(expr);
 }
 
@@ -64,8 +67,8 @@ void instrument_intervals(
         const interval_domaint &d = interval_analysis[i_it];
 
         // Let's try to simplify first
-        if(interval_domaint::enable_assertion_simplification)
-          simplify_guard(i_it->guard, d);
+        // if(interval_domaint::enable_assertion_simplification)
+        // simplify_guard(i_it->guard, d);
 
         // Evaluate the simplified expression
         tvt guard = interval_domaint::eval_boolean_expression(i_it->guard, d);
@@ -102,22 +105,22 @@ void instrument_intervals(
 
       /**
        * The instrumentation of the assume will happen in:
-       * 
-       * 1. After IF
+       *
+       * 1. After IF (and)
        *  IF !(a > 42) GOTO 5
        *    +++ ASSUME (a > 42)
-       * 
+       *
        * 2. After a function call
        *  FUCTION_CALL(FOO)
        *    +++ ASSUME(state-after-foo)
-       * 
+       *
        * 3. Before a function call
        *  +++ ASSUME(state-before-foo)
        *  FUCNTION_CALL(FOO)
-       * 
-       * 4. Before a location
+       *
+       * 4. Before a target
        *  +++ ASSUME(current-state)
-       *  1: ....  
+       *  1: ....
       */
       goto_programt::const_targett previous = i_it;
       previous--;
@@ -170,13 +173,17 @@ void dump_intervals(
   forall_goto_program_instructions(i_it, goto_function.body)
   {
     const interval_domaint &d = interval_analysis[i_it];
-    auto print_vars = [&out, &i_it](const auto &map) {
+    auto print_vars = [&out, &i_it](const auto &map)
+    {
       for(const auto &interval : map)
       {
         // "state,var,min,max,bot,top";
         out << fmt::format(
-          "{},{},{},{},{},{}\n",
+          "{},{},{},{},{},{},{},{},{}\n",
           i_it->location_number,
+          i_it->location.line().as_string(),
+          i_it->location.column().as_string(),
+          i_it->location.function().as_string(),
           interval.first,
           (interval.second.lower_set ? interval.second.lower : "-inf"),
           (interval.second.upper_set ? interval.second.upper : "inf"),
@@ -211,7 +218,7 @@ void interval_analysis(
   if(!csv_file.empty())
   {
     std::ostringstream oss;
-    oss << "state,var,min,max,bot,top\n";
+    oss << "state,line,column,function,var,min,max,bot,top\n";
     Forall_goto_functions(f_it, goto_functions)
       dump_intervals(oss, f_it->second, interval_analysis);
 

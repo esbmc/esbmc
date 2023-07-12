@@ -687,7 +687,8 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(
     // Interval: [a,b]
     std::vector<expr2tc> disjuncts;
 
-    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w) {
+    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w)
+    {
       assert(w.lower <= w.upper);
 
       std::vector<expr2tc> s_conjuncts;
@@ -727,7 +728,8 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
     return gen_false_expr();
 
   std::vector<expr2tc> conjuncts;
-  auto typecast = [&symbol](expr2tc v) {
+  auto typecast = [&symbol](expr2tc v)
+  {
     c_implicit_typecast(v, symbol->type, *migrate_namespace_lookup);
     return v;
   };
@@ -804,10 +806,12 @@ bool contains_float(const expr2tc &e)
     return true;
 
   bool inner_float = false;
-  e->foreach_operand([&inner_float](auto &it) {
-    if(contains_float(it))
-      inner_float = true;
-  });
+  e->foreach_operand(
+    [&inner_float](auto &it)
+    {
+      if(contains_float(it))
+        inner_float = true;
+    });
 
   return inner_float;
 }
@@ -867,7 +871,7 @@ void interval_domaint::transform(
   case ASSERT:
   {
     // There is a bug in Floats that need to be investigated! regression-float/nextafter
-    if(!contains_float(instruction.guard))
+    if(!contains_float(instruction.guard) && enable_assume_asserts)
       assume(instruction.guard);
     break;
   }
@@ -1031,10 +1035,34 @@ void interval_domaint::assume_rec(
   if(id == expr2t::greaterthan_id)
     return assume_rec(rhs, expr2t::lessthan_id, lhs);
 
-  // we now have lhs <  rhs or
-  //             lhs <= rhs
+  if(id == expr2t::lessthan_id)
+  {
+    if(is_bv_type(lhs) && is_bv_type(rhs))
+    {
+      // TODO: To properly do this we need a way to invert functions
+      if(!is_symbol2t(lhs))
+      {
+        // Gave-up for optimization
+        auto new_lhs =
+          add2tc(lhs->type, lhs, constant_int2tc(lhs->type, BigInt(1)));
+        if(simplify(new_lhs))
+          return assume_rec(new_lhs, expr2t::lessthanequal_id, rhs);
+      }
+      else if(!is_symbol2t(rhs))
+      {
+        // Gave-up for optimization
+        auto new_rhs =
+          sub2tc(rhs->type, rhs, constant_int2tc(rhs->type, BigInt(1)));
+        if(simplify(new_rhs))
+          return assume_rec(lhs, expr2t::lessthanequal_id, new_rhs);
+      }
+    }
+    return assume_rec(lhs, expr2t::lessthanequal_id, rhs);
+  }
 
-  assert(id == expr2t::lessthan_id || id == expr2t::lessthanequal_id);
+  // we now have lhs <= rhs
+
+  assert(id == expr2t::lessthanequal_id);
 
   if(is_bv_type(lhs) && is_bv_type(rhs))
   {
@@ -1052,7 +1080,9 @@ void interval_domaint::assume(const expr2tc &cond)
   expr2tc new_cond = cond;
   simplify(new_cond);
   // Let's check whether this condition is always false
-  if(eval_boolean_expression(new_cond, *this).is_false())
+  if(
+    enable_eval_assumptions &&
+    eval_boolean_expression(new_cond, *this).is_false())
   {
     log_debug("The expr {} is always false. Returning bottom", *cond);
     make_bottom();
@@ -1207,6 +1237,10 @@ void interval_domaint::set_options(const optionst &options)
     !options.get_bool_option("interval-analysis-no-contract");
   enable_wrapped_intervals =
     options.get_bool_option("interval-analysis-wrapped");
+  enable_assume_asserts =
+    options.get_bool_option("interval-analysis-assume-asserts");
+  enable_eval_assumptions =
+    options.get_bool_option("interval-analysis-eval-assumptions");
 
   auto fixpoint_str = options.get_option("interval-analysis-extrapolate-limit");
   fixpoint_limit = fixpoint_str.empty() ? 5 : atoi(fixpoint_str.c_str());
@@ -1226,6 +1260,8 @@ bool interval_domaint::enable_assertion_simplification = false;
 bool interval_domaint::enable_contraction_for_abstract_states = true;
 bool interval_domaint::enable_wrapped_intervals = false;
 bool interval_domaint::enable_real_intervals = true;
+bool interval_domaint::enable_assume_asserts = true;
+bool interval_domaint::enable_eval_assumptions = true;
 
 // Widening options
 unsigned interval_domaint::fixpoint_limit = 5;
