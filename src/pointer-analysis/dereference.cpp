@@ -1949,13 +1949,9 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
     {
       const type2tc &bytetype = get_uint8_type();
       // Extracting bytes from the current index
-      for(unsigned int j = 0; j < bytes_per_index; j++)
-      {
+      for(unsigned int j = 0; i < num_bytes && j < bytes_per_index; i++, j++)
         exprs[i] =
           byte_extract2tc(bytetype, the_index, gen_ulong(j), is_big_endian);
-        i++;
-      }
-      i--;
     }
     accuml_offs =
       add2tc(accuml_offs->type, accuml_offs, gen_long(accuml_offs->type, 1));
