@@ -1582,3 +1582,10 @@ bool clang_cpp_convertert::is_CopyOrMoveOperator(const clang::FunctionDecl &fd)
 
   return false;
 }
+
+bool clang_cpp_convertert::is_ConstructorOrDestructor(
+  const clang::FunctionDecl &fd)
+{
+  return fd.getKind() == clang::Decl::CXXConstructor ||
+         fd.getKind() == clang::Decl::CXXDestructor;
+}
