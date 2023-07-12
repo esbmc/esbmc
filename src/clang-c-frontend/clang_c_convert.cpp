@@ -377,9 +377,14 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     return true;
 
   if(rd.isUnion())
+  {
     add_padding(to_union_type(t), ns);
+  }
   else
+  {
+    get_complete_type(to_struct_type(t), ns);
     add_padding(to_struct_type(t), ns);
+  }
 
   t.location() = location_begin;
   added_symbol.type = t;
