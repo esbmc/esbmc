@@ -1480,10 +1480,6 @@ void dereferencet::construct_from_dyn_offset(
     return;
   }
 
-  // Ensure we're dealing with a BV. A floatbv is not a bv!
-  if(!is_bv_type(value->type) && !is_fixedbv_type(value->type))
-    value = bitcast2tc(get_uint_type(value->type->get_width()), value);
-
   expr2tc replaced_dyn_offset = replace_dyn_offset_with_zero(offset);
   simplify(replaced_dyn_offset);
   unsigned int num_bytes = compute_num_bytes_to_extract(
