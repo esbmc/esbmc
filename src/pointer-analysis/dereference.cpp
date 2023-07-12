@@ -616,7 +616,7 @@ expr2tc dereferencet::build_reference_to(
   const expr2tc &deref_expr,
   const type2tc &type,
   const guardt &guard,
-  expr2tc lexical_offset,
+  const expr2tc &lexical_offset,
   expr2tc &pointer_guard)
 {
   expr2tc value;
@@ -718,12 +718,7 @@ expr2tc dereferencet::build_reference_to(
   // or index exprs, like foo->bar[3]. If bar is of integer type, we translate
   // that to be a dereference of foo + extra_offset, resulting in an integer.
   if(!is_nil_expr(lexical_offset))
-  {
-    /* lexical_offset is in bytes, not bits */
-    assert(lexical_offset->type != offset_type);
-    lexical_offset = typecast2tc(offset_type, lexical_offset);
     final_offset = add2tc(final_offset->type, final_offset, lexical_offset);
-  }
 
   // If we're in internal mode, collect all of our data into one struct, insert
   // it into the list of internal data, and then bail. The caller does not want
@@ -1904,7 +1899,7 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
   unsigned int num_bytes,
   const expr2tc &offset)
 {
-  type2tc subtype, arrsize_type = index_type2();
+  type2tc subtype, idx_type = index_type2();
   assert(num_bytes != 0);
 
   assert(
@@ -1915,7 +1910,7 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
     const array_type2t &arr_type = to_array_type(array->type);
     subtype = arr_type.subtype;
     if(arr_type.array_size)
-      arrsize_type = arr_type.array_size->type;
+      idx_type = arr_type.array_size->type;
     assert(
       !is_array_type(subtype) &&
       "Can't extract bytes from multi-dimensional arrays");
@@ -1933,7 +1928,7 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
   std::vector<expr2tc> exprs(num_bytes);
   // Calculating the array index based on the given byte offset
   expr2tc accuml_offs = typecast2tc(
-    arrsize_type,
+    idx_type,
     div2tc(offset->type, offset, gen_long(offset->type, bytes_per_index)));
   for(unsigned int i = 0; i < num_bytes; i++)
   {
