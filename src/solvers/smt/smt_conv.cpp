@@ -513,8 +513,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     if(int_encoding)
     {
       a = mk_add(
-        convert_ast(to_ieee_mul2t(expr).side_1),
-        convert_ast(to_ieee_mul2t(expr).side_2));
+        convert_ast(to_ieee_add2t(expr).side_1),
+        convert_ast(to_ieee_add2t(expr).side_2));
     }
     else
     {
@@ -532,8 +532,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     if(int_encoding)
     {
       a = mk_sub(
-        convert_ast(to_ieee_mul2t(expr).side_1),
-        convert_ast(to_ieee_mul2t(expr).side_2));
+        convert_ast(to_ieee_sub2t(expr).side_1),
+        convert_ast(to_ieee_sub2t(expr).side_2));
     }
     else
     {
@@ -568,8 +568,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     if(int_encoding)
     {
       a = mk_div(
-        convert_ast(to_ieee_fma2t(expr).value_1),
-        convert_ast(to_ieee_fma2t(expr).value_2));
+        convert_ast(to_ieee_div2t(expr).side_1),
+        convert_ast(to_ieee_div2t(expr).side_2));
     }
     else
     {
