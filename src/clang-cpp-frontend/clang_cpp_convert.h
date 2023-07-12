@@ -519,7 +519,6 @@ protected:
     const exprt &vtable_ptr_deref);
 
   bool is_aggregate_type(const clang::QualType &q_type) override;
-
   /*
    * check if a method is Copy assignment Operator or 
    * Move assignment Operator
@@ -527,6 +526,12 @@ protected:
    *  fd: clang AST representing a C++ method
    */
   bool is_CopyOrMoveOperator(const clang::FunctionDecl &fd);
+  /*
+   * check if a method is constructor or destructor
+   * Arguments:
+   *  fd: clang AST representing a C++ method
+   */
+  bool is_ConstructorOrDestructor(const clang::FunctionDecl &fd);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

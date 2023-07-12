@@ -3530,13 +3530,6 @@ bool clang_c_convertert::is_field_global_storage(const clang::FieldDecl *field)
   return false;
 }
 
-bool clang_c_convertert::is_ConstructorOrDestructor(
-  const clang::FunctionDecl &fd)
-{
-  return fd.getKind() == clang::Decl::CXXConstructor ||
-         fd.getKind() == clang::Decl::CXXDestructor;
-}
-
 bool clang_c_convertert::perform_virtual_dispatch(const clang::MemberExpr &)
 {
   // It just can't happen in C

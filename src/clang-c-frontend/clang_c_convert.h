@@ -272,13 +272,6 @@ protected:
   bool is_field_global_storage(const clang::FieldDecl *field);
 
   /*
-   * check if a method is constructor or destructor
-   * Arguments:
-   *  fd: clang AST representing a C++ method
-   */
-  bool is_ConstructorOrDestructor(const clang::FunctionDecl &fd);
-
-  /*
    * Function to check whether a member function call refers to
    * a virtual/overriding method.
    *
