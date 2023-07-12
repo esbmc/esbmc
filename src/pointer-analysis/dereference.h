@@ -411,6 +411,11 @@ private:
     const expr2tc &object,
     unsigned int bytes,
     const expr2tc &offset);
+  void internal_extract_bytes(
+    const expr2tc &object,
+    unsigned int num_bytes,
+    const expr2tc &offset,
+    std::vector<expr2tc> &bytes) const;
   expr2tc stitch_together_from_byte_array(
     unsigned int num_bytes,
     const std::vector<expr2tc> &bytes);
