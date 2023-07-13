@@ -22,7 +22,8 @@ void remove_unreachable(goto_programt &goto_program)
       goto_programt::const_targetst successors;
       goto_program.get_successors(t, successors);
 
-      for(goto_programt::const_targetst::const_iterator s_it = successors.begin();
+      for(goto_programt::const_targetst::const_iterator s_it =
+            successors.begin();
           s_it != successors.end();
           s_it++)
         working.push(*s_it);
