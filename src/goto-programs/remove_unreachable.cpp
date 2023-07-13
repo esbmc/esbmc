@@ -1,6 +1,18 @@
 #include <goto-programs/remove_unreachable.h>
+#include <goto-programs/remove_skip.h>
 #include <set>
 #include <stack>
+
+void remove_unreachable(goto_functionst &goto_functions)
+{
+  for(auto &fun_it : goto_functions.function_map)
+    remove_unreachable(fun_it.second);
+}
+
+void remove_unreachable(goto_functiont &goto_function)
+{
+  remove_unreachable(goto_function.body);
+}
 
 void remove_unreachable(goto_programt &goto_program)
 {
@@ -30,12 +42,14 @@ void remove_unreachable(goto_programt &goto_program)
     }
   }
 
-  // make all unreachable code a skip
-  // unless it's an 'end_function'
-
+  // All unreachable code apart from END_FUNCTION instructions
+  // is transformed into SKIP
   Forall_goto_program_instructions(it, goto_program)
   {
     if(reachable.find(it) == reachable.end() && !it->is_end_function())
       it->make_skip();
   }
+
+  // Finally, all introduced SKIPs are now removed
+  remove_skip(goto_program);
 }
