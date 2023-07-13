@@ -1819,10 +1819,15 @@ unsigned long calculate_array_domain_width(const array_type2t &arr)
   // Index arrays by the smallest integer required to represent its size.
   // Unless it's either infinite or dynamic in size, in which case use the
   // machine word size.
-  if(!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size))
+  if(!is_nil_expr(arr.array_size))
   {
-    constant_int2tc thesize = arr.array_size;
-    return size_to_bit_width(thesize->value.to_uint64());
+    if(is_constant_int2t(arr.array_size))
+    {
+      constant_int2tc thesize = arr.array_size;
+      return size_to_bit_width(thesize->value.to_uint64());
+    }
+
+    return arr.array_size->type->get_width();
   }
 
   return config.ansi_c.word_size;
