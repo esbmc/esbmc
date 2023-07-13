@@ -1025,9 +1025,8 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     symbolt &s = *context.find_symbol(id);
     new_type = s.type;
 
-    // Special case for C++ class and struct
-    // Use symbolic types instead of actual types
-    if(sym_already_exist && !rd.isUnion() && mode == "C++")
+    // special case for C++
+    if(sym_already_exist && mode == "C++")
     {
       // replace the copy with a symbolic type
       // otherwise new_type be incomplete in case of object composition
