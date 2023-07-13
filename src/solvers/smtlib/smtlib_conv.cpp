@@ -1579,7 +1579,8 @@ smt_astt smtlib_convt::mk_select(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_ARRAY);
   assert(a->sort->get_domain_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, b->sort, SMT_FUNC_SELECT);
+  smtlib_smt_ast *ast =
+    new smtlib_smt_ast(this, a->sort->get_range_sort(), SMT_FUNC_SELECT);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
