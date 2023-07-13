@@ -265,11 +265,14 @@ void goto_programt::get_successors(
   }
   else if(i.is_return())
   {
-    // the successor is the end_function at the end
+    // The successor is the END_FUNCTION at the end
     successors.push_back(--instructions.end());
   }
-  else if(i.is_assume())
+  else if(i.is_assume() || i.is_assert())
   {
+    // This is an ASSERT or ASSUME with a guard that
+    // might hold (i.e., definitely not FALSE), so the next target
+    // might be reached.
     if(!is_false(i.guard))
       successors.push_back(next);
   }
