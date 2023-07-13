@@ -334,7 +334,7 @@ smtlib_convt::process_emitter::~process_emitter() noexcept
 
 smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   : smt_convt(_ns, _options),
-    array_iface(false, false),
+    array_iface(true, false),
     fp_convt(this),
     emit_proc(_options.get_option("smtlib-solver-prog")),
     emit_opt_output(_options.get_option("output"))
