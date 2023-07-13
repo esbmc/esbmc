@@ -382,7 +382,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   }
   else
   {
-    get_complete_type(to_struct_type(t), ns);
+    get_complete_struct_type(to_struct_type(t), ns);
     add_padding(to_struct_type(t), ns);
   }
 
