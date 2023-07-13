@@ -486,11 +486,13 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   {
     // the type might contains symbolic types,
     // replace them with complete types before generating zero initialization
-    //typet complete_type;
+    typet complete_type;
+    bool contains_symbolic = array_type_contains_symbolic(t, complete_type, ns);
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    symbol.value = gen_zero(t, true);
+    symbol.value = contains_symbolic ?
+      gen_zero(complete_type, true) : gen_zero(t, true);
     symbol.value.zero_initializer(true);
   }
 

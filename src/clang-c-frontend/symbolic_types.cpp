@@ -18,3 +18,31 @@ void get_complete_struct_type(struct_typet &type, const namespacet &ns)
     }
   }
 }
+
+bool array_type_contains_symbolic(
+  const typet &type,
+  typet &complete_type,
+  const namespacet &ns)
+{
+  // check whether we have symbolic types in array type
+  if(type.id() == "array")
+  {
+    complete_type = type;
+    typet &sub_type = complete_type.subtype();
+    if(sub_type.is_symbol())
+    {
+      const symbolt *the_type = ns.lookup(sub_type.identifier());
+      assert(the_type);
+      if(the_type->type.is_struct())
+      {
+        // replace the symbolic subtype then
+        // follow the type recursively to replace all symbolic types
+        sub_type = the_type->type;
+        get_complete_struct_type(to_struct_type(sub_type), ns);
+      }
+    }
+    return true;
+  }
+
+  return false;
+}
