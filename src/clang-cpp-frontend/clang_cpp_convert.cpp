@@ -226,8 +226,8 @@ bool clang_cpp_convertert::get_method(
   // A compiler-generated default ctor/dtor is considered implicit, but we have
   // to parse it.
   if(
-    fd.isImplicit() &&
-    !is_ConstructorOrDestructor(fd) /*&& !is_CopyOrMoveOperator(fd)*/)
+    fd.isImplicit() && !is_ConstructorOrDestructor(fd) &&
+    !is_CopyOrMoveOperator(fd))
     return false;
 
   return clang_c_convertert::get_function(fd, new_expr);
@@ -1043,6 +1043,13 @@ bool clang_cpp_convertert::name_param_and_continue(
     return true;
   }
 
+  if(is_CopyOrMoveOperator(dcxt) && is_defaulted_op(dcxt))
+  {
+    get_op_name(
+      static_cast<const clang::CXXMethodDecl *>(dcxt), id, name, param);
+    return true;
+  }
+
   return false;
 }
 
@@ -1127,6 +1134,21 @@ bool clang_cpp_convertert::get_decl_ref(
     if(
       (id.empty() || name.empty()) && is_cpyctor(dcxt) &&
       is_defaulted_ctor(dcxt))
+    {
+      get_cpyctor_name(
+        static_cast<const clang::CXXConstructorDecl *>(dcxt),
+        id,
+        name,
+        new_expr);
+
+      // assign a name and an id
+      new_expr.name(name);
+      new_expr.identifier(id);
+    }
+
+    if(
+      (id.empty() || name.empty()) && is_CopyOrMoveOperator(dcxt) &&
+      is_defaulted_op(dcxt))
     {
       get_cpyctor_name(
         static_cast<const clang::CXXConstructorDecl *>(dcxt),
@@ -1581,6 +1603,43 @@ bool clang_cpp_convertert::is_CopyOrMoveOperator(const clang::FunctionDecl &fd)
     return md->isCopyAssignmentOperator() || md->isMoveAssignmentOperator();
 
   return false;
+}
+
+bool clang_cpp_convertert::is_CopyOrMoveOperator(const clang::DeclContext *dcxt)
+{
+  if(
+    const clang::CXXMethodDecl *method =
+      llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
+    return method->isCopyAssignmentOperator() ||
+           method->isMoveAssignmentOperator();
+
+  return false;
+}
+
+bool clang_cpp_convertert::is_defaulted_op(const clang::DeclContext *dcxt)
+{
+  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
+    if(md->isDefaulted())
+      return true;
+
+  return false;
+}
+
+void clang_cpp_convertert::get_op_name(
+  const clang::CXXMethodDecl *cxxmd,
+  std::string &id,
+  std::string &name,
+  exprt &param)
+{
+  assert(cxxmd->isImplicit());
+  get_decl_name(*cxxmd, name, id);
+
+  // name would be just `ref` and id would be "<op_id>::ref"
+  name.assign(op_constref_suffix);
+  id = id + "::" + op_constref_suffix;
+
+  // sync param name
+  param.cmt_base_name(name);
 }
 
 bool clang_cpp_convertert::is_ConstructorOrDestructor(

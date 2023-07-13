@@ -526,6 +526,26 @@ protected:
    *  fd: clang AST representing a C++ method
    */
   bool is_CopyOrMoveOperator(const clang::FunctionDecl &fd);
+  bool is_CopyOrMoveOperator(const clang::DeclContext *dcxt);
+
+  bool is_defaulted_op(const clang::DeclContext *dcxt);
+
+  /*
+   * This function assigns a name and an id to the unnamed const ref
+   * in an implicit defaulted copy constructor added by the compiler.
+   *
+   * Params:
+   *  pd: the clang AST node for the function parameter we are currently dealing with
+   *  id: id for this function parameter
+   *  name: name for this function parameter
+   *  param: ESBMC's IR representing the function parameter
+   */
+  void get_op_name(
+    const clang::CXXMethodDecl *cxxmd,
+    std::string &id,
+    std::string &name,
+    exprt &param);
+  std::string op_constref_suffix = "ref";
   /*
    * check if a method is constructor or destructor
    * Arguments:
