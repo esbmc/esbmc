@@ -433,8 +433,6 @@ public:
   //! The list of instructions in the goto program
   instructionst instructions;
 
-  void get_successors(targett target, targetst &successors);
-
   void get_successors(const_targett target, const_targetst &successors) const;
 
   /// Insertion that preserves jumps to "target".
