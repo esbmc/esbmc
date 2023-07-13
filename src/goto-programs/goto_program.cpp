@@ -243,43 +243,6 @@ void goto_programt::compute_loop_numbers(unsigned int &num)
     }
 }
 
-void goto_programt::get_successors(targett target, targetst &successors)
-{
-  successors.clear();
-  if(target == instructions.end())
-    return;
-
-  targett next = target;
-  next++;
-
-  const instructiont &i = *target;
-
-  if(i.is_goto())
-  {
-    for(auto target : i.targets)
-      successors.push_back(target);
-
-    if(!is_true(i.guard))
-      successors.push_back(next);
-  }
-  else if(i.is_throw())
-  {
-    // the successors are non-obvious
-  }
-  else if(i.is_return())
-  {
-    // the successor is the end_function at the end of the function
-    successors.push_back(--instructions.end());
-  }
-  else if(i.is_assume())
-  {
-    if(!is_false(i.guard))
-      successors.push_back(next);
-  }
-  else
-    successors.push_back(next);
-}
-
 void goto_programt::get_successors(
   const_targett target,
   const_targetst &successors) const
