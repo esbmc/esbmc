@@ -11,7 +11,7 @@
 
 // A type symbol may contain a compoment that has symbolic type,
 // which doesn't work with type_byte_size.
-// This function replace the symbolic type with the actual type.
+// This function replaces the symbolic type with the complete type.
 void get_complete_struct_type(struct_typet &type, const namespacet &ns);
 
 #endif // ESBMC_SYMBOLIC_TYPES_H
