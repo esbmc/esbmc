@@ -711,9 +711,8 @@ bool clang_c_convertert::get_function_param(
   param.type() = param_type;
   param.cmt_base_name(name);
 
-  if(name.empty())
-    if(!name_param_and_continue(pd, id, name, param))
-      return false;
+  if(name.empty() && name_param_and_continue(pd, id, name, param))
+    return true;
 
   locationt location_begin;
   get_location_from_decl(pd, location_begin);

@@ -69,7 +69,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       static_cast<const clang::CXXMethodDecl &>(decl);
 
     assert(llvm::dyn_cast<clang::TemplateDecl>(&cxxmd) == nullptr);
-    if(get_function(cxxmd, new_expr))
+    if(get_method(cxxmd, new_expr))
       return true;
 
     break;
@@ -214,11 +214,11 @@ bool clang_cpp_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 }
 
 bool clang_cpp_convertert::get_method(
-  const clang::FunctionDecl &fd,
+  const clang::CXXMethodDecl &md,
   exprt &new_expr)
 {
   // Only convert instantiated functions/methods not depending on a template parameter
-  if(fd.isDependentContext())
+  if(md.isDependentContext())
     return false;
 
   // Don't convert if implicit, unless it's a constructor/destructor/
@@ -226,24 +226,15 @@ bool clang_cpp_convertert::get_method(
   // A compiler-generated default ctor/dtor is considered implicit, but we have
   // to parse it.
   if(
-    fd.isImplicit() && !is_ConstructorOrDestructor(fd) &&
-    !is_CopyOrMoveOperator(fd))
+    md.isImplicit() && !is_ConstructorOrDestructor(md) &&
+    !is_CopyOrMoveOperator(md))
     return false;
 
-  return clang_c_convertert::get_function(fd, new_expr);
-}
-
-bool clang_cpp_convertert::get_function(
-  const clang::FunctionDecl &fd,
-  exprt &new_expr)
-{
-  if(get_method(fd, new_expr))
+  if(clang_c_convertert::get_function(md, new_expr))
     return true;
 
-  // add additional annotations for class/struct/union methods
-  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
-    if(annotate_class_method(md, new_expr, fd))
-      return true;
+  if(annotate_class_method(md, new_expr))
+    return true;
 
   return false;
 }
@@ -269,13 +260,13 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if(cxxrd->bases_begin() != cxxrd->bases_end())
     {
       base_map bases;
-      get_base_map(cxxrd, bases);
+      get_base_map(*cxxrd, bases);
       get_base_components_methods(bases, type);
     }
   }
 
   // Parse the fields
-  for(auto const *field : rd.fields())
+  for(auto const &field : rd.fields())
   {
     struct_typet::componentt comp;
     if(get_decl(*field, comp))
@@ -289,7 +280,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if(is_field_global_storage(field))
       continue;
 
-    if(annotate_class_field(field, type, comp))
+    if(annotate_class_field(*field, type, comp))
       return true;
 
     type.components().push_back(comp);
@@ -319,7 +310,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
 
   // skip unions as they don't have virtual methods
   if(!recordd.isUnion())
-    if(get_struct_class_virtual_methods(cxxrd, type))
+    if(get_struct_class_virtual_methods(*cxxrd, type))
       return true;
 
   // Iterate over the declarations stored in this context
@@ -1016,6 +1007,9 @@ bool clang_cpp_convertert::name_param_and_continue(
   std::string &name,
   exprt &param)
 {
+  if(!(id.empty() && name.empty()))
+    return false;
+
   /*
    * A C++ function may contain unnamed function parameter(s).
    * The base method of clang_c_converter doesn't care about
@@ -1035,22 +1029,26 @@ bool clang_cpp_convertert::name_param_and_continue(
   assert(id.empty() && name.empty());
 
   const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
-  if(is_cpyctor(dcxt) && is_defaulted_ctor(dcxt))
+  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
   {
-    // let's deal with the unnamed parameter for an implicit defaulted cpyctor
-    get_cpyctor_name(
-      static_cast<const clang::CXXConstructorDecl *>(dcxt), id, name, param);
-    return true;
+    if(is_CopyOrMoveOperator(*md) || is_ConstructorOrDestructor(*md))
+    {
+      assert(md->isImplicit());
+      get_decl_name(*md, name, id);
+
+      // name would be just `ref` and id would be "<cpyctor_id>::ref"
+      name = name + cpyctor_constref_suffix;
+      id = id + "::" + cpyctor_constref_suffix;
+
+      // sync param name
+      param.cmt_base_name(name);
+      param.identifier(id);
+      param.name(name);
+      return false;
+    }
   }
 
-  if(is_CopyOrMoveOperator(dcxt) && is_defaulted_op(dcxt))
-  {
-    get_op_name(
-      static_cast<const clang::CXXMethodDecl *>(dcxt), id, name, param);
-    return true;
-  }
-
-  return false;
+  return clang_c_convertert::name_param_and_continue(pd, id, name, param);
 }
 
 template <typename SpecializationDecl>
@@ -1059,7 +1057,7 @@ bool clang_cpp_convertert::get_template_decl_specialization(
   bool DumpExplicitInst,
   exprt &new_expr)
 {
-  for(auto *redecl_with_bad_type : D->redecls())
+  for(auto const *redecl_with_bad_type : D->redecls())
   {
     auto *redecl = llvm::dyn_cast<SpecializationDecl>(redecl_with_bad_type);
     if(!redecl)
@@ -1091,7 +1089,7 @@ bool clang_cpp_convertert::get_template_decl_specialization(
 
 template <typename TemplateDecl>
 bool clang_cpp_convertert::get_template_decl(
-  const TemplateDecl *D,
+  const TemplateDecl &D,
   bool DumpExplicitInst,
   exprt &new_expr)
 {
@@ -1116,50 +1114,10 @@ bool clang_cpp_convertert::get_decl_ref(
     // first follow the base conversion flow to fill new_expr
     if(clang_c_convertert::get_decl_ref(decl, new_expr))
       return true;
-
-    /*
-     * Name and id might be empty.
-     * We need to do some additional checks and conversions on function
-     * parameters for C++, e.g. unnamed const ref in a defaulted cpyctor
-     */
-    const clang::ParmVarDecl &param =
-      static_cast<const clang::ParmVarDecl &>(decl);
-    const clang::DeclContext *dcxt = param.getParentFunctionOrMethod();
-
-    /*
-     * try to get its name and id.
-     * If empty, we need to manually assign a name and an id.
-     */
-    get_decl_name(param, name, id);
-    if(
-      (id.empty() || name.empty()) && is_cpyctor(dcxt) &&
-      is_defaulted_ctor(dcxt))
-    {
-      get_cpyctor_name(
-        static_cast<const clang::CXXConstructorDecl *>(dcxt),
-        id,
-        name,
-        new_expr);
-
-      // assign a name and an id
-      new_expr.name(name);
-      new_expr.identifier(id);
-    }
-
-    if(
-      (id.empty() || name.empty()) && is_CopyOrMoveOperator(dcxt) &&
-      is_defaulted_op(dcxt))
-    {
-      get_cpyctor_name(
-        static_cast<const clang::CXXConstructorDecl *>(dcxt),
-        id,
-        name,
-        new_expr);
-
-      // assign a name and an id
-      new_expr.name(name);
-      new_expr.identifier(id);
-    }
+    const auto *param = llvm::dyn_cast<const clang::ParmVarDecl>(&decl);
+    param->dumpColor();
+    if(name_param_and_continue(*param, id, name, new_expr))
+      return true;
 
     return false;
   }
@@ -1180,7 +1138,7 @@ bool clang_cpp_convertert::get_decl_ref(
     // annotate return type - will be used to adjust the initiliazer or decl-derived stmt
     const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd);
     assert(md);
-    annotate_ctor_dtor_rtn_type(md, fd_type.return_type());
+    annotate_ctor_dtor_rtn_type(*md, fd_type.return_type());
 
     break;
   }
@@ -1200,7 +1158,7 @@ bool clang_cpp_convertert::get_decl_ref(
 }
 
 bool clang_cpp_convertert::annotate_class_field(
-  const clang::FieldDecl *field,
+  const clang::FieldDecl &field,
   const struct_union_typet &type,
   struct_typet::componentt &comp)
 {
@@ -1224,7 +1182,7 @@ bool clang_cpp_convertert::annotate_class_field(
 }
 
 bool clang_cpp_convertert::annotate_class_field_access(
-  const clang::FieldDecl *field,
+  const clang::FieldDecl &field,
   struct_typet::componentt &comp)
 {
   std::string access;
@@ -1237,10 +1195,10 @@ bool clang_cpp_convertert::annotate_class_field_access(
 }
 
 bool clang_cpp_convertert::get_access_from_decl(
-  const clang::Decl *decl,
+  const clang::Decl &decl,
   std::string &access)
 {
-  switch(decl->getAccess())
+  switch(decl.getAccess())
   {
   case clang::AS_public:
   {
@@ -1268,9 +1226,8 @@ bool clang_cpp_convertert::get_access_from_decl(
 }
 
 bool clang_cpp_convertert::annotate_class_method(
-  const clang::CXXMethodDecl *cxxmdd,
-  exprt &new_expr,
-  const clang::FunctionDecl &fd)
+  const clang::CXXMethodDecl &cxxmdd,
+  exprt &new_expr)
 {
   code_typet &component_type = to_code_type(new_expr.type());
 
@@ -1279,12 +1236,12 @@ bool clang_cpp_convertert::annotate_class_method(
    */
   // annotate parent
   std::string parent_class_name = getFullyQualifiedName(
-    ASTContext->getTagDeclType(cxxmdd->getParent()), *ASTContext);
+    ASTContext->getTagDeclType(cxxmdd.getParent()), *ASTContext);
   std::string parent_class_id = tag_prefix + parent_class_name;
   component_type.set("#member_name", parent_class_id);
 
   // annotate ctor and dtor
-  if(is_ConstructorOrDestructor(fd))
+  if(is_ConstructorOrDestructor(cxxmdd))
   {
     // annotate ctor and dtor return type
     annotate_ctor_dtor_rtn_type(cxxmdd, component_type.return_type());
@@ -1297,7 +1254,7 @@ bool clang_cpp_convertert::annotate_class_method(
      * in the adjuster.
      * So let's do the sync before adding more annotations.
      */
-    symbolt *fd_symb = get_fd_symbol(fd);
+    symbolt *fd_symb = get_fd_symbol(cxxmdd);
     if(fd_symb)
     {
       fd_symb->type = component_type;
@@ -1311,7 +1268,7 @@ bool clang_cpp_convertert::annotate_class_method(
 
   // annotate name
   std::string method_id, method_name;
-  clang_c_convertert::get_decl_name(*cxxmdd, method_name, method_id);
+  clang_c_convertert::get_decl_name(cxxmdd, method_name, method_id);
   new_expr.name(method_id);
 
   // annotate access
@@ -1327,16 +1284,16 @@ bool clang_cpp_convertert::annotate_class_method(
   new_expr.pretty_name(method_name);
 
   // annotate inline
-  new_expr.set("is_inlined", cxxmdd->isInlined());
+  new_expr.set("is_inlined", cxxmdd.isInlined());
 
   // annotate location
   locationt location_begin;
-  get_location_from_decl(*cxxmdd, location_begin);
+  get_location_from_decl(cxxmdd, location_begin);
   new_expr.location() = location_begin;
 
   // We need to add a non-static method as a `component` to class symbol's type
   // remove "statement: skip" otherwise it won't be added
-  if(!cxxmdd->isStatic())
+  if(!cxxmdd.isStatic())
     if(to_code(new_expr).statement() == "skip")
       to_code(new_expr).remove("statement");
 
@@ -1412,25 +1369,25 @@ symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
 }
 
 void clang_cpp_convertert::get_base_map(
-  const clang::CXXRecordDecl *cxxrd,
+  const clang::CXXRecordDecl &cxxrd,
   base_map &map)
 {
   /*
    * This function gets all the base classes from which we need to get the components/methods
    */
-  for(const clang::CXXBaseSpecifier &base : cxxrd->bases())
+  for(const clang::CXXBaseSpecifier &base : cxxrd.bases())
   {
     // The base class is always a CXXRecordDecl
-    const clang::CXXRecordDecl *base_cxxrd =
-      (base.getType().getTypePtr()->getAsCXXRecordDecl());
+    const clang::CXXRecordDecl &base_cxxrd =
+      *(base.getType().getTypePtr()->getAsCXXRecordDecl());
 
     // recursively get more bases for this `base`
-    if(base_cxxrd->bases_begin() != base_cxxrd->bases_end())
+    if(base_cxxrd.bases_begin() != base_cxxrd.bases_end())
       get_base_map(base_cxxrd, map);
 
     // get base class id
     std::string class_id, class_name;
-    clang_c_convertert::get_decl_name(*base_cxxrd, class_name, class_id);
+    clang_c_convertert::get_decl_name(base_cxxrd, class_name, class_id);
 
     // avoid adding the same base, e.g. in case of diamond problem
     if(map.find(class_id) != map.end())
@@ -1506,25 +1463,25 @@ bool clang_cpp_convertert::is_duplicate_method(
 }
 
 void clang_cpp_convertert::annotate_cpyctor(
-  const clang::CXXMethodDecl *cxxmdd,
+  const clang::CXXMethodDecl &cxxmdd,
   typet &rtn_type)
 {
   if(is_defaulted_ctor(cxxmdd) && is_cpyctor(cxxmdd))
     rtn_type.set("#default_copy_cons", true);
 }
 
-bool clang_cpp_convertert::is_cpyctor(const clang::DeclContext *dcxt)
+bool clang_cpp_convertert::is_cpyctor(const clang::DeclContext &dcxt)
 {
-  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(dcxt))
+  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(&dcxt))
     if(ctor->isCopyConstructor())
       return true;
 
   return false;
 }
 
-bool clang_cpp_convertert::is_defaulted_ctor(const clang::DeclContext *dcxt)
+bool clang_cpp_convertert::is_defaulted_ctor(const clang::DeclContext &dcxt)
 {
-  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(dcxt))
+  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(&dcxt))
     if(ctor->isDefaulted())
       return true;
 
@@ -1532,13 +1489,13 @@ bool clang_cpp_convertert::is_defaulted_ctor(const clang::DeclContext *dcxt)
 }
 
 void clang_cpp_convertert::get_cpyctor_name(
-  const clang::CXXConstructorDecl *cxxctor,
+  const clang::CXXConstructorDecl &cxxctor,
   std::string &id,
   std::string &name,
   exprt &param)
 {
-  assert(cxxctor->isImplicit());
-  get_decl_name(*cxxctor, name, id);
+  assert(cxxctor.isImplicit());
+  get_decl_name(cxxctor, name, id);
 
   // name would be just `ref` and id would be "<cpyctor_id>::ref"
   name.assign(cpyctor_constref_suffix);
@@ -1549,10 +1506,10 @@ void clang_cpp_convertert::get_cpyctor_name(
 }
 
 void clang_cpp_convertert::annotate_ctor_dtor_rtn_type(
-  const clang::CXXMethodDecl *cxxmdd,
+  const clang::CXXMethodDecl &cxxmdd,
   typet &rtn_type)
 {
-  std::string mark_rtn = (cxxmdd->getKind() == clang::Decl::CXXDestructor)
+  std::string mark_rtn = (cxxmdd.getKind() == clang::Decl::CXXDestructor)
                            ? "destructor"
                            : "constructor";
   typet tmp_rtn_type(mark_rtn);
@@ -1597,54 +1554,14 @@ bool clang_cpp_convertert::is_aggregate_type(const clang::QualType &q_type)
   return false;
 }
 
-bool clang_cpp_convertert::is_CopyOrMoveOperator(const clang::FunctionDecl &fd)
+bool clang_cpp_convertert::is_CopyOrMoveOperator(const clang::CXXMethodDecl &md)
 {
-  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
-    return md->isCopyAssignmentOperator() || md->isMoveAssignmentOperator();
-
-  return false;
-}
-
-bool clang_cpp_convertert::is_CopyOrMoveOperator(const clang::DeclContext *dcxt)
-{
-  if(
-    const clang::CXXMethodDecl *method =
-      llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
-    return method->isCopyAssignmentOperator() ||
-           method->isMoveAssignmentOperator();
-
-  return false;
-}
-
-bool clang_cpp_convertert::is_defaulted_op(const clang::DeclContext *dcxt)
-{
-  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
-    if(md->isDefaulted())
-      return true;
-
-  return false;
-}
-
-void clang_cpp_convertert::get_op_name(
-  const clang::CXXMethodDecl *cxxmd,
-  std::string &id,
-  std::string &name,
-  exprt &param)
-{
-  assert(cxxmd->isImplicit());
-  get_decl_name(*cxxmd, name, id);
-
-  // name would be just `ref` and id would be "<op_id>::ref"
-  name.assign(op_constref_suffix);
-  id = id + "::" + op_constref_suffix;
-
-  // sync param name
-  param.cmt_base_name(name);
+  return md.isCopyAssignmentOperator() || md.isMoveAssignmentOperator();
 }
 
 bool clang_cpp_convertert::is_ConstructorOrDestructor(
-  const clang::FunctionDecl &fd)
+  const clang::CXXMethodDecl &md)
 {
-  return fd.getKind() == clang::Decl::CXXConstructor ||
-         fd.getKind() == clang::Decl::CXXDestructor;
+  return md.getKind() == clang::Decl::CXXConstructor ||
+         md.getKind() == clang::Decl::CXXDestructor;
 }
