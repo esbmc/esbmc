@@ -268,43 +268,49 @@ void kfree(const void *ptr)
 }
 unsigned long copy_to_user(void *to, void *from, unsigned size)
 {
-   //checking on the passed parameters of kernel function
-   //the source in kernel space and destination in user space must be valid 
-    assert(to != NULL);
-    assert(from != NULL);
-    assert(size <= PAGE_SIZE);
+  //checking on the passed parameters of kernel function
+  //the source in kernel space and destination in user space must be valid
+  assert(to != NULL);
+  assert(from != NULL);
+  assert(size <= PAGE_SIZE);
 
-    //check on user space memory boundry
-    assert((char*) to < user_memory + USER_MEMORY_SPACE  && (char*) to >= user_memory);
-    //check on kernel space memory boundry
-    assert((char*) from < kernel_memory + KERNEL_MEMORY_SPACE  && (char*) from >= kernel_memory);
-    //copy memory from kernel space to user space
-    //simulate the copy operation by memcpy 
-    memcpy(to, from, size);
+  //check on user space memory boundry
+  assert(
+    (char *)to < user_memory + USER_MEMORY_SPACE && (char *)to >= user_memory);
+  //check on kernel space memory boundry
+  assert(
+    (char *)from < kernel_memory + KERNEL_MEMORY_SPACE &&
+    (char *)from >= kernel_memory);
+  //copy memory from kernel space to user space
+  //simulate the copy operation by memcpy
+  memcpy(to, from, size);
 
-    return 0;
+  return 0;
 }
 
-unsigned long copy_from_user(void * to, void * from, unsigned size)
+unsigned long copy_from_user(void *to, void *from, unsigned size)
 {
-    //the source in user space and destination in kernel space must be valid
-    //avoid dereferencing null pointer
-    assert(to != NULL);
-    assert(from != NULL);
-    assert(size <= PAGE_SIZE);
+  //the source in user space and destination in kernel space must be valid
+  //avoid dereferencing null pointer
+  assert(to != NULL);
+  assert(from != NULL);
+  assert(size <= PAGE_SIZE);
 
-    //check on kernel space memory boundry
-    assert((char*) to < kernel_memory + KERNEL_MEMORY_SPACE  && (char*) to >= kernel_memory);
-    //check on user space memory boundry
-    assert((char*) from < user_memory + USER_MEMORY_SPACE  && (char*) from >= user_memory);
+  //check on kernel space memory boundry
+  assert(
+    (char *)to < kernel_memory + KERNEL_MEMORY_SPACE &&
+    (char *)to >= kernel_memory);
+  //check on user space memory boundry
+  assert(
+    (char *)from < user_memory + USER_MEMORY_SPACE &&
+    (char *)from >= user_memory);
 
-    //copy memory from user space to kernel space
-    //simulate the copy operation by memcpy 
-    memcpy(to, from, size);
+  //copy memory from user space to kernel space
+  //simulate the copy operation by memcpy
+  memcpy(to, from, size);
 
-    return 0;
-} 
-
+  return 0;
+}
 
 void *ldv_malloc(size_t size)
 {
