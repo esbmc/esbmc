@@ -15,6 +15,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
 #include <clang-c-frontend/padding.h>
+#include <clang-c-frontend/symbolic_types.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
