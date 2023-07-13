@@ -336,6 +336,7 @@ void add_padding(union_typet &type, const namespacet &ns)
   // check per component, and ignore those without fixed size
   for(const auto &c : type.components())
   {
+#if 0
     if(c.type().is_symbol())
     {
       // replace symbolic type with the actual type
@@ -349,6 +350,9 @@ void add_padding(union_typet &type, const namespacet &ns)
       type2tc thetype = migrate_type(c.type());
       size_bits = std::max(size_bits, type_byte_size_bits(thetype));
     }
+#endif
+    type2tc thetype = migrate_type(c.type());
+    size_bits = std::max(size_bits, type_byte_size_bits(thetype));
   }
 
   // Is the union packed?
