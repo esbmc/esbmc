@@ -603,10 +603,10 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
 
   // This should always be a symbol.
   const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(a);
-  assert(sa->kind == SMT_FUNC_SYMBOL && "Non-symbol in smtlib expr get_bv()");
-  std::string name = sa->symname;
 
-  emit("(get-value (|%s|))\n", name.c_str());
+  emit("%s", "(get-value (");
+  emit_ast(sa);
+  emit("%s\n", "))");
   flush();
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_VALUE);
@@ -638,11 +638,6 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
   std::list<sexpr>::iterator it = response.sexpr_list.begin();
   sexpr &symname = *it++;
   sexpr &respval = *it++;
-  if(!(symname.token == TOK_SIMPLESYM && symname.data == name))
-  {
-    log_error("smtlib solver returned different symbol from get-value");
-    abort();
-  }
 
   // Attempt to read an integer.
   BigInt m;
@@ -655,7 +650,6 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
     log_error("Numeral value for integer symbol from smtlib solver");
     abort();
   }
-
   else if(respval.token == TOK_HEXNUM)
   {
     std::string data = respval.data.substr(2);
