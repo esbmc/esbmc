@@ -299,7 +299,7 @@ unsigned long copy_from_user(void * to, void * from, unsigned size)
     assert((char*) from < user_memory + USER_MEMORY_SPACE  && (char*) from >= user_memory);
 
     //copy memory from user space to kernel space
-    //use user space function to mock 
+    //simulate the copy operation by memcpy 
     memcpy(to, from, size);
 
     return 0;
