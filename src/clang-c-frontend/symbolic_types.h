@@ -14,7 +14,9 @@ void get_complete_struct_type(struct_typet &type, const namespacet &ns);
 
 // If an array type's subtype is symbolic struct type, replace it with
 // the complete struct type
-bool array_type_contains_symbolic(const typet &type,
-    typet &complete_type, const namespacet &ns);
+bool array_type_contains_symbolic(
+  const typet &type,
+  typet &complete_type,
+  const namespacet &ns);
 
 #endif // ESBMC_SYMBOLIC_TYPES_H
