@@ -132,7 +132,7 @@ jobs:
       - uses: actions/upload-artifact@v1
         with:
           name: benchexec-result
-          path: run-output.zip
+          path: $HOME/output.zip
       - name: Save logs
         if: ${{ inputs.output != '' }}
         run: mv $HOME/output.zip $HOME/${{ inputs.output }}
