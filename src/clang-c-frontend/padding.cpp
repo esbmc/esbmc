@@ -364,7 +364,7 @@ void add_padding(union_typet &type, const namespacet &ns)
   }
 }
 
-void get_complete_type(struct_typet &type, const namespacet &ns)
+void get_complete_struct_type(struct_typet &type, const namespacet &ns)
 {
   for(auto &comp : type.components())
   {
@@ -373,9 +373,12 @@ void get_complete_type(struct_typet &type, const namespacet &ns)
     {
       const symbolt *actual_type = ns.lookup(it_type.identifier());
       assert(actual_type);
-      it_type = actual_type->type;
-      // follow the type recursively to replace all symbolic types
-      get_complete_type(to_struct_type(it_type), ns);
+      if(actual_type->type.is_struct())
+      {
+        it_type = actual_type->type;
+        // follow the type recursively to replace all symbolic types
+        get_complete_struct_type(to_struct_type(it_type), ns);
+      }
     }
   }
 }
