@@ -1031,7 +1031,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     new_type = s.type;
 
     // special case for C++
-    if(sym_already_exist && mode == "C++")
+    if(sym_already_exist && mode == "C++" && !rd.isUnion())
     {
       // replace the copy with a symbolic type
       // otherwise new_type be incomplete in case of object composition
