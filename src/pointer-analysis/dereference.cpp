@@ -1959,18 +1959,29 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
   std::vector<expr2tc> exprs;
   exprs.reserve(num_bytes);
 
-  // Calculating the array index based on the given byte offset
+  /* Calculate the array index based on the given byte offset, the remainder
+   * of the offset gives us the byte number of the indexed array element. */
   expr2tc elem_idx = typecast2tc(
     idx_type,
     div2tc(offset->type, offset, gen_long(offset->type, bytes_per_index)));
   expr2tc zero = gen_zero(offset->type);
   expr2tc elem_offs =
     modulus2tc(offset->type, offset, gen_long(offset->type, bytes_per_index));
+
+  /* While still more bytes are needed, create an index expression into the
+   * array and extract the required number of bytes from it.
+   *
+   * XXX fbrausse: We don't have enough information here to set n to
+   * (bytes_per_index - elem_offs) in the first iteration, so we have to trust
+   * our caller that num_bytes is equal to n when elem_offs could be non-zero.
+   */
   for(unsigned i = 0, n; i < num_bytes; i += n)
   {
     n = std::min(num_bytes, i + bytes_per_index) - i;
     expr2tc the_index = index2tc(subtype, array, elem_idx);
     internal_extract_bytes(the_index, n, elem_offs, exprs);
+    /* After the first iteration elem_offs is always 0 because arrays are stored
+     * contiguously in C. */
     elem_offs = zero;
     elem_idx = add2tc(idx_type, elem_idx, gen_long(idx_type, 1));
   }
