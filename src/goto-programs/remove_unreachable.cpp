@@ -4,14 +4,14 @@
 
 void remove_unreachable(goto_programt &goto_program)
 {
-  std::set<goto_programt::targett> reachable;
-  std::stack<goto_programt::targett> working;
+  std::set<goto_programt::const_targett> reachable;
+  std::stack<goto_programt::const_targett> working;
 
   working.push(goto_program.instructions.begin());
 
   while(!working.empty())
   {
-    goto_programt::targett t = working.top();
+    goto_programt::const_targett t = working.top();
     working.pop();
 
     if(
@@ -19,10 +19,10 @@ void remove_unreachable(goto_programt &goto_program)
       t != goto_program.instructions.end())
     {
       reachable.insert(t);
-      goto_programt::targetst successors;
+      goto_programt::const_targetst successors;
       goto_program.get_successors(t, successors);
 
-      for(goto_programt::targetst::const_iterator s_it = successors.begin();
+      for(goto_programt::const_targetst::const_iterator s_it = successors.begin();
           s_it != successors.end();
           s_it++)
         working.push(*s_it);
