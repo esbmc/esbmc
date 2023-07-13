@@ -1641,14 +1641,7 @@ bool esbmc_parseoptionst::process_goto_program(
     remove_skip(goto_functions);
 
     // remove unreachable code
-    Forall_goto_functions(f_it, goto_functions)
-      remove_unreachable(f_it->second.body);
-
-    // remove skips
-    remove_skip(goto_functions);
-
-    // recalculate numbers, etc.
-    goto_functions.update();
+    remove_unreachable(goto_functions);
 
     // add loop ids
     goto_functions.compute_loop_numbers();
