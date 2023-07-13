@@ -546,6 +546,8 @@ void smtlib_smt_ast::dump() const
 
   ctx->emit_ast(this);
   ctx->emit("%s", "\n");
+  std::string sort_str = ctx->sort_to_string(sort);
+  ctx->emit("sort: %s\n", sort_str.c_str());
   ctx->flush();
 
   ctx_m->emit_opt_output.out_stream = tmp_file;
