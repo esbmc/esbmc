@@ -1,5 +1,5 @@
 #include <goto-programs/remove_unreachable.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <set>
 #include <stack>
 
@@ -21,6 +21,11 @@ void remove_unreachable(goto_programt &goto_program)
 
   working.push(goto_program.instructions.begin());
 
+  // Building a set of reachable instructions. 
+  // An instruction is considered reachable if it is
+  // a successor of another instruction.
+  // Also, the first instruction in the GOTO program is considered to be 
+  // always reachable.
   while(!working.empty())
   {
     goto_programt::const_targett t = working.top();
@@ -51,5 +56,5 @@ void remove_unreachable(goto_programt &goto_program)
   }
 
   // Finally, all introduced SKIPs are now removed
-  remove_skip(goto_program);
+  remove_no_op(goto_program);
 }

@@ -1,16 +1,16 @@
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 
-/// Determine whether the instruction is semantically equivalent to a skip
-/// (no-op).  This includes a skip, but also if(false) goto ..., goto next;
-///  next: ..., and (void)0.
-/// \param body  goto program containing the instruction
-/// \param it  instruction iterator that is tested for being a skip (or
-/// equivalent)
-/// \param ignore_labels  If the caller takes care of moving labels, then even
-/// skip statements carrying labels can be treated as skips (even though they
-/// may carry key information such as error labels).
-/// \return True, iff it is equivalent to a skip.
-bool is_skip(
+// Determine whether the instruction is a no-op.
+// Some examples of such instructions incude: a SKIP,
+// "if(false) goto ...", "goto next; next: ...", (void)0, etc.
+// \param body  goto program containing the instruction
+// \param it  instruction iterator that is tested for being a skip (or
+// equivalent)
+// \param ignore_labels  If the caller takes care of moving labels, then even
+// skip statements carrying labels can be treated as skips (even though they
+// may carry key information such as error labels).
+// \return True, iff it is equivalent to a skip.
+bool is_no_op(
   const goto_programt &body,
   goto_programt::const_targett it,
   bool ignore_labels)
@@ -70,7 +70,7 @@ bool is_skip(
 /// in the range [begin, end)
 /// \param begin  iterator pointing to first instruction to be considered
 /// \param end  iterator pointing beyond last instruction to be considered
-void remove_skip(
+void remove_no_op(
   goto_programt &goto_program,
   goto_programt::targett begin,
   goto_programt::targett end)
@@ -97,7 +97,7 @@ void remove_skip(
       // for collecting labels
       std::list<irep_idt> labels;
 
-      while(is_skip(goto_program, it, true))
+      while(is_no_op(goto_program, it, true))
       {
         // don't remove the last skip statement,
         // it could be a target
@@ -159,16 +159,16 @@ void remove_skip(
       if(begin == last)
         ++begin;
 
-      if(is_skip(goto_program, last) && !last->is_target())
+      if(is_no_op(goto_program, last) && !last->is_target())
         goto_program.instructions.erase(last);
     }
   } while(goto_program.instructions.size() < old_size);
 }
 
 /// remove unnecessary skip statements
-void remove_skip(goto_programt &goto_program)
+void remove_no_op(goto_programt &goto_program)
 {
-  remove_skip(
+  remove_no_op(
     goto_program,
     goto_program.instructions.begin(),
     goto_program.instructions.end());
@@ -177,10 +177,10 @@ void remove_skip(goto_programt &goto_program)
 }
 
 /// remove unnecessary skip statements
-void remove_skip(goto_functionst &goto_functions)
+void remove_no_op(goto_functionst &goto_functions)
 {
   Forall_goto_functions(f_it, goto_functions)
-    remove_skip(
+    remove_no_op(
       f_it->second.body,
       f_it->second.body.instructions.begin(),
       f_it->second.body.instructions.end());

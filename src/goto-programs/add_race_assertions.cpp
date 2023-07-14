@@ -1,5 +1,5 @@
 #include <goto-programs/add_race_assertions.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <goto-programs/rw_set.h>
 #include <pointer-analysis/value_sets.h>
 #include <util/expr_util.h>
@@ -157,7 +157,7 @@ void add_race_assertions(
     }
   }
 
-  remove_skip(goto_program);
+  remove_no_op(goto_program);
 }
 
 void add_race_assertions(
