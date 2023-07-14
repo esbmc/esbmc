@@ -34,7 +34,7 @@ extern "C"
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/write_goto_binary.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
@@ -1633,7 +1633,7 @@ bool esbmc_parseoptionst::process_goto_program(
 #endif
 
     // remove skips
-    remove_skip(goto_functions);
+    remove_no_op(goto_functions);
 
     // remove unreachable code
     remove_unreachable(goto_functions);

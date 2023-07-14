@@ -1,7 +1,7 @@
 #include <cassert>
 #include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/cprover_prefix.h>
@@ -16,7 +16,7 @@
 static bool is_empty(const goto_programt &goto_program)
 {
   forall_goto_program_instructions(it, goto_program)
-    if(!is_skip(goto_program, it))
+    if(!is_no_op(goto_program, it))
       return false;
 
   return true;
@@ -1716,7 +1716,7 @@ void goto_convertt::generate_ifthenelse(
     if(
       is_empty(false_case) ||
       (false_case.instructions.size() == 1 &&
-       is_skip(false_case, false_case.instructions.begin())))
+       is_no_op(false_case, false_case.instructions.begin())))
       return;
   }
 
@@ -1737,7 +1737,7 @@ void goto_convertt::generate_ifthenelse(
     if(
       is_empty(true_case) ||
       (true_case.instructions.size() == 1 &&
-       is_skip(true_case, true_case.instructions.begin())))
+       is_no_op(true_case, true_case.instructions.begin())))
       return;
   }
 
