@@ -243,29 +243,52 @@ void goto_programt::compute_loop_numbers(unsigned int &num)
     }
 }
 
+// This method takes an iterator "target" into the list of instructions
+// and returns a list of iterators "successors" to the successor
+// instructions of "target".
+//
+// In this context, a successor is any instruction that may be
+// executed after the given instruction (i.e., specified by "target").
+// In some cases (see below) we can trivially reject
+// some instructions as successors.
 void goto_programt::get_successors(
   const_targett target,
   const_targetst &successors) const
 {
   successors.clear();
+
+  // The last instruction does not have any successors
   if(target == instructions.end())
     return;
 
   const auto next = std::next(target);
-
   const instructiont &i = *target;
 
   if(i.is_goto())
   {
-    for(auto target : i.targets)
-      successors.emplace_back(target);
+    // GOTO instructions may have multiple successors:
+    // the next instruction in the list + all the instructions
+    // this jump may lead to.
 
+    // If the guard is definitely FALSE, then the corresponding
+    // jump can never occur. Hence, we can ignore all jump targets
+    // as successors. Otherwise, we consider these targets as successors.
+    if(!is_false(i.guard))
+    {
+      for(auto target : i.targets)
+        successors.emplace_back(target);
+    }
+
+    // If the guard is definitely TRUE, then this GOTO
+    // jump always happens. Hence, only one kind of successors
+    // is possible -- the target instructions of the GOTO jump.
     if(!is_true(i.guard) && next != instructions.end())
       successors.push_back(next);
   }
   else if(i.is_return())
   {
-    // The successor is the END_FUNCTION at the end
+    // A RETURN instruction is basically an "unguarded" jump to
+    // the corresponding END_FUNCTION instruction.
     successors.push_back(--instructions.end());
   }
   else if(i.is_assume() || i.is_assert())
