@@ -7,7 +7,7 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/remove_unreachable.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <util/cmdline.h>
 #include <util/message.h>
 #include <util/filesystem.h>
@@ -196,15 +196,11 @@ program goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
 
   namespacet ns(lui.context);
   goto_check(ns, opts, goto_functions);
-  // remove skips
-  remove_skip(goto_functions);
+  // remove no-op's
+  remove_no_op(goto_functions);
 
-  // remove unreachable code
-  Forall_goto_functions(f_it, goto_functions)
-    remove_unreachable(f_it->second.body);
-
-  // remove skips
-  remove_skip(goto_functions);
+  // Remove unreachable code
+  remove_unreachable(goto_functions);
 
   // recalculate numbers, etc.
   goto_functions.update();

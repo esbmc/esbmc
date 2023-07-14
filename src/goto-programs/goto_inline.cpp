@@ -1,6 +1,6 @@
 #include <cassert>
 #include <goto-programs/goto_inline.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <langapi/language_util.h>
 #include <util/base_type.h>
 #include <util/cprover_prefix.h>
@@ -366,7 +366,7 @@ void goto_inlinet::goto_inline_rec(goto_programt &dest, bool full)
 
   if(changed)
   {
-    remove_skip(dest);
+    remove_no_op(dest);
     dest.update();
   }
 }

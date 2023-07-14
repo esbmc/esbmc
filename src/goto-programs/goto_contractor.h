@@ -7,7 +7,7 @@
 #include <util/algorithms.h>
 #include <util/message.h>
 #include <goto-programs/goto_loops.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loopst.h>
