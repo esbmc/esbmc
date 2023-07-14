@@ -200,7 +200,7 @@ protected:
     const clang::CXXMethodDecl &cxxmdd,
     typet &rtn_type);
   bool is_cpyctor(const clang::DeclContext &dcxt);
-  bool is_defaulted_ctor(const clang::DeclContext &dcxt);
+  bool is_defaulted_ctor(const clang::CXXMethodDecl &md);
 
   /*
    * When getting a function call to ctor, we might call the base ctor from a derived class ctor

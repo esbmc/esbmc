@@ -1031,9 +1031,10 @@ bool clang_cpp_convertert::name_param_and_continue(
   const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
   if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
   {
-    if(is_CopyOrMoveOperator(*md) || is_ConstructorOrDestructor(*md))
+    if(
+      (is_CopyOrMoveOperator(*md) && md->isImplicit()) ||
+      (is_ConstructorOrDestructor(*md) && is_defaulted_ctor(*md)))
     {
-      assert(md->isImplicit());
       get_decl_name(*md, name, id);
 
       // name would be just `ref` and id would be "<cpyctor_id>::ref"
@@ -1115,7 +1116,6 @@ bool clang_cpp_convertert::get_decl_ref(
     if(clang_c_convertert::get_decl_ref(decl, new_expr))
       return true;
     const auto *param = llvm::dyn_cast<const clang::ParmVarDecl>(&decl);
-    param->dumpColor();
     if(name_param_and_continue(*param, id, name, new_expr))
       return true;
 
@@ -1479,9 +1479,9 @@ bool clang_cpp_convertert::is_cpyctor(const clang::DeclContext &dcxt)
   return false;
 }
 
-bool clang_cpp_convertert::is_defaulted_ctor(const clang::DeclContext &dcxt)
+bool clang_cpp_convertert::is_defaulted_ctor(const clang::CXXMethodDecl &md)
 {
-  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(&dcxt))
+  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(&md))
     if(ctor->isDefaulted())
       return true;
 
