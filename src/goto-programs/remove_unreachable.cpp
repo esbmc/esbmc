@@ -21,10 +21,10 @@ void remove_unreachable(goto_programt &goto_program)
 
   working.push(goto_program.instructions.begin());
 
-  // Building a set of reachable instructions. 
+  // Building a set of reachable instructions.
   // An instruction is considered reachable if it is
   // a successor of another instruction.
-  // Also, the first instruction in the GOTO program is considered to be 
+  // Also, the first instruction in the GOTO program is considered to be
   // always reachable.
   while(!working.empty())
   {
