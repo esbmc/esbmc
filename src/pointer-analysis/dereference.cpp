@@ -699,13 +699,6 @@ expr2tc dereferencet::build_reference_to(
   {
     assert(alignment != 0);
 
-    if(!is_symbol2t(deref_expr))
-    {
-      // The expression being dereferenced isn't just a symbol: it might have
-      // all kind of things messing with alignment in there. We could interpret
-      // it as future work.
-      alignment = 1;
-    }
     final_offset =
       pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
   }
