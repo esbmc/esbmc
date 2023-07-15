@@ -641,8 +641,8 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
     "Expected 2 operands in "
     "valuation_pair_list from smtlib solver");
   std::list<sexpr>::iterator it = response.sexpr_list.begin();
-  sexpr &symname [[maybe_unused]] = *it++;
-  sexpr &respval = *it++;
+  /* sexpr &symname = *it; */
+  sexpr &respval = *++it;
 
   // Attempt to read an integer.
   BigInt m;
