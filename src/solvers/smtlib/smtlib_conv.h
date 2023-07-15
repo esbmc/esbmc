@@ -119,17 +119,19 @@ enum smt_func_kind
   SMT_FUNC_FLOAT2BV,
 };
 
-class sexpr
+struct sexpr
 {
-public:
-  sexpr() : token(0)
-  {
-    sexpr_list.clear();
-  }
-  unsigned int token; // If zero, then an sexpr list
+  sexpr() = default;
+  sexpr(sexpr &&) noexcept = default;
+  sexpr &operator=(sexpr &&) noexcept = default;
+
+  unsigned int token = 0; // If zero, then an sexpr list
   std::list<sexpr> sexpr_list;
   std::string data; // Text rep of parsed token.
 };
+
+static_assert(std::is_nothrow_move_constructible_v<sexpr>);
+static_assert(std::is_nothrow_move_assignable_v<sexpr>);
 
 class smtlib_smt_sort : public smt_sort
 {
