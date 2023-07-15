@@ -403,19 +403,24 @@ unsigned int smtlib_convt::emit_terminal_ast(
     // Construct a bitvector
     {
       // Irritatingly, the number may be higher than the actual bitwidth permits.
-      assert(
-        sort->get_data_width() <= 64 &&
-        "smtlib printer assumes no numbers more "
-        "than 64 bits wide, sorry");
-      uint64_t theval = ast->intval.to_uint64();
-      if(sort->get_data_width() < 64)
+      size_t n = sort->get_data_width();
+      assert(n > 0);
+      if(n <= 64)
       {
-        uint64_t mask = 1ULL << sort->get_data_width();
-        mask -= 1;
-        theval &= mask;
+        uint64_t theval = ast->intval.to_uint64();
+        if(n < 64)
+        {
+          uint64_t mask = 1ULL << n;
+          mask -= 1;
+          theval &= mask;
+        }
+        ss << "(_ bv" << theval << " " << n << ")";
       }
-      assert(sort->get_data_width() != 0);
-      ss << "(_ bv" << theval << " " << sort->get_data_width() << ")";
+      else
+      {
+        /* Two's complement, n bits wide */
+        ss << "#b" << integer2binary(ast->intval, n);
+      }
       output = ss.str();
       return 0;
     }
