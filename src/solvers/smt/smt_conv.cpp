@@ -1785,8 +1785,6 @@ expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
 
   smt_sortt s = convert_sort(arr_sort);
   size_t domain_width = s->get_domain_width();
-  if(domain_width == config.ansi_c.int_width)
-    return idx;
 
   // Otherwise, we need to extract the lower bits out of this.
   return typecast2tc(
