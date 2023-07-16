@@ -121,6 +121,7 @@ int smtlibparse(int startval);
 extern int smtlib_send_start_code;
 extern sexpr *smtlib_output;
 
+#if 0
 static std::string unquote(const std::string_view &s)
 {
   size_t n = s.size();
@@ -140,6 +141,7 @@ static std::string unquote(const std::string_view &s)
   }
   return r;
 }
+#endif
 
 smt_convt *create_new_smtlib_solver(
   const optionst &options,
@@ -262,6 +264,7 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
   smtlib_tokin = in_stream;
 
   // Fetch solver name and version.
+#if 0
   emit("%s", "(get-info :name)\n");
   flush();
   smtlib_send_start_code = 1;
@@ -319,6 +322,10 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
     solver_name,
     solver_version,
     solver_proc_pid);
+#else
+  log_status(
+    "Using external solver cmd '{}' with PID {}", cmd, solver_proc_pid);
+#endif
 #endif
 }
 
