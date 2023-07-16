@@ -367,6 +367,7 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
     return "Real";
   case SMT_SORT_FIXEDBV:
   case SMT_SORT_BV:
+  case SMT_SORT_BVFP:
     ss << "(_ BitVec " << sort->get_data_width() << ")";
     return ss.str();
   case SMT_SORT_ARRAY:
