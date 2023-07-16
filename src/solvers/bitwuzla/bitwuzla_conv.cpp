@@ -704,9 +704,7 @@ expr2tc bitwuzla_convt::get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
-  const bitw_smt_ast *ast = dynamic_cast<const bitw_smt_ast *>(array);
-  if(ast == nullptr)
-    throw type2t::symbolic_type_excp();
+  const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(array);
 
   size_t size;
   BitwuzlaTerm **indicies, **values, *default_value;

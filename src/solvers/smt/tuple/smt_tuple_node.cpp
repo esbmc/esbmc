@@ -223,6 +223,15 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
   return outstruct;
 }
 
+expr2tc smt_tuple_node_flattener::tuple_get_array_elem(
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
+{
+  return array_conv.get_array_elem(
+    array, index, ctx->get_flattened_array_subtype(subtype));
+}
+
 smt_astt smt_tuple_node_flattener::tuple_array_of(
   const expr2tc &init_val,
   unsigned long array_size)

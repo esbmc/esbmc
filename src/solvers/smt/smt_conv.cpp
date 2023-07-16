@@ -2200,10 +2200,14 @@ expr2tc smt_convt::get(const expr2tc &expr)
       smt_astt array = convert_ast(src_value);
 
       // Retrieve the element
-      res = array_api->get_array_elem(
-        array,
-        to_constant_int2t(idx).value.to_uint64(),
-        get_flattened_array_subtype(res->type));
+      if(is_tuple_array_ast_type(src_value->type))
+        res = tuple_api->tuple_get_array_elem(
+          array, to_constant_int2t(idx).value.to_uint64(), res->type);
+      else
+        res = array_api->get_array_elem(
+          array,
+          to_constant_int2t(idx).value.to_uint64(),
+          get_flattened_array_subtype(res->type));
     }
 
     // TODO: Give up, then what?
@@ -2438,9 +2442,17 @@ expr2tc smt_convt::get_array(const type2tc &type, smt_astt array)
   type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
   std::vector<expr2tc> fields;
 
+  bool uses_tuple_api = is_tuple_array_ast_type(type);
+
   for(size_t i = 0; i < (1ULL << w); i++)
   {
-    fields.push_back(array_api->get_array_elem(array, i, ar.subtype));
+    expr2tc elem;
+    if(uses_tuple_api)
+      elem =
+        tuple_api->tuple_get_array_elem(array, i, to_array_type(type).subtype);
+    else
+      elem = array_api->get_array_elem(array, i, ar.subtype);
+    fields.push_back(elem);
   }
 
   return constant_array2tc(arr_type, fields);

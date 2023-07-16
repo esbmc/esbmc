@@ -200,6 +200,18 @@ smt_astt smt_tuple_sym_flattener::tuple_array_of(
   return newsym;
 }
 
+expr2tc smt_tuple_sym_flattener::tuple_get_array_elem(
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
+{
+  /* TODO: missing implementation */
+  throw type2t::symbolic_type_excp();
+  (void)array;
+  (void)index;
+  (void)subtype;
+}
+
 smt_sortt smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
 {
   if(is_array_type(type))
