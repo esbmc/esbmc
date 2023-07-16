@@ -677,15 +677,8 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
 {
   assert(emit_proc);
 
-  if(dynamic_cast<const array_ast *>(array))
-  {
-    assert(dynamic_cast<smt_tuple_node_flattener *>(tuple_api));
-    return static_cast<smt_tuple_node_flattener *>(tuple_api)
-      ->array_conv.get_array_elem(array, index, t);
-  }
-
   // This should always be a symbol.
-  const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(array);
+  const smtlib_smt_ast *sa = to_solver_smt_ast<smtlib_smt_ast>(array);
   assert(sa->kind == SMT_FUNC_SYMBOL && "Non-symbol in smtlib get_array_elem");
   std::string name = sa->symname;
 

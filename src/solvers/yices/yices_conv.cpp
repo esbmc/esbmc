@@ -841,6 +841,14 @@ expr2tc yices_convt::get_array_elem(
   return get_by_ast(subtype, container);
 }
 
+expr2tc yices_convt::tuple_get_array_elem(
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
+{
+  return get_array_elem(array, index, get_flattened_array_subtype(subtype));
+}
+
 void yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
 {
   if(sort->id == SMT_SORT_ARRAY)

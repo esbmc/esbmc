@@ -1279,6 +1279,14 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
   return get_by_ast(subtype, new_ast(e, convert_sort(subtype)));
 }
 
+expr2tc z3_convt::tuple_get_array_elem(
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
+{
+  return get_array_elem(array, index, get_flattened_array_subtype(subtype));
+}
+
 void z3_smt_ast::dump() const
 {
   std::string ast(Z3_ast_to_string(a.ctx(), a));

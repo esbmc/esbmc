@@ -477,9 +477,12 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
   if(!is_unbounded_array(a->sort) && (index < mast->array_fields.size()))
     return ctx->get_by_ast(subtype, mast->array_fields[index]);
 
-  // This is an array that was not previously converted, therefore doesn't
-  // appear in the valuation table. Therefore, all its values are free.
-  assert(mast->base_array_id >= array_valuation.size());
+  if(mast->base_array_id >= array_valuation.size())
+  {
+    // This is an array that was not previously converted, therefore doesn't
+    // appear in the valuation table. Therefore, all its values are free.
+    return expr2tc();
+  }
 
   // Fetch all the indexes
   const idx_record_containert &indexes = array_indexes[mast->base_array_id];
@@ -500,7 +503,11 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
       break;
   }
 
-  assert(it == indexes.end());
+  if(it == indexes.end())
+  {
+    // Then this index wasn't modelled in any way.
+    return expr2tc();
+  }
 
   // We've found an index; pick its value out, convert back to expr.
   const ast_vect &solver_values =
