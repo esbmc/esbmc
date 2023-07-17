@@ -925,7 +925,7 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   this_param.cmt_identifier(id);
 
   // Add to the list of params
-  params.push_back(this_param);
+  params.insert(params.begin(), this_param);
 
   // If the method is not defined, we don't need to add it's parameter
   // to the context, they will never be used
