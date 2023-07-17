@@ -12,7 +12,7 @@
 #undef yyerror
 #define yyerror smtliberror
 
-#define YYMAXDEPTH 100000
+#define YYMAXDEPTH 250000
 
 int smtliblex(int startsym);
 int smtliberror(int startsym, const std::string &error);
