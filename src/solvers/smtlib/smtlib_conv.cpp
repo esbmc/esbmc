@@ -952,7 +952,7 @@ bool smtlib_convt::get_bool(smt_astt a)
 const std::string smtlib_convt::solver_text()
 {
   if(emit_proc)
-    return emit_proc.solver_name + " version " + emit_proc.solver_version;
+    return "'" + options.get_option("smtlib-solver-prog") + "'";
 
   if(emit_opt_output)
     return "Text output";
