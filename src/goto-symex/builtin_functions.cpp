@@ -1129,48 +1129,46 @@ static inline expr2tc gen_value_by_byte(
   return gen_byte_expression(type, src, value, num_of_bytes, offset);
 }
 
+/**
+ * @brief This function will try to initialize the object pointed by
+ * the address in a smarter way, minimizing the number of assignments.
+ * This is intend to optimize the behaviour of a memset operation:
+ *
+ * memset(void* ptr, int value, size_t num_of_bytes)
+ *
+ * - ptr can point to anything. We have to add checks!
+ * - value is interpreted as a uchar.
+ * - num_of_bytes must be known. If it is nondet, we will bump the call
+ *
+ * In plain C, the objective of a call such as:
+ *
+ * int a;
+ * memset(&a, value, num)
+ *
+ * Would generate something as:
+ *
+ * int temp = 0;
+ * for(int i = 0; i < num; i++) temp = byte | (temp << 8);
+ * a = temp;
+ *
+ * This is just a simplification for understanding though. During the
+ * instrumentation size checks will be added, and also, the original
+ * bytes from `a` that were not overwritten must be mantained!
+ * Arrays will need to be added up to an nth element.
+ *
+ * In ESBMC though, we have 2 main methods of dealing with memory objects:
+ *
+ * A. Heap objects, which are valid/invalid. They are the easiest to deal
+ *    with, as the dereference will actually return a big array of char to us.
+ *    For this case, we can just overwrite the members directly with the value
+ *
+ * B. Stack objects, which are typed. It will be hard, this will require operations
+ *    which depends on the base type and also on padding.
+ */
 void goto_symext::intrinsic_memset(
   reachability_treet &art,
   const code_function_call2t &func_call)
 {
-  /**
-     * @brief This function will try to initialize the object pointed by
-     * the address in a smarter way, minimizing the number of assignments.
-     * This is intend to optimize the behaviour of a memset operation:
-     *
-     * memset(void* ptr, int value, size_t num_of_bytes)
-     *
-     * - ptr can point to anything. We have to add checks!
-     * - value is interpreted as a uchar.
-     * - num_of_bytes must be known. If it is nondet, we will bump the call
-     *
-     * In plain C, the objective of a call such as:
-     *
-     * int a;
-     * memset(&a, value, num)
-     *
-     * Would generate something as:
-     *
-     * int temp = 0;
-     * for(int i = 0; i < num; i++) temp = byte | (temp << 8);
-     * a = temp;
-     *
-     * This is just a simplification for understanding though. During the
-     * instrumentation size checks will be added, and also, the original
-     * bytes from `a` that were not overwritten must be mantained!
-     * Arrays will need to be added up to an nth element.
-     *
-     * In ESBMC though, we have 2 main methods of dealing with memory objects:
-     *
-     * A. Heap objects, which are valid/invalid. They are the easiest to deal
-     *    with, as the dereference will actually return a big array of char to us.
-     *    For this case, we can just overwrite the members directly with the value
-     *
-     * B. Stack objects, which are typed. It will be hard, this will require operations
-     *    which depends on the base type and also on padding.
-     *
-     */
-
   // 1. Check for the functions parameters and do the deref and processing!
 
   assert(func_call.operands.size() == 3 && "Wrong memset signature");
@@ -1196,9 +1194,9 @@ void goto_symext::intrinsic_memset(
   };
 
   /* Get the arguments
-     * arg0: ptr to object
-     * arg1: int for the new byte value
-     * arg2: number of bytes to be set */
+   * arg0: ptr to object
+   * arg1: int for the new byte value
+   * arg2: number of bytes to be set */
   expr2tc arg0 = func_call.operands[0];
   expr2tc arg1 = func_call.operands[1];
   expr2tc arg2 = func_call.operands[2];
@@ -1209,10 +1207,10 @@ void goto_symext::intrinsic_memset(
   dereference(deref, dereferencet::INTERNAL);
 
   /* Preconditions for the optimization:
-     * A: It should point to someplace
-     * B: byte itself should be renamed properly
-     * C: Number of bytes cannot be symbolic
-     * D: This is a simplification. So don't run with --no-simplify */
+   * A: It should point to someplace
+   * B: byte itself should be renamed properly
+   * C: Number of bytes cannot be symbolic
+   * D: This is a simplification. So don't run with --no-simplify */
   cur_state->rename(arg1);
   cur_state->rename(arg2);
   if(
