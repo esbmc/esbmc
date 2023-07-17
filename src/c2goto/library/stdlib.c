@@ -4,7 +4,6 @@
 #include <limits.h>
 #include <errno.h>
 
-
 #include <assert.h>
 
 #undef errno
@@ -214,8 +213,6 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
-
-
 void *ldv_malloc(size_t size)
 {
   return malloc(size);
@@ -225,8 +222,6 @@ void *ldv_zalloc(size_t size)
 {
   return malloc(size);
 }
-
-
 
 size_t strlcat(char *dst, const char *src, size_t siz)
 {
