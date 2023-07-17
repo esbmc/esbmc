@@ -19,12 +19,12 @@ void get_complete_struct_type(struct_typet &type, const namespacet &ns)
   }
 }
 
-bool array_type_contains_symbolic(
+bool type_contains_symbolic(
   const typet &type,
   typet &complete_type,
   const namespacet &ns)
 {
-  // check whether we have symbolic types in array type
+  // take care of symbolic struct types in an array type
   if(type.id() == "array")
   {
     complete_type = type;
@@ -41,6 +41,21 @@ bool array_type_contains_symbolic(
         get_complete_struct_type(to_struct_type(sub_type), ns);
       }
     }
+    return true;
+  }
+  // take care of symbolic struct type itself
+  else if(type.id() == "symbol")
+  {
+    const symbolt *the_type = ns.lookup(type.identifier());
+    assert(the_type);
+    if(the_type->type.is_struct())
+    {
+      // replace the symbolic subtype then
+      // follow the type recursively to replace all symbolic types
+      complete_type = the_type->type;
+      get_complete_struct_type(to_struct_type(complete_type), ns);
+    }
+
     return true;
   }
 

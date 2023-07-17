@@ -12,9 +12,9 @@
 // Replaces the symbolic struct type with the complete struct type.
 void get_complete_struct_type(struct_typet &type, const namespacet &ns);
 
-// If an array type's subtype is symbolic struct type, replace it with
+// If a type contains symbolic struct type, replace it with
 // the complete struct type
-bool array_type_contains_symbolic(
+bool type_contains_symbolic(
   const typet &type,
   typet &complete_type,
   const namespacet &ns);

@@ -478,6 +478,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
+  if(id == "c:@beans")
+    printf("Got it\n");
   bool aggregate_value_init = is_aggregate_type(vd.getType());
 
   if(
@@ -487,7 +489,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     // the type might contains symbolic types,
     // replace them with complete types before generating zero initialization
     typet complete_type;
-    bool contains_symbolic = array_type_contains_symbolic(t, complete_type, ns);
+    bool contains_symbolic = type_contains_symbolic(t, complete_type, ns);
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
