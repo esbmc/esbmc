@@ -14,7 +14,7 @@ void get_complete_struct_type(struct_typet &type, const namespacet &ns);
 
 // If a type contains symbolic struct type, replace it with
 // the complete struct type
-bool type_contains_symbolic(
+bool contains_symbolic_struct_types(
   const typet &type,
   typet &complete_type,
   const namespacet &ns);
