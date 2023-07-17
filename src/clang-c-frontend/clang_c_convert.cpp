@@ -489,7 +489,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     // the type might contains symbolic types,
     // replace them with complete types before generating zero initialization
     typet complete_type;
-    bool contains_symbolic = contains_symbolic_struct_types(t, complete_type, ns);
+    bool contains_symbolic =
+      contains_symbolic_struct_types(t, complete_type, ns);
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
@@ -1971,7 +1972,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // the type might contains symbolic types,
     // replace them with complete types before getting the initializations
     typet complete_type;
-    bool contains_symbolic = contains_symbolic_struct_types(t, complete_type, ns);
+    bool contains_symbolic =
+      contains_symbolic_struct_types(t, complete_type, ns);
     if(contains_symbolic)
       t = complete_type;
 
