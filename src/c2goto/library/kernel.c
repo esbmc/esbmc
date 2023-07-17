@@ -8,7 +8,6 @@
 
 #include <assert.h>
 
-
 typedef unsigned int gfp_t;
 
 static void check_gfp_flags(gfp_t flags)
@@ -79,8 +78,8 @@ unsigned long copy_to_user(void *to, void *from, unsigned long size)
   assert(from != NULL);
   assert(size <= PAGE_SIZE);
 
-  assert( (char*) to >= user_memory);
-  assert( (char*) from >= kernel_memory);
+  assert((char *)to >= user_memory);
+  assert((char *)from >= kernel_memory);
 
   //copy memory from kernel space to user space
   //simulate the copy operation by memcpy
@@ -97,9 +96,8 @@ unsigned long copy_from_user(void *to, void *from, unsigned long size)
   assert(from != NULL);
   assert(size <= PAGE_SIZE);
 
-
-  assert( (char*) to >= kernel_memory);
-  assert( (char*) from >= user_memory);
+  assert((char *)to >= kernel_memory);
+  assert((char *)from >= user_memory);
   //copy memory from user space to kernel space
   //simulate the copy operation by memcpy
   memcpy(to, from, size);
