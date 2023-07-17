@@ -3,8 +3,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <errno.h>
-#include <ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h>
-#include <ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h>
+
 
 #include <assert.h>
 
@@ -215,102 +214,7 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
-typedef unsigned int gfp_t;
 
-static void check_gfp_flags(gfp_t flags)
-{
-  // Define all valid flags
-  gfp_t valid_flags =
-    __GFP_DMA | __GFP_HIGHMEM | __GFP_DMA32 | __GFP_ZERO | __GFP_NOWARN |
-    __GFP_REPEAT | __GFP_NOFAIL | __GFP_NORETRY | __GFP_MEMALLOC | __GFP_COMP |
-    __GFP_NO_KSWAPD | __GFP_OTHER_NODE | __GFP_WRITE | __GFP_HARDWALL |
-    __GFP_THISNODE | __GFP_ATOMIC | __GFP_ACCOUNT | __GFP_RECLAIM | __GFP_IO |
-    __GFP_FS | GFP_KERNEL | GFP_KERNEL_ACCOUNT | GFP_NOIO | GFP_NOFS |
-    GFP_USER | GFP_DMA | GFP_DMA32 | GFP_HIGHUSER;
-
-  // Check if any flag is set that is not in the list of valid flags
-  assert((flags & ~valid_flags) == 0);
-}
-static void *__kmalloc(size_t size, gfp_t flags)
-{
-  return malloc(size);
-}
-
-static void *__kmalloc_large(size_t size, gfp_t flags)
-{
-  (void)flags; // Ignore flags.
-  return malloc(size);
-}
-
-void *kmalloc(int size, int flags)
-{
-  // Check size greater than  zero and less than max
-  assert(size > 0 && size <= MAX_ALLOC_SIZE);
-  //check flags greater than zero
-  assert(flags > 0);
-
-  //check if flags have corresponding valid values
-  check_gfp_flags(flags);
-  // If the size is larger than the KMALLOC_MAX_CACHE_SIZE, then handle in kmalloc_large
-  if(size > KMALLOC_MAX_CACHE_SIZE)
-  {
-    // Call to kmalloc_large or equivalent function can be here.
-    return __kmalloc_large(size, flags);
-  }
-
-  (void)flags; // Ignore flags.
-  return __kmalloc(size, flags);
-}
-
-void kfree(const void *ptr)
-{
-  free((void *)ptr);
-}
-unsigned long copy_to_user(void *to, void *from, unsigned size)
-{
-  //checking on the passed parameters of kernel function
-  //the source in kernel space and destination in user space must be valid
-  assert(to != NULL);
-  assert(from != NULL);
-  assert(size <= PAGE_SIZE);
-
-  //check on user space memory boundry
-  assert(
-    (char *)to < user_memory + USER_MEMORY_SPACE && (char *)to >= user_memory);
-  //check on kernel space memory boundry
-  assert(
-    (char *)from < kernel_memory + KERNEL_MEMORY_SPACE &&
-    (char *)from >= kernel_memory);
-  //copy memory from kernel space to user space
-  //simulate the copy operation by memcpy
-  memcpy(to, from, size);
-
-  return 0;
-}
-
-unsigned long copy_from_user(void *to, void *from, unsigned size)
-{
-  //the source in user space and destination in kernel space must be valid
-  //avoid dereferencing null pointer
-  assert(to != NULL);
-  assert(from != NULL);
-  assert(size <= PAGE_SIZE);
-
-  //check on kernel space memory boundry
-  assert(
-    (char *)to < kernel_memory + KERNEL_MEMORY_SPACE &&
-    (char *)to >= kernel_memory);
-  //check on user space memory boundry
-  assert(
-    (char *)from < user_memory + USER_MEMORY_SPACE &&
-    (char *)from >= user_memory);
-
-  //copy memory from user space to kernel space
-  //simulate the copy operation by memcpy
-  memcpy(to, from, size);
-
-  return 0;
-}
 
 void *ldv_malloc(size_t size)
 {
@@ -322,16 +226,7 @@ void *ldv_zalloc(size_t size)
   return malloc(size);
 }
 
-void *kmalloc_array(size_t n, size_t size, gfp_t flags)
-{
-  return __kmalloc(n * size, flags);
-}
 
-void *kcalloc(size_t n, size_t size, gfp_t flags)
-{
-  (void)flags;
-  return calloc(n, size);
-}
 
 size_t strlcat(char *dst, const char *src, size_t siz)
 {
