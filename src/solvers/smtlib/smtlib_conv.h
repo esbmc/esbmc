@@ -125,7 +125,7 @@ struct sexpr
   sexpr(sexpr &&) noexcept = default;
   sexpr &operator=(sexpr &&) noexcept = default;
 
-  unsigned int token = 0; // If zero, then an sexpr list
+  int token = 0; // If zero, then an sexpr list
   std::list<sexpr> sexpr_list;
   std::string data; // Text rep of parsed token.
 };

@@ -612,6 +612,24 @@ smt_convt::resultt smtlib_convt::dec_solve()
   }
 }
 
+static BigInt interp_numeric(const sexpr &respval, bool is_signed)
+{
+  yytokentype tok = static_cast<yytokentype>(respval.token);
+  switch(tok)
+  {
+  case TOK_DECIMAL:
+    return string2integer(respval.data);
+  case TOK_HEXNUM:
+    return string2integer(respval.data.substr(2), 16);
+  case TOK_BINNUM:
+    return binary2integer(respval.data.substr(2), is_signed);
+  default:
+    log_error(
+      "interpreting token type " + std::to_string(tok) + " as an integer");
+    abort();
+  }
+}
+
 BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
 {
   assert(emit_proc);
@@ -655,26 +673,7 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
   sexpr &respval = *++it;
 
   // Attempt to read an integer.
-  BigInt m;
-  if(respval.token == TOK_DECIMAL)
-  {
-    m = string2integer(respval.data);
-  }
-  else if(respval.token == TOK_NUMERAL)
-  {
-    log_error("Numeral value for integer symbol from smtlib solver");
-    abort();
-  }
-  else if(respval.token == TOK_HEXNUM)
-  {
-    std::string data = respval.data.substr(2);
-    m = string2integer(data, 16);
-  }
-  else if(respval.token == TOK_BINNUM)
-  {
-    std::string data = respval.data.substr(2);
-    m = binary2integer(data, is_signed);
-  }
+  BigInt m = interp_numeric(respval, is_signed);
 
   delete smtlib_output;
   return m;
@@ -950,7 +949,16 @@ bool smtlib_convt::get_bool(smt_astt a)
   else if(second.token == TOK_KW_FALSE)
     result = false;
   else
-    abort();
+  {
+    /* Boolector sometimes returns #b0 or #b1 for Bool-sorted constants */
+    BigInt m = interp_numeric(second, false);
+    if(m == 0)
+      result = false;
+    else if(m == 1)
+      result = true;
+    else
+      abort();
+  }
 
   delete smtlib_output;
   return result;
