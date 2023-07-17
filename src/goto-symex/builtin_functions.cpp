@@ -1018,6 +1018,8 @@ static inline expr2tc gen_value_by_byte(
           value,
           bytes_to_write,
           offset_left);
+        if(!result->datatype_members[i])
+          return expr2tc();
         bytes_left =
           bytes_left <= base_size ? 0 : bytes_left - (base_size - offset_left);
         offset_left = 0;
@@ -1122,7 +1124,7 @@ static inline expr2tc gen_value_by_byte(
     result->init_field = name;
     result->datatype_members[0] =
       gen_value_by_byte(member_type, member, value, num_of_bytes, offset);
-    return result;
+    return result->datatype_members[0] ? result : expr2tc();
   }
 
   // Found a primitive! Just apply the function
@@ -1303,8 +1305,22 @@ void goto_symext::intrinsic_memset(
       return;
     }
 
-    auto number_of_offset = to_constant_int2t(item_offset).value.to_uint64();
-    auto type_size = type_byte_size(item_object->type).to_uint64();
+    uint64_t number_of_offset =
+      to_constant_int2t(item_offset).value.to_uint64();
+
+    /* This fails for VLAs or dynamically allocated arrays.
+     * XXX: We could consider not failing and encoding the is_out_bounds
+     *      condition below symbolically instead. */
+    uint64_t type_size;
+    try
+    {
+      type_size = type_byte_size(item_object->type).to_uint64();
+    }
+    catch(const array_type2t::dyn_sized_array_excp &)
+    {
+      bump_call();
+      return;
+    }
 
     if(is_code_type(item_object->type))
     {
