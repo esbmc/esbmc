@@ -412,7 +412,6 @@ unsigned int smtlib_convt::emit_terminal_ast(
   case SMT_FUNC_BVINT:
     // Construct a bitvector
     {
-      // Irritatingly, the number may be higher than the actual bitwidth permits.
       size_t n = sort->get_data_width();
       assert(n > 0);
       /* Two's complement, n bits wide */
