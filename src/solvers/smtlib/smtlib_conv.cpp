@@ -415,22 +415,8 @@ unsigned int smtlib_convt::emit_terminal_ast(
       // Irritatingly, the number may be higher than the actual bitwidth permits.
       size_t n = sort->get_data_width();
       assert(n > 0);
-      if(n <= 64)
-      {
-        uint64_t theval = ast->intval.to_uint64();
-        if(n < 64)
-        {
-          uint64_t mask = 1ULL << n;
-          mask -= 1;
-          theval &= mask;
-        }
-        ss << "(_ bv" << theval << " " << n << ")";
-      }
-      else
-      {
-        /* Two's complement, n bits wide */
-        ss << "#b" << integer2binary(ast->intval, n);
-      }
+      /* Two's complement, n bits wide */
+      ss << "#b" << integer2binary(ast->intval, n);
       output = ss.str();
       return 0;
     }
