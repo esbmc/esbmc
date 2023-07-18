@@ -1,0 +1,66 @@
+name: Build ESBMC
+
+on:
+    workflow_call:
+      inputs:
+        operating-system:
+            required: true
+            type: string
+        build-flags:
+            required: true
+            type: string
+        testing:
+            required: true
+            type: boolean
+
+jobs:
+    build-unix:
+        name: Build ESBMC (${{ inputs.operating-system }})
+        if: ${{ inputs.operating-system != 'windows-latest' }}
+        runs-on: ${{ inputs.operating-system }}
+        steps:
+        - uses: actions/checkout@v2
+        - name: Build ESBMC
+          run: ./scripts/build.sh ${{ inputs.build-flags }}
+        - uses: actions/upload-artifact@v1
+          with:
+            name: release-${{ inputs.operating-system }}
+            path: ./release
+        - name: Run tests
+          if: ${{ inputs.testing == true }}
+          run: cd build/ && ctest -j4 --output-on-failure --progress .
+
+    build-windows:
+        name: Build ESBMC (Windows)
+        if: ${{ inputs.operating-system == 'windows-latest' }}
+        runs-on: windows-latest
+        steps:
+        - name: Set up Python
+          uses: actions/setup-python@v2
+          with:
+            python-version: 3.8
+        - name: check python
+          run: python --version
+        - name: Update vcpkg
+          run: |
+            vcpkg.exe update
+            cd C:/vcpkg
+            git.exe pull
+            .\bootstrap-vcpkg.bat
+        - name: Make git use LF only
+          run: |
+            git config --system core.autocrlf false
+            git config --system core.eol lf
+        - uses: actions/checkout@v2
+        - name: Configure ESBMC
+          run: ./scripts/build.ps1
+        - uses: actions/upload-artifact@v2
+          with:
+            name: release-windows-latest
+            path: C:/deps/esbmc
+        - name: Run Tests
+          if: ${{ inputs.testing == true }}
+          run: |
+            cd build
+            ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
+        
