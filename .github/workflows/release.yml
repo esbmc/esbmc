@@ -2,7 +2,7 @@ name: Upload Release Asset
 on:
   schedule:
     #      M H - - D => 06:00 of Monday 
-  - cron: '0 6 * * 0'
+  - cron: '0 6 * * 1'
   workflow_dispatch:
 
 jobs:
