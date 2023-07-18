@@ -1,4 +1,4 @@
-name: Build ESBMC
+name: Pull Request Checks
 
 on: [pull_request]
 
@@ -28,56 +28,47 @@ jobs:
         name: Developer-Manual
         path: manual.pdf    
 
-  build-unix:
+  build:
     strategy:
       matrix:
-        os: [ubuntu-latest]
-    name: Build ESBMC (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+        os: [ubuntu-latest, windows-latest]
+    uses: ./.github/workflows/build.yml
+    with:
+      operating-system: ${{ matrix.os }}
+      build-flags: '-b Debug -e On'
+      testing: true
+      
+    # Check project with clang-format
+  code-style:
+    name: Check C/C++ code-style
+    runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v2
-    - name: Build ESBMC
-      run: ./scripts/build.sh -b Debug -e On
-    - uses: actions/upload-artifact@v1
-      with:
-        name: release-unix
-        path: ./release
-    - name: Run tests
-      run: cd build/ && ctest -j4 --output-on-failure --progress .
-    - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
-      with:
-        name: csmith-unix
-        path: ./build/csmith-error
-        if-no-files-found: ignore
-
-  build-windows:
-    name: Build ESBMC with Z3 (Windows)
-    runs-on: windows-latest
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install libtinfo-dev
+    - name: Download Clang 11
+      run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+    - name: Extract Clang 11
+      run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
+    - name: Run clang-format (src)
+      run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | grep -v src/ansi-c/cpp | grep -v src/clang-c-frontend/headers/ | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
+    - name: Run clang-format (tests)
+      run: find unit -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh  | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
+    - name: Throws error if changes were made
+      run: git diff --exit-code --ignore-cr-at-eol
+      
+  cmake-lint:
+    name: Check CMake modules
+    runs-on: ubuntu-20.04
+    continue-on-error: true # TODO: Eventually this will be removed
     steps:
-    - name: Set up Python
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.8
       uses: actions/setup-python@v2
       with:
         python-version: 3.8
-    - name: check python
-      run: python --version
-    - name: Update vcpkg
-      run: |
-        vcpkg.exe update
-        cd C:/vcpkg
-        git.exe pull
-        .\bootstrap-vcpkg.bat
-    - name: Make git use LF only
-      run: |
-        git config --system core.autocrlf false
-        git config --system core.eol lf
-    - uses: actions/checkout@v2
-    - name: Configure ESBMC
-      run: ./scripts/build.ps1
-    - uses: actions/upload-artifact@v2
-      with:
-          name: release-windows
-          path: C:/deps/esbmc
-    - name: Run Tests
-      run: |
-        cd build
-        ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
+    - name: Install cmakelint
+      run: pip install cmakelint
+    - name: Run CMake Lint
+      run: find . -iname *.cmake -o -iname CMakeLists.txt | grep -v build | xargs cmakelint || echo "failure"
+      
