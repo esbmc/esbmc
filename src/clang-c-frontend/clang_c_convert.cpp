@@ -1003,18 +1003,12 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     std::string id, name;
     get_decl_name(rd, name, id);
 
-    // does symbol already exist before we go through the getter?
-    bool sym_already_exist = context.find_symbol(id);
-
-    // avoid unnecessary conversion if symbol already exists
-    if(!sym_already_exist)
-      if(get_struct_union_class(rd))
-        return true;
-
-    symbolt &s = *context.find_symbol(id);
-    // For the time being we just copy the entire type.
-    // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
-    new_type = s.type;
+    if(auto *symbol = context.find_symbol(id))
+      // For the time being we just copy the entire type.
+      // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
+      new_type = symbol->type;
+    else
+      new_type = symbol_typet(id);
 
     break;
   }
