@@ -277,6 +277,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "do not do overflow check for scanf/fscanf with unlimited character "
      "width."},
+    {"no-vla-size-check",
+     NULL,
+     "do not check whether the size of VLAs overflows the available address "
+     "space"},
     {"nan-check", NULL, "check floating-point for NaN"},
     {"memory-leak-check", NULL, "enable memory leak check"},
     {"overflow-check", NULL, "enable arithmetic over- and underflow check"},

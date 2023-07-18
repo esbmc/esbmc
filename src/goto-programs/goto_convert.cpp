@@ -543,10 +543,12 @@ void goto_convertt::generate_dynamic_size_vla(
 {
   assert(var.type().is_array());
 
-  auto assert_not = [&, int_encoding = options.get_bool_option("int-encoding")](
-                      irep_idt op_id, const exprt &e) {
-    /* these constraints are pointless with --ir */
-    if(int_encoding)
+  bool disable_check = options.get_bool_option("no-vla-size-check");
+  /* these constraints are pointless with --ir as they'll be thrown away during
+   * smt-conv anyway; they'll just slow us down */
+  disable_check |= options.get_bool_option("int-encoding");
+  auto assert_not = [&](irep_idt op_id, const exprt &e) {
+    if(disable_check)
       return;
 
     exprt ovfl(op_id, bool_type());
