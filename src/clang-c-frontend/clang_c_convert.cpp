@@ -711,8 +711,8 @@ bool clang_c_convertert::get_function_param(
   param.type() = param_type;
   param.cmt_base_name(name);
 
-  if(name.empty() && name_param_and_continue(pd, id, name, param))
-    return true;
+  if(id.empty() && name.empty())
+    name_param_and_continue(pd, id, name, param);
 
   locationt location_begin;
   get_location_from_decl(pd, location_begin);
@@ -750,7 +750,7 @@ bool clang_c_convertert::get_function_param(
   return false;
 }
 
-bool clang_c_convertert::name_param_and_continue(
+void clang_c_convertert::name_param_and_continue(
   const clang::ParmVarDecl &,
   std::string &,
   std::string &,
@@ -762,7 +762,6 @@ bool clang_c_convertert::name_param_and_continue(
    * when the function is defined, the exprt is filled for the sake of
    * beautification
    */
-  return false;
 }
 
 bool clang_c_convertert::get_type(

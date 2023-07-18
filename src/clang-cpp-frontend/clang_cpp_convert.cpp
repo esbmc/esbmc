@@ -1001,15 +1001,12 @@ bool clang_cpp_convertert::get_function_params(
   return false;
 }
 
-bool clang_cpp_convertert::name_param_and_continue(
+void clang_cpp_convertert::name_param_and_continue(
   const clang::ParmVarDecl &pd,
   std::string &id,
   std::string &name,
   exprt &param)
 {
-  if(!(id.empty() && name.empty()))
-    return false;
-
   /*
    * A C++ function may contain unnamed function parameter(s).
    * The base method of clang_c_converter doesn't care about
@@ -1026,8 +1023,6 @@ bool clang_cpp_convertert::name_param_and_continue(
    *     (done as part of the clang_c_converter's get_function_param flow)
    */
 
-  assert(id.empty() && name.empty());
-
   const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
   if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
   {
@@ -1038,18 +1033,15 @@ bool clang_cpp_convertert::name_param_and_continue(
       get_decl_name(*md, name, id);
 
       // name would be just `ref` and id would be "<cpyctor_id>::ref"
-      name = name + cpyctor_constref_suffix;
-      id = id + "::" + cpyctor_constref_suffix;
+      name = name + "::" + constref_suffix;
+      id = id + "::" + constref_suffix;
 
       // sync param name
       param.cmt_base_name(name);
       param.identifier(id);
       param.name(name);
-      return false;
     }
   }
-
-  return clang_c_convertert::name_param_and_continue(pd, id, name, param);
 }
 
 template <typename SpecializationDecl>
@@ -1115,9 +1107,14 @@ bool clang_cpp_convertert::get_decl_ref(
     // first follow the base conversion flow to fill new_expr
     if(clang_c_convertert::get_decl_ref(decl, new_expr))
       return true;
+
     const auto *param = llvm::dyn_cast<const clang::ParmVarDecl>(&decl);
-    if(name_param_and_continue(*param, id, name, new_expr))
-      return true;
+    assert(param);
+
+    get_decl_name(*param, name, id);
+
+    if(id.empty() || name.empty())
+      name_param_and_continue(*param, id, name, new_expr);
 
     return false;
   }
@@ -1486,23 +1483,6 @@ bool clang_cpp_convertert::is_defaulted_ctor(const clang::CXXMethodDecl &md)
       return true;
 
   return false;
-}
-
-void clang_cpp_convertert::get_cpyctor_name(
-  const clang::CXXConstructorDecl &cxxctor,
-  std::string &id,
-  std::string &name,
-  exprt &param)
-{
-  assert(cxxctor.isImplicit());
-  get_decl_name(cxxctor, name, id);
-
-  // name would be just `ref` and id would be "<cpyctor_id>::ref"
-  name.assign(cpyctor_constref_suffix);
-  id = id + "::" + cpyctor_constref_suffix;
-
-  // sync param name
-  param.cmt_base_name(name);
 }
 
 void clang_cpp_convertert::annotate_ctor_dtor_rtn_type(
