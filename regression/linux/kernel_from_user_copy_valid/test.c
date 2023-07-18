@@ -1,8 +1,6 @@
-#define USER_MEMORY_SPACE 10000
-#define KERNEL_MEMORY_SPACE 10000
+#include <ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h>
 
-char user_memory[USER_MEMORY_SPACE]; //mock user memory
-char kernel_memory[KERNEL_MEMORY_SPACE];//mock user memory
+
 int main()
 {
     // Non-deterministic choice of indices

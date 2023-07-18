@@ -1,8 +1,7 @@
 #include <stddef.h>
-#define USER_MEMORY_SPACE 10000
-#define KERNEL_MEMORY_SPACE 10000
-char user_memory[USER_MEMORY_SPACE]; //mock user memory
-char kernel_memory[KERNEL_MEMORY_SPACE];//mock user memory
+#include <ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h>
+
+
 void modify_ptr_null(char** ptr)
 {
     *ptr = NULL;
