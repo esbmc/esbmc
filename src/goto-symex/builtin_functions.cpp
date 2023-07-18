@@ -869,7 +869,7 @@ static inline expr2tc gen_byte_expression(
 {
   /**
    * The idea of this expression is to compute the object value
-   * in the case where every byte `value` was set set up until num_of_bytes
+   * in the case where every byte `value` was set up until num_of_bytes
    *
    * Note: this function assumes that all memory checks have been done!
    *
@@ -914,6 +914,10 @@ static inline expr2tc gen_byte_expression(
    * the computation of the object-value and initial mask representation
    *
    */
+
+  /* Can't set string constants */
+  if(is_string_type(type))
+    return expr2tc();
 
   if(is_pointer_type(type))
     return gen_byte_expression_byte_update(
