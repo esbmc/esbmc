@@ -14,8 +14,6 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
-#include <clang-c-frontend/padding.h>
-#include <clang-c-frontend/symbolic_types.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -377,16 +375,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if(get_struct_union_class_methods_decls(*rd_def, to_struct_type(t)))
     return true;
 
-  if(rd.isUnion())
-  {
-    add_padding(to_union_type(t), ns);
-  }
-  else
-  {
-    get_complete_struct_type(to_struct_type(t), ns);
-    add_padding(to_struct_type(t), ns);
-  }
-
   t.location() = location_begin;
   added_symbol.type = t;
   return false;
@@ -484,16 +472,9 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     symbol.static_lifetime && !symbol.is_extern &&
     (!vd.hasInit() || aggregate_value_init))
   {
-    // the type might contains symbolic types,
-    // replace them with complete types before generating zero initialization
-    typet complete_type;
-    bool contains_symbolic =
-      contains_symbolic_struct_types(t, complete_type, ns);
-
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    symbol.value =
-      contains_symbolic ? gen_zero(complete_type, true) : gen_zero(t, true);
+    symbol.value = gen_zero(t, true);
     symbol.value.zero_initializer(true);
   }
 
@@ -1023,19 +1004,9 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
         return true;
 
     symbolt &s = *context.find_symbol(id);
+    // For the time being we just copy the entire type.
+    // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
     new_type = s.type;
-
-    // special case for C++
-    if(sym_already_exist && mode == "C++" && !rd.isUnion())
-    {
-      // replace the copy with a symbolic type
-      // otherwise new_type be incomplete in case of object composition
-      // See issue 991 and 1162 for more details
-      // By doing so, we also make the symbol table more compact, more
-      // readable and easier to debug
-      assert(new_type.is_struct() || new_type.is_union());
-      get_ref_to_struct_type(new_type);
-    }
 
     break;
   }
@@ -1958,14 +1929,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     exprt inits;
-
-    // the type might contains symbolic types,
-    // replace them with complete types before getting the initializations
-    typet complete_type;
-    bool contains_symbolic =
-      contains_symbolic_struct_types(t, complete_type, ns);
-    if(contains_symbolic)
-      t = complete_type;
 
     // Structs/unions/arrays put the initializer on operands
     if(t.is_struct() || t.is_array() || t.is_vector())
