@@ -135,7 +135,7 @@ protected:
    *  name: name for this function parameter
    *  param: ESBMC's IR representing the function parameter
    */
-  virtual bool name_param_and_continue(
+  virtual void name_param_and_continue(
     const clang::ParmVarDecl &pd,
     std::string &id,
     std::string &name,
