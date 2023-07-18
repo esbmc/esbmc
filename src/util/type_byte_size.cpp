@@ -213,7 +213,7 @@ expr2tc type_byte_size_bits_expr(const type2tc &type)
     simplify(subsize);
 
     if(is_constant_int2t(arrsize) && is_constant_int2t(subsize))
-      return gen_ulong(
+      return bitsize(
         to_constant_int2t(subsize).value * to_constant_int2t(arrsize).value);
 
     type2tc t = bitsize_type2();
