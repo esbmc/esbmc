@@ -478,8 +478,6 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
-  if(id == "c:@beans")
-    printf("Got it\n");
   bool aggregate_value_init = is_aggregate_type(vd.getType());
 
   if(
