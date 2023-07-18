@@ -1486,7 +1486,7 @@ void value_sett::dump() const
 {
   std::ostringstream oss;
   output(oss);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }
 
 void value_sett::obj_numbering_ref(unsigned int num)
