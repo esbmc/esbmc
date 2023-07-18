@@ -27,17 +27,15 @@ static inline void get_symbols(
 
 static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
 {
-  expr->Foreach_operand(
-    [&state](expr2tc &e) -> void
-    {
-      tvt result = interval_domaint::eval_boolean_expression(e, state);
-      if(result.is_true())
-        e = gen_true_expr();
-      else if(result.is_false())
-        e = gen_false_expr();
-      else
-        simplify_guard(e, state);
-    });
+  expr->Foreach_operand([&state](expr2tc &e) -> void {
+    tvt result = interval_domaint::eval_boolean_expression(e, state);
+    if(result.is_true())
+      e = gen_true_expr();
+    else if(result.is_false())
+      e = gen_false_expr();
+    else
+      simplify_guard(e, state);
+  });
   simplify(expr);
 }
 
@@ -173,8 +171,7 @@ void dump_intervals(
   forall_goto_program_instructions(i_it, goto_function.body)
   {
     const interval_domaint &d = interval_analysis[i_it];
-    auto print_vars = [&out, &i_it](const auto &map)
-    {
+    auto print_vars = [&out, &i_it](const auto &map) {
       for(const auto &interval : map)
       {
         // "state,var,min,max,bot,top";
