@@ -4,12 +4,15 @@ on:
     workflow_call:
       inputs:
         operating-system:
+            description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
             required: true
             type: string
         build-flags:
+            description: "Flags to be passed to build.sh script"
             required: true
             type: string
         testing:
+            description: "Whether to run tests (regression) for this build"
             required: true
             type: boolean
 
