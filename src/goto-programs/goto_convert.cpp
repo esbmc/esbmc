@@ -545,8 +545,8 @@ void goto_convertt::generate_dynamic_size_vla(
 
   bool disable_check = options.get_bool_option("no-vla-size-check");
   /* these constraints are pointless with --ir as they'll be thrown away during
-   * smt-conv anyway; they'll just slow us down */
-  disable_check |= options.get_bool_option("int-encoding");
+   * smt-conv anyway, but let's keep the "int-encoding" option for the backends
+   * only */
   auto assert_not = [&](irep_idt op_id, const exprt &e) {
     if(disable_check)
       return;
