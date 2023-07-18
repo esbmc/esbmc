@@ -82,20 +82,13 @@ on:
 
 jobs:
 
+
   build-unix:
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-    name: Build ESBMC (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    steps:
-    - uses: actions/checkout@v2
-    - name: Build ESBMC
-      run: ./scripts/build.sh -b Release -e OFF
-    - uses: actions/upload-artifact@v3
-      with:
-        name: release-linux
-        path: ./build/src/esbmc/esbmc
+    uses: ./.github/workflows/build.yml
+    with:
+      operating-system: ubuntu-latest
+      build-flags: '-b Release -e Off'
+      testing: false     
 
   run-benchexec:
     runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
@@ -105,7 +98,7 @@ jobs:
       - name: Download Linux Build
         uses: actions/download-artifact@v1
         with:
-          name: release-linux
+          name: release-ubuntu-latest
           path: ./
       - name: Checkout code
         uses: actions/checkout@master
