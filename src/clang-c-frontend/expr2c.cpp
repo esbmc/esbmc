@@ -143,9 +143,11 @@ std::string expr2ct::convert_rec(
   }
   else if(src.id() == "incomplete_struct")
   {
-    std::string dest = q + "struct";
+    std::string dest = q;
     const std::string &tag = src.tag().as_string();
-    if(tag != "")
+    if(tag == "")
+      dest += "struct";
+    else
       dest += " " + tag;
     dest += d;
     return dest;

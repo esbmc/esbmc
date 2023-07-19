@@ -51,6 +51,10 @@ const typet &namespacet::follow(const typet &src) const
 
   const symbolt *symbol = lookup(src);
 
+  /* If its cyclic it means we don't actually have a definition of this type,
+   * only declarations. In that case we can do nothing and shouldn't even
+   * have been called. */
+
   // let's hope it's not cyclic...
   while(true)
   {
