@@ -4,13 +4,12 @@
 // Some examples of such instructions incude: a SKIP,
 // "if(false) goto ...", "goto next; next: ...", (void)0, etc.
 //
-// \param body  goto program containing the instruction
-// \param it  instruction iterator that is tested for being a skip (or
-// equivalent)
-// \param ignore_labels  If the caller takes care of moving labels, then even
-// skip statements carrying labels can be treated as skips (even though they
+// \param body - goto program containing the instruction
+// \param it - instruction iterator that is tested for being a no-op
+// \param ignore_labels - if the caller takes care of moving labels, then even
+// no-op statements carrying labels can be treated as no-op's (even though they
 // may carry key information such as error labels).
-// \return True, iff it is equivalent to a skip.
+// \return True, iff it is a no-op.
 bool is_no_op(
   const goto_programt &body,
   goto_programt::const_targett it,
@@ -33,7 +32,7 @@ bool is_no_op(
     if(next_it == body.instructions.end())
       return false;
 
-    // A branch to the next instruction is a skip
+    // A branch to the next instruction is a no-op
     // We also require the guard to be 'true'
     return is_true(it->guard) && it->has_target() &&
            it->get_target() == next_it;
@@ -78,7 +77,7 @@ void remove_no_op(
   goto_programt::targett end)
 {
   // This needs to be a fixed-point, as
-  // removing a skip can turn a goto into a skip.
+  // removing a no-op can turn a goto into a no-op.
   std::size_t old_size;
 
   do
