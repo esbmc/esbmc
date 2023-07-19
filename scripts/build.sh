@@ -14,6 +14,10 @@ ubuntu_setup () {
     sudo apt-get update && sudo apt-get install -y clang clang-tidy python-is-python3 csmith python3 git ccache unzip wget curl libcsmith-dev gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev pkg-config python3-pip python3-toml python-is-python3 openjdk-11-jdk &&
     BASE_ARGS="$BASE_ARGS -DENABLE_OLD_FRONTEND=On  -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On" &&
     SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=ON"
+    # Hack: Boolector might fail to download some dependencies using curl (maybe we should patch it?)
+    # curl: (60) SSL: no alternative certificate subject name matches target host name 'codeload.github.com'
+    # As a unsafe workaround... we can just tell curl to be unsafe
+    echo "insecure" > $HOME/.curlrc
 }
 
 # macOS setup (pre-config)
