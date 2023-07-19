@@ -1402,6 +1402,19 @@ bool esbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
   return false;
 }
 
+// This method performs a wide range of actions that can be broadly divided
+// into 3 main steps:
+//
+//  1) creating a GOTO program,
+//  2) processing the GOTO program, and
+//  3) outputting the GOTO program.
+//
+// This method is typically used as the second stage
+// (right after parsing the command line options) by the verification methods
+// (i.e., BMC, k-induction, etc).
+//
+// \param options - various options used during the above steps,
+// \param goto_functions - the "created and processed" GOTO program.
 bool esbmc_parseoptionst::get_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -1448,6 +1461,14 @@ bool esbmc_parseoptionst::get_goto_program(
   return false;
 }
 
+// This method creates a GOTO program from the source specified by the
+// command line options. A GOTO program can be created:
+//
+//  1) from a GOTO binary file,
+//  2) by parsing the input program files.
+//
+// \param options - options to be passed through,
+// \param goto_functions - this is where the created GOTO program is stored.
 bool esbmc_parseoptionst::create_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -1497,6 +1518,9 @@ bool esbmc_parseoptionst::create_goto_program(
   return false;
 }
 
+// This method creates a GOTO program from the given GOTO binary.
+//
+// \param goto_functions - this is where the created GOTO program is stored.
 bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
 {
   log_progress("Reading GOTO program from file");
@@ -1512,6 +1536,10 @@ bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
   return false;
 }
 
+// This method creates a GOTO program by parsing the input program files.
+//
+// \param options - options to be passed to the program parser,
+// \param goto_functions - this is where the created GOTO program is stored.
 bool esbmc_parseoptionst::parse_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -1575,6 +1603,19 @@ bool esbmc_parseoptionst::parse_goto_program(
   return false;
 }
 
+// This method performs various analyses and transformations
+// on the given GOTO program. They involve all the techniques that we class
+// as "static analyses" - performed on the given GOTO program before it is
+// symbolically executed. Examples of such techniques include:
+//
+//  - interval analysis,
+//  - removal of unreachable code,
+//  - preprocessing the program for k-induction,
+//  - applying GOTO contractors,
+//  - ...
+//
+// \param options - various options used by the processing methods,
+// \param goto_functions - reference to the GOTO program to be processed.
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -1700,6 +1741,16 @@ bool esbmc_parseoptionst::process_goto_program(
   return false;
 }
 
+// This method provides different output methods for the given GOTO program.
+// Depending on the provided options this method can:
+//
+//  - output the given GOTO program as text,
+//  - translate the provided GOTO program into C,
+//  - create a GOTO binary from this GOTO program,
+//  - methods outputting some additional information of the GOTO program.
+//
+// \param options - various options setting the output methods,
+// \param goto_functions - the GOTO program to be output.
 bool esbmc_parseoptionst::output_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
