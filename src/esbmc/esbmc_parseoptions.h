@@ -37,7 +37,16 @@ protected:
   get_goto_program(optionst &options, goto_functionst &goto_functions);
 
   virtual bool
+  create_goto_program(optionst &options, goto_functionst &goto_functions);
+
+  virtual bool
+  parse_goto_program(optionst &options, goto_functionst &goto_functions);
+
+  virtual bool
   process_goto_program(optionst &options, goto_functionst &goto_functions);
+
+  virtual bool
+  output_goto_program(optionst &options, goto_functionst &goto_functions);
 
   int doit_k_induction();
   int doit_k_induction_parallel();
