@@ -301,7 +301,7 @@ void add_padding(struct_typet &type, const namespacet &ns)
     }
 
     type2tc thetype = migrate_type(it_type);
-    offset += type_byte_size(thetype);
+    offset += type_byte_size(thetype, &ns);
   }
 
   // any explicit alignment for the struct?
@@ -343,7 +343,7 @@ void add_padding(union_typet &type, const namespacet &ns)
   for(const auto &c : type.components())
   {
     type2tc thetype = migrate_type(c.type());
-    size_bits = std::max(size_bits, type_byte_size_bits(thetype));
+    size_bits = std::max(size_bits, type_byte_size_bits(thetype, &ns));
   }
 
   // Is the union packed?
