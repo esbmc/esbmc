@@ -772,7 +772,7 @@ void goto_convertt::remove_function_call(
   const typet &ftype = call.function().type();
   if(ftype.return_type().id() == "constructor")
   {
-    // for copy constructor, we need to add the implicit `this` as the first argument,
+    // for constructor, we need to add the implicit `this` as the first argument,
     // so convert to:
     // BLAH(&return_value$_BLAH$1, ...)
     side_effect_expr_function_callt ctor_call;
