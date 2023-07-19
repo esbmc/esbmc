@@ -1407,70 +1407,15 @@ bool esbmc_parseoptionst::get_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
 {
-  fine_timet parse_start = current_time();
   try
   {
-    if(cmdline.args.size() == 0)
-    {
-      log_error("Please provide a program to verify");
+    fine_timet create_start = current_time();
+    if(create_goto_program(options, goto_functions))
       return true;
-    }
-
-    // Ahem
-    migrate_namespace_lookup = new namespacet(context);
-
-    // If the user is providing the GOTO functions, we don't need to parse
-    if(cmdline.isset("binary"))
-    {
-      log_progress("Reading GOTO program from file");
-
-      if(read_goto_binary(goto_functions))
-        return true;
-    }
-    else
-    {
-      // Parsing
-      if(parse())
-        return true;
-
-      if(cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
-      {
-        assert(language_files.filemap.size());
-        languaget &language = *language_files.filemap.begin()->second.language;
-        std::ostringstream oss;
-        language.show_parse(oss);
-        log_status("{}", oss.str());
-        if(cmdline.isset("parse-tree-only"))
-          return true;
-      }
-
-      // Typecheking (old frontend) or adjust (clang frontend)
-      if(typecheck())
-        return true;
-      if(final())
-        return true;
-
-      // we no longer need any parse trees or language files
-      clear_parse();
-
-      if(
-        cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
-      {
-        std::ostringstream oss;
-        show_symbol_table_plain(oss);
-        log_status("{}", oss.str());
-        if(cmdline.isset("symbol-table-only"))
-          return true;
-      }
-
-      log_progress("Generating GOTO Program");
-
-      goto_convert(context, options, goto_functions);
-    }
-
-    fine_timet parse_stop = current_time();
+    fine_timet create_stop = current_time();
     log_status(
-      "GOTO program creation time: {}s", time2string(parse_stop - parse_start));
+      "GOTO program creation time: {}s",
+      time2string(create_stop - create_start));
 
     fine_timet process_start = current_time();
     if(process_goto_program(options, goto_functions))
@@ -1479,6 +1424,8 @@ bool esbmc_parseoptionst::get_goto_program(
     log_status(
       "GOTO program processing time: {}s",
       time2string(process_stop - process_start));
+    if(output_goto_program(options, goto_functions))
+      return true;
   }
 
   catch(const char *e)
@@ -1502,50 +1449,58 @@ bool esbmc_parseoptionst::get_goto_program(
   return false;
 }
 
-void esbmc_parseoptionst::preprocessing()
+bool esbmc_parseoptionst::create_goto_program(
+  optionst &options,
+  goto_functionst &goto_functions)
 {
   try
   {
-    if(cmdline.args.size() != 1)
+    if(cmdline.args.size() == 0)
     {
-      log_error("Please provide one program to preprocess");
-      return;
+      log_error("Please provide a program to verify");
+      return true;
     }
 
-    std::string filename = cmdline.args[0];
+    // Ahem
+    migrate_namespace_lookup = new namespacet(context);
 
-    // To test that the file exists,
-    std::ifstream infile(filename.c_str());
-    if(!infile)
+    // If the user is providing the GOTO functions, we don't need to parse
+    if(cmdline.isset("binary"))
     {
-      log_error("failed to open input file");
-      return;
+      if(read_goto_binary(goto_functions))
+        return true;
     }
-#ifdef ENABLE_OLD_FRONTEND
-    std::ostringstream oss;
-    if(c_preprocess(filename, oss, false))
-      log_error("PREPROCESSING ERROR");
-    log_status("{}", oss.str());
-#endif
+    else
+    {
+      if(parse_goto_program(options, goto_functions))
+        return true;
+    }
   }
+
   catch(const char *e)
   {
     log_error("{}", e);
+    return true;
   }
 
   catch(const std::string &e)
   {
     log_error("{}", e);
+    return true;
   }
 
   catch(std::bad_alloc &)
   {
     log_error("Out of memory");
+    return true;
   }
+
+  return false;
 }
 
 bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
 {
+  log_progress("Reading GOTO program from file");
   for(const auto &arg : _cmdline.args)
   {
     if(::read_goto_binary(arg, context, goto_functions))
@@ -1553,6 +1508,69 @@ bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
       log_error("Failed to open `{}'", arg);
       return true;
     }
+  }
+
+  return false;
+}
+
+bool esbmc_parseoptionst::parse_goto_program(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  try
+  {
+    if(parse())
+      return true;
+
+    if(cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
+    {
+      assert(language_files.filemap.size());
+      languaget &language = *language_files.filemap.begin()->second.language;
+      std::ostringstream oss;
+      language.show_parse(oss);
+      log_status("{}", oss.str());
+      if(cmdline.isset("parse-tree-only"))
+        return true;
+    }
+
+    // Typecheking (old frontend) or adjust (clang frontend)
+    if(typecheck())
+      return true;
+    if(final())
+      return true;
+
+    // we no longer need any parse trees or language files
+    clear_parse();
+
+    if(cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
+    {
+      std::ostringstream oss;
+      show_symbol_table_plain(oss);
+      log_status("{}", oss.str());
+      if(cmdline.isset("symbol-table-only"))
+        return true;
+    }
+
+    log_progress("Generating GOTO Program");
+    goto_convert(context, options, goto_functions);
+  }
+
+  catch(const char *e)
+  {
+    log_error("{}", e);
+    return true;
+  }
+
+  catch(const std::string &e)
+  {
+    log_error("{}", e);
+    return true;
+  }
+
+  catch(std::bad_alloc &)
+  {
+    log_error("Out of memory");
+    return true;
   }
 
   return false;
@@ -1664,6 +1682,36 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp;
       tmp.add_false_asserts(goto_functions);
     }
+  }
+
+  catch(const char *e)
+  {
+    log_error("{}", e);
+    return true;
+  }
+
+  catch(const std::string &e)
+  {
+    log_error("{}", e);
+    return true;
+  }
+
+  catch(std::bad_alloc &)
+  {
+    log_error("Out of memory");
+    return true;
+  }
+
+  return false;
+}
+
+bool esbmc_parseoptionst::output_goto_program(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  try
+  {
+    namespacet ns(context);
 
     // show it?
     if(cmdline.isset("show-loops"))
@@ -1735,13 +1783,49 @@ bool esbmc_parseoptionst::process_goto_program(
     return true;
   }
 
+  return false;
+}
+
+void esbmc_parseoptionst::preprocessing()
+{
+  try
+  {
+    if(cmdline.args.size() != 1)
+    {
+      log_error("Please provide one program to preprocess");
+      return;
+    }
+
+    std::string filename = cmdline.args[0];
+
+    // To test that the file exists,
+    std::ifstream infile(filename.c_str());
+    if(!infile)
+    {
+      log_error("failed to open input file");
+      return;
+    }
+#ifdef ENABLE_OLD_FRONTEND
+    std::ostringstream oss;
+    if(c_preprocess(filename, oss, false))
+      log_error("PREPROCESSING ERROR");
+    log_status("{}", oss.str());
+#endif
+  }
+  catch(const char *e)
+  {
+    log_error("{}", e);
+  }
+
+  catch(const std::string &e)
+  {
+    log_error("{}", e);
+  }
+
   catch(std::bad_alloc &)
   {
     log_error("Out of memory");
-    return true;
   }
-
-  return false;
 }
 
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
