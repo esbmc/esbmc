@@ -1632,14 +1632,9 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_functions, ns, context, options, value_set_analysis);
 #endif
 
-    // remove skips
     remove_no_op(goto_functions);
-
-    // remove unreachable code
     remove_unreachable(goto_functions);
-
-    // add loop ids
-    goto_functions.compute_loop_numbers();
+    goto_functions.update();
 
     if(cmdline.isset("data-races-check"))
     {
