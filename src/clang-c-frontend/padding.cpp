@@ -147,6 +147,9 @@ static struct_typet::componentst::iterator pad(
 
 void add_padding(struct_typet &type, const namespacet &ns)
 {
+  /* components only exist for complete types */
+  assert(!type.incomplete());
+
   struct_typet::componentst &components = type.components();
 
   // First make bit-fields appear on byte boundaries
@@ -330,6 +333,9 @@ void add_padding(struct_typet &type, const namespacet &ns)
 
 void add_padding(union_typet &type, const namespacet &ns)
 {
+  /* components only exist for complete types */
+  assert(!type.incomplete());
+
   BigInt max_alignment_bits = alignment(type, ns) * config.ansi_c.char_width;
   BigInt size_bits = 0;
 

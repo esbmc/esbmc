@@ -557,26 +557,31 @@ void clang_c_adjust::adjust_type(typet &type)
       abort();
     }
 
-    typet new_type = symbol.type;
-
-    struct_union_typet &the_type = to_struct_union_type(new_type);
-
-    struct_union_typet::componentst new_components;
-
-    for(auto &f : the_type.components())
+    if(!symbol.type.incomplete())
     {
-      adjust_expr(f);
-      new_components.push_back(f);
+      /* components only exist for complete types */
+
+      typet new_type = symbol.type;
+
+      struct_union_typet &the_type = to_struct_union_type(new_type);
+
+      struct_union_typet::componentst new_components;
+
+      for(auto &f : the_type.components())
+      {
+        adjust_expr(f);
+        new_components.push_back(f);
+      }
+
+      std::swap(the_type.components(), new_components);
+
+      if(new_type.is_union())
+        add_padding(to_union_type(new_type), ns);
+      else
+        add_padding(to_struct_type(new_type), ns);
+
+      std::swap(type, new_type);
     }
-
-    std::swap(the_type.components(), new_components);
-
-    if(new_type.is_union())
-      add_padding(to_union_type(new_type), ns);
-    else
-      add_padding(to_struct_type(new_type), ns);
-
-    std::swap(type, new_type);
   }
 }
 

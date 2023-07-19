@@ -329,6 +329,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   std::string symbol_name = symbol.id.as_string();
   symbol.is_type = true;
 
+  assert(!context.find_symbol(symbol_name));
+
   // We have to add the struct/union/class to the context before converting its
   // fields because there might be recursive struct/union/class (pointers) and
   // the code at get_type, case clang::Type::Record, needs to find the correct
@@ -336,14 +338,15 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   // contain the fields, which are added to the symbol later on this method.
   move_symbol_to_context(symbol);
 
+  // Now get the symbol back to continue the conversion
+  symbolt &added_symbol = *context.find_symbol(symbol_name);
+  added_symbol.type.incomplete(true);
+
   // Don't continue to parse if it doesn't have a complete definition
   // Try to get the definition
   clang::RecordDecl *rd_def = rd.getDefinition();
   if(!rd_def)
     return false;
-
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
 
   // We have to add fields before methods as the fields are likely to be used
   // in the methods
@@ -378,6 +381,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
   t.location() = location_begin;
   added_symbol.type = t;
+
   return false;
 }
 
@@ -1003,12 +1007,16 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     std::string id, name;
     get_decl_name(rd, name, id);
 
+    get_struct_union_class(rd);
+
     if(auto *symbol = context.find_symbol(id))
       // For the time being we just copy the entire type.
       // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
       new_type = symbol->type;
     else
+    {
       new_type = symbol_typet(id);
+    }
 
     break;
   }
