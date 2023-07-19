@@ -136,9 +136,23 @@ bool clang_c_maint::clang_main()
       const symbolt &argc_symbol = *ns.lookup("argc'");
       const symbolt &argv_symbol = *ns.lookup("argv'");
 
-      // assume argc is at least one
       exprt one = from_integer(1, argc_symbol.type);
 
+      exprt add("+", uint_type());
+      add.copy_to_operands(symbol_expr(argc_symbol), one); // argc + 1
+
+      exprt mult("*", uint_type());
+      exprt char_pointer_size = from_integer(
+        config.ansi_c.pointer_width() / config.ansi_c.char_width, uint_type());
+      mult.copy_to_operands(
+        add, char_pointer_size); // (argc + 1) * sizeof(char *)
+
+      // Adjust __ESBMC_alloc_size as argv is handled as dynamic array
+      exprt dynamic_size("dynamic_size", size_type());
+      dynamic_size.copy_to_operands(gen_address_of(symbol_expr(argv_symbol)));
+      init_code.copy_to_operands(code_assignt(dynamic_size, mult));
+
+      // assume argc is at least one
       exprt ge(">=", bool_type());
       ge.copy_to_operands(symbol_expr(argc_symbol), one);
 
@@ -153,6 +167,8 @@ bool clang_c_maint::clang_main()
         max = power(2, atoi(argc_symbol.type.width().c_str())) - 1;
       else
         assert(false);
+
+      max /= config.ansi_c.pointer_width() / 8;
 
       exprt max_minus_one = from_integer(max - 1, argc_symbol.type);
 
