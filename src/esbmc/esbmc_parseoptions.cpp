@@ -1300,6 +1300,7 @@ int esbmc_parseoptionst::do_forward_condition(
   auto res = do_bmc(bmc);
 
   // Restore the no assertion flag, before checking the other steps
+
   opts.set_option("no-assertions", no_assertions);
 
   switch(res)
@@ -1585,6 +1586,10 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
       cmdline.isset("k-induction-parallel"))
     {
+      // remove skips before doing k-induction
+      // it seems to fix some issues
+      remove_skip(goto_functions);
+      
       goto_k_induction(goto_functions);
     }
 
