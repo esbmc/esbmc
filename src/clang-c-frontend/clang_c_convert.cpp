@@ -299,29 +299,27 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   std::string id, name;
   get_decl_name(rd, name, id);
 
-  // Check if the symbol is already added to the context, do nothing if it is
-  // already in the context.
-  if(context.find_symbol(id) != nullptr)
-    return false;
-
-  // TODO: Fix me when we have a test case using C++ union.
-  //       A C++ union can have member functions but not virtual functions.
-  //       Just use struct_typet for C++?
-  struct_union_typet t;
-  if(rd.isUnion())
-    t = union_typet();
-  else
-    t = struct_typet();
-  t.tag(name);
-
   locationt location_begin;
   get_location_from_decl(rd, location_begin);
+
+  // Check if the symbol is already added to the context, do nothing if it is
+  // already in the context.
+  symbolt *sym = context.find_symbol(id);
+  if(sym)
+    return false;
+
+  /* First put a symbol with a symbolic type into the context, then resolve
+   * all subtypes (which might refer to this symbol and copy its type),
+   * and finally set this symbol's correctly resolved type. */
+
+  symbol_typet sym_t(id);
+  sym_t.location() = location_begin;
 
   symbolt symbol;
   get_default_symbol(
     symbol,
     get_modulename_from_path(location_begin.file().as_string()),
-    t,
+    sym_t,
     name,
     id,
     location_begin);
@@ -329,24 +327,30 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   std::string symbol_name = symbol.id.as_string();
   symbol.is_type = true;
 
-  assert(!context.find_symbol(symbol_name));
-
   // We have to add the struct/union/class to the context before converting its
   // fields because there might be recursive struct/union/class (pointers) and
   // the code at get_type, case clang::Type::Record, needs to find the correct
   // type (itself). Note that the type is incomplete at this stage, it doesn't
   // contain the fields, which are added to the symbol later on this method.
-  move_symbol_to_context(symbol);
+  sym = move_symbol_to_context(symbol);
 
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
-  added_symbol.type.incomplete(true);
+  // TODO: Fix me when we have a test case using C++ union.
+  //       A C++ union can have member functions but not virtual functions.
+  //       Just use struct_typet for C++?
+  struct_union_typet t(rd.isUnion() ? "union" : "struct");
+  t.tag(name);
+  t.location() = location_begin;
 
   // Don't continue to parse if it doesn't have a complete definition
   // Try to get the definition
   clang::RecordDecl *rd_def = rd.getDefinition();
   if(!rd_def)
+  {
+    t.id("incomplete_" + t.id().as_string());
+    t.incomplete(true);
+    sym->type = t;
     return false;
+  }
 
   // We have to add fields before methods as the fields are likely to be used
   // in the methods
@@ -376,11 +380,14 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
+  /* If this is a recursively defined type, we'll accumulate some symbol_typet
+   * members here. */
   if(get_struct_union_class_methods_decls(*rd_def, to_struct_type(t)))
     return true;
 
-  t.location() = location_begin;
-  added_symbol.type = t;
+  /* We successfully constructed the type of this symbol; overwrite the
+   * symbol_typet with the now-complete type definition. */
+  sym->type = t;
 
   return false;
 }
