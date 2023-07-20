@@ -432,7 +432,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   if(get_type(vd.getType(), t))
     return true;
 
-  // Check if we annotated it to be have an infinity size
+  // Check if we annotated it to have an infinity size
   bool no_slice = false;
   if(vd.hasAttrs())
   {
@@ -1014,16 +1014,11 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     std::string id, name;
     get_decl_name(rd, name, id);
 
+    /* record in context if not already there */
     get_struct_union_class(rd);
 
-    if(auto *symbol = context.find_symbol(id))
-      // For the time being we just copy the entire type.
-      // See comment: https://github.com/esbmc/esbmc/issues/991#issuecomment-1535068024
-      new_type = symbol->type;
-    else
-    {
-      new_type = symbol_typet(id);
-    }
+    /* symbolic type referring to that type */
+    new_type = symbol_typet(id);
 
     break;
   }
@@ -1947,23 +1942,27 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     exprt inits;
 
+    const typet &t_ref = ns.follow(t);
+
     // Structs/unions/arrays put the initializer on operands
-    if(t.is_struct() || t.is_array() || t.is_vector())
+    if(t_ref.is_struct() || t.is_array() || t.is_vector())
     {
-      // Initializer everything to zero, even pads
-      // TODO: should we initialize pads with nondet values?
-      inits = gen_zero(t);
+      /* Initialize everything to zero */
+      inits = gen_zero(t_ref);
 
       unsigned int num = init_stmt.getNumInits();
       for(unsigned int i = 0, j = 0; (i < inits.operands().size() && j < num);
           ++i)
       {
         // if it is an struct/union, we should skip padding
-        if(t.is_struct())
-          if(
-            to_struct_union_type(t).components()[i].get_is_padding() ||
-            to_struct_union_type(t).components()[i].get_is_unnamed_bitfield())
+        const struct_union_typet::componentt *c = nullptr;
+        if(t_ref.is_struct())
+        {
+          c = &to_struct_union_type(t_ref).components()[i];
+          assert(!c->get_is_padding());
+          if(c->get_is_unnamed_bitfield())
             continue;
+        }
 
         // Get the value being initialized
         exprt init;
@@ -1971,8 +1970,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           return true;
 
         typet elem_type;
-        if(t.is_struct())
-          elem_type = to_struct_union_type(t).components()[i].type();
+        if(t_ref.is_struct())
+          elem_type = c->type();
         else if(t.is_array())
           elem_type = to_array_type(t).subtype();
         else
@@ -1981,7 +1980,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         inits.operands().at(i) = init;
       }
     }
-    else if(t.is_union())
+    else if(t_ref.is_union())
     {
       /* The Clang AST either contains a single initializer for union-typed
        * expressions or none for the empty union. Create a constant expression
