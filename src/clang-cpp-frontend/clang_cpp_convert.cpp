@@ -1022,6 +1022,7 @@ void clang_cpp_convertert::name_param_and_continue(
    *  3. add a symbol for it
    *     (done as part of the clang_c_converter's get_function_param flow)
    */
+  assert(id.empty() && name.empty());
 
   const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
   if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
@@ -1113,7 +1114,7 @@ bool clang_cpp_convertert::get_decl_ref(
 
     get_decl_name(*param, name, id);
 
-    if(id.empty() || name.empty())
+    if(id.empty() && name.empty())
       name_param_and_continue(*param, id, name, new_expr);
 
     return false;
