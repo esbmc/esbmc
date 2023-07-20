@@ -9,7 +9,7 @@ setup_folder () {
     cp esbmc-src/scripts/competitions/svcomp/esbmc-wrapper.py $HOME/esbmc-wrapper.py
     rm -rf $HOME/output-action $HOME/esbmc-output esbmc-src $HOME/run-output.zip
     mkdir $HOME/output-action
-    cp ./esbmc $HOME/output-action
+    cp ./bin/esbmc $HOME/output-action
     cd $HOME/output-action
     cp $HOME/esbmc-wrapper.py .
     cp $HOME/esbmc.xml .
