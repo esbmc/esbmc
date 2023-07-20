@@ -549,7 +549,10 @@ void clang_c_adjust::adjust_type(typet &type)
     }
 
     if(symbol.is_macro)
+    {
       type = symbol.type; // overwrite
+      adjust_type(type);
+    }
   }
   else if(is_array_like(type))
   {
@@ -559,6 +562,7 @@ void clang_c_adjust::adjust_type(typet &type)
       /* adjust the size expression for VLAs */
       adjust_expr((exprt &)size);
     }
+    adjust_type(type.subtype());
   }
   else if(type.is_struct() || type.is_union())
   {
