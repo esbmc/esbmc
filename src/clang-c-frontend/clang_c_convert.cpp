@@ -352,6 +352,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     return false;
   }
 
+  /* update location with that of the type's definition */
+  get_location_from_decl(*rd_def, t.location());
+
   // We have to add fields before methods as the fields are likely to be used
   // in the methods
   if(get_struct_union_class_fields(*rd_def, t))
