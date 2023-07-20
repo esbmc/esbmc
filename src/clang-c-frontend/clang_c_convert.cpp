@@ -330,8 +330,11 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   // We have to add the struct/union/class to the context before converting its
   // fields because there might be recursive struct/union/class (pointers) and
   // the code at get_type, case clang::Type::Record, needs to find the correct
-  // type (itself). Note that the type is incomplete at this stage, it doesn't
-  // contain the fields, which are added to the symbol later on this method.
+  // type (itself). That's why the symbol's type is symbolic for this step.
+  /* The downside of this approach is that we can't use ns.follow() until this
+   * symbol (and all type symbols up our callstack) are properly constructed:
+   * it would loop forever. */
+
   sym = move_symbol_to_context(symbol);
 
   // TODO: Fix me when we have a test case using C++ union.
