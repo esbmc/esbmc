@@ -14,6 +14,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
+#include <clang-c-frontend/symbolic_types.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -472,9 +473,16 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     symbol.static_lifetime && !symbol.is_extern &&
     (!vd.hasInit() || aggregate_value_init))
   {
+    // the type might contains symbolic types,
+    // replace them with complete types before generating zero initialization
+    typet complete_type;
+    bool contains_symbolic =
+      contains_symbolic_struct_types(t, complete_type, ns);
+
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    symbol.value = gen_zero(t, true);
+    symbol.value =
+      contains_symbolic ? gen_zero(complete_type, true) : gen_zero(t, true);
     symbol.value.zero_initializer(true);
   }
 
