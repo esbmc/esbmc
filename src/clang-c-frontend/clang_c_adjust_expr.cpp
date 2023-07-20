@@ -138,7 +138,7 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   {
     adjust_code(to_code(expr));
   }
-  else if(expr.is_struct() || expr.is_union())
+  else if(expr.is_struct())
   {
     const typet &t = ns.follow(expr.type());
     /* can't be an initializer of an incomplete type, it's not allowed by C */

@@ -1994,7 +1994,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
        * of the right type and set its init-expression, if it exists.
        * The init expression has to be the only operand to this expression
        * regardless of the position the initialized field is being declared. */
-      inits = gen_zero(t);
+      inits = gen_zero(t_ref);
       if(init_stmt.getNumInits() > 0)
       {
         assert(init_stmt.getNumInits() == 1);
