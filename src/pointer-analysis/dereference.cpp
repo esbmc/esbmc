@@ -348,15 +348,20 @@ static bool is_aligned_member(const expr2tc &expr)
   const expr2tc &structure = to_member2t(expr).source_value;
   auto *ty = static_cast<const struct_union_data *>(structure->type.get());
 
-  /* non-packed structures have all members aligned */
-  if(!ty->packed)
-    return true;
+  if(ty->packed)
+  {
+    /* Very (too?) conservative approach: all members of packed structures are to
+     * be accessed in a known-unaligned way. Note, that's not true for GCC/Clang:
+     * if they can prove some member is always aligned, they'll use the faster
+     * instructions on aligned pointers. */
+    return false;
+  }
 
-  /* Very (too?) conservative approach: all members of packed structures are to
-   * be accessed in a known-unaligned way. Note, that's not true for GCC/Clang:
-   * if they can prove some member is always aligned, they'll use the faster
-   * instructions on aligned pointers. */
-  return false;
+  /* non-packed structures have all members aligned
+   *
+   * TODO: This holds true only for non-padding members as padding is not
+   *       actually a member. We just treat it as one, which here is wrong. */
+  return true;
 }
 
 expr2tc dereferencet::dereference_expr_nonscalar(

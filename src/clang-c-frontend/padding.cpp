@@ -256,6 +256,19 @@ void add_padding(struct_typet &type, const namespacet &ns)
       assert(bit_field_bits == 0);
       continue;
     }
+    else if(it->get_is_padding())
+    {
+      /* Can't pad padding "members", they're not officially members of C
+       * structures. If we're here, most likely this structure has already been
+       * padded.
+       *
+       * TODO: We should record this fact as a flag on the type, similar (but
+       *       not equivalent) to "packed". It's not equivalent because for
+       *       non-packed but padded structs we still have the alignment
+       *       guarantees for all the non-padding members.
+       */
+      a = 1;
+    }
     else
       a = alignment(it_type, ns);
 
