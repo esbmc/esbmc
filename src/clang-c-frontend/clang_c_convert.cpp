@@ -1947,7 +1947,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // Structs/unions/arrays put the initializer on operands
     if(t_ref.is_struct() || t.is_array() || t.is_vector())
     {
-      /* Initialize everything to zero */
+      /* Initialize everything to zero;
+       * padding is taken care of later in adjust() */
       inits = gen_zero(t_ref);
 
       unsigned int num = init_stmt.getNumInits();

@@ -138,6 +138,28 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   {
     adjust_code(to_code(expr));
   }
+  else if(expr.is_struct() || expr.is_union())
+  {
+    const typet &t = ns.follow(expr.type());
+    /* can't be an initializer of an incomplete type, it's not allowed by C */
+    assert(!t.incomplete());
+    /* adjust_type() above may have added padding members.
+     * Adjust the init expression accordingly. */
+    const struct_union_typet::componentst &new_comp =
+      to_struct_union_type(t).components();
+    exprt::operandst &ops = expr.operands();
+    for(size_t i = 0; i < new_comp.size(); i++)
+    {
+      const struct_union_typet::componentt &c = new_comp[i];
+      if(c.get_is_padding())
+      {
+        // TODO: should we initialize pads with nondet values?
+        ops.insert(ops.begin() + i, gen_zero(c.type()));
+      }
+      adjust_expr(ops[i]);
+    }
+    assert(new_comp.size() == ops.size());
+  }
   else
   {
     // Just check operands of everything else
