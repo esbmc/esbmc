@@ -357,6 +357,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
   // We have to add fields before methods as the fields are likely to be used
   // in the methods
+  /* If this is a recursively defined type, we'll accumulate some symbol_typet
+   * members here. */
   if(get_struct_union_class_fields(*rd_def, t))
     return true;
 
@@ -383,8 +385,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  /* If this is a recursively defined type, we'll accumulate some symbol_typet
-   * members here. */
   if(get_struct_union_class_methods_decls(*rd_def, to_struct_type(t)))
     return true;
 
