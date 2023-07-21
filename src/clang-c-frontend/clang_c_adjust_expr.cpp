@@ -12,6 +12,7 @@
 #include <util/message/format.h>
 #include <util/prefix.h>
 #include <util/std_code.h>
+#include <util/type_byte_size.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
@@ -605,6 +606,11 @@ void clang_c_adjust::adjust_type(typet &type)
         add_padding(to_union_type(new_type), ns);
       else
         add_padding(to_struct_type(new_type), ns);
+
+      type2tc t2 = migrate_type(new_type);
+      BigInt sz = type_byte_size(t2, &ns);
+      BigInt a = alignment(new_type, ns);
+      assert(sz % a == 0);
 
       std::swap(type, new_type);
     }
