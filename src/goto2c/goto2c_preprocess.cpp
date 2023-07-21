@@ -1,6 +1,5 @@
 #include <goto2c/goto2c.h>
-#include <clang-c-frontend/expr2ccode.h>
-#include <clang-c-frontend/clang_c_language.h>
+#include <goto2c/expr2ccode.h>
 #include <util/expr_util.h>
 #include <util/c_sizeof.h>
 
