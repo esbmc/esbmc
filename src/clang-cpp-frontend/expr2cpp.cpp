@@ -1,26 +1,26 @@
 #include <cassert>
-#include <clang-c-frontend/expr2c.h>
+#include <clang-c-frontend/expr2string.h>
 #include <clang-cpp-frontend/expr2cpp.h>
 #include <util/std_types.h>
 #include <util/symbol.h>
 #include <unordered_set>
 
-class expr2cppt : public expr2ct
+class expr2cppt : public expr2stringt
 {
 public:
   expr2cppt(const namespacet &_ns, const bool _fullname)
-    : expr2ct(_ns, _fullname)
+    : expr2stringt(_ns, _fullname)
   {
   }
 
   std::string convert(const exprt &src) override
   {
-    return expr2ct::convert(src);
+    return expr2stringt::convert(src);
   }
 
   std::string convert(const typet &src) override
   {
-    return expr2ct::convert(src);
+    return expr2stringt::convert(src);
   }
 
 protected:
@@ -110,7 +110,7 @@ std::string expr2cppt::convert_constant(const exprt &src, unsigned &precedence)
       return "false";
   }
 
-  return expr2ct::convert_constant(src, precedence);
+  return expr2stringt::convert_constant(src, precedence);
 }
 
 std::string expr2cppt::convert_rec(
@@ -168,7 +168,7 @@ std::string expr2cppt::convert_rec(
     else if(cpp_type == "long_double")
       return new_qualifiers.as_string() + "long double" + d;
     else
-      return expr2ct::convert_rec(src, qualifiers, declarator);
+      return expr2stringt::convert_rec(src, qualifiers, declarator);
   }
   else if(src.id() == "symbol")
   {
@@ -209,7 +209,7 @@ std::string expr2cppt::convert_rec(
       return dest;
     }
     else
-      return expr2ct::convert_rec(src, qualifiers, declarator);
+      return expr2stringt::convert_rec(src, qualifiers, declarator);
   }
   else if(src.id() == "struct" || src.id() == "incomplete_struct")
   {
@@ -299,7 +299,7 @@ std::string expr2cppt::convert_rec(
   else if(src.id() == "unassigned")
     return "?";
   else
-    return expr2ct::convert_rec(src, qualifiers, declarator);
+    return expr2stringt::convert_rec(src, qualifiers, declarator);
 }
 
 std::string expr2cppt::convert_cpp_this(const exprt &, unsigned)
@@ -366,7 +366,7 @@ std::string expr2cppt::convert(const exprt &src, unsigned &precedence)
   if(src.id() == "pod_constructor")
     return "pod_constructor";
 
-  return expr2ct::convert(src, precedence);
+  return expr2stringt::convert(src, precedence);
 }
 
 std::string expr2cppt::convert_code(const codet &src, unsigned indent)
@@ -379,7 +379,7 @@ std::string expr2cppt::convert_code(const codet &src, unsigned indent)
   if(statement == "cpp_new" || statement == "cpp_new[]")
     return convert_cpp_new(src, indent);
 
-  return expr2ct::convert_code(src, indent);
+  return expr2stringt::convert_code(src, indent);
 }
 
 std::string

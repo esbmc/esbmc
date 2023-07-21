@@ -12,7 +12,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
-#include <clang-c-frontend/expr2c.h>
+#include <clang-c-frontend/expr2string.h>
 #include <sstream>
 #include <util/c_link.h>
 
@@ -525,7 +525,7 @@ bool clang_c_languaget::from_expr(
   std::string &code,
   const namespacet &ns)
 {
-  code = expr2c(expr, ns);
+  code = expr2string(expr, ns);
   return false;
 }
 
@@ -534,6 +534,6 @@ bool clang_c_languaget::from_type(
   std::string &code,
   const namespacet &ns)
 {
-  code = type2c(type, ns);
+  code = type2string(type, ns);
   return false;
 }
