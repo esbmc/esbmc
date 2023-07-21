@@ -7,7 +7,7 @@
 #include <util/expr.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
-#include <clang-c-frontend/expr2c.h>
+#include <clang-c-frontend/expr2string.h>
 
 std::string
 expr2ccode(const exprt &expr, const namespacet &ns, bool fullname = false);
@@ -18,11 +18,11 @@ type2ccode(const typet &type, const namespacet &ns, bool fullname = false);
 std::string
 typedef2ccode(const typet &type, const namespacet &ns, bool fullname = false);
 
-class expr2ccodet : public expr2ct
+class expr2ccodet : public expr2stringt
 {
 public:
   expr2ccodet(const namespacet &_ns, const bool _fullname)
-    : expr2ct(_ns, _fullname)
+    : expr2stringt(_ns, _fullname)
   {
   }
   virtual ~expr2ccodet() = default;
