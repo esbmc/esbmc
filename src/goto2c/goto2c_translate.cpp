@@ -236,7 +236,6 @@ std::string goto2ct::translate(goto_programt::instructiont &instruction)
     out << "unknown instruction";
   }
   out << ";";
-  out << " // " << instruction.location.comment() << " // " << instruction.type
-      << "\n";
+  out << " // " << instruction.location.comment() << " // " << instruction.type;
   return out.str();
 }
