@@ -391,9 +391,15 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if(get_struct_union_class_methods_decls(*rd_def, to_struct_type(t)))
     return true;
 
-  /* We successfully constructed the type of this symbol; overwrite the
-   * symbol_typet with the now-complete type definition. */
-  sym->type = t;
+  /* We successfully constructed the type of this symbol; replace the
+   * symbol with the symbol_typet with the now-complete type definition.
+   * Do this by erasing and re-inserting because the order of definitions in the
+   * context matters. This type should be defined after any of the types that it
+   * is composed of. */
+  symbol = *sym;
+  context.erase_symbol(symbol.id);
+  symbol.type = t;
+  move_symbol_to_context(symbol);
 
   return false;
 }
