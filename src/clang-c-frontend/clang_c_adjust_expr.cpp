@@ -607,10 +607,15 @@ void clang_c_adjust::adjust_type(typet &type)
       else
         add_padding(to_struct_type(new_type), ns);
 
-      type2tc t2 = migrate_type(new_type);
-      BigInt sz = type_byte_size(t2, &ns);
-      BigInt a = alignment(new_type, ns);
-      assert(sz % a == 0);
+#ifndef NDEBUG
+      if(!new_type.get_bool("packed"))
+      {
+        type2tc t2 = migrate_type(new_type);
+        BigInt sz = type_byte_size(t2, &ns);
+        BigInt a = alignment(new_type, ns);
+        assert(sz % a == 0);
+      }
+#endif
 
       std::swap(type, new_type);
     }
