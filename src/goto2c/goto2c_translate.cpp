@@ -1,5 +1,5 @@
 #include <goto2c/goto2c.h>
-#include <goto2c/expr2ccode.h>
+#include <goto2c/expr2c.h>
 #include <util/expr_util.h>
 #include <util/c_sizeof.h>
 #include <util/config.h>
@@ -25,27 +25,27 @@ std::string goto2ct::translate()
   // Types
   out << "/////////////////////   GLOBAL TYPES  ////////////////////////\n";
   for(auto type : global_types)
-    out << typedef2ccode(type, ns) << "; // " << type.location() << "\n";
+    out << typedef2c(type, ns) << "; // " << type.location() << "\n";
   out << "\n\n";
 
   // External variables
   out << "/////////////////  EXTERNAL VARIABLES   ////////////////////\n";
   for(auto s : extern_vars)
-    out << expr2ccode(code_declt(symbol_expr(s)), ns) << "; // " << s.location
+    out << expr2c(code_declt(symbol_expr(s)), ns) << "; // " << s.location
         << "\n";
   out << "\n\n";
 
   // Function declarations
   out << "/////////////////  FUNCTION DECLARATIONS   ////////////////////\n";
   for(auto s : fun_decls)
-    out << expr2ccode(code_declt(symbol_expr(s)), ns) << "; // " << s.location
+    out << expr2c(code_declt(symbol_expr(s)), ns) << "; // " << s.location
         << "\n";
   out << "\n\n";
 
   // Global variables declarations
   out << "//////////////// GLOBAL VARIABLE DECLARATIONS ///////////////////\n";
   for(auto s : global_vars)
-    out << expr2ccode(code_declt(symbol_expr(s)), ns) << "; // " << s.location
+    out << expr2c(code_declt(symbol_expr(s)), ns) << "; // " << s.location
         << "\n";
   out << "\n\n";
 
@@ -55,7 +55,7 @@ std::string goto2ct::translate()
   {
     if(initializers.count(s.id.as_string()) > 0)
     {
-      out << expr2ccode(
+      out << expr2c(
                code_declt(symbol_expr(s), initializers[s.id.as_string()]), ns)
           << "; // " << s.location << "\n";
     }
@@ -88,13 +88,13 @@ goto2ct::translate(std::string function_id, goto_functiont &goto_function)
 {
   std::ostringstream out;
 
-  std::string fun_name_short = expr2ccodet::get_name_shorthand(function_id);
+  std::string fun_name_short = expr2ct::get_name_shorthand(function_id);
   // Creating a function symbol
   symbolt fun_sym;
   fun_sym.id = function_id;
   fun_sym.type = goto_function.type;
   // Translating the function declaration
-  out << expr2ccode(code_declt(symbol_expr(fun_sym)), ns) << "\n";
+  out << expr2c(code_declt(symbol_expr(fun_sym)), ns) << "\n";
   // Translating the function body
   out << "{\n";
   // Translating local types if there are any
@@ -102,7 +102,7 @@ goto2ct::translate(std::string function_id, goto_functiont &goto_function)
   {
     out << "////////////////////   LOCAL TYPES  ///////////////////////\n";
     for(auto type : local_types[fun_name_short])
-      out << typedef2ccode(type, ns) << "; // " << type.location() << "\n";
+      out << typedef2c(type, ns) << "; // " << type.location() << "\n";
   }
   // Translating local static variables if there are any
   if(local_static_vars[fun_name_short].size() > 0)
@@ -110,7 +110,7 @@ goto2ct::translate(std::string function_id, goto_functiont &goto_function)
     out << "///////////////   LOCAL STATIC VARIABLES /////////////////\n";
     for(auto s : local_static_vars[fun_name_short])
     {
-      out << expr2ccode(
+      out << expr2c(
                code_declt(symbol_expr(s), initializers[s.id.as_string()]), ns)
           << "; // " << s.location << "\n";
     }
@@ -182,17 +182,16 @@ std::string goto2ct::translate(goto_programt::instructiont &instruction)
   switch(instruction.type)
   {
   case ASSERT:
-    out << expr2ccode(code_assertt(migrate_expr_back(instruction.guard)), ns);
+    out << expr2c(code_assertt(migrate_expr_back(instruction.guard)), ns);
     break;
   case ASSUME:
     out << "// "
-        << expr2ccode(code_assumet(migrate_expr_back(instruction.guard)), ns);
+        << expr2c(code_assumet(migrate_expr_back(instruction.guard)), ns);
     break;
   case GOTO:
     // If we know that the guard is TRUE, then just skip the "if" part
     if(!is_true(instruction.guard))
-      out << "if(" << expr2ccode(migrate_expr_back(instruction.guard), ns)
-          << ") ";
+      out << "if(" << expr2c(migrate_expr_back(instruction.guard), ns) << ") ";
     // It is guaranteed that every GOTO instruction has only one target
     out << "goto __ESBMC_goto_label_"
         << instruction.targets.front()->target_number;
@@ -203,7 +202,7 @@ std::string goto2ct::translate(goto_programt::instructiont &instruction)
   case DECL:
   case ASSIGN:
   case OTHER:
-    out << expr2ccode(migrate_expr_back(instruction.code), ns);
+    out << expr2c(migrate_expr_back(instruction.code), ns);
     break;
   // "Silent" instructions. They cannot be translated directly into C.
   // So we just keep them for debugging purposes.
@@ -211,7 +210,7 @@ std::string goto2ct::translate(goto_programt::instructiont &instruction)
     out << "// " << instruction.location.function();
     break;
   case DEAD:
-    out << "// " << expr2ccode(migrate_expr_back(instruction.code), ns);
+    out << "// " << expr2c(migrate_expr_back(instruction.code), ns);
     break;
   case LOCATION:
     out << "// " << instruction.location;

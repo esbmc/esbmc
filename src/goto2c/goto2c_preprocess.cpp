@@ -1,5 +1,5 @@
 #include <goto2c/goto2c.h>
-#include <goto2c/expr2ccode.h>
+#include <goto2c/expr2c.h>
 #include <util/expr_util.h>
 #include <util/c_sizeof.h>
 
@@ -271,7 +271,7 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
     if(it->type == DEAD && std::next(it)->type == DEAD)
     {
       std::string sym_name = to_code_dead2t(it->code).value.as_string();
-      std::string sym_name_short = expr2ccodet::get_name_shorthand(sym_name);
+      std::string sym_name_short = expr2ct::get_name_shorthand(sym_name);
       if(
         std::find(scope_cluster.begin(), scope_cluster.end(), sym_name_short) !=
         scope_cluster.end())
