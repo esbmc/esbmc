@@ -1948,7 +1948,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     exprt inits;
 
-    const typet &t_ref = ns.follow(t);
+    typet t_ref = t;
+    get_complete_type(t_ref, ns);
 
     // Structs/unions/arrays put the initializer on operands
     if(t_ref.is_struct() || t.is_array() || t.is_vector())
