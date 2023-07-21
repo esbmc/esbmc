@@ -615,6 +615,12 @@ void clang_c_adjust::adjust_type(typet &type)
         BigInt a = alignment(new_type, ns);
         assert(sz % a == 0);
       }
+      typet copy = new_type;
+      if(copy.is_union())
+        add_padding(to_union_type(copy), ns);
+      else
+        add_padding(to_struct_type(copy), ns);
+      assert(copy == new_type);
 #endif
 
       std::swap(type, new_type);
