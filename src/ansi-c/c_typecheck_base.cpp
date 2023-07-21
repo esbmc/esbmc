@@ -14,12 +14,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 std::string c_typecheck_baset::to_string(const exprt &expr)
 {
-  return expr2c(expr, *this);
+  return expr2string(expr, *this);
 }
 
 std::string c_typecheck_baset::to_string(const typet &type)
 {
-  return type2c(type, *this);
+  return type2string(type, *this);
 }
 
 void c_typecheck_baset::replace_symbol(irept &symbol)
