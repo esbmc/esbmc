@@ -1,6 +1,8 @@
 Release Notes of the ESBMC model checker
 
 *** Version 7.3
+* Clang CHERI-C frontend
+- Prepare CHERI-C support (#905).
 * Abstract Interpretation Framework:
 - Revamp on interval analysis options (#1153).
 - Replaced cmath with its cpp counterpart (#1073).
