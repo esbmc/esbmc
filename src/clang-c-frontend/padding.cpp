@@ -145,7 +145,7 @@ static struct_typet::componentst::iterator pad(
   return std::next(components.insert(where, component));
 }
 
-void add_padding(struct_typet &type, const namespacet &ns)
+static void add_padding(struct_typet &type, const namespacet &ns)
 {
   /* components only exist for complete types */
   assert(!type.incomplete());
@@ -344,7 +344,7 @@ void add_padding(struct_typet &type, const namespacet &ns)
   }
 }
 
-void add_padding(union_typet &type, const namespacet &ns)
+static void add_padding(union_typet &type, const namespacet &ns)
 {
   /* components only exist for complete types */
   assert(!type.incomplete());
@@ -381,4 +381,15 @@ void add_padding(union_typet &type, const namespacet &ns)
 
     type.components().push_back(component);
   }
+}
+
+void add_padding(typet &type, const namespacet &ns)
+{
+  assert(!type.is_symbol());
+
+  /* Only structs and unions get padded, all other types are fine */
+  if(type.is_struct())
+    add_padding(to_struct_type(type), ns);
+  else if(type.is_union())
+    add_padding(to_union_type(type), ns);
 }
