@@ -495,14 +495,10 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   {
     // the type might contains symbolic types,
     // replace them with complete types before generating zero initialization
-    typet complete_type;
-    bool contains_symbolic =
-      contains_symbolic_struct_types(t, complete_type, ns);
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    symbol.value =
-      contains_symbolic ? gen_zero(complete_type, true) : gen_zero(t, true);
+    symbol.value = gen_zero(get_complete_type(t, ns), true);
     symbol.value.zero_initializer(true);
   }
 
@@ -1951,15 +1947,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     exprt inits;
 
-    typet t_ref = t;
-    get_complete_type(t_ref, ns);
+    t = get_complete_type(t, ns);
 
     // Structs/unions/arrays put the initializer on operands
-    if(t_ref.is_struct() || t.is_array() || t.is_vector())
+    if(t.is_struct() || t.is_array() || t.is_vector())
     {
       /* Initialize everything to zero;
        * padding is taken care of later in adjust() */
-      inits = gen_zero(t_ref);
+      inits = gen_zero(t);
 
       unsigned int num = init_stmt.getNumInits();
       for(unsigned int i = 0, j = 0; (i < inits.operands().size() && j < num);
@@ -1967,9 +1962,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       {
         // if it is an struct/union, we should skip padding
         const struct_union_typet::componentt *c = nullptr;
-        if(t_ref.is_struct())
+        if(t.is_struct())
         {
-          c = &to_struct_union_type(t_ref).components()[i];
+          c = &to_struct_union_type(t).components()[i];
           assert(!c->get_is_padding());
           if(c->get_is_unnamed_bitfield())
             continue;
@@ -1981,7 +1976,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           return true;
 
         typet elem_type;
-        if(t_ref.is_struct())
+        if(t.is_struct())
           elem_type = c->type();
         else if(t.is_array())
           elem_type = to_array_type(t).subtype();
@@ -1991,14 +1986,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         inits.operands().at(i) = init;
       }
     }
-    else if(t_ref.is_union())
+    else if(t.is_union())
     {
       /* The Clang AST either contains a single initializer for union-typed
        * expressions or none for the empty union. Create a constant expression
        * of the right type and set its init-expression, if it exists.
        * The init expression has to be the only operand to this expression
        * regardless of the position the initialized field is being declared. */
-      inits = gen_zero(t_ref);
+      inits = gen_zero(t);
       if(init_stmt.getNumInits() > 0)
       {
         assert(init_stmt.getNumInits() == 1);
@@ -2034,8 +2029,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if(get_type(init_stmt.getType(), t))
       return true;
 
-    get_complete_type(t, ns);
-    new_expr = gen_zero(t);
+    new_expr = gen_zero(get_complete_type(t, ns));
     break;
   }
 
