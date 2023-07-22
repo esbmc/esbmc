@@ -14,7 +14,7 @@ struct type_sizet
 {
   const namespacet *ns;
 
-  explicit type_sizet(const namespacet *ns = nullptr) : ns(ns)
+  explicit type_sizet(const namespacet *ns) : ns(ns)
   {
   }
   type_sizet(const type_sizet &) = delete;

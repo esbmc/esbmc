@@ -20,7 +20,7 @@ static void complete_type(typet &type, const namespacet &ns)
     assert(sym->is_type);
     assert(!sym->type.is_symbol());
     type = sym->type;
-    complete_type(type, ns);
+    return complete_type(type, ns);
   }
 }
 
