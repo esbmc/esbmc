@@ -304,22 +304,24 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context.
-  symbolt *sym = context.find_symbol(id);
-  if(sym)
+  if(context.find_symbol(id))
     return false;
 
-  /* First put a symbol with a symbolic type into the context, then resolve
-   * all subtypes (which might refer to this symbol and copy its type),
-   * and finally set this symbol's correctly resolved type. */
+  /* First put a symbol with a incomplete type into the context, then resolve
+   * all subtypes and finally set this symbol's correctly resolved type. */
 
-  symbol_typet sym_t(id);
-  sym_t.location() = location_begin;
+  irep_idt c_tag = rd.isUnion() ? typet::t_union : typet::t_struct;
+
+  struct_union_typet t("incomplete_" + c_tag.as_string());
+  t.location() = location_begin;
+  t.incomplete(true); /* for now just a declaration */
+  t.tag(name);
 
   symbolt symbol;
   get_default_symbol(
     symbol,
     get_modulename_from_path(location_begin.file().as_string()),
-    sym_t,
+    t,
     name,
     id,
     location_begin);
@@ -330,38 +332,30 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   // We have to add the struct/union/class to the context before converting its
   // fields because there might be recursive struct/union/class (pointers) and
   // the code at get_type, case clang::Type::Record, needs to find the correct
-  // type (itself). That's why the symbol's type is symbolic for this step.
-  /* The downside of this approach is that we can't use ns.follow() until this
-   * symbol (and all type symbols up our callstack) are properly constructed:
-   * it would loop forever. */
+  // type (itself). Note that the type is incomplete at this stage, it doesn't
+  // contain the fields, which are added to the symbol later on this method.
 
-  sym = move_symbol_to_context(symbol);
+  bool did_exist [[maybe_unused]] = context.add(symbol);
+  assert(!did_exist);
 
   // TODO: Fix me when we have a test case using C++ union.
   //       A C++ union can have member functions but not virtual functions.
   //       Just use struct_typet for C++?
-  struct_union_typet t(rd.isUnion() ? "union" : "struct");
-  t.tag(name);
-  t.location() = location_begin;
 
   // Don't continue to parse if it doesn't have a complete definition
   // Try to get the definition
   clang::RecordDecl *rd_def = rd.getDefinition();
   if(!rd_def)
-  {
-    t.id("incomplete_" + t.id().as_string());
-    t.incomplete(true);
-    sym->type = t;
     return false;
-  }
+
+  /* now build the complete type */
+  t.id(c_tag);
 
   /* update location with that of the type's definition */
   get_location_from_decl(*rd_def, t.location());
 
   // We have to add fields before methods as the fields are likely to be used
   // in the methods
-  /* If this is a recursively defined type, we'll accumulate some symbol_typet
-   * members here. */
   if(get_struct_union_class_fields(*rd_def, t))
     return true;
 
@@ -388,18 +382,21 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  if(get_struct_union_class_methods_decls(*rd_def, to_struct_type(t)))
+  if(get_struct_union_class_methods_decls(*rd_def, t))
     return true;
 
+  /* done translating the definition, so now it's not incomplete anymore */
+  t.remove(irept::a_incomplete);
+
   /* We successfully constructed the type of this symbol; replace the
-   * symbol with the symbol_typet with the now-complete type definition.
+   * symbol with the incomplete type by one with the now-complete type
+   * definition.
    * Do this by erasing and re-inserting because the order of definitions in the
    * context matters. This type should be defined after any of the types that it
    * is composed of. */
-  symbol = *sym;
   context.erase_symbol(symbol.id);
   symbol.type = t;
-  move_symbol_to_context(symbol);
+  context.move_symbol_to_context(symbol);
 
   return false;
 }
@@ -431,7 +428,7 @@ bool clang_c_convertert::get_struct_union_class_fields(
 
 bool clang_c_convertert::get_struct_union_class_methods_decls(
   const clang::RecordDecl &,
-  struct_typet &)
+  typet &)
 {
   // We don't add methods or static members to the struct in C
   return false;
@@ -549,7 +546,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     if(r)
       return true;
 
-    added_symbol = move_symbol_to_context(symbol);
+    added_symbol = context.move_symbol_to_context(symbol);
     gen_typecast(ns, val, t);
     if(!aggregate_value_init)
       added_symbol->value = val;
@@ -566,7 +563,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     // We have to add the symbol before converting the initial assignment
     // because we might have something like 'int x = x + 1;' which is
     // completely wrong but allowed by the language
-    added_symbol = move_symbol_to_context(symbol);
+    added_symbol = context.move_symbol_to_context(symbol);
 
     code_declt decl(symbol_expr(*added_symbol));
     decl.location() = location_begin;
@@ -644,7 +641,7 @@ bool clang_c_convertert::get_function(
                      fd.getStorageClass() == clang::SC_PrivateExtern;
   symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
 
-  symbolt &added_symbol = *move_symbol_to_context(symbol);
+  symbolt &added_symbol = *context.move_symbol_to_context(symbol);
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
@@ -758,7 +755,7 @@ bool clang_c_convertert::get_function_param(
   if(!fd.isDefined())
     return false;
 
-  move_symbol_to_context(param_symbol);
+  context.move_symbol_to_context(param_symbol);
   return false;
 }
 
@@ -3420,11 +3417,6 @@ std::string clang_c_convertert::get_filename_from_path(std::string path)
     return path.substr(path.find_last_of('/') + 1);
 
   return path;
-}
-
-symbolt *clang_c_convertert::move_symbol_to_context(symbolt &symbol)
-{
-  return context.move_symbol_to_context(symbol);
 }
 
 void clang_c_convertert::convert_expression_to_code(exprt &expr)
