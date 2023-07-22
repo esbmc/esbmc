@@ -8,6 +8,7 @@ Release Notes of the ESBMC model checker
 - Replaced cmath with its cpp counterpart (#1073).
 - Interval Analysis: the get_interval function is more generic (#1065).
 - Fixed wrong computation for type bounds (#1052).
+- Abstract interpretation revamp (#915).
 * Linux Kernel Verification:
 - simulation for Kernel user space copy (#1192).
 - Mock kernel (#1135).
