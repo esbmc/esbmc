@@ -565,64 +565,26 @@ void clang_c_adjust::adjust_type(typet &type)
     }
     adjust_type(type.subtype());
   }
-  else if(type.is_struct() || type.is_union())
+  else if((type.is_struct() || type.is_union()) && !type.incomplete())
   {
-    // FIXME: should we have a tag_name() method on struct_union_typet?
-    irep_idt id;
-    if(type.tag().empty())
-      id = type.name();
-    else
-      id = "tag-" + type.tag().as_string();
+    /* components only exist for complete types */
+    for(auto &f : to_struct_union_type(type).components())
+      adjust_expr(f);
 
-    symbolt *s = context.find_symbol(id);
-    if(s == nullptr)
-    {
-      log_error("type symbol `{}' not found", id);
-      abort();
-    }
-
-    const symbolt &symbol = *s;
-    if(!symbol.is_type)
-    {
-      log_error("expected type symbol, but got\n{}", symbol);
-      abort();
-    }
-
-    if(!symbol.type.incomplete())
-    {
-      /* components only exist for complete types */
-
-      typet new_type = symbol.type;
-
-      struct_union_typet &the_type = to_struct_union_type(new_type);
-
-      struct_union_typet::componentst new_components;
-
-      for(auto &f : the_type.components())
-      {
-        adjust_expr(f);
-        new_components.push_back(f);
-      }
-
-      std::swap(the_type.components(), new_components);
-
-      add_padding(new_type, ns);
+    add_padding(type, ns);
 
 #ifndef NDEBUG
-      if(!new_type.get_bool("packed"))
-      {
-        type2tc t2 = migrate_type(new_type);
-        BigInt sz = type_byte_size(t2, &ns);
-        BigInt a = alignment(new_type, ns);
-        assert(sz % a == 0);
-      }
-      typet copy = new_type;
-      add_padding(copy, ns);
-      assert(copy == new_type);
-#endif
-
-      std::swap(type, new_type);
+    if(!type.get_bool("packed"))
+    {
+      type2tc t2 = migrate_type(type);
+      BigInt sz = type_byte_size(t2, &ns);
+      BigInt a = alignment(type, ns);
+      assert(sz % a == 0);
     }
+    typet copy = type;
+    add_padding(copy, ns);
+    assert(copy == type);
+#endif
   }
 }
 
