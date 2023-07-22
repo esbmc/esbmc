@@ -2182,10 +2182,26 @@ void dereferencet::bounds_check(
   if(options.get_bool_option("no-bounds-check"))
     return;
 
-  unsigned int access_size = type_byte_size(type).to_uint64();
-
   assert(is_array_type(expr) || is_string_type(expr));
   const array_type2t arr_type = get_arr_type(expr);
+
+  if(!arr_type.array_size)
+  {
+    /* Infinite size array, doesn't have bounds to check. We arrive here in two
+     * situations: access to an incomplete type (originally an array, struct or
+     * union) or access to an array marked to have infinite size. These cases
+     * only happen when the program actually builds and dereferences pointers
+     * to the object.
+     *
+     * We actually allow also the first case since there is not enough
+     * information about the type (it's incomplete). This is in line with how
+     * we handle functions with no body. See also the comments in migrate_type()
+     * about incomplete types and Github issue #1210. */
+    assert(arr_type.size_is_infinite);
+    return;
+  }
+
+  unsigned int access_size = type_byte_size(type).to_uint64();
 
   expr2tc arrsize;
   if(
