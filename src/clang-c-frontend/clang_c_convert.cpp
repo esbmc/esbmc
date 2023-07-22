@@ -2034,6 +2034,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if(get_type(init_stmt.getType(), t))
       return true;
 
+    get_complete_type(t, ns);
     new_expr = gen_zero(t);
     break;
   }
