@@ -167,7 +167,7 @@ protected:
    */
   virtual bool get_struct_union_class_methods_decls(
     const clang::RecordDecl &recordd,
-    struct_typet &type);
+    typet &type);
 
   virtual bool get_type(const clang::QualType &type, typet &new_type);
 
@@ -229,8 +229,6 @@ protected:
   std::string get_modulename_from_path(std::string path);
 
   void convert_expression_to_code(exprt &expr);
-
-  symbolt *move_symbol_to_context(symbolt &symbol);
 
   bool convert_character_literal(
     const clang::CharacterLiteral &char_literal,

@@ -291,7 +291,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 
 bool clang_cpp_convertert::get_struct_union_class_methods_decls(
   const clang::RecordDecl &recordd,
-  struct_typet &type)
+  typet &type)
 {
   // Note: If a struct is defined inside an extern C, it will be a RecordDecl
 
@@ -310,8 +310,11 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
 
   // skip unions as they don't have virtual methods
   if(!recordd.isUnion())
-    if(get_struct_class_virtual_methods(*cxxrd, type))
+  {
+    assert(type.is_struct());
+    if(get_struct_class_virtual_methods(*cxxrd, to_struct_type(type)))
       return true;
+  }
 
   // Iterate over the declarations stored in this context
   for(const auto &decl : cxxrd->decls())
@@ -371,7 +374,10 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
     {
       // Add only if it isn't static
       if(!cxxmd->isStatic())
-        type.methods().push_back(comp);
+      {
+        assert(type.is_struct());
+        to_struct_type(type).methods().push_back(comp);
+      }
       else
       {
         log_error("static method is not supported in {}", __func__);
@@ -957,7 +963,7 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   this_map[address] = std::pair<std::string, typet>(
     param_symbol.id.as_string(), this_param.type());
 
-  move_symbol_to_context(param_symbol);
+  context.move_symbol_to_context(param_symbol);
   return false;
 }
 
