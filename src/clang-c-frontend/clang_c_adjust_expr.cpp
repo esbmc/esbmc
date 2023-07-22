@@ -568,7 +568,11 @@ void clang_c_adjust::adjust_type(typet &type)
   else if(type.is_struct() || type.is_union())
   {
     // FIXME: should we have a tag_name() method on struct_union_typet?
-    std::string id = "tag-" + type.tag().as_string();
+    irep_idt id;
+    if(type.tag().empty())
+      id = type.name();
+    else
+      id = "tag-" + type.tag().as_string();
 
     symbolt *s = context.find_symbol(id);
     if(s == nullptr)

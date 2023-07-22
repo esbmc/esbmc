@@ -3,7 +3,7 @@
  *  - travere virtual methods
  *  - generate VFT type symbol
  *  - generate VFT variable symbols
- *  - genearte thunk functions for overriding methods
+ *  - generate thunk functions for overriding methods
  */
 #include <util/compiler_defs.h>
 // Remove warnings from Clang headers
