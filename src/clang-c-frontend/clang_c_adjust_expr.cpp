@@ -606,10 +606,7 @@ void clang_c_adjust::adjust_type(typet &type)
 
       std::swap(the_type.components(), new_components);
 
-      if(new_type.is_union())
-        add_padding(to_union_type(new_type), ns);
-      else
-        add_padding(to_struct_type(new_type), ns);
+      add_padding(new_type, ns);
 
 #ifndef NDEBUG
       if(!new_type.get_bool("packed"))
@@ -620,10 +617,7 @@ void clang_c_adjust::adjust_type(typet &type)
         assert(sz % a == 0);
       }
       typet copy = new_type;
-      if(copy.is_union())
-        add_padding(to_union_type(copy), ns);
-      else
-        add_padding(to_struct_type(copy), ns);
+      add_padding(copy, ns);
       assert(copy == new_type);
 #endif
 
