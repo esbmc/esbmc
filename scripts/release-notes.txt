@@ -1,5 +1,55 @@
 Release Notes of the ESBMC model checker
 
+*** Version 7.3
+* Abstract Interpretation Framework:
+- Revamp on interval analysis options (#1153).
+- Replaced cmath with its cpp counterpart (#1073).
+- Interval Analysis: the get_interval function is more generic (#1065).
+- Fixed wrong computation for type bounds (#1052).
+* Linux Kernel Verification:
+- simulation for Kernel user space copy (#1192).
+- Mock kernel (#1135).
+* Clang C++ Frontend:
+- Improve code structure/ add new methods (#1189).
+- Fix temporary object constructs for a single argument (#1196).
+- Replaced throw with assert in string OM (#1163).
+- Various fixes for C++ verification (#1138).
+- Added CUDA and Qt/QtCore to include paths in CPP (#1131).
+- Fix for TC template2 in 1108 (#1134).
+- Embed CPP headers into ESBMC (#1124).
+- Return a constant for MemberExpr to enumerator (#1119).
+- Decouple TC20/36/39 from zero initialization (#1113).
+- Fixed missing argument in copy constructor (#1112).
+- Refactor/modify the COM (#1111).
+- Fixed nested MemberExpr to struct/class method (#1102).
+- Add TCs for CUDA OM (#1095).
+- Fixed static member access (#1094).
+- Fixed global initialization (#1086).
+- Fixed inconsistent template specialization ids (#1079).
+* SMT-backend:
+- Fix usage of mk_ite by properly dispatching (#1201).
+- More smtlib fixes (#1193).
+- Fix symbol names and emission of AST node types in the smtlib backend (#1117).
+- Restore some smtlib functionality with external solver (#1114).
+- tuple-array-ast requires flattened array subtype in tuple-node-flattener (#1096).
+* General Fixes:
+- Fix intrinsic memset errors (#1199).
+- Check for overflow during the generation of VLAs (#1190).
+- Added an option to ignore strings (#1185).
+- Only use custom limits.h for the old frontend; otherwise, clang provides its own for us (#1168).
+- Restrict --unsigned-overflow-check to unsigned types only (#1143).
+- Fixing arch for 32-bit arm analysis as armv6 (#1142).
+- rename_type() should also recurse into operands (#1123).
+- Bug fixing for printf return value (#1115).
+- Add some more support for dynamic array sizes (#1101).
+- Support dyn-off structures w/ array members from byte-arrays (#1090).
+- Adjust also symbol's type and handle VLAs in adjust_type() (#1083).
+- Opt into collecting types only for (some?) known irep annotations (#1077).
+- Fix scanf bigint bug (#1076).
+- Add support for malloc-scanf overflow checking (#1063).
+- Fix overflow check for unsigned integer (#1058).
+- Improve code coverage by modifing/adding assertions in GOTO (#1048).
+
 *** Version 7.2
 * Clang-C++ frontend:
   ** Added support for polymorphism (#919, #922, #923, #926, #927)
