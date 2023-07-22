@@ -343,12 +343,11 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   //       Just use struct_typet for C++?
 
   // Don't continue to parse if it doesn't have a complete definition
-  // Try to get the definition
   clang::RecordDecl *rd_def = rd.getDefinition();
   if(!rd_def)
     return false;
 
-  /* now build the complete type */
+  /* it has a definition, now build the complete type */
   t.id(c_tag);
 
   /* update location with that of the type's definition */
@@ -1960,7 +1959,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       for(unsigned int i = 0, j = 0; (i < inits.operands().size() && j < num);
           ++i)
       {
-        // if it is an struct/union, we should skip padding
         const struct_union_typet::componentt *c = nullptr;
         if(t.is_struct())
         {
