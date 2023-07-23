@@ -2322,7 +2322,9 @@ public:
 };
 
 /** Addition operation. Adds two operands together. Must both be numeric types.
- *  Types of both operands and expr type should match. @extends arith_2ops */
+ *  Types of both operands and expr type should match.
+ *
+ *  @extends arith_2ops */
 class add2t : public add_expr_methods
 {
 public:
