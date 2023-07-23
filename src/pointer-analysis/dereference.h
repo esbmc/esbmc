@@ -393,6 +393,9 @@ private:
     const expr2tc &lexical_offset,
     expr2tc &pointer_guard);
 
+  uint64_t natural_alignment(const type2tc &type) const;
+  uint64_t deref_alignment(const expr2tc &deref_expr, uint64_t tgt_align) const;
+
   void
   deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode);
 

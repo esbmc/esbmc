@@ -614,6 +614,104 @@ bool dereferencet::dereference_type_compare(
   return false;
 }
 
+uint64_t dereferencet::natural_alignment(const type2tc &type) const
+{
+  if(is_symbol_type(type))
+    return natural_alignment(ns.follow(type));
+
+  if(is_array_type(type))
+    return natural_alignment(to_array_type(type).subtype);
+
+  if(is_structure_type(type))
+  {
+    auto &data = static_cast<const struct_union_data &>(*type);
+    using std::max;
+
+    uint64_t a = 1;
+    if(!data.packed)
+      for(size_t i = 0; i < data.members.size(); i++)
+      {
+        /* padding and invented members do not contribute to alignment */
+        if(strchr(data.member_names[i].c_str(), '$'))
+          continue;
+        a = max(a, natural_alignment(data.members[i]));
+      }
+    return a;
+  }
+
+  assert(is_number_type(type) || is_pointer_type(type) || is_vector_type(type));
+  return type_byte_size(type).to_uint64();
+}
+
+/* alignment of the target of 'deref_expr'. */
+uint64_t dereferencet::deref_alignment(
+  const expr2tc &deref_expr,
+  uint64_t tgt_align) const
+{
+  using std::min;
+
+  if(is_typecast2t(deref_expr))
+    return deref_alignment(to_typecast2t(deref_expr).from, tgt_align);
+
+  if(is_bitcast2t(deref_expr))
+    return deref_alignment(to_bitcast2t(deref_expr).from, tgt_align);
+
+  if(is_symbol2t(deref_expr))
+    return tgt_align;
+
+  if(is_add2t(deref_expr) || is_sub2t(deref_expr))
+  {
+    const arith_2ops &ops = static_cast<const arith_2ops &>(*deref_expr);
+    using std::swap;
+
+    expr2tc ptr_op = ops.side_1;
+    expr2tc int_op = ops.side_2;
+    if(!is_pointer_type(ptr_op))
+      swap(ptr_op, int_op);
+
+    if(!is_pointer_type(ptr_op))
+      return 1; /* not pointer arithmetic, all bets are off */
+
+    assert(is_bv_type(int_op));
+
+    uint64_t src_align = deref_alignment(ptr_op, tgt_align);
+    if(is_constant_int2t(int_op) && to_constant_int2t(int_op).value == 0)
+      return src_align;
+
+    const type2tc &tgt_type = to_pointer_type(ptr_op->type).subtype;
+    uint64_t type_align = natural_alignment(tgt_type);
+    return min(type_align, src_align);
+  }
+
+  if(is_member2t(deref_expr))
+  {
+    /* shouldn't dereference padding or otherwise invented members */
+    assert(!strchr(to_member2t(deref_expr).member.c_str(), '$'));
+
+    return tgt_align;
+  }
+
+  if(is_index2t(deref_expr))
+    return tgt_align;
+
+  if(is_address_of2t(deref_expr))
+    return tgt_align;
+
+  if(is_if2t(deref_expr))
+  {
+    const if2t &i = to_if2t(deref_expr);
+    uint64_t ta = deref_alignment(i.true_value, tgt_align);
+    uint64_t tf = deref_alignment(i.false_value, tgt_align);
+    return min(ta, tf);
+  }
+
+  if(is_concat2t(deref_expr) || is_byte_update2t(deref_expr))
+    return 1; /* no guarantees */
+
+  // We could interpret it as future work.
+  return 1;
+}
+
 expr2tc dereferencet::build_reference_to(
   const expr2tc &what,
   modet mode,
@@ -698,6 +796,12 @@ expr2tc dereferencet::build_reference_to(
   if(!is_constant_int2t(final_offset))
   {
     assert(alignment != 0);
+
+    /* The expression being dereferenced doesn't need to be just a symbol: it
+     * might have all kind of things messing with alignment in there. */
+    uint64_t tgt_align = deref_alignment(deref_expr, alignment);
+    assert(tgt_align <= alignment);
+    alignment = tgt_align;
 
     final_offset =
       pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
