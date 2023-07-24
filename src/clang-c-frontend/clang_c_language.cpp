@@ -12,7 +12,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
-#include <clang-c-frontend/expr2string.h>
+#include <util/expr2string.h>
 #include <sstream>
 #include <util/c_link.h>
 

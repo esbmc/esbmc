@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/gcc_builtin_headers.h>
 #include <ansi-c/trans_unit.h>
-#include <clang-c-frontend/expr2string.h>
+#include <util/expr2string.h>
 #include <cstring>
 #include <fstream>
 #include <sstream>

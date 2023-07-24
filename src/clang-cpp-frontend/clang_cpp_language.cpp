@@ -11,7 +11,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <clang-cpp-frontend/clang_cpp_language.h>
-#include <clang-cpp-frontend/expr2cpp.h>
+#include <util/expr2cpp.h>
 #include <clang-cpp-frontend/esbmc_internal_cpp.h>
 #include <regex>
 #include <util/filesystem.h>
