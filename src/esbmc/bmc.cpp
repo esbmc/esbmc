@@ -816,11 +816,17 @@ smt_convt::resultt bmct::multi_property_check(
             std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
             show_goto_trace(out, ns, goto_trace);
           }
-          std::ostringstream oss;
-          log_fail("\n[Counterexample]\n");
-          show_goto_trace(oss, ns, goto_trace);
-          log_result("{}", oss.str());
-          final_result = result;
+          
+          // for show-caller-loc option
+          // skip the unnecessary output
+          if(claim.claim_msg != "show caller location")
+          {
+            std::ostringstream oss;
+            log_fail("\n[Counterexample]\n");
+            show_goto_trace(oss, ns, goto_trace);
+            log_result("{}", oss.str());
+            final_result = result;
+          }
 
           // collect the tracked instrumentation which is verified failed
           // we assume it always works in multi-property checking mode
