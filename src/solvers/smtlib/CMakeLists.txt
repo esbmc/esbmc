@@ -21,7 +21,7 @@ target_include_directories(smtlib
 # could be very large and the std::list destructors use a lot of stack space
 set(stacksize 20971520)  # 20 MB ought to be enough for everyone
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:${stacksize}" CACHE STRING "Linker flags" FORCE)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:${stacksize}" CACHE STRING "Linker flags" FORCE)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
   set(stacksize 0x1400000) # macOS uses hex by default (see Issue #1212)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-stack_size,${stacksize}" CACHE STRING "Linker flags" FORCE)
