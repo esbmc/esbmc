@@ -149,7 +149,9 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
 
     expr2tc update = data.update_value;
     if(!is_unsignedbv_type(update) || update->type->get_width() != src_width)
-      update = typecast2tc(get_uint_type(src_width), update);
+      update = typecast2tc(
+        get_uint_type(src_width),
+        bitcast2tc(get_uint_type(update->type->get_width()), update));
 
     // The approach: mask, shift and or. Quite inefficient.
 

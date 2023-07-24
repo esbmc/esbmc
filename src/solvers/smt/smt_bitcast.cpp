@@ -141,10 +141,18 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
       return fp_api->mk_from_bv_to_fp(
         convert_ast(new_from), convert_sort(to_type));
   }
+  else if(is_fixedbv_type(to_type))
+  {
+    if(is_bv_type(from))
+      return convert_ast(from);
+  }
   else if(is_bv_type(to_type))
   {
     if(is_floatbv_type(from))
       return fp_api->mk_from_fp_to_bv(convert_ast(from));
+
+    if(is_fixedbv_type(from))
+      return convert_ast(from);
 
     if(is_struct_type(from) || is_array_type(from))
       return convert_ast(flatten_to_bitvector(from));
