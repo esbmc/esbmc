@@ -11,6 +11,11 @@
 #include <util/std_types.h>
 #include <ostream>
 
+// for show_caller_loc option
+bool flg = false;
+bool out_flg = false;
+locationt call_loc;
+
 void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
 {
   for(const auto &step : steps)
@@ -209,9 +214,9 @@ void show_goto_trace_gui(
         out << "TRACE"
             << "\n";
 
-        out << "," // identifier
-            << "," // base_name
-            << "," // type
+        out << ","  // identifier
+            << ","  // base_name
+            << ","  // type
             << ""
             << "\n" // value
             << step.step_nr << "\n"
@@ -374,11 +379,37 @@ void show_goto_trace(
     case goto_trace_stept::ASSERT:
       if(!step.guard)
       {
+        if(config.options.get_bool_option("show-caller-loc"))
+        {
+          if(flg)
+          {
+            if(
+              step.pc->location.comment().as_string() == "show caller location")
+            {
+              call_loc = step.pc->location;
+              continue;
+            }
+            if(call_loc.file() != step.pc->location.file())
+              out_flg = true;
+            flg = false;
+          }
+          if(step.pc->location.comment().as_string() == "show caller location")
+          {
+            flg = true;
+            call_loc = step.pc->location;
+            continue;
+          }
+        }
         show_state_header(out, step, step.pc->location, step.step_nr);
         out << "Violated property:"
             << "\n";
         if(!step.pc->location.is_nil())
           out << "  " << step.pc->location << "\n";
+        if(out_flg)
+        {
+          out << "  " << "Calling at: " << call_loc << "\n";
+          out_flg = false;
+        }
         out << "  " << step.comment << "\n";
 
         if(step.pc->is_assert())

@@ -1672,6 +1672,70 @@ bool esbmc_parseoptionst::process_goto_program(
       tmp.add_false_asserts(goto_functions);
     }
 
+    if(cmdline.isset("show-caller-loc"))
+    {
+      // process each program
+      // if we find a function call. compare the locaiton.file between caller instruction and funciton body.
+      // if not equal then add an assert(1) behind the instruction, which stores the location info of the caller.
+      // works like goto_termination
+
+      Forall_goto_functions(f_it, goto_functions)
+        if(f_it->second.body_available)
+        {
+          goto_programt &goto_program = f_it->second.body;
+          Forall_goto_program_instructions(it, goto_program)
+          {
+            if(it->is_function_call() && it->location.is_not_nil())
+            {
+              // we only deal with file in the target file
+              std::string src_fl = cmdline.args[0];
+              std::string caller_fl = it->location.file().as_string();
+              if(caller_fl != src_fl)
+                continue;
+
+              code_function_call2t &function_call =
+                to_code_function_call2t(it->code);
+
+              // Don't do function pointers
+              if(is_dereference2t(function_call.function))
+                continue;
+
+              // find code in function map
+              irep_idt &identifier =
+                to_symbol2t(function_call.function).thename;
+              goto_functionst::function_mapt::const_iterator iter =
+                goto_functions.function_map.find(identifier);
+
+              // return if body is not found or empty
+              if(iter == goto_functions.function_map.end())
+                continue;
+
+              const goto_functiont &goto_function = iter->second;
+              if(!goto_function.body_available)
+                continue;
+
+              std::string callee_fl = goto_function.body.instructions.front()
+                                        .location.file()
+                                        .as_string();
+
+              // this means the function body is defined in another file
+              if(caller_fl != callee_fl)
+              {
+                // add a true assert that contains caller_loc
+                goto_programt::targett t = goto_program.insert(it);
+                t->type = ASSERT;
+                t->guard = gen_false_expr();
+                t->location = it->location;
+                t->location.property("show caller location");
+                t->location.comment("show caller location");
+                t->location.user_provided(true);
+                it = ++t;
+              }
+            }
+          }
+        }
+    }
+
     // show it?
     if(cmdline.isset("show-loops"))
     {
