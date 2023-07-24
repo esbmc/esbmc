@@ -685,14 +685,37 @@ uint64_t dereferencet::deref_alignment(
 
   if(is_member2t(deref_expr))
   {
-    /* shouldn't dereference padding or otherwise invented members */
-    assert(!strchr(to_member2t(deref_expr).member.c_str(), '$'));
+    const member2t &m = to_member2t(deref_expr);
 
-    return tgt_align;
+    /* shouldn't dereference padding or otherwise invented members */
+    assert(!strchr(m.member.c_str(), '$'));
+
+    if(is_symbol2t(m.source_value))
+      return tgt_align;
+
+    expr2tc e;
+    const expr2tc &src = m.source_value;
+    if(is_constant_struct2t(src))
+    {
+      auto &d = static_cast<const constant_datatype_data &>(*src);
+      auto &s = static_cast<const struct_union_data &>(*src->type);
+      size_t c = s.get_component_number(m.member);
+      e = d.datatype_members[c];
+    }
+    else if(is_constant_union2t(src))
+    {
+      const constant_union2t &u = to_constant_union2t(src);
+      assert(u.datatype_members.size() == 1);
+      e = u.datatype_members[0];
+    }
+
+    return e ? deref_alignment(e, tgt_align) : 1;
   }
 
   if(is_index2t(deref_expr))
+  {
     return tgt_align;
+  }
 
   if(is_address_of2t(deref_expr))
     return tgt_align;
@@ -799,9 +822,12 @@ expr2tc dereferencet::build_reference_to(
 
     /* The expression being dereferenced doesn't need to be just a symbol: it
      * might have all kind of things messing with alignment in there. */
-    uint64_t tgt_align = deref_alignment(deref_expr, alignment);
-    assert(tgt_align <= alignment);
-    alignment = tgt_align;
+    if(alignment > 1)
+    {
+      uint64_t tgt_align = deref_alignment(deref_expr, alignment);
+      assert(tgt_align <= alignment);
+      alignment = tgt_align;
+    }
 
     final_offset =
       pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
