@@ -1,6 +1,6 @@
 #include <cassert>
-#include <clang-c-frontend/expr2string.h>
-#include <clang-cpp-frontend/expr2cpp.h>
+#include <util/expr2string.h>
+#include <util/expr2cpp.h>
 #include <util/std_types.h>
 #include <util/symbol.h>
 #include <unordered_set>

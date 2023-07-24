@@ -8,7 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/c_typecheck_base.h>
 #include <ansi-c/type2name.h>
-#include <clang-c-frontend/expr2string.h>
+#include <util/expr2string.h>
 #include <util/prefix.h>
 #include <util/std_types.h>
 

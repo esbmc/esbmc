@@ -7,7 +7,7 @@
 #include <util/expr.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
-#include <clang-c-frontend/expr2string.h>
+#include <util/expr2string.h>
 
 std::string
 expr2c(const exprt &expr, const namespacet &ns, bool fullname = false);
