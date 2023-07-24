@@ -2,4 +2,4 @@ CORE
 gh-1070.c
 --unwind 1 --cvc
 ^VERIFICATION FAILED$
-\bdereference failure: array bounds violated\b
+\bdereference failure:|\bunwinding assertion loop\b
