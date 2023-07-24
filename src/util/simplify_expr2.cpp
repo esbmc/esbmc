@@ -1589,7 +1589,9 @@ expr2tc bitcast2t::do_simplify() const
   }
 
   // This should be fine, just use typecast
-  if(!is_floatbv_type(type) && !is_floatbv_type(from->type))
+  if(
+    !is_floatbv_type(type) && !is_floatbv_type(from->type) &&
+    !is_fixedbv_type(type) && !is_fixedbv_type(from->type))
     return typecast2tc(type, from)->do_simplify();
 
   return expr2tc();
