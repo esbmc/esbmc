@@ -12,9 +12,9 @@
 #include <ostream>
 
 // for show_caller_loc option
-bool flg = false;
-bool out_flg = false;
-locationt call_loc;
+static bool call_start = false;
+static bool show_loc = false;
+static locationt caller_loc;
 
 void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
 {
@@ -214,9 +214,9 @@ void show_goto_trace_gui(
         out << "TRACE"
             << "\n";
 
-        out << ","  // identifier
-            << ","  // base_name
-            << ","  // type
+        out << "," // identifier
+            << "," // base_name
+            << "," // type
             << ""
             << "\n" // value
             << step.step_nr << "\n"
@@ -381,35 +381,19 @@ void show_goto_trace(
       {
         if(config.options.get_bool_option("show-caller-loc"))
         {
-          if(flg)
-          {
-            if(
-              step.pc->location.comment().as_string() == "show caller location")
-            {
-              call_loc = step.pc->location;
-              continue;
-            }
-            if(call_loc.file() != step.pc->location.file())
-              out_flg = true;
-            flg = false;
-          }
-          if(step.pc->location.comment().as_string() == "show caller location")
-          {
-            flg = true;
-            call_loc = step.pc->location;
+          if(show_caller_location(step))
             continue;
           }
-        }
+        
         show_state_header(out, step, step.pc->location, step.step_nr);
         out << "Violated property:"
             << "\n";
         if(!step.pc->location.is_nil())
           out << "  " << step.pc->location << "\n";
-        if(out_flg)
-        {
-          out << "  " << "Calling at: " << call_loc << "\n";
-          out_flg = false;
-        }
+        if(show_loc)
+          out << "  "
+              << "Calling at: " << caller_loc << "\n";
+
         out << "  " << step.comment << "\n";
 
         if(step.pc->is_assert())
@@ -458,4 +442,43 @@ void show_goto_trace(
       assert(false);
     }
   }
+}
+
+bool show_caller_location(const goto_trace_stept &step)
+{
+            std::string cmt = step.pc->location.comment().as_string();
+          std::string ppt = step.pc->location.property().as_string();
+          if(call_start) // meaning we have reached atom_start
+          {
+            if(cmt == "show caller location" && ppt == "atom_end")
+            {
+              /*
+                assert(0); // atom_end <-- we are here
+                func_call();
+                assert(0); // atom_start 
+              */
+              log_progress("atom_end");
+              call_start = false;
+              show_loc = false;
+              return true;
+            }
+
+            // reach the function body which may contains multiple bugs
+            if(caller_loc.file() != step.pc->location.file())
+              // meaning the caller and body are not in the same file
+              show_loc = true;
+          }
+          if(cmt == "show caller location" && ppt == "atom_start")
+          {
+            /*
+              assert(0); // atom_end  
+              func_call();
+              assert(0); // atom_start <-- we are here
+            */
+           log_progress("atom_start");
+            call_start = true;
+            caller_loc = step.pc->location;
+            return true;
+          }
+          return false;
 }
