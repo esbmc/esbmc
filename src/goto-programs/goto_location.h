@@ -5,4 +5,4 @@
     ESBMC only shows the failed claim location in the body, 
     which is not relevant for vulnerability repair and bug fixing.
 */
-void goto_location(goto_functionst &goto_functions, std::string src_fl);
+void goto_location(goto_functionst &goto_functions, const std::string src_fl);
