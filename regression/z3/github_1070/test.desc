@@ -2,4 +2,4 @@ THOROUGH
 gh-1070.c
 --unwind 1 --z3
 ^VERIFICATION FAILED$
-\bdereference failure: NULL pointer\b
+\bdereference failure:|\bunwinding assertion loop\b

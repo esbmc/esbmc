@@ -442,10 +442,8 @@ private:
     const type2tc &type,
     const guardt &guard,
     modet mode);
-  void check_alignment(
-    unsigned long minwidth,
-    const expr2tc &&offset,
-    const guardt &guard);
+  void
+  check_alignment(BigInt minwidth, const expr2tc &offset, const guardt &guard);
   unsigned int static compute_num_bytes_to_extract(
     const expr2tc offset,
     unsigned long num_bits);

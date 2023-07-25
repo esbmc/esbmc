@@ -208,9 +208,9 @@ inline expr2tc gen_false_expr()
   return c;
 }
 
-inline expr2tc gen_long(const type2tc &type, long val)
+inline expr2tc gen_long(const type2tc &type, BigInt val)
 {
-  return constant_int2tc(type, BigInt(val));
+  return constant_int2tc(type, std::move(val));
 }
 
 inline expr2tc gen_ulong(BigInt v)
