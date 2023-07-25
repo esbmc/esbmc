@@ -721,7 +721,7 @@ smt_convt::resultt bmct::multi_property_check(
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
   std::atomic_size_t ce_counter = 0;
   // need an ordered container to fix the order of show_goto_trace
-  std::vector<size_t> jobs; 
+  std::vector<size_t> jobs;
   std::mutex result_mutex;
   // For coverage info
   int tracked_instrument = 0;
@@ -817,7 +817,7 @@ smt_convt::resultt bmct::multi_property_check(
             std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
             show_goto_trace(out, ns, goto_trace);
           }
-          
+
           // for show-caller-loc option
           // skip the instrumented assertions
           if(claim.claim_msg == "show caller location")
