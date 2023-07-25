@@ -650,14 +650,16 @@ uint64_t dereferencet::deref_alignment(
 {
   using std::min;
 
+  if(is_symbol2t(deref_expr))
+    return tgt_align;
+
+  return 1;
+
   if(is_typecast2t(deref_expr))
     return deref_alignment(to_typecast2t(deref_expr).from, tgt_align);
 
   if(is_bitcast2t(deref_expr))
     return deref_alignment(to_bitcast2t(deref_expr).from, tgt_align);
-
-  if(is_symbol2t(deref_expr))
-    return tgt_align;
 
   if(is_add2t(deref_expr) || is_sub2t(deref_expr))
   {
@@ -1063,7 +1065,7 @@ void dereferencet::build_reference_rec(
   {
   case flag_src_scalar | flag_dst_scalar | flag_is_const_offs:
     // Access a scalar from a scalar.
-    construct_from_const_offset(value, offset, type);
+    construct_from_const_offset(value, offset, type, guard, mode, alignment);
     break;
   case flag_src_struct | flag_dst_scalar | flag_is_const_offs:
     // Extract a scalar from within a structure
@@ -1108,7 +1110,7 @@ void dereferencet::build_reference_rec(
 
   case flag_src_scalar | flag_dst_scalar | flag_is_dyn_offs:
     // Access a scalar within a scalar (dyn offset)
-    construct_from_dyn_offset(value, offset, type);
+    construct_from_dyn_offset(value, offset, type, guard, mode, alignment);
     break;
   case flag_src_struct | flag_dst_scalar | flag_is_dyn_offs:
     // Extract a scalar from within a structure (dyn offset)
@@ -1285,7 +1287,7 @@ void dereferencet::construct_from_array(
 
     // Extracting and stitching bytes together
     value = stitch_together_from_byte_array(
-      num_bytes, extract_bytes_from_array(value, num_bytes, offset_bytes));
+      num_bytes, extract_bytes_from_array(value, num_bytes, offset_bytes, guard, mode, alignment));
 
     expr2tc offset_bits = typecast2tc(
       size_type2(),
@@ -1303,7 +1305,10 @@ void dereferencet::construct_from_array(
 void dereferencet::construct_from_const_offset(
   expr2tc &value,
   const expr2tc &offset,
-  const type2tc &type)
+  const type2tc &type,
+  const guardt &guard,
+  modet mode,
+  unsigned int alignment)
 {
   const constant_int2t &theint = to_constant_int2t(offset);
 
@@ -1349,7 +1354,7 @@ void dereferencet::construct_from_const_offset(
 
   // Extracting and stitching bytes together
   value = stitch_together_from_byte_array(
-    num_bytes, extract_bytes_from_scalar(value, num_bytes, offset_bytes));
+    num_bytes, extract_bytes_from_scalar(value, num_bytes, offset_bytes, guard, mode, alignment));
 
   expr2tc offset_bits =
     modulus2tc(offset->type, offset, gen_long(offset->type, 8));
@@ -1489,7 +1494,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   {
     value = bitcast2tc(
       get_uint_type(type_byte_size_bits(value->type, &ns).to_uint64()), value);
-    return construct_from_dyn_offset(value, offset, type);
+    return construct_from_dyn_offset(value, offset, type, guard, mode, alignment);
   }
 
   // For each element of the struct, look at the alignment, and produce an
@@ -1584,7 +1589,10 @@ void dereferencet::construct_from_dyn_struct_offset(
 void dereferencet::construct_from_dyn_offset(
   expr2tc &value,
   const expr2tc &offset,
-  const type2tc &type)
+  const type2tc &type,
+  const guardt &guard,
+  modet mode,
+  unsigned int alignment)
 {
   expr2tc orig_value = value;
 
@@ -1612,13 +1620,14 @@ void dereferencet::construct_from_dyn_offset(
   unsigned int num_bytes = compute_num_bytes_to_extract(
     replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
   // Converting offset to bytes before bytes extraction
-  expr2tc offset_bytes =
-    div2tc(offset->type, offset, gen_long(offset->type, 8));
+  expr2tc offset_bytes = typecast2tc(
+    size_type2(),
+    div2tc(offset->type, offset, gen_long(offset->type, 8)));
   simplify(offset_bytes);
 
   // Extracting and stitching bytes together
   value = stitch_together_from_byte_array(
-    num_bytes, extract_bytes_from_scalar(value, num_bytes, offset_bytes));
+    num_bytes, extract_bytes_from_scalar(value, num_bytes, offset_bytes, guard, mode, alignment));
 
   // Extracting bits from the produced bv
   value = extract_bits_from_byte_array(
@@ -1699,7 +1708,7 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
     if(is_array_type(target_type))
     {
       target = stitch_together_from_byte_array(
-        target_type, value, gen_ulong(struct_offset), guard);
+        target_type, value, gen_ulong(struct_offset), guard, mode, alignment);
     }
     else
     {
@@ -2028,7 +2037,10 @@ void dereferencet::internal_extract_bytes(
   const expr2tc &object,
   unsigned int num_bytes,
   const expr2tc &offset,
-  std::vector<expr2tc> &bytes) const
+  const guardt &guard,
+  modet mode,
+  unsigned int alignment,
+  std::vector<expr2tc> &bytes)
 {
   if(!num_bytes)
     return;
@@ -2041,26 +2053,24 @@ void dereferencet::internal_extract_bytes(
     return;
   }
 
-  const type2tc &bytetype = get_uint8_type();
   expr2tc accuml_offs = offset;
+  const type2tc &bytetype = get_uint8_type();
   for(unsigned i = 0; i < num_bytes; i++)
   {
     bytes.emplace_back(
       byte_extract2tc(bytetype, object, accuml_offs, is_big_endian));
-    accuml_offs = add2tc(accuml_offs->type, accuml_offs, gen_ulong(1));
+    accuml_offs = add2tc(accuml_offs->type, accuml_offs, gen_long(accuml_offs->type, 1));
   }
 }
 
 std::vector<expr2tc> dereferencet::extract_bytes_from_array(
   const expr2tc &array,
   unsigned int num_bytes,
-  const expr2tc &offset)
+  const expr2tc &offset,
+  const guardt &guard,
+  modet mode,
+  unsigned int alignment)
 {
-  std::vector<expr2tc> r;
-  r.reserve(num_bytes);
-  internal_extract_bytes(array, num_bytes, offset, r);
-  return r;
-
   type2tc subtype, idx_type = index_type2();
   assert(num_bytes != 0);
 
@@ -2088,31 +2098,21 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
   std::vector<expr2tc> exprs;
   exprs.reserve(num_bytes);
 
-  /* Calculate the array index based on the given byte offset, the remainder
-   * of the offset gives us the byte number of the indexed array element. */
-  expr2tc elem_idx = typecast2tc(
-    idx_type,
-    div2tc(offset->type, offset, gen_long(offset->type, bytes_per_index)));
-  expr2tc zero = gen_zero(offset->type);
-  expr2tc elem_offs =
-    modulus2tc(offset->type, offset, gen_long(offset->type, bytes_per_index));
-
-  /* While still more bytes are needed, create an index expression into the
-   * array and extract the required number of bytes from it.
-   *
-   * XXX fbrausse: We don't have enough information here to set n to
-   * (bytes_per_index - elem_offs) in the first iteration, so we have to trust
-   * our caller that num_bytes is equal to n when elem_offs could be non-zero.
-   */
-  for(unsigned i = 0, n; i < num_bytes; i += n)
+  const type2tc &bytetype = get_uint8_type();
+  expr2tc accuml_offs = offset;
+  for(unsigned i = 0; i < num_bytes; i++)
   {
-    n = std::min(num_bytes, i + bytes_per_index) - i;
+    /* Calculate the array index based on the given byte offset, the remainder
+     * of the offset gives us the byte number of the indexed array element. */
+    expr2tc elem_idx = typecast2tc(
+      idx_type,
+      div2tc(offset->type, accuml_offs, gen_long(offset->type, bytes_per_index)));
+    expr2tc zero = gen_zero(offset->type);
+    expr2tc elem_offs =
+      modulus2tc(offset->type, accuml_offs, gen_long(offset->type, bytes_per_index));
     expr2tc the_index = index2tc(subtype, array, elem_idx);
-    internal_extract_bytes(the_index, n, elem_offs, exprs);
-    /* After the first iteration elem_offs is always 0 because arrays are stored
-     * contiguously in C. */
-    elem_offs = zero;
-    elem_idx = add2tc(idx_type, elem_idx, gen_long(idx_type, 1));
+    internal_extract_bytes(the_index, 1, elem_offs, guard, mode, alignment, exprs);
+    accuml_offs = add2tc(offset->type, accuml_offs, gen_long(offset->type, 1));
   }
 
   return exprs;
@@ -2121,13 +2121,16 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
 std::vector<expr2tc> dereferencet::extract_bytes_from_scalar(
   const expr2tc &object,
   unsigned int num_bytes,
-  const expr2tc &offset)
+  const expr2tc &offset,
+  const guardt &guard,
+  modet mode,
+  unsigned int alignment)
 {
   assert(num_bytes != 0);
 
   std::vector<expr2tc> bytes;
   bytes.reserve(num_bytes);
-  internal_extract_bytes(object, num_bytes, offset, bytes);
+  internal_extract_bytes(object, num_bytes, offset, guard, mode, alignment, bytes);
   return bytes;
 }
 
@@ -2168,7 +2171,9 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   const type2tc &type,
   const expr2tc &byte_array,
   expr2tc offset_bits,
-  const guardt & /* guard */)
+  const guardt &guard,
+  modet mode,
+  unsigned int alignment)
 {
   /* TODO: check array bounds, (alignment?) */
   assert(is_array_type(byte_array));
@@ -2210,7 +2215,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
     extract_bits_from_byte_array(
       stitch_together_from_byte_array(
         num_bytes,
-        extract_bytes_from_array(byte_array, num_bytes, offset_bytes)),
+        extract_bytes_from_array(byte_array, num_bytes, offset_bytes, guard, mode, alignment)),
       offset_bits,
       num_bits64));
 }

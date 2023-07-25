@@ -1,6 +1,18 @@
 #include <solvers/smt/smt_conv.h>
 #include <util/type_byte_size.h>
 
+/* return index expression into array, updates offset */
+static expr2tc array_index_offset(const expr2tc &array, expr2tc &offset_bytes)
+{
+  assert(is_array_type(array));
+  const array_type2t &type = to_array_type(array->type);
+  const type2tc &subtype = type.subtype;
+  expr2tc subtype_size = type_byte_size_expr(subtype);
+  expr2tc div = div2tc(offset_bytes->type, offset_bytes, subtype_size);
+  offset_bytes = modulus2tc(offset_bytes->type, offset_bytes, subtype_size);
+  return index2tc(subtype, array, div);
+}
+
 smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 {
   if(int_encoding)
@@ -13,17 +25,22 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   const byte_extract2t &data = to_byte_extract2t(expr);
   expr2tc source = data.source_value;
+  expr2tc offs = data.source_offset;
+
+  assert(!is_array_type(source));
+  while(is_array_type(source))
+    source = array_index_offset(source, offs);
+
   unsigned int src_width = source->type->get_width();
 
   if(!is_bv_type(source->type) && !is_fixedbv_type(source->type))
     source = bitcast2tc(get_uint_type(src_width), source);
 
-  if(!is_constant_int2t(data.source_offset))
+  if(!is_constant_int2t(offs))
   {
     // The approach: the argument is now a bitvector. Just shift it the
     // appropriate amount, according to the source offset, and select out the
     // bottom byte.
-    expr2tc offs = data.source_offset;
     if(offs->type->get_width() != src_width)
       offs = typecast2tc(source->type, data.source_offset);
 
@@ -45,7 +62,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
     return res;
   }
 
-  const constant_int2t &intref = to_constant_int2t(data.source_offset);
+  const constant_int2t &intref = to_constant_int2t(offs);
 
   unsigned width;
   width = data.source_value->type->get_width();
