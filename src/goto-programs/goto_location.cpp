@@ -1,6 +1,6 @@
 #include <goto-programs/goto_functions.h>
 
-void goto_location(goto_functionst &goto_functions, const std::string src_fl)
+void goto_location(goto_functionst &goto_functions, const std::string &src_fl)
 {
   Forall_goto_functions(f_it, goto_functions)
     if(f_it->second.body_available)
