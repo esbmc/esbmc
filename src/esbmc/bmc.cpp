@@ -818,15 +818,20 @@ smt_convt::resultt bmct::multi_property_check(
           }
           
           // for show-caller-loc option
-          // skip the unnecessary output
-          if(claim.claim_msg != "show caller location")
+          // skip the instrumented assertions
+          if(claim.claim_msg == "show caller location")
+          {
+            std::ostringstream oss;
+            show_goto_trace(oss, ns, goto_trace);
+          }
+          else
           {
             std::ostringstream oss;
             log_fail("\n[Counterexample]\n");
             show_goto_trace(oss, ns, goto_trace);
             log_result("{}", oss.str());
-            final_result = result;
           }
+          final_result = result;
 
           // collect the tracked instrumentation which is verified failed
           // we assume it always works in multi-property checking mode
