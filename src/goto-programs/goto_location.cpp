@@ -70,4 +70,3 @@ void goto_location(goto_functionst &goto_functions, std::string src_fl)
       }
     }
 }
-
