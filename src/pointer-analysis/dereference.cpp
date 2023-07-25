@@ -1155,16 +1155,18 @@ void dereferencet::construct_from_array(
       replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
 
     // Converting offset to bytes for byte extracting
-    expr2tc offset_bytes =
-      div2tc(offset->type, offset, gen_long(offset->type, 8));
+    expr2tc offset_bytes = typecast2tc(
+      size_type2(),
+      div2tc(offset->type, offset, gen_long(offset->type, 8)));
     simplify(offset_bytes);
 
     // Extracting and stitching bytes together
     value = stitch_together_from_byte_array(
       num_bytes, extract_bytes_from_array(value, num_bytes, offset_bytes));
 
-    expr2tc offset_bits =
-      modulus2tc(offset->type, offset, gen_long(offset->type, 8));
+    expr2tc offset_bits = typecast2tc(
+      size_type2(),
+      modulus2tc(offset->type, offset, gen_long(offset->type, 8)));
     simplify(offset_bits);
 
     // Extracting bits from the produced bv
@@ -1905,7 +1907,6 @@ void dereferencet::internal_extract_bytes(
   const expr2tc &offset,
   std::vector<expr2tc> &bytes) const
 {
-  assert(!is_array_type(object));
   if(!num_bytes)
     return;
 
@@ -1932,6 +1933,11 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
   unsigned int num_bytes,
   const expr2tc &offset)
 {
+  std::vector<expr2tc> r;
+  r.reserve(num_bytes);
+  internal_extract_bytes(array, num_bytes, offset, r);
+  return r;
+
   type2tc subtype, idx_type = index_type2();
   assert(num_bytes != 0);
 
