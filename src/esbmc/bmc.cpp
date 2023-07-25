@@ -720,14 +720,15 @@ smt_convt::resultt bmct::multi_property_check(
   // Initial values
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
   std::atomic_size_t ce_counter = 0;
-  std::unordered_set<size_t> jobs;
+  // need an ordered container to fix the order of show_goto_trace
+  std::vector<size_t> jobs; 
   std::mutex result_mutex;
   // For coverage info
   int tracked_instrument = 0;
 
   // TODO: This is the place to check a cache
   for(size_t i = 1; i <= remaining_claims; i++)
-    jobs.emplace(i);
+    jobs.push_back(i);
 
   /* This is a JOB that will:
    * 1. Generate a solver instance for a specific claim (@parameter i)

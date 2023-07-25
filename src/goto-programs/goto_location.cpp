@@ -51,7 +51,7 @@ void goto_location(goto_functionst &goto_functions, std::string src_fl)
             t->type = ASSERT;
             t->guard = gen_false_expr();
             t->location = it->location;
-            t->location.property("atom_end");
+            t->location.property("atom_start");
             t->location.comment("show caller location");
             t->location.user_provided(true);
             it = ++t;
@@ -61,7 +61,7 @@ void goto_location(goto_functionst &goto_functions, std::string src_fl)
             t->type = ASSERT;
             t->guard = gen_false_expr();
             t->location = it->location;
-            t->location.property("atom_start");
+            t->location.property("atom_end");
             t->location.comment("show caller location");
             t->location.user_provided(true);
             it = t;
@@ -70,3 +70,4 @@ void goto_location(goto_functionst &goto_functions, std::string src_fl)
       }
     }
 }
+

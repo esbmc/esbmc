@@ -383,8 +383,8 @@ void show_goto_trace(
         {
           if(show_caller_location(step))
             continue;
-          }
-        
+        }
+
         show_state_header(out, step, step.pc->location, step.step_nr);
         out << "Violated property:"
             << "\n";
@@ -446,39 +446,38 @@ void show_goto_trace(
 
 bool show_caller_location(const goto_trace_stept &step)
 {
-            std::string cmt = step.pc->location.comment().as_string();
-          std::string ppt = step.pc->location.property().as_string();
-          if(call_start) // meaning we have reached atom_start
-          {
-            if(cmt == "show caller location" && ppt == "atom_end")
-            {
-              /*
-                assert(0); // atom_end <-- we are here
-                func_call();
-                assert(0); // atom_start 
-              */
-              log_progress("atom_end");
-              call_start = false;
-              show_loc = false;
-              return true;
-            }
+  std::string cmt = step.pc->location.comment().as_string();
+  std::string ppt = step.pc->location.property().as_string();
+  if(call_start) // meaning we have reached atom_start
+  {
+    if(cmt == "show caller location" && ppt == "atom_end")
+    {
+      /*
+        assert(0); // atom_end <-- we are here
+        func_call();
+        assert(0); // atom_start 
+      */
+      call_start = false;
+      show_loc = false;
+      return true;
+    }
 
-            // reach the function body which may contains multiple bugs
-            if(caller_loc.file() != step.pc->location.file())
-              // meaning the caller and body are not in the same file
-              show_loc = true;
-          }
-          if(cmt == "show caller location" && ppt == "atom_start")
-          {
-            /*
-              assert(0); // atom_end  
-              func_call();
-              assert(0); // atom_start <-- we are here
-            */
-           log_progress("atom_start");
-            call_start = true;
-            caller_loc = step.pc->location;
-            return true;
-          }
-          return false;
+    // reach the function body which may contains multiple bugs
+    if(caller_loc.file() != step.pc->location.file())
+      // meaning the caller and body are not in the same file
+      show_loc = true;
+  }
+  if(cmt == "show caller location" && ppt == "atom_start")
+  {
+    /*
+      assert(0); // atom_end  
+      func_call();
+      assert(0); // atom_start <-- we are here
+    */
+    call_start = true;
+    caller_loc = step.pc->location;
+    return true;
+  }
+
+  return false;
 }
