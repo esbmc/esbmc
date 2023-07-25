@@ -453,9 +453,9 @@ bool show_caller_location(const goto_trace_stept &step)
     if(cmt == "show caller location" && ppt == "atom_end")
     {
       /*
-        assert(0); // atom_end <-- we are here
+        assert(0); // atom_start
         func_call();
-        assert(0); // atom_start 
+        assert(0); // atom_end <-- we are here 
       */
       call_start = false;
       show_loc = false;
@@ -470,9 +470,9 @@ bool show_caller_location(const goto_trace_stept &step)
   if(cmt == "show caller location" && ppt == "atom_start")
   {
     /*
-      assert(0); // atom_end  
+      assert(0); // atom_start <-- we are here 
       func_call();
-      assert(0); // atom_start <-- we are here
+      assert(0); // atom_end
     */
     call_start = true;
     caller_loc = step.pc->location;

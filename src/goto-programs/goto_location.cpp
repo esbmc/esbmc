@@ -43,9 +43,9 @@ void goto_location(goto_functionst &goto_functions, std::string src_fl)
           {
             // add two false asserts that contains location info
             // e.g.
-            // assert(0); // atom_end
-            // func_call();
             // assert(0); // atom_start
+            // func_call();
+            // assert(0); // atom_end
 
             goto_programt::targett t = goto_program.insert(it);
             t->type = ASSERT;
