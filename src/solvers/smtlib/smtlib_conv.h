@@ -276,7 +276,8 @@ public:
   unsigned int emit_ast(
     const smtlib_smt_ast *ast,
     std::string &output,
-    unsigned long &temp_sym_counter) const;
+    std::unordered_map<const smtlib_smt_ast *, std::string> &temp_symbols)
+    const;
 
   void emit_ast(const smtlib_smt_ast *ast) const;
 
