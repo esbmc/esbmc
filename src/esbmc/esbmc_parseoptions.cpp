@@ -484,9 +484,6 @@ int esbmc_parseoptionst::doit()
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<mark_decl_as_non_det>(context));
-
-    goto_preprocess_algorithms.emplace_back(
-      std::make_unique<goto_cse>(context));
   }
 
   // Run this before the main flow. This method performs its own
@@ -1670,6 +1667,9 @@ bool esbmc_parseoptionst::process_goto_program(
       else
         goto_partial_inline(goto_functions, options, ns);
     }
+
+    goto_cse cse(ns);
+    cse.run(goto_functions);
 
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {

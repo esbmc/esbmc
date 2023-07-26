@@ -202,8 +202,8 @@ void common_subexpression_elimination(
 
 bool goto_cse::runOnProgram(goto_functionst &F)
 {
-  //cse_domaint::vsa = std::make_unique<value_set_analysist>(ns);
-  //(*cse_domaint::vsa)(F);
+  cse_domaint::vsa = std::make_unique<value_set_analysist>(ns);
+  (*cse_domaint::vsa)(F);
 
   available_expressions(F, ns);
   return true;
