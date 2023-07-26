@@ -66,7 +66,7 @@ void cse_domaint::assign(
   // Expressions that contain the target will need to be recomputed
   havoc_expr(code.target, i_it);
   // Target may be an expression as well
-  //check_expression(code.target);
+  check_expression(code.target);
   check_expression(code.source);
 }
 
