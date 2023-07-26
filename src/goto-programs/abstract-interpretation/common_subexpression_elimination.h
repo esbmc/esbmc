@@ -100,9 +100,14 @@ public:
   virtual bool
   runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
 
-  unsigned threshold = 2;
+  unsigned threshold = 1;
+  bool verbose_mode = true;
 
 protected:
   ait<cse_domaint> available_expressions;
   const namespacet &ns;
+  expr2tc obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const;
+  void replace_max_sub_expr(
+    expr2tc &e,
+    std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol) const;
 };

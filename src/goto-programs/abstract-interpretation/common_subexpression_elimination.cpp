@@ -135,9 +135,8 @@ bool cse_domaint::remove_expr(const expr2tc &taint, const expr2tc &E) const
     return true;
 
   bool result = false;
-  E->foreach_operand([this, &result, &taint](const expr2tc &e) {
-    result |= remove_expr(taint, e);
-  });
+  E->foreach_operand([this, &result, &taint](const expr2tc &e)
+                     { result |= remove_expr(taint, e); });
   return result;
 }
 
@@ -147,8 +146,8 @@ bool cse_domaint::remove_expr(const irep_idt &sym, const expr2tc &E) const
     return true;
 
   bool result = false;
-  E->foreach_operand(
-    [this, &result, &sym](const expr2tc &e) { result |= remove_expr(sym, e); });
+  E->foreach_operand([this, &result, &sym](const expr2tc &e)
+                     { result |= remove_expr(sym, e); });
   return result;
 }
 
@@ -202,18 +201,161 @@ void common_subexpression_elimination(
 
 bool goto_cse::runOnProgram(goto_functionst &F)
 {
-  cse_domaint::vsa = std::make_unique<value_set_analysist>(ns);
-  (*cse_domaint::vsa)(F);
+  //cse_domaint::vsa = std::make_unique<value_set_analysist>(ns);
+  //(*cse_domaint::vsa)(F);
 
   available_expressions(F, ns);
   return true;
 }
 
-bool runOnFunction(std::pair<const dstring, goto_functiont> &F)
+expr2tc
+goto_cse::obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const
 {
-  // Many loops will be done...
+  if(state.available_expressions.count(e))
+    return e;
+
+  if(!e)
+    return expr2tc();
+
+  // No need to add primitives
+  if(is_constant(e) || is_symbol2t(e))
+    return expr2tc();
+
+  expr2tc result = expr2tc();
+  e->foreach_operand(
+    [this, &result, &state](const expr2tc e_inner)
+    {
+      // already solved
+      if(result != expr2tc())
+        return;
+
+      result = obtain_max_sub_expr(e_inner, state);
+      if(result != expr2tc())
+        return;
+
+      result = obtain_max_sub_expr(e_inner, state);
+    });
+  return result;
+}
+
+void goto_cse::replace_max_sub_expr(
+  expr2tc &e,
+  std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol) const
+{
+  if(!e)
+    return;
+
+  // No need to add primitives
+  if(is_constant(e) || is_symbol2t(e))
+    return;
+
+  if(expr2symbol.count(e))
+  {
+    //auto v = ;
+    e = expr2symbol[e];
+    return;
+  }
+
+  e->Foreach_operand([this, &expr2symbol](expr2tc &e0)
+                     { replace_max_sub_expr(e0, expr2symbol); });
+}
+
+bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
+{
+  if(!F.second.body_available)
+    return false;
+
+  log_status("Checking function {}", F.first.as_string());
+  if(F.first.as_string() != "c:@F@main")
+    return false;
+
   // 1. Let's count expressions
   std::unordered_map<expr2tc, unsigned, irep2_hash> counter;
+  for(auto it = (F.second.body).instructions.begin();
+      it != (F.second.body).instructions.end();
+      ++it)
+  {
+    if(!it->is_assign())
+      continue;
 
+    const cse_domaint &state = available_expressions[it];
+    const expr2tc max_sub = obtain_max_sub_expr(it->code, state);
+    if(max_sub == expr2tc())
+      continue;
+
+    counter[max_sub]++;
+  }
+
+  // 2. We might print some context now
+  if(verbose_mode)
+  {
+    for(auto it = counter.begin(); it != counter.end(); it++)
+    {
+      if(it->second >= threshold)
+        log_status(
+          "Found common sub-expression ({} times): {}\n",
+          it->second + 1,
+          *it->first);
+    }
+  }
+
+  // Early exit, if no symbols.
+
+  // 3. Instrument new tmp symbols
+  std::unordered_map<expr2tc, expr2tc, irep2_hash> expr2symbol;
+  for(auto it = (F.second.body).instructions.begin();
+      it != (F.second.body).instructions.end();
+      ++it)
+  {
+    auto itt = it;
+    itt++;
+    try
+    {
+      const cse_domaint &state = available_expressions[itt];
+      std::unordered_set<expr2tc, irep2_hash> to_add;
+      for(const auto &sub : counter)
+      {
+        if(sub.second < threshold)
+          continue;
+        if(state.available_expressions.count(sub.first))
+          to_add.insert(sub.first);
+      }
+
+      for(const auto &e : to_add)
+      {
+        goto_programt::targett t = F.second.body.insert(it);
+        symbol2tc symbol(e->type, "my_magic_symbol");
+        t->make_assignment();
+        t->code = code_assign2tc(symbol, e);
+        expr2symbol[e] = symbol;
+        counter[e] = 0;
+      }
+    }
+    catch(...)
+    {
+      continue;
+    }
+  }
+
+  // 4. Final step, let's replace the symbols!
+  for(auto it = (F.second.body).instructions.begin();
+      it != (F.second.body).instructions.end();
+      ++it)
+  {
+    if(!it->is_assign())
+      continue;
+
+    auto assignment = to_code_assign2t(it->code);
+    if(is_symbol2t(assignment.target))
+    {
+      auto name = to_symbol2t(assignment.target).thename.as_string();
+      log_status("Checking for symbol {}", name);
+      if(name == "my_magic_symbol")
+        continue;
+      ;
+    }
+
+    replace_max_sub_expr(it->code, expr2symbol);
+  }
   return true;
 }
