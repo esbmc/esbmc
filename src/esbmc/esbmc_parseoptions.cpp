@@ -31,6 +31,7 @@ extern "C"
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
+#include <goto-programs/abstract-interpretation/common_subexpression_elimination.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/write_goto_binary.h>
@@ -483,6 +484,9 @@ int esbmc_parseoptionst::doit()
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<mark_decl_as_non_det>(context));
+
+    goto_preprocess_algorithms.emplace_back(
+      std::make_unique<goto_cse>(context));
   }
 
   // Run this before the main flow. This method performs its own
