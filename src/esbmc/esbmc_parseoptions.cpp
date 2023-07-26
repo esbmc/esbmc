@@ -1668,8 +1668,11 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, options, ns);
     }
 
-    goto_cse cse(ns);
-    cse.run(goto_functions);
+    if(cmdline.isset("common-subexpression-elimination"))
+    {
+      goto_cse cse(ns);
+      cse.run(goto_functions);
+    }
 
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {

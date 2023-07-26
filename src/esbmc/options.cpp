@@ -450,6 +450,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"enable-core-dump", NULL, "do not disable core dump output"},
     {"no-simplify", NULL, "do not simplify any expression"},
     {"no-propagation", NULL, "disable constant propagation"},
+    {"common-subexpression-elimination",
+     NULL,
+     "adds intermediate variables to precompute common sub-expressions between "
+     "assignments"},
     {"add-symex-value-sets",
      NULL,
      "enable value-set analysis for pointers and add assumes to the "
