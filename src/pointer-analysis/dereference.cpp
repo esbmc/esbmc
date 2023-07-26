@@ -653,8 +653,6 @@ uint64_t dereferencet::deref_alignment(
   if(is_symbol2t(deref_expr))
     return tgt_align;
 
-  return 1;
-
   if(is_typecast2t(deref_expr))
     return deref_alignment(to_typecast2t(deref_expr).from, tgt_align);
 
@@ -685,6 +683,8 @@ uint64_t dereferencet::deref_alignment(
     return min(type_align, src_align);
   }
 
+  /* lvalue instead of member, index, symbol? */
+
   if(is_member2t(deref_expr))
   {
     const member2t &m = to_member2t(deref_expr);
@@ -692,11 +692,11 @@ uint64_t dereferencet::deref_alignment(
     /* shouldn't dereference padding or otherwise invented members */
     assert(!strchr(m.member.c_str(), '$'));
 
-    if(is_symbol2t(m.source_value))
+    const expr2tc &src = m.source_value;
+    if(is_symbol2t(src))
       return tgt_align;
 
     expr2tc e;
-    const expr2tc &src = m.source_value;
     if(is_constant_struct2t(src))
     {
       auto &d = static_cast<const constant_datatype_data &>(*src);
@@ -716,11 +716,17 @@ uint64_t dereferencet::deref_alignment(
 
   if(is_index2t(deref_expr))
   {
-    return tgt_align;
-  }
+    const index2t &i = to_index2t(deref_expr);
 
-  if(is_address_of2t(deref_expr))
-    return tgt_align;
+    const expr2tc &src = i.source_value;
+    if(is_symbol2t(src))
+      return tgt_align;
+
+    if(is_constant_array_of2t(src))
+      return deref_alignment(to_constant_array_of2t(src).initializer, tgt_align);
+
+    return 1;
+  }
 
   if(is_if2t(deref_expr))
   {
@@ -735,6 +741,9 @@ uint64_t dereferencet::deref_alignment(
 
   // We could interpret it as future work.
   return 1;
+
+  if(is_address_of2t(deref_expr))
+    return tgt_align;
 }
 
 expr2tc dereferencet::build_reference_to(
@@ -2053,13 +2062,14 @@ void dereferencet::internal_extract_bytes(
     return;
   }
 
-  expr2tc accuml_offs = offset;
   const type2tc &bytetype = get_uint8_type();
   for(unsigned i = 0; i < num_bytes; i++)
   {
+    expr2tc o = offset;
+    if(i)
+      o = add2tc(o->type, o, gen_long(o->type, i));
     bytes.emplace_back(
-      byte_extract2tc(bytetype, object, accuml_offs, is_big_endian));
-    accuml_offs = add2tc(accuml_offs->type, accuml_offs, gen_long(accuml_offs->type, 1));
+      byte_extract2tc(bytetype, object, o, is_big_endian));
   }
 }
 
@@ -2099,20 +2109,22 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
   exprs.reserve(num_bytes);
 
   const type2tc &bytetype = get_uint8_type();
-  expr2tc accuml_offs = offset;
+  std::vector<expr2tc> elem_offsets(std::min(num_bytes, bytes_per_index));
+  expr2tc bpi = gen_long(offset->type, bytes_per_index);
   for(unsigned i = 0; i < num_bytes; i++)
   {
     /* Calculate the array index based on the given byte offset, the remainder
      * of the offset gives us the byte number of the indexed array element. */
-    expr2tc elem_idx = typecast2tc(
-      idx_type,
-      div2tc(offset->type, accuml_offs, gen_long(offset->type, bytes_per_index)));
-    expr2tc zero = gen_zero(offset->type);
-    expr2tc elem_offs =
-      modulus2tc(offset->type, accuml_offs, gen_long(offset->type, bytes_per_index));
+    expr2tc o = offset;
+    if(i)
+      o = add2tc(o->type, o, gen_long(o->type, i));
+    expr2tc elem_idx = typecast2tc(idx_type, div2tc(o->type, o, bpi));
+    expr2tc &elem_offs = elem_offsets[i % bytes_per_index];
+    if(!elem_offs)
+      elem_offs = modulus2tc(o->type, o, bpi);
     expr2tc the_index = index2tc(subtype, array, elem_idx);
+    simplify(the_index);
     internal_extract_bytes(the_index, 1, elem_offs, guard, mode, alignment, exprs);
-    accuml_offs = add2tc(offset->type, accuml_offs, gen_long(offset->type, 1));
   }
 
   return exprs;
