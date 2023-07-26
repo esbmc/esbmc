@@ -454,7 +454,7 @@ unsigned int smtlib_convt::emit_terminal_ast(
 unsigned int smtlib_convt::emit_ast(
   const smtlib_smt_ast *ast,
   std::string &output,
-  unsigned long &temp_sym_counter) const
+  std::unordered_map<const smtlib_smt_ast *, std::string> &temp_symbols) const
 {
   unsigned int brace_level = 0;
   assert(ast->args.size() <= 4);
@@ -473,17 +473,23 @@ unsigned int smtlib_convt::emit_ast(
     // Continue.
   }
 
-  for(unsigned long int i = 0; i < ast->args.size(); i++)
-    brace_level += emit_ast(
-      static_cast<const smtlib_smt_ast *>(ast->args[i]),
-      args[i],
-      temp_sym_counter);
+  if(auto it = temp_symbols.find(ast); it != temp_symbols.end())
+  {
+    output = it->second;
+    return 0;
+  }
 
   // Get a temporary sym name
-  unsigned int tempnum = temp_sym_counter++;
+  size_t tempnum = temp_symbols.size();
   std::stringstream ss;
   ss << "?x" << tempnum;
   std::string tempname = ss.str();
+
+  temp_symbols.emplace(ast, tempname);
+
+  for(unsigned long int i = 0; i < ast->args.size(); i++)
+    brace_level += emit_ast(
+      static_cast<const smtlib_smt_ast *>(ast->args[i]), args[i], temp_symbols);
 
   // Emit a let, assigning the result of this AST func to the sym.
   // For some reason let requires a double-braced operand.
@@ -522,8 +528,8 @@ void smtlib_convt::emit_ast(const smtlib_smt_ast *ast) const
   // This is inspired by the output from Z3 that I've seen.
 
   std::string output;
-  unsigned long temp_symbol_counter = 1UL;
-  unsigned int brace_level = emit_ast(ast, output, temp_symbol_counter);
+  std::unordered_map<const smtlib_smt_ast *, std::string> temp_symbols;
+  unsigned int brace_level = emit_ast(ast, output, temp_symbols);
 
   /* Emit the final representation of the root, either a (possibly temporary)
    * symbol, or that of a terminal. */
