@@ -301,7 +301,18 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
   }
 
   // Early exit, if no symbols.
+  bool exists = false;
+  for(auto elem : counter)
+  {
+    if(elem.second >= threshold)
+    {
+      exists = true;
+      break;
+    }
+  }
 
+  if(!exists)
+    return false;
   // 3. Instrument new tmp symbols
   std::unordered_map<expr2tc, expr2tc, irep2_hash> expr2symbol;
   for(auto it = (F.second.body).instructions.begin();
