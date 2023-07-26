@@ -1,5 +1,6 @@
 #include <goto-programs/abstract-interpretation/common_subexpression_elimination.h>
-
+#include <util/prefix.h>
+#include <fmt/format.h>
 std::unique_ptr<value_set_analysist> cse_domaint::vsa = nullptr;
 void cse_domaint::transform(
   goto_programt::const_targett from,
@@ -324,7 +325,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       for(const auto &e : to_add)
       {
         goto_programt::targett t = F.second.body.insert(it);
-        symbol2tc symbol(e->type, "my_magic_symbol");
+        symbol2tc symbol = create_cse_symbol(e->type);
         t->make_assignment();
         t->code = code_assign2tc(symbol, e);
         expr2symbol[e] = symbol;
@@ -348,14 +349,18 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     auto assignment = to_code_assign2t(it->code);
     if(is_symbol2t(assignment.target))
     {
+      // Are we dealing with our CSE symbol?
       auto name = to_symbol2t(assignment.target).thename.as_string();
-      log_status("Checking for symbol {}", name);
-      if(name == "my_magic_symbol")
+      if(has_prefix(name, prefix))
         continue;
-      ;
     }
 
     replace_max_sub_expr(it->code, expr2symbol);
   }
   return true;
+}
+
+symbol2tc goto_cse::create_cse_symbol(const type2tc &t)
+{
+  return symbol2tc(t, fmt::format("{}${}", prefix, symbol_counter++));
 }

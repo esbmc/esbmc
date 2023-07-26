@@ -110,4 +110,10 @@ protected:
   void replace_max_sub_expr(
     expr2tc &e,
     std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol) const;
+
+  symbol2tc create_cse_symbol(const type2tc &t);
+
+private:
+  unsigned symbol_counter = 0;
+  const std::string prefix = "__esbmc_cse_symbol";
 };
