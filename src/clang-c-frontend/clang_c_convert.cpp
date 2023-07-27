@@ -302,53 +302,67 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   locationt location_begin;
   get_location_from_decl(rd, location_begin);
 
-  // Check if the symbol is already added to the context, do nothing if it is
-  // already in the context.
-  if(context.find_symbol(id))
-    return false;
-
-  /* First put a symbol with a incomplete type into the context, then resolve
-   * all subtypes and finally set this symbol's correctly resolved type. */
-
   irep_idt c_tag = rd.isUnion() ? typet::t_union : typet::t_struct;
 
-  struct_union_typet t("incomplete_" + c_tag.as_string());
-  t.location() = location_begin;
-  t.incomplete(true); /* for now just a declaration */
-  t.tag(name);
+  // Check if the symbol is already added to the context, do nothing if it is
+  // already in the context.
+  symbolt *sym = context.find_symbol(id);
+  if(!sym)
+  {
+    /* First put a symbol with a incomplete type into the context, then resolve
+     * all subtypes and finally set this symbol's correctly resolved type. */
+    struct_union_typet t("incomplete_" + c_tag.as_string());
+    t.location() = location_begin;
+    t.incomplete(true); /* for now just a declaration */
+    t.tag(name);
 
-  symbolt symbol;
-  get_default_symbol(
-    symbol,
-    get_modulename_from_path(location_begin.file().as_string()),
-    t,
-    name,
-    id,
-    location_begin);
+    symbolt symbol;
+    get_default_symbol(
+      symbol,
+      get_modulename_from_path(location_begin.file().as_string()),
+      t,
+      name,
+      id,
+      location_begin);
 
-  std::string symbol_name = symbol.id.as_string();
-  symbol.is_type = true;
+    symbol.is_type = true;
 
-  // We have to add the struct/union/class to the context before converting its
-  // fields because there might be recursive struct/union/class (pointers) and
-  // the code at get_type, case clang::Type::Record, needs to find the correct
-  // type (itself). Note that the type is incomplete at this stage, it doesn't
-  // contain the fields, which are added to the symbol later on this method.
+    // We have to add the struct/union/class to the context before converting its
+    // fields because there might be recursive struct/union/class (pointers) and
+    // the code at get_type, case clang::Type::Record, needs to find the correct
+    // type (itself). Note that the type is incomplete at this stage, it doesn't
+    // contain the fields, which are added to the symbol later on this method.
 
-  bool did_exist [[maybe_unused]] = context.add(symbol);
-  assert(!did_exist);
+    sym = context.move_symbol_to_context(symbol);
+  }
+
+  assert(sym->is_type);
 
   // TODO: Fix me when we have a test case using C++ union.
   //       A C++ union can have member functions but not virtual functions.
   //       Just use struct_typet for C++?
 
-  // Don't continue to parse if it doesn't have a complete definition
+  /* Don't continue to parse if it doesn't have a complete definition, yet.
+   * This can happen in two cases:
+   * a) there is no complete type definition in the translation unit, or
+   * b) the type is being referred to under a pointer inside another type
+   *    definition and up to this definition has not been defined, yet.
+   */
   clang::RecordDecl *rd_def = rd.getDefinition();
   if(!rd_def)
     return false;
 
+  /* Don't continue if it's not incomplete; use the .incomplete() flag to avoid
+   * infinite recursion if the type we're defining refers to itself
+   * (via pointers): it either is already being defined (up the stack somewhere)
+   * or it's already a complete struct or union in the context. */
+  if(!sym->type.incomplete())
+    return false;
+  sym->type.remove(irept::a_incomplete);
+
   /* it has a definition, now build the complete type */
-  t.id(c_tag);
+  struct_union_typet t(c_tag);
+  t.tag(name);
 
   /* update location with that of the type's definition */
   get_location_from_decl(*rd_def, t.location());
@@ -384,15 +398,13 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if(get_struct_union_class_methods_decls(*rd_def, t))
     return true;
 
-  /* done translating the definition, so now it's not incomplete anymore */
-  t.remove(irept::a_incomplete);
-
   /* We successfully constructed the type of this symbol; replace the
    * symbol with the incomplete type by one with the now-complete type
    * definition.
    * Do this by erasing and re-inserting because the order of definitions in the
    * context matters. This type should be defined after any of the types that it
    * is composed of. */
+  symbolt symbol = *sym;
   context.erase_symbol(symbol.id);
   symbol.type = t;
   context.move_symbol_to_context(symbol);
