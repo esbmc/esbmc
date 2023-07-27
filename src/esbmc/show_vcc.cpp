@@ -36,7 +36,7 @@ void bmct::show_vcc(
         if(!p_it->ignore)
         {
           std::string string_value;
-          languages.from_expr(migrate_expr_back(p_it->cond), string_value);
+          languages.from_expr(p_it->cond, string_value);
           out << "{-" << count << "} " << string_value << "\n";
           count++;
         }
@@ -45,7 +45,7 @@ void bmct::show_vcc(
         << "\n";
 
     std::string string_value;
-    languages.from_expr(migrate_expr_back(it->cond), string_value);
+    languages.from_expr(it->cond, string_value);
     out << "{" << 1 << "} " << string_value << "\n";
 
     out << "\n";

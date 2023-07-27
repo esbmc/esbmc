@@ -3,7 +3,7 @@
 
 #include <langapi/mode.h>
 #include <util/language.h>
-
+#include <util/migrate.h>
 class languagest
 {
 public:
@@ -12,6 +12,11 @@ public:
   bool from_expr(const exprt &expr, std::string &code)
   {
     return language->from_expr(expr, code, ns);
+  }
+
+  bool from_expr(const expr2tc &expr, std::string &code)
+  {
+    return language->from_expr(migrate_expr_back(expr), code, ns);
   }
 
   bool from_type(const typet &type, std::string &code)

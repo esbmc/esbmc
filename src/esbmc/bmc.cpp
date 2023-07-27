@@ -237,7 +237,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
     oss << "\n/* " << count << " */ ";
 
     std::string string_value;
-    languages.from_expr(migrate_expr_back(it.cond), string_value);
+    languages.from_expr(it.cond, string_value);
 
     if(it.is_assignment())
     {
@@ -258,7 +258,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
 
     if(!migrate_expr_back(it.guard).is_true())
     {
-      languages.from_expr(migrate_expr_back(it.guard), string_value);
+      languages.from_expr(it.guard, string_value);
       oss << std::string(i2string(count).size() + 3, ' ');
       oss << "guard: " << string_value << "\n";
     }
