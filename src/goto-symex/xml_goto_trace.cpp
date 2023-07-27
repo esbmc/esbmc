@@ -60,7 +60,7 @@ void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
       {
         value_string = from_expr(ns, identifier, step.value);
         type_string =
-          from_type(ns, identifier, migrate_type_back(step.value->type));
+          from_type(ns, identifier, step.value->type);
       }
 
       const symbolt *symbol = ns.lookup(identifier);
