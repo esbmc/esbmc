@@ -186,14 +186,12 @@ unsigned int empty_type2t::get_width() const
 
 unsigned int symbol_type2t::get_width() const
 {
-  assert(0 && "Fetching width of symbol type - invalid operation");
-  abort();
+  throw symbolic_type_excp();
 }
 
 unsigned int cpp_name_type2t::get_width() const
 {
-  assert(0 && "Fetching width of cpp_name type - invalid operation");
-  abort();
+  throw symbolic_type_excp();
 }
 
 unsigned int struct_type2t::get_width() const
