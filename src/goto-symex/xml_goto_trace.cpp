@@ -58,7 +58,7 @@ void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
 
       if(!is_nil_expr(step.value))
       {
-        value_string = from_expr(ns, identifier, migrate_expr_back(step.value));
+        value_string = from_expr(ns, identifier, step.value);
         type_string =
           from_type(ns, identifier, migrate_type_back(step.value->type));
       }

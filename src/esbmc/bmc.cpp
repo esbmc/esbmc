@@ -256,7 +256,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
       oss << "renumber: " << from_expr(ns, "", it.lhs) << "\n";
     }
 
-    if(!migrate_expr_back(it.guard).is_true())
+    if(!is_true(it.guard))
     {
       languages.from_expr(it.guard, string_value);
       oss << std::string(i2string(count).size() + 3, ' ');

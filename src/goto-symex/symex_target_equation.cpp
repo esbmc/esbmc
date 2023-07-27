@@ -293,13 +293,13 @@ void symex_target_equationt::SSA_stept::output(
   }
 
   if(is_assert() || is_assume() || is_assignment())
-    out << from_expr(ns, "", migrate_expr_back(cond)) << "\n";
+    out << from_expr(ns, "", cond) << "\n";
 
   if(is_assert())
     out << comment << "\n";
 
   if(config.options.get_bool_option("ssa-guards"))
-    out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << "\n";
+    out << "Guard: " << from_expr(ns, "", guard) << "\n";
 }
 
 void symex_target_equationt::SSA_stept::short_output(
