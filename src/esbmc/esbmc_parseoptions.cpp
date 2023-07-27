@@ -1647,7 +1647,7 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       // remove skips before doing k-induction
       // it seems to fix some issues
-      remove_skip(goto_functions);
+      remove_no_op(goto_functions);
 
       goto_k_induction(goto_functions);
     }
