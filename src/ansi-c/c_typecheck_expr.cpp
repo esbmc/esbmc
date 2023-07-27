@@ -22,6 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_types.h>
 #include <util/string_constant.h>
 #include <iostream>
+#include <ansi-c/compat.h>
 
 void c_typecheck_baset::typecheck_expr(exprt &expr)
 {
@@ -791,7 +792,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
 
   typet type = op0.type();
 
-  follow_symbol(type);
+  follow_symbol(type, *this);
 
   if(type.id() == "incomplete_struct")
   {

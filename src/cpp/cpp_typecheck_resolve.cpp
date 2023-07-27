@@ -20,7 +20,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/std_types.h>
 #include <util/string_constant.h>
 #include <utility>
-
+#include <ansi-c/compat.h>
 cpp_typecheck_resolvet::cpp_typecheck_resolvet(cpp_typecheckt &_cpp_typecheck)
   : cpp_typecheck(_cpp_typecheck)
 {
@@ -448,7 +448,7 @@ exprt cpp_typecheck_resolvet::convert_identifier(
 
       while(followed_type.id() == "symbol")
       {
-        typet tmp = cpp_typecheck.lookup(followed_type)->type;
+        typet tmp = cpp_typecheck.lookup(followed_type.identifier())->type;
         followed_type = tmp;
         constant |= followed_type.cmt_constant();
       }
@@ -1233,7 +1233,8 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
     auto new_end = std::remove_if(
       zero_distance_matches.begin(),
       zero_distance_matches.end(),
-      [&full_template_args_tc](matcht const &match) {
+      [&full_template_args_tc](matcht const &match)
+      {
         // This should be replaced by a clean std::remove_if...
         for(unsigned i = 0; i < full_template_args_tc.arguments().size(); ++i)
         {
@@ -1355,7 +1356,7 @@ void cpp_typecheck_resolvet::show_identifiers(
 
       if(id_expr.type().get_bool("is_template"))
       {
-        out << cpp_typecheck.lookup(to_symbol_expr(id_expr))->name;
+        out << cpp_typecheck.lookup(to_symbol_expr(id_expr).identifier())->name;
       }
       else if(id_expr.type().id() == "code")
       {
@@ -1391,7 +1392,8 @@ void cpp_typecheck_resolvet::show_identifiers(
 
       if(id_expr.id() == "symbol")
       {
-        const symbolt &symbol = *cpp_typecheck.lookup(to_symbol_expr(id_expr));
+        const symbolt &symbol =
+          *cpp_typecheck.lookup(to_symbol_expr(id_expr).identifier());
         out << " (" << symbol.location << ")";
       }
       else if(id_expr.id() == "member")
@@ -2100,7 +2102,7 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
   const cpp_typecheck_fargst &fargs)
 {
   typet tmp = expr.type();
-  cpp_typecheck.follow_symbol(tmp);
+  follow_symbol(tmp, cpp_typecheck);
 
   // XXX -- Spec allows for partial template argument specification, currently
   // not handled.
