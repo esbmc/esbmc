@@ -152,7 +152,11 @@ static void add_padding(struct_typet &type, const namespacet &ns)
 
   struct_typet::componentst &components = type.components();
 
-  // First make bit-fields appear on byte boundaries
+  // First let's pad all components
+  for(struct_typet::componentt &c : components)
+    add_padding(c.type(), ns);
+
+  // Next make bit-fields appear on byte boundaries
   {
     std::size_t bit_field_bits = 0;
 
@@ -385,7 +389,8 @@ static void add_padding(union_typet &type, const namespacet &ns)
 
 void add_padding(typet &type, const namespacet &ns)
 {
-  assert(!type.is_symbol());
+  if(type.is_symbol())
+    return add_padding(const_cast<typet &>(ns.lookup(type)->type), ns);
 
   /* Only structs and unions get padded, all other types are fine */
   if(type.is_struct())
