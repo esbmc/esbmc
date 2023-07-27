@@ -8,7 +8,7 @@ bool type_eq(const typet &type1, const typet &type2, const namespacet &ns)
 
   if(type1.id() == "symbol")
   {
-    const symbolt *symbol = ns.lookup(type1);
+    const symbolt *symbol = ns.lookup(type1.identifier());
     assert(symbol);
     if(!symbol->is_type)
       throw "symbol " + id2string(symbol->name) + " is not a type";
@@ -18,7 +18,7 @@ bool type_eq(const typet &type1, const typet &type2, const namespacet &ns)
 
   if(type2.id() == "symbol")
   {
-    const symbolt *symbol = ns.lookup(type2);
+    const symbolt *symbol = ns.lookup(type2.identifier());
     assert(symbol);
     if(!symbol->is_type)
       throw "symbol " + id2string(symbol->name) + " is not a type";
