@@ -8,4 +8,4 @@ target_include_directories(goto2c
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-target_link_libraries(goto2c gotoprograms clangcfrontend ${cheaders_lib} ${ESBMC_CLANG_LIBS})
+target_link_libraries(goto2c gotoprograms ${cheaders_lib} ${ESBMC_CLANG_LIBS})
