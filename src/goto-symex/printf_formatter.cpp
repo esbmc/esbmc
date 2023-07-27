@@ -126,7 +126,7 @@ void printf_formattert::process_format(std::ostream &out)
     const expr2tc &op = *(next_operand++);
     const expr2tc symbol2 = get_base_object(op);
     if(is_constant_string2t(symbol2))
-       out << to_constant_string2t(symbol2).value.as_string();
+      out << to_constant_string2t(symbol2).value.as_string();
   }
   break;
 

@@ -10,8 +10,6 @@
 #include <util/std_code.h>
 #include <util/std_types.h>
 
-
-
 std::string expr2ct::id_shorthand(const exprt &expr) const
 {
   const irep_idt &identifier = expr.identifier();
@@ -67,7 +65,6 @@ std::string expr2ct::convert(const type2tc &src)
 {
   return convert(migrate_type_back(src));
 }
-
 
 std::string expr2ct::convert_rec(
   const typet &src,
@@ -2065,7 +2062,8 @@ static bool is_pointer_arithmetic(const exprt &e, const exprt *&ptr, exprt &idx)
   {
     assert(e.operands().size() == 2);
     const exprt *p = nullptr, *i = nullptr;
-    auto categorize = [&p, &i](const exprt &e) {
+    auto categorize = [&p, &i](const exprt &e)
+    {
       const irep_idt &tid = e.type().id();
       if(tid == "pointer")
         p = &e;
@@ -2081,9 +2079,8 @@ static bool is_pointer_arithmetic(const exprt &e, const exprt *&ptr, exprt &idx)
       exprt j;
       if(is_pointer_arithmetic(*p, p, j))
       {
-        auto is_unsigned = [](const exprt &e) {
-          return e.type().id() == "unsignedbv";
-        };
+        auto is_unsigned = [](const exprt &e)
+        { return e.type().id() == "unsignedbv"; };
         const char *type =
           is_unsigned(j) || is_unsigned(*i) ? "unsignedbv" : "signedbv";
         idx = exprt(e.id(), typet(type));

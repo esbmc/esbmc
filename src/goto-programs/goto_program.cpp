@@ -71,8 +71,7 @@ void goto_programt::instructiont::output_instruction(
     break;
 
   case FUNCTION_CALL:
-    out << "FUNCTION_CALL:  " << from_expr(ns, "", code)
-        << "\n";
+    out << "FUNCTION_CALL:  " << from_expr(ns, "", code) << "\n";
     break;
 
   case RETURN:

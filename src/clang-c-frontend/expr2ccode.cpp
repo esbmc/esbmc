@@ -973,7 +973,6 @@ std::string expr2ccodet::convert(const expr2tc &src, unsigned &precedence)
   return convert(migrate_expr_back(src), precedence);
 }
 
-
 std::string
 expr2ccodet::convert_typecast(const exprt &src, unsigned &precedence)
 {
