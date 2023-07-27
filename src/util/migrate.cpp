@@ -60,7 +60,14 @@ static expr2tc fixup_containerof_in_sizeof(const expr2tc &_expr)
 static type2tc migrate_type0(const typet &type)
 {
   if(type.id() == typet::t_bool)
+  {
+    if(type.get_bool("#bitfield"))
+    {
+      assert(!type.width().empty());
+      return get_uint_type(strtol(type.width().c_str(), nullptr, 10));
+    }
     return get_bool_type();
+  }
 
   if(type.id() == typet::t_signedbv)
   {
