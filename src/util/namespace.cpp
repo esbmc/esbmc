@@ -20,6 +20,11 @@ const symbolt *namespacet::lookup(const irep_idt &name) const
   return context->find_symbol(name);
 }
 
+const symbolt *namespacet::lookup(const expr2tc &name) const
+{
+  return lookup(migrate_expr_back(name));
+}
+
 void namespacet::follow_symbol(irept &irep) const
 {
   while(irep.id() == "symbol")
