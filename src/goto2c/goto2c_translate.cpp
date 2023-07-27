@@ -192,7 +192,7 @@ std::string goto2ct::translate(goto_programt::instructiont &instruction)
   case GOTO:
     // If we know that the guard is TRUE, then just skip the "if" part
     if(!is_true(instruction.guard))
-      out << "if(" << expr2ccode(migrate_expr_back(instruction.guard), ns)
+      out << "if(" << expr2ccode(instruction.guard, ns)
           << ") ";
     // It is guaranteed that every GOTO instruction has only one target
     out << "goto __ESBMC_goto_label_"
@@ -204,7 +204,7 @@ std::string goto2ct::translate(goto_programt::instructiont &instruction)
   case DECL:
   case ASSIGN:
   case OTHER:
-    out << expr2ccode(migrate_expr_back(instruction.code), ns);
+    out << expr2ccode(instruction.code, ns);
     break;
   // "Silent" instructions. They cannot be translated directly into C.
   // So we just keep them for debugging purposes.
@@ -212,7 +212,7 @@ std::string goto2ct::translate(goto_programt::instructiont &instruction)
     out << "// " << instruction.location.function();
     break;
   case DEAD:
-    out << "// " << expr2ccode(migrate_expr_back(instruction.code), ns);
+    out << "// " << expr2ccode(instruction.code, ns);
     break;
   case LOCATION:
     out << "// " << instruction.location;

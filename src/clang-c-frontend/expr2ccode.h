@@ -8,6 +8,10 @@
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <clang-c-frontend/expr2c.h>
+#include <irep2/irep2.h>
+
+std::string
+expr2ccode(const expr2tc &expr, const namespacet &ns, bool fullname = false);
 
 std::string
 expr2ccode(const exprt &expr, const namespacet &ns, bool fullname = false);

@@ -51,6 +51,12 @@ bool expr2ccodet::is_typedef_struct_union(std::string tag)
     std::regex_search(id2string(tag), m, std::regex("struct[[:space:]]+.*")));
 }
 
+std::string expr2ccode(const expr2tc &expr, const namespacet &ns, bool fullname)
+{
+  return expr2ccode(migrate_expr_back(expr),ns,fullname);
+}
+
+
 std::string expr2ccode(const exprt &expr, const namespacet &ns, bool fullname)
 {
   expr2ccodet expr2ccode(ns, fullname);
