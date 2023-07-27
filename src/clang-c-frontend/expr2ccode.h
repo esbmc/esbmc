@@ -73,7 +73,7 @@ protected:
 
   std::string convert_code_decl(const codet &src, unsigned indent) override;
   std::string convert(const exprt &src, unsigned &precedence) override;
-
+  std::string convert(const expr2tc &src, unsigned &precedence) override;
   std::string convert_same_object(const exprt &src, unsigned &precedence);
   std::string convert_pointer_offset(
     const exprt &src,

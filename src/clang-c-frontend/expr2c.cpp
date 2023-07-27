@@ -10,6 +10,8 @@
 #include <util/std_code.h>
 #include <util/std_types.h>
 
+
+
 std::string expr2ct::id_shorthand(const exprt &expr) const
 {
   const irep_idt &identifier = expr.identifier();
@@ -60,6 +62,12 @@ std::string expr2ct::convert(const typet &src)
 {
   return convert_rec(src, c_qualifierst(), "");
 }
+
+std::string expr2ct::convert(const type2tc &src)
+{
+  return convert(migrate_type_back(src));
+}
+
 
 std::string expr2ct::convert_rec(
   const typet &src,
@@ -2096,6 +2104,11 @@ static bool is_pointer_arithmetic(const exprt &e, const exprt *&ptr, exprt &idx)
   return false;
 }
 
+std::string expr2ct::convert(const expr2tc &src, unsigned &precedence)
+{
+  return convert(migrate_expr_back(src), precedence);
+}
+
 std::string expr2ct::convert(const exprt &src, unsigned &precedence)
 {
   precedence = 16;
@@ -2560,6 +2573,11 @@ std::string expr2ct::convert(const exprt &src)
 {
   unsigned precedence;
   return convert(src, precedence);
+}
+
+std::string expr2ct::convert(const expr2tc &src)
+{
+  return convert(migrate_expr_back(src));
 }
 
 std::string expr2c(const exprt &expr, const namespacet &ns, bool fullname)
