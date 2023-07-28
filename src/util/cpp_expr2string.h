@@ -7,9 +7,13 @@ class exprt;
 class namespacet;
 class typet;
 
-std::string
-cpp_expr2string(const exprt &expr, const namespacet &ns, const bool fullname = false);
-std::string
-cpp_type2string(const typet &type, const namespacet &ns, const bool fullname = false);
+std::string cpp_expr2string(
+  const exprt &expr,
+  const namespacet &ns,
+  const bool fullname = false);
+std::string cpp_type2string(
+  const typet &type,
+  const namespacet &ns,
+  const bool fullname = false);
 
 #endif

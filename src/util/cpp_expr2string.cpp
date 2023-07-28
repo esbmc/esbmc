@@ -41,7 +41,8 @@ protected:
   typedef std::unordered_set<std::string> id_sett;
 };
 
-std::string cpp_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
+std::string
+cpp_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
 {
   const typet &full_type = ns.follow(src.type());
 
@@ -99,7 +100,8 @@ std::string cpp_expr2stringt::convert_struct(const exprt &src, unsigned &precede
   return dest;
 }
 
-std::string cpp_expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
+std::string
+cpp_expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
 {
   if(src.type().id() == "bool")
   {
