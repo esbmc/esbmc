@@ -1,6 +1,8 @@
 #include <goto-programs/abstract-interpretation/common_subexpression_elimination.h>
 #include <util/prefix.h>
 #include <fmt/format.h>
+
+// TODO: Do an points-to abstract interpreter
 std::unique_ptr<value_set_analysist> cse_domaint::vsa = nullptr;
 void cse_domaint::transform(
   goto_programt::const_targett from,
@@ -13,16 +15,24 @@ void cse_domaint::transform(
   {
   case END_FUNCTION:
     // Nothing is available anymore
+    // TODO: Only local expressions are not available!
     available_expressions.clear();
     break;
   case ASSIGN:
-    assign(instruction.code, to);
+  {
+    const code_assign2t &code = to_code_assign2t(instruction.code);
+    // Expressions that contain the target will need to be recomputed
+    havoc_expr(code.target, to);
+    // Target may be an expression as well
+    make_expression_available(code.target);
+    make_expression_available(code.source);
+  }
     break;
 
   case GOTO:
   case ASSERT:
   case ASSUME:
-    check_expression(instruction.guard);
+    make_expression_available(instruction.guard);
     break;
 
   case DECL:
@@ -61,13 +71,7 @@ void cse_domaint::assign(
   const expr2tc &e,
   const goto_programt::const_targett &i_it)
 {
-  const code_assign2t &code = to_code_assign2t(e);
 
-  // Expressions that contain the target will need to be recomputed
-  havoc_expr(code.target, i_it);
-  // Target may be an expression as well
-  check_expression(code.target);
-  check_expression(code.source);
 }
 
 bool cse_domaint::join(const cse_domaint &b)
@@ -109,7 +113,7 @@ bool cse_domaint::join(const cse_domaint &b)
   return changed;
 }
 
-void cse_domaint::check_expression(const expr2tc &E)
+void cse_domaint::make_expression_available(const expr2tc &E)
 {
   if(!E)
     return;
@@ -123,7 +127,7 @@ void cse_domaint::check_expression(const expr2tc &E)
     return;
 
   // Let's recursively make it available!
-  E->foreach_operand([this](const expr2tc &e) { check_expression(e); });
+  E->foreach_operand([this](const expr2tc &e) { make_expression_available(e); });
   available_expressions.insert(E);
 }
 
