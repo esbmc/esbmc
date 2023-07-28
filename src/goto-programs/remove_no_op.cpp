@@ -1,16 +1,16 @@
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 
-/// Determine whether the instruction is semantically equivalent to a skip
-/// (no-op).  This includes a skip, but also if(false) goto ..., goto next;
-///  next: ..., and (void)0.
-/// \param body  goto program containing the instruction
-/// \param it  instruction iterator that is tested for being a skip (or
-/// equivalent)
-/// \param ignore_labels  If the caller takes care of moving labels, then even
-/// skip statements carrying labels can be treated as skips (even though they
-/// may carry key information such as error labels).
-/// \return True, iff it is equivalent to a skip.
-bool is_skip(
+// Determine whether the instruction is a no-op.
+// Some examples of such instructions incude: a SKIP,
+// "if(false) goto ...", "goto next; next: ...", (void)0, etc.
+//
+// \param body - goto program containing the instruction
+// \param it - instruction iterator that is tested for being a no-op
+// \param ignore_labels - if the caller takes care of moving labels, then even
+// no-op statements carrying labels can be treated as no-op's (even though they
+// may carry key information such as error labels).
+// \return True, iff it is a no-op.
+bool is_no_op(
   const goto_programt &body,
   goto_programt::const_targett it,
   bool ignore_labels)
@@ -32,7 +32,7 @@ bool is_skip(
     if(next_it == body.instructions.end())
       return false;
 
-    // A branch to the next instruction is a skip
+    // A branch to the next instruction is a no-op
     // We also require the guard to be 'true'
     return is_true(it->guard) && it->has_target() &&
            it->get_target() == next_it;
@@ -65,18 +65,19 @@ bool is_skip(
   return false;
 }
 
-/// remove unnecessary skip statements
-/// \param goto_program  goto program containing the instructions to be cleaned
-/// in the range [begin, end)
-/// \param begin  iterator pointing to first instruction to be considered
-/// \param end  iterator pointing beyond last instruction to be considered
-void remove_skip(
+// Remove unnecessary no-op statements in a subset of the given GOTO program
+//
+// \param goto_program  goto program containing the instructions to be cleaned
+// in the range [begin, end)
+// \param begin  iterator pointing to first instruction to be considered
+// \param end  iterator pointing beyond last instruction to be considered
+void remove_no_op(
   goto_programt &goto_program,
   goto_programt::targett begin,
   goto_programt::targett end)
 {
   // This needs to be a fixed-point, as
-  // removing a skip can turn a goto into a skip.
+  // removing a no-op can turn a goto into a no-op.
   std::size_t old_size;
 
   do
@@ -88,8 +89,7 @@ void remove_skip(
       new_targetst;
     new_targetst new_targets;
 
-    // remove skip statements
-
+    // remove no-op statements
     for(goto_programt::instructionst::iterator it = begin; it != end;)
     {
       goto_programt::targett old_target = it;
@@ -97,9 +97,9 @@ void remove_skip(
       // for collecting labels
       std::list<irep_idt> labels;
 
-      while(is_skip(goto_program, it, true))
+      while(is_no_op(goto_program, it, true))
       {
-        // don't remove the last skip statement,
+        // don't remove the last no-op statement,
         // it could be a target
         if(
           it == std::prev(end) || (std::next(it)->is_end_function() &&
@@ -145,12 +145,12 @@ void remove_skip(
     while(new_targets.find(begin) != new_targets.end())
       ++begin;
 
-    // now delete the skips -- we do so after adjusting the
+    // now delete the no-op's -- we do so after adjusting the
     // gotos to avoid dangling targets
     for(const auto &new_target : new_targets)
       goto_program.instructions.erase(new_target.first);
 
-    // remove the last skip statement unless it's a target
+    // remove the last no-op statement unless it's a target
     goto_program.compute_target_numbers();
 
     if(begin != end)
@@ -159,16 +159,18 @@ void remove_skip(
       if(begin == last)
         ++begin;
 
-      if(is_skip(goto_program, last) && !last->is_target())
+      if(is_no_op(goto_program, last) && !last->is_target())
         goto_program.instructions.erase(last);
     }
   } while(goto_program.instructions.size() < old_size);
 }
 
-/// remove unnecessary skip statements
-void remove_skip(goto_programt &goto_program)
+// Remove unnecessary no-op statements in the entire GOTO program
+//
+// \param goto_program  goto program containing the instructions to be cleaned
+void remove_no_op(goto_programt &goto_program)
 {
-  remove_skip(
+  remove_no_op(
     goto_program,
     goto_program.instructions.begin(),
     goto_program.instructions.end());
@@ -176,11 +178,13 @@ void remove_skip(goto_programt &goto_program)
   goto_program.update();
 }
 
-/// remove unnecessary skip statements
-void remove_skip(goto_functionst &goto_functions)
+// Remove unnecessary no-op statements all GOTO functions
+//
+// \param goto_functions  list of goto functions to be cleaned
+void remove_no_op(goto_functionst &goto_functions)
 {
   Forall_goto_functions(f_it, goto_functions)
-    remove_skip(
+    remove_no_op(
       f_it->second.body,
       f_it->second.body.instructions.begin(),
       f_it->second.body.instructions.end());

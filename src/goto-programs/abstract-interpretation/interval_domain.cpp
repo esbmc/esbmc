@@ -2,6 +2,7 @@
 /// Interval Domain
 // TODO: Ternary operators, lessthan into lessthanequal for integers
 #include <goto-programs/abstract-interpretation/interval_domain.h>
+#include <goto-programs/abstract-interpretation/bitwise_bounds.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/std_expr.h>
@@ -266,116 +267,276 @@ T interval_domaint::interpolate_intervals(const T &before, const T &after)
 template <class T>
 T interval_domaint::get_interval(const expr2tc &e) const
 {
-  // This needs to come before constant number
-  if(is_constant_bool2t(e))
+  T result = get_top_interval_from_expr<T>(e);
+
+  // TODO: I probably can refactor these in a better way
+  switch(e->expr_id)
   {
-    auto r = get_top_interval_from_expr<T>(e);
-    r.lower = to_constant_bool2t(e).is_true();
-    r.upper = to_constant_bool2t(e).is_true();
-    return r;
+  case expr2t::constant_bool_id:
+    result.set_lower(to_constant_bool2t(e).is_true());
+    result.set_upper(to_constant_bool2t(e).is_true());
+    break;
+
+  case expr2t::constant_int_id:
+  case expr2t::constant_fixedbv_id:
+  case expr2t::constant_floatbv_id:
+    result = get_interval_from_const<T>(e);
+    break;
+
+  case expr2t::symbol_id:
+    result = get_interval_from_symbol<T>(to_symbol2t(e));
+    break;
+
+  case expr2t::neg_id:
+    result = -get_interval<T>(to_neg2t(e).value);
+    break;
+
+  case expr2t::not_id:
+    result = T::invert_bool(get_interval<T>(to_not2t(e).value));
+    break;
+
+  case expr2t::or_id:
+  case expr2t::and_id:
+  case expr2t::xor_id:
+  case expr2t::implies_id:
+  {
+    auto logic_op = std::dynamic_pointer_cast<logic_2ops>(e);
+    tvt lhs = eval_boolean_expression(logic_op->side_1, *this);
+    tvt rhs = eval_boolean_expression(logic_op->side_2, *this);
+
+    if(is_and2t(e))
+    {
+      // If any side is false, (and => false)
+      if((lhs.is_false() || rhs.is_false()))
+      {
+        result.set_lower(0);
+        result.set_upper(0);
+        break;
+      }
+
+      // Both sides are true, then true
+      if(lhs.is_true() && rhs.is_true())
+      {
+        result.set_lower(1);
+        result.set_upper(1);
+        break;
+      }
+    }
+
+    else if(is_or2t(e))
+    {
+      if(lhs.is_true() || rhs.is_true())
+      {
+        result.set_lower(1);
+        result.set_upper(1);
+        break;
+      }
+
+      // Both sides are false, then false
+      if(lhs.is_false() && rhs.is_false())
+      {
+        result.set_lower(0);
+        result.set_upper(0);
+        break;
+      }
+    }
+
+    else if(is_xor2t(e))
+    {
+      if(lhs.is_unknown() || rhs.is_unknown())
+      {
+        result.set_lower(0);
+        result.set_upper(1);
+      }
+      else if(lhs == rhs)
+      {
+        result.set_lower(0);
+        result.set_upper(0);
+      }
+      else
+      {
+        result.set_lower(1);
+        result.set_upper(1);
+      }
+
+      break;
+    }
+
+    else if(is_implies2t(e))
+    {
+      // A --> B <=== > ¬A or B
+      if(lhs.is_true() && rhs.is_false())
+      {
+        result.set_lower(0);
+        result.set_upper(0);
+      }
+      else if(lhs.is_false() || rhs.is_true())
+      {
+        result.set_lower(1);
+        result.set_upper(1);
+      }
+      else
+      {
+        result.set_lower(0);
+        result.set_upper(1);
+      }
+      break;
+    }
+
+    log_debug("Could not simplify: {}", *e);
+    break;
   }
 
-  if(is_symbol2t(e))
-    return get_interval_from_symbol<T>(to_symbol2t(e));
-
-  if(is_neg2t(e))
-    return -get_interval<T>(to_neg2t(e).value);
-
-  if(is_constant_number(e))
-    return get_interval_from_const<T>(e);
-
-  if(is_if2t(e))
+  case expr2t::if_id:
   {
     auto cond = get_interval<T>(to_if2t(e).cond);
     auto lhs = get_interval<T>(to_if2t(e).true_value);
     auto rhs = get_interval<T>(to_if2t(e).false_value);
-    return T::ternary_if(cond, lhs, rhs);
+    result = T::ternary_if(cond, lhs, rhs);
+    break;
   }
 
-  if(is_typecast2t(e))
+  case expr2t::typecast_id:
   {
+    // Special case: boolean
+    if(is_bool_type(to_typecast2t(e).type))
+    {
+      tvt truth = eval_boolean_expression(to_typecast2t(e).from, *this);
+      result.set_lower(0);
+      result.set_upper(1);
+
+      if(truth.is_true())
+        result.set_lower(1);
+
+      if(truth.is_false())
+        result.set_upper(0);
+
+      break;
+    }
     auto inner = get_interval<T>(to_typecast2t(e).from);
-    return T::cast(inner, to_typecast2t(e).type);
+    result = T::cast(inner, to_typecast2t(e).type);
+    break;
   }
 
-  // Arithmetic?
-  auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
-  if(arith_op && enable_interval_arithmetic)
-  {
-    auto lhs = get_interval<T>(arith_op->side_1);
-    auto rhs = get_interval<T>(arith_op->side_2);
-
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  case expr2t::mul_id:
+  case expr2t::div_id:
+  case expr2t::modulus_id:
     if(enable_interval_arithmetic)
     {
+      auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
+      auto lhs = get_interval<T>(arith_op->side_1);
+      auto rhs = get_interval<T>(arith_op->side_2);
+
       if(is_add2t(e))
-        return lhs + rhs;
+        result = lhs + rhs;
 
-      if(is_sub2t(e))
-        return lhs - rhs;
+      else if(is_sub2t(e))
+        result = lhs - rhs;
 
-      if(is_mul2t(e))
-        return lhs * rhs;
+      else if(is_mul2t(e))
+        result = lhs * rhs;
 
-      if(is_div2t(e))
-        return lhs / rhs;
+      else if(is_div2t(e))
+        result = lhs / rhs;
 
-      if(is_modulus2t(e))
-        return lhs % rhs;
+      else if(is_modulus2t(e))
+        result = lhs % rhs;
     }
-  }
+    break;
 
-  if(enable_interval_bitwise_arithmetic)
+  case expr2t::shl_id:
+  case expr2t::ashr_id:
+  case expr2t::lshr_id:
+  case expr2t::bitor_id:
+  case expr2t::bitand_id:
+  case expr2t::bitxor_id:
+  case expr2t::bitnand_id:
+  case expr2t::bitnor_id:
+  case expr2t::bitnxor_id:
+    if(enable_interval_bitwise_arithmetic)
+    {
+      auto bit_op = std::dynamic_pointer_cast<bit_2ops>(e);
+      auto lhs = get_interval<T>(bit_op->side_1);
+      auto rhs = get_interval<T>(bit_op->side_2);
+
+      if(is_shl2t(e))
+        result = T::left_shift(lhs, rhs);
+
+      else if(is_ashr2t(e))
+        result = T::arithmetic_right_shift(lhs, rhs);
+
+      else if(is_lshr2t(e))
+        result = T::logical_right_shift(lhs, rhs);
+
+      else if(is_bitor2t(e))
+        result = lhs | rhs;
+
+      else if(is_bitand2t(e))
+        result = lhs & rhs;
+      else if(is_bitxor2t(e))
+        result = lhs ^ rhs;
+
+      else if(is_bitnand2t(e))
+        result = T::bitnot(lhs & rhs);
+      else if(is_bitnor2t(e))
+        result = T::bitnot(lhs | rhs);
+      else if(is_bitnxor2t(e))
+        result = T::bitnot(lhs ^ rhs);
+    }
+    break;
+
+  case expr2t::bitnot_id:
+    if(enable_interval_bitwise_arithmetic)
+      result = T::bitnot(get_interval<T>(to_bitnot2t(e).value));
+    break;
+
+  case expr2t::lessthan_id:
+  case expr2t::lessthanequal_id:
+  case expr2t::greaterthan_id:
+  case expr2t::greaterthanequal_id:
+  case expr2t::equality_id:
+  case expr2t::notequal_id:
   {
-    if(is_shl2t(e))
-    {
-      auto k = get_interval<T>(to_shl2t(e).side_2);
-      auto i = get_interval<T>(to_shl2t(e).side_1);
-      return T::left_shift(i, k);
-    }
+    const expr2tc &lhs = *e->get_sub_expr(0);
+    const expr2tc &rhs = *e->get_sub_expr(1);
 
-    if(is_ashr2t(e))
-    {
-      auto k = get_interval<T>(to_ashr2t(e).side_2);
-      auto i = get_interval<T>(to_ashr2t(e).side_1);
-      return T::arithmetic_right_shift(i, k);
-    }
+    auto lhs_i = get_interval<T>(lhs);
+    auto rhs_i = get_interval<T>(rhs);
 
-    if(is_lshr2t(e))
-    {
-      auto k = get_interval<T>(to_lshr2t(e).side_2);
-      auto i = get_interval<T>(to_lshr2t(e).side_1);
-      return T::logical_right_shift(i, k);
-    }
+    if(is_equality2t(e))
+      result = T::equality(lhs_i, rhs_i);
 
-    if(is_bitor2t(e))
-    {
-      auto rhs = get_interval<T>(to_bitor2t(e).side_2);
-      auto lhs = get_interval<T>(to_bitor2t(e).side_1);
-      return lhs | rhs;
-    }
+    else if(is_notequal2t(e))
+      result = T::not_equal(lhs_i, rhs_i);
 
-    if(is_bitand2t(e))
-    {
-      auto rhs = get_interval<T>(to_bitand2t(e).side_2);
-      auto lhs = get_interval<T>(to_bitand2t(e).side_1);
-      return lhs & rhs;
-    }
-    if(is_bitxor2t(e))
-    {
-      auto rhs = get_interval<T>(to_bitxor2t(e).side_2);
-      auto lhs = get_interval<T>(to_bitxor2t(e).side_1);
-      return lhs ^ rhs;
-    }
+    else if(is_lessthan2t(e))
+      result = T::less_than(lhs_i, rhs_i);
 
-    if(is_bitnot2t(e))
-    {
-      auto lhs = get_interval<T>(to_bitnot2t(e).value);
-      return T::bitnot(lhs);
-    }
+    else if(is_greaterthan2t(e))
+      result = T::greater_than(lhs_i, rhs_i);
+
+    else if(is_lessthanequal2t(e))
+      result = T::less_than_equal(lhs_i, rhs_i);
+
+    else if(is_greaterthanequal2t(e))
+      result = T::greater_than_equal(lhs_i, rhs_i);
+
+    break;
   }
 
-  // We could not generate from the expr. Return top
-  return get_top_interval_from_expr<T>(e);
+  case expr2t::sideeffect_id:
+    // This is probably a nondet
+    log_debug("[Interval] returning top for side effect {}", *e);
+    break;
+
+  default:
+    log_debug("[Interval] Couldn't compute interval for expr: {}", *e);
+    break;
+  }
+
+  return result;
 }
 
 template <class Interval>
@@ -637,6 +798,20 @@ void interval_domaint::output(std::ostream &out) const
   }
 }
 
+bool contains_float(const expr2tc &e)
+{
+  if(is_floatbv_type(e->type))
+    return true;
+
+  bool inner_float = false;
+  e->foreach_operand([&inner_float](auto &it) {
+    if(contains_float(it))
+      inner_float = true;
+  });
+
+  return inner_float;
+}
+
 void interval_domaint::transform(
   goto_programt::const_targett from,
   goto_programt::const_targett to,
@@ -691,8 +866,9 @@ void interval_domaint::transform(
 
   case ASSERT:
   {
-    expr2tc code = instruction.code;
-    ai_simplify(code, ns);
+    // There is a bug in Floats that need to be investigated! regression-float/nextafter
+    if(!contains_float(instruction.guard) && enable_assume_asserts)
+      assume(instruction.guard);
     break;
   }
 
@@ -855,10 +1031,34 @@ void interval_domaint::assume_rec(
   if(id == expr2t::greaterthan_id)
     return assume_rec(rhs, expr2t::lessthan_id, lhs);
 
-  // we now have lhs <  rhs or
-  //             lhs <= rhs
+  if(id == expr2t::lessthan_id)
+  {
+    if(is_bv_type(lhs) && is_bv_type(rhs))
+    {
+      // TODO: To properly do this we need a way to invert functions
+      if(!is_symbol2t(lhs))
+      {
+        // Gave-up for optimization
+        auto new_lhs =
+          add2tc(lhs->type, lhs, constant_int2tc(lhs->type, BigInt(1)));
+        if(simplify(new_lhs))
+          return assume_rec(new_lhs, expr2t::lessthanequal_id, rhs);
+      }
+      else if(!is_symbol2t(rhs))
+      {
+        // Gave-up for optimization
+        auto new_rhs =
+          sub2tc(rhs->type, rhs, constant_int2tc(rhs->type, BigInt(1)));
+        if(simplify(new_rhs))
+          return assume_rec(lhs, expr2t::lessthanequal_id, new_rhs);
+      }
+    }
+    return assume_rec(lhs, expr2t::lessthanequal_id, rhs);
+  }
 
-  assert(id == expr2t::lessthan_id || id == expr2t::lessthanequal_id);
+  // we now have lhs <= rhs
+
+  assert(id == expr2t::lessthanequal_id);
 
   if(is_bv_type(lhs) && is_bv_type(rhs))
   {
@@ -875,7 +1075,50 @@ void interval_domaint::assume(const expr2tc &cond)
 {
   expr2tc new_cond = cond;
   simplify(new_cond);
+
+#if 0
+  // Let's check whether this condition is always false
+  if(
+    enable_eval_assumptions &&
+    eval_boolean_expression(new_cond, *this).is_false())
+  {
+    log_debug("The expr {} is always false. Returning bottom", *cond);
+    make_bottom();
+    return;
+  }
+#endif
+
   assume_rec(new_cond, false);
+}
+
+tvt interval_domaint::eval_boolean_expression(
+  const expr2tc &cond,
+  const interval_domaint &id)
+{
+  // TODO: for now we will only support integer expressions (no mix!)
+  if(enable_wrapped_intervals)
+  {
+    log_debug("[eval_boolean_expression] Disabled for wrapped");
+    return tvt(tvt::TV_UNKNOWN);
+  }
+
+  if(contains_float(cond))
+  {
+    log_debug("[eval_boolean_expression] No support for floats/mixing");
+    return tvt(tvt::TV_UNKNOWN);
+  }
+
+  auto interval = id.get_interval<integer_intervalt>(cond);
+
+  // If the interval does not contain zero then it's always true
+  if(!interval.contains(0))
+    return tvt(tvt::TV_TRUE);
+
+  // If it does contain zero and its singleton then it's always false
+  if(interval.singleton())
+    return tvt(tvt::TV_FALSE);
+
+  return tvt(tvt::TV_UNKNOWN);
 }
 
 void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
@@ -963,42 +1206,20 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
   if(!enable_assertion_simplification)
     return true;
 
-  bool unchanged = true;
-  interval_domaint d(*this);
-
-  // merge intervals to properly handle conjunction
-  if(is_and2t(condition)) // May be directly representable
+  tvt eval = eval_boolean_expression(condition, *this);
+  if(eval.is_true())
   {
-    // TODO: This is not working, reimplement this using other logic
-    log_debug("[interval] Conjuction");
-    interval_domaint a;
-    a.make_top();        // a is everything
-    a.assume(condition); // Restrict a to an over-approximation
-                         //  of when condition is true
-    if(!a.join(d))       // If d (this) is included in a...
-    {                    // Then the condition is always true
-      unchanged = is_true(condition);
-      condition = gen_true_expr();
-    }
-  }
-  else if(is_symbol2t(condition))
-  {
-    // TODO: we have to handle symbol expression
-  }
-  else // Less likely to be representable
-  {
-    log_debug("[interval] not");
-    expr2tc not_condition = condition;
-    make_not(not_condition);
-    d.assume(not_condition); // Restrict to when condition is false
-    if(d.is_bottom())        // If there there are none...
-    {                        // Then the condition is always true
-      unchanged = is_true(condition);
-      condition = gen_true_expr();
-    }
+    // TODO: convert to 1?
   }
 
-  return unchanged;
+  if(eval.is_false())
+  {
+    // TODO: convert to 0?
+  }
+
+  // TODO: contract expression (implication?)
+
+  return false;
 }
 
 void interval_domaint::set_options(const optionst &options)
@@ -1015,6 +1236,10 @@ void interval_domaint::set_options(const optionst &options)
     !options.get_bool_option("interval-analysis-no-contract");
   enable_wrapped_intervals =
     options.get_bool_option("interval-analysis-wrapped");
+  enable_assume_asserts =
+    options.get_bool_option("interval-analysis-assume-asserts");
+  enable_eval_assumptions =
+    options.get_bool_option("interval-analysis-eval-assumptions");
 
   auto fixpoint_str = options.get_option("interval-analysis-extrapolate-limit");
   fixpoint_limit = fixpoint_str.empty() ? 5 : atoi(fixpoint_str.c_str());
@@ -1034,6 +1259,8 @@ bool interval_domaint::enable_assertion_simplification = false;
 bool interval_domaint::enable_contraction_for_abstract_states = true;
 bool interval_domaint::enable_wrapped_intervals = false;
 bool interval_domaint::enable_real_intervals = true;
+bool interval_domaint::enable_assume_asserts = true;
+bool interval_domaint::enable_eval_assumptions = true;
 
 // Widening options
 unsigned interval_domaint::fixpoint_limit = 5;

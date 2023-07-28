@@ -82,6 +82,10 @@ public:
     ordered_symbols.swap(other.ordered_symbols);
   }
 
+  symbolt *find_symbol(const char *name)
+  {
+    return find_symbol(irep_idt(name));
+  }
   symbolt *find_symbol(irep_idt name);
   const symbolt *find_symbol(irep_idt name) const;
 

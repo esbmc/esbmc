@@ -87,7 +87,7 @@ void clang_c_convertert::gen_typecast_to_union(
 
   union_exprt new_result(t);
   auto &component =
-    union_init_component(to_union_type(t).components(), e.type());
+    union_init_component(to_union_type(ns.follow(t)).components(), e.type());
   // Set the operator and component
   new_result.set_component_name(component.name());
   gen_typecast(ns, e, component.type());

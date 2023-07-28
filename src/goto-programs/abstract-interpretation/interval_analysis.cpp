@@ -4,6 +4,7 @@
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <unordered_set>
+#include <util/prefix.h>
 
 static inline void get_symbols(
   const expr2tc &expr,
@@ -22,6 +23,20 @@ static inline void get_symbols(
 
   expr->foreach_operand(
     [&symbols](const expr2tc &e) -> void { get_symbols(e, symbols); });
+}
+
+static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
+{
+  expr->Foreach_operand([&state](expr2tc &e) -> void {
+    tvt result = interval_domaint::eval_boolean_expression(e, state);
+    if(result.is_true())
+      e = gen_true_expr();
+    else if(result.is_false())
+      e = gen_false_expr();
+    else
+      simplify_guard(e, state);
+  });
+  simplify(expr);
 }
 
 void instrument_intervals(
@@ -44,6 +59,67 @@ void instrument_intervals(
     }
     else
     {
+      if(i_it->is_assume() || i_it->is_assert() || i_it->is_goto())
+      {
+        // We may be able to simplify here
+        const interval_domaint &d = interval_analysis[i_it];
+
+        // Let's try to simplify first
+        // if(interval_domaint::enable_assertion_simplification)
+        // simplify_guard(i_it->guard, d);
+
+        // Evaluate the simplified expression
+        tvt guard = interval_domaint::eval_boolean_expression(i_it->guard, d);
+        if(i_it->is_goto())
+          guard = !guard;
+        // If guard is always true... convert it into a skip!
+        if(guard.is_true() && interval_domaint::enable_assertion_simplification)
+          i_it->make_skip();
+        // If guard is always false... convert it to trivial!
+        if(
+          guard.is_false() && interval_domaint::enable_assertion_simplification)
+          i_it->guard = i_it->is_goto() ? gen_true_expr() : gen_false_expr();
+
+        // Let's instrument an assumption with symbols that affect the guard
+        std::vector<expr2tc> assumption;
+        std::unordered_set<expr2tc, irep2_hash> guard_symbols;
+        get_symbols(i_it->guard, guard_symbols);
+        for(const auto &symbol_expr : guard_symbols)
+        {
+          expr2tc tmp = d.make_expression(symbol_expr);
+          if(!is_true(tmp))
+            assumption.push_back(tmp);
+        }
+
+        if(!assumption.empty())
+        {
+          goto_programt::targett t = goto_function.body.insert(i_it);
+          t->make_assumption(conjunction(assumption));
+          t->inductive_step_instruction = config.options.is_kind();
+        }
+
+        continue;
+      }
+
+      /**
+       * The instrumentation of the assume will happen in:
+       *
+       * 1. After IF (and)
+       *  IF !(a > 42) GOTO 5
+       *    +++ ASSUME (a > 42)
+       *
+       * 2. After a function call
+       *  FUCTION_CALL(FOO)
+       *    +++ ASSUME(state-after-foo)
+       *
+       * 3. Before a function call
+       *  +++ ASSUME(state-before-foo)
+       *  FUCNTION_CALL(FOO)
+       *
+       * 4. Before a target
+       *  +++ ASSUME(current-state)
+       *  1: ....
+      */
       goto_programt::const_targett previous = i_it;
       previous--;
       if(previous->is_goto() && !is_true(previous->guard))
@@ -100,8 +176,11 @@ void dump_intervals(
       {
         // "state,var,min,max,bot,top";
         out << fmt::format(
-          "{},{},{},{},{},{}\n",
+          "{},{},{},{},{},{},{},{},{}\n",
           i_it->location_number,
+          i_it->location.line().as_string(),
+          i_it->location.column().as_string(),
+          i_it->location.function().as_string(),
           interval.first,
           (interval.second.lower_set ? interval.second.lower : "-inf"),
           (interval.second.upper_set ? interval.second.upper : "inf"),
@@ -136,7 +215,7 @@ void interval_analysis(
   if(!csv_file.empty())
   {
     std::ostringstream oss;
-    oss << "state,var,min,max,bot,top\n";
+    oss << "state,line,column,function,var,min,max,bot,top\n";
     Forall_goto_functions(f_it, goto_functions)
       dump_intervals(oss, f_it->second, interval_analysis);
 

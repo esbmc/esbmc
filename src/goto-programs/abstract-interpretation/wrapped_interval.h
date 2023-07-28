@@ -909,6 +909,97 @@ public:
     return result;
   }
 
+  static wrapped_interval
+  equality(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    wrapped_interval result(lhs.t);
+    if(lhs.singleton() && rhs.singleton() && lhs.get_lower() == rhs.get_lower())
+    {
+      result.set_lower(1);
+      result.set_upper(1);
+    }
+    else if(intersection(lhs, rhs).empty())
+    {
+      result.set_lower(0);
+      result.set_upper(0);
+    }
+    return result;
+  }
+
+  static wrapped_interval invert_bool(const wrapped_interval &i)
+  {
+    if(!i.singleton())
+      return i;
+
+    auto result = i;
+    auto inverted = result.get_lower() == 0 ? 1 : 0;
+    result.set_lower(inverted);
+    result.set_upper(inverted);
+    return result;
+  }
+
+  static wrapped_interval
+  not_equal(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    return invert_bool(equality(lhs, rhs));
+  }
+
+  static wrapped_interval
+  less_than(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    wrapped_interval result(lhs.t);
+    if(lhs.get_upper() < rhs.get_lower())
+    {
+      result.set_lower(1);
+      result.set_upper(1);
+    }
+    else if(lhs.get_lower() >= rhs.get_upper())
+    {
+      result.set_lower(0);
+      result.set_upper(0);
+    }
+    else
+    {
+      result.set_lower(0);
+      result.set_upper(1);
+    }
+    return result;
+  }
+
+  static wrapped_interval
+  less_than_equal(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    wrapped_interval result(lhs.t);
+    if(lhs.get_upper() <= rhs.get_lower())
+    {
+      result.set_lower(1);
+      result.set_upper(1);
+    }
+    else if(lhs.get_lower() > rhs.get_upper())
+    {
+      result.set_lower(0);
+      result.set_upper(0);
+    }
+    else
+    {
+      result.set_lower(0);
+      result.set_upper(1);
+    }
+    return result;
+  }
+
+  static wrapped_interval
+  greater_than_equal(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    return less_than(rhs, lhs);
+  }
+
+  static wrapped_interval
+  greater_than(const wrapped_interval &lhs, const wrapped_interval &rhs)
+  {
+    return less_than_equal(rhs, lhs);
+  }
+
   wrapped_interval sign_extension(const type2tc &cast) const
   {
     std::vector<wrapped_interval> parts;

@@ -73,10 +73,12 @@ public:
 
   void set_upper(const T &b)
   {
+    upper_set = true;
     set(true, b);
   }
   void set_lower(const T &b)
   {
+    lower_set = true;
     set(false, b);
   }
 
@@ -433,8 +435,9 @@ public:
     return s;
   }
 
-  friend interval_templatet<T>
-  operator&(const interval_templatet<T> &, const interval_templatet<T> &)
+  interval_templatet<T> interval_bitand(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &) const
   {
     log_debug("No support for bitand");
     interval_templatet<T> result;
@@ -442,7 +445,14 @@ public:
   }
 
   friend interval_templatet<T>
-  operator|(const interval_templatet<T> &, const interval_templatet<T> &)
+  operator&(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
+  {
+    return lhs.interval_bitand(lhs, rhs);
+  }
+
+  interval_templatet<T> interval_bitor(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &) const
   {
     log_debug("No support for bitor");
     interval_templatet<T> result;
@@ -450,37 +460,62 @@ public:
   }
 
   friend interval_templatet<T>
-  operator^(const interval_templatet<T> &, const interval_templatet<T> &)
+  operator|(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
+  {
+    return lhs.interval_bitor(lhs, rhs);
+  }
+
+  interval_templatet<T> interval_bitxor(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &) const
   {
     log_debug("No support for bitxor");
     interval_templatet<T> result;
     return result;
   }
 
-  static interval_templatet<T> logical_right_shift(
-    const interval_templatet<T> &,
-    const interval_templatet<T> &)
+  friend interval_templatet<T>
+  operator^(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
   {
-    log_debug("No support for logical right shift");
+    return lhs.interval_bitxor(lhs, rhs);
+  }
+
+  interval_templatet<T> interval_logical_right_shift(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &) const
+  {
+    log_debug("No support for lshr");
+    interval_templatet<T> result;
+    return result;
+  }
+
+  static interval_templatet<T> logical_right_shift(
+    const interval_templatet<T> &lhs,
+    const interval_templatet<T> &rhs)
+  {
+    return lhs.interval_logical_right_shift(lhs, rhs);
+  }
+
+  interval_templatet<T> interval_left_shift(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &) const
+  {
+    log_debug("No support for shl");
     interval_templatet<T> result;
     return result;
   }
 
   static interval_templatet<T>
-  left_shift(const interval_templatet<T> &, const interval_templatet<T> &)
+  left_shift(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
   {
-    log_debug("No support for left shift");
-    interval_templatet<T> result;
-    return result;
+    return lhs.interval_left_shift(lhs, rhs);
   }
 
   static interval_templatet<T> arithmetic_right_shift(
-    const interval_templatet<T> &,
-    const interval_templatet<T> &)
+    const interval_templatet<T> &lhs,
+    const interval_templatet<T> &rhs)
   {
-    log_debug("No support for arithmetic right shift");
-    interval_templatet<T> result;
-    return result;
+    return lhs.interval_left_shift(lhs, rhs);
   }
 
   static interval_templatet<T> bitnot(const interval_templatet<T> &w)
@@ -489,6 +524,112 @@ public:
     result.set_lower(-w.get_upper() - 1);
     result.set_upper(-w.get_lower() - 1);
     return result;
+  }
+
+  static interval_templatet<T>
+  equality(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
+  {
+    interval_templatet<T> result;
+    result.set_lower(0);
+    result.set_upper(1);
+
+    // If the intervals are singletons and equal then it's always true
+    if(lhs.singleton() && rhs.singleton() && lhs.get_lower() == rhs.get_lower())
+    {
+      result.set_lower(1);
+      return result;
+    }
+
+    // If the intervals don't intersect, then they are always empty
+    auto lhs_cpy = lhs;
+    lhs_cpy.intersect_with(rhs);
+    if(lhs_cpy.empty())
+      result.set_upper(0);
+
+    return result;
+  }
+
+  static interval_templatet<T> invert_bool(const interval_templatet<T> &i)
+  {
+    if(!i.singleton())
+      return i;
+
+    auto result = i;
+    auto inverted = result.get_lower() == 0 ? 1 : 0;
+    result.set_lower(inverted);
+    result.set_upper(inverted);
+    return result;
+  }
+
+  static interval_templatet<T>
+  not_equal(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
+  {
+    return invert_bool(equality(lhs, rhs));
+  }
+
+  static interval_templatet<T>
+  less_than(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
+  {
+    interval_templatet<T> result;
+    result.set_lower(0);
+    result.set_upper(1);
+
+    // MAX LHS < MIN RHS => TRUE
+    if(lhs.upper_set && rhs.lower_set && lhs.get_upper() < rhs.get_lower())
+    {
+      result.set_lower(1);
+      return result;
+    }
+
+    // MIN LHS >= MAX RHS => FALSE
+    if(lhs.lower_set && rhs.upper_set && lhs.get_lower() >= rhs.get_upper())
+    {
+      result.set_upper(0);
+      return result;
+    }
+
+    assert(!result.singleton() && !result.is_bottom());
+    return result;
+  }
+
+  static interval_templatet<T> less_than_equal(
+    const interval_templatet<T> &lhs,
+    const interval_templatet<T> &rhs)
+  {
+    interval_templatet<T> result;
+    result.set_lower(0);
+    result.set_upper(1);
+
+    // MAX LHS <= MIN RHS => TRUE
+    if(lhs.upper_set && rhs.lower_set && lhs.get_upper() <= rhs.get_lower())
+    {
+      result.set_lower(1);
+      return result;
+    }
+
+    // MIN LHS > MAX RHS => FALSE
+    if(lhs.lower_set && rhs.upper_set && lhs.get_lower() > rhs.get_upper())
+    {
+      result.set_upper(0);
+      return result;
+    }
+
+    assert(!result.singleton() && !result.is_bottom());
+    return result;
+  }
+
+  static interval_templatet<T> greater_than_equal(
+    const interval_templatet<T> &lhs,
+    const interval_templatet<T> &rhs)
+  {
+    return less_than(rhs, lhs);
+  }
+
+  static interval_templatet<T> greater_than(
+    const interval_templatet<T> &lhs,
+    const interval_templatet<T> &rhs)
+  {
+    return less_than_equal(rhs, lhs);
   }
 
   /// This is just to check if a value has changed. This is not the same as an interval comparation!
@@ -643,5 +784,4 @@ std::ostream &operator<<(std::ostream &out, const interval_templatet<T> &i)
 
   return out;
 }
-
 #endif // CPROVER_ANALYSES_INTERVAL_TEMPLATE_H

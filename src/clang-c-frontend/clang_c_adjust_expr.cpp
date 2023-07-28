@@ -1,4 +1,5 @@
 #include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -11,6 +12,7 @@
 #include <util/message/format.h>
 #include <util/prefix.h>
 #include <util/std_code.h>
+#include <util/type_byte_size.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
@@ -22,7 +24,7 @@ bool clang_c_adjust::adjust()
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
-  context.Foreach_operand(
+  context.Foreach_operand_in_order(
     [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
 
   // Adjust types first, so that symbolic-type resolution always receives
@@ -136,6 +138,28 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   else if(expr.is_code())
   {
     adjust_code(to_code(expr));
+  }
+  else if(expr.is_struct())
+  {
+    const typet &t = ns.follow(expr.type());
+    /* can't be an initializer of an incomplete type, it's not allowed by C */
+    assert(!t.incomplete());
+    /* adjust_type() above may have added padding members.
+     * Adjust the init expression accordingly. */
+    const struct_union_typet::componentst &new_comp =
+      to_struct_union_type(t).components();
+    exprt::operandst &ops = expr.operands();
+    for(size_t i = 0; i < new_comp.size(); i++)
+    {
+      const struct_union_typet::componentt &c = new_comp[i];
+      if(c.get_is_padding())
+      {
+        // TODO: should we initialize pads with nondet values?
+        ops.insert(ops.begin() + i, gen_zero(c.type()));
+      }
+      adjust_expr(ops[i]);
+    }
+    assert(new_comp.size() == ops.size());
   }
   else
   {
@@ -504,7 +528,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
 
 void clang_c_adjust::adjust_type(typet &type)
 {
-  if(type.id() == "symbol")
+  if(type.is_symbol())
   {
     const irep_idt &identifier = type.identifier();
 
@@ -526,7 +550,10 @@ void clang_c_adjust::adjust_type(typet &type)
     }
 
     if(symbol.is_macro)
+    {
       type = symbol.type; // overwrite
+      adjust_type(type);
+    }
   }
   else if(is_array_like(type))
   {
@@ -536,6 +563,28 @@ void clang_c_adjust::adjust_type(typet &type)
       /* adjust the size expression for VLAs */
       adjust_expr((exprt &)size);
     }
+    adjust_type(type.subtype());
+  }
+  else if((type.is_struct() || type.is_union()) && !type.incomplete())
+  {
+    /* components only exist for complete types */
+    for(auto &f : to_struct_union_type(type).components())
+      adjust_expr(f);
+
+    add_padding(type, ns);
+
+#ifndef NDEBUG
+    if(!type.get_bool("packed"))
+    {
+      type2tc t2 = migrate_type(type);
+      BigInt sz = type_byte_size(t2, &ns);
+      BigInt a = alignment(type, ns);
+      assert(sz % a == 0);
+    }
+    typet copy = type;
+    add_padding(copy, ns);
+    assert(copy == type);
+#endif
   }
 }
 

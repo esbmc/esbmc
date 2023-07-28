@@ -1,7 +1,7 @@
 #include <cassert>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/i2string.h>

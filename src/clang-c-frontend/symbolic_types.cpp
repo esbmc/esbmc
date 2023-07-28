@@ -1,63 +1,31 @@
 #include "symbolic_types.h"
 
-void get_complete_struct_type(struct_typet &type, const namespacet &ns)
+/* TODO: this is basically thrash_type_symbols() modulo pointers in slow */
+static void complete_type(typet &type, const namespacet &ns)
 {
-  for(auto &comp : type.components())
+  if(type.is_struct() || type.is_union())
   {
-    typet &it_type = comp.type();
-    if(it_type.is_symbol())
-    {
-      const symbolt *complete_type = ns.lookup(it_type.identifier());
-      assert(complete_type);
-      if(complete_type->type.is_struct())
-      {
-        it_type = complete_type->type;
-        // follow the type recursively to replace all symbolic types
-        get_complete_struct_type(to_struct_type(it_type), ns);
-      }
-    }
+    for(auto &comp : to_struct_union_type(type).components())
+      complete_type(comp.type(), ns);
+    return;
+  }
+
+  if(type.is_array())
+    return complete_type(type.subtype(), ns);
+
+  if(type.is_symbol())
+  {
+    const symbolt *sym = ns.lookup(type.identifier());
+    assert(sym);
+    assert(sym->is_type);
+    assert(!sym->type.is_symbol());
+    type = sym->type;
+    return complete_type(type, ns);
   }
 }
 
-bool contains_symbolic_struct_types(
-  const typet &type,
-  typet &complete_type,
-  const namespacet &ns)
+typet get_complete_type(typet type, const namespacet &ns)
 {
-  // take care of symbolic struct types in an array type
-  if(type.id() == "array")
-  {
-    complete_type = type;
-    typet &sub_type = complete_type.subtype();
-    if(sub_type.is_symbol())
-    {
-      const symbolt *the_type = ns.lookup(sub_type.identifier());
-      assert(the_type);
-      if(the_type->type.is_struct())
-      {
-        // replace the symbolic subtype then
-        // follow the type recursively to replace all symbolic types
-        sub_type = the_type->type;
-        get_complete_struct_type(to_struct_type(sub_type), ns);
-      }
-    }
-    return true;
-  }
-  // take care of symbolic struct type itself
-  else if(type.id() == "symbol")
-  {
-    const symbolt *the_type = ns.lookup(type.identifier());
-    assert(the_type);
-    if(the_type->type.is_struct())
-    {
-      // replace the symbolic subtype then
-      // follow the type recursively to replace all symbolic types
-      complete_type = the_type->type;
-      get_complete_struct_type(to_struct_type(complete_type), ns);
-    }
-
-    return true;
-  }
-
-  return false;
+  complete_type(type, ns);
+  return type;
 }

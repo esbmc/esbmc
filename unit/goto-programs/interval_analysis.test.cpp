@@ -389,7 +389,7 @@ TEST_CASE(
   T.code =
     "int main() {\n"
     "int a = nondet_int(); int b=0;\n "
-    "if(a < -50){\n"
+    "if(a <= -50){\n"
     "b = 2;\n" // a: [MIN_INT, -50)
     "a = -52;\n"
     "b = 2;\n" // a: [-52, -52]

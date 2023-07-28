@@ -34,7 +34,7 @@ extern "C"
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/write_goto_binary.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
@@ -1300,6 +1300,7 @@ int esbmc_parseoptionst::do_forward_condition(
   auto res = do_bmc(bmc);
 
   // Restore the no assertion flag, before checking the other steps
+
   opts.set_option("no-assertions", no_assertions);
 
   switch(res)
@@ -1402,11 +1403,77 @@ bool esbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
   return false;
 }
 
+// This method performs a wide range of actions that can be broadly divided
+// into 3 main steps:
+//
+//  1) creating a GOTO program,
+//  2) processing the GOTO program, and
+//  3) outputting the GOTO program.
+//
+// This method is typically used as the second stage
+// (right after parsing the command line options) by the verification methods
+// (i.e., BMC, k-induction, etc).
+//
+// \param options - various options used during the above steps,
+// \param goto_functions - the "created and processed" GOTO program.
 bool esbmc_parseoptionst::get_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
 {
-  fine_timet parse_start = current_time();
+  try
+  {
+    fine_timet create_start = current_time();
+    if(create_goto_program(options, goto_functions))
+      return true;
+    fine_timet create_stop = current_time();
+    log_status(
+      "GOTO program creation time: {}s",
+      time2string(create_stop - create_start));
+
+    fine_timet process_start = current_time();
+    if(process_goto_program(options, goto_functions))
+      return true;
+    fine_timet process_stop = current_time();
+    log_status(
+      "GOTO program processing time: {}s",
+      time2string(process_stop - process_start));
+    if(output_goto_program(options, goto_functions))
+      return true;
+  }
+
+  catch(const char *e)
+  {
+    log_error("{}", e);
+    return true;
+  }
+
+  catch(const std::string &e)
+  {
+    log_error("{}", e);
+    return true;
+  }
+
+  catch(std::bad_alloc &)
+  {
+    log_error("Out of memory");
+    return true;
+  }
+
+  return false;
+}
+
+// This method creates a GOTO program from the source specified by the
+// command line options. A GOTO program can be created:
+//
+//  1) from a GOTO binary file,
+//  2) by parsing the input program files.
+//
+// \param options - options to be passed through,
+// \param goto_functions - this is where the created GOTO program is stored.
+bool esbmc_parseoptionst::create_goto_program(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
   try
   {
     if(cmdline.args.size() == 0)
@@ -1421,63 +1488,14 @@ bool esbmc_parseoptionst::get_goto_program(
     // If the user is providing the GOTO functions, we don't need to parse
     if(cmdline.isset("binary"))
     {
-      log_progress("Reading GOTO program from file");
-
       if(read_goto_binary(goto_functions))
         return true;
     }
     else
     {
-      // Parsing
-      if(parse())
+      if(parse_goto_program(options, goto_functions))
         return true;
-
-      if(cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
-      {
-        assert(language_files.filemap.size());
-        languaget &language = *language_files.filemap.begin()->second.language;
-        std::ostringstream oss;
-        language.show_parse(oss);
-        log_status("{}", oss.str());
-        if(cmdline.isset("parse-tree-only"))
-          return true;
-      }
-
-      // Typecheking (old frontend) or adjust (clang frontend)
-      if(typecheck())
-        return true;
-      if(final())
-        return true;
-
-      // we no longer need any parse trees or language files
-      clear_parse();
-
-      if(
-        cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
-      {
-        std::ostringstream oss;
-        show_symbol_table_plain(oss);
-        log_status("{}", oss.str());
-        if(cmdline.isset("symbol-table-only"))
-          return true;
-      }
-
-      log_progress("Generating GOTO Program");
-
-      goto_convert(context, options, goto_functions);
     }
-
-    fine_timet parse_stop = current_time();
-    log_status(
-      "GOTO program creation time: {}s", time2string(parse_stop - parse_start));
-
-    fine_timet process_start = current_time();
-    if(process_goto_program(options, goto_functions))
-      return true;
-    fine_timet process_stop = current_time();
-    log_status(
-      "GOTO program processing time: {}s",
-      time2string(process_stop - process_start));
   }
 
   catch(const char *e)
@@ -1501,50 +1519,12 @@ bool esbmc_parseoptionst::get_goto_program(
   return false;
 }
 
-void esbmc_parseoptionst::preprocessing()
-{
-  try
-  {
-    if(cmdline.args.size() != 1)
-    {
-      log_error("Please provide one program to preprocess");
-      return;
-    }
-
-    std::string filename = cmdline.args[0];
-
-    // To test that the file exists,
-    std::ifstream infile(filename.c_str());
-    if(!infile)
-    {
-      log_error("failed to open input file");
-      return;
-    }
-#ifdef ENABLE_OLD_FRONTEND
-    std::ostringstream oss;
-    if(c_preprocess(filename, oss, false))
-      log_error("PREPROCESSING ERROR");
-    log_status("{}", oss.str());
-#endif
-  }
-  catch(const char *e)
-  {
-    log_error("{}", e);
-  }
-
-  catch(const std::string &e)
-  {
-    log_error("{}", e);
-  }
-
-  catch(std::bad_alloc &)
-  {
-    log_error("Out of memory");
-  }
-}
-
+// This method creates a GOTO program from the given GOTO binary.
+//
+// \param goto_functions - this is where the created GOTO program is stored.
 bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
 {
+  log_progress("Reading GOTO program from file");
   for(const auto &arg : _cmdline.args)
   {
     if(::read_goto_binary(arg, context, goto_functions))
@@ -1557,6 +1537,86 @@ bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
   return false;
 }
 
+// This method creates a GOTO program by parsing the input program files.
+//
+// \param options - options to be passed to the program parser,
+// \param goto_functions - this is where the created GOTO program is stored.
+bool esbmc_parseoptionst::parse_goto_program(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  try
+  {
+    if(parse())
+      return true;
+
+    if(cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
+    {
+      assert(language_files.filemap.size());
+      languaget &language = *language_files.filemap.begin()->second.language;
+      std::ostringstream oss;
+      language.show_parse(oss);
+      log_status("{}", oss.str());
+      if(cmdline.isset("parse-tree-only"))
+        return true;
+    }
+
+    // Typecheking (old frontend) or adjust (clang frontend)
+    if(typecheck())
+      return true;
+    if(final())
+      return true;
+
+    // we no longer need any parse trees or language files
+    clear_parse();
+
+    if(cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
+    {
+      std::ostringstream oss;
+      show_symbol_table_plain(oss);
+      log_status("{}", oss.str());
+      if(cmdline.isset("symbol-table-only"))
+        return true;
+    }
+
+    log_progress("Generating GOTO Program");
+    goto_convert(context, options, goto_functions);
+  }
+
+  catch(const char *e)
+  {
+    log_error("{}", e);
+    return true;
+  }
+
+  catch(const std::string &e)
+  {
+    log_error("{}", e);
+    return true;
+  }
+
+  catch(std::bad_alloc &)
+  {
+    log_error("Out of memory");
+    return true;
+  }
+
+  return false;
+}
+
+// This method performs various analyses and transformations
+// on the given GOTO program. They involve all the techniques that we class
+// as "static analyses" - performed on the given GOTO program before it is
+// symbolically executed. Examples of such techniques include:
+//
+//  - interval analysis,
+//  - removal of unreachable code,
+//  - preprocessing the program for k-induction,
+//  - applying GOTO contractors,
+//  - ...
+//
+// \param options - various options used by the processing methods,
+// \param goto_functions - reference to the GOTO program to be processed.
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -1585,6 +1645,10 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
       cmdline.isset("k-induction-parallel"))
     {
+      // remove skips before doing k-induction
+      // it seems to fix some issues
+      remove_no_op(goto_functions);
+
       goto_k_induction(goto_functions);
     }
 
@@ -1632,21 +1696,9 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_functions, ns, context, options, value_set_analysis);
 #endif
 
-    // remove skips
-    remove_skip(goto_functions);
-
-    // remove unreachable code
-    Forall_goto_functions(f_it, goto_functions)
-      remove_unreachable(f_it->second.body);
-
-    // remove skips
-    remove_skip(goto_functions);
-
-    // recalculate numbers, etc.
+    remove_no_op(goto_functions);
+    remove_unreachable(goto_functions);
     goto_functions.update();
-
-    // add loop ids
-    goto_functions.compute_loop_numbers();
 
     if(cmdline.isset("data-races-check"))
     {
@@ -1671,6 +1723,46 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp;
       tmp.add_false_asserts(goto_functions);
     }
+  }
+
+  catch(const char *e)
+  {
+    log_error("{}", e);
+    return true;
+  }
+
+  catch(const std::string &e)
+  {
+    log_error("{}", e);
+    return true;
+  }
+
+  catch(std::bad_alloc &)
+  {
+    log_error("Out of memory");
+    return true;
+  }
+
+  return false;
+}
+
+// This method provides different output methods for the given GOTO program.
+// Depending on the provided options this method can:
+//
+//  - output the given GOTO program as text,
+//  - translate the provided GOTO program into C,
+//  - create a GOTO binary from this GOTO program,
+//  - methods outputting some additional information of the GOTO program.
+//
+// \param options - various options setting the output methods,
+// \param goto_functions - the GOTO program to be output.
+bool esbmc_parseoptionst::output_goto_program(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  try
+  {
+    namespacet ns(context);
 
     // show it?
     if(cmdline.isset("show-loops"))
@@ -1742,13 +1834,49 @@ bool esbmc_parseoptionst::process_goto_program(
     return true;
   }
 
+  return false;
+}
+
+void esbmc_parseoptionst::preprocessing()
+{
+  try
+  {
+    if(cmdline.args.size() != 1)
+    {
+      log_error("Please provide one program to preprocess");
+      return;
+    }
+
+    std::string filename = cmdline.args[0];
+
+    // To test that the file exists,
+    std::ifstream infile(filename.c_str());
+    if(!infile)
+    {
+      log_error("failed to open input file");
+      return;
+    }
+#ifdef ENABLE_OLD_FRONTEND
+    std::ostringstream oss;
+    if(c_preprocess(filename, oss, false))
+      log_error("PREPROCESSING ERROR");
+    log_status("{}", oss.str());
+#endif
+  }
+  catch(const char *e)
+  {
+    log_error("{}", e);
+  }
+
+  catch(const std::string &e)
+  {
+    log_error("{}", e);
+  }
+
   catch(std::bad_alloc &)
   {
     log_error("Out of memory");
-    return true;
   }
-
-  return false;
 }
 
 int esbmc_parseoptionst::do_bmc(bmct &bmc)

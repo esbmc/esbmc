@@ -11,6 +11,7 @@
 #include <util/ieee_float.h>
 #include <irep2/irep2_utils.h>
 #include <util/mp_arith.h>
+#include <util/threeval.h>
 #include <boost/multiprecision/cpp_bin_float.hpp>
 typedef interval_templatet<BigInt> integer_intervalt;
 using real_intervalt =
@@ -56,7 +57,9 @@ public:
     enable_wrapped_intervals; /// Enabled wrapped intervals (disables Integers)
   static bool
     enable_real_intervals; /// Enabled wrapped intervals (disables Integers)
-
+  static bool enable_assume_asserts; /// Asserts are propagates as assumptions
+  static bool
+    enable_eval_assumptions; /// Try to evaluate in a guard in a TVT to accelerate bottoms
   // Widening options
   static unsigned
     fixpoint_limit; /// Sets a limit for number of iteartions before widening
@@ -84,6 +87,10 @@ public:
   {
     return wrap_map;
   }
+
+  /// Eval whether a boolean expression is always true, always false, or either (for the current state)
+  static tvt
+  eval_boolean_expression(const expr2tc &cond, const interval_domaint &id);
 
 protected:
   /**

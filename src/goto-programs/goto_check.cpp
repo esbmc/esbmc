@@ -286,6 +286,9 @@ void goto_checkt::input_overflow_check(
   const expr2tc &expr,
   const locationt &loc)
 {
+  if(disable_bounds_check)
+    return;
+
   code_function_call2t func_call = to_code_function_call2t(expr);
   if(!is_symbol2t(func_call.function))
     return;

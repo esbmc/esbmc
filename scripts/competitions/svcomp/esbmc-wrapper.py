@@ -303,16 +303,16 @@ def witness_to_sha256(benchmark):
     data = f.read().encode('utf-8')
     sha256hash = sha256(data).hexdigest()
   witness = os.path.basename(benchmark) + ".graphml"
-  
+
   fin = open(witness, "rt")
   data = fin.readlines()
   fin.close()
-  
+
   fin = open(witness, "wt")
   for line in data:
     if '<data key="programhash">' in line:
       line = line.replace(line[line.index('>')+1:line.index('</data>')], sha256hash)
-      
+
     if '<data key="creationtime">' in line:
       time = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
       line = line.replace(line[line.index('>')+1:line.index('</data>')], time)
