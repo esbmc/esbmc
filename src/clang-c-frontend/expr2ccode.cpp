@@ -51,6 +51,11 @@ bool expr2ccodet::is_typedef_struct_union(std::string tag)
     std::regex_search(id2string(tag), m, std::regex("struct[[:space:]]+.*")));
 }
 
+std::string expr2ccode(const expr2tc &expr, const namespacet &ns, bool fullname)
+{
+  return expr2ccode(migrate_expr_back(expr), ns, fullname);
+}
+
 std::string expr2ccode(const exprt &expr, const namespacet &ns, bool fullname)
 {
   expr2ccodet expr2ccode(ns, fullname);
@@ -963,6 +968,11 @@ std::string expr2ccodet::convert(const exprt &src, unsigned &precedence)
   return convert_norep(src, precedence);
 }
 
+std::string expr2ccodet::convert(const expr2tc &src, unsigned &precedence)
+{
+  return convert(migrate_expr_back(src), precedence);
+}
+
 std::string
 expr2ccodet::convert_typecast(const exprt &src, unsigned &precedence)
 {
@@ -1349,12 +1359,12 @@ expr2ccodet::convert_same_object(const exprt &src, unsigned &precedence)
         add2tc(arr_type->subtype, addr->ptr_obj, arr_size));
       or2tc in_bounds(gt, gt2);
       simplify(in_bounds);
-      return convert(migrate_expr_back(in_bounds), precedence);
+      return convert(in_bounds, precedence);
     }
   }
 
   equality2tc eq(same->side_1, same->side_2);
-  return convert(migrate_expr_back(not2tc(eq)), precedence);
+  return convert(not2tc(eq), precedence);
 }
 
 std::string expr2ccodet::convert_pointer_offset(

@@ -24,6 +24,9 @@ public:
 
   virtual std::string convert(const typet &src);
   virtual std::string convert(const exprt &src);
+  virtual std::string convert(const type2tc &src);
+  virtual std::string convert(const expr2tc &src);
+
 
   void get_shorthands(const exprt &expr);
 
@@ -150,6 +153,7 @@ protected:
   virtual std::string convert_code_printf(const codet &src, unsigned indent);
 
   virtual std::string convert(const exprt &src, unsigned &precedence);
+  virtual std::string convert(const expr2tc &src, unsigned &precedence);
 
   std::string convert_function_call(const exprt &src, unsigned &precedence);
   virtual std::string convert_malloc(const exprt &src, unsigned &precedence);

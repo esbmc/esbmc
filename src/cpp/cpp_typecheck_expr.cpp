@@ -23,7 +23,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
-
+#include <ansi-c/compat.h>
 bool cpp_typecheckt::find_parent(
   const symbolt &symb,
   const irep_idt &base_name,
@@ -83,8 +83,8 @@ void cpp_typecheckt::typecheck_expr_main(exprt &expr)
     typecheck_type(base);
     typecheck_type(deriv);
 
-    follow_symbol(base);
-    follow_symbol(deriv);
+    follow_symbol(base, *this);
+    follow_symbol(deriv, *this);
 
     if(base.id() != "struct" || deriv.id() != "struct")
       expr.make_false();
@@ -1558,7 +1558,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
 
   // look at type of function
 
-  follow_symbol(expr.function().type());
+  follow_symbol(expr.function().type(), *this);
 
   if(expr.function().type().id() == "pointer")
   {

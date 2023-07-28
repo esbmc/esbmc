@@ -734,7 +734,7 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
 {
   languagest languages(ns, language_idt::C);
   std::string lhsexpr;
-  languages.from_expr(migrate_expr_back(step.lhs), lhsexpr);
+  languages.from_expr(step.lhs, lhsexpr);
   std::string location = step.pc->location.to_string();
   return (
     (location.find("built-in") & location.find("library") &
@@ -749,7 +749,7 @@ bool is_valid_witness_expr(
 {
   languagest languages(ns, language_idt::C);
   std::string value;
-  languages.from_expr(migrate_expr_back(exp), value);
+  languages.from_expr(exp, value);
   return (value.find("__ESBMC") & value.find("stdin") & value.find("stdout") &
           value.find("stderr") & value.find("sys_")) == std::string::npos;
 }

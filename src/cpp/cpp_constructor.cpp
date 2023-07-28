@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/std_types.h>
-
+#include <ansi-c/compat.h>
 codet cpp_typecheckt::cpp_constructor(
   const locationt &location,
   const exprt &object,
@@ -22,7 +22,7 @@ codet cpp_typecheckt::cpp_constructor(
   typecheck_expr(object_tc);
 
   typet tmp_type(object_tc.type());
-  follow_symbol(tmp_type);
+  follow_symbol(tmp_type, *this);
 
   assert(!is_reference(tmp_type));
   if(tmp_type.id() == "array")

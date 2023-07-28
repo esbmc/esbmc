@@ -61,6 +61,11 @@ std::string expr2ct::convert(const typet &src)
   return convert_rec(src, c_qualifierst(), "");
 }
 
+std::string expr2ct::convert(const type2tc &src)
+{
+  return convert(migrate_type_back(src));
+}
+
 std::string expr2ct::convert_rec(
   const typet &src,
   const c_qualifierst &qualifiers,
@@ -2057,7 +2062,8 @@ static bool is_pointer_arithmetic(const exprt &e, const exprt *&ptr, exprt &idx)
   {
     assert(e.operands().size() == 2);
     const exprt *p = nullptr, *i = nullptr;
-    auto categorize = [&p, &i](const exprt &e) {
+    auto categorize = [&p, &i](const exprt &e)
+    {
       const irep_idt &tid = e.type().id();
       if(tid == "pointer")
         p = &e;
@@ -2073,9 +2079,8 @@ static bool is_pointer_arithmetic(const exprt &e, const exprt *&ptr, exprt &idx)
       exprt j;
       if(is_pointer_arithmetic(*p, p, j))
       {
-        auto is_unsigned = [](const exprt &e) {
-          return e.type().id() == "unsignedbv";
-        };
+        auto is_unsigned = [](const exprt &e)
+        { return e.type().id() == "unsignedbv"; };
         const char *type =
           is_unsigned(j) || is_unsigned(*i) ? "unsignedbv" : "signedbv";
         idx = exprt(e.id(), typet(type));
@@ -2094,6 +2099,11 @@ static bool is_pointer_arithmetic(const exprt &e, const exprt *&ptr, exprt &idx)
   }
 
   return false;
+}
+
+std::string expr2ct::convert(const expr2tc &src, unsigned &precedence)
+{
+  return convert(migrate_expr_back(src), precedence);
 }
 
 std::string expr2ct::convert(const exprt &src, unsigned &precedence)
@@ -2560,6 +2570,11 @@ std::string expr2ct::convert(const exprt &src)
 {
   unsigned precedence;
   return convert(src, precedence);
+}
+
+std::string expr2ct::convert(const expr2tc &src)
+{
+  return convert(migrate_expr_back(src));
 }
 
 std::string expr2c(const exprt &expr, const namespacet &ns, bool fullname)

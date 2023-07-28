@@ -9,12 +9,6 @@ class namespacet
 {
 public:
   virtual const symbolt *lookup(const irep_idt &name) const;
-  const symbolt *lookup(const irept &irep) const
-  {
-    return lookup(irep.identifier());
-  }
-
-  void follow_symbol(irept &irep) const;
 
   const typet &follow(const typet &src) const;
   const type2tc follow(const type2tc &src) const

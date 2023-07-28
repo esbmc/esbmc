@@ -8,6 +8,10 @@
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <clang-c-frontend/expr2c.h>
+#include <irep2/irep2.h>
+
+std::string
+expr2ccode(const expr2tc &expr, const namespacet &ns, bool fullname = false);
 
 std::string
 expr2ccode(const exprt &expr, const namespacet &ns, bool fullname = false);
@@ -69,7 +73,7 @@ protected:
 
   std::string convert_code_decl(const codet &src, unsigned indent) override;
   std::string convert(const exprt &src, unsigned &precedence) override;
-
+  std::string convert(const expr2tc &src, unsigned &precedence) override;
   std::string convert_same_object(const exprt &src, unsigned &precedence);
   std::string convert_pointer_offset(
     const exprt &src,

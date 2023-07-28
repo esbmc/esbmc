@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_typecheck.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-
+#include <ansi-c/compat.h>
 codet cpp_typecheckt::cpp_destructor(
   const locationt &location,
   const typet &type,
@@ -19,7 +19,7 @@ codet cpp_typecheckt::cpp_destructor(
   new_code.location() = location;
 
   typet tmp_type(type);
-  follow_symbol(tmp_type);
+  follow_symbol(tmp_type, *this);
 
   assert(!is_reference(tmp_type));
 
