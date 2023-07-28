@@ -379,7 +379,7 @@ void show_goto_trace(
             << "\n";
         if(!step.pc->location.is_nil())
           out << "  " << step.pc->location << "\n";
-        if(config.options.get_bool_option("show-caller-loc"))
+        if(config.options.get_bool_option("show-stacktrace"))
         {
           // Print stack trace
           out << "Stack trace:" << std::endl;
