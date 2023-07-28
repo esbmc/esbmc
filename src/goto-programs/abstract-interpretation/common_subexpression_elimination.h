@@ -4,24 +4,39 @@
 #include <goto-programs/abstract-interpretation/ai.h>
 #include <pointer-analysis/value_set_analysis.h>
 /**
- * @brief Abstract domain to obtain all available expressions
+ * @brief Abstract domain to obtain all available expressions (AE)
  *
- * The domain is the list of symbols that may affect next statements
+ * The domain is the set of expressions that were already computed up to this point.
  *
+ * ... // AE: []
+ * int x = a + b + c // AE: [a + b, a + b + c]
+ * int y = a + b + d // AE: [a + b, a + b + c, a + b + d]
+ * c = 42 // AE: [a + b, a + b + d]
+ *
+ *
+ * There are some level of precision to be considered. The expression can't be a constant
+ * or a symbol as there is no point in saying that something like '42' is available.
+ * However, '42 + 1' will be cached. This opens a path for canonization algorithms as
+ * '42 + 2' = '2 + 42' = '1 + 42' = ...
+ *
+ * TODO: add a canonization method for expr2tc.
+ *
+ * In Summary, the abstract domain is implemented as:
  * - TOP --> all expressions possible for the program (not needed)
- * - BOTTOM --> no expressions available
- * - Meet operator: see join function
- * - Transform operator: adds/remove available expressions recursively
- * - Flow-sensitive
- * - Context-insensitive
+ * - BOTTOM --> no expressions are available
+ * - Meet operator: AE1 `meet` AE2 = AE2
+ * - Transform operator:
+ *   + END_FUNCTION: all local variables are not available anymore
+ *   + ASSIGN: RHS (and sub-expressions) is now available, LHS (and dependencies) is not available anymore
+ *   + GOTO/ASSERT/ASSUME: guard (and sub-expressions) is now available
+ *   + DECL/DEAD: variable is no longer available
+ *   + FUNCTION_CALL: same as assign
  */
 
 class cse_domaint : public ai_domain_baset
 {
 public:
-  cse_domaint()
-  {
-  }
+  cse_domaint() = default;
 
   virtual void transform(
     goto_programt::const_targett from,
@@ -33,6 +48,7 @@ public:
 
   virtual void make_bottom() override
   {
+    // A bottom for AE means that there are no expressions available
     available_expressions.clear();
   }
 
@@ -41,7 +57,9 @@ public:
     available_expressions.clear();
   };
   virtual void make_top() override{
-
+    // Theoretically there exists a TOP (all possible AE in the program).
+    // In practice, there is no need for it.
+    throw "[CSE] Available Expressions does not implement make_top()";
   };
 
   virtual bool is_bottom() const override
@@ -50,6 +68,7 @@ public:
   }
   virtual bool is_top() const override
   {
+    // Not needed
     return false;
   }
 
@@ -67,6 +86,7 @@ public:
     goto_programt::const_targett,
     goto_programt::const_targett)
   {
+    // We don't care about the type of instruction to merge.
     return join(b);
   }
 
@@ -74,13 +94,15 @@ public:
 
 protected:
   void assign(const expr2tc &assignment, const goto_programt::const_targett &);
-  void check_expression(const expr2tc &e);
+  void make_expression_available(const expr2tc &e);
   void havoc_expr(const expr2tc &e, const goto_programt::const_targett &);
   void havoc_symbol(const irep_idt &sym);
   bool remove_expr(const expr2tc &taint, const expr2tc &src) const;
   bool remove_expr(const irep_idt &sym, const expr2tc &src) const;
 
 public:
+  // TODO: clearly this shouldn't be here. The proper way is to create a new Abstract Interpreter
+  // that contains a points-to analysis
   static std::unique_ptr<value_set_analysist> vsa;
 };
 
