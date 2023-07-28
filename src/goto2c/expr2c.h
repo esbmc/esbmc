@@ -1,5 +1,5 @@
-#ifndef CPROVER_EXPR2CCODE_H
-#define CPROVER_EXPR2CCODE_H
+#ifndef CPROVER_EXPR2C_H
+#define CPROVER_EXPR2C_H
 
 #include <map>
 #include <set>
@@ -7,7 +7,7 @@
 #include <util/expr.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
-#include <util/expr2string.h>
+#include <util/c_expr2string.h>
 
 std::string
 expr2c(const exprt &expr, const namespacet &ns, bool fullname = false);
@@ -18,11 +18,11 @@ type2c(const typet &type, const namespacet &ns, bool fullname = false);
 std::string
 typedef2c(const typet &type, const namespacet &ns, bool fullname = false);
 
-class expr2ct : public expr2stringt
+class expr2ct : public c_expr2stringt
 {
 public:
   expr2ct(const namespacet &_ns, const bool _fullname)
-    : expr2stringt(_ns, _fullname)
+    : c_expr2stringt(_ns, _fullname)
   {
   }
   virtual ~expr2ct() = default;

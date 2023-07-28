@@ -12,7 +12,6 @@ CC_DIAGNOSTIC_POP()
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <c2goto/cprover_library.h>
-#include <util/expr2string.h>
 #include <util/c_link.h>
 
 languaget *new_solidity_language()

@@ -1,4 +1,4 @@
-#include <util/expr2string.h>
+#include <util/c_expr2string.h>
 #include <util/arith_tools.h>
 #include <util/c_misc.h>
 #include <util/c_types.h>
@@ -10,7 +10,7 @@
 #include <util/std_code.h>
 #include <util/std_types.h>
 
-std::string expr2stringt::id_shorthand(const exprt &expr) const
+std::string c_expr2stringt::id_shorthand(const exprt &expr) const
 {
   const irep_idt &identifier = expr.identifier();
   const symbolt *symbol = ns.lookup(identifier);
@@ -27,7 +27,7 @@ std::string expr2stringt::id_shorthand(const exprt &expr) const
   return sh;
 }
 
-void expr2stringt::get_symbols(const exprt &expr)
+void c_expr2stringt::get_symbols(const exprt &expr)
 {
   if(expr.id() == "symbol")
     symbols.insert(expr);
@@ -36,7 +36,7 @@ void expr2stringt::get_symbols(const exprt &expr)
     get_symbols(*it);
 }
 
-void expr2stringt::get_shorthands(const exprt &expr)
+void c_expr2stringt::get_shorthands(const exprt &expr)
 {
   get_symbols(expr);
 
@@ -56,12 +56,12 @@ void expr2stringt::get_shorthands(const exprt &expr)
   }
 }
 
-std::string expr2stringt::convert(const typet &src)
+std::string c_expr2stringt::convert(const typet &src)
 {
   return convert_rec(src, c_qualifierst(), "");
 }
 
-std::string expr2stringt::convert_rec(
+std::string c_expr2stringt::convert_rec(
   const typet &src,
   const c_qualifierst &qualifiers,
   const std::string &declarator)
@@ -290,7 +290,7 @@ std::string expr2stringt::convert_rec(
 }
 
 std::string
-expr2stringt::convert_typecast(const exprt &src, unsigned &precedence)
+c_expr2stringt::convert_typecast(const exprt &src, unsigned &precedence)
 {
   precedence = 14;
 
@@ -339,7 +339,7 @@ expr2stringt::convert_typecast(const exprt &src, unsigned &precedence)
 }
 
 std::string
-expr2stringt::convert_bitcast(const exprt &src, unsigned &precedence)
+c_expr2stringt::convert_bitcast(const exprt &src, unsigned &precedence)
 {
   precedence = 14;
 
@@ -370,7 +370,7 @@ expr2stringt::convert_bitcast(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2stringt::convert_implicit_address_of(
+std::string c_expr2stringt::convert_implicit_address_of(
   const exprt &src,
   unsigned &precedence)
 {
@@ -380,7 +380,7 @@ std::string expr2stringt::convert_implicit_address_of(
   return convert(src.op0(), precedence);
 }
 
-std::string expr2stringt::convert_trinary(
+std::string c_expr2stringt::convert_trinary(
   const exprt &src,
   const std::string &symbol1,
   const std::string &symbol2,
@@ -431,7 +431,7 @@ std::string expr2stringt::convert_trinary(
   return dest;
 }
 
-std::string expr2stringt::convert_quantifier(
+std::string c_expr2stringt::convert_quantifier(
   const exprt &src,
   const std::string &symbol,
   unsigned precedence)
@@ -479,7 +479,7 @@ std::string expr2stringt::convert_quantifier(
   return dest;
 }
 
-std::string expr2stringt::convert_with(const exprt &src, unsigned precedence)
+std::string c_expr2stringt::convert_with(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() < 3)
     return convert_norep(src, precedence);
@@ -534,7 +534,7 @@ std::string expr2stringt::convert_with(const exprt &src, unsigned precedence)
   return dest;
 }
 
-std::string expr2stringt::convert_cond(const exprt &src, unsigned precedence)
+std::string c_expr2stringt::convert_cond(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() < 2)
     return convert_norep(src, precedence);
@@ -566,7 +566,7 @@ std::string expr2stringt::convert_cond(const exprt &src, unsigned precedence)
   return dest;
 }
 
-std::string expr2stringt::convert_binary(
+std::string c_expr2stringt::convert_binary(
   const exprt &src,
   const std::string &symbol,
   unsigned precedence,
@@ -603,7 +603,7 @@ std::string expr2stringt::convert_binary(
   return dest;
 }
 
-std::string expr2stringt::convert_unary(
+std::string c_expr2stringt::convert_unary(
   const exprt &src,
   const std::string &symbol,
   unsigned precedence)
@@ -624,7 +624,7 @@ std::string expr2stringt::convert_unary(
   return dest;
 }
 
-std::string expr2stringt::convert_pointer_object_has_type(
+std::string c_expr2stringt::convert_pointer_object_has_type(
   const exprt &src,
   unsigned precedence)
 {
@@ -644,7 +644,7 @@ std::string expr2stringt::convert_pointer_object_has_type(
   return dest;
 }
 
-std::string expr2stringt::convert_alloca(const exprt &src, unsigned &precedence)
+std::string c_expr2stringt::convert_alloca(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -663,7 +663,7 @@ std::string expr2stringt::convert_alloca(const exprt &src, unsigned &precedence)
 }
 
 std::string
-expr2stringt::convert_realloc(const exprt &src, unsigned &precedence)
+c_expr2stringt::convert_realloc(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -682,7 +682,7 @@ expr2stringt::convert_realloc(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2stringt::convert_malloc(const exprt &src, unsigned &precedence)
+std::string c_expr2stringt::convert_malloc(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -700,7 +700,7 @@ std::string expr2stringt::convert_malloc(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2stringt::convert_nondet(const exprt &src, unsigned &precedence)
+std::string c_expr2stringt::convert_nondet(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 0)
     return convert_norep(src, precedence);
@@ -708,7 +708,7 @@ std::string expr2stringt::convert_nondet(const exprt &src, unsigned &precedence)
   return "NONDET(" + convert(src.type()) + ")";
 }
 
-std::string expr2stringt::convert_statement_expression(
+std::string c_expr2stringt::convert_statement_expression(
   const exprt &src,
   unsigned &precedence)
 {
@@ -719,7 +719,7 @@ std::string expr2stringt::convert_statement_expression(
   return "(" + convert_code(to_code_block(to_code(src.op0())), 0) + ")";
 }
 
-std::string expr2stringt::convert_function(
+std::string c_expr2stringt::convert_function(
   const exprt &src,
   const std::string &name,
   unsigned)
@@ -744,7 +744,7 @@ std::string expr2stringt::convert_function(
 }
 
 std::string
-expr2stringt::convert_array_of(const exprt &src, unsigned precedence)
+c_expr2stringt::convert_array_of(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -753,7 +753,7 @@ expr2stringt::convert_array_of(const exprt &src, unsigned precedence)
 }
 
 std::string
-expr2stringt::convert_byte_extract(const exprt &src, unsigned precedence)
+c_expr2stringt::convert_byte_extract(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() != 2)
     return convert_norep(src, precedence);
@@ -775,7 +775,7 @@ expr2stringt::convert_byte_extract(const exprt &src, unsigned precedence)
 }
 
 std::string
-expr2stringt::convert_byte_update(const exprt &src, unsigned precedence)
+c_expr2stringt::convert_byte_update(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() != 3)
     return convert_norep(src, precedence);
@@ -801,7 +801,7 @@ expr2stringt::convert_byte_update(const exprt &src, unsigned precedence)
   return dest;
 }
 
-std::string expr2stringt::convert_unary_post(
+std::string c_expr2stringt::convert_unary_post(
   const exprt &src,
   const std::string &symbol,
   unsigned precedence)
@@ -823,7 +823,7 @@ std::string expr2stringt::convert_unary_post(
   return dest;
 }
 
-std::string expr2stringt::convert_index(const exprt &src, unsigned precedence)
+std::string c_expr2stringt::convert_index(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() != 2)
     return convert_norep(src, precedence);
@@ -845,7 +845,7 @@ std::string expr2stringt::convert_index(const exprt &src, unsigned precedence)
   return dest;
 }
 
-std::string expr2stringt::convert_member(const exprt &src, unsigned precedence)
+std::string c_expr2stringt::convert_member(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -902,7 +902,7 @@ std::string expr2stringt::convert_member(const exprt &src, unsigned precedence)
 }
 
 std::string
-expr2stringt::convert_array_member_value(const exprt &src, unsigned precedence)
+c_expr2stringt::convert_array_member_value(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -911,7 +911,7 @@ expr2stringt::convert_array_member_value(const exprt &src, unsigned precedence)
 }
 
 std::string
-expr2stringt::convert_struct_member_value(const exprt &src, unsigned precedence)
+c_expr2stringt::convert_struct_member_value(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -919,12 +919,12 @@ expr2stringt::convert_struct_member_value(const exprt &src, unsigned precedence)
   return "." + src.name().as_string() + "=" + convert(src.op0());
 }
 
-std::string expr2stringt::convert_norep(const exprt &src, unsigned &)
+std::string c_expr2stringt::convert_norep(const exprt &src, unsigned &)
 {
   return src.pretty(0);
 }
 
-std::string expr2stringt::convert_symbol(const exprt &src, unsigned &)
+std::string c_expr2stringt::convert_symbol(const exprt &src, unsigned &)
 {
   const irep_idt &id = src.identifier();
   std::string dest;
@@ -943,39 +943,39 @@ std::string expr2stringt::convert_symbol(const exprt &src, unsigned &)
   return dest;
 }
 
-std::string expr2stringt::convert_nondet_symbol(const exprt &src, unsigned &)
+std::string c_expr2stringt::convert_nondet_symbol(const exprt &src, unsigned &)
 {
   const std::string &id = src.identifier().as_string();
   return "nondet_symbol(" + id + ")";
 }
 
-std::string expr2stringt::convert_predicate_symbol(const exprt &src, unsigned &)
+std::string c_expr2stringt::convert_predicate_symbol(const exprt &src, unsigned &)
 {
   const std::string &id = src.identifier().as_string();
   return "ps(" + id + ")";
 }
 
 std::string
-expr2stringt::convert_predicate_next_symbol(const exprt &src, unsigned &)
+c_expr2stringt::convert_predicate_next_symbol(const exprt &src, unsigned &)
 {
   const std::string &id = src.identifier().as_string();
   return "pns(" + id + ")";
 }
 
 std::string
-expr2stringt::convert_quantified_symbol(const exprt &src, unsigned &)
+c_expr2stringt::convert_quantified_symbol(const exprt &src, unsigned &)
 {
   const std::string &id = src.identifier().as_string();
   return id;
 }
 
-std::string expr2stringt::convert_nondet_bool(const exprt &, unsigned &)
+std::string c_expr2stringt::convert_nondet_bool(const exprt &, unsigned &)
 {
   return "nondet_bool()";
 }
 
 std::string
-expr2stringt::convert_object_descriptor(const exprt &src, unsigned &precedence)
+c_expr2stringt::convert_object_descriptor(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 2)
     return convert_norep(src, precedence);
@@ -994,7 +994,7 @@ expr2stringt::convert_object_descriptor(const exprt &src, unsigned &precedence)
 }
 
 std::string
-expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
+c_expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
 {
   const typet &type = ns.follow(src.type());
   const std::string &cformat = src.cformat().as_string();
@@ -1101,7 +1101,7 @@ expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2stringt::convert_struct_union_body(
+std::string c_expr2stringt::convert_struct_union_body(
   const exprt::operandst &operands,
   const struct_union_typet::componentst &components)
 {
@@ -1158,7 +1158,7 @@ std::string expr2stringt::convert_struct_union_body(
   return dest;
 }
 
-std::string expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
+std::string c_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
 {
   const typet full_type = ns.follow(src.type());
 
@@ -1174,7 +1174,7 @@ std::string expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
   return convert_struct_union_body(src.operands(), components);
 }
 
-std::string expr2stringt::convert_union(const exprt &src, unsigned &precedence)
+std::string c_expr2stringt::convert_union(const exprt &src, unsigned &precedence)
 {
   const typet full_type = ns.follow(src.type());
 
@@ -1211,7 +1211,7 @@ std::string expr2stringt::convert_union(const exprt &src, unsigned &precedence)
   }
 }
 
-std::string expr2stringt::convert_array(const exprt &src, unsigned &)
+std::string c_expr2stringt::convert_array(const exprt &src, unsigned &)
 {
   std::string dest = "{ ";
 
@@ -1238,7 +1238,7 @@ std::string expr2stringt::convert_array(const exprt &src, unsigned &)
 }
 
 std::string
-expr2stringt::convert_array_list(const exprt &src, unsigned &precedence)
+c_expr2stringt::convert_array_list(const exprt &src, unsigned &precedence)
 {
   std::string dest = "{ ";
 
@@ -1270,7 +1270,7 @@ expr2stringt::convert_array_list(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2stringt::convert_function_call(const exprt &src, unsigned &)
+std::string c_expr2stringt::convert_function_call(const exprt &src, unsigned &)
 {
   if(src.operands().size() != 2)
   {
@@ -1309,7 +1309,7 @@ std::string expr2stringt::convert_function_call(const exprt &src, unsigned &)
 }
 
 std::string
-expr2stringt::convert_overflow(const exprt &src, unsigned &precedence)
+c_expr2stringt::convert_overflow(const exprt &src, unsigned &precedence)
 {
   precedence = 16;
 
@@ -1332,7 +1332,7 @@ expr2stringt::convert_overflow(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2stringt::indent_str(unsigned indent)
+std::string c_expr2stringt::indent_str(unsigned indent)
 {
   std::string dest;
   for(unsigned j = 0; j < indent; j++)
@@ -1340,14 +1340,14 @@ std::string expr2stringt::indent_str(unsigned indent)
   return dest;
 }
 
-std::string expr2stringt::convert_code_asm(const codet &, unsigned indent)
+std::string c_expr2stringt::convert_code_asm(const codet &, unsigned indent)
 {
   std::string dest = indent_str(indent);
   dest += "asm();\n";
   return dest;
 }
 
-std::string expr2stringt::convert_code_while(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_while(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 2)
   {
@@ -1372,7 +1372,7 @@ std::string expr2stringt::convert_code_while(const codet &src, unsigned indent)
 }
 
 std::string
-expr2stringt::convert_code_dowhile(const codet &src, unsigned indent)
+c_expr2stringt::convert_code_dowhile(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 2)
   {
@@ -1399,7 +1399,7 @@ expr2stringt::convert_code_dowhile(const codet &src, unsigned indent)
 }
 
 std::string
-expr2stringt::convert_code_ifthenelse(const codet &src, unsigned indent)
+c_expr2stringt::convert_code_ifthenelse(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 3 && src.operands().size() != 2)
   {
@@ -1430,7 +1430,7 @@ expr2stringt::convert_code_ifthenelse(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2stringt::convert_code_return(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_return(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 0 && src.operands().size() != 1)
   {
@@ -1449,7 +1449,7 @@ std::string expr2stringt::convert_code_return(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2stringt::convert_code_goto(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_goto(const codet &src, unsigned indent)
 {
   std::string dest = indent_str(indent);
   dest += "goto ";
@@ -1460,7 +1460,7 @@ std::string expr2stringt::convert_code_goto(const codet &src, unsigned indent)
 }
 
 std::string
-expr2stringt::convert_code_gcc_goto(const codet &src, unsigned indent)
+c_expr2stringt::convert_code_gcc_goto(const codet &src, unsigned indent)
 {
   std::string dest = indent_str(indent);
   dest += "goto ";
@@ -1470,7 +1470,7 @@ expr2stringt::convert_code_gcc_goto(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2stringt::convert_code_break(const codet &, unsigned indent)
+std::string c_expr2stringt::convert_code_break(const codet &, unsigned indent)
 {
   std::string dest = indent_str(indent);
   dest += "break";
@@ -1479,7 +1479,7 @@ std::string expr2stringt::convert_code_break(const codet &, unsigned indent)
   return dest;
 }
 
-std::string expr2stringt::convert_code_switch(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_switch(const codet &src, unsigned indent)
 {
   if(src.operands().size() < 1)
   {
@@ -1518,7 +1518,7 @@ std::string expr2stringt::convert_code_switch(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2stringt::convert_code_continue(const codet &, unsigned indent)
+std::string c_expr2stringt::convert_code_continue(const codet &, unsigned indent)
 {
   std::string dest = indent_str(indent);
   dest += "continue";
@@ -1528,7 +1528,7 @@ std::string expr2stringt::convert_code_continue(const codet &, unsigned indent)
 }
 
 std::string
-expr2stringt::convert_code_decl_block(const codet &src, unsigned indent)
+c_expr2stringt::convert_code_decl_block(const codet &src, unsigned indent)
 {
   std::string dest = indent_str(indent);
 
@@ -1541,7 +1541,7 @@ expr2stringt::convert_code_decl_block(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2stringt::convert_code_dead(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_dead(const codet &src, unsigned indent)
 {
   // initializer to go away
   if(src.operands().size() != 1)
@@ -1553,7 +1553,7 @@ std::string expr2stringt::convert_code_dead(const codet &src, unsigned indent)
   return indent_str(indent) + "dead " + convert(src.op0()) + ";";
 }
 
-std::string expr2stringt::convert_code_decl(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_decl(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 1 && src.operands().size() != 2)
   {
@@ -1605,7 +1605,7 @@ std::string expr2stringt::convert_code_decl(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2stringt::convert_code_for(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_for(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 4)
   {
@@ -1643,7 +1643,7 @@ std::string expr2stringt::convert_code_for(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2stringt::convert_code_block(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_block(const codet &src, unsigned indent)
 {
   std::string dest = indent_str(indent);
   dest += "\n{\n";
@@ -1664,7 +1664,7 @@ std::string expr2stringt::convert_code_block(const codet &src, unsigned indent)
 }
 
 std::string
-expr2stringt::convert_code_expression(const codet &src, unsigned indent)
+c_expr2stringt::convert_code_expression(const codet &src, unsigned indent)
 {
   std::string dest = indent_str(indent);
 
@@ -1683,7 +1683,7 @@ expr2stringt::convert_code_expression(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2stringt::convert_code(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code(const codet &src, unsigned indent)
 {
   const irep_idt &statement = src.statement();
 
@@ -1775,7 +1775,7 @@ std::string expr2stringt::convert_code(const codet &src, unsigned indent)
   return convert_norep(src, precedence);
 }
 
-std::string expr2stringt::convert_code_assign(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_assign(const codet &src, unsigned indent)
 {
   // Union remangle: If the right hand side is a constant array, containing
   // byte extract expressions, then it's almost 100% certain to be a flattened
@@ -1792,7 +1792,7 @@ std::string expr2stringt::convert_code_assign(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2stringt::convert_code_free(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_free(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 1)
   {
@@ -1803,14 +1803,14 @@ std::string expr2stringt::convert_code_free(const codet &src, unsigned indent)
   return indent_str(indent) + "FREE(" + convert(src.op0()) + ");";
 }
 
-std::string expr2stringt::convert_code_init(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_init(const codet &src, unsigned indent)
 {
   std::string tmp = convert_binary(src, "=", 2, true);
 
   return indent_str(indent) + "INIT " + tmp + ";";
 }
 
-std::string expr2stringt::convert_code_lock(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_lock(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 1)
   {
@@ -1821,7 +1821,7 @@ std::string expr2stringt::convert_code_lock(const codet &src, unsigned indent)
   return indent_str(indent) + "LOCK(" + convert(src.op0()) + ");";
 }
 
-std::string expr2stringt::convert_code_unlock(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_unlock(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 1)
   {
@@ -1832,7 +1832,7 @@ std::string expr2stringt::convert_code_unlock(const codet &src, unsigned indent)
   return indent_str(indent) + "UNLOCK(" + convert(src.op0()) + ");";
 }
 
-std::string expr2stringt::convert_code_function_call(
+std::string c_expr2stringt::convert_code_function_call(
   const code_function_callt &src,
   unsigned)
 {
@@ -1884,7 +1884,7 @@ std::string expr2stringt::convert_code_function_call(
   return dest;
 }
 
-std::string expr2stringt::convert_code_printf(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_printf(const codet &src, unsigned indent)
 {
   std::string dest = indent_str(indent) + "PRINTF(";
 
@@ -1904,7 +1904,7 @@ std::string expr2stringt::convert_code_printf(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2stringt::convert_code_assert(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_assert(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 1)
   {
@@ -1915,7 +1915,7 @@ std::string expr2stringt::convert_code_assert(const codet &src, unsigned indent)
   return indent_str(indent) + "assert(" + convert(src.op0()) + ");";
 }
 
-std::string expr2stringt::convert_code_assume(const codet &src, unsigned indent)
+std::string c_expr2stringt::convert_code_assume(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 1)
   {
@@ -1927,7 +1927,7 @@ std::string expr2stringt::convert_code_assume(const codet &src, unsigned indent)
 }
 
 std::string
-expr2stringt::convert_code_label(const code_labelt &src, unsigned indent)
+c_expr2stringt::convert_code_label(const code_labelt &src, unsigned indent)
 {
   std::string labels_string;
 
@@ -1943,7 +1943,7 @@ expr2stringt::convert_code_label(const code_labelt &src, unsigned indent)
   return labels_string + tmp;
 }
 
-std::string expr2stringt::convert_code_switch_case(
+std::string c_expr2stringt::convert_code_switch_case(
   const code_switch_caset &src,
   unsigned indent)
 {
@@ -1974,12 +1974,12 @@ std::string expr2stringt::convert_code_switch_case(
   return labels_string + tmp;
 }
 
-std::string expr2stringt::convert_code(const codet &src)
+std::string c_expr2stringt::convert_code(const codet &src)
 {
   return convert_code(src, 0);
 }
 
-std::string expr2stringt::convert_Hoare(const exprt &src)
+std::string c_expr2stringt::convert_Hoare(const exprt &src)
 {
   unsigned precedence;
 
@@ -2022,7 +2022,7 @@ std::string expr2stringt::convert_Hoare(const exprt &src)
 }
 
 std::string
-expr2stringt::convert_extractbit(const exprt &src, unsigned precedence)
+c_expr2stringt::convert_extractbit(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() != 2)
     return convert_norep(src, precedence);
@@ -2035,7 +2035,7 @@ expr2stringt::convert_extractbit(const exprt &src, unsigned precedence)
   return dest;
 }
 
-std::string expr2stringt::convert_sizeof(const exprt &src, unsigned)
+std::string c_expr2stringt::convert_sizeof(const exprt &src, unsigned)
 {
   std::string dest = "sizeof(";
   dest += convert(static_cast<const typet &>(src.c_sizeof_type()));
@@ -2044,7 +2044,7 @@ std::string expr2stringt::convert_sizeof(const exprt &src, unsigned)
   return dest;
 }
 
-std::string expr2stringt::convert_extract(const exprt &src)
+std::string c_expr2stringt::convert_extract(const exprt &src)
 {
   std::string op = convert(src.op0());
   unsigned int upper = atoi(src.get("upper").as_string().c_str());
@@ -2121,7 +2121,7 @@ static bool is_pointer_arithmetic(const exprt &e, const exprt *&ptr, exprt &idx)
   return false;
 }
 
-std::string expr2stringt::convert(const exprt &src, unsigned &precedence)
+std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
 {
   precedence = 16;
 
@@ -2581,22 +2581,22 @@ std::string expr2stringt::convert(const exprt &src, unsigned &precedence)
   return convert_norep(src, precedence);
 }
 
-std::string expr2stringt::convert(const exprt &src)
+std::string c_expr2stringt::convert(const exprt &src)
 {
   unsigned precedence;
   return convert(src, precedence);
 }
 
-std::string expr2string(const exprt &expr, const namespacet &ns, bool fullname)
+std::string c_expr2string(const exprt &expr, const namespacet &ns, bool fullname)
 {
   std::string code;
-  expr2stringt expr2string(ns, fullname);
-  expr2string.get_shorthands(expr);
-  return expr2string.convert(expr);
+  c_expr2stringt c_expr2string(ns, fullname);
+  c_expr2string.get_shorthands(expr);
+  return c_expr2string.convert(expr);
 }
 
-std::string type2string(const typet &type, const namespacet &ns, bool fullname)
+std::string c_type2string(const typet &type, const namespacet &ns, bool fullname)
 {
-  expr2stringt expr2string(ns, fullname);
-  return expr2string.convert(type);
+  c_expr2stringt c_expr2string(ns, fullname);
+  return c_expr2string.convert(type);
 }
