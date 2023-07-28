@@ -379,6 +379,25 @@ void show_goto_trace(
             << "\n";
         if(!step.pc->location.is_nil())
           out << "  " << step.pc->location << "\n";
+        if(config.options.get_bool_option("show-stacktrace"))
+        {
+          // Print stack trace
+          out << "Stack trace:" << std::endl;
+          for(const auto &it : step.stack_trace)
+          {
+            if(it.src == nullptr)
+              out << "  " << it.function.as_string() << std::endl;
+            else
+            {
+              out << "  " << it.function.as_string();
+              if(it.src->pc->location.is_not_nil())
+                out << " at " << it.src->pc->location << std::endl;
+              else
+                out << std::endl;
+            }
+          }
+        }
+
         out << "  " << step.comment << "\n";
 
         if(step.pc->is_assert())

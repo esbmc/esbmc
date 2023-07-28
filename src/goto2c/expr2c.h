@@ -1,5 +1,5 @@
-#ifndef CPROVER_EXPR2CCODE_H
-#define CPROVER_EXPR2CCODE_H
+#ifndef CPROVER_EXPR2C_H
+#define CPROVER_EXPR2C_H
 
 #include <map>
 #include <set>
@@ -7,25 +7,25 @@
 #include <util/expr.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
-#include <clang-c-frontend/expr2c.h>
+#include <util/c_expr2string.h>
 
 std::string
-expr2ccode(const exprt &expr, const namespacet &ns, bool fullname = false);
+expr2c(const exprt &expr, const namespacet &ns, bool fullname = false);
 
 std::string
-type2ccode(const typet &type, const namespacet &ns, bool fullname = false);
+type2c(const typet &type, const namespacet &ns, bool fullname = false);
 
 std::string
-typedef2ccode(const typet &type, const namespacet &ns, bool fullname = false);
+typedef2c(const typet &type, const namespacet &ns, bool fullname = false);
 
-class expr2ccodet : public expr2ct
+class expr2ct : public c_expr2stringt
 {
 public:
-  expr2ccodet(const namespacet &_ns, const bool _fullname)
-    : expr2ct(_ns, _fullname)
+  expr2ct(const namespacet &_ns, const bool _fullname)
+    : c_expr2stringt(_ns, _fullname)
   {
   }
-  virtual ~expr2ccodet() = default;
+  virtual ~expr2ct() = default;
 
   std::string convert(const typet &src) override;
   std::string convert(const exprt &src) override;

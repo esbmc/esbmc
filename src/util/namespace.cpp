@@ -51,6 +51,9 @@ const typet &namespacet::follow(const typet &src) const
 
   const symbolt *symbol = lookup(src);
 
+  /* If its cyclic it means we don't actually have a definition of this type.
+   * In that case we can do nothing and shouldn't even have been called. */
+
   // let's hope it's not cyclic...
   while(true)
   {
@@ -58,6 +61,8 @@ const typet &namespacet::follow(const typet &src) const
     assert(symbol->is_type);
     if(!symbol->type.is_symbol())
       return symbol->type;
-    symbol = lookup(symbol->type);
+    const symbolt *next = lookup(symbol->type);
+    assert(next != symbol && "cycle of length 1 in ns.follow()");
+    symbol = next;
   }
 }

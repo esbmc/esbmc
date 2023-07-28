@@ -14,7 +14,6 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
-#include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/symbolic_types.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
@@ -300,51 +299,73 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   std::string id, name;
   get_decl_name(rd, name, id);
 
+  locationt location_begin;
+  get_location_from_decl(rd, location_begin);
+
+  irep_idt c_tag = rd.isUnion() ? typet::t_union : typet::t_struct;
+
   // Check if the symbol is already added to the context, do nothing if it is
   // already in the context.
-  if(context.find_symbol(id) != nullptr)
-    return false;
+  symbolt *sym = context.find_symbol(id);
+  if(!sym)
+  {
+    /* First put a symbol with a incomplete type into the context, then resolve
+     * all subtypes and finally set this symbol's correctly resolved type. */
+    struct_union_typet t("incomplete_" + c_tag.as_string());
+    t.location() = location_begin;
+    t.incomplete(true); /* for now just a declaration */
+    t.tag(name);
+
+    symbolt symbol;
+    get_default_symbol(
+      symbol,
+      get_modulename_from_path(location_begin.file().as_string()),
+      t,
+      name,
+      id,
+      location_begin);
+
+    symbol.is_type = true;
+
+    // We have to add the struct/union/class to the context before converting its
+    // fields because there might be recursive struct/union/class (pointers) and
+    // the code at get_type, case clang::Type::Record, needs to find the correct
+    // type (itself). Note that the type is incomplete at this stage, it doesn't
+    // contain the fields, which are added to the symbol later on this method.
+
+    sym = context.move_symbol_to_context(symbol);
+  }
+
+  assert(sym->is_type);
 
   // TODO: Fix me when we have a test case using C++ union.
   //       A C++ union can have member functions but not virtual functions.
   //       Just use struct_typet for C++?
-  struct_union_typet t;
-  if(rd.isUnion())
-    t = union_typet();
-  else
-    t = struct_typet();
-  t.tag(name);
 
-  locationt location_begin;
-  get_location_from_decl(rd, location_begin);
-
-  symbolt symbol;
-  get_default_symbol(
-    symbol,
-    get_modulename_from_path(location_begin.file().as_string()),
-    t,
-    name,
-    id,
-    location_begin);
-
-  std::string symbol_name = symbol.id.as_string();
-  symbol.is_type = true;
-
-  // We have to add the struct/union/class to the context before converting its
-  // fields because there might be recursive struct/union/class (pointers) and
-  // the code at get_type, case clang::Type::Record, needs to find the correct
-  // type (itself). Note that the type is incomplete at this stage, it doesn't
-  // contain the fields, which are added to the symbol later on this method.
-  move_symbol_to_context(symbol);
-
-  // Don't continue to parse if it doesn't have a complete definition
-  // Try to get the definition
+  /* Don't continue to parse if it doesn't have a complete definition, yet.
+   * This can happen in two cases:
+   * a) there is no complete type definition in the translation unit, or
+   * b) the type is being referred to under a pointer inside another type
+   *    definition and up to this definition has not been defined, yet.
+   */
   clang::RecordDecl *rd_def = rd.getDefinition();
   if(!rd_def)
     return false;
 
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
+  /* Don't continue if it's not incomplete; use the .incomplete() flag to avoid
+   * infinite recursion if the type we're defining refers to itself
+   * (via pointers): it either is already being defined (up the stack somewhere)
+   * or it's already a complete struct or union in the context. */
+  if(!sym->type.incomplete())
+    return false;
+  sym->type.remove(irept::a_incomplete);
+
+  /* it has a definition, now build the complete type */
+  struct_union_typet t(c_tag);
+  t.tag(name);
+
+  /* update location with that of the type's definition */
+  get_location_from_decl(*rd_def, t.location());
 
   // We have to add fields before methods as the fields are likely to be used
   // in the methods
@@ -374,21 +395,20 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  if(get_struct_union_class_methods_decls(*rd_def, to_struct_type(t)))
+  if(get_struct_union_class_methods_decls(*rd_def, t))
     return true;
 
-  if(rd.isUnion())
-  {
-    add_padding(to_union_type(t), ns);
-  }
-  else
-  {
-    get_complete_struct_type(to_struct_type(t), ns);
-    add_padding(to_struct_type(t), ns);
-  }
+  /* We successfully constructed the type of this symbol; replace the
+   * symbol with the incomplete type by one with the now-complete type
+   * definition.
+   * Do this by erasing and re-inserting because the order of definitions in the
+   * context matters. This type should be defined after any of the types that it
+   * is composed of. */
+  symbolt symbol = *sym;
+  context.erase_symbol(symbol.id);
+  symbol.type = t;
+  context.move_symbol_to_context(symbol);
 
-  t.location() = location_begin;
-  added_symbol.type = t;
   return false;
 }
 
@@ -419,7 +439,7 @@ bool clang_c_convertert::get_struct_union_class_fields(
 
 bool clang_c_convertert::get_struct_union_class_methods_decls(
   const clang::RecordDecl &,
-  struct_typet &)
+  typet &)
 {
   // We don't add methods or static members to the struct in C
   return false;
@@ -432,7 +452,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   if(get_type(vd.getType(), t))
     return true;
 
-  // Check if we annotated it to be have an infinity size
+  // Check if we annotated it to have an infinity size
   bool no_slice = false;
   if(vd.hasAttrs())
   {
@@ -486,14 +506,10 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   {
     // the type might contains symbolic types,
     // replace them with complete types before generating zero initialization
-    typet complete_type;
-    bool contains_symbolic =
-      contains_symbolic_struct_types(t, complete_type, ns);
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    symbol.value =
-      contains_symbolic ? gen_zero(complete_type, true) : gen_zero(t, true);
+    symbol.value = gen_zero(get_complete_type(t, ns), true);
     symbol.value.zero_initializer(true);
   }
 
@@ -537,7 +553,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     if(r)
       return true;
 
-    added_symbol = move_symbol_to_context(symbol);
+    added_symbol = context.move_symbol_to_context(symbol);
     gen_typecast(ns, val, t);
     if(!aggregate_value_init)
       added_symbol->value = val;
@@ -554,7 +570,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     // We have to add the symbol before converting the initial assignment
     // because we might have something like 'int x = x + 1;' which is
     // completely wrong but allowed by the language
-    added_symbol = move_symbol_to_context(symbol);
+    added_symbol = context.move_symbol_to_context(symbol);
 
     code_declt decl(symbol_expr(*added_symbol));
     decl.location() = location_begin;
@@ -632,7 +648,7 @@ bool clang_c_convertert::get_function(
                      fd.getStorageClass() == clang::SC_PrivateExtern;
   symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
 
-  symbolt &added_symbol = *move_symbol_to_context(symbol);
+  symbolt &added_symbol = *context.move_symbol_to_context(symbol);
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
@@ -746,7 +762,7 @@ bool clang_c_convertert::get_function_param(
   if(!fd.isDefined())
     return false;
 
-  move_symbol_to_context(param_symbol);
+  context.move_symbol_to_context(param_symbol);
   return false;
 }
 
@@ -1014,28 +1030,11 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     std::string id, name;
     get_decl_name(rd, name, id);
 
-    // does symbol already exist before we go through the getter?
-    bool sym_already_exist = context.find_symbol(id);
+    /* record in context if not already there */
+    get_struct_union_class(rd);
 
-    // avoid unnecessary conversion if symbol already exists
-    if(!sym_already_exist)
-      if(get_struct_union_class(rd))
-        return true;
-
-    symbolt &s = *context.find_symbol(id);
-    new_type = s.type;
-
-    // special case for C++
-    if(sym_already_exist && mode == "C++" && !rd.isUnion())
-    {
-      // replace the copy with a symbolic type
-      // otherwise new_type be incomplete in case of object composition
-      // See issue 991 and 1162 for more details
-      // By doing so, we also make the symbol table more compact, more
-      // readable and easier to debug
-      assert(new_type.is_struct() || new_type.is_union());
-      get_ref_to_struct_type(new_type);
-    }
+    /* symbolic type referring to that type */
+    new_type = symbol_typet(id);
 
     break;
   }
@@ -1959,31 +1958,27 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     exprt inits;
 
-    // the type might contains symbolic types,
-    // replace them with complete types before getting the initializations
-    typet complete_type;
-    bool contains_symbolic =
-      contains_symbolic_struct_types(t, complete_type, ns);
-    if(contains_symbolic)
-      t = complete_type;
+    t = get_complete_type(t, ns);
 
     // Structs/unions/arrays put the initializer on operands
     if(t.is_struct() || t.is_array() || t.is_vector())
     {
-      // Initializer everything to zero, even pads
-      // TODO: should we initialize pads with nondet values?
+      /* Initialize everything to zero;
+       * padding is taken care of later in adjust() */
       inits = gen_zero(t);
 
       unsigned int num = init_stmt.getNumInits();
       for(unsigned int i = 0, j = 0; (i < inits.operands().size() && j < num);
           ++i)
       {
-        // if it is an struct/union, we should skip padding
+        const struct_union_typet::componentt *c = nullptr;
         if(t.is_struct())
-          if(
-            to_struct_union_type(t).components()[i].get_is_padding() ||
-            to_struct_union_type(t).components()[i].get_is_unnamed_bitfield())
+        {
+          c = &to_struct_union_type(t).components()[i];
+          assert(!c->get_is_padding());
+          if(c->get_is_unnamed_bitfield())
             continue;
+        }
 
         // Get the value being initialized
         exprt init;
@@ -1992,7 +1987,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
         typet elem_type;
         if(t.is_struct())
-          elem_type = to_struct_union_type(t).components()[i].type();
+          elem_type = c->type();
         else if(t.is_array())
           elem_type = to_array_type(t).subtype();
         else
@@ -2044,7 +2039,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if(get_type(init_stmt.getType(), t))
       return true;
 
-    new_expr = gen_zero(t);
+    new_expr = gen_zero(get_complete_type(t, ns));
     break;
   }
 
@@ -3427,11 +3422,6 @@ std::string clang_c_convertert::get_filename_from_path(std::string path)
     return path.substr(path.find_last_of('/') + 1);
 
   return path;
-}
-
-symbolt *clang_c_convertert::move_symbol_to_context(symbolt &symbol)
-{
-  return context.move_symbol_to_context(symbol);
 }
 
 void clang_c_convertert::convert_expression_to_code(exprt &expr)

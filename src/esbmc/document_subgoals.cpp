@@ -1,4 +1,4 @@
-#include <clang-c-frontend/expr2c.h>
+#include <util/c_expr2string.h>
 #include <esbmc/document_subgoals.h>
 #include <fstream>
 #include <util/i2string.h>

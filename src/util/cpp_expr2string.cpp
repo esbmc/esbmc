@@ -1,26 +1,26 @@
 #include <cassert>
-#include <clang-c-frontend/expr2c.h>
-#include <clang-cpp-frontend/expr2cpp.h>
+#include <util/c_expr2string.h>
+#include <util/cpp_expr2string.h>
 #include <util/std_types.h>
 #include <util/symbol.h>
 #include <unordered_set>
 
-class expr2cppt : public expr2ct
+class cpp_expr2stringt : public c_expr2stringt
 {
 public:
-  expr2cppt(const namespacet &_ns, const bool _fullname)
-    : expr2ct(_ns, _fullname)
+  cpp_expr2stringt(const namespacet &_ns, const bool _fullname)
+    : c_expr2stringt(_ns, _fullname)
   {
   }
 
   std::string convert(const exprt &src) override
   {
-    return expr2ct::convert(src);
+    return c_expr2stringt::convert(src);
   }
 
   std::string convert(const typet &src) override
   {
-    return expr2ct::convert(src);
+    return c_expr2stringt::convert(src);
   }
 
 protected:
@@ -41,7 +41,8 @@ protected:
   typedef std::unordered_set<std::string> id_sett;
 };
 
-std::string expr2cppt::convert_struct(const exprt &src, unsigned &precedence)
+std::string
+cpp_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
 {
   const typet &full_type = ns.follow(src.type());
 
@@ -99,7 +100,8 @@ std::string expr2cppt::convert_struct(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2cppt::convert_constant(const exprt &src, unsigned &precedence)
+std::string
+cpp_expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
 {
   if(src.type().id() == "bool")
   {
@@ -110,10 +112,10 @@ std::string expr2cppt::convert_constant(const exprt &src, unsigned &precedence)
       return "false";
   }
 
-  return expr2ct::convert_constant(src, precedence);
+  return c_expr2stringt::convert_constant(src, precedence);
 }
 
-std::string expr2cppt::convert_rec(
+std::string cpp_expr2stringt::convert_rec(
   const typet &src,
   const c_qualifierst &qualifiers,
   const std::string &declarator)
@@ -168,7 +170,7 @@ std::string expr2cppt::convert_rec(
     else if(cpp_type == "long_double")
       return new_qualifiers.as_string() + "long double" + d;
     else
-      return expr2ct::convert_rec(src, qualifiers, declarator);
+      return c_expr2stringt::convert_rec(src, qualifiers, declarator);
   }
   else if(src.id() == "symbol")
   {
@@ -209,7 +211,7 @@ std::string expr2cppt::convert_rec(
       return dest;
     }
     else
-      return expr2ct::convert_rec(src, qualifiers, declarator);
+      return c_expr2stringt::convert_rec(src, qualifiers, declarator);
   }
   else if(src.id() == "struct" || src.id() == "incomplete_struct")
   {
@@ -299,15 +301,15 @@ std::string expr2cppt::convert_rec(
   else if(src.id() == "unassigned")
     return "?";
   else
-    return expr2ct::convert_rec(src, qualifiers, declarator);
+    return c_expr2stringt::convert_rec(src, qualifiers, declarator);
 }
 
-std::string expr2cppt::convert_cpp_this(const exprt &, unsigned)
+std::string cpp_expr2stringt::convert_cpp_this(const exprt &, unsigned)
 {
   return "this";
 }
 
-std::string expr2cppt::convert_cpp_new(const exprt &src, unsigned)
+std::string cpp_expr2stringt::convert_cpp_new(const exprt &src, unsigned)
 {
   std::string dest;
 
@@ -330,7 +332,7 @@ std::string expr2cppt::convert_cpp_new(const exprt &src, unsigned)
 }
 
 std::string
-expr2cppt::convert_code_cpp_delete(const exprt &src, unsigned indent)
+cpp_expr2stringt::convert_code_cpp_delete(const exprt &src, unsigned indent)
 {
   std::string dest = indent_str(indent) + "delete ";
 
@@ -347,7 +349,7 @@ expr2cppt::convert_code_cpp_delete(const exprt &src, unsigned indent)
   return dest;
 }
 
-std::string expr2cppt::convert(const exprt &src, unsigned &precedence)
+std::string cpp_expr2stringt::convert(const exprt &src, unsigned &precedence)
 {
   if(src.id() == "cpp-this")
     return convert_cpp_this(src, precedence = 15);
@@ -366,10 +368,10 @@ std::string expr2cppt::convert(const exprt &src, unsigned &precedence)
   if(src.id() == "pod_constructor")
     return "pod_constructor";
 
-  return expr2ct::convert(src, precedence);
+  return c_expr2stringt::convert(src, precedence);
 }
 
-std::string expr2cppt::convert_code(const codet &src, unsigned indent)
+std::string cpp_expr2stringt::convert_code(const codet &src, unsigned indent)
 {
   const irep_idt &statement = src.statement();
 
@@ -379,20 +381,20 @@ std::string expr2cppt::convert_code(const codet &src, unsigned indent)
   if(statement == "cpp_new" || statement == "cpp_new[]")
     return convert_cpp_new(src, indent);
 
-  return expr2ct::convert_code(src, indent);
+  return c_expr2stringt::convert_code(src, indent);
 }
 
 std::string
-expr2cpp(const exprt &expr, const namespacet &ns, const bool fullname)
+cpp_expr2string(const exprt &expr, const namespacet &ns, const bool fullname)
 {
-  expr2cppt expr2cpp(ns, fullname);
-  expr2cpp.get_shorthands(expr);
-  return expr2cpp.convert(expr);
+  cpp_expr2stringt cpp_expr2string(ns, fullname);
+  cpp_expr2string.get_shorthands(expr);
+  return cpp_expr2string.convert(expr);
 }
 
 std::string
-type2cpp(const typet &type, const namespacet &ns, const bool fullname)
+cpp_type2string(const typet &type, const namespacet &ns, const bool fullname)
 {
-  expr2cppt expr2cpp(ns, fullname);
-  return expr2cpp.convert(type);
+  cpp_expr2stringt cpp_expr2string(ns, fullname);
+  return cpp_expr2string.convert(type);
 }

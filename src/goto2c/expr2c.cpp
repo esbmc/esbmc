@@ -1,4 +1,4 @@
-#include <clang-c-frontend/expr2ccode.h>
+#include <goto2c/expr2c.h>
 #include <util/arith_tools.h>
 #include <util/c_misc.h>
 #include <util/c_types.h>
@@ -15,7 +15,7 @@
 #include <algorithm>
 #include <regex>
 
-std::string expr2ccodet::get_name_shorthand(std::string fullname)
+std::string expr2ct::get_name_shorthand(std::string fullname)
 {
   std::string shorthand = fullname;
 
@@ -26,13 +26,13 @@ std::string expr2ccodet::get_name_shorthand(std::string fullname)
   return shorthand;
 }
 
-bool expr2ccodet::is_padding(std::string tag)
+bool expr2ct::is_padding(std::string tag)
 {
   return has_prefix(tag, "anon_pad$") || has_prefix(tag, "$pad") ||
          has_prefix(tag, "anon_bit_field_pad$");
 }
 
-bool expr2ccodet::is_anonymous_member(std::string tag)
+bool expr2ct::is_anonymous_member(std::string tag)
 {
   return has_prefix(tag, "anon$");
 }
@@ -43,7 +43,7 @@ bool expr2ccodet::is_anonymous_member(std::string tag)
 // type name in ESBMC irep. (Currently this info is not carried over from the
 // Clang AST, and ideally we should introduce a separate
 // attribute for this field.)
-bool expr2ccodet::is_typedef_struct_union(std::string tag)
+bool expr2ct::is_typedef_struct_union(std::string tag)
 {
   std::smatch m;
   return !(
@@ -51,42 +51,40 @@ bool expr2ccodet::is_typedef_struct_union(std::string tag)
     std::regex_search(id2string(tag), m, std::regex("struct[[:space:]]+.*")));
 }
 
-std::string expr2ccode(const exprt &expr, const namespacet &ns, bool fullname)
+std::string expr2c(const exprt &expr, const namespacet &ns, bool fullname)
 {
-  expr2ccodet expr2ccode(ns, fullname);
-  expr2ccode.get_shorthands(expr);
-  return expr2ccode.convert(expr);
+  expr2ct expr2c(ns, fullname);
+  expr2c.get_shorthands(expr);
+  return expr2c.convert(expr);
 }
 
-std::string type2ccode(const typet &type, const namespacet &ns, bool fullname)
+std::string type2c(const typet &type, const namespacet &ns, bool fullname)
 {
-  expr2ccodet expr2ccode(ns, fullname);
-  return expr2ccode.convert(type);
+  expr2ct expr2c(ns, fullname);
+  return expr2c.convert(type);
 }
 
-std::string
-typedef2ccode(const typet &type, const namespacet &ns, bool fullname)
+std::string typedef2c(const typet &type, const namespacet &ns, bool fullname)
 {
-  expr2ccodet expr2ccode(ns, fullname);
+  expr2ct expr2c(ns, fullname);
   if(type.id() == "struct" || type.id() == "union")
-    return expr2ccode.convert_struct_union_typedef(to_struct_union_type(type));
+    return expr2c.convert_struct_union_typedef(to_struct_union_type(type));
   else
-    return type2ccode(type, ns);
+    return type2c(type, ns);
 }
 
-std::string expr2ccodet::convert(const typet &src)
+std::string expr2ct::convert(const typet &src)
 {
   return convert_rec(src, c_qualifierst(), "");
 }
 
-std::string expr2ccodet::convert(const exprt &src)
+std::string expr2ct::convert(const exprt &src)
 {
   unsigned precedence;
   return convert(src, precedence);
 }
 
-std::string
-expr2ccodet::convert_struct_union_typedef(const struct_union_typet &src)
+std::string expr2ct::convert_struct_union_typedef(const struct_union_typet &src)
 {
   assert(src.id() == "struct" || src.id() == "union");
   std::string tag = src.tag().as_string();
@@ -124,7 +122,7 @@ expr2ccodet::convert_struct_union_typedef(const struct_union_typet &src)
   return dest;
 }
 
-std::string expr2ccodet::convert_rec(
+std::string expr2ct::convert_rec(
   const typet &src,
   const c_qualifierst &qualifiers,
   const std::string &declarator)
@@ -394,7 +392,7 @@ std::string expr2ccodet::convert_rec(
   return convert_norep((exprt &)src, precedence);
 }
 
-std::string expr2ccodet::convert_code_printf(const codet &src, unsigned indent)
+std::string expr2ct::convert_code_printf(const codet &src, unsigned indent)
 {
   std::string dest = indent_str(indent) + "printf(";
 
@@ -414,7 +412,7 @@ std::string expr2ccodet::convert_code_printf(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2ccodet::convert_code_free(const codet &src, unsigned indent)
+std::string expr2ct::convert_code_free(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 1)
   {
@@ -425,7 +423,7 @@ std::string expr2ccodet::convert_code_free(const codet &src, unsigned indent)
   return indent_str(indent) + "free(" + convert(src.op0()) + ")";
 }
 
-std::string expr2ccodet::convert_code_return(const codet &src, unsigned indent)
+std::string expr2ct::convert_code_return(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 0 && src.operands().size() != 1)
   {
@@ -442,7 +440,7 @@ std::string expr2ccodet::convert_code_return(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2ccodet::convert_code_assign(const codet &src, unsigned indent)
+std::string expr2ct::convert_code_assign(const codet &src, unsigned indent)
 {
   unsigned int precedence = 15;
   std::string dest = convert(src.op0(), precedence);
@@ -460,7 +458,7 @@ std::string expr2ccodet::convert_code_assign(const codet &src, unsigned indent)
   return indent_str(indent) + dest;
 }
 
-std::string expr2ccodet::convert_code_assert(const codet &src, unsigned indent)
+std::string expr2ct::convert_code_assert(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 1)
   {
@@ -471,7 +469,7 @@ std::string expr2ccodet::convert_code_assert(const codet &src, unsigned indent)
   return indent_str(indent) + "assert(" + convert(src.op0()) + ")";
 }
 
-std::string expr2ccodet::convert_code_assume(const codet &src, unsigned indent)
+std::string expr2ct::convert_code_assume(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 1)
   {
@@ -482,7 +480,7 @@ std::string expr2ccodet::convert_code_assume(const codet &src, unsigned indent)
   return indent_str(indent) + "assume(" + convert(src.op0()) + ")";
 }
 
-std::string expr2ccodet::convert_symbol(const exprt &src, unsigned &)
+std::string expr2ct::convert_symbol(const exprt &src, unsigned &)
 {
   const irep_idt &id = src.identifier();
   std::string dest;
@@ -509,7 +507,7 @@ std::string expr2ccodet::convert_symbol(const exprt &src, unsigned &)
   return dest;
 }
 
-std::string expr2ccodet::convert(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert(const exprt &src, unsigned &precedence)
 {
   precedence = 16;
 
@@ -963,8 +961,7 @@ std::string expr2ccodet::convert(const exprt &src, unsigned &precedence)
   return convert_norep(src, precedence);
 }
 
-std::string
-expr2ccodet::convert_typecast(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_typecast(const exprt &src, unsigned &precedence)
 {
   precedence = 14;
 
@@ -1005,7 +1002,7 @@ expr2ccodet::convert_typecast(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2ccodet::convert_code_decl(const codet &src, unsigned indent)
+std::string expr2ct::convert_code_decl(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 1 && src.operands().size() != 2)
   {
@@ -1040,7 +1037,7 @@ std::string expr2ccodet::convert_code_decl(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2ccodet::convert_struct(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_struct(const exprt &src, unsigned &precedence)
 {
   const typet full_type = ns.follow(src.type());
 
@@ -1056,7 +1053,7 @@ std::string expr2ccodet::convert_struct(const exprt &src, unsigned &precedence)
   return convert_struct_union_body(src, src.operands(), components);
 }
 
-std::string expr2ccodet::convert_union(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_union(const exprt &src, unsigned &precedence)
 {
   const typet full_type = ns.follow(src.type());
 
@@ -1101,7 +1098,7 @@ std::string expr2ccodet::convert_union(const exprt &src, unsigned &precedence)
 
 // This produces a compound literal from the given
 // struct/union body
-std::string expr2ccodet::convert_struct_union_body(
+std::string expr2ct::convert_struct_union_body(
   const exprt &src,
   const exprt::operandst &operands,
   const struct_union_typet::componentst &components)
@@ -1163,7 +1160,7 @@ std::string expr2ccodet::convert_struct_union_body(
   return dest;
 }
 
-std::string expr2ccodet::convert_member(const exprt &src, unsigned precedence)
+std::string expr2ct::convert_member(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -1214,8 +1211,7 @@ std::string expr2ccodet::convert_member(const exprt &src, unsigned precedence)
   return dest;
 }
 
-std::string
-expr2ccodet::convert_constant(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_constant(const exprt &src, unsigned &precedence)
 {
   const typet &type = ns.follow(src.type());
   const std::string &cformat = src.cformat().as_string();
@@ -1321,8 +1317,7 @@ expr2ccodet::convert_constant(const exprt &src, unsigned &precedence)
 // This is an attempt of encoding and translating ESBMC intrinsic
 // function "_Bool __ESBMC_same_object(void *, void *)" that returns true
 // when both pointers point to the same object in memory.
-std::string
-expr2ccodet::convert_same_object(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_same_object(const exprt &src, unsigned &precedence)
 {
   assert(src.operands().size() == 2);
   expr2tc new_src;
@@ -1357,7 +1352,7 @@ expr2ccodet::convert_same_object(const exprt &src, unsigned &precedence)
   return convert(migrate_expr_back(not2tc(eq)), precedence);
 }
 
-std::string expr2ccodet::convert_pointer_offset(
+std::string expr2ct::convert_pointer_offset(
   const exprt &src,
   unsigned &precedence [[maybe_unused]])
 {
@@ -1380,7 +1375,7 @@ std::string expr2ccodet::convert_pointer_offset(
   return dest;
 }
 
-std::string expr2ccodet::convert_malloc(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_malloc(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -1396,7 +1391,7 @@ std::string expr2ccodet::convert_malloc(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2ccodet::convert_realloc(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_realloc(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -1415,7 +1410,7 @@ std::string expr2ccodet::convert_realloc(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2ccodet::convert_alloca(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_alloca(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -1433,7 +1428,7 @@ std::string expr2ccodet::convert_alloca(const exprt &src, unsigned &precedence)
 
 // This method contains all "__VERIFIER_nondet_" cases
 // that appear in "esbmc_intrinsics.h".
-std::string expr2ccodet::convert_nondet(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_nondet(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 0)
     return convert_norep(src, precedence);
@@ -1476,7 +1471,7 @@ std::string expr2ccodet::convert_nondet(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2ccodet::convert_array_of(const exprt &src, unsigned precedence)
+std::string expr2ct::convert_array_of(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -1491,7 +1486,7 @@ std::string expr2ccodet::convert_array_of(const exprt &src, unsigned precedence)
 }
 
 std::string
-expr2ccodet::convert_dynamic_size(const exprt &src, unsigned &precedence)
+expr2ct::convert_dynamic_size(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
@@ -1507,7 +1502,7 @@ expr2ccodet::convert_dynamic_size(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2ccodet::convert_infinity(
+std::string expr2ct::convert_infinity(
   const exprt &src [[maybe_unused]],
   unsigned &precedence [[maybe_unused]])
 {
@@ -1515,8 +1510,7 @@ std::string expr2ccodet::convert_infinity(
   return "__ESBMC_INF_SIZE";
 }
 
-std::string
-expr2ccodet::convert_ieee_add(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_ieee_add(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 2)
     return convert_norep(src, precedence);
@@ -1524,8 +1518,7 @@ expr2ccodet::convert_ieee_add(const exprt &src, unsigned &precedence)
   return "(" + convert(src.op0()) + ")+(" + convert(src.op1()) + ")";
 }
 
-std::string
-expr2ccodet::convert_ieee_sub(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_ieee_sub(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 2)
     return convert_norep(src, precedence);
@@ -1533,8 +1526,7 @@ expr2ccodet::convert_ieee_sub(const exprt &src, unsigned &precedence)
   return "(" + convert(src.op0()) + ")-(" + convert(src.op1()) + ")";
 }
 
-std::string
-expr2ccodet::convert_ieee_mul(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_ieee_mul(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 2)
     return convert_norep(src, precedence);
@@ -1542,8 +1534,7 @@ expr2ccodet::convert_ieee_mul(const exprt &src, unsigned &precedence)
   return "(" + convert(src.op0()) + ")*(" + convert(src.op1()) + ")";
 }
 
-std::string
-expr2ccodet::convert_ieee_div(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_ieee_div(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 2)
     return convert_norep(src, precedence);
@@ -1551,8 +1542,7 @@ expr2ccodet::convert_ieee_div(const exprt &src, unsigned &precedence)
   return "(" + convert(src.op0()) + ")/(" + convert(src.op1()) + ")";
 }
 
-std::string
-expr2ccodet::convert_ieee_sqrt(const exprt &src, unsigned &precedence)
+std::string expr2ct::convert_ieee_sqrt(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
