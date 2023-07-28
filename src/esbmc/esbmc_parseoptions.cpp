@@ -30,7 +30,6 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
-#include <goto-programs/goto_location.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
@@ -1678,11 +1677,6 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       show_loop_numbers(goto_functions);
       return true;
-    }
-
-    if(cmdline.isset("show-caller-loc"))
-    {
-      goto_location(goto_functions, cmdline.args[0]);
     }
 
     if(cmdline.isset("output-goto"))
