@@ -720,7 +720,6 @@ smt_convt::resultt bmct::multi_property_check(
   // Initial values
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
   std::atomic_size_t ce_counter = 0;
-  // need an ordered container to fix the order of show_goto_trace
   std::unordered_set<size_t> jobs;
   std::mutex result_mutex;
   // For coverage info
