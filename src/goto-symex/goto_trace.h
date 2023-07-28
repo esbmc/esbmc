@@ -136,6 +136,4 @@ void counterexample_value(
   const expr2tc &identifier,
   const expr2tc &value);
 
-bool show_caller_location(const goto_trace_stept &step);
-
 #endif
