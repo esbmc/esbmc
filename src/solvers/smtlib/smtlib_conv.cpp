@@ -759,6 +759,12 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
 
     result = constant_int2tc(t, m);
   }
+  else if(is_floatbv_type(t))
+  {
+    ieee_floatt fl{ieee_float_spect(t)};
+    fl.unpack(m);
+    result = constant_floatbv2tc(fl);
+  }
   else if(is_fixedbv_type(t))
   {
     assert(
