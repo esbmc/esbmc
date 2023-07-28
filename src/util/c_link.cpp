@@ -1,4 +1,4 @@
-#include <util/expr2string.h>
+#include <util/c_expr2string.h>
 #include <unordered_set>
 #include <util/base_type.h>
 #include <util/c_link.h>
@@ -90,12 +90,12 @@ protected:
 
 std::string c_linkt::to_string(const exprt &expr)
 {
-  return expr2string(expr, ns);
+  return c_expr2string(expr, ns);
 }
 
 std::string c_linkt::to_string(const typet &type)
 {
-  return type2string(type, ns);
+  return c_type2string(type, ns);
 }
 
 void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)

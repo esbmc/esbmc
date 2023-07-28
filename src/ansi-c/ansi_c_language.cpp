@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/gcc_builtin_headers.h>
 #include <ansi-c/trans_unit.h>
-#include <util/expr2string.h>
+#include <util/c_expr2string.h>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -222,7 +222,7 @@ bool ansi_c_languaget::from_expr(
   std::string &code,
   const namespacet &ns)
 {
-  code = expr2string(expr, ns);
+  code = c_expr2string(expr, ns);
   return false;
 }
 
@@ -231,7 +231,7 @@ bool ansi_c_languaget::from_type(
   std::string &code,
   const namespacet &ns)
 {
-  code = type2string(type, ns);
+  code = c_type2string(type, ns);
   return false;
 }
 

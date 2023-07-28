@@ -11,7 +11,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <clang-cpp-frontend/clang_cpp_language.h>
-#include <util/expr2cpp.h>
+#include <util/cpp_expr2string.h>
 #include <clang-cpp-frontend/esbmc_internal_cpp.h>
 #include <regex>
 #include <util/filesystem.h>
@@ -103,7 +103,7 @@ bool clang_cpp_languaget::from_expr(
   std::string &code,
   const namespacet &ns)
 {
-  code = expr2cpp(expr, ns);
+  code = cpp_expr2string(expr, ns);
   return false;
 }
 
@@ -112,6 +112,6 @@ bool clang_cpp_languaget::from_type(
   std::string &code,
   const namespacet &ns)
 {
-  code = type2cpp(type, ns);
+  code = cpp_type2string(type, ns);
   return false;
 }
