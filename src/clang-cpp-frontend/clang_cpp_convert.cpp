@@ -375,7 +375,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
       // Add only if it isn't static
       if(!cxxmd->isStatic())
       {
-        assert(type.is_struct());
+        assert(type.is_struct() || type.is_union());
         to_struct_type(type).methods().push_back(comp);
       }
       else

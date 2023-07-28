@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.cu
   --memlimit 14000000 --timeout 900
 
