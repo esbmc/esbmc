@@ -4,6 +4,7 @@
 
 // TODO: Do an points-to abstract interpreter
 std::unique_ptr<value_set_analysist> cse_domaint::vsa = nullptr;
+
 void cse_domaint::transform(
   goto_programt::const_targett from,
   goto_programt::const_targett to,
@@ -13,11 +14,6 @@ void cse_domaint::transform(
   const goto_programt::instructiont &instruction = *from;
   switch(instruction.type)
   {
-  case END_FUNCTION:
-    // Nothing is available anymore
-    // TODO: Only local expressions are not available!
-    available_expressions.clear();
-    break;
   case ASSIGN:
   {
     const code_assign2t &code = to_code_assign2t(instruction.code);
@@ -44,7 +40,9 @@ void cse_domaint::transform(
 
   case FUNCTION_CALL:
   {
-    // havoc_rec(code_function_call.ret);
+    // Function arguments might be available... unless its recursive function
+    //    make_expression_available(to_code_function_call2t(instruction.code).va);
+    //havoc_expr(to_code_function_call2t(instruction.code).ret, to);
   }
 
   default:;
@@ -67,12 +65,6 @@ void cse_domaint::output(std::ostream &out) const
   out << "}";
 }
 
-void cse_domaint::assign(
-  const expr2tc &e,
-  const goto_programt::const_targett &i_it)
-{
-
-}
 
 bool cse_domaint::join(const cse_domaint &b)
 {
@@ -131,7 +123,7 @@ void cse_domaint::make_expression_available(const expr2tc &E)
   available_expressions.insert(E);
 }
 
-bool cse_domaint::remove_expr(const expr2tc &taint, const expr2tc &E) const
+bool cse_domaint::should_remove_expr(const expr2tc &taint, const expr2tc &E) const
 {
   if(!taint)
     return false;
@@ -141,18 +133,18 @@ bool cse_domaint::remove_expr(const expr2tc &taint, const expr2tc &E) const
 
   bool result = false;
   E->foreach_operand([this, &result, &taint](const expr2tc &e)
-                     { result |= remove_expr(taint, e); });
+                     { result |= should_remove_expr(taint, e); });
   return result;
 }
 
-bool cse_domaint::remove_expr(const irep_idt &sym, const expr2tc &E) const
+bool cse_domaint::should_remove_expr(const irep_idt &sym, const expr2tc &E) const
 {
   if(is_symbol2t(E) && to_symbol2t(E).thename == sym)
     return true;
 
   bool result = false;
   E->foreach_operand([this, &result, &sym](const expr2tc &e)
-                     { result |= remove_expr(sym, e); });
+                     { result |= should_remove_expr(sym, e); });
   return result;
 }
 
@@ -161,7 +153,7 @@ void cse_domaint::havoc_symbol(const irep_idt &sym)
   std::vector<expr2tc> to_remove;
   for(auto x : available_expressions)
   {
-    if(remove_expr(sym, x))
+    if(should_remove_expr(sym, x))
       to_remove.push_back(x);
   }
   for(auto x : to_remove)
@@ -190,7 +182,7 @@ void cse_domaint::havoc_expr(
   std::vector<expr2tc> to_remove;
   for(auto x : available_expressions)
   {
-    if(remove_expr(target, x))
+    if(should_remove_expr(target, x))
       to_remove.push_back(x);
   }
   for(auto x : to_remove)

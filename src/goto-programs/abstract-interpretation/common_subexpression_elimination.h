@@ -14,10 +14,10 @@
  * c = 42 // AE: [a + b, a + b + d]
  *
  *
- * There are some level of precision to be considered. The expression can't be a constant
- * or a symbol as there is no point in saying that something like '42' is available.
- * However, '42 + 1' will be cached. This opens a path for canonization algorithms as
- * '42 + 2' = '2 + 42' = '1 + 42' = ...
+ * There are some level of precision to be considered. We shouldn't track constants
+ * or a symbols as there is no point in saying that something like '42' is available.
+ * However, '42 + a' will be cached. This opens a path for canonization algorithms as
+ * '42 + a' = 'a + 42'
  *
  * TODO: add a canonization method for expr2tc.
  *
@@ -90,15 +90,26 @@ public:
     return join(b);
   }
 
+
+  /// All expressions available
   std::unordered_set<expr2tc, irep2_hash> available_expressions;
 
 protected:
-  void assign(const expr2tc &assignment, const goto_programt::const_targett &);
+
+  /// Add non-primitive expression `e` (and its sub-expressions) into available_expressions.
   void make_expression_available(const expr2tc &e);
+
+  /// Remove expression `e` (and everything that it depends on) from available_expressions
   void havoc_expr(const expr2tc &e, const goto_programt::const_targett &);
+
+  /// Remove every expression from available_expressions that depends on symbol `sym`
   void havoc_symbol(const irep_idt &sym);
-  bool remove_expr(const expr2tc &taint, const expr2tc &src) const;
-  bool remove_expr(const irep_idt &sym, const expr2tc &src) const;
+
+  // Helper function to check whether `src` depends on `taint`
+  bool should_remove_expr(const expr2tc &taint, const expr2tc &src) const;
+    // Helper function to check whether `src` depends on symbol `sym`
+  bool should_remove_expr(const irep_idt &sym, const expr2tc &src) const;
+
 
 public:
   // TODO: clearly this shouldn't be here. The proper way is to create a new Abstract Interpreter
