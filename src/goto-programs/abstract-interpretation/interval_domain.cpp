@@ -972,7 +972,7 @@ void interval_domaint::assign(const expr2tc &expr)
     }
     return;
   }
-    
+
   if(isbvop)
   {
     if(enable_wrapped_intervals)
