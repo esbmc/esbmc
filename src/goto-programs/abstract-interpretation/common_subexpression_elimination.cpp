@@ -23,7 +23,7 @@ void cse_domaint::transform(
     make_expression_available(code.target);
     make_expression_available(code.source);
   }
-    break;
+  break;
 
   case GOTO:
   case ASSERT:
@@ -64,7 +64,6 @@ void cse_domaint::output(std::ostream &out) const
   }
   out << "}";
 }
-
 
 bool cse_domaint::join(const cse_domaint &b)
 {
@@ -119,11 +118,13 @@ void cse_domaint::make_expression_available(const expr2tc &E)
     return;
 
   // Let's recursively make it available!
-  E->foreach_operand([this](const expr2tc &e) { make_expression_available(e); });
+  E->foreach_operand(
+    [this](const expr2tc &e) { make_expression_available(e); });
   available_expressions.insert(E);
 }
 
-bool cse_domaint::should_remove_expr(const expr2tc &taint, const expr2tc &E) const
+bool cse_domaint::should_remove_expr(const expr2tc &taint, const expr2tc &E)
+  const
 {
   if(!taint)
     return false;
@@ -132,19 +133,22 @@ bool cse_domaint::should_remove_expr(const expr2tc &taint, const expr2tc &E) con
     return true;
 
   bool result = false;
-  E->foreach_operand([this, &result, &taint](const expr2tc &e)
-                     { result |= should_remove_expr(taint, e); });
+  E->foreach_operand([this, &result, &taint](const expr2tc &e) {
+    result |= should_remove_expr(taint, e);
+  });
   return result;
 }
 
-bool cse_domaint::should_remove_expr(const irep_idt &sym, const expr2tc &E) const
+bool cse_domaint::should_remove_expr(const irep_idt &sym, const expr2tc &E)
+  const
 {
   if(is_symbol2t(E) && to_symbol2t(E).thename == sym)
     return true;
 
   bool result = false;
-  E->foreach_operand([this, &result, &sym](const expr2tc &e)
-                     { result |= should_remove_expr(sym, e); });
+  E->foreach_operand([this, &result, &sym](const expr2tc &e) {
+    result |= should_remove_expr(sym, e);
+  });
   return result;
 }
 
@@ -219,19 +223,17 @@ goto_cse::obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const
     return expr2tc();
 
   expr2tc result = expr2tc();
-  e->foreach_operand(
-    [this, &result, &state](const expr2tc e_inner)
-    {
-      // already solved
-      if(result != expr2tc())
-        return;
+  e->foreach_operand([this, &result, &state](const expr2tc e_inner) {
+    // already solved
+    if(result != expr2tc())
+      return;
 
-      result = obtain_max_sub_expr(e_inner, state);
-      if(result != expr2tc())
-        return;
+    result = obtain_max_sub_expr(e_inner, state);
+    if(result != expr2tc())
+      return;
 
-      result = obtain_max_sub_expr(e_inner, state);
-    });
+    result = obtain_max_sub_expr(e_inner, state);
+  });
   return result;
 }
 
@@ -253,8 +255,9 @@ void goto_cse::replace_max_sub_expr(
     return;
   }
 
-  e->Foreach_operand([this, &expr2symbol](expr2tc &e0)
-                     { replace_max_sub_expr(e0, expr2symbol); });
+  e->Foreach_operand([this, &expr2symbol](expr2tc &e0) {
+    replace_max_sub_expr(e0, expr2symbol);
+  });
 }
 
 bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
