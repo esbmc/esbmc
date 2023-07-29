@@ -134,6 +134,7 @@ public:
   }
 };
 } // namespace
+
 TEST_CASE("Basic Expressions", "[ai][available-expressions]")
 {
   // Setup global options here
@@ -155,5 +156,55 @@ TEST_CASE("Basic Expressions", "[ai][available-expressions]")
 
   T.unavailable_expressions["6"] = {"@F@main@a", "@F@main@b"};
 
+  T.run_test(AE);
+}
+
+TEST_CASE("Expressions - Loops", "[ai][available-expressions]")
+{
+  // Setup global options here
+  ait<cse_domaint> AE;
+
+  ae_program T;
+  T.code =
+    "int main() {\n"
+    "int i= 10;\n"
+    "int a,b,c,d;\n"
+    "while(i != 0) {\n"  // AE: []
+    "  a = b + c + d;\n" // AE: []
+    "  b = 42;\n"        // AE: [b + c, b + c + d]
+    "  i--;\n"           // AE: []
+    "}\n"
+    "return a;\n"
+    "}";
+  T.available_expressions["6"] = {"@F@main@b", "@F@main@c"};
+  T.unavailable_expressions["4"] = {"@F@main@b", "@F@main@c"};
+  T.unavailable_expressions["5"] = {"@F@main@b", "@F@main@c"};
+  T.unavailable_expressions["7"] = {"@F@main@b", "@F@main@c"};
+
+  T.run_test(AE);
+}
+
+TEST_CASE("Expressions - Loops 2", "[ai][available-expressions]")
+{
+  // Setup global options here
+  ait<cse_domaint> AE;
+
+  ae_program T;
+  T.code =
+    "int main() {\n"
+    "int i= 10;\n"
+    "int a,b,c,d;\n"
+    "while(i != 0) {\n"  // AE: []
+    "  a = b + c + d;\n" // AE: [b + c]
+    "  d = 42;\n"        // AE: [b + c, b + c + d]
+    "  i--;\n"           // AE: [b + c]
+    "}\n"
+    "int left;\n" // AE: []
+    "return a;\n"
+    "}";
+  T.available_expressions["6"] = {"@F@main@b", "@F@main@c", "@F@main@d"};
+  T.available_expressions["5"] = {"@F@main@b", "@F@main@c"};
+  T.available_expressions["7"] = {"@F@main@b", "@F@main@c"};
+  T.unavailable_expressions["7"] = {"@F@main@b", "@F@main@c", "@F@main@d"};
   T.run_test(AE);
 }
