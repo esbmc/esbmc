@@ -208,3 +208,24 @@ TEST_CASE("Expressions - Loops 2", "[ai][available-expressions]")
   T.unavailable_expressions["7"] = {"@F@main@b", "@F@main@c", "@F@main@d"};
   T.run_test(AE);
 }
+
+TEST_CASE("Expressions - Function Call", "[ai][available-expressions]")
+{
+  // Setup global options here
+  ait<cse_domaint> AE;
+
+  ae_program T;
+  T.code =
+    "int id(int v) { return v; }\n"
+    "int main() {\n"
+    "int a,b,c,d;\n"       // AE: []
+    "int e = a + b + c;\n" // AE: []
+    "a = id(b + c);\n"     // AE : [a + b, a + b + c]
+    "int new;\n"
+    "return a;\n" // AE: [b + c]
+    "}";
+  T.available_expressions["5"] = {"@F@main@a", "@F@main@b", "@F@main@c"};
+  T.unavailable_expressions["6"] = {"@F@main@a", "@F@main@b", "@F@main@c"};
+  T.available_expressions["6"] = {"@F@main@b", "@F@main@c"};
+  T.run_test(AE);
+}
