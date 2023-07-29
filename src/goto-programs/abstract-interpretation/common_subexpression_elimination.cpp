@@ -40,9 +40,14 @@ void cse_domaint::transform(
 
   case FUNCTION_CALL:
   {
-    // Function arguments might be available... unless its recursive function
-    //    make_expression_available(to_code_function_call2t(instruction.code).va);
-    //havoc_expr(to_code_function_call2t(instruction.code).ret, to);
+    const code_function_call2t &func =
+      to_code_function_call2t(instruction.code);
+    if(func.ret)
+      havoc_expr(func.ret, to);
+
+    // each operand should be available now (unless someone is doing a sideeffect)
+    for(const expr2tc &e : func.operands)
+      make_expression_available(e);
   }
 
   default:;
