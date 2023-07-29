@@ -3,14 +3,157 @@
 
 #include "../testing-utils/goto_factory.h"
 #include "goto-programs/abstract-interpretation/common_subexpression_elimination.h"
+#include <util/prefix.h>
+/* Testing this is almost impossible without having
+ * having a goto_program generation interface
+ *
+ * So... I will check for a vector of symbols/constants
+ * in additions. Not the best way... but it should be
+ * good enough for our purposes.
+ */
 
-struct test_item
+namespace
 {
-  expr2tc e;
-  bool should_contain;
+// GOTO program index (PC) -> List of "symbols". This could be a vector of vectors.. but its enough for now
+typedef std::map<std::string, std::vector<std::string>> test_vector;
+
+class ae_program
+{
+public:
+  std::string code;
+  test_vector available_expressions;
+  test_vector unavailable_expressions;
+
+  // A + B + C --> [A,B,C]
+  bool flatten_addition(const expr2tc &e, std::vector<std::string> &v) const
+  {
+    if(is_symbol2t(e))
+    {
+      std::string thename = to_symbol2t(e).thename.as_string();
+      if(!has_prefix(thename, "c:@__ESBMC"))
+        v.push_back(thename);
+
+      return true;
+    }
+
+    if(!is_add2t(e))
+      return false;
+
+    bool side1 = flatten_addition(to_add2t(e).side_1, v);
+    bool side2 = flatten_addition(to_add2t(e).side_2, v);
+
+    return side1 && side2;
+  }
+
+  void run_test(ait<cse_domaint> &AE)
+  {
+    // Build the GOTO program from C
+    auto P = goto_factory::get_goto_functions(
+      code, goto_factory::Architecture::BIT_32);
+    CHECK(P.functions.function_map.size() > 0);
+
+    // Run the Abstract Interpretation
+    AE(P.functions, P.ns);
+    CHECK(P.functions.function_map.size() > 0);
+
+    // Test!
+    Forall_goto_functions(f_it, P.functions)
+    {
+      if(f_it->first == "c:@F@main")
+      {
+        REQUIRE(f_it->second.body_available);
+        forall_goto_program_instructions(i_it, f_it->second.body)
+        {
+          const cse_domaint &state = AE[i_it];
+
+          const auto &should_be_present =
+            available_expressions.find(i_it->location.get_line().as_string());
+
+          const auto &should_not_be_present =
+            unavailable_expressions.find(i_it->location.get_line().as_string());
+
+          bool present_check = should_be_present == available_expressions.end();
+          log_status("Checking it: {}", i_it->location.get_line().as_string());
+          for(const auto &expr : state.available_expressions)
+          {
+            if(
+              (should_not_be_present == unavailable_expressions.end()) &&
+              present_check)
+              break;
+
+            std::vector<std::string> results;
+            if(!flatten_addition(expr, results))
+              continue;
+
+            // Not present check
+            if(results.size() == should_not_be_present->second.size())
+            {
+              bool found = true;
+              for(int i = 0; i < results.size(); i++)
+              {
+                const std::string &var_name = should_not_be_present->second[i];
+                const std::string &real_name = results[i];
+                log_status("{} != {}", var_name, real_name);
+                if(!std::equal(
+                     var_name.rbegin(), var_name.rend(), real_name.rbegin()))
+                {
+                  found = false;
+                  break;
+                }
+              }
+              REQUIRE(!found);
+            }
+
+            if(present_check)
+              continue;
+
+            // Present check
+            if(results.size() == should_be_present->second.size())
+            {
+              bool found = true;
+              for(int i = 0; i < results.size(); i++)
+              {
+                const std::string &var_name = should_be_present->second[i];
+                const std::string &real_name = results[i];
+                log_status("{} == {}", var_name, real_name);
+                if(!std::equal(
+                     var_name.rbegin(), var_name.rend(), real_name.rbegin()))
+                {
+                  found = false;
+                  break;
+                }
+              }
+              present_check = found;
+            }
+          }
+
+          REQUIRE(present_check);
+        }
+      }
+    }
+  }
 };
-
-
-TEST_CASE("Hello", "[ai][available-expressions]")
+} // namespace
+TEST_CASE("Basic Expressions", "[ai][available-expressions]")
 {
+  // Setup global options here
+  ait<cse_domaint> AE;
+
+  ae_program T;
+  T.code =
+    "int main() {\n"
+    "int a,b;\n"
+    "int c = a + b;\n" // Here no expression should be available
+    "int d;\n"         // Here a + b should be available
+    "a = 42;\n"        // Here a + b should not be available
+    "int e;\n"         // Here a + b should not be available
+    "return a;\n"
+    "}";
+  T.unavailable_expressions["4"] = {
+    "@F@main@a"}; // individual symbols should not be cached
+  T.available_expressions["4"] = {"@F@main@a", "@F@main@b"};
+
+  T.unavailable_expressions["6"] = {"@F@main@a", "@F@main@b"};
+
+  T.run_test(AE);
 }
