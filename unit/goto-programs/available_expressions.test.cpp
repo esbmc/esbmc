@@ -5,7 +5,7 @@
 #include "goto-programs/abstract-interpretation/common_subexpression_elimination.h"
 #include <util/prefix.h>
 /* Testing this is almost impossible without having
- * having a goto_program generation interface
+ * a goto_program generation interface
  *
  * So... I will check for a vector of symbols/constants
  * in additions. Not the best way... but it should be
@@ -50,11 +50,17 @@ public:
     // Build the GOTO program from C
     auto P = goto_factory::get_goto_functions(
       code, goto_factory::Architecture::BIT_32);
-    CHECK(P.functions.function_map.size() > 0);
+    REQUIRE(P.functions.function_map.size() > 0);
+
+    // Run the Points-To analysis (eventually this will be removed)
+#if 0 // This makes ESBMC's string container crash. 
+    cse_domaint::vsa = std::make_unique<value_set_analysist>(P.ns);
+    (*cse_domaint::vsa)(P.functions);
+#endif
 
     // Run the Abstract Interpretation
-    AE(P.functions, P.ns);
-    CHECK(P.functions.function_map.size() > 0);
+    AE(P.functions, ns);
+    REQUIRE(P.functions.function_map.size() > 0);
 
     // Test!
     Forall_goto_functions(f_it, P.functions)
@@ -147,7 +153,7 @@ TEST_CASE("Basic Expressions", "[ai][available-expressions]")
     "int c = a + b;\n" // Here no expression should be available
     "int d;\n"         // Here a + b should be available
     "a = 42;\n"        // Here a + b should not be available
-    "int e;\n"         // Here a + b should not be available
+    "int *e = &d;\n"         // Here a + b should not be available
     "return a;\n"
     "}";
   T.unavailable_expressions["4"] = {
@@ -218,7 +224,7 @@ TEST_CASE("Expressions - Function Call", "[ai][available-expressions]")
   T.code =
     "int id(int v) { return v; }\n"
     "int main() {\n"
-    "int a,b,c,d;\n"       // AE: []
+
     "int e = a + b + c;\n" // AE: []
     "a = id(b + c);\n"     // AE : [a + b, a + b + c]
     "int new;\n"
@@ -229,3 +235,5 @@ TEST_CASE("Expressions - Function Call", "[ai][available-expressions]")
   T.available_expressions["6"] = {"@F@main@b", "@F@main@c"};
   T.run_test(AE);
 }
+
+// TODO: pointers! Saddly I can't make the VSA work under this testing environment as string_container has some weird initialization bug.
