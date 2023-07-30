@@ -2,4 +2,4 @@ CORE
 gh-1070.c
 --unwind 1
 ^VERIFICATION FAILED$
-\bdereference failure:\b|\bunwinding assertion loop\b
+\bdereference failure:|\bunwinding assertion loop\b
