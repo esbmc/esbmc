@@ -674,18 +674,13 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
 {
   assert(emit_proc);
 
-  // This should always be a symbol.
-  const smtlib_smt_ast *sa = to_solver_smt_ast<smtlib_smt_ast>(array);
-  assert(sa->kind == SMT_FUNC_SYMBOL && "Non-symbol in smtlib get_array_elem");
-  std::string name = sa->symname;
-
-  // XXX -- double bracing this may be a Z3 ecentricity
   uint64_t domain_width = array->sort->get_domain_width();
-  emit(
-    "(get-value ((select |%s| (_ bv%" PRIu64 " %" PRIu64 "))))\n",
-    name.c_str(),
-    index,
-    domain_width);
+  smt_astt sel =
+    array->select(this, constant_int2tc(get_uint_type(domain_width), index));
+
+  emit("%s", "(get-value (");
+  emit_ast(to_solver_smt_ast<smtlib_smt_ast>(sel));
+  emit("%s\n", "))");
   flush();
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_VALUE);
