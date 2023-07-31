@@ -603,6 +603,48 @@ smt_convt::resultt smtlib_convt::dec_solve()
   }
 }
 
+sexpr smtlib_convt::get_value(smt_astt a) const
+{
+  assert(emit_proc);
+
+  emit("%s", "(get-value (");
+  emit_ast(to_solver_smt_ast<smtlib_smt_ast>(a));
+  emit("%s\n", "))");
+  flush();
+  smtlib_send_start_code = 1;
+  smtlibparse(TOK_START_VALUE);
+
+  if(smtlib_output->token == TOK_KW_ERROR)
+  {
+    log_error(
+      "Error from smtlib solver when fetching literal value: \"{}\"",
+      smtlib_output->data);
+    abort();
+  }
+  else if(smtlib_output->token != 0)
+  {
+    log_error("Unrecognized response to get-value from smtlib solver");
+    abort();
+  }
+  // Unpack our value from response list.
+  assert(
+    smtlib_output->sexpr_list.size() == 1 &&
+    "More than one response to "
+    "get-value from smtlib solver");
+  sexpr &response = *smtlib_output->sexpr_list.begin();
+  // Now we have a valuation pair. First is the symbol
+  assert(
+    response.sexpr_list.size() == 2 &&
+    "Expected 2 operands in "
+    "valuation_pair_list from smtlib solver");
+  std::list<sexpr>::iterator it = response.sexpr_list.begin();
+  /* sexpr &symname = *it; */
+  sexpr respval = std::move(*++it);
+
+  delete smtlib_output;
+  return respval;
+}
+
 static BigInt interp_numeric(const sexpr &respval, bool is_signed)
 {
   yytokentype tok = static_cast<yytokentype>(respval.token);
@@ -622,50 +664,11 @@ static BigInt interp_numeric(const sexpr &respval, bool is_signed)
 
 BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
 {
-  assert(emit_proc);
-
-  // This should always be a symbol.
-  const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(a);
-
-  emit("%s", "(get-value (");
-  emit_ast(sa);
-  emit("%s\n", "))");
-  flush();
-  smtlib_send_start_code = 1;
-  smtlibparse(TOK_START_VALUE);
-
-  if(smtlib_output->token == TOK_KW_ERROR)
-  {
-    log_error(
-      "Error from smtlib solver when fetching literal value: \"{}\"",
-      smtlib_output->data);
-    abort();
-  }
-
-  else if(smtlib_output->token != 0)
-  {
-    log_error("Unrecognized response to get-value from smtlib solver");
-    abort();
-  }
-  // Unpack our value from response list.
-  assert(
-    smtlib_output->sexpr_list.size() == 1 &&
-    "More than one response to "
-    "get-value from smtlib solver");
-  sexpr &response = *smtlib_output->sexpr_list.begin();
-  // Now we have a valuation pair. First is the symbol
-  assert(
-    response.sexpr_list.size() == 2 &&
-    "Expected 2 operands in "
-    "valuation_pair_list from smtlib solver");
-  std::list<sexpr>::iterator it = response.sexpr_list.begin();
-  /* sexpr &symname = *it; */
-  sexpr &respval = *++it;
+  sexpr respval = get_value(a);
 
   // Attempt to read an integer.
   BigInt m = interp_numeric(respval, is_signed);
 
-  delete smtlib_output;
   return m;
 }
 
@@ -678,40 +681,9 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
   smt_astt sel =
     array->select(this, constant_int2tc(get_uint_type(domain_width), index));
 
-  emit("%s", "(get-value (");
-  emit_ast(to_solver_smt_ast<smtlib_smt_ast>(sel));
-  emit("%s\n", "))");
-  flush();
-  smtlib_send_start_code = 1;
-  smtlibparse(TOK_START_VALUE);
+  return get_by_ast(t, sel);
 
-  if(smtlib_output->token == TOK_KW_ERROR)
-  {
-    log_error(
-      "Error from smtlib solver when fetching literal value: \"{}\"",
-      smtlib_output->data);
-    abort();
-  }
-  else if(smtlib_output->token != 0)
-  {
-    log_error("Unrecognized response to get-value from smtlib solver");
-    abort();
-  }
-
-  // Unpack our value from response list.
-  assert(
-    smtlib_output->sexpr_list.size() == 1 &&
-    "More than one response to "
-    "get-value from smtlib solver");
-  sexpr &response = *smtlib_output->sexpr_list.begin();
-  // Now we have a valuation pair. First is the symbol
-  assert(
-    response.sexpr_list.size() == 2 &&
-    "Expected 2 operands in "
-    "valuation_pair_list from smtlib solver");
-  std::list<sexpr>::iterator it = response.sexpr_list.begin();
-  it++; // Echo of what we selected
-  sexpr &respval = *it++;
+  sexpr respval = get_value(sel);
 
   // Attempt to read an integer.
   BigInt m;
@@ -725,7 +697,6 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
     log_error("Numeral value for integer symbol from smtlib solver");
     abort();
   }
-
   else if(respval.token == TOK_HEXNUM)
   {
     std::string data = respval.data.substr(2);
@@ -818,7 +789,6 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
     abort();
   }
 
-  delete smtlib_output;
   return result;
 }
 
@@ -888,71 +858,42 @@ void smtlib_convt::file_emitter::flush() const
   fflush(out_stream);
 }
 
-bool smtlib_convt::get_bool(smt_astt a)
+tvt smtlib_convt::l_get(smt_astt a)
 {
-  assert(emit_proc);
-
-  emit("%s", "(get-value (");
-
-  emit_ast(static_cast<const smtlib_smt_ast *>(a));
-
-  emit("%s", "))\n");
-  flush();
-
-  smtlib_send_start_code = 1;
-  smtlibparse(TOK_START_VALUE);
-
-  if(smtlib_output->token == TOK_KW_ERROR)
-  {
-    log_error(
-      "Error from smtlib solver when fetching literal value: \"{}\"",
-      smtlib_output->data);
-    abort();
-  }
-  else if(smtlib_output->token != 0)
-  {
-    log_error("Unrecognized response to get-value from smtlib solver");
-    abort();
-  }
-
-  // First layer: valuation pair list. Should have one item.
-  assert(
-    smtlib_output->sexpr_list.size() == 1 &&
-    "Unexpected number of "
-    "responses to get-value from smtlib solver");
-  sexpr &pair = *smtlib_output->sexpr_list.begin();
-  // Should have two entries
-  assert(
-    pair.sexpr_list.size() == 2 &&
-    "Valuation pair in smtlib get-value "
-    "output without two operands");
-  std::list<sexpr>::const_iterator it = pair.sexpr_list.begin();
-  const sexpr &first = *it++;
-  (void)first;
-  const sexpr &second = *it++;
-  //  assert(first.token == TOK_SIMPLESYM && first.data == ss.str() &&
-  //         "Unexpected valuation variable from smtlib solver");
+  sexpr second = get_value(a);
 
   // And finally we have our value. It should be true or false.
-  bool result;
   if(second.token == TOK_KW_TRUE)
-    result = true;
-  else if(second.token == TOK_KW_FALSE)
-    result = false;
-  else
+    return tvt(true);
+  if(second.token == TOK_KW_FALSE)
+    return tvt(false);
+
+  if(second.token == TOK_SIMPLESYM && second.data == "???")
   {
-    /* Boolector sometimes returns #b0 or #b1 for Bool-sorted constants */
-    BigInt m = interp_numeric(second, false);
-    if(m == 0)
-      result = false;
-    else if(m == 1)
-      result = true;
-    else
-      abort();
+    /* Yices sometimes returns '???', e.g. when using get-value of stores */
+    return tvt(tvt::TV_UNKNOWN);
   }
 
-  delete smtlib_output;
-  return result;
+  /* Boolector sometimes returns #b0 or #b1 for Bool-sorted constants */
+  BigInt m = interp_numeric(second, false);
+  if(m == 0)
+    return tvt(false);
+  if(m == 1)
+    return tvt(true);
+
+  abort();
+}
+
+bool smtlib_convt::get_bool(smt_astt a)
+{
+  tvt tv = l_get(a);
+
+  if(tv.is_true())
+    return true;
+  if(tv.is_false())
+    return false;
+
+  abort();
 }
 
 const std::string smtlib_convt::solver_text()
