@@ -37,7 +37,7 @@ static const std::array smt_func_name_table = {
   "bvudiv",                 /* SMT_FUNC_BVUDIV, */
   "bvsdiv",                 /* SMT_FUNC_BVSDIV, */
   "%",                      /* SMT_FUNC_MOD, */
-  "bvsmod",                 /* SMT_FUNC_BVSMOD, */
+  "bvsrem",                 /* SMT_FUNC_BVSMOD, */
   "bvurem",                 /* SMT_FUNC_BVUMOD, */
   "shl",                    /* SMT_FUNC_SHL, */
   "bvshl",                  /* SMT_FUNC_BVSHL, */
