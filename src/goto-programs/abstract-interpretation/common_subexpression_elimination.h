@@ -119,7 +119,25 @@ public:
 
 #include <util/algorithms.h>
 /**
- * Common Subexpression Elimination algorithm
+ * @brief Common Subexpression Elimination algorithm
+ *
+ * Compute all common subexpression (above the `threshold`)
+ * in a goto program. For each common subexpression, a new intermediate
+ * variable `__esbmc_cse_symbol$` is created and assigned to the common
+ * value.
+ *
+ * For ESBMC, the main advantage is for sequential dereferences/with
+ * statements. They generate lots of boilerplate to be dereferenced
+ * during symex.
+ *
+ * Before:
+ * X = a + b + c;
+ * Y = a + b + d;
+ *
+ * After:
+ * __esbmc_cse_symbol$0 = a + b;
+ * X = __esbmc_cse_symbol$0 + c;
+ * Y = __esbmc_cse_symbol$0 + d;
  */
 class goto_cse : public goto_functions_algorithm
 {
@@ -135,6 +153,25 @@ public:
 
   unsigned threshold = 1;
   bool verbose_mode = true;
+
+
+  struct common_expression
+  {
+    std::unordered_map<unsigned,size_t> sequence_counter;
+    std::vector<expr2tc> symbol;
+    std::vector<goto_programt::const_targett> gen; // First time expression is used after being unavailable
+    std::vector<goto_programt::const_targett> kill; // Expression becomes unavailable after being available
+    bool available = false;
+    unsigned last_seen = 0;
+
+    // There are some constraints that should be added here:
+    // kill.size() <= gen.size()
+    // sequence_counter is indexed by gen indexes
+    // available might be a private member
+    // this struct needs better naming
+
+  };
+  
 
 protected:
   ait<cse_domaint> available_expressions;
