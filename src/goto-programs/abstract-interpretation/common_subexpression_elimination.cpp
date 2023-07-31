@@ -207,11 +207,13 @@ void common_subexpression_elimination(
 
 bool goto_cse::runOnProgram(goto_functionst &F)
 {
+
+  // Initialization for the abstract analysis.
   cse_domaint::vsa = std::make_unique<value_set_analysist>(ns);
   (*cse_domaint::vsa)(F);
 
   available_expressions(F, ns);
-  return true;
+  return false;
 }
 
 expr2tc
@@ -265,58 +267,83 @@ void goto_cse::replace_max_sub_expr(
   });
 }
 
+
+#include <ranges>
+
 bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 {
   if(!F.second.body_available)
     return false;
 
-  log_status("Checking function {}", F.first.as_string());
+  log_debug("Checking function {}", F.first.as_string());
   if(F.first.as_string() != "c:@F@main")
     return false;
 
   // 1. Let's count expressions
+
+  // Compute all possible sequences
+
+  std::unordered_map<expr2tc, common_expression, irep2_hash> expressions;
   std::unordered_map<expr2tc, unsigned, irep2_hash> counter;
   for(auto it = (F.second.body).instructions.begin();
       it != (F.second.body).instructions.end();
       ++it)
   {
-    if(!it->is_assign())
+    if(!it->is_assign()) // Maybe we need to consider function call as well (havoc)
       continue;
 
     const cse_domaint &state = available_expressions[it];
+
+    // Are the intervals still available (todo: this can be parallel)
+    for(auto &exp :
+        expressions | std::ranges::views::filter([&state](auto elem) {
+          return (
+            elem.second.available &&
+            !state.available_expressions.count(elem.first));
+        }))
+    {
+	exp.second.available = false;
+	exp.second.kill.push_back(it);
+    }
+
     const expr2tc max_sub = obtain_max_sub_expr(it->code, state);
     if(max_sub == expr2tc())
       continue;
 
+    auto E = expressions.find(max_sub);
+    
+    if(E == expressions.end())
+    {
+      // Adding for the first time
+      common_expression exp;
+      E = expressions.emplace(std::make_pair(max_sub, exp)).first;
+    }
+
+    if(!E->second.available)
+    {
+      E->second.available = true;
+      E->second.gen.push_back(it);
+      // Just to add
+      E->second.sequence_counter[E->second.gen.size() - 1] = 0;
+    }
+
+    E->second.sequence_counter[E->second.gen.size() - 1] += 1;
     counter[max_sub]++;
   }
+
+  // Let's filter sequences lower than the threshold
 
   // 2. We might print some context now
   if(verbose_mode)
   {
-    for(auto it = counter.begin(); it != counter.end(); it++)
+    for(const auto &e : expressions)
     {
-      if(it->second >= threshold)
-        log_status(
-          "Found common sub-expression ({} times): {}\n",
-          it->second + 1,
-          *it->first);
-    }
+      log_status("Got {} sequences of: {}", e.second.gen.size(), *e.first);
+    }    
   }
 
   // Early exit, if no symbols.
-  bool exists = false;
-  for(auto elem : counter)
-  {
-    if(elem.second >= threshold)
-    {
-      exists = true;
-      break;
-    }
-  }
-
-  if(!exists)
-    return false;
+  
   // 3. Instrument new tmp symbols
   std::unordered_map<expr2tc, expr2tc, irep2_hash> expr2symbol;
   for(auto it = (F.second.body).instructions.begin();
@@ -327,27 +354,24 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     itt++;
     try
     {
-      const cse_domaint &state = available_expressions[itt];
-      std::unordered_set<expr2tc, irep2_hash> to_add;
-      for(const auto &sub : counter)
-      {
-        if(sub.second < threshold)
-          continue;
-        if(state.available_expressions.count(sub.first))
-          to_add.insert(sub.first);
-      }
 
-      for(const auto &e : to_add)
-      {
-        goto_programt::targett t = F.second.body.insert(it);
-        symbol2tc symbol = create_cse_symbol(e->type);
-        t->make_assignment();
-        t->code = code_assign2tc(symbol, e);
-        expr2symbol[e] = symbol;
-        counter[e] = 0;
-      }
+      // We are adding instructions here, which means that available expressions will throw
+      // errors if we try do get the Abstract State of an instrumented instruction
+      const cse_domaint &state = available_expressions[itt];
+
+      for(auto &[e, cse] : expressions | std::ranges::views::filter([this, &itt](auto elem) {
+	return  elem.second.available;
+      }))
+	  {	    
+	    goto_programt::targett t = F.second.body.insert(it);
+	    symbol2tc symbol = create_cse_symbol(e->type);
+	    t->make_assignment();
+	    t->code = code_assign2tc(symbol, e);
+	    cse.symbol.push_back(symbol);
+	    log_status("Adding new symbol {}", symbol->thename);
+	  }
     }
-    catch(...)
+    catch(...) // TODO: only out-of-bounds 
     {
       continue;
     }
