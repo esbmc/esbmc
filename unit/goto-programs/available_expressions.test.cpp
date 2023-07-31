@@ -59,7 +59,7 @@ public:
 #endif
 
     // Run the Abstract Interpretation
-    AE(P.functions, ns);
+    AE(P.functions, P.ns);
     REQUIRE(P.functions.function_map.size() > 0);
 
     // Test!
