@@ -1,7 +1,7 @@
 #include <goto-programs/abstract-interpretation/common_subexpression_elimination.h>
 #include <util/prefix.h>
 #include <fmt/format.h>
-
+#include <ranges>
 // TODO: Do an points-to abstract interpreter
 std::unique_ptr<value_set_analysist> cse_domaint::vsa = nullptr;
 
@@ -85,26 +85,9 @@ bool cse_domaint::join(const cse_domaint &b)
     return true;
   }
 
-  bool changed = false;
-  // Union first
-  for(auto e : b.available_expressions)
-  {
-    if(!available_expressions.count(e))
-    {
-      changed = true;
-      available_expressions.insert(e);
-    }
-  }
+  bool changed = available_expressions == b.available_expressions;
+  available_expressions = b.available_expressions;
 
-  // Intersection second
-  for(auto x : available_expressions)
-  {
-    if(!b.available_expressions.count(x))
-    {
-      changed = true;
-      available_expressions.erase(x);
-    }
-  }
 
   return changed;
 }
@@ -197,21 +180,40 @@ void cse_domaint::havoc_expr(
   for(auto x : to_remove)
     available_expressions.erase(x);
 }
-#include <memory>
-void common_subexpression_elimination(
-  goto_functionst &goto_functions,
-  const namespacet &ns,
-  const optionst &options)
+bool goto_cse::common_expression::should_add_symbol(const goto_programt::const_targett &it, size_t threshold) const
 {
+  auto index = std::find(gen.begin(), gen.end(), it);
+  return index == gen.end() ? false : sequence_counter.at(index - gen.begin()) >= threshold;
 }
+
+expr2tc goto_cse::common_expression::get_symbol_for_target(const goto_programt::const_targett &it) const
+{
+  assert(gen.size());
+
+  auto index = std::find_if(gen.begin(), gen.end(), [&it](const goto_programt::const_targett &v)
+  { return v->location_number >= it->location_number;});
+
+  if(index == gen.end())
+  {
+    // Either last symbol or nothing
+    return symbol.at(gen.size() - 1);
+  }
+     return expr2tc();
+  //  index--;
+  return symbol.at(index - gen.begin());
+}
+
+
+#include <memory>
+
 
 bool goto_cse::runOnProgram(goto_functionst &F)
 {
-
+  log_debug("[CSE] Computing Points-To for program");
   // Initialization for the abstract analysis.
   cse_domaint::vsa = std::make_unique<value_set_analysist>(ns);
   (*cse_domaint::vsa)(F);
-
+    log_debug("[CSE] Computing Available Expressions for program");
   available_expressions(F, ns);
   return false;
 }
@@ -232,13 +234,11 @@ goto_cse::obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const
   expr2tc result = expr2tc();
   e->foreach_operand([this, &result, &state](const expr2tc e_inner) {
     // already solved
-    if(result != expr2tc())
+    if(result)
       return;
 
-    result = obtain_max_sub_expr(e_inner, state);
-    if(result != expr2tc())
+    if(!e_inner)
       return;
-
     result = obtain_max_sub_expr(e_inner, state);
   });
   return result;
@@ -246,7 +246,8 @@ goto_cse::obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const
 
 void goto_cse::replace_max_sub_expr(
   expr2tc &e,
-  std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol) const
+  const expressions_map &expr2symbol,
+  const goto_programt::const_targett &to) const
 {
   if(!e)
     return;
@@ -255,36 +256,37 @@ void goto_cse::replace_max_sub_expr(
   if(is_constant(e) || is_symbol2t(e))
     return;
 
-  if(expr2symbol.count(e))
+  auto common = expr2symbol.find(e);
+  if(common != expr2symbol.end())
   {
-    //auto v = ;
-    e = expr2symbol[e];
-    return;
+    auto symbol = common->second.get_symbol_for_target(to);
+    if(symbol)
+    {
+       log_debug("[CSE] Found replacement!");
+       e = symbol;
+       return;
+    }     
   }
-
-  e->Foreach_operand([this, &expr2symbol](expr2tc &e0) {
-    replace_max_sub_expr(e0, expr2symbol);
+  e->Foreach_operand([this, &expr2symbol, &to](expr2tc &e0) {
+    replace_max_sub_expr(e0, expr2symbol, to);
   });
 }
 
 
-#include <ranges>
+
 
 bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 {
   if(!F.second.body_available)
     return false;
 
-  log_debug("Checking function {}", F.first.as_string());
-  if(F.first.as_string() != "c:@F@main")
-    return false;
+  log_debug("[CSE] Checking function {}", F.first.as_string());
 
   // 1. Let's count expressions
 
   // Compute all possible sequences
+  expressions_map expressions;
 
-  std::unordered_map<expr2tc, common_expression, irep2_hash> expressions;
-  std::unordered_map<expr2tc, unsigned, irep2_hash> counter;
   for(auto it = (F.second.body).instructions.begin();
       it != (F.second.body).instructions.end();
       ++it)
@@ -294,41 +296,40 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 
     const cse_domaint &state = available_expressions[it];
 
-    // Are the intervals still available (todo: this can be parallel)
+    // Are the intervals still available (TODO: this can be parallel)
     for(auto &exp :
-        expressions | std::ranges::views::filter([&state](auto elem) {
-          return (
-            elem.second.available &&
-            !state.available_expressions.count(elem.first));
+        expressions | std::ranges::views::filter([&state](auto &elem) {
+	  // Expression was available and now it isn't
+          return elem.second.available && !state.available_expressions.count(elem.first);
         }))
     {
 	exp.second.available = false;
 	exp.second.kill.push_back(it);
     }
 
+    // Get the max sub expr that should be available in this state
     const expr2tc max_sub = obtain_max_sub_expr(it->code, state);
     if(max_sub == expr2tc())
       continue;
 
     auto E = expressions.find(max_sub);
-    
+
+    // Are we seeing it for the first time?/
     if(E == expressions.end())
     {
-      // Adding for the first time
       common_expression exp;
       E = expressions.emplace(std::make_pair(max_sub, exp)).first;
     }
 
+    // Was the expression unavailable?
     if(!E->second.available)
     {
       E->second.available = true;
       E->second.gen.push_back(it);
-      // Just to add
       E->second.sequence_counter[E->second.gen.size() - 1] = 0;
     }
 
     E->second.sequence_counter[E->second.gen.size() - 1] += 1;
-    counter[max_sub]++;
   }
 
   // Let's filter sequences lower than the threshold
@@ -336,9 +337,18 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
   // 2. We might print some context now
   if(verbose_mode)
   {
-    for(const auto &e : expressions)
+    for(const auto &[k,v] : expressions)
     {
-      log_status("Got {} sequences of: {}", e.second.gen.size(), *e.first);
+      log_debug("Got {} sequences of: {}", v.gen.size(), *k);
+
+      log_debug("GEN");
+      for(const auto &g : v.gen)
+	log_status("\t{}", g->location.as_string());
+
+      log_debug("KILL");
+      for(const auto &kill : v.kill)
+	log_status("\t{}", kill->location.as_string());
+
     }    
   }
 
@@ -350,32 +360,25 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       it != (F.second.body).instructions.end();
       ++it)
   {
-    auto itt = it;
-    itt++;
-    try
-    {
 
-      // We are adding instructions here, which means that available expressions will throw
-      // errors if we try do get the Abstract State of an instrumented instruction
-      const cse_domaint &state = available_expressions[itt];
-
-      for(auto &[e, cse] : expressions | std::ranges::views::filter([this, &itt](auto elem) {
-	return  elem.second.available;
-      }))
-	  {	    
-	    goto_programt::targett t = F.second.body.insert(it);
-	    symbol2tc symbol = create_cse_symbol(e->type);
-	    t->make_assignment();
-	    t->code = code_assign2tc(symbol, e);
-	    cse.symbol.push_back(symbol);
-	    log_status("Adding new symbol {}", symbol->thename);
-	  }
+      for(auto &[e, cse] :
+          expressions | std::ranges::views::filter([this, &it](auto elem) {
+            return elem.second.should_add_symbol(it, threshold);
+          }))
+      {
+	auto itt = it;
+	itt--;
+	// Hack: I am still not sure why the first appearance breaks everything
+	if(!cse.symbol.size())
+	  itt--;
+        goto_programt::targett t = F.second.body.insert(itt);
+        symbol2tc symbol = create_cse_symbol(e->type);
+        t->make_assignment();
+        t->code = code_assign2tc(symbol, e);
+        cse.symbol.push_back(symbol);
+        log_debug("[CSE] Adding new symbol {}", symbol->thename);
+      }
     }
-    catch(...) // TODO: only out-of-bounds 
-    {
-      continue;
-    }
-  }
 
   // 4. Final step, let's replace the symbols!
   for(auto it = (F.second.body).instructions.begin();
@@ -394,12 +397,13 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
         continue;
     }
 
-    replace_max_sub_expr(it->code, expr2symbol);
+    log_status(it->location.as_string());
+    replace_max_sub_expr(it->code, expressions, it);
   }
   return true;
 }
 
-symbol2tc goto_cse::create_cse_symbol(const type2tc &t)
+inline symbol2tc goto_cse::create_cse_symbol(const type2tc &t)
 {
   return symbol2tc(t, fmt::format("{}${}", prefix, symbol_counter++));
 }

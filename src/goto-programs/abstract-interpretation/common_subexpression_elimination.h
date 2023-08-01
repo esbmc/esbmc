@@ -162,7 +162,6 @@ public:
     std::vector<goto_programt::const_targett> gen; // First time expression is used after being unavailable
     std::vector<goto_programt::const_targett> kill; // Expression becomes unavailable after being available
     bool available = false;
-    unsigned last_seen = 0;
 
     // There are some constraints that should be added here:
     // kill.size() <= gen.size()
@@ -170,16 +169,22 @@ public:
     // available might be a private member
     // this struct needs better naming
 
+    bool should_add_symbol(const goto_programt::const_targett &itt, size_t threshold) const;
+
+    expr2tc get_symbol_for_target(const goto_programt::const_targett&) const;
+
   };
   
 
 protected:
+  typedef std::unordered_map<expr2tc, common_expression, irep2_hash> expressions_map;
+  
   ait<cse_domaint> available_expressions;
   const namespacet &ns;
   expr2tc obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const;
   void replace_max_sub_expr(
     expr2tc &e,
-    std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol) const;
+    const expressions_map &expr2symbol, const goto_programt::const_targett &to) const;
 
   symbol2tc create_cse_symbol(const type2tc &t);
 
