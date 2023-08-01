@@ -1098,9 +1098,12 @@ smt_astt cvc_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
 
-  // Seems we can't make negative bitvectors; so just pull the value out and
-  // assume CVC is going to cut the top off correctly.
-  CVC4::BitVector bv = CVC4::BitVector(w, theint.to_uint64());
+  CVC4::BitVector bv;
+  if(theint.is_negative() || !theint.is_uint64())
+    bv = CVC4::BitVector(integer2binary(theint, w), 2);
+  else
+    bv = CVC4::BitVector(w, theint.to_uint64());
+
   CVC4::Expr e = em.mkConst(bv);
   return new_ast(e, s);
 }
