@@ -819,11 +819,19 @@ smt_astt z3_convt::mk_smt_real(const std::string &str)
 smt_astt z3_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
+  z3::expr e(z3_ctx);
 
-  if(theint.is_negative())
-    return new_ast(z3_ctx.bv_val(theint.to_int64(), w), s);
+  if(theint.is_int64())
+    e = z3_ctx.bv_val(theint.to_int64(), w);
+  else if(theint.is_uint64())
+    e = z3_ctx.bv_val(theint.to_uint64(), w);
+  else
+  {
+    std::string dec = integer2string(theint, 10);
+    e = z3_ctx.bv_val(dec.c_str(), w);
+  }
 
-  return new_ast(z3_ctx.bv_val(theint.to_uint64(), w), s);
+  return new_ast(e, s);
 }
 
 smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
