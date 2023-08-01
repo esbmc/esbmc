@@ -425,7 +425,15 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
   return true;
 }
 
-inline symbol2tc goto_cse::create_cse_symbol(const type2tc &t)
+inline symbolt goto_cse::create_cse_symbol(
+  const type2tc &t,
+  const goto_programt::const_targett &to)
 {
-  return symbol2tc(t, fmt::format("{}${}", prefix, symbol_counter++));
+  symbolt symbol;
+  symbol.type = migrate_type_back(t);
+  symbol.id = fmt::format("{}${}", prefix, symbol_counter++);
+  symbol.name = symbol.id;
+  symbol.mode = "C";
+  symbol.location = to->location;
+  return symbol;
 }
