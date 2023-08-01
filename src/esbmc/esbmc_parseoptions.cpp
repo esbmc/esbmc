@@ -1670,7 +1670,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if(cmdline.isset("common-subexpression-elimination"))
     {
-      goto_cse cse(ns);
+      goto_cse cse(context);
       cse.run(goto_functions);
     }
 
