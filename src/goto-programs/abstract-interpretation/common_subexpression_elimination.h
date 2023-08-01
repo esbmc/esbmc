@@ -56,7 +56,8 @@ public:
   {
     available_expressions.clear();
   };
-  virtual void make_top() override{
+  virtual void make_top() override
+  {
     // Theoretically there exists a TOP (all possible AE in the program).
     // In practice, there is no need for it.
     throw "[CSE] Available Expressions does not implement make_top()";
@@ -90,12 +91,10 @@ public:
     return join(b);
   }
 
-
   /// All expressions available
   std::unordered_set<expr2tc, irep2_hash> available_expressions;
 
 protected:
-
   /// Add non-primitive expression `e` (and its sub-expressions) into available_expressions.
   void make_expression_available(const expr2tc &e);
 
@@ -107,9 +106,8 @@ protected:
 
   // Helper function to check whether `src` depends on `taint`
   bool should_remove_expr(const expr2tc &taint, const expr2tc &src) const;
-    // Helper function to check whether `src` depends on symbol `sym`
+  // Helper function to check whether `src` depends on symbol `sym`
   bool should_remove_expr(const irep_idt &sym, const expr2tc &src) const;
-
 
 public:
   // TODO: clearly this shouldn't be here. The proper way is to create a new Abstract Interpreter
@@ -142,8 +140,7 @@ public:
 class goto_cse : public goto_functions_algorithm
 {
 public:
-  explicit goto_cse(const namespacet &ns)
-    : goto_functions_algorithm(true), ns(ns)
+  explicit goto_cse(contextt &ns) : goto_functions_algorithm(true), context(ns)
   {
   }
 
@@ -154,13 +151,14 @@ public:
   unsigned threshold = 1;
   bool verbose_mode = true;
 
-
   struct common_expression
   {
-    std::unordered_map<unsigned,size_t> sequence_counter;
+    std::unordered_map<unsigned, size_t> sequence_counter;
     std::vector<expr2tc> symbol;
-    std::vector<goto_programt::const_targett> gen; // First time expression is used after being unavailable
-    std::vector<goto_programt::const_targett> kill; // Expression becomes unavailable after being available
+    std::vector<goto_programt::const_targett>
+      gen; // First time expression is used after being unavailable
+    std::vector<goto_programt::const_targett>
+      kill; // Expression becomes unavailable after being available
     bool available = false;
 
     // There are some constraints that should be added here:
@@ -169,24 +167,27 @@ public:
     // available might be a private member
     // this struct needs better naming
 
-    bool should_add_symbol(const goto_programt::const_targett &itt, size_t threshold) const;
+    bool should_add_symbol(
+      const goto_programt::const_targett &itt,
+      size_t threshold) const;
 
-    expr2tc get_symbol_for_target(const goto_programt::const_targett&) const;
-
+    expr2tc get_symbol_for_target(const goto_programt::const_targett &) const;
   };
-  
 
 protected:
-  typedef std::unordered_map<expr2tc, common_expression, irep2_hash> expressions_map;
-  
+  typedef std::unordered_map<expr2tc, common_expression, irep2_hash>
+    expressions_map;
+
   ait<cse_domaint> available_expressions;
-  const namespacet &ns;
+  contextt &context;
   expr2tc obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const;
   void replace_max_sub_expr(
     expr2tc &e,
-    const expressions_map &expr2symbol, const goto_programt::const_targett &to) const;
+    const expressions_map &expr2symbol,
+    const goto_programt::const_targett &to) const;
 
-  symbol2tc create_cse_symbol(const type2tc &t);
+  symbolt
+  create_cse_symbol(const type2tc &t, const goto_programt::const_targett &to);
 
 private:
   unsigned symbol_counter = 0;
