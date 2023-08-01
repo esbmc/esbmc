@@ -125,7 +125,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       unsignedbv_type2tc newtype(sz + 1);
 
       // All one bit vector is tricky, might be 64 bits wide for all we know.
-      constant_int2tc allonesexpr(newtype, BigInt((1ULL << (sz + 1)) - 1));
+      constant_int2tc allonesexpr(newtype, ones(sz + 1));
       smt_astt allonesvector = convert_ast(allonesexpr);
 
       // It should either be zero or all one's;
