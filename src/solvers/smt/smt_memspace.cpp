@@ -514,13 +514,6 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   abort();
 }
 
-static BigInt ones(unsigned n_bits)
-{
-  BigInt r;
-  r.setPower2(n_bits);
-  return r -= 1;
-}
-
 void smt_convt::init_addr_space_array()
 {
   addr_space_sym_num.back() = 1;
