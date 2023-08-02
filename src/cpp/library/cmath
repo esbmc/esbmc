@@ -1,5 +1,7 @@
 
-/* while we don't have our own <math.h> work around the fact that libstc++'s
+#pragma once
+
+/* while we don't have our own <math.h> work around the fact that libstdc++'s
  * <math.h> does #include <cmath> and expects all the std::* functions to be
  * there. But we don't want theirs... */
 #define _GLIBCXX_INCLUDE_NEXT_C_HEADERS
