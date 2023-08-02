@@ -70,9 +70,11 @@ long int atol(const char * str);
 
 long long atoll(const char *str);
 
+#if 0
 char get_char(int digit); //Converter from digit ie 0123456789 to char '0'......'9'
 
 void rev(char *); //reverse function ;
+#endif
 
 double strtod(const char *__ESBMC_restrict str, char **__ESBMC_restrict endptr);
 
