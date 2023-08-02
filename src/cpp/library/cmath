@@ -1,1 +1,102 @@
+
+/* while we don't have our own <math.h> work around the fact that libstc++'s
+ * <math.h> does #include <cmath> and expects all the std::* functions to be
+ * there. But we don't want theirs... */
+#define _GLIBCXX_INCLUDE_NEXT_C_HEADERS
+
 #include <math.h>
+
+namespace std {
+
+float       abs(float num) { return ::fabsf(num); }
+double      abs(double num) { return ::fabs(num); }
+long double abs(long double num) { return ::fabsl(num); }
+
+using ::fabsf;
+using ::fabs;
+using ::fabsl;
+
+/* TODO: also declare these in <cstdlib> */
+float       fabs(float num) { return ::fabsf(num); }
+long double fabs(long double num) { return ::fabsl(num); }
+
+/* TODO:
+template <typename Integer>
+double fabs(Integer num);
+ */
+
+#define CIMPORT1(name) \
+	using ::name ## f; \
+	using ::name; \
+	using ::name ## l; \
+	float name(float num) { return ::name ## f(num); } \
+	long double name(long double num) { return ::name ## l(num); } \
+	/* TODO: \
+	template <typename Integer> \
+	double name(Integer num); \
+	 */
+
+#define CIMPORT2(name) \
+	using ::name ## f; \
+	using ::name; \
+	using ::name ## l; \
+	float name(float a, float b) { return ::name ## f(a, b); } \
+	long double name(long double a, long double b) { return ::name ## l(a, b); } \
+	/* TODO: \
+	template <typename Integer> \
+	double name(Integer num); \
+	 */
+
+CIMPORT1(acos)
+CIMPORT1(asin)
+CIMPORT1(atan)
+CIMPORT2(atan2)
+CIMPORT1(cos)
+CIMPORT1(sin)
+CIMPORT1(tan)
+CIMPORT1(cosh)
+CIMPORT1(sinh)
+CIMPORT1(tanh)
+CIMPORT1(exp)
+CIMPORT1(log)
+CIMPORT1(log10)
+CIMPORT1(floor)
+CIMPORT1(ceil)
+CIMPORT2(pow)
+CIMPORT1(sqrt)
+CIMPORT2(fmod)
+
+using ::frexpf;
+using ::frexp;
+using ::frexpl;
+float frexp(float num, int *exp) { return ::frexpf(num, exp); }
+long double frexp(long double num, int *exp) { return ::frexpl(num, exp); }
+/* TODO:
+template <typename Integer>
+double frexp(Integer num, int *exp);
+ */
+
+using ::ldexpf;
+using ::ldexp;
+using ::ldexpl;
+float ldexp(float num, int exp) { return ::ldexpf(num, exp); }
+long double ldexp(long double num, int exp) { return ::ldexpl(num, exp); }
+/* TODO:
+template <typename Integer>
+double ldexp(Integer num, int exp);
+ */
+
+using ::modff;
+using ::modf;
+using ::modfl;
+float modf(float num, float *iptr) { return ::modff(num, iptr); }
+long double modf(long double num, long double *iptr) { return ::modfl(num, iptr); }
+/* TODO:
+template <typename Integer>
+double modf(Integer num, double *iptr);
+ */
+
+#undef CIMPORT1
+#undef CIMPORT2
+
+}
