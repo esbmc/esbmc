@@ -10,17 +10,17 @@
 
 namespace std {
 
-float       abs(float num) { return ::fabsf(num); }
-double      abs(double num) { return ::fabs(num); }
-long double abs(long double num) { return ::fabsl(num); }
+inline float       abs(float num) { return ::fabsf(num); }
+inline double      abs(double num) { return ::fabs(num); }
+inline long double abs(long double num) { return ::fabsl(num); }
 
 using ::fabsf;
 using ::fabs;
 using ::fabsl;
 
 /* TODO: also declare these in <cstdlib> */
-float       fabs(float num) { return ::fabsf(num); }
-long double fabs(long double num) { return ::fabsl(num); }
+inline float       fabs(float num) { return ::fabsf(num); }
+inline long double fabs(long double num) { return ::fabsl(num); }
 
 /* TODO:
 template <typename Integer>
@@ -31,8 +31,8 @@ double fabs(Integer num);
 	using ::name ## f; \
 	using ::name; \
 	using ::name ## l; \
-	float name(float num) { return ::name ## f(num); } \
-	long double name(long double num) { return ::name ## l(num); } \
+	inline float name(float num) { return ::name ## f(num); } \
+	inline long double name(long double num) { return ::name ## l(num); } \
 	/* TODO: \
 	template <typename Integer> \
 	double name(Integer num); \
@@ -42,8 +42,8 @@ double fabs(Integer num);
 	using ::name ## f; \
 	using ::name; \
 	using ::name ## l; \
-	float name(float a, float b) { return ::name ## f(a, b); } \
-	long double name(long double a, long double b) { return ::name ## l(a, b); } \
+	inline float name(float a, float b) { return ::name ## f(a, b); } \
+	inline long double name(long double a, long double b) { return ::name ## l(a, b); } \
 	/* TODO: \
 	template <typename Integer> \
 	double name(Integer num); \
@@ -71,8 +71,8 @@ CIMPORT2(fmod)
 using ::frexpf;
 using ::frexp;
 using ::frexpl;
-float frexp(float num, int *exp) { return ::frexpf(num, exp); }
-long double frexp(long double num, int *exp) { return ::frexpl(num, exp); }
+inline float frexp(float num, int *exp) { return ::frexpf(num, exp); }
+inline long double frexp(long double num, int *exp) { return ::frexpl(num, exp); }
 /* TODO:
 template <typename Integer>
 double frexp(Integer num, int *exp);
@@ -81,8 +81,8 @@ double frexp(Integer num, int *exp);
 using ::ldexpf;
 using ::ldexp;
 using ::ldexpl;
-float ldexp(float num, int exp) { return ::ldexpf(num, exp); }
-long double ldexp(long double num, int exp) { return ::ldexpl(num, exp); }
+inline float ldexp(float num, int exp) { return ::ldexpf(num, exp); }
+inline long double ldexp(long double num, int exp) { return ::ldexpl(num, exp); }
 /* TODO:
 template <typename Integer>
 double ldexp(Integer num, int exp);
@@ -91,8 +91,8 @@ double ldexp(Integer num, int exp);
 using ::modff;
 using ::modf;
 using ::modfl;
-float modf(float num, float *iptr) { return ::modff(num, iptr); }
-long double modf(long double num, long double *iptr) { return ::modfl(num, iptr); }
+inline float modf(float num, float *iptr) { return ::modff(num, iptr); }
+inline long double modf(long double num, long double *iptr) { return ::modfl(num, iptr); }
 /* TODO:
 template <typename Integer>
 double modf(Integer num, double *iptr);
