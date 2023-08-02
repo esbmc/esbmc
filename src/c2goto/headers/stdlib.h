@@ -10,8 +10,6 @@ __ESBMC_C_CPP_BEGIN
 #define EXIT_FAILURE 0
 #define EXIT_SUCCESS 1
 
-typedef unsigned int MB_CUR_MAX;
-
 typedef struct {
 	int quot;
 	int rem;
