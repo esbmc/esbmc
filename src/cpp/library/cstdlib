@@ -11,7 +11,5 @@
 #define STL_STDLIB
 
 #include <stdlib.h>
-#include "cstring"
-#include "definitions.h"
 
 #endif
