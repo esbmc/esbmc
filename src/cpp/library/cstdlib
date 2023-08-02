@@ -108,11 +108,15 @@ long int strtol(const char * str, char ** endptr, int base);
 
 unsigned long int strtoul(const char * str, char ** endptr, int base);
 
-char * getenv(const char * name) {
-	size_t size = strlen(name) + 1;
-	char tmp[size];
-	strcpy(tmp, name);
-	return tmp;
+char *getenv(const char *name) {
+  if(name == NULL || *name == '\0')
+    return NULL; // Invalid input
+  size_t size = strlen(name) + 1;
+  char *tmp = (char *)malloc(sizeof(char) * size);
+  if(tmp == NULL)
+    return NULL;
+  strcpy(tmp, name);
+  return tmp;
 }
 
 void exit(int status)
