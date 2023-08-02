@@ -1,4 +1,4 @@
-# ESBMC CUDA Operational Model - base on CUDA v8.0
+# ESBMC CUDA Operational Model - based on CUDA v8.0
 
 [CUDA](https://developer.nvidia.com/cuda-zone) (Compute Unified Device Architecture) is a parallel computing platform and application programming interface (API) model created by NVIDIA.
 
