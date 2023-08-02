@@ -3,6 +3,8 @@
 
 #include <__esbmc/stddefs.h>
 
+#include <stddef.h> /* size_t */
+
 __ESBMC_C_CPP_BEGIN
 
 #define EXIT_FAILURE 0
@@ -37,8 +39,8 @@ void qsort(void * base, size_t num, size_t size,
 		int (*comparator)(const void *, const void *));
 
 int abs(int n);
-
-long abs(long n);
+long labs(long n);
+long long llabs(long long n);
 
 void * realloc(void * ptr, size_t size);
 
