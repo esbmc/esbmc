@@ -1,15 +1,13 @@
-/*******************************************************************
- Module:
-
- Author: Felipe Rodrigues
-
- Date: September 2012
-
- \*******************************************************************/
-
 #ifndef STL_STDLIB
 #define STL_STDLIB
 
 #include <stdlib.h>
+
+#define RAND_MAX 2147483647
+
+int rand(void) {
+  __ESBMC_HIDE:;
+	return nondet_uint() % RAND_MAX;
+}
 
 #endif

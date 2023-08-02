@@ -3,7 +3,6 @@
 #include <ctype.h>
 #include <limits.h>
 #include <errno.h>
-
 #include <assert.h>
 
 #undef errno
@@ -12,10 +11,18 @@ extern _Thread_local int errno;
 #undef exit
 #undef abort
 #undef calloc
-#undef getenv
 #undef atoi
 #undef atol
 #undef atoll
+#undef rand
+#undef getenv
+
+#define RAND_MAX 2147483647
+
+int rand(void) {
+  __ESBMC_HIDE:;
+	return nondet_uint() % RAND_MAX;
+}
 
 typedef struct atexit_key
 {

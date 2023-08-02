@@ -1,3 +1,5 @@
+
+
 #ifndef _CUDA_RUNTIME_API_H
 #define _CUDA_RUNTIME_API_H 1
 
@@ -11,7 +13,7 @@
 
 #include <stddef.h>
 #include <stdio.h>
-#include <cstdlib>
+#include <stdlib.h>
 
 /** \cond impl_private */
 #if !defined(__dv)
