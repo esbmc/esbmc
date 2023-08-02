@@ -19,9 +19,10 @@ extern _Thread_local int errno;
 
 #define RAND_MAX 2147483647
 
-int rand(void) {
-  __ESBMC_HIDE:;
-	return nondet_uint() % RAND_MAX;
+int rand(void)
+{
+__ESBMC_HIDE:;
+  return nondet_uint() % RAND_MAX;
 }
 
 typedef struct atexit_key
