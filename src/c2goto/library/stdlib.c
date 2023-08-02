@@ -267,3 +267,61 @@ __ESBMC_HIDE:;
   __ESBMC_assume(!((uintptr_t)r & (align - 1)));
   return r;
 }
+
+int rand(void) {
+	return nondet_uint() % RAND_MAX;
+}
+
+long random(void) {
+	return nondet_ulong() % RAND_MAX;
+}
+
+#if 0
+void srand (unsigned int s)
+{
+	seed = s;
+}
+#endif
+
+#if 0
+char get_char(int digit) {
+	char charstr[] = "0123456789ABCDEF";
+	return charstr[digit];
+}
+
+void rev(char *p) {
+	char *q = &p[strlen(p) - 1];
+	char *r = p;
+	for (; q > r; q--, r++) {
+		char s = *q;
+		*q = *r;
+		*r = s;
+	}
+}
+
+char * itoa(int value, char * str, int base) {
+	int count = 0;
+	bool flag = true;
+	if (value < 0 && base == 10) {
+		flag = false;
+	}
+	while (value != 0) {
+		int dig = value % base;
+		value -= dig;
+		value /= base;
+
+		if (flag == true)
+			str[count] = get_char(dig);
+		else
+			str[count] = get_char(-dig);
+		count++;
+	}
+	if (flag == false) {
+		str[count] = '-';
+		count++;
+	}
+	str[count] = 0;
+	rev(str);
+	return str;
+}
+#endif
