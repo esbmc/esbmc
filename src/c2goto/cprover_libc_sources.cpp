@@ -51,6 +51,7 @@ public:
       using namespace boost::filesystem;
       headers = base_path() + "/headers";
       create_directory(headers);
+      create_directory(headers + "/__esbmc");
       create_directory(headers + "/bits");
       create_directory(headers + "/sys");
       create_directory(headers + "/sys/_types");
