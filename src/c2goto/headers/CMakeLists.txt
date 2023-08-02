@@ -1,5 +1,13 @@
-set(inputs limits.h pthread.h stdarg.h stdbool.h stddef.h 
-           bits/pthreadtypes.h bits/thread-shared-types.h
+set(inputs limits.h
+           stdarg.h
+           stdbool.h
+           stddef.h
+           string.h
+           __esbmc/stddefs.h
+           # pthreads
+           pthread.h
+           bits/pthreadtypes.h
+           bits/thread-shared-types.h
            # MacOSX10.x
            sys/_types/_pthread_attr_t.h
            # MacOSX11.0 and above
@@ -17,7 +25,7 @@ set(inputs limits.h pthread.h stdarg.h stdbool.h stddef.h
            ubuntu20.04/kernel_5.15.0-76/include/linux/gfp.h
            ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h
            ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h
-
+           # end pthreads
    )
 mangle(mangled_files ${CMAKE_CURRENT_SOURCE_DIR} ${inputs}
        PREFIX esbmc_libc_header_
