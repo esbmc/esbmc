@@ -1,4 +1,6 @@
-set(inputs limits.h
+set(inputs
+           ctype.h
+           limits.h
            stdarg.h
            stdbool.h
            stddef.h
