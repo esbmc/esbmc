@@ -81,5 +81,5 @@ int main(){
 
 	free(w);
 
-	return EXIT_SUCCESS;
+	return CUDA_SUCCESS;
 }
