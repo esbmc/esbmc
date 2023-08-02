@@ -258,7 +258,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   if concurrency:
     command_line += " --no-por --context-bound 2 "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
-
+  else:
+    command_line += " --common-subexpression-elimination "
   # Add witness arg
   witness_name = os.path.basename(benchmark) if esbmc_ci else "witness"
   command_line += "--witness-output " + witness_name + ".graphml "
