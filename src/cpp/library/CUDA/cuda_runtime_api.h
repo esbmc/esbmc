@@ -59,14 +59,9 @@ cudaError_t cudaMalloc(void **devPtr, size_t size)
   *devPtr = malloc(size);
 
   if(*devPtr == NULL)
-  {
     tmp = CUDA_ERROR_OUT_OF_MEMORY;
-    exit(1);
-  }
   else
-  {
     tmp = CUDA_SUCCESS;
-  }
 
   //post-conditions
   __ESBMC_assert(tmp == CUDA_SUCCESS, "Memory was not allocated");
@@ -302,7 +297,7 @@ void cudaDeviceInsert(int device)
 
   newCudaDevice = (cudaDeviceList_t *)malloc(sizeof(cudaDeviceList_t));
   if(newCudaDevice == NULL)
-    exit(0);
+    return;
 
   newCudaDevice->id = device;
   newCudaDevice->active = 0;

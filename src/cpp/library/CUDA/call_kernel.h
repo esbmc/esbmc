@@ -2,13 +2,16 @@
 #define _CALL_KERNEL_H 1
 
 #include <stddef.h>
-#include <cstdlib>
+#include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 #include <assert.h>
 #include "vector_types.h"
 #include "device_launch_parameters.h"
 #include <new>
+
+void *malloc(size_t size);
+void free(void *ptr);
 
 int blockGlobal;
 int threadGlobal;
