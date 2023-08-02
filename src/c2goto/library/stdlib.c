@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <errno.h>
+#include <stdint.h> /* uintptr_t */
 
 #include <assert.h>
 
