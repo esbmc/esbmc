@@ -112,7 +112,7 @@ char *getenv(const char *name) {
   if(name == NULL || *name == '\0')
     return NULL; // Invalid input
   size_t size = strlen(name) + 1;
-  char *tmp = (char *)malloc(sizeof(char) * size);
+  char *tmp = (char *)__ESBMC_alloca(sizeof(char) * size);
   if(tmp == NULL)
     return NULL;
   strcpy(tmp, name);
