@@ -4,6 +4,7 @@ set(inputs
            stdarg.h
            stdbool.h
            stddef.h
+           stdlib.h
            string.h
            __esbmc/stddefs.h
            # pthreads
