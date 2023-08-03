@@ -1800,15 +1800,19 @@ expr2tc typecast2t::do_simplify() const
 
       if(to_width == from_width)
         return simp;
-
-      return expr2tc();
     }
     catch(const array_type2t::dyn_sized_array_excp &e)
     {
       // Something crazy, and probably C++ based, occurred. Don't attempt to
       // simplify.
-      return expr2tc();
     }
+    catch(const type2t::symbolic_type_excp &e)
+    {
+      /* might happen if there is a symbolic type in a ptr's subtype; these
+       * have not been squashed by thrash_type_symbols() */
+    }
+
+    return expr2tc();
   }
   else if(is_typecast2t(simp) && type == simp->type)
   {

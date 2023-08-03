@@ -1,7 +1,7 @@
 #include <util/algorithms.h>
 #include <util/message.h>
 #include <goto-programs/goto_loops.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 
 bool goto_functions_algorithm::run(goto_functionst &goto_functions)
 {

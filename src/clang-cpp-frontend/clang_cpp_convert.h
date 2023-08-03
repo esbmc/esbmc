@@ -85,7 +85,7 @@ protected:
 
   bool get_struct_union_class_methods_decls(
     const clang::RecordDecl &rd,
-    struct_typet &type) override;
+    typet &type) override;
 
   /*
    * Deal with ClassTemplateDecl or FunctionTemplateDecl or

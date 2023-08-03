@@ -49,6 +49,8 @@ void rw_sett::read_write_rec(
       {
         return; // ignore for now
       }
+
+      // TODO improvements for CUDA features
     }
 
     irep_idt object = id2string(symbol_expr.get_identifier()) + suffix;

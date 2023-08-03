@@ -681,7 +681,18 @@ smt_astt yices_convt::mk_smt_real(const std::string &str)
 smt_astt yices_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
-  term_t term = yices_bvconst_uint64(w, theint.to_int64());
+  term_t term;
+
+  if(theint.is_int64())
+    term = yices_bvconst_int64(w, theint.to_int64());
+  else if(theint.is_uint64())
+    term = yices_bvconst_uint64(w, theint.to_uint64());
+  else
+  {
+    std::string bits = integer2binary(theint, w);
+    term = yices_parse_bvbin(bits.c_str());
+  }
+
   return new_ast(term, s);
 }
 

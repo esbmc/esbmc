@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_exception_id.h>
 #include <cpp/cpp_type2name.h>
 #include <cpp/cpp_typecheck.h>
-#include <clang-cpp-frontend/expr2cpp.h>
+#include <util/cpp_expr2string.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
 #include <util/c_sizeof.h>
@@ -274,8 +274,8 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
     {
       err_location(expr);
       str << "error: types are incompatible.\n"
-          << "I got `" << type2cpp(expr.op1().type(), *this) << "' and `"
-          << type2cpp(expr.op2().type(), *this) << "'.";
+          << "I got `" << cpp_type2string(expr.op1().type(), *this) << "' and `"
+          << cpp_type2string(expr.op2().type(), *this) << "'.";
       throw 0;
     }
   }

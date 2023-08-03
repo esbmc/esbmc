@@ -656,7 +656,7 @@ public:
  *  Contains a spec for a floating point number -- this is the equivalent of a
  *  ieee_float_spect in the old irep situation. Stores how bits are distributed
  *  over fraction bits and exponent bits.
- *  @extend floatbv_type_methods
+ *  @extend floatbv_data
  */
 class floatbv_type2t : public floatbv_type_methods
 {

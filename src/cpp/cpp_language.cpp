@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_language.h>
 #include <cpp/cpp_parser.h>
 #include <cpp/cpp_typecheck.h>
-#include <clang-cpp-frontend/expr2cpp.h>
+#include <util/cpp_expr2string.h>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -247,7 +247,7 @@ bool cpp_languaget::from_expr(
   std::string &code,
   const namespacet &ns)
 {
-  code = expr2cpp(expr, ns);
+  code = cpp_expr2string(expr, ns);
   return false;
 }
 
@@ -256,6 +256,6 @@ bool cpp_languaget::from_type(
   std::string &code,
   const namespacet &ns)
 {
-  code = type2cpp(type, ns);
+  code = cpp_type2string(type, ns);
   return false;
 }

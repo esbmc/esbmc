@@ -10,13 +10,6 @@
 #include <util/namespace.h>
 
 // Replaces the symbolic struct type with the complete struct type.
-void get_complete_struct_type(struct_typet &type, const namespacet &ns);
-
-// If a type contains symbolic struct type, replace it with
-// the complete struct type
-bool contains_symbolic_struct_types(
-  const typet &type,
-  typet &complete_type,
-  const namespacet &ns);
+typet get_complete_type(typet type, const namespacet &ns);
 
 #endif // ESBMC_SYMBOLIC_TYPES_H

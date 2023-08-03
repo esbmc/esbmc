@@ -8,12 +8,28 @@
 #include <util/std_types.h>
 #include <util/type_byte_size.h>
 
-BigInt member_offset(const type2tc &type, const irep_idt &member)
+namespace
 {
-  return member_offset_bits(type, member) / 8;
-}
+struct type_sizet
+{
+  const namespacet *ns;
 
-BigInt member_offset_bits(const type2tc &type, const irep_idt &member)
+  explicit type_sizet(const namespacet *ns) : ns(ns)
+  {
+  }
+  type_sizet(const type_sizet &) = delete;
+  type_sizet &operator=(const type_sizet &) = delete;
+
+  BigInt member_offset_bits(const type2tc &type, const irep_idt &member) const;
+  BigInt size_bits(const type2tc &type) const;
+  expr2tc size_bits_expr(const type2tc &type) const;
+  expr2tc pointer_offset_bits(const expr2tc &expr) const;
+};
+} // namespace
+
+BigInt type_sizet::member_offset_bits(
+  const type2tc &type,
+  const irep_idt &member) const
 {
   BigInt result = 0;
 
@@ -28,18 +44,35 @@ BigInt member_offset_bits(const type2tc &type, const irep_idt &member)
     if(thetype.member_names[idx] == member.as_string())
       break;
 
-    result += type_byte_size_bits(it);
+    result += size_bits(it);
     idx++;
   }
 
   return result;
 }
 
-BigInt type_byte_size_default(const type2tc &type, const BigInt &defaultval)
+BigInt member_offset_bits(
+  const type2tc &type,
+  const irep_idt &member,
+  const namespacet *ns)
+{
+  return type_sizet(ns).member_offset_bits(type, member);
+}
+
+BigInt
+member_offset(const type2tc &type, const irep_idt &member, const namespacet *ns)
+{
+  return member_offset_bits(type, member, ns) / 8;
+}
+
+BigInt type_byte_size_default(
+  const type2tc &type,
+  const BigInt &defaultval,
+  const namespacet *ns)
 {
   try
   {
-    return type_byte_size(type);
+    return type_byte_size(type, ns);
   }
   catch(const array_type2t::dyn_sized_array_excp &e)
   {
@@ -47,14 +80,7 @@ BigInt type_byte_size_default(const type2tc &type, const BigInt &defaultval)
   }
 }
 
-BigInt type_byte_size(const type2tc &type)
-{
-  BigInt bits = type_byte_size_bits(type);
-
-  return (bits + 7) / 8;
-}
-
-BigInt type_byte_size_bits(const type2tc &type)
+BigInt type_sizet::size_bits(const type2tc &type) const
 {
   switch(type->type_id)
   {
@@ -67,11 +93,15 @@ BigInt type_byte_size_bits(const type2tc &type)
     return 0;
 
   case type2t::symbol_id:
-    log_error("Symbolic type id in type_byte_size\n{}", *type);
+    if(ns)
+      return size_bits(ns->follow(type));
+    log_error("Symbolic type id in size_typet::size_bits\n{}", *type);
     abort();
 
   case type2t::cpp_name_id:
-    log_error("C++ symbolic type id in type_byte_size\n{}", *type);
+    if(ns)
+      return size_bits(ns->follow(type));
+    log_error("Symbolic C++ type id in size_typet::size_bits\n{}", *type);
     abort();
 
   case type2t::bool_id:
@@ -87,27 +117,11 @@ BigInt type_byte_size_bits(const type2tc &type)
     return to_string_type(type).width * config.ansi_c.char_width;
 
   case type2t::vector_id:
-  {
-    const vector_type2t &t2 = to_vector_type(type);
-    if(t2.size_is_infinite)
-      throw array_type2t::inf_sized_array_excp();
-
-    expr2tc arrsize = t2.array_size;
-    simplify(arrsize);
-
-    if(!is_constant_int2t(arrsize))
-      throw array_type2t::dyn_sized_array_excp(arrsize);
-
-    BigInt subsize = type_byte_size_bits(t2.subtype);
-    const constant_int2t &arrsize_int = to_constant_int2t(arrsize);
-    return subsize * arrsize_int.value;
-  }
-
   case type2t::array_id:
   {
     // Attempt to compute constant array offset. If we can't, we can't
     // reasonably return anything anyway, so throw.
-    const array_type2t &t2 = to_array_type(type);
+    const array_data &t2 = static_cast<const array_data &>(*type);
     if(t2.size_is_infinite)
       throw array_type2t::inf_sized_array_excp();
 
@@ -116,7 +130,7 @@ BigInt type_byte_size_bits(const type2tc &type)
     if(!is_constant_int2t(arrsize))
       throw array_type2t::dyn_sized_array_excp(arrsize);
 
-    BigInt subsize = type_byte_size_bits(t2.subtype);
+    BigInt subsize = size_bits(t2.subtype);
     const constant_int2t &arrsize_int = to_constant_int2t(arrsize);
     return subsize * arrsize_int.value;
   }
@@ -128,7 +142,7 @@ BigInt type_byte_size_bits(const type2tc &type)
     // necessary to make arrays align properly if malloc'd, see C89 6.3.3.4.
     BigInt accumulated_size = 0;
     for(auto const &it : to_struct_type(type).members)
-      accumulated_size += type_byte_size_bits(it);
+      accumulated_size += size_bits(it);
 
     // At the end of that, the tests above should have rounded accumulated size
     // up to a size that contains the required trailing padding for array
@@ -142,14 +156,26 @@ BigInt type_byte_size_bits(const type2tc &type)
     // array allocation alignment.
     BigInt max_size = 0;
     for(auto const &it : to_union_type(type).members)
-      max_size = std::max(max_size, type_byte_size_bits(it));
+      max_size = std::max(max_size, size_bits(it));
     return max_size;
   }
 
   default:
-    log_error("Unrecognised type in type_byte_size_bits:\n{}", *type);
+    log_error("Unrecognised type in size_typet::size_bits:\n{}", *type);
     abort();
   }
+}
+
+BigInt type_byte_size_bits(const type2tc &type, const namespacet *ns)
+{
+  return type_sizet(ns).size_bits(type);
+}
+
+BigInt type_byte_size(const type2tc &type, const namespacet *ns)
+{
+  BigInt bits = type_byte_size_bits(type, ns);
+
+  return (bits + 7) / 8;
 }
 
 static expr2tc bitsize(BigInt n)
@@ -157,10 +183,10 @@ static expr2tc bitsize(BigInt n)
   return constant_int2tc(bitsize_type2(), std::move(n));
 }
 
-expr2tc type_byte_size_bits_expr(const type2tc &type)
+expr2tc type_sizet::size_bits_expr(const type2tc &type) const
 {
   /* The structure of this function is the same as that of
-   * type_byte_size_bits(). We don't call that and just handle the exception
+   * size_bits(). We don't call that and just handle the exception
    * though, since that would mean we'd unnecessarily recurse multiple times
    * into the type. */
 
@@ -175,11 +201,15 @@ expr2tc type_byte_size_bits_expr(const type2tc &type)
     return bitsize(0);
 
   case type2t::symbol_id:
-    log_error("Symbolic type id in type_byte_size\n{}", *type);
+    if(ns)
+      return size_bits_expr(ns->follow(type));
+    log_error("Symbolic type id in type_size_t::size_bits_expr\n{}", *type);
     abort();
 
   case type2t::cpp_name_id:
-    log_error("C++ symbolic type id in type_byte_size\n{}", *type);
+    if(ns)
+      return size_bits_expr(ns->follow(type));
+    log_error("Symbolic C++ type id in type_size_t::size_bits_expr\n{}", *type);
     abort();
 
   case type2t::bool_id:
@@ -197,19 +227,15 @@ expr2tc type_byte_size_bits_expr(const type2tc &type)
   case type2t::array_id:
   case type2t::vector_id:
   {
-    const array_data *t2;
-    if(type->type_id == type2t::vector_id)
-      t2 = &to_vector_type(type);
-    else
-      t2 = &to_array_type(type);
+    const array_data &t2 = static_cast<const array_data &>(*type);
 
-    if(t2->size_is_infinite)
+    if(t2.size_is_infinite)
       throw array_type2t::inf_sized_array_excp();
 
-    expr2tc arrsize = t2->array_size;
+    expr2tc arrsize = t2.array_size;
     simplify(arrsize);
 
-    expr2tc subsize = type_byte_size_bits_expr(t2->subtype);
+    expr2tc subsize = size_bits_expr(t2.subtype);
     simplify(subsize);
 
     if(is_constant_int2t(arrsize) && is_constant_int2t(subsize))
@@ -232,7 +258,7 @@ expr2tc type_byte_size_bits_expr(const type2tc &type)
     type2tc t = bitsize_type2();
     for(const type2tc &member : to_struct_type(type).members)
     {
-      expr2tc s = type_byte_size_bits_expr(member);
+      expr2tc s = size_bits_expr(member);
       if(is_constant_int2t(s))
         acc_cnst += to_constant_int2t(s).value;
       else if(acc_dyn)
@@ -263,7 +289,7 @@ expr2tc type_byte_size_bits_expr(const type2tc &type)
     type2tc t = bitsize_type2();
     for(const type2tc &elem : to_union_type(type).members)
     {
-      expr2tc s = type_byte_size_bits_expr(elem);
+      expr2tc s = size_bits_expr(elem);
       if(is_constant_int2t(s))
         max_cnst = std::max(max_cnst, to_constant_int2t(s).value);
       else if(max_dyn)
@@ -283,14 +309,19 @@ expr2tc type_byte_size_bits_expr(const type2tc &type)
   }
 
   default:
-    log_error("Unrecognised type in type_byte_size_bits_expr:\n{}", *type);
+    log_error("Unrecognised type in type_size_t::size_bits_expr:\n{}", *type);
     abort();
   }
 }
 
-expr2tc type_byte_size_expr(const type2tc &type)
+expr2tc type_byte_size_bits_expr(const type2tc &type, const namespacet *ns)
 {
-  expr2tc n = type_byte_size_bits_expr(type);
+  return type_sizet(ns).size_bits_expr(type);
+}
+
+expr2tc type_byte_size_expr(const type2tc &type, const namespacet *ns)
+{
+  expr2tc n = type_byte_size_bits_expr(type, ns);
   if(is_constant_int2t(n))
     return gen_ulong((to_constant_int2t(n).value + 7) / 8);
   type2tc s = bitsize_type2();
@@ -298,7 +329,7 @@ expr2tc type_byte_size_expr(const type2tc &type)
   return typecast2tc(t, div2tc(s, add2tc(s, n, bitsize(7)), bitsize(8)));
 }
 
-expr2tc compute_pointer_offset_bits(const expr2tc &expr)
+expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
 {
   if(is_symbol2t(expr))
     return bitsize(0);
@@ -311,7 +342,7 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
     if(is_array_type(index.source_value))
     {
       const array_type2t &arr_type = to_array_type(index.source_value->type);
-      sub_size = type_byte_size_bits_expr(arr_type.subtype);
+      sub_size = size_bits_expr(arr_type.subtype);
     }
     else if(is_string_type(index.source_value))
     {
@@ -346,7 +377,7 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
     }
 
     // Also accumulate any pointer offset in the source object.
-    result = add2tc(t, result, compute_pointer_offset_bits(index.source_value));
+    result = add2tc(t, result, pointer_offset_bits(index.source_value));
 
     return result;
   }
@@ -367,8 +398,8 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
 
     // Also accumulate any pointer offset in the source object.
     expr2tc res_expr = bitsize(result);
-    res_expr = add2tc(
-      res_expr->type, res_expr, compute_pointer_offset_bits(memb.source_value));
+    res_expr =
+      add2tc(res_expr->type, res_expr, pointer_offset_bits(memb.source_value));
 
     return res_expr;
   }
@@ -383,7 +414,7 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
   if(is_typecast2t(expr))
   {
     // Blast straight through.
-    return compute_pointer_offset_bits(to_typecast2t(expr).from);
+    return pointer_offset_bits(to_typecast2t(expr).from);
   }
 
   if(is_dynamic_object2t(expr))
@@ -406,9 +437,14 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
   abort();
 }
 
-expr2tc compute_pointer_offset(const expr2tc &expr)
+expr2tc compute_pointer_offset_bits(const expr2tc &expr, const namespacet *ns)
 {
-  expr2tc bits = compute_pointer_offset_bits(expr);
+  return type_sizet(ns).pointer_offset_bits(expr);
+}
+
+expr2tc compute_pointer_offset(const expr2tc &expr, const namespacet *ns)
+{
+  expr2tc bits = compute_pointer_offset_bits(expr, ns);
   expr2tc bytes = div2tc(bits->type, bits, bitsize(8));
   return typecast2tc(size_type2(), bytes);
 }

@@ -7,7 +7,7 @@
 
 #include <pthread.h>
 
-unsigned int __ESBMC_get_thread_id(void);
+pthread_t __ESBMC_get_thread_id(void);
 
 #if !defined(__STORAGE__)
 
@@ -33,16 +33,21 @@ extern "C"
   uint3 getThreadIdx(unsigned int id);
   uint3 getBlockIdx(unsigned int id);
 
+  uint3 getThreadIdx_table(unsigned int id);
+  uint3 getBlockIdx_table(unsigned int id);
+
   void assignIndexes()
   {
     __ESBMC_atomic_begin();
     int i;
+
     //for(i = 0; i < GPU_threads; i++)
     for(i = 0; i < 2; i++)
-      indexOfBlock[i] = getBlockIdx(i);
+      indexOfBlock[i] = getBlockIdx_table(i);
     //for(i = 0; i < GPU_threads; i++)
     for(i = 0; i < 2; i++)
-      indexOfThread[i] = getThreadIdx(i);
+      indexOfThread[i] = getThreadIdx_table(i);
+
     __ESBMC_atomic_end();
   }
 
@@ -84,6 +89,51 @@ extern "C"
       (unsigned int)((linear_value % (gridDim.x * gridDim.y)) / gridDim.x);
     block_index.x =
       (unsigned int)((linear_value % (gridDim.x * gridDim.y)) % gridDim.x);
+
+    __ESBMC_atomic_end();
+    return block_index;
+  }
+
+  /**
+   * Apply a lookup table to drastically reduce validation time 
+   * while retaining the same behavior
+   */
+  uint3 getThreadIdx_table(unsigned int id)
+  {
+    __ESBMC_atomic_begin();
+
+    unsigned int lookup3Dx[2][2][2] = {{{0, 0}, {0, 0}}, {{0, 1}, {0, 1}}};
+    unsigned int lookup3Dz[2][2][2] = {{{0, 0}, {0, 0}}, {{1, 0}, {1, 0}}};
+
+    unsigned int gridDim_index = (unsigned int)(gridDim.x - 1);
+    unsigned int blockDim_index = (unsigned int)(blockDim.x - 1);
+
+    uint3 thread_index;
+
+    thread_index.z =
+      (unsigned int)(lookup3Dz[id][gridDim_index][blockDim_index]);
+    thread_index.y = (unsigned int)0;
+    thread_index.x =
+      (unsigned int)(lookup3Dx[id][gridDim_index][blockDim_index]);
+
+    __ESBMC_atomic_end();
+    return thread_index;
+  }
+
+  uint3 getBlockIdx_table(unsigned int id)
+  {
+    __ESBMC_atomic_begin();
+
+    unsigned int lookup3D[2][2][2] = {{{0, 0}, {0, 0}}, {{1, 0}, {1, 0}}};
+
+    unsigned int gridDim_index = (unsigned int)(gridDim.x - 1);
+    unsigned int blockDim_index = (unsigned int)(blockDim.x - 1);
+
+    uint3 block_index;
+
+    block_index.z = (unsigned int)0;
+    block_index.y = (unsigned int)0;
+    block_index.x = (unsigned int)(lookup3D[id][gridDim_index][blockDim_index]);
 
     __ESBMC_atomic_end();
     return block_index;

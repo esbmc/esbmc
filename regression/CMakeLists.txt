@@ -158,6 +158,7 @@ else()
                     k-induction
                     csmith
                     k-induction-parallel
+                    cuda/benchmarks
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_CVC}

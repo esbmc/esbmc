@@ -348,15 +348,20 @@ static bool is_aligned_member(const expr2tc &expr)
   const expr2tc &structure = to_member2t(expr).source_value;
   auto *ty = static_cast<const struct_union_data *>(structure->type.get());
 
-  /* non-packed structures have all members aligned */
-  if(!ty->packed)
-    return true;
+  if(ty->packed)
+  {
+    /* Very (too?) conservative approach: all members of packed structures are to
+     * be accessed in a known-unaligned way. Note, that's not true for GCC/Clang:
+     * if they can prove some member is always aligned, they'll use the faster
+     * instructions on aligned pointers. */
+    return false;
+  }
 
-  /* Very (too?) conservative approach: all members of packed structures are to
-   * be accessed in a known-unaligned way. Note, that's not true for GCC/Clang:
-   * if they can prove some member is always aligned, they'll use the faster
-   * instructions on aligned pointers. */
-  return false;
+  /* non-packed structures have all members aligned
+   *
+   * TODO: This holds true only for non-padding members as padding is not
+   *       actually a member. We just treat it as one, which here is wrong. */
+  return true;
 }
 
 expr2tc dereferencet::dereference_expr_nonscalar(
@@ -2177,10 +2182,26 @@ void dereferencet::bounds_check(
   if(options.get_bool_option("no-bounds-check"))
     return;
 
-  unsigned int access_size = type_byte_size(type).to_uint64();
-
   assert(is_array_type(expr) || is_string_type(expr));
   const array_type2t arr_type = get_arr_type(expr);
+
+  if(!arr_type.array_size)
+  {
+    /* Infinite size array, doesn't have bounds to check. We arrive here in two
+     * situations: access to an incomplete type (originally an array, struct or
+     * union) or access to an array marked to have infinite size. These cases
+     * only happen when the program actually builds and dereferences pointers
+     * to the object.
+     *
+     * We actually allow also the first case since there is not enough
+     * information about the type (it's incomplete). This is in line with how
+     * we handle functions with no body. See also the comments in migrate_type()
+     * about incomplete types and Github issue #1210. */
+    assert(arr_type.size_is_infinite);
+    return;
+  }
+
+  unsigned int access_size = type_byte_size(type).to_uint64();
 
   expr2tc arrsize;
   if(

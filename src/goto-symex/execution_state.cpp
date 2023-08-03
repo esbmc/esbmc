@@ -660,7 +660,7 @@ bool execution_statet::is_cur_state_guard_false(const expr2tc &guard)
     }
   }
 
-  return false;
+  return is_false(guard);
 }
 
 void execution_statet::execute_guard()

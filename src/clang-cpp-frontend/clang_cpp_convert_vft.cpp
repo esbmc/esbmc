@@ -3,7 +3,7 @@
  *  - travere virtual methods
  *  - generate VFT type symbol
  *  - generate VFT variable symbols
- *  - genearte thunk functions for overriding methods
+ *  - generate thunk functions for overriding methods
  */
 #include <util/compiler_defs.h>
 // Remove warnings from Clang headers
@@ -285,7 +285,8 @@ void clang_cpp_convertert::add_thunk_method(
   add_thunk_method_body(thunk_func_symb, component);
 
   // add thunk function symbol to the symbol table
-  symbolt &added_thunk_symbol = *move_symbol_to_context(thunk_func_symb);
+  symbolt &added_thunk_symbol =
+    *context.move_symbol_to_context(thunk_func_symb);
 
   // add thunk function as a `method` in the derived class' type
   add_thunk_component_to_type(added_thunk_symbol, type, component);
