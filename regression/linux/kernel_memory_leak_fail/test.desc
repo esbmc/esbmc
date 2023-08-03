@@ -1,0 +1,4 @@
+CORE
+test.c
+--memory-leak-check
+^VERIFICATION FAILED$

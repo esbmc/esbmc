@@ -743,6 +743,16 @@ protected:
     const expr2tc &ptr_obj,
     const type2tc &new_type,
     const expr2tc &size = expr2tc());
+  /** Kai*/
+  /** Symbolic implementation of kmalloc*/
+  expr2tc symex_kmalloc(const expr2tc &lhs, const sideeffect2t &code);
+
+  expr2tc symex_kmem(
+    const bool is_malloc,
+    const expr2tc &lhs,
+    const sideeffect2t &code);
+  /** Symbolic implementation of kfree*/
+  void symex_kfree(const expr2tc &expr);
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
   /** Symbolic implementation of c++'s delete. */

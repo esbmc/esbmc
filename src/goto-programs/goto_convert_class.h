@@ -424,6 +424,22 @@ protected:
     const exprt &rhs,
     const exprt::operandst &arguments,
     goto_programt &dest);
+  void do_kmalloc(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_kfree(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_kmem(
+    bool is_malloc,
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
   void do_realloc(
     const exprt &lhs,
     const exprt &rhs,
