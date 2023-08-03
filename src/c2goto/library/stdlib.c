@@ -209,7 +209,7 @@ __ESBMC_HIDE:;
   size_t buf_size;
 
   __ESBMC_assume(buf_size >= 1);
-  buffer = (char *)malloc(buf_size);
+  buffer = (char *)__ESBMC_alloca(buf_size);
   buffer[buf_size - 1] = 0;
   return buffer;
 }
