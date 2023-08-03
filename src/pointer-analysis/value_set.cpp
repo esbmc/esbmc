@@ -379,6 +379,7 @@ void value_sett::get_value_set_rec(
     const sideeffect2t &side = to_sideeffect2t(expr);
     switch(side.kind)
     {
+    case sideeffect2t::alloca:
     case sideeffect2t::malloc:
     {
       assert(suffix == "");
