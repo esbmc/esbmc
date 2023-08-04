@@ -405,7 +405,6 @@ smt_astt array_convt::convert_array_of_wsort(
   unsigned long domain_width,
   smt_sortt arr_sort)
 {
-  array_ast *mast = new_ast(arr_sort);
   if(is_unbounded_array(arr_sort))
   {
     // If this is an unbounded array, simply store the value of the initializer
@@ -425,6 +424,7 @@ smt_astt array_convt::convert_array_of_wsort(
 
   // For bounded arrays, simply store the initializer in the explicit vector
   // of elements, x times.
+  array_ast *mast = new_ast(arr_sort);
   unsigned long array_size = 1UL << domain_width;
   for(unsigned long i = 0; i < array_size; i++)
     mast->array_fields.push_back(init_val);
