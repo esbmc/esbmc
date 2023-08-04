@@ -118,6 +118,8 @@ smt_astt tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   smt_convt::ast_vec eqs;
   eqs.reserve(data.members.size());
 
+  assert(sort->get_tuple_type() == other->sort->get_tuple_type());
+
   // Iterate through each field and encode an equality.
   for(unsigned int i = 0; i < data.members.size(); i++)
   {
