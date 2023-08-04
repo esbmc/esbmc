@@ -75,7 +75,7 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
    *
    * z: symbol = k0
    *
-   * a: IF !(symbol < k)
+   * a: IF !(symbol < k) GOTO [...]
    * b: ... // code that only reads symbol
    * b: symbol++
    *
@@ -87,8 +87,9 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
   int k = 0;
 
   // 1. Check the condition. 't' should be IF !(symbol < K) THEN GOTO x
-  if(!t->is_goto())
+  if(!t->is_goto() || !is_not2t(t->guard))
     return -1;
+
   // Pattern match symbol and K, if the relation is <= then K = K + 1
   {
     auto &cond = to_not2t(t->guard).value;
