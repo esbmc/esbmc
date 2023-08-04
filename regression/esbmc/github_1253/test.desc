@@ -1,0 +1,4 @@
+CORE
+break-1_reduced.i
+--no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets --no-align-check --k-step 2 --floatbv --unlimited-k-steps -D'__builtin_unreachable()' --no-vla-size-check --32  --no-pointer-check --no-bounds-check --interval-analysis --error-label ERROR --goto-unwind --unlimited-goto-unwind --k-induction --max-inductive-step 3
+^VERIFICATION SUCCESSFUL$

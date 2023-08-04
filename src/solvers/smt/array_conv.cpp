@@ -412,14 +412,15 @@ smt_astt array_convt::convert_array_of_wsort(
     // and constraint values at a later date. Heavy lifting is performed by
     // mk_array_symbol.
     std::string name = ctx->mk_fresh_name("array_of_unbounded::");
+    smt_astt r = mk_array_symbol(name, arr_sort, init_val->sort);
 
     struct array_of_val_rec v;
-    v.array_id = mast->base_array_id;
+    v.array_id = array_downcast(r)->base_array_id;
     v.value = init_val;
     v.ctx_level = ctx->ctx_level;
     array_of_vals.insert(v);
 
-    return mk_array_symbol(name, arr_sort, init_val->sort);
+    return r;
   }
 
   // For bounded arrays, simply store the initializer in the explicit vector
