@@ -58,15 +58,10 @@ cudaError_t cudaMalloc(void **devPtr, size_t size)
   __ESBMC_assert(size > 0, "Size to be allocated may not be less than zero");
   *devPtr = malloc(size);
 
-  if(*devPtr == NULL)
-  {
+  if(devPtr == NULL)
     tmp = CUDA_ERROR_OUT_OF_MEMORY;
-    exit(1);
-  }
   else
-  {
     tmp = CUDA_SUCCESS;
-  }
 
   //post-conditions
   __ESBMC_assert(tmp == CUDA_SUCCESS, "Memory was not allocated");
