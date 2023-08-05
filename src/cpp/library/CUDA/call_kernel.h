@@ -678,7 +678,8 @@ void ESBMC_verify_kernel_with_two_args_u(
 {
   __ESBMC_atomic_begin();
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  dev_two_u.a = (unsigned int *)__ESBMC_alloca(GPU_threads * sizeof(unsigned int));
+  dev_two_u.a =
+    (unsigned int *)__ESBMC_alloca(GPU_threads * sizeof(unsigned int));
   dev_two_u.b = (int *)__ESBMC_alloca(GPU_threads * sizeof(int));
   dev_two_u.a = (unsigned int *)arg1;
   dev_two_u.b = (int *)arg2;
