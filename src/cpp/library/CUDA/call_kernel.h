@@ -519,7 +519,6 @@ void ESBMC_verify_kernel_no_params(void *(*kernel)(), int blocks, int threads)
 {
   __ESBMC_atomic_begin();
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
 
   dev_no_params.func = kernel;
 
@@ -527,7 +526,6 @@ void ESBMC_verify_kernel_no_params(void *(*kernel)(), int blocks, int threads)
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_no_params, NULL);
     i++;
   }
@@ -541,11 +539,7 @@ void ESBMC_verify_kernel_with_one_arg(
   void *arg1)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_one.a = (int*) __ESBMC_alloca(n_threads * sizeof(int));
   dev_one.a = (int *)__ESBMC_alloca(GPU_threads * sizeof(int));
   dev_one.a = (int *)arg1;
   dev_one.func = kernel;
@@ -574,13 +568,8 @@ void ESBMC_verify_kernel_with_two_args(
   void *arg2)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_two.a = (int*) __ESBMC_alloca(n_threads * sizeof(int));
   dev_two.a = (int *)__ESBMC_alloca(GPU_threads * sizeof(int));
-  //dev_two.b = (int*) __ESBMC_alloca(n_threads * sizeof(int));
   dev_two.b = (int *)__ESBMC_alloca(GPU_threads * sizeof(int));
   dev_two.a = (int *)arg1;
   dev_two.b = (int *)arg2;
@@ -607,15 +596,9 @@ void ESBMC_verify_kernel_with_three_args(
   void *arg3)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_three.a = (int*) __ESBMC_alloca(n_threads * sizeof(int));
   dev_three.a = (int *)__ESBMC_alloca(GPU_threads * sizeof(int));
-  //dev_three.b = (int*) __ESBMC_alloca(n_threads * sizeof(int));
   dev_three.b = (int *)__ESBMC_alloca(GPU_threads * sizeof(int));
-  //dev_three.c = (int*) __ESBMC_alloca(n_threads * sizeof(int));
   dev_three.c = (int *)__ESBMC_alloca(GPU_threads * sizeof(int));
 
   dev_three.a = (int *)arg1;
@@ -644,10 +627,7 @@ void ESBMC_verify_kernel_with_two_args_i(
   int arg2)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
   dev_two_i.a = arg1;
   dev_two_i.b = arg2;
   dev_two_i.func = kernel;
@@ -656,7 +636,6 @@ void ESBMC_verify_kernel_with_two_args_i(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_two_i, NULL);
     i++;
   }
@@ -672,11 +651,7 @@ void ESBMC_verify_kernel_with_one_args_u(
   void *arg1)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_one_u.a = (uint4*) __ESBMC_alloca(n_threads * sizeof(uint4));
   dev_one_u.a = (uint4 *)__ESBMC_alloca(GPU_threads * sizeof(uint4));
 
   dev_one_u.a = (uint4 *)arg1;
@@ -702,13 +677,8 @@ void ESBMC_verify_kernel_with_two_args_u(
   void *arg2)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_two_u.a = (unsigned int*) __ESBMC_alloca(n_threads * sizeof(unsigned int));
   dev_two_u.a = (unsigned int *)__ESBMC_alloca(GPU_threads * sizeof(unsigned int));
-  //dev_two_u.b = (int*) __ESBMC_alloca(n_threads * sizeof(int));
   dev_two_u.b = (int *)__ESBMC_alloca(GPU_threads * sizeof(int));
   dev_two_u.a = (unsigned int *)arg1;
   dev_two_u.b = (int *)arg2;
@@ -735,10 +705,7 @@ void ESBMC_verify_kernel_with_three_args_u(
   unsigned arg3)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
   dev_three_u.a = arg1;
   dev_three_u.b = arg2;
   dev_three_u.c = arg3;
@@ -748,9 +715,7 @@ void ESBMC_verify_kernel_with_three_args_u(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_three_u, NULL);
-    //assert(0);
     i++;
   }
   __ESBMC_atomic_end();
@@ -764,13 +729,8 @@ void ESBMC_verify_kernel_float(
   void *arg1)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_float.a = (float*) __ESBMC_alloca(n_threads * sizeof(float));
   dev_float.a = (float *)__ESBMC_alloca(GPU_threads * sizeof(float));
-
   dev_float.a = (float *)arg1;
   dev_float.func = kernel;
 
@@ -778,7 +738,6 @@ void ESBMC_verify_kernel_float(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_float, NULL);
     i++;
   }
@@ -794,13 +753,8 @@ void ESBMC_verify_kernel_ffloat(
   float arg2)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_ffloat.a = (float*) __ESBMC_alloca(n_threads * sizeof(float));
   dev_ffloat.a = (float *)__ESBMC_alloca(GPU_threads * sizeof(float));
-
   dev_ffloat.a = (float *)arg1;
   dev_ffloat.b = arg2;
   dev_ffloat.func = kernel;
@@ -809,7 +763,6 @@ void ESBMC_verify_kernel_ffloat(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_ffloat, NULL);
     i++;
   }
@@ -830,19 +783,11 @@ void ESBMC_verify_kernel_f5i2(
   int arg7)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_f5i2.a = (float*) __ESBMC_alloca(GPU_threads * sizeof(float));
   dev_f5i2.a = (float *)__ESBMC_alloca(GPU_threads * sizeof(float));
-  //dev_f5i2.b = (float*) __ESBMC_alloca(GPU_threads * sizeof(float));
   dev_f5i2.b = (float *)__ESBMC_alloca(GPU_threads * sizeof(float));
-  //dev_f5i2.c = (float*) __ESBMC_alloca(GPU_threads * sizeof(float));
   dev_f5i2.c = (float *)__ESBMC_alloca(GPU_threads * sizeof(float));
-  //dev_f5i2.d = (float*) __ESBMC_alloca(GPU_threads * sizeof(float));
   dev_f5i2.d = (float *)__ESBMC_alloca(GPU_threads * sizeof(float));
-  //dev_f5i2.e = (float*) __ESBMC_alloca(GPU_threads * sizeof(float));
   dev_f5i2.e = (float *)__ESBMC_alloca(GPU_threads * sizeof(float));
 
   dev_f5i2.a = (float *)arg1;
@@ -858,7 +803,6 @@ void ESBMC_verify_kernel_f5i2(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_f5i2, NULL);
     i++;
   }
@@ -874,21 +818,15 @@ void ESBMC_verify_kernel_d1(
   void *arg1)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
   dev_d1.a = (double *)__ESBMC_alloca(GPU_threads * sizeof(double));
-
   dev_d1.a = (double *)arg1;
-
   dev_d1.func = kernel;
 
   int i = 0, tmp;
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_d1, NULL);
     i++;
   }
@@ -904,11 +842,7 @@ void ESBMC_verify_kernel_d2(
   int arg2)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_intt.a = (int*) __ESBMC_alloca(n_threads * sizeof(int));
   dev_d2.a = arg1;
   dev_d2.b = arg2;
   dev_d2.func = kernel;
@@ -917,7 +851,6 @@ void ESBMC_verify_kernel_d2(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_d2, NULL);
     i++;
   }
@@ -934,10 +867,7 @@ void ESBMC_verify_kernel_c3(
   void *arg3)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
   dev_c3.a = (char *)__ESBMC_alloca(GPU_threads * sizeof(float));
   dev_c3.b = (char *)__ESBMC_alloca(GPU_threads * sizeof(float));
   dev_c3.c = (char *)__ESBMC_alloca(GPU_threads * sizeof(float));
@@ -951,7 +881,6 @@ void ESBMC_verify_kernel_c3(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_c3, NULL);
     i++;
   }
@@ -968,11 +897,7 @@ void ESBMC_verify_kernel__intt(
   int arg2)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_intt.a = (int*) __ESBMC_alloca(n_threads * sizeof(int));
   dev_intt.a = (int *)__ESBMC_alloca(GPU_threads * sizeof(int));
 
   dev_intt.a = (int *)arg1;
@@ -983,7 +908,6 @@ void ESBMC_verify_kernel__intt(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_intt, NULL);
     i++;
   }
@@ -1001,11 +925,7 @@ void ESBMC_verify_kernel__fuintt(
   unsigned int arg3)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_fuintt.a = (float*) __ESBMC_alloca(n_threads * sizeof(float));
   dev_fuintt.a = (float *)__ESBMC_alloca(GPU_threads * sizeof(float));
 
   dev_fuintt.a = (float *)arg1;
@@ -1017,7 +937,6 @@ void ESBMC_verify_kernel__fuintt(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_fuintt, NULL);
     i++;
   }
@@ -1033,11 +952,7 @@ void ESBMC_verify_kernel__fuint(
   unsigned int arg2)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_fuint.a = (float*) __ESBMC_alloca(n_threads * sizeof(float));
   dev_fuint.a = (float *)__ESBMC_alloca(GPU_threads * sizeof(float));
 
   dev_fuint.a = (float *)arg1;
@@ -1048,7 +963,6 @@ void ESBMC_verify_kernel__fuint(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_fuint, NULL);
     i++;
   }
@@ -1066,11 +980,7 @@ void ESBMC_verify_kernel__fuintint(
   int arg3)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_fuintint.a = (float*) __ESBMC_alloca(n_threads * sizeof(float));
   dev_fuintint.a = (float *)__ESBMC_alloca(GPU_threads * sizeof(float));
 
   dev_fuintint.a = (float *)arg1;
@@ -1082,7 +992,6 @@ void ESBMC_verify_kernel__fuintint(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_fuintint, NULL);
     i++;
   }
@@ -1098,13 +1007,8 @@ void ESBMC_verify_kernel__fint(
   int arg2)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_fint.a = (float*) __ESBMC_alloca(n_threads * sizeof(float));
   dev_fint.a = (float *)__ESBMC_alloca(GPU_threads * sizeof(float));
-
   dev_fint.a = (float *)arg1;
   dev_fint.b = arg2;
   dev_fint.func = kernel;
@@ -1113,7 +1017,6 @@ void ESBMC_verify_kernel__fint(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_fint, NULL);
     i++;
   }
@@ -1131,16 +1034,10 @@ void ESBMC_verify_kernel_with_three_args_iuull(
   void *arg3)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_three_iuull.a = (int*) __ESBMC_alloca(n_threads * sizeof(int));
   dev_three_iuull.a = (int *)__ESBMC_alloca(GPU_threads * sizeof(int));
-  //dev_three_iuull.b = (unsigned int*) __ESBMC_alloca(n_threads * sizeof(unsigned int));
   dev_three_iuull.b =
     (unsigned int *)__ESBMC_alloca(GPU_threads * sizeof(unsigned int));
-  //dev_three_iuull.c = (unsigned long long int*) __ESBMC_alloca(n_threads * sizeof(unsigned long long int));
   dev_three_iuull.c = (unsigned long long int *)__ESBMC_alloca(
     GPU_threads * sizeof(unsigned long long int));
 
@@ -1154,7 +1051,6 @@ void ESBMC_verify_kernel_with_three_args_iuull(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(
       &threads_id[i], NULL, ESBMC_execute_kernel_three_iuull, NULL);
     i++;
@@ -1173,19 +1069,12 @@ void ESBMC_verify_kernel_with_four__args_i_ui_ull_f(
   void *arg4)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_four_i_ui_ull_f.a = (int*) __ESBMC_alloca(n_threads * sizeof(int));
   dev_four_i_ui_ull_f.a = (int *)__ESBMC_alloca(GPU_threads * sizeof(int));
-  //dev_four_i_ui_ull_f.b = (unsigned int*) __ESBMC_alloca(n_threads * sizeof(unsigned int));
   dev_four_i_ui_ull_f.b =
     (unsigned int *)__ESBMC_alloca(GPU_threads * sizeof(unsigned int));
-  //dev_four_i_ui_ull_f.c = (unsigned long long int*) __ESBMC_alloca(n_threads * sizeof(unsigned long long int));
   dev_four_i_ui_ull_f.c = (unsigned long long int *)__ESBMC_alloca(
     GPU_threads * sizeof(unsigned long long int));
-  //dev_four_i_ui_ull_f.d = (float*) __ESBMC_alloca(n_threads * sizeof(float));
   dev_four_i_ui_ull_f.d = (float *)__ESBMC_alloca(GPU_threads * sizeof(float));
 
   dev_four_i_ui_ull_f.a = (int *)arg1;
@@ -1214,11 +1103,7 @@ void ESBMC_verify_kernel_one_ui(
   void *arg1)
 {
   __ESBMC_atomic_begin();
-  //n_threads = blocks * threads;
   threads_id = (pthread_t *)__ESBMC_alloca(GPU_threads * sizeof(pthread_t));
-  //threads_id = (pthread_t *) __ESBMC_alloca(2 * sizeof(pthread_t));
-
-  //dev_ui.a = (unsigned int*) __ESBMC_alloca(n_threads * sizeof(unsigned int));
   dev_ui.a = (unsigned int *)__ESBMC_alloca(GPU_threads * sizeof(unsigned int));
   dev_ui.a = (unsigned int *)arg1;
   dev_ui.func = kernel;
@@ -1227,7 +1112,6 @@ void ESBMC_verify_kernel_one_ui(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_ui, NULL);
     i++;
   }
@@ -1251,7 +1135,6 @@ void ESBMC_verify_kernel(RET *kernel, BLOCK blocks, THREAD threads)
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1272,7 +1155,6 @@ void ESBMC_verify_kernel(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1299,7 +1181,6 @@ void ESBMC_verify_kernel(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1328,7 +1209,6 @@ void ESBMC_verify_kernel(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1356,7 +1236,6 @@ void ESBMC_verify_kernel_i(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1378,7 +1257,6 @@ void ESBMC_verify_kernel_u(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1405,7 +1283,6 @@ void ESBMC_verify_kernel_u(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1434,7 +1311,6 @@ void ESBMC_verify_kernel_u(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1462,7 +1338,6 @@ void ESBMC_verify_kernel_f(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1483,7 +1358,6 @@ void ESBMC_verify_kernel_f(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1529,7 +1403,6 @@ void ESBMC_verify_kernel_f(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1559,7 +1432,6 @@ void ESBMC_verify_kernel_c(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1580,7 +1452,6 @@ void ESBMC_verify_kernel_c(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1607,7 +1478,6 @@ void ESBMC_verify_kernel_c(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1635,7 +1505,6 @@ void ESBMC_verify_kernel_intt(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1665,7 +1534,6 @@ void ESBMC_verify_kernel_fuintt(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1692,7 +1560,6 @@ void ESBMC_verify_kernel_fuintt(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1722,7 +1589,6 @@ void ESBMC_verify_kernel_fuintint(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1749,7 +1615,6 @@ void ESBMC_verify_kernel_fuintint(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1779,7 +1644,6 @@ void ESBMC_verify_kernel_three_args_iuull(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1819,7 +1683,6 @@ void ESBMC_verify_kernel_four(
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1841,7 +1704,6 @@ void ESBMC_verify_kernel_ui(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
 
   int i = 0;
   for(i = 0; i < GPU_threads; i++)
-    //for (i = 0; i < 2; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
