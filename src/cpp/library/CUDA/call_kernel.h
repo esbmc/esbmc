@@ -551,9 +551,7 @@ void ESBMC_verify_kernel_with_one_arg(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_one, NULL);
-    //		assert(0);
     i++;
   }
 
@@ -579,7 +577,6 @@ void ESBMC_verify_kernel_with_two_args(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_two, NULL);
     i++;
   }
@@ -610,9 +607,7 @@ void ESBMC_verify_kernel_with_three_args(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_three, NULL);
-    //assert(0);
     i++;
   }
   __ESBMC_atomic_end();
@@ -661,9 +656,7 @@ void ESBMC_verify_kernel_with_one_args_u(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_one_u, NULL);
-    //assert(0);
     i++;
   }
   __ESBMC_atomic_end();
@@ -689,7 +682,6 @@ void ESBMC_verify_kernel_with_two_args_u(
   assignIndexes();
   while(i < GPU_threads)
   {
-    //while (i < 2) {
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_two_u, NULL);
     i++;
   }
