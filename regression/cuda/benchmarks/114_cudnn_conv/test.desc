@@ -1,0 +1,6 @@
+CORE
+main.cu
+--force-malloc-success --incremental-bmc
+
+^VERIFICATION SUCCESSFUL$
+
