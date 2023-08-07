@@ -85,7 +85,7 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
     names.emplace_back("pointer_cap_info");
   }
 
-  pointer_struct = {members, names, names, "pointer_struct"};
+  pointer_struct = struct_type2tc(members, names, names, "pointer_struct");
 
   pointer_logic.emplace_back();
 
@@ -99,10 +99,10 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   members.push_back(ptraddr_type2()); /* CHERI-TODO */
   names.emplace_back("start");
   names.emplace_back("end");
-  addr_space_type = {members, names, names, "addr_space_type"};
+  addr_space_type = struct_type2tc(members, names, names, "addr_space_type");
 
   /* indexed by pointer_object2t expressions */
-  addr_space_arr_type = {addr_space_type, expr2tc(), true};
+  addr_space_arr_type = array_type2tc(addr_space_type, expr2tc(), true);
 
   addr_space_data.emplace_back();
 
@@ -2467,7 +2467,7 @@ expr2tc smt_convt::get_array(const expr2tc &expr)
 const struct_union_data &smt_convt::get_type_def(const type2tc &type) const
 {
   return (is_pointer_type(type))
-           ? *pointer_struct
+           ? to_struct_type(pointer_struct)
            : dynamic_cast<const struct_union_data &>(*type.get());
 }
 
@@ -2694,7 +2694,7 @@ void smt_convt::rewrite_ptrs_to_structs(type2tc &type)
   // as we go.
   struct
   {
-    const struct_type2tc &pointer_struct;
+    const type2tc &pointer_struct;
 
     void operator()(type2tc &e) const
     {

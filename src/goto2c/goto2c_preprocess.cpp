@@ -515,7 +515,7 @@ expr2tc goto2ct::replace_array_assignment_with_memcpy(code_assign2tc assign)
   // Returning a function call (with the empty left-hand side)
   // to the newly generated "memcpy" function with the inputs
   // defined in "ops".
-  expr2tc fun_call = code_function_call2tc(symbol2tc(), fun_sym, ops);
+  expr2tc fun_call = code_function_call2tc(expr2tc(), fun_sym, ops);
 
   return fun_call;
 }

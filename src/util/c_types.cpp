@@ -388,12 +388,12 @@ type2tc get_int_type(unsigned int sz)
 
 type2tc get_bool_type()
 {
-  static type2tc bool_type(std::make_shared<bool_type2t>());
+  static type2tc bool_type = bool_type2tc();
   return bool_type;
 }
 
 type2tc get_empty_type()
 {
-  static type2tc empty_type(std::make_shared<empty_type2t>());
+  static type2tc empty_type = empty_type2tc();
   return empty_type;
 }
