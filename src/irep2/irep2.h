@@ -1067,7 +1067,7 @@ public:
     typename boost::mpl::pop_front<fields>::type>
     superclass;
   typedef container container2tc;
-  typedef typename container::base_container base_container2tc;
+  typedef typename container::base2tc base_container2tc;
   typedef typename baseclass::base_type base2t;
 
   template <typename... Args>
@@ -1360,7 +1360,6 @@ public:
   {
   }
 
-  typedef irep_container<base> base_container;
   typedef idtype id_field_type;
 };
 
