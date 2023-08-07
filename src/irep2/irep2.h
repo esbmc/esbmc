@@ -177,9 +177,10 @@ template <class T>
 class irep_container : public std::shared_ptr<T>
 {
 public:
-  irep_container() : std::shared_ptr<T>()
-  {
-  }
+  irep_container() = default;
+  irep_container(const irep_container &ref) = default;
+
+  irep_container &operator=(irep_container const &ref) = default;
 
   template <class Y>
   explicit irep_container(Y *p) : std::shared_ptr<T>(p)
@@ -194,21 +195,11 @@ public:
   {
   }
 
-  irep_container(const irep_container &ref) : std::shared_ptr<T>(ref)
-  {
-  }
-
   template <class Y>
   irep_container(const irep_container<Y> &ref)
     : std::shared_ptr<T>(static_cast<const std::shared_ptr<Y> &>(ref))
   {
     assert(dynamic_cast<const std::shared_ptr<T> &>(ref) != NULL);
-  }
-
-  irep_container &operator=(irep_container const &ref)
-  {
-    std::shared_ptr<T>::operator=(ref);
-    return *this;
   }
 
   template <class Y>
