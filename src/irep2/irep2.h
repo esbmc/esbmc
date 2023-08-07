@@ -298,11 +298,15 @@ typedef irep_container<expr2t> expr2tc;
 typedef std::pair<std::string, std::string> member_entryt;
 typedef std::list<member_entryt> list_of_memberst;
 
+class irep2t : public std::enable_shared_from_this<irep2t>
+{
+};
+
 /** Base class for all types.
  *  Contains only a type identifier enumeration - for some types (such as bool,
  *  or empty,) there's no need for any significant amount of data to be stored.
  */
-class type2t : public std::enable_shared_from_this<type2t>
+class type2t : public irep2t
 {
 public:
   /** Enumeration identifying each sort of type. */
@@ -524,8 +528,7 @@ static inline std::string get_type_id(const type2tc &type)
  *  In this base, contains an expression id used for distinguishing different
  *  classes of expr, in addition we have a type as all exprs should have types.
  */
-class expr2t;
-class expr2t : public std::enable_shared_from_this<expr2t>
+class expr2t : public irep2t
 {
 public:
   /** Enumeration identifying each sort of expr.

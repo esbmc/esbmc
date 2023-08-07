@@ -48,7 +48,7 @@ std::string get_type_id(const type2t &type)
 }
 
 type2t::type2t(type_ids id)
-  : std::enable_shared_from_this<type2t>(), type_id(id), crc_val(0)
+  : type_id(id), crc_val(0)
 {
 }
 
