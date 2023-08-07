@@ -306,12 +306,7 @@ public:
 // Then give them a typedef name
 
 #define irep_typedefs(basename, superclass)                                    \
-  typedef esbmct::something2tc<                                                \
-    type2t,                                                                    \
-    basename##_type2t,                                                         \
-    const type2t::type_ids,                                                    \
-    superclass>                                                                \
-    basename##_type2tc;                                                        \
+  typedef esbmct::something2tc<type2t, basename##_type2t> basename##_type2tc;  \
   typedef esbmct::type_methods2<                                               \
     basename##_type2t,                                                         \
     superclass,                                                                \
