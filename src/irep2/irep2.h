@@ -186,11 +186,6 @@ public:
   {
   }
 
-  template <class Y>
-  explicit irep_container(const Y *p) : std::shared_ptr<T>(const_cast<Y *>(p))
-  {
-  }
-
   // Copy construct from any std::shared_ptr of this type. That just copies
   // a reference. Obviously this is fairly unwise because any std::shared_ptr
   // won't be using the detach facility to manipulate things, however it's
