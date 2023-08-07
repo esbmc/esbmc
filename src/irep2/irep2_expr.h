@@ -1390,12 +1390,9 @@ public:
 // again and again, this gets macro'd.
 
 #define irep_typedefs(basename, superclass)                                    \
-  typedef esbmct::something2tc<                                                \
-    expr2t,                                                                    \
-    basename##2t,                                                              \
-    const expr2t::expr_ids,                                                    \
-    superclass>                                                                \
-    basename##2tc;                                                             \
+  typedef esbmct::                                                             \
+    something2tc<expr2t, basename##2t, const expr2t::expr_ids, superclass>     \
+      basename##2tc;                                                           \
   typedef esbmct::                                                             \
     expr_methods2<basename##2t, superclass, superclass::traits, basename##2tc> \
       basename##_expr_methods;                                                 \
@@ -1413,12 +1410,9 @@ public:
 // Special case for some empty ireps,
 
 #define irep_typedefs_empty(basename, superclass)                              \
-  typedef esbmct::something2tc<                                                \
-    expr2t,                                                                    \
-    basename##2t,                                                              \
-    const expr2t::expr_ids,                                                    \
-    superclass>                                                                \
-    basename##2tc;                                                             \
+  typedef esbmct::                                                             \
+    something2tc<expr2t, basename##2t, const expr2t::expr_ids, superclass>     \
+      basename##2tc;                                                           \
   typedef esbmct::expr_methods2<                                               \
     basename##2t,                                                              \
     superclass,                                                                \
