@@ -1325,24 +1325,6 @@ class something2tc : public irep_container<base>
 public:
   typedef irep_container<base> base2tc;
 
-  // Initialize container from a non-type-committed container. Encode an
-  // assertion that the type is what we expect.
-  //
-  // Don't do this though if this'll conflict with a later consructor though.
-  // For example if we have not2tc, not2tc(expr) could be copying it or
-  // constructing a new not2t irep. In the face of this ambiguity, pick the
-  // latter, and the end user can worry about how to cast up to a not2tc.
-  template <class arbitary = ::esbmct::dummy_type_tag>
-  something2tc(
-    const base2tc &init,
-    typename boost::lazy_disable_if<
-      boost::mpl::bool_<true>,
-      arbitary>::type * = nullptr)
-    : base2tc(init)
-  {
-    assert(init.get()->*idfield == expid);
-  }
-
   // Allow construction too when we're handed a pointer to the (correctly
   // typed) base2t ptr. This is used by boost::python, and various bits of
   // code that create new ptrs and fling them into type2tcs.
