@@ -217,30 +217,6 @@ public:
   {
   }
 
-  template <class Y>
-  irep_container(const irep_container<Y> &ref)
-    : std::shared_ptr<T>(static_cast<const std::shared_ptr<Y> &>(ref))
-  {
-    assert(dynamic_cast<const std::shared_ptr<T> &>(ref) != NULL);
-  }
-
-  template <class Y>
-  irep_container &operator=(std::shared_ptr<Y> const &r)
-  {
-    std::shared_ptr<T>::operator=(r);
-    T *p = std::shared_ptr<T>::operator->();
-    return *this;
-  }
-
-  template <class Y>
-  irep_container &operator=(const irep_container<Y> &ref)
-  {
-    assert(dynamic_cast<const std::shared_ptr<T> &>(ref) != NULL);
-    *this = std::static_pointer_cast<T, Y>(
-      static_cast<const std::shared_ptr<Y> &>(ref));
-    return *this;
-  }
-
   irep_container simplify() const
   {
     const T *foo = std::shared_ptr<T>::get();
