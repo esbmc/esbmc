@@ -1623,6 +1623,12 @@ bool esbmc_parseoptionst::process_goto_program(
   try
   {
     namespacet ns(context);
+
+    // Start by removing all no-op instructions and unreachable code
+    remove_no_op(goto_functions);
+    remove_unreachable(goto_functions);
+
+    // Apply all the initialized algorithms
     for(auto &algorithm : goto_preprocess_algorithms)
       algorithm->run(goto_functions);
 
@@ -1647,7 +1653,6 @@ bool esbmc_parseoptionst::process_goto_program(
       // remove skips before doing k-induction
       // it seems to fix some issues
       remove_no_op(goto_functions);
-
       goto_k_induction(goto_functions);
     }
 
@@ -1670,30 +1675,6 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     goto_check(ns, options, goto_functions);
-
-    // show it?
-    if(cmdline.isset("show-goto-value-sets"))
-    {
-      value_set_analysist value_set_analysis(ns);
-      value_set_analysis(goto_functions);
-      std::ostringstream oss;
-      show_value_sets(goto_functions, value_set_analysis, oss);
-      log_result("{}", oss.str());
-      return true;
-    }
-
-#if 0
-    // This disabled code used to run the pointer static analysis and produce
-    // pointer assertions appropriately. Disabled now that assertions are all
-    // performed at symex time.
-    status("Pointer Analysis");
-
-    status("Adding Pointer Checks");
-
-    // add pointer checks
-    pointer_checks(
-      goto_functions, ns, context, options, value_set_analysis);
-#endif
 
     remove_no_op(goto_functions);
     remove_unreachable(goto_functions);
@@ -1770,6 +1751,18 @@ bool esbmc_parseoptionst::output_goto_program(
       return true;
     }
 
+    // show it?
+    if(cmdline.isset("show-goto-value-sets"))
+    {
+      value_set_analysist value_set_analysis(ns);
+      value_set_analysis(goto_functions);
+      std::ostringstream oss;
+      show_value_sets(goto_functions, value_set_analysis, oss);
+      log_result("{}", oss.str());
+      return true;
+    }
+
+    // Write the GOTO program into a binary
     if(cmdline.isset("output-goto"))
     {
       log_status("Writing GOTO program to file");
@@ -1783,7 +1776,8 @@ bool esbmc_parseoptionst::output_goto_program(
       return true;
     }
 
-    // show it?
+    // Output the GOTO program to the log (and terminate or continue) in
+    // a human-readable format
     if(
       cmdline.isset("goto-functions-too") ||
       cmdline.isset("goto-functions-only"))
@@ -1795,7 +1789,8 @@ bool esbmc_parseoptionst::output_goto_program(
         return true;
     }
 
-    // translate it?
+    // Translate the GOTO program to C and output it into the log or
+    // a specified output file
     if(cmdline.isset("goto2c"))
     {
       // Creating a translator here
@@ -1807,7 +1802,7 @@ bool esbmc_parseoptionst::output_goto_program(
       const std::string &filename = options.get_option("output");
       if(!filename.empty())
       {
-        // Outputting all instructions to the output file
+        // Outputting the translated program into the output file
         std::ofstream out(filename.c_str());
         if(out)
         {
