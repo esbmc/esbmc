@@ -1288,8 +1288,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if(expr.op1().id() == "member_name")
     {
       idx = constant_string2tc(
-        string_type2tc(1),
-        expr.op1().get_string("component_name"));
+        string_type2tc(1), expr.op1().get_string("component_name"));
     }
     else
     {

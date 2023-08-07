@@ -320,8 +320,7 @@ void dereferencet::dereference_addrof_expr(
       offs = typecast2tc(pointer_type2(), offs);
 
       // Cast to a byte pointer; add; cast back. Is essentially pointer arith.
-      expr2tc output =
-        typecast2tc(pointer_type2tc(get_uint8_type()), base);
+      expr2tc output = typecast2tc(pointer_type2tc(get_uint8_type()), base);
       output = add2tc(output->type, output, offs);
       output = typecast2tc(expr->type, output);
       expr = output;

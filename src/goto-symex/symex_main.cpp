@@ -220,8 +220,7 @@ void goto_symext::symex_step(reachability_treet &art)
           is_pointer_type(deref_code->target->type) &&
           !is_pointer_type(thrown_obj->type))
         {
-          expr2tc new_thrown_obj =
-            address_of2tc(thrown_obj->type, thrown_obj);
+          expr2tc new_thrown_obj = address_of2tc(thrown_obj->type, thrown_obj);
           deref_code->source = new_thrown_obj;
         }
         else

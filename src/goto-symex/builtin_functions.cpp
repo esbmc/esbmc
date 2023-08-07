@@ -455,9 +455,9 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   type2tc renamedtype2 =
     migrate_type(ns.follow(migrate_type_back(ptr_ref.subtype)));
 
-  type2tc newtype =
-    do_array ? type2tc(array_type2tc(renamedtype2, code.size, false))
-             : renamedtype2;
+  type2tc newtype = do_array
+                      ? type2tc(array_type2tc(renamedtype2, code.size, false))
+                      : renamedtype2;
 
   symbol.type = migrate_type_back(newtype);
 
