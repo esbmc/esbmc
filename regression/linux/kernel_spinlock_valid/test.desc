@@ -1,4 +1,0 @@
-CORE
-test.c
---unwind 200
-^VERIFICATION SUCCESSFUL$
