@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h>
 #include <ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h>
 #include <ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h>
@@ -114,7 +115,7 @@ void kernel_spinlock_init(mock_spinlock_t *lock)
   //check if the lock is valid
   assert(lock != NULL);
   //initialize the lock
-  atomic_init(&lock -> locked, false);
+  lock->locked = 0;
 }
 
 void kernel_spin_lock(mock_spinlock_t *lock)
@@ -123,16 +124,16 @@ void kernel_spin_lock(mock_spinlock_t *lock)
   assert(lock != NULL);
   bool expected_value = false;
   //check if the lock is already locked, spin for a while
-  while (!atomic_compare_exchange_weak(&lock->is_locked, &expected_vaue, true)) {
-      expected_value = false;
-  }
+    while (!__sync_bool_compare_and_swap(&lock->locked, 0, 1)) {
+        // spin
+    }
 }
 
-void kernel_spin_unlock(mock_spinlock_t *lock
+void kernel_spin_unlock(mock_spinlock_t *lock)
 {
   //check if the lock is valid
   assert(lock != NULL);
   //unlock the lock
-  atomic_store(&lock->is_locked, false);
+    __sync_bool_compare_and_swap(&lock->locked, 1, 0);
 }
 
