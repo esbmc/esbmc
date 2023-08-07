@@ -382,8 +382,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
       if(guard.is_true())
       {
         log_error(
-          "non-code call target '{}' generated at {}",
-          sym.thename.as_string());
+          "non-code call target '{}' generated at {}", sym.thename.as_string());
         return false;
       }
 

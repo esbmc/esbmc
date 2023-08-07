@@ -127,9 +127,7 @@ expr2t::expr2t(const type2tc &_type, expr_ids id)
 }
 
 expr2t::expr2t(const expr2t &ref)
-  : expr_id(ref.expr_id),
-    type(ref.type),
-    crc_val(ref.crc_val)
+  : expr_id(ref.expr_id), type(ref.type), crc_val(ref.crc_val)
 {
 }
 

@@ -1436,7 +1436,8 @@ static expr2tc do_bit_munge_operation(
   if(side_1 != simplified_side_1 || side_2 != simplified_side_2)
     return typecast_check_return(
       type,
-      expr2tc(std::make_shared<constructor>(type, simplified_side_1, simplified_side_2)));
+      expr2tc(std::make_shared<constructor>(
+        type, simplified_side_1, simplified_side_2)));
 
   return expr2tc();
 }
@@ -1892,7 +1893,8 @@ static expr2tc simplify_relations(
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_op(std::make_shared<constructor>(simplied_side_1, simplied_side_2));
+      expr2tc new_op(
+        std::make_shared<constructor>(simplied_side_1, simplied_side_2));
 
       return typecast_check_return(type, new_op);
     }
@@ -2005,7 +2007,8 @@ static expr2tc simplify_floatbv_relations(
   // Were we able to simplify the sides?
   if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
   {
-    expr2tc new_op(std::make_shared<constructor>(simplied_side_1, simplied_side_2));
+    expr2tc new_op(
+      std::make_shared<constructor>(simplied_side_1, simplied_side_2));
 
     return typecast_check_return(type, new_op);
   }
@@ -2653,8 +2656,8 @@ static expr2tc simplify_floatbv_2ops(
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_op(
-        std::make_shared<constructor>(type, simplied_side_1, simplied_side_2, rounding_mode));
+      expr2tc new_op(std::make_shared<constructor>(
+        type, simplied_side_1, simplied_side_2, rounding_mode));
 
       return typecast_check_return(type, new_op);
     }

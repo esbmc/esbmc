@@ -2742,10 +2742,7 @@ public:
    *         might be changed in the future.
    *  @param ptrobj Item to take pointer to. */
   address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
-    : address_of_expr_methods(
-        pointer_type2tc(subtype),
-        address_of_id,
-        ptrobj)
+    : address_of_expr_methods(pointer_type2tc(subtype), address_of_id, ptrobj)
   {
   }
   address_of2t(const address_of2t &ref) = default;
