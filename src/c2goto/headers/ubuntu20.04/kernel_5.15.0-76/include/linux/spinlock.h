@@ -3,7 +3,7 @@
 /* The declarations of mock spin lock behaviour*/
 /** mock spinlock struct*/
 typedef struct {
-    atomic_bool locked;
+    int locked;
 } mock_spinlock_t;
 
 void kernel_spinlock_init(mock_spinlock_t *lock);
