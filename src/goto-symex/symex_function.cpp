@@ -288,14 +288,14 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   cur_state->source.prog = &goto_function.body;
 }
 
-static std::list<std::pair<guardt, symbol2tc>>
+static std::list<std::pair<guardt, expr2tc>>
 get_function_list(const expr2tc &expr)
 {
-  std::list<std::pair<guardt, symbol2tc>> l;
+  std::list<std::pair<guardt, expr2tc>> l;
 
   if(is_if2t(expr))
   {
-    std::list<std::pair<guardt, symbol2tc>> l1, l2;
+    std::list<std::pair<guardt, expr2tc>> l1, l2;
     const if2t &ifexpr = to_if2t(expr);
     expr2tc guardexpr = ifexpr.cond;
     not2tc notguardexpr(guardexpr);
@@ -317,8 +317,7 @@ get_function_list(const expr2tc &expr)
   {
     guardt guard;
     guard.make_true();
-    std::pair<guardt, symbol2tc> p(guard, symbol2tc(expr));
-    l.push_back(p);
+    l.emplace_back(guard, expr);
     return l;
   }
 
@@ -371,25 +370,25 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     return;
   }
 
-  std::list<std::pair<guardt, symbol2tc>> l = get_function_list(func_ptr);
+  std::list<std::pair<guardt, expr2tc>> l = get_function_list(func_ptr);
 
   /* Internal check that all symbols are actually of 'code' type (modulo the
    * guard) */
   auto maybe_called_symbol_is_code [[maybe_unused]] = [this](const auto &elem) {
     const guardt &guard = elem.first;
-    const symbol2tc &sym = elem.second;
-    if(!guard.is_false() && !is_code_type(sym))
+    const symbol2t &sym = to_symbol2t(elem.second);
+    if(!guard.is_false() && !is_code_type(sym.type))
     {
       if(guard.is_true())
       {
         log_error(
           "non-code call target '{}' generated at {}",
-          sym->thename.as_string());
+          sym.thename.as_string());
         return false;
       }
 
       log_status(
-        "non-code call target '{}' generated at {}", sym->thename.as_string());
+        "non-code call target '{}' generated at {}", sym.thename.as_string());
     }
     return true;
   };
@@ -398,11 +397,12 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   // Store.
   for(auto &it : l)
   {
+    const symbol2t &sym = to_symbol2t(it.second);
     goto_functionst::function_mapt::const_iterator fit =
-      goto_functions.function_map.find(it.second->thename);
+      goto_functions.function_map.find(sym.thename);
 
-    const std::string pretty_name = it.second->thename.as_string().substr(
-      it.second->thename.as_string().find_last_of('@') + 1);
+    const std::string pretty_name = sym.thename.as_string().substr(
+      sym.thename.as_string().find_last_of('@') + 1);
 
     if(fit == goto_functions.function_map.end() || !fit->second.body_available)
     {
@@ -477,14 +477,14 @@ bool goto_symext::run_next_function_ptr_target(bool first)
   cur_state->source.pc = cur_state->top().function_ptr_call_loc;
 
   // And setup the function call.
-  code_function_call2tc call = cur_state->top().orig_func_ptr_call;
-  call->function = target_symbol;
+  expr2tc state_call = cur_state->top().orig_func_ptr_call;
+  to_code_function_call2t(state_call).function = target_symbol;
   goto_symex_statet::framet &cur_frame = cur_state->top();
 
   if(cur_state->top().cur_function_ptr_targets.size() == 0)
     cur_frame.orig_func_ptr_call = expr2tc();
 
-  symex_function_call_code(call);
+  symex_function_call_code(state_call);
 
   return true;
 }
@@ -505,7 +505,7 @@ void goto_symext::pop_frame()
   // clear locals from L2 renaming
   for(auto const &it : frame.local_variables)
   {
-    type2tc ptr(new pointer_type2t(pointer_type2()));
+    type2tc ptr = pointer_type2tc(pointer_type2());
     symbol2tc l1_sym(ptr, it.base_name);
     frame.level1.get_ident_name(l1_sym);
 

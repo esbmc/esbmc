@@ -321,7 +321,7 @@ void dereferencet::dereference_addrof_expr(
 
       // Cast to a byte pointer; add; cast back. Is essentially pointer arith.
       expr2tc output =
-        typecast2tc(type2tc(new pointer_type2t(get_uint8_type())), base);
+        typecast2tc(pointer_type2tc(get_uint8_type()), base);
       output = add2tc(output->type, output, offs);
       output = typecast2tc(expr->type, output);
       expr = output;
@@ -471,7 +471,7 @@ expr2tc dereferencet::dereference(
   // course, if it does point at something, dereferencing continues.
   expr2tc src = orig_src;
   if(!is_pointer_type(orig_src))
-    src = typecast2tc(type2tc(new pointer_type2t(get_empty_type())), src);
+    src = typecast2tc(pointer_type2tc(get_empty_type()), src);
 
   type2tc type = to_type;
 
@@ -646,7 +646,7 @@ expr2tc dereferencet::build_reference_to(
 
   if(is_null_object2t(root_object) && !is_free(mode) && !is_internal(mode))
   {
-    type2tc nullptrtype = type2tc(new pointer_type2t(type));
+    type2tc nullptrtype = pointer_type2tc(type);
     symbol2tc null_ptr(nullptrtype, "NULL");
 
     same_object2tc pointer_guard(deref_expr, null_ptr);
@@ -669,7 +669,7 @@ expr2tc dereferencet::build_reference_to(
   value = object;
 
   // Produce a guard that the dereferenced pointer points at this object.
-  type2tc ptr_type = type2tc(new pointer_type2t(object->type));
+  type2tc ptr_type = pointer_type2tc(object->type);
   address_of2tc obj_ptr(ptr_type, object);
   pointer_guard = same_object2tc(deref_expr, obj_ptr);
   guardt tmp_guard(guard);
@@ -789,7 +789,7 @@ void dereferencet::deref_invalid_ptr(
   if(is_free(mode))
   {
     // You're allowed to free NULL.
-    symbol2tc null_ptr(type2tc(new pointer_type2t(get_empty_type())), "NULL");
+    symbol2tc null_ptr(pointer_type2tc(get_empty_type()), "NULL");
     notequal2tc neq(null_ptr, deref_expr);
     and2tc and_(neq, invalid_pointer_expr);
     validity_test = and_;

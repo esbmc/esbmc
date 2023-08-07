@@ -217,7 +217,7 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
       to_constant_int2t(outstruct->datatype_members[1]).value;
     return ctx->pointer_logic.back().pointer_expr(
       pointer_logict::pointert(num, offs),
-      type2tc(new pointer_type2t(get_empty_type())));
+      pointer_type2tc(get_empty_type()));
   }
 
   return outstruct;

@@ -466,8 +466,8 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
    */
   if(is_constant_vector2t(op1) && is_constant_vector2t(op2))
   {
-    constant_vector2tc vec1(op1);
-    constant_vector2tc vec2(op2);
+    constant_vector2tc vec1(to_constant_vector2t(op1));
+    const constant_vector2t *vec2 = &to_constant_vector2t(op2);
     for(size_t i = 0; i < vec1->datatype_members.size(); i++)
     {
       auto &A = vec1->datatype_members[i];
@@ -497,7 +497,7 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
   {
     bool is_op1_vec = is_constant_vector2t(op1);
     expr2tc c = !is_op1_vec ? op1 : op2;
-    constant_vector2tc vector(is_op1_vec ? op1 : op2);
+    constant_vector2tc vector(to_constant_vector2t(is_op1_vec ? op1 : op2));
     for(auto &datatype_member : vector->datatype_members)
     {
       auto &op = datatype_member;

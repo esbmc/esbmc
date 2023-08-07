@@ -498,14 +498,14 @@ expr2tc goto2ct::replace_array_assignment_with_memcpy(code_assign2tc assign)
   typecast2tc type_cast(assign->source->type, assign->source);
 
   // Creating a "void*" type frequently used below
-  type2tc pointertype(new pointer_type2t(get_empty_type()));
+  type2tc pointertype = pointer_type2tc(get_empty_type());
 
   // Creating a function signature here: arguments types,
   // return type, function arguments names, function name
   std::vector<type2tc> args = {pointertype, pointertype, get_uint64_type()};
   type2tc ret_type = get_empty_type();
   std::vector<irep_idt> arg_names = {"d", "s", "n"};
-  type2tc fun_type(new code_type2t(args, pointertype, arg_names, false));
+  type2tc fun_type = code_type2tc(args, pointertype, arg_names, false);
   symbol2tc fun_sym(fun_type, "c:@F@memcpy");
 
   // Now defining the function inputs
@@ -515,8 +515,7 @@ expr2tc goto2ct::replace_array_assignment_with_memcpy(code_assign2tc assign)
   // Returning a function call (with the empty left-hand side)
   // to the newly generated "memcpy" function with the inputs
   // defined in "ops".
-  code_function_call2tc fun_call =
-    new code_function_call2t(symbol2tc(), fun_sym, ops);
+  expr2tc fun_call = code_function_call2tc(symbol2tc(), fun_sym, ops);
 
   return fun_call;
 }

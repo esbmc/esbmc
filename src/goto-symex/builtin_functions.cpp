@@ -61,7 +61,7 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
     cur_state->rename_address(item.object);
     cur_state->guard.guard_expr(guard);
     target->renumber(guard, item.object, realloc_size, cur_state->source);
-    type2tc new_ptr = type2tc(new pointer_type2t(item.object->type));
+    type2tc new_ptr = pointer_type2tc(item.object->type);
     address_of2tc addrof(new_ptr, item.object);
     result_list.emplace_back(addrof, item.guard);
 
@@ -226,8 +226,7 @@ void goto_symext::track_new_pointer(
   // Also update all the accounting data.
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  type2tc sym_type =
-    type2tc(new array_type2t(get_bool_type(), expr2tc(), true));
+  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
   symbol2tc sym(sym_type, dyn_info_arr_name);
 
   index2tc idx(get_bool_type(), sym, ptr_obj);
@@ -239,8 +238,7 @@ void goto_symext::track_new_pointer(
   truth = gen_true_expr();
   symex_assign(code_assign2tc(valid_index_expr, truth), true);
 
-  type2tc sz_sym_type =
-    type2tc(new array_type2t(size_type2(), expr2tc(), true));
+  type2tc sz_sym_type = array_type2tc(size_type2(), expr2tc(), true);
   symbol2tc sz_sym(sz_sym_type, alloc_size_arr_name);
   index2tc sz_index_expr(size_type2(), sz_sym, ptr_obj);
 
@@ -308,8 +306,7 @@ void goto_symext::symex_free(const expr2tc &expr)
   }
 
   // Clear the alloc bit.
-  type2tc sym_type =
-    type2tc(new array_type2t(get_bool_type(), expr2tc(), true));
+  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), code.operand);
   dereference(ptr_obj, dereferencet::READ);
 
@@ -459,7 +456,7 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
     migrate_type(ns.follow(migrate_type_back(ptr_ref.subtype)));
 
   type2tc newtype =
-    do_array ? type2tc(new array_type2t(renamedtype2, code.size, false))
+    do_array ? type2tc(array_type2tc(renamedtype2, code.size, false))
              : renamedtype2;
 
   symbol.type = migrate_type_back(newtype);
@@ -487,8 +484,7 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   symex_assign(code_assign2tc(lhs, rhs), true);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  type2tc sym_type =
-    type2tc(new array_type2t(get_bool_type(), expr2tc(), true));
+  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
   symbol2tc sym(sym_type, "__ESBMC_is_dynamic");
 
   pointer_object2tc ptr_obj(pointer_type2(), lhs);
@@ -992,14 +988,15 @@ static inline expr2tc gen_value_by_byte(
      * the end
      */
 
-    constant_array2tc result = gen_zero(type);
+    expr2tc result = gen_zero(type);
+    constant_array2t &data = to_constant_array2t(result);
 
     uint64_t base_size =
       type_byte_size(to_array_type(type).subtype).to_uint64();
     uint64_t bytes_left = num_of_bytes;
     uint64_t offset_left = offset;
 
-    for(unsigned i = 0; i < result->datatype_members.size(); i++)
+    for(unsigned i = 0; i < data.datatype_members.size(); i++)
     {
       BigInt position(i);
       index2tc local_member(
@@ -1009,20 +1006,20 @@ static inline expr2tc gen_value_by_byte(
       // Skip offsets
       if(offset_left >= base_size)
       {
-        result->datatype_members[i] = local_member;
+        data.datatype_members[i] = local_member;
         offset_left -= base_size;
       }
       else
       {
         uint64_t bytes_to_write =
           bytes_left < base_size ? bytes_left : base_size;
-        result->datatype_members[i] = gen_value_by_byte(
+        data.datatype_members[i] = gen_value_by_byte(
           to_array_type(type).subtype,
           local_member,
           value,
           bytes_to_write,
           offset_left);
-        if(!result->datatype_members[i])
+        if(!data.datatype_members[i])
           return expr2tc();
         bytes_left =
           bytes_left <= base_size ? 0 : bytes_left - (base_size - offset_left);
@@ -1038,11 +1035,12 @@ static inline expr2tc gen_value_by_byte(
     /** Similar to array, however get the size of
      * each component
      */
-    constant_struct2tc result = gen_zero(type);
+    expr2tc result = gen_zero(type);
+    constant_struct2t &data = to_constant_struct2t(result);
     uint64_t bytes_left = num_of_bytes;
     uint64_t offset_left = offset;
 
-    for(unsigned i = 0; i < result->datatype_members.size(); i++)
+    for(unsigned i = 0; i < data.datatype_members.size(); i++)
     {
       irep_idt name = to_struct_type(type).member_names[i];
       // TODO: We need a better way to detect bitfields
@@ -1052,9 +1050,9 @@ static inline expr2tc gen_value_by_byte(
 
       // Since it is a symbol, lets start from the old value
       if(is_pointer_type(to_struct_type(type).members[i]))
-        result->datatype_members[i] = local_member;
+        data.datatype_members[i] = local_member;
 
-      type2tc current_member_type = result->datatype_members[i]->type;
+      type2tc current_member_type = data.datatype_members[i]->type;
 
       uint64_t current_member_size =
         type_byte_size(current_member_type).to_uint64();
@@ -1062,21 +1060,21 @@ static inline expr2tc gen_value_by_byte(
       // Skip offsets
       if(offset_left >= current_member_size)
       {
-        result->datatype_members[i] = local_member;
+        data.datatype_members[i] = local_member;
         offset_left -= current_member_size;
       }
       else
       {
         assert(offset_left < current_member_size);
         uint64_t bytes_to_write = std::min(bytes_left, current_member_size);
-        result->datatype_members[i] = gen_value_by_byte(
+        data.datatype_members[i] = gen_value_by_byte(
           current_member_type,
           local_member,
           value,
           bytes_to_write,
           offset_left);
 
-        if(!result->datatype_members[i])
+        if(!data.datatype_members[i])
           return expr2tc();
 
         bytes_left = bytes_left < current_member_size
@@ -1102,7 +1100,8 @@ static inline expr2tc gen_value_by_byte(
      * See GitHub Issue #639
      *
      */
-    constant_union2tc result = gen_zero(type);
+    expr2tc result = gen_zero(type);
+    constant_union2t &data = to_constant_union2t(result);
 
     uint64_t union_total_size = type_byte_size(type).to_uint64();
     // Let's find a member with the biggest size
@@ -1125,10 +1124,10 @@ static inline expr2tc gen_value_by_byte(
       to_union_type(type).members[selected_member_index];
     const member2tc member(member_type, src, name);
 
-    result->init_field = name;
-    result->datatype_members[0] =
+    data.init_field = name;
+    data.datatype_members[0] =
       gen_value_by_byte(member_type, member, value, num_of_bytes, offset);
-    return result->datatype_members[0] ? result : expr2tc();
+    return data.datatype_members[0] ? result : expr2tc();
   }
 
   // Found a primitive! Just apply the function
