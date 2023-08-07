@@ -212,9 +212,10 @@ void goto_symext::symex_step(reachability_treet &art)
       code_assign2tc deref_code(to_code_assign2t(instruction.code));
 
       // XXX jmorse -- this is not fully symbolic.
-      if(thrown_obj_map.find(cur_state->source.pc) != thrown_obj_map.end())
+      if(auto it = thrown_obj_map.find(cur_state->source.pc);
+         it != thrown_obj_map.end())
       {
-        symbol2tc thrown_obj = thrown_obj_map[cur_state->source.pc];
+        const symbol2tc &thrown_obj = it->second;
 
         if(
           is_pointer_type(deref_code->target->type) &&

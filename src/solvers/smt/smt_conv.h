@@ -795,7 +795,7 @@ public:
   std::list<pointer_logict> pointer_logic;
   /** Constant struct representing the implementation of the pointer type --
    *  i.e., the struct type that pointers get translated to. */
-  struct_type2tc pointer_struct;
+  type2tc pointer_struct;
   /** The type of the machine integer that can store a pointer. */
   type2tc machine_ptr;
   /** Sort for booleans. For fast access. */
@@ -827,9 +827,9 @@ public:
   std::list<unsigned int> addr_space_sym_num;
   /** Type of the address space allocation records. Currently a start address
    *  integer and an end address integer. */
-  struct_type2tc addr_space_type;
+  type2tc addr_space_type;
   /** Type of the array of address space allocation records. */
-  array_type2tc addr_space_arr_type;
+  type2tc addr_space_arr_type;
   /** List of address space allocation sizes. A map from the object number to
    *  the nubmer of bytes allocated. In a list to support pushing and
    *  popping. */

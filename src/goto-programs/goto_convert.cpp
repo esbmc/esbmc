@@ -296,9 +296,10 @@ void goto_convertt::convert_throw_decl_end(
   goto_programt &dest)
 {
   // add the THROW_DECL_END instruction to 'dest'
+  std::vector<irep_idt> exc; /* TODO: should this really be empty? */
   goto_programt::targett throw_decl_end_instruction = dest.add_instruction();
   throw_decl_end_instruction->make_throw_decl_end();
-  throw_decl_end_instruction->code = code_cpp_throw_decl_end2tc();
+  throw_decl_end_instruction->code = code_cpp_throw_decl_end2tc(exc);
   throw_decl_end_instruction->location = expr.location();
 }
 

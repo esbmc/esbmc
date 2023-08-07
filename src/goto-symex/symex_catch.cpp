@@ -297,7 +297,7 @@ void goto_symext::update_throw_target(
 
   // Signal assignment code to fetch the thrown object and rewrite the
   // assignment, assigning the thrown obj to the local variable.
-  thrown_obj_map[target] = thrown_obj;
+  thrown_obj_map.insert_or_assign(target, thrown_obj);
 
   if(!options.get_bool_option("extended-try-analysis"))
   {

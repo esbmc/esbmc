@@ -532,10 +532,9 @@ smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
 
   // We've now grabbed the pointer struct, now get first element. Represent
   // as fetching the first element of the struct representation.
+  const struct_type2t &addr_space_ty = to_struct_type(addr_space_type);
   expr2tc from_start = member2tc(
-    addr_space_type->members[0],
-    from_addr_space,
-    addr_space_type->member_names[0]);
+    addr_space_ty.members[0], from_addr_space, addr_space_ty.member_names[0]);
 
   pointer_offset2tc ptr_offs(diff_type, cast.from);
   expr2tc address = add2tc(addr_type, from_start, ptr_offs);
