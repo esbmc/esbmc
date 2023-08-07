@@ -98,8 +98,8 @@ void cpp_languaget::internal_additions(std::ostream &out)
   // Forward decs for pthread main thread begin/end hooks. Because they're
   // pulled in from the C library, they need to be declared prior to pulling
   // them in, for type checking.
-  out << "void pthread_start_main_hook(void);" << std::endl;
-  out << "void pthread_end_main_hook(void);" << std::endl;
+  out << "void __ESBMC_pthread_start_main_hook(void);" << std::endl;
+  out << "void __ESBMC_pthread_end_main_hook(void);" << std::endl;
 
   // GCC stuff
   out << GCC_BUILTIN_HEADERS;

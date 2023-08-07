@@ -355,7 +355,7 @@ ibex::Function *goto_contractort::create_function_from_expr2t(expr2tc expr)
     }
     else
     {
-      log_error("ERROR: MAX VAR SIZE REACHED");
+      log_error("MAX VAR SIZE REACHED");
       return nullptr;
     }
     break;

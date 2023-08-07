@@ -15,6 +15,7 @@ map := map
 set := set
 multimap := multimap
 multiset := multiset
+cbmc := cbmc
 
 # Clean
 ifneq ($(filter clean,$(MAKECMDGOALS)),)
@@ -29,9 +30,9 @@ endif
 llvm: all
 
 # Make them all
-all: $(algorithm) $(cpp) $(inheritance) $(stream)  $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(string)
+all: $(algorithm) $(cpp) $(inheritance) $(stream)  $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(string) $(cbmc)
 
-$(algorithm) $(cpp) $(inheritance) $(stream) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set)  $(multimap) $(multiset) $(string):
+$(algorithm) $(cpp) $(inheritance) $(stream) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set)  $(multimap) $(multiset) $(string) $(cbmc):
 	$(MAKE) --directory=$@ $(TARGET)
 
 #Make only STL directories
@@ -54,7 +55,8 @@ map: $(map)
 set: $(set)
 multimap: $(multimap)
 multiset: $(multiset)
+cbmc: $(cbmc)
 
 # Allow parallel make
 
-.PHONY: all $(algorithm) $(cpp) $(inheritance) $(stream) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(string)
+.PHONY: all $(algorithm) $(cpp) $(inheritance) $(stream) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(string) $(cbmc)

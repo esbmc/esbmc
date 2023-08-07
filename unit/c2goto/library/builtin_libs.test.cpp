@@ -20,13 +20,11 @@ void __ESBMC_atomic_end()
 {
 }
 
-#include <library/builtin_libs.c>
-
 #define sync_fetch_generator(TYPE, OPERATOR)                                   \
   {                                                                            \
     int dest = 10;                                                             \
     TYPE value = 5;                                                            \
-    int fetch = __ESBMC_sync_fetch_and_##OPERATOR(&dest, value);               \
+    int fetch = __sync_fetch_and_##OPERATOR(&dest, value);                     \
     CHECK(dest == 15);                                                         \
     CHECK(fetch == 10);                                                        \
   }

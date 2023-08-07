@@ -58,17 +58,17 @@ protected:
   int do_base_case(
     optionst &opts,
     goto_functionst &goto_functions,
-    const BigInt &k_step);
+    const uint64_t &k_step);
 
   int do_forward_condition(
     optionst &opts,
     goto_functionst &goto_functions,
-    const BigInt &k_step);
+    const uint64_t &k_step);
 
   int do_inductive_step(
     optionst &opts,
     goto_functionst &goto_functions,
-    const BigInt &k_step);
+    const uint64_t &k_step);
 
   bool read_goto_binary(goto_functionst &goto_functions);
 

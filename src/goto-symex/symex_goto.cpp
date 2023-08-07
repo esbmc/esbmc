@@ -442,18 +442,15 @@ bool goto_symext::get_unwind(
 
   bool stop_unwind =
     this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
-  if(!options.get_bool_option("quiet"))
-  {
-    log_status(
-      stop_unwind ? "Not unwinding "
-                  : "Unwinding "
-                    "loop {} {} {} {} {}",
-      i2string(cur_state->source.pc->loop_number),
-      " iteration ",
-      integer2string(unwind),
-      " ",
-      cur_state->source.pc->location.as_string());
-  }
+  const std::string state = stop_unwind ? "Not unwinding " : "Unwinding ";
+
+  log_status(
+    state + "loop {} {} {} {} {}",
+    i2string(cur_state->source.pc->loop_number),
+    " iteration ",
+    integer2string(unwind),
+    " ",
+    cur_state->source.pc->location.as_string());
 
   return stop_unwind;
 }

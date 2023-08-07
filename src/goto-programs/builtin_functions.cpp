@@ -469,15 +469,14 @@ void goto_convertt::do_function_call_symbol(
   const symbolt *symbol = ns.lookup(identifier);
   if(!symbol)
   {
-    log_error("error: function `{}' not found", id2string(identifier));
+    log_error("Function `{}' not found", id2string(identifier));
     abort();
   }
 
   if(!symbol->type.is_code())
   {
     log_error(
-      "error: function `{}' type mismatch: expected code",
-      id2string(identifier));
+      "Function `{}' type mismatch: expected code", id2string(identifier));
   }
 
   // If the symbol is not nil, i.e., the user defined the expected behaviour of

@@ -209,43 +209,6 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   for(auto const &inc : config.ansi_c.warnings)
     compiler_args.push_back("-W" + inc);
 
-  compiler_args.emplace_back("-D__builtin_sadd_overflow=__ESBMC_overflow_sadd");
-  compiler_args.emplace_back(
-    "-D__builtin_saddl_overflow=__ESBMC_overflow_saddl");
-  compiler_args.emplace_back(
-    "-D__builtin_saddll_overflow=__ESBMC_overflow_saddll");
-  compiler_args.emplace_back("-D__builtin_uadd_overflow=__ESBMC_overflow_uadd");
-  compiler_args.emplace_back(
-    "-D__builtin_uaddl_overflow=__ESBMC_overflow_uaddl");
-  compiler_args.emplace_back(
-    "-D__builtin_uaddll_overflow=__ESBMC_overflow_uaddll");
-
-  compiler_args.emplace_back("-D__builtin_ssub_overflow=__ESBMC_overflow_ssub");
-  compiler_args.emplace_back(
-    "-D__builtin_ssubl_overflow=__ESBMC_overflow_ssubl");
-  compiler_args.emplace_back(
-    "-D__builtin_ssubll_overflow=__ESBMC_overflow_ssubll");
-  compiler_args.emplace_back("-D__builtin_usub_overflow=__ESBMC_overflow_usub");
-  compiler_args.emplace_back(
-    "-D__builtin_usubl_overflow=__ESBMC_overflow_usubl");
-  compiler_args.emplace_back(
-    "-D__builtin_usubll_overflow=__ESBMC_overflow_usubll");
-
-  compiler_args.emplace_back("-D__builtin_smul_overflow=__ESBMC_overflow_smul");
-  compiler_args.emplace_back(
-    "-D__builtin_smull_overflow=__ESBMC_overflow_smull");
-  compiler_args.emplace_back(
-    "-D__builtin_smulll_overflow=__ESBMC_overflow_smulll");
-  compiler_args.emplace_back("-D__builtin_umul_overflow=__ESBMC_overflow_umul");
-  compiler_args.emplace_back(
-    "-D__builtin_umull_overflow=__ESBMC_overflow_umull");
-  compiler_args.emplace_back(
-    "-D__builtin_umulll_overflow=__ESBMC_overflow_umulll");
-  compiler_args.emplace_back(
-    "-D__sync_fetch_and_add=__ESBMC_sync_fetch_and_add");
-  compiler_args.emplace_back(
-    "-D__builtin_constant_p=__ESBMC_builtin_constant_p");
-
   compiler_args.emplace_back("-D__builtin_memcpy=memcpy");
 
   compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
@@ -383,12 +346,9 @@ _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_yield();
 void __ESBMC_atomic_begin();
 void __ESBMC_atomic_end();
-/** Explicitly initialize a new object */
-void __ESBMC_init_object(void*);
 
-int __ESBMC_abs(int);
-long int __ESBMC_labs(long int);
-long long int __ESBMC_llabs(long long int);
+// Explicitly initialize a new object
+void __ESBMC_init_object(void*);
 
 // pointers
 __UINTPTR_TYPE__ __ESBMC_POINTER_OBJECT(const void *);
@@ -407,22 +367,25 @@ __SIZE_TYPE__ __ESBMC_alloc_size[1];
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
-
 _Bool __ESBMC_is_little_endian();
 
 int __ESBMC_rounding_mode = 0;
 
 void *__ESBMC_memset(void *, int, unsigned int);
 
+// Calls goto_symext::add_memory_leak_checks() which adds memory leak checks
+// if it's enabled
 void __ESBMC_memory_leak_checks();
 
-// Forward decs for pthread main thread begin/end hooks. Because they're
+// Forward decls for pthread main thread begin/end hooks. Because they're
 // pulled in from the C library, they need to be declared prior to pulling
 // them in, for type checking.
-void pthread_start_main_hook(void);
-void pthread_end_main_hook(void);
+void __ESBMC_pthread_start_main_hook(void);
+void __ESBMC_pthread_end_main_hook(void);
 
-void __atexit_handler(void);
+// Forward decl of the intrinsic function that calls atexit registered functions.
+// We need this here or it won't be pulled from the C library
+void __ESBMC_atexit_handler(void);
 
 // Forward declarations for nondeterministic types.
 int nondet_int();
@@ -456,48 +419,6 @@ void __VERIFIER_error();
 void __VERIFIER_assume(int);
 void __VERIFIER_atomic_begin();
 void __VERIFIER_atomic_end();
-
-_Bool __ESBMC_overflow_sadd(int, int, int *);
-_Bool __ESBMC_overflow_saddl(long int, long int, long int *);
-_Bool __ESBMC_overflow_saddll(long long int, long long int, long long int *);
-_Bool __ESBMC_overflow_uadd(unsigned int, unsigned int, unsigned int *);
-_Bool __ESBMC_overflow_uaddl(unsigned long int, unsigned long int, unsigned long int *);
-_Bool __ESBMC_overflow_uaddll(unsigned long long int, unsigned long long int, unsigned long long int *);
-_Bool __ESBMC_overflow_ssub(int, int, int *);
-_Bool __ESBMC_overflow_ssubl(long int, long int, long int *);
-_Bool __ESBMC_overflow_ssubll(long long int, long long int, long long int *);
-_Bool __ESBMC_overflow_usub(unsigned int, unsigned int, unsigned int *);
-_Bool __ESBMC_overflow_usubl(unsigned long int, unsigned long int, unsigned long int *);
-_Bool __ESBMC_overflow_usubll(unsigned long long int, unsigned long long int, unsigned long long int *);
-_Bool __ESBMC_overflow_smul(int, int, int *);
-_Bool __ESBMC_overflow_smull(long int, long int, long int *);
-_Bool __ESBMC_overflow_smulll(long long int, long long int, long long int *);
-_Bool __ESBMC_overflow_umul(unsigned int, unsigned int, unsigned int *);
-_Bool __ESBMC_overflow_umull(unsigned long int, unsigned long int, unsigned long int *);
-_Bool __ESBMC_overflow_umulll(unsigned long long int, unsigned long long int, unsigned long long int *);
-int __ESBMC_sync_fetch_and_add(int*, int);
-int __ESBMC_builtin_constant_p(int);
-
-// This is causing problems when using the C++ frontend. It needs to be rewritten
-#define __atomic_load_n(PTR, MO)                                               \
-  __extension__({                                                              \
-    __auto_type __atomic_load_ptr = (PTR);                                     \
-    __typeof__(*__atomic_load_ptr) __atomic_load_tmp;                          \
-    __ESBMC_atomic_load(__atomic_load_ptr, &__atomic_load_tmp, (MO));          \
-    __atomic_load_tmp;                                                         \
-  })
-
-#define __atomic_store_n(PTR, VAL, MO)                                         \
-  __extension__({                                                              \
-    __auto_type __atomic_store_ptr = (PTR);                                    \
-    __typeof__(*__atomic_store_ptr) __atomic_store_tmp = (VAL);                \
-    __ESBMC_atomic_store(__atomic_store_ptr, &__atomic_store_tmp, (MO));       \
-  })
-
-// TODO: implement this similarly to printf
-  #define fscanf __ESBMC_fscanf
-
-  #define scanf __ESBMC_scanf
     )";
 
   if(config.ansi_c.cheri)

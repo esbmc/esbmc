@@ -21,8 +21,8 @@
 
 #define CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()                                     \
   DO_PRAGMA(GCC diagnostic ignored "-Wstrict-aliasing")                        \
-  DO_PRAGMA(GCC diagnostic ignored "-Wunused-parameter")
-
+  DO_PRAGMA(GCC diagnostic ignored "-Wunused-parameter")                       \
+  DO_PRAGMA(GCC diagnostic ignored "-Wnonnull")
 #endif
 
 #ifndef GNUC_PREREQ

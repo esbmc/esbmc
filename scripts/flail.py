@@ -176,7 +176,7 @@ def parse_args(argv):
                         --prefix esbmc_libc_ \\
                         -o ./libc.c \\
                         --header ./libc.h \\
-                        esbmc/src/c2goto/library/builtin_libs.c src/c2goto/library/ctype.c
+                        src/c2goto/library/ctype.c
 
             Ex.2 Convert a goto binary file (see last line of the CMD below) into a char array
                  After building ESBMC, find clib32.goto from the build tree
