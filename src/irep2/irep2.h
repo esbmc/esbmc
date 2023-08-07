@@ -911,7 +911,6 @@ public:
     type_id_field;
   typedef typename boost::mpl::
     push_front<boost::mpl::vector<Args...>, type_id_field>::type fields;
-  static constexpr bool always_construct = true;
   typedef type2t base2t;
 
   template <typename derived>
@@ -934,7 +933,6 @@ public:
     typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::
       type,
     expr_id_field>::type fields;
-  static constexpr bool always_construct = true;
   static constexpr unsigned int num_fields =
     boost::mpl::size<fields>::type::value;
   typedef expr2t base2t;
@@ -960,7 +958,6 @@ public:
     typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::
       type,
     expr_id_field>::type fields;
-  static constexpr bool always_construct = true;
   static constexpr unsigned int num_fields =
     boost::mpl::size<fields>::type::value;
   typedef expr2t base2t;
@@ -979,7 +976,6 @@ public:
     expr_id_field;
   typedef typename boost::mpl::
     push_front<boost::mpl::vector<Args...>, expr_id_field>::type fields;
-  static constexpr bool always_construct = true;
   static constexpr unsigned int num_fields =
     boost::mpl::size<fields>::type::value;
   typedef expr2t base2t;
