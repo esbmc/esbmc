@@ -1319,9 +1319,7 @@ public:
 template <
   class base,
   class contained,
-  unsigned int expid,
   typename idtype,
-  idtype base::*idfield,
   class superclass>
 class something2tc : public irep_container<base>
 {
@@ -1390,11 +1388,9 @@ class variadic_vector<>
 template <
   typename T1,
   typename T2,
-  unsigned int T3,
-  typename T4,
-  T4 T1::*T5,
-  typename T6>
-T2 *get_pointer(esbmct::something2tc<T1, T2, T3, T4, T5, T6> const &p)
+  typename T3,
+  typename T4>
+T2 *get_pointer(esbmct::something2tc<T1, T2, T3, T4> const &p)
 {
   return const_cast<T2 *>(p.get());
 }

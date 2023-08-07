@@ -309,9 +309,7 @@ public:
   typedef esbmct::something2tc<                                                \
     type2t,                                                                    \
     basename##_type2t,                                                         \
-    type2t::basename##_id,                                                     \
     const type2t::type_ids,                                                    \
-    &type2t::type_id,                                                          \
     superclass>                                                                \
     basename##_type2tc;                                                        \
   typedef esbmct::type_methods2<                                               \
