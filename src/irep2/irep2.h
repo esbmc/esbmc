@@ -1355,8 +1355,6 @@ public:
     : base2tc(std::make_shared<contained>(args...))
   {
   }
-
-  typedef idtype id_field_type;
 };
 
 // Boost doesn't have variadic vector templates, so convert to it.
