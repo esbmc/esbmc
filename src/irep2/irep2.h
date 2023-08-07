@@ -182,11 +182,6 @@ public:
 
   irep_container &operator=(irep_container const &ref) = default;
 
-  template <class Y>
-  explicit irep_container(Y *p) : std::shared_ptr<T>(p)
-  {
-  }
-
   // Copy construct from any std::shared_ptr of this type. That just copies
   // a reference. Obviously this is fairly unwise because any std::shared_ptr
   // won't be using the detach facility to manipulate things, however it's
@@ -913,7 +908,7 @@ public:
     type_id_field;
   typedef typename boost::mpl::
     push_front<boost::mpl::vector<Args...>, type_id_field>::type fields;
-  static constexpr bool always_construct = false;
+  static constexpr bool always_construct = true;
   typedef type2t base2t;
 
   template <typename derived>
@@ -936,7 +931,7 @@ public:
     typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::
       type,
     expr_id_field>::type fields;
-  static constexpr bool always_construct = false;
+  static constexpr bool always_construct = true;
   static constexpr unsigned int num_fields =
     boost::mpl::size<fields>::type::value;
   typedef expr2t base2t;
@@ -962,7 +957,7 @@ public:
     typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::
       type,
     expr_id_field>::type fields;
-  static constexpr bool always_construct = false;
+  static constexpr bool always_construct = true;
   static constexpr unsigned int num_fields =
     boost::mpl::size<fields>::type::value;
   typedef expr2t base2t;
@@ -1391,7 +1386,7 @@ public:
 
   // Forward all constructors down to the contained type.
   template <typename... Args>
-  something2tc(Args... args) : base2tc(new contained(args...))
+  something2tc(Args... args) : base2tc(std::make_shared<contained>(args...))
   {
   }
 

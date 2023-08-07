@@ -182,8 +182,8 @@ void goto_checkt::float_overflow_check(
   if(is_ieee_div2t(expr))
   {
     // Can overflow if dividing by something small
-    expr2tc op0_inf = expr2tc(new isinf2t(side_1));
-    expr2tc new_inf = expr2tc(new isinf2t(expr));
+    expr2tc op0_inf = isinf2tc(side_1);
+    expr2tc new_inf = isinf2tc(expr);
     make_not(new_inf);
 
     or2tc overflow_check(op0_inf, new_inf);
@@ -198,11 +198,11 @@ void goto_checkt::float_overflow_check(
   else if(is_ieee_add2t(expr) || is_ieee_sub2t(expr) || is_ieee_mul2t(expr))
   {
     // Can overflow
-    expr2tc op0_inf = expr2tc(new isinf2t(side_1));
-    expr2tc op1_inf = expr2tc(new isinf2t(side_2));
+    expr2tc op0_inf = isinf2tc(side_1);
+    expr2tc op1_inf = isinf2tc(side_2);
     or2tc operands_or(op0_inf, op1_inf);
 
-    expr2tc new_inf = expr2tc(new isinf2t(expr));
+    expr2tc new_inf = isinf2tc(expr);
     make_not(new_inf);
 
     or2tc overflow_check(operands_or, new_inf);
@@ -248,8 +248,8 @@ void goto_checkt::overflow_check(
 
   // add overflow subgoal
   expr2tc overflow = is_neg2t(expr)
-                       ? expr2tc(new overflow_neg2t(to_neg2t(expr).value))
-                       : expr2tc(new overflow2t(expr));
+                       ? expr2tc(overflow_neg2tc(to_neg2t(expr).value))
+                       : expr2tc(overflow2tc(expr));
   make_not(overflow);
 
   add_guarded_claim(
@@ -494,8 +494,8 @@ void goto_checkt::shift_check(
 
   auto left_op = (*expr->get_sub_expr(0));
   auto left_op_type = left_op->type;
-  expr2tc left_op_type_size(
-    new constant_int2t(left_op_type, BigInt(left_op_type->get_width())));
+  expr2tc left_op_type_size =
+    constant_int2tc(left_op_type, BigInt(left_op_type->get_width()));
 
   lessthan2tc right_op_size_check(right_op, left_op_type_size);
 
@@ -530,7 +530,7 @@ void goto_checkt::nan_check(
     return;
 
   // add nan subgoal
-  expr2tc isnan = expr2tc(new isnan2t(expr));
+  expr2tc isnan = isnan2tc(expr);
   make_not(isnan);
 
   add_guarded_claim(isnan, "NaN on " + get_expr_id(expr), "NaN", loc, guard);

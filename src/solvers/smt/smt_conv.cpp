@@ -152,8 +152,8 @@ void smt_convt::smt_post_init()
     for(pow = 1ULL; count < 64; pow <<= 1, count++)
       power_array_data.push_back(constant_int2tc(powarr_elemt, BigInt(pow)));
 
-    type2tc power_array_type(
-      new array_type2t(powarr_elemt, gen_ulong(64), false));
+    type2tc power_array_type =
+      array_type2tc(powarr_elemt, gen_ulong(64), false);
 
     constant_array2tc power_array(power_array_type, power_array_data);
     int_shift_op_array = convert_ast(power_array);
@@ -1252,7 +1252,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     const string_type2t &str_type = to_string_type(type);
     constant_int2tc width(
       get_uint_type(config.ansi_c.int_width), BigInt(str_type.width));
-    type2tc new_type(new array_type2t(get_uint8_type(), width, false));
+    type2tc new_type = array_type2tc(get_uint8_type(), width, false);
     result = convert_sort(new_type);
     break;
   }
@@ -1603,7 +1603,7 @@ smt_astt smt_convt::convert_bswap(const expr2tc &expr)
   std::vector<expr2tc> thebytes;
   for(std::size_t byte = 0; byte < bytes; byte++)
   {
-    thebytes.emplace_back(new extract2t(
+    thebytes.emplace_back(extract2tc(
       get_uint8_type(),
       op,
       (byte * bits_per_byte + (bits_per_byte - 1)),
@@ -1821,8 +1821,8 @@ unsigned long calculate_array_domain_width(const array_type2t &arr)
   {
     if(is_constant_int2t(arr.array_size))
     {
-      constant_int2tc thesize = arr.array_size;
-      return size_to_bit_width(thesize->value.to_uint64());
+      const constant_int2t &thesize = to_constant_int2t(arr.array_size);
+      return size_to_bit_width(thesize.value.to_uint64());
     }
 
     return arr.array_size->type->get_width();
@@ -1886,19 +1886,19 @@ static expr2tc gen_additions(const type2tc &type, std::vector<expr2tc> &exprs)
 
 expr2tc smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 {
-  index2tc idx = expr;
+  const index2t *idx = &to_index2t(expr);
 
   // First we need to find the flatten_array_type, to cast symbols/constants
   // with different types during the addition and multiplication. They'll be
   // casted to the flattened array index type
   while(is_index2t(idx->source_value))
-    idx = idx->source_value;
+    idx = &to_index2t(idx->source_value);
 
   type2tc subtype = make_array_domain_type(
     to_array_type(flatten_array_type(idx->source_value->type)));
 
   // Rewrite the store chain as additions and multiplications
-  idx = expr;
+  idx = &to_index2t(expr);
 
   // Multiplications will hold of the mult2tc terms, we have to
   // add them together in the end
@@ -1907,7 +1907,7 @@ expr2tc smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 
   while(is_index2t(idx->source_value))
   {
-    idx = idx->source_value;
+    idx = &to_index2t(idx->source_value);
 
     type2tc t = flatten_array_type(idx->type);
     assert(is_array_type(t));
@@ -1936,7 +1936,7 @@ expr2tc smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 expr2tc
 smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &update_val)
 {
-  with2tc with = expr;
+  const with2t *with = &to_with2t(expr);
 
   // First we need to find the flatten_array_type, to cast symbols/constants
   // with different types during the addition and multiplication. They'll be
@@ -1958,7 +1958,7 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &update_val)
 
   while(is_with2t(with->update_value) && is_array_type(with->update_value))
   {
-    with = with->update_value;
+    with = &to_with2t(with->update_value);
 
     type2tc t = flatten_array_type(with->update_value->type);
 
@@ -2439,7 +2439,7 @@ expr2tc smt_convt::get_array(const type2tc &type, smt_astt array)
 
   array_type2t ar = to_array_type(flatten_array_type(type));
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
-  type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
+  type2tc arr_type = array_type2tc(ar.subtype, arr_size, false);
   std::vector<expr2tc> fields;
 
   bool uses_tuple_api = is_tuple_array_ast_type(type);
@@ -2513,7 +2513,7 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
     if(
       is_bool_type(members[i]->type) && !int_encoding &&
       !array_api->supports_bools_in_arrays)
-      init = typecast2tc(type2tc(new unsignedbv_type2t(1)), init);
+      init = typecast2tc(unsignedbv_type2tc(1), init);
 
     newsym_ast = newsym_ast->update(this, convert_ast(init), i);
   }
@@ -2576,8 +2576,8 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
         constarray_type.array_size);
       simplify(newsize);
 
-      type2tc new_arr_type(
-        new array_type2t(constarray_type.subtype, newsize, false));
+      type2tc new_arr_type =
+        array_type2tc(constarray_type.subtype, newsize, false);
       constant_array2tc new_const_array(new_arr_type, new_contents);
       return convert_ast(new_const_array);
     }

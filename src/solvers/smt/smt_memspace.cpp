@@ -253,7 +253,7 @@ smt_astt smt_convt::convert_identifier_pointer(
     {
       // For null, other pieces of code will have already initialized its
       // value, so we can just refer to a symbol.
-      type2tc t(new pointer_type2t(get_empty_type()));
+      type2tc t = pointer_type2tc(get_empty_type());
       a = tuple_api->mk_tuple_symbol(symbol, convert_sort(t));
 
       return a;
@@ -281,7 +281,7 @@ smt_astt smt_convt::convert_identifier_pointer(
   obj_num = pointer_logic.back().add_object(expr);
 
   // Produce a symbol representing this.
-  type2tc t(new pointer_type2t(get_empty_type()));
+  type2tc t = pointer_type2tc(get_empty_type());
   a = tuple_api->mk_tuple_symbol(symbol, convert_sort(t));
 
   // If this object hasn't yet been put in the address space record, we need to

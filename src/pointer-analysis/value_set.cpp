@@ -1171,7 +1171,7 @@ void value_sett::do_free(const expr2tc &op)
         {
           // adjust
           objectt o = o_it->second;
-          dynamic_object2tc new_dyn(object);
+          dynamic_object2tc new_dyn(to_dynamic_object2t(object));
           new_dyn->invalid = false;
           new_dyn->unknown = true;
           insert(new_object_map, new_dyn, o);

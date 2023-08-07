@@ -166,7 +166,7 @@ public:
      *  can point at, and that need to have calls set up to and executed. This
      *  member contains an iterator to the first goto instruction in the target
      *  and the target symbol name. */
-    std::list<std::pair<goto_programt::const_targett, symbol2tc>>
+    std::list<std::pair<goto_programt::const_targett, expr2tc>>
       cur_function_ptr_targets;
     /** Instruction where function pointer calls should seem to originate
      *  from. */
