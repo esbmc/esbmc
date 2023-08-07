@@ -4,6 +4,7 @@
 #include <limits.h>
 #include <errno.h>
 #include <ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h>
+#include <ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h>
 #include <ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h>
 
 #include <assert.h>
@@ -107,3 +108,31 @@ unsigned long copy_from_user(void *to, void *from, unsigned long size)
 
   return 0;
 }
+
+void kernel_spinlock_init(mock_spinlock_t *lock)
+{
+  //check if the lock is valid
+  assert(lock != NULL);
+  //initialize the lock
+  atomic_init(&lock -> locked, false);
+}
+
+void kernel_spin_lock(mock_spinlock_t *lock)
+{
+  //check if the lock is valid
+  assert(lock != NULL);
+  bool expected_value = false;
+  //check if the lock is already locked, spin for a while
+  while (!atomic_compare_exchange_weak(&lock->is_locked, &expected_vaue, true)) {
+      expected_value = false;
+  }
+}
+
+void kernel_spin_unlock(mock_spinlock_t *lock
+{
+  //check if the lock is valid
+  assert(lock != NULL);
+  //unlock the lock
+  atomic_store(&lock->is_locked, false);
+}
+
