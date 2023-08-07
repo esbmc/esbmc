@@ -1393,9 +1393,7 @@ public:
   typedef esbmct::something2tc<                                                \
     expr2t,                                                                    \
     basename##2t,                                                              \
-    expr2t::basename##_id,                                                     \
     const expr2t::expr_ids,                                                    \
-    &expr2t::expr_id,                                                          \
     superclass>                                                                \
     basename##2tc;                                                             \
   typedef esbmct::                                                             \
@@ -1418,9 +1416,7 @@ public:
   typedef esbmct::something2tc<                                                \
     expr2t,                                                                    \
     basename##2t,                                                              \
-    expr2t::basename##_id,                                                     \
     const expr2t::expr_ids,                                                    \
-    &expr2t::expr_id,                                                          \
     superclass>                                                                \
     basename##2tc;                                                             \
   typedef esbmct::expr_methods2<                                               \
