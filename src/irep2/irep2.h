@@ -1357,7 +1357,8 @@ public:
 
   // Forward all constructors down to the contained type.
   template <typename... Args>
-  something2tc(Args... args) : base2tc(std::make_shared<contained>(args...))
+  something2tc(const Args &...args)
+    : base2tc(std::make_shared<contained>(args...))
   {
   }
 
