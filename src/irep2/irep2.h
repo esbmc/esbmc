@@ -1325,15 +1325,6 @@ class something2tc : public irep_container<base>
 public:
   typedef irep_container<base> base2tc;
 
-  // Allow construction too when we're handed a pointer to the (correctly
-  // typed) base2t ptr. This is used by boost::python, and various bits of
-  // code that create new ptrs and fling them into type2tcs.
-  something2tc(contained *init) : base2tc(init)
-  {
-    assert(init != NULL); // Would already have fired right?
-    assert(init->*idfield == expid);
-  }
-
   const contained &operator*() const
   {
     return static_cast<const contained &>(*base2tc::get());
