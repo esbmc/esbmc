@@ -4,7 +4,7 @@ target_include_directories(abstract-interpretation
         PUBLIC ${Boost_INCLUDE_DIRS})
 
 if (ENABLE_GOTO_CONTRACTOR)
-    target_link_libraries(abstract-interpretation gotocontractor fmt::fmt)
+    target_link_libraries(abstract-interpretation gotocontractor pointeranalysis fmt::fmt)
 else ()
-    target_link_libraries(abstract-interpretation fmt::fmt)
+    target_link_libraries(abstract-interpretation pointeranalysis fmt::fmt)
 endif ()
