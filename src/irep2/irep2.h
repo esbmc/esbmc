@@ -1316,7 +1316,7 @@ public:
 //
 // We need a class derived from expr2tc that takes the correct set of
 // constructor arguments, which means yet more template goo.
-template <class base, class contained, typename idtype, class superclass>
+template <class base, class contained>
 class something2tc : public irep_container<base>
 {
 public:
@@ -1378,8 +1378,8 @@ class variadic_vector<>
 // In global namespace: to get boost to recognize something2tc's as being a
 // shared pointer type, we need to define get_pointer for it:
 
-template <typename T1, typename T2, typename T3, typename T4>
-T2 *get_pointer(esbmct::something2tc<T1, T2, T3, T4> const &p)
+template <typename T1, typename T2>
+T2 *get_pointer(esbmct::something2tc<T1, T2> const &p)
 {
   return const_cast<T2 *>(p.get());
 }
