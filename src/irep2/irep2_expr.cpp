@@ -122,13 +122,12 @@ static_assert(
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc &_type, expr_ids id)
-  : std::enable_shared_from_this<expr2t>(), expr_id(id), type(_type), crc_val(0)
+  : expr_id(id), type(_type), crc_val(0)
 {
 }
 
 expr2t::expr2t(const expr2t &ref)
-  : std::enable_shared_from_this<expr2t>(),
-    expr_id(ref.expr_id),
+  : expr_id(ref.expr_id),
     type(ref.type),
     crc_val(ref.crc_val)
 {
