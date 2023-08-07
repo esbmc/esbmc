@@ -1340,7 +1340,7 @@ public:
   something2tc(
     const base2tc &init,
     typename boost::lazy_disable_if<
-      boost::mpl::bool_<superclass::traits::always_construct == true>,
+      boost::mpl::bool_<true>,
       arbitary>::type * = nullptr)
     : base2tc(init)
   {
