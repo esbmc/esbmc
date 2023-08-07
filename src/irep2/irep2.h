@@ -204,16 +204,19 @@ template <class T>
 class irep_container : public std::shared_ptr<T>
 {
 public:
-  irep_container() = default;
-  irep_container(const irep_container &ref) = default;
+  constexpr irep_container() = default;
+  constexpr irep_container(const irep_container &ref) = default;
+  constexpr irep_container(irep_container &&ref) = default;
 
   irep_container &operator=(irep_container const &ref) = default;
+  irep_container &operator=(irep_container &&ref) = default;
 
   // Copy construct from any std::shared_ptr of this type. That just copies
   // a reference. Obviously this is fairly unwise because any std::shared_ptr
   // won't be using the detach facility to manipulate things, however it's
   // necessary for std::make_shared.
-  explicit irep_container(std::shared_ptr<T> &&p) : std::shared_ptr<T>(p)
+  explicit irep_container(std::shared_ptr<T> &&p)
+    : std::shared_ptr<T>(std::move(p))
   {
   }
 
