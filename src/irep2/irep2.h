@@ -836,15 +836,7 @@ static inline std::string get_expr_id(const expr2tc &expr)
  *
  *    foo2tc bar(type, operand1, operand2);
  *
- *  As well as copy-constructing a container around an expr to make it type
- *  specific:
- *
- *    expr2tc foo = something();
- *    foo2tc bar(foo);
- *
- *  Assertions in the construction will ensure that the expression is in fact
- *  of type foo2t. One can transparently access the irep fields through
- *  dereference, such as:
+ *  One can transparently access the irep fields through dereference, such as:
  *
  *    bar->operand1 = 0;
  *
@@ -853,15 +845,22 @@ static inline std::string get_expr_id(const expr2tc &expr)
  *
  *  ----
  *
- *  Problems: there's an ambiguity between the construction of some new ireps,
- *  and the downcasting from one type to another. If one were to say:
+ *  The following functions can be used to inspect an irep2 object:
  *
- *    not2tc foo(someotherexpr);
+ *    is_${suffix}()
+ *    to_${suffix}()
  *
- *  Are we constructing a new "not" expression, the inversion of someotherexpr,
- *  or downcasting it to a not2t reference? Currently it's configurable with
- *  some traits hacks, but the ambiguity is alas something that has to be lived
- *  with. All similar ireps are configured to always construct.
+ *  For expr2tc the suffix the name of the class, while for type2t it is the
+ *  name of the class without the trailing "2t", e.g.
+ *
+ *    is_bool_type(type)
+ *    to_constant_int2t(expr)
+ *
+ *  ----
+ *
+ *  The traits defined here are used to generically implement the functions
+ *  operating on a type2t's or an expr2t's fields, like .dump() and the
+ *  iterators foreach_subtype() and foreach_operand().
  *
  *  (The required traits hacks need cleaning up too).
  */
