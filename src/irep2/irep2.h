@@ -873,14 +873,6 @@ namespace esbmct
  *  way of defining ireps. */
 const unsigned int num_type_fields = 6;
 
-// Dummy type tag - exists to be an arbitary, local class, for use in some
-// templates. See below.
-class dummy_type_tag
-{
-public:
-  typedef int type;
-};
-
 /** Record for properties of an irep field.
  *  This type records, for any particular field:
  *    * It's type
