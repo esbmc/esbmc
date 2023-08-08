@@ -1388,7 +1388,12 @@ public:
 // again and again, this gets macro'd.
 
 #define irep_typedefs(basename, superclass)                                    \
-  typedef esbmct::something2tc<expr2t, basename##2t> basename##2tc;            \
+  template <typename... Args>                                                  \
+  inline expr2tc basename##2tc(Args && ...args)                                \
+  {                                                                            \
+    return expr2tc(std::static_pointer_cast<expr2t>(                           \
+      std::make_shared<basename##2t>(std::forward<Args>(args)...)));           \
+  }                                                                            \
   typedef esbmct::                                                             \
     expr_methods2<basename##2t, superclass, superclass::traits> \
       basename##_expr_methods;                                                 \
@@ -1404,7 +1409,12 @@ public:
 // Special case for some empty ireps,
 
 #define irep_typedefs_empty(basename, superclass)                              \
-  typedef esbmct::something2tc<expr2t, basename##2t> basename##2tc;            \
+  template <typename... Args>                                                  \
+  inline expr2tc basename##2tc(Args && ...args)                                \
+  {                                                                            \
+    return expr2tc(std::static_pointer_cast<expr2t>(                           \
+      std::make_shared<basename##2t>(std::forward<Args>(args)...)));           \
+  }                                                                            \
   typedef esbmct::expr_methods2<                                               \
     basename##2t,                                                              \
     superclass,                                                                \
