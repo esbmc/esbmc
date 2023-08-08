@@ -1365,22 +1365,6 @@ public:
   }
 };
 
-// Boost doesn't have variadic vector templates, so convert to it.
-
-template <typename... Args>
-class variadic_vector;
-
-template <typename T, typename... Args>
-class variadic_vector<T, Args...>
-{
-  typedef boost::mpl::push_back<variadic_vector<Args...>, T> type;
-};
-
-template <>
-class variadic_vector<>
-{
-  typedef boost::mpl::vector<> type;
-};
 } // namespace esbmct
 
 inline bool operator==(const type2tc &a, const type2tc &b)
