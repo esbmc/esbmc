@@ -1232,9 +1232,8 @@ public:
     code_funccall_data,
     &code_funccall_data::operands>
     operands_field;
-  typedef esbmct::
-    expr2t_traits<ret_field, function_field, operands_field>
-      traits;
+  typedef esbmct::expr2t_traits<ret_field, function_field, operands_field>
+    traits;
 };
 
 class code_comma_data : public code_base
@@ -1328,8 +1327,7 @@ public:
     code_cpp_throw_data,
     &code_cpp_throw_data::exception_list>
     exception_list_field;
-  typedef esbmct::expr2t_traits<operand_field, exception_list_field>
-    traits;
+  typedef esbmct::expr2t_traits<operand_field, exception_list_field> traits;
 };
 
 class code_cpp_throw_decl_data : public code_base
