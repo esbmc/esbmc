@@ -179,6 +179,9 @@ __ESBMC_HIDE:;
   pthread_exec_key_destructors();
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end(); // Never reached; doesn't matter.
+
+  // Ensure that we cut all subsequent execution paths.
+  __ESBMC_assume(0);
   return;
 }
 
@@ -223,6 +226,9 @@ __ESBMC_HIDE:;
   __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end();
+
+  // Ensure that there is no subsequent execution path
+  __ESBMC_assume(0);
 }
 
 pthread_t pthread_self(void)
