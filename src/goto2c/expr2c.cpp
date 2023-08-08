@@ -1328,7 +1328,6 @@ std::string expr2ct::convert_same_object(const exprt &src, unsigned &precedence)
 
   assert(
     is_pointer_type(same.side_1->type) && is_pointer_type(same.side_2->type));
-  const pointer_type2t &ptr_type = to_pointer_type(same.side_1->type);
 
   if(is_address_of2t(same.side_2))
   {
