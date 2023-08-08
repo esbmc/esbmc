@@ -312,15 +312,11 @@ public:
     return type2tc(std::static_pointer_cast<type2t>(                           \
       std::make_shared<basename##_type2t>(std::forward<Args>(args)...)));      \
   }                                                                            \
-  typedef esbmct::type_methods2<                                               \
-    basename##_type2t,                                                         \
-    superclass,                                                                \
-    superclass::traits>                                                        \
-    basename##_type_methods;                                                   \
-  extern template class esbmct::type_methods2<                                 \
-    basename##_type2t,                                                         \
-    superclass,                                                                \
-    superclass::traits>;
+  typedef esbmct::                                                             \
+    type_methods2<basename##_type2t, superclass, superclass::traits>           \
+      basename##_type_methods;                                                 \
+  extern template class esbmct::                                               \
+    type_methods2<basename##_type2t, superclass, superclass::traits>;
 
 irep_typedefs(bool, type2t);
 irep_typedefs(empty, type2t);

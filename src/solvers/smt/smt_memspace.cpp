@@ -45,8 +45,8 @@ smt_astt smt_convt::convert_ptr_cmp(
   expr2tc ptr_obj2 = pointer_object2tc(int_type, side2);
   expr2tc ptr_offs2 = pointer_offset2tc(signed_size_type2(), side2);
 
-  expr2tc addrspacesym = symbol2tc(
-    addr_space_arr_type, get_cur_addrspace_ident());
+  expr2tc addrspacesym =
+    symbol2tc(addr_space_arr_type, get_cur_addrspace_ident());
   expr2tc obj1_data = index2tc(addr_space_type, addrspacesym, ptr_obj1);
   expr2tc obj2_data = index2tc(addr_space_type, addrspacesym, ptr_obj2);
 

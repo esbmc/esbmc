@@ -24,8 +24,8 @@ array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   unsigned int i = 0;
   for(auto const &it : data.members)
   {
-    type2tc arrtype = array_type2tc(
-      it, array_type.array_size, array_type.size_is_infinite);
+    type2tc arrtype =
+      array_type2tc(it, array_type.array_size, array_type.size_is_infinite);
 
     smt_astt truepart = true_val->project(ctx, i);
     smt_astt falsepart = false_val->project(ctx, i);
@@ -185,8 +185,8 @@ void array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   unsigned int i = 0;
   for(auto const &it : data.members)
   {
-    type2tc tmparrtype = array_type2tc(
-      it, arrtype.array_size, arrtype.size_is_infinite);
+    type2tc tmparrtype =
+      array_type2tc(it, arrtype.array_size, arrtype.size_is_infinite);
     smt_astt source = src->project(ctx, i);
     smt_astt destination = dst->project(ctx, i);
     source->assign(ctx, destination);

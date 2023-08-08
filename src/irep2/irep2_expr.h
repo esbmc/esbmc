@@ -1394,17 +1394,12 @@ public:
     return expr2tc(std::static_pointer_cast<expr2t>(                           \
       std::make_shared<basename##2t>(std::forward<Args>(args)...)));           \
   }                                                                            \
-  typedef esbmct::                                                             \
-    expr_methods2<basename##2t, superclass, superclass::traits> \
-      basename##_expr_methods;                                                 \
-  extern template class esbmct::expr_methods2<                                 \
-    basename##2t,                                                              \
-    superclass,                                                                \
-    superclass::traits>;                                                            \
-  extern template class esbmct::irep_methods2<                                 \
-    basename##2t,                                                              \
-    superclass,                                                                \
-    superclass::traits>;
+  typedef esbmct::expr_methods2<basename##2t, superclass, superclass::traits>  \
+    basename##_expr_methods;                                                   \
+  extern template class esbmct::                                               \
+    expr_methods2<basename##2t, superclass, superclass::traits>;               \
+  extern template class esbmct::                                               \
+    irep_methods2<basename##2t, superclass, superclass::traits>;
 
 // Special case for some empty ireps,
 
@@ -1415,19 +1410,13 @@ public:
     return expr2tc(std::static_pointer_cast<expr2t>(                           \
       std::make_shared<basename##2t>(std::forward<Args>(args)...)));           \
   }                                                                            \
-  typedef esbmct::expr_methods2<                                               \
-    basename##2t,                                                              \
-    superclass,                                                                \
-    esbmct::expr2t_default_traits>                                                             \
-    basename##_expr_methods;                                                   \
-  extern template class esbmct::expr_methods2<                                 \
-    basename##2t,                                                              \
-    superclass,                                                                \
-    esbmct::expr2t_default_traits>;                                                            \
-  extern template class esbmct::expr_methods2<                                 \
-    basename##2t,                                                              \
-    superclass,                                                                \
-    esbmct::expr2t_default_traits>;
+  typedef esbmct::                                                             \
+    expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>     \
+      basename##_expr_methods;                                                 \
+  extern template class esbmct::                                               \
+    expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>;    \
+  extern template class esbmct::                                               \
+    expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>;
 
 // This can't be replaced by iterating over all expr ids in preprocessing
 // magic because the mapping between top level expr class and it's data holding
