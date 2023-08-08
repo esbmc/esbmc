@@ -35,11 +35,11 @@
 
 #define expr_typedefs_empty(basename, superclass)                              \
   template class esbmct::                                                      \
-    expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>;    \
+    expr_methods2<basename##2t, superclass, superclass::traits>;               \
   template class esbmct::                                                      \
     irep_methods2<basename##2t, superclass, superclass::traits>;               \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
-    esbmct::expr2t_default_traits,                                             \
+    superclass::traits,                                                        \
     boost::mpl::pop_front<typename superclass::traits::fields>::type>;
