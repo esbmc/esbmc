@@ -1572,8 +1572,8 @@ smt_astt smt_convt::convert_popcount(const expr2tc &expr)
     bitstring.reserve(width);
     for(std::size_t i = 0; i < width / (2 * shift); ++i)
       bitstring += std::string(shift, '0') + std::string(shift, '1');
-    expr2tc bitmask = constant_int2tc(
-      op->type, binary2integer(bitstring, false));
+    expr2tc bitmask =
+      constant_int2tc(op->type, binary2integer(bitstring, false));
 
     // build the expression
     op = add2tc(

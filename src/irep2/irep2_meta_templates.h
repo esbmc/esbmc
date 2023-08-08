@@ -27,8 +27,8 @@ template <
   typename enable,
   typename fields>
 const expr2tc *
-esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::
-  get_sub_expr(unsigned int i) const
+esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::get_sub_expr(
+  unsigned int i) const
 {
   return superclass::get_sub_expr_rec(0, i); // Skips expr_id
 }
@@ -39,8 +39,7 @@ template <
   typename traits,
   typename enable,
   typename fields>
-expr2tc *
-esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::
+expr2tc *esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::
   get_sub_expr_nc(unsigned int i)
 {
   return superclass::get_sub_expr_nc_rec(0, i); // Skips expr_id
@@ -52,8 +51,7 @@ template <
   typename traits,
   typename enable,
   typename fields>
-unsigned int
-esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::
+unsigned int esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::
   get_num_sub_exprs() const
 {
   return superclass::get_num_sub_exprs_rec(); // Skips expr_id
@@ -65,9 +63,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-void esbmct::
-  expr_methods2<derived, baseclass, traits, enable, fields>::
-    foreach_operand_impl_const(expr2t::const_op_delegate &f) const
+void esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::
+  foreach_operand_impl_const(expr2t::const_op_delegate &f) const
 {
   superclass::foreach_operand_impl_const_rec(f);
 }
@@ -78,9 +75,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-void esbmct::
-  expr_methods2<derived, baseclass, traits, enable, fields>::
-    foreach_operand_impl(expr2t::op_delegate &f)
+void esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::
+  foreach_operand_impl(expr2t::op_delegate &f)
 {
   superclass::foreach_operand_impl_rec(f);
 }
@@ -93,9 +89,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-void esbmct::
-  type_methods2<derived, baseclass, traits, enable, fields>::
-    foreach_subtype_impl_const(type2t::const_subtype_delegate &f) const
+void esbmct::type_methods2<derived, baseclass, traits, enable, fields>::
+  foreach_subtype_impl_const(type2t::const_subtype_delegate &f) const
 {
   superclass::foreach_subtype_impl_const_rec(f);
 }
@@ -106,9 +101,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-void esbmct::
-  type_methods2<derived, baseclass, traits, enable, fields>::
-    foreach_subtype_impl(type2t::subtype_delegate &f)
+void esbmct::type_methods2<derived, baseclass, traits, enable, fields>::
+  foreach_subtype_impl(type2t::subtype_delegate &f)
 {
   superclass::foreach_subtype_impl_rec(f);
 }
@@ -119,9 +113,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-auto esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::clone()
-    const -> base_container2tc
+auto esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::clone()
+  const -> base_container2tc
 {
   const derived *derived_this = static_cast<const derived *>(this);
   // Use std::make_shared to clone this with one allocation, it puts the ref
@@ -140,8 +133,8 @@ template <
   typename enable,
   typename fields>
 list_of_memberst
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
-  tostring(unsigned int indent) const
+esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::tostring(
+  unsigned int indent) const
 {
   list_of_memberst thevector;
 
@@ -155,9 +148,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-bool esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::cmp(
-    const base2t &ref) const
+bool esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::cmp(
+  const base2t &ref) const
 {
   return cmp_rec(ref); // _includes_ type_id / expr_id
 }
@@ -168,9 +160,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-int esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::lt(
-    const base2t &ref) const
+int esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::lt(
+  const base2t &ref) const
 {
   return lt_rec(ref); // _includes_ type_id / expr_id
 }
@@ -182,8 +173,8 @@ template <
   typename enable,
   typename fields>
 size_t
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
-  do_crc() const
+esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::do_crc()
+  const
 {
   if(this->crc_val != 0)
     return this->crc_val;
@@ -204,9 +195,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-void esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::hash(
-    crypto_hash &hash) const
+void esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::hash(
+  crypto_hash &hash) const
 {
   hash_rec(hash); // _includes_ type_id / expr_id
 }
@@ -219,10 +209,9 @@ template <
   typename traits,
   typename enable,
   typename fields>
-void esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::
-    tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent)
-      const
+void esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
+  tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent)
+    const
 {
   // Skip over type fields in expressions. Alas, this is a design oversight,
   // without this we would screw up the field name list.
@@ -252,9 +241,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-bool esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::cmp_rec(
-    const base2t &ref) const
+bool esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::cmp_rec(
+  const base2t &ref) const
 {
   const derived *derived_this = static_cast<const derived *>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
@@ -272,9 +260,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-int esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::lt_rec(
-    const base2t &ref) const
+int esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::lt_rec(
+  const base2t &ref) const
 {
   int tmp;
   const derived *derived_this = static_cast<const derived *>(this);
@@ -294,9 +281,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-void esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::
-    do_crc_rec() const
+void esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
+  do_crc_rec() const
 {
   const derived *derived_this = static_cast<const derived *>(this);
   auto m_ptr = membr_ptr::value;
@@ -313,9 +299,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-void esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::
-    hash_rec(crypto_hash &hash) const
+void esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
+  hash_rec(crypto_hash &hash) const
 {
   const derived *derived_this = static_cast<const derived *>(this);
   auto m_ptr = membr_ptr::value;
@@ -351,8 +336,7 @@ template <
   typename traits,
   typename enable,
   typename fields>
-expr2tc *
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
+expr2tc *esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
   get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
 {
   expr2tc *ptr;
@@ -372,8 +356,7 @@ template <
   typename traits,
   typename enable,
   typename fields>
-unsigned int
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
+unsigned int esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
   get_num_sub_exprs_rec() const
 {
   unsigned int num = 0;
@@ -391,9 +374,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-void esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::
-    foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
+void esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
+  foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
 {
   const derived *derived_this = static_cast<const derived *>(this);
   auto m_ptr = membr_ptr::value;
@@ -410,9 +392,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-void esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::
-    foreach_operand_impl_rec(expr2t::op_delegate &f)
+void esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
+  foreach_operand_impl_rec(expr2t::op_delegate &f)
 {
   derived *derived_this = static_cast<derived *>(this);
   auto m_ptr = membr_ptr::value;
@@ -467,9 +448,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-void esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::
-    foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &f) const
+void esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
+  foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &f) const
 {
   const derived *derived_this = static_cast<const derived *>(this);
   auto m_ptr = membr_ptr::value;
@@ -486,9 +466,8 @@ template <
   typename traits,
   typename enable,
   typename fields>
-void esbmct::
-  irep_methods2<derived, baseclass, traits, enable, fields>::
-    foreach_subtype_impl_rec(type2t::subtype_delegate &f)
+void esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
+  foreach_subtype_impl_rec(type2t::subtype_delegate &f)
 {
   derived *derived_this = static_cast<derived *>(this);
   auto m_ptr = membr_ptr::value;

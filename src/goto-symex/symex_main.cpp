@@ -521,8 +521,8 @@ void goto_symext::run_intrinsic(
       auto typecast = typecast2tc(subtype, x);
       members.push_back(typecast);
     }
-    expr2tc result = constant_vector2tc(
-      func_call.ret->type, std::move(members));
+    expr2tc result =
+      constant_vector2tc(func_call.ret->type, std::move(members));
     expr2tc ret_ref = func_call.ret;
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
@@ -564,8 +564,8 @@ void goto_symext::run_intrinsic(
       index = index % v1_size;
       members.push_back(vec.datatype_members[index]);
     }
-    expr2tc result = constant_vector2tc(
-      func_call.ret->type, std::move(members));
+    expr2tc result =
+      constant_vector2tc(func_call.ret->type, std::move(members));
     expr2tc ret_ref = func_call.ret;
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
@@ -729,8 +729,8 @@ void goto_symext::add_memory_leak_checks()
     // each dynamic allocation, and the allocation success status
     // is described by a separate "allocation_guard".
     // (see "symex_mem" method in "goto-symex/builtin_functions.cpp").
-    expr2tc cond = if2tc(
-      eq->type, it.alloc_guard.as_expr(), eq, gen_true_expr());
+    expr2tc cond =
+      if2tc(eq->type, it.alloc_guard.as_expr(), eq, gen_true_expr());
 
     replace_dynamic_allocation(cond);
     cur_state->rename(cond);

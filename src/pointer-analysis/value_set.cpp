@@ -990,8 +990,8 @@ void value_sett::assign(
 
     // Build a sym specific to this type. Give l1 number to guard against
     // recursively entering this code path
-    expr2tc xchg_sym = symbol2tc(
-      lhs->type, xchg_name, symbol2t::level1, xchg_num++, 0, 0, 0);
+    expr2tc xchg_sym =
+      symbol2tc(lhs->type, xchg_name, symbol2t::level1, xchg_num++, 0, 0, 0);
 
     assign(xchg_sym, ifref.true_value, false);
     assign(xchg_sym, ifref.false_value, true);

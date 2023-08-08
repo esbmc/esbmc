@@ -2234,8 +2234,8 @@ void dereferencet::bounds_check(
       return;
 
     // Secondly, try to calc the size of the array.
-    expr2tc subtype_size = constant_int2tc(
-      size_type2(), type_byte_size(arr_type.subtype));
+    expr2tc subtype_size =
+      constant_int2tc(size_type2(), type_byte_size(arr_type.subtype));
     expr2tc array_size = typecast2tc(size_type2(), arr_type.array_size);
     arrsize = mul2tc(size_type2(), array_size, subtype_size);
   }

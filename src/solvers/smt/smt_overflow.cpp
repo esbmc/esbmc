@@ -33,10 +33,10 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       expr2tc negop2 = not2tc(op2pos);
       expr2tc both_neg = and2tc(negop1, negop2);
 
-      expr2tc nooverflow = implies2tc(
-        both_pos, greaterthanequal2tc(overflow.operand, zero));
-      expr2tc nounderflow = implies2tc(
-        both_neg, lessthanequal2tc(overflow.operand, zero));
+      expr2tc nooverflow =
+        implies2tc(both_pos, greaterthanequal2tc(overflow.operand, zero));
+      expr2tc nounderflow =
+        implies2tc(both_neg, lessthanequal2tc(overflow.operand, zero));
       return convert_ast(not2tc(and2tc(nooverflow, nounderflow)));
     }
 
@@ -82,8 +82,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       uint64_t topbit = 1ULL << (opers.side_1->type->get_width() - 1);
       expr2tc min_int = constant_int2tc(opers.side_1->type, -BigInt(topbit));
       expr2tc is_min_int = equality2tc(min_int, opers.side_1);
-      expr2tc imp = implies2tc(
-        is_min_int, greaterthan2tc(overflow.operand, zero));
+      expr2tc imp =
+        implies2tc(is_min_int, greaterthan2tc(overflow.operand, zero));
 
       expr2tc minus_one = constant_int2tc(opers.side_1->type, -BigInt(1));
       expr2tc is_minus_one = equality2tc(minus_one, opers.side_2);
@@ -211,8 +211,8 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   const overflow_neg2t &neg = to_overflow_neg2t(expr);
   unsigned int width = neg.operand->type->get_width();
 
-  expr2tc min_int = constant_int2tc(
-    neg.operand->type, BigInt(1 << (width - 1)));
+  expr2tc min_int =
+    constant_int2tc(neg.operand->type, BigInt(1 << (width - 1)));
   expr2tc val = equality2tc(neg.operand, min_int);
   return convert_ast(val);
 }

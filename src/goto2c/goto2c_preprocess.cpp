@@ -492,7 +492,8 @@ void goto2ct::remove_unsupported_instructions(goto_programt &goto_program)
 //
 //      "memcpy(array1, array2, <size_of_array2>);"
 //
-expr2tc goto2ct::replace_array_assignment_with_memcpy(const code_assign2t &assign)
+expr2tc
+goto2ct::replace_array_assignment_with_memcpy(const code_assign2t &assign)
 {
   // Creating a compound literal from the RHS
   expr2tc type_cast = typecast2tc(assign.source->type, assign.source);

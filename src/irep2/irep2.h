@@ -1093,11 +1093,7 @@ protected:
 // Base instance of irep_methods2. This is a template specialization that
 // matches (via boost::enable_if) when the list of fields to operate on is
 // now empty. Finish up the remaining computation, if any.
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields>
+template <class derived, class baseclass, typename traits, typename fields>
 class irep_methods2<
   derived,
   baseclass,
@@ -1217,8 +1213,7 @@ class expr_methods2
   : public irep_methods2<derived, baseclass, traits, fields, enable>
 {
 public:
-  typedef irep_methods2<derived, baseclass, traits, fields, enable>
-    superclass;
+  typedef irep_methods2<derived, baseclass, traits, fields, enable> superclass;
 
   template <typename... Args>
   expr_methods2(const Args &...args) : superclass(args...)
@@ -1252,8 +1247,7 @@ class type_methods2
   : public irep_methods2<derived, baseclass, traits, fields, enable>
 {
 public:
-  typedef irep_methods2<derived, baseclass, traits, fields, enable>
-    superclass;
+  typedef irep_methods2<derived, baseclass, traits, fields, enable> superclass;
 
   template <typename... Args>
   type_methods2(const Args &...args) : superclass(args...)
