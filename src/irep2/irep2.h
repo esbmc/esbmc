@@ -938,10 +938,12 @@ public:
   typedef expr2t base2t;
 };
 
-// Hack to force something2tc to always construct the traits' type, rather
-// that copy construct. Due to misery and ambiguity elsewhere.
+// "Specialisation" for expr kinds where the type is derived, like boolean
+// typed exprs. Should actually become a more structured expr2t_traits
+// that can be specialised in this way, at a later date. Might want to
+// move the presumed type down to the _data class at that time too.
 template <typename... Args>
-class expr2t_traits_always_construct
+class expr2t_traits_notype
 {
 public:
   typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>

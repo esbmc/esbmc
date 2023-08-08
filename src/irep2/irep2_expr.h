@@ -387,7 +387,7 @@ public:
 
   // Type mangling:
   typedef esbmct::field_traits<expr2tc, bool_1op, &bool_1op::value> value_field;
-  typedef esbmct::expr2t_traits_always_construct<value_field> traits;
+  typedef esbmct::expr2t_traits_notype<value_field> traits;
 };
 
 class logic_2ops : public logical_ops
@@ -665,7 +665,7 @@ public:
   invalid_pointer_ops(const invalid_pointer_ops &ref) = default;
 
   // Type mangling:
-  typedef esbmct::expr2t_traits_always_construct<ptr_obj_field> traits;
+  typedef esbmct::expr2t_traits_notype<ptr_obj_field> traits;
 };
 
 class byte_ops : public expr2t
@@ -964,7 +964,7 @@ public:
   // Type mangling:
   typedef esbmct::field_traits<expr2tc, object_ops, &object_ops::value>
     value_field;
-  typedef esbmct::expr2t_traits_always_construct<value_field> traits;
+  typedef esbmct::expr2t_traits_notype<value_field> traits;
 };
 
 class sideeffect_data : public expr2t
@@ -1149,7 +1149,7 @@ public:
   typedef esbmct::
     field_traits<expr2tc, code_expression_data, &code_expression_data::operand>
       operand_field;
-  typedef esbmct::expr2t_traits_always_construct<operand_field> traits;
+  typedef esbmct::expr2t_traits_notype<operand_field> traits;
 };
 
 class code_goto_data : public code_base
