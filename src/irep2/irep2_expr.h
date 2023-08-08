@@ -66,7 +66,7 @@ public:
   typedef esbmct::
     field_traits<fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value>
       value_field;
-  typedef esbmct::expr2t_traits_notype<value_field> traits;
+  typedef esbmct::expr2t_traits<value_field> traits;
 };
 
 class constant_floatbv_data : public constant2t
@@ -89,7 +89,7 @@ public:
     constant_floatbv_data,
     &constant_floatbv_data::value>
     value_field;
-  typedef esbmct::expr2t_traits_notype<value_field> traits;
+  typedef esbmct::expr2t_traits<value_field> traits;
 };
 
 class constant_datatype_data : public constant2t
@@ -155,7 +155,7 @@ public:
   typedef esbmct::
     field_traits<bool, constant_bool_data, &constant_bool_data::value>
       value_field;
-  typedef esbmct::expr2t_traits_notype<value_field> traits;
+  typedef esbmct::expr2t_traits<value_field> traits;
 };
 
 class constant_array_of_data : public constant2t
@@ -362,7 +362,7 @@ public:
     side_1_field;
   typedef esbmct::field_traits<expr2tc, relation_data, &relation_data::side_2>
     side_2_field;
-  typedef esbmct::expr2t_traits_notype<side_1_field, side_2_field> traits;
+  typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
 };
 
 class logical_ops : public expr2t
@@ -411,7 +411,7 @@ public:
     side_1_field;
   typedef esbmct::field_traits<expr2tc, logic_2ops, &logic_2ops::side_2>
     side_2_field;
-  typedef esbmct::expr2t_traits_notype<side_1_field, side_2_field> traits;
+  typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
 };
 
 class bitops : public expr2t
@@ -633,7 +633,7 @@ public:
   typedef esbmct::
     field_traits<expr2tc, same_object_data, &same_object_data::side_2>
       side_2_field;
-  typedef esbmct::expr2t_traits_notype<side_1_field, side_2_field> traits;
+  typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
 };
 
 class pointer_ops : public expr2t
@@ -873,7 +873,7 @@ public:
   // Type mangling:
   typedef esbmct::field_traits<expr2tc, overflow_ops, &overflow_ops::operand>
     operand_field;
-  typedef esbmct::expr2t_traits_notype<operand_field> traits;
+  typedef esbmct::expr2t_traits<operand_field> traits;
 };
 
 class overflow_cast_data : public overflow_ops
@@ -897,7 +897,7 @@ public:
   typedef esbmct::
     field_traits<unsigned int, overflow_cast_data, &overflow_cast_data::bits>
       bits_field;
-  typedef esbmct::expr2t_traits_notype<operand_field, bits_field> traits;
+  typedef esbmct::expr2t_traits<operand_field, bits_field> traits;
 };
 
 class dynamic_object_data : public expr2t
@@ -1065,7 +1065,7 @@ public:
     code_block_data,
     &code_block_data::operands>
     operands_field;
-  typedef esbmct::expr2t_traits_notype<operands_field> traits;
+  typedef esbmct::expr2t_traits<operands_field> traits;
 };
 
 class code_assign_data : public code_base
@@ -1091,7 +1091,7 @@ public:
   typedef esbmct::
     field_traits<expr2tc, code_assign_data, &code_assign_data::source>
       source_field;
-  typedef esbmct::expr2t_traits_notype<target_field, source_field> traits;
+  typedef esbmct::expr2t_traits<target_field, source_field> traits;
 };
 
 class code_decl_data : public code_base
@@ -1131,7 +1131,7 @@ public:
     code_printf_data,
     &code_printf_data::operands>
     operands_field;
-  typedef esbmct::expr2t_traits_notype<operands_field> traits;
+  typedef esbmct::expr2t_traits<operands_field> traits;
 };
 
 class code_expression_data : public code_base
@@ -1167,7 +1167,7 @@ public:
   typedef esbmct::
     field_traits<irep_idt, code_goto_data, &code_goto_data::target>
       target_field;
-  typedef esbmct::expr2t_traits_notype<target_field> traits;
+  typedef esbmct::expr2t_traits<target_field> traits;
 };
 
 class object_desc_data : public expr2t
@@ -1233,7 +1233,7 @@ public:
     &code_funccall_data::operands>
     operands_field;
   typedef esbmct::
-    expr2t_traits_notype<ret_field, function_field, operands_field>
+    expr2t_traits<ret_field, function_field, operands_field>
       traits;
 };
 
@@ -1300,7 +1300,7 @@ public:
     code_cpp_catch_data,
     &code_cpp_catch_data::exception_list>
     exception_list_field;
-  typedef esbmct::expr2t_traits_notype<exception_list_field> traits;
+  typedef esbmct::expr2t_traits<exception_list_field> traits;
 };
 
 class code_cpp_throw_data : public code_base
@@ -1328,7 +1328,7 @@ public:
     code_cpp_throw_data,
     &code_cpp_throw_data::exception_list>
     exception_list_field;
-  typedef esbmct::expr2t_traits_notype<operand_field, exception_list_field>
+  typedef esbmct::expr2t_traits<operand_field, exception_list_field>
     traits;
 };
 
@@ -1352,7 +1352,7 @@ public:
     code_cpp_throw_decl_data,
     &code_cpp_throw_decl_data::exception_list>
     exception_list_field;
-  typedef esbmct::expr2t_traits_notype<exception_list_field> traits;
+  typedef esbmct::expr2t_traits<exception_list_field> traits;
 };
 
 class extract_data : public expr2t
