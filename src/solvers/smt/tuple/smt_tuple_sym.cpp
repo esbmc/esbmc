@@ -154,10 +154,8 @@ expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
     if(is_nil_expr(outmem[0]))
       return expr2tc();
 
-    unsigned int num =
-      to_constant_int2t(outmem[0]).value.to_uint64();
-    unsigned int offs =
-      to_constant_int2t(outmem[1]).value.to_uint64();
+    unsigned int num = to_constant_int2t(outmem[0]).value.to_uint64();
+    unsigned int offs = to_constant_int2t(outmem[1]).value.to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return ctx->pointer_logic.back().pointer_expr(p, expr->type);
   }

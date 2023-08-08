@@ -554,7 +554,8 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr, c_typet c_type)
     {
       const array_type2t &arr_type = to_array_type(expr_type);
       const pointer_type2t &ptr_type = to_pointer_type(new_type);
-      expr2tc index_expr = index2tc(arr_type.subtype, expr, gen_zero(index_type2()));
+      expr2tc index_expr =
+        index2tc(arr_type.subtype, expr, gen_zero(index_type2()));
       expr2tc addrof = address_of2tc(ptr_type.subtype, index_expr);
       expr = addrof;
     }
