@@ -850,11 +850,23 @@ static inline std::string get_expr_id(const expr2tc &expr)
  *    is_${suffix}()
  *    to_${suffix}()
  *
- *  For expr2tc the suffix the name of the class, while for type2t it is the
+ *  For expr2tc the suffix is the name of the class, while for type2t it is the
  *  name of the class without the trailing "2t", e.g.
  *
  *    is_bool_type(type)
  *    to_constant_int2t(expr)
+ *
+ *  The to_* functions return a (const) reference for a (const) expr2tc or
+ *  type2tc parameter. The non-const versions perform a so-called "detach"
+ *  operation, which ensures that the to-be-modified object is not referenced by
+ *  any other irep2 terms in use. This detach operation is explained in more
+ *  detail in the comment about irep_container. Because const-ness is used to
+ *  decide whether to detach or not, when working with irep2 it is *critical*
+ *  that const_cast<>() is used only where it's safe to. Best practice is to
+ *  put a formal safety proof into the comment about const_cast usage.
+ *
+ *  The above functions are defined by type_macros and expr_macros in the
+ *  respective irep2 header.
  *
  *  ----
  *
