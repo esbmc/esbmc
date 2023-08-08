@@ -234,8 +234,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     if(!is_nil_expr(call.ret))
     {
       unsigned int &nondet_count = get_nondet_counter();
-      expr2tc rhs = symbol2tc(
-        call.ret->type, "nondet$symex::" + i2string(nondet_count++));
+      expr2tc rhs =
+        symbol2tc(call.ret->type, "nondet$symex::" + i2string(nondet_count++));
 
       symex_assign(code_assign2tc(call.ret, rhs));
     }

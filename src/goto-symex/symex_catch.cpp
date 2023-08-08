@@ -280,8 +280,8 @@ void goto_symext::update_throw_target(
   const code_cpp_throw2t &throw_insn = to_code_cpp_throw2t(code);
 
   // Generate a name to assign this to.
-  expr2tc thrown_obj = symbol2tc(
-    throw_insn.operand->type, irep_idt("symex_throw::thrown_obj"));
+  expr2tc thrown_obj =
+    symbol2tc(throw_insn.operand->type, irep_idt("symex_throw::thrown_obj"));
   expr2tc operand = throw_insn.operand;
   symex_assign(code_assign2tc(thrown_obj, operand));
 

@@ -1051,8 +1051,8 @@ static inline expr2tc gen_value_by_byte(
       // TODO: We need a better way to detect bitfields
       if(has_prefix(name.as_string(), "bit_field_pad$"))
         return expr2tc();
-      expr2tc local_member = member2tc(
-        to_struct_type(type).members[i], src, name);
+      expr2tc local_member =
+        member2tc(to_struct_type(type).members[i], src, name);
 
       // Since it is a symbol, lets start from the old value
       if(is_pointer_type(to_struct_type(type).members[i]))

@@ -152,8 +152,7 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
   {
     for(unsigned int i = 0; i < strct.members.size(); i++)
       outmem.emplace_back();
-    return constant_struct2tc(
-      tuple->sort->get_tuple_type(), std::move(outmem));
+    return constant_struct2tc(tuple->sort->get_tuple_type(), std::move(outmem));
   }
 
   // Run through all fields and despatch to 'get' again.
@@ -217,8 +216,7 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
       pointer_logict::pointert(num, offs), pointer_type2tc(get_empty_type()));
   }
 
-  return constant_struct2tc(
-    tuple->sort->get_tuple_type(), std::move(outmem));
+  return constant_struct2tc(tuple->sort->get_tuple_type(), std::move(outmem));
 }
 
 expr2tc smt_tuple_node_flattener::tuple_get_array_elem(
@@ -237,10 +235,7 @@ smt_astt smt_tuple_node_flattener::tuple_array_of(
   uint64_t elems = 1ULL << array_size;
   type2tc array_type = array_type2tc(init_val->type, gen_ulong(elems), false);
   smt_sortt array_sort = new smt_sort(
-    SMT_SORT_ARRAY,
-    array_type,
-    array_size,
-    ctx->convert_sort(init_val->type));
+    SMT_SORT_ARRAY, array_type, array_size, ctx->convert_sort(init_val->type));
 
   return array_conv.convert_array_of_wsort(
     ctx->convert_ast(init_val), array_size, array_sort);
