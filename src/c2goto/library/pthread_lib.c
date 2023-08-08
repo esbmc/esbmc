@@ -48,9 +48,9 @@ void(
 /* TODO: these should be 'static', right? */
 pthread_key_t __ESBMC_next_thread_key = 0;
 
-unsigned int __ESBMC_num_total_threads = 0;
-unsigned int __ESBMC_num_threads_running = 0;
-unsigned int __ESBMC_blocked_threads_count = 0;
+unsigned short int __ESBMC_num_total_threads = 0;
+unsigned short int __ESBMC_num_threads_running = 0;
+unsigned short int __ESBMC_blocked_threads_count = 0;
 
 pthread_t __ESBMC_get_thread_id(void);
 
