@@ -27,7 +27,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   {
     auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 
-    equality2tc question(gen_true_expr(), new_guard);
+    expr2tc question = equality2tc(gen_true_expr(), new_guard);
     try
     {
       tvt res = rte->ask_solver_question(question);
@@ -193,7 +193,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       do_simplify(guard_expr);
     }
 
-    not2tc not_guard_expr(guard_expr);
+    expr2tc not_guard_expr = not2tc(guard_expr);
     do_simplify(not_guard_expr);
 
     if(forward)

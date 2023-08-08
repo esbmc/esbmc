@@ -1061,11 +1061,11 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
   }
 
   // Otherwise, run through all fields and despatch to 'get_by_ast' again.
-  constant_struct2tc outstruct(type, std::vector<expr2tc>());
+  std::vector<expr2tc> outmem;
   unsigned int i = 0;
   for(auto const &it : strct.members)
   {
-    outstruct->datatype_members.push_back(smt_convt::get_by_ast(
+    outmem.push_back(smt_convt::get_by_ast(
       it,
       new_ast(
         yices_select(1 + i, to_solver_smt_ast<yices_smt_ast>(sym)->a),
@@ -1073,7 +1073,7 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
     i++;
   }
 
-  return outstruct;
+  return constant_struct2tc(type, std::move(outmem));
 }
 
 expr2tc yices_convt::tuple_get(const expr2tc &expr)
@@ -1104,16 +1104,16 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
   }
 
   // Otherwise, run through all fields and despatch to 'get' again.
-  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
+  std::vector<expr2tc> outmem;
   unsigned int i = 0;
   for(auto const &it : strct.members)
   {
-    member2tc memb(it, expr, strct.member_names[i]);
-    outstruct->datatype_members.push_back(get(memb));
+    expr2tc memb = member2tc(it, expr, strct.member_names[i]);
+    outmem.push_back(get(memb));
     i++;
   }
 
-  return outstruct;
+  return constant_struct2tc(expr->type, std::move(outmem));
 }
 
 void yices_convt::print_model()

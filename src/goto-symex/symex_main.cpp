@@ -19,7 +19,7 @@
 bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
 {
   auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
-  equality2tc question(gen_true_expr(), expr);
+  expr2tc question = equality2tc(gen_true_expr(), expr);
   try
   {
     // check whether the assertion holds
@@ -209,28 +209,29 @@ void goto_symext::symex_step(reachability_treet &art)
   case ASSIGN:
     if(!cur_state->guard.is_false())
     {
-      code_assign2tc deref_code(to_code_assign2t(instruction.code));
+      code_assign2t deref_code = to_code_assign2t(instruction.code); // copy
 
       // XXX jmorse -- this is not fully symbolic.
       if(auto it = thrown_obj_map.find(cur_state->source.pc);
          it != thrown_obj_map.end())
       {
-        const symbol2tc &thrown_obj = it->second;
+        const expr2tc &thrown_obj = it->second;
+        assert(is_symbol2t(thrown_obj));
 
         if(
-          is_pointer_type(deref_code->target->type) &&
+          is_pointer_type(deref_code.target->type) &&
           !is_pointer_type(thrown_obj->type))
         {
           expr2tc new_thrown_obj = address_of2tc(thrown_obj->type, thrown_obj);
-          deref_code->source = new_thrown_obj;
+          deref_code.source = new_thrown_obj;
         }
         else
-          deref_code->source = thrown_obj;
+          deref_code.source = thrown_obj;
 
         thrown_obj_map.erase(cur_state->source.pc);
       }
 
-      symex_assign(deref_code);
+      symex_assign(code_assign2tc(std::move(deref_code)));
     }
 
     cur_state->source.pc++;
@@ -520,7 +521,8 @@ void goto_symext::run_intrinsic(
       auto typecast = typecast2tc(subtype, x);
       members.push_back(typecast);
     }
-    constant_vector2tc result(func_call.ret->type, members);
+    expr2tc result = constant_vector2tc(
+      func_call.ret->type, std::move(members));
     expr2tc ret_ref = func_call.ret;
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
@@ -562,7 +564,8 @@ void goto_symext::run_intrinsic(
       index = index % v1_size;
       members.push_back(vec.datatype_members[index]);
     }
-    constant_vector2tc result(func_call.ret->type, members);
+    expr2tc result = constant_vector2tc(
+      func_call.ret->type, std::move(members));
     expr2tc ret_ref = func_call.ret;
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
@@ -647,7 +650,7 @@ void goto_symext::run_intrinsic(
     // Get the argument
     expr2tc arg0 = func_call.operands[0];
     internal_deref_items.clear();
-    dereference2tc deref(get_empty_type(), arg0);
+    expr2tc deref = dereference2tc(get_empty_type(), arg0);
     dereference(deref, dereferencet::INTERNAL);
 
     for(const auto &item : internal_deref_items)
@@ -714,11 +717,11 @@ void goto_symext::add_memory_leak_checks()
       continue;
 
     // Assert that the allocated object was freed.
-    deallocated_obj2tc deallocd(it.obj);
+    expr2tc deallocd = deallocated_obj2tc(it.obj);
 
     // For each dynamic object we generate a condition checking
     // whether it has been deallocated.
-    equality2tc eq(deallocd, gen_true_expr());
+    expr2tc eq = equality2tc(deallocd, gen_true_expr());
 
     // Additionally, we need to make sure that we check the above condition
     // only for dynamic objects that were created from successful
@@ -726,7 +729,8 @@ void goto_symext::add_memory_leak_checks()
     // each dynamic allocation, and the allocation success status
     // is described by a separate "allocation_guard".
     // (see "symex_mem" method in "goto-symex/builtin_functions.cpp").
-    if2tc cond(eq->type, it.alloc_guard.as_expr(), eq, gen_true_expr());
+    expr2tc cond = if2tc(
+      eq->type, it.alloc_guard.as_expr(), eq, gen_true_expr());
 
     replace_dynamic_allocation(cond);
     cur_state->rename(cond);

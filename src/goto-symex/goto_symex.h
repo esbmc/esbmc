@@ -104,9 +104,9 @@ public:
    *  These guards are symbolic names for the truth of a guard on a GOTO jump.
    *  Assertions and other activity during the course of symbolic execution
    *  encode these execution guard in them.
-   *  @return Symbol of the guard
+   *  @return Symbol expression naming the guard
    */
-  symbol2tc guard_identifier()
+  expr2tc guard_identifier()
   {
     return symbol2tc(
       get_bool_type(),
@@ -834,9 +834,9 @@ protected:
 
   /** Map of currently active exception targets, i.e. instructions where an
    *  exception is going to be merged in in the future. Keys are iterators to
-   *  the instruction catching the object; domain is a symbol that the thrown
-   *  piece of data has been assigned to. */
-  std::map<goto_programt::const_targett, symbol2tc> thrown_obj_map;
+   *  the instruction catching the object; values are the symbols that the
+   *  thrown piece of data has been assigned to. */
+  std::map<goto_programt::const_targett, expr2tc> thrown_obj_map;
 
   /** Flag to indicate if we are go into the unexpected flow. */
   bool inside_unexpected;

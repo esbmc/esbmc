@@ -474,7 +474,7 @@ struct Subtor
       expr2tc c1 = op1;
       if(get_value(c1) == 0)
       {
-        neg2tc c(op2->type, op2);
+        expr2tc c = neg2tc(op2->type, op2);
         ::simplify(c);
         return c;
       }
@@ -748,14 +748,13 @@ expr2tc neg2t::do_simplify() const
 {
   if(is_constant_vector2t(value))
   {
-    constant_vector2tc vector(to_constant_vector2t(value));
-    for(size_t i = 0; i < vector->datatype_members.size(); i++)
+    std::vector<expr2tc> members = to_constant_vector2t(value).datatype_members;
+    for(size_t i = 0; i < members.size(); i++)
     {
-      auto &op = vector->datatype_members[i];
-      neg2tc neg(op->type, op);
-      vector->datatype_members[i] = neg;
+      auto &op = members[i];
+      members[i] = neg2tc(op->type, op);
     }
-    return vector;
+    return constant_vector2tc(value->type, std::move(members));
   }
   return simplify_arith_1op<Negator, neg2t>(type, value);
 }
@@ -793,9 +792,9 @@ expr2tc with2t::do_simplify() const
     assert(no < c_struct.datatype_members.size());
 
     // Clone constant struct, update its field according to this "with".
-    constant_struct2tc s = c_struct;
-    s->datatype_members[no] = update_value;
-    return expr2tc(s);
+    constant_struct2t copy = c_struct;
+    copy.datatype_members[no] = update_value;
+    return constant_struct2tc(std::move(copy));
   }
   if(is_constant_union2t(source_value))
   {
@@ -828,9 +827,9 @@ expr2tc with2t::do_simplify() const
     if(index.value >= array.datatype_members.size())
       return expr2tc();
 
-    constant_array2tc arr = array;
-    arr->datatype_members[index.as_ulong()] = update_value;
-    return arr;
+    constant_array2t arr = array; // copy
+    arr.datatype_members[index.as_ulong()] = update_value;
+    return constant_array2tc(std::move(arr));
   }
   else if(is_constant_vector2t(source_value))
   {
@@ -845,9 +844,9 @@ expr2tc with2t::do_simplify() const
     if(index.value >= vec.datatype_members.size())
       return expr2tc();
 
-    constant_vector2tc vec2 = vec;
-    vec2->datatype_members[index.as_ulong()] = update_value;
-    return vec2;
+    constant_vector2t vec2 = vec; // copy
+    vec2.datatype_members[index.as_ulong()] = update_value;
+    return constant_vector2tc(std::move(vec2));
   }
   else if(is_constant_array_of2t(source_value))
   {
@@ -992,7 +991,7 @@ expr2tc pointer_offset2t::do_simplify() const
     if(non_ptr_op->type != type)
       non_ptr_op = typecast2tc(type, non_ptr_op);
 
-    mul2tc new_non_ptr_op(type, non_ptr_op, type_size);
+    expr2tc new_non_ptr_op = mul2tc(type, non_ptr_op, type_size);
 
     expr2tc new_add = add2tc(type, new_ptr_op, new_non_ptr_op);
 
@@ -1544,14 +1543,13 @@ expr2tc bitnot2t::do_simplify() const
 
   if(is_constant_vector2t(value))
   {
-    constant_vector2tc vector(to_constant_vector2t(value));
-    for(size_t i = 0; i < vector->datatype_members.size(); i++)
+    constant_vector2t vector = to_constant_vector2t(value); // copy
+    for(size_t i = 0; i < vector.datatype_members.size(); i++)
     {
-      auto &op = vector->datatype_members[i];
-      bitnot2tc neg(op->type, op);
-      vector->datatype_members[i] = neg;
+      auto &op = vector.datatype_members[i];
+      vector.datatype_members[i] = bitnot2tc(op->type, op);
     }
-    return vector;
+    return constant_vector2tc(std::move(vector));
   }
 
   return do_bit_munge_operation<bitnot2t>(op, type, value, value);

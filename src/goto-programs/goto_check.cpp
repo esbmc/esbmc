@@ -186,7 +186,7 @@ void goto_checkt::float_overflow_check(
     expr2tc new_inf = isinf2tc(expr);
     make_not(new_inf);
 
-    or2tc overflow_check(op0_inf, new_inf);
+    expr2tc overflow_check = or2tc(op0_inf, new_inf);
 
     add_guarded_claim(
       overflow_check,
@@ -200,12 +200,12 @@ void goto_checkt::float_overflow_check(
     // Can overflow
     expr2tc op0_inf = isinf2tc(side_1);
     expr2tc op1_inf = isinf2tc(side_2);
-    or2tc operands_or(op0_inf, op1_inf);
+    expr2tc operands_or = or2tc(op0_inf, op1_inf);
 
     expr2tc new_inf = isinf2tc(expr);
     make_not(new_inf);
 
-    or2tc overflow_check(operands_or, new_inf);
+    expr2tc overflow_check = or2tc(operands_or, new_inf);
 
     add_guarded_claim(
       overflow_check,
@@ -490,21 +490,21 @@ void goto_checkt::shift_check(
   expr2tc zero = gen_zero(right_op->type);
   assert(!is_nil_expr(zero));
 
-  greaterthanequal2tc right_op_non_negative(right_op, zero);
+  expr2tc right_op_non_negative = greaterthanequal2tc(right_op, zero);
 
   auto left_op = (*expr->get_sub_expr(0));
   auto left_op_type = left_op->type;
   expr2tc left_op_type_size =
     constant_int2tc(left_op_type, BigInt(left_op_type->get_width()));
 
-  lessthan2tc right_op_size_check(right_op, left_op_type_size);
+  expr2tc right_op_size_check = lessthan2tc(right_op, left_op_type_size);
 
-  and2tc ub_check(right_op_non_negative, right_op_size_check);
+  expr2tc ub_check = and2tc(right_op_non_negative, right_op_size_check);
 
   if(is_shl2t(expr) && is_signedbv_type(left_op))
   {
     zero = gen_zero(left_op->type);
-    greaterthanequal2tc left_op_non_negative(left_op, zero);
+    expr2tc left_op_non_negative = greaterthanequal2tc(left_op, zero);
     ub_check = and2tc(ub_check, left_op_non_negative);
   }
 
@@ -554,7 +554,7 @@ void goto_checkt::pointer_rel_check(
     expr2tc side_1 = *expr->get_sub_expr(0);
     expr2tc side_2 = *expr->get_sub_expr(1);
 
-    same_object2tc same_object(side_1, side_2);
+    expr2tc same_object = same_object2tc(side_1, side_2);
     add_guarded_claim(
       same_object, "Same object violation", "pointer", loc, guard);
   }
@@ -627,7 +627,7 @@ void goto_checkt::bounds_check(
   expr2tc zero = gen_zero(the_index->type);
   assert(!is_nil_expr(zero));
 
-  greaterthanequal2tc lower(the_index, zero);
+  expr2tc lower = greaterthanequal2tc(the_index, zero);
   add_guarded_claim(lower, name + " lower bound", "array bounds", loc, guard);
 
   assert(is_array_type(t) || is_string_type(t) || is_vector_type(t));
@@ -643,8 +643,8 @@ void goto_checkt::bounds_check(
       : constant_int2tc(get_uint32_type(), to_string_type(t).get_length());
 
   // Cast size to index type
-  typecast2tc casted_size(the_index->type, array_size);
-  lessthan2tc upper(the_index, casted_size);
+  expr2tc casted_size = typecast2tc(the_index->type, array_size);
+  expr2tc upper = lessthan2tc(the_index, casted_size);
   add_guarded_claim(upper, name + " upper bound", "array bounds", loc, guard);
 }
 

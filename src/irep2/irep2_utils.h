@@ -198,13 +198,13 @@ inline bool is_false(const expr2tc &expr)
 
 inline expr2tc gen_true_expr()
 {
-  static constant_bool2tc c(true);
+  static expr2tc c = constant_bool2tc(true);
   return c;
 }
 
 inline expr2tc gen_false_expr()
 {
-  static constant_bool2tc c(false);
+  static expr2tc c = constant_bool2tc(false);
   return c;
 }
 
@@ -225,8 +225,7 @@ inline expr2tc gen_ulong(unsigned long val)
 
 inline expr2tc gen_slong(signed long val)
 {
-  constant_int2tc v(get_int_type(config.ansi_c.word_size), BigInt(val));
-  return v;
+  return constant_int2tc(get_int_type(config.ansi_c.word_size), BigInt(val));
 }
 
 inline const type2tc &get_array_subtype(const type2tc &type)
@@ -466,16 +465,16 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
    */
   if(is_constant_vector2t(op1) && is_constant_vector2t(op2))
   {
-    constant_vector2tc vec1(to_constant_vector2t(op1));
+    std::vector<expr2tc> members = to_constant_vector2t(op1).datatype_members;
     const constant_vector2t *vec2 = &to_constant_vector2t(op2);
-    for(size_t i = 0; i < vec1->datatype_members.size(); i++)
+    for(size_t i = 0; i < members.size(); i++)
     {
-      auto &A = vec1->datatype_members[i];
+      auto &A = members[i];
       auto &B = vec2->datatype_members[i];
       auto new_op = func(A->type, A, B);
-      vec1->datatype_members[i] = new_op;
+      members[i] = new_op;
     }
-    return vec1;
+    return constant_vector2tc(op1->type, std::move(members));
   }
   /*
    * If only one of the operator is a vector, then the result
@@ -497,8 +496,9 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
   {
     bool is_op1_vec = is_constant_vector2t(op1);
     expr2tc c = !is_op1_vec ? op1 : op2;
-    constant_vector2tc vector(to_constant_vector2t(is_op1_vec ? op1 : op2));
-    for(auto &datatype_member : vector->datatype_members)
+    expr2tc v = is_op1_vec ? op1 : op2;
+    std::vector<expr2tc> members = to_constant_vector2t(v).datatype_members;
+    for(auto &datatype_member : members)
     {
       auto &op = datatype_member;
       auto e1 = is_op1_vec ? op : c;
@@ -506,7 +506,7 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
       auto new_op = func(op->type, e1, e2);
       datatype_member = new_op->do_simplify();
     }
-    return vector;
+    return constant_vector2tc(v->type, std::move(members));
   }
 }
 

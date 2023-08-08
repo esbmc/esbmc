@@ -12,7 +12,7 @@ std::array<unsigned int, 5> to_array(const crypto_hash &h)
   std::copy(h.hash, h.hash + 5, result.begin());
   return result;
 }
-struct_type2tc testing_struct2t()
+type2tc testing_struct2t()
 {
   std::vector<type2tc> struct_members{
     get_uint_type(config.ansi_c.word_size),
@@ -32,7 +32,7 @@ expr2tc gen_testing_overlap(unsigned v)
   return constant_int2tc(testing_overlap2t(), BigInt(v));
 }
 
-constant_struct2tc gen_testing_struct(unsigned int a, unsigned int b)
+expr2tc gen_testing_struct(unsigned int a, unsigned int b)
 {
   std::vector<expr2tc> members{gen_ulong(a), gen_ulong(b)};
   return constant_struct2tc(testing_struct2t(), members);

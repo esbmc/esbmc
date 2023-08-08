@@ -156,7 +156,7 @@ void goto_program_dereferencet::dereference_instruction(
       // Rather than derefing function ptr, which we're moving to not collect
       // via pointer analysis, instead just assert that it's a valid pointer.
       const dereference2t &deref = to_dereference2t(func_call.function);
-      invalid_pointer2tc invalid_ptr(deref.value);
+      expr2tc invalid_ptr = invalid_pointer2tc(deref.value);
       guardt guard;
       guard.add(invalid_ptr);
       if(!options.get_bool_option("no-pointer-check"))

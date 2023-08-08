@@ -229,11 +229,11 @@ void goto2ct::extract_initializers_from_esbmc_main()
   {
     if(instr.type == ASSIGN)
     {
-      code_assign2tc assign = to_code_assign2t(instr.code);
-      if(is_symbol2t(assign->target))
+      const code_assign2t &assign = to_code_assign2t(instr.code);
+      if(is_symbol2t(assign.target))
       {
-        const symbolt *sym = ns.lookup(to_symbol2t(assign->target).thename);
-        exprt init = migrate_expr_back(assign->source);
+        const symbolt *sym = ns.lookup(to_symbol2t(assign.target).thename);
+        exprt init = migrate_expr_back(assign.source);
         if(sym && sym->static_lifetime)
         {
           initializers[sym->id.as_string()] = init;
@@ -408,12 +408,12 @@ void goto2ct::adjust_invalid_assignment_rec(
   namespacet &ns)
 {
   assert(is_code_assign2t(instruction.code));
-  code_assign2tc assign = to_code_assign2t(instruction.code);
+  const code_assign2t &assign = to_code_assign2t(instruction.code);
   // Assignment to a typecast
-  if(is_typecast2t(assign->target))
+  if(is_typecast2t(assign.target))
   {
-    expr2tc new_lhs = to_typecast2t(assign->target).from;
-    code_assign2tc new_assign(new_lhs, assign->source);
+    expr2tc new_lhs = to_typecast2t(assign.target).from;
+    expr2tc new_assign = code_assign2tc(new_lhs, assign.source);
     goto_programt::instructiont new_instruction(instruction);
     new_instruction.code = new_assign;
 
@@ -421,7 +421,7 @@ void goto2ct::adjust_invalid_assignment_rec(
   }
   // Assignment to an array variable.
   // Turning it into a function call to "memcpy"
-  else if(is_array_type(assign->target->type))
+  else if(is_array_type(assign.target->type))
   {
     expr2tc fun_call = replace_array_assignment_with_memcpy(assign);
     instruction.code = fun_call;
@@ -474,9 +474,9 @@ void goto2ct::remove_unsupported_instructions(goto_programt &goto_program)
   {
     if(it->type == ASSIGN)
     {
-      code_assign2tc assign = to_code_assign2t(it->code);
+      const code_assign2t &assign = to_code_assign2t(it->code);
       // Removing assignments to "dynamic_type2t"
-      if(is_dynamic_size2t(assign->target))
+      if(is_dynamic_size2t(assign.target))
         it = goto_program.instructions.erase(it);
     }
   }
@@ -492,10 +492,10 @@ void goto2ct::remove_unsupported_instructions(goto_programt &goto_program)
 //
 //      "memcpy(array1, array2, <size_of_array2>);"
 //
-expr2tc goto2ct::replace_array_assignment_with_memcpy(code_assign2tc assign)
+expr2tc goto2ct::replace_array_assignment_with_memcpy(const code_assign2t &assign)
 {
   // Creating a compound literal from the RHS
-  typecast2tc type_cast(assign->source->type, assign->source);
+  expr2tc type_cast = typecast2tc(assign.source->type, assign.source);
 
   // Creating a "void*" type frequently used below
   type2tc pointertype = pointer_type2tc(get_empty_type());
@@ -506,11 +506,11 @@ expr2tc goto2ct::replace_array_assignment_with_memcpy(code_assign2tc assign)
   type2tc ret_type = get_empty_type();
   std::vector<irep_idt> arg_names = {"d", "s", "n"};
   type2tc fun_type = code_type2tc(args, pointertype, arg_names, false);
-  symbol2tc fun_sym(fun_type, "c:@F@memcpy");
+  expr2tc fun_sym = symbol2tc(fun_type, "c:@F@memcpy");
 
   // Now defining the function inputs
   std::vector<expr2tc> ops = {
-    assign->target, type_cast, c_sizeof(assign->source->type, ns)};
+    assign.target, type_cast, c_sizeof(assign.source->type, ns)};
 
   // Returning a function call (with the empty left-hand side)
   // to the newly generated "memcpy" function with the inputs
