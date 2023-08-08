@@ -155,39 +155,6 @@ bool expr2t::operator<(const expr2t &ref) const
     return (lt(ref) < 0);
 }
 
-unsigned long expr2t::depth() const
-{
-  unsigned long num_nodes = 0;
-
-  for(unsigned int idx = 0; idx < get_num_sub_exprs(); idx++)
-  {
-    const expr2tc *e = get_sub_expr(idx);
-    if(is_nil_expr(*e))
-      continue;
-    unsigned long tmp = (*e)->depth();
-    num_nodes = std::max(num_nodes, tmp);
-  }
-
-  num_nodes++; // Count ourselves.
-  return num_nodes;
-}
-
-unsigned long expr2t::num_nodes() const
-{
-  unsigned long count = 0;
-
-  for(unsigned int idx = 0; idx < get_num_sub_exprs(); idx++)
-  {
-    const expr2tc *e = get_sub_expr(idx);
-    if(is_nil_expr(*e))
-      continue;
-    count += (*e)->num_nodes();
-  }
-
-  count++; // Count ourselves.
-  return count;
-}
-
 int expr2t::ltchecked(const expr2t &ref) const
 {
   int tmp = expr2t::lt(ref);

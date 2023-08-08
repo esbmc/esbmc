@@ -583,22 +583,6 @@ public:
    */
   std::string pretty(unsigned int indent = 0) const;
 
-  /** Calculate number of exprs descending from this one.
-   *  For statistics collection - calculates the number of expressions that
-   *  make up this particular expression (i.e., count however many expr2tc's you
-   *  can reach from this expr).
-   *  @return Number of expr2tc's reachable from this node.
-   */
-  unsigned long num_nodes() const;
-
-  /** Calculate max depth of exprs from this point.
-   *  Looks at all sub-exprs of this expr, and calculates the longest chain one
-   *  can descend before there are no more. Useful for statistics about the
-   *  exprs we're dealing with.
-   *  @return Number of expr2tc's reachable from this node.
-   */
-  unsigned long depth() const;
-
   /** Write textual representation of this object to stdout.
    *  For use in debugging - dumps the output of the pretty method to stdout.
    *  Can either be used in portion of code, or more commonly called from gdb.
