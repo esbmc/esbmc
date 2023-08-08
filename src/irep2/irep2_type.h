@@ -310,14 +310,12 @@ public:
   typedef esbmct::type_methods2<                                               \
     basename##_type2t,                                                         \
     superclass,                                                                \
-    superclass::traits,                                                        \
-    basename##_type2tc>                                                        \
+    superclass::traits>                                                        \
     basename##_type_methods;                                                   \
   extern template class esbmct::type_methods2<                                 \
     basename##_type2t,                                                         \
     superclass,                                                                \
-    superclass::traits,                                                        \
-    basename##_type2tc>;
+    superclass::traits>;
 
 irep_typedefs(bool, type2t);
 irep_typedefs(empty, type2t);

@@ -951,7 +951,6 @@ template <
   class derived,
   class baseclass,
   typename traits,
-  typename container,
   typename fields = typename traits::fields,
   typename enable = void>
 class irep_methods2;
@@ -959,7 +958,6 @@ template <
   class derived,
   class baseclass,
   typename traits,
-  typename container,
   typename fields = typename traits::fields,
   typename enable = void>
 class expr_methods2;
@@ -967,7 +965,6 @@ template <
   class derived,
   class baseclass,
   typename traits,
-  typename container,
   typename fields = typename traits::fields,
   typename enable = void>
 class type_methods2;
@@ -1007,14 +1004,12 @@ template <
   class derived,
   class baseclass,
   typename traits,
-  typename container,
   typename fields,
   typename enable>
 class irep_methods2 : public irep_methods2<
                         derived,
                         baseclass,
                         traits,
-                        container,
                         typename boost::mpl::pop_front<fields>::type>
 {
 public:
@@ -1022,12 +1017,10 @@ public:
     derived,
     baseclass,
     traits,
-    container,
     typename boost::mpl::pop_front<fields>::type>
     superclass;
-  typedef container container2tc;
-  typedef typename container::base2tc base_container2tc;
   typedef typename baseclass::base_type base2t;
+  typedef irep_container<base2t> base_container2tc;
 
   template <typename... Args>
   irep_methods2(const Args &...args) : superclass(args...)
@@ -1092,13 +1085,11 @@ template <
   class derived,
   class baseclass,
   typename traits,
-  typename container,
   typename fields>
 class irep_methods2<
   derived,
   baseclass,
   traits,
-  container,
   fields,
   typename boost::enable_if<typename boost::mpl::empty<fields>::type>::type>
   : public baseclass
@@ -1208,14 +1199,13 @@ template <
   class derived,
   class baseclass,
   typename traits,
-  typename container,
   typename fields,
   typename enable>
 class expr_methods2
-  : public irep_methods2<derived, baseclass, traits, container, fields, enable>
+  : public irep_methods2<derived, baseclass, traits, fields, enable>
 {
 public:
-  typedef irep_methods2<derived, baseclass, traits, container, fields, enable>
+  typedef irep_methods2<derived, baseclass, traits, fields, enable>
     superclass;
 
   template <typename... Args>
@@ -1244,14 +1234,13 @@ template <
   class derived,
   class baseclass,
   typename traits,
-  typename container,
   typename fields,
   typename enable>
 class type_methods2
-  : public irep_methods2<derived, baseclass, traits, container, fields, enable>
+  : public irep_methods2<derived, baseclass, traits, fields, enable>
 {
 public:
-  typedef irep_methods2<derived, baseclass, traits, container, fields, enable>
+  typedef irep_methods2<derived, baseclass, traits, fields, enable>
     superclass;
 
   template <typename... Args>

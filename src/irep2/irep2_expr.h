@@ -1390,18 +1390,16 @@ public:
 #define irep_typedefs(basename, superclass)                                    \
   typedef esbmct::something2tc<expr2t, basename##2t> basename##2tc;            \
   typedef esbmct::                                                             \
-    expr_methods2<basename##2t, superclass, superclass::traits, basename##2tc> \
+    expr_methods2<basename##2t, superclass, superclass::traits> \
       basename##_expr_methods;                                                 \
   extern template class esbmct::expr_methods2<                                 \
     basename##2t,                                                              \
     superclass,                                                                \
-    superclass::traits,                                                        \
-    basename##2tc>;                                                            \
+    superclass::traits>;                                                            \
   extern template class esbmct::irep_methods2<                                 \
     basename##2t,                                                              \
     superclass,                                                                \
-    superclass::traits,                                                        \
-    basename##2tc>;
+    superclass::traits>;
 
 // Special case for some empty ireps,
 
@@ -1410,19 +1408,16 @@ public:
   typedef esbmct::expr_methods2<                                               \
     basename##2t,                                                              \
     superclass,                                                                \
-    esbmct::expr2t_default_traits,                                             \
-    basename##2tc>                                                             \
+    esbmct::expr2t_default_traits>                                                             \
     basename##_expr_methods;                                                   \
   extern template class esbmct::expr_methods2<                                 \
     basename##2t,                                                              \
     superclass,                                                                \
-    esbmct::expr2t_default_traits,                                             \
-    basename##2tc>;                                                            \
+    esbmct::expr2t_default_traits>;                                                            \
   extern template class esbmct::expr_methods2<                                 \
     basename##2t,                                                              \
     superclass,                                                                \
-    esbmct::expr2t_default_traits,                                             \
-    basename##2tc>;
+    esbmct::expr2t_default_traits>;
 
 // This can't be replaced by iterating over all expr ids in preprocessing
 // magic because the mapping between top level expr class and it's data holding
