@@ -13,46 +13,6 @@
 #include <util/migrate.h>
 #include <util/std_types.h>
 
-namespace esbmct
-{
-template <typename... Args>
-template <typename derived>
-auto type2t_traits<Args...>::make_contained(typename Args::result_type... args)
-  -> irep_container<base2t>
-{
-  return irep_container<base2t>(new derived(args...));
-}
-} // namespace esbmct
-
-// Undoubtedly a better way of doing this...
-namespace esbmct
-{
-template <typename... Args>
-template <typename derived>
-auto expr2t_traits<Args...>::make_contained(
-  const type2tc &type,
-  typename Args::result_type... args) -> irep_container<base2t>
-{
-  return irep_container<base2t>(new derived(type, args...));
-}
-
-template <typename... Args>
-template <typename derived>
-auto expr2t_traits_notype<Args...>::make_contained(
-  typename Args::result_type... args) -> irep_container<base2t>
-{
-  return irep_container<base2t>(new derived(args...));
-}
-
-template <typename... Args>
-template <typename derived>
-auto expr2t_traits_always_construct<Args...>::make_contained(
-  typename Args::result_type... args) -> irep_container<base2t>
-{
-  return irep_container<base2t>(new derived(args...));
-}
-} // namespace esbmct
-
 /************************ Second attempt at irep templates ********************/
 
 // Implementations of common methods, recursively.
