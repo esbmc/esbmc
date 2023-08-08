@@ -3555,19 +3555,6 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-// Generate a boost mpl set of all the trait type used by exprs. This juggling
-// removes duplicates. Has to be below class defs apparently.
-
-#define _ESBMC_IREP2_MPL_SET(r, data, elem) BOOST_PP_CAT(elem, 2t)::traits,
-typedef boost::mpl::fold<
-  esbmct::variadic_vector<
-    BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_SET, foo, ESBMC_LIST_OF_EXPRS)
-      add2t::traits>, // Need to leave a trailing type because some extra commas
-                      // will be splatted on the end
-  boost::mpl::set0<>, // Initial state, empty set
-  // Insert things into this boost set
-  boost::mpl::insert<boost::mpl::_1, boost::mpl::_2>>::type set_of_traits;
-
 // Same deal as for "type_macros".
 #ifdef NDEBUG
 #define dynamic_cast static_cast
