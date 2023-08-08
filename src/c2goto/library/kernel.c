@@ -122,11 +122,17 @@ void kernel_spin_lock(mock_spinlock_t *lock)
 {
   //check if the lock is valid
   assert(lock != NULL);
-  bool expected_value = false;
   //check if the lock is already locked, spin for a while
-    while (!__sync_bool_compare_and_swap(&lock->locked, 0, 1)) {
-        // spin
-    }
+  //approach 1: but also results in infinite loop
+  // while (!__sync_bool_compare_and_swap(&lock->is_locked, 0, 1)) {}
+  // spin
+
+  //approach 2: use esbmc assume
+  while(lock->locked == 1)
+  {
+    __ESBMC_assume(lock->locked == 0);
+  }
+  lock->locked = 1;
 }
 
 void kernel_spin_unlock(mock_spinlock_t *lock)
@@ -134,6 +140,7 @@ void kernel_spin_unlock(mock_spinlock_t *lock)
   //check if the lock is valid
   assert(lock != NULL);
   //unlock the lock
-    __sync_bool_compare_and_swap(&lock->locked, 1, 0);
+  //approach 1:
+  // __sync_bool_compare_and_swap(&lock->locked, 1, 0);
+  lock->locked = 0;
 }
-
