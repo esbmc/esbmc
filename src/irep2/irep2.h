@@ -915,9 +915,6 @@ public:
   typedef typename boost::mpl::
     push_front<boost::mpl::vector<Args...>, type_id_field>::type fields;
   typedef type2t base2t;
-
-  template <typename derived>
-  static irep_container<base2t> make_contained(typename Args::result_type...);
 };
 
 /** Trait class for expr2t ireps.
@@ -939,11 +936,6 @@ public:
   static constexpr unsigned int num_fields =
     boost::mpl::size<fields>::type::value;
   typedef expr2t base2t;
-
-  // Note addition of type2tc...
-  template <typename derived>
-  static irep_container<base2t>
-  make_contained(const type2tc &, typename Args::result_type...);
 };
 
 // "Specialisation" for expr kinds that don't take a type, like boolean
@@ -964,9 +956,6 @@ public:
   static constexpr unsigned int num_fields =
     boost::mpl::size<fields>::type::value;
   typedef expr2t base2t;
-
-  template <typename derived>
-  static irep_container<base2t> make_contained(typename Args::result_type...);
 };
 
 // Hack to force something2tc to always construct the traits' type, rather
@@ -982,9 +971,6 @@ public:
   static constexpr unsigned int num_fields =
     boost::mpl::size<fields>::type::value;
   typedef expr2t base2t;
-
-  template <typename derived>
-  static irep_container<base2t> make_contained(typename Args::result_type...);
 };
 
 // Declaration of irep and expr methods templates.
