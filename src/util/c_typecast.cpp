@@ -54,7 +54,7 @@ bool check_c_implicit_typecast(
   c_typecastt c_typecast(ns);
   // It seems that this expression is just a vehicle for the type to be
   // renamed.
-  symbol2tc tmp(src_type, "shoes");
+  expr2tc tmp = symbol2tc(src_type, "shoes");
   c_typecast.implicit_typecast(tmp, dest_type);
   return !c_typecast.errors.empty();
 }
@@ -244,10 +244,8 @@ bool check_c_implicit_typecast(
   {
     if(is_pointer_type(dest_type))
     {
-      pointer_type2tc dest_ptr_type = dest_type;
-      pointer_type2tc src_ptr_type = src_type;
-      type2tc dest_subtype = dest_ptr_type->subtype;
-      type2tc src_subtype = src_ptr_type->subtype;
+      type2tc dest_subtype = to_pointer_type(dest_type).subtype;
+      type2tc src_subtype = to_pointer_type(src_type).subtype;
 
       if(src_subtype == dest_subtype)
         return false;
@@ -556,8 +554,8 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr, c_typet c_type)
     {
       const array_type2t &arr_type = to_array_type(expr_type);
       const pointer_type2t &ptr_type = to_pointer_type(new_type);
-      index2tc index_expr(arr_type.subtype, expr, gen_zero(index_type2()));
-      address_of2tc addrof(ptr_type.subtype, index_expr);
+      expr2tc index_expr = index2tc(arr_type.subtype, expr, gen_zero(index_type2()));
+      expr2tc addrof = address_of2tc(ptr_type.subtype, index_expr);
       expr = addrof;
     }
     else
@@ -726,7 +724,7 @@ void c_typecastt::implicit_typecast_followed(
 {
   if(is_pointer_type(dest_type))
   {
-    pointer_type2tc dest_ptr_type = dest_type;
+    const pointer_type2t &dest_ptr_type = to_pointer_type(dest_type);
     // special case: 0 == NULL
 
     if(
@@ -747,13 +745,13 @@ void c_typecastt::implicit_typecast_followed(
         src_subtype = to_array_type(src_type).subtype;
 
       const type2tc &src_sub = ns.follow(src_subtype);
-      const type2tc &dest_sub = ns.follow(dest_ptr_type->subtype);
+      const type2tc &dest_sub = ns.follow(dest_ptr_type.subtype);
 
       if(is_empty_type(src_sub) || is_empty_type(dest_sub))
       {
         // from/to void is always good
       }
-      else if(base_type_eq(dest_ptr_type->subtype, src_subtype, ns))
+      else if(base_type_eq(dest_ptr_type.subtype, src_subtype, ns))
       {
       }
       else if(is_code_type(src_sub) && is_code_type(dest_sub))
@@ -878,8 +876,8 @@ void c_typecastt::do_typecast(expr2tc &dest, const type2tc &type)
   if(is_array_type(dest_type))
   {
     const array_type2t &arr_type = to_array_type(dest_type);
-    index2tc index(arr_type.subtype, dest, gen_zero(index_type2()));
-    address_of2tc tmp(arr_type.subtype, index);
+    expr2tc index = index2tc(arr_type.subtype, dest, gen_zero(index_type2()));
+    expr2tc tmp = address_of2tc(arr_type.subtype, index);
     dest = tmp;
     if(ns.follow(dest->type) != ns.follow(type))
       dest = typecast2tc(type, dest);

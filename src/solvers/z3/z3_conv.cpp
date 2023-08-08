@@ -1132,11 +1132,11 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
   }
 
   // Otherwise, run through all fields and dispatch to 'get_by_ast' again.
-  constant_struct2tc outstruct(type, std::vector<expr2tc>());
+  std::vector<expr2tc> outmem;
   unsigned int i = 0;
   for(auto const &it : strct.members)
   {
-    outstruct->datatype_members.push_back(get_by_ast(
+    outmem.push_back(get_by_ast(
       it,
       new_ast(
         mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, i),
@@ -1144,7 +1144,7 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
     i++;
   }
 
-  return outstruct;
+  return constant_struct2tc(type, std::move(outmem));
 }
 
 expr2tc z3_convt::tuple_get(const expr2tc &expr)
@@ -1175,16 +1175,16 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
   }
 
   // Otherwise, run through all fields and dispatch to 'get' again.
-  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
+  std::vector<expr2tc> outmem;
   unsigned int i = 0;
   for(auto const &it : strct.members)
   {
-    member2tc memb(it, expr, strct.member_names[i]);
-    outstruct->datatype_members.push_back(get(memb));
+    expr2tc memb = member2tc(it, expr, strct.member_names[i]);
+    outmem.push_back(get(memb));
     i++;
   }
 
-  return outstruct;
+  return constant_struct2tc(expr->type, std::move(outmem));
 }
 
 // ***************************** 'get' api *******************************

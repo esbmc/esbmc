@@ -633,16 +633,17 @@ expr2tc interval_domaint::make_expression_value<real_intervalt>(
   const type2tc &type,
   bool upper) const
 {
-  constant_floatbv2tc value(ieee_floatt(ieee_float_spect(
+  expr2tc value = constant_floatbv2tc(ieee_floatt(ieee_float_spect(
     to_floatbv_type(type).fraction, to_floatbv_type(type).exponent)));
+  constant_floatbv2t &v = to_constant_floatbv2t(value);
 
   const auto d = (upper ? interval.upper : interval.lower).convert_to<double>();
-  value->value.from_double(d);
-  assert(!value->value.is_NaN() && !value->value.is_infinity());
+  v.value.from_double(d);
+  assert(!v.value.is_NaN() && !v.value.is_infinity());
   if(upper)
-    value->value.increment(true);
+    v.value.increment(true);
   else
-    value->value.decrement(true);
+    v.value.decrement(true);
 
   return value;
 }

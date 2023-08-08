@@ -134,7 +134,7 @@ expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
   const struct_union_data &strct = ctx->get_type_def(thetype);
 
   // XXX - what's the correct type to return here.
-  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
+  std::vector<expr2tc> outmem;
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
@@ -142,8 +142,8 @@ expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
   {
     std::stringstream ss;
     ss << name << "." << strct.member_names[i];
-    symbol2tc sym(it, ss.str());
-    outstruct->datatype_members.push_back(ctx->get(sym));
+    expr2tc sym = symbol2tc(it, ss.str());
+    outmem.push_back(ctx->get(sym));
     i++;
   }
 
@@ -151,18 +151,18 @@ expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
   if(is_pointer_type(expr->type))
   {
     // Guard against free pointer value
-    if(is_nil_expr(outstruct->datatype_members[0]))
+    if(is_nil_expr(outmem[0]))
       return expr2tc();
 
     unsigned int num =
-      to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
+      to_constant_int2t(outmem[0]).value.to_uint64();
     unsigned int offs =
-      to_constant_int2t(outstruct->datatype_members[1]).value.to_uint64();
+      to_constant_int2t(outmem[1]).value.to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return ctx->pointer_logic.back().pointer_expr(p, expr->type);
   }
 
-  return outstruct;
+  return constant_struct2tc(expr->type, std::move(outmem));
 }
 
 smt_astt smt_tuple_sym_flattener::tuple_array_of(
@@ -175,10 +175,10 @@ smt_astt smt_tuple_sym_flattener::tuple_array_of(
   const constant_datatype_data &data =
     static_cast<const constant_datatype_data &>(*init_val.get());
 
-  constant_int2tc arrsize(index_type2(), BigInt(array_size));
+  expr2tc arrsize = constant_int2tc(index_type2(), BigInt(array_size));
   type2tc arrtype = array_type2tc(init_val->type, arrsize, false);
   std::string name = ctx->mk_fresh_name("tuple_array_of::") + ".";
-  symbol2tc tuple_arr_of_sym(arrtype, irep_idt(name));
+  expr2tc tuple_arr_of_sym = symbol2tc(arrtype, irep_idt(name));
 
   smt_sortt sort = ctx->convert_sort(arrtype);
   smt_astt newsym = new array_sym_smt_ast(ctx, sort, name);
@@ -188,7 +188,7 @@ smt_astt smt_tuple_sym_flattener::tuple_array_of(
   {
     const expr2tc &val = data.datatype_members[i];
     type2tc subarr_type = array_type2tc(val->type, arrsize, false);
-    constant_array_of2tc sub_array_of(subarr_type, val);
+    expr2tc sub_array_of = constant_array_of2tc(subarr_type, val);
 
     smt_astt tuple_arr_of_sym_ast = ctx->convert_ast(tuple_arr_of_sym);
     smt_astt target_array = tuple_arr_of_sym_ast->project(ctx, i);

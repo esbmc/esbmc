@@ -37,16 +37,16 @@ ieee_float_spect::ieee_float_spect(const floatbv_typet &type)
   e = width - f - 1;
 }
 
-ieee_float_spect::ieee_float_spect(const floatbv_type2tc &type)
+ieee_float_spect::ieee_float_spect(const floatbv_type2t &type)
 {
-  unsigned width = type->get_width();
-  f = type->fraction;
+  unsigned width = type.get_width();
+  f = type.fraction;
   assert(f != 0);
   assert(f < width);
   e = width - f - 1;
 }
 
-const floatbv_type2tc ieee_float_spect::get_type() const
+type2tc ieee_float_spect::get_type() const
 {
   return floatbv_type2tc(f, e);
 }

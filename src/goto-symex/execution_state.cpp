@@ -643,7 +643,7 @@ bool execution_statet::is_cur_state_guard_false(const expr2tc &guard)
     runtime_encoded_equationt *rte =
       dynamic_cast<runtime_encoded_equationt *>(target.get());
 
-    equality2tc the_question(gen_true_expr(), parent_guard);
+    expr2tc the_question = equality2tc(gen_true_expr(), parent_guard);
 
     try
     {

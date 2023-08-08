@@ -23,8 +23,8 @@ expr2tc c_sizeof(const type2tc &src, const namespacet &ns)
     // Right now we just introduce a symbol __ESBMC_INF_SIZE to represent
     // the "infinity" expression in irep1. (As of now migrating
     // the latter into irep2 results in an error.)
-    symbol2tc inf_size(get_uint64_type(), "__ESBMC_INF_SIZE");
-    constant_int2tc subtype_size(
+    expr2tc inf_size = symbol2tc(get_uint64_type(), "__ESBMC_INF_SIZE");
+    expr2tc subtype_size = constant_int2tc(
       get_uint64_type(), type_byte_size(to_array_type(t).subtype));
     return mul2tc(get_uint64_type(), inf_size, subtype_size);
   }
@@ -32,6 +32,5 @@ expr2tc c_sizeof(const type2tc &src, const namespacet &ns)
   // migration, but we might still run into a nondeterministically sized
   // array.
   BigInt size = type_byte_size(t);
-  constant_int2tc res(get_uint64_type(), size);
-  return res;
+  return constant_int2tc(get_uint64_type(), size);
 }

@@ -155,7 +155,7 @@ void smt_convt::smt_post_init()
     type2tc power_array_type =
       array_type2tc(powarr_elemt, gen_ulong(64), false);
 
-    constant_array2tc power_array(power_array_type, power_array_data);
+    expr2tc power_array = constant_array2tc(power_array_type, power_array_data);
     int_shift_op_array = convert_ast(power_array);
   }
 
@@ -863,7 +863,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       // frontend doesn't cast the second operand up to the width of
       // the first, which SMT does not enjoy.
-      typecast2tc cast(shl.side_1->type, shl.side_2);
+      expr2tc cast = typecast2tc(shl.side_1->type, shl.side_2);
       args[1] = convert_ast(cast);
     }
 
@@ -888,7 +888,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       // frontend doesn't cast the second operand up to the width of
       // the first, which SMT does not enjoy.
-      typecast2tc cast(ashr.side_1->type, ashr.side_2);
+      expr2tc cast = typecast2tc(ashr.side_1->type, ashr.side_2);
       args[1] = convert_ast(cast);
     }
 
@@ -913,7 +913,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       // frontend doesn't cast the second operand up to the width of
       // the first, which SMT does not enjoy.
-      typecast2tc cast(lshr.side_1->type, lshr.side_2);
+      expr2tc cast = typecast2tc(lshr.side_1->type, lshr.side_2);
       args[1] = convert_ast(cast);
     }
 
@@ -945,9 +945,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else
     {
-      lessthan2tc lt(abs.value, gen_zero(abs.value->type));
-      neg2tc neg(abs.value->type, abs.value);
-      if2tc ite(abs.type, lt, neg, abs.value);
+      expr2tc lt = lessthan2tc(abs.value, gen_zero(abs.value->type));
+      expr2tc neg = neg2tc(abs.value->type, abs.value);
+      expr2tc ite = if2tc(abs.type, lt, neg, abs.value);
 
       a = convert_ast(ite);
     }
@@ -1250,7 +1250,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
   case type2t::string_id:
   {
     const string_type2t &str_type = to_string_type(type);
-    constant_int2tc width(
+    expr2tc width = constant_int2tc(
       get_uint_type(config.ansi_c.int_width), BigInt(str_type.width));
     type2tc new_type = array_type2tc(get_uint8_type(), width, false);
     result = convert_sort(new_type);
@@ -1564,7 +1564,7 @@ smt_astt smt_convt::convert_popcount(const expr2tc &expr)
   for(std::size_t shift = 1; shift < width; shift <<= 1)
   {
     // x >> shift
-    lshr2tc shifted_x(op->type, op, from_integer(shift, op->type));
+    expr2tc shifted_x = lshr2tc(op->type, op, from_integer(shift, op->type));
 
     // bitmask is a string of alternating shift-many bits starting from lsb set
     // to 1
@@ -1572,7 +1572,8 @@ smt_astt smt_convt::convert_popcount(const expr2tc &expr)
     bitstring.reserve(width);
     for(std::size_t i = 0; i < width / (2 * shift); ++i)
       bitstring += std::string(shift, '0') + std::string(shift, '1');
-    const constant_int2tc bitmask(op->type, binary2integer(bitstring, false));
+    expr2tc bitmask = constant_int2tc(
+      op->type, binary2integer(bitstring, false));
 
     // build the expression
     op = add2tc(
@@ -2039,7 +2040,7 @@ smt_astt smt_convt::convert_array_store(const expr2tc &expr)
   // Workaround for bools-in-arrays.
   if(is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays)
   {
-    typecast2tc cast(get_uint_type(1), update_val);
+    expr2tc cast = typecast2tc(get_uint_type(1), update_val);
     update = convert_ast(cast);
   }
   else
@@ -2438,7 +2439,7 @@ expr2tc smt_convt::get_array(const type2tc &type, smt_astt array)
     w = 10;
 
   array_type2t ar = to_array_type(flatten_array_type(type));
-  constant_int2tc arr_size(index_type2(), BigInt(1 << w));
+  expr2tc arr_size = constant_int2tc(index_type2(), BigInt(1 << w));
   type2tc arr_type = array_type2tc(ar.subtype, arr_size, false);
   std::vector<expr2tc> fields;
 
@@ -2570,7 +2571,7 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
           constarray.datatype_members.end());
 
       // Create new expression, convert and return that.
-      mul2tc newsize(
+      expr2tc newsize = mul2tc(
         arrtype.array_size->type,
         arrtype.array_size,
         constarray_type.array_size);
@@ -2578,7 +2579,8 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
 
       type2tc new_arr_type =
         array_type2tc(constarray_type.subtype, newsize, false);
-      constant_array2tc new_const_array(new_arr_type, new_contents);
+      expr2tc new_const_array =
+        constant_array2tc(new_arr_type, std::move(new_contents));
       return convert_ast(new_const_array);
     }
   }
@@ -2645,13 +2647,13 @@ smt_astt smt_convt::pointer_array_of(
 #endif
 
   // Well known value; zero and zero.
-  constant_int2tc zero_val(machine_ptr, BigInt(0));
+  expr2tc zero_val = constant_int2tc(machine_ptr, BigInt(0));
   std::vector<expr2tc> operands;
   operands.reserve(2);
   operands.push_back(zero_val);
   operands.push_back(zero_val);
 
-  constant_struct2tc strct(pointer_struct, operands);
+  expr2tc strct = constant_struct2tc(pointer_struct, std::move(operands));
   return tuple_api->tuple_array_of(strct, array_width);
 }
 

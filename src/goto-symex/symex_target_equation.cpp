@@ -198,8 +198,9 @@ void symex_target_equationt::convert_internal_step(
         step.converted_output_args.push_back(tmp);
       else
       {
-        symbol2tc sym(tmp->type, "symex::output::" + i2string(output_count++));
-        equality2tc eq(sym, tmp);
+        expr2tc sym =
+          symbol2tc(tmp->type, "symex::output::" + i2string(output_count++));
+        expr2tc eq = equality2tc(sym, tmp);
         smt_conv.set_to(eq, true);
         step.converted_output_args.push_back(sym);
       }

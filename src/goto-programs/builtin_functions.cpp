@@ -283,8 +283,8 @@ void goto_convertt::do_cpp_new(
     migrate_expr(alloc_size, alloc_units);
 
     BigInt sz = type_byte_size(subtype);
-    constant_int2tc sz_expr(uint_type2(), sz);
-    mul2tc byte_size(uint_type2(), alloc_units, sz_expr);
+    expr2tc sz_expr = constant_int2tc(uint_type2(), sz);
+    expr2tc byte_size = mul2tc(uint_type2(), alloc_units, sz_expr);
     alloc_size = migrate_expr_back(byte_size);
 
     const_cast<irept &>(rhs.size_irep()) = alloc_size;

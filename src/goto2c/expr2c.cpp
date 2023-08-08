@@ -1324,31 +1324,31 @@ std::string expr2ct::convert_same_object(const exprt &src, unsigned &precedence)
   migrate_expr(src, new_src);
 
   assert(is_same_object2t(new_src));
-  same_object2tc same = to_same_object2t(new_src);
+  const same_object2t &same = to_same_object2t(new_src);
 
   assert(
-    is_pointer_type(same->side_1->type) && is_pointer_type(same->side_2->type));
-  pointer_type2tc ptr_type = to_pointer_type(same->side_1->type);
+    is_pointer_type(same.side_1->type) && is_pointer_type(same.side_2->type));
+  const pointer_type2t &ptr_type = to_pointer_type(same.side_1->type);
 
-  if(is_address_of2t(same->side_2))
+  if(is_address_of2t(same.side_2))
   {
-    address_of2tc addr = to_address_of2t(same->side_2);
-    if(is_array_type(addr->ptr_obj->type))
+    const address_of2t &addr = to_address_of2t(same.side_2);
+    if(is_array_type(addr.ptr_obj->type))
     {
-      array_type2tc arr_type = to_array_type(addr->ptr_obj->type);
+      const array_type2t &arr_type = to_array_type(addr.ptr_obj->type);
       // this arr_size is equal to the number of elements of the given array
-      expr2tc arr_size = arr_type->array_size;
-      greaterthan2tc gt(addr->ptr_obj, same->side_1);
-      greaterthan2tc gt2(
-        add2tc(same->side_1->type, same->side_1, gen_ulong(1)),
-        add2tc(arr_type->subtype, addr->ptr_obj, arr_size));
-      or2tc in_bounds(gt, gt2);
+      expr2tc arr_size = arr_type.array_size;
+      expr2tc gt = greaterthan2tc(addr.ptr_obj, same.side_1);
+      expr2tc gt2 = greaterthan2tc(
+        add2tc(same.side_1->type, same.side_1, gen_ulong(1)),
+        add2tc(arr_type.subtype, addr.ptr_obj, arr_size));
+      expr2tc in_bounds = or2tc(gt, gt2);
       simplify(in_bounds);
       return convert(migrate_expr_back(in_bounds), precedence);
     }
   }
 
-  equality2tc eq(same->side_1, same->side_2);
+  expr2tc eq = equality2tc(same.side_1, same.side_2);
   return convert(migrate_expr_back(not2tc(eq)), precedence);
 }
 

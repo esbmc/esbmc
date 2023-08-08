@@ -108,7 +108,7 @@ unsigned goto_symext::argument_assignments(
       }
 
       // 'Declare' the argument before assigning a value to it
-      symbol2tc lhs(function_type.arguments[name_idx], identifier);
+      expr2tc lhs = symbol2tc(function_type.arguments[name_idx], identifier);
       symex_decl(code_decl2tc(lhs->type, identifier));
 
       // Assign value to function argument
@@ -149,7 +149,7 @@ unsigned goto_symext::argument_assignments(
       // 'Declare' the argument before assigning a value to it
       symex_decl(code_decl2tc((*it1)->type, identifier));
 
-      symbol2tc sym((*it1)->type, identifier);
+      expr2tc sym = symbol2tc((*it1)->type, identifier);
       cur_state->top().level1.get_ident_name(sym);
 
       // Assign value to function argument
@@ -214,7 +214,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     {
       // Add an unwinding assumption.
       expr2tc now_guard = cur_state->guard.as_expr();
-      not2tc not_now(now_guard);
+      expr2tc not_now = not2tc(now_guard);
       target->assumption(now_guard, not_now, cur_state->source, first_loop);
     }
 
@@ -234,7 +234,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     if(!is_nil_expr(call.ret))
     {
       unsigned int &nondet_count = get_nondet_counter();
-      symbol2tc rhs(
+      expr2tc rhs = symbol2tc(
         call.ret->type, "nondet$symex::" + i2string(nondet_count++));
 
       symex_assign(code_assign2tc(call.ret, rhs));
@@ -298,7 +298,7 @@ get_function_list(const expr2tc &expr)
     std::list<std::pair<guardt, expr2tc>> l1, l2;
     const if2t &ifexpr = to_if2t(expr);
     expr2tc guardexpr = ifexpr.cond;
-    not2tc notguardexpr(guardexpr);
+    expr2tc notguardexpr = not2tc(guardexpr);
 
     // Get sub items, them iterate over adding the relevant guard
     l1 = get_function_list(ifexpr.true_value);
@@ -505,7 +505,7 @@ void goto_symext::pop_frame()
   for(auto const &it : frame.local_variables)
   {
     type2tc ptr = pointer_type2tc(pointer_type2());
-    symbol2tc l1_sym(ptr, it.base_name);
+    expr2tc l1_sym = symbol2tc(ptr, it.base_name);
     frame.level1.get_ident_name(l1_sym);
 
     // Call free on alloca'd objects
@@ -515,13 +515,13 @@ void goto_symext::pop_frame()
       symex_free(code_free2tc(l1_sym));
 
     // Erase from level 1 propagation
-    cur_state->value_set.erase(l1_sym->get_symbol_name());
+    cur_state->value_set.erase(to_symbol2t(l1_sym).get_symbol_name());
 
     cur_state->level2.remove(it);
 
     // Construct an l1 name on the fly - this is a temporary hack for when
     // the value set is storing things in a not-an-irep-idt form.
-    symbol2tc tmp_expr(
+    expr2tc tmp_expr = symbol2tc(
       get_empty_type(), it.base_name, it.lev, it.l1_num, 0, it.t_num, 0);
     cur_state->value_set.erase(to_symbol2t(tmp_expr).get_symbol_name());
   }
@@ -555,7 +555,7 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
 
       if(frame.return_value->type != value->type)
       {
-        typecast2tc cast(frame.return_value->type, value);
+        expr2tc cast = typecast2tc(frame.return_value->type, value);
         assign = code_assign2tc(frame.return_value, cast);
       }
 

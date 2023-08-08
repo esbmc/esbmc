@@ -40,17 +40,18 @@ smt_astt smt_convt::convert_ptr_cmp(
   // if the ptr objs are the same.
   type2tc int_type = machine_ptr;
 
-  pointer_object2tc ptr_obj1(int_type, side1);
-  pointer_offset2tc ptr_offs1(signed_size_type2(), side1);
-  pointer_object2tc ptr_obj2(int_type, side2);
-  pointer_offset2tc ptr_offs2(signed_size_type2(), side2);
+  expr2tc ptr_obj1 = pointer_object2tc(int_type, side1);
+  expr2tc ptr_offs1 = pointer_offset2tc(signed_size_type2(), side1);
+  expr2tc ptr_obj2 = pointer_object2tc(int_type, side2);
+  expr2tc ptr_offs2 = pointer_offset2tc(signed_size_type2(), side2);
 
-  symbol2tc addrspacesym(addr_space_arr_type, get_cur_addrspace_ident());
-  index2tc obj1_data(addr_space_type, addrspacesym, ptr_obj1);
-  index2tc obj2_data(addr_space_type, addrspacesym, ptr_obj2);
+  expr2tc addrspacesym = symbol2tc(
+    addr_space_arr_type, get_cur_addrspace_ident());
+  expr2tc obj1_data = index2tc(addr_space_type, addrspacesym, ptr_obj1);
+  expr2tc obj2_data = index2tc(addr_space_type, addrspacesym, ptr_obj2);
 
-  member2tc obj1_start(int_type, obj1_data, irep_idt("start"));
-  member2tc obj2_start(int_type, obj2_data, irep_idt("start"));
+  expr2tc obj1_start = member2tc(int_type, obj1_data, irep_idt("start"));
+  expr2tc obj2_start = member2tc(int_type, obj2_data, irep_idt("start"));
 
   expr2tc start_expr = templ_expr, offs_expr = templ_expr;
 
@@ -63,9 +64,9 @@ smt_astt smt_convt::convert_ptr_cmp(
   *offs_expr->get_sub_expr_nc(1) = ptr_offs2;
 
   // Those are now boolean type'd relations.
-  equality2tc is_same_obj_expr(ptr_obj1, ptr_obj2);
+  expr2tc is_same_obj_expr = equality2tc(ptr_obj1, ptr_obj2);
 
-  if2tc res(offs_expr->type, is_same_obj_expr, offs_expr, start_expr);
+  expr2tc res = if2tc(offs_expr->type, is_same_obj_expr, offs_expr, start_expr);
   return convert_ast(res);
 }
 
@@ -109,9 +110,9 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     // already asserted for elsewhere.
     if(expr->expr_id == expr2t::sub_id)
     {
-      pointer_offset2tc offs1(signed_size_type2(), side1);
-      pointer_offset2tc offs2(signed_size_type2(), side2);
-      sub2tc the_ptr_offs(offs1->type, offs1, offs2);
+      expr2tc offs1 = pointer_offset2tc(signed_size_type2(), side1);
+      expr2tc offs2 = pointer_offset2tc(signed_size_type2(), side2);
+      expr2tc the_ptr_offs = sub2tc(offs1->type, offs1, offs2);
 
       if(ret_is_ptr)
       {
@@ -140,9 +141,9 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     expr2tc ptr_op = (op1_is_ptr) ? side1 : side2;
     expr2tc non_ptr_op = (op1_is_ptr) ? side2 : side1;
 
-    add2tc add(ptr_op->type, ptr_op, non_ptr_op);
-    // That'll generate the correct pointer arithmatic; now typecast
-    typecast2tc cast(type, add);
+    expr2tc add = add2tc(ptr_op->type, ptr_op, non_ptr_op);
+    // That'll generate the correct pointer arithmetic; now typecast
+    expr2tc cast = typecast2tc(type, add);
     return convert_ast(cast);
   }
   case 5:
@@ -263,7 +264,7 @@ smt_astt smt_convt::convert_identifier_pointer(
   // Construct canonical address-of this thing, and check the cache. The addrof
   // expression this is sourced from might have ended up with the wrong type,
   // alas.
-  address_of2tc new_addr_of(expr->type, expr);
+  expr2tc new_addr_of = address_of2tc(expr->type, expr);
   smt_cachet::const_iterator cache_result = smt_cache.find(new_addr_of);
   if(cache_result != smt_cache.end())
     return cache_result->ast;
@@ -324,7 +325,7 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   if(config.ansi_c.cheri)
     membs.push_back(
       constant_int2tc(ptr_struct.members[2], BigInt(0))); /* CHERI-TODO */
-  constant_struct2tc ptr_val_s(pointer_struct, membs);
+  expr2tc ptr_val_s = constant_struct2tc(pointer_struct, membs);
   smt_astt ptr_val = tuple_api->tuple_create(ptr_val_s);
 
   type2tc ptr_loc_type = ptraddr_type2();
@@ -335,15 +336,15 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   std::string start_name = sse1.str();
   std::string end_name = sse2.str();
 
-  symbol2tc start_sym(ptr_loc_type, start_name);
-  symbol2tc end_sym(ptr_loc_type, end_name);
+  expr2tc start_sym = symbol2tc(ptr_loc_type, start_name);
+  expr2tc end_sym = symbol2tc(ptr_loc_type, end_name);
 
   // Another thing to note is that the end var must be /the size of the obj/
   // from start. Express this in irep.
   expr2tc endisequal;
   expr2tc the_offs;
   the_offs = typecast2tc(ptr_loc_type, size);
-  add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
+  expr2tc start_plus_offs = add2tc(ptr_loc_type, start_sym, the_offs);
   endisequal = equality2tc(start_plus_offs, end_sym);
 
   // Assert that start + offs == end
@@ -354,9 +355,9 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   // the end of the address space (ie, wrap around). So, also assert that
   // end > start
   // Except when the size is zero, which might not be statically dicoverable
-  constant_int2tc zero_val(the_offs->type, BigInt(0));
-  equality2tc zeroeq(zero_val, the_offs);
-  greaterthan2tc wraparound(end_sym, start_sym);
+  expr2tc zero_val = constant_int2tc(the_offs->type, BigInt(0));
+  expr2tc zeroeq = equality2tc(zero_val, the_offs);
+  expr2tc wraparound = greaterthan2tc(end_sym, start_sym);
   assert_expr(or2tc(zeroeq, wraparound));
 
   // Generate address space layout constraints.
@@ -367,11 +368,11 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   membs.clear();
   membs.push_back(start_sym);
   membs.push_back(end_sym);
-  constant_struct2tc range_struct(addr_space_type, membs);
+  expr2tc range_struct = constant_struct2tc(addr_space_type, membs);
   std::stringstream ss;
   ss << "__ESBMC_ptr_addr_range_" << obj_num;
-  symbol2tc range_sym(addr_space_type, ss.str());
-  equality2tc eq(range_sym, range_struct);
+  expr2tc range_sym = symbol2tc(addr_space_type, ss.str());
+  expr2tc eq = equality2tc(range_sym, range_struct);
   assert_expr(eq);
 
   // Update array
@@ -390,8 +391,8 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
   std::stringstream start1, end1;
   start1 << "__ESBMC_ptr_obj_start_" << objnum;
   end1 << "__ESBMC_ptr_obj_end_" << objnum;
-  symbol2tc start_i(inttype, start1.str());
-  symbol2tc end_i(inttype, end1.str());
+  expr2tc start_i = symbol2tc(inttype, start1.str());
+  expr2tc end_i = symbol2tc(inttype, end1.str());
 
   for(unsigned int j = 0; j < objnum; j++)
   {
@@ -402,14 +403,14 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     std::stringstream startj, endj;
     startj << "__ESBMC_ptr_obj_start_" << j;
     endj << "__ESBMC_ptr_obj_end_" << j;
-    symbol2tc start_j(inttype, startj.str());
-    symbol2tc end_j(inttype, endj.str());
+    expr2tc start_j = symbol2tc(inttype, startj.str());
+    expr2tc end_j = symbol2tc(inttype, endj.str());
 
     // Formula: (i_end < j_start) || (i_start > j_end)
     // Previous assertions ensure start < end for all objs.
-    lessthan2tc lt1(end_i, start_j);
-    greaterthan2tc gt1(start_i, end_j);
-    or2tc no_overlap(lt1, gt1);
+    expr2tc lt1 = lessthan2tc(end_i, start_j);
+    expr2tc gt1 = greaterthan2tc(start_i, end_j);
+    expr2tc no_overlap = or2tc(lt1, gt1);
 
     expr2tc e = no_overlap;
 
@@ -447,7 +448,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     expr2tc offs = compute_pointer_offset(obj.ptr_obj);
     expr2tc base = get_base_object(obj.ptr_obj);
 
-    address_of2tc addrof(obj.type, base);
+    expr2tc addrof = address_of2tc(obj.type, base);
     smt_astt a = convert_ast(addrof);
 
     /* constant 1 refers to member 'pointer_offset' of 'pointer_struct' */
@@ -496,9 +497,9 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
 
     const if2t &ifval = to_if2t(obj.ptr_obj);
 
-    address_of2tc addrof1(obj.type, ifval.true_value);
-    address_of2tc addrof2(obj.type, ifval.false_value);
-    if2tc newif(obj.type, ifval.cond, addrof1, addrof2);
+    expr2tc addrof1 = address_of2tc(obj.type, ifval.true_value);
+    expr2tc addrof2 = address_of2tc(obj.type, ifval.false_value);
+    expr2tc newif = if2tc(obj.type, ifval.cond, addrof1, addrof2);
     return convert_ast(newif);
   }
 
@@ -506,7 +507,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   {
     // Take the address of whatevers being casted. Either way, they all end up
     // being of a pointer_tuple type, so this should be fine.
-    address_of2tc tmp(type2tc(), to_typecast2t(obj.ptr_obj).from);
+    expr2tc tmp = address_of2tc(type2tc(), to_typecast2t(obj.ptr_obj).from);
     tmp->type = obj.type;
     return convert_ast(tmp);
   }
@@ -520,28 +521,29 @@ void smt_convt::init_addr_space_array()
   addr_space_sym_num.back() = 1;
 
   type2tc ptr_int_type = ptraddr_type2(); /* CHERI-TODO */
-  constant_int2tc zero_ptr_int(ptr_int_type, BigInt(0));
-  constant_int2tc one_ptr_int(ptr_int_type, BigInt(1));
-  constant_int2tc obj1_end_const(ptr_int_type, ones(ptr_int_type->get_width()));
+  expr2tc zero_ptr_int = constant_int2tc(ptr_int_type, BigInt(0));
+  expr2tc one_ptr_int = constant_int2tc(ptr_int_type, BigInt(1));
+  expr2tc obj1_end_const =
+    constant_int2tc(ptr_int_type, ones(ptr_int_type->get_width()));
 
-  symbol2tc obj0_start(ptr_int_type, "__ESBMC_ptr_obj_start_0");
-  symbol2tc obj0_end(ptr_int_type, "__ESBMC_ptr_obj_end_0");
+  expr2tc obj0_start = symbol2tc(ptr_int_type, "__ESBMC_ptr_obj_start_0");
+  expr2tc obj0_end = symbol2tc(ptr_int_type, "__ESBMC_ptr_obj_end_0");
 
   assert_expr(equality2tc(obj0_start, zero_ptr_int));
   assert_expr(equality2tc(obj0_end, zero_ptr_int));
 
-  symbol2tc obj1_start(ptr_int_type, "__ESBMC_ptr_obj_start_1");
-  symbol2tc obj1_end(ptr_int_type, "__ESBMC_ptr_obj_end_1");
+  expr2tc obj1_start = symbol2tc(ptr_int_type, "__ESBMC_ptr_obj_start_1");
+  expr2tc obj1_end = symbol2tc(ptr_int_type, "__ESBMC_ptr_obj_end_1");
 
   assert_expr(equality2tc(obj1_start, one_ptr_int));
   assert_expr(equality2tc(obj1_end, obj1_end_const));
 
-  constant_struct2tc addr0_tuple(
+  expr2tc addr0_tuple = constant_struct2tc(
     addr_space_type, std::vector<expr2tc>{obj0_start, obj0_end});
   assert_expr(equality2tc(
     symbol2tc(addr_space_type, "__ESBMC_ptr_addr_range_0"), addr0_tuple));
 
-  constant_struct2tc addr1_tuple(
+  expr2tc addr1_tuple = constant_struct2tc(
     addr_space_type, std::vector<expr2tc>{obj1_start, obj1_end});
   assert_expr(equality2tc(
     symbol2tc(addr_space_type, "__ESBMC_ptr_addr_range_1"), addr1_tuple));
@@ -566,8 +568,8 @@ void smt_convt::init_addr_space_array()
     /* same as NULL capability */
     inv_members.emplace_back(constant_int2tc(ptr_struct.members[2], 0));
   }
-  constant_struct2tc null_ptr_tuple(pointer_struct, null_members);
-  constant_struct2tc invalid_ptr_tuple(pointer_struct, inv_members);
+  expr2tc null_ptr_tuple = constant_struct2tc(pointer_struct, null_members);
+  expr2tc invalid_ptr_tuple = constant_struct2tc(pointer_struct, inv_members);
 
   null_ptr_ast = convert_ast(null_ptr_tuple);
   invalid_ptr_ast = convert_ast(invalid_ptr_tuple);
@@ -583,15 +585,15 @@ void smt_convt::init_addr_space_array()
 
 void smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
 {
-  symbol2tc oldname(
+  expr2tc oldname = symbol2tc(
     addr_space_arr_type,
     "__ESBMC_addrspace_arr_" + std::to_string(addr_space_sym_num.back()++));
-  with2tc store(
+  expr2tc store = with2tc(
     addr_space_arr_type,
     oldname,
     constant_int2tc(machine_ptr, BigInt(idx)),
     val);
-  symbol2tc newname(
+  expr2tc newname = symbol2tc(
     addr_space_arr_type,
     "__ESBMC_addrspace_arr_" + std::to_string(addr_space_sym_num.back()));
   convert_assign(equality2tc(newname, store));
