@@ -1355,6 +1355,14 @@ public:
     : base2tc(std::make_shared<contained>(args...))
   {
   }
+
+  // to get boost to recognize something2tc's as being a
+  // shared pointer type, we need to define a freestanding get_pointer for it.
+  // put it as an inline friend as to not pollute the outer namespace
+  friend const contained *get_pointer(const something2tc &p)
+  {
+    return p.get();
+  }
 };
 
 // Boost doesn't have variadic vector templates, so convert to it.
@@ -1374,15 +1382,6 @@ class variadic_vector<>
   typedef boost::mpl::vector<> type;
 };
 } // namespace esbmct
-
-// In global namespace: to get boost to recognize something2tc's as being a
-// shared pointer type, we need to define get_pointer for it:
-
-template <typename T1, typename T2>
-T2 *get_pointer(esbmct::something2tc<T1, T2> const &p)
-{
-  return const_cast<T2 *>(p.get());
-}
 
 inline bool operator==(const type2tc &a, const type2tc &b)
 {
