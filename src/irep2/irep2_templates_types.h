@@ -273,8 +273,8 @@
     type_methods2<basename##2t, superclass, typename superclass::traits>;      \
   irep_typedefs6(basename, superclass)
 
-#define type_typedefs_empty(basename)                                          \
+#define type_typedefs_empty(basename, superclass)                              \
   template class esbmct::                                                      \
-    type_methods2<basename##2t, type2t, esbmct::type2t_default_traits>;        \
+    type_methods2<basename##2t, superclass, typename superclass::traits>;      \
   template class esbmct::                                                      \
-    irep_methods2<basename##2t, type2t, esbmct::type2t_default_traits>;
+    irep_methods2<basename##2t, superclass, typename superclass::traits>;

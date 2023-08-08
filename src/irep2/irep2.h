@@ -166,10 +166,8 @@ namespace esbmct
 {
 template <typename... Args>
 class expr2t_traits;
-typedef expr2t_traits<> expr2t_default_traits;
 template <typename... Args>
 class type2t_traits;
-typedef type2t_traits<> type2t_default_traits;
 } // namespace esbmct
 
 class type2t;
@@ -318,7 +316,7 @@ public:
   };
 
   /* Define default traits */
-  typedef typename esbmct::type2t_default_traits traits;
+  typedef typename esbmct::type2t_traits<> traits;
 
   /** Symbolic type exception class.
    *  To be thrown when attempting to fetch the width of a symbolic type, such
@@ -554,7 +552,7 @@ public:
   typedef expr2tc container_type;
   typedef expr2t base_type;
   // Also provide base traits
-  typedef esbmct::expr2t_default_traits traits;
+  typedef esbmct::expr2t_traits<> traits;
 
   virtual ~expr2t() = default;
 
