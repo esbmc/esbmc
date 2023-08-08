@@ -248,8 +248,8 @@ void goto_checkt::overflow_check(
 
   // add overflow subgoal
   expr2tc overflow = is_neg2t(expr)
-                       ? expr2tc(overflow_neg2tc(to_neg2t(expr).value))
-                       : expr2tc(overflow2tc(expr));
+                       ? overflow_neg2tc(to_neg2t(expr).value)
+                       : overflow2tc(expr);
   make_not(overflow);
 
   add_guarded_claim(
