@@ -335,11 +335,11 @@ irep_typedefs(vector, array_data)
 // clang-format on
 #undef irep_typedefs
 
-  /** Boolean type.
+/** Boolean type.
  *  Identifies a boolean type. Contains no additional data.
- *  @extends typet
+ *  @extends type2t
  */
-  class bool_type2t : public bool_type_methods
+class bool_type2t : public bool_type_methods
 {
 public:
   bool_type2t() : bool_type_methods(bool_id)
