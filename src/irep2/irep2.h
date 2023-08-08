@@ -1270,61 +1270,6 @@ public:
   void foreach_subtype_impl(type2t::subtype_delegate &t) override;
 };
 
-// So that we can write such things as:
-//
-//   constant_int2tc bees(type, val);
-//
-// We need a class derived from expr2tc that takes the correct set of
-// constructor arguments, which means yet more template goo.
-template <class base, class contained>
-class something2tc : public irep_container<base>
-{
-public:
-  typedef irep_container<base> base2tc;
-
-  const contained &operator*() const
-  {
-    return static_cast<const contained &>(*base2tc::get());
-  }
-
-  const contained *operator->() const // never throws
-  {
-    return static_cast<const contained *>(base2tc::operator->());
-  }
-
-  const contained *get() const // never throws
-  {
-    return static_cast<const contained *>(base2tc::get());
-  }
-
-  contained *get() // never throws
-  {
-    base2tc::detach();
-    return static_cast<contained *>(base2tc::get());
-  }
-
-  contained *operator->() // never throws
-  {
-    base2tc::detach();
-    return static_cast<contained *>(base2tc::operator->());
-  }
-
-  // Forward all constructors down to the contained type.
-  template <typename... Args>
-  something2tc(const Args &...args)
-    : base2tc(std::make_shared<contained>(args...))
-  {
-  }
-
-  // to get boost to recognize something2tc's as being a
-  // shared pointer type, we need to define a freestanding get_pointer for it.
-  // put it as an inline friend as to not pollute the outer namespace
-  friend const contained *get_pointer(const something2tc &p)
-  {
-    return p.get();
-  }
-};
-
 } // namespace esbmct
 
 inline bool operator==(const type2tc &a, const type2tc &b)
