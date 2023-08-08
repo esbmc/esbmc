@@ -938,26 +938,6 @@ public:
   typedef expr2t base2t;
 };
 
-// "Specialisation" for expr kinds that don't take a type, like boolean
-// typed exprs. Should actually become a more structured expr2t_traits
-// that can be specialised in this way, at a later date. Might want to
-// move the presumed type down to the _data class at that time too.
-template <typename... Args>
-class expr2t_traits_notype
-{
-public:
-  typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
-    expr_id_field;
-  typedef field_traits<type2tc, expr2t, &expr2t::type> type_field;
-  typedef typename boost::mpl::push_front<
-    typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::
-      type,
-    expr_id_field>::type fields;
-  static constexpr unsigned int num_fields =
-    boost::mpl::size<fields>::type::value;
-  typedef expr2t base2t;
-};
-
 // Hack to force something2tc to always construct the traits' type, rather
 // that copy construct. Due to misery and ambiguity elsewhere.
 template <typename... Args>
