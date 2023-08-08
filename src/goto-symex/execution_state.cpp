@@ -248,6 +248,7 @@ void execution_statet::symex_step(reachability_treet &art)
     if(instruction.function == "__ESBMC_main")
     {
       end_thread();
+      owning_rt->main_thread_ended = true;
     }
     else if(
       instruction.function == "c:@F@main" &&
@@ -423,6 +424,10 @@ bool execution_statet::check_if_ileaves_blocked()
     // Don't generate interleavings automatically - instead, the user will
     // inserts intrinsics identifying where they want interleavings to occur,
     // and to what thread.
+    return true;
+
+  if(owning_rt->main_thread_ended && memory_leak_check)
+    // Don't generate further interleavings since __ESBMC_main thread has ended.
     return true;
 
   if(threads_state.size() < 2)

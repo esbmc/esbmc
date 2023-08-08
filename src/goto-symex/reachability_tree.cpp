@@ -41,7 +41,7 @@ reachability_treet::reachability_treet(
   interactive_ileaves = options.get_bool_option("interactive-ileaves");
   schedule = options.get_bool_option("schedule");
   por = !options.get_bool_option("no-por");
-
+  main_thread_ended = false;
   target_template = std::move(target);
 }
 
