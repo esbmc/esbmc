@@ -318,6 +318,8 @@ public:
   const namespacet &ns;
   /** Options that are enabled */
   optionst &options;
+  /** __ESBMC_main thread has ended */
+  bool main_thread_ended;
 
 protected:
   /** Stack of execution states representing current interleaving.
