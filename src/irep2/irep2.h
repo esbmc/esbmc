@@ -196,10 +196,12 @@ class constant_vector2t;
  *  locations continued to share the original.
  *
  *  So yeah, that's what this class attempts to implement, via the medium of
- *  boosts shared_ptr.
+ *  std::shared_ptr. However, to the outside the shared_ptr is not accessible
+ *  since that would break the const guarantees for operator* and .get() which
+ *  this class provides.
  */
 template <class T>
-class irep_container : public std::shared_ptr<T>
+class irep_container : private std::shared_ptr<T>
 {
 public:
   constexpr irep_container() = default;
@@ -223,6 +225,13 @@ public:
     const T *foo = std::shared_ptr<T>::get();
     return foo->simplify();
   }
+
+  /* provide own definitions for
+   *   operator*
+   *   operator->
+   *   get()
+   * to account for const-ness and detach if necessary
+   */
 
   const T &operator*() const
   {
@@ -257,6 +266,11 @@ public:
 
   void detach()
   {
+    /* TODO threads: this is unsafe for multi-threaded execution
+     *
+     * From the docs: In multithreaded environment, the value returned by
+     * use_count is approximate (typical implementations use a
+     * memory_order_relaxed load). */
     if(this->use_count() == 1)
       return; // No point remunging oneself if we're the only user of the ptr.
 
@@ -274,6 +288,56 @@ public:
       return foo->crc_val;
 
     return foo->do_crc();
+  }
+
+  using std::shared_ptr<T>::operator bool;
+  using std::shared_ptr<T>::reset;
+
+  friend void swap(irep_container &a, irep_container &b)
+  {
+    using std::swap;
+    swap(
+      static_cast<std::shared_ptr<T> &>(a),
+      static_cast<std::shared_ptr<T> &>(b));
+  }
+
+  void swap(irep_container &b)
+  {
+    std::shared_ptr<T>::swap(b);
+  }
+
+  friend bool operator==(const irep_container &a, const irep_container &b)
+  {
+    // Handle nil ireps
+    if(!a.get() && !b.get())
+      return true;
+    if(!a.get() || !b.get())
+      return false;
+
+    return (*a.get() == *b.get());
+  }
+
+  friend bool operator!=(const irep_container &a, const irep_container &b)
+  {
+    return !(a == b);
+  }
+
+  friend bool operator<(const irep_container &a, const irep_container &b)
+  {
+    if(!a.get())                 // nil is lower than non-nil
+      return b.get() != nullptr; // true if b is non-nil, so a is lower
+    if(!b.get())
+      return false; // If b is nil, nothing can be lower
+
+    return (*a.get() < *b.get());
+  }
+
+  friend bool operator>(const irep_container &a, const irep_container &b)
+  {
+    // We're greater if we neither less than or equal.
+    // This costs more: but that's ok, because all conventional software uses
+    // less-than comparisons for ordering
+    return !(a < b) && (a != b);
   }
 };
 
@@ -1247,73 +1311,6 @@ public:
 };
 
 } // namespace esbmct
-
-inline bool operator==(const type2tc &a, const type2tc &b)
-{
-  // Handle nil ireps
-  if(is_nil_type(a) && is_nil_type(b))
-    return true;
-  if(is_nil_type(a) || is_nil_type(b))
-    return false;
-
-  return (*a.get() == *b.get());
-}
-
-inline bool operator!=(const type2tc &a, const type2tc &b)
-{
-  return !(a == b);
-}
-
-inline bool operator<(const type2tc &a, const type2tc &b)
-{
-  if(is_nil_type(a))        // nil is lower than non-nil
-    return !is_nil_type(b); // true if b is non-nil, so a is lower
-  if(is_nil_type(b))
-    return false; // If b is nil, nothing can be lower
-
-  return (*a.get() < *b.get());
-}
-
-inline bool operator>(const type2tc &a, const type2tc &b)
-{
-  // We're greater if we neither less than or equal.
-  // This costs more: but that's ok, because all conventional software uses
-  // less-than comparisons for ordering
-  return !(a < b) && (a != b);
-}
-
-inline bool operator==(const expr2tc &a, const expr2tc &b)
-{
-  if(is_nil_expr(a) && is_nil_expr(b))
-    return true;
-  if(is_nil_expr(a) || is_nil_expr(b))
-    return false;
-
-  return (*a.get() == *b.get());
-}
-
-inline bool operator!=(const expr2tc &a, const expr2tc &b)
-{
-  return !(a == b);
-}
-
-inline bool operator<(const expr2tc &a, const expr2tc &b)
-{
-  if(is_nil_expr(a))        // nil is lower than non-nil
-    return !is_nil_expr(b); // true if b is non-nil, so a is lower
-  if(is_nil_expr(b))
-    return false; // If b is nil, nothing can be lower
-
-  return (*a.get() < *b.get());
-}
-
-inline bool operator>(const expr2tc &a, const expr2tc &b)
-{
-  // We're greater if we neither less than or equal.
-  // This costs more: but that's ok, because all conventional software uses
-  // less-than comparisons for ordering
-  return !(a < b) && (a != b);
-}
 
 inline std::ostream &operator<<(std::ostream &out, const expr2tc &a)
 {
