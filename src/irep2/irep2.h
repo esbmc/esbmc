@@ -205,7 +205,7 @@ template <class T>
 class irep_container : private std::shared_ptr<T>
 {
 public:
-  constexpr irep_container() = default;
+  constexpr irep_container() noexcept = default;
   constexpr irep_container(const irep_container &ref) = default;
   constexpr irep_container(irep_container &&ref) = default;
 
@@ -231,21 +231,26 @@ public:
    *   operator*
    *   operator->
    *   get()
-   * to account for const-ness and detach if necessary
+   * to account for const-ness and detach if necessary.
+   *
+   * This interface is not 'equal' to std::shared_ptr's in the sense of
+   * 'override' precisely because the const-ness of *this is moved to the
+   * pointee, which std::shared_ptr doesn't do. We can reuse the noexcept
+   * guarantee, though.
    */
 
   // the const versions just forward
-  const T &operator*() const
+  const T &operator*() const noexcept
   {
     return *get();
   }
 
-  const T *operator->() const // never throws
+  const T *operator->() const noexcept
   {
     return get();
   }
 
-  const T *get() const // never throws
+  const T *get() const noexcept
   {
     return std::shared_ptr<T>::get();
   }
