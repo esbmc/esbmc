@@ -900,8 +900,9 @@ void execution_statet::get_expr_globals(
     }
   }
 
-  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e)
-                        { get_expr_globals(ns, e, globals_list); });
+  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
+    get_expr_globals(ns, e, globals_list);
+  });
 }
 
 bool execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l)
