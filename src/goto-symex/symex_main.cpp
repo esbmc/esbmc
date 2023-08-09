@@ -209,19 +209,19 @@ void goto_symext::symex_step(reachability_treet &art)
   case ASSIGN:
     if(!cur_state->guard.is_false())
     {
-      code_assign2tc deref_code = instruction.code;
+      code_assign2tc deref_code(to_code_assign2t(instruction.code));
 
       // XXX jmorse -- this is not fully symbolic.
-      if(thrown_obj_map.find(cur_state->source.pc) != thrown_obj_map.end())
+      if(auto it = thrown_obj_map.find(cur_state->source.pc);
+         it != thrown_obj_map.end())
       {
-        symbol2tc thrown_obj = thrown_obj_map[cur_state->source.pc];
+        const symbol2tc &thrown_obj = it->second;
 
         if(
           is_pointer_type(deref_code->target->type) &&
           !is_pointer_type(thrown_obj->type))
         {
-          expr2tc new_thrown_obj(
-            new address_of2t(thrown_obj->type, thrown_obj));
+          expr2tc new_thrown_obj = address_of2tc(thrown_obj->type, thrown_obj);
           deref_code->source = new_thrown_obj;
         }
         else
@@ -492,7 +492,7 @@ void goto_symext::run_intrinsic(
       op));
 
     // Perform overflow check and assign it to the return object
-    symex_assign(code_assign2tc(func_call.ret, expr2tc(new overflow2t(op))));
+    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
   }
   else if(has_prefix(symname, "c:@F@__ESBMC_convertvector"))
   {

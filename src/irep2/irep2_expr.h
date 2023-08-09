@@ -66,7 +66,7 @@ public:
   typedef esbmct::
     field_traits<fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value>
       value_field;
-  typedef esbmct::expr2t_traits_notype<value_field> traits;
+  typedef esbmct::expr2t_traits<value_field> traits;
 };
 
 class constant_floatbv_data : public constant2t
@@ -89,7 +89,7 @@ public:
     constant_floatbv_data,
     &constant_floatbv_data::value>
     value_field;
-  typedef esbmct::expr2t_traits_notype<value_field> traits;
+  typedef esbmct::expr2t_traits<value_field> traits;
 };
 
 class constant_datatype_data : public constant2t
@@ -155,7 +155,7 @@ public:
   typedef esbmct::
     field_traits<bool, constant_bool_data, &constant_bool_data::value>
       value_field;
-  typedef esbmct::expr2t_traits_notype<value_field> traits;
+  typedef esbmct::expr2t_traits<value_field> traits;
 };
 
 class constant_array_of_data : public constant2t
@@ -362,7 +362,7 @@ public:
     side_1_field;
   typedef esbmct::field_traits<expr2tc, relation_data, &relation_data::side_2>
     side_2_field;
-  typedef esbmct::expr2t_traits_notype<side_1_field, side_2_field> traits;
+  typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
 };
 
 class logical_ops : public expr2t
@@ -387,7 +387,7 @@ public:
 
   // Type mangling:
   typedef esbmct::field_traits<expr2tc, bool_1op, &bool_1op::value> value_field;
-  typedef esbmct::expr2t_traits_always_construct<value_field> traits;
+  typedef esbmct::expr2t_traits_notype<value_field> traits;
 };
 
 class logic_2ops : public logical_ops
@@ -411,7 +411,7 @@ public:
     side_1_field;
   typedef esbmct::field_traits<expr2tc, logic_2ops, &logic_2ops::side_2>
     side_2_field;
-  typedef esbmct::expr2t_traits_notype<side_1_field, side_2_field> traits;
+  typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
 };
 
 class bitops : public expr2t
@@ -633,7 +633,7 @@ public:
   typedef esbmct::
     field_traits<expr2tc, same_object_data, &same_object_data::side_2>
       side_2_field;
-  typedef esbmct::expr2t_traits_notype<side_1_field, side_2_field> traits;
+  typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
 };
 
 class pointer_ops : public expr2t
@@ -665,7 +665,7 @@ public:
   invalid_pointer_ops(const invalid_pointer_ops &ref) = default;
 
   // Type mangling:
-  typedef esbmct::expr2t_traits_always_construct<ptr_obj_field> traits;
+  typedef esbmct::expr2t_traits_notype<ptr_obj_field> traits;
 };
 
 class byte_ops : public expr2t
@@ -873,7 +873,7 @@ public:
   // Type mangling:
   typedef esbmct::field_traits<expr2tc, overflow_ops, &overflow_ops::operand>
     operand_field;
-  typedef esbmct::expr2t_traits_notype<operand_field> traits;
+  typedef esbmct::expr2t_traits<operand_field> traits;
 };
 
 class overflow_cast_data : public overflow_ops
@@ -897,7 +897,7 @@ public:
   typedef esbmct::
     field_traits<unsigned int, overflow_cast_data, &overflow_cast_data::bits>
       bits_field;
-  typedef esbmct::expr2t_traits_notype<operand_field, bits_field> traits;
+  typedef esbmct::expr2t_traits<operand_field, bits_field> traits;
 };
 
 class dynamic_object_data : public expr2t
@@ -964,7 +964,7 @@ public:
   // Type mangling:
   typedef esbmct::field_traits<expr2tc, object_ops, &object_ops::value>
     value_field;
-  typedef esbmct::expr2t_traits_always_construct<value_field> traits;
+  typedef esbmct::expr2t_traits_notype<value_field> traits;
 };
 
 class sideeffect_data : public expr2t
@@ -1065,7 +1065,7 @@ public:
     code_block_data,
     &code_block_data::operands>
     operands_field;
-  typedef esbmct::expr2t_traits_notype<operands_field> traits;
+  typedef esbmct::expr2t_traits<operands_field> traits;
 };
 
 class code_assign_data : public code_base
@@ -1091,7 +1091,7 @@ public:
   typedef esbmct::
     field_traits<expr2tc, code_assign_data, &code_assign_data::source>
       source_field;
-  typedef esbmct::expr2t_traits_notype<target_field, source_field> traits;
+  typedef esbmct::expr2t_traits<target_field, source_field> traits;
 };
 
 class code_decl_data : public code_base
@@ -1131,7 +1131,7 @@ public:
     code_printf_data,
     &code_printf_data::operands>
     operands_field;
-  typedef esbmct::expr2t_traits_notype<operands_field> traits;
+  typedef esbmct::expr2t_traits<operands_field> traits;
 };
 
 class code_expression_data : public code_base
@@ -1149,7 +1149,7 @@ public:
   typedef esbmct::
     field_traits<expr2tc, code_expression_data, &code_expression_data::operand>
       operand_field;
-  typedef esbmct::expr2t_traits_always_construct<operand_field> traits;
+  typedef esbmct::expr2t_traits_notype<operand_field> traits;
 };
 
 class code_goto_data : public code_base
@@ -1167,7 +1167,7 @@ public:
   typedef esbmct::
     field_traits<irep_idt, code_goto_data, &code_goto_data::target>
       target_field;
-  typedef esbmct::expr2t_traits_notype<target_field> traits;
+  typedef esbmct::expr2t_traits<target_field> traits;
 };
 
 class object_desc_data : public expr2t
@@ -1232,9 +1232,8 @@ public:
     code_funccall_data,
     &code_funccall_data::operands>
     operands_field;
-  typedef esbmct::
-    expr2t_traits_notype<ret_field, function_field, operands_field>
-      traits;
+  typedef esbmct::expr2t_traits<ret_field, function_field, operands_field>
+    traits;
 };
 
 class code_comma_data : public code_base
@@ -1300,7 +1299,7 @@ public:
     code_cpp_catch_data,
     &code_cpp_catch_data::exception_list>
     exception_list_field;
-  typedef esbmct::expr2t_traits_notype<exception_list_field> traits;
+  typedef esbmct::expr2t_traits<exception_list_field> traits;
 };
 
 class code_cpp_throw_data : public code_base
@@ -1328,8 +1327,7 @@ public:
     code_cpp_throw_data,
     &code_cpp_throw_data::exception_list>
     exception_list_field;
-  typedef esbmct::expr2t_traits_notype<operand_field, exception_list_field>
-    traits;
+  typedef esbmct::expr2t_traits<operand_field, exception_list_field> traits;
 };
 
 class code_cpp_throw_decl_data : public code_base
@@ -1352,7 +1350,7 @@ public:
     code_cpp_throw_decl_data,
     &code_cpp_throw_decl_data::exception_list>
     exception_list_field;
-  typedef esbmct::expr2t_traits_notype<exception_list_field> traits;
+  typedef esbmct::expr2t_traits<exception_list_field> traits;
 };
 
 class extract_data : public expr2t
@@ -1390,14 +1388,7 @@ public:
 // again and again, this gets macro'd.
 
 #define irep_typedefs(basename, superclass)                                    \
-  typedef esbmct::something2tc<                                                \
-    expr2t,                                                                    \
-    basename##2t,                                                              \
-    expr2t::basename##_id,                                                     \
-    const expr2t::expr_ids,                                                    \
-    &expr2t::expr_id,                                                          \
-    superclass>                                                                \
-    basename##2tc;                                                             \
+  typedef esbmct::something2tc<expr2t, basename##2t> basename##2tc;            \
   typedef esbmct::                                                             \
     expr_methods2<basename##2t, superclass, superclass::traits, basename##2tc> \
       basename##_expr_methods;                                                 \
@@ -1415,14 +1406,7 @@ public:
 // Special case for some empty ireps,
 
 #define irep_typedefs_empty(basename, superclass)                              \
-  typedef esbmct::something2tc<                                                \
-    expr2t,                                                                    \
-    basename##2t,                                                              \
-    expr2t::basename##_id,                                                     \
-    const expr2t::expr_ids,                                                    \
-    &expr2t::expr_id,                                                          \
-    superclass>                                                                \
-    basename##2tc;                                                             \
+  typedef esbmct::something2tc<expr2t, basename##2t> basename##2tc;            \
   typedef esbmct::expr_methods2<                                               \
     basename##2t,                                                              \
     superclass,                                                                \
@@ -2742,10 +2726,7 @@ public:
    *         might be changed in the future.
    *  @param ptrobj Item to take pointer to. */
   address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
-    : address_of_expr_methods(
-        type2tc(new pointer_type2t(subtype)),
-        address_of_id,
-        ptrobj)
+    : address_of_expr_methods(pointer_type2tc(subtype), address_of_id, ptrobj)
   {
   }
   address_of2t(const address_of2t &ref) = default;
@@ -3571,19 +3552,6 @@ public:
 
   static std::string field_names[esbmct::num_type_fields];
 };
-
-// Generate a boost mpl set of all the trait type used by exprs. This juggling
-// removes duplicates. Has to be below class defs apparently.
-
-#define _ESBMC_IREP2_MPL_SET(r, data, elem) BOOST_PP_CAT(elem, 2t)::traits,
-typedef boost::mpl::fold<
-  esbmct::variadic_vector<
-    BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_SET, foo, ESBMC_LIST_OF_EXPRS)
-      add2t::traits>, // Need to leave a trailing type because some extra commas
-                      // will be splatted on the end
-  boost::mpl::set0<>, // Initial state, empty set
-  // Insert things into this boost set
-  boost::mpl::insert<boost::mpl::_1, boost::mpl::_2>>::type set_of_traits;
 
 // Same deal as for "type_macros".
 #ifdef NDEBUG

@@ -87,7 +87,7 @@ void symex_dereference_statet::get_value_set(
         if(is_null_object2t(obj.object))
         {
           // create NULL pointer type in case the object is a NULL-object
-          type2tc nullptrtype = type2tc(new pointer_type2t(expr->type));
+          type2tc nullptrtype = pointer_type2tc(expr->type);
           obj_ptr = symbol2tc(nullptrtype, "NULL");
         }
         else

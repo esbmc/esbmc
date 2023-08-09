@@ -367,8 +367,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
 {
   if(is_signedbv_type(type))
   {
-    signedbv_type2tc signed_type = type;
-    unsigned width = signed_type->width;
+    unsigned width = to_signedbv_type(type).width;
 
     if(width <= config.ansi_c.char_width)
       return CHAR;
@@ -383,8 +382,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
   }
   else if(is_unsignedbv_type(type))
   {
-    unsignedbv_type2tc unsigned_type = type;
-    unsigned width = unsigned_type->width;
+    unsigned width = to_unsignedbv_type(type).width;
 
     if(width <= config.ansi_c.char_width)
       return UCHAR;
@@ -401,8 +399,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
     return BOOL;
   else if(is_fixedbv_type(type))
   {
-    fixedbv_type2tc fixedbv_type = type;
-    unsigned width = fixedbv_type->width;
+    unsigned width = to_fixedbv_type(type).width;
     if(width <= config.ansi_c.single_width)
       return SINGLE;
     else if(width <= config.ansi_c.double_width)
@@ -412,8 +409,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
   }
   else if(is_pointer_type(type))
   {
-    pointer_type2tc ptr_type = type;
-    if(is_empty_type(ptr_type->subtype))
+    if(is_empty_type(to_pointer_type(type).subtype))
       return VOIDPTR;
     else
       return PTR;
@@ -504,8 +500,7 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr, c_typet c_type)
   case PTR:
     if(is_array_type(expr_type))
     {
-      array_type2tc arr_type = expr_type;
-      new_type = pointer_type2tc(arr_type->subtype);
+      new_type = pointer_type2tc(to_array_type(expr_type).subtype);
       break;
     }
     return;
@@ -559,10 +554,10 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr, c_typet c_type)
   {
     if(is_pointer_type(new_type) && is_array_type(expr_type))
     {
-      array_type2tc arr_type = expr_type;
-      pointer_type2tc ptr_type = new_type;
-      index2tc index_expr(arr_type->subtype, expr, gen_zero(index_type2()));
-      address_of2tc addrof(ptr_type->subtype, index_expr);
+      const array_type2t &arr_type = to_array_type(expr_type);
+      const pointer_type2t &ptr_type = to_pointer_type(new_type);
+      index2tc index_expr(arr_type.subtype, expr, gen_zero(index_type2()));
+      address_of2tc addrof(ptr_type.subtype, index_expr);
       expr = addrof;
     }
     else
@@ -882,9 +877,9 @@ void c_typecastt::do_typecast(expr2tc &dest, const type2tc &type)
 
   if(is_array_type(dest_type))
   {
-    array_type2tc arr_type = dest_type;
-    index2tc index(arr_type->subtype, dest, gen_zero(index_type2()));
-    address_of2tc tmp(arr_type->subtype, index);
+    const array_type2t &arr_type = to_array_type(dest_type);
+    index2tc index(arr_type.subtype, dest, gen_zero(index_type2()));
+    address_of2tc tmp(arr_type.subtype, index);
     dest = tmp;
     if(ns.follow(dest->type) != ns.follow(type))
       dest = typecast2tc(type, dest);

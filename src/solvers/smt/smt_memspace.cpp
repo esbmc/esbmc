@@ -253,7 +253,7 @@ smt_astt smt_convt::convert_identifier_pointer(
     {
       // For null, other pieces of code will have already initialized its
       // value, so we can just refer to a symbol.
-      type2tc t(new pointer_type2t(get_empty_type()));
+      type2tc t = pointer_type2tc(get_empty_type());
       a = tuple_api->mk_tuple_symbol(symbol, convert_sort(t));
 
       return a;
@@ -281,7 +281,7 @@ smt_astt smt_convt::convert_identifier_pointer(
   obj_num = pointer_logic.back().add_object(expr);
 
   // Produce a symbol representing this.
-  type2tc t(new pointer_type2t(get_empty_type()));
+  type2tc t = pointer_type2tc(get_empty_type());
   a = tuple_api->mk_tuple_symbol(symbol, convert_sort(t));
 
   // If this object hasn't yet been put in the address space record, we need to
@@ -318,11 +318,12 @@ smt_astt smt_convt::convert_identifier_pointer(
 smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
 {
   std::vector<expr2tc> membs;
-  membs.push_back(constant_int2tc(pointer_struct->members[0], BigInt(obj_num)));
-  membs.push_back(constant_int2tc(pointer_struct->members[1], BigInt(0)));
+  const struct_type2t &ptr_struct = to_struct_type(pointer_struct);
+  membs.push_back(constant_int2tc(ptr_struct.members[0], BigInt(obj_num)));
+  membs.push_back(constant_int2tc(ptr_struct.members[1], BigInt(0)));
   if(config.ansi_c.cheri)
     membs.push_back(
-      constant_int2tc(pointer_struct->members[2], BigInt(0))); /* CHERI-TODO */
+      constant_int2tc(ptr_struct.members[2], BigInt(0))); /* CHERI-TODO */
   constant_struct2tc ptr_val_s(pointer_struct, membs);
   smt_astt ptr_val = tuple_api->tuple_create(ptr_val_s);
 
@@ -548,20 +549,22 @@ void smt_convt::init_addr_space_array()
   bump_addrspace_array(pointer_logic.back().get_null_object(), addr0_tuple);
   bump_addrspace_array(pointer_logic.back().get_invalid_object(), addr1_tuple);
 
+  const struct_type2t &ptr_struct = to_struct_type(pointer_struct);
+
   std::vector<expr2tc> null_members =
                          {
-                           constant_int2tc(pointer_struct->members[0], 0),
-                           constant_int2tc(pointer_struct->members[1], 0),
+                           constant_int2tc(ptr_struct.members[0], 0),
+                           constant_int2tc(ptr_struct.members[1], 0),
                          },
                        inv_members = {
-                         constant_int2tc(pointer_struct->members[0], 1),
-                         constant_int2tc(pointer_struct->members[1], 0),
+                         constant_int2tc(ptr_struct.members[0], 1),
+                         constant_int2tc(ptr_struct.members[1], 0),
                        };
   if(config.ansi_c.cheri)
   {
-    null_members.emplace_back(constant_int2tc(pointer_struct->members[2], 0));
+    null_members.emplace_back(constant_int2tc(ptr_struct.members[2], 0));
     /* same as NULL capability */
-    inv_members.emplace_back(constant_int2tc(pointer_struct->members[2], 0));
+    inv_members.emplace_back(constant_int2tc(ptr_struct.members[2], 0));
   }
   constant_struct2tc null_ptr_tuple(pointer_struct, null_members);
   constant_struct2tc invalid_ptr_tuple(pointer_struct, inv_members);

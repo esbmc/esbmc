@@ -122,15 +122,12 @@ static_assert(
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc &_type, expr_ids id)
-  : std::enable_shared_from_this<expr2t>(), expr_id(id), type(_type), crc_val(0)
+  : expr_id(id), type(_type), crc_val(0)
 {
 }
 
 expr2t::expr2t(const expr2t &ref)
-  : std::enable_shared_from_this<expr2t>(),
-    expr_id(ref.expr_id),
-    type(ref.type),
-    crc_val(ref.crc_val)
+  : expr_id(ref.expr_id), type(ref.type), crc_val(ref.crc_val)
 {
 }
 
@@ -327,25 +324,17 @@ expr2tc constant_string2t::to_array() const
   type2tc type = get_uint8_type();
 
   for(i = 0; i < length; i++)
-  {
-    constant_int2t *v = new constant_int2t(type, BigInt(value.as_string()[i]));
-    expr2tc ptr(v);
-    contents.push_back(ptr);
-  }
+    contents.push_back(constant_int2tc(type, BigInt(value.as_string()[i])));
 
   // Null terminator is implied.
-  contents.push_back(expr2tc(new constant_int2t(type, BigInt(0))));
+  contents.push_back(constant_int2tc(type, BigInt(0)));
 
-  unsignedbv_type2t *len_type = new unsignedbv_type2t(config.ansi_c.int_width);
-  type2tc len_tp(len_type);
-  constant_int2t *len_val = new constant_int2t(len_tp, BigInt(contents.size()));
-  expr2tc len_val_ref(len_val);
+  type2tc len_tp = unsignedbv_type2tc(config.ansi_c.int_width);
+  expr2tc len_val_ref = constant_int2tc(len_tp, BigInt(contents.size()));
 
-  array_type2t *arr_type = new array_type2t(type, len_val_ref, false);
-  type2tc arr_tp(arr_type);
-  constant_array2t *a = new constant_array2t(arr_tp, contents);
+  type2tc arr_tp = array_type2tc(type, len_val_ref, false);
+  expr2tc final_val = constant_array2tc(arr_tp, contents);
 
-  expr2tc final_val(a);
   return final_val;
 }
 

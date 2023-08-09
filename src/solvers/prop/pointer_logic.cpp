@@ -43,7 +43,7 @@ expr2tc pointer_logict::pointer_expr(unsigned object, const type2tc &type) const
 expr2tc
 pointer_logict::pointer_expr(const pointert &pointer, const type2tc &type) const
 {
-  type2tc pointer_type(new pointer_type2t(get_empty_type()));
+  type2tc pointer_type = pointer_type2tc(get_empty_type());
 
   if(pointer.object == null_object) // NULL?
   {
@@ -72,10 +72,9 @@ expr2tc pointer_logict::object_rec(
   const type2tc &pointer_type,
   const expr2tc &src) const
 {
-  if(src->type->type_id == type2t::array_id)
+  if(is_array_type(src->type))
   {
-    const array_type2t &arrtype =
-      static_cast<const array_type2t &>(*src->type.get());
+    const array_type2t &arrtype = to_array_type(*src->type.get());
     BigInt size = type_byte_size(arrtype.subtype);
 
     if(size == 0)
@@ -142,7 +141,7 @@ pointer_logict::pointer_logict()
 {
   obj_num_offset = 0;
 
-  type2tc type(new pointer_type2t(get_empty_type()));
+  type2tc type = pointer_type2tc(get_empty_type());
   symbol2tc sym(type, "NULL");
 
   // add NULL

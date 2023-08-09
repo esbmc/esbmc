@@ -55,7 +55,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       // Convert to be an addition
       neg2tc negop2(opers.side_2->type, opers.side_2);
       add2tc anadd(opers.side_1->type, opers.side_1, negop2);
-      expr2tc add_overflows(new overflow2t(anadd));
+      expr2tc add_overflows = overflow2tc(anadd);
 
       // Corner case: subtracting MIN_INT from many things overflows. The result
       // should always be positive.

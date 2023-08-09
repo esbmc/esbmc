@@ -83,7 +83,7 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
    * bound as k - k0 and return true
    */
   goto_programt::targett t = loop.get_original_loop_head();
-  symbol2tc symbol;
+  expr2tc symbol;
   int k = 0;
 
   // 1. Check the condition. 't' should be IF !(symbol < K) THEN GOTO x

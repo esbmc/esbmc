@@ -62,7 +62,7 @@ void guardt::guard_expr(expr2tc &dest) const
     return;
   }
 
-  dest = expr2tc(new implies2t(as_expr(), dest));
+  dest = implies2tc(as_expr(), dest);
 }
 
 void guardt::build_guard_expr()
@@ -132,7 +132,7 @@ guardt &operator|=(guardt &g1, const guardt &g2)
   {
     // Both guards have one symbol, so check if we opposite symbols, e.g,
     // g1 == sym1 and g2 == !sym1
-    expr2tc or_expr(new or2t(*g1.guard_list.begin(), *g2.guard_list.begin()));
+    expr2tc or_expr = or2tc(*g1.guard_list.begin(), *g2.guard_list.begin());
     simplify(or_expr);
 
     if(::is_true(or_expr))
@@ -185,7 +185,7 @@ guardt &operator|=(guardt &g1, const guardt &g2)
     new_g2.build_guard_expr();
 
     // Get the and expression from both guards
-    expr2tc or_expr(new or2t(new_g1.as_expr(), new_g2.as_expr()));
+    expr2tc or_expr = or2tc(new_g1.as_expr(), new_g2.as_expr());
 
     // If the guards single symbols, try to simplify the or expression
     if(new_g1.is_single_symbol() && new_g2.is_single_symbol())

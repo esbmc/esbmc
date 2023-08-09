@@ -37,102 +37,129 @@
 // list, for enumerating later. Should avoid manually enumerating anywhere
 // else.
 
-#define ESBMC_LIST_OF_EXPRS                                                         \
-  BOOST_PP_LIST_CONS(                                                               \
-    constant_int,                                                                   \
-    BOOST_PP_LIST_CONS(                                                             \
-      constant_fixedbv,                                                             \
-      BOOST_PP_LIST_CONS(                                                           \
-        constant_floatbv,                                                           \
-        BOOST_PP_LIST_CONS(                                                         \
-          constant_bool,                                                            \
-          BOOST_PP_LIST_CONS(                                                       \
-            constant_string,                                                        \
-            BOOST_PP_LIST_CONS(                                                     \
-              constant_struct,                                                      \
-              BOOST_PP_LIST_CONS(                                                   \
-                constant_union,                                                     \
-                BOOST_PP_LIST_CONS(                                                 \
-                  constant_array,                                                   \
-                  BOOST_PP_LIST_CONS(                                               \
-                    constant_vector,                                                \
-                    BOOST_PP_LIST_CONS(                                             \
-                      constant_array_of,                                            \
-                      BOOST_PP_LIST_CONS(                                           \
-                        symbol,                                                     \
-                        BOOST_PP_LIST_CONS(                                         \
-                          typecast,                                                 \
-                          BOOST_PP_LIST_CONS(                                       \
-                            bitcast,                                                \
-                            BOOST_PP_LIST_CONS(                                     \
-                              nearbyint,                                            \
-                              BOOST_PP_LIST_CONS(                                   \
-                                if,                                                 \
-                                BOOST_PP_LIST_CONS(                                 \
-                                  equality,                                         \
-                                  BOOST_PP_LIST_CONS(                               \
-                                    notequal,                                       \
-                                    BOOST_PP_LIST_CONS(                             \
-                                      lessthan,                                     \
-                                      BOOST_PP_LIST_CONS(                           \
-                                        greaterthan,                                \
-                                        BOOST_PP_LIST_CONS(                         \
-                                          lessthanequal,                            \
-                                          BOOST_PP_LIST_CONS(                       \
-                                            greaterthanequal,                       \
-                                            BOOST_PP_LIST_CONS(                     \
-                                              not,                                  \
-                                              BOOST_PP_LIST_CONS(                   \
-                                                and,                                \
-                                                BOOST_PP_LIST_CONS(                 \
-                                                  or,                               \
-                                                  BOOST_PP_LIST_CONS (              \
-                                                    xor,                            \
-                                                    BOOST_PP_LIST_CONS(             \
-                                                      implies,                      \
-                                                      BOOST_PP_LIST_CONS(           \
-                                                        bitand,                     \
-                                                        BOOST_PP_LIST_CONS(         \
-                                                          bitor,                    \
-                                                          BOOST_PP_LIST_CONS(       \
-                                                            bitxor,                 \
-                                                            BOOST_PP_LIST_CONS(     \
-                                                              bitnand,              \
-                                                              BOOST_PP_LIST_CONS(   \
-                                                                bitnor,             \
-                                                                BOOST_PP_LIST_CONS( \
-                                                                  bitnxor,          \
-                                                                  BOOST_PP_LIST_CONS(bitnot, BOOST_PP_LIST_CONS(lshr, BOOST_PP_LIST_CONS(neg, BOOST_PP_LIST_CONS(abs, BOOST_PP_LIST_CONS(add, BOOST_PP_LIST_CONS(sub, BOOST_PP_LIST_CONS(mul, BOOST_PP_LIST_CONS(div, BOOST_PP_LIST_CONS(ieee_add, BOOST_PP_LIST_CONS(ieee_sub, BOOST_PP_LIST_CONS(ieee_mul, BOOST_PP_LIST_CONS(ieee_div, BOOST_PP_LIST_CONS(ieee_fma, BOOST_PP_LIST_CONS(ieee_sqrt, BOOST_PP_LIST_CONS(popcount, BOOST_PP_LIST_CONS(bswap, BOOST_PP_LIST_CONS(modulus, BOOST_PP_LIST_CONS(shl, BOOST_PP_LIST_CONS(ashr, BOOST_PP_LIST_CONS(dynamic_object, BOOST_PP_LIST_CONS(same_object, BOOST_PP_LIST_CONS(pointer_offset, BOOST_PP_LIST_CONS(pointer_object, BOOST_PP_LIST_CONS(pointer_capability, BOOST_PP_LIST_CONS(address_of, BOOST_PP_LIST_CONS(byte_extract, BOOST_PP_LIST_CONS(byte_update, BOOST_PP_LIST_CONS(with, BOOST_PP_LIST_CONS(member, BOOST_PP_LIST_CONS(index, BOOST_PP_LIST_CONS(isnan, BOOST_PP_LIST_CONS(overflow, BOOST_PP_LIST_CONS(overflow_cast, BOOST_PP_LIST_CONS(overflow_neg, BOOST_PP_LIST_CONS(unknown, BOOST_PP_LIST_CONS(invalid, BOOST_PP_LIST_CONS(null_object, BOOST_PP_LIST_CONS(dereference, BOOST_PP_LIST_CONS(valid_object, BOOST_PP_LIST_CONS(deallocated_obj, BOOST_PP_LIST_CONS(dynamic_size, BOOST_PP_LIST_CONS(sideeffect, BOOST_PP_LIST_CONS(code_block, BOOST_PP_LIST_CONS(code_assign, BOOST_PP_LIST_CONS(code_init, BOOST_PP_LIST_CONS(code_decl, BOOST_PP_LIST_CONS(code_dead, BOOST_PP_LIST_CONS(code_printf, BOOST_PP_LIST_CONS(code_expression, BOOST_PP_LIST_CONS(code_return, BOOST_PP_LIST_CONS(code_skip, BOOST_PP_LIST_CONS(code_free, BOOST_PP_LIST_CONS(code_goto, BOOST_PP_LIST_CONS(object_descriptor, BOOST_PP_LIST_CONS(code_function_call, BOOST_PP_LIST_CONS(code_comma, BOOST_PP_LIST_CONS(invalid_pointer, BOOST_PP_LIST_CONS(code_asm, BOOST_PP_LIST_CONS(code_cpp_del_array, BOOST_PP_LIST_CONS(code_cpp_delete, BOOST_PP_LIST_CONS(code_cpp_catch, BOOST_PP_LIST_CONS(code_cpp_throw, BOOST_PP_LIST_CONS(code_cpp_throw_decl, BOOST_PP_LIST_CONS(code_cpp_throw_decl_end, BOOST_PP_LIST_CONS(isinf, BOOST_PP_LIST_CONS(isnormal, BOOST_PP_LIST_CONS(isfinite, BOOST_PP_LIST_CONS(signbit, BOOST_PP_LIST_CONS(concat, BOOST_PP_LIST_CONS(extract, BOOST_PP_LIST_NIL))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+// clang-format off
+#define ESBMC_LIST_OF_EXPRS                                                    \
+  BOOST_PP_LIST_CONS(constant_int,                                             \
+  BOOST_PP_LIST_CONS(constant_fixedbv,                                         \
+  BOOST_PP_LIST_CONS(constant_floatbv,                                         \
+  BOOST_PP_LIST_CONS(constant_bool,                                            \
+  BOOST_PP_LIST_CONS(constant_string,                                          \
+  BOOST_PP_LIST_CONS(constant_struct,                                          \
+  BOOST_PP_LIST_CONS(constant_union,                                           \
+  BOOST_PP_LIST_CONS(constant_array,                                           \
+  BOOST_PP_LIST_CONS(constant_vector,                                          \
+  BOOST_PP_LIST_CONS(constant_array_of,                                        \
+  BOOST_PP_LIST_CONS(symbol,                                                   \
+  BOOST_PP_LIST_CONS(typecast,                                                 \
+  BOOST_PP_LIST_CONS(bitcast,                                                  \
+  BOOST_PP_LIST_CONS(nearbyint,                                                \
+  BOOST_PP_LIST_CONS(if,                                                       \
+  BOOST_PP_LIST_CONS(equality,                                                 \
+  BOOST_PP_LIST_CONS(notequal,                                                 \
+  BOOST_PP_LIST_CONS(lessthan,                                                 \
+  BOOST_PP_LIST_CONS(greaterthan,                                              \
+  BOOST_PP_LIST_CONS(lessthanequal,                                            \
+  BOOST_PP_LIST_CONS(greaterthanequal,                                         \
+  BOOST_PP_LIST_CONS(not,                                                      \
+  BOOST_PP_LIST_CONS(and,                                                      \
+  BOOST_PP_LIST_CONS(or,                                                       \
+  BOOST_PP_LIST_CONS(xor,                                                      \
+  BOOST_PP_LIST_CONS(implies,                                                  \
+  BOOST_PP_LIST_CONS(bitand,                                                   \
+  BOOST_PP_LIST_CONS(bitor,                                                    \
+  BOOST_PP_LIST_CONS(bitxor,                                                   \
+  BOOST_PP_LIST_CONS(bitnand,                                                  \
+  BOOST_PP_LIST_CONS(bitnor,                                                   \
+  BOOST_PP_LIST_CONS(bitnxor,                                                  \
+  BOOST_PP_LIST_CONS(bitnot,                                                   \
+  BOOST_PP_LIST_CONS(lshr,                                                     \
+  BOOST_PP_LIST_CONS(neg,                                                      \
+  BOOST_PP_LIST_CONS(abs,                                                      \
+  BOOST_PP_LIST_CONS(add,                                                      \
+  BOOST_PP_LIST_CONS(sub,                                                      \
+  BOOST_PP_LIST_CONS(mul,                                                      \
+  BOOST_PP_LIST_CONS(div,                                                      \
+  BOOST_PP_LIST_CONS(ieee_add,                                                 \
+  BOOST_PP_LIST_CONS(ieee_sub,                                                 \
+  BOOST_PP_LIST_CONS(ieee_mul,                                                 \
+  BOOST_PP_LIST_CONS(ieee_div,                                                 \
+  BOOST_PP_LIST_CONS(ieee_fma,                                                 \
+  BOOST_PP_LIST_CONS(ieee_sqrt,                                                \
+  BOOST_PP_LIST_CONS(popcount,                                                 \
+  BOOST_PP_LIST_CONS(bswap,                                                    \
+  BOOST_PP_LIST_CONS(modulus,                                                  \
+  BOOST_PP_LIST_CONS(shl,                                                      \
+  BOOST_PP_LIST_CONS(ashr,                                                     \
+  BOOST_PP_LIST_CONS(dynamic_object,                                           \
+  BOOST_PP_LIST_CONS(same_object,                                              \
+  BOOST_PP_LIST_CONS(pointer_offset,                                           \
+  BOOST_PP_LIST_CONS(pointer_object,                                           \
+  BOOST_PP_LIST_CONS(pointer_capability,                                       \
+  BOOST_PP_LIST_CONS(address_of,                                               \
+  BOOST_PP_LIST_CONS(byte_extract,                                             \
+  BOOST_PP_LIST_CONS(byte_update,                                              \
+  BOOST_PP_LIST_CONS(with,                                                     \
+  BOOST_PP_LIST_CONS(member,                                                   \
+  BOOST_PP_LIST_CONS(index,                                                    \
+  BOOST_PP_LIST_CONS(isnan,                                                    \
+  BOOST_PP_LIST_CONS(overflow,                                                 \
+  BOOST_PP_LIST_CONS(overflow_cast,                                            \
+  BOOST_PP_LIST_CONS(overflow_neg,                                             \
+  BOOST_PP_LIST_CONS(unknown,                                                  \
+  BOOST_PP_LIST_CONS(invalid,                                                  \
+  BOOST_PP_LIST_CONS(null_object,                                              \
+  BOOST_PP_LIST_CONS(dereference,                                              \
+  BOOST_PP_LIST_CONS(valid_object,                                             \
+  BOOST_PP_LIST_CONS(deallocated_obj,                                          \
+  BOOST_PP_LIST_CONS(dynamic_size,                                             \
+  BOOST_PP_LIST_CONS(sideeffect,                                               \
+  BOOST_PP_LIST_CONS(code_block,                                               \
+  BOOST_PP_LIST_CONS(code_assign,                                              \
+  BOOST_PP_LIST_CONS(code_init,                                                \
+  BOOST_PP_LIST_CONS(code_decl,                                                \
+  BOOST_PP_LIST_CONS(code_dead,                                                \
+  BOOST_PP_LIST_CONS(code_printf,                                              \
+  BOOST_PP_LIST_CONS(code_expression,                                          \
+  BOOST_PP_LIST_CONS(code_return,                                              \
+  BOOST_PP_LIST_CONS(code_skip,                                                \
+  BOOST_PP_LIST_CONS(code_free,                                                \
+  BOOST_PP_LIST_CONS(code_goto,                                                \
+  BOOST_PP_LIST_CONS(object_descriptor,                                        \
+  BOOST_PP_LIST_CONS(code_function_call,                                       \
+  BOOST_PP_LIST_CONS(code_comma,                                               \
+  BOOST_PP_LIST_CONS(invalid_pointer,                                          \
+  BOOST_PP_LIST_CONS(code_asm,                                                 \
+  BOOST_PP_LIST_CONS(code_cpp_del_array,                                       \
+  BOOST_PP_LIST_CONS(code_cpp_delete,                                          \
+  BOOST_PP_LIST_CONS(code_cpp_catch,                                           \
+  BOOST_PP_LIST_CONS(code_cpp_throw,                                           \
+  BOOST_PP_LIST_CONS(code_cpp_throw_decl,                                      \
+  BOOST_PP_LIST_CONS(code_cpp_throw_decl_end,                                  \
+  BOOST_PP_LIST_CONS(isinf,                                                    \
+  BOOST_PP_LIST_CONS(isnormal,                                                 \
+  BOOST_PP_LIST_CONS(isfinite,                                                 \
+  BOOST_PP_LIST_CONS(signbit,                                                  \
+  BOOST_PP_LIST_CONS(concat,                                                   \
+  BOOST_PP_LIST_CONS(extract,                                                  \
+  BOOST_PP_LIST_NIL))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 #define ESBMC_LIST_OF_TYPES                                                    \
-  BOOST_PP_LIST_CONS(                                                          \
-    bool,                                                                      \
-    BOOST_PP_LIST_CONS(                                                        \
-      empty,                                                                   \
-      BOOST_PP_LIST_CONS(                                                      \
-        symbol,                                                                \
-        BOOST_PP_LIST_CONS(                                                    \
-          struct,                                                              \
-          BOOST_PP_LIST_CONS(                                                  \
-            union,                                                             \
-            BOOST_PP_LIST_CONS(                                                \
-              code,                                                            \
-              BOOST_PP_LIST_CONS(                                              \
-                array,                                                         \
-                BOOST_PP_LIST_CONS(                                            \
-                  vector,                                                      \
-                  BOOST_PP_LIST_CONS(                                          \
-                    pointer,                                                   \
-                    BOOST_PP_LIST_CONS(                                        \
-                      unsignedbv,                                              \
-                      BOOST_PP_LIST_CONS(                                      \
-                        signedbv,                                              \
-                        BOOST_PP_LIST_CONS(                                    \
-                          fixedbv,                                             \
-                          BOOST_PP_LIST_CONS(                                  \
-                            string,                                            \
-                            BOOST_PP_LIST_CONS(                                \
-                              cpp_name, BOOST_PP_LIST_NIL))))))))))))))
+  BOOST_PP_LIST_CONS(bool,                                                     \
+  BOOST_PP_LIST_CONS(empty,                                                    \
+  BOOST_PP_LIST_CONS(symbol,                                                   \
+  BOOST_PP_LIST_CONS(struct,                                                   \
+  BOOST_PP_LIST_CONS(union,                                                    \
+  BOOST_PP_LIST_CONS(code,                                                     \
+  BOOST_PP_LIST_CONS(array,                                                    \
+  BOOST_PP_LIST_CONS(vector,                                                   \
+  BOOST_PP_LIST_CONS(pointer,                                                  \
+  BOOST_PP_LIST_CONS(unsignedbv,                                               \
+  BOOST_PP_LIST_CONS(signedbv,                                                 \
+  BOOST_PP_LIST_CONS(fixedbv,                                                  \
+  BOOST_PP_LIST_CONS(string,                                                   \
+  BOOST_PP_LIST_CONS(cpp_name,                                                 \
+  BOOST_PP_LIST_NIL))))))))))))))
+// clang-format on
 
 // Even crazier forward decs,
 namespace esbmct
@@ -177,60 +204,20 @@ template <class T>
 class irep_container : public std::shared_ptr<T>
 {
 public:
-  irep_container() : std::shared_ptr<T>()
-  {
-  }
+  constexpr irep_container() = default;
+  constexpr irep_container(const irep_container &ref) = default;
+  constexpr irep_container(irep_container &&ref) = default;
 
-  template <class Y>
-  explicit irep_container(Y *p) : std::shared_ptr<T>(p)
-  {
-  }
-
-  template <class Y>
-  explicit irep_container(const Y *p) : std::shared_ptr<T>(const_cast<Y *>(p))
-  {
-  }
+  irep_container &operator=(irep_container const &ref) = default;
+  irep_container &operator=(irep_container &&ref) = default;
 
   // Copy construct from any std::shared_ptr of this type. That just copies
   // a reference. Obviously this is fairly unwise because any std::shared_ptr
   // won't be using the detach facility to manipulate things, however it's
   // necessary for std::make_shared.
-  explicit irep_container(std::shared_ptr<T> &&p) : std::shared_ptr<T>(p)
+  explicit irep_container(std::shared_ptr<T> &&p)
+    : std::shared_ptr<T>(std::move(p))
   {
-  }
-
-  irep_container(const irep_container &ref) : std::shared_ptr<T>(ref)
-  {
-  }
-
-  template <class Y>
-  irep_container(const irep_container<Y> &ref)
-    : std::shared_ptr<T>(static_cast<const std::shared_ptr<Y> &>(ref))
-  {
-    assert(dynamic_cast<const std::shared_ptr<T> &>(ref) != NULL);
-  }
-
-  irep_container &operator=(irep_container const &ref)
-  {
-    std::shared_ptr<T>::operator=(ref);
-    return *this;
-  }
-
-  template <class Y>
-  irep_container &operator=(std::shared_ptr<Y> const &r)
-  {
-    std::shared_ptr<T>::operator=(r);
-    T *p = std::shared_ptr<T>::operator->();
-    return *this;
-  }
-
-  template <class Y>
-  irep_container &operator=(const irep_container<Y> &ref)
-  {
-    assert(dynamic_cast<const std::shared_ptr<T> &>(ref) != NULL);
-    *this = std::static_pointer_cast<T, Y>(
-      static_cast<const std::shared_ptr<Y> &>(ref));
-    return *this;
   }
 
   irep_container simplify() const
@@ -298,11 +285,15 @@ typedef irep_container<expr2t> expr2tc;
 typedef std::pair<std::string, std::string> member_entryt;
 typedef std::list<member_entryt> list_of_memberst;
 
+class irep2t : public std::enable_shared_from_this<irep2t>
+{
+};
+
 /** Base class for all types.
  *  Contains only a type identifier enumeration - for some types (such as bool,
  *  or empty,) there's no need for any significant amount of data to be stored.
  */
-class type2t : public std::enable_shared_from_this<type2t>
+class type2t : public irep2t
 {
 public:
   /** Enumeration identifying each sort of type. */
@@ -524,8 +515,7 @@ static inline std::string get_type_id(const type2tc &type)
  *  In this base, contains an expression id used for distinguishing different
  *  classes of expr, in addition we have a type as all exprs should have types.
  */
-class expr2t;
-class expr2t : public std::enable_shared_from_this<expr2t>
+class expr2t : public irep2t
 {
 public:
   /** Enumeration identifying each sort of expr.
@@ -846,15 +836,7 @@ static inline std::string get_expr_id(const expr2tc &expr)
  *
  *    foo2tc bar(type, operand1, operand2);
  *
- *  As well as copy-constructing a container around an expr to make it type
- *  specific:
- *
- *    expr2tc foo = something();
- *    foo2tc bar(foo);
- *
- *  Assertions in the construction will ensure that the expression is in fact
- *  of type foo2t. One can transparently access the irep fields through
- *  dereference, such as:
+ *  One can transparently access the irep fields through dereference, such as:
  *
  *    bar->operand1 = 0;
  *
@@ -863,15 +845,22 @@ static inline std::string get_expr_id(const expr2tc &expr)
  *
  *  ----
  *
- *  Problems: there's an ambiguity between the construction of some new ireps,
- *  and the downcasting from one type to another. If one were to say:
+ *  The following functions can be used to inspect an irep2 object:
  *
- *    not2tc foo(someotherexpr);
+ *    is_${suffix}()
+ *    to_${suffix}()
  *
- *  Are we constructing a new "not" expression, the inversion of someotherexpr,
- *  or downcasting it to a not2t reference? Currently it's configurable with
- *  some traits hacks, but the ambiguity is alas something that has to be lived
- *  with. All similar ireps are configured to always construct.
+ *  For expr2tc the suffix the name of the class, while for type2t it is the
+ *  name of the class without the trailing "2t", e.g.
+ *
+ *    is_bool_type(type)
+ *    to_constant_int2t(expr)
+ *
+ *  ----
+ *
+ *  The traits defined here are used to generically implement the functions
+ *  operating on a type2t's or an expr2t's fields, like .dump() and the
+ *  iterators foreach_subtype() and foreach_operand().
  *
  *  (The required traits hacks need cleaning up too).
  */
@@ -883,14 +872,6 @@ namespace esbmct
  *  I've yet to find a way of making this play nice with the new variardic
  *  way of defining ireps. */
 const unsigned int num_type_fields = 6;
-
-// Dummy type tag - exists to be an arbitary, local class, for use in some
-// templates. See below.
-class dummy_type_tag
-{
-public:
-  typedef int type;
-};
 
 /** Record for properties of an irep field.
  *  This type records, for any particular field:
@@ -924,11 +905,7 @@ public:
     type_id_field;
   typedef typename boost::mpl::
     push_front<boost::mpl::vector<Args...>, type_id_field>::type fields;
-  static constexpr bool always_construct = false;
   typedef type2t base2t;
-
-  template <typename derived>
-  static irep_container<base2t> make_contained(typename Args::result_type...);
 };
 
 /** Trait class for expr2t ireps.
@@ -947,18 +924,12 @@ public:
     typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::
       type,
     expr_id_field>::type fields;
-  static constexpr bool always_construct = false;
   static constexpr unsigned int num_fields =
     boost::mpl::size<fields>::type::value;
   typedef expr2t base2t;
-
-  // Note addition of type2tc...
-  template <typename derived>
-  static irep_container<base2t>
-  make_contained(const type2tc &, typename Args::result_type...);
 };
 
-// "Specialisation" for expr kinds that don't take a type, like boolean
+// "Specialisation" for expr kinds where the type is derived, like boolean
 // typed exprs. Should actually become a more structured expr2t_traits
 // that can be specialised in this way, at a later date. Might want to
 // move the presumed type down to the _data class at that time too.
@@ -968,37 +939,11 @@ class expr2t_traits_notype
 public:
   typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
     expr_id_field;
-  typedef field_traits<type2tc, expr2t, &expr2t::type> type_field;
-  typedef typename boost::mpl::push_front<
-    typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::
-      type,
-    expr_id_field>::type fields;
-  static constexpr bool always_construct = false;
-  static constexpr unsigned int num_fields =
-    boost::mpl::size<fields>::type::value;
-  typedef expr2t base2t;
-
-  template <typename derived>
-  static irep_container<base2t> make_contained(typename Args::result_type...);
-};
-
-// Hack to force something2tc to always construct the traits' type, rather
-// that copy construct. Due to misery and ambiguity elsewhere.
-template <typename... Args>
-class expr2t_traits_always_construct
-{
-public:
-  typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
-    expr_id_field;
   typedef typename boost::mpl::
     push_front<boost::mpl::vector<Args...>, expr_id_field>::type fields;
-  static constexpr bool always_construct = true;
   static constexpr unsigned int num_fields =
     boost::mpl::size<fields>::type::value;
   typedef expr2t base2t;
-
-  template <typename derived>
-  static irep_container<base2t> make_contained(typename Args::result_type...);
 };
 
 // Declaration of irep and expr methods templates.
@@ -1081,7 +1026,7 @@ public:
     typename boost::mpl::pop_front<fields>::type>
     superclass;
   typedef container container2tc;
-  typedef typename container::base_container base_container2tc;
+  typedef typename container::base2tc base_container2tc;
   typedef typename baseclass::base_type base2t;
 
   template <typename... Args>
@@ -1330,48 +1275,11 @@ public:
 //
 // We need a class derived from expr2tc that takes the correct set of
 // constructor arguments, which means yet more template goo.
-template <
-  class base,
-  class contained,
-  unsigned int expid,
-  typename idtype,
-  idtype base::*idfield,
-  class superclass>
+template <class base, class contained>
 class something2tc : public irep_container<base>
 {
 public:
   typedef irep_container<base> base2tc;
-  // Blank initialization of a container class -> store NULL
-  something2tc() : base2tc()
-  {
-  }
-
-  // Initialize container from a non-type-committed container. Encode an
-  // assertion that the type is what we expect.
-  //
-  // Don't do this though if this'll conflict with a later consructor though.
-  // For example if we have not2tc, not2tc(expr) could be copying it or
-  // constructing a new not2t irep. In the face of this ambiguity, pick the
-  // latter, and the end user can worry about how to cast up to a not2tc.
-  template <class arbitary = ::esbmct::dummy_type_tag>
-  something2tc(
-    const base2tc &init,
-    typename boost::lazy_disable_if<
-      boost::mpl::bool_<superclass::traits::always_construct == true>,
-      arbitary>::type * = nullptr)
-    : base2tc(init)
-  {
-    assert(init.get()->*idfield == expid);
-  }
-
-  // Allow construction too when we're handed a pointer to the (correctly
-  // typed) base2t ptr. This is used by boost::python, and various bits of
-  // code that create new ptrs and fling them into type2tcs.
-  something2tc(contained *init) : base2tc(init)
-  {
-    assert(init != NULL); // Would already have fired right?
-    assert(init->*idfield == expid);
-  }
 
   const contained &operator*() const
   {
@@ -1402,46 +1310,21 @@ public:
 
   // Forward all constructors down to the contained type.
   template <typename... Args>
-  something2tc(Args... args) : base2tc(new contained(args...))
+  something2tc(const Args &...args)
+    : base2tc(std::make_shared<contained>(args...))
   {
   }
 
-  typedef irep_container<base> base_container;
-  typedef idtype id_field_type;
+  // to get boost to recognize something2tc's as being a
+  // shared pointer type, we need to define a freestanding get_pointer for it.
+  // put it as an inline friend as to not pollute the outer namespace
+  friend const contained *get_pointer(const something2tc &p)
+  {
+    return p.get();
+  }
 };
 
-// Boost doesn't have variadic vector templates, so convert to it.
-
-template <typename... Args>
-class variadic_vector;
-
-template <typename T, typename... Args>
-class variadic_vector<T, Args...>
-{
-  typedef boost::mpl::push_back<variadic_vector<Args...>, T> type;
-};
-
-template <>
-class variadic_vector<>
-{
-  typedef boost::mpl::vector<> type;
-};
 } // namespace esbmct
-
-// In global namespace: to get boost to recognize something2tc's as being a
-// shared pointer type, we need to define get_pointer for it:
-
-template <
-  typename T1,
-  typename T2,
-  unsigned int T3,
-  typename T4,
-  T4 T1::*T5,
-  typename T6>
-T2 *get_pointer(esbmct::something2tc<T1, T2, T3, T4, T5, T6> const &p)
-{
-  return const_cast<T2 *>(p.get());
-}
 
 inline bool operator==(const type2tc &a, const type2tc &b)
 {

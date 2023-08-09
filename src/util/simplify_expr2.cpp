@@ -278,8 +278,8 @@ static expr2tc simplify_arith_2ops(
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_op =
-        expr2tc(new constructor(type, simplied_side_1, simplied_side_2));
+      expr2tc new_op(
+        std::make_shared<constructor>(type, simplied_side_1, simplied_side_2));
 
       return typecast_check_return(type, new_op);
     }
@@ -638,8 +638,7 @@ expr2tc modulus2t::do_simplify() const
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_mod =
-        expr2tc(new modulus2t(type, simplied_side_1, simplied_side_2));
+      expr2tc new_mod = modulus2tc(type, simplied_side_1, simplied_side_2);
 
       return typecast_check_return(type, new_mod);
     }
@@ -695,7 +694,7 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
     // Were we able to simplify anything?
     if(value != to_simplify)
     {
-      expr2tc new_neg = expr2tc(new constructor(type, to_simplify));
+      expr2tc new_neg(std::make_shared<constructor>(type, to_simplify));
       return typecast_check_return(type, new_neg);
     }
 
@@ -749,7 +748,7 @@ expr2tc neg2t::do_simplify() const
 {
   if(is_constant_vector2t(value))
   {
-    constant_vector2tc vector(value);
+    constant_vector2tc vector(to_constant_vector2t(value));
     for(size_t i = 0; i < vector->datatype_members.size(); i++)
     {
       auto &op = vector->datatype_members[i];
@@ -1097,7 +1096,7 @@ expr2tc not2t::do_simplify() const
     return expr2tc();
 
   const constant_bool2t &val = to_constant_bool2t(simp);
-  return expr2tc(new constant_bool2t(!val.value));
+  return constant_bool2tc(!val.value);
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -1118,8 +1117,8 @@ static expr2tc simplify_logic_2ops(
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_op =
-        expr2tc(new constructor(simplied_side_1, simplied_side_2));
+      expr2tc new_op(
+        std::make_shared<constructor>(simplied_side_1, simplied_side_2));
 
       return typecast_check_return(type, new_op);
     }
@@ -1437,7 +1436,8 @@ static expr2tc do_bit_munge_operation(
   if(side_1 != simplified_side_1 || side_2 != simplified_side_2)
     return typecast_check_return(
       type,
-      expr2tc(new constructor(type, simplified_side_1, simplified_side_2)));
+      expr2tc(std::make_shared<constructor>(
+        type, simplified_side_1, simplified_side_2)));
 
   return expr2tc();
 }
@@ -1544,7 +1544,7 @@ expr2tc bitnot2t::do_simplify() const
 
   if(is_constant_vector2t(value))
   {
-    constant_vector2tc vector(value);
+    constant_vector2tc vector(to_constant_vector2t(value));
     for(size_t i = 0; i < vector->datatype_members.size(); i++)
     {
       auto &op = vector->datatype_members[i];
@@ -1818,7 +1818,7 @@ expr2tc typecast2t::do_simplify() const
   {
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
-    return expr2tc(new typecast2t(type, to_typecast2t(simp).from));
+    return typecast2tc(type, to_typecast2t(simp).from);
   }
 
   return expr2tc();
@@ -1893,8 +1893,8 @@ static expr2tc simplify_relations(
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_op =
-        expr2tc(new constructor(simplied_side_1, simplied_side_2));
+      expr2tc new_op(
+        std::make_shared<constructor>(simplied_side_1, simplied_side_2));
 
       return typecast_check_return(type, new_op);
     }
@@ -2007,7 +2007,8 @@ static expr2tc simplify_floatbv_relations(
   // Were we able to simplify the sides?
   if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
   {
-    expr2tc new_op = expr2tc(new constructor(simplied_side_1, simplied_side_2));
+    expr2tc new_op(
+      std::make_shared<constructor>(simplied_side_1, simplied_side_2));
 
     return typecast_check_return(type, new_op);
   }
@@ -2034,7 +2035,7 @@ struct IEEE_equalitytor
     if(op1 == op2)
     {
       // x == x is the same as saying !isnan(x)
-      expr2tc is_nan(new isnan2t(op1));
+      expr2tc is_nan = isnan2tc(op1);
       expr2tc is_not_nan = not2tc(is_nan);
       return try_simplification(is_not_nan);
     }
@@ -2100,7 +2101,7 @@ struct IEEE_notequalitytor
     if(op1 == op2)
     {
       // x != x is the same as saying isnan(x)
-      expr2tc is_nan(new isnan2t(op1));
+      expr2tc is_nan = isnan2tc(op1);
       return try_simplification(is_nan);
     }
 
@@ -2470,7 +2471,7 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
     // Were we able to simplify anything?
     if(value != to_simplify)
     {
-      expr2tc new_neg = expr2tc(new constructor(to_simplify));
+      expr2tc new_neg(std::make_shared<constructor>(to_simplify));
       return typecast_check_return(type, new_neg);
     }
 
@@ -2655,8 +2656,8 @@ static expr2tc simplify_floatbv_2ops(
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_op = expr2tc(
-        new constructor(type, simplied_side_1, simplied_side_2, rounding_mode));
+      expr2tc new_op(std::make_shared<constructor>(
+        type, simplied_side_1, simplied_side_2, rounding_mode));
 
       return typecast_check_return(type, new_op);
     }

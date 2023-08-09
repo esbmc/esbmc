@@ -176,7 +176,7 @@ smt_astt smt_tuple_sym_flattener::tuple_array_of(
     static_cast<const constant_datatype_data &>(*init_val.get());
 
   constant_int2tc arrsize(index_type2(), BigInt(array_size));
-  type2tc arrtype(new array_type2t(init_val->type, arrsize, false));
+  type2tc arrtype = array_type2tc(init_val->type, arrsize, false);
   std::string name = ctx->mk_fresh_name("tuple_array_of::") + ".";
   symbol2tc tuple_arr_of_sym(arrtype, irep_idt(name));
 
