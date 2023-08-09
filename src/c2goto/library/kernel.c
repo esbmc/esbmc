@@ -7,8 +7,8 @@
 #include <ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h>
 #include <ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h>
 #include <ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h>
-
 #include <assert.h>
+#define spin_limit 80
 
 typedef unsigned int gfp_t;
 
@@ -110,7 +110,7 @@ unsigned long copy_from_user(void *to, void *from, unsigned long size)
   return 0;
 }
 
-void kernel_spinlock_init(mock_spinlock_t *lock)
+void spin_lock_init(spinlock_t *lock)
 {
   //check if the lock is valid
   assert(lock != NULL);
@@ -118,24 +118,36 @@ void kernel_spinlock_init(mock_spinlock_t *lock)
   lock->locked = 0;
 }
 
-void kernel_spin_lock(mock_spinlock_t *lock)
+void spin_lock(spinlock_t *lock)
 {
   //check if the lock is valid
   assert(lock != NULL);
-  //check if the lock is already locked, spin for a while
-  //approach 1: but also results in infinite loop
-  // while (!__sync_bool_compare_and_swap(&lock->is_locked, 0, 1)) {}
-  // spin
 
   //approach 2: use esbmc assume
-  while(lock->locked == 1)
+  bool acquired = false;
+  //check if the lock is valid
+  assert(lock != NULL);
+
+  int retries = 0;
+  while(retries < spin_limit)
   {
-    __ESBMC_assume(lock->locked == 0);
+    __ESBMC_atomic_begin();
+    if(lock->locked == 0)
+    {
+      lock->locked = 1;
+      __ESBMC_atomic_end();
+      return;
+    }
+    __ESBMC_atomic_end();
+    retries++;
   }
-  lock->locked = 1;
+  
+  // If we reached here, it means we couldn't acquire the lock after several retries.
+  // This isn't great for a real system, but it's a way to make model checking more manageable.
+  __ESBMC_assume(0); // This will prune this execution path.
 }
 
-void kernel_spin_unlock(mock_spinlock_t *lock)
+void spin_unlock(spinlock_t *lock)
 {
   //check if the lock is valid
   assert(lock != NULL);

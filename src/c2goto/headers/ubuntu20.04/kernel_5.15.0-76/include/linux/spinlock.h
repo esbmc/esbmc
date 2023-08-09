@@ -4,10 +4,10 @@
 /** mock spinlock struct*/
 typedef struct {
     int locked;
-} mock_spinlock_t;
+} spinlock_t;
 
-void kernel_spinlock_init(mock_spinlock_t *lock);
+void spin_lock_init(spinlock_t *lock);
 
-void kernel_spin_lock(mock_spinlock_t *lock);
+void spin_lock(spinlock_t *lock);
 
-void kernel_spin_unlock(mock_spinlock_t *lock);
+void spin_unlock(spinlock_t *lock);
