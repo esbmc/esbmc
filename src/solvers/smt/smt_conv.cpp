@@ -269,8 +269,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         distribute_vector_operation(expr->expr_id, to_bitnot2t(expr).value));
     }
 
-    std::shared_ptr<ieee_arith_2ops> ops;
-    ops = std::dynamic_pointer_cast<ieee_arith_2ops>(expr);
+    const ieee_arith_2ops *ops = dynamic_cast<const ieee_arith_2ops *>(&*expr);
     if(ops)
     {
       return convert_ast(distribute_vector_operation(
@@ -278,13 +277,11 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     if(is_arith_expr(expr))
     {
-      std::shared_ptr<arith_2ops> arith;
-      arith = std::dynamic_pointer_cast<arith_2ops>(expr);
-      return convert_ast(distribute_vector_operation(
-        arith->expr_id, arith->side_1, arith->side_2));
+      const arith_2ops &arith = dynamic_cast<const arith_2ops &>(*expr);
+      return convert_ast(
+        distribute_vector_operation(arith.expr_id, arith.side_1, arith.side_2));
     }
-    std::shared_ptr<bit_2ops> bit;
-    bit = std::dynamic_pointer_cast<bit_2ops>(expr);
+    const bit_2ops *bit = dynamic_cast<const bit_2ops *>(&*expr);
     if(bit)
       return convert_ast(
         distribute_vector_operation(bit->expr_id, bit->side_1, bit->side_2));
@@ -2478,11 +2475,11 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
     return convert_array_of_prep(expr);
   // Check size
   assert(is_constant_array2t(expr) || is_constant_vector2t(expr));
-  expr2tc size = std::static_pointer_cast<array_data>(expr->type)->array_size;
-  bool is_infinite =
-    std::static_pointer_cast<array_data>(expr->type)->size_is_infinite;
-  auto members =
-    std::static_pointer_cast<constant_datatype_data>(expr)->datatype_members;
+  const array_data &data = static_cast<const array_data &>(*expr->type);
+  expr2tc size = data.array_size;
+  bool is_infinite = data.size_is_infinite;
+  const auto &members =
+    static_cast<const constant_datatype_data &>(*expr).datatype_members;
 
   // Handle constant array expressions: these don't have tuple type and so
   // don't need funky handling, but we need to create a fresh new symbol and

@@ -74,7 +74,7 @@ expr2tc expr2t::simplify() const
     expr2tc new_us = clone();
     std::list<expr2tc>::iterator it2 = newoperands.begin();
     new_us->Foreach_operand([&it2](expr2tc &e) {
-      if((*it2) == nullptr)
+      if(!*it2)
         ; // No change in operand;
       else
         e = *it2; // Operand changed; overwrite with new one.
