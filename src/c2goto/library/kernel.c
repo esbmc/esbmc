@@ -141,7 +141,7 @@ void spin_lock(spinlock_t *lock)
     __ESBMC_atomic_end();
     retries++;
   }
-  
+
   // If we reached here, it means we couldn't acquire the lock after several retries.
   // This isn't great for a real system, but it's a way to make model checking more manageable.
   __ESBMC_assume(0); // This will prune this execution path.
