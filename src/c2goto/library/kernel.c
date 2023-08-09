@@ -8,6 +8,7 @@
 #include <ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h>
 #include <ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h>
 #include <assert.h>
+#define spin_limit 80
 
 typedef unsigned int gfp_t;
 
