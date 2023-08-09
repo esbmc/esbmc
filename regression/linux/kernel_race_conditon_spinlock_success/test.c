@@ -2,23 +2,23 @@
 #include <assert.h>
 #include <pthread.h>
 int shared_counter = 0;
-mock_spinlock_t lock;
-#define MAX_THREADS 10
+spinlock_t lock;
+#define MAX_THREADS 3
 
 void increment_counter()
 {
     //apply spin lock
-    kernel_spin_lock(&lock);
+    spin_lock(&lock);
     //increment counter
     shared_counter++;
-    kernel_spin_unlock(&lock);
+    spin_unlock(&lock);
 }
 
 int main()
 {
     pthread_t threads[MAX_THREADS];
 
-    kernel_spin_lock_init(&lock);
+    spin_lock_init(&lock);
 
     for (int i = 0; i < MAX_THREADS; i++)
     {
