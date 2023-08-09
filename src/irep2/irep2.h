@@ -174,6 +174,7 @@ class type2t;
 class expr2t;
 class constant_array2t;
 class constant_vector2t;
+
 /** Reference counted container for expr2t based classes.
  *  This class extends boost shared_ptr's to contain anything that's a subclass
  *  of expr2t. It provides several ways of accessing the contained pointer;
@@ -233,14 +234,15 @@ public:
    * to account for const-ness and detach if necessary
    */
 
+  // the const versions just forward
   const T &operator*() const
   {
-    return *std::shared_ptr<T>::get();
+    return *get();
   }
 
   const T *operator->() const // never throws
   {
-    return std::shared_ptr<T>::operator->();
+    return get();
   }
 
   const T *get() const // never throws
@@ -248,6 +250,7 @@ public:
     return std::shared_ptr<T>::get();
   }
 
+  // the non-const versions detach
   T *get() // never throws
   {
     detach();
@@ -256,12 +259,14 @@ public:
     return tmp;
   }
 
+  T &operator*()
+  {
+    return *get();
+  }
+
   T *operator->() // never throws
   {
-    detach();
-    T *tmp = std::shared_ptr<T>::get();
-    tmp->crc_val = 0;
-    return tmp;
+    return get();
   }
 
   void detach()
@@ -283,7 +288,7 @@ public:
 
   size_t crc() const
   {
-    const T *foo = std::shared_ptr<T>::get();
+    const T *foo = get();
     if(foo->crc_val != 0)
       return foo->crc_val;
 
@@ -306,15 +311,29 @@ public:
     std::shared_ptr<T>::swap(b);
   }
 
+  /* Provide comparison operators here as inline friends so they don't pollute
+   * the outer namespace; this reduces clutter when there are error messages
+   * about these infix operators. It also means that no user-defined
+   * conversions are considered unless at least one operand has the type of
+   * this class or is derived from it. This is usually wanted since supplying
+   * those conversions means someone else has to care about comparing whatever
+   * values they potentially convert...
+   *
+   * This implementation assumes that the type T is totally ordered.
+   *
+   * TODO: when switching to >= C++20, replace these with only operator== and
+   * operator<=>
+   */
+
   friend bool operator==(const irep_container &a, const irep_container &b)
   {
-    // Handle nil ireps
-    if(!a.get() && !b.get())
+    if(same(a, b))
       return true;
-    if(!a.get() || !b.get())
+
+    if(!a || !b)
       return false;
 
-    return (*a.get() == *b.get());
+    return *a == *b; // different pointees could still compare equal
   }
 
   friend bool operator!=(const irep_container &a, const irep_container &b)
@@ -324,20 +343,43 @@ public:
 
   friend bool operator<(const irep_container &a, const irep_container &b)
   {
-    if(!a.get())                 // nil is lower than non-nil
-      return b.get() != nullptr; // true if b is non-nil, so a is lower
-    if(!b.get())
+    if(!b)
       return false; // If b is nil, nothing can be lower
+    if(!a)
+      return true; // nil is lower than non-nil
 
-    return (*a.get() < *b.get());
+    if(same(a, b))
+      return false;
+
+    return *a < *b;
+  }
+
+  friend bool operator<=(const irep_container &a, const irep_container &b)
+  {
+    return !(a > b);
+  }
+
+  friend bool operator>=(const irep_container &a, const irep_container &b)
+  {
+    return !(a < b);
   }
 
   friend bool operator>(const irep_container &a, const irep_container &b)
   {
-    // We're greater if we neither less than or equal.
-    // This costs more: but that's ok, because all conventional software uses
-    // less-than comparisons for ordering
-    return !(a < b) && (a != b);
+    return b < a;
+  }
+
+private:
+  static bool same(const irep_container &a, const irep_container &b) noexcept
+  {
+    /* Note: Can't reliably test equality on pointers directly, see
+     * <https://eel.is/c++draft/expr.eq#3.1>
+     * Instead we'll use the implementation-defined total order guaranteed by
+     * std::less. */
+    const T *p = a.get(), *q = b.get();
+    if(!std::less{}(p, q) && !std::less{}(q, p))
+      return true; /* target is identical */
+    return false;
   }
 };
 
