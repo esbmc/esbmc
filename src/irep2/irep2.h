@@ -223,12 +223,6 @@ public:
   {
   }
 
-  irep_container simplify() const
-  {
-    const T *foo = std::shared_ptr<T>::get();
-    return foo->simplify();
-  }
-
   /* provide own definitions for
    *   operator*
    *   operator->
@@ -293,15 +287,6 @@ public:
     *this = foo->clone();
   }
 
-  size_t crc() const
-  {
-    const T *foo = get();
-    if(foo->crc_val != 0)
-      return foo->crc_val;
-
-    return foo->do_crc();
-  }
-
   using std::shared_ptr<T>::operator bool;
   using std::shared_ptr<T>::reset;
 
@@ -316,6 +301,21 @@ public:
   void swap(irep_container &b)
   {
     std::shared_ptr<T>::swap(b);
+  }
+
+  irep_container simplify() const
+  {
+    const T *foo = get();
+    return foo->simplify();
+  }
+
+  size_t crc() const
+  {
+    const T *foo = get();
+    if(foo->crc_val != 0)
+      return foo->crc_val;
+
+    return foo->do_crc();
   }
 
   /* Provide comparison operators here as inline friends so they don't pollute
@@ -437,7 +437,8 @@ public:
    */
   class symbolic_type_excp
   {
-    virtual const char *what() const throw()
+  public:
+    const char *what() const noexcept
     {
       return "symbolic type encountered";
     }
@@ -481,7 +482,6 @@ public:
    */
   virtual unsigned int get_width() const = 0;
 
-  /* These are all self explanatory */
   bool operator==(const type2t &ref) const;
   bool operator!=(const type2t &ref) const;
   bool operator<(const type2t &ref) const;
