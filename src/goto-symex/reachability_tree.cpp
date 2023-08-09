@@ -558,7 +558,10 @@ reachability_treet::get_next_formula()
     switch_to_next_execution_state();
 
     if(get_cur_state().interleaving_unviable)
+    {
+      get_cur_state().clear_claims();
       break;
+    }
   }
 
   (*cur_state_it)->add_memory_leak_checks();
