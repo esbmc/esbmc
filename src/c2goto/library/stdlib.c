@@ -68,14 +68,18 @@ __ESBMC_HIDE:;
 void abort(void)
 {
 __ESBMC_HIDE:;
+#ifndef __ESBMC_NO_MEMLEAK_CHECK_ON_ABNORMAL_TERMINATION
   __ESBMC_memory_leak_checks();
+#endif
   __ESBMC_assume(0);
 }
 
 void _Exit(int status)
 {
 __ESBMC_HIDE:;
+#ifndef __ESBMC_NO_MEMLEAK_CHECK_ON_ABNORMAL_TERMINATION
   __ESBMC_memory_leak_checks();
+#endif
   __ESBMC_assume(0);
 }
 #pragma clang diagnostic pop
