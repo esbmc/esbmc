@@ -212,8 +212,10 @@ public:
   irep_container &operator=(irep_container const &ref) = default;
   irep_container &operator=(irep_container &&ref) = default;
 
-  // Copy construct from any std::shared_ptr of this type. That just copies
-  // a reference. Obviously this is fairly unwise because any std::shared_ptr
+  // Move-construct from any std::shared_ptr of this type. That just moves the
+  // reference over and leaves our caller with an empty shared_ptr. Doesn't
+  // prevent copies from the original 'p' to exist, though.
+  // Obviously this is fairly unwise because any std::shared_ptr
   // won't be using the detach facility to manipulate things, however it's
   // necessary for std::make_shared.
   explicit irep_container(std::shared_ptr<T> &&p)
