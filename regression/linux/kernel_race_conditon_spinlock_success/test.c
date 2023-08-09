@@ -9,7 +9,6 @@ void increment_counter()
 {
     //apply spin lock
     spin_lock(&lock);
-
     //increment counter
     shared_counter++;
     spin_unlock(&lock);
