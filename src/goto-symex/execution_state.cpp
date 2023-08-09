@@ -426,7 +426,10 @@ bool execution_statet::check_if_ileaves_blocked()
     // and to what thread.
     return true;
 
-  if(owning_rt->main_thread_ended && memory_leak_check)
+  if(
+    owning_rt->main_thread_ended &&
+    !options.get_bool_option("deadlock-check") &&
+    !options.get_bool_option("data-races-check"))
     // Don't generate further interleavings since __ESBMC_main thread has ended.
     return true;
 
@@ -897,9 +900,8 @@ void execution_statet::get_expr_globals(
     }
   }
 
-  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
-    get_expr_globals(ns, e, globals_list);
-  });
+  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e)
+                        { get_expr_globals(ns, e, globals_list); });
 }
 
 bool execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l)
