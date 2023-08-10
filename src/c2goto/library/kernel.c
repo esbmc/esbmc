@@ -8,7 +8,6 @@
 #include <ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h>
 #include <ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h>
 #include <assert.h>
-#define spin_limit 80
 
 typedef unsigned int gfp_t;
 
@@ -115,44 +114,32 @@ void spin_lock_init(spinlock_t *lock)
   //check if the lock is valid
   assert(lock != NULL);
   //initialize the lock
-  lock->locked = 0;
+  lock->locked = false;
 }
 
-void spin_lock(spinlock_t *lock)
+bool spin_lock(spinlock_t *lock)
 {
-  //check if the lock is valid
-  assert(lock != NULL);
-
-  //approach 2: use esbmc assume
-  bool acquired = false;
-  //check if the lock is valid
-  assert(lock != NULL);
+  __ESBMC_assert(lock != NULL, "The lock is null, verfication failed");
 
   int retries = 0;
-  while(retries < spin_limit)
+  while(retries < SPIN_LIMIT)
   {
     __ESBMC_atomic_begin();
-    if(lock->locked == 0)
+    if(lock->locked == false)
     {
-      lock->locked = 1;
+      lock->locked = true;
       __ESBMC_atomic_end();
-      return;
+      return true;
     }
     __ESBMC_atomic_end();
     retries++;
   }
 
-  // If we reached here, it means we couldn't acquire the lock after several retries.
-  // This isn't great for a real system, but it's a way to make model checking more manageable.
-  __ESBMC_assume(0); // This will prune this execution path.
+  return false;
 }
 
 void spin_unlock(spinlock_t *lock)
 {
-  //check if the lock is valid
-  assert(lock != NULL);
-  //unlock the lock
-  //approach 1:
-  // __sync_bool_compare_and_swap(&lock->locked, 1, 0);
-  lock->locked = 0;
+  __ESBMC_assert(lock != NULL, "The lock is null, verfication failed");
+  lock->locked = false;
 }
