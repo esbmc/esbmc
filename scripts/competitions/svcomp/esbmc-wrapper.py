@@ -217,6 +217,11 @@ esbmc_dargs += "-D'__builtin_unreachable()' "
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
 esbmc_dargs += "--no-vla-size-check "
 
+memleak_args = "--memory-leak-check "
+# It seems SV-COMP doesn't want to check for memleaks on abort()
+# see also <https://github.com/esbmc/esbmc/issues/1259>
+memleak_args += "--no-abnormal-memory-leak "
+
 import re
 def check_if_benchmark_contains_pthread(benchmark):
   with open(benchmark, "r") as f:
@@ -255,10 +260,10 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   if prop == Property.overflow:
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions "
   elif prop == Property.memory:
-    command_line += "--memory-leak-check --no-assertions "
+    command_line += memleak_args + " --no-assertions "
     strat = "incr"
   elif prop == Property.memcleanup:
-    command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --memory-cleanup-check --no-assertions "
+    command_line += "--no-pointer-check --no-bounds-check " + memleak_args + "--memory-cleanup-check --no-assertions "
     strat = "incr"
   elif prop == Property.reach:
     if concurrency:
