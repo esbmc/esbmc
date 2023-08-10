@@ -11,6 +11,8 @@ import re
 import xml.etree.ElementTree as ET
 import time
 import shlex
+import subprocess
+from resource import *
 #####################
 # Testing Tool
 #####################
@@ -79,9 +81,9 @@ class BaseTest:
         self.test_dir = test_dir
         self.test_args = None
         self.test_file = None
-        self.test_mode = "CORE"        
+        self.test_mode = "CORE"
         self._initialize_test_case()
-    
+
     """Ignore regex and only check for crashes"""
     RUN_ONLY = False
     """SMT only test"""
@@ -205,17 +207,18 @@ class Executor:
 
     def run(self, test_case: BaseTest):
         """Execute the test case with `executable`"""
-        process = Popen(test_case.generate_run_argument_list(*self.tool),
-                        stdout=PIPE, stderr=PIPE)
+        cmd = test_case.generate_run_argument_list(*self.tool)
+
         try:
-            stdout, stderr = process.communicate(timeout=self.timeout)
-        except:
-            process.stdout.close()
-            process.stderr.close()
-            process.kill()
-            process.wait()
-            return None, None, 0        
-        return stdout, stderr, process.returncode
+            # use subprocess.run because we want to wait for the subprocess to finish
+            p = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, timeout=self.timeout);
+            # get the RSS (resident set size) of the subprocess who have been terminated
+            # the result is in kilobytes
+            print("@@ mem_usage={0} for cmd: {1}".format(getrusage(RUSAGE_CHILDREN).ru_maxrss, cmd))
+        except subprocess.CalledProcessError:
+            return None, None, 0
+
+        return p.stdout, p.stderr, p.returncode
 
 
 def get_test_objects(base_dir: str):
@@ -259,7 +262,7 @@ def _add_test(test_case, executor):
 
         if BaseTest.RUN_ONLY:
             if rc != 0:
-                self.fail(f"Wrong output for process. Exitted with {rc}")                
+                self.fail(f"Wrong output for process. Bombed out with exit code {rc}")
             return
 
         output_to_validate = stdout.decode() + stderr.decode()
