@@ -212,9 +212,12 @@ class Executor:
         try:
             # use subprocess.run because we want to wait for the subprocess to finish
             p = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, timeout=self.timeout);
-            # get the RSS (resident set size) of the subprocess who have been terminated
-            # the result is in kilobytes
-            print("@@ mem_usage={0} for cmd: {1}".format(getrusage(RUSAGE_CHILDREN).ru_maxrss, cmd))
+            # get the RSS (resident set size) of the subprocess that just terminated.
+            # Save the output in a tmp.log and then use the command below
+            # to get the total maximum RSS:
+            #   egrep "mem_usage=[0-9]+" tmp.log -o | cut -d'=' -f2 | paste -sd+ - | bc
+            # see https://docs.python.org/3/library/resource.html for more details
+            print("mem_usage={0} kilobytes".format(getrusage(RUSAGE_CHILDREN).ru_maxrss))
         except subprocess.CalledProcessError:
             return None, None, 0
 
@@ -367,6 +370,7 @@ def _arg_parsing():
 def main():
     _arg_parsing()
     suite = unittest.TestLoader().loadTestsFromTestCase(RegressionBase)
+    # run all test cases
     unittest.main(argv=[sys.argv[0], "-v"])
 
 if __name__ == "__main__":
