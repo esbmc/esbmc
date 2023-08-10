@@ -143,7 +143,7 @@ public:
    */
   void add_memory_leak_checks();
 
- protected:
+protected:
   /**
    *  Perform simplification on an expression.
    *  Essentially is just a call to simplify, but is guarded by the
