@@ -94,7 +94,7 @@ void symex_dereference_statet::get_value_set(
           obj_ptr = add2tc(
             expr->type, address_of2tc(expr->type, obj.object), obj.offset);
 
-        same_object2tc eq = same_object2tc(expr, obj_ptr);
+        expr2tc eq = same_object2tc(expr, obj_ptr);
 
         // note that the pointer could point to any of the accumulated objects.
         // However, if we have just one element, our or_accuml should store just that single element.

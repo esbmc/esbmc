@@ -42,10 +42,7 @@ typet build_float_type(unsigned width)
 type2tc build_float_type2(unsigned width)
 {
   if(config.ansi_c.use_fixed_for_float)
-  {
-    fixedbv_type2tc result(width, width / 2);
-    return result;
-  }
+    return fixedbv_type2tc(width, width / 2);
 
   unsigned fraction = 0;
   switch(width)
@@ -69,8 +66,7 @@ type2tc build_float_type2(unsigned width)
     assert(false);
   }
 
-  floatbv_type2tc result(fraction, width - fraction - 1);
-  return result;
+  return floatbv_type2tc(fraction, width - fraction - 1);
 }
 
 typet index_type()

@@ -1388,41 +1388,18 @@ public:
 // again and again, this gets macro'd.
 
 #define irep_typedefs(basename, superclass)                                    \
-  typedef esbmct::something2tc<expr2t, basename##2t> basename##2tc;            \
-  typedef esbmct::                                                             \
-    expr_methods2<basename##2t, superclass, superclass::traits, basename##2tc> \
-      basename##_expr_methods;                                                 \
-  extern template class esbmct::expr_methods2<                                 \
-    basename##2t,                                                              \
-    superclass,                                                                \
-    superclass::traits,                                                        \
-    basename##2tc>;                                                            \
-  extern template class esbmct::irep_methods2<                                 \
-    basename##2t,                                                              \
-    superclass,                                                                \
-    superclass::traits,                                                        \
-    basename##2tc>;
-
-// Special case for some empty ireps,
-
-#define irep_typedefs_empty(basename, superclass)                              \
-  typedef esbmct::something2tc<expr2t, basename##2t> basename##2tc;            \
-  typedef esbmct::expr_methods2<                                               \
-    basename##2t,                                                              \
-    superclass,                                                                \
-    esbmct::expr2t_default_traits,                                             \
-    basename##2tc>                                                             \
+  template <typename... Args>                                                  \
+  inline expr2tc basename##2tc(Args && ...args)                                \
+  {                                                                            \
+    return expr2tc(std::static_pointer_cast<expr2t>(                           \
+      std::make_shared<basename##2t>(std::forward<Args>(args)...)));           \
+  }                                                                            \
+  typedef esbmct::expr_methods2<basename##2t, superclass, superclass::traits>  \
     basename##_expr_methods;                                                   \
-  extern template class esbmct::expr_methods2<                                 \
-    basename##2t,                                                              \
-    superclass,                                                                \
-    esbmct::expr2t_default_traits,                                             \
-    basename##2tc>;                                                            \
-  extern template class esbmct::expr_methods2<                                 \
-    basename##2t,                                                              \
-    superclass,                                                                \
-    esbmct::expr2t_default_traits,                                             \
-    basename##2tc>;
+  extern template class esbmct::                                               \
+    expr_methods2<basename##2t, superclass, superclass::traits>;               \
+  extern template class esbmct::                                               \
+    irep_methods2<basename##2t, superclass, superclass::traits>;
 
 // This can't be replaced by iterating over all expr ids in preprocessing
 // magic because the mapping between top level expr class and it's data holding
@@ -1490,9 +1467,9 @@ irep_typedefs(isnan, bool_1op);
 irep_typedefs(overflow, overflow_ops);
 irep_typedefs(overflow_cast, overflow_cast_data);
 irep_typedefs(overflow_neg, overflow_ops);
-irep_typedefs_empty(unknown, expr2t);
-irep_typedefs_empty(invalid, expr2t);
-irep_typedefs_empty(null_object, expr2t);
+irep_typedefs(unknown, expr2t);
+irep_typedefs(invalid, expr2t);
+irep_typedefs(null_object, expr2t);
 irep_typedefs(dynamic_object, dynamic_object_data);
 irep_typedefs(dereference, dereference_data);
 irep_typedefs(valid_object, object_ops);
@@ -1507,7 +1484,7 @@ irep_typedefs(code_dead, code_decl_data);
 irep_typedefs(code_printf, code_printf_data);
 irep_typedefs(code_expression, code_expression_data);
 irep_typedefs(code_return, code_expression_data);
-irep_typedefs_empty(code_skip, expr2t);
+irep_typedefs(code_skip, expr2t);
 irep_typedefs(code_free, code_expression_data);
 irep_typedefs(code_goto, code_goto_data);
 irep_typedefs(object_descriptor, object_desc_data);

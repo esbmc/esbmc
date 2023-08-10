@@ -183,10 +183,9 @@ public:
      * Process a block adding the width of each symbol into the stack length
      * @param expr Expr to search for symbols.
      * @param stack_limit to limit size for stack.
-     * @return Constrain the stack limit.
+     * @return Constrain the stack limit (lessthanequal2t)
      */
-    lessthanequal2tc
-    process_stack_size(const expr2tc &expr, unsigned long stack_limit);
+    expr2tc process_stack_size(const expr2tc &expr, unsigned long stack_limit);
 
     /**
      * Decrease the stack frame size when the variables go out of scope

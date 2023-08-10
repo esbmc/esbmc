@@ -74,7 +74,7 @@ private:
     typet &type);
   void assign_scope_ids(goto_programt &goto_program);
   void remove_unsupported_instructions(goto_programt &goto_program);
-  expr2tc replace_array_assignment_with_memcpy(code_assign2tc assign);
+  expr2tc replace_array_assignment_with_memcpy(const code_assign2t &assign);
   void adjust_invalid_assignments(goto_programt &goto_program);
   void adjust_invalid_assignment_rec(
     goto_programt::instructionst &new_instructions,

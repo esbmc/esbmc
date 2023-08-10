@@ -88,7 +88,8 @@ expr2tc pointer_logict::object_rec(
       inttype = arrtype.array_size->type;
     else
       inttype = unsignedbv_type2tc(config.ansi_c.int_width);
-    index2tc newindex(arrtype.subtype, src, constant_int2tc(inttype, index));
+    expr2tc newindex =
+      index2tc(arrtype.subtype, src, constant_int2tc(inttype, index));
 
     return object_rec(rest, pointer_type, newindex);
   }
@@ -123,7 +124,7 @@ expr2tc pointer_logict::object_rec(
       if(new_offset > offset)
       {
         // found it
-        member2tc tmp(it, src, member_names[idx]);
+        expr2tc tmp = member2tc(it, src, member_names[idx]);
         return object_rec(offset - current_offset, pointer_type, tmp);
       }
 
@@ -142,12 +143,12 @@ pointer_logict::pointer_logict()
   obj_num_offset = 0;
 
   type2tc type = pointer_type2tc(get_empty_type());
-  symbol2tc sym(type, "NULL");
+  expr2tc sym = symbol2tc(type, "NULL");
 
   // add NULL
   null_object = add_object(sym);
 
   // add INVALID
-  symbol2tc invalid(type, "INVALID");
+  expr2tc invalid = symbol2tc(type, "INVALID");
   invalid_object = add_object(invalid);
 }

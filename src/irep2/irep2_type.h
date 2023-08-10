@@ -306,18 +306,17 @@ public:
 // Then give them a typedef name
 
 #define irep_typedefs(basename, superclass)                                    \
-  typedef esbmct::something2tc<type2t, basename##_type2t> basename##_type2tc;  \
-  typedef esbmct::type_methods2<                                               \
-    basename##_type2t,                                                         \
-    superclass,                                                                \
-    superclass::traits,                                                        \
-    basename##_type2tc>                                                        \
-    basename##_type_methods;                                                   \
-  extern template class esbmct::type_methods2<                                 \
-    basename##_type2t,                                                         \
-    superclass,                                                                \
-    superclass::traits,                                                        \
-    basename##_type2tc>;
+  template <typename... Args>                                                  \
+  inline type2tc basename##_type2tc(Args &&...args)                            \
+  {                                                                            \
+    return type2tc(std::static_pointer_cast<type2t>(                           \
+      std::make_shared<basename##_type2t>(std::forward<Args>(args)...)));      \
+  }                                                                            \
+  typedef esbmct::                                                             \
+    type_methods2<basename##_type2t, superclass, superclass::traits>           \
+      basename##_type_methods;                                                 \
+  extern template class esbmct::                                               \
+    type_methods2<basename##_type2t, superclass, superclass::traits>;
 
 irep_typedefs(bool, type2t);
 irep_typedefs(empty, type2t);

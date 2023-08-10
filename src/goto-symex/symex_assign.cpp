@@ -339,7 +339,7 @@ void goto_symext::symex_assign_structure(
   for(auto const &it : structtype.members)
   {
     const expr2tc &lhs_memb = the_structure.datatype_members[i];
-    member2tc rhs_memb(it, rhs, structtype.member_names[i]);
+    expr2tc rhs_memb = member2tc(it, rhs, structtype.member_names[i]);
     symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
     i++;
   }
@@ -446,7 +446,7 @@ void goto_symext::symex_assign_member(
   //   a'==a WITH [c:=e]
 
   type2tc str_type = string_type2tc(component_name.as_string().size());
-  with2tc new_rhs(
+  expr2tc new_rhs = with2tc(
     real_lhs->type,
     real_lhs,
     constant_string2tc(str_type, component_name),
@@ -478,7 +478,7 @@ void goto_symext::symex_assign_if(
   symex_assign_rec(ifval.true_value, full_lhs, rhs, full_rhs, guard, hidden);
   guard = old_guard;
 
-  not2tc not_cond(cond);
+  expr2tc not_cond = not2tc(cond);
   guard.add(not_cond);
   symex_assign_rec(
     ifval.false_value, full_lhs, rhs_copy, full_rhs, guard, hidden);
@@ -506,21 +506,24 @@ void goto_symext::symex_assign_byte_extract(
       !is_multi_dimensional_array(arr_type.subtype) &&
       "Can't currently byte extract through more than two dimensions of "
       "array right now, sorry");
-    constant_int2tc subtype_sz(index_type2(), type_byte_size(arr_type.subtype));
+    expr2tc subtype_sz =
+      constant_int2tc(index_type2(), type_byte_size(arr_type.subtype));
     expr2tc div = div2tc(index_type2(), extract.source_offset, subtype_sz);
     expr2tc mod = modulus2tc(index_type2(), extract.source_offset, subtype_sz);
     do_simplify(div);
     do_simplify(mod);
 
-    index2tc idx(arr_type.subtype, extract.source_value, div);
-    byte_update2tc be2(arr_type.subtype, idx, mod, rhs, extract.big_endian);
-    with2tc store(extract.source_value->type, extract.source_value, div, be2);
+    expr2tc idx = index2tc(arr_type.subtype, extract.source_value, div);
+    expr2tc be2 =
+      byte_update2tc(arr_type.subtype, idx, mod, rhs, extract.big_endian);
+    expr2tc store =
+      with2tc(extract.source_value->type, extract.source_value, div, be2);
     symex_assign_rec(
       extract.source_value, full_lhs, store, full_rhs, guard, hidden);
   }
   else
   {
-    byte_update2tc new_rhs(
+    expr2tc new_rhs = byte_update2tc(
       extract.source_value->type,
       extract.source_value,
       extract.source_offset,
@@ -580,7 +583,8 @@ void goto_symext::symex_assign_concat(
   std::list<expr2tc> extracts;
   for(unsigned int i = 0; i < operand_list.size(); i++)
   {
-    byte_extract2tc byte(get_uint_type(8), rhs, gen_ulong(i), is_big_endian);
+    expr2tc byte =
+      byte_extract2tc(get_uint_type(8), rhs, gen_ulong(i), is_big_endian);
     extracts.push_back(byte);
   }
 

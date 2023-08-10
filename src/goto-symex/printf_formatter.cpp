@@ -11,7 +11,7 @@ printf_formattert::make_type(const expr2tc &src, const type2tc &dest)
   if(src->type == dest)
     return src;
 
-  typecast2tc tmp(dest, src);
+  expr2tc tmp = typecast2tc(dest, src);
   simplify(tmp);
   return tmp;
 }

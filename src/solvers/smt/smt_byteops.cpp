@@ -32,14 +32,14 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
     if(data.big_endian)
     {
       auto data_size = type_byte_size(source->type);
-      constant_int2tc data_size_expr(source->type, data_size - 1);
-      sub2tc sub(source->type, data_size_expr, offs);
+      expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
+      expr2tc sub = sub2tc(source->type, data_size_expr, offs);
       offs = sub;
     }
 
     offs = mul2tc(offs->type, offs, constant_int2tc(offs->type, BigInt(8)));
 
-    lshr2tc shr(source->type, source, offs);
+    expr2tc shr = lshr2tc(source->type, source, offs);
     smt_astt ext = convert_ast(shr);
     smt_astt res = mk_extract(ext, 7, 0);
     return res;
@@ -112,14 +112,14 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     // casting of it in the body of this function, so wrap it up as a bitvector
     // and re-apply.
     type2tc bit_type = get_uint_type(data.type->get_width());
-    bitcast2tc src_obj(bit_type, data.source_value);
-    byte_update2tc new_update(
+    expr2tc src_obj = bitcast2tc(bit_type, data.source_value);
+    expr2tc new_update = byte_update2tc(
       bit_type,
       src_obj,
       data.source_offset,
       data.update_value,
       data.big_endian);
-    bitcast2tc cast_back(data.type, new_update);
+    expr2tc cast_back = bitcast2tc(data.type, new_update);
     return convert_ast(cast_back);
   }
 
@@ -143,8 +143,8 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     if(data.big_endian)
     {
       auto data_size = type_byte_size(source->type);
-      constant_int2tc data_size_expr(source->type, data_size - 1);
-      sub2tc sub(source->type, data_size_expr, offs);
+      expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
+      expr2tc sub = sub2tc(source->type, data_size_expr, offs);
       offs = sub;
     }
 

@@ -234,7 +234,7 @@ void dereferencet::dereference_guard_expr(
       // Guard the next operand against this operand short circuiting us.
       if(is_or2t(expr))
       {
-        not2tc tmp(op);
+        expr2tc tmp = not2tc(op);
         guard.add(tmp);
       }
       else
@@ -270,7 +270,7 @@ void dereferencet::dereference_guard_expr(
   if(o2)
   {
     guardt old_guards(guard);
-    not2tc tmp(ifref.cond);
+    expr2tc tmp = not2tc(ifref.cond);
     guard.add(tmp);
     dereference_expr(ifref.false_value, guard, mode);
     guard.swap(old_guards);
@@ -646,9 +646,9 @@ expr2tc dereferencet::build_reference_to(
   if(is_null_object2t(root_object) && !is_free(mode) && !is_internal(mode))
   {
     type2tc nullptrtype = pointer_type2tc(type);
-    symbol2tc null_ptr(nullptrtype, "NULL");
+    expr2tc null_ptr = symbol2tc(nullptrtype, "NULL");
 
-    same_object2tc pointer_guard(deref_expr, null_ptr);
+    expr2tc pointer_guard = same_object2tc(deref_expr, null_ptr);
 
     guardt tmp_guard(guard);
     tmp_guard.add(pointer_guard);
@@ -669,7 +669,7 @@ expr2tc dereferencet::build_reference_to(
 
   // Produce a guard that the dereferenced pointer points at this object.
   type2tc ptr_type = pointer_type2tc(object->type);
-  address_of2tc obj_ptr(ptr_type, object);
+  expr2tc obj_ptr = address_of2tc(ptr_type, object);
   pointer_guard = same_object2tc(deref_expr, obj_ptr);
   guardt tmp_guard(guard);
   tmp_guard.add(pointer_guard);
@@ -779,7 +779,7 @@ void dereferencet::deref_invalid_ptr(
     return;
 
   // constraint that it actually is an invalid pointer
-  invalid_pointer2tc invalid_pointer_expr(deref_expr);
+  expr2tc invalid_pointer_expr = invalid_pointer2tc(deref_expr);
 
   expr2tc validity_test;
   std::string foo;
@@ -788,9 +788,9 @@ void dereferencet::deref_invalid_ptr(
   if(is_free(mode))
   {
     // You're allowed to free NULL.
-    symbol2tc null_ptr(pointer_type2tc(get_empty_type()), "NULL");
-    notequal2tc neq(null_ptr, deref_expr);
-    and2tc and_(neq, invalid_pointer_expr);
+    expr2tc null_ptr = symbol2tc(pointer_type2tc(get_empty_type()), "NULL");
+    expr2tc neq = notequal2tc(null_ptr, deref_expr);
+    expr2tc and_ = and2tc(neq, invalid_pointer_expr);
     validity_test = and_;
     foo = "invalid pointer freed";
   }
@@ -1084,14 +1084,14 @@ void dereferencet::construct_from_array(
   }
 
   unsigned int subtype_size = type_byte_size_bits(arr_subtype).to_uint64();
-  constant_int2tc subtype_sz_expr(offset->type, BigInt(subtype_size));
+  expr2tc subtype_sz_expr = constant_int2tc(offset->type, BigInt(subtype_size));
   // The value of "div" does not depend on the offset units (i.e., bits or bytes)
   // as it essentially represents an index in the array of the given subtype
   expr2tc div =
     typecast2tc(pointer_type2(), div2tc(offset->type, offset, subtype_sz_expr));
   simplify(div);
 
-  modulus2tc mod(offset->type, offset, subtype_sz_expr);
+  expr2tc mod = modulus2tc(offset->type, offset, subtype_sz_expr);
   simplify(mod);
 
   if(is_structure_type(arr_subtype))
@@ -1207,8 +1207,8 @@ void dereferencet::construct_from_const_offset(
     // resort to extracting bytes from it.
     else
     {
-      member2tc themember = to_member2t(value);
-      value = themember->source_value;
+      const member2t &themember = to_member2t(value);
+      value = themember.source_value;
     }
   }
 
@@ -1317,7 +1317,7 @@ void dereferencet::construct_from_const_struct_offset(
       // This access is in the bounds of this member, but isn't at the start.
       // XXX that might be an alignment error.
       expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
-      constant_int2tc new_offs(pointer_type2(), int_offset - m_offs);
+      expr2tc new_offs = constant_int2tc(pointer_type2(), int_offset - m_offs);
 
       // Extract.
       build_reference_rec(memb, new_offs, type, guard, mode);
@@ -1467,11 +1467,11 @@ void dereferencet::construct_from_dyn_offset(
   if(base_type_eq(value->type, type, ns))
   {
     // Is offset zero?
-    equality2tc eq(offset, gen_zero(offset->type));
+    expr2tc eq = equality2tc(offset, gen_zero(offset->type));
 
     // Yes -> value, no -> free value
     expr2tc free_result = make_failed_symbol(type);
-    if2tc result(type, eq, value, free_result);
+    expr2tc result = if2tc(type, eq, value, free_result);
 
     value = result;
     return;
@@ -1524,13 +1524,13 @@ void dereferencet::construct_from_multidir_array(
     subtype_sz = typecast2tc(offset->type, subtype_sz);
   }
 
-  div2tc div(offset->type, offset, subtype_sz);
+  expr2tc div = div2tc(offset->type, offset, subtype_sz);
   simplify(div);
 
-  index2tc outer_idx(arr_type.subtype, value, div);
+  expr2tc outer_idx = index2tc(arr_type.subtype, value, div);
   value = outer_idx;
 
-  modulus2tc mod(offset->type, offset, subtype_sz);
+  expr2tc mod = modulus2tc(offset->type, offset, subtype_sz);
   simplify(mod);
 
   build_reference_rec(value, mod, type, guard, mode, alignment);
@@ -1860,7 +1860,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     }
 
     // We now have a vector of fields reconstructed from the byte array
-    constant_struct2tc the_struct(type, fields);
+    expr2tc the_struct = constant_struct2tc(type, std::move(fields));
     output.emplace_back(accuml_guard, the_struct);
     return;
   }
@@ -1936,7 +1936,7 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_array(
     div2tc(offset->type, offset, gen_long(offset->type, bytes_per_index)));
   for(unsigned int i = 0; i < num_bytes; i++)
   {
-    index2tc the_index = index2tc(subtype, array, accuml_offs);
+    expr2tc the_index = index2tc(subtype, array, accuml_offs);
     if(subtype->get_width() <= 8)
     {
       // This is a byte array
@@ -1986,10 +1986,10 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_scalar(
 
   if(is_index2t(object))
   {
-    index2tc new_index = to_index2t(object);
-    new_object = new_index->source_value;
+    const index2t &new_index = to_index2t(object);
+    new_object = new_index.source_value;
     // Adjust the offset taking into account the array subtype
-    expr2tc index = new_index->index;
+    expr2tc index = new_index.index;
     if(index->type != accuml_offs->type)
       index = typecast2tc(accuml_offs->type, index);
     accuml_offs = add2tc(
@@ -1998,7 +1998,7 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_scalar(
       mul2tc(
         accuml_offs->type,
         index,
-        gen_long(accuml_offs->type, new_index->type->get_width() / 8)));
+        gen_long(accuml_offs->type, new_index.type->get_width() / 8)));
     simplify(accuml_offs);
   }
 
@@ -2133,10 +2133,10 @@ void dereferencet::valid_check(
     const symbolt &sym = *ns.lookup(to_symbol2t(symbol).thename);
     if(has_prefix(sym.id.as_string(), "symex_dynamic::"))
     {
-      // Assert thtat it hasn't (nondeterministically) been invalidated.
-      address_of2tc addrof(symbol->type, symbol);
-      valid_object2tc valid_expr(addrof);
-      not2tc not_valid_expr(valid_expr);
+      // Assert that it hasn't (nondeterministically) been invalidated.
+      expr2tc addrof = address_of2tc(symbol->type, symbol);
+      expr2tc valid_expr = valid_object2tc(addrof);
+      expr2tc not_valid_expr = not2tc(valid_expr);
 
       guardt tmp_guard(guard);
       tmp_guard.add(not_valid_expr);
@@ -2209,13 +2209,13 @@ void dereferencet::bounds_check(
       ns.lookup(to_symbol2t(expr).thename)->id.as_string(), "symex_dynamic::"))
   {
     // Construct a dynamic_size irep.
-    address_of2tc addrof(expr->type, expr);
+    expr2tc addrof = address_of2tc(expr->type, expr);
     arrsize = dynamic_size2tc(addrof);
   }
   else if(!is_constant_int2t(arr_type.array_size))
   {
     // Also a dynamic_size irep.
-    address_of2tc addrof(expr->type, expr);
+    expr2tc addrof = address_of2tc(expr->type, expr);
     arrsize = dynamic_size2tc(addrof);
   }
   else
@@ -2234,24 +2234,24 @@ void dereferencet::bounds_check(
       return;
 
     // Secondly, try to calc the size of the array.
-    constant_int2tc subtype_size(
-      size_type2(), type_byte_size(arr_type.subtype));
+    expr2tc subtype_size =
+      constant_int2tc(size_type2(), type_byte_size(arr_type.subtype));
     expr2tc array_size = typecast2tc(size_type2(), arr_type.array_size);
     arrsize = mul2tc(size_type2(), array_size, subtype_size);
   }
 
   // Transforming offset to bytes
-  typecast2tc unsigned_offset(
+  expr2tc unsigned_offset = typecast2tc(
     size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
 
   // Then, expressions as to whether the access is over or under the array
   // size.
-  constant_int2tc access_size_e(size_type2(), BigInt(access_size));
-  add2tc upper_byte(size_type2(), unsigned_offset, access_size_e);
+  expr2tc access_size_e = constant_int2tc(size_type2(), BigInt(access_size));
+  expr2tc upper_byte = add2tc(size_type2(), unsigned_offset, access_size_e);
 
-  greaterthan2tc gt(unsigned_offset, arrsize);
-  greaterthan2tc gt2(upper_byte, arrsize);
-  or2tc is_in_bounds(gt, gt2);
+  expr2tc gt = greaterthan2tc(unsigned_offset, arrsize);
+  expr2tc gt2 = greaterthan2tc(upper_byte, arrsize);
+  expr2tc is_in_bounds = or2tc(gt, gt2);
 
   // Report these as assertions; they'll be simplified away if they're constant
 
@@ -2291,7 +2291,7 @@ bool dereferencet::check_code_access(
 
   // Only other constraint is that the offset has to be zero; there are no
   // other rules about what code objects look like.
-  notequal2tc neq(offset, gen_zero(offset->type));
+  expr2tc neq = notequal2tc(offset, gen_zero(offset->type));
   guardt tmp_guard = guard;
   tmp_guard.add(neq);
   dereference_failure(
@@ -2324,8 +2324,8 @@ void dereferencet::check_data_obj_access(
   // offset+access_sz-1, so check fail if the (offset+access_sz) > data_sz.
   // Lower bound not checked, instead we just treat everything as unsigned,
   // which has the same effect.
-  add2tc add(access_sz_e->type, offset, access_sz_e);
-  greaterthan2tc gt(add, data_sz_e);
+  expr2tc add = add2tc(access_sz_e->type, offset, access_sz_e);
+  expr2tc gt = greaterthan2tc(add, data_sz_e);
 
   if(!options.get_bool_option("no-bounds-check"))
   {
@@ -2371,12 +2371,12 @@ void dereferencet::check_alignment(
   if(options.get_bool_option("int-encoding"))
   {
     expr2tc align = gen_ulong(minwidth);
-    modulus2tc moded(align->type, offset, align);
+    expr2tc moded = modulus2tc(align->type, offset, align);
     neq = notequal2tc(moded, gen_zero(moded->type));
   }
   else
   {
-    bitand2tc anded(mask_expr->type, mask_expr, offset);
+    expr2tc anded = bitand2tc(mask_expr->type, mask_expr, offset);
     neq = notequal2tc(anded, gen_zero(anded->type));
   }
 

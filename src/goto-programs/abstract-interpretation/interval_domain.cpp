@@ -300,9 +300,9 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::xor_id:
   case expr2t::implies_id:
   {
-    auto logic_op = std::dynamic_pointer_cast<logic_2ops>(e);
-    tvt lhs = eval_boolean_expression(logic_op->side_1, *this);
-    tvt rhs = eval_boolean_expression(logic_op->side_2, *this);
+    const auto &logic_op = dynamic_cast<const logic_2ops &>(*e);
+    tvt lhs = eval_boolean_expression(logic_op.side_1, *this);
+    tvt rhs = eval_boolean_expression(logic_op.side_2, *this);
 
     if(is_and2t(e))
     {
@@ -425,9 +425,9 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::modulus_id:
     if(enable_interval_arithmetic)
     {
-      auto arith_op = std::dynamic_pointer_cast<arith_2ops>(e);
-      auto lhs = get_interval<T>(arith_op->side_1);
-      auto rhs = get_interval<T>(arith_op->side_2);
+      const auto &arith_op = dynamic_cast<const arith_2ops &>(*e);
+      auto lhs = get_interval<T>(arith_op.side_1);
+      auto rhs = get_interval<T>(arith_op.side_2);
 
       if(is_add2t(e))
         result = lhs + rhs;
@@ -457,9 +457,9 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::bitnxor_id:
     if(enable_interval_bitwise_arithmetic)
     {
-      auto bit_op = std::dynamic_pointer_cast<bit_2ops>(e);
-      auto lhs = get_interval<T>(bit_op->side_1);
-      auto rhs = get_interval<T>(bit_op->side_2);
+      const auto &bit_op = dynamic_cast<const bit_2ops &>(*e);
+      auto lhs = get_interval<T>(bit_op.side_1);
+      auto rhs = get_interval<T>(bit_op.side_2);
 
       if(is_shl2t(e))
         result = T::left_shift(lhs, rhs);
@@ -633,16 +633,17 @@ expr2tc interval_domaint::make_expression_value<real_intervalt>(
   const type2tc &type,
   bool upper) const
 {
-  constant_floatbv2tc value(ieee_floatt(ieee_float_spect(
+  expr2tc value = constant_floatbv2tc(ieee_floatt(ieee_float_spect(
     to_floatbv_type(type).fraction, to_floatbv_type(type).exponent)));
+  constant_floatbv2t &v = to_constant_floatbv2t(value);
 
   const auto d = (upper ? interval.upper : interval.lower).convert_to<double>();
-  value->value.from_double(d);
-  assert(!value->value.is_NaN() && !value->value.is_infinity());
+  v.value.from_double(d);
+  assert(!v.value.is_NaN() && !v.value.is_infinity());
   if(upper)
-    value->value.increment(true);
+    v.value.increment(true);
   else
-    value->value.decrement(true);
+    v.value.decrement(true);
 
   return value;
 }

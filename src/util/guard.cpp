@@ -44,7 +44,7 @@ void guardt::add(const expr2tc &expr)
   else
   {
     // Otherwise, just update the chain of ands
-    and2tc new_g_expr(g_expr, expr);
+    expr2tc new_g_expr = and2tc(g_expr, expr);
     g_expr.swap(new_g_expr);
   }
 }
@@ -85,7 +85,7 @@ void guardt::build_guard_expr()
   expr2tc arg1, arg2;
   arg1 = *it++;
   arg2 = *it++;
-  and2tc res(arg1, arg2);
+  expr2tc res = and2tc(arg1, arg2);
   while(it != guard_list.end())
     res = and2tc(res, *it++);
 

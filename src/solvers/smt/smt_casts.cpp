@@ -10,12 +10,12 @@ smt_astt smt_convt::convert_typecast_to_bool(const typecast2t &cast)
   if(is_pointer_type(cast.from))
   {
     // Convert to two casts.
-    typecast2tc to_int(machine_ptr, cast.from);
-    equality2tc as_bool(gen_zero(machine_ptr), to_int);
+    expr2tc to_int = typecast2tc(machine_ptr, cast.from);
+    expr2tc as_bool = equality2tc(gen_zero(machine_ptr), to_int);
     return convert_ast(as_bool);
   }
 
-  notequal2tc neq(cast.from, gen_zero(cast.from->type));
+  expr2tc neq = notequal2tc(cast.from, gen_zero(cast.from->type));
   return convert_ast(neq);
 }
 
@@ -414,7 +414,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   // First cast it to an unsignedbv
   type2tc int_type = ptraddr_type2();
   smt_sortt int_sort = convert_sort(int_type);
-  typecast2tc cast_to_unsigned(int_type, cast.from);
+  expr2tc cast_to_unsigned = typecast2tc(int_type, cast.from);
   smt_astt target = convert_ast(cast_to_unsigned);
 
   // Construct array for all possible object outcomes
@@ -523,7 +523,7 @@ smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
   // The plan: index the object id -> address-space array and pick out the
   // start address, then add it to any additional pointer offset.
 
-  pointer_object2tc obj_num(addr_type, cast.from);
+  expr2tc obj_num = pointer_object2tc(addr_type, cast.from);
 
   expr2tc from_addr_space = index2tc(
     addr_space_type,
@@ -536,7 +536,7 @@ smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
   expr2tc from_start = member2tc(
     addr_space_ty.members[0], from_addr_space, addr_space_ty.member_names[0]);
 
-  pointer_offset2tc ptr_offs(diff_type, cast.from);
+  expr2tc ptr_offs = pointer_offset2tc(diff_type, cast.from);
   expr2tc address = add2tc(addr_type, from_start, ptr_offs);
   expr2tc pointer = address;
 
