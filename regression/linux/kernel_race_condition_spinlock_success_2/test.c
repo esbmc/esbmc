@@ -3,33 +3,23 @@
 #include <pthread.h>
 int shared_counter = 0;
 spinlock_t lock;
-#define MAX_THREADS 2
+#define MAX_THREADS 3
 
-void increment_counter()
-{
-    //apply spin lock
+void *lockAndIncrement(void *arg) {
     spin_lock(&lock);
-
-    //increment counter
     shared_counter++;
     spin_unlock(&lock);
 }
 
-int main()
-{
+int main() {
     pthread_t threads[MAX_THREADS];
-
     spin_lock_init(&lock);
-
-    for (int i = 0; i < MAX_THREADS; i++)
-    {
-        pthread_create(&threads[i], NULL, increment_counter, NULL);
-
+    for (int i = 0; i < MAX_THREADS; i++) {
+        pthread_create(&threads[i], NULL, lockAndIncrement, NULL);
     }
     for (int i = 0; i < MAX_THREADS; i++) {
         pthread_join(threads[i], NULL);
     }
-    //check if post condition is satisfied
     assert(shared_counter == MAX_THREADS);
     return 0;
 }
