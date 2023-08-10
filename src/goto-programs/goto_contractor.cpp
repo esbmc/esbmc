@@ -38,7 +38,6 @@ void goto_contractort::get_intervals(goto_functionst goto_functions)
 
 void goto_contractort::parse_intervals(expr2tc expr)
 {
-  symbol2tc symbol;
   double value;
 
   expr = get_base_object(expr);
@@ -53,19 +52,17 @@ void goto_contractort::parse_intervals(expr2tc expr)
   if(!is_comp_expr(expr))
     return;
 
-  std::shared_ptr<relation_data> rel;
-  rel = std::dynamic_pointer_cast<relation_data>(expr);
+  const relation_data &rel = dynamic_cast<const relation_data &>(*expr);
 
   //side1 1 is a symbol or typecast to symbol
-  auto side1 = rel->side_1;
+  auto side1 = rel.side_1;
   //side 2 is always a number.
-  auto side2 = rel->side_2;
+  auto side2 = rel.side_2;
 
   auto obj = get_base_object(side1);
   if(!is_symbol2t(obj))
     return;
 
-  symbol = to_symbol2t(obj);
   bool neg = false;
   if(is_neg2t(side2))
   {
@@ -78,17 +75,18 @@ void goto_contractort::parse_intervals(expr2tc expr)
 
   value = to_constant_int2t(side2).as_long() * (neg ? -1 : 1) + (neg ? -1 : 1);
 
-  if(map.find(symbol->get_symbol_name()) == CspMap::NOT_FOUND)
+  std::string symbol_name = to_symbol2t(obj).get_symbol_name();
+  if(map.find(symbol_name) == CspMap::NOT_FOUND)
     return;
   switch(expr->expr_id)
   {
   case expr2t::expr_ids::greaterthan_id:
   case expr2t::expr_ids::greaterthanequal_id:
-    map.update_lb_interval(value, symbol->get_symbol_name());
+    map.update_lb_interval(value, symbol_name);
     break;
   case expr2t::expr_ids::lessthan_id:
   case expr2t::expr_ids::lessthanequal_id:
-    map.update_ub_interval(value, symbol->get_symbol_name());
+    map.update_ub_interval(value, symbol_name);
     break;
   case expr2t::expr_ids::equality_id:
     break;
@@ -129,7 +127,7 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
     for(auto const &var : map.var_map)
     {
       //testing with updating both bounds after reduction.
-      symbol2tc X = var.second.getSymbol();
+      expr2tc X = var.second.getSymbol();
       if(var.second.isIntervalChanged())
       {
         auto ub = create_value_expr(var.second.getInterval().ub(), int_type2());
@@ -183,33 +181,32 @@ ibex::Ctc *goto_contractort::create_contractor_from_expr2t(const expr2tc &expr)
   }
   else
   {
-    std::shared_ptr<logic_2ops> logic_op;
-    logic_op = std::dynamic_pointer_cast<logic_2ops>(base_object);
+    const logic_2ops &logic_op = dynamic_cast<const logic_2ops &>(*base_object);
 
     switch(base_object->expr_id)
     {
     case expr2t::expr_ids::and_id:
     {
-      auto side1 = create_contractor_from_expr2t(logic_op->side_1);
-      auto side2 = create_contractor_from_expr2t(logic_op->side_2);
+      auto side1 = create_contractor_from_expr2t(logic_op.side_1);
+      auto side2 = create_contractor_from_expr2t(logic_op.side_2);
       if(side1 != nullptr && side2 != nullptr)
         contractor = new ibex::CtcCompo(*side1, *side2);
       break;
     }
     case expr2t::expr_ids::or_id:
     {
-      auto side1 = create_contractor_from_expr2t(logic_op->side_1);
-      auto side2 = create_contractor_from_expr2t(logic_op->side_2);
+      auto side1 = create_contractor_from_expr2t(logic_op.side_1);
+      auto side2 = create_contractor_from_expr2t(logic_op.side_2);
       if(side1 != nullptr && side2 != nullptr)
         contractor = new ibex::CtcUnion(*side1, *side2);
       break;
     }
     case expr2t::expr_ids::notequal_id:
     {
-      std::shared_ptr<relation_data> rel;
-      rel = std::dynamic_pointer_cast<relation_data>(base_object);
-      ibex::Function *f = create_function_from_expr2t(rel->side_1);
-      ibex::Function *g = create_function_from_expr2t(rel->side_2);
+      const relation_data &rel =
+        dynamic_cast<const relation_data &>(*base_object);
+      ibex::Function *f = create_function_from_expr2t(rel.side_1);
+      ibex::Function *g = create_function_from_expr2t(rel.side_2);
       if(g == nullptr || f == nullptr)
         return nullptr;
       auto *side1 = new ibex::NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
@@ -254,12 +251,12 @@ goto_contractort::create_constraint_from_expr2t(const expr2tc &expr)
     return nullptr;
   }
 
-  std::shared_ptr<relation_data> rel;
-  rel = std::dynamic_pointer_cast<relation_data>(get_base_object(expr));
+  const relation_data &rel =
+    dynamic_cast<const relation_data &>(*get_base_object(expr));
 
   ibex::Function *f, *g;
-  f = create_function_from_expr2t(rel->side_1);
-  g = create_function_from_expr2t(rel->side_2);
+  f = create_function_from_expr2t(rel.side_1);
+  g = create_function_from_expr2t(rel.side_2);
   if(f == nullptr || g == nullptr)
     return nullptr;
   //TODO: implement "not" flag  and process.
@@ -312,16 +309,15 @@ ibex::Function *goto_contractort::create_function_from_expr2t(expr2tc expr)
   case expr2t::expr_ids::mul_id:
   case expr2t::expr_ids::div_id:
   {
-    std::shared_ptr<arith_2ops> arith_op;
     if(!is_arith_expr(expr))
       return nullptr;
-    arith_op = std::dynamic_pointer_cast<arith_2ops>(expr);
-    g = create_function_from_expr2t(arith_op->side_1);
-    h = create_function_from_expr2t(arith_op->side_2);
+    const arith_2ops &arith_op = dynamic_cast<const arith_2ops &>(*expr);
+    g = create_function_from_expr2t(arith_op.side_1);
+    h = create_function_from_expr2t(arith_op.side_2);
     if(g == nullptr || h == nullptr)
       return nullptr;
 
-    switch(arith_op->expr_id)
+    switch(arith_op.expr_id)
     {
     case expr2t::expr_ids::add_id:
       f = new ibex::Function(*vars, (*g)(*vars) + (*h)(*vars));
@@ -382,7 +378,7 @@ int goto_contractort::create_variable_from_expr2t(expr2tc expr)
   if(is_symbol2t(expr))
   {
     std::string var_name = to_symbol2t(expr).get_symbol_name();
-    int index = map.add_var(var_name, to_symbol2t(expr));
+    int index = map.add_var(var_name, expr);
     return index;
   }
   return map.NOT_FOUND;
@@ -422,7 +418,7 @@ size_t vart::getIndex() const
   return index;
 }
 
-vart::vart(const string &varName, const symbol2tc &symbol, const size_t &index)
+vart::vart(const string &varName, const expr2tc &symbol, const size_t &index)
 {
   this->var_name = varName;
   this->symbol = symbol;
@@ -445,7 +441,7 @@ void vart::setIntervalChanged(bool intervalChanged)
   interval_changed = intervalChanged;
 }
 
-const symbol2tc &vart::getSymbol() const
+const expr2tc &vart::getSymbol() const
 {
   return symbol;
 }

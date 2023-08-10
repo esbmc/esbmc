@@ -26,7 +26,7 @@ class vart
 private:
   ibex::Interval interval;
   std::string var_name;
-  symbol2tc symbol;
+  expr2tc symbol;
   size_t index;
   bool interval_changed;
 
@@ -34,12 +34,12 @@ public:
   size_t getIndex() const;
 
 public:
-  vart(const string &varName, const symbol2tc &symbol, const size_t &index);
+  vart(const string &varName, const expr2tc &symbol, const size_t &index);
   const ibex::Interval &getInterval() const;
   void setInterval(const ibex::Interval &interval);
   bool isIntervalChanged() const;
   void setIntervalChanged(bool intervalChanged);
-  const symbol2tc &getSymbol() const;
+  const expr2tc &getSymbol() const;
 };
 
 class Contractor
@@ -244,7 +244,7 @@ public:
   CspMap()
   {
   }
-  size_t add_var(const std::string &name, const symbol2t &symbol)
+  size_t add_var(const std::string &name, const expr2tc &symbol)
   {
     auto find = var_map.find(name);
     if(find == var_map.end())
