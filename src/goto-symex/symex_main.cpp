@@ -608,6 +608,14 @@ void goto_symext::run_intrinsic(
         : gen_false_expr();
     symex_assign(code_assign2tc(func_call.ret, is_little_endian));
   }
+  else if(symname == "c:@F@__ESBMC_no_abnormal_memory_leak")
+  {
+    expr2tc no_abnormal_memleak =
+      config.options.get_bool_option("no-abnormal-memory-leak")
+        ? gen_true_expr()
+        : gen_false_expr();
+    symex_assign(code_assign2tc(func_call.ret, no_abnormal_memleak));
+  }
   else if(symname == "c:@F@__ESBMC_builtin_constant_p")
   {
     assert(

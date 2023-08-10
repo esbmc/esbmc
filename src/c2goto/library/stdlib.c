@@ -65,10 +65,13 @@ __ESBMC_HIDE:;
   __ESBMC_assume(0);
 }
 
+_Bool __ESBMC_no_abnormal_memory_leak(void);
+
 void abort(void)
 {
 __ESBMC_HIDE:;
-  __ESBMC_memory_leak_checks();
+  if(!__ESBMC_no_abnormal_memory_leak())
+    __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
 

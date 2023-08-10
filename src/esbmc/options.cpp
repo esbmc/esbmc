@@ -284,6 +284,11 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "do not check whether the size of VLAs overflows the available address "
      "space"},
+    {"no-abnormal-memory-leak",
+     NULL,
+     "affects --memory-leak-check; if both are enabled, the check for memory "
+     "leaks is only performed for normal termination, that is, not for "
+     "abort()"},
     {"nan-check", NULL, "check floating-point for NaN"},
     {"memory-leak-check", NULL, "enable memory leak check"},
     {"overflow-check", NULL, "enable arithmetic over- and underflow check"},
