@@ -143,12 +143,7 @@ public:
    */
   void add_memory_leak_checks();
 
-  /**
-   *  Clear remaining_claims if the interleaving is unviable.
-   */
-  void clear_claims();
-
-protected:
+ protected:
   /**
    *  Perform simplification on an expression.
    *  Essentially is just a call to simplify, but is guarded by the
