@@ -555,10 +555,10 @@ reachability_treet::get_next_formula()
 
     if(get_cur_state().interleaving_unviable)
       break;
-
     create_next_state();
 
     switch_to_next_execution_state();
+  
   }
 
   (*cur_state_it)->add_memory_leak_checks();
