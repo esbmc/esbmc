@@ -324,13 +324,8 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
 
   goto_symext::symex_goto(old_guard);
 
-  if(!pre_goto_guard.is_false())
-  {
-    if(threads_state.size() >= thread_cswitch_threshold)
-    {
-      analyze_read(old_guard);
-    }
-  }
+  if(threads_state.size() >= thread_cswitch_threshold)
+    analyze_read(old_guard);
 }
 
 void execution_statet::assume(const expr2tc &assumption)
