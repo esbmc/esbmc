@@ -559,6 +559,12 @@ public:
    */
   void get_reference_set(const expr2tc &expr, value_setst::valuest &dest) const;
 
+  /** "Internal" get_value_set method. Just the same as the other get_value_set
+   *  method, but collects into an object_mapt instead of a list of exprs.
+   *  @param expr The expression to evaluate the value set of.
+   *  @param dest Destination value set object map to store the result into. */
+  void get_value_set(const expr2tc &expr, object_mapt &dest) const;
+
 protected:
   /** Recursive body of get_value_set.
    *  @param expr Expression to interpret and fetch value set for
@@ -594,12 +600,6 @@ protected:
     object_mapt &dest,
     const std::string &suffix,
     const type2tc &original_type) const;
-
-  /** Internal get_value_set method. Just the same as the other get_value_set
-   *  method, but collects into an object_mapt instead of a list of exprs.
-   *  @param expr The expression to evaluate the value set of.
-   *  @param dest Destination value set object map to store the result into. */
-  void get_value_set(const expr2tc &expr, object_mapt &dest) const;
 
   /** Internal get_reference_set method. Just the same as the other
    *  get_reference_set method, but collects into an object_mapt instead of a
