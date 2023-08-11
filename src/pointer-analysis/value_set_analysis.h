@@ -36,9 +36,10 @@ public:
     const irep_idt &identifier,
     xmlt &dest) const;
 
+  void get_globals(std::list<value_sett::entryt> &dest);
+
 protected:
   bool check_type(const typet &type);
-  void get_globals(std::list<value_sett::entryt> &dest);
   void add_vars(const goto_functionst &goto_functions);
   void add_vars(const goto_programt &goto_programa);
 
