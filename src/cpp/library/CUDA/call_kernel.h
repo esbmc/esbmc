@@ -282,8 +282,7 @@ typedef struct arg_struct_i_ui_ull_f Targ_i_ui_ull_f;
 typedef struct arg_struct1_ui Targ1_ui;
 
 unsigned int n_threads;
-__attribute__((annotate("__ESBMC_inf_size")))
-pthread_t threads_id[1];
+__attribute__((annotate("__ESBMC_inf_size"))) pthread_t threads_id[1];
 
 Targ_no_params dev_no_params;
 Targ dev_three;
