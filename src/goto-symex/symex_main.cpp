@@ -5,6 +5,8 @@
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
 
+#include <pointer-analysis/value_set_analysis.h>
+
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
@@ -718,6 +720,36 @@ void goto_symext::add_memory_leak_checks()
   if(!memory_leak_check)
     return;
 
+  bool memcleanup_check = options.get_bool_option("memory-cleanup-check");
+  std::unordered_set<expr2tc, irep2_hash> globals_point_to;
+  if(!memcleanup_check)
+  {
+    std::list<value_sett::entryt> globals;
+    value_set_analysist(ns).get_globals(globals);
+    for(const value_sett::entryt &e : globals)
+    {
+      const symbolt *symbol = ns.lookup(e.identifier);
+      assert(symbol);
+      symbol_exprt sym_expr(symbol->id, symbol->type);
+      expr2tc sym_expr2;
+      migrate_expr(sym_expr, sym_expr2);
+      value_setst::valuest points_to;
+      cur_state->value_set.get_value_set(sym_expr2, points_to);
+      for (const expr2tc &target : points_to)
+      {
+        if(!is_object_descriptor2t(target))
+          continue;
+        expr2tc root_object = to_object_descriptor2t(target).get_root_object();
+        if(is_null_object2t(root_object))
+          continue;
+        if(is_invalid2t(root_object))
+          continue;
+        /* TODO: what about unknown2t? */
+        globals_point_to.emplace(address_of2tc(root_object->type, root_object));
+      }
+    }
+  }
+
   for(auto const &it : dynamic_memory)
   {
     // Don't check memory leak if the object is automatically deallocated
@@ -731,14 +763,23 @@ void goto_symext::add_memory_leak_checks()
     // whether it has been deallocated.
     expr2tc eq = equality2tc(deallocd, gen_true_expr());
 
+    expr2tc when = it.alloc_guard.as_expr();
+
+    if(!memcleanup_check)
+    {
+      expr2tc is_any = gen_false_expr();
+      for (const expr2tc &e : globals_point_to)
+        is_any = or2tc(is_any, same_object2tc(it.obj, e));
+      when = and2tc(when, not2tc(is_any));
+    }
+
     // Additionally, we need to make sure that we check the above condition
     // only for dynamic objects that were created from successful
     // memory allocations. This is because we always create a dynamic object for
     // each dynamic allocation, and the allocation success status
     // is described by a separate "allocation_guard".
     // (see "symex_mem" method in "goto-symex/builtin_functions.cpp").
-    expr2tc cond =
-      if2tc(eq->type, it.alloc_guard.as_expr(), eq, gen_true_expr());
+    expr2tc cond = implies2tc(when, eq);
 
     replace_dynamic_allocation(cond);
     cur_state->rename(cond);

@@ -291,6 +291,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "abort()"},
     {"nan-check", NULL, "check floating-point for NaN"},
     {"memory-leak-check", NULL, "enable memory leak check"},
+    {"memory-cleanup-check", NULL, "enable memory cleanup check"},
     {"overflow-check", NULL, "enable arithmetic over- and underflow check"},
     {"unsigned-overflow-check",
      NULL,
