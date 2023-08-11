@@ -260,10 +260,10 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   if prop == Property.overflow:
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions "
   elif prop == Property.memory:
-    command_line += memleak_args + " --no-assertions "
+    command_line += memleak_args + "--no-reachable-memleaks --no-assertions "
     strat = "incr"
   elif prop == Property.memcleanup:
-    command_line += "--no-pointer-check --no-bounds-check " + memleak_args + "--memory-cleanup-check --no-assertions "
+    command_line += "--no-pointer-check --no-bounds-check " + memleak_args + "--no-assertions "
     strat = "incr"
   elif prop == Property.reach:
     if concurrency:
