@@ -553,12 +553,11 @@ reachability_treet::get_next_formula()
 
     next_thread_id = decide_ileave_direction(get_cur_state());
 
+    if(get_cur_state().interleaving_unviable)
+      break;
     create_next_state();
 
     switch_to_next_execution_state();
-
-    if(get_cur_state().interleaving_unviable)
-      break;
   }
 
   (*cur_state_it)->add_memory_leak_checks();
