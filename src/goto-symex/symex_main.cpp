@@ -720,9 +720,9 @@ void goto_symext::add_memory_leak_checks()
   if(!memory_leak_check)
     return;
 
-  bool memcleanup_check = options.get_bool_option("memory-cleanup-check");
+  bool no_reachables = options.get_bool_option("no-reachable-memleaks");
   std::function<expr2tc(expr2tc)> maybe_global_target;
-  if(!memcleanup_check)
+  if(no_reachables)
   {
     std::list<value_sett::entryt> globals;
     value_set_analysist(ns).get_globals(globals);
@@ -783,8 +783,8 @@ void goto_symext::add_memory_leak_checks()
 
     expr2tc when = it.alloc_guard.as_expr();
 
-    if(!memcleanup_check)
-      when = and2tc(when, not2tc(maybe_global_target(it.obj)));
+    if(no_reachables)
+      when = and2tc(when, not2tc(maybe_global_target(get_base_object(it.obj))));
 
     // Additionally, we need to make sure that we check the above condition
     // only for dynamic objects that were created from successful
