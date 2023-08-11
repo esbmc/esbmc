@@ -721,11 +721,12 @@ void goto_symext::add_memory_leak_checks()
     return;
 
   bool memcleanup_check = options.get_bool_option("memory-cleanup-check");
-  std::unordered_set<expr2tc, irep2_hash> globals_point_to;
+  std::function<expr2tc(expr2tc)> maybe_global_target;
   if(!memcleanup_check)
   {
     std::list<value_sett::entryt> globals;
     value_set_analysist(ns).get_globals(globals);
+    value_sett::object_mapt points_to;
     for(const value_sett::entryt &e : globals)
     {
       const symbolt *symbol = ns.lookup(e.identifier);
@@ -733,21 +734,38 @@ void goto_symext::add_memory_leak_checks()
       symbol_exprt sym_expr(symbol->id, symbol->type);
       expr2tc sym_expr2;
       migrate_expr(sym_expr, sym_expr2);
-      value_setst::valuest points_to;
       cur_state->value_set.get_value_set(sym_expr2, points_to);
-      for (const expr2tc &target : points_to)
-      {
-        if(!is_object_descriptor2t(target))
-          continue;
-        expr2tc root_object = to_object_descriptor2t(target).get_root_object();
-        if(is_null_object2t(root_object))
-          continue;
-        if(is_invalid2t(root_object))
-          continue;
-        /* TODO: what about unknown2t? */
-        globals_point_to.emplace(address_of2tc(root_object->type, root_object));
-      }
     }
+    std::unordered_set<expr2tc, irep2_hash> globals_point_to;
+    bool has_unknown = false;
+    for(auto it = points_to.begin(); it != points_to.end(); ++it)
+    {
+      expr2tc target = cur_state->value_set.to_expr(it);
+      if(is_unknown2t(target))
+      {
+        has_unknown = true;
+        break;
+      }
+      if(is_invalid2t(target))
+        continue;
+      assert(is_object_descriptor2t(target));
+      expr2tc root_object = to_object_descriptor2t(target).get_root_object();
+      if(is_null_object2t(root_object))
+        continue;
+      globals_point_to.emplace(address_of2tc(root_object->type, root_object));
+    }
+    if(has_unknown)
+      maybe_global_target = [](expr2tc) { return gen_true_expr(); };
+    else
+      maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
+        expr2tc is_any;
+        for(const expr2tc &e : tgts)
+        {
+          expr2tc same = same_object2tc(obj, e);
+          is_any = is_any ? or2tc(is_any, same) : same;
+        }
+        return is_any ? is_any : gen_false_expr();
+      };
   }
 
   for(auto const &it : dynamic_memory)
@@ -766,12 +784,7 @@ void goto_symext::add_memory_leak_checks()
     expr2tc when = it.alloc_guard.as_expr();
 
     if(!memcleanup_check)
-    {
-      expr2tc is_any = gen_false_expr();
-      for (const expr2tc &e : globals_point_to)
-        is_any = or2tc(is_any, same_object2tc(it.obj, e));
-      when = and2tc(when, not2tc(is_any));
-    }
+      when = and2tc(when, not2tc(maybe_global_target(it.obj)));
 
     // Additionally, we need to make sure that we check the above condition
     // only for dynamic objects that were created from successful
