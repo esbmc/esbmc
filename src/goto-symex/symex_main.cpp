@@ -729,12 +729,14 @@ void goto_symext::add_memory_leak_checks()
     value_sett::object_mapt points_to;
     for(const value_sett::entryt &e : globals)
     {
+      if(e.identifier == "argv'" || has_prefix(e.identifier, "c:@__ESBMC_"))
+        continue;
       const symbolt *symbol = ns.lookup(e.identifier);
       assert(symbol);
       symbol_exprt sym_expr(symbol->id, symbol->type);
       expr2tc sym_expr2;
       migrate_expr(sym_expr, sym_expr2);
-      cur_state->value_set.get_value_set(sym_expr2, points_to);
+      cur_state->value_set.get_value_set_rec(sym_expr2, points_to, e.suffix, sym_expr2->type);
     }
     std::unordered_set<expr2tc, irep2_hash> globals_point_to;
     bool has_unknown = false;
