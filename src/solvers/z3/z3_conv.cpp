@@ -1338,7 +1338,6 @@ void z3_convt::print_smt_formulae(std::ostream &dest)
   dest << "; Asserts from ESMBC starts\n";
   dest << smt_formula; // All VCC conditions in SMTLIB format.
   dest << "; Asserts from ESMBC ends\n";
-  dest << "(check-sat)\n";
   dest << "(get-model)\n";
   dest << "(exit)\n";
   log_status(
