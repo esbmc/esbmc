@@ -11,6 +11,11 @@ import re
 import xml.etree.ElementTree as ET
 import time
 import shlex
+import subprocess
+
+if sys.platform.startswith('linux'):
+    from resource import *
+
 #####################
 # Testing Tool
 #####################
@@ -79,9 +84,9 @@ class BaseTest:
         self.test_dir = test_dir
         self.test_args = None
         self.test_file = None
-        self.test_mode = "CORE"        
+        self.test_mode = "CORE"
         self._initialize_test_case()
-    
+
     """Ignore regex and only check for crashes"""
     RUN_ONLY = False
     """SMT only test"""
@@ -205,17 +210,24 @@ class Executor:
 
     def run(self, test_case: BaseTest):
         """Execute the test case with `executable`"""
-        process = Popen(test_case.generate_run_argument_list(*self.tool),
-                        stdout=PIPE, stderr=PIPE)
+        cmd = test_case.generate_run_argument_list(*self.tool)
+
         try:
-            stdout, stderr = process.communicate(timeout=self.timeout)
-        except:
-            process.stdout.close()
-            process.stderr.close()
-            process.kill()
-            process.wait()
-            return None, None, 0        
-        return stdout, stderr, process.returncode
+            # use subprocess.run because we want to wait for the subprocess to finish
+            p = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, timeout=self.timeout);
+
+            # get the RSS (resident set size) of the subprocess that just terminated.
+            # Save the output in a tmp.log and then use the command below
+            # to get the total maximum RSS:
+            #   egrep "mem_usage=[0-9]+" tmp.log -o | cut -d'=' -f2 | paste -sd+ - | bc
+            # see https://docs.python.org/3/library/resource.html for more details
+            if sys.platform.startswith('linux'):
+                print("mem_usage={0} kilobytes".format(getrusage(RUSAGE_CHILDREN).ru_maxrss))
+
+        except subprocess.CalledProcessError:
+            return None, None, 0
+
+        return p.stdout, p.stderr, p.returncode
 
 
 def get_test_objects(base_dir: str):
@@ -259,7 +271,7 @@ def _add_test(test_case, executor):
 
         if BaseTest.RUN_ONLY:
             if rc != 0:
-                self.fail(f"Wrong output for process. Exitted with {rc}")                
+                self.fail(f"Wrong output for process. Bombed out with exit code {rc}")
             return
 
         output_to_validate = stdout.decode() + stderr.decode()
@@ -364,6 +376,7 @@ def _arg_parsing():
 def main():
     _arg_parsing()
     suite = unittest.TestLoader().loadTestsFromTestCase(RegressionBase)
+    # run all test cases
     unittest.main(argv=[sys.argv[0], "-v"])
 
 if __name__ == "__main__":
