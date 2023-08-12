@@ -285,6 +285,9 @@ __ESBMC_HIDE:;
 
   __ESBMC_atomic_end();
 
+  // But if this thread ended, don't allow for any further execution.
+  __ESBMC_assume(!ended);
+
   return 0;
 }
 
