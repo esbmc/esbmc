@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <util/string_container.h>
+#include <util/prefix.h>
 
 class dstring final
 {
@@ -35,6 +36,11 @@ public:
   /// source object \p other, this is effectively just a copy constructor.
   constexpr dstring(dstring &&other) : no(other.no)
   {
+  }
+
+  friend bool has_prefix(dstring s, std::string_view prefix)
+  {
+    return has_prefix(std::string_view(s.as_string()), prefix);
   }
 
   inline bool empty() const
