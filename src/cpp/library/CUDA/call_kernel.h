@@ -1018,9 +1018,6 @@ void ESBMC_verify_kernel(RET *kernel, BLOCK blocks, THREAD threads)
     gridDim.x * gridDim.y * gridDim.z,
     blockDim.x * blockDim.y * blockDim.z);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
-
   //ESBMC_atomic_end();
 }
 
@@ -1036,9 +1033,6 @@ void ESBMC_verify_kernel(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
     gridDim.x * gridDim.y * gridDim.z,
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg);
-
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
 }
@@ -1061,9 +1055,6 @@ void ESBMC_verify_kernel(
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg,
     (void *)arg2);
-
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
 }
@@ -1089,9 +1080,6 @@ void ESBMC_verify_kernel(
     (void *)arg2,
     (void *)arg3);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
-
   //ESBMC_atomic_end();
 }
 
@@ -1115,9 +1103,6 @@ void ESBMC_verify_kernel_i(
     arg,
     arg2);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
-
   //ESBMC_atomic_end();
 }
 
@@ -1134,9 +1119,6 @@ void ESBMC_verify_kernel_u(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
     gridDim.x * gridDim.y * gridDim.z,
     blockDim.x * blockDim.y * blockDim.z,
     arg);
-
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
 }
@@ -1159,9 +1141,6 @@ void ESBMC_verify_kernel_u(
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg,
     (void *)arg2);
-
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
 }
@@ -1187,9 +1166,6 @@ void ESBMC_verify_kernel_u(
     arg2,
     arg3);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
-
   //ESBMC_atomic_end();
 }
 
@@ -1213,9 +1189,6 @@ void ESBMC_verify_kernel_f(
     (void *)arg,
     arg2);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
-
   //ESBMC_atomic_end();
 }
 
@@ -1231,9 +1204,6 @@ void ESBMC_verify_kernel_f(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
     gridDim.x * gridDim.y * gridDim.z,
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg);
-
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
 }
@@ -1276,9 +1246,6 @@ void ESBMC_verify_kernel_f(
     arg6,
     arg7);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
-
   //ESBMC_atomic_end();
 }
 
@@ -1304,9 +1271,6 @@ void ESBMC_verify_kernel_c(
     (void *)arg2,
     (void *)arg3);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
-
   //ESBMC_atomic_end();
 }
 
@@ -1322,9 +1286,6 @@ void ESBMC_verify_kernel_c(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
     gridDim.x * gridDim.y * gridDim.z,
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg);
-
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
 }
@@ -1348,9 +1309,6 @@ void ESBMC_verify_kernel_c(
     arg,
     arg2);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
-
   //ESBMC_atomic_end();
 }
 
@@ -1373,9 +1331,6 @@ void ESBMC_verify_kernel_intt(
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg,
     arg2);
-
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
 }
@@ -1402,9 +1357,6 @@ void ESBMC_verify_kernel_fuintt(
     arg2,
     arg3);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
-
   //ESBMC_atomic_end();
 }
 
@@ -1426,9 +1378,6 @@ void ESBMC_verify_kernel_fuintt(
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg,
     arg2);
-
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
 }
@@ -1455,9 +1404,6 @@ void ESBMC_verify_kernel_fuintint(
     arg2,
     arg3);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
-
   //ESBMC_atomic_end();
 }
 
@@ -1479,9 +1425,6 @@ void ESBMC_verify_kernel_fuintint(
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg,
     arg2);
-
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
 }
@@ -1507,9 +1450,6 @@ void ESBMC_verify_kernel_three_args_iuull(
     (void *)arg,
     (void *)arg2,
     (void *)arg3);
-
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
 }
@@ -1546,9 +1486,6 @@ void ESBMC_verify_kernel_four(
     (void *)arg3,
     (void *)arg4);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
-
   //ESBMC_atomic_end();
 }
 
@@ -1565,9 +1502,6 @@ void ESBMC_verify_kernel_ui(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
     gridDim.x * gridDim.y * gridDim.z,
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg);
-
-  for(unsigned short int i = 0; i < GPU_threads; i++)
-    pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
 }
