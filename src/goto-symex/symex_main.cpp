@@ -725,37 +725,60 @@ void goto_symext::add_memory_leak_checks()
   if(no_reachables)
   {
     std::list<value_sett::entryt> globals;
-    value_set_analysist(ns).get_globals(globals);
-    value_sett::object_mapt points_to;
-    for(const value_sett::entryt &e : globals)
-    {
-      if(e.identifier == "argv'" || has_prefix(e.identifier, "c:@__ESBMC_"))
-        continue;
-      const symbolt *symbol = ns.lookup(e.identifier);
-      assert(symbol);
-      symbol_exprt sym_expr(symbol->id, symbol->type);
-      expr2tc sym_expr2;
-      migrate_expr(sym_expr, sym_expr2);
-      cur_state->value_set.get_value_set_rec(sym_expr2, points_to, e.suffix, sym_expr2->type);
-    }
+    value_set_analysist va(ns);
+    va.get_globals(globals);
     std::unordered_set<expr2tc, irep2_hash> globals_point_to;
     bool has_unknown = false;
-    for(auto it = points_to.begin(); it != points_to.end(); ++it)
-    {
-      expr2tc target = cur_state->value_set.to_expr(it);
-      if(is_unknown2t(target))
+    for(int i=0; !has_unknown && !globals.empty(); i++) {
+      value_sett::object_mapt points_to;
+      for(const value_sett::entryt &e : globals)
       {
-        has_unknown = true;
-        break;
+        const symbolt *symbol = ns.lookup(e.identifier);
+        assert(symbol);
+        if(symbol->id == "argv'" || has_prefix(symbol->name, "__ESBMC_"))
+          continue;
+        fprintf(stderr, "memcleanup: itr %d, obtaining value-set for global '%s' suffix '%s'\n",
+                i, e.identifier.c_str(), e.suffix.c_str());
+        symbol_exprt sym_expr(symbol->id, symbol->type);
+        expr2tc sym_expr2;
+        migrate_expr(sym_expr, sym_expr2);
+        cur_state->value_set.get_value_set_rec(sym_expr2, points_to, e.suffix, sym_expr2->type);
       }
-      if(is_invalid2t(target))
-        continue;
-      assert(is_object_descriptor2t(target));
-      expr2tc root_object = to_object_descriptor2t(target).get_root_object();
-      if(is_null_object2t(root_object))
-        continue;
-      globals_point_to.emplace(address_of2tc(root_object->type, root_object));
+      globals.clear();
+      for(auto it = points_to.begin(); it != points_to.end(); ++it)
+      {
+        expr2tc target = cur_state->value_set.to_expr(it);
+        if(is_unknown2t(target))
+        {
+          continue;
+          has_unknown = true;
+          globals.clear();
+          break;
+        }
+        if(is_invalid2t(target))
+          continue;
+        assert(is_object_descriptor2t(target));
+        expr2tc root_object = to_object_descriptor2t(target).get_root_object();
+        if(is_null_object2t(root_object))
+          continue;
+        expr2tc adr = address_of2tc(root_object->type, root_object);
+        auto [itr,ins] = globals_point_to.emplace(adr);
+        if(!ins)
+          continue;
+        assert(is_symbol2t(root_object));
+        va.get_entries_rec(
+          to_symbol2t(root_object).get_symbol_name(),
+          "",
+          migrate_type_back(root_object->type),
+          globals);
+      }
     }
+
+    fprintf(stderr, "memcleanup: unknown: %d, globals point to:\n", has_unknown);
+    for (const expr2tc &e : globals_point_to)
+      fprintf(stderr, "memcleanup:  %s\n",
+              to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name().c_str());
+
     if(has_unknown)
       maybe_global_target = [](expr2tc) { return gen_true_expr(); };
     else
