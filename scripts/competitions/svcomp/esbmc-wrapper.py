@@ -220,7 +220,7 @@ esbmc_dargs += "--no-vla-size-check "
 memleak_args = "--memory-leak-check "
 # It seems SV-COMP doesn't want to check for memleaks on abort()
 # see also <https://github.com/esbmc/esbmc/issues/1259>
-#memleak_args += "--no-abnormal-memory-leak "
+memleak_args += "--no-abnormal-memory-leak "
 
 import re
 def check_if_benchmark_contains_pthread(benchmark):
