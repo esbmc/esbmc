@@ -12,7 +12,10 @@ import xml.etree.ElementTree as ET
 import time
 import shlex
 import subprocess
-from resource import *
+
+if sys.platform.startswith('linux'):
+    from resource import *
+
 #####################
 # Testing Tool
 #####################
@@ -212,12 +215,15 @@ class Executor:
         try:
             # use subprocess.run because we want to wait for the subprocess to finish
             p = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, timeout=self.timeout);
+
             # get the RSS (resident set size) of the subprocess that just terminated.
             # Save the output in a tmp.log and then use the command below
             # to get the total maximum RSS:
             #   egrep "mem_usage=[0-9]+" tmp.log -o | cut -d'=' -f2 | paste -sd+ - | bc
             # see https://docs.python.org/3/library/resource.html for more details
-            print("mem_usage={0} kilobytes".format(getrusage(RUSAGE_CHILDREN).ru_maxrss))
+            if sys.platform.startswith('linux'):
+                print("mem_usage={0} kilobytes".format(getrusage(RUSAGE_CHILDREN).ru_maxrss))
+
         except subprocess.CalledProcessError:
             return None, None, 0
 
