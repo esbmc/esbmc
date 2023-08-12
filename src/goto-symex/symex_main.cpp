@@ -784,7 +784,12 @@ void goto_symext::add_memory_leak_checks()
     expr2tc when = it.alloc_guard.as_expr();
 
     if(no_reachables)
-      when = and2tc(when, not2tc(maybe_global_target(get_base_object(it.obj))));
+    {
+      expr2tc obj = get_base_object(it.obj);
+      expr2tc adr = address_of2tc(obj->type, obj);
+      expr2tc targeted = maybe_global_target(adr);
+      when = and2tc(when, not2tc(targeted));
+    }
 
     // Additionally, we need to make sure that we check the above condition
     // only for dynamic objects that were created from successful
