@@ -736,10 +736,12 @@ void goto_symext::add_memory_leak_checks()
         symbol_exprt sym_expr(e.identifier);
         expr2tc sym_expr2;
         migrate_expr(sym_expr, sym_expr2);
-        if(e.identifier == "argv'" || has_prefix(ns.lookup(to_symbol2t(sym_expr2).thename)->name, "__ESBMC_"))
+        const symbolt *sym = ns.lookup(to_symbol2t(sym_expr2).thename);
+        if(e.identifier == "argv'" || has_prefix(sym->name, "__ESBMC_"))
           continue;
         fprintf(stderr, "memcleanup: itr %d, obtaining value-set for global '%s' suffix '%s'\n",
                 i, e.identifier.c_str(), e.suffix.c_str());
+        sym_expr2->type = migrate_type(sym->type);
         cur_state->value_set.get_value_set_rec(sym_expr2, points_to, e.suffix, sym_expr2->type);
       }
       globals.clear();
