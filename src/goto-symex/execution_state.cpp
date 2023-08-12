@@ -245,15 +245,17 @@ void execution_statet::symex_step(reachability_treet &art)
   switch(instruction.type)
   {
   case END_FUNCTION:
-    if(instruction.function == "__ESBMC_main")
+    if(
+      instruction.function == "__ESBMC_main" ||
+      (instruction.function == "c:@F@main" &&
+       options.get_bool_option("memory-leak-check")))
     {
       end_thread();
       owning_rt->main_thread_ended = true;
     }
     else if(
       instruction.function == "c:@F@main" &&
-      !options.get_bool_option("deadlock-check") &&
-      !options.get_bool_option("memory-leak-check"))
+      !options.get_bool_option("deadlock-check"))
     {
       // check whether we reached the end of the main function and
       // whether we are not checking for (local and global) deadlocks and memory leaks.
@@ -895,9 +897,8 @@ void execution_statet::get_expr_globals(
     }
   }
 
-  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
-    get_expr_globals(ns, e, globals_list);
-  });
+  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e)
+                        { get_expr_globals(ns, e, globals_list); });
 }
 
 bool execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l)
