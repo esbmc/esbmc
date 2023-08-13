@@ -854,6 +854,10 @@ protected:
   /** Flag as to whether we're performing memory leak checks. Corresponds to
    *  the option --memory-leak-check */
   bool memory_leak_check;
+  /** Flag as to whether we're pruning the objects from the memory leak check
+   *  that are still reachable via global pointers. Corresponds to the option
+   *  --no-reachable-memory-leak */
+  bool no_reachable_memleak;
   /** Flag as to whether we're checking user assertions. Corresponds to
    *  the option --no-assertions */
   bool no_assertions;
