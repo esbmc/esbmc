@@ -759,7 +759,7 @@ void goto_symext::add_memory_leak_checks()
           continue;
         assert(is_object_descriptor2t(target));
         expr2tc root_object = to_object_descriptor2t(target).get_root_object();
-        if(is_null_object2t(root_object))
+        if(is_null_object2t(root_object) || is_constant_string2t(root_object))
           continue;
         expr2tc adr = address_of2tc(root_object->type, root_object);
         auto [itr,ins] = globals_point_to.emplace(adr);
