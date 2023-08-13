@@ -845,6 +845,9 @@ void goto_symext::add_memory_leak_checks()
         expr2tc is_any;
         for(const expr2tc &e : tgts)
         {
+          /* XXX: 'obj' is the address of a statically known dynamic object,
+           *      couldn't we just statically check whether the symbol 'e'
+           *      addresses is the same as 'obj' directly? */
           expr2tc same = same_object2tc(obj, e);
           is_any = is_any ? or2tc(is_any, same) : same;
         }
