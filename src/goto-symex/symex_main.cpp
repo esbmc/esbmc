@@ -723,48 +723,107 @@ void goto_symext::add_memory_leak_checks()
   std::function<expr2tc(expr2tc)> maybe_global_target;
   if(no_reachable_memleak)
   {
-    std::list<value_sett::entryt> globals;
-    value_set_analysist va(ns);
-    va.get_globals(globals);
+    /* We've been instructed to exclude any allocated dynamic object from the
+     * memory-leak check that is still reachable via global symbols.
+     *
+     * So the idea is to go through all global symbols in the context and
+     * check where they point to via the value-set of the respective symbol.
+     * This forms the set of targets reachable from global symbols. However,
+     * reachable is a transitive relation, so we'll build a fixpoint by then
+     * adding those symbols that are reachable in one step from the already
+     * known globally-reachable ones. It's basically a breadth-first search.
+     *
+     * The targets (actually, their addresses) are collected in
+     * 'globals_point_to'.
+     *
+     * The 'globals' list contains the new "frontier" of symbols left to check
+     * for their value-sets. Once it's empty, the fixpoint is reached.
+     */
     std::unordered_set<expr2tc, irep2_hash> globals_point_to;
     bool has_unknown = false;
+    value_set_analysist va(ns);
+
+    std::list<value_sett::entryt> globals;
+    va.get_globals(globals);
     for(int i=0; !has_unknown && !globals.empty(); i++) {
+      /* Collect all objects reachable from 'globals' in 'points_to'. */
       value_sett::object_mapt points_to;
       for(const value_sett::entryt &e : globals)
       {
+        /* Unfortunately, we just have the symbol id and a suffix that's only
+         * meaningful to the value-set analysis, but no type. However, we
+         * need a type. So reconstruct the current state's version of a
+         * symbol-expr referring to this symbol. */
         symbol_exprt sym_expr(e.identifier);
         expr2tc sym_expr2;
         migrate_expr(sym_expr, sym_expr2);
+
+        /* Now obtain the type. */
         const symbolt *sym = ns.lookup(to_symbol2t(sym_expr2).thename);
+
+        /* By "global" only user-defined symbols are meant. Internally used ones
+         * we can ignore. */
         if(e.identifier == "argv'" || has_prefix(sym->name, "__ESBMC_"))
           continue;
-        fprintf(stderr, "memcleanup: itr %d, obtaining value-set for global '%s' suffix '%s'\n",
+        fprintf(stderr, "memcleanup: itr %d, obtaining value-set for global "
+                        "'%s' suffix '%s'\n",
                 i, e.identifier.c_str(), e.suffix.c_str());
         sym_expr2->type = migrate_type(sym->type);
+
+        /* Rename so that it reflects the current state. */
         cur_state->rename(sym_expr2);
-        cur_state->value_set.get_value_set_rec(sym_expr2, points_to, e.suffix, sym_expr2->type);
+
+        /* Collect its value-set into 'points_to'. Since that's a map, this
+         * will only add targets that are not already in there. */
+        cur_state->value_set
+          .get_value_set_rec(sym_expr2, points_to, e.suffix, sym_expr2->type);
       }
+
+      /* Now add the new found symbols to 'globals_point_to' and also record
+       * them in 'globals'. If they were known already, we don't need to handle
+       * them again. */
       globals.clear();
       for(auto it = points_to.begin(); it != points_to.end(); ++it)
       {
         expr2tc target = cur_state->value_set.to_expr(it);
+        /* A value-set entry can be unknown, invalid or a descriptor of an
+         * object. */
         if(is_unknown2t(target))
         {
+          /* Treating 'unknown' as "could potentially point anywhere" generates
+           * too many false positives. It will basically make the memory-leak
+           * check useless since all dynamic objects could potentially still
+           * be referenced. We ignore it for now and pretend that's OK because
+           * dereference() with INTERNAL mode would also do that. */
           continue;
           has_unknown = true;
           globals.clear();
           break;
         }
+        /* invalid targets are not objects, ignore those */
         if(is_invalid2t(target))
           continue;
+
         assert(is_object_descriptor2t(target));
         expr2tc root_object = to_object_descriptor2t(target).get_root_object();
+
+        /* null-objects and constant strings are interesting for neither the
+         * memory-leak check nor for finding more pointers to enlarge the set
+         * of reachable objects */
         if(is_null_object2t(root_object) || is_constant_string2t(root_object))
           continue;
+
+        /* Record and, if new, obtain all the "entries" interesting for the
+         * value-set analysis. An entry is interesting basically if its type
+         * contains a pointer type. Those are also exactly the ones interesting
+         * for the building the set of reachable objects. */
         expr2tc adr = address_of2tc(root_object->type, root_object);
         auto [itr,ins] = globals_point_to.emplace(adr);
         if(!ins)
           continue;
+
+        /* Check the contents of a valid root object of this target for more
+         * pointers reaching out further */
         assert(is_symbol2t(root_object));
         va.get_entries_rec(
           to_symbol2t(root_object).get_symbol_name(),
