@@ -849,7 +849,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         {
           // Non constant offset -- work out what the lowest alignment is.
           // Fetch the type size of the array index element.
-          BigInt m = type_byte_size_default(index.source_value->type, 1);
+          BigInt m = type_byte_size_default(index.type, 1);
 
           // This index operation, whatever the offset, will always multiply
           // by the size of the element type.
