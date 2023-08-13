@@ -36,6 +36,7 @@ goto_symext::goto_symext(
     depth_limit(atol(options.get_option("depth").c_str())),
     break_insn(atol(options.get_option("break-at").c_str())),
     memory_leak_check(options.get_bool_option("memory-leak-check")),
+    no_reachable_memleak(options.get_bool_option("no-reachable-memory-leak")),
     no_assertions(options.get_bool_option("no-assertions")),
     no_simplify(options.get_bool_option("no-simplify")),
     no_unwinding_assertions(options.get_bool_option("no-unwinding-assertions")),

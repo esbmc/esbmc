@@ -289,7 +289,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "affects --memory-leak-check; if both are enabled, the check for memory "
      "leaks is only performed for normal termination, that is, not for "
      "abort()"},
-    {"no-reachable-memleaks",
+    {"no-reachable-memory-leak",
      NULL,
      "exclude still reachable objects from --memory-leak-check"},
     {"nan-check", NULL, "check floating-point for NaN"},

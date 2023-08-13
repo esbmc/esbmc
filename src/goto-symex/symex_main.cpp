@@ -720,9 +720,8 @@ void goto_symext::add_memory_leak_checks()
   if(!memory_leak_check)
     return;
 
-  bool no_reachables = options.get_bool_option("no-reachable-memleaks");
   std::function<expr2tc(expr2tc)> maybe_global_target;
-  if(no_reachables)
+  if(no_reachable_memleak)
   {
     std::list<value_sett::entryt> globals;
     value_set_analysist va(ns);
@@ -809,7 +808,7 @@ void goto_symext::add_memory_leak_checks()
 
     expr2tc when = it.alloc_guard.as_expr();
 
-    if(no_reachables)
+    if(no_reachable_memleak)
     {
       expr2tc obj = get_base_object(it.obj);
       expr2tc adr = address_of2tc(obj->type, obj);
