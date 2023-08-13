@@ -742,6 +742,7 @@ void goto_symext::add_memory_leak_checks()
         fprintf(stderr, "memcleanup: itr %d, obtaining value-set for global '%s' suffix '%s'\n",
                 i, e.identifier.c_str(), e.suffix.c_str());
         sym_expr2->type = migrate_type(sym->type);
+        cur_state->rename(sym_expr2);
         cur_state->value_set.get_value_set_rec(sym_expr2, points_to, e.suffix, sym_expr2->type);
       }
       globals.clear();
