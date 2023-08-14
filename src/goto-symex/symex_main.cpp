@@ -745,7 +745,8 @@ void goto_symext::add_memory_leak_checks()
 
     std::list<value_sett::entryt> globals;
     va.get_globals(globals);
-    for(int i=0; !has_unknown && !globals.empty(); i++) {
+    for(int i = 0; !has_unknown && !globals.empty(); i++)
+    {
       /* Collect all objects reachable from 'globals' in 'points_to'. */
       value_sett::object_mapt points_to;
       for(const value_sett::entryt &e : globals)
@@ -765,9 +766,12 @@ void goto_symext::add_memory_leak_checks()
          * we can ignore. */
         if(e.identifier == "argv'" || has_prefix(sym->name, "__ESBMC_"))
           continue;
-        fprintf(stderr, "memcleanup: itr %d, obtaining value-set for global "
-                        "'%s' suffix '%s'\n",
-                i, e.identifier.c_str(), e.suffix.c_str());
+        log_debug(
+          "memcleanup: itr {}, obtaining value-set for global '{}' suffix "
+          "'{}'\n",
+          i,
+          e.identifier,
+          e.suffix);
         sym_expr2->type = migrate_type(sym->type);
 
         /* Rename so that it reflects the current state. */
@@ -775,8 +779,8 @@ void goto_symext::add_memory_leak_checks()
 
         /* Collect its value-set into 'points_to'. Since that's a map, this
          * will only add targets that are not already in there. */
-        cur_state->value_set
-          .get_value_set_rec(sym_expr2, points_to, e.suffix, sym_expr2->type);
+        cur_state->value_set.get_value_set_rec(
+          sym_expr2, points_to, e.suffix, sym_expr2->type);
       }
 
       /* Now add the new found symbols to 'globals_point_to' and also record
@@ -794,11 +798,12 @@ void goto_symext::add_memory_leak_checks()
            * too many false positives. It will basically make the memory-leak
            * check useless since all dynamic objects could potentially still
            * be referenced. We ignore it for now and pretend that's OK because
-           * dereference() with INTERNAL mode would also do that. */
-          continue;
+           * dereference() with INTERNAL mode would also do that.
           has_unknown = true;
           globals.clear();
           break;
+           */
+          continue;
         }
         /* invalid targets are not objects, ignore those */
         if(is_invalid2t(target))
@@ -818,7 +823,7 @@ void goto_symext::add_memory_leak_checks()
          * contains a pointer type. Those are also exactly the ones interesting
          * for the building the set of reachable objects. */
         expr2tc adr = address_of2tc(root_object->type, root_object);
-        auto [itr,ins] = globals_point_to.emplace(adr);
+        auto [itr, ins] = globals_point_to.emplace(adr);
         if(!ins)
           continue;
 
@@ -833,10 +838,11 @@ void goto_symext::add_memory_leak_checks()
       }
     }
 
-    fprintf(stderr, "memcleanup: unknown: %d, globals point to:\n", has_unknown);
-    for (const expr2tc &e : globals_point_to)
-      fprintf(stderr, "memcleanup:  %s\n",
-              to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name().c_str());
+    log_debug("memcleanup: unknown: {}, globals point to:\n", has_unknown);
+    for(const expr2tc &e : globals_point_to)
+      log_debug(
+        "memcleanup:   {}\n",
+        to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name());
 
     if(has_unknown)
       maybe_global_target = [](expr2tc) { return gen_true_expr(); };
