@@ -434,10 +434,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"double-assign-check", NULL, ""},
     // Abort if the program contains a recursion
     {"abort-on-recursion", NULL, ""},
-    // Verbosity of message, probably does nothing
+    /* see <https://github.com/esbmc/esbmc/pull/1281> for a list of supported
+     * modules; check "grep -rw 'log_debug(' src" for more up-to-date info. */
     {"verbosity",
      boost::program_options::value<std::vector<std::string>>(),
-     ""},
+     "Verbosity of log output, can be given multiple times. Parameter is "
+     "either a decimal N or 'module:N' to set the log-level of debug messages "
+     "of the module to N; without module, it sets the global log-level"},
     // --break-at $insnnum will cause ESBMC to execute a trap
     // instruction when it executes the designated GOTO instruction number.
     {"break-at", boost::program_options::value<std::string>(), ""},
