@@ -1105,7 +1105,8 @@ tvt interval_domaint::eval_boolean_expression(
 
   if(contains_float(cond))
   {
-    log_debug("interval", "[eval_boolean_expression] No support for floats/mixing");
+    log_debug(
+      "interval", "[eval_boolean_expression] No support for floats/mixing");
     return tvt(tvt::TV_UNKNOWN);
   }
 

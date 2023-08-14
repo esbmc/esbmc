@@ -90,7 +90,7 @@ struct messaget
 
   public:
     VerbosityLevel verbosity;
-    std::unordered_map<std::string,VerbosityLevel> modules;
+    std::unordered_map<std::string, VerbosityLevel> modules;
     FILE *out;
     FILE *err;
 
@@ -100,9 +100,7 @@ struct messaget
       if(mod)
         if(auto it = modules.find(mod); it != modules.end())
           l = it->second;
-      return lvl > l                        ? nullptr
-             : lvl == VerbosityLevel::Error ? err
-                                            : out;
+      return lvl > l ? nullptr : lvl == VerbosityLevel::Error ? err : out;
     }
 
     void set_flushln() const
@@ -115,7 +113,12 @@ struct messaget
     }
 
     template <typename... Args>
-    bool logln(const char *mod, VerbosityLevel lvl, const char *file, int line, Args &&...args) const
+    bool logln(
+      const char *mod,
+      VerbosityLevel lvl,
+      const char *file,
+      int line,
+      Args &&...args) const
     {
       FILE *f = target(mod, lvl);
       if(!f)

@@ -30,7 +30,7 @@ void parseoptions_baset::set_verbosity_msg(VerbosityLevel v)
       {
         mod = verb;
         *colon = '\0';
-        verb = colon+1;
+        verb = colon + 1;
       }
 
       VerbosityLevel w = (VerbosityLevel)atoi(verb);
