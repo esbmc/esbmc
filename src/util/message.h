@@ -155,9 +155,9 @@ print(VerbosityLevel lvl, std::string_view msg, const locationt &)
 #define log_status(fmt, ...)                                                   \
   messaget::state.logln(                                                       \
     nullptr, VerbosityLevel::Status, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define log_debug(fmt, ...)                                                    \
+#define log_debug(mod, fmt, ...)                                               \
   messaget::state.logln(                                                       \
-    nullptr, VerbosityLevel::Debug, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+    mod, VerbosityLevel::Debug, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
 // TODO: Eventually this will be removed
 #ifdef ENABLE_OLD_FRONTEND

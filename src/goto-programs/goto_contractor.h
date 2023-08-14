@@ -125,7 +125,7 @@ private:
     }
     else
     {
-      log_debug("Contractors: Unsupported Ctc type");
+      log_debug("contractor", "Contractors: Unsupported Ctc type");
     }
     return nullptr;
   }
@@ -184,7 +184,7 @@ public:
       oss << "inner :" << to_oss(c->get_inner()).str() << "\n";
       oss << "location :" << c->get_location() << "\n";
     }
-    log_debug("{}", oss.str());
+    log_debug("contractor", "{}", oss.str());
   }
   std::ostringstream list_to_oss(ibex::Array<ibex::Ctc> *list, bool is_compo)
   {
@@ -344,7 +344,7 @@ public:
     if(!function_loops.empty())
     {
       vars = new ibex::Variable(CspMap::MAX_VAR);
-      log_debug("1/4 - Parsing asserts to create CSP Constraints.");
+      log_debug("contractor", "1/4 - Parsing asserts to create CSP Constraints.");
       get_contractors(_goto_functions);
       if(contractors.is_empty())
       {
@@ -354,13 +354,13 @@ public:
         return;
       }
       contractors.dump();
-      log_debug("2/4 - Parsing assumes to set values for variables intervals.");
+      log_debug("contractor", "2/4 - Parsing assumes to set values for variables intervals.");
       get_intervals(_goto_functions);
 
-      log_debug("3/4 - Applying contractor.");
+      log_debug("contractor", "3/4 - Applying contractor.");
       apply_contractor();
 
-      log_debug("4/4 - Inserting assumes.");
+      log_debug("contractor", "4/4 - Inserting assumes.");
       insert_assume(_goto_functions);
     }
   }

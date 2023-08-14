@@ -1230,7 +1230,7 @@ void goto_symext::intrinsic_memset(
   {
     /* Not sure what to do here, let's rely
        * on the default implementation then */
-    log_debug("[memset] Couldn't optimize memset due to precondition");
+    log_debug("memset", "Couldn't optimize memset due to precondition");
     bump_call();
     return;
   }
@@ -1238,7 +1238,7 @@ void goto_symext::intrinsic_memset(
   simplify(arg2);
   if(!is_constant_int2t(arg2))
   {
-    log_debug("[memset] TODO: simplifier issues :/");
+    log_debug("memset", "TODO: simplifier issues :/");
     bump_call();
     return;
   }
@@ -1261,7 +1261,7 @@ void goto_symext::intrinsic_memset(
        * item_offset must be something! */
     if(!item_object || !item_offset)
     {
-      log_debug("[memset] Couldn't get item_object/item_offset");
+      log_debug("memset", "Couldn't get item_object/item_offset");
       bump_call();
       return;
     }
@@ -1270,9 +1270,10 @@ void goto_symext::intrinsic_memset(
     // We can't optimize symbolic offsets :/
     if(is_symbol2t(item_offset))
     {
-      log_debug(fmt::format(
-        "[memset] Item offset is symbolic: {}",
-        to_symbol2t(item_offset).get_symbol_name()));
+      log_debug(
+        "memset",
+        "Item offset is symbolic: {}",
+        to_symbol2t(item_offset).get_symbol_name());
       bump_call();
       return;
     }
@@ -1294,7 +1295,7 @@ void goto_symext::intrinsic_memset(
           // if side_1 of mult is a pointer_offset, then it is just zero
           if(is_pointer_offset2t(as_mul.side_1))
           {
-            log_debug("[memset] TODO: some simplifications are missing");
+            log_debug("memset", "TODO: some simplifications are missing");
             item_offset = constant_int2tc(get_uint64_type(), BigInt(0));
           }
         }
@@ -1309,7 +1310,7 @@ void goto_symext::intrinsic_memset(
        * For now bump_call, later we should expand our simplifier
        */
       log_debug(
-        "[memset] TODO: some simplifications are missing, bumping call");
+        "memset", "TODO: some simplifications are missing, bumping call");
       bump_call();
       return;
     }
@@ -1365,7 +1366,7 @@ void goto_symext::intrinsic_memset(
     // Were we able to optimize it? If not... bump call
     if(!new_object)
     {
-      log_debug("[memset] gen_value_by_byte failed");
+      log_debug("memset", "gen_value_by_byte failed");
       bump_call();
       return;
     }

@@ -51,10 +51,11 @@ void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
     ++sliced;
     if(is_symbol2t(SSA_step.cond))
       log_debug(
+        "slice",
         "slice ignoring assume symbol {}",
         to_symbol2t(SSA_step.cond).get_symbol_name());
     else
-      log_debug("slide ignoring assume expression");
+      log_debug("slice", "slice ignoring assume expression");
   }
   else
   {
@@ -88,6 +89,7 @@ void symex_slicet::run_on_assignment(
     SSA_step.ignore = true;
     ++sliced;
     log_debug(
+      "slice",
       "slice ignoring assignment to symbol {}",
       to_symbol2t(SSA_step.lhs).get_symbol_name());
   }
@@ -112,6 +114,7 @@ void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
     SSA_step.ignore = true;
     ++sliced;
     log_debug(
+      "slice",
       "slice ignoring renumbering symbol {}",
       to_symbol2t(SSA_step.lhs).get_symbol_name());
   }

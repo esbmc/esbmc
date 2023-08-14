@@ -389,7 +389,7 @@ void goto_contractort::parse_error(const expr2tc &expr)
   std::ostringstream oss;
   oss << get_expr_id(expr);
   oss << " Expression is complex, skipping this assert.\n";
-  log_debug("{}", oss.str());
+  log_debug("contractor", "{}", oss.str());
 }
 
 bool goto_contractort::initialize_main_function_loops()

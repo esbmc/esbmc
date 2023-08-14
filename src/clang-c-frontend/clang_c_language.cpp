@@ -30,7 +30,7 @@ clang_c_languaget::clang_c_languaget()
   // Build the compile arguments
   build_compiler_args(clang_headers_path());
 
-  if(FILE *f = messaget::state.target(nullptr, VerbosityLevel::Debug))
+  if(FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
   {
     fprintf(f, "clang invocation:");
     for(const std::string &s : compiler_args)
@@ -102,7 +102,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   for(auto const &def : config.ansi_c.defines)
     compiler_args.push_back("-D" + def);
 
-  if(messaget::state.verbosity >= VerbosityLevel::Debug)
+  if(messaget::state.target("clang", VerbosityLevel::Debug))
     compiler_args.emplace_back("-v");
 
   compiler_args.emplace_back("-target");

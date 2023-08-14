@@ -48,7 +48,7 @@ void pattern_checker::check_authorization_through_tx_origin(
   const nlohmann::json &body_stmt = func["body"]["statements"];
   log_progress(
     "  - Pattern-based checking: SWC-115 Authorization through tx.origin");
-  log_debug("statements in function body array ... \n");
+  log_debug("solidity", "statements in function body array ... \n");
 
   unsigned index = 0;
 
