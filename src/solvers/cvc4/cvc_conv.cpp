@@ -1277,7 +1277,7 @@ void cvc_convt::dump_smt()
   auto const &assertions = smt.getAssertions();
   for(auto const &a : assertions)
     a.printAst(oss, 0);
-  log_debug("{}", oss.str());
+  log_debug("cvc4", "{}", oss.str());
 }
 
 void cvc_smt_ast::dump() const

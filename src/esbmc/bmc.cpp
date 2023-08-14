@@ -751,7 +751,7 @@ smt_convt::resultt bmct::multi_property_check(
     // Just to confirm that things are in parallel
 #ifndef _WIN32
 #ifndef __APPLE__ // sched_getcpu not supported in OS X
-      log_debug("Thread running on Core {}", sched_getcpu());
+      log_debug("multi-property", "Thread running on Core {}", sched_getcpu());
 #endif
 #endif
       // Set up the current claim and slice it!
@@ -837,7 +837,7 @@ smt_convt::resultt bmct::multi_property_check(
       }
       catch(...)
       {
-        log_debug("Failing Fast");
+        log_debug("multi-property", "Failing Fast");
       }
     };
 

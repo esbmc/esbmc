@@ -919,7 +919,7 @@ smt_astt smtlib_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 
 smt_astt smtlib_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
-  log_debug("[smt_ast] mk_zero_ext with {} width", topwidth);
+  log_debug("smtlib", "[smt_ast] mk_zero_ext with {} width", topwidth);
   smt_astt z = mk_smt_bv(0, mk_bv_sort(topwidth));
   return mk_concat(z, a);
 }

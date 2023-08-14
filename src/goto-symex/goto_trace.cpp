@@ -21,7 +21,7 @@ void goto_trace_stept::dump() const
 {
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
-  log_debug("{}", oss.str());
+  log_debug("goto-trace", "{}", oss.str());
 }
 
 void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const

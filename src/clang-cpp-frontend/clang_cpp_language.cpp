@@ -43,7 +43,7 @@ void clang_cpp_languaget::force_file_type()
     !config.options.get_bool_option("no-abstracted-cpp-includes") &&
     !config.options.get_bool_option("no-library"))
   {
-    log_debug("[CPP] Adding CPP includes: {}", esbmct::abstract_cpp_includes());
+    log_debug("c++", "Adding CPP includes: {}", esbmct::abstract_cpp_includes());
     //compiler_args.push_back("-cxx-isystem");
     //compiler_args.push_back(esbmct::abstract_cpp_includes());
     // Let the cpp include "overtake" others.

@@ -424,14 +424,14 @@ public:
   static interval_templatet<T>
   cast(const interval_templatet<T> &old, const type2tc &)
   {
-    log_debug("No support for typecasting");
+    log_debug("interval", "No support for typecasting");
     return old;
   }
 
   friend interval_templatet<T>
   operator%(const interval_templatet<T> &s, const interval_templatet<T> &)
   {
-    log_debug("No support for mod");
+    log_debug("interval", "No support for mod");
     return s;
   }
 
@@ -439,7 +439,7 @@ public:
     const interval_templatet<T> &,
     const interval_templatet<T> &) const
   {
-    log_debug("No support for bitand");
+    log_debug("interval", "No support for bitand");
     interval_templatet<T> result;
     return result;
   }
@@ -454,7 +454,7 @@ public:
     const interval_templatet<T> &,
     const interval_templatet<T> &) const
   {
-    log_debug("No support for bitor");
+    log_debug("interval", "No support for bitor");
     interval_templatet<T> result;
     return result;
   }
@@ -469,7 +469,7 @@ public:
     const interval_templatet<T> &,
     const interval_templatet<T> &) const
   {
-    log_debug("No support for bitxor");
+    log_debug("interval", "No support for bitxor");
     interval_templatet<T> result;
     return result;
   }
@@ -484,7 +484,7 @@ public:
     const interval_templatet<T> &,
     const interval_templatet<T> &) const
   {
-    log_debug("No support for lshr");
+    log_debug("interval", "No support for lshr");
     interval_templatet<T> result;
     return result;
   }
@@ -500,7 +500,7 @@ public:
     const interval_templatet<T> &,
     const interval_templatet<T> &) const
   {
-    log_debug("No support for shl");
+    log_debug("interval", "No support for shl");
     interval_templatet<T> result;
     return result;
   }

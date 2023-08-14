@@ -383,7 +383,7 @@ T interval_domaint::get_interval(const expr2tc &e) const
       break;
     }
 
-    log_debug("Could not simplify: {}", *e);
+    log_debug("interval", "Could not simplify: {}", *e);
     break;
   }
 
@@ -528,11 +528,11 @@ T interval_domaint::get_interval(const expr2tc &e) const
 
   case expr2t::sideeffect_id:
     // This is probably a nondet
-    log_debug("[Interval] returning top for side effect {}", *e);
+    log_debug("interval", "returning top for side effect {}", *e);
     break;
 
   default:
-    log_debug("[Interval] Couldn't compute interval for expr: {}", *e);
+    log_debug("interval", "Couldn't compute interval for expr: {}", *e);
     break;
   }
 
@@ -1002,7 +1002,7 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
       real_map.erase(identifier);
   }
   else
-    log_debug("[havoc_rec] Missing support: {}", *expr);
+    log_debug("interval", "[havoc_rec] Missing support: {}", *expr);
 }
 
 void interval_domaint::assume_rec(
@@ -1083,7 +1083,7 @@ void interval_domaint::assume(const expr2tc &cond)
     enable_eval_assumptions &&
     eval_boolean_expression(new_cond, *this).is_false())
   {
-    log_debug("The expr {} is always false. Returning bottom", *cond);
+    log_debug("interval", "The expr {} is always false. Returning bottom", *cond);
     make_bottom();
     return;
   }
@@ -1099,13 +1099,13 @@ tvt interval_domaint::eval_boolean_expression(
   // TODO: for now we will only support integer expressions (no mix!)
   if(enable_wrapped_intervals)
   {
-    log_debug("[eval_boolean_expression] Disabled for wrapped");
+    log_debug("interval", "[eval_boolean_expression] Disabled for wrapped");
     return tvt(tvt::TV_UNKNOWN);
   }
 
   if(contains_float(cond))
   {
-    log_debug("[eval_boolean_expression] No support for floats/mixing");
+    log_debug("interval", "[eval_boolean_expression] No support for floats/mixing");
     return tvt(tvt::TV_UNKNOWN);
   }
 
@@ -1174,7 +1174,7 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
       cond->foreach_operand([this](const expr2tc &e) { assume_rec(e, true); });
   }
   else
-    log_debug("[assume_rec] Missing support: {}", *cond);
+    log_debug("interval", "[assume_rec] Missing support: {}", *cond);
 }
 
 void interval_domaint::dump() const

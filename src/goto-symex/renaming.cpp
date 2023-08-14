@@ -287,7 +287,7 @@ void renaming::level2t::dump() const
 {
   std::ostringstream oss;
   print(oss);
-  log_debug("{}", oss.str());
+  log_debug("rename", "{}", oss.str());
 }
 
 void renaming::level2t::make_assignment(
