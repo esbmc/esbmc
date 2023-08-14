@@ -344,7 +344,8 @@ public:
     if(!function_loops.empty())
     {
       vars = new ibex::Variable(CspMap::MAX_VAR);
-      log_debug("contractor", "1/4 - Parsing asserts to create CSP Constraints.");
+      log_debug(
+        "contractor", "1/4 - Parsing asserts to create CSP Constraints.");
       get_contractors(_goto_functions);
       if(contractors.is_empty())
       {
@@ -354,7 +355,9 @@ public:
         return;
       }
       contractors.dump();
-      log_debug("contractor", "2/4 - Parsing assumes to set values for variables intervals.");
+      log_debug(
+        "contractor",
+        "2/4 - Parsing assumes to set values for variables intervals.");
       get_intervals(_goto_functions);
 
       log_debug("contractor", "3/4 - Applying contractor.");
