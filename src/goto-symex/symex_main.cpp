@@ -767,8 +767,8 @@ void goto_symext::add_memory_leak_checks()
         if(e.identifier == "argv'" || has_prefix(sym->name, "__ESBMC_"))
           continue;
         log_debug(
-          "memcleanup: itr {}, obtaining value-set for global '{}' suffix "
-          "'{}'\n",
+          "memcleanup",
+          "itr {}, obtaining value-set for global '{}' suffix '{}'",
           i,
           e.identifier,
           e.suffix);
@@ -841,7 +841,8 @@ void goto_symext::add_memory_leak_checks()
     log_debug("memcleanup: unknown: {}, globals point to:\n", has_unknown);
     for(const expr2tc &e : globals_point_to)
       log_debug(
-        "memcleanup:   {}\n",
+        "memcleanup",
+        "  {}",
         to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name());
 
     if(has_unknown)
