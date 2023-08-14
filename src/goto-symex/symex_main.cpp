@@ -838,7 +838,7 @@ void goto_symext::add_memory_leak_checks()
       }
     }
 
-    log_debug("memcleanup: unknown: {}, globals point to:\n", has_unknown);
+    log_debug("memcleanup", "unknown: {}, globals point to:\n", has_unknown);
     for(const expr2tc &e : globals_point_to)
       log_debug(
         "memcleanup",
