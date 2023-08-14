@@ -49,7 +49,7 @@ const struct group_opt_templ c2goto_options[] = {
      {"sysroot",
       boost::program_options::value<std::string>()->value_name("<path>"),
       "set the sysroot for the frontend"},
-     {"verbosity", boost::program_options::value<int>(), ""},
+     {"verbosity", boost::program_options::value<std::vector<std::string>>(), ""},
    }},
   {"end", {{"", NULL, "end of options"}}},
   {"Hidden Options", {{"", NULL, ""}}}};

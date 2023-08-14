@@ -435,7 +435,7 @@ const struct group_opt_templ all_cmd_options[] = {
     // Abort if the program contains a recursion
     {"abort-on-recursion", NULL, ""},
     // Verbosity of message, probably does nothing
-    {"verbosity", boost::program_options::value<int>(), ""},
+    {"verbosity", boost::program_options::value<std::vector<std::string>>(), ""},
     // --break-at $insnnum will cause ESBMC to execute a trap
     // instruction when it executes the designated GOTO instruction number.
     {"break-at", boost::program_options::value<std::string>(), ""},
