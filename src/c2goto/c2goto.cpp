@@ -51,7 +51,9 @@ const struct group_opt_templ c2goto_options[] = {
       "set the sysroot for the frontend"},
      {"verbosity",
       boost::program_options::value<std::vector<std::string>>(),
-      ""},
+      "Verbosity of log output, can be given multiple times. Parameter is "
+      "either a decimal N or 'module:N' to set the log-level of debug messages "
+      "of the module to N; without module, it sets the global log-level"},
    }},
   {"end", {{"", NULL, "end of options"}}},
   {"Hidden Options", {{"", NULL, ""}}}};
