@@ -89,7 +89,7 @@ void timeout_handler(int)
 }
 #endif
 
-extern "C" const uint8_t *const esbmc_version_string;
+extern "C" const char *const esbmc_version_string;
 
 uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
 {
