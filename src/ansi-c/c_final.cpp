@@ -21,7 +21,7 @@ void c_finalize_expression(const contextt &context, exprt &expr)
       if(s == nullptr)
       {
         str << "failed to find symbol " << expr.identifier();
-        log_error(str.str());
+        log_error("{}", str.str());
         throw 0;
       }
 
@@ -33,14 +33,14 @@ void c_finalize_expression(const contextt &context, exprt &expr)
       {
         symbol.location.dump();
         str << "symbol `" << symbol.name << "' has incomplete type";
-        log_error(str.str());
+        log_error("{}", str.str());
         throw 0;
       }
       else
       {
         symbol.location.dump();
         str << "symbol `" << symbol.name << "' has unexpected type";
-        log_error(str.str());
+        log_error("{}", str.str());
         throw 0;
       }
     }

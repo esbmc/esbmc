@@ -1384,13 +1384,13 @@ bool esbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
 
   catch(const char *e)
   {
-    log_error(e);
+    log_error("{}", e);
     return true;
   }
 
   catch(const std::string &e)
   {
-    log_error(e);
+    log_error("{}", e);
     return true;
   }
 

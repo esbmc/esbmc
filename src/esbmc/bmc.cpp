@@ -385,11 +385,9 @@ void bmct::report_result(smt_convt::resultt &res)
   if((interleaving_number > 0) && options.get_bool_option("all-runs"))
   {
     log_status(
-      "Number of generated interleavings: " +
-      integer2string((interleaving_number)));
+      "Number of generated interleavings: {}", interleaving_number);
     log_status(
-      "Number of failed interleavings: " +
-      integer2string((interleaving_failed)));
+      "Number of failed interleavings: {}", interleaving_failed);
   }
 }
 
@@ -652,7 +650,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     {
       std::ostringstream oss;
       document_subgoals(*eq.get(), oss);
-      log_status(oss.str());
+      log_status("{}", oss.str());
       return smt_convt::P_SMTLIB;
     }
 

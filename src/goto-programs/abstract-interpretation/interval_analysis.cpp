@@ -208,7 +208,7 @@ void interval_analysis(
   {
     std::ostringstream oss;
     interval_analysis.output(goto_functions, oss);
-    log_status(oss.str());
+    log_status("{}", oss.str());
   }
 
   std::string csv_file = options.get_option("interval-analysis-csv-dump");

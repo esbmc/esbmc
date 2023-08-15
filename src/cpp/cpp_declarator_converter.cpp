@@ -110,7 +110,7 @@ symbolt &cpp_declarator_convertert::convert(
         err_location(declarator.name());
         str << "member `" << base_name << "' not found in scope `"
             << scope->identifier << "'";
-        log_error(str.str());
+        log_error("{}", str.str());
         abort();
       }
     }
@@ -135,7 +135,7 @@ symbolt &cpp_declarator_convertert::convert(
       {
         err_location(name.location());
         str << "error: expected type";
-        log_error(str.str());
+        log_error("{}", str.str());
         abort();
       }
 

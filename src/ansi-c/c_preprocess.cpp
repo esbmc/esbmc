@@ -224,7 +224,7 @@ bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
 
     std::ifstream stderr_input(stderr_file_buf);
     str << stderr_input.rdbuf();
-    log_status(str.str());
+    log_status("{}", str.str());
 
     std::ifstream output_input(out_file_buf);
     outstream << output_input.rdbuf();

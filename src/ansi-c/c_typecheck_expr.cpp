@@ -1081,8 +1081,7 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
     if(type0.cmt_constant())
     {
       err_location(op0);
-      std::string msg = "warning: `" + to_string(op0) + "' is constant";
-      log_warning(msg);
+      log_warning("warning: `{}' is constant", to_string(op0));
     }
 
     if(
@@ -1158,7 +1157,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
 
       err_location(f_op);
       str << "function `" << identifier << "' is not declared";
-      log_warning(str.str());
+      log_warning("{}", str.str());
     }
   }
 
@@ -1922,8 +1921,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
   if(o_type0.cmt_constant())
   {
     err_location(expr);
-    std::string msg = "warning: `" + to_string(op0) + "' is constant";
-    log_warning(msg);
+    log_warning("warning: `{}' is constant", to_string(op0));
   }
 
   if(statement == "assign")
