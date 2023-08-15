@@ -10,7 +10,7 @@ else()
             NAME bitwuzla
             DOWNLOAD_ONLY YES
             GITHUB_REPOSITORY bitwuzla/bitwuzla
-            GIT_TAG smtcomp-2021)
+            GIT_TAG 0.1.1)
 
         message("[bitwuzla] Setting up lingeling")
         execute_process(COMMAND "./contrib/setup-lingeling.sh"
