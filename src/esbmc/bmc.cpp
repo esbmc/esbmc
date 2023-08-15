@@ -84,13 +84,6 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   }
 }
 
-void bmct::do_cbmc(
-  std::shared_ptr<smt_convt> &smt_conv,
-  std::shared_ptr<symex_target_equationt> &eq)
-{
-  eq->convert(*smt_conv.get());
-}
-
 void bmct::successful_trace()
 {
   if(options.get_bool_option("result-only"))
@@ -165,7 +158,7 @@ void bmct::generate_smt_from_equation(
   log_status("Encoding remaining VCC(s) using {}", logic);
 
   fine_timet encode_start = current_time();
-  do_cbmc(smt_conv, eq);
+  eq->convert(*smt_conv.get());
   fine_timet encode_stop = current_time();
   log_status(
     "Encoding to solver time: {}s", time2string(encode_stop - encode_start));
