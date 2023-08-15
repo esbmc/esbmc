@@ -244,7 +244,7 @@ void renaming::renaming_levelt::get_original_name(
     return;
 
   default:
-    log_error("get_original_nameing to invalid level {}", lev);
+    log_error("get_original_nameing to invalid level {}", fmt::underlying(lev));
     abort();
   }
 }
