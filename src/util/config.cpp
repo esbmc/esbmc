@@ -157,7 +157,7 @@ bool configt::set(const cmdlinet &cmdline)
     {
       log_error(
         "error: only 'hybrid' and 'purecap' modes supported for --cheri, "
-        "argument was: " +
+        "argument was: {}",
         mode);
       abort();
     }
@@ -225,7 +225,7 @@ bool configt::set(const cmdlinet &cmdline)
     {
       if(!flavor.empty() && flavor != "purecap")
         log_warning(
-          "overriding flavor '" + flavor + "' by 'purecap' due to --cheri");
+          "overriding flavor '{}' by 'purecap' due to --cheri", flavor);
       flavor = "purecap";
     }
     req_target++;
@@ -235,7 +235,7 @@ bool configt::set(const cmdlinet &cmdline)
   {
     log_error(
       "only at most one target can be specified via "
-      "--i386-{win32,macos,linux}, --ppc-macos, --cheri and --no-arch");
+      "--i386-{{win32,macos,linux}}, --ppc-macos, --cheri and --no-arch");
     return true;
   }
 

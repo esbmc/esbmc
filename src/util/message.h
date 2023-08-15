@@ -77,28 +77,68 @@ struct messaget
 
 #define log_error(fmt, ...)                                                    \
   messaget::state.logln(                                                       \
-    nullptr, VerbosityLevel::Error, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+    nullptr,                                                                   \
+    VerbosityLevel::Error,                                                     \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
 #define log_result(fmt, ...)                                                   \
   messaget::state.logln(                                                       \
-    nullptr, VerbosityLevel::Result, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+    nullptr,                                                                   \
+    VerbosityLevel::Result,                                                    \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
 #define log_warning(fmt, ...)                                                  \
   messaget::state.logln(                                                       \
-    nullptr, VerbosityLevel::Warning, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+    nullptr,                                                                   \
+    VerbosityLevel::Warning,                                                   \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
 #define log_progress(fmt, ...)                                                 \
   messaget::state.logln(                                                       \
-    nullptr, VerbosityLevel::Progress, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+    nullptr,                                                                   \
+    VerbosityLevel::Progress,                                                  \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
 #define log_success(fmt, ...)                                                  \
   messaget::state.logln(                                                       \
-    nullptr, VerbosityLevel::Success, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+    nullptr,                                                                   \
+    VerbosityLevel::Success,                                                   \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
 #define log_fail(fmt, ...)                                                     \
   messaget::state.logln(                                                       \
-    nullptr, VerbosityLevel::Fail, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+    nullptr,                                                                   \
+    VerbosityLevel::Fail,                                                      \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
 #define log_status(fmt, ...)                                                   \
   messaget::state.logln(                                                       \
-    nullptr, VerbosityLevel::Status, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+    nullptr,                                                                   \
+    VerbosityLevel::Status,                                                    \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
 #define log_debug(mod, fmt, ...)                                               \
   messaget::state.logln(                                                       \
-    mod, VerbosityLevel::Debug, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+    mod,                                                                       \
+    VerbosityLevel::Debug,                                                     \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
 
 // TODO: Eventually this will be removed
 #ifdef ENABLE_OLD_FRONTEND

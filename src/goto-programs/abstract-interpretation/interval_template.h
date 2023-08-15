@@ -101,7 +101,7 @@ public:
       else
         oss << "+inf)";
     }
-    log_status(oss.str());
+    log_status("{}", oss.str());
   }
 
   virtual bool is_le_than(const T &a, const T &b) const

@@ -705,7 +705,7 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     if(base_type_eq(cast.type, cast.from->type, ns))
       return convert_ast(cast.from); // No additional conversion required
 
-    log_error("Can't typecast between unions\n{}");
+    log_error("Can't typecast between unions\n{}", *expr);
     abort();
   }
 

@@ -370,10 +370,8 @@ void goto_convertt::remove_assignment(
   {
     if(expr.operands().size() != 2)
     {
-      std::ostringstream str;
-      str << statement << " takes two arguments\n";
-      str << "Location: " << expr.location();
-      log_error(str.str());
+      log_error(
+        "{} takes two arguments\nLocation: {}", statement, expr.location());
       abort();
     }
 
@@ -552,10 +550,10 @@ void goto_convertt::remove_pre(
       constant_type = op_type;
     else
     {
-      std::ostringstream str;
-      str << "no constant one of type " + op_type.to_string() << "\n";
-      str << "Location: " << expr.location();
-      log_error(str.str());
+      log_error(
+        "no constant one of type {}\nLocation: {}",
+        op_type.to_string(),
+        expr.location());
       abort();
     }
 
@@ -643,10 +641,10 @@ void goto_convertt::remove_post(
       constant_type = op_type;
     else
     {
-      std::ostringstream str;
-      str << "no constant one of type " + op_type.to_string();
-      str << "Location: " << expr.location();
-      log_error(str.str());
+      log_error(
+        "no constant one of type {}\nLocation: {}",
+        op_type.to_string(),
+        expr.location());
       abort();
     }
 

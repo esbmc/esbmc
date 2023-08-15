@@ -79,17 +79,17 @@ bool clang_c_maint::clang_main()
 
   if(matches.empty())
   {
-    log_error("main symbol `" + main + "' not found");
+    log_error("main symbol `{}' not found", main);
     return true; // give up
   }
 
   if(matches.size() >= 2)
   {
     if(matches.size() == 2)
-      log_error("warning: main symbol `" + main + "' is ambiguous");
+      log_error("warning: main symbol `{}' is ambiguous", main);
     else
     {
-      log_error("main symbol `" + main + "' is ambiguous");
+      log_error("main symbol `{}' is ambiguous", main);
       return true;
     }
   }
