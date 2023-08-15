@@ -384,10 +384,8 @@ void bmct::report_result(smt_convt::resultt &res)
 
   if((interleaving_number > 0) && options.get_bool_option("all-runs"))
   {
-    log_status(
-      "Number of generated interleavings: {}", interleaving_number);
-    log_status(
-      "Number of failed interleavings: {}", interleaving_failed);
+    log_status("Number of generated interleavings: {}", interleaving_number);
+    log_status("Number of failed interleavings: {}", interleaving_failed);
   }
 }
 
