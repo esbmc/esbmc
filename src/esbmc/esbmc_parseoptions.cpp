@@ -416,9 +416,8 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("file-output"))
   {
     FILE *f = fopen(cmdline.getval("file-output"), "w+");
+    /* TODO: handle failure */
     out = f;
-    err = f;
-    messaget::state.err = f;
     messaget::state.out = f;
   }
   //

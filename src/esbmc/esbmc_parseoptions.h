@@ -25,8 +25,6 @@ public:
   ~esbmc_parseoptionst()
   {
     close_file(out);
-    if(out != err)
-      close_file(err);
   }
 
 protected:
@@ -81,8 +79,7 @@ protected:
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
 
-  FILE *out = stdout;
-  FILE *err = stderr;
+  FILE *out = stderr;
 
   std::vector<std::unique_ptr<goto_functions_algorithm>>
     goto_preprocess_algorithms;

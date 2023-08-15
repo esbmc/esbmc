@@ -64,7 +64,7 @@ void yices_convt::push_ctx()
 
   if(res != 0)
   {
-    yices_print_error(messaget::state.err);
+    yices_print_error(messaget::state.out);
     log_error("Error pushing yices context");
     abort();
   }
@@ -76,7 +76,7 @@ void yices_convt::pop_ctx()
 
   if(res != 0)
   {
-    yices_print_error(messaget::state.err);
+    yices_print_error(messaget::state.out);
     log_error("Error poping yices context");
     abort();
   }
