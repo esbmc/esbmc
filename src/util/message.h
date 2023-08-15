@@ -92,7 +92,6 @@ struct messaget
     VerbosityLevel verbosity;
     std::unordered_map<std::string, VerbosityLevel> modules;
     FILE *out;
-    FILE *err;
 
     FILE *target(const char *mod, VerbosityLevel lvl) const
     {
@@ -100,7 +99,7 @@ struct messaget
       if(mod)
         if(auto it = modules.find(mod); it != modules.end())
           l = it->second;
-      return lvl > l ? nullptr : lvl == VerbosityLevel::Error ? err : out;
+      return lvl > l ? nullptr : out;
     }
 
     void set_flushln() const
@@ -108,7 +107,6 @@ struct messaget
 /* Win32 interprets _IOLBF as _IOFBF (and then chokes on size=0) */
 #if !defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
       setvbuf(out, NULL, _IOLBF, 0);
-      setvbuf(err, NULL, _IOLBF, 0);
 #endif
     }
 
@@ -128,7 +126,7 @@ struct messaget
       (void)file;
       (void)line;
     }
-  } state = {VerbosityLevel::Status, {}, stdout, stderr};
+  } state = {VerbosityLevel::Status, {}, stderr};
 };
 
 static inline void
