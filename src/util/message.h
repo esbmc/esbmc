@@ -14,7 +14,6 @@ Maintainers:
 #include <fmt/format.h>
 #include <fmt/color.h>
 #include <util/message/format.h>
-#include <util/location.h>
 
 /**
  * @brief Verbosity refers to the max level
@@ -128,12 +127,6 @@ struct messaget
     }
   } state = {VerbosityLevel::Status, {}, stderr};
 };
-
-static inline void
-print(VerbosityLevel lvl, std::string_view msg, const locationt &)
-{
-  messaget::state.logln(nullptr, lvl, nullptr, 0, "{}", msg);
-}
 
 #define log_error(fmt, ...)                                                    \
   messaget::state.logln(                                                       \

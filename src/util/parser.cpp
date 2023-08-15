@@ -28,5 +28,5 @@ void parsert::parse_error(const std::string &message, const std::string &before)
   std::string tmp = message;
   if(before != "")
     tmp += " before `" + before + "'";
-  print(VerbosityLevel::Error, tmp, location);
+  log_error("at {}: {}", location, tmp);
 }
