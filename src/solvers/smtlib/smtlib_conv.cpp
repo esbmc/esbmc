@@ -661,7 +661,9 @@ static BigInt interp_numeric(const sexpr &respval, bool is_signed)
   case TOK_BINNUM:
     return binary2integer(respval.data.substr(2), is_signed);
   default:
-    log_error("interpreting S-expr of token type {} as an integer", tok);
+    log_error(
+      "interpreting S-expr of token type {} as an integer",
+      fmt::underlying(tok));
     abort();
   }
 }

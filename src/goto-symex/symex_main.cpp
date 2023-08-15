@@ -340,7 +340,7 @@ void goto_symext::symex_step(reachability_treet &art)
   default:
     log_error(
       "GOTO instruction type {} not handled in goto_symext::symex_step",
-      instruction.type);
+      fmt::underlying(instruction.type));
     abort();
   }
 }

@@ -99,7 +99,7 @@ simple_shell_unescape(const char *s, const char *var)
       log_warning(
         "cannot parse environment variable {}: unfinished {}, ignoring...",
         var,
-        mode);
+        fmt::underlying(mode));
       return {};
     }
     split.emplace_back(std::move(arg));
