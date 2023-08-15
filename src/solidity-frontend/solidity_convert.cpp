@@ -2117,7 +2117,7 @@ bool solidity_convertert::get_elementary_type_name(
   log_debug(
     "solidity",
     "	@@@ got ElementaryType: SolidityGrammar::ElementaryTypeNameT::{}",
-    type);
+    fmt::underlying(type));
 
   switch(type)
   {
