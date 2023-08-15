@@ -43,8 +43,8 @@ struct messaget
 {
   static inline class
   {
-    template <typename... Args>
-    static void println(FILE *f, VerbosityLevel lvl, Args &&...args)
+    static void println(FILE *f, VerbosityLevel lvl, fmt::string_view format,
+                        fmt::format_args args)
     {
       if(config.options.get_bool_option("color"))
       {
@@ -53,27 +53,27 @@ struct messaget
         case VerbosityLevel::Error:
           fmt::print(
             f, fmt::fg(fmt::color::red) | fmt::emphasis::bold, "[ERROR] ");
-          fmt::print(f, std::forward<Args>(args)...);
+          fmt::vprint(f, format, args);
           break;
         case VerbosityLevel::Warning:
           fmt::print(
             f, fmt::fg(fmt::color::yellow) | fmt::emphasis::bold, "[WARNING] ");
-          fmt::print(f, std::forward<Args>(args)...);
+          fmt::vprint(f, format, args);
           break;
         case VerbosityLevel::Progress:
           fmt::print(
             f, fmt::fg(fmt::color::blue) | fmt::emphasis::bold, "[PROGRESS] ");
-          fmt::print(f, std::forward<Args>(args)...);
+          fmt::vprint(f, format, args);
           break;
         case VerbosityLevel::Fail:
-          fmt::print(f, fmt::fg(fmt::color::red), std::forward<Args>(args)...);
+          fmt::vprint(f, fmt::fg(fmt::color::red), format, args);
           break;
         case VerbosityLevel::Success:
-          fmt::print(
-            f, fmt::fg(fmt::color::green), std::forward<Args>(args)...);
+          fmt::vprint(
+            f, fmt::fg(fmt::color::green), format, args);
           break;
         default:
-          fmt::print(f, std::forward<Args>(args)...);
+          fmt::vprint(f, format, args);
           break;
         }
       }
@@ -81,7 +81,7 @@ struct messaget
       {
         if(lvl == VerbosityLevel::Error)
           fmt::print(f, "ERROR: ");
-        fmt::print(f, std::forward<Args>(args)...);
+        fmt::vprint(f, format, args);
       }
 
       fmt::print(f, "\n");
@@ -115,12 +115,13 @@ struct messaget
       VerbosityLevel lvl,
       const char *file,
       int line,
+      fmt::format_string<Args...> format,
       Args &&...args) const
     {
       FILE *f = target(mod, lvl);
       if(!f)
         return false;
-      println(f, lvl, std::forward<Args>(args)...);
+      println(f, lvl, format, fmt::make_format_args(args...));
       return true;
       (void)file;
       (void)line;
