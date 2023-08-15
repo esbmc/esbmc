@@ -43,8 +43,11 @@ struct messaget
 {
   static inline class statet
   {
-    static void println(FILE *f, VerbosityLevel lvl, fmt::string_view format,
-                        fmt::format_args args);
+    static void println(
+      FILE *f,
+      VerbosityLevel lvl,
+      fmt::string_view format,
+      fmt::format_args args);
 
   public:
     VerbosityLevel verbosity;
