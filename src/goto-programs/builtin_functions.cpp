@@ -179,7 +179,7 @@ void goto_convertt::do_mem(
   get_alloc_type(arguments[0], alloc_type, alloc_size);
 
   if(alloc_size.is_nil())
-    alloc_size = from_integer(1, uint_type());
+    alloc_size = from_integer(1, size_type());
 
   if(alloc_type.is_nil())
     alloc_type = char_type();
@@ -187,9 +187,9 @@ void goto_convertt::do_mem(
   if(alloc_type.id() == "symbol")
     alloc_type = ns.follow(alloc_type);
 
-  if(alloc_size.type() != uint_type())
+  if(alloc_size.type() != size_type())
   {
-    alloc_size.make_typecast(uint_type());
+    alloc_size.make_typecast(size_type());
     simplify(alloc_size);
   }
 
