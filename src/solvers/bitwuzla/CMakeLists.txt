@@ -42,8 +42,9 @@ if(EXISTS $ENV{HOME}/bitwuzla)
 endif()
 
 if(ENABLE_BITWUZLA)
-    include(FindPkgConfig)
-    pkg_check_modules(Bitwuzla REQUIRED IMPORTED_TARGET bitwuzla)
+  include(FindPkgConfig)
+  set(ENV{PKG_CONFIG_PATH} "${Bitwuzla_DIR}/lib/pkgconfig")
+  pkg_check_modules(Bitwuzla REQUIRED IMPORTED_TARGET bitwuzla)
 
     message(STATUS "Found Bitwuzla at: ${Bitwuzla_PREFIX}")
     message(STATUS "Bitwuzla version: ${Bitwuzla_VERSION}")
