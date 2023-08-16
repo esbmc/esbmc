@@ -464,7 +464,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
         if(name == "__ESBMC_inf_size")
         {
           assert(t.is_array());
-          t.size(exprt("infinity", uint_type()));
+          t.size(exprt("infinity", size_type()));
         }
         else if(name == "__ESBMC_no_slice")
           no_slice = true;
@@ -1571,9 +1571,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
 
     new_expr = constant_exprt(
-      integer2binary(result.Val.getInt().getSExtValue(), bv_width(uint_type())),
+      integer2binary(result.Val.getInt().getSExtValue(), bv_width(size_type())),
       integer2string(result.Val.getInt().getSExtValue()),
-      uint_type());
+      size_type());
     break;
   }
 
@@ -1588,9 +1588,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       new_expr = constant_exprt(
         integer2binary(
-          result.Val.getInt().getZExtValue(), bv_width(uint_type())),
+          result.Val.getInt().getZExtValue(), bv_width(size_type())),
         integer2string(result.Val.getInt().getZExtValue()),
-        uint_type());
+        size_type());
     }
     else
     {
