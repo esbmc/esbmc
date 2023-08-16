@@ -272,8 +272,8 @@ void goto_convertt::do_cpp_new(
   if(rhs.statement() == "cpp_new[]")
   {
     alloc_size = static_cast<const exprt &>(rhs.size_irep());
-    if(alloc_size.type() != uint_type())
-      alloc_size.make_typecast(uint_type());
+    if(alloc_size.type() != size_type())
+      alloc_size.make_typecast(size_type());
 
     remove_sideeffects(alloc_size, dest);
 
@@ -283,21 +283,21 @@ void goto_convertt::do_cpp_new(
     migrate_expr(alloc_size, alloc_units);
 
     BigInt sz = type_byte_size(subtype);
-    expr2tc sz_expr = constant_int2tc(uint_type2(), sz);
-    expr2tc byte_size = mul2tc(uint_type2(), alloc_units, sz_expr);
+    expr2tc sz_expr = constant_int2tc(size_type2(), sz);
+    expr2tc byte_size = mul2tc(size_type2(), alloc_units, sz_expr);
     alloc_size = migrate_expr_back(byte_size);
 
     const_cast<irept &>(rhs.size_irep()) = alloc_size;
   }
   else
-    alloc_size = from_integer(1, uint_type());
+    alloc_size = from_integer(1, size_type());
 
   if(alloc_size.is_nil())
-    alloc_size = from_integer(1, uint_type());
+    alloc_size = from_integer(1, size_type());
 
-  if(alloc_size.type() != uint_type())
+  if(alloc_size.type() != size_type())
   {
-    alloc_size.make_typecast(uint_type());
+    alloc_size.make_typecast(size_type());
     simplify(alloc_size);
   }
 
@@ -328,7 +328,7 @@ void goto_convertt::do_cpp_new(
 
   // set size
   //nec: ex37.c
-  exprt dynamic_size("dynamic_size", uint_type());
+  exprt dynamic_size("dynamic_size", size_type());
   dynamic_size.copy_to_operands(lhs);
   dynamic_size.location() = rhs.find_location();
   goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
