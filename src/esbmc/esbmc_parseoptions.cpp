@@ -409,10 +409,28 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   config.options = options;
 }
 
+// This is the main entry point of ESBMC. Here ESBMC performs initialisation
+// of the algorithms that will be run over the GOTO program at later stages
+// and calls the verification strategy specified in the command line:
+//
+//  1) Incremental
+//  2) Termination
+//  3) Falsification
+//  4) k-induction
+//  5) Parallel k-induction
+//  6) Default strategy
+//
+// The first 5 are implemented as separate methods, while the last one is
+// implemented directly in this method.
+//
+// Despite some method-specific differences, all strategies follow
+// the general flow below:
+//
+//  get_command_line_options -> get_goto_functions -> set_claims -> do_bmc
+//
 int esbmc_parseoptionst::doit()
 {
   // Configure msg output
-
   if(cmdline.isset("file-output"))
   {
     FILE *f = fopen(cmdline.getval("file-output"), "w+");
@@ -420,9 +438,8 @@ int esbmc_parseoptionst::doit()
     out = f;
     messaget::state.out = f;
   }
-  //
+
   // Print a banner
-  //
   log_status(
     "ESBMC version {} {}-bit {} {}",
     ESBMC_VERSION,
@@ -433,8 +450,7 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("version"))
     return 0;
 
-  // unwinding of transition systems
-
+  // Unwinding of transition systems
   if(cmdline.isset("module") || cmdline.isset("gen-interface"))
   {
     log_error(
@@ -443,16 +459,16 @@ int esbmc_parseoptionst::doit()
     return 1;
   }
 
-  // command line options
+  // Command line options
   if(cmdline.isset("preprocess"))
   {
     preprocessing();
     return 0;
   }
 
-  // initialize goto_functions algorithms
+  // Initialize goto_functions algorithms
   {
-    // loop unroll
+    // Loop unrolling
     if(cmdline.isset("goto-unwind") && !cmdline.isset("unwind"))
     {
       size_t unroll_limit = cmdline.isset("unlimited-goto-unwind") ? -1 : 1000;
@@ -460,11 +476,12 @@ int esbmc_parseoptionst::doit()
         std::make_unique<bounded_loop_unroller>(unroll_limit));
     }
 
-    // mark declarations as nondet
+    // Explicitly marking all declared variables as "nondet"
     if(cmdline.isset("initialize-nondet-variables"))
       goto_preprocess_algorithms.emplace_back(
         std::make_unique<mark_decl_as_non_det>(context));
   }
+
   if(cmdline.isset("termination"))
     return doit_termination();
 
