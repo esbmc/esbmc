@@ -527,6 +527,11 @@ void value_sett::get_value_set_rec(
       return;
     }
 
+    if(sym.rlevel == symbol2t::renaming_level::level1_global)
+      assert(sym.level1_num == 0);
+    assert(sym.rlevel != symbol2t::renaming_level::level2);
+    assert(1||sym.rlevel != symbol2t::renaming_level::level2_global);
+
     // Look up this symbol, with the given suffix to distinguish any arrays or
     // members we've picked out of it at a higher level.
     valuest::const_iterator v_it = values.find(sym.get_symbol_name() + suffix);
@@ -712,6 +717,8 @@ void value_sett::get_value_set_rec(
 
   // If none of those expressions matched, then we don't really know what this
   // expression evaluates to. So just record it as being unknown.
+  log_debug("value-set", "unknown expr {} of type {} -> inserting unknown value",
+            get_expr_id(expr), get_type_id(expr->type));
   expr2tc tmp = unknown2tc(original_type);
   insert(dest, tmp, BigInt(0));
 }
@@ -970,6 +977,8 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
 
   // If we didn't recognize the expression, then we have no idea what this
   // refers to, so store an unknown expr.
+  log_debug("value-set", "unknown expr {} of type {} -> inserting unknown reference",
+            get_expr_id(expr), get_type_id(expr->type));
   expr2tc unknown = unknown2tc(expr->type);
   insert(dest, unknown, BigInt(0));
 }
