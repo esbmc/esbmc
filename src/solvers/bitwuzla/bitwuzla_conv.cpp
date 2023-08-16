@@ -671,7 +671,7 @@ smt_astt bitwuzla_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 bool bitwuzla_convt::get_bool(smt_astt a)
 {
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  const char *result = bitwuzla_get_bv_value(bitw, ast->a);
+  const char *result = bitwuzla_term_to_string(bitwuzla_get_value(bitw, ast->a));
 
   assert(result != NULL && "Bitwuzla returned null bv value string");
 
@@ -694,7 +694,7 @@ bool bitwuzla_convt::get_bool(smt_astt a)
 BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)
 {
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  const char *result = bitwuzla_get_bv_value(bitw, ast->a);
+  const char *result = bitwuzla_term_to_string(bitwuzla_get_value(bitw, ast->a));
   BigInt val = binary2integer(result, is_signed);
   return val;
 }
@@ -714,7 +714,7 @@ expr2tc bitwuzla_convt::get_array_elem(
   if(size > 0)
     for(size_t i = 0; i < size; i++)
     {
-      const char *index_str = bitwuzla_get_bv_value(bitw, indicies[i]);
+      const char *index_str = bitwuzla_term_to_string(bitwuzla_get_value(bitw, indicies[i]));
       auto idx = string2integer(index_str, 2);
       if(idx == index)
         return get_by_ast(subtype, new_ast(values[i], convert_sort(subtype)));
@@ -807,17 +807,18 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 void bitwuzla_convt::dump_smt()
 {
-  bitwuzla_dump_formula(bitw, "smt2", messaget::state.out);
+  bitwuzla_print_formula(bitw, "smt2", messaget::state.out);
 }
 
 void bitw_smt_ast::dump() const
 {
-  bitwuzla_term_dump(a, "smt2", messaget::state.out);
+  bitwuzla_print_term(a, "smt2", messaget::state.out);
 }
 
 void bitwuzla_convt::print_model()
 {
-  bitwuzla_print_model(bitw, "smt2", messaget::state.out);
+  // TODO: requires more work! See porting manual!
+  //bitwuzla_print_model(bitw, "smt2", messaget::state.out);
 }
 
 smt_sortt bitwuzla_convt::mk_bool_sort()
