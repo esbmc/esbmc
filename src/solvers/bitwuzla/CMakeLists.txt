@@ -43,7 +43,7 @@ endif()
 
 if(ENABLE_BITWUZLA)
   include(FindPkgConfig)
-  set(ENV{PKG_CONFIG_PATH} "${Bitwuzla_DIR}/lib/pkgconfig")
+  # export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/home/lucas/ESBMC_Project/bitwuzla/bitwuzla-release/lib/x86_64-linux-gnu/pkgconfig/
   pkg_check_modules(Bitwuzla REQUIRED IMPORTED_TARGET bitwuzla)
 
     message(STATUS "Found Bitwuzla at: ${Bitwuzla_PREFIX}")
