@@ -46,6 +46,7 @@ protected:
   virtual bool
   output_goto_program(optionst &options, goto_functionst &goto_functions);
 
+  int doit_default();
   int doit_k_induction();
   int doit_k_induction_parallel();
 

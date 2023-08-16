@@ -91,6 +91,21 @@ void timeout_handler(int)
 
 extern "C" const char *const esbmc_version_string;
 
+// This transforms a string representation of a time interval
+// written in the form <number><suffix> into seconds.
+// The following suffixes corresponding to time units are supported:
+//
+//  s - seconds,
+//  m - minutes,
+//  h - hours,
+//  d - days.
+//
+// When <suffix> is empty, the default time unit is seconds.
+// If <suffix> is not empty, and its final character is not in the list above,
+// this method throws an error.
+//
+// \param str - string representation of a time interval,
+// \return - number of seconds that represents the input string value.
 uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
 {
   uint64_t mult;
@@ -126,6 +141,21 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
   return timeout;
 }
 
+// This transforms a string representation of a memory limit
+// written in the form <number><suffix> into megabytes.
+// The following suffixes corresponding to memory size units are supported:
+//
+//  b - bytes,
+//  k - kilobytes,
+//  m - megabytes,
+//  g - gigabytes.
+//
+// When <suffix> is empty, the default unit is megabytes.
+// If <suffix> is not empty, and its final character is not in the list above,
+// this method throws an error.
+//
+// \param str - string representation of a memory limit,
+// \return - number of megabytes that represents the input string value.
 uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
 {
   uint64_t mult;
@@ -194,30 +224,21 @@ static std::string format_target()
   return oss.str();
 }
 
+// This method creates a set of options based on the CMD arguments passed to
+// ESBMC. Also, it sets some options that are used across various
+// ESBMC stages but which are not available via CMD.
+//
+// \param options - the options object created and updated by this method.
 void esbmc_parseoptionst::get_command_line_options(optionst &options)
 {
   if(config.set(cmdline))
-  {
     exit(1);
-  }
+
   log_status("Target: {}", format_target());
 
+  // Copy all flags from CMD into options
   options.cmdline(cmdline);
   set_verbosity_msg();
-
-  if(cmdline.isset("cex-output"))
-    options.set_option("cex-output", cmdline.getval("cex-output"));
-
-  /* graphML generation options check */
-  if(cmdline.isset("witness-output"))
-    options.set_option("witness-output", cmdline.getval("witness-output"));
-
-  if(cmdline.isset("witness-producer"))
-    options.set_option("witness-producer", cmdline.getval("witness-producer"));
-
-  if(cmdline.isset("witness-programfile"))
-    options.set_option(
-      "witness-programfile", cmdline.getval("witness-programfile"));
 
   if(cmdline.isset("git-hash"))
   {
@@ -232,15 +253,15 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     exit(0);
   }
 
+  // Below we make some additional adjustments (e.g., adding some options
+  // that are used by ESBMC at later stages but which are not available
+  // through CMD, setting groups of options based depending on
+  // particular CMD flags)
   if(cmdline.isset("bv"))
-  {
     options.set_option("int-encoding", false);
-  }
 
   if(cmdline.isset("ir"))
-  {
     options.set_option("int-encoding", true);
-  }
 
   if(cmdline.isset("fixedbv"))
     options.set_option("fixedbv", true);
@@ -251,9 +272,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("context-bound", cmdline.getval("context-bound"));
   else
     options.set_option("context-bound", -1);
-
-  if(cmdline.isset("lock-order-check"))
-    options.set_option("lock-order-check", true);
 
   if(cmdline.isset("deadlock-check"))
   {
@@ -326,14 +344,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(
     cmdline.isset("overflow-check") || cmdline.isset("unsigned-overflow-check"))
-  {
     options.set_option("disable-inductive-step", true);
-  }
 
   if(cmdline.isset("ub-shift-check"))
-  {
     options.set_option("ub-shift-check", true);
-  }
 
   if(cmdline.isset("timeout"))
   {
@@ -418,15 +432,15 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 //  3) Falsification
 //  4) k-induction
 //  5) Parallel k-induction
-//  6) Default strategy
+//  6) Default
 //
-// The first 5 are implemented as separate methods, while the last one is
-// implemented directly in this method.
+// All strategies are implemented as separate methods, and they follow
+// the same sequence of steps:
 //
-// Despite some method-specific differences, all strategies follow
-// the general flow below:
-//
-//  get_command_line_options -> get_goto_functions -> set_claims -> do_bmc
+//  1) Parse command line options (i.e., "get_command_line_options")
+//  2) Create and preprocess a GOTO program (i.e., "get_goto_functions")
+//  3) Set claims (i.e., "set_claims")
+//  4) Perform calls to "do_bmc" as required by the strategy algorithm
 //
 int esbmc_parseoptionst::doit()
 {
@@ -453,13 +467,12 @@ int esbmc_parseoptionst::doit()
   // Unwinding of transition systems
   if(cmdline.isset("module") || cmdline.isset("gen-interface"))
   {
-    log_error(
-      "This version has no support for "
-      " hardware modules.");
+    log_error("This version has no support for hardware modules.");
     return 1;
   }
 
-  // Command line options
+  // Preprocess the input program.
+  // (This will not have any effect if the OLD_FRONTEND is not enabled.)
   if(cmdline.isset("preprocess"))
   {
     preprocessing();
@@ -482,6 +495,7 @@ int esbmc_parseoptionst::doit()
         std::make_unique<mark_decl_as_non_det>(context));
   }
 
+  // Now run one of the chosen strategies
   if(cmdline.isset("termination"))
     return doit_termination();
 
@@ -497,6 +511,11 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
 
+  return doit_default();
+}
+
+int esbmc_parseoptionst::doit_default()
+{
   optionst opts;
   get_command_line_options(opts);
 
@@ -1391,6 +1410,39 @@ int esbmc_parseoptionst::do_inductive_step(
   return true;
 }
 
+// This is a wrapper method that does a single round of
+// symbolic execution of the given
+//
+// \param bmc - the bmc object that contains all the necessary
+// information (see below) to perform a single run of Bounded Model Checking:
+//
+//  1) GOTO program,
+//  2) program context,
+//  3) verification options.
+//
+//  In particular, the latter is used to control what assertions and
+//  assumptions are injected into the verified bounded trace
+//  during symbolic execution.
+int esbmc_parseoptionst::do_bmc(bmct &bmc)
+{
+  log_progress("Starting Bounded Model Checking");
+
+  smt_convt::resultt res = bmc.start_bmc();
+  if(res == smt_convt::P_ERROR)
+    abort();
+
+#ifdef HAVE_SENDFILE_ESBMC
+  if(bmc.options.get_bool_option("memstats"))
+  {
+    int fd = open("/proc/self/status", O_RDONLY);
+    sendfile(2, fd, nullptr, 100000);
+    close(fd);
+  }
+#endif
+
+  return res;
+}
+
 bool esbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
 {
   try
@@ -1848,6 +1900,8 @@ bool esbmc_parseoptionst::output_goto_program(
   return false;
 }
 
+// This performs the preprocessing of the input program
+// when the old C/C++ frontend (i.e., from "ansi-c/" or "cpp/") is used.
 void esbmc_parseoptionst::preprocessing()
 {
   try
@@ -1890,27 +1944,8 @@ void esbmc_parseoptionst::preprocessing()
   }
 }
 
-int esbmc_parseoptionst::do_bmc(bmct &bmc)
-{ // do actual BMC
-
-  log_progress("Starting Bounded Model Checking");
-
-  smt_convt::resultt res = bmc.start_bmc();
-  if(res == smt_convt::P_ERROR)
-    abort();
-
-#ifdef HAVE_SENDFILE_ESBMC
-  if(bmc.options.get_bool_option("memstats"))
-  {
-    int fd = open("/proc/self/status", O_RDONLY);
-    sendfile(2, fd, nullptr, 100000);
-    close(fd);
-  }
-#endif
-
-  return res;
-}
-
+// This prints the ESBMC version and a list of CMD options
+// available in ESBMC.
 void esbmc_parseoptionst::help()
 {
   log_status("\n* * *           ESBMC {}          * * *", ESBMC_VERSION);
