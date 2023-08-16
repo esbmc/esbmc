@@ -8,7 +8,7 @@
 
 extern "C"
 {
-#include <bitwuzla/bitwuzla.h>
+#include <bitwuzla/c/bitwuzla.h>
 }
 
 class bitw_smt_ast : public solver_smt_ast<BitwuzlaTerm *>
