@@ -851,15 +851,33 @@ void goto_symext::add_memory_leak_checks()
               continue;
             }
 
-            log_debug("memcleanup-skip", "memcleanup: found target '{}'",
-                      to_symbol2t(root_object).get_symbol_name());
+            log_debug("memcleanup-skip", "memcleanup: found target '{}' of {} type",
+                      to_symbol2t(root_object).get_symbol_name(),
+                      get_type_id(root_object->type));
 
             /* Record and, if new, obtain all the "entries" interesting for the
              * value-set analysis. An entry is interesting basically if its type
              * contains a pointer type. Those are also exactly the ones interesting
              * for the building the set of reachable objects. */
             expr2tc adr = address_of2tc(root_object->type, root_object);
-            expr2tc same_as_e = same_object2tc(sym_expr2_l2, adr);
+            expr2tc adr_e = sym_expr2_l2;
+
+            if(is_structure_type(adr_e))
+            {
+              const char *suffix = e.suffix.c_str();
+              const char *last_dot = strrchr(suffix, '.');
+              assert(last_dot);
+              irep_idt memb(last_dot + 1);
+              const struct_union_data &u = static_cast<const struct_union_data &>(*adr_e->type);
+              unsigned c = u.get_component_number(memb);
+              adr_e = member2tc(u.members[c], adr_e, memb);
+            }
+            else if(is_array_type(adr_e))
+            {
+              /* TODO: introduce new symbol for array index? */
+            }
+            assert(is_pointer_type(adr_e));
+            expr2tc same_as_e = same_object2tc(adr_e, adr);
             expr2tc is_e = path_to_e ? and2tc(path_to_e, same_as_e) : same_as_e;
             expr2tc &pts = globals_point_to[adr];
             pts = pts ? or2tc(pts, is_e) : is_e;
