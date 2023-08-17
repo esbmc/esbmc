@@ -427,21 +427,35 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 // of the algorithms that will be run over the GOTO program at later stages
 // and calls the verification strategy specified in the command line:
 //
-//  1) Incremental
-//  2) Termination
-//  3) Falsification
-//  4) k-induction
-//  5) Parallel k-induction
-//  6) Default
+//  1) Incremental          (see "doit_incremental")
+//  2) Termination          (see "doit_termination")
+//  3) Falsification        (see "doit_falsification")
+//  4) k-induction          (see "doit_k_induction")
+//  5) Parallel k-induction (see "doit_k_induction_parallel")
+//  6) Default              (see "doit_default")
 //
 // All strategies are implemented as separate methods, and they follow
 // the same sequence of steps:
 //
-//  1) Parse command line options (i.e., "get_command_line_options")
-//  2) Create and preprocess a GOTO program (i.e., "get_goto_functions")
-//  3) Set claims (i.e., "set_claims")
-//  4) Perform calls to "do_bmc" as required by the strategy algorithm
+//  1) Parse CMD                            (see "get_command_line_options")
+//  2) Create and preprocess a GOTO program (see "get_goto_functions")
+//  3) Set user-specified claims            (see "set_claims")
+//  4) Perform Bounded Model Checking
 //
+// by making calls to different types
+// (see below) of decision problems (as required by the strategy algorithm)
+// for different unwinding bounds. Occasionally the exact unwinding bound
+// can be identified prior to symbolic execution, in which case
+// the maximum unwinding bound "--max-k-step" is ignored.
+//
+// There are three types of decision problems that we solve:
+//
+//  - Base case             (see "do_base_case")
+//  - Forward condition     (see "do_forward_condition")
+//  - Inductive step        (see "do_inductive_step")
+//
+// All they do is setting specific ESBMC options, call "do_bmc" and
+// interpret the obtained result.
 int esbmc_parseoptionst::doit()
 {
   // Configure msg output
@@ -1269,6 +1283,16 @@ int esbmc_parseoptionst::doit_termination()
   return 0;
 }
 
+// This checks whether "there is a set of inputs that reaches and violates
+// an assertion when all the loops in the verified program are unwound up to
+// the given bound k".
+//
+// \param opts - options for controlling the symbolic execution
+// \param goto_function - GOTO program under investigation
+// \param k_step - depth to which all loops in the program are unrolled
+// \return - \True if such assertion violation (i.e., a bug) is found,
+// \False if all reachable assertions hold for all input values
+// in "goto_functions" with all its loops unrolled up to "k_step".
 int esbmc_parseoptionst::do_base_case(
   optionst &opts,
   goto_functionst &goto_functions,
@@ -1305,6 +1329,17 @@ int esbmc_parseoptionst::do_base_case(
   return false;
 }
 
+// This checks whether "there is a set of inputs for which one of the loop
+// conditions is still satisfied after it has been executed
+// (i.e., unrolled) at least k times".
+//
+// \param opts - options for controlling the symbolic execution
+// \param goto_function - GOTO program under investigation
+// \param k_step - depth to which all loops in the program are unrolled
+// \return - \True if there is a set of input values for which at least
+// one of the loops in the program can be executed more than "k_step" times,
+// \False if all reachable loops have at most "k_step" iterations
+// for all input values in "goto_functions".
 int esbmc_parseoptionst::do_forward_condition(
   optionst &opts,
   goto_functionst &goto_functions,
@@ -1360,6 +1395,13 @@ int esbmc_parseoptionst::do_forward_condition(
   return true;
 }
 
+// This checks whether "[Fedor: TODO]".
+//
+// \param opts - options for controlling the symbolic execution
+// \param goto_function - GOTO program under investigation
+// \param k_step - depth to which all loops in the program are unrolled
+// \return - \True if [Fedor: TODO],
+// \False if [Fedor: TODO].
 int esbmc_parseoptionst::do_inductive_step(
   optionst &opts,
   goto_functionst &goto_functions,
@@ -1411,7 +1453,11 @@ int esbmc_parseoptionst::do_inductive_step(
 }
 
 // This is a wrapper method that does a single round of
-// symbolic execution of the given
+// symbolic execution of the given GOTO program and creates
+// a decision problem specified by the verification options.
+// In brief, they are used to control what assertions and
+// assumptions are injected into the verified bounded trace
+// during symbolic execution.
 //
 // \param bmc - the bmc object that contains all the necessary
 // information (see below) to perform a single run of Bounded Model Checking:
@@ -1419,10 +1465,6 @@ int esbmc_parseoptionst::do_inductive_step(
 //  1) GOTO program,
 //  2) program context,
 //  3) verification options.
-//
-//  In particular, the latter is used to control what assertions and
-//  assumptions are injected into the verified bounded trace
-//  during symbolic execution.
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");
