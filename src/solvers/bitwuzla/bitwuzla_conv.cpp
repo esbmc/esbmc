@@ -25,11 +25,13 @@ smt_convt *create_new_bitwuzla_solver(
 bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   : smt_convt(ns, options), array_iface(true, true), fp_convt(this)
 {
-  bitw = bitwuzla_new();
-  bitwuzla_set_option(bitw, BITWUZLA_OPT_PRODUCE_MODELS, 1);
+  bitw_options = bitwuzla_options_new(); 
+
+  bitwuzla_set_option(bitw_options, BITWUZLA_OPT_PRODUCE_MODELS, 1);
   bitwuzla_set_abort_callback(bitwuzla_error_handler);
+  
   if(options.get_bool_option("smt-during-symex"))
-    bitwuzla_set_option(bitw, BITWUZLA_OPT_INCREMENTAL, 1);
+    bitw = bitwuzla_new(bitw_options);
 }
 
 bitwuzla_convt::~bitwuzla_convt()
