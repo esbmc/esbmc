@@ -901,7 +901,9 @@ void goto_symext::add_memory_leak_checks()
     if(no_reachable_memleak)
     {
       expr2tc obj = get_base_object(it.obj);
-      expr2tc adr = address_of2tc(obj->type, obj);
+      expr2tc adr = obj;
+      if(!is_if2t(obj))
+        adr = address_of2tc(obj->type, obj);
       expr2tc targeted = maybe_global_target(adr);
       when = and2tc(when, not2tc(targeted));
     }
