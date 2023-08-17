@@ -554,7 +554,7 @@ bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   if(it != symtable.end())
     return it->second;
 
-  BitwuzlaTerm *node;
+  BitwuzlaTerm node;
 
   switch(s->id)
   {
@@ -565,7 +565,7 @@ bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   case SMT_SORT_BOOL:
   case SMT_SORT_ARRAY:
     node = bitwuzla_mk_const(
-      to_solver_smt_sort<BitwuzlaSort *>(s)->s, name.c_str());
+      to_solver_smt_sort<BitwuzlaSort>(s)->s, name.c_str());
     break;
 
   default:
@@ -585,7 +585,7 @@ bitwuzla_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   smt_sortt s = mk_bv_sort(high - low + 1);
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  BitwuzlaTerm *b = bitwuzla_mk_term1_indexed2(
+  BitwuzlaTerm b = bitwuzla_mk_term1_indexed2(
     BITWUZLA_KIND_BV_EXTRACT, ast->a, high, low);
   return new_ast(b, s);
 }
@@ -594,7 +594,7 @@ smt_astt bitwuzla_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
   smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  BitwuzlaTerm *b = bitwuzla_mk_term1_indexed1(
+  BitwuzlaTerm b = bitwuzla_mk_term1_indexed1(
     BITWUZLA_KIND_BV_SIGN_EXTEND, ast->a, topwidth);
   return new_ast(b, s);
 }
@@ -603,7 +603,7 @@ smt_astt bitwuzla_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
   smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  BitwuzlaTerm *b = bitwuzla_mk_term1_indexed1(
+  BitwuzlaTerm b = bitwuzla_mk_term1_indexed1(
     BITWUZLA_KIND_BV_ZERO_EXTEND, ast->a, topwidth);
   return new_ast(b, s);
 }
