@@ -29,7 +29,7 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
 
   bitwuzla_set_option(bitw_options, BITWUZLA_OPT_PRODUCE_MODELS, 1);
   bitwuzla_set_abort_callback(bitwuzla_error_handler);
-  
+
   if(options.get_bool_option("smt-during-symex"))
     bitw = bitwuzla_new(bitw_options);
 }
@@ -70,7 +70,7 @@ smt_convt::resultt bitwuzla_convt::dec_solve()
 const std::string bitwuzla_convt::solver_text()
 {
   std::string ss = "Bitwuzla ";
-  ss += bitwuzla_version(bitw);
+  ss += bitwuzla_version();
   return ss;
 }
 
