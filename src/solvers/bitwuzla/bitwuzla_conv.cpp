@@ -793,8 +793,8 @@ void bitwuzla_convt::print_model()
 
 smt_sortt bitwuzla_convt::mk_bool_sort()
 {
-  return new solver_smt_sort<BitwuzlaSort *>(
-    SMT_SORT_BOOL, bitwuzla_mk_bool_sort(bitw), 1);
+  return new solver_smt_sort<BitwuzlaSort>(
+    SMT_SORT_BOOL, bitwuzla_mk_bool_sort(), 1);
 }
 
 smt_sortt bitwuzla_convt::mk_bv_sort(std::size_t width)
