@@ -707,7 +707,7 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
   bool is_signed =
     (is_signedbv_type(opers.side_1) || is_signedbv_type(opers.side_2));
 
-  BitwuzlaTerm *res;
+  BitwuzlaTerm res;
   if(is_add2t(overflow.operand))
   {
     if(is_signed)
@@ -769,8 +769,7 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
   return new_ast(
     bitwuzla_mk_const_array(
-      bitw,
-      to_solver_smt_sort<BitwuzlaSort *>(arrsort)->s,
+      to_solver_smt_sort<BitwuzlaSort>(arrsort)->s,
       to_solver_smt_ast<bitw_smt_ast>(init_val)->a),
     arrsort);
 }
@@ -782,7 +781,8 @@ void bitwuzla_convt::dump_smt()
 
 void bitw_smt_ast::dump() const
 {
-  bitwuzla_print_term(a, "smt2", messaget::state.out);
+  //@TODO: find a replacement
+  //bitwuzla_print_term(a, "smt2", messaget::state.out);
 }
 
 void bitwuzla_convt::print_model()
