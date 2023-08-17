@@ -96,6 +96,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   depth_limit = sym.depth_limit;
   break_insn = sym.break_insn;
   memory_leak_check = sym.memory_leak_check;
+  no_reachable_memleak = sym.no_reachable_memleak;
   no_assertions = sym.no_assertions;
   no_simplify = sym.no_simplify;
   no_unwinding_assertions = sym.no_unwinding_assertions;
