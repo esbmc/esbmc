@@ -259,6 +259,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
     # It seems SV-COMP doesn't want to check for memleaks on abort()
     # see also <https://github.com/esbmc/esbmc/issues/1259>
     command_line += "--no-abnormal-memory-leak "
+    # many benchmarks assume malloc(0) == NULL and alloca(0) == NULL
+    command_line += "--malloc-zero-is-null "
     strat = "incr"
   elif prop == Property.memcleanup:
     command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
