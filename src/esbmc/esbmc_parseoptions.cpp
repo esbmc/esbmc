@@ -486,7 +486,7 @@ int esbmc_parseoptionst::doit()
   }
 
   // Preprocess the input program.
-  // (This will not have any effect if the OLD_FRONTEND is not enabled.)
+  // (This will not have any effect if OLD_FRONTEND is not enabled.)
   if(cmdline.isset("preprocess"))
   {
     preprocessing();
@@ -509,33 +509,25 @@ int esbmc_parseoptionst::doit()
         std::make_unique<mark_decl_as_non_det>(context));
   }
 
-  // Now run one of the chosen strategies
-  if(cmdline.isset("termination"))
-    return doit_termination();
-
-  if(cmdline.isset("incremental-bmc"))
-    return doit_incremental();
-
-  if(cmdline.isset("falsification"))
-    return doit_falsification();
-
-  if(cmdline.isset("k-induction"))
-    return doit_k_induction();
-
+  // Run this before the main flow. This method performs its own
+  // parsing and preprocessing.
+  // This is an old implementation of parallel k-induction algorithm.
+  // Eventually we will modify it and implement parallel version for all
+  // available strategies. Just run it first before everything else
+  // for now.
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
 
-  return doit_default();
-}
+  // Parse ESBMC options (CMD + set internal options)
+  optionst options;
+  get_command_line_options(options);
 
-int esbmc_parseoptionst::doit_default()
-{
-  optionst opts;
-  get_command_line_options(opts);
-
-  if(get_goto_program(opts, goto_functions))
+  // Create and preprocess a GOTO program
+  if(get_goto_program(options, goto_functions))
     return 6;
 
+  // Output claims about this program
+  // (Fedor: should be moved to the output method perhaps)
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
@@ -543,15 +535,36 @@ int esbmc_parseoptionst::doit_default()
     return 0;
   }
 
+  // Set user-specified claims
+  // (Fedor: should be moved to the preprocessing method perhaps)
   if(set_claims(goto_functions))
     return 7;
 
-  if(opts.get_bool_option("skip-bmc"))
+  // Leave without doing any Bounded Model Checking
+  if(options.get_bool_option("skip-bmc"))
     return 0;
 
-  // do actual BMC
-  bmct bmc(goto_functions, opts, context);
+  // Now run one of the chosen strategies
+  if(cmdline.isset("termination"))
+    return doit_termination(options, goto_functions);
 
+  if(cmdline.isset("incremental-bmc"))
+    return doit_incremental(options, goto_functions);
+
+  if(cmdline.isset("falsification"))
+    return doit_falsification(options, goto_functions);
+
+  if(cmdline.isset("k-induction"))
+    return doit_k_induction(options, goto_functions);
+
+  return doit_default(options, goto_functions);
+}
+
+int esbmc_parseoptionst::doit_default(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  bmct bmc(goto_functions, options, context);
   return do_bmc(bmc);
 }
 
@@ -1116,24 +1129,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   return 0;
 }
 
-int esbmc_parseoptionst::doit_k_induction()
+int esbmc_parseoptionst::doit_k_induction(
+  optionst &options,
+  goto_functionst &goto_functions)
 {
-  optionst opts;
-  get_command_line_options(opts);
-
-  if(get_goto_program(opts, goto_functions))
-    return 6;
-
-  if(cmdline.isset("show-claims"))
-  {
-    const namespacet ns(context);
-    show_claims(ns, goto_functions);
-    return 0;
-  }
-
-  if(set_claims(goto_functions))
-    return 7;
-
   // Get max number of iterations
   BigInt max_k_step = cmdline.isset("unlimited-k-steps")
                         ? UINT_MAX
@@ -1144,13 +1143,13 @@ int esbmc_parseoptionst::doit_k_induction()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    if(do_base_case(opts, goto_functions, k_step))
+    if(do_base_case(options, goto_functions, k_step))
       return true;
 
-    if(!do_forward_condition(opts, goto_functions, k_step))
+    if(!do_forward_condition(options, goto_functions, k_step))
       return false;
 
-    if(!do_inductive_step(opts, goto_functions, k_step))
+    if(!do_inductive_step(options, goto_functions, k_step))
       return false;
   }
 
@@ -1160,24 +1159,10 @@ int esbmc_parseoptionst::doit_k_induction()
   return 0;
 }
 
-int esbmc_parseoptionst::doit_falsification()
+int esbmc_parseoptionst::doit_falsification(
+  optionst &options,
+  goto_functionst &goto_functions)
 {
-  optionst opts;
-  get_command_line_options(opts);
-
-  if(get_goto_program(opts, goto_functions))
-    return 6;
-
-  if(cmdline.isset("show-claims"))
-  {
-    const namespacet ns(context);
-    show_claims(ns, goto_functions);
-    return 0;
-  }
-
-  if(set_claims(goto_functions))
-    return 7;
-
   // Get max number of iterations
   BigInt max_k_step = cmdline.isset("unlimited-k-steps")
                         ? UINT_MAX
@@ -1188,7 +1173,7 @@ int esbmc_parseoptionst::doit_falsification()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    if(do_base_case(opts, goto_functions, k_step))
+    if(do_base_case(options, goto_functions, k_step))
       return true;
   }
 
@@ -1198,25 +1183,10 @@ int esbmc_parseoptionst::doit_falsification()
   return 0;
 }
 
-int esbmc_parseoptionst::doit_incremental()
+int esbmc_parseoptionst::doit_incremental(
+  optionst &options,
+  goto_functionst &goto_functions)
 {
-  optionst opts;
-  get_command_line_options(opts);
-
-  if(get_goto_program(opts, goto_functions))
-    return 6;
-
-  if(cmdline.isset("show-claims"))
-  {
-    const namespacet ns(context);
-    std::ostringstream oss;
-    show_claims(ns, goto_functions);
-    return 0;
-  }
-
-  if(set_claims(goto_functions))
-    return 7;
-
   // Get max number of iterations
   BigInt max_k_step = cmdline.isset("unlimited-k-steps")
                         ? UINT_MAX
@@ -1227,10 +1197,10 @@ int esbmc_parseoptionst::doit_incremental()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    if(do_base_case(opts, goto_functions, k_step))
+    if(do_base_case(options, goto_functions, k_step))
       return true;
 
-    if(!do_forward_condition(opts, goto_functions, k_step))
+    if(!do_forward_condition(options, goto_functions, k_step))
       return false;
   }
 
@@ -1240,24 +1210,10 @@ int esbmc_parseoptionst::doit_incremental()
   return 0;
 }
 
-int esbmc_parseoptionst::doit_termination()
+int esbmc_parseoptionst::doit_termination(
+  optionst &options,
+  goto_functionst &goto_functions)
 {
-  optionst opts;
-  get_command_line_options(opts);
-
-  if(get_goto_program(opts, goto_functions))
-    return 6;
-
-  if(cmdline.isset("show-claims"))
-  {
-    const namespacet ns(context);
-    show_claims(ns, goto_functions);
-    return 0;
-  }
-
-  if(set_claims(goto_functions))
-    return 7;
-
   // Get max number of iterations
   BigInt max_k_step = cmdline.isset("unlimited-k-steps")
                         ? UINT_MAX
@@ -1268,7 +1224,7 @@ int esbmc_parseoptionst::doit_termination()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    if(!do_forward_condition(opts, goto_functions, k_step))
+    if(!do_forward_condition(options, goto_functions, k_step))
       return false;
 
     /* Disable this for now as it is causing more than 100 errors on SV-COMP
@@ -1463,8 +1419,8 @@ int esbmc_parseoptionst::do_inductive_step(
 // information (see below) to perform a single run of Bounded Model Checking:
 //
 //  1) GOTO program,
-//  2) program context,
-//  3) verification options.
+//  2) verification options.
+//  3) program context,
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");

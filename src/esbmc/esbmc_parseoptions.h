@@ -46,13 +46,13 @@ protected:
   virtual bool
   output_goto_program(optionst &options, goto_functionst &goto_functions);
 
-  int doit_default();
-  int doit_k_induction();
+  int doit_default(optionst &options, goto_functionst &goto_functions);
+  int doit_k_induction(optionst &options, goto_functionst &goto_functions);
   int doit_k_induction_parallel();
 
-  int doit_falsification();
-  int doit_incremental();
-  int doit_termination();
+  int doit_falsification(optionst &options, goto_functionst &goto_functions);
+  int doit_incremental(optionst &options, goto_functionst &goto_functions);
+  int doit_termination(optionst &options, goto_functionst &goto_functions);
 
   int do_base_case(
     optionst &opts,
