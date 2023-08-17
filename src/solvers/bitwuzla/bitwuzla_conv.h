@@ -11,10 +11,10 @@ extern "C"
 #include <bitwuzla/c/bitwuzla.h>
 }
 
-class bitw_smt_ast : public solver_smt_ast<BitwuzlaTerm *>
+class bitw_smt_ast : public solver_smt_ast<BitwuzlaTerm>
 {
 public:
-  using solver_smt_ast<BitwuzlaTerm *>::solver_smt_ast;
+  using solver_smt_ast<BitwuzlaTerm>::solver_smt_ast;
   ~bitw_smt_ast() override = default;
 
   void dump() const override;
