@@ -745,12 +745,20 @@ void goto_symext::add_memory_leak_checks()
 
     std::vector<std::pair<expr2tc,std::list<value_sett::entryt>>> globals(1);
     va.get_globals(globals[0].second);
+    std::unordered_set<std::string> visited;
     for(int i = 0; !has_unknown && !globals.empty(); i++)
     {
       std::vector<std::pair<expr2tc,std::list<value_sett::entryt>>> tmp;
       for(const auto &[path_to_e,g] : globals)
         for(const value_sett::entryt &e : g)
         {
+          /* Skip if already visited
+           *
+           * TODO: this is possibly wrongly culling paths that have different
+           *       preconditions; should take path_to_e into account. */
+          if(!visited.emplace(e.identifier + e.suffix).second)
+            continue;
+
           /* Unfortunately, we just have the symbol id and a suffix that's only
            * meaningful to the value-set analysis, but no type. However, we
            * need a type. So reconstruct the current state's version of a
