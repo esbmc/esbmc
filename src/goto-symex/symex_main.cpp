@@ -768,7 +768,7 @@ void goto_symext::add_memory_leak_checks()
             continue;
           log_debug(
             "memcleanup",
-            "itr {}, obtaining value-set for global '{}' suffix '{}'",
+            "memcleanup: itr {}, obtaining value-set for global '{}' suffix '{}'",
             i,
             e.identifier,
             e.suffix);
@@ -810,6 +810,7 @@ void goto_symext::add_memory_leak_checks()
              * object. */
             if(is_unknown2t(target))
             {
+              log_debug("memcleanup-skip", "memcleanup: skipping target unknown2t");
               /* Treating 'unknown' as "could potentially point anywhere" generates
                * too many false positives. It will basically make the memory-leak
                * check useless since all dynamic objects could potentially still
@@ -823,7 +824,10 @@ void goto_symext::add_memory_leak_checks()
             }
             /* invalid targets are not objects, ignore those */
             if(is_invalid2t(target))
+            {
+              log_debug("memcleanup-skip", "memcleanup: skipping target invalid2t");
               continue;
+            }
 
             assert(is_object_descriptor2t(target));
             expr2tc root_object = to_object_descriptor2t(target).get_root_object();
@@ -831,9 +835,24 @@ void goto_symext::add_memory_leak_checks()
             /* null-objects, constant strings and functions are interesting for
              * neither the memory-leak check nor for finding more pointers to
              * enlarge the set of reachable objects */
-            if(is_null_object2t(root_object) || is_constant_string2t(root_object) ||
-               is_code_type(root_object))
+            if(is_null_object2t(root_object))
+            {
+              log_debug("memcleanup-skip", "memcleanup: skipping target null-object");
               continue;
+            }
+            if(is_constant_string2t(root_object))
+            {
+              log_debug("memcleanup-skip", "memcleanup: skipping target constant-string");
+              continue;
+            }
+            if(is_code_type(root_object))
+            {
+              log_debug("memcleanup-skip", "memcleanup: skipping target of code type");
+              continue;
+            }
+
+            log_debug("memcleanup-skip", "memcleanup: found target '{}'",
+                      to_symbol2t(root_object).get_symbol_name());
 
             /* Record and, if new, obtain all the "entries" interesting for the
              * value-set analysis. An entry is interesting basically if its type
@@ -859,11 +878,11 @@ void goto_symext::add_memory_leak_checks()
       globals = std::move(tmp);
     }
 
-    log_debug("memcleanup", "unknown: {}, globals point to:", has_unknown);
+    log_debug("memcleanup", "memcleanup: unknown: {}, globals point to:", has_unknown);
     for(const auto &[e,g] : globals_point_to)
       log_debug(
         "memcleanup",
-        "  {}",
+        "memcleanup:  {}",
         to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name());
 
     if(has_unknown)
@@ -887,7 +906,10 @@ void goto_symext::add_memory_leak_checks()
   {
     // Don't check memory leak if the object is automatically deallocated
     if(it.auto_deallocd)
+    {
+      log_debug("memcleanup-skip", "memcleanup: not considering auto-dealloc'd");
       continue;
+    }
 
     // Assert that the allocated object was freed.
     expr2tc deallocd = deallocated_obj2tc(it.obj);
