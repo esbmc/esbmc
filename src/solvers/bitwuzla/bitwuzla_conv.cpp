@@ -534,7 +534,7 @@ smt_astt bitwuzla_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 
 smt_astt bitwuzla_convt::mk_smt_bool(bool val)
 {
-  BitwuzlaTerm *node = (val) ? bitwuzla_mk_true(bitw) : bitwuzla_mk_false(bitw);
+  BitwuzlaTerm node = (val) ? bitwuzla_mk_true() : bitwuzla_mk_false();
   const smt_sort *sort = boolean_sort;
   return new_ast(node, sort);
 }
