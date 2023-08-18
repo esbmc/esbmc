@@ -628,15 +628,15 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     abort();
   }
 
-  optionst opts;
+  optionst options;
 
   if(process_type != PARENT)
   {
     // Get full set of options
-    get_command_line_options(opts);
+    get_command_line_options(options);
 
     // Generate goto functions and set claims
-    if(get_goto_program(opts, goto_functions))
+    if(get_goto_program(options, goto_functions))
       return 6;
 
     if(cmdline.isset("show-claims"))
@@ -884,12 +884,12 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   case BASE_CASE:
   {
     // Set that we are running base case
-    opts.set_option("base-case", true);
-    opts.set_option("forward-condition", false);
-    opts.set_option("inductive-step", false);
+    options.set_option("base-case", true);
+    options.set_option("forward-condition", false);
+    options.set_option("inductive-step", false);
 
-    opts.set_option("no-unwinding-assertions", true);
-    opts.set_option("partial-loops", false);
+    options.set_option("no-unwinding-assertions", true);
+    options.set_option("partial-loops", false);
 
     // Start communication to the parent process
     close(forward_pipe[0]);
@@ -903,7 +903,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a bug
     for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, opts, context);
+      bmct bmc(goto_functions, options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
       log_status("Checking base case, k = {:d}\n", k_step);
@@ -987,13 +987,13 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   case FORWARD_CONDITION:
   {
     // Set that we are running forward condition
-    opts.set_option("base-case", false);
-    opts.set_option("forward-condition", true);
-    opts.set_option("inductive-step", false);
+    options.set_option("base-case", false);
+    options.set_option("forward-condition", true);
+    options.set_option("inductive-step", false);
 
-    opts.set_option("no-unwinding-assertions", false);
-    opts.set_option("partial-loops", false);
-    opts.set_option("no-assertions", true);
+    options.set_option("no-unwinding-assertions", false);
+    options.set_option("partial-loops", false);
+    options.set_option("no-assertions", true);
 
     // Start communication to the parent process
     close(forward_pipe[0]);
@@ -1007,7 +1007,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a proof
     for(BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, opts, context);
+      bmct bmc(goto_functions, options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
       log_status("Checking forward condition, k = {:d}", k_step);
@@ -1023,7 +1023,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         break;
       }
 
-      if(opts.get_bool_option("disable-forward-condition"))
+      if(options.get_bool_option("disable-forward-condition"))
         break;
 
       // Send information to parent if no bug was found
@@ -1055,12 +1055,12 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   case INDUCTIVE_STEP:
   {
     // Set that we are running inductive step
-    opts.set_option("base-case", false);
-    opts.set_option("forward-condition", false);
-    opts.set_option("inductive-step", true);
+    options.set_option("base-case", false);
+    options.set_option("forward-condition", false);
+    options.set_option("inductive-step", true);
 
-    opts.set_option("no-unwinding-assertions", true);
-    opts.set_option("partial-loops", true);
+    options.set_option("no-unwinding-assertions", true);
+    options.set_option("partial-loops", true);
 
     // Start communication to the parent process
     close(forward_pipe[0]);
@@ -1074,7 +1074,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a proof
     for(BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, opts, context);
+      bmct bmc(goto_functions, options, context);
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -1091,7 +1091,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         break;
       }
 
-      if(opts.get_bool_option("disable-inductive-step"))
+      if(options.get_bool_option("disable-inductive-step"))
         break;
 
       // Send information to parent if no bug was found
@@ -1228,7 +1228,7 @@ int esbmc_parseoptionst::doit_termination(
       return false;
 
     /* Disable this for now as it is causing more than 100 errors on SV-COMP
-    if(!do_inductive_step(opts, goto_functions, k_step))
+    if(!do_inductive_step(options, goto_functions, k_step))
       return false;
     */
   }
@@ -1243,25 +1243,25 @@ int esbmc_parseoptionst::doit_termination(
 // an assertion when all the loops in the verified program are unwound up to
 // the given bound k".
 //
-// \param opts - options for controlling the symbolic execution
+// \param options - options for controlling the symbolic execution
 // \param goto_function - GOTO program under investigation
 // \param k_step - depth to which all loops in the program are unrolled
 // \return - \True if such assertion violation (i.e., a bug) is found,
 // \False if all reachable assertions hold for all input values
 // in "goto_functions" with all its loops unrolled up to "k_step".
 int esbmc_parseoptionst::do_base_case(
-  optionst &opts,
+  optionst &options,
   goto_functionst &goto_functions,
   const BigInt &k_step)
 {
-  opts.set_option("base-case", true);
-  opts.set_option("forward-condition", false);
-  opts.set_option("inductive-step", false);
+  options.set_option("base-case", true);
+  options.set_option("forward-condition", false);
+  options.set_option("inductive-step", false);
 
-  opts.set_option("no-unwinding-assertions", true);
-  opts.set_option("partial-loops", false);
+  options.set_option("no-unwinding-assertions", true);
+  options.set_option("partial-loops", false);
 
-  bmct bmc(goto_functions, opts, context);
+  bmct bmc(goto_functions, options, context);
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -1289,7 +1289,7 @@ int esbmc_parseoptionst::do_base_case(
 // conditions is still satisfied after it has been executed
 // (i.e., unrolled) at least k times".
 //
-// \param opts - options for controlling the symbolic execution
+// \param options - options for controlling the symbolic execution
 // \param goto_function - GOTO program under investigation
 // \param k_step - depth to which all loops in the program are unrolled
 // \return - \True if there is a set of input values for which at least
@@ -1297,28 +1297,28 @@ int esbmc_parseoptionst::do_base_case(
 // \False if all reachable loops have at most "k_step" iterations
 // for all input values in "goto_functions".
 int esbmc_parseoptionst::do_forward_condition(
-  optionst &opts,
+  optionst &options,
   goto_functionst &goto_functions,
   const BigInt &k_step)
 {
-  if(opts.get_bool_option("disable-forward-condition"))
+  if(options.get_bool_option("disable-forward-condition"))
     return true;
 
-  opts.set_option("base-case", false);
-  opts.set_option("forward-condition", true);
-  opts.set_option("inductive-step", false);
+  options.set_option("base-case", false);
+  options.set_option("forward-condition", true);
+  options.set_option("inductive-step", false);
 
-  opts.set_option("no-unwinding-assertions", false);
-  opts.set_option("partial-loops", false);
+  options.set_option("no-unwinding-assertions", false);
+  options.set_option("partial-loops", false);
 
   // We have to disable assertions in the forward condition but
   // restore the previous value after it
-  bool no_assertions = opts.get_bool_option("no-assertions");
+  bool no_assertions = options.get_bool_option("no-assertions");
 
   // Turn assertions off
-  opts.set_option("no-assertions", true);
+  options.set_option("no-assertions", true);
 
-  bmct bmc(goto_functions, opts, context);
+  bmct bmc(goto_functions, options, context);
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -1327,7 +1327,7 @@ int esbmc_parseoptionst::do_forward_condition(
 
   // Restore the no assertion flag, before checking the other steps
 
-  opts.set_option("no-assertions", no_assertions);
+  options.set_option("no-assertions", no_assertions);
 
   switch(res)
   {
@@ -1353,13 +1353,13 @@ int esbmc_parseoptionst::do_forward_condition(
 
 // This checks whether "[Fedor: TODO]".
 //
-// \param opts - options for controlling the symbolic execution
+// \param options - options for controlling the symbolic execution
 // \param goto_function - GOTO program under investigation
 // \param k_step - depth to which all loops in the program are unrolled
 // \return - \True if [Fedor: TODO],
 // \False if [Fedor: TODO].
 int esbmc_parseoptionst::do_inductive_step(
-  optionst &opts,
+  optionst &options,
   goto_functionst &goto_functions,
   const BigInt &k_step)
 {
@@ -1367,7 +1367,7 @@ int esbmc_parseoptionst::do_inductive_step(
   if(k_step == 1)
     return true;
 
-  if(opts.get_bool_option("disable-inductive-step"))
+  if(options.get_bool_option("disable-inductive-step"))
     return true;
 
   if(
@@ -1375,14 +1375,14 @@ int esbmc_parseoptionst::do_inductive_step(
     k_step.to_uint64())
     return true;
 
-  opts.set_option("base-case", false);
-  opts.set_option("forward-condition", false);
-  opts.set_option("inductive-step", true);
+  options.set_option("base-case", false);
+  options.set_option("forward-condition", false);
+  options.set_option("inductive-step", true);
 
-  opts.set_option("no-unwinding-assertions", true);
-  opts.set_option("partial-loops", true);
+  options.set_option("no-unwinding-assertions", true);
+  options.set_option("partial-loops", true);
 
-  bmct bmc(goto_functions, opts, context);
+  bmct bmc(goto_functions, options, context);
   bmc.options.set_option("unwind", integer2string(k_step));
 
   log_progress("Checking inductive step, k = {:d}", k_step);
