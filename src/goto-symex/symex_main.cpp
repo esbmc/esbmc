@@ -743,13 +743,13 @@ void goto_symext::add_memory_leak_checks()
     bool has_unknown = false;
     value_set_analysist va(ns);
 
-    std::vector<std::pair<expr2tc,std::list<value_sett::entryt>>> globals(1);
+    std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> globals(1);
     va.get_globals(globals[0].second);
     std::unordered_set<std::string> visited;
     for(int i = 0; !has_unknown && !globals.empty(); i++)
     {
-      std::vector<std::pair<expr2tc,std::list<value_sett::entryt>>> tmp;
-      for(const auto &[path_to_e,g] : globals)
+      std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> tmp;
+      for(const auto &[path_to_e, g] : globals)
         for(const value_sett::entryt &e : g)
         {
           /* Skip if already visited
@@ -776,7 +776,8 @@ void goto_symext::add_memory_leak_checks()
             continue;
           log_debug(
             "memcleanup",
-            "memcleanup: itr {}, obtaining value-set for global '{}' suffix '{}'",
+            "memcleanup: itr {}, obtaining value-set for global '{}' suffix "
+            "'{}'",
             i,
             e.identifier,
             e.suffix);
@@ -791,13 +792,11 @@ void goto_symext::add_memory_leak_checks()
           if(is_symbol2t(sym_expr2))
           {
             symbol2t &s = to_symbol2t(sym_expr2);
-            #if 1
             if(s.rlevel == symbol2t::renaming_level::level2_global)
             {
               /* value-set assumes L1 symbols */
               s.rlevel = symbol2t::renaming_level::level1_global;
             }
-            #endif
             // assert(s.rlevel == symbol2t::renaming_level::level1_global);
           }
 
@@ -818,7 +817,8 @@ void goto_symext::add_memory_leak_checks()
              * object. */
             if(is_unknown2t(target))
             {
-              log_debug("memcleanup-skip", "memcleanup: skipping target unknown2t");
+              log_debug(
+                "memcleanup-skip", "memcleanup: skipping target unknown2t");
               /* Treating 'unknown' as "could potentially point anywhere" generates
                * too many false positives. It will basically make the memory-leak
                * check useless since all dynamic objects could potentially still
@@ -833,35 +833,43 @@ void goto_symext::add_memory_leak_checks()
             /* invalid targets are not objects, ignore those */
             if(is_invalid2t(target))
             {
-              log_debug("memcleanup-skip", "memcleanup: skipping target invalid2t");
+              log_debug(
+                "memcleanup-skip", "memcleanup: skipping target invalid2t");
               continue;
             }
 
             assert(is_object_descriptor2t(target));
-            expr2tc root_object = to_object_descriptor2t(target).get_root_object();
+            expr2tc root_object =
+              to_object_descriptor2t(target).get_root_object();
 
             /* null-objects, constant strings and functions are interesting for
              * neither the memory-leak check nor for finding more pointers to
              * enlarge the set of reachable objects */
             if(is_null_object2t(root_object))
             {
-              log_debug("memcleanup-skip", "memcleanup: skipping target null-object");
+              log_debug(
+                "memcleanup-skip", "memcleanup: skipping target null-object");
               continue;
             }
             if(is_constant_string2t(root_object))
             {
-              log_debug("memcleanup-skip", "memcleanup: skipping target constant-string");
+              log_debug(
+                "memcleanup-skip",
+                "memcleanup: skipping target constant-string");
               continue;
             }
             if(is_code_type(root_object))
             {
-              log_debug("memcleanup-skip", "memcleanup: skipping target of code type");
+              log_debug(
+                "memcleanup-skip", "memcleanup: skipping target of code type");
               continue;
             }
 
-            log_debug("memcleanup-skip", "memcleanup: found target '{}' of {} type",
-                      to_symbol2t(root_object).get_symbol_name(),
-                      get_type_id(root_object->type));
+            log_debug(
+              "memcleanup-skip",
+              "memcleanup: found target '{}' of {} type",
+              to_symbol2t(root_object).get_symbol_name(),
+              get_type_id(root_object->type));
 
             /* Record and, if new, obtain all the "entries" interesting for the
              * value-set analysis. An entry is interesting basically if its type
@@ -870,22 +878,66 @@ void goto_symext::add_memory_leak_checks()
             expr2tc adr = address_of2tc(root_object->type, root_object);
             expr2tc adr_e = sym_expr2_l2;
 
-            if(is_structure_type(adr_e))
+            std::vector<expr2tc> sub_exprs = {expr2tc()};
+            if(is_structure_type(sym_expr2_l2))
             {
               const char *suffix = e.suffix.c_str();
               const char *last_dot = strrchr(suffix, '.');
               assert(last_dot);
               irep_idt memb(last_dot + 1);
-              const struct_union_data &u = static_cast<const struct_union_data &>(*adr_e->type);
+              const struct_union_data &u =
+                static_cast<const struct_union_data &>(*sym_expr2_l2->type);
               unsigned c = u.get_component_number(memb);
-              adr_e = member2tc(u.members[c], adr_e, memb);
+              sub_exprs[0] = member2tc(u.members[c], sym_expr2_l2, memb);
             }
-            else if(is_array_type(adr_e))
+            else if(is_array_type(sym_expr2_l2))
             {
-              /* TODO: introduce new symbol for array index? */
+              const array_type2t &array_type =
+                to_array_type(sym_expr2_l2->type);
+              const expr2tc &size = array_type.array_size;
+              assert(size);
+              if(is_constant_int2t(size))
+              {
+                /* This could be huge. TODO: switch to the case below. */
+                uint64_t n = to_constant_int2t(size).value.to_uint64();
+                sub_exprs.resize(n);
+                for(uint64_t i = 0; i < n; i++)
+                  sub_exprs[i] = index2tc(
+                    array_type.subtype, adr_e, gen_long(size->type, i));
+              }
+              else
+              {
+                /* Missing implementation. We cannot just use a new symbol for
+                 * the index since this expression is used in a negated context.
+                 * I.e. we need to encode a condition whose negation is true if
+                 * and only if the target 'adr' is *not* reachable from this
+                 * array.
+                 * Exists index, s.t. "array[index] is the same object as 'adr'"
+                 * does not satisfy this requirement: solvers are free to choose
+                 * an 'index' where the same-object condition is false. Instead,
+                 * the counter-example needs to include a witness that 'adr' is
+                 * *not* reachable from 'array'.
+                 *
+                 * TODO: Can we use the inductive counting construction from
+                 *       Immerman and Szelepcsényi proving co-NL = NL here? */
+                continue; // this is a workaround
+              }
             }
-            assert(is_pointer_type(adr_e));
-            expr2tc same_as_e = same_object2tc(adr_e, adr);
+            else
+            {
+              /* Initial case for globals */
+              assert(e.suffix.empty());
+              sub_exprs[0] = sym_expr2_l2;
+            }
+            expr2tc same_as_e;
+            for(size_t i = 0; i < sub_exprs.size(); i++)
+            {
+              expr2tc sub_expr = sub_exprs[i];
+              assert(is_pointer_type(sub_expr));
+              expr2tc same = same_object2tc(sub_expr, adr);
+              same_as_e = same_as_e ? or2tc(same_as_e, same) : same;
+            }
+            assert(same_as_e);
             expr2tc is_e = path_to_e ? and2tc(path_to_e, same_as_e) : same_as_e;
             expr2tc &pts = globals_point_to[adr];
             pts = pts ? or2tc(pts, is_e) : is_e;
@@ -893,7 +945,7 @@ void goto_symext::add_memory_leak_checks()
             /* Check the contents of a valid root object of this target for more
              * pointers reaching out further */
             assert(is_symbol2t(root_object));
-            tmp.emplace_back(is_e, std::list<value_sett::entryt> {});
+            tmp.emplace_back(is_e, std::list<value_sett::entryt>{});
             va.get_entries_rec(
               to_symbol2t(root_object).get_symbol_name(),
               "",
@@ -904,8 +956,9 @@ void goto_symext::add_memory_leak_checks()
       globals = std::move(tmp);
     }
 
-    log_debug("memcleanup", "memcleanup: unknown: {}, globals point to:", has_unknown);
-    for(const auto &[e,g] : globals_point_to)
+    log_debug(
+      "memcleanup", "memcleanup: unknown: {}, globals point to:", has_unknown);
+    for(const auto &[e, g] : globals_point_to)
       log_debug(
         "memcleanup",
         "memcleanup:  {}",
@@ -916,7 +969,7 @@ void goto_symext::add_memory_leak_checks()
     else
       maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
         expr2tc is_any;
-        for(const auto &[e,g] : tgts)
+        for(const auto &[e, g] : tgts)
         {
           /* XXX: 'obj' is the address of a statically known dynamic object,
            *      couldn't we just statically check whether the symbol 'e'
@@ -933,7 +986,8 @@ void goto_symext::add_memory_leak_checks()
     // Don't check memory leak if the object is automatically deallocated
     if(it.auto_deallocd)
     {
-      log_debug("memcleanup-skip", "memcleanup: not considering auto-dealloc'd");
+      log_debug(
+        "memcleanup-skip", "memcleanup: not considering auto-dealloc'd");
       continue;
     }
 
