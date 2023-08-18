@@ -55,17 +55,17 @@ protected:
   int doit_termination(optionst &options, goto_functionst &goto_functions);
 
   int do_base_case(
-    optionst &opts,
+    optionst &options,
     goto_functionst &goto_functions,
     const BigInt &k_step);
 
   int do_forward_condition(
-    optionst &opts,
+    optionst &options,
     goto_functionst &goto_functions,
     const BigInt &k_step);
 
   int do_inductive_step(
-    optionst &opts,
+    optionst &options,
     goto_functionst &goto_functions,
     const BigInt &k_step);
 
