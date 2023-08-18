@@ -80,7 +80,7 @@ def run(cmd_line):
   print(stdout.decode())
   print(stderr.decode())
 
-  return stdout
+  return stderr
 
 def parse_result(the_output, prop):
 
