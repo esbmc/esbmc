@@ -525,7 +525,7 @@ smt_astt bitwuzla_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   return new_ast(
     bitwuzla_mk_bv_value(
-      to_solver_smt_sort<BitwuzlaSort *>(s)->s,
+      to_solver_smt_sort<BitwuzlaSort>(s)->s,
       integer2binary(theint, s->get_data_width()).c_str(),
       2),
     s);
