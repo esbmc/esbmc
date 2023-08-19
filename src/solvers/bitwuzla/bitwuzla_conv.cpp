@@ -635,24 +635,23 @@ smt_astt bitwuzla_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 bool bitwuzla_convt::get_bool(smt_astt a)
 {
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
+
   const char *result =
     bitwuzla_term_to_string(bitwuzla_get_value(bitw, ast->a));
 
   assert(result != NULL && "Bitwuzla returned null bv value string");
 
   bool res;
-  switch(*result)
-  {
-  case 'true':
+  if(!strcmp(result, "true"))
     res = true;
-    break;
-  case 'false':
+  else if(!strcmp(result, "false"))
     res = false;
-    break;
-  default:
-    log_error("Can't get boolean value from Bitwuzla");
+  else
+  {
+    log_error("Can't get boolean value from Bitwuzla: {}", result);
     abort();
   }
+
   return res;
 }
 
