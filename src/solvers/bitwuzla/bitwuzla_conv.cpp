@@ -672,24 +672,21 @@ expr2tc bitwuzla_convt::get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
-  const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(array);
+  const bitw_smt_ast *za = to_solver_smt_ast<bitw_smt_ast>(array);
+  unsigned long array_bound = array->sort->get_domain_width();
+  const bitw_smt_ast *idx;
+  if(int_encoding)
+    idx = to_solver_smt_ast<bitw_smt_ast>(mk_smt_int(BigInt(index)));
+  else
+    idx = to_solver_smt_ast<bitw_smt_ast>(
+      mk_smt_bv(BigInt(index), mk_bv_sort(array_bound)));
 
-  size_t size;
-  BitwuzlaTerm *indicies, *values, *default_value;
-  bitwuzla_get_array_value(
-    bitw, ast->a, &indicies, &values, &size, &default_value);
+  BitwuzlaTerm e = bitwuzla_mk_term2(
+    BITWUZLA_KIND_ARRAY_SELECT,
+    bitwuzla_get_value(bitw, za->a),
+    bitwuzla_get_value(bitw, idx->a));
 
-  if(size > 0)
-    for(size_t i = 0; i < size; i++)
-    {
-      const char *index_str =
-        bitwuzla_term_to_string(bitwuzla_get_value(bitw, indicies[i]));
-      auto idx = string2integer(index_str, 2);
-      if(idx == index)
-        return get_by_ast(subtype, new_ast(values[i], convert_sort(subtype)));
-    }
-
-  return gen_zero(subtype);
+  return get_by_ast(subtype, new_ast(e, convert_sort(subtype)));
 }
 
 smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
