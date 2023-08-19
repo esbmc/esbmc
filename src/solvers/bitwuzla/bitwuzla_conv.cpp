@@ -25,7 +25,7 @@ smt_convt *create_new_bitwuzla_solver(
 bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   : smt_convt(ns, options), array_iface(true, true), fp_convt(this)
 {
-  bitw_options = bitwuzla_options_new(); 
+  bitw_options = bitwuzla_options_new();
 
   bitwuzla_set_option(bitw_options, BITWUZLA_OPT_PRODUCE_MODELS, 1);
   bitwuzla_set_abort_callback(bitwuzla_error_handler);
@@ -352,8 +352,7 @@ smt_astt bitwuzla_convt::mk_not(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
   return new_ast(
-    bitwuzla_mk_term1(
-      BITWUZLA_KIND_NOT, to_solver_smt_ast<bitw_smt_ast>(a)->a),
+    bitwuzla_mk_term1(BITWUZLA_KIND_NOT, to_solver_smt_ast<bitw_smt_ast>(a)->a),
     boolean_sort);
 }
 
@@ -528,7 +527,7 @@ smt_astt bitwuzla_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
     bitwuzla_mk_bv_value(
       to_solver_smt_sort<BitwuzlaSort *>(s)->s,
       integer2binary(theint, s->get_data_width()).c_str(),
-      BITWUZLA_BV_BASE_BIN),
+      2),
     s);
 }
 
@@ -564,8 +563,8 @@ bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   case SMT_SORT_BVFP_RM:
   case SMT_SORT_BOOL:
   case SMT_SORT_ARRAY:
-    node = bitwuzla_mk_const(
-      to_solver_smt_sort<BitwuzlaSort>(s)->s, name.c_str());
+    node =
+      bitwuzla_mk_const(to_solver_smt_sort<BitwuzlaSort>(s)->s, name.c_str());
     break;
 
   default:
@@ -585,8 +584,8 @@ bitwuzla_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   smt_sortt s = mk_bv_sort(high - low + 1);
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  BitwuzlaTerm b = bitwuzla_mk_term1_indexed2(
-    BITWUZLA_KIND_BV_EXTRACT, ast->a, high, low);
+  BitwuzlaTerm b =
+    bitwuzla_mk_term1_indexed2(BITWUZLA_KIND_BV_EXTRACT, ast->a, high, low);
   return new_ast(b, s);
 }
 
@@ -594,8 +593,8 @@ smt_astt bitwuzla_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
   smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  BitwuzlaTerm b = bitwuzla_mk_term1_indexed1(
-    BITWUZLA_KIND_BV_SIGN_EXTEND, ast->a, topwidth);
+  BitwuzlaTerm b =
+    bitwuzla_mk_term1_indexed1(BITWUZLA_KIND_BV_SIGN_EXTEND, ast->a, topwidth);
   return new_ast(b, s);
 }
 
@@ -603,8 +602,8 @@ smt_astt bitwuzla_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
   smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  BitwuzlaTerm b = bitwuzla_mk_term1_indexed1(
-    BITWUZLA_KIND_BV_ZERO_EXTEND, ast->a, topwidth);
+  BitwuzlaTerm b =
+    bitwuzla_mk_term1_indexed1(BITWUZLA_KIND_BV_ZERO_EXTEND, ast->a, topwidth);
   return new_ast(b, s);
 }
 
@@ -712,45 +711,44 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
   {
     if(is_signed)
     {
-      res = bitwuzla_mk_term2(
-        BITWUZLA_KIND_BV_SADD_OVERFLOW, side1->a, side2->a);
+      res =
+        bitwuzla_mk_term2(BITWUZLA_KIND_BV_SADD_OVERFLOW, side1->a, side2->a);
     }
     else
     {
-      res = bitwuzla_mk_term2(
-        BITWUZLA_KIND_BV_UADD_OVERFLOW, side1->a, side2->a);
+      res =
+        bitwuzla_mk_term2(BITWUZLA_KIND_BV_UADD_OVERFLOW, side1->a, side2->a);
     }
   }
   else if(is_sub2t(overflow.operand))
   {
     if(is_signed)
     {
-      res = bitwuzla_mk_term2(
-        BITWUZLA_KIND_BV_SSUB_OVERFLOW, side1->a, side2->a);
+      res =
+        bitwuzla_mk_term2(BITWUZLA_KIND_BV_SSUB_OVERFLOW, side1->a, side2->a);
     }
     else
     {
-      res = bitwuzla_mk_term2(
-        BITWUZLA_KIND_BV_USUB_OVERFLOW, side1->a, side2->a);
+      res =
+        bitwuzla_mk_term2(BITWUZLA_KIND_BV_USUB_OVERFLOW, side1->a, side2->a);
     }
   }
   else if(is_mul2t(overflow.operand))
   {
     if(is_signed)
     {
-      res = bitwuzla_mk_term2(
-        BITWUZLA_KIND_BV_SMUL_OVERFLOW, side1->a, side2->a);
+      res =
+        bitwuzla_mk_term2(BITWUZLA_KIND_BV_SMUL_OVERFLOW, side1->a, side2->a);
     }
     else
     {
-      res = bitwuzla_mk_term2(
-        BITWUZLA_KIND_BV_UMUL_OVERFLOW, side1->a, side2->a);
+      res =
+        bitwuzla_mk_term2(BITWUZLA_KIND_BV_UMUL_OVERFLOW, side1->a, side2->a);
     }
   }
   else if(is_div2t(overflow.operand) || is_modulus2t(overflow.operand))
   {
-    res = bitwuzla_mk_term2(
-      BITWUZLA_KIND_BV_SDIV_OVERFLOW, side1->a, side2->a);
+    res = bitwuzla_mk_term2(BITWUZLA_KIND_BV_SDIV_OVERFLOW, side1->a, side2->a);
   }
   else
   {
