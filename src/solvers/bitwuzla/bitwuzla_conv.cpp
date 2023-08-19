@@ -675,7 +675,7 @@ expr2tc bitwuzla_convt::get_array_elem(
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(array);
 
   size_t size;
-  BitwuzlaTerm **indicies, **values, *default_value;
+  BitwuzlaTerm *indicies, *values, *default_value;
   bitwuzla_get_array_value(
     bitw, ast->a, &indicies, &values, &size, &default_value);
 
