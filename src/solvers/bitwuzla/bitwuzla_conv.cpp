@@ -29,9 +29,7 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
 
   bitwuzla_set_option(bitw_options, BITWUZLA_OPT_PRODUCE_MODELS, 1);
   bitwuzla_set_abort_callback(bitwuzla_error_handler);
-
-  if(options.get_bool_option("smt-during-symex"))
-    bitw = bitwuzla_new(bitw_options);
+  bitw = bitwuzla_new(bitw_options);
 }
 
 bitwuzla_convt::~bitwuzla_convt()
@@ -645,10 +643,10 @@ bool bitwuzla_convt::get_bool(smt_astt a)
   bool res;
   switch(*result)
   {
-  case '1':
+  case 'true':
     res = true;
     break;
-  case '0':
+  case 'false':
     res = false;
     break;
   default:
