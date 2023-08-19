@@ -16,6 +16,8 @@
 #include <util/pretty.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
+#include <util/time_stopping.h>
+
 #include <vector>
 
 bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
@@ -776,7 +778,7 @@ void goto_symext::add_memory_leak_checks()
     /* We've been instructed to exclude any allocated dynamic object from the
      * memory-leak check that is still reachable via global symbols.
      *
-     * So the idea is to go through all global symbols in the context and
+     * So the idea is to go through all global symbols in the context and to
      * check where they point to via the value-set of the respective symbol.
      * This forms the set of targets reachable from global symbols. However,
      * reachable is a transitive relation, so we'll build a fixpoint by then
@@ -786,15 +788,38 @@ void goto_symext::add_memory_leak_checks()
      * The targets (actually, their addresses) are collected in
      * 'globals_point_to'.
      *
-     * The 'globals' list contains the new "frontier" of symbols left to check
-     * for their value-sets. Once it's empty, the fixpoint is reached.
+     * The list 'globals' contains the new "frontier" of symbols left to check
+     * for where they point to. Once it's empty, the fixpoint is reached.
      */
+    fine_timet start_time = current_time();
     std::unordered_map<expr2tc, expr2tc, irep2_hash> globals_point_to;
     bool has_unknown = false;
     value_set_analysist va(ns);
 
+    /* List of sets of all globally reachable symbols (encoded as a list of
+     * value-set entries), each together with an expression denoting a condition
+     * under which this set is valid.
+     *
+     * When looking at the "points-to" relation as a graph, this condition
+     * encodes whether the symbol S, whose value-set is under consideration, is
+     * globally reachable, i.e. whether in this graph there is a path from a
+     * globally defined symbol to S.
+     *
+     * Crucially, this condition is later used in negated form as a constraint
+     * for the solver, that is, "there is no path starting from global symbols
+     * to the dynamic object and it is still allocated". For structures and
+     * constant-size arrays this is not a big deal since the possible neighbours
+     * can statically be encoded, but it poses problems for arrays with dynamic
+     * size, see the comments about it when handling the split suffix below.
+     *
+     * Initially, as an optimization, the expression is empty (which stands for
+     * 'true'). */
     std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> globals(1);
     va.get_globals(globals[0].second);
+
+    /* In order to handle every globally reachable symbol just once even in case
+     * the user code has constructed circular data structures, maintain a set
+     * of visited symbols. */
     std::unordered_set<std::string> visited;
     for(int i = 0; !has_unknown && !globals.empty(); i++)
     {
@@ -840,7 +865,7 @@ void goto_symext::add_memory_leak_checks()
 
           /* Further below we'll look at the value-set of (the L1 version of)
            * sym_expr2 and compare the root-objects in it (via same_object2t) to
-           * something in this symbol that is of pointer type. This symbol could
+           * something in this symbol that is of pointer type. The symbol could
            * well be an array or a structure.
            *
            * The suffix from the value-set entry says to which sub-component(s)
@@ -910,7 +935,12 @@ void goto_symext::add_memory_leak_checks()
              * reachable from the array.
              *
              * XXX fbrausse: Can we use the inductive counting construction from
-             *               Immerman and Szelepcsényi proving co-NL = NL here?
+             *   Immerman and Szelepcsényi proving co-NL = NL here?
+             *   Alternatively, we might be able to use Savitch's theorem to
+             *   construct a deterministic expression for reachability and
+             *   negate that. Might even be faster since the expression
+             *   constructed in DSPACE(log^2(n)) should be handled faster than
+             *   the time it takes to solve a formula constructed in DTIME(n^2).
              */
 
             // this is a workaround because there is no implementation, yet
@@ -1023,24 +1053,29 @@ void goto_symext::add_memory_leak_checks()
             /* Check the contents of a valid root object of this target for more
              * pointers reaching out further */
             assert(is_symbol2t(root_object));
-            tmp.emplace_back(is_e, std::list<value_sett::entryt>{});
+            std::list<value_sett::entryt> root_points_to;
             va.get_entries_rec(
               to_symbol2t(root_object).get_symbol_name(),
               "",
               migrate_type_back(root_object->type),
-              tmp.back().second);
+              root_points_to);
+
+            tmp.emplace_back(is_e, std::move(root_points_to));
           }
         }
       globals = std::move(tmp);
     }
 
-    log_debug(
-      "memcleanup", "memcleanup: unknown: {}, globals point to:", has_unknown);
-    for(const auto &[e, g] : globals_point_to)
-      log_debug(
-        "memcleanup",
-        "memcleanup:  {}",
-        to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name());
+    if(log_debug(
+         "memcleanup",
+         "memcleanup: time: {}s, unknown: {}, globals point to:",
+         time2string(current_time() - start_time),
+         has_unknown))
+      for(const auto &[e, g] : globals_point_to)
+        log_debug(
+          "memcleanup",
+          "memcleanup:  {}",
+          to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name());
 
     if(has_unknown)
       maybe_global_target = [](expr2tc) { return gen_true_expr(); };
