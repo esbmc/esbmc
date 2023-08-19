@@ -715,6 +715,56 @@ void goto_symext::run_intrinsic(
   }
 }
 
+namespace {
+
+struct suffix_componentt
+{
+  irep_idt member_name;
+
+  suffix_componentt()
+  {}
+
+  explicit suffix_componentt(irep_idt name)
+  : member_name(name)
+  {}
+
+  bool is_index() const noexcept
+  {
+    return member_name.empty();
+  }
+
+  bool is_member() const noexcept
+  {
+    return !is_index();
+  }
+};
+
+std::vector<suffix_componentt>
+split_suffix_components(const std::string &suffix)
+{
+  std::vector<suffix_componentt> components;
+  const char *begin = suffix.c_str();
+  while(*begin)
+  {
+    if(strncmp(begin, "[]", 2) == 0)
+    {
+      components.emplace_back();
+      begin += 2;
+    }
+    else
+    {
+      assert(*begin == '.');
+      begin++;
+      size_t end = strcspn(begin, ".[");
+      components.emplace_back(std::string(begin, end));
+      begin += end;
+    }
+  }
+  return components;
+}
+
+}
+
 void goto_symext::add_memory_leak_checks()
 {
   if(!memory_leak_check)
@@ -787,7 +837,88 @@ void goto_symext::add_memory_leak_checks()
           assert(cur_state->call_stack.size() >= 1);
           // cur_state->top().level1.rename(sym_expr2);
           cur_state->rename(sym_expr2);
-          expr2tc sym_expr2_l2 = sym_expr2;
+
+          /* Further below we'll look at the value-set of (the L1 version of)
+           * sym_expr2 and compare the root-objects in it (via same_object2t) to
+           * something in this symbol that is of pointer type. This symbol could
+           * well be an array or a structure.
+           *
+           * The suffix from the value-set entry says to which sub-component(s)
+           * (if any) of the object referred to by sym_expr2 this entry belongs.
+           * Those sub-components are of pointer type and could point to objects
+           * reachable further out. Construct expressions that refer into the
+           * symbol based on the suffix so that we catch all the pointers. If
+           * the suffix is empty, sym_expr2 already has pointer type. Otherwise
+           * the symbol has a compound type. */
+          std::vector<expr2tc> sub_exprs = {sym_expr2};
+          for(const suffix_componentt &c : split_suffix_components(e.suffix))
+          {
+            /* The suffix consists of a sequence of components, which are either
+             * "[]" or ".name" where name is the name of some member of a
+             * structure type. */
+            if(c.is_member())
+            {
+              for(expr2tc &p : sub_exprs)
+              {
+                assert(is_structure_type(p));
+                const struct_union_data &u =
+                  static_cast<const struct_union_data &>(*p->type);
+                unsigned n = u.get_component_number(c.member_name);
+                p = member2tc(u.members[n], p, c.member_name);
+              }
+              continue;
+            }
+
+            assert(c.is_index());
+            const type2tc &type = sub_exprs[0]->type;
+            assert(is_array_type(type));
+            const array_type2t &array_type = to_array_type(type);
+            const expr2tc &size = array_type.array_size;
+            if(!size)
+            {
+              /* The user is doing evil things like pointing to infinite-size
+               * arrays. Bad user. Those arrays are not "global symbols" in the
+               * sense of --no-reachable-memory-leak; ignore those. */
+              sub_exprs.clear();
+              break;
+            }
+
+            if(is_constant_int2t(size))
+            {
+              /* This could be huge. TODO: switch to the case below. */
+              uint64_t n = to_constant_int2t(size).value.to_uint64();
+              std::vector<expr2tc> new_sub_exprs;
+              new_sub_exprs.reserve(n * sub_exprs.size());
+              for(const expr2tc &p : sub_exprs)
+                for(uint64_t i = 0; i < n; i++)
+                  new_sub_exprs.emplace_back(index2tc(
+                    array_type.subtype, p, gen_long(size->type, i)));
+              sub_exprs = std::move(new_sub_exprs);
+              continue;
+            }
+
+            /* TODO: Missing implementation.
+             *
+             * We cannot just use a new symbol for the index since this
+             * expression is used in a negated context. I.e. we will need to
+             * encode a condition whose negation is true if and only if the
+             * target 'adr' is *not* reachable from this array.
+             * Exists index, s.t. "array[index] is the same object as 'adr'"
+             * does not satisfy this requirement: solvers are free to choose an
+             * 'index' where the same-object condition is false. Instead, the
+             * counter-example needs to include a witness that 'adr' is *not*
+             * reachable from the array.
+             *
+             * XXX fbrausse: Can we use the inductive counting construction from
+             *               Immerman and Szelepcsényi proving co-NL = NL here?
+             */
+
+            // this is a workaround because there is no implementation, yet
+            sub_exprs.clear();
+            break;
+          }
+          if(sub_exprs.empty()) /* this target is not to be handled */
+            continue;
 
           if(is_symbol2t(sym_expr2))
           {
@@ -876,63 +1007,10 @@ void goto_symext::add_memory_leak_checks()
              * contains a pointer type. Those are also exactly the ones interesting
              * for the building the set of reachable objects. */
             expr2tc adr = address_of2tc(root_object->type, root_object);
-            expr2tc adr_e = sym_expr2_l2;
 
-            std::vector<expr2tc> sub_exprs = {expr2tc()};
-            if(is_structure_type(sym_expr2_l2))
-            {
-              const char *suffix = e.suffix.c_str();
-              const char *last_dot = strrchr(suffix, '.');
-              assert(last_dot);
-              irep_idt memb(last_dot + 1);
-              const struct_union_data &u =
-                static_cast<const struct_union_data &>(*sym_expr2_l2->type);
-              unsigned c = u.get_component_number(memb);
-              sub_exprs[0] = member2tc(u.members[c], sym_expr2_l2, memb);
-            }
-            else if(is_array_type(sym_expr2_l2))
-            {
-              const array_type2t &array_type =
-                to_array_type(sym_expr2_l2->type);
-              const expr2tc &size = array_type.array_size;
-              assert(size);
-              if(is_constant_int2t(size))
-              {
-                /* This could be huge. TODO: switch to the case below. */
-                uint64_t n = to_constant_int2t(size).value.to_uint64();
-                sub_exprs.resize(n);
-                for(uint64_t i = 0; i < n; i++)
-                  sub_exprs[i] = index2tc(
-                    array_type.subtype, adr_e, gen_long(size->type, i));
-              }
-              else
-              {
-                /* Missing implementation. We cannot just use a new symbol for
-                 * the index since this expression is used in a negated context.
-                 * I.e. we need to encode a condition whose negation is true if
-                 * and only if the target 'adr' is *not* reachable from this
-                 * array.
-                 * Exists index, s.t. "array[index] is the same object as 'adr'"
-                 * does not satisfy this requirement: solvers are free to choose
-                 * an 'index' where the same-object condition is false. Instead,
-                 * the counter-example needs to include a witness that 'adr' is
-                 * *not* reachable from 'array'.
-                 *
-                 * TODO: Can we use the inductive counting construction from
-                 *       Immerman and Szelepcsényi proving co-NL = NL here? */
-                continue; // this is a workaround
-              }
-            }
-            else
-            {
-              /* Initial case for globals */
-              assert(e.suffix.empty());
-              sub_exprs[0] = sym_expr2_l2;
-            }
             expr2tc same_as_e;
-            for(size_t i = 0; i < sub_exprs.size(); i++)
+            for(const expr2tc &sub_expr : sub_exprs)
             {
-              expr2tc sub_expr = sub_exprs[i];
               assert(is_pointer_type(sub_expr));
               expr2tc same = same_object2tc(sub_expr, adr);
               same_as_e = same_as_e ? or2tc(same_as_e, same) : same;
