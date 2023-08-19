@@ -811,22 +811,22 @@ smt_sortt bitwuzla_convt::mk_fbv_sort(std::size_t width)
 
 smt_sortt bitwuzla_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
-  auto domain_sort = to_solver_smt_sort<BitwuzlaSort *>(domain);
-  auto range_sort = to_solver_smt_sort<BitwuzlaSort *>(range);
+  auto domain_sort = to_solver_smt_sort<BitwuzlaSort>(domain);
+  auto range_sort = to_solver_smt_sort<BitwuzlaSort>(range);
 
-  auto t = bitwuzla_mk_array_sort(bitw, domain_sort->s, range_sort->s);
+  auto t = bitwuzla_mk_array_sort(domain_sort->s, range_sort->s);
   return new solver_smt_sort<BitwuzlaSort>(
     SMT_SORT_ARRAY, t, domain_sort->get_data_width(), range);
 }
 
 smt_sortt bitwuzla_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
 {
-  return new solver_smt_sort<BitwuzlaSort *>(
+  return new solver_smt_sort<BitwuzlaSort>(
     SMT_SORT_BVFP, bitwuzla_mk_bv_sort(ew + sw + 1), ew + sw + 1, sw + 1);
 }
 
 smt_sortt bitwuzla_convt::mk_bvfp_rm_sort()
 {
-  return new solver_smt_sort<BitwuzlaSort *>(
+  return new solver_smt_sort<BitwuzlaSort>(
     SMT_SORT_BVFP_RM, bitwuzla_mk_bv_sort(3), 3);
 }
