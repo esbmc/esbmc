@@ -445,7 +445,11 @@ bool goto_symext::get_unwind(
   if(!options.get_bool_option("quiet"))
   {
     if(stop_unwind)
-      log_status("Not unwinding");
+      log_status(
+        "Not unwinding loop {} iteration {}   {}",
+        i2string(cur_state->source.pc->loop_number),
+        integer2string(unwind),
+        cur_state->source.pc->location);
     else
       log_status(
         "Unwinding loop {} iteration {}   {}",
