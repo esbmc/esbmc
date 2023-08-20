@@ -39,12 +39,11 @@ void cse_domaint::transform(
     break;
 
   case FUNCTION_CALL:
-  {
+  {    
     const code_function_call2t &func =
       to_code_function_call2t(instruction.code);
     if(func.ret)
       havoc_expr(func.ret, to);
-
     // each operand should be available now (unless someone is doing a sideeffect)
     for(const expr2tc &e : func.operands)
       make_expression_available(e);
@@ -85,7 +84,7 @@ bool cse_domaint::join(const cse_domaint &b)
     return true;
   }
 
-  bool changed = available_expressions == b.available_expressions;
+  bool changed = available_expressions != b.available_expressions;
   available_expressions = b.available_expressions;
 
   return changed;
@@ -228,6 +227,7 @@ bool goto_cse::runOnProgram(goto_functionst &F)
   (*cse_domaint::vsa)(F);
   log_debug("[CSE] Computing Available Expressions for program");
   available_expressions(F, ns);
+  log_debug("[CSE] Finished computing AE for program");
   return false;
 }
 
