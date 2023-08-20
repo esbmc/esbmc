@@ -380,6 +380,7 @@ void value_sett::get_value_set_rec(
     switch (side.kind)
     {
     case sideeffect2t::alloca:
+    case sideeffect2t::realloc:  
     case sideeffect2t::malloc:
     {
       assert(suffix == "");
