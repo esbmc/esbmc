@@ -11,28 +11,21 @@ else()
             DOWNLOAD_ONLY YES
             GITHUB_REPOSITORY bitwuzla/bitwuzla
             GIT_TAG 0.1.1)
+	  
+	  message("[bitwuzla] Source-dir: ${bitwuzla_SOURCE_DIR} ")
+        message("[bitwuzla] Configuring project:  ./configure.py --prefix ${bitwuzla_BINARY_DIR}")
+        execute_process(COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR}
+          WORKING_DIRECTORY "${bitwuzla_SOURCE_DIR}")
 
-        message("[bitwuzla] Setting up lingeling")
-        execute_process(COMMAND "./contrib/setup-lingeling.sh"
-            WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR})
-
-        message("[bitwuzla] Setting up btor2tools")
-        execute_process(COMMAND "./contrib/setup-btor2tools.sh"
-            WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR})
-
-        message("[bitwuzla] Setting up symfpu")
-        execute_process(COMMAND "./contrib/setup-symfpu.sh"
-            WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR})
-
-        message("[bitwuzla] Configuring build")
-        execute_process(COMMAND ${bitwuzla_SOURCE_DIR}/configure.sh --prefix ${bitwuzla_BINARY_DIR}
-            WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR})
-
+	
         message("[bitwuzla] Building...")
-        execute_process(COMMAND make -j4 install
-            WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR}/build)
+        execute_process(COMMAND meson install
+          WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR}/build
+	  COMMAND_ECHO STDOUT)
 
         set(Bitwuzla_DIR ${bitwuzla_BINARY_DIR})
+	# We need to tell cmake where to look for the .pc file exported by bitwuzla
+	set(CMAKE_PREFIX_PATH "${bitwuzla_BINARY_DIR}")
     endif()
 
 endif()
@@ -43,7 +36,6 @@ endif()
 
 if(ENABLE_BITWUZLA)
   include(FindPkgConfig)
-  # export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/home/lucas/ESBMC_Project/bitwuzla/bitwuzla-release/lib/x86_64-linux-gnu/pkgconfig/
   pkg_check_modules(Bitwuzla REQUIRED IMPORTED_TARGET bitwuzla)
 
     message(STATUS "Found Bitwuzla at: ${Bitwuzla_PREFIX}")
