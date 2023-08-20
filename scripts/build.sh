@@ -5,13 +5,16 @@ mkdir build && cd build || exit $?
 
 # Set arguments that should be available for every OS
 BASE_ARGS="-DDOWNLOAD_DEPENDENCIES=On -GNinja -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release"
-SOLVER_FLAGS="-DENABLE_BOOLECTOR=On -DENABLE_YICES=Off -DENABLE_CVC4=OFF  -DENABLE_BITWUZLA=OFF -DENABLE_GOTO_CONTRACTOR=OFF"
+SOLVER_FLAGS="-DENABLE_BOOLECTOR=On -DENABLE_YICES=Off -DENABLE_CVC4=OFF  -DENABLE_BITWUZLA=On -DENABLE_GOTO_CONTRACTOR=OFF"
 COMPILER_ARGS=''
 # Ubuntu setup (pre-config)
 ubuntu_setup () {
     # Tested on ubuntu 22.04
     echo "Configuring Ubuntu build"
     sudo apt-get update && sudo apt-get install -y clang clang-tidy python-is-python3 csmith python3 git ccache unzip wget curl libcsmith-dev gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev pkg-config python3-pip python3-toml python-is-python3 openjdk-11-jdk &&
+    echo "Installing Python dependencies"
+    pip3 install --user meson &&
+    meson --version &&
     BASE_ARGS="$BASE_ARGS -DENABLE_OLD_FRONTEND=On  -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On" &&
     SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=ON"
     # Hack: Boolector might fail to download some dependencies using curl (maybe we should patch it?)
