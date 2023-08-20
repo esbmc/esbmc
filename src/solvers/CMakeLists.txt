@@ -1,35 +1,57 @@
-set (ESBMC_ENABLE_z3 0)
-set (ESBMC_ENABLE_minisat 0)
-set (ESBMC_ENABLE_boolector 0)
-set (ESBMC_ENABLE_cvc4 0)
-set (ESBMC_ENABLE_mathsat 0)
-set (ESBMC_ENABLE_yices 0)
-set (ESBMC_ENABLE_bitwuzla 0)
+set(Bitwuzla_MIN_VERSION "0.1")
 
-add_subdirectory(prop)
-add_subdirectory(smt)
-add_subdirectory(smtlib)
+if(DEFINED Bitwuzla_DIR)
+    set(ENABLE_BITWUZLA ON)
+else()
+    if(ENABLE_BITWUZLA AND DOWNLOAD_DEPENDENCIES)
+        # See Boolector configurations for more details about this
 
-add_library(solve solve.cpp)
-target_link_libraries(solve fmt::fmt)
-target_include_directories(solve
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-    PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
-    PRIVATE ${Boost_INCLUDE_DIRS}
-)
+        CPMAddPackage(
+            NAME bitwuzla
+            DOWNLOAD_ONLY YES
+            GITHUB_REPOSITORY bitwuzla/bitwuzla
+            GIT_TAG 0.1.1)
+	  
+	  message("[bitwuzla] Source-dir: ${bitwuzla_SOURCE_DIR} ")
+        message("[bitwuzla] Configuring project:  ./configure.py --prefix ${bitwuzla_BINARY_DIR}")
+        execute_process(COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR}
+          WORKING_DIRECTORY "${bitwuzla_SOURCE_DIR}")
 
-add_library(solvers INTERFACE)
-target_link_libraries(solvers INTERFACE solve smtlib smttuple smtfp smt prop)
+	
+        message("[bitwuzla] Building...")
+        execute_process(COMMAND meson install
+          WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR}/build
+	  COMMAND_ECHO STDOUT)
 
-# Logic for each of these are duplicated -- cmake doesn't have indirect function
-# calling, so it's hard to structure it how I want
-add_subdirectory(z3)
-add_subdirectory(boolector)
-add_subdirectory(cvc4)
-add_subdirectory(mathsat)
-add_subdirectory(yices)
-add_subdirectory(bitwuzla)
+        set(Bitwuzla_DIR ${bitwuzla_BINARY_DIR})
+	# We need to tell cmake where to look for the .pc file exported by bitwuzla
+	set(CMAKE_PREFIX_PATH "${bitwuzla_BINARY_DIR}")
+    endif()
 
-set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS}" PARENT_SCOPE)
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/solver_config.h.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/solver_config.h")
+endif()
+
+if(EXISTS $ENV{HOME}/bitwuzla)
+    set(ENABLE_BITWUZLA ON)
+endif()
+
+if(ENABLE_BITWUZLA)
+  include(FindPkgConfig)
+  pkg_check_modules(Bitwuzla REQUIRED IMPORTED_TARGET bitwuzla)
+
+    message(STATUS "Found Bitwuzla at: ${Bitwuzla_PREFIX}")
+    message(STATUS "Bitwuzla version: ${Bitwuzla_VERSION}")
+    if(Bitwuzla_VERSION VERSION_LESS Bitwuzla_MIN_VERSION)
+        message(FATAL_ERROR "Expected version ${Bitwuzla_MIN_VERSION} or greater")
+    endif()
+
+    add_library(solverbitw bitwuzla_conv.cpp)
+    target_include_directories(solverbitw
+            PRIVATE ${Boost_INCLUDE_DIRS}
+            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(solverbitw fmt::fmt PkgConfig::Bitwuzla)
+
+    target_link_libraries(solvers INTERFACE solverbitw)
+
+    set(ESBMC_ENABLE_bitwuzla 1 PARENT_SCOPE)
+    set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} bitwuzla" PARENT_SCOPE)
+endif()
