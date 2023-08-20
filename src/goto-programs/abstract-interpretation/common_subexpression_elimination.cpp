@@ -124,6 +124,9 @@ bool cse_domaint::should_remove_expr(const expr2tc &taint, const expr2tc &E)
   if(taint == E)
     return true;
 
+  if(!E) // not sure when this can happen
+    return false;
+
   bool result = false;
   E->foreach_operand([this, &result, &taint](const expr2tc &e) {
     result |= should_remove_expr(taint, e);
