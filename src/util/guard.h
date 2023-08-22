@@ -5,6 +5,8 @@
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 
+#include <set>
+
 /* Defines a guard. A guard is the antecedent (i.e. left-hand side) of an
  * implication. This guard implementation is even more concrete in that on the
  * top level it is interpreted as a conjunction of conditions.
@@ -27,7 +29,7 @@
 class guardt
 {
 public:
-  typedef std::vector<expr2tc> guard_listt;
+  typedef std::set<expr2tc> guard_listt;
 
   void add(const expr2tc &expr);
   void append(const guardt &guard);

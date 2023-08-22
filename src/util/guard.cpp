@@ -32,7 +32,7 @@ void guardt::add(const expr2tc &expr)
     return;
   }
 
-  guard_list.push_back(expr);
+  guard_list.insert(expr);
 
   // Update the chain of ands
 
@@ -109,15 +109,13 @@ void guardt::append(const guardt &guard)
 guardt &operator-=(guardt &g1, guardt g2)
 {
   /* the function std::set_difference() expects the two ranges to be sorted */
-  std::sort(g1.guard_list.begin(), g1.guard_list.end());
-  std::sort(g2.guard_list.begin(), g2.guard_list.end());
   guardt::guard_listt diff;
   std::set_difference(
     g1.guard_list.begin(),
     g1.guard_list.end(),
     g2.guard_list.begin(),
     g2.guard_list.end(),
-    std::back_inserter(diff));
+    std::inserter(diff, diff.end()));
 
   // Clear g1 and build the guard's list and expr
   g1.clear();
@@ -174,7 +172,7 @@ guardt &operator|=(guardt &g1, const guardt &g2)
       g1.guard_list.end(),
       g2.guard_list.begin(),
       g2.guard_list.end(),
-      std::back_inserter(common.guard_list));
+      std::inserter(common.guard_list, common.guard_list.end()));
     common.build_guard_expr();
 
     // New g1 and g2, without the common guards
@@ -184,7 +182,7 @@ guardt &operator|=(guardt &g1, const guardt &g2)
       g1.guard_list.end(),
       common.guard_list.begin(),
       common.guard_list.end(),
-      std::back_inserter(new_g1.guard_list));
+      std::inserter(new_g1.guard_list, new_g1.guard_list.end()));
     new_g1.build_guard_expr();
 
     guardt new_g2;
@@ -193,7 +191,7 @@ guardt &operator|=(guardt &g1, const guardt &g2)
       g2.guard_list.end(),
       common.guard_list.begin(),
       common.guard_list.end(),
-      std::back_inserter(new_g2.guard_list));
+      std::inserter(new_g2.guard_list, new_g2.guard_list.end()));
     new_g2.build_guard_expr();
 
     // Get the and expression from both guards
