@@ -106,11 +106,12 @@ void guardt::append(const guardt &guard)
     add(it);
 }
 
-guardt &operator-=(guardt &g1, const guardt &g2)
+guardt &operator-=(guardt &g1, guardt g2)
 {
+  /* the function std::set_difference() expects the two ranges to be sorted */
+  std::sort(g1.guard_list.begin(), g1.guard_list.end());
+  std::sort(g2.guard_list.begin(), g2.guard_list.end());
   guardt::guard_listt diff;
-  /* XXX fbrausse: the function std::set_difference() expects the two ranges
-   *   to be sorted! Bug? */
   std::set_difference(
     g1.guard_list.begin(),
     g1.guard_list.end(),
