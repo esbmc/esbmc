@@ -56,7 +56,7 @@ public:
    * It is defined as those conditions in g1 that are not present in g2, where
    * present means that they are exact copies (in contrast to equivalent
    * formulas like not2tc(not2tc(e)) and e). */
-  friend guardt &operator-=(guardt &g1, const guardt &g2);
+  friend guardt &operator-=(guardt &g1, guardt g2);
 
   /* Disjunction of two guards. */
   friend guardt &operator|=(guardt &g1, const guardt &g2);
