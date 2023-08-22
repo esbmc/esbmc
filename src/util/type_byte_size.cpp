@@ -469,26 +469,17 @@ const expr2tc &get_base_object(const expr2tc &expr)
   return expr;
 }
 
-/* XXX fbrausse: what does this function compute? */
+// Obtain the format string (the first argument) in scanf and printf function
 const irep_idt get_string_argument(const expr2tc &expr)
 {
-  // Remove typecast
-  if(is_typecast2t(expr))
-    return get_string_argument(to_typecast2t(expr).from);
+  const expr2tc &base_expr = get_base_object(expr);
 
-  // Remove address_of
-  if(is_address_of2t(expr))
-    return get_string_argument(to_address_of2t(expr).ptr_obj);
+  if(is_constant_string2t(base_expr))
+    return to_constant_string2t(base_expr).value;
 
-  // Remove index
-  if(is_index2t(expr))
-    return get_string_argument(to_index2t(expr).source_value);
+  if(is_symbol2t(base_expr))
+    return to_symbol2t(base_expr).thename;
 
-  if(is_constant_string2t(expr))
-    return to_constant_string2t(expr).value;
-
-  if(is_symbol2t(expr))
-    return to_symbol2t(expr).thename;
-
+  log_warning("Obtained empty format string.");
   return "";
 }
