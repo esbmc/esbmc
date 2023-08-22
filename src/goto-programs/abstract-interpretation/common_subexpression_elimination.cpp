@@ -221,13 +221,13 @@ expr2tc goto_cse::common_expression::get_symbol_for_target(
 bool goto_cse::runOnProgram(goto_functionst &F)
 {
   const namespacet ns(context);
-  log_debug("[CSE] Computing Points-To for program");
+  log_debug("{}", "[CSE] Computing Points-To for program");
   // Initialization for the abstract analysis.
   cse_domaint::vsa = std::make_unique<value_set_analysist>(ns);
   (*cse_domaint::vsa)(F);
-  log_debug("[CSE] Computing Available Expressions for program");
+  log_debug("{}", "[CSE] Computing Available Expressions for program");
   available_expressions(F, ns);
-  log_debug("[CSE] Finished computing AE for program");
+  log_debug("{}","[CSE] Finished computing AE for program");
   return false;
 }
 
@@ -275,7 +275,6 @@ void goto_cse::replace_max_sub_expr(
     auto symbol = common->second.get_symbol_for_target(to);
     if(symbol)
     {
-      log_debug("[CSE] Found replacement!");
       e = symbol;
       return;
     }
@@ -289,8 +288,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 {
   if(!F.second.body_available)
     return false;
-
-  log_debug("[CSE] Checking function {}", F.first.as_string());
 
   // 1. Let's count expressions
 
@@ -351,13 +348,9 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
   {
     for(const auto &[k, v] : expressions)
     {
-      log_debug("Got {} sequences of: {}", v.gen.size(), *k);
-
-      log_debug("GEN");
       for(const auto &g : v.gen)
         log_status("\t{}", g->location.as_string());
 
-      log_debug("KILL");
       for(const auto &kill : v.kill)
         log_status("\t{}", kill->location.as_string());
     }
@@ -385,9 +378,9 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 
       symbolt symbol = create_cse_symbol(e->type, itt);
       auto magic = context.move_symbol_to_context(symbol);
-      ;
+      
 
-      const symbol2tc symbol_as_expr(e->type, magic->id);
+      const auto symbol_as_expr = symbol2tc(e->type, magic->id);
 
       goto_programt::targett t = F.second.body.insert(itt);
       t->make_assignment();
@@ -400,8 +393,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       decl->location = it->location;
 
       cse.symbol.push_back(symbol_as_expr);
-
-      log_debug("[CSE] Adding new symbol {}", symbol_as_expr->thename);
     }
   }
 
@@ -422,7 +413,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
         continue;
     }
 
-    log_status(it->location.as_string());
+    log_status("{}", it->location.as_string());
     replace_max_sub_expr(it->code, expressions, it);
   }
   return true;

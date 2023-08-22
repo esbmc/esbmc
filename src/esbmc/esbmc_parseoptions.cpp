@@ -1670,7 +1670,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if(cmdline.isset("common-subexpression-elimination")) 
     {
-      if(cmdline.isset("no-library")
+      if(cmdline.isset("no-library"))
 	 log_warning("Using CSE with --no-library might cause huge slowdowns!");
       goto_cse cse(context);
       cse.run(goto_functions);
