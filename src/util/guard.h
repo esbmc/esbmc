@@ -27,9 +27,6 @@
 class guardt
 {
 public:
-  // Default constructors
-  guardt() = default;
-
   typedef std::vector<expr2tc> guard_listt;
 
   void add(const expr2tc &expr);
