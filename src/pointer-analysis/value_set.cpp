@@ -723,8 +723,11 @@ void value_sett::get_value_set_rec(
 
   // If none of those expressions matched, then we don't really know what this
   // expression evaluates to. So just record it as being unknown.
-  log_debug("value-set", "unknown expr {} of type {} -> inserting unknown value",
-            get_expr_id(expr), get_type_id(expr->type));
+  log_debug(
+    "value-set",
+    "unknown expr {} of type {} -> inserting unknown value",
+    get_expr_id(expr),
+    get_type_id(expr->type));
   expr2tc tmp = unknown2tc(original_type);
   insert(dest, tmp, BigInt(0));
 }
@@ -983,8 +986,11 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
 
   // If we didn't recognize the expression, then we have no idea what this
   // refers to, so store an unknown expr.
-  log_debug("value-set", "unknown expr {} of type {} -> inserting unknown reference",
-            get_expr_id(expr), get_type_id(expr->type));
+  log_debug(
+    "value-set",
+    "unknown expr {} of type {} -> inserting unknown reference",
+    get_expr_id(expr),
+    get_type_id(expr->type));
   expr2tc unknown = unknown2tc(expr->type);
   insert(dest, unknown, BigInt(0));
 }

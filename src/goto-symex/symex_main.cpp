@@ -717,18 +717,19 @@ void goto_symext::run_intrinsic(
   }
 }
 
-namespace {
-
+namespace
+{
 struct suffix_componentt
 {
   irep_idt member_name;
 
   suffix_componentt()
-  {}
+  {
+  }
 
-  explicit suffix_componentt(irep_idt name)
-  : member_name(name)
-  {}
+  explicit suffix_componentt(irep_idt name) : member_name(name)
+  {
+  }
 
   bool is_index() const noexcept
   {
@@ -765,7 +766,7 @@ split_suffix_components(const std::string &suffix)
   return components;
 }
 
-}
+} // namespace
 
 void goto_symext::add_memory_leak_checks()
 {
@@ -916,8 +917,8 @@ void goto_symext::add_memory_leak_checks()
               new_sub_exprs.reserve(n * sub_exprs.size());
               for(const expr2tc &p : sub_exprs)
                 for(uint64_t i = 0; i < n; i++)
-                  new_sub_exprs.emplace_back(index2tc(
-                    array_type.subtype, p, gen_long(size->type, i)));
+                  new_sub_exprs.emplace_back(
+                    index2tc(array_type.subtype, p, gen_long(size->type, i)));
               sub_exprs = std::move(new_sub_exprs);
               continue;
             }
