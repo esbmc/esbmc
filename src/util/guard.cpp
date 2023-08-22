@@ -106,23 +106,19 @@ void guardt::append(const guardt &guard)
     add(it);
 }
 
-guardt &operator-=(guardt &g1, guardt g2)
+guardt &operator-=(guardt &g1, const guardt &g2)
 {
-  /* the function std::set_difference() expects the two ranges to be sorted */
-  std::sort(g1.guard_list.begin(), g1.guard_list.end());
-  std::sort(g2.guard_list.begin(), g2.guard_list.end());
-  guardt::guard_listt diff;
-  std::set_difference(
-    g1.guard_list.begin(),
-    g1.guard_list.end(),
-    g2.guard_list.begin(),
-    g2.guard_list.end(),
-    std::back_inserter(diff));
+  guardt::guard_listt l2 = g2.guard_list;
+  std::sort(l2.begin(), l2.end());
+  for (auto it = g1.guard_list.begin(); it != g1.guard_list.end();)
+  {
+    if(std::binary_search(l2.begin(), l2.end(), *it))
+      it = g1.guard_list.erase(it);
+    else
+      ++it;
+  }
 
-  // Clear g1 and build the guard's list and expr
-  g1.clear();
-
-  g1.guard_list.swap(diff);
+  g1.g_expr.reset();
   g1.build_guard_expr();
 
   return g1;
