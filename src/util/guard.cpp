@@ -101,6 +101,8 @@ void guardt::append(const guardt &guard)
 guardt &operator-=(guardt &g1, const guardt &g2)
 {
   guardt::guard_listt diff;
+  /* XXX fbrausse: the function std::set_difference() expects the two ranges
+   *   to be sorted! Bug? */
   std::set_difference(
     g1.guard_list.begin(),
     g1.guard_list.end(),
@@ -130,7 +132,7 @@ guardt &operator|=(guardt &g1, const guardt &g2)
 
   if(g1.is_single_symbol() && g2.is_single_symbol())
   {
-    // Both guards have one symbol, so check if we opposite symbols, e.g,
+    // Both guards have one symbol, so check if we have opposite symbols, e.g,
     // g1 == sym1 and g2 == !sym1
     expr2tc or_expr = or2tc(*g1.guard_list.begin(), *g2.guard_list.begin());
     simplify(or_expr);
@@ -142,7 +144,8 @@ guardt &operator|=(guardt &g1, const guardt &g2)
     }
 
     // Despite if we could simplify or not, clear and set the new guard
-    g1.clear_insert(or_expr);
+    g1.clear();
+    g1.add(or_expr);
   }
   else
   {
@@ -191,7 +194,8 @@ guardt &operator|=(guardt &g1, const guardt &g2)
     if(new_g1.is_single_symbol() && new_g2.is_single_symbol())
       simplify(or_expr);
 
-    g1.clear_append(common);
+    g1.clear();
+    g1.append(common);
     g1.add(or_expr);
   }
 
@@ -265,16 +269,4 @@ void guardt::clear()
 {
   guard_list.clear();
   g_expr.reset();
-}
-
-void guardt::clear_append(const guardt &guard)
-{
-  clear();
-  append(guard);
-}
-
-void guardt::clear_insert(const expr2tc &expr)
-{
-  clear();
-  add(expr);
 }
