@@ -24,8 +24,6 @@ else()
 	  COMMAND_ECHO STDOUT)
 
         set(Bitwuzla_DIR ${bitwuzla_BINARY_DIR})
-	# We need to tell cmake where to look for the .pc file exported by bitwuzla
-	set(CMAKE_PREFIX_PATH "${bitwuzla_BINARY_DIR}")
     endif()
 
 endif()
@@ -35,8 +33,18 @@ if(EXISTS $ENV{HOME}/bitwuzla)
 endif()
 
 if(ENABLE_BITWUZLA)
+  
+  if(Bitwuzla_DIR)
+    # We need to tell cmake where to look for the .pc file exported by bitwuzla
+    list(APPEND CMAKE_PREFIX_PATH "${Bitwuzla_DIR}")
+  endif()
+
   include(FindPkgConfig)
   pkg_check_modules(Bitwuzla REQUIRED IMPORTED_TARGET bitwuzla)
+
+  if(NOT Bitwuzla_FOUND)
+    message(ERROR "Could not find Bitwuzla in '${Bitwuzla_DIR}'")
+  endif()
 
     message(STATUS "Found Bitwuzla at: ${Bitwuzla_PREFIX}")
     message(STATUS "Bitwuzla version: ${Bitwuzla_VERSION}")
