@@ -49,13 +49,7 @@ protected:
 
   int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
 
-  int doit_default(optionst &options, goto_functionst &goto_functions);
-  int doit_k_induction(optionst &options, goto_functionst &goto_functions);
   int doit_k_induction_parallel();
-
-  int doit_falsification(optionst &options, goto_functionst &goto_functions);
-  int doit_incremental(optionst &options, goto_functionst &goto_functions);
-  int doit_termination(optionst &options, goto_functionst &goto_functions);
 
   tvt is_base_case_violated(
     optionst &options,
