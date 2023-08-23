@@ -61,9 +61,13 @@ public:
 
   /* Difference between two guards.
    *
-   * It is defined as those conditions in g1 that are not present in g2, where
-   * present means that they are exact copies (in contrast to equivalent
-   * formulas like not2tc(not2tc(e)) and e). */
+   * Let P be the common prefix of the two guard-lists in terms of the
+   * expressions being exact copies (in contrast to equivalent formulas like
+   * not2tc(not2tc(e)) and e).
+   *
+   * Then the difference between g1 and g2 is defined to be the conjunction of
+   * the conditions in g1 following P, that is, the prefix P is removed from g1.
+   */
   friend guardt &operator-=(guardt &g1, const guardt &g2);
 
   /* Disjunction of two guards. */
