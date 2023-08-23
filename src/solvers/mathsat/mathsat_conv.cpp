@@ -905,7 +905,7 @@ void mathsat_smt_ast::dump() const
   auto convt = dynamic_cast<const mathsat_convt *>(context);
   assert(convt != nullptr);
 
-  log_debug("mathsat", "{}", msat_to_smtlib2(convt->env, a));
+  log_status("{}", msat_to_smtlib2(convt->env, a));
 }
 
 void mathsat_convt::dump_smt()
