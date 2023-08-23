@@ -236,7 +236,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   log_status("Target: {}", format_target());
 
-  // Copy all flags from CMD into options
+  // Copy all flags that are set to non-default values in CMD into options
   options.cmdline(cmdline);
   set_verbosity_msg();
 
@@ -545,105 +545,13 @@ int esbmc_parseoptionst::doit()
     return 0;
 
   // Now run one of the chosen strategies
-  /*
-  if(cmdline.isset("termination"))
-    return doit_termination(options, goto_functions);
-
-  if(cmdline.isset("incremental-bmc"))
-    return doit_incremental(options, goto_functions);
-
-  if(cmdline.isset("falsification"))
-    return doit_falsification(options, goto_functions);
-
-  if(cmdline.isset("k-induction"))
-    return doit_k_induction(options, goto_functions);
-  */
-
   if(
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
     cmdline.isset("falsification") || cmdline.isset("k-induction"))
     return do_bmc_strategy(options, goto_functions);
 
-  return doit_default(options, goto_functions);
-}
-
-int esbmc_parseoptionst::do_bmc_strategy(
-  optionst &options,
-  goto_functionst &goto_functions)
-{
-  // Get max number of iterations
-  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
-                        ? UINT_MAX
-                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
-
-  // Get the increment
-  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
-
-  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
-  {
-    // k-induction
-    if(options.get_bool_option("k-induction"))
-    {
-      tvt base_case_is_violated =
-        is_base_case_violated(options, goto_functions, k_step);
-      if(base_case_is_violated.is_true())
-        return 1;
-
-      tvt forward_condition_holds =
-        does_forward_condition_hold(options, goto_functions, k_step);
-      if(forward_condition_holds.is_false())
-        return 0;
-
-      // Don't run inductive step for k_step == 1
-      if(k_step > 1)
-      {
-        tvt inductive_step_is_violated =
-          is_inductive_step_violated(options, goto_functions, k_step);
-        if(inductive_step_is_violated.is_false())
-          return 0;
-      }
-    }
-    // termination
-    if(options.get_bool_option("termination"))
-    {
-      tvt forward_condition_holds =
-        does_forward_condition_hold(options, goto_functions, k_step);
-      if(forward_condition_holds.is_false())
-        return 0;
-    }
-    // incremental-bmc
-    if(options.get_bool_option("incremental-bmc"))
-    {
-      tvt base_case_is_violated =
-        is_base_case_violated(options, goto_functions, k_step);
-      if(base_case_is_violated.is_true())
-        return 1;
-
-      tvt forward_condition_holds =
-        does_forward_condition_hold(options, goto_functions, k_step);
-      if(forward_condition_holds.is_false())
-        return 0;
-    }
-    // falsification
-    if(options.get_bool_option("falsification"))
-    {
-      tvt base_case_is_violated =
-        is_base_case_violated(options, goto_functions, k_step);
-      if(base_case_is_violated.is_true())
-        return 1;
-    }
-  }
-
-  log_status("Unable to prove or falsify the program, giving up.");
-  log_fail("VERIFICATION UNKNOWN");
-
-  return 0;
-}
-
-int esbmc_parseoptionst::doit_default(
-  optionst &options,
-  goto_functionst &goto_functions)
-{
+  // If no strategy is chosen, just rely on the simplifier
+  // and the flags set through CMD
   bmct bmc(goto_functions, options, context);
   return do_bmc(bmc);
 }
@@ -1209,7 +1117,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   return 0;
 }
 
-int esbmc_parseoptionst::doit_k_induction(
+int esbmc_parseoptionst::do_bmc_strategy(
   optionst &options,
   goto_functionst &goto_functions)
 {
@@ -1221,122 +1129,59 @@ int esbmc_parseoptionst::doit_k_induction(
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
+  // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    tvt base_case_is_violated =
-      is_base_case_violated(options, goto_functions, k_step);
-    if(base_case_is_violated.is_true())
-      return 1;
-
-    tvt forward_condition_holds =
-      does_forward_condition_hold(options, goto_functions, k_step);
-    if(forward_condition_holds.is_false())
-      return 0;
-
-    // Don't run inductive step for k_step == 1
-    if(k_step > 1)
+    // k-induction
+    if(options.get_bool_option("k-induction"))
     {
-      tvt inductive_step_is_violated =
-        is_inductive_step_violated(options, goto_functions, k_step);
-      if(inductive_step_is_violated.is_false())
+      if(is_base_case_violated(options, goto_functions, k_step).is_true())
+        return 1;
+
+      if(does_forward_condition_hold(options, goto_functions, k_step)
+           .is_false())
         return 0;
+
+      // Don't run inductive step for k_step == 1
+      if(k_step > 1)
+      {
+        if(is_inductive_step_violated(options, goto_functions, k_step)
+             .is_false())
+          return 0;
+      }
+    }
+    // termination
+    if(options.get_bool_option("termination"))
+    {
+      if(does_forward_condition_hold(options, goto_functions, k_step)
+           .is_false())
+        return 0;
+
+      /* Disable this for now as it is causing more than 100 errors on SV-COMP
+      if(!is_inductive_step_violated(options, goto_functions, k_step))
+        return false;
+      */
+    }
+    // incremental-bmc
+    if(options.get_bool_option("incremental-bmc"))
+    {
+      if(is_base_case_violated(options, goto_functions, k_step).is_true())
+        return 1;
+
+      if(does_forward_condition_hold(options, goto_functions, k_step)
+           .is_false())
+        return 0;
+    }
+    // falsification
+    if(options.get_bool_option("falsification"))
+    {
+      if(is_base_case_violated(options, goto_functions, k_step).is_true())
+        return 1;
     }
   }
 
   log_status("Unable to prove or falsify the program, giving up.");
   log_fail("VERIFICATION UNKNOWN");
-
-  return 0;
-}
-
-int esbmc_parseoptionst::doit_falsification(
-  optionst &options,
-  goto_functionst &goto_functions)
-{
-  // Get max number of iterations
-  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
-                        ? UINT_MAX
-                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
-
-  // Get the increment
-  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
-
-  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
-  {
-    tvt base_case_is_violated =
-      is_base_case_violated(options, goto_functions, k_step);
-    if(base_case_is_violated.is_true())
-      return 1;
-  }
-
-  log_status("Unable to prove or falsify the program, giving up.");
-  log_fail("VERIFICATION UNKNOWN");
-
-  return 0;
-}
-
-// Fedor: basically the return of this method is what
-// ESBMC main() returns. So we return 1 if there is a violation of
-// some sort and 0 if verification is unknown or successful
-int esbmc_parseoptionst::doit_incremental(
-  optionst &options,
-  goto_functionst &goto_functions)
-{
-  // Get max number of iterations
-  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
-                        ? UINT_MAX
-                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
-
-  // Get the increment
-  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
-
-  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
-  {
-    tvt base_case_is_violated =
-      is_base_case_violated(options, goto_functions, k_step);
-    if(base_case_is_violated.is_true())
-      return 1;
-
-    tvt forward_condition_holds =
-      does_forward_condition_hold(options, goto_functions, k_step);
-    if(forward_condition_holds.is_false())
-      return 0;
-  }
-
-  log_status("Unable to prove or falsify the program, giving up.");
-  log_fail("VERIFICATION UNKNOWN");
-
-  return 0;
-}
-
-int esbmc_parseoptionst::doit_termination(
-  optionst &options,
-  goto_functionst &goto_functions)
-{
-  // Get max number of iterations
-  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
-                        ? UINT_MAX
-                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
-
-  // Get the increment
-  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
-
-  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
-  {
-    tvt forward_condition_holds =
-      does_forward_condition_hold(options, goto_functions, k_step);
-    if(forward_condition_holds.is_false())
-      return 0;
-
-    /* Disable this for now as it is causing more than 100 errors on SV-COMP
-    if(!is_inductive_step_violated(options, goto_functions, k_step))
-      return false;
-    */
-  }
-
-  log_status("Unable to prove or falsify the program, giving up.");
-  log_fail("VERIFICATION UNKNOWN");
-
   return 0;
 }
 
