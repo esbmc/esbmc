@@ -23,6 +23,14 @@
  * In addition, these guards provide operator support for building
  * - the disjunction of two guards via |=, and
  * - the "difference" of two guards via -=; see there for more details.
+ *
+ * It is important to note that even though conceptually the set of conditions
+ * could indeed be an (unordered) set, the order of the conditions put into
+ * guards actually matters. From <https://github.com/esbmc/esbmc/pull/1297>:
+ *
+ *   The SMT backend relies on the order of operands to cache the converted
+ *   expressions, you'll see huge slowdowns if the order of the guards is not
+ *   stable (we should document it somewhere...).
  */
 class guardt
 {
