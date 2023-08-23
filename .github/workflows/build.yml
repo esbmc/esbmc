@@ -1,7 +1,7 @@
 name: Build ESBMC
 
 on:
-    # Saddly, there is no way to share the inputs between workflow_dispatch and workflow_call
+    # Sadly, there is no way to share the inputs between workflow_dispatch and workflow_call
     workflow_dispatch:
       inputs:
         operating-system:
