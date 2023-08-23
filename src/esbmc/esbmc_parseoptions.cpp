@@ -425,37 +425,16 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
 // This is the main entry point of ESBMC. Here ESBMC performs initialisation
 // of the algorithms that will be run over the GOTO program at later stages
-// and calls the verification strategy specified in the command line:
-//
-//  1) Incremental          (see "doit_incremental")
-//  2) Termination          (see "doit_termination")
-//  3) Falsification        (see "doit_falsification")
-//  4) k-induction          (see "doit_k_induction")
-//  5) Parallel k-induction (see "doit_k_induction_parallel")
-//  6) Default              (see "doit_default")
-//
-// All strategies are implemented as separate methods, and they follow
-// the same sequence of steps:
 //
 //  1) Parse CMD                            (see "get_command_line_options")
 //  2) Create and preprocess a GOTO program (see "get_goto_functions")
 //  3) Set user-specified claims            (see "set_claims")
 //  4) Perform Bounded Model Checking
-//
-// by making calls to different types
-// (see below) of decision problems (as required by the strategy algorithm)
-// for different unwinding bounds. Occasionally the exact unwinding bound
-// can be identified prior to symbolic execution, in which case
-// the maximum unwinding bound "--max-k-step" is ignored.
-//
-// There are three types of decision problems that we solve:
-//
-//  - Base case             (see "is_base_case_violated")
-//  - Forward condition     (see "does_forward_condition_hold")
-//  - Inductive step        (see "is_inductive_step_violated")
-//
-// All they do is setting specific ESBMC options, call "do_bmc" and
-// interpret the obtained result.
+//    - Run a particular verification strategy if specified
+//      in CMD (see "do_bmc_strategy"), or
+//    - Perform a single run of Bounded Model Checking and rely
+//      on the simplifier to determine the sufficient verification bound
+//      (see "do_bmc")
 int esbmc_parseoptionst::doit()
 {
   // Configure msg output
@@ -556,6 +535,9 @@ int esbmc_parseoptionst::doit()
   return do_bmc(bmc);
 }
 
+// This is the parallel version of k-induction algorithm.
+// This is an old implementation and should be revisited sometime in the
+// future.
 int esbmc_parseoptionst::doit_k_induction_parallel()
 {
 #ifdef _WIN32
@@ -1117,6 +1099,26 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   return 0;
 }
 
+// This method iteratively applies one of the verification strategies
+// for different unwinding bounds up to the specified maximum depth.
+//
+// ESBMC features 4 verification strategies:
+//
+//  1) Incremental
+//  2) Termination
+//  3) Falsification
+//  4) k-induction
+//
+// Applying a strategy in this context means solving a paticular sequence
+// of decision problems from the list below for the given unwinding bound k:
+//
+//  - Base case             (see "is_base_case_violated")
+//  - Forward condition     (see "does_forward_condition_hold")
+//  - Inductive step        (see "is_inductive_step_violated")
+//
+// \param options - options for setting the verification strategy
+// and conrolling symbolic execution
+// \param goto_functions - GOTO program under verification
 int esbmc_parseoptionst::do_bmc_strategy(
   optionst &options,
   goto_functionst &goto_functions)
@@ -1192,9 +1194,11 @@ int esbmc_parseoptionst::do_bmc_strategy(
 // \param options - options for controlling the symbolic execution
 // \param goto_function - GOTO program under investigation
 // \param k_step - depth to which all loops in the program are unrolled
-// \return - \True if such assertion violation (i.e., a bug) is found,
-// \False if all reachable assertions hold for all input values
-// in "goto_functions" with all its loops unrolled up to "k_step".
+// \return
+//    TV_TRUE if such assertion violation (i.e., a bug) is found,
+//    TV_FALSE if all reachable assertions hold for all input values
+// in "goto_functions" with all its loops unrolled up to "k_step",
+//    TV_UNKNOWN - otherwise.
 tvt esbmc_parseoptionst::is_base_case_violated(
   optionst &options,
   goto_functionst &goto_functions,
@@ -1238,10 +1242,12 @@ tvt esbmc_parseoptionst::is_base_case_violated(
 // \param options - options for controlling the symbolic execution
 // \param goto_function - GOTO program under investigation
 // \param k_step - depth to which all loops in the program are unrolled
-// \return - \True if there is a set of input values for which at least
+// \return
+//    TV_TRUE if there is a set of input values for which at least
 // one of the loops in the program can be executed more than "k_step" times.
-// \False if all reachable loops have at most "k_step" iterations
+//    TV_FALSE if all reachable loops have at most "k_step" iterations
 // for all input values in "goto_functions".
+//    TV_UNKNOWN - otherwise.
 tvt esbmc_parseoptionst::does_forward_condition_hold(
   optionst &options,
   goto_functionst &goto_functions,
@@ -1305,10 +1311,12 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
 // \param options - options for controlling the symbolic execution
 // \param goto_function - GOTO program under investigation
 // \param k_step - depth to which all loops in the program are unrolled
-// \return - \True if there is a set of values for which all assertions in
+// \return -
+//    TV_TRUE if there is a set of values for which all assertions in
 // all loops hold for the first "k" iterations but not one of the assertions in
 // one of the loops is violated during the "k+1" iterations.
-// \False if the the inductive step holds.
+//    TV_FALSE if the the inductive step holds.
+//    TV_UNKNOWN - otherwise.
 tvt esbmc_parseoptionst::is_inductive_step_violated(
   optionst &options,
   goto_functionst &goto_functions,
