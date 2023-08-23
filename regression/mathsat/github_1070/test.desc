@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 gh-1070.c
 --unwind 1 --mathsat
 ^VERIFICATION FAILED$
