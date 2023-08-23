@@ -35,7 +35,7 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
 bitwuzla_convt::~bitwuzla_convt()
 {
   bitwuzla_delete(bitw);
-  delete bitw_options;
+  bitwuzla_options_delete(bitw_options);
   bitw = nullptr;
   bitw_options = nullptr;
 }
