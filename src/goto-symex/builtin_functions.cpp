@@ -344,13 +344,11 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   new_rhs.operands.erase(new_rhs.operands.begin());
 
   std::list<expr2tc> args;
-  new_rhs.foreach_operand(
-    [this, &args](const expr2tc &e)
-    {
-      expr2tc tmp = e;
-      do_simplify(tmp);
-      args.push_back(tmp);
-    });
+  new_rhs.foreach_operand([this, &args](const expr2tc &e) {
+    expr2tc tmp = e;
+    do_simplify(tmp);
+    args.push_back(tmp);
+  });
 
   if(!is_nil_expr(lhs))
   {
@@ -1203,8 +1201,7 @@ void goto_symext::intrinsic_memset(
 
   // Define a local function for translating to calling the unwinding C
   // implementation of memset
-  auto bump_call = [this, &func_call]() -> void
-  {
+  auto bump_call = [this, &func_call]() -> void {
     // We're going to execute a function call, and that's going to mess with
     // the program counter. Set it back *onto* pointing at this intrinsic, so
     // symex_function_call calculates the right return address. Misery.
