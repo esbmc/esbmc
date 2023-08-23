@@ -322,10 +322,10 @@ expr2tc type_byte_size_bits_expr(const type2tc &type, const namespacet *ns)
 expr2tc type_byte_size_expr(const type2tc &type, const namespacet *ns)
 {
   expr2tc n = type_byte_size_bits_expr(type, ns);
-  if(is_constant_int2t(n))
-    return gen_ulong((to_constant_int2t(n).value + 7) / 8);
-  type2tc s = bitsize_type2();
   type2tc t = size_type2();
+  if(is_constant_int2t(n))
+    return gen_long(t, (to_constant_int2t(n).value + 7) / 8);
+  type2tc s = bitsize_type2();
   return typecast2tc(t, div2tc(s, add2tc(s, n, bitsize(7)), bitsize(8)));
 }
 
