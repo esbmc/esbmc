@@ -468,18 +468,3 @@ const expr2tc &get_base_object(const expr2tc &expr)
 
   return expr;
 }
-
-// Obtain the format string (the first argument) in scanf and printf function
-const irep_idt get_string_argument(const expr2tc &expr)
-{
-  const expr2tc &base_expr = get_base_object(expr);
-
-  if(is_constant_string2t(base_expr))
-    return to_constant_string2t(base_expr).value;
-
-  if(is_symbol2t(base_expr))
-    return to_symbol2t(base_expr).thename;
-
-  log_warning("Obtained empty format string.");
-  return "";
-}

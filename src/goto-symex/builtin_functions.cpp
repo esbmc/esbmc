@@ -349,18 +349,30 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 
   code_printf2t &new_rhs = to_code_printf2t(renamed_rhs);
 
-  // The expr2tc in position 0 is the string format
-  const irep_idt fmt = get_string_argument(new_rhs.operands[0]);
+  // get string format
+  while(!is_constant_string2t(get_base_object(new_rhs.operands[0])))
+  {
+    // fprintf(FILE *__restrict__ __stream, const char *__restrict__ __format, ...)
+    // snprintf(char *__restrict__ __s, size_t __maxlen, const char *__restrict__ __format, ...)
+
+    // pop
+    new_rhs.operands.erase(new_rhs.operands.begin());
+  }
+  const expr2tc &base_expr = get_base_object(new_rhs.operands[0]);
+  assert(is_constant_string2t(base_expr));
+  const irep_idt fmt = to_constant_string2t(base_expr).value;
 
   // Now we pop the format
   new_rhs.operands.erase(new_rhs.operands.begin());
 
   std::list<expr2tc> args;
-  new_rhs.foreach_operand([this, &args](const expr2tc &e) {
-    expr2tc tmp = e;
-    do_simplify(tmp);
-    args.push_back(tmp);
-  });
+  new_rhs.foreach_operand(
+    [this, &args](const expr2tc &e)
+    {
+      expr2tc tmp = e;
+      do_simplify(tmp);
+      args.push_back(tmp);
+    });
 
   if(!is_nil_expr(lhs))
   {
@@ -383,7 +395,9 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       {
         // the current expression "arg" does not hold the value info (might be a bug)
         // thus we need to look it up from the symbol table
-        symbolt s = *ns.lookup(get_string_argument(arg));
+        const expr2tc &base_expr = get_base_object(arg);
+        assert(is_symbol2t(base_expr));
+        symbolt s = *ns.lookup(to_symbol2t(base_expr).thename);
         exprt dest;
         array2string(s, dest);
         migrate_expr(dest, arg);
@@ -1211,7 +1225,8 @@ void goto_symext::intrinsic_memset(
 
   // Define a local function for translating to calling the unwinding C
   // implementation of memset
-  auto bump_call = [this, &func_call]() -> void {
+  auto bump_call = [this, &func_call]() -> void
+  {
     // We're going to execute a function call, and that's going to mess with
     // the program counter. Set it back *onto* pointing at this intrinsic, so
     // symex_function_call calculates the right return address. Misery.
