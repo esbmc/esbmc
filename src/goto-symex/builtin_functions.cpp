@@ -307,6 +307,14 @@ void goto_symext::symex_free(const expr2tc &expr)
       for(auto const &a : allocad)
       {
         expr2tc alloc_obj = get_base_object(a.obj);
+        while(is_if2t(alloc_obj))
+        {
+          const if2t &the_if = to_if2t(alloc_obj);
+          assert(is_symbol2t(the_if.false_value));
+          assert(to_symbol2t(the_if.false_value).thename == "NULL");
+          alloc_obj = get_base_object(the_if.true_value);
+        }
+        assert(is_symbol2t(alloc_obj));
         const irep_idt &id_alloc_obj = to_symbol2t(alloc_obj).thename;
         const irep_idt &id_item_obj = to_symbol2t(item.object).thename;
         // Check if the object allocated with alloca is the same
