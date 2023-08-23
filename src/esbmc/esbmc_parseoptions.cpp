@@ -450,9 +450,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 //
 // There are three types of decision problems that we solve:
 //
-//  - Base case             (see "do_base_case")
-//  - Forward condition     (see "do_forward_condition")
-//  - Inductive step        (see "do_inductive_step")
+//  - Base case             (see "is_base_case_violated")
+//  - Forward condition     (see "does_forward_condition_hold")
+//  - Inductive step        (see "is_inductive_step_violated")
 //
 // All they do is setting specific ESBMC options, call "do_bmc" and
 // interpret the obtained result.
@@ -545,6 +545,7 @@ int esbmc_parseoptionst::doit()
     return 0;
 
   // Now run one of the chosen strategies
+  /*
   if(cmdline.isset("termination"))
     return doit_termination(options, goto_functions);
 
@@ -556,8 +557,87 @@ int esbmc_parseoptionst::doit()
 
   if(cmdline.isset("k-induction"))
     return doit_k_induction(options, goto_functions);
+  */
+
+  if(
+    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("falsification") || cmdline.isset("k-induction"))
+    return do_bmc_strategy(options, goto_functions);
 
   return doit_default(options, goto_functions);
+}
+
+int esbmc_parseoptionst::do_bmc_strategy(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  // Get max number of iterations
+  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
+                        ? UINT_MAX
+                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+
+  // Get the increment
+  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  {
+    // k-induction
+    if(options.get_bool_option("k-induction"))
+    {
+      tvt base_case_is_violated =
+        is_base_case_violated(options, goto_functions, k_step);
+      if(base_case_is_violated.is_true())
+        return 1;
+
+      tvt forward_condition_holds =
+        does_forward_condition_hold(options, goto_functions, k_step);
+      if(forward_condition_holds.is_false())
+        return 0;
+
+      // Don't run inductive step for k_step == 1
+      if(k_step > 1)
+      {
+        tvt inductive_step_is_violated =
+          is_inductive_step_violated(options, goto_functions, k_step);
+        if(inductive_step_is_violated.is_false())
+          return 0;
+      }
+    }
+    // termination
+    if(options.get_bool_option("termination"))
+    {
+      tvt forward_condition_holds =
+        does_forward_condition_hold(options, goto_functions, k_step);
+      if(forward_condition_holds.is_false())
+        return 0;
+    }
+    // incremental-bmc
+    if(options.get_bool_option("incremental-bmc"))
+    {
+      tvt base_case_is_violated =
+        is_base_case_violated(options, goto_functions, k_step);
+      if(base_case_is_violated.is_true())
+        return 1;
+
+      tvt forward_condition_holds =
+        does_forward_condition_hold(options, goto_functions, k_step);
+      if(forward_condition_holds.is_false())
+        return 0;
+    }
+    // falsification
+    if(options.get_bool_option("falsification"))
+    {
+      tvt base_case_is_violated =
+        is_base_case_violated(options, goto_functions, k_step);
+      if(base_case_is_violated.is_true())
+        return 1;
+    }
+  }
+
+  log_status("Unable to prove or falsify the program, giving up.");
+  log_fail("VERIFICATION UNKNOWN");
+
+  return 0;
 }
 
 int esbmc_parseoptionst::doit_default(
@@ -1143,14 +1223,24 @@ int esbmc_parseoptionst::doit_k_induction(
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    if(do_base_case(options, goto_functions, k_step))
-      return true;
+    tvt base_case_is_violated =
+      is_base_case_violated(options, goto_functions, k_step);
+    if(base_case_is_violated.is_true())
+      return 1;
 
-    if(!do_forward_condition(options, goto_functions, k_step))
-      return false;
+    tvt forward_condition_holds =
+      does_forward_condition_hold(options, goto_functions, k_step);
+    if(forward_condition_holds.is_false())
+      return 0;
 
-    if(!do_inductive_step(options, goto_functions, k_step))
-      return false;
+    // Don't run inductive step for k_step == 1
+    if(k_step > 1)
+    {
+      tvt inductive_step_is_violated =
+        is_inductive_step_violated(options, goto_functions, k_step);
+      if(inductive_step_is_violated.is_false())
+        return 0;
+    }
   }
 
   log_status("Unable to prove or falsify the program, giving up.");
@@ -1173,8 +1263,10 @@ int esbmc_parseoptionst::doit_falsification(
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    if(do_base_case(options, goto_functions, k_step))
-      return true;
+    tvt base_case_is_violated =
+      is_base_case_violated(options, goto_functions, k_step);
+    if(base_case_is_violated.is_true())
+      return 1;
   }
 
   log_status("Unable to prove or falsify the program, giving up.");
@@ -1183,6 +1275,9 @@ int esbmc_parseoptionst::doit_falsification(
   return 0;
 }
 
+// Fedor: basically the return of this method is what
+// ESBMC main() returns. So we return 1 if there is a violation of
+// some sort and 0 if verification is unknown or successful
 int esbmc_parseoptionst::doit_incremental(
   optionst &options,
   goto_functionst &goto_functions)
@@ -1197,11 +1292,15 @@ int esbmc_parseoptionst::doit_incremental(
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    if(do_base_case(options, goto_functions, k_step))
-      return true;
+    tvt base_case_is_violated =
+      is_base_case_violated(options, goto_functions, k_step);
+    if(base_case_is_violated.is_true())
+      return 1;
 
-    if(!do_forward_condition(options, goto_functions, k_step))
-      return false;
+    tvt forward_condition_holds =
+      does_forward_condition_hold(options, goto_functions, k_step);
+    if(forward_condition_holds.is_false())
+      return 0;
   }
 
   log_status("Unable to prove or falsify the program, giving up.");
@@ -1224,11 +1323,13 @@ int esbmc_parseoptionst::doit_termination(
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    if(!do_forward_condition(options, goto_functions, k_step))
-      return false;
+    tvt forward_condition_holds =
+      does_forward_condition_hold(options, goto_functions, k_step);
+    if(forward_condition_holds.is_false())
+      return 0;
 
     /* Disable this for now as it is causing more than 100 errors on SV-COMP
-    if(!do_inductive_step(options, goto_functions, k_step))
+    if(!is_inductive_step_violated(options, goto_functions, k_step))
       return false;
     */
   }
@@ -1249,7 +1350,7 @@ int esbmc_parseoptionst::doit_termination(
 // \return - \True if such assertion violation (i.e., a bug) is found,
 // \False if all reachable assertions hold for all input values
 // in "goto_functions" with all its loops unrolled up to "k_step".
-int esbmc_parseoptionst::do_base_case(
+tvt esbmc_parseoptionst::is_base_case_violated(
   optionst &options,
   goto_functionst &goto_functions,
   const BigInt &k_step)
@@ -1257,32 +1358,32 @@ int esbmc_parseoptionst::do_base_case(
   options.set_option("base-case", true);
   options.set_option("forward-condition", false);
   options.set_option("inductive-step", false);
-
   options.set_option("no-unwinding-assertions", true);
   options.set_option("partial-loops", false);
+  options.set_option("unwind", integer2string(k_step));
 
   bmct bmc(goto_functions, options, context);
-
-  bmc.options.set_option("unwind", integer2string(k_step));
 
   log_status("Checking base case, k = {:d}", k_step);
   switch(do_bmc(bmc))
   {
   case smt_convt::P_UNSATISFIABLE:
+    return tvt(tvt::TV_FALSE);
+
   case smt_convt::P_SMTLIB:
   case smt_convt::P_ERROR:
     break;
 
   case smt_convt::P_SATISFIABLE:
     log_result("\nBug found (k = {:d})", k_step);
-    return true;
+    return tvt(tvt::TV_TRUE);
 
   default:
     log_result("Unknown BMC result");
     abort();
   }
 
-  return false;
+  return tvt(tvt::TV_UNKNOWN);
 }
 
 // This checks whether "there is a set of inputs for which one of the loop
@@ -1293,21 +1394,20 @@ int esbmc_parseoptionst::do_base_case(
 // \param goto_function - GOTO program under investigation
 // \param k_step - depth to which all loops in the program are unrolled
 // \return - \True if there is a set of input values for which at least
-// one of the loops in the program can be executed more than "k_step" times,
+// one of the loops in the program can be executed more than "k_step" times.
 // \False if all reachable loops have at most "k_step" iterations
 // for all input values in "goto_functions".
-int esbmc_parseoptionst::do_forward_condition(
+tvt esbmc_parseoptionst::does_forward_condition_hold(
   optionst &options,
   goto_functionst &goto_functions,
   const BigInt &k_step)
 {
   if(options.get_bool_option("disable-forward-condition"))
-    return true;
+    return tvt(tvt::TV_UNKNOWN);
 
   options.set_option("base-case", false);
   options.set_option("forward-condition", true);
   options.set_option("inductive-step", false);
-
   options.set_option("no-unwinding-assertions", false);
   options.set_option("partial-loops", false);
 
@@ -1317,21 +1417,21 @@ int esbmc_parseoptionst::do_forward_condition(
 
   // Turn assertions off
   options.set_option("no-assertions", true);
+  options.set_option("unwind", integer2string(k_step));
 
   bmct bmc(goto_functions, options, context);
-
-  bmc.options.set_option("unwind", integer2string(k_step));
 
   log_progress("Checking forward condition, k = {:d}", k_step);
   auto res = do_bmc(bmc);
 
   // Restore the no assertion flag, before checking the other steps
-
   options.set_option("no-assertions", no_assertions);
 
   switch(res)
   {
   case smt_convt::P_SATISFIABLE:
+    return tvt(tvt::TV_TRUE);
+
   case smt_convt::P_SMTLIB:
   case smt_convt::P_ERROR:
     break;
@@ -1341,54 +1441,57 @@ int esbmc_parseoptionst::do_forward_condition(
       "\nSolution found by the forward condition; "
       "all states are reachable (k = {:d})",
       k_step);
-    return false;
+    return tvt(tvt::TV_FALSE);
 
   default:
     log_fail("Unknown BMC result");
     abort();
   }
 
-  return true;
+  return tvt(tvt::TV_UNKNOWN);
 }
 
-// This checks whether "[Fedor: TODO]".
+// This tries to prove the inductive step: "assuming nondeterministic
+// inputs for every loop, and assuming that all assertions hold for
+// the first k iterations of every loop, all assertions will also hold
+// when all loops in the program are unrolled to k+1."
+// ("Loop inputs" are the variables whose values change inside the loop.)
 //
 // \param options - options for controlling the symbolic execution
 // \param goto_function - GOTO program under investigation
 // \param k_step - depth to which all loops in the program are unrolled
-// \return - \True if [Fedor: TODO],
-// \False if [Fedor: TODO].
-int esbmc_parseoptionst::do_inductive_step(
+// \return - \True if there is a set of values for which all assertions in
+// all loops hold for the first "k" iterations but not one of the assertions in
+// one of the loops is violated during the "k+1" iterations.
+// \False if the the inductive step holds.
+tvt esbmc_parseoptionst::is_inductive_step_violated(
   optionst &options,
   goto_functionst &goto_functions,
   const BigInt &k_step)
 {
-  // Don't run inductive step for k_step == 1
-  if(k_step == 1)
-    return true;
-
   if(options.get_bool_option("disable-inductive-step"))
-    return true;
+    return tvt(tvt::TV_UNKNOWN);
 
   if(
     strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) <
     k_step.to_uint64())
-    return true;
+    return tvt(tvt::TV_UNKNOWN);
 
   options.set_option("base-case", false);
   options.set_option("forward-condition", false);
   options.set_option("inductive-step", true);
-
   options.set_option("no-unwinding-assertions", true);
   options.set_option("partial-loops", true);
+  options.set_option("unwind", integer2string(k_step));
 
   bmct bmc(goto_functions, options, context);
-  bmc.options.set_option("unwind", integer2string(k_step));
 
   log_progress("Checking inductive step, k = {:d}", k_step);
   switch(do_bmc(bmc))
   {
   case smt_convt::P_SATISFIABLE:
+    return tvt(tvt::TV_TRUE);
+
   case smt_convt::P_SMTLIB:
   case smt_convt::P_ERROR:
     break;
@@ -1398,14 +1501,14 @@ int esbmc_parseoptionst::do_inductive_step(
       "\nSolution found by the inductive step "
       "(k = {:d})",
       k_step);
-    return false;
+    return tvt(tvt::TV_FALSE);
 
   default:
     log_fail("Unknown BMC result\n");
     abort();
   }
 
-  return true;
+  return tvt(tvt::TV_UNKNOWN);
 }
 
 // This is a wrapper method that does a single round of
@@ -1743,6 +1846,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     goto_check(ns, options, goto_functions);
 
+    // Fedor: introduce an option for disabling these two
     remove_no_op(goto_functions);
     remove_unreachable(goto_functions);
     goto_functions.update();
