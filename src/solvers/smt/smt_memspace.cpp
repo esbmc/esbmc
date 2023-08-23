@@ -158,7 +158,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     type2tc inttype = machine_ptr;
     type2tc difftype = get_int_type(config.ansi_c.address_width);
 
-    if(non_ptr_op->type->get_width() < config.ansi_c.pointer_width())
+    if(non_ptr_op->type->get_width() != config.ansi_c.pointer_width())
       non_ptr_op = typecast2tc(machine_ptr, non_ptr_op);
 
     expr2tc mul = mul2tc(inttype, non_ptr_op, pointee_size);
