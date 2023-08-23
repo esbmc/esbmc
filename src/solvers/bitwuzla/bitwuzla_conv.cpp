@@ -672,7 +672,7 @@ expr2tc bitwuzla_convt::get_array_elem(
   const type2tc &subtype)
 {
   const bitw_smt_ast *za = to_solver_smt_ast<bitw_smt_ast>(array);
-  unsigned long array_bound = array->sort->get_domain_width();
+  size_t array_bound = array->sort->get_domain_width();
   const bitw_smt_ast *idx;
   if(int_encoding)
     idx = to_solver_smt_ast<bitw_smt_ast>(mk_smt_int(BigInt(index)));
