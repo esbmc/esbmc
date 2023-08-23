@@ -1648,8 +1648,11 @@ bool esbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     // Start by removing all no-op instructions and unreachable code
-    remove_no_op(goto_functions);
-    remove_unreachable(goto_functions);
+    if(!cmdline.isset("no-remove-no-op"))
+      remove_no_op(goto_functions);
+
+    if(!cmdline.isset("no-remove-unreachable"))
+      remove_unreachable(goto_functions);
 
     // Apply all the initialized algorithms
     for(auto &algorithm : goto_preprocess_algorithms)
@@ -1673,8 +1676,8 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
       cmdline.isset("k-induction-parallel"))
     {
-      // remove skips before doing k-induction
-      // it seems to fix some issues
+      // Always remove skips before doing k-induction.
+      // It seems to fix some issues for now
       remove_no_op(goto_functions);
       goto_k_induction(goto_functions);
     }
@@ -1699,9 +1702,14 @@ bool esbmc_parseoptionst::process_goto_program(
 
     goto_check(ns, options, goto_functions);
 
-    // Fedor: introduce an option for disabling these two
-    remove_no_op(goto_functions);
-    remove_unreachable(goto_functions);
+    // Once again, remove all unreachable and no-op code that could have been
+    // introduced by the above algorithms
+    if(!cmdline.isset("no-remove-no-op"))
+      remove_no_op(goto_functions);
+
+    if(!cmdline.isset("no-remove-unreachable"))
+      remove_unreachable(goto_functions);
+
     goto_functions.update();
 
     if(cmdline.isset("data-races-check"))
