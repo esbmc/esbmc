@@ -6,7 +6,7 @@
 #include <util/namespace.h>
 #include <util/options.h>
 
-// to invoke "get_string_argument()" for input overflow checks
+// to invoke "get_base_object" for input overflow checks
 #include <util/type_byte_size.h>
 
 void goto_check(
