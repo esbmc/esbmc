@@ -58,7 +58,9 @@ protected:
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node);
   bool get_function_params(const nlohmann::json &pd, exprt &param);
+  bool get_default_function(const std::string name, const std::string id);
   bool get_struct_class(const nlohmann::json &ast_node);
+  void add_enum_member_val(nlohmann::json &ast_node);
   bool add_implicit_constructor();
   bool get_implicit_ctor_call(const int ref_decl_id, exprt &new_expr);
   bool
@@ -92,6 +94,7 @@ protected:
     const nlohmann::json int_literal_type = nullptr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
+  bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
   bool get_func_decl_ref_type(const nlohmann::json &decl, typet &new_type);
@@ -168,6 +171,8 @@ protected:
     std::string the_value,
     exprt &dest);
   bool convert_string_literal(std::string the_value, exprt &dest);
+  void convert_type_expr(const namespacet &ns, exprt &dest, const typet &type);
+  bool convert_hex_literal(std::string the_value, exprt &dest, const int n = 0);
 
   static constexpr const char *mode = "C++";
 
@@ -185,6 +190,9 @@ private:
     SolidityGrammar::ElementaryTypeNameT &type,
     typet &out);
   bool get_elementary_type_name_int(
+    SolidityGrammar::ElementaryTypeNameT &type,
+    typet &out);
+  bool get_elementary_type_name_bytesn(
     SolidityGrammar::ElementaryTypeNameT &type,
     typet &out);
 };
