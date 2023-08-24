@@ -99,6 +99,10 @@ void cse_domaint::make_expression_available(const expr2tc &E)
   if(is_constant(E) || is_symbol2t(E))
     return;
 
+  // I hate floats
+  if(is_floatbv_type(E))
+    return;
+
   // Did we check it already?
   if(available_expressions.count(E))
     return;
@@ -136,6 +140,10 @@ bool cse_domaint::should_remove_expr(const expr2tc &taint, const expr2tc &E)
 bool cse_domaint::should_remove_expr(const irep_idt &sym, const expr2tc &E)
   const
 {
+  // Not sure how this can happens
+  if(!E)
+    return false;
+  
   if(is_symbol2t(E) && to_symbol2t(E).thename == sym)
     return true;
 
