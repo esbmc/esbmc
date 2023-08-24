@@ -28,7 +28,7 @@ bool language_uit::parse(const std::string &filename)
 
   if(mode < 0)
   {
-    log_error("failed to figure out type of file", filename);
+    log_error("failed to figure out type of file {}", filename);
     return true;
   }
 
@@ -48,7 +48,7 @@ bool language_uit::parse(const std::string &filename)
   std::ifstream infile(filename.c_str());
   if(!infile)
   {
-    log_error("failed to open input file", filename);
+    log_error("failed to open input file {}", filename);
     return true;
   }
 
@@ -64,7 +64,7 @@ bool language_uit::parse(const std::string &filename)
   lf.language = mode_table[mode].new_language();
   languaget &language = *lf.language;
 
-  log_progress("Parsing", filename);
+  log_progress("Parsing {}", filename);
 
 #ifdef ENABLE_SOLIDITY_FRONTEND
   if(mode == get_mode(language_idt::SOLIDITY))

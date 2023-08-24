@@ -10,27 +10,18 @@ else()
             NAME bitwuzla
             DOWNLOAD_ONLY YES
             GITHUB_REPOSITORY bitwuzla/bitwuzla
-            GIT_TAG smtcomp-2021)
+            GIT_TAG 0.1.1)
+	  
+	  message("[bitwuzla] Source-dir: ${bitwuzla_SOURCE_DIR} ")
+        message("[bitwuzla] Configuring project:  ./configure.py --prefix ${bitwuzla_BINARY_DIR}")
+        execute_process(COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR}
+          WORKING_DIRECTORY "${bitwuzla_SOURCE_DIR}")
 
-        message("[bitwuzla] Setting up lingeling")
-        execute_process(COMMAND "./contrib/setup-lingeling.sh"
-            WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR})
-
-        message("[bitwuzla] Setting up btor2tools")
-        execute_process(COMMAND "./contrib/setup-btor2tools.sh"
-            WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR})
-
-        message("[bitwuzla] Setting up symfpu")
-        execute_process(COMMAND "./contrib/setup-symfpu.sh"
-            WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR})
-
-        message("[bitwuzla] Configuring build")
-        execute_process(COMMAND ${bitwuzla_SOURCE_DIR}/configure.sh --prefix ${bitwuzla_BINARY_DIR}
-            WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR})
-
+	
         message("[bitwuzla] Building...")
-        execute_process(COMMAND make -j4 install
-            WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR}/build)
+        execute_process(COMMAND meson install
+          WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR}/build
+	  COMMAND_ECHO STDOUT)
 
         set(Bitwuzla_DIR ${bitwuzla_BINARY_DIR})
     endif()
@@ -42,10 +33,20 @@ if(EXISTS $ENV{HOME}/bitwuzla)
 endif()
 
 if(ENABLE_BITWUZLA)
-    find_package(Bitwuzla REQUIRED
-            HINTS ${Bitwuzla_DIR}/lib/cmake $ENV{HOME}/bitwuzla)
+  
+  if(Bitwuzla_DIR)
+    # We need to tell cmake where to look for the .pc file exported by bitwuzla
+    list(APPEND CMAKE_PREFIX_PATH "${Bitwuzla_DIR}")
+  endif()
 
-    message(STATUS "Found Bitwuzla at: ${Bitwuzla_DIR}")
+  include(FindPkgConfig)
+  pkg_check_modules(Bitwuzla REQUIRED IMPORTED_TARGET bitwuzla)
+
+  if(NOT Bitwuzla_FOUND)
+    message(ERROR "Could not find Bitwuzla in '${Bitwuzla_DIR}'")
+  endif()
+
+    message(STATUS "Found Bitwuzla at: ${Bitwuzla_PREFIX}")
     message(STATUS "Bitwuzla version: ${Bitwuzla_VERSION}")
     if(Bitwuzla_VERSION VERSION_LESS Bitwuzla_MIN_VERSION)
         message(FATAL_ERROR "Expected version ${Bitwuzla_MIN_VERSION} or greater")
@@ -55,7 +56,7 @@ if(ENABLE_BITWUZLA)
     target_include_directories(solverbitw
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solverbitw fmt::fmt Bitwuzla::bitwuzla)
+    target_link_libraries(solverbitw fmt::fmt PkgConfig::Bitwuzla)
 
     target_link_libraries(solvers INTERFACE solverbitw)
 

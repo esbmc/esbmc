@@ -8,6 +8,7 @@
 #include <util/options.h>
 #include <util/parseoptions.h>
 #include <util/algorithms.h>
+#include <util/threeval.h>
 
 extern const struct group_opt_templ all_cmd_options[];
 
@@ -46,25 +47,22 @@ protected:
   virtual bool
   output_goto_program(optionst &options, goto_functionst &goto_functions);
 
-  int doit_k_induction();
+  int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
+
   int doit_k_induction_parallel();
 
-  int doit_falsification();
-  int doit_incremental();
-  int doit_termination();
-
-  int do_base_case(
-    optionst &opts,
+  tvt is_base_case_violated(
+    optionst &options,
     goto_functionst &goto_functions,
     const BigInt &k_step);
 
-  int do_forward_condition(
-    optionst &opts,
+  tvt does_forward_condition_hold(
+    optionst &options,
     goto_functionst &goto_functions,
     const BigInt &k_step);
 
-  int do_inductive_step(
-    optionst &opts,
+  tvt is_inductive_step_violated(
+    optionst &options,
     goto_functionst &goto_functions,
     const BigInt &k_step);
 

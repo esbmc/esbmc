@@ -77,7 +77,6 @@ def run(cmd_line):
   p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   (stdout, stderr) = p.communicate()
 
-  print(stdout.decode())
   print(stderr.decode())
 
   return stderr
