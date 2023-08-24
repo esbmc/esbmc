@@ -117,18 +117,24 @@ expr2tc goto_symext::symex_mem(
   expr2tc size = code.size;
   bool size_is_one = false;
 
+  if(is_nil_type(type))
+    type = char_type2();
+
   if(is_nil_expr(size))
     size_is_one = true;
   else
   {
     cur_state->rename(size);
     BigInt i;
-    if(is_constant_int2t(size) && to_constant_int2t(size).as_ulong() == 1)
-      size_is_one = true;
+    if(is_constant_int2t(size))
+    {
+      uint64_t v = to_constant_int2t(size).value.to_uint64();
+      if(v == 1)
+        size_is_one = true;
+      else if(v == 0 && options.get_bool_option("malloc-zero-is-null"))
+        return symbol2tc(pointer_type2tc(type), "NULL");
+    }
   }
-
-  if(is_nil_type(type))
-    type = char_type2();
 
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
@@ -184,6 +190,14 @@ expr2tc goto_symext::symex_mem(
   expr2tc rhs = rhs_addrof;
   expr2tc ptr_rhs = rhs;
   guardt alloc_guard = cur_state->guard;
+
+  if(options.get_bool_option("malloc-zero-is-null"))
+  {
+    expr2tc null_sym = symbol2tc(rhs->type, "NULL");
+    expr2tc choice = greaterthan2tc(size, gen_long(size->type, 0));
+    alloc_guard.add(choice);
+    rhs = if2tc(rhs->type, choice, rhs, null_sym);
+  }
 
   if(!options.get_bool_option("force-malloc-success") && is_malloc)
   {
@@ -293,6 +307,14 @@ void goto_symext::symex_free(const expr2tc &expr)
       for(auto const &a : allocad)
       {
         expr2tc alloc_obj = get_base_object(a.obj);
+        while(is_if2t(alloc_obj))
+        {
+          const if2t &the_if = to_if2t(alloc_obj);
+          assert(is_symbol2t(the_if.false_value));
+          assert(to_symbol2t(the_if.false_value).thename == "NULL");
+          alloc_obj = get_base_object(the_if.true_value);
+        }
+        assert(is_symbol2t(alloc_obj));
         const irep_idt &id_alloc_obj = to_symbol2t(alloc_obj).thename;
         const irep_idt &id_item_obj = to_symbol2t(item.object).thename;
         // Check if the object allocated with alloca is the same
