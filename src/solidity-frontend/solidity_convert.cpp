@@ -3165,11 +3165,6 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(
       std::regex e("returns \\((\\w+)\\)");
       std::string typeString = type_descrpt["typeString"].get<std::string>();
       if(std::regex_search(typeString, matches, e))
-      // use regex to capture the type and convert it to shorter form.
-      std::smatch matches;
-      std::regex e("returns \\((\\w+)\\)");
-      std::string typeString = type_descrpt["typeString"].get<std::string>();
-      if(std::regex_search(typeString, matches, e))
       {
         auto j2 = nlohmann::json::parse(
           R"({
