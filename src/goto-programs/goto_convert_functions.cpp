@@ -257,20 +257,24 @@ struct context_type_grapht
       const exprt *expr;
     } object;
 
-    explicit nodet(const contextt *ctx) : object{.context = ctx}
+    explicit nodet(const contextt *ctx)
     {
+      object.context = ctx;
     }
 
-    explicit nodet(const symbolt *sym) : object{.symbol = sym}
+    explicit nodet(const symbolt *sym)
     {
+      object.symbol = sym;
     }
 
-    explicit nodet(const typet *type) : object{.type = type}
+    explicit nodet(const typet *type)
     {
+      object.type = type;
     }
 
-    explicit nodet(const exprt *expr) : object{.expr = expr}
+    explicit nodet(const exprt *expr)
     {
+      object.expr = expr;
     }
 
     std::vector<edge> adj;
