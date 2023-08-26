@@ -331,50 +331,31 @@ struct context_type_grapht
 
   node_id add_all(const contextt &ctx)
   {
+    /* Add root node */
     node_id v = add_node(&ctx);
+
+    /* First put all symbol nodes into the graph and record a mapping from
+     * symbol id to the node id. This will be used when collecting symbolic
+     * types and therefore needs to be done before we start interpreting
+     * expressions and types. */
     symbolst symbols;
     ctx.foreach_operand_in_order([this, v, &symbols](const symbolt &symbol) {
       node_id w = add_node(&symbol);
       symbols[symbol.id] = w;
       add_edge(v, {}, w);
     });
-    ctx.foreach_operand_in_order(
-      [this, &symbols](const symbolt &symbol) { collect(symbols, symbol); });
-    return v;
-  }
 
-  node_id collect(symbolst &syms, const symbolt &sym)
-  {
-    node_id v = syms.find(sym.id)->second;
-    add_edge(v, "value", add_all(syms, sym.value));
-    add_edge(v, "type", add_all(syms, sym.type));
-    return v;
-  }
+    /* Now that the map is filled, add expressions and types as nodes,
+     * recursively. */
+    for(const edge &e : adj(v))
+    {
+      node_id w = e.target;
+      const symbolt *sym = (*this)[w].symbol;
+      add_edge(w, "value", add_all(symbols, sym->value));
+      add_edge(w, "type", add_all(symbols, sym->type));
+    }
 
-  void collect(const symbolst &syms, node_id v, const irept &term, bool is_type)
-  {
-    forall_irep(it, term.get_sub())
-      collect(syms, v, *it, false);
-    forall_named_irep(it, term.get_named_sub())
-    {
-      if(denotes_thrashable_subtype(it->first))
-        add_edge(
-          v, it->first, add_all(syms, static_cast<const typet &>(it->second)));
-      else if(
-        is_type && term.id() == typet::t_symbol &&
-        it->first == typet::a_identifier)
-        add_edge(v, term.id(), syms.find(it->second.id())->second);
-      else
-        collect(syms, v, it->second, false);
-    }
-    forall_named_irep(it, term.get_comments())
-    {
-      if(denotes_thrashable_subtype(it->first))
-        add_edge(
-          v, it->first, add_all(syms, static_cast<const typet &>(it->second)));
-      else
-        collect(syms, v, it->second, false);
-    }
+    return v;
   }
 
   node_id add_all(const symbolst &syms, const exprt &e)
@@ -390,12 +371,59 @@ struct context_type_grapht
     collect(syms, v, t, true);
     return v;
   }
+
+  void collect(const symbolst &syms, node_id v, const irept &term, bool is_type)
+  {
+    /* Recurse through all the elements of the three component sets that make up
+     * an irept:
+     * - sub
+     * - named_sub
+     * - comments
+     *
+     * For each labelled element that denotes a (potentially thrashable) type,
+     * record a new node in the graph and connect it to the given node 'v'.
+     * In case the term is a "symbol" and we know it is in context of a type
+     * (in contrast to a symbol-expression), look up the node corresponding to
+     * the symbol and connect it, too.
+     *
+     * All other elements are not getting their own nodes since there is no
+     * generic way of determining whether they are expressions or something
+     * else.
+     */
+
+    forall_irep(it, term.get_sub())
+      collect(syms, v, *it, false);
+
+    forall_named_irep(it, term.get_named_sub())
+    {
+      if(denotes_thrashable_subtype(it->first))
+        add_edge(
+          v, it->first, add_all(syms, static_cast<const typet &>(it->second)));
+      else if(
+        is_type && term.id() == typet::t_symbol &&
+        it->first == typet::a_identifier)
+        add_edge(v, term.id(), syms.find(it->second.id())->second);
+      else
+        collect(syms, v, it->second, false);
+    }
+
+    forall_named_irep(it, term.get_comments())
+    {
+      if(denotes_thrashable_subtype(it->first))
+        add_edge(
+          v, it->first, add_all(syms, static_cast<const typet &>(it->second)));
+      else
+        collect(syms, v, it->second, false);
+    }
+  }
 };
 
+/* Map taking peculiarities of the graph into account, in particular the
+ * indexing with node_id. */
 template <typename T>
 struct node_map
 {
-  std::array<std::vector<T>,context_type_grapht::N_NODE_TYPES> vecs;
+  std::array<std::vector<T>, context_type_grapht::N_NODE_TYPES> vecs;
 
   explicit node_map(const context_type_grapht &G, const T &init = {})
   {
@@ -583,6 +611,23 @@ void goto_convert_functionst::wallop_type(
 using node_id = context_type_grapht::node_id;
 using edge = context_type_grapht::edge;
 
+/* Support node_id hashing using types in std */
+namespace std
+{
+template <>
+struct hash<node_id> : hash<size_t>
+{
+  static_assert(sizeof(node_id) == sizeof(size_t));
+
+  size_t operator()(const node_id &v) const noexcept
+  {
+    size_t w;
+    memcpy(&w, &v, sizeof(w));
+    return hash<size_t>::operator()(w); // this is basically a no-op
+  }
+};
+} // namespace std
+
 namespace
 {
 struct sccst /* strongly connected components */
@@ -600,7 +645,7 @@ struct sccst /* strongly connected components */
   std::vector<node_id> stack;
   size_t index = 0;
 
-  std::unordered_set<irep_idt, irep_id_hash> large_scc_syms;
+  std::unordered_set<node_id> large_scc_syms;
 
   sccst(const context_type_grapht &G) : G(G), data(G)
   {
@@ -653,10 +698,9 @@ struct sccst /* strongly connected components */
     for(node_id w : scc)
       if(w.type == context_type_grapht::SYMBOL)
       {
-        const symbolt *sym = G[w].symbol;
-        large_scc_syms.emplace(sym->id);
+        large_scc_syms.emplace(w);
         if(f)
-          fprintf(f, " %s", sym->id.c_str());
+          fprintf(f, " %s", G[w].symbol->id.c_str());
       }
     if(f)
       fprintf(f, "\n");
@@ -686,10 +730,13 @@ void goto_convert_functionst::thrash_type_symbols()
 
   context_type_grapht G;
   node_id root = G.add_all(context);
+
   sccst sccs(G);
   sccs.tarjan(root);
-  const std::unordered_set<irep_idt, irep_id_hash> &avoid = sccs.large_scc_syms;
+
+  const std::unordered_set<node_id> &avoid = sccs.large_scc_syms;
   G.forall_nodes(context_type_grapht::TYPE, [&G, &avoid](node_id v) {
+    const symbolt *replace = nullptr;
     for(const edge &e : G.adj(v))
     {
       node_id w = e.target;
@@ -698,10 +745,25 @@ void goto_convert_functionst::thrash_type_symbols()
       assert(w.type == context_type_grapht::SYMBOL);
       const symbolt *sym = G[w].symbol;
       assert(sym->is_type);
-      if(avoid.find(sym->id) != avoid.end())
+
+      /* If the symbol is a large SCC that means it somewhere refers to itself,
+       * i.e., there is a cycle. These cycles break many algorithms down the
+       * line such as migrate or the irep1 simplifier (and irep2, though that
+       * would need migrate to work).
+       */
+      if(avoid.find(w) != avoid.end())
         continue;
-      *const_cast<typet *>(G[v].type) = sym->type;
+
+      replace = sym;
+      break;
     }
+    if(!replace)
+      return;
+
+    /* Replace the type; note: this is not using the irept API and therefore
+     * no "detatch()" is being performed. We are, after all, changing the
+     * entire graph. */
+    *const_cast<typet *>(G[v].type) = replace->type;
   });
 
   /* Original algorithm */
