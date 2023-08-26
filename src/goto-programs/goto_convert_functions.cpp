@@ -249,7 +249,7 @@ struct context_type_grapht
 
   struct nodet
   {
-    union
+    union valuet
     {
       const contextt *context;
       const symbolt *symbol;
@@ -283,14 +283,14 @@ struct context_type_grapht
   std::vector<nodet> Vs[N_NODE_TYPES];
 
   template <typename F>
-  void forall_nodes(node_typet type, F && f)
+  void forall_nodes(node_typet type, F && f) const
   {
     for(size_t j = 0; j < Vs[type].size(); j++)
       f(node_id{type, j});
   }
 
   template <typename F>
-  void forall_nodes(F &&f)
+  void forall_nodes(F &&f) const
   {
     for(size_t i = 0; i < N_NODE_TYPES; i++)
       forall_nodes((node_typet)i, f)
@@ -317,7 +317,7 @@ struct context_type_grapht
     return Vs[v.type][v.idx];
   }
 
-  const auto &operator[](node_id v) const
+  const nodet::valuet &operator[](node_id v) const
   {
     return node(v).object;
   }
@@ -360,8 +360,10 @@ struct context_type_grapht
       if(denotes_thrashable_subtype(it->first))
         add_edge(
           v, it->first, add_all(syms, static_cast<const typet &>(it->second)));
-      else if(is_type && term.id() == "symbol")
-        add_edge(v, term.id(), syms.find(term.identifier())->second);
+      else if(
+        is_type && term.id() == typet::t_symbol &&
+        it->first == typet::a_identifier)
+        add_edge(v, term.id(), syms.find(it->second.id())->second);
       else
         collect(syms, v, it->second, false);
     }
@@ -393,15 +395,20 @@ struct context_type_grapht
 template <typename T>
 struct node_map
 {
-  std::vector<T> vecs[context_type_grapht::N_NODE_TYPES];
+  std::array<std::vector<T>,context_type_grapht::N_NODE_TYPES> vecs;
 
-  node_map(const context_type_grapht &G)
+  explicit node_map(const context_type_grapht &G, const T &init = {})
   {
     for(size_t i = 0; i < context_type_grapht::N_NODE_TYPES; i++)
-      vecs[i].resize(G.Vs[i].size());
+      vecs[i].resize(G.Vs[i].size(), init);
   }
 
   T &operator[](context_type_grapht::node_id v)
+  {
+    return vecs[v.type][v.idx];
+  }
+
+  const T &operator[](context_type_grapht::node_id v) const
   {
     return vecs[v.type][v.idx];
   }
