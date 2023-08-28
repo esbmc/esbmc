@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function setData --contract contract.sol
+--function setData --sol contract.sol
 ^VERIFICATION SUCCESSFUL$
