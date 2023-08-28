@@ -99,6 +99,11 @@ void cse_domaint::make_expression_available(const expr2tc &E)
   if(is_constant(E) || is_symbol2t(E))
     return;
 
+  // Skip nondets
+  if(is_sideeffect2t(E) && to_sideeffect2t(E).kind == sideeffect_data::allockind::nondet)
+    return;
+
+
   // I hate floats
   if(is_floatbv_type(E))
     return;
