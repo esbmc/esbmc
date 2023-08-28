@@ -1,4 +1,4 @@
 KNOWNBUG
 contract.solast
---function comp --contract contract.sol --unwind 1
+--function comp --sol contract.sol --unwind 1
 ^VERIFICATION SUCCESSFUL$

@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function setLarge --contract contract.sol
+--function setLarge --sol contract.sol
 ^VERIFICATION SUCCESSFUL$
