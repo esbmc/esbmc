@@ -70,7 +70,7 @@ bool clang_c_maint::clang_main()
     // if user provided class/contract name
     if(!config.cname.empty() && !config.main.empty() && main != "main")
     {
-      const std::string fmt = config.cname + "@F@" + main;
+      const std::string fmt = "@" + config.cname + "@F@" + main;
       if((it->second).as_string().find(fmt) == std::string::npos)
         continue;
     }
