@@ -191,5 +191,6 @@ protected:
 
 private:
   unsigned symbol_counter = 0;
+  bool program_initialized = false;
   const std::string prefix = "__esbmc_cse_symbol";
 };

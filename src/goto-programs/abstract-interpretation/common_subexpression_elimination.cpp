@@ -236,11 +236,21 @@ bool goto_cse::runOnProgram(goto_functionst &F)
   const namespacet ns(context);
   log_debug("{}", "[CSE] Computing Points-To for program");
   // Initialization for the abstract analysis.
-  cse_domaint::vsa = std::make_unique<value_set_analysist>(ns);
-  (*cse_domaint::vsa)(F);
-  log_debug("{}", "[CSE] Computing Available Expressions for program");
-  available_expressions(F, ns);
-  log_debug("{}","[CSE] Finished computing AE for program");
+  
+  try
+  {
+    cse_domaint::vsa = std::make_unique<value_set_analysist>(ns);
+    (*cse_domaint::vsa)(F);
+    log_debug("{}", "[CSE] Computing Available Expressions for program");
+    available_expressions(F, ns);
+    log_debug("{}","[CSE] Finished computing AE for program");
+    program_initialized = true;
+  }
+  catch(...)
+  {
+    program_initialized = false;
+  }
+
   return false;
 }
 
@@ -299,6 +309,8 @@ void goto_cse::replace_max_sub_expr(
 
 bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 {
+  if(!program_initialized)
+    return false;
   if(!F.second.body_available)
     return false;
 

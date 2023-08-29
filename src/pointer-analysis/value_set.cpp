@@ -415,7 +415,7 @@ void value_sett::get_value_set_rec(
 
     default:
       log_error("Unexpected side-effect: {}", *expr);
-      abort();
+      throw std::runtime_error("unsuported side-effect"); 
     }
   }
 
