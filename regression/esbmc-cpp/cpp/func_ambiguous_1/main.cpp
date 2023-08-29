@@ -1,7 +1,4 @@
-#include <iostream>
-#include <cmath>
 #include <cassert>
-using namespace std;
 
 class overflow{
   public:
@@ -35,5 +32,5 @@ class overflow2{
 
 int main() {
   // overflow x = overflow(nondet_int(),nondet_int());
-
+  return 0;
 }
