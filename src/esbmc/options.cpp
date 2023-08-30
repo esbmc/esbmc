@@ -54,10 +54,10 @@ const struct group_opt_templ all_cmd_options[] = {
    {
      {"sol",
       boost::program_options::value<std::string>()->value_name("path"),
-      "set smart contract source"},
+      ".sol and .solast file names"},
      {"contract",
       boost::program_options::value<std::string>()->value_name("cname"),
-      "set main function name"},
+      "set contract name"},
    }},
 #endif
   {"Frontend",
@@ -157,7 +157,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "set main function name"},
     {"class",
      boost::program_options::value<std::string>()->value_name("cname"),
-     "set main function name"},
+     "set the class name"},
     {"claim",
      boost::program_options::value<std::vector<int>>()->value_name("nr"),
      "only check specific claim"},
