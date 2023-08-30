@@ -68,10 +68,10 @@ bool clang_c_maint::clang_main()
   forall_symbol_base_map(it, context.symbol_base_map, main)
   {
     // if user provided class/contract name
-    if(!config.cname.empty() && !config.main.empty() && main != "main")
+    if(!config.cname.empty() && !config.main.empty())
     {
       const std::string fmt = "@" + config.cname + "@F@" + main;
-      if((it->second).as_string().find(fmt) == std::string::npos)
+      if(it->second.as_string().find(fmt) == std::string::npos)
         continue;
     }
     // look it up

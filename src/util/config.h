@@ -119,6 +119,7 @@ public:
   } ansi_c;
 
   std::string main;
+  // the name of class/contract/namespace where the function is inside
   std::string cname;
   std::unordered_set<std::string> no_slice_names;
   std::unordered_set<std::string> no_slice_ids;
