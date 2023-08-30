@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--class first_space --function func
+^VERIFICATION SUCCESSFUL$
