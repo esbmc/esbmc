@@ -1,4 +1,0 @@
-CORE
-main.cpp --function add --class overflow2 --overflow-check
-
-^VERIFICATION SUCCESSFUL$
