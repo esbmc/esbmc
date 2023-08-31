@@ -2,9 +2,6 @@
 #include <pthread.h>
 #include <stddef.h>
 
-void *malloc(size_t size);
-void free(void *ptr);
-
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
 void __ESBMC_terminate_thread(void);
 unsigned int __ESBMC_spawn_thread(void (*)(void));
@@ -72,7 +69,7 @@ static __ESBMC_thread_key *head = NULL;
 int insert_key_value(pthread_key_t key, const void *value)
 {
   __ESBMC_thread_key *l =
-    (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key));
+    (__ESBMC_thread_key *)__ESBMC_alloca(sizeof(__ESBMC_thread_key));
   if(l == NULL)
     return -1;
   l->thread = __ESBMC_get_thread_id();
@@ -110,7 +107,6 @@ __ESBMC_HIDE:;
   }
   else if(l->next != NULL)
     head = l->next;
-  free(l);
   return 0;
   __ESBMC_atomic_end();
 }
