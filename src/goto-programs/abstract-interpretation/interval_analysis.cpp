@@ -27,6 +27,7 @@ static inline void get_symbols(
 
 static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
 {
+  
   expr->Foreach_operand([&state](expr2tc &e) -> void {
     tvt result = interval_domaint::eval_boolean_expression(e, state);
     if(result.is_true())
@@ -39,18 +40,59 @@ static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
   simplify(expr);
 }
 
+static inline void optimize_expression(expr2tc &expr, const interval_domaint &state)
+{
+  // Preconditions
+  if(is_nil_expr(expr))
+    return;
+
+  // We can't replace the LHS of an assignment
+  if(is_code_assign2t(expr))
+  {
+    optimize_expression(to_code_assign2t(expr).source, state);
+    return;
+  }
+    
+  // Let's compute the forward evaluation of the expression
+  auto interval = state.get_interval<integer_intervalt>(expr);
+
+  // Singleton Propagation
+  if(interval.singleton() && is_bv_type(expr))
+  {
+    // Right now we can only do that for bitvectors (more implementation is needed for floats)
+    expr = state.make_expression_value<integer_intervalt>(interval, expr->type, true);
+    return;
+  }
+
+  // Could not optimize, let's try the sub-expressions then.
+  expr->Foreach_operand([&state](expr2tc &e) -> void {
+    optimize_expression(e, state);
+  });
+  simplify(expr);
+}
+
 void instrument_intervals(
   const ait<interval_domaint> &interval_analysis,
   goto_functiont &goto_function)
 {
   std::unordered_set<expr2tc, irep2_hash> symbols;
 
-  forall_goto_program_instructions(i_it, goto_function.body)
+  // Preprocessing and inline optimizations
+  Forall_goto_program_instructions(i_it, goto_function.body)
   {
+    const interval_domaint &d = interval_analysis[i_it];
+
+    // Singleton Propagation
+    optimize_expression(i_it->code, d);
+    optimize_expression(i_it->guard, d);
+
+    // TODO: Move Guard Simplification to here
+    
     get_symbols(i_it->code, symbols);
     get_symbols(i_it->guard, symbols);
   }
 
+  // Code Instrumentation
   Forall_goto_program_instructions(i_it, goto_function.body)
   {
     if(i_it == goto_function.body.instructions.begin())
