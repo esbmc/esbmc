@@ -311,6 +311,7 @@ protected:
   template <class Interval>
   Interval generate_modular_interval(const symbol2t sym) const;
 
+public:
   /**
    * @brief Get the interval for expression
    *
@@ -346,16 +347,6 @@ protected:
   template <class Interval>
   Interval get_top_interval_from_expr(const expr2tc &sym) const;
 
-  /**
-   * @brief Sets new interval for symbol
-   *
-   * @tparam Interval interval template specialization (Integers, Reals)
-   * @param sym
-   * @param value
-   */
-  template <class Interval>
-  void update_symbol_interval(const symbol2t &sym, const Interval value);
-
   template <class Interval>
   bool is_mapped(const symbol2t &sym) const;
 
@@ -368,8 +359,20 @@ protected:
     const type2tc &type,
     bool upper) const;
 
+protected:
   template <class IntervalMap>
   bool join(IntervalMap &new_map, const IntervalMap &previous_map);
+
+    /**
+   * @brief Sets new interval for symbol
+   *
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param sym
+   * @param value
+   */
+  template <class Interval>
+  void update_symbol_interval(const symbol2t &sym, const Interval value);
+
 };
 
 #endif // CPROVER_ANALYSES_INTERVAL_DOMAIN_H
