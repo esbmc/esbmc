@@ -56,6 +56,15 @@ static inline void optimize_expression(expr2tc &expr, const interval_domaint &st
     optimize_expression(to_code_assign2t(expr).source, state);
     return;
   }
+
+  // Function calls might have an implicit assignment
+  if(is_code_function_call2t(expr))
+  {
+    for(auto &x: to_code_function_call2t(expr).operands)
+      optimize_expression(x, state);
+    return;
+  }
+    
     
   // Let's compute the forward evaluation of the expression
   auto interval = state.get_interval<integer_intervalt>(expr);
