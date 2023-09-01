@@ -46,6 +46,10 @@ static inline void optimize_expression(expr2tc &expr, const interval_domaint &st
   if(is_nil_expr(expr))
     return;
 
+  // We can't simplify addr-of sub-expr
+  if(is_address_of2t(expr))
+     return;
+
   // We can't replace the LHS of an assignment
   if(is_code_assign2t(expr))
   {
