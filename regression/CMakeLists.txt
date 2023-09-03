@@ -159,6 +159,7 @@ else()
                     csmith
                     k-induction-parallel
                     cuda/benchmarks
+                    cuda/Supported_long_time
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_CVC}
@@ -171,7 +172,6 @@ else()
                     ${REGRESSIONS_JIMPLE}
                     extensions
                     cuda/COM_sanity_checks
-		    cuda/Supported_long_time
                     linux
                     ${REGRESSIONS_CHERI}
        )
