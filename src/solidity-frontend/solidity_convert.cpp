@@ -3577,7 +3577,6 @@ bool solidity_convertert::move_functions_to_main(
     to_struct_type(contract.type).methods();
   for(const auto &method : methods)
   {
-
     // guard: nondet_bool()
     if(context.find_symbol("c:@F@nondet_bool") == nullptr)
       return true;
