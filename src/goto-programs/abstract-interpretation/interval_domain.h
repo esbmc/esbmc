@@ -363,7 +363,7 @@ protected:
   template <class IntervalMap>
   bool join(IntervalMap &new_map, const IntervalMap &previous_map);
 
-    /**
+  /**
    * @brief Sets new interval for symbol
    *
    * @tparam Interval interval template specialization (Integers, Reals)
@@ -372,7 +372,6 @@ protected:
    */
   template <class Interval>
   void update_symbol_interval(const symbol2t &sym, const Interval value);
-
 };
 
 #endif // CPROVER_ANALYSES_INTERVAL_DOMAIN_H

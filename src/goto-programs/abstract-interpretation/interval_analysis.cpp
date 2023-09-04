@@ -27,7 +27,6 @@ static inline void get_symbols(
 
 static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
 {
-  
   expr->Foreach_operand([&state](expr2tc &e) -> void {
     tvt result = interval_domaint::eval_boolean_expression(e, state);
     if(result.is_true())
@@ -42,7 +41,6 @@ static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
 
 static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 {
-  return;
   ///////////////////
   // PRECONDITIONS //
   ///////////////////
@@ -51,7 +49,7 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 
   // We can't simplify addr-of sub-expr
   if(is_address_of2t(expr))
-     return;
+    return;
 
   // We can't replace the LHS of an assignment
   if(is_code_assign2t(expr))
@@ -63,11 +61,11 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
   // Function calls might have an implicit assignment
   if(is_code_function_call2t(expr))
   {
-    for(auto &x: to_code_function_call2t(expr).operands)
+    for(auto &x : to_code_function_call2t(expr).operands)
       optimize_expression(x, state);
     return;
   }
-    
+
   //////////////////////
   // FORWARD ANALYSIS //
   //////////////////////
@@ -77,16 +75,16 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
   if(interval.singleton() && is_bv_type(expr))
   {
     // Right now we can only do that for bitvectors (more implementation is needed for floats)
-    expr = state.make_expression_value<integer_intervalt>(interval, expr->type, true);
+    expr = state.make_expression_value<integer_intervalt>(
+      interval, expr->type, true);
     return;
   }
 
   /////////////////////////
   // TRY SUB-EXPRESSIONS //
   /////////////////////////
-  expr->Foreach_operand([&state](expr2tc &e) -> void {
-    optimize_expression(e, state);
-  });
+  expr->Foreach_operand(
+    [&state](expr2tc &e) -> void { optimize_expression(e, state); });
   simplify(expr);
 }
 
@@ -108,7 +106,7 @@ void instrument_intervals(
     optimize_expression(i_it->guard, d);
 
     // TODO: Move Guard Simplification to here
-    
+
     get_symbols(i_it->code, symbols);
     get_symbols(i_it->guard, symbols);
   }
