@@ -3567,14 +3567,16 @@ bool solidity_convertert::move_functions_to_main(
     // construct ifthenelse
 
     // guard: nondet_uint()
-    exprt guard_expr("symbol");
+    if(context.find_symbol("c:@F@nondet_int") == nullptr)
+      return true;
+    const symbolt &guard = *context.find_symbol("c:@F@nondet_int");
+
+    side_effect_expr_function_callt guard_expr;
     guard_expr.name("nondet_int");
     guard_expr.identifier("c:@F@nondet_int");
-    guard_expr.location() = func.location;
-
-    code_typet type;
-    type.return_type() = int_type();
-    guard_expr.type() = type;
+    guard_expr.location() = guard.location;
+    guard_expr.cmt_lvalue(true);
+    guard_expr.function() = symbol_expr(guard);
 
     // then
     code_function_callt then_expr;
@@ -3585,25 +3587,29 @@ bool solidity_convertert::move_functions_to_main(
     then_expr.arguments().resize(
       arguments.size(), static_cast<const exprt &>(get_nil_irep()));
 
-    // ifthenelse
+    // ifthenelse-statement
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(guard_expr, then_expr);
 
     // move to body code block
-    body_code.operands().push_back(if_expr);
+    body_code.move_to_operands(if_expr);
   }
 
   // cond
-  exprt cond_expr("symbol");
+  const symbolt &guard = *context.find_symbol("c:@F@nondet_int");
+  side_effect_expr_function_callt cond_expr;
   cond_expr.name("nondet_uint");
   cond_expr.identifier("c:@F@nondet_uint");
+  cond_expr.cmt_lvalue(true);
   cond_expr.location() = init_code.location();
+  cond_expr.function() = symbol_expr(guard);
 
+  // while-statement
   code_whilet code_while;
   code_while.cond() = cond_expr;
   code_while.body() = body_code;
 
-  init_code.operands().push_back(code_while);
+  init_code.move_to_operands(code_while);
 
   // add "main"
   symbolt new_symbol;
@@ -3631,6 +3637,7 @@ bool solidity_convertert::move_functions_to_main(
 
   // no params
   main_type.make_ellipsis();
+
   added_symbol.type = main_type;
   added_symbol.value = init_code;
 

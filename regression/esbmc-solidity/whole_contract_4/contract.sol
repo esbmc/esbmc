@@ -28,7 +28,7 @@ contract Robot {
     }
 
     function inv() public view {
-        assert((x == 2 && y == 4));
+        assert(!(x == 2 && y == 3));
     }
 
     function test() public view {
