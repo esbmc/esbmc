@@ -69,7 +69,8 @@ bool language_uit::parse(const std::string &filename)
 #ifdef ENABLE_SOLIDITY_FRONTEND
   if(mode == get_mode(language_idt::SOLIDITY))
   {
-    language.set_func_name(_cmdline.vm["function"].as<std::string>());
+    if(!config.options.get_option("function").empty())
+      language.set_func_name(_cmdline.vm["function"].as<std::string>());
 
     if(config.options.get_option("sol") == "")
     {

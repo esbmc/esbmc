@@ -100,6 +100,10 @@ bool solidity_convertert::convert()
       // add implicit construcor function
       if(add_implicit_constructor())
         return true;
+
+      // add function symbols to main
+      if(move_functions_to_main(current_contractName))
+        return true;
     }
   }
 
@@ -432,10 +436,12 @@ bool solidity_convertert::get_struct_class_method(
   struct_typet &type)
 {
   struct_typet::componentt comp;
-  if(get_decl(ast_node, comp))
-    return true;
+  if(get_func_decl_ref(ast_node, comp))
+    return false;
+
   if(comp.is_code() && to_code(comp).statement() == "skip")
     return false;
+
   type.methods().push_back(comp);
   return false;
 }
@@ -2324,7 +2330,8 @@ bool solidity_convertert::get_func_decl_ref_type(
       "solidity",
       "	@@@ Got type={}",
       SolidityGrammar::func_decl_ref_to_str(type));
-    assert(!"Unimplemented type in auxiliary type to convert function call");
+    //TODO: seem to be unnecessary, need investigate
+    // assert(!"Unimplemented type in auxiliary type to convert function call");
     return true;
   }
   }
@@ -3477,4 +3484,186 @@ void solidity_convertert::convert_type_expr(
 
   else
     solidity_gen_typecast(ns, src_expr, dest_type);
+}
+
+static inline void init_variable(codet &dest, const symbolt &sym)
+{
+  const exprt &value = sym.value;
+
+  if(value.is_nil())
+    return;
+
+  assert(!value.type().is_code());
+
+  exprt symbol("symbol", sym.type);
+  symbol.identifier(sym.id);
+
+  code_assignt code(symbol, sym.value);
+  code.location() = sym.location;
+
+  dest.move_to_operands(code);
+}
+
+static inline void static_lifetime_init(const contextt &context, codet &dest)
+{
+  dest = code_blockt();
+
+  // Do assignments based on "value".
+  // context.foreach_operand_in_order([&dest](const symbolt &s) {
+  //   if(s.static_lifetime)
+  //     init_variable(dest, s);
+  // });
+
+  // call designated "initialization" functions
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
+    {
+      if(s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
+}
+
+/*
+  verify the contract as a whole
+*/
+bool solidity_convertert::move_functions_to_main(
+  const std::string &contractName)
+{
+  // return if "function" is set or "contract" is unset
+  if(
+    !config.options.get_option("function").empty() ||
+    config.options.get_option("contract").empty())
+    return false;
+
+  // return if it's not the target contract
+  if(contractName != config.options.get_option("contract"))
+    return false;
+
+  codet init_code, body_code;
+  static_lifetime_init(context, body_code);
+  static_lifetime_init(context, init_code);
+
+  //body_code.make_block();
+  init_code.make_block();
+
+  // get contract symbol "tag-contract"
+
+  const std::string id = prefix + contractName;
+  if(context.find_symbol(id) == nullptr)
+    return true;
+
+  const symbolt &contract = *context.find_symbol(id);
+
+  // a contract should be a struct
+  assert(contract.type.is_struct());
+
+  // 1. call constructor()
+  if(context.find_symbol(contractName) == nullptr)
+    return true;
+  const symbolt &constructor = *context.find_symbol(contractName);
+  code_function_callt call;
+  call.location() = constructor.location;
+  call.function() = symbol_expr(constructor);
+  init_code.move_to_operands(call);
+
+  // 2. do while(nondet_uint())
+
+  // 3. do if(nondet_uint()) then func()
+  const struct_typet::componentst &methods =
+    to_struct_type(contract.type).methods();
+  for(const auto &method : methods)
+  {
+    // extract method(function)
+    const std::string func_id = method.identifier().as_string();
+    // skip constructor
+    if(func_id == contractName)
+      continue;
+
+    if(context.find_symbol(func_id) == nullptr)
+      return true;
+
+    const symbolt &func = *context.find_symbol(func_id);
+
+    // construct ifthenelse
+
+    // guard: nondet_uint()
+    exprt guard_expr("symbol");
+    guard_expr.name("nondet_int");
+    guard_expr.identifier("c:@F@nondet_int");
+    guard_expr.location() = func.location;
+
+    code_typet type;
+    type.return_type() = int_type();
+    guard_expr.type() = type;
+
+    // then
+    code_function_callt then_expr;
+    then_expr.location() = func.location;
+    then_expr.function() = symbol_expr(func);
+    const code_typet::argumentst &arguments =
+      to_code_type(func.type).arguments();
+    then_expr.arguments().resize(
+      arguments.size(), static_cast<const exprt &>(get_nil_irep()));
+
+    // ifthenelse
+    codet if_expr("ifthenelse");
+    if_expr.copy_to_operands(guard_expr, then_expr);
+
+    // move to body code block
+    body_code.operands().push_back(if_expr);
+  }
+
+  // cond
+  exprt cond_expr("symbol");
+  cond_expr.name("nondet_uint");
+  cond_expr.identifier("c:@F@nondet_uint");
+  cond_expr.location() = init_code.location();
+
+  code_whilet code_while;
+  code_while.cond() = cond_expr;
+  code_while.body() = body_code;
+
+  init_code.operands().push_back(code_while);
+
+  // add "main"
+  symbolt new_symbol;
+
+  code_typet main_type;
+  main_type.return_type() = empty_typet();
+  std::string sol_id = "c:@" + contractName + "@F@sol_main";
+  std::string sol_name = "sol_main";
+  new_symbol.location = contract.location;
+  std::string debug_modulename =
+    get_modulename_from_path(contract.location.file().as_string());
+  get_default_symbol(
+    new_symbol,
+    debug_modulename,
+    main_type,
+    sol_name,
+    sol_id,
+    contract.location);
+
+  new_symbol.lvalue = true;
+  new_symbol.is_extern = false;
+  new_symbol.file_local = false;
+
+  symbolt &added_symbol = *context.move_symbol_to_context(new_symbol);
+
+  // no params
+  main_type.make_ellipsis();
+  added_symbol.type = main_type;
+  added_symbol.value = init_code;
+
+  // set "function" option
+  // we are doing this in "typecheck()" and before "final()"
+  config.options.set_option("function", "sol_main");
+  config.main = "sol_main";
+
+  log_status("finish!!!");
+
+  return false;
 }
