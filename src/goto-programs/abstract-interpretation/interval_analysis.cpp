@@ -40,9 +40,12 @@ static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
   simplify(expr);
 }
 
-static inline void optimize_expression(expr2tc &expr, const interval_domaint &state)
+static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 {
-  // Preconditions
+  return;
+  ///////////////////
+  // PRECONDITIONS //
+  ///////////////////
   if(is_nil_expr(expr))
     return;
 
@@ -65,8 +68,9 @@ static inline void optimize_expression(expr2tc &expr, const interval_domaint &st
     return;
   }
     
-    
-  // Let's compute the forward evaluation of the expression
+  //////////////////////
+  // FORWARD ANALYSIS //
+  //////////////////////
   auto interval = state.get_interval<integer_intervalt>(expr);
 
   // Singleton Propagation
@@ -77,7 +81,9 @@ static inline void optimize_expression(expr2tc &expr, const interval_domaint &st
     return;
   }
 
-  // Could not optimize, let's try the sub-expressions then.
+  /////////////////////////
+  // TRY SUB-EXPRESSIONS //
+  /////////////////////////
   expr->Foreach_operand([&state](expr2tc &e) -> void {
     optimize_expression(e, state);
   });
@@ -90,7 +96,9 @@ void instrument_intervals(
 {
   std::unordered_set<expr2tc, irep2_hash> symbols;
 
-  // Preprocessing and inline optimizations
+  //////////////////////////
+  // INLINE OPTIMIZATIONS //
+  //////////////////////////
   Forall_goto_program_instructions(i_it, goto_function.body)
   {
     const interval_domaint &d = interval_analysis[i_it];
@@ -105,7 +113,9 @@ void instrument_intervals(
     get_symbols(i_it->guard, symbols);
   }
 
-  // Code Instrumentation
+  ////////////////////////////////
+  // ASSUMPTION INSTRUMENTATION //
+  ////////////////////////////////
   Forall_goto_program_instructions(i_it, goto_function.body)
   {
     if(i_it == goto_function.body.instructions.begin())
