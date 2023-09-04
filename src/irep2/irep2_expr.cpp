@@ -334,7 +334,7 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
     assert_type_compat_for_with(
       to_pointer_type(a).subtype, to_pointer_type(b).subtype);
   }
-  else
+  else if(!is_symbol_type(a) && !is_symbol_type(b))
     assert(a == b);
 }
 

@@ -311,7 +311,7 @@ void dereferencet::dereference_addrof_expr(
       //  We have a base. There may be additional dereferences in it.
       dereference_expr(base, guard, mode);
       // Now compute the pointer offset involved.
-      expr2tc offs = compute_pointer_offset(addrof.ptr_obj);
+      expr2tc offs = compute_pointer_offset(addrof.ptr_obj, &ns);
       assert(
         !is_nil_expr(offs) &&
         "Pointer offset of index/member "
@@ -607,6 +607,15 @@ bool dereferencet::dereference_type_compare(
       object = typecast2tc(dereference_type, object);
       return true; // ok, dt is a prefix of ot
     }
+  }
+
+  if(base_type_eq(ot_base, dt_base, ns))
+  {
+    assert(
+      !is_pointer_type(dt_base) ||
+      !is_symbol_type(to_pointer_type(dt_base).subtype));
+    object = typecast2tc(dereference_type, object);
+    return true;
   }
 
   // really different
@@ -2317,7 +2326,7 @@ void dereferencet::check_data_obj_access(
   assert(!is_array_type(value));
   assert(offset->type == bitsize_type2());
 
-  BigInt data_sz = type_byte_size_bits(value->type);
+  BigInt data_sz = type_byte_size_bits(value->type, &ns);
   BigInt access_sz = type_byte_size_bits(type);
   expr2tc data_sz_e = gen_long(offset->type, data_sz);
   expr2tc access_sz_e = gen_long(offset->type, access_sz);

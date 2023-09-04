@@ -1022,8 +1022,9 @@ void value_sett::assign(
   }
 
   // Must have concrete type.
-  assert(!is_symbol_type(lhs));
-  const type2tc &lhs_type = lhs->type;
+  type2tc lhs_type = lhs->type;
+  if(is_symbol_type(lhs_type))
+    lhs_type = ns.follow(lhs_type);
 
   if(is_struct_type(lhs_type) || is_union_type(lhs_type))
   {

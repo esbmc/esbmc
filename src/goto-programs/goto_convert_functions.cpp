@@ -186,65 +186,269 @@ void goto_convert(
   goto_convert_functions.goto_convert();
 }
 
-void goto_convert_functionst::collect_type(
-  const irept &type,
-  typename_sett &deps)
-{
-  if(type.id() == "pointer")
-    return;
-
-  if(type.id() == "symbol")
-  {
-    assert(type.identifier() != "");
-    deps.insert(type.identifier());
-    return;
-  }
-
-  collect_expr(type, deps);
-}
-
 static bool denotes_thrashable_subtype(const irep_idt &id)
 {
   return id == "type" || id == "subtype";
 }
 
-void goto_convert_functionst::collect_expr(
-  const irept &expr,
-  typename_sett &deps)
+namespace
 {
-  if(expr.id() == "pointer")
-    return;
-
-  forall_irep(it, expr.get_sub())
+struct context_type_grapht
+{
+  enum node_typet : size_t
   {
-    collect_expr(*it, deps);
-  }
+    CONTEXT, /* root, top level */
+    SYMBOL,  /* second level */
+    TYPE,    /* higher level */
+    EXPR,    /* higher level */
+  };
 
-  forall_named_irep(it, expr.get_named_sub())
+  static constexpr size_t N_NODE_TYPES = EXPR + 1;
+
+  template <typename T>
+  static constexpr node_typet node_type(const T *)
   {
-    if(denotes_thrashable_subtype(it->first))
-      collect_type(it->second, deps);
+    if constexpr(std::is_same_v<T, contextt>)
+      return CONTEXT;
+    else if constexpr(std::is_same_v<T, symbolt>)
+      return SYMBOL;
+    else if constexpr(std::is_same_v<T, typet>)
+      return TYPE;
     else
-      collect_expr(it->second, deps);
+    {
+      static_assert(std::is_same_v<T, exprt>);
+      return EXPR;
+    }
   }
 
-  forall_named_irep(it, expr.get_comments())
+  struct node_id
   {
-    if(denotes_thrashable_subtype(it->first))
-      collect_type(it->second, deps);
-    else
-      collect_expr(it->second, deps);
+    node_typet type : 2;
+    size_t idx : CHAR_BIT * sizeof(size_t) - 2;
+
+    friend bool operator==(const node_id &a, const node_id &b)
+    {
+      return a.type == b.type && a.idx == b.idx;
+    }
+
+    friend bool operator!=(const node_id &a, const node_id &b)
+    {
+      return !(a == b);
+    }
+  };
+
+  struct edge
+  {
+    irep_idt label;
+    node_id target;
+
+    edge(irep_idt label, node_id target) : label(label), target(target)
+    {
+    }
+  };
+
+  struct nodet
+  {
+    union valuet
+    {
+      const contextt *context;
+      const symbolt *symbol;
+      const typet *type;
+      const exprt *expr;
+    } object;
+
+    explicit nodet(const contextt *ctx)
+    {
+      object.context = ctx;
+    }
+
+    explicit nodet(const symbolt *sym)
+    {
+      object.symbol = sym;
+    }
+
+    explicit nodet(const typet *type)
+    {
+      object.type = type;
+    }
+
+    explicit nodet(const exprt *expr)
+    {
+      object.expr = expr;
+    }
+
+    std::vector<edge> adj;
+  };
+
+  std::vector<nodet> Vs[N_NODE_TYPES];
+
+  template <typename F>
+  void forall_nodes(node_typet type, F && f) const
+  {
+    for(size_t j = 0; j < Vs[type].size(); j++)
+      f(node_id{type, j});
   }
-}
+
+  template <typename F>
+  void forall_nodes(F &&f) const
+  {
+    for(size_t i = 0; i < N_NODE_TYPES; i++)
+      forall_nodes((node_typet)i, f)
+        ;
+  }
+
+  template <typename T>
+  node_id add_node(const T *tgt)
+  {
+    node_typet t = node_type(tgt);
+    node_id r = {t, Vs[t].size()};
+    Vs[t].emplace_back(tgt);
+    return r;
+  }
+
+  void add_edge(node_id v, irep_idt label, node_id w)
+  {
+    std::vector<edge> &adj = Vs[v.type][v.idx].adj;
+    adj.emplace_back(label, w);
+  }
+
+  const nodet &node(node_id v) const
+  {
+    return Vs[v.type][v.idx];
+  }
+
+  const nodet::valuet &operator[](node_id v) const
+  {
+    return node(v).object;
+  }
+
+  const std::vector<edge> &adj(node_id v) const
+  {
+    return node(v).adj;
+  }
+
+  typedef std::unordered_map<irep_idt, node_id, irep_id_hash> symbolst;
+
+  node_id add_all(const contextt &ctx)
+  {
+    /* Add root node */
+    node_id v = add_node(&ctx);
+
+    /* First put all symbol nodes into the graph and record a mapping from
+     * symbol id to the node id. This will be used when collecting symbolic
+     * types and therefore needs to be done before we start interpreting
+     * expressions and types. */
+    symbolst symbols;
+    ctx.foreach_operand_in_order([this, v, &symbols](const symbolt &symbol) {
+      node_id w = add_node(&symbol);
+      symbols[symbol.id] = w;
+      add_edge(v, {}, w);
+    });
+
+    /* Now that the map is filled, add expressions and types as nodes,
+     * recursively. */
+    for(const edge &e : adj(v))
+    {
+      node_id w = e.target;
+      const symbolt *sym = (*this)[w].symbol;
+      add_edge(w, "value", add_all(symbols, sym->value));
+      add_edge(w, "type", add_all(symbols, sym->type));
+    }
+
+    return v;
+  }
+
+  node_id add_all(const symbolst &syms, const exprt &e)
+  {
+    node_id v = add_node(&e);
+    collect(syms, v, e, false);
+    return v;
+  }
+
+  node_id add_all(const symbolst &syms, const typet &t)
+  {
+    node_id v = add_node(&t);
+    collect(syms, v, t, true);
+    return v;
+  }
+
+  void collect(const symbolst &syms, node_id v, const irept &term, bool is_type)
+  {
+    /* Recurse through all the elements of the three component sets that make up
+     * an irept:
+     * - sub
+     * - named_sub
+     * - comments
+     *
+     * For each labelled element that denotes a (potentially thrashable) type,
+     * record a new node in the graph and connect it to the given node 'v'.
+     * In case the term is a "symbol" and we know it is in context of a type
+     * (in contrast to a symbol-expression), look up the node corresponding to
+     * the symbol and connect it, too.
+     *
+     * All other elements are not getting their own nodes since there is no
+     * generic way of determining whether they are expressions or something
+     * else.
+     */
+
+    forall_irep(it, term.get_sub())
+      collect(syms, v, *it, false);
+
+    forall_named_irep(it, term.get_named_sub())
+    {
+      if(denotes_thrashable_subtype(it->first))
+        add_edge(
+          v, it->first, add_all(syms, static_cast<const typet &>(it->second)));
+      else if(
+        is_type && term.id() == typet::t_symbol &&
+        it->first == typet::a_identifier)
+        add_edge(v, term.id(), syms.find(it->second.id())->second);
+      else
+        collect(syms, v, it->second, false);
+    }
+
+    forall_named_irep(it, term.get_comments())
+    {
+      if(denotes_thrashable_subtype(it->first))
+        add_edge(
+          v, it->first, add_all(syms, static_cast<const typet &>(it->second)));
+      else
+        collect(syms, v, it->second, false);
+    }
+  }
+};
+
+/* Map taking peculiarities of the graph into account, in particular the
+ * indexing with node_id. */
+template <typename T>
+struct node_map
+{
+  std::array<std::vector<T>, context_type_grapht::N_NODE_TYPES> vecs;
+
+  explicit node_map(const context_type_grapht &G, const T &init = {})
+  {
+    for(size_t i = 0; i < context_type_grapht::N_NODE_TYPES; i++)
+      vecs[i].resize(G.Vs[i].size(), init);
+  }
+
+  T &operator[](context_type_grapht::node_id v)
+  {
+    return vecs[v.type][v.idx];
+  }
+
+  const T &operator[](context_type_grapht::node_id v) const
+  {
+    return vecs[v.type][v.idx];
+  }
+};
+} // namespace
 
 void goto_convert_functionst::rename_types(
   irept &type,
   const symbolt &cur_name_sym,
-  const irep_idt &sname)
+  const std::unordered_set<irep_idt, irep_id_hash> &avoid,
+  bool under_ptr)
 {
-  if(type.id() == "pointer")
-    return;
-
   // Some type symbols aren't entirely correct. This is because (in the current
   // 27_exStbFb test) some type symbols get the module name inserted into the
   // name -- so int32_t becomes main::int32_t.
@@ -260,7 +464,7 @@ void goto_convert_functionst::rename_types(
   typet type2;
   if(type.id() == "symbol")
   {
-    if(type.identifier() == sname)
+    if(under_ptr && avoid.find(type.identifier()) != avoid.end())
     {
       // A recursive symbol -- the symbol we're about to link to is in fact the
       // one that initiated this chain of renames. This leads to either infinite
@@ -274,10 +478,10 @@ void goto_convert_functionst::rename_types(
       return;
     }
 
-    if(ns.lookup(type.identifier()))
+    if(const symbolt *sym = ns.lookup(type.identifier()))
     {
       // If we can just look up the current type symbol, use that.
-      type2 = ns.follow((typet &)type);
+      type2 = sym->type;
     }
     else
     {
@@ -286,11 +490,9 @@ void goto_convert_functionst::rename_types(
         cur_name_sym.module.as_string() + type.identifier().as_string();
 
       // Try looking that up.
-      if(ns.lookup(irep_idt(ident)))
+      if(const symbolt *sym = ns.lookup(irep_idt(ident)))
       {
-        irept tmptype = type;
-        tmptype.identifier(irep_idt(ident));
-        type2 = ns.follow((typet &)tmptype);
+        type2 = sym->type;
       }
       else
       {
@@ -305,57 +507,136 @@ void goto_convert_functionst::rename_types(
     return;
   }
 
-  rename_exprs(type, cur_name_sym, sname);
+  rename_exprs(type, cur_name_sym, avoid, under_ptr);
 }
 
 void goto_convert_functionst::rename_exprs(
   irept &expr,
   const symbolt &cur_name_sym,
-  const irep_idt &sname)
+  const std::unordered_set<irep_idt, irep_id_hash> &avoid,
+  bool under_ptr)
 {
-  if(expr.id() == "pointer")
-    return;
+  under_ptr |= expr.id() == "pointer";
 
   Forall_irep(it, expr.get_sub())
-    rename_exprs(*it, cur_name_sym, sname);
+    rename_exprs(*it, cur_name_sym, avoid, under_ptr);
 
   Forall_named_irep(it, expr.get_named_sub())
   {
     if(denotes_thrashable_subtype(it->first))
     {
-      rename_types(it->second, cur_name_sym, sname);
+      rename_types(it->second, cur_name_sym, avoid, under_ptr);
     }
     else
     {
-      rename_exprs(it->second, cur_name_sym, sname);
+      rename_exprs(it->second, cur_name_sym, avoid, under_ptr);
     }
   }
 
   Forall_named_irep(it, expr.get_comments())
-    rename_exprs(it->second, cur_name_sym, sname);
+    rename_exprs(it->second, cur_name_sym, avoid, under_ptr);
 }
 
-void goto_convert_functionst::wallop_type(
-  irep_idt name,
-  typename_mapt &typenames,
-  const irep_idt &sname)
+using node_id = context_type_grapht::node_id;
+using edge = context_type_grapht::edge;
+
+/* Support node_id hashing using types in std */
+namespace std
 {
-  // If this type doesn't depend on anything, no need to rename anything.
-  typename_mapt::iterator it = typenames.find(name);
-  assert(it != typenames.end());
-  std::set<irep_idt> &deps = it->second;
-  if(deps.size() == 0)
-    return;
+template <>
+struct hash<node_id> : hash<size_t>
+{
+  static_assert(sizeof(node_id) == sizeof(size_t));
 
-  // Iterate over our dependancies ensuring they're resolved.
-  for(const auto &dep : deps)
-    wallop_type(dep, typenames, sname);
+  size_t operator()(const node_id &v) const noexcept
+  {
+    size_t w;
+    memcpy(&w, &v, sizeof(w));
+    return hash<size_t>::operator()(w); // this is basically a no-op
+  }
+};
+} // namespace std
 
-  // And finally perform renaming.
-  symbolt *s = context.find_symbol(name);
-  rename_types(s->type, *s, sname);
-  deps.clear();
-}
+namespace
+{
+struct sccst /* strongly connected components */
+{
+  const context_type_grapht &G;
+
+  struct tarjan_data
+  {
+    size_t index = 0;
+    size_t lowlink;
+    bool on_stack;
+  };
+
+  node_map<tarjan_data> data;
+  std::vector<node_id> stack;
+  size_t index = 0;
+
+  std::function<void(const std::vector<node_id> &)> handle_scc;
+
+  sccst(
+    const context_type_grapht &G,
+    std::function<void(const std::vector<node_id> &)> handle_scc = {})
+    : G(G), data(G), handle_scc(std::move(handle_scc))
+  {
+  }
+
+  void tarjan(node_id v) /* Tarjan's 1972 algorithm to compute SCCs */
+  {
+    size_t idx = ++index;
+    data[v] = {idx, idx, true};
+    stack.push_back(v);
+    for(const edge &e : G.adj(v))
+    {
+      node_id w = e.target;
+      if(!data[w].index)
+      {
+        tarjan(w);
+        data[v].lowlink = std::min(data[v].lowlink, data[w].lowlink);
+      }
+      else if(data[w].on_stack)
+      {
+        data[v].lowlink = std::min(data[v].lowlink, data[w].index);
+      }
+    }
+
+    if(data[v].lowlink != data[v].index)
+      return;
+
+    std::vector<node_id> scc;
+    node_id w;
+    do
+    {
+      w = stack.back();
+      stack.pop_back();
+      data[w].on_stack = false;
+      scc.push_back(w);
+    } while(v != w);
+
+    if(handle_scc)
+      handle_scc(scc);
+
+    // record SCCs of size > 1 to make life easier for thrash_type_symbols()
+    if(scc.size() == 1)
+      return;
+
+    FILE *f = messaget::state.target("thrash-ts", VerbosityLevel::Debug);
+    if(!f)
+      return;
+
+    fprintf(f, "large scc:");
+    for(node_id w : scc)
+      fprintf(f, " %zd:%zd", w.type, w.idx);
+    fprintf(f, " --");
+    for(node_id w : scc)
+      if(w.type == context_type_grapht::SYMBOL)
+        fprintf(f, " %s", G[w].symbol->id.c_str());
+    fprintf(f, "\n");
+  }
+};
+} // namespace
 
 void goto_convert_functionst::thrash_type_symbols()
 {
@@ -365,42 +646,33 @@ void goto_convert_functionst::thrash_type_symbols()
   // in a struct to itself, this breaks down. Therefore, don't rename types of
   // pointers; they have a type already; they're pointers.
 
-  // Collect a list of all type names. This is required before this entire
-  // thing has no types, and there's no way (in C++ converted code at least)
-  // to decide what name is a type or not.
-  typename_sett names;
-  context.foreach_operand([this, &names](const symbolt &s) {
-    collect_expr(s.value, names);
-    collect_type(s.type, names);
-  });
+  /* Some types under pointers we need to replace, however, in order to make
+   * pointer arithmetic work on them.
+   * See <https://github.com/esbmc/esbmc/issues/1289>. We do this by computing
+   * the strongly connected components (SCCs) of the type subgraph of the graph
+   * represented by the context. Those SCCs of size larger than one node are not
+   * safe to be replaced at the moment since they would introduce cycles and our
+   * ad-hoc recursions are not prepared for those.
+   *
+   * Tarjan's algorithm for computing SCCs has the benefit of giving a
+   * topological ordering of the SCCs of the graph. We use that as the order in
+   * which to replace/unfold symbolic types in symbols' values and types. */
 
-  // Try to compute their dependencies.
+  context_type_grapht G;
+  node_id root = G.add_all(context);
 
-  typename_mapt typenames;
-  context.foreach_operand([this, &names, &typenames](const symbolt &s) {
-    if(names.find(s.id) != names.end())
-    {
-      typename_sett list;
-      collect_expr(s.value, list);
-      collect_type(s.type, list);
-      typenames[s.id] = list;
-    }
-  });
-
-  for(auto &it : typenames)
-    it.second.erase(it.first);
-
-  // Now, repeatedly rename all types. When we encounter a type that contains
-  // unresolved symbols, resolve it first, then include it into this type.
-  // This means that we recurse to whatever depth of nested types the user
-  // has. With at least a meg of stack, I doubt that's really a problem.
-  std::map<irep_idt, std::set<irep_idt>>::iterator it;
-  for(it = typenames.begin(); it != typenames.end(); it++)
-    wallop_type(it->first, typenames, it->first);
-
-  // And now all the types have a fixed form, rename types in all existing code.
-  context.Foreach_operand([this](symbolt &s) {
-    rename_types(s.type, s, s.id);
-    rename_exprs(s.value, s, s.id);
-  });
+  sccst(G, [this, &G](const std::vector<node_id> &scc) {
+    std::unordered_set<irep_idt, irep_id_hash> avoid;
+    for(node_id v : scc)
+      if(v.type == context_type_grapht::SYMBOL)
+        avoid.insert(G[v].symbol->id);
+    for(node_id v : scc)
+      if(v.type == context_type_grapht::SYMBOL)
+      {
+        symbolt *sym = const_cast<symbolt *>(G[v].symbol);
+        log_debug("thrash-ts-detail", "renaming symbol {}", sym->id);
+        rename_exprs(sym->value, *sym, avoid, false);
+        rename_types(sym->type, *sym, avoid, false);
+      }
+  }).tarjan(root);
 }
