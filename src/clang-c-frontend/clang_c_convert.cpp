@@ -547,20 +547,26 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
      * initializer can't have side-effects (it's a constant expression). */
     code_blockt *orig = current_block;
     current_block = nullptr;
+    const clang::Stmt *stmt = vd.getInit();
+
     exprt val;
-    bool r = get_expr(*vd.getInit(), val);
+    bool r = get_expr(*stmt, val);
     current_block = orig;
     if(r)
       return true;
 
+    bool aggregate_without_init =
+      aggregate_value_init &&
+      stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
+
     added_symbol = context.move_symbol_to_context(symbol);
     gen_typecast(ns, val, t);
-    if(!aggregate_value_init)
+    if(!aggregate_without_init)
       added_symbol->value = val;
 
     code_declt decl(symbol_expr(*added_symbol));
     decl.location() = location_begin;
-    if(!aggregate_value_init)
+    if(!aggregate_without_init)
       decl.operands().push_back(val);
 
     new_expr = decl;
