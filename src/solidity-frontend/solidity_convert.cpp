@@ -3502,7 +3502,9 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
 }
 
 /*
-  verify the contract as a whole
+  verify the contract as a whole.
+  the idea is to verify the assertions that must be held 
+  in any function calling order.
 */
 bool solidity_convertert::move_functions_to_main(
   const std::string &contractName)
@@ -3517,41 +3519,78 @@ bool solidity_convertert::move_functions_to_main(
   if(contractName != config.options.get_option("contract"))
     return false;
 
-  codet init_code, body_code;
-  static_lifetime_init(context, body_code);
-  static_lifetime_init(context, init_code);
+  /*
+  convert the verifying contract to a "sol_main" function, e.g.
 
-  //body_code.make_block();
-  init_code.make_block();
+  Contract Base             
+  {
+      constrcutor(){}
+      function A(){}
+      function B(){}
+  }
 
-  // get contract symbol "tag-contract"
+  will be converted to
 
+  void sol_main()
+  {
+    Base()  // constructor_call
+    while(nondet_bool)
+    {
+      if(nondet_bool) A();
+      if(nondet_bool) B();
+    }
+  }
+  */
+
+  // 0. initialize "sol_main" body and while-loop body
+  codet func_body, while_body;
+  static_lifetime_init(context, while_body);
+  static_lifetime_init(context, func_body);
+
+  while_body.make_block();
+  func_body.make_block();
+
+  // 1. get constructor call
+
+  // 1.1 get contract symbol ("tag-contractName")
   const std::string id = prefix + contractName;
   if(context.find_symbol(id) == nullptr)
     return true;
-
   const symbolt &contract = *context.find_symbol(id);
+  assert(contract.type.is_struct() && "A contract should be a struct");
 
-  // a contract should be a struct
-  assert(contract.type.is_struct());
-
-  // 1. call constructor()
+  // 1.2 construct a constructor call and move to func_body
   if(context.find_symbol(contractName) == nullptr)
     return true;
   const symbolt &constructor = *context.find_symbol(contractName);
   code_function_callt call;
   call.location() = constructor.location;
   call.function() = symbol_expr(constructor);
-  init_code.move_to_operands(call);
 
-  // 2. do while(nondet_uint())
+  // move to "sol_main" body
+  func_body.move_to_operands(call);
 
-  // 3. do if(nondet_uint()) then func()
+  // 2. construct a while-loop and move to func_body
+
+  // 2.1 construct ifthenelse statement
   const struct_typet::componentst &methods =
     to_struct_type(contract.type).methods();
   for(const auto &method : methods)
   {
-    // extract method(function)
+
+    // guard: nondet_bool()
+    if(context.find_symbol("c:@F@nondet_bool") == nullptr)
+      return true;
+    const symbolt &guard = *context.find_symbol("c:@F@nondet_bool");
+
+    side_effect_expr_function_callt guard_expr;
+    guard_expr.name("nondet_bool");
+    guard_expr.identifier("c:@F@nondet_bool");
+    guard_expr.location() = guard.location;
+    guard_expr.cmt_lvalue(true);
+    guard_expr.function() = symbol_expr(guard);
+
+    // then: function_call
     const std::string func_id = method.identifier().as_string();
     // skip constructor
     if(func_id == contractName)
@@ -3559,24 +3598,7 @@ bool solidity_convertert::move_functions_to_main(
 
     if(context.find_symbol(func_id) == nullptr)
       return true;
-
     const symbolt &func = *context.find_symbol(func_id);
-
-    // construct ifthenelse
-
-    // guard: nondet_uint()
-    if(context.find_symbol("c:@F@nondet_int") == nullptr)
-      return true;
-    const symbolt &guard = *context.find_symbol("c:@F@nondet_int");
-
-    side_effect_expr_function_callt guard_expr;
-    guard_expr.name("nondet_int");
-    guard_expr.identifier("c:@F@nondet_int");
-    guard_expr.location() = guard.location;
-    guard_expr.cmt_lvalue(true);
-    guard_expr.function() = symbol_expr(guard);
-
-    // then
     code_function_callt then_expr;
     then_expr.location() = func.location;
     then_expr.function() = symbol_expr(func);
@@ -3585,33 +3607,34 @@ bool solidity_convertert::move_functions_to_main(
     then_expr.arguments().resize(
       arguments.size(), static_cast<const exprt &>(get_nil_irep()));
 
-    // ifthenelse-statement
+    // ifthenelse-statement:
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(guard_expr, then_expr);
 
-    // move to body code block
-    body_code.move_to_operands(if_expr);
+    // move to while-loop body
+    while_body.move_to_operands(if_expr);
   }
 
-  // cond
-  const symbolt &guard = *context.find_symbol("c:@F@nondet_int");
+  // while-cond:
+  const symbolt &guard = *context.find_symbol("c:@F@nondet_bool");
   side_effect_expr_function_callt cond_expr;
-  cond_expr.name("nondet_uint");
-  cond_expr.identifier("c:@F@nondet_uint");
+  cond_expr.name("nondet_bool");
+  cond_expr.identifier("c:@F@nondet_bool");
   cond_expr.cmt_lvalue(true);
-  cond_expr.location() = init_code.location();
+  cond_expr.location() = func_body.location();
   cond_expr.function() = symbol_expr(guard);
 
-  // while-statement
+  // while-loop statement:
   code_whilet code_while;
   code_while.cond() = cond_expr;
-  code_while.body() = body_code;
+  code_while.body() = while_body;
 
-  init_code.move_to_operands(code_while);
+  // move to "sol_main"
+  func_body.move_to_operands(code_while);
 
-  // add "main"
+  // 3. add "sol_main" to symbol table
+
   symbolt new_symbol;
-
   code_typet main_type;
   main_type.return_type() = empty_typet();
   std::string sol_id = "c:@" + contractName + "@F@sol_main";
@@ -3637,9 +3660,9 @@ bool solidity_convertert::move_functions_to_main(
   main_type.make_ellipsis();
 
   added_symbol.type = main_type;
-  added_symbol.value = init_code;
+  added_symbol.value = func_body;
 
-  // set "main" function
+  // 4. set "sol_main" as main function
   config.main = "sol_main";
 
   return false;
