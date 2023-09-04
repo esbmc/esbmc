@@ -3486,33 +3486,9 @@ void solidity_convertert::convert_type_expr(
     solidity_gen_typecast(ns, src_expr, dest_type);
 }
 
-static inline void init_variable(codet &dest, const symbolt &sym)
-{
-  const exprt &value = sym.value;
-
-  if(value.is_nil())
-    return;
-
-  assert(!value.type().is_code());
-
-  exprt symbol("symbol", sym.type);
-  symbol.identifier(sym.id);
-
-  code_assignt code(symbol, sym.value);
-  code.location() = sym.location;
-
-  dest.move_to_operands(code);
-}
-
 static inline void static_lifetime_init(const contextt &context, codet &dest)
 {
   dest = code_blockt();
-
-  // Do assignments based on "value".
-  // context.foreach_operand_in_order([&dest](const symbolt &s) {
-  //   if(s.static_lifetime)
-  //     init_variable(dest, s);
-  // });
 
   // call designated "initialization" functions
   context.foreach_operand_in_order(
@@ -3658,12 +3634,8 @@ bool solidity_convertert::move_functions_to_main(
   added_symbol.type = main_type;
   added_symbol.value = init_code;
 
-  // set "function" option
-  // we are doing this in "typecheck()" and before "final()"
-  config.options.set_option("function", "sol_main");
+  // set "main" function
   config.main = "sol_main";
-
-  log_status("finish!!!");
 
   return false;
 }
