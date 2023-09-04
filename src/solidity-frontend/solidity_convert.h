@@ -131,6 +131,7 @@ protected:
   std::string get_src_from_json(const nlohmann::json &ast_node);
 
   symbolt *move_symbol_to_context(symbolt &symbol);
+  bool move_functions_to_main(const std::string &contractName);
 
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
