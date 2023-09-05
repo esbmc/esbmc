@@ -20,7 +20,7 @@ Before starting, note that ESBMC is mainly distributed under the terms of the [A
 | MathSAT   | no       | 5.5.4           |
 | Yices     | no       | 2.6.1           |
 | Z3        | no       | 4.8.9           |
-| Bitwuzla  | no       | 0.1.1           |
+| Bitwuzla  | no       | 0.2.0           |
 
 The version requirements are usually pretty stable, but can change between releases.
 
@@ -188,7 +188,7 @@ We have wrapped the entire build and setup of Bitwuzla in the following command:
 
 ```
 Linux/macOS:
-git clone --depth=1 --branch=0.1.1 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install
+git clone --depth=1 --branch=0.2.0 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install
 ```
 
 If you need more details on Bitwuzla, please refer to [its Github](https://github.com/bitwuzla/bitwuzla).
