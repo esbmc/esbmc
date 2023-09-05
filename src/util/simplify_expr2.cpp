@@ -906,7 +906,6 @@ expr2tc member2t::do_simplify() const
       /* If the type we just selected isn't compatible, it means that whatever
        * field is in the constant union /isn't/ the field we're selecting from
        * it. So don't simplify it, because we can't. */
-      // This can be the default, because base_type will not print anything
 
       if(
         !is_pointer_type(type) &&
