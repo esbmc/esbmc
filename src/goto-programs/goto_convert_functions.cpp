@@ -552,7 +552,8 @@ struct hash<node_id> : hash<size_t>
   {
     size_t w;
     memcpy(&w, &v, sizeof(w));
-    return hash<size_t>::operator()(w); // this is basically a no-op
+    // delegate to std lib for consistency; this is basically a no-op
+    return hash<size_t>::operator()(w);
   }
 };
 } // namespace std
@@ -583,7 +584,10 @@ struct sccst /* strongly connected components */
   {
   }
 
-  void tarjan(node_id v) /* Tarjan's 1972 algorithm to compute SCCs */
+  /* Tarjan's algorithm to compute SCCs.
+   * See "Depth-first search and linear graph algorithms, SIAM, 1972.";
+   * doi:10.1137/0201010; section 4 */
+  void tarjan(node_id v)
   {
     size_t idx = ++index;
     data[v] = {idx, idx, true};
