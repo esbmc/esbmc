@@ -39,18 +39,73 @@ static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
   simplify(expr);
 }
 
+static void optimize_expression(expr2tc &expr, const interval_domaint &state)
+{
+  // Preconditions
+  if(is_nil_expr(expr))
+    return;
+
+  // We can't simplify addr-of sub-expr.
+  // int x = 3; int *ptr = &x; would become int x = 3; int *ptr = &3;
+  if(is_address_of2t(expr))
+    return;
+
+  // We can't replace the target of an assignment.
+  // int x = 3; x = 4; would become int x = 3; 3 = 4;
+  if(is_code_assign2t(expr))
+  {
+    optimize_expression(to_code_assign2t(expr).source, state);
+    return;
+  }
+
+  // Function calls might have an implicit assignment
+  if(is_code_function_call2t(expr))
+  {
+    for(auto &x : to_code_function_call2t(expr).operands)
+      optimize_expression(x, state);
+    return;
+  }
+
+  // Forward Analysis
+  auto interval = state.get_interval<integer_intervalt>(expr);
+
+  // Singleton Propagation
+  if(interval.singleton() && is_bv_type(expr))
+  {
+    // Right now we can only do that for bitvectors (more implementation is needed for floats)
+    expr = state.make_expression_value<integer_intervalt>(
+      interval, expr->type, true);
+    return;
+  }
+
+  // Try sub-expressions
+  expr->Foreach_operand(
+    [&state](expr2tc &e) -> void { optimize_expression(e, state); });
+  simplify(expr);
+}
+
 void instrument_intervals(
   const ait<interval_domaint> &interval_analysis,
   goto_functiont &goto_function)
 {
   std::unordered_set<expr2tc, irep2_hash> symbols;
 
-  forall_goto_program_instructions(i_it, goto_function.body)
+  // Inline optimizations
+  Forall_goto_program_instructions(i_it, goto_function.body)
   {
+    const interval_domaint &d = interval_analysis[i_it];
+
+    // Singleton Propagation
+    optimize_expression(i_it->code, d);
+    optimize_expression(i_it->guard, d);
+
+    // TODO: Move Guard Simplification to here
+
     get_symbols(i_it->code, symbols);
     get_symbols(i_it->guard, symbols);
   }
 
+  // Instrumentation of assumptions
   Forall_goto_program_instructions(i_it, goto_function.body)
   {
     if(i_it == goto_function.body.instructions.begin())

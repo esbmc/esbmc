@@ -422,17 +422,19 @@ public:
   }
 
   static interval_templatet<T>
-  cast(const interval_templatet<T> &old, const type2tc &)
+  cast(const interval_templatet<T> &, const type2tc &)
   {
     log_debug("interval", "No support for typecasting");
-    return old;
+    interval_templatet<T> result;
+    return result;
   }
 
   friend interval_templatet<T>
-  operator%(const interval_templatet<T> &s, const interval_templatet<T> &)
+  operator%(const interval_templatet<T> &, const interval_templatet<T> &)
   {
     log_debug("interval", "No support for mod");
-    return s;
+    interval_templatet<T> result;
+    return result;
   }
 
   interval_templatet<T> interval_bitand(

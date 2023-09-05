@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol example1.sol --contract Robot --k-induction
+^VERIFICATION FAILED$
