@@ -41,17 +41,17 @@ static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
 
 static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 {
-  ///////////////////
-  // PRECONDITIONS //
-  ///////////////////
+  // Preconditions
   if(is_nil_expr(expr))
     return;
 
-  // We can't simplify addr-of sub-expr
+  // We can't simplify addr-of sub-expr.
+  // int x = 3; int *ptr = &x; would become int x = 3; int *ptr = &3;
   if(is_address_of2t(expr))
     return;
 
-  // We can't replace the LHS of an assignment
+  // We can't replace the target of an assignment.
+  // int x = 3; x = 4; would become int x = 3; 3 = 4;
   if(is_code_assign2t(expr))
   {
     optimize_expression(to_code_assign2t(expr).source, state);
@@ -66,9 +66,7 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
     return;
   }
 
-  //////////////////////
-  // FORWARD ANALYSIS //
-  //////////////////////
+  // Forward Analysis
   auto interval = state.get_interval<integer_intervalt>(expr);
 
   // Singleton Propagation
@@ -80,9 +78,7 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
     return;
   }
 
-  /////////////////////////
-  // TRY SUB-EXPRESSIONS //
-  /////////////////////////
+  // Try sub-expressions
   expr->Foreach_operand(
     [&state](expr2tc &e) -> void { optimize_expression(e, state); });
   simplify(expr);
@@ -94,9 +90,7 @@ void instrument_intervals(
 {
   std::unordered_set<expr2tc, irep2_hash> symbols;
 
-  //////////////////////////
-  // INLINE OPTIMIZATIONS //
-  //////////////////////////
+  // Inline optimizations
   Forall_goto_program_instructions(i_it, goto_function.body)
   {
     const interval_domaint &d = interval_analysis[i_it];
@@ -111,9 +105,7 @@ void instrument_intervals(
     get_symbols(i_it->guard, symbols);
   }
 
-  ////////////////////////////////
-  // ASSUMPTION INSTRUMENTATION //
-  ////////////////////////////////
+  // Instrumentation of assumptions
   Forall_goto_program_instructions(i_it, goto_function.body)
   {
     if(i_it == goto_function.body.instructions.begin())
