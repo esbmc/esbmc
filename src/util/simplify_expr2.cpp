@@ -890,7 +890,7 @@ expr2tc member2t::do_simplify() const
       s = to_constant_struct2t(source_value).datatype_members[no];
       assert(
         is_pointer_type(type) ||
-        base_type_eq(type, s->type, namespacet(contextt())));
+        base_type_eq(type, s->type, *migrate_namespace_lookup));
     }
     else
     {
@@ -909,7 +909,7 @@ expr2tc member2t::do_simplify() const
 
       if(
         !is_pointer_type(type) &&
-        !base_type_eq(type, s->type, namespacet(contextt())))
+        !base_type_eq(type, s->type, *migrate_namespace_lookup))
         return expr2tc();
     }
 
