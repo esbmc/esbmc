@@ -617,8 +617,7 @@ void value_sett::get_value_set_rec(
                 throw type2t::symbolic_type_excp();
 
               // Potentially rename,
-              const type2tc renamed = ns.follow(subtype);
-              elem_size = type_byte_size(renamed);
+              elem_size = type_byte_size(subtype, &ns);
             }
             const BigInt &val = to_constant_int2t(non_ptr_op).value;
             total_offs = val * elem_size;
