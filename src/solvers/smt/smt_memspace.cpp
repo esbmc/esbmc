@@ -295,7 +295,7 @@ smt_astt smt_convt::convert_identifier_pointer(
     expr2tc size;
     try
     {
-      size = type_byte_size_expr(expr->type);
+      size = type_byte_size_expr(expr->type, &ns);
     }
     catch(const array_type2t::inf_sized_array_excp &e)
     {

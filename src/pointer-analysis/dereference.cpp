@@ -388,7 +388,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     }
 
     // Determine offset accumulated to this point (in bits)
-    expr2tc offset_to_scalar = compute_pointer_offset_bits(base);
+    expr2tc offset_to_scalar = compute_pointer_offset_bits(base, &ns);
     simplify(offset_to_scalar);
 
     dereference2t &deref = to_dereference2t(expr);
@@ -1251,8 +1251,8 @@ void dereferencet::construct_from_const_struct_offset(
   for(auto const &it : struct_type.members)
   {
     BigInt m_offs =
-      member_offset_bits(value->type, struct_type.member_names[i]);
-    BigInt m_size = type_byte_size_bits(it);
+      member_offset_bits(value->type, struct_type.member_names[i], &ns);
+    BigInt m_size = type_byte_size_bits(it, &ns);
 
     if(m_size == 0)
     {
