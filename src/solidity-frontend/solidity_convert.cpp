@@ -100,6 +100,10 @@ bool solidity_convertert::convert()
       // add implicit construcor function
       if(add_implicit_constructor())
         return true;
+
+      // add function symbols to main
+      if(move_functions_to_main(current_contractName))
+        return true;
     }
   }
 
@@ -432,10 +436,12 @@ bool solidity_convertert::get_struct_class_method(
   struct_typet &type)
 {
   struct_typet::componentt comp;
-  if(get_decl(ast_node, comp))
-    return true;
+  if(get_func_decl_ref(ast_node, comp))
+    return false;
+
   if(comp.is_code() && to_code(comp).statement() == "skip")
     return false;
+
   type.methods().push_back(comp);
   return false;
 }
@@ -2324,7 +2330,8 @@ bool solidity_convertert::get_func_decl_ref_type(
       "solidity",
       "	@@@ Got type={}",
       SolidityGrammar::func_decl_ref_to_str(type));
-    assert(!"Unimplemented type in auxiliary type to convert function call");
+    //TODO: seem to be unnecessary, need investigate
+    // assert(!"Unimplemented type in auxiliary type to convert function call");
     return true;
   }
   }
@@ -3477,4 +3484,185 @@ void solidity_convertert::convert_type_expr(
 
   else
     solidity_gen_typecast(ns, src_expr, dest_type);
+}
+
+static inline void static_lifetime_init(const contextt &context, codet &dest)
+{
+  dest = code_blockt();
+
+  // call designated "initialization" functions
+  context.foreach_operand_in_order([&dest](const symbolt &s) {
+    if(s.type.initialization() && s.type.is_code())
+    {
+      code_function_callt function_call;
+      function_call.function() = symbol_expr(s);
+      dest.move_to_operands(function_call);
+    }
+  });
+}
+
+/*
+  verify the contract as a whole.
+  the idea is to verify the assertions that must be held 
+  in any function calling order.
+*/
+bool solidity_convertert::move_functions_to_main(
+  const std::string &contractName)
+{
+  // return if "function" is set or "contract" is unset
+  if(
+    !config.options.get_option("function").empty() ||
+    config.options.get_option("contract").empty())
+    return false;
+
+  // return if it's not the target contract
+  if(contractName != config.options.get_option("contract"))
+    return false;
+
+  /*
+  convert the verifying contract to a "sol_main" function, e.g.
+
+  Contract Base             
+  {
+      constrcutor(){}
+      function A(){}
+      function B(){}
+  }
+
+  will be converted to
+
+  void sol_main()
+  {
+    Base()  // constructor_call
+    while(nondet_bool)
+    {
+      if(nondet_bool) A();
+      if(nondet_bool) B();
+    }
+  }
+  */
+
+  // 0. initialize "sol_main" body and while-loop body
+  codet func_body, while_body;
+  static_lifetime_init(context, while_body);
+  static_lifetime_init(context, func_body);
+
+  while_body.make_block();
+  func_body.make_block();
+
+  // 1. get constructor call
+
+  // 1.1 get contract symbol ("tag-contractName")
+  const std::string id = prefix + contractName;
+  if(context.find_symbol(id) == nullptr)
+    return true;
+  const symbolt &contract = *context.find_symbol(id);
+  assert(contract.type.is_struct() && "A contract should be a struct");
+
+  // 1.2 construct a constructor call and move to func_body
+  if(context.find_symbol(contractName) == nullptr)
+    return true;
+  const symbolt &constructor = *context.find_symbol(contractName);
+  code_function_callt call;
+  call.location() = constructor.location;
+  call.function() = symbol_expr(constructor);
+
+  // move to "sol_main" body
+  func_body.move_to_operands(call);
+
+  // 2. construct a while-loop and move to func_body
+
+  // 2.1 construct ifthenelse statement
+  const struct_typet::componentst &methods =
+    to_struct_type(contract.type).methods();
+  for(const auto &method : methods)
+  {
+    // guard: nondet_bool()
+    if(context.find_symbol("c:@F@nondet_bool") == nullptr)
+      return true;
+    const symbolt &guard = *context.find_symbol("c:@F@nondet_bool");
+
+    side_effect_expr_function_callt guard_expr;
+    guard_expr.name("nondet_bool");
+    guard_expr.identifier("c:@F@nondet_bool");
+    guard_expr.location() = guard.location;
+    guard_expr.cmt_lvalue(true);
+    guard_expr.function() = symbol_expr(guard);
+
+    // then: function_call
+    const std::string func_id = method.identifier().as_string();
+    // skip constructor
+    if(func_id == contractName)
+      continue;
+
+    if(context.find_symbol(func_id) == nullptr)
+      return true;
+    const symbolt &func = *context.find_symbol(func_id);
+    code_function_callt then_expr;
+    then_expr.location() = func.location;
+    then_expr.function() = symbol_expr(func);
+    const code_typet::argumentst &arguments =
+      to_code_type(func.type).arguments();
+    then_expr.arguments().resize(
+      arguments.size(), static_cast<const exprt &>(get_nil_irep()));
+
+    // ifthenelse-statement:
+    codet if_expr("ifthenelse");
+    if_expr.copy_to_operands(guard_expr, then_expr);
+
+    // move to while-loop body
+    while_body.move_to_operands(if_expr);
+  }
+
+  // while-cond:
+  const symbolt &guard = *context.find_symbol("c:@F@nondet_bool");
+  side_effect_expr_function_callt cond_expr;
+  cond_expr.name("nondet_bool");
+  cond_expr.identifier("c:@F@nondet_bool");
+  cond_expr.cmt_lvalue(true);
+  cond_expr.location() = func_body.location();
+  cond_expr.function() = symbol_expr(guard);
+
+  // while-loop statement:
+  code_whilet code_while;
+  code_while.cond() = cond_expr;
+  code_while.body() = while_body;
+
+  // move to "sol_main"
+  func_body.move_to_operands(code_while);
+
+  // 3. add "sol_main" to symbol table
+
+  symbolt new_symbol;
+  code_typet main_type;
+  main_type.return_type() = empty_typet();
+  std::string sol_id = "c:@" + contractName + "@F@sol_main";
+  std::string sol_name = "sol_main";
+  new_symbol.location = contract.location;
+  std::string debug_modulename =
+    get_modulename_from_path(contract.location.file().as_string());
+  get_default_symbol(
+    new_symbol,
+    debug_modulename,
+    main_type,
+    sol_name,
+    sol_id,
+    contract.location);
+
+  new_symbol.lvalue = true;
+  new_symbol.is_extern = false;
+  new_symbol.file_local = false;
+
+  symbolt &added_symbol = *context.move_symbol_to_context(new_symbol);
+
+  // no params
+  main_type.make_ellipsis();
+
+  added_symbol.type = main_type;
+  added_symbol.value = func_body;
+
+  // 4. set "sol_main" as main function
+  config.main = "sol_main";
+
+  return false;
 }
