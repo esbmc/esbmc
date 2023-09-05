@@ -25,20 +25,6 @@ static inline void get_symbols(
     [&symbols](const expr2tc &e) -> void { get_symbols(e, symbols); });
 }
 
-static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
-{
-  expr->Foreach_operand([&state](expr2tc &e) -> void {
-    tvt result = interval_domaint::eval_boolean_expression(e, state);
-    if(result.is_true())
-      e = gen_true_expr();
-    else if(result.is_false())
-      e = gen_false_expr();
-    else
-      simplify_guard(e, state);
-  });
-  simplify(expr);
-}
-
 static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 {
   // Preconditions
@@ -78,6 +64,24 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
     return;
   }
 
+  // Boolean intervals
+  if(is_bool_type(expr))
+  {
+    // Expression is always true
+    if(!interval.contains(0))
+    {
+      expr = gen_true_expr();
+      return;
+    }
+
+    // interval is [0,0] which is always false
+    if(interval.singleton())
+    {
+      expr = gen_false_expr();
+      return;
+    }
+  }
+
   // Try sub-expressions
   expr->Foreach_operand(
     [&state](expr2tc &e) -> void { optimize_expression(e, state); });
@@ -99,8 +103,6 @@ void instrument_intervals(
     optimize_expression(i_it->code, d);
     optimize_expression(i_it->guard, d);
 
-    // TODO: Move Guard Simplification to here
-
     get_symbols(i_it->code, symbols);
     get_symbols(i_it->guard, symbols);
   }
@@ -118,10 +120,6 @@ void instrument_intervals(
       {
         // We may be able to simplify here
         const interval_domaint &d = interval_analysis[i_it];
-
-        // Let's try to simplify first
-        // if(interval_domaint::enable_assertion_simplification)
-        // simplify_guard(i_it->guard, d);
 
         // Evaluate the simplified expression
         tvt guard = interval_domaint::eval_boolean_expression(i_it->guard, d);
