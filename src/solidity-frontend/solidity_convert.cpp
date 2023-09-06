@@ -2049,6 +2049,7 @@ bool solidity_convertert::get_enum_member_ref(
   return false;
 }
 
+// get the built-in methods
 bool solidity_convertert::get_decl_ref_builtin(
   const nlohmann::json &decl,
   exprt &new_expr)
@@ -2057,11 +2058,17 @@ bool solidity_convertert::get_decl_ref_builtin(
   // -ve ref id means built-in functions or variables.
   // Add more special function names here
   assert(
-    decl["name"] == "assert" || decl["name"] == "__ESBMC_assume" ||
-    decl["name"] == "__VERIFIER_assume");
+    (decl["name"] == "assert" || decl["name"] == "require" ||
+     decl["name"] == "__ESBMC_assume" || decl["name"] == "__VERIFIER_assume") &&
+    "Unsupported built-in method");
 
   std::string name, id;
-  name = decl["name"].get<std::string>();
+
+  // "require" keyword is virtually identical to "assume"
+  if(decl["name"] == "require")
+    name = "__ESBMC_assume";
+  else
+    name = decl["name"].get<std::string>();
   id = name;
 
   // manually unrolled recursion here
@@ -2071,8 +2078,7 @@ bool solidity_convertert::get_decl_ref_builtin(
   code_typet convert_type;
   typet return_type;
   if(
-    decl["name"] == "assert" || decl["name"] == "__ESBMC_assume" ||
-    decl["name"] == "__VERIFIER_assume")
+    name == "assert" || name == "__ESBMC_assume" || name == "__VERIFIER_assume")
   {
     assert(decl["typeDescriptions"]["typeString"] == "function (bool) pure");
     // clang's assert(.) uses "signed_int" as assert(.) type (NOT the argument type),
