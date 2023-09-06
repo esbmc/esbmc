@@ -1361,8 +1361,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   if(access_sz == config.ansi_c.char_width)
   {
     value = bitcast2tc(
-      get_uint_type(type_byte_size_bits(value->type, &ns).to_uint64()),
-      value);
+      get_uint_type(type_byte_size_bits(value->type, &ns).to_uint64()), value);
     return construct_from_dyn_offset(value, offset, type);
   }
 
@@ -1385,7 +1384,8 @@ void dereferencet::construct_from_dyn_struct_offset(
   unsigned int i = 0;
   for(type2tc it : struct_type.members)
   {
-    BigInt offs = member_offset_bits(value->type, struct_type.member_names[i], &ns);
+    BigInt offs =
+      member_offset_bits(value->type, struct_type.member_names[i], &ns);
 
     // Compute some kind of guard
     it = ns.follow(it);
@@ -1414,8 +1414,7 @@ void dereferencet::construct_from_dyn_struct_offset(
       extract_list.emplace_back(field_guard, field);
     }
     else if(
-      access_sz > field_size &&
-      type->get_width() != config.ansi_c.char_width)
+      access_sz > field_size && type->get_width() != config.ansi_c.char_width)
     {
       guardt newguard(guard);
       newguard.add(field_guard);
