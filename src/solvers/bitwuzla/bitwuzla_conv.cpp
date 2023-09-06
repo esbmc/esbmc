@@ -770,7 +770,8 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 void bitwuzla_convt::dump_smt()
 {
-  bitwuzla_print_formula(bitw, "smt2", messaget::state.out);
+  // Print formulas using binary bit-vector output format
+  bitwuzla_print_formula(bitw, "smt2", messaget::state.out, 2);
 }
 
 void bitw_smt_ast::dump() const
