@@ -1353,12 +1353,16 @@ void dereferencet::construct_from_dyn_struct_offset(
   modet mode,
   const expr2tc *failed_symbol)
 {
+  unsigned int access_sz = type_byte_size_bits(type).to_uint64();
+
   // if we are accessing the struct using a byte, we can ignore alignment
   // rules, so convert the struct to bv and dispatch it to
   // construct_from_dyn_offset
-  if(type->get_width() == config.ansi_c.char_width)
+  if(access_sz == config.ansi_c.char_width)
   {
-    value = bitcast2tc(get_uint_type(value->type->get_width()), value);
+    value = bitcast2tc(
+      get_uint_type(type_byte_size_bits(value->type, &ns).to_uint64()),
+      value);
     return construct_from_dyn_offset(value, offset, type);
   }
 
@@ -1366,7 +1370,6 @@ void dereferencet::construct_from_dyn_struct_offset(
   // appropriate access (that we'll switch on).
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
-  unsigned int access_sz = type_byte_size_bits(type).to_uint64();
   expr2tc bits_offset = offset;
 
   expr2tc failed_container;
@@ -1380,12 +1383,13 @@ void dereferencet::construct_from_dyn_struct_offset(
   std::list<std::pair<expr2tc, expr2tc>> extract_list;
 
   unsigned int i = 0;
-  for(auto const &it : struct_type.members)
+  for(type2tc it : struct_type.members)
   {
-    BigInt offs = member_offset_bits(value->type, struct_type.member_names[i]);
+    BigInt offs = member_offset_bits(value->type, struct_type.member_names[i], &ns);
 
     // Compute some kind of guard
-    BigInt field_size = type_byte_size_bits(it);
+    it = ns.follow(it);
+    BigInt field_size = type_byte_size_bits(it, &ns);
 
     // Round up to word size
     expr2tc field_offset = constant_int2tc(offset->type, offs);
@@ -1410,7 +1414,7 @@ void dereferencet::construct_from_dyn_struct_offset(
       extract_list.emplace_back(field_guard, field);
     }
     else if(
-      access_sz > it->get_width() &&
+      access_sz > field_size &&
       type->get_width() != config.ansi_c.char_width)
     {
       guardt newguard(guard);
