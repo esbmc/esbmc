@@ -9,9 +9,6 @@ set (ESBMC_ENABLE_bitwuzla 0)
 add_subdirectory(prop)
 add_subdirectory(smt)
 
-if(BISON_FOUND AND FLEX_FOUND)
-  add_subdirectory(smtlib)
-endif()
 
 add_library(solve solve.cpp)
 target_link_libraries(solve fmt::fmt)
@@ -22,7 +19,15 @@ target_include_directories(solve
 )
 
 add_library(solvers INTERFACE)
-target_link_libraries(solvers INTERFACE solve smtlib smttuple smtfp smt prop)
+
+if(BISON_FOUND AND FLEX_FOUND)
+  add_subdirectory(smtlib)
+  target_link_libraries(solvers INTERFACE solve smtlib smttuple smtfp smt prop)
+else()
+  target_link_libraries(solvers INTERFACE solve smttuple smtfp smt prop)
+endif()
+
+
 
 # Logic for each of these are duplicated -- cmake doesn't have indirect function
 # calling, so it's hard to structure it how I want
