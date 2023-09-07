@@ -8,7 +8,10 @@ set (ESBMC_ENABLE_bitwuzla 0)
 
 add_subdirectory(prop)
 add_subdirectory(smt)
-add_subdirectory(smtlib)
+
+if(BISON_FOUND AND FLEX_FOUND)
+  add_subdirectory(smtlib)
+endif()
 
 add_library(solve solve.cpp)
 target_link_libraries(solve fmt::fmt)
