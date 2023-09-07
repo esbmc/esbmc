@@ -37,7 +37,7 @@ else()
 endif()
 
 # Add to solver link
-target_link_libraries(solvers INTERFACE solverz3)
+target_link_libraries(solvers INTERFACE smtlib)
 
 
 set(ESBMC_ENABLE_smtlib 1 PARENT_SCOPE)
