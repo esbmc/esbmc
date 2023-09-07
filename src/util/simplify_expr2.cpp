@@ -985,7 +985,8 @@ expr2tc pointer_offset2t::do_simplify() const
     expr2tc new_ptr_op = pointer_offset2tc(type, ptr_op);
     // And multiply the non pointer one by the type size.
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
-    expr2tc type_size = type_byte_size_expr(ptr_subtype);
+    expr2tc type_size =
+      type_byte_size_expr(ptr_subtype, migrate_namespace_lookup);
 
     if(non_ptr_op->type != type)
       non_ptr_op = typecast2tc(type, non_ptr_op);
