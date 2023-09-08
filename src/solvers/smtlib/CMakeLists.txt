@@ -1,4 +1,5 @@
 if(NOT ENABLE_SMTLIB)
+  set(ESBMC_ENABLE_smtlib 0 PARENT_SCOPE)
   return()
 endif()
 
