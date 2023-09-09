@@ -235,6 +235,26 @@ struct context_type_grapht
     {
       return !(a == b);
     }
+
+    friend bool is_context(node_id v)
+    {
+      return v.type == CONTEXT;
+    }
+
+    friend bool is_symbol(node_id v)
+    {
+      return v.type == SYMBOL;
+    }
+
+    friend bool is_type(node_id v)
+    {
+      return v.type == TYPE;
+    }
+
+    friend bool is_expr(node_id v)
+    {
+      return v.type == EXPR;
+    }
   };
 
   struct edge
@@ -668,10 +688,10 @@ void goto_convert_functionst::thrash_type_symbols()
   sccst(G, [this, &G](const std::vector<node_id> &scc) {
     std::unordered_set<irep_idt, irep_id_hash> avoid;
     for(node_id v : scc)
-      if(v.type == context_type_grapht::SYMBOL)
+      if(is_symbol(v))
         avoid.insert(G[v].symbol->id);
     for(node_id v : scc)
-      if(v.type == context_type_grapht::SYMBOL)
+      if(is_symbol(v))
       {
         symbolt *sym = const_cast<symbolt *>(G[v].symbol);
         log_debug("thrash-ts-detail", "renaming symbol {}", sym->id);
