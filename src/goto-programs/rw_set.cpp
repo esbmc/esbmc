@@ -86,11 +86,26 @@ void rw_sett::read_write_rec(
   else if(expr.id() == "dereference")
   {
     assert(expr.operands().size() == 1);
+
+    const std::string id2string = expr.op0().identifier().as_string();
+
+    if(id2string.find("__ESBMC") != std::string::npos ||
+       id2string.find("c:pthread_lib.c") != std::string::npos)
+    {
+      return;
+    }
+
     read(expr.op0(), guard);
 
     exprt tmp(expr.op0());
     expr2tc tmp_expr;
-    migrate_expr(tmp, tmp_expr);
+    // Used for debugging, find a specific id
+    if(expr.op0().identifier() == /*"c:main4.c@48@F@t1@shared"*/ "c:main6.c@16@F@printValue@p")
+      // migrate_expr(expr, tmp_expr);
+      migrate_expr(expr, tmp_expr);
+    else
+     migrate_expr(tmp, tmp_expr);
+
     dereference(target, tmp_expr, ns, value_sets);
     tmp = migrate_expr_back(tmp_expr);
 
