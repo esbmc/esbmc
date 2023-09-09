@@ -2311,13 +2311,17 @@ expr2tc smt_convt::get(const expr2tc &expr)
   }
 
   // Recurse on operands
-  res->Foreach_operand([this](expr2tc &e) {
+  bool have_all = true;
+  res->Foreach_operand([this, &have_all](expr2tc &e) {
     expr2tc new_e = get(e);
     e = new_e;
+    if(!e)
+      have_all = false;
   });
 
   // And simplify
-  simplify(res);
+  if(have_all)
+    simplify(res);
   return res;
 }
 

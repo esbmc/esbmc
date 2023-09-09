@@ -1884,7 +1884,14 @@ public:
   bitcast2t(const type2tc &type, const expr2tc &from)
     : bitcast_expr_methods(type, bitcast_id, from)
   {
-    assert(type->get_width() == from->type->get_width());
+    try
+    {
+      assert(type->get_width() == from->type->get_width());
+    }
+    catch(const type2t::symbolic_type_excp &)
+    {
+      /* ignore */
+    }
   }
 
   bitcast2t(const bitcast2t &ref) = default;
@@ -3112,6 +3119,8 @@ public:
     allockind k)
     : sideeffect_expr_methods(t, sideeffect_id, oper, sz, a, alloct, k)
   {
+    if(k == allockind::alloca)
+      assert(oper->type == sz->type);
   }
   sideeffect2t(const sideeffect2t &ref) = default;
 

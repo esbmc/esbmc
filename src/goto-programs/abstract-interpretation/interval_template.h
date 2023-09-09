@@ -422,17 +422,19 @@ public:
   }
 
   static interval_templatet<T>
-  cast(const interval_templatet<T> &old, const type2tc &)
+  cast(const interval_templatet<T> &, const type2tc &)
   {
     log_debug("interval", "No support for typecasting");
-    return old;
+    interval_templatet<T> result;
+    return result;
   }
 
   friend interval_templatet<T>
-  operator%(const interval_templatet<T> &s, const interval_templatet<T> &)
+  operator%(const interval_templatet<T> &, const interval_templatet<T> &)
   {
     log_debug("interval", "No support for mod");
-    return s;
+    interval_templatet<T> result;
+    return result;
   }
 
   interval_templatet<T> interval_bitand(
@@ -622,14 +624,16 @@ public:
     const interval_templatet<T> &lhs,
     const interval_templatet<T> &rhs)
   {
-    return less_than(rhs, lhs);
+    // a >= b <==> b <= a
+    return less_than_equal(rhs, lhs);
   }
 
   static interval_templatet<T> greater_than(
     const interval_templatet<T> &lhs,
     const interval_templatet<T> &rhs)
   {
-    return less_than_equal(rhs, lhs);
+    // a > b <==> b < a
+    return less_than(rhs, lhs);
   }
 
   /// This is just to check if a value has changed. This is not the same as an interval comparation!

@@ -531,6 +531,17 @@ void value_sett::get_value_set_rec(
     // members we've picked out of it at a higher level.
     valuest::const_iterator v_it = values.find(sym.get_symbol_name() + suffix);
 
+    if(sym.rlevel == symbol2t::renaming_level::level1_global)
+      assert(sym.level1_num == 0);
+    assert(sym.rlevel != symbol2t::renaming_level::level2_global);
+    /* This assertion does not hold: during value_sett::assign() the RHS is the
+     * L2 symbol c:pthread_lib.c@5466@F@pthread_create@startdata in e.g.
+     * - regression/esbmc-unix/02_account_symbolic_06
+     * - regression/esbmc/10_bicycle_01
+     * - regression/nonz3/10_bicycle_02
+    // assert(sym.rlevel != symbol2t::renaming_level::level2);
+     */
+
     // If it points at things, put those things into the destination object map.
     if(v_it != values.end())
     {
@@ -606,8 +617,7 @@ void value_sett::get_value_set_rec(
                 throw type2t::symbolic_type_excp();
 
               // Potentially rename,
-              const type2tc renamed = ns.follow(subtype);
-              elem_size = type_byte_size(renamed);
+              elem_size = type_byte_size(subtype, &ns);
             }
             const BigInt &val = to_constant_int2t(non_ptr_op).value;
             total_offs = val * elem_size;
@@ -712,6 +722,11 @@ void value_sett::get_value_set_rec(
 
   // If none of those expressions matched, then we don't really know what this
   // expression evaluates to. So just record it as being unknown.
+  log_debug(
+    "value-set",
+    "unknown expr {} of type {} -> inserting unknown value",
+    get_expr_id(expr),
+    get_type_id(expr->type));
   expr2tc tmp = unknown2tc(original_type);
   insert(dest, tmp, BigInt(0));
 }
@@ -970,6 +985,11 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
 
   // If we didn't recognize the expression, then we have no idea what this
   // refers to, so store an unknown expr.
+  log_debug(
+    "value-set",
+    "unknown expr {} of type {} -> inserting unknown reference",
+    get_expr_id(expr),
+    get_type_id(expr->type));
   expr2tc unknown = unknown2tc(expr->type);
   insert(dest, unknown, BigInt(0));
 }

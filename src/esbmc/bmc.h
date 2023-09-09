@@ -37,10 +37,6 @@ protected:
     std::shared_ptr<smt_convt> &smt_conv,
     std::shared_ptr<symex_target_equationt> &eq);
 
-  virtual void do_cbmc(
-    std::shared_ptr<smt_convt> &smt_conv,
-    std::shared_ptr<symex_target_equationt> &eq);
-
   virtual void show_program(std::shared_ptr<symex_target_equationt> &eq);
   virtual void report_success();
   virtual void report_failure();

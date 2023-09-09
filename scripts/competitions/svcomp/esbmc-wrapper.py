@@ -119,7 +119,7 @@ def parse_result(the_output, prop):
 
     if prop == Property.memory:
       if memory_leak in the_output:
-        return Result.unknown
+        return Result.fail_memtrack
 
       if invalid_pointer_free in the_output:
         return Result.fail_free
@@ -259,6 +259,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
     # It seems SV-COMP doesn't want to check for memleaks on abort()
     # see also <https://github.com/esbmc/esbmc/issues/1259>
     command_line += "--no-abnormal-memory-leak "
+    # many benchmarks assume malloc(0) == NULL and alloca(0) == NULL
+    command_line += "--malloc-zero-is-null "
     strat = "incr"
   elif prop == Property.memcleanup:
     command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
@@ -267,7 +269,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
-      command_line += "--no-pointer-check --no-bounds-check --interval-analysis --error-label ERROR --goto-unwind --unlimited-goto-unwind "
+      command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR --goto-unwind --unlimited-goto-unwind "
   else:
     print("Unknown property")
     exit(1)

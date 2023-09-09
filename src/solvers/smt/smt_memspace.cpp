@@ -154,9 +154,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 
     // Actually perform some pointer arith
     const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
-    typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
-    type2tc followed_type = migrate_type(followed_type_old);
-    expr2tc pointee_size = type_byte_size_expr(followed_type);
+    expr2tc pointee_size = type_byte_size_expr(ptr_type.subtype, &ns);
     type2tc inttype = machine_ptr;
     type2tc difftype = get_int_type(config.ansi_c.address_width);
 
@@ -295,7 +293,7 @@ smt_astt smt_convt::convert_identifier_pointer(
     expr2tc size;
     try
     {
-      size = type_byte_size_expr(expr->type);
+      size = type_byte_size_expr(expr->type, &ns);
     }
     catch(const array_type2t::inf_sized_array_excp &e)
     {

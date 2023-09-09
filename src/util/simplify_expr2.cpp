@@ -890,7 +890,7 @@ expr2tc member2t::do_simplify() const
       s = to_constant_struct2t(source_value).datatype_members[no];
       assert(
         is_pointer_type(type) ||
-        base_type_eq(type, s->type, namespacet(contextt())));
+        base_type_eq(type, s->type, *migrate_namespace_lookup));
     }
     else
     {
@@ -906,11 +906,10 @@ expr2tc member2t::do_simplify() const
       /* If the type we just selected isn't compatible, it means that whatever
        * field is in the constant union /isn't/ the field we're selecting from
        * it. So don't simplify it, because we can't. */
-      // This can be the default, because base_type will not print anything
 
       if(
         !is_pointer_type(type) &&
-        !base_type_eq(type, s->type, namespacet(contextt())))
+        !base_type_eq(type, s->type, *migrate_namespace_lookup))
         return expr2tc();
     }
 
@@ -986,7 +985,8 @@ expr2tc pointer_offset2t::do_simplify() const
     expr2tc new_ptr_op = pointer_offset2tc(type, ptr_op);
     // And multiply the non pointer one by the type size.
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
-    expr2tc type_size = type_byte_size_expr(ptr_subtype);
+    expr2tc type_size =
+      type_byte_size_expr(ptr_subtype, migrate_namespace_lookup);
 
     if(non_ptr_op->type != type)
       non_ptr_op = typecast2tc(type, non_ptr_op);
@@ -1609,7 +1609,7 @@ expr2tc bitcast2t::do_simplify() const
   // Follow approach of old irep, i.e., copy it
   if(type == from->type)
   {
-    // Typecast to same type means this can be eliminated entirely
+    // Bitcast to same type means this can be eliminated entirely
     return from;
   }
 

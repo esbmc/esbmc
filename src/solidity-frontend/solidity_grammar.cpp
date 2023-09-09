@@ -58,6 +58,30 @@ const std::map<ElementaryTypeNameT, unsigned int> int_size_map = {
   {INT208, 208}, {INT216, 216}, {INT224, 224}, {INT232, 232}, {INT240, 240},
   {INT248, 248}, {INT256, 256},
 };
+const std::unordered_map<std::string, ElementaryTypeNameT> bytesn_to_type_map =
+  {
+    {"byte", BYTES1},     {"bytes1", BYTES1},   {"bytes2", BYTES2},
+    {"bytes3", BYTES3},   {"bytes4", BYTES4},   {"bytes5", BYTES5},
+    {"bytes6", BYTES6},   {"bytes7", BYTES7},   {"bytes8", BYTES8},
+    {"bytes9", BYTES9},   {"bytes10", BYTES10}, {"bytes11", BYTES11},
+    {"bytes12", BYTES12}, {"bytes13", BYTES13}, {"bytes14", BYTES14},
+    {"bytes15", BYTES15}, {"bytes16", BYTES16}, {"bytes17", BYTES17},
+    {"bytes18", BYTES18}, {"bytes19", BYTES19}, {"bytes20", BYTES20},
+    {"bytes21", BYTES21}, {"bytes22", BYTES22}, {"bytes23", BYTES23},
+    {"bytes24", BYTES24}, {"bytes25", BYTES25}, {"bytes26", BYTES26},
+    {"bytes27", BYTES27}, {"bytes28", BYTES28}, {"bytes29", BYTES29},
+    {"bytes30", BYTES30}, {"bytes31", BYTES31}, {"bytes32", BYTES32},
+};
+const std::map<ElementaryTypeNameT, unsigned int> bytesn_size_map = {
+  {BYTES1, 1},   {BYTES2, 2},   {BYTES3, 3},   {BYTES4, 4},   {BYTES5, 5},
+  {BYTES6, 6},   {BYTES7, 7},   {BYTES8, 8},   {BYTES9, 9},   {BYTES10, 10},
+  {BYTES11, 11}, {BYTES12, 12}, {BYTES13, 13}, {BYTES14, 14}, {BYTES15, 15},
+  {BYTES16, 16}, {BYTES17, 17}, {BYTES18, 18}, {BYTES19, 19}, {BYTES20, 20},
+  {BYTES21, 21}, {BYTES22, 22}, {BYTES23, 23}, {BYTES24, 24}, {BYTES25, 25},
+  {BYTES26, 26}, {BYTES27, 27}, {BYTES28, 28}, {BYTES29, 29}, {BYTES30, 30},
+  {BYTES31, 31}, {BYTES32, 32},
+};
+
 // rule contract-body-element
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
 {
@@ -72,6 +96,10 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
     (element["kind"] == "function" || element["kind"] == "constructor"))
   {
     return FunctionDef;
+  }
+  else if(element["nodeType"] == "EnumDefinition")
+  {
+    return EnumDef;
   }
   else
   {
@@ -90,6 +118,7 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
   {
     ENUM_TO_STR(StateVarDecl)
     ENUM_TO_STR(FunctionDef)
+    ENUM_TO_STR(EnumDef)
     ENUM_TO_STR(ContractBodyElementTError)
   default:
   {
@@ -112,10 +141,17 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
       typeString == "string" || typeString.find("literal_string") == 0 ||
-      typeString == "string storage ref" || typeString == "string memory")
+      typeString == "string storage ref" || typeString == "string memory" ||
+      typeString == "address payable" || typeString == "address" ||
+      typeString.substr(0, 5) == "bytes")
     {
       // For state var declaration,
       return ElementaryTypeName;
+    }
+    else if(typeString.find("type(") != std::string::npos)
+    {
+      // For type conversion
+      return TypeConversionName;
     }
     else if(typeString.find("int_const") != std::string::npos)
     {
@@ -157,6 +193,12 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return ContractTypeName;
     }
+    else if(
+      type_name["typeIdentifier"].get<std::string>().find("t_enum") !=
+      std::string::npos)
+    {
+      return EnumTypeName;
+    }
     else
     {
       log_error(
@@ -195,6 +237,8 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(ArrayTypeName)
     ENUM_TO_STR(DynArrayTypeName)
     ENUM_TO_STR(ContractTypeName)
+    ENUM_TO_STR(TypeConversionName)
+    ENUM_TO_STR(EnumTypeName)
     ENUM_TO_STR(TypeNameTError)
   default:
   {
@@ -242,7 +286,24 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   {
     return STRING;
   }
-
+  if(typeString == "address")
+  {
+    return ADDRESS;
+  }
+  if(typeString == "address payable")
+  {
+    return ADDRESS_PAYABLE;
+  }
+  if(typeString == "bytes" || typeString == "bytes storage ref")
+  {
+    // dynamic bytes array
+    return BYTE_ARRAY;
+  }
+  if(bytesn_to_type_map.count(typeString))
+  {
+    // fixed-size arrays bytesN, where N is a number between 1 and 32
+    return bytesn_to_type_map.at(typeString);
+  }
   log_error(
     "Got elementary-type-name typeString={}. Unsupported "
     "elementary-type-name type",
@@ -322,6 +383,41 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
     ENUM_TO_STR(BOOL)
     ENUM_TO_STR(STRING_LITERAL)
     ENUM_TO_STR(STRING)
+    ENUM_TO_STR(ADDRESS)
+    ENUM_TO_STR(ADDRESS_PAYABLE)
+    ENUM_TO_STR(BYTE_ARRAY)
+    ENUM_TO_STR(BYTES1)
+    ENUM_TO_STR(BYTES2)
+    ENUM_TO_STR(BYTES3)
+    ENUM_TO_STR(BYTES4)
+    ENUM_TO_STR(BYTES5)
+    ENUM_TO_STR(BYTES6)
+    ENUM_TO_STR(BYTES7)
+    ENUM_TO_STR(BYTES8)
+    ENUM_TO_STR(BYTES9)
+    ENUM_TO_STR(BYTES10)
+    ENUM_TO_STR(BYTES11)
+    ENUM_TO_STR(BYTES12)
+    ENUM_TO_STR(BYTES13)
+    ENUM_TO_STR(BYTES14)
+    ENUM_TO_STR(BYTES15)
+    ENUM_TO_STR(BYTES16)
+    ENUM_TO_STR(BYTES17)
+    ENUM_TO_STR(BYTES18)
+    ENUM_TO_STR(BYTES19)
+    ENUM_TO_STR(BYTES20)
+    ENUM_TO_STR(BYTES21)
+    ENUM_TO_STR(BYTES22)
+    ENUM_TO_STR(BYTES23)
+    ENUM_TO_STR(BYTES24)
+    ENUM_TO_STR(BYTES25)
+    ENUM_TO_STR(BYTES26)
+    ENUM_TO_STR(BYTES27)
+    ENUM_TO_STR(BYTES28)
+    ENUM_TO_STR(BYTES29)
+    ENUM_TO_STR(BYTES30)
+    ENUM_TO_STR(BYTES31)
+    ENUM_TO_STR(BYTES32)
     ENUM_TO_STR(ElementaryTypeNameTError)
   default:
   {
@@ -339,6 +435,11 @@ unsigned int uint_type_name_to_size(ElementaryTypeNameT type)
 unsigned int int_type_name_to_size(ElementaryTypeNameT type)
 {
   return int_size_map.at(type);
+}
+
+unsigned int bytesn_type_name_to_size(ElementaryTypeNameT type)
+{
+  return bytesn_size_map.at(type);
 }
 
 // rule parameter-list
@@ -492,13 +593,25 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return Tuple;
   }
-  else if(
-    expr["nodeType"] == "FunctionCall" || expr["nodeType"] == "MemberAccess")
+  else if(expr["nodeType"] == "FunctionCall")
   {
     if(expr["expression"]["nodeType"] == "NewExpression")
       return NewExpression;
     if(expr["expression"]["nodeType"] == "MemberAccess")
       return MemberCallClass;
+    if(
+      expr["expression"]["nodeType"] == "ElementaryTypeNameExpression" &&
+      expr["kind"] == "typeConversion")
+      return ElementaryTypeNameExpression;
+    return CallExprClass;
+  }
+  else if(expr["nodeType"] == "MemberAccess")
+  {
+    // get enum.member
+    if(expr["expression"]["nodeType"] == "Identifier")
+      return DeclRefExprClass;
+
+    // get contractInstance.function
     return CallExprClass;
   }
   else if(expr["nodeType"] == "ImplicitCastExprClass")
@@ -675,6 +788,10 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr)
   {
     return BO_OrAssign;
   }
+  else if(expr["operator"] == "**")
+  {
+    return BO_Pow;
+  }
   else
   {
     log_error(
@@ -723,6 +840,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(BO_AndAssign)
     ENUM_TO_STR(BO_XorAssign)
     ENUM_TO_STR(BO_OrAssign)
+    ENUM_TO_STR(BO_Pow)
 
     ENUM_TO_STR(UnaryOperatorClass)
     ENUM_TO_STR(UO_PreDec)
@@ -743,6 +861,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(IndexAccess)
     ENUM_TO_STR(NewExpression)
     ENUM_TO_STR(MemberCallClass)
+    ENUM_TO_STR(ElementaryTypeNameExpression)
     ENUM_TO_STR(ExpressionTError)
   default:
   {
