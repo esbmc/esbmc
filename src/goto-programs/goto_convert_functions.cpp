@@ -577,7 +577,7 @@ struct sccst /* strongly connected components */
 
   std::function<void(const std::vector<node_id> &)> handle_scc;
 
-  sccst(
+  explicit sccst(
     const context_type_grapht &G,
     std::function<void(const std::vector<node_id> &)> handle_scc = {})
     : G(G), data(G), handle_scc(std::move(handle_scc))
