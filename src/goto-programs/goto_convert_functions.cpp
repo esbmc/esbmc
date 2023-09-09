@@ -300,7 +300,7 @@ struct context_type_grapht
     std::vector<edge> adj;
   };
 
-  std::vector<nodet> Vs[N_NODE_TYPES];
+  std::array<std::vector<nodet>, N_NODE_TYPES> Vs;
 
   template <typename F>
   void forall_nodes(node_typet type, F && f) const
@@ -615,15 +615,17 @@ struct sccst /* strongly connected components */
     for(const edge &e : G.adj(v))
     {
       node_id w = e.target;
+      size_t link;
       if(!data[w].index)
       {
         tarjan(w);
-        data[v].lowlink = std::min(data[v].lowlink, data[w].lowlink);
+        link = data[w].lowlink;
       }
       else if(data[w].on_stack)
-      {
-        data[v].lowlink = std::min(data[v].lowlink, data[w].index);
-      }
+        link = data[w].index;
+      else
+        continue;
+      data[v].lowlink = std::min(data[v].lowlink, link);
     }
 
     if(data[v].lowlink != data[v].index)
@@ -641,23 +643,6 @@ struct sccst /* strongly connected components */
 
     if(handle_scc)
       handle_scc(scc);
-
-    // record SCCs of size > 1 to make life easier for thrash_type_symbols()
-    if(scc.size() == 1)
-      return;
-
-    FILE *f = messaget::state.target("thrash-ts", VerbosityLevel::Debug);
-    if(!f)
-      return;
-
-    fprintf(f, "large scc:");
-    for(node_id w : scc)
-      fprintf(f, " %zd:%zd", w.type, w.idx);
-    fprintf(f, " --");
-    for(node_id w : scc)
-      if(w.type == context_type_grapht::SYMBOL)
-        fprintf(f, " %s", G[w].symbol->id.c_str());
-    fprintf(f, "\n");
   }
 };
 } // namespace
@@ -686,6 +671,19 @@ void goto_convert_functionst::thrash_type_symbols()
   node_id root = G.add_all(context);
 
   sccst(G, [this, &G](const std::vector<node_id> &scc) {
+    if(FILE *f = messaget::state.target("thrash-ts", VerbosityLevel::Debug);
+       scc.size() > 1 && f)
+    {
+      fprintf(f, "large scc:");
+      for(node_id w : scc)
+        fprintf(f, " %zd:%zd", w.type, w.idx);
+      fprintf(f, " --");
+      for(node_id w : scc)
+        if(is_symbol(w))
+          fprintf(f, " %s", G[w].symbol->id.c_str());
+      fprintf(f, "\n");
+    }
+
     std::unordered_set<irep_idt, irep_id_hash> avoid;
     for(node_id v : scc)
       if(is_symbol(v))
