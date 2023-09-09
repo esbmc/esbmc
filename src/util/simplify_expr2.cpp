@@ -1809,6 +1809,17 @@ expr2tc typecast2t::do_simplify() const
       /* might happen if there is a symbolic type in a ptr's subtype; these
        * have not been squashed by thrash_type_symbols() */
     }
+    catch(const array_type2t::inf_sized_array_excp &)
+    {
+      /* Happens when pointing into infinite size arrays; this is usually the
+       * case when there is a variable declared extern which has no complete
+       * type, but it still is being accessed.
+       * See regression/esbmc/github_1210-1-* for examples.
+       *
+       * In the past thrash_type_symbols() wouldn't touch those (as they would
+       * be under a pointer, but since we're also handling arrays of symbolic
+       * subtype under pointers now, they arrive here as well. */
+    }
 
     return expr2tc();
   }
