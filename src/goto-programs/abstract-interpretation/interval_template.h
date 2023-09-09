@@ -624,14 +624,16 @@ public:
     const interval_templatet<T> &lhs,
     const interval_templatet<T> &rhs)
   {
-    return less_than(rhs, lhs);
+    // a >= b <==> b <= a
+    return less_than_equal(rhs, lhs);
   }
 
   static interval_templatet<T> greater_than(
     const interval_templatet<T> &lhs,
     const interval_templatet<T> &rhs)
   {
-    return less_than_equal(rhs, lhs);
+    // a > b <==> b < a
+    return less_than(rhs, lhs);
   }
 
   /// This is just to check if a value has changed. This is not the same as an interval comparation!
