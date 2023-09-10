@@ -641,40 +641,24 @@ void goto_convert_functionst::thrash_type_symbols()
   // in a struct to itself, this breaks down. Therefore, don't rename types of
   // pointers; they have a type already; they're pointers.
 
-  /* Some types under pointers we need to replace, however, in order to make
-   * pointer arithmetic work on them.
-   * See <https://github.com/esbmc/esbmc/issues/1289>. We do this by computing
-   * the strongly connected components (SCCs) of the type subgraph of the graph
-   * represented by the context. Those SCCs of size larger than one node are not
-   * safe to be replaced at the moment since they would introduce cycles and our
-   * ad-hoc recursions are not prepared for those.
-   *
-   * Tarjan's algorithm for computing SCCs has the benefit of giving a
-   * topological ordering of the SCCs of the graph. We use that as the order in
-   * which to replace/unfold symbolic types in symbols' values and types. */
+  /* Tarjan's algorithm for computing strongly connected components (SCCs) has
+   * the benefit of giving a topological ordering of the SCCs of the graph. We
+   * use that as the order in which to replace/unfold symbolic types in symbols'
+   * values and types. The effect is that these "dependencies" are resolved
+   * before symbols that use on them. When a symbolic type refers to itself (or
+   * to a another node in its SCC) it is "unfolded" exactly once.
+   */
 
   context_type_grapht G;
   node_id root = G.add_all(context);
 
   sccst(G, [this, &G](const std::vector<node_id> &scc) {
-    if(FILE *f = messaget::state.target("thrash-ts", VerbosityLevel::Debug);
-       scc.size() > 1 && f)
-    {
-      fprintf(f, "large scc:");
-      for(node_id w : scc)
-        fprintf(f, " %zd:%zd", w.type, w.idx);
-      fprintf(f, " --");
-      for(node_id w : scc)
-        if(is_symbol(w))
-          fprintf(f, " %s", G[w].symbol->id.c_str());
-      fprintf(f, "\n");
-    }
-
     for(node_id v : scc)
       if(is_symbol(v))
       {
         symbolt *sym = const_cast<symbolt *>(G[v].symbol);
-        log_debug("thrash-ts-detail", "renaming symbol {}", sym->id);
+        log_debug(
+          "thrash-ts", "thrashing symbolic types inside symbol {}", sym->id);
         rename_exprs(sym->value, *sym);
         rename_types(sym->type, *sym);
       }
