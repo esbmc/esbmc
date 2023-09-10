@@ -1623,7 +1623,7 @@ expr2tc bitcast2t::do_simplify() const
 expr2tc typecast2t::do_simplify() const
 {
   // Follow approach of old irep, i.e., copy it
-  if(type == from->type)
+  if(base_type_eq(type, from->type, *migrate_namespace_lookup))
   {
     // Typecast to same type means this can be eliminated entirely
     return from;

@@ -259,7 +259,7 @@ void goto_symext::track_new_pointer(
   expr2tc sz_index_expr = index2tc(size_type2(), sz_sym, ptr_obj);
 
   expr2tc object_size_exp =
-    is_nil_expr(size) ? type_byte_size_expr(new_type) : size;
+    is_nil_expr(size) ? type_byte_size_expr(new_type, &ns) : size;
 
   symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true);
 }
@@ -982,16 +982,14 @@ static inline expr2tc gen_byte_expression(
   return result;
 }
 
-static inline expr2tc gen_value_by_byte(
+expr2tc goto_symext::gen_value_by_byte(
   const type2tc &type,
   const expr2tc &src,
   const expr2tc &value,
   const size_t num_of_bytes,
-  const size_t offset)
+  const size_t offset) const
 {
-  /**
-   * @brief Construct a new object, initializing it with the memset equivalent
-   *
+  /*
    * There are a few corner cases here:
    *
    * 1 - Primitives: these are simple: just generate the byte_expression directly
@@ -1000,7 +998,6 @@ static inline expr2tc gen_value_by_byte(
    * 3 - Structs/Union: these are the hardest as we have to take the alignment into
    *        account when dealing with it. Hopefully the clang-frontend already give it
    *        to us.
-   *
    */
 
   // Bitwise operations are not valid for floats. Throw error (debug) or give up (release)
@@ -1019,7 +1016,7 @@ static inline expr2tc gen_value_by_byte(
     constant_array2t &data = to_constant_array2t(result);
 
     uint64_t base_size =
-      type_byte_size(to_array_type(type).subtype).to_uint64();
+      type_byte_size(to_array_type(type).subtype, &ns).to_uint64();
     uint64_t bytes_left = num_of_bytes;
     uint64_t offset_left = offset;
 
@@ -1083,7 +1080,7 @@ static inline expr2tc gen_value_by_byte(
       type2tc current_member_type = data.datatype_members[i]->type;
 
       uint64_t current_member_size =
-        type_byte_size(current_member_type).to_uint64();
+        type_byte_size(current_member_type, &ns).to_uint64();
 
       // Skip offsets
       if(offset_left >= current_member_size)
@@ -1131,7 +1128,7 @@ static inline expr2tc gen_value_by_byte(
     expr2tc result = gen_zero(type);
     constant_union2t &data = to_constant_union2t(result);
 
-    uint64_t union_total_size = type_byte_size(type).to_uint64();
+    uint64_t union_total_size = type_byte_size(type, &ns).to_uint64();
     // Let's find a member with the biggest size
     int selected_member_index;
 
@@ -1346,7 +1343,7 @@ void goto_symext::intrinsic_memset(
     uint64_t type_size;
     try
     {
-      type_size = type_byte_size(item_object->type).to_uint64();
+      type_size = type_byte_size(item_object->type, &ns).to_uint64();
     }
     catch(const array_type2t::dyn_sized_array_excp &)
     {
