@@ -361,7 +361,6 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   {
     // 1. printf: 1st argument
     assert(new_rhs.operands.size() >= 1 && "Wrong printf signature");
-    idx = 1;
     const expr2tc &base_expr = get_base_object(new_rhs.operands[0]);
     fmt = get_string_argument(base_expr);
     idx = (fmt == "") ? 0 : 1;
