@@ -350,7 +350,10 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   code_printf2t &new_rhs = to_code_printf2t(renamed_rhs);
 
   if(new_rhs.bs_name.empty())
-    assert(!"No base_name for code_printf2t");
+  {
+    log_error("No base_name for code_printf2t");
+    return;
+  }
 
   const std::string base_name = new_rhs.bs_name;
 
@@ -366,12 +369,13 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     idx = (fmt == "") ? 0 : 1;
   }
   else if(
-    base_name == "fprintf" || base_name == "dprintf" || base_name == "sprintf")
+    base_name == "fprintf" || base_name == "dprintf" ||
+    base_name == "sprintf" || base_name == "vfprintf")
   {
     // 2.fprintf, sprintf, dprintf: 2nd argument
     assert(
       new_rhs.operands.size() >= 2 &&
-      "Wrong fprintf/sprintf/dprintf signature");
+      "Wrong fprintf/sprintf/dprintf/vfprintf signature");
     const expr2tc &base_expr = get_base_object(new_rhs.operands[1]);
     fmt = get_string_argument(base_expr);
     idx = (fmt == "") ? 1 : 2;
