@@ -1135,7 +1135,7 @@ expr2tc goto_symext::gen_value_by_byte(
     for(unsigned i = 0; i < to_union_type(type).members.size(); i++)
     {
       if(
-        type_byte_size(to_union_type(type).members[i]).to_uint64() ==
+        type_byte_size(to_union_type(type).members[i], &ns).to_uint64() ==
         union_total_size)
       {
         selected_member_index = i;

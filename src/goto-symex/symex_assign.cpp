@@ -509,7 +509,7 @@ void goto_symext::symex_assign_byte_extract(
       "Can't currently byte extract through more than two dimensions of "
       "array right now, sorry");
     expr2tc subtype_sz =
-      constant_int2tc(index_type2(), type_byte_size(arr_type.subtype));
+      constant_int2tc(index_type2(), type_byte_size(arr_type.subtype, &ns));
     expr2tc div = div2tc(index_type2(), extract.source_offset, subtype_sz);
     expr2tc mod = modulus2tc(index_type2(), extract.source_offset, subtype_sz);
     do_simplify(div);

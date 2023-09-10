@@ -604,7 +604,7 @@ void goto_convertt::generate_dynamic_size_vla(
   const typet &subtype = arr_type.subtype();
 
   type2tc tmp = migrate_type(subtype);
-  auto st_size = type_byte_size(tmp);
+  auto st_size = type_byte_size(tmp, &ns);
 
   exprt st_size_expr = from_integer(st_size, size.type());
   exprt mult(exprt::mult, size.type());

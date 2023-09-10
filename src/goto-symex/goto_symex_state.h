@@ -185,13 +185,16 @@ public:
      * @param stack_limit to limit size for stack.
      * @return Constrain the stack limit (lessthanequal2t)
      */
-    expr2tc process_stack_size(const expr2tc &expr, unsigned long stack_limit);
+    expr2tc process_stack_size(
+      const expr2tc &expr,
+      unsigned long stack_limit,
+      const namespacet &ns);
 
     /**
      * Decrease the stack frame size when the variables go out of scope
      * @param expr Expression to considered in the stack frame.
      */
-    void decrease_stack_frame_size(const expr2tc &expr);
+    void decrease_stack_frame_size(const expr2tc &expr, const namespacet &ns);
 
     /** Set of variables names that have been declared. Used to detect when we
      *  are in some kind of block that is entered then exited repeatedly -

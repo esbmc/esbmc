@@ -443,7 +443,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   if(is_index2t(obj.ptr_obj) || is_member2t(obj.ptr_obj))
   {
     // This might be a composite index/member/blah chain
-    expr2tc offs = compute_pointer_offset(obj.ptr_obj);
+    expr2tc offs = compute_pointer_offset(obj.ptr_obj, &ns);
     expr2tc base = get_base_object(obj.ptr_obj);
 
     expr2tc addrof = address_of2tc(obj.type, base);

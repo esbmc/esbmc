@@ -54,7 +54,7 @@ static expr2tc fixup_containerof_in_sizeof(const expr2tc &_expr)
     return expr;
 
   const address_of2t &addrof = to_address_of2t(expr);
-  return compute_pointer_offset(addrof.ptr_obj);
+  return compute_pointer_offset(addrof.ptr_obj, migrate_namespace_lookup);
 }
 
 static type2tc migrate_type0(const typet &type)

@@ -87,7 +87,7 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
 
   pointer_struct = struct_type2tc(members, names, names, "pointer_struct");
 
-  pointer_logic.emplace_back();
+  pointer_logic.emplace_back(ns);
 
   addr_space_sym_num.push_back(0);
 
@@ -357,9 +357,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
 #endif
     a = convert_ast(typecast2tc(
-      get_uint_type(type_byte_size_bits(expr->type).to_uint64()),
+      get_uint_type(type_byte_size_bits(expr->type, &ns).to_uint64()),
       bitcast2tc(
-        get_uint_type(type_byte_size_bits(src_expr->type).to_uint64()),
+        get_uint_type(type_byte_size_bits(src_expr->type, &ns).to_uint64()),
         src_expr)));
     break;
   }
@@ -663,12 +663,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else if(is_union_type(expr))
     {
-      uint64_t bits = type_byte_size_bits(expr->type).to_uint64();
+      uint64_t bits = type_byte_size_bits(expr->type, &ns).to_uint64();
       const union_type2t &tu = to_union_type(expr->type);
       assert(is_constant_string2t(with.update_field));
       unsigned c =
         tu.get_component_number(to_constant_string2t(with.update_field).value);
-      uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
+      uint64_t mem_bits = type_byte_size_bits(tu.members[c], &ns).to_uint64();
       expr2tc upd = bitcast2tc(
         get_uint_type(mem_bits), typecast2tc(tu.members[c], with.update_value));
       if(mem_bits < bits)
@@ -1289,7 +1289,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
   }
   case type2t::union_id:
   {
-    result = mk_int_bv_sort(type_byte_size_bits(type).to_uint64());
+    result = mk_int_bv_sort(type_byte_size_bits(type, &ns).to_uint64());
     break;
   }
 
@@ -1667,7 +1667,7 @@ smt_astt smt_convt::convert_member(const expr2tc &expr)
   // requested member type
   if(is_union_type(member.source_value))
   {
-    BigInt size = type_byte_size_bits(member.source_value->type);
+    BigInt size = type_byte_size_bits(member.source_value->type, &ns);
     expr2tc to_bv =
       bitcast2tc(get_uint_type(size.to_uint64()), member.source_value);
     type2tc type = expr->type;
@@ -1676,7 +1676,7 @@ smt_astt smt_convt::convert_member(const expr2tc &expr)
     return convert_ast(bitcast2tc(
       type,
       typecast2tc(
-        get_uint_type(type_byte_size_bits(type).to_uint64()), to_bv)));
+        get_uint_type(type_byte_size_bits(type, &ns).to_uint64()), to_bv)));
   }
 
   assert(
@@ -2353,7 +2353,7 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   case type2t::union_id:
   {
     expr2tc uint_rep =
-      get_by_ast(get_uint_type(type_byte_size_bits(type).to_uint64()), a);
+      get_by_ast(get_uint_type(type_byte_size_bits(type, &ns).to_uint64()), a);
     std::vector<expr2tc> members;
     /* TODO: this violates the assumption in the rest of ESBMC that
      *       constant_union2t only have at most 1 member initializer.
@@ -2364,7 +2364,7 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
       expr2tc cast = bitcast2tc(
         member_type,
         typecast2tc(
-          get_uint_type(type_byte_size_bits(member_type).to_uint64()),
+          get_uint_type(type_byte_size_bits(member_type, &ns).to_uint64()),
           uint_rep));
       simplify(cast);
       members.push_back(cast);

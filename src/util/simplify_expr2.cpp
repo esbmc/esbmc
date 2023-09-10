@@ -935,8 +935,8 @@ expr2tc pointer_offset2t::do_simplify() const
       const index2t &index = to_index2t(addrof.ptr_obj);
       if(is_constant_int2t(index.index))
       {
-        expr2tc offs =
-          try_simplification(compute_pointer_offset(addrof.ptr_obj));
+        expr2tc offs = try_simplification(
+          compute_pointer_offset(addrof.ptr_obj, migrate_namespace_lookup));
         if(is_constant_int2t(offs))
           return offs;
       }

@@ -593,7 +593,7 @@ void goto_symext::symex_return(const expr2tc &code)
     code->foreach_operand([this](const expr2tc &e) {
       // check whether the stack size has been reached.
       claim(
-        (cur_state->top().process_stack_size(e, stack_limit)),
+        (cur_state->top().process_stack_size(e, stack_limit, ns)),
         "Stack limit property was violated");
     });
   }

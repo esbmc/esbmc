@@ -1054,7 +1054,7 @@ void dereferencet::build_reference_rec(
     // Let's find a member with the biggest size
     size_t selected_member_index = SIZE_MAX;
     for(size_t i = 0; i < uni_type.members.size(); i++)
-      if(type_byte_size(uni_type.members[i]) == union_total_size)
+      if(type_byte_size(uni_type.members[i], &ns) == union_total_size)
       {
         selected_member_index = i;
         break;
@@ -1162,7 +1162,7 @@ void dereferencet::construct_from_array(
     expr2tc replaced_dyn_offset = replace_dyn_offset_with_zero(offset);
     simplify(replaced_dyn_offset);
     unsigned int num_bytes = compute_num_bytes_to_extract(
-      replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
+      replaced_dyn_offset, type_byte_size_bits(type, &ns).to_uint64());
 
     // Converting offset to bytes for byte extracting
     expr2tc offset_bytes =
@@ -1181,7 +1181,7 @@ void dereferencet::construct_from_array(
     value = bitcast2tc(
       type,
       extract_bits_from_byte_array(
-        value, offset_bits, type_byte_size_bits(type).to_uint64()));
+        value, offset_bits, type_byte_size_bits(type, &ns).to_uint64()));
   }
 }
 
@@ -1224,8 +1224,8 @@ void dereferencet::construct_from_const_offset(
     }
   }
 
-  unsigned int num_bytes =
-    compute_num_bytes_to_extract(offset, type_byte_size_bits(type).to_uint64());
+  unsigned int num_bytes = compute_num_bytes_to_extract(
+    offset, type_byte_size_bits(type, &ns).to_uint64());
 
   // Converting offset to bytes before bytes extraction
   expr2tc offset_bytes = typecast2tc(
@@ -1241,7 +1241,7 @@ void dereferencet::construct_from_const_offset(
   simplify(offset_bits);
 
   value = extract_bits_from_byte_array(
-    value, offset_bits, type_byte_size_bits(type).to_uint64());
+    value, offset_bits, type_byte_size_bits(type, &ns).to_uint64());
 
   // Extracting bits from the produced bv
   value = bitcast2tc(type, value);
@@ -1257,7 +1257,7 @@ void dereferencet::construct_from_const_struct_offset(
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
   const BigInt int_offset = to_constant_int2t(offset).value;
-  BigInt access_size = type_byte_size_bits(type);
+  BigInt access_size = type_byte_size_bits(type, &ns);
 
   unsigned int i = 0;
   for(auto const &it : struct_type.members)
@@ -1365,7 +1365,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   modet mode,
   const expr2tc *failed_symbol)
 {
-  unsigned int access_sz = type_byte_size_bits(type).to_uint64();
+  unsigned int access_sz = type_byte_size_bits(type, &ns).to_uint64();
 
   // if we are accessing the struct using a byte, we can ignore alignment
   // rules, so convert the struct to bv and dispatch it to
@@ -1499,7 +1499,7 @@ void dereferencet::construct_from_dyn_offset(
   expr2tc replaced_dyn_offset = replace_dyn_offset_with_zero(offset);
   simplify(replaced_dyn_offset);
   unsigned int num_bytes = compute_num_bytes_to_extract(
-    replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
+    replaced_dyn_offset, type_byte_size_bits(type, &ns).to_uint64());
   // Converting offset to bytes before bytes extraction
   expr2tc offset_bytes =
     div2tc(offset->type, offset, gen_long(offset->type, 8));
@@ -1511,7 +1511,7 @@ void dereferencet::construct_from_dyn_offset(
 
   // Extracting bits from the produced bv
   value = extract_bits_from_byte_array(
-    value, offset, type_byte_size_bits(type).to_uint64());
+    value, offset, type_byte_size_bits(type, &ns).to_uint64());
   value = bitcast2tc(type, value);
 }
 
@@ -1530,7 +1530,7 @@ void dereferencet::construct_from_multidir_array(
   // is an alignment violation as that can possess extra padding.
   // So, divide the offset by size of the inner dimention, make an index2t, and
   // construct a reference to that.
-  expr2tc subtype_sz = type_byte_size_bits_expr(arr_type.subtype);
+  expr2tc subtype_sz = type_byte_size_bits_expr(arr_type.subtype, &ns);
   if(subtype_sz->type != offset->type)
   {
     /* TODO: subtype_sz is in bits (with its type being bitsize_type2()).
@@ -1597,7 +1597,7 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
         target, gen_ulong(struct_offset), target_type, guard, mode);
     }
     fields.push_back(target);
-    struct_offset += type_byte_size_bits(target_type);
+    struct_offset += type_byte_size_bits(target_type, &ns);
   }
 
   // We now have a vector of fields reconstructed from the byte array
@@ -1761,7 +1761,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     // to guard for offsets that are inside this array, and modulus the offset
     // by the array size.
 
-    BigInt subtype_size = type_byte_size_bits(arr_type.subtype);
+    BigInt subtype_size = type_byte_size_bits(arr_type.subtype, &ns);
     expr2tc sub_size = constant_int2tc(offs->type, subtype_size);
     expr2tc div = div2tc(offs->type, offs, sub_size);
     expr2tc mod = modulus2tc(offs->type, offs, sub_size);
@@ -1812,8 +1812,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       }
 
       BigInt memb_offs =
-        member_offset_bits(value->type, struct_type.member_names[i]);
-      BigInt size = type_byte_size_bits(it);
+        member_offset_bits(value->type, struct_type.member_names[i], &ns);
+      BigInt size = type_byte_size_bits(it, &ns);
       expr2tc memb_offs_expr = gen_long(bitsize_type2(), memb_offs);
       expr2tc limit_expr = gen_long(offs->type, memb_offs + size);
       expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
@@ -2225,7 +2225,7 @@ void dereferencet::bounds_check(
     return;
   }
 
-  unsigned int access_size = type_byte_size(type).to_uint64();
+  unsigned int access_size = type_byte_size(type, &ns).to_uint64();
 
   expr2tc arrsize;
   if(
@@ -2260,7 +2260,7 @@ void dereferencet::bounds_check(
 
     // Secondly, try to calc the size of the array.
     expr2tc subtype_size =
-      constant_int2tc(size_type2(), type_byte_size(arr_type.subtype));
+      constant_int2tc(size_type2(), type_byte_size(arr_type.subtype, &ns));
     expr2tc array_size = typecast2tc(size_type2(), arr_type.array_size);
     arrsize = mul2tc(size_type2(), array_size, subtype_size);
   }

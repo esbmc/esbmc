@@ -898,8 +898,8 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     if(is_union_type(memb.source_value->type))
       offset_in_bytes = BigInt(0);
     else
-      offset_in_bytes = member_offset(
-        memb.source_value->type, memb.member, &ns);
+      offset_in_bytes =
+        member_offset(memb.source_value->type, memb.member, &ns);
 
     object_mapt struct_references;
     get_reference_set(memb.source_value, struct_references);

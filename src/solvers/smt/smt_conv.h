@@ -640,8 +640,11 @@ public:
   /** Convert a byte_update2tc, inserting a byte into the byte representation
    *  of some piece of data. */
   smt_astt convert_byte_update(const expr2tc &expr);
+
+  expr2tc flatten_to_bitvector(const expr2tc &new_expr) const;
   /** Convert a bitcast2tc, converting an expr to its bit representation. */
   smt_astt convert_bitcast(const expr2tc &expr);
+
   /** Convert the given expr to AST, then assert that AST */
   void assert_expr(const expr2tc &e);
   /** Convert constant_array2tc's and constant_array_of2tc's */

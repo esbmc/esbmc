@@ -65,7 +65,7 @@ void goto_symext::symex_decl(const expr2tc code)
 
     // check whether the stack size has been reached.
     claim(
-      (cur_state->top().process_stack_size(code2, stack_limit)),
+      (cur_state->top().process_stack_size(code2, stack_limit, ns)),
       "Stack limit property was violated when declaring " + pretty_name);
   }
 
@@ -117,7 +117,7 @@ void goto_symext::symex_dead(const expr2tc code)
 
   // check whether the stack limit check has been activated.
   if(stack_limit > 0)
-    cur_state->top().decrease_stack_frame_size(code2);
+    cur_state->top().decrease_stack_frame_size(code2, ns);
 
   const code_dead2t &dead_code = to_code_dead2t(code2);
 

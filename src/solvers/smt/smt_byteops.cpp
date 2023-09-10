@@ -31,7 +31,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
     // offset distance. The rest of these calculations will still apply.
     if(data.big_endian)
     {
-      auto data_size = type_byte_size(source->type);
+      auto data_size = type_byte_size(source->type, &ns);
       expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
       expr2tc sub = sub2tc(source->type, data_size_expr, offs);
       offs = sub;
@@ -89,7 +89,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   if(is_array_type(data.type))
   {
     type2tc subtype = to_array_type(data.type).subtype;
-    BigInt sub_size_int = type_byte_size(subtype);
+    BigInt sub_size_int = type_byte_size(subtype, &ns);
     assert(
       !sub_size_int.is_zero() &&
       "Unimplemented byte_update on array of zero-width elements");
@@ -142,7 +142,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     // offset distance. The rest of these calculations will still apply.
     if(data.big_endian)
     {
-      auto data_size = type_byte_size(source->type);
+      auto data_size = type_byte_size(source->type, &ns);
       expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
       expr2tc sub = sub2tc(source->type, data_size_expr, offs);
       offs = sub;
@@ -189,7 +189,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   if(data.big_endian)
   {
     unsigned int data_size =
-      type_byte_size(data.source_value->type).to_uint64() - 1;
+      type_byte_size(data.source_value->type, &ns).to_uint64() - 1;
     src_offset = data_size - src_offset;
   }
 

@@ -5,10 +5,11 @@
 
 expr2tc goto_symex_statet::framet::process_stack_size(
   const expr2tc &expr,
-  unsigned long stack_limit)
+  unsigned long stack_limit,
+  const namespacet &ns)
 {
   // Store the total number of bits for a given stack frame.
-  stack_frame_total += (type_byte_size(expr->type) * 8);
+  stack_frame_total += type_byte_size_bits(expr->type, &ns);
 
   // Create two constants to define stack frame size and stack limit.
   BigInt f_size(stack_frame_total);
@@ -20,11 +21,13 @@ expr2tc goto_symex_statet::framet::process_stack_size(
   return lessthanequal2tc(function_irep2, limit_irep2);
 }
 
-void goto_symex_statet::framet::decrease_stack_frame_size(const expr2tc &expr)
+void goto_symex_statet::framet::decrease_stack_frame_size(
+  const expr2tc &expr,
+  const namespacet &ns)
 {
   const code_dead2t &decl_code = to_code_dead2t(expr);
 
   // Obtain the width of the dead expression and decrease it from the
   // total number of bits for a given stack frame.
-  stack_frame_total -= (type_byte_size(decl_code.type) * 8);
+  stack_frame_total -= type_byte_size_bits(decl_code.type, &ns);
 }

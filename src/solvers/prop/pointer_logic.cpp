@@ -75,7 +75,7 @@ expr2tc pointer_logict::object_rec(
   if(is_array_type(src->type))
   {
     const array_type2t &arrtype = to_array_type(*src->type.get());
-    BigInt size = type_byte_size(arrtype.subtype);
+    BigInt size = type_byte_size(arrtype.subtype, &ns);
 
     if(size == 0)
       return src;
@@ -115,7 +115,7 @@ expr2tc pointer_logict::object_rec(
     {
       assert(offset >= current_offset);
 
-      BigInt sub_size = type_byte_size(it);
+      BigInt sub_size = type_byte_size(it, &ns);
 
       if(sub_size == 0)
         return src;
@@ -138,7 +138,7 @@ expr2tc pointer_logict::object_rec(
   return src;
 }
 
-pointer_logict::pointer_logict()
+pointer_logict::pointer_logict(const namespacet &ns) : ns(ns)
 {
   obj_num_offset = 0;
 
