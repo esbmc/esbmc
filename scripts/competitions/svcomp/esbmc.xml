@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+<!DOCTYPE benchmark PUBLIC "+//IDN sosy-lab.org//DTD BenchExec benchmark 1.18//EN" "https://www.sosy-lab.org/benchexec/benchmark-1.18.dtd">
+<benchmark tool="esbmc" displayName="ESBMC-bkind" timelimit="15 min" memlimit="6 GB" cpuCores="2">
+
+  <require cpuModel="Intel Xeon E3-1230 v5 @ 3.40 GHz"/>
+
+  <resultfiles>**/test-suite</resultfiles>
+
+  <option name="-s">kinduction</option>
+
+  <rundefinition name="Test-Comp23_coverage-error-call">
+    <propertyfile>$HOME/sv-benchmarks/c/properties/coverage-error-call.prp</propertyfile>
+  </rundefinition>
+
+  <tasks name="ReachSafety-Arrays">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Arrays.set</includesfile>
+  </tasks>
+  <tasks name="ReachSafety-BitVectors">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-BitVectors.set</includesfile>
+  </tasks>
+  <tasks name="ReachSafety-ControlFlow">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-ControlFlow.set</includesfile>
+  </tasks>
+  <tasks name="ReachSafety-ECA">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-ECA.set</includesfile>
+    <excludesfile>excludes/ReachSafety-ECA-excludes.set</excludesfile>
+  </tasks>
+  <tasks name="ReachSafety-Floats">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Floats.set</includesfile>
+  </tasks>
+  <tasks name="ReachSafety-Heap">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Heap.set</includesfile>
+  </tasks>
+  <tasks name="ReachSafety-Loops">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Loops.set</includesfile>
+  </tasks>
+  <tasks name="ReachSafety-ProductLines">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-ProductLines.set</includesfile>
+  </tasks>
+  <tasks name="ReachSafety-Recursive">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Recursive.set</includesfile>
+  </tasks>
+  <tasks name="ReachSafety-Sequentialized">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Sequentialized.set</includesfile>
+  </tasks>
+  <tasks name="ReachSafety-XCSP">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-XCSP.set</includesfile>
+  </tasks>
+  <tasks name="ReachSafety-Combinations">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Combinations.set</includesfile>
+  </tasks>
+  <tasks name="ReachSafety-Hardware">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Hardware.set</includesfile>
+  </tasks>
+
+  <tasks name="SoftwareSystems-BusyBox-MemSafety">
+    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-BusyBox-MemSafety.set</includesfile>
+  </tasks>
+
+  <tasks name="SoftwareSystems-DeviceDriversLinux64-ReachSafety">
+    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-DeviceDriversLinux64-ReachSafety.set</includesfile>
+    <excludesfile>$HOME/sv-benchmarks/c/SoftwareSystems-DeviceDriversLinux64Large-ReachSafety.set</excludesfile>
+  </tasks>
+
+  <tasks name="SoftwareSystems-SQLite-MemSafety">
+    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-SQLite-MemSafety.set</includesfile>
+  </tasks>
+
+  <tasks name="Termination-MainHeap">
+    <includesfile>$HOME/sv-benchmarks/c/Termination-MainHeap.set</includesfile>
+  </tasks>
+
+</benchmark>
