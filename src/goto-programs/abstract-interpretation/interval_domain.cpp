@@ -76,8 +76,6 @@ void interval_domaint::apply_assume_symbol_truth(
     sym.type->type_id == type2t::bool_id)
     interval.make_ge_than(1);
 
-  sym.dump();
-  interval.dump();
   update_symbol_interval(sym, interval);
 }
 
