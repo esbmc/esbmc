@@ -365,8 +365,19 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     // 1. printf: 1st argument
     assert(new_rhs.operands.size() >= 1 && "Wrong printf signature");
     const expr2tc &base_expr = get_base_object(new_rhs.operands[0]);
-    fmt = get_string_argument(base_expr);
-    idx = (fmt == "") ? 0 : 1;
+    if(is_constant_string2t(base_expr))
+    {
+      fmt = to_constant_string2t(base_expr).value;
+      idx = 1;
+    }
+    else
+    {
+      // e.g.
+      // int x = 1;
+      // printf(x); // output ""
+      fmt = "";
+      idx = 0;
+    }
   }
   else if(
     base_name == "fprintf" || base_name == "dprintf" ||
@@ -377,16 +388,32 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       new_rhs.operands.size() >= 2 &&
       "Wrong fprintf/sprintf/dprintf/vfprintf signature");
     const expr2tc &base_expr = get_base_object(new_rhs.operands[1]);
-    fmt = get_string_argument(base_expr);
-    idx = (fmt == "") ? 1 : 2;
+    if(is_constant_string2t(base_expr))
+    {
+      fmt = to_constant_string2t(base_expr).value;
+      idx = 2;
+    }
+    else
+    {
+      fmt = "";
+      idx = 1;
+    }
   }
   else if(base_name == "snprintf")
   {
     // 3. snprintf: 3rd argument
     assert(new_rhs.operands.size() >= 3 && "Wrong snprintf signature");
     const expr2tc &base_expr = get_base_object(new_rhs.operands[2]);
-    fmt = get_string_argument(base_expr);
-    idx = (fmt == "") ? 2 : 3;
+    if(is_constant_string2t(base_expr))
+    {
+      fmt = to_constant_string2t(base_expr).value;
+      idx = 3;
+    }
+    else
+    {
+      fmt = "";
+      idx = 2;
+    }
   }
 
   // Now we pop the format
