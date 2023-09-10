@@ -178,6 +178,8 @@ public:
    */
   void assume(const expr2tc &);
 
+  void assume_symbol_is_true(const expr2tc &);
+
   /**
    * @brief Uses the abstract state to simplify a given expression using context-
    * specific information.
@@ -300,6 +302,16 @@ protected:
    */
   template <class Interval>
   void apply_assume_less(const expr2tc &lhs, const expr2tc &rhs);
+
+  /**
+   * @brief Applies symbol = truth
+   *
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param symbol
+   * @param negation
+   */
+  template <class Interval>
+  void apply_assume_symbol_truth(const symbol2t &sym, bool is_false);
 
   /**
    * @brief Generates interval with [min, max] using symbol type

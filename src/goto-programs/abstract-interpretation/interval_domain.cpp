@@ -58,6 +58,29 @@ void interval_domaint::update_symbol_interval(
   wrap_map[sym.thename] = value;
 }
 
+template <class Interval>
+void interval_domaint::apply_assume_symbol_truth(
+  const symbol2t &sym,
+  bool is_false)
+{
+  Interval interval = get_interval_from_symbol<Interval>(sym);
+  // [0,0]
+  if(is_false)
+  {
+    interval.set_upper(0);
+    interval.set_lower(0);
+  }
+  // [1, infinity]
+  else if(
+    sym.type->type_id == type2t::unsignedbv_id ||
+    sym.type->type_id == type2t::bool_id)
+    interval.make_ge_than(1);
+
+  sym.dump();
+  interval.dump();
+  update_symbol_interval(sym, interval);
+}
+
 template <>
 integer_intervalt
 interval_domaint::get_interval_from_const(const expr2tc &e) const
@@ -1184,6 +1207,20 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
   {
     if(negation)
       cond->foreach_operand([this](const expr2tc &e) { assume_rec(e, true); });
+  }
+  else if(is_symbol2t(cond))
+  {
+    if(is_bv_type(cond) || is_bool_type(cond))
+    {
+      if(enable_wrapped_intervals)
+        apply_assume_symbol_truth<wrapped_interval>(
+          to_symbol2t(cond), negation);
+      else
+        apply_assume_symbol_truth<integer_intervalt>(
+          to_symbol2t(cond), negation);
+    }
+    else if(is_floatbv_type(cond) && enable_real_intervals)
+      apply_assume_symbol_truth<real_intervalt>(to_symbol2t(cond), negation);
   }
   else
     log_debug("interval", "[assume_rec] Missing support: {}", *cond);
