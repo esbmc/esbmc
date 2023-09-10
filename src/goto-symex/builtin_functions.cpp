@@ -349,21 +349,46 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 
   code_printf2t &new_rhs = to_code_printf2t(renamed_rhs);
 
-  // get string format
-  while(!is_constant_string2t(get_base_object(new_rhs.operands[0])))
-  {
-    // fprintf(FILE *__restrict__ __stream, const char *__restrict__ __format, ...)
-    // snprintf(char *__restrict__ __s, size_t __maxlen, const char *__restrict__ __format, ...)
+  if(new_rhs.bs_name.empty())
+    assert(!"No base_name for code_printf2t");
 
-    // pop
-    new_rhs.operands.erase(new_rhs.operands.begin());
+  const std::string base_name = new_rhs.bs_name;
+
+  // get the format string base on the bs_name
+  irep_idt fmt;
+  size_t idx;
+  if(base_name == "printf")
+  {
+    // 1. printf: 1st argument
+    assert(new_rhs.operands.size() >= 1 && "Wrong printf signature");
+    idx = 1;
+    const expr2tc &base_expr = get_base_object(new_rhs.operands[0]);
+    fmt = get_string_argument(base_expr);
+    idx = (fmt == "") ? 0 : 1;
   }
-  const expr2tc &base_expr = get_base_object(new_rhs.operands[0]);
-  assert(is_constant_string2t(base_expr));
-  const irep_idt fmt = to_constant_string2t(base_expr).value;
+  else if(
+    base_name == "fprintf" || base_name == "dprintf" || base_name == "sprintf")
+  {
+    // 2.fprintf, sprintf, dprintf: 2nd argument
+    assert(
+      new_rhs.operands.size() >= 2 &&
+      "Wrong fprintf/sprintf/dprintf signature");
+    const expr2tc &base_expr = get_base_object(new_rhs.operands[1]);
+    fmt = get_string_argument(base_expr);
+    idx = (fmt == "") ? 1 : 2;
+  }
+  else if(base_name == "snprintf")
+  {
+    // 3. snprintf: 3rd argument
+    assert(new_rhs.operands.size() >= 3 && "Wrong snprintf signature");
+    const expr2tc &base_expr = get_base_object(new_rhs.operands[2]);
+    fmt = get_string_argument(base_expr);
+    idx = (fmt == "") ? 2 : 3;
+  }
 
   // Now we pop the format
-  new_rhs.operands.erase(new_rhs.operands.begin());
+  for(size_t i = 0; i < idx; i++)
+    new_rhs.operands.erase(new_rhs.operands.begin());
 
   std::list<expr2tc> args;
   new_rhs.foreach_operand([this, &args](const expr2tc &e) {
