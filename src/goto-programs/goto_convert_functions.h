@@ -19,16 +19,8 @@ public:
   void goto_convert();
   void convert_function(symbolt &symbol);
   void thrash_type_symbols();
-  void rename_types(
-    irept &type,
-    const symbolt &cur_name_sym,
-    const std::unordered_set<irep_idt, irep_id_hash> &avoid,
-    bool under_ptr);
-  void rename_exprs(
-    irept &expr,
-    const symbolt &cur_name_sym,
-    const std::unordered_set<irep_idt, irep_id_hash> &avoid,
-    bool under_ptr);
+  void rename_types(irept &type, const symbolt &cur_name_sym);
+  void rename_exprs(irept &expr, const symbolt &cur_name_sym);
 
   goto_convert_functionst(
     contextt &_context,

@@ -188,7 +188,7 @@ void goto_convert(
 
 static bool denotes_thrashable_subtype(const irep_idt &id)
 {
-  return id == "type" || id == "subtype";
+  return id == exprt::i_type || id == typet::f_subtype;
 }
 
 namespace
@@ -465,10 +465,11 @@ struct node_map
 
 void goto_convert_functionst::rename_types(
   irept &type,
-  const symbolt &cur_name_sym,
-  const std::unordered_set<irep_idt, irep_id_hash> &avoid,
-  bool under_ptr)
+  const symbolt &cur_name_sym)
 {
+  if(type.id() == typet::t_pointer)
+    return;
+
   // Some type symbols aren't entirely correct. This is because (in the current
   // 27_exStbFb test) some type symbols get the module name inserted into the
   // name -- so int32_t becomes main::int32_t.
@@ -482,22 +483,8 @@ void goto_convert_functionst::rename_types(
   // should have.
 
   typet type2;
-  if(type.id() == "symbol")
+  if(type.id() == typet::t_symbol)
   {
-    if(under_ptr && avoid.find(type.identifier()) != avoid.end())
-    {
-      // A recursive symbol -- the symbol we're about to link to is in fact the
-      // one that initiated this chain of renames. This leads to either infinite
-      // loops or segfaults, depending on the phase of the moon.
-      // It should also never happen, but with C++ code it does, because methods
-      // are part of the type, and methods can take a full struct/object as a
-      // parameter, not just a reference/pointer. So, that's a legitimate place
-      // where we have this recursive symbol dependancy situation.
-      // The workaround to this is to just ignore it, and hope that it doesn't
-      // become a problem in the future.
-      return;
-    }
-
     if(const symbolt *sym = ns.lookup(type.identifier()))
     {
       // If we can just look up the current type symbol, use that.
@@ -527,34 +514,33 @@ void goto_convert_functionst::rename_types(
     return;
   }
 
-  rename_exprs(type, cur_name_sym, avoid, under_ptr);
+  rename_exprs(type, cur_name_sym);
 }
 
 void goto_convert_functionst::rename_exprs(
   irept &expr,
-  const symbolt &cur_name_sym,
-  const std::unordered_set<irep_idt, irep_id_hash> &avoid,
-  bool under_ptr)
+  const symbolt &cur_name_sym)
 {
-  under_ptr |= expr.id() == "pointer";
+  if(expr.id() == typet::t_pointer)
+    return;
 
   Forall_irep(it, expr.get_sub())
-    rename_exprs(*it, cur_name_sym, avoid, under_ptr);
+    rename_exprs(*it, cur_name_sym);
 
   Forall_named_irep(it, expr.get_named_sub())
   {
     if(denotes_thrashable_subtype(it->first))
     {
-      rename_types(it->second, cur_name_sym, avoid, under_ptr);
+      rename_types(it->second, cur_name_sym);
     }
     else
     {
-      rename_exprs(it->second, cur_name_sym, avoid, under_ptr);
+      rename_exprs(it->second, cur_name_sym);
     }
   }
 
   Forall_named_irep(it, expr.get_comments())
-    rename_exprs(it->second, cur_name_sym, avoid, under_ptr);
+    rename_exprs(it->second, cur_name_sym);
 }
 
 using node_id = context_type_grapht::node_id;
@@ -684,17 +670,13 @@ void goto_convert_functionst::thrash_type_symbols()
       fprintf(f, "\n");
     }
 
-    std::unordered_set<irep_idt, irep_id_hash> avoid;
-    for(node_id v : scc)
-      if(is_symbol(v))
-        avoid.insert(G[v].symbol->id);
     for(node_id v : scc)
       if(is_symbol(v))
       {
         symbolt *sym = const_cast<symbolt *>(G[v].symbol);
         log_debug("thrash-ts-detail", "renaming symbol {}", sym->id);
-        rename_exprs(sym->value, *sym, avoid, false);
-        rename_types(sym->type, *sym, avoid, false);
+        rename_exprs(sym->value, *sym);
+        rename_types(sym->type, *sym);
       }
   }).tarjan(root);
 }

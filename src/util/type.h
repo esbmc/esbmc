@@ -116,8 +116,9 @@ public:
   static irep_idt a_integer_bits;
   static irep_idt a_f;
 
-protected:
   static irep_idt f_subtype;
+
+protected:
   static irep_idt f_subtypes;
   static irep_idt f_location;
   static irep_idt f_can_carry_provenance;
