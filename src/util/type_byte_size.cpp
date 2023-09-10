@@ -468,3 +468,18 @@ const expr2tc &get_base_object(const expr2tc &expr)
 
   return expr;
 }
+
+// get format string from printf
+irep_idt get_string_argument(const expr2tc &base_expr)
+{
+  if(is_constant_string2t(base_expr))
+    return to_constant_string2t(base_expr).value;
+  else
+  {
+    // e.g.
+    // int a = 0;
+    // printf(a);
+    log_warning("No format string found");
+    return "";
+  }
+}

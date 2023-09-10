@@ -1117,13 +1117,16 @@ public:
   code_printf_data(
     const type2tc &t,
     expr2t::expr_ids id,
-    std::vector<expr2tc> v)
-    : code_base(t, id), operands(std::move(v))
+    std::vector<expr2tc> v,
+    const std::string &b)
+    : code_base(t, id), operands(std::move(v)), bs_name(b)
   {
   }
   code_printf_data(const code_printf_data &ref) = default;
 
   std::vector<expr2tc> operands;
+  // Base name
+  std::string bs_name;
 
   // Type mangling:
   typedef esbmct::field_traits<
@@ -3191,8 +3194,8 @@ public:
 class code_printf2t : public code_printf_expr_methods
 {
 public:
-  code_printf2t(const std::vector<expr2tc> &opers)
-    : code_printf_expr_methods(get_empty_type(), code_printf_id, opers)
+  code_printf2t(const std::vector<expr2tc> &opers, const std::string &b)
+    : code_printf_expr_methods(get_empty_type(), code_printf_id, opers, b)
   {
   }
   code_printf2t(const code_printf2t &ref) = default;
