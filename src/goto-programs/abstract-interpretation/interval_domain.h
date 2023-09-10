@@ -178,8 +178,6 @@ public:
    */
   void assume(const expr2tc &);
 
-  void assume_symbol_is_true(const expr2tc &);
-
   /**
    * @brief Uses the abstract state to simplify a given expression using context-
    * specific information.
