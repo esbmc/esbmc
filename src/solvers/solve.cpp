@@ -18,7 +18,9 @@ solver_creator create_new_yices_solver;
 solver_creator create_new_bitwuzla_solver;
 
 static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
+#ifdef SMTLIB
   {"smtlib", create_new_smtlib_solver},
+#endif
 #ifdef Z3
   {"z3", create_new_z3_solver},
 #endif

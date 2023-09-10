@@ -197,7 +197,7 @@ class TestParser:
     def from_file(test_dir: str, name: str) -> BaseTest:
         """Tries to open a file and selects which class to parse the file"""
         file_path = os.path.join(test_dir, "test.desc")
-        assert os.path.exists(file_path)
+        assert os.path.exists(file_path), file_path
         with open(file_path) as fp:
             first_line = fp.readline().strip()
             return TestParser.MODES[TestParser.detect_mode_by_header(first_line)](test_dir, name)

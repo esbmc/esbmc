@@ -83,8 +83,7 @@ if (CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
     endif()
 endif()
 
-find_package(BISON 2.6.1 REQUIRED)
-find_package(FLEX 2.6.1 REQUIRED)
+
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
 find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options iostreams)
@@ -97,6 +96,8 @@ include(OptimizationCCache)
 include(WError)
 
 if(ENABLE_OLD_FRONTEND)
+  find_package(BISON 2.6.1 REQUIRED)
+  find_package(FLEX 2.6.1 REQUIRED)
   add_definitions(-DENABLE_OLD_FRONTEND)
 endif()
 
