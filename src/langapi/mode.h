@@ -12,7 +12,8 @@ enum class language_idt : int
   C,
   CPP,
   SOLIDITY,
-  JIMPLE
+  JIMPLE,
+  PYTHON,
 };
 
 struct language_desct

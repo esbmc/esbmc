@@ -21,6 +21,8 @@ if(ENABLE_JIMPLE_FRONTEND)
 add_subdirectory (jimple-frontend)
 endif()
 
+add_subdirectory(python-frontend)
+
 add_subdirectory (clang-c-frontend)
 add_subdirectory (pointer-analysis)
 add_subdirectory (langapi)
