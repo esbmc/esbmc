@@ -1293,6 +1293,12 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     break;
   }
 
+  case type2t::symbol_id:
+  {
+    result = convert_sort(ns.follow(type));
+    break;
+  }
+
   default:
     log_error(
       "Unexpected type ID {} reached SMT conversion", get_type_id(type));
