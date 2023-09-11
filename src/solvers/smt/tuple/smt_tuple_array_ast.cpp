@@ -160,7 +160,7 @@ smt_astt array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
     array_type2tc(restype, arr.array_size, arr.size_is_infinite);
   smt_sortt s = ctx->convert_sort(new_arr_type);
 
-  if(is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype))
+  if(is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype, ctx->ns))
   {
     // This is a struct within a struct, so just generate the name prefix of
     // the internal struct being projected.

@@ -2,7 +2,7 @@
 #define CPROVER_NAMESPACE_H
 
 #include <util/context.h>
-#include <irep2/irep2.h>
+#include <irep2/irep2_type.h>
 #include <util/migrate.h>
 
 class namespacet
@@ -19,6 +19,8 @@ public:
   const typet &follow(const typet &src) const;
   const type2tc follow(const type2tc &src) const
   {
+    if(!is_symbol_type(src))
+      return src;
     typet back = migrate_type_back(src);
     typet followed = follow(back);
     type2tc tmp = migrate_type(followed);

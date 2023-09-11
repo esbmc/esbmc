@@ -182,12 +182,12 @@ smt_astt tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   const type2tc &restype = data.members[idx];
   smt_sortt s = ctx->convert_sort(restype);
 
-  if(is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype))
+  if(is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype, ctx->ns))
   {
     // This is a struct within a struct, so just generate the name prefix of
     // the internal struct being projected.
     sym_name = sym_name + ".";
-    if(is_tuple_array_ast_type(restype))
+    if(is_tuple_array_ast_type(restype, ctx->ns))
       return new array_sym_smt_ast(ctx, s, sym_name);
 
     return new tuple_sym_smt_ast(ctx, s, sym_name);

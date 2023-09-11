@@ -1176,7 +1176,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     const extract2t &ex = to_extract2t(expr);
     a = convert_ast(ex.from);
-    if(ex.from->type->get_width() == ex.upper - ex.lower + 1)
+    if(
+      type_byte_size_bits(ex.from->type, &ns).to_uint64() ==
+      ex.upper - ex.lower + 1)
       return a;
     a = mk_extract(a, ex.upper, ex.lower);
     break;
@@ -2057,6 +2059,9 @@ smt_astt smt_convt::convert_array_store(const expr2tc &expr)
 
 type2tc smt_convt::flatten_array_type(const type2tc &type)
 {
+  if(is_symbol_type(type))
+    return flatten_array_type(ns.follow(type));
+
   // If vector, convert to array
   if(is_vector_type(type))
     return array_type2tc(
@@ -2148,7 +2153,7 @@ type2tc smt_convt::get_flattened_array_subtype(const type2tc &type)
   }
 
   // type_rec is now the base type.
-  return type_rec;
+  return ns.follow(type_rec);
 }
 
 void smt_convt::pre_solve()
@@ -2204,7 +2209,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
       smt_astt array = convert_ast(src_value);
 
       // Retrieve the element
-      if(is_tuple_array_ast_type(src_value->type))
+      if(is_tuple_array_ast_type(src_value->type, ns))
         res = tuple_api->tuple_get_array_elem(
           array, to_constant_int2t(idx).value.to_uint64(), res->type);
       else
@@ -2452,7 +2457,7 @@ expr2tc smt_convt::get_array(const type2tc &type, smt_astt array)
   type2tc arr_type = array_type2tc(ar.subtype, arr_size, false);
   std::vector<expr2tc> fields;
 
-  bool uses_tuple_api = is_tuple_array_ast_type(type);
+  bool uses_tuple_api = is_tuple_array_ast_type(type, ns);
 
   for(size_t i = 0; i < (1ULL << w); i++)
   {

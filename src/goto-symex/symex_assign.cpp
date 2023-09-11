@@ -341,7 +341,8 @@ void goto_symext::symex_assign_structure(
   for(auto const &it : structtype.members)
   {
     const expr2tc &lhs_memb = the_structure.datatype_members[i];
-    expr2tc rhs_memb = member2tc(it, rhs, structtype.member_names[i]);
+    expr2tc rhs_memb =
+      member2tc(ns.follow(it), rhs, structtype.member_names[i]);
     symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
     i++;
   }

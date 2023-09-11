@@ -23,8 +23,11 @@ void tuple_node_smt_ast::make_free(smt_convt *ctx)
   elements.resize(strct.members.size());
 
   unsigned int i = 0;
-  for(auto const &it : strct.members)
+  for(type2tc it : strct.members)
   {
+    if(is_symbol_type(it))
+      it = ctx->ns.follow(it);
+
     smt_sortt newsort = ctx->convert_sort(it);
     std::string fieldname = name + "." + strct.member_names[i].as_string();
 
@@ -32,7 +35,7 @@ void tuple_node_smt_ast::make_free(smt_convt *ctx)
     {
       elements[i] = ctx->tuple_api->tuple_fresh(newsort, fieldname);
     }
-    else if(is_tuple_array_ast_type(it))
+    else if(is_tuple_array_ast_type(it, ctx->ns))
     {
       std::string newname = ctx->mk_fresh_name(fieldname);
       smt_sortt subsort =

@@ -1079,7 +1079,7 @@ expr2tc goto_symext::gen_value_by_byte(
      * the end
      */
 
-    expr2tc result = gen_zero(type);
+    expr2tc result = gen_zero(type, false, &ns);
     constant_array2t &data = to_constant_array2t(result);
 
     uint64_t base_size =
@@ -1090,8 +1090,9 @@ expr2tc goto_symext::gen_value_by_byte(
     for(unsigned i = 0; i < data.datatype_members.size(); i++)
     {
       BigInt position(i);
+      type2tc subtype = ns.follow(to_array_type(type).subtype);
       expr2tc local_member = index2tc(
-        to_array_type(type).subtype,
+        subtype,
         src,
         constant_int2tc(get_uint32_type(), position));
       // Skip offsets
@@ -1105,7 +1106,7 @@ expr2tc goto_symext::gen_value_by_byte(
         uint64_t bytes_to_write =
           bytes_left < base_size ? bytes_left : base_size;
         data.datatype_members[i] = gen_value_by_byte(
-          to_array_type(type).subtype,
+          subtype,
           local_member,
           value,
           bytes_to_write,
@@ -1126,7 +1127,7 @@ expr2tc goto_symext::gen_value_by_byte(
     /** Similar to array, however get the size of
      * each component
      */
-    expr2tc result = gen_zero(type);
+    expr2tc result = gen_zero(type, false, &ns);
     constant_struct2t &data = to_constant_struct2t(result);
     uint64_t bytes_left = num_of_bytes;
     uint64_t offset_left = offset;
@@ -1137,11 +1138,11 @@ expr2tc goto_symext::gen_value_by_byte(
       // TODO: We need a better way to detect bitfields
       if(has_prefix(name.as_string(), "bit_field_pad$"))
         return expr2tc();
-      expr2tc local_member =
-        member2tc(to_struct_type(type).members[i], src, name);
+      type2tc member_type = ns.follow(to_struct_type(type).members[i]);
+      expr2tc local_member = member2tc(member_type, src, name);
 
       // Since it is a symbol, lets start from the old value
-      if(is_pointer_type(to_struct_type(type).members[i]))
+      if(is_pointer_type(member_type))
         data.datatype_members[i] = local_member;
 
       type2tc current_member_type = data.datatype_members[i]->type;
@@ -1192,7 +1193,7 @@ expr2tc goto_symext::gen_value_by_byte(
      * See GitHub Issue #639
      *
      */
-    expr2tc result = gen_zero(type);
+    expr2tc result = gen_zero(type, false, &ns);
     constant_union2t &data = to_constant_union2t(result);
 
     uint64_t union_total_size = type_byte_size(type, &ns).to_uint64();
@@ -1212,8 +1213,8 @@ expr2tc goto_symext::gen_value_by_byte(
 
     const irep_idt &name =
       to_union_type(type).member_names[selected_member_index];
-    const type2tc &member_type =
-      to_union_type(type).members[selected_member_index];
+    type2tc member_type =
+      ns.follow(to_union_type(type).members[selected_member_index]);
     expr2tc member = member2tc(member_type, src, name);
 
     data.init_field = name;

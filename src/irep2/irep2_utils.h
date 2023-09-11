@@ -6,6 +6,7 @@
 #include <irep2/irep2_expr.h>
 #include <util/migrate.h>
 #include <util/message.h>
+#include <util/namespace.h>
 
 std::string indent_str_irep2(unsigned int indent);
 
@@ -317,7 +318,10 @@ inline expr2tc gen_nondet(const type2tc &type)
     sideeffect2t::nondet);
 }
 
-inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
+inline expr2tc gen_zero(
+  const type2tc &type,
+  bool array_as_array_of = false,
+  const namespacet *ns = nullptr)
 {
   switch(type->type_id)
   {
@@ -344,14 +348,15 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
     std::vector<expr2tc> members;
     for(long int i = 0; i < s.as_long(); i++)
       members.push_back(
-        gen_zero(to_vector_type(type).subtype, array_as_array_of));
+        gen_zero(to_vector_type(type).subtype, array_as_array_of, ns));
 
     return constant_vector2tc(type, members);
   }
   case type2t::array_id:
   {
     if(array_as_array_of)
-      return constant_array_of2tc(type, gen_zero(to_array_type(type).subtype));
+      return constant_array_of2tc(
+        type, gen_zero(to_array_type(type).subtype, ns));
 
     auto arr_type = to_array_type(type);
 
@@ -361,7 +366,7 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
     std::vector<expr2tc> members;
     for(long int i = 0; i < s.as_long(); i++)
       members.push_back(
-        gen_zero(to_array_type(type).subtype, array_as_array_of));
+        gen_zero(to_array_type(type).subtype, array_as_array_of, ns));
 
     return constant_array2tc(type, members);
   }
@@ -375,7 +380,7 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
 
     std::vector<expr2tc> members;
     for(auto const &member_type : struct_type.members)
-      members.push_back(gen_zero(member_type, array_as_array_of));
+      members.push_back(gen_zero(member_type, array_as_array_of, ns));
 
     return constant_struct2tc(type, members);
   }
@@ -386,10 +391,15 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
 
     assert(!union_type.members.empty());
     std::vector<expr2tc> members = {
-      gen_zero(union_type.members.front(), array_as_array_of)};
+      gen_zero(union_type.members.front(), array_as_array_of, ns)};
 
     return constant_union2tc(type, union_type.member_names.front(), members);
   }
+
+  case type2t::symbol_id:
+    if(ns)
+      return gen_zero(ns->follow(type), array_as_array_of, ns);
+    break;
 
   default:
     break;

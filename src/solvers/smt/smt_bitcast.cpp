@@ -52,14 +52,14 @@ static expr2tc concat_tree(
 
 expr2tc smt_convt::flatten_to_bitvector(const expr2tc &new_expr) const
 {
-  // Easy cases, no need to concat anything
-
   /* keep this condition in sync with concat2t's assumptions */
   if(is_bv_type(new_expr))
     return new_expr;
 
+  uint64_t sz = type_byte_size_bits(new_expr->type, &ns).to_uint64();
+
   if(is_number_type(new_expr) || is_pointer_type(new_expr))
-    return bitcast2tc(get_uint_type(new_expr->type->get_width()), new_expr);
+    return bitcast2tc(get_uint_type(sz), new_expr);
 
   // If it is an array, concat every element into a big bitvector
   if(is_array_type(new_expr))
@@ -87,14 +87,18 @@ expr2tc smt_convt::flatten_to_bitvector(const expr2tc &new_expr) const
     return concat_tree(0, sz, extract, ns);
   }
 
-  if(new_expr->type->get_width() == 0)
+  if(sz == 0)
     return constant_int2tc(get_uint_type(0), BigInt(0));
+
+  expr2tc expr = new_expr;
+  if(is_symbol_type(expr))
+    expr->type = ns.follow(expr->type);
 
   // If it is a struct, concat all members into a big bitvector
   // TODO: this is similar to concat array elements, should we merge them?
-  if(is_struct_type(new_expr))
+  if(is_struct_type(expr))
   {
-    const struct_type2t &structtype = to_struct_type(new_expr->type);
+    const struct_type2t &structtype = to_struct_type(expr->type);
 
     size_t sz = structtype.members.size();
 
@@ -103,19 +107,16 @@ expr2tc smt_convt::flatten_to_bitvector(const expr2tc &new_expr) const
     auto extract = [&](size_t i) {
       /* The sub-expression should be flattened as well */
       return flatten_to_bitvector(member2tc(
-        structtype.members[sz - i - 1],
-        new_expr,
+        ns.follow(structtype.members[sz - i - 1]),
+        expr,
         structtype.member_names[sz - i - 1]));
     };
 
     return concat_tree(0, sz, extract, ns);
   }
 
-  if(is_union_type(new_expr))
-  {
-    size_t sz = type_byte_size_bits(new_expr->type, &ns).to_uint64();
-    return extract2tc(get_uint_type(sz), new_expr, sz - 1, 0);
-  }
+  if(is_union_type(expr))
+    return extract2tc(get_uint_type(sz), expr, sz - 1, 0);
 
   log_error(
     "Unrecognized type {} when flattening to bytes",
@@ -127,8 +128,13 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 {
   assert(is_bitcast2t(expr));
 
-  const expr2tc &from = to_bitcast2t(expr).from;
-  const type2tc &to_type = to_bitcast2t(expr).type;
+  expr2tc from = to_bitcast2t(expr).from;
+  if(is_symbol_type(from))
+    from->type = ns.follow(from->type);
+
+  type2tc to_type = to_bitcast2t(expr).type;
+  if(is_symbol_type(to_type))
+    to_type = ns.follow(to_type);
 
   // Converts to floating-point
   if(is_floatbv_type(to_type))

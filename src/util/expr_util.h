@@ -3,7 +3,7 @@
 #include <util/symbol.h>
 
 //
-// WARNING: The following functions are depreciated, and will
+// WARNING: The following functions are deprecated, and will
 //          eventually be removed
 //
 // Look at std_expr.h instead.

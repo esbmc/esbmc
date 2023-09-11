@@ -13,7 +13,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   const byte_extract2t &data = to_byte_extract2t(expr);
   expr2tc source = data.source_value;
-  unsigned int src_width = source->type->get_width();
+  unsigned int src_width = type_byte_size_bits(source->type, &ns).to_uint64();
 
   if(!is_bv_type(source->type) && !is_fixedbv_type(source->type))
     source = bitcast2tc(get_uint_type(src_width), source);
@@ -47,8 +47,8 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
-  unsigned width;
-  width = data.source_value->type->get_width();
+  const unsigned width =
+    type_byte_size_bits(data.source_value->type, &ns).to_uint64();
 
   unsigned int upper, lower;
   if(!data.big_endian)
@@ -65,7 +65,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   smt_astt source_ast = convert_ast(source);
 
-  unsigned int sort_sz = data.source_value->type->get_width();
+  unsigned int sort_sz = width;
   if(sort_sz <= upper)
   {
     smt_sortt s = mk_int_bv_sort(8);
@@ -111,7 +111,8 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     // This is a pointer or a bool, or something. We don't want to handle
     // casting of it in the body of this function, so wrap it up as a bitvector
     // and re-apply.
-    type2tc bit_type = get_uint_type(data.type->get_width());
+    type2tc bit_type =
+      get_uint_type(type_byte_size_bits(data.type, &ns).to_uint64());
     expr2tc src_obj = bitcast2tc(bit_type, data.source_value);
     expr2tc new_update = byte_update2tc(
       bit_type,
@@ -126,7 +127,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   if(!is_constant_int2t(data.source_offset))
   {
     expr2tc source = data.source_value;
-    unsigned int src_width = source->type->get_width();
+    unsigned int src_width = type_byte_size_bits(source->type, &ns).to_uint64();
     type2tc org_type;
     if(!is_unsignedbv_type(source))
     {
@@ -135,7 +136,9 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     }
 
     expr2tc offs = data.source_offset;
-    if(!is_unsignedbv_type(offs) || offs->type->get_width() != src_width)
+    if(
+      !is_unsignedbv_type(offs) ||
+      type_byte_size_bits(offs->type, &ns).to_uint64() != src_width)
       offs = typecast2tc(get_uint_type(src_width), offs);
 
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
@@ -149,7 +152,9 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     }
 
     expr2tc update = data.update_value;
-    if(!is_unsignedbv_type(update) || update->type->get_width() != src_width)
+    if(
+      !is_unsignedbv_type(update) ||
+      type_byte_size_bits(update->type, &ns).to_uint64() != src_width)
       update = typecast2tc(get_uint_type(src_width), update);
 
     // The approach: mask, shift and or. Quite inefficient.
@@ -181,7 +186,8 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   smt_astt value = convert_ast(data.update_value);
   smt_astt src_value = convert_ast(data.source_value);
 
-  unsigned int width_op0 = data.source_value->type->get_width();
+  unsigned int width_op0 =
+    type_byte_size_bits(data.source_value->type, &ns).to_uint64();
   unsigned int src_offset =
     to_constant_int2t(data.source_offset).value.to_uint64();
 
@@ -196,7 +202,8 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
 // Assertion some of our assumptions, which broadly mean that we'll only work
 // on bytes that are going into non-byte words
 #ifndef NDEBUG
-  unsigned int width_op2 = data.update_value->type->get_width();
+  unsigned int width_op2 =
+    type_byte_size_bits(data.update_value->type, &ns).to_uint64();
   assert(width_op2 == 8 && "Can't byte update non-byte operations");
   assert(width_op2 != width_op0 && "Can't byte update bytes, sorry");
 #endif

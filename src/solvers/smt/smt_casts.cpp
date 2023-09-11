@@ -648,7 +648,9 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
 
 smt_astt smt_convt::convert_typecast(const expr2tc &expr)
 {
-  const typecast2t &cast = to_typecast2t(expr);
+  typecast2t cast = to_typecast2t(expr);
+  if(is_symbol_type(cast.type))
+    cast.type = ns.follow(cast.type);
 
   if(
     int_encoding && is_floatbv_type(cast.from->type) &&
@@ -659,7 +661,7 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     return convert_ast(cast.from);
   }
 
-  if(cast.type == cast.from->type)
+  if(base_type_eq(cast.type, cast.from->type, ns))
     return convert_ast(cast.from);
 
   // Casts to and from pointers need to be addressed all as one

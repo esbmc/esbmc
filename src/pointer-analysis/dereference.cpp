@@ -896,7 +896,7 @@ enum target_flags
 void dereferencet::build_reference_rec(
   expr2tc &value,
   const expr2tc &offset,
-  const type2tc &type,
+  type2tc type,
   const guardt &guard,
   modet mode,
   unsigned long alignment)
@@ -907,6 +907,8 @@ void dereferencet::build_reference_rec(
 
   if(is_symbol_type(value))
     value->type = ns.follow(value->type);
+  if(is_symbol_type(type))
+    type = ns.follow(type);
 
   // All accesses to code need no further construction
   if(is_code_type(value) || is_code_type(type))
@@ -1088,6 +1090,8 @@ void dereferencet::construct_from_array(
 
   const array_type2t arr_type = get_arr_type(value);
   type2tc arr_subtype = arr_type.subtype;
+  if(is_symbol_type(arr_subtype))
+    arr_subtype = ns.follow(arr_subtype);
 
   if(is_array_type(arr_subtype))
   {
@@ -1275,7 +1279,7 @@ void dereferencet::construct_from_const_struct_offset(
       // is supposed to point at.
       // If user is seeking a reference to this substruct, a different method
       // should have been called (construct_struct_ref_from_const_offset).
-      assert(is_struct_type(it));
+      assert(is_struct_type(ns.follow(it)));
       assert(!is_struct_type(type));
       i++;
       continue;
@@ -1569,7 +1573,7 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   // not the case, just let the array recursive handler handle it. It'll bail
   // if access is unaligned, and reduces us to constructing a constant
   // reference from the base subtype, through the correct recursive handler.
-  if(base_subtype->get_width() != 8)
+  if(type_byte_size_bits(base_subtype, &ns).to_uint64() != 8)
   {
     construct_from_array(value, offset, type, guard, mode, alignment);
     return;
@@ -1753,7 +1757,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   // Is this a non-byte-array array?
   if(
     is_array_type(value->type) &&
-    get_base_array_subtype(value->type)->get_width() != 8)
+    type_byte_size_bits(get_base_array_subtype(value->type), &ns).to_uint64() !=
+      8)
   {
     const array_type2t &arr_type = to_array_type(value->type);
     // We can legally access various offsets into arrays. Generate an index
@@ -2023,7 +2028,7 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_scalar(
       mul2tc(
         accuml_offs->type,
         index,
-        gen_long(accuml_offs->type, new_index.type->get_width() / 8)));
+        gen_long(accuml_offs->type, type_byte_size(new_index.type, &ns))));
     simplify(accuml_offs);
   }
 

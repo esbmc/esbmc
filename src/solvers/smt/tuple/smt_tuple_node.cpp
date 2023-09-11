@@ -155,16 +155,19 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     return constant_struct2tc(tuple->sort->get_tuple_type(), std::move(outmem));
   }
 
-  // Run through all fields and despatch to 'get' again.
+  // Run through all fields and dispatch to 'get' again.
   unsigned int i = 0;
-  for(auto const &it : strct.members)
+  for(type2tc it : strct.members)
   {
+    if(is_symbol_type(it))
+      it = ns.follow(it);
+
     expr2tc res;
     if(is_tuple_ast_type(it))
     {
       res = tuple_get_rec(to_tuple_node_ast(tuple->elements[i]));
     }
-    else if(is_tuple_array_ast_type(it))
+    else if(is_tuple_array_ast_type(it, ctx->ns))
     {
       res = expr2tc(); // XXX currently unimplemented
     }

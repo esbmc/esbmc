@@ -456,7 +456,7 @@ public:
   void build_reference_rec(
     expr2tc &value,
     const expr2tc &offset,
-    const type2tc &type,
+    type2tc type,
     const guardt &guard,
     modet mode,
     unsigned long alignment = 0);
