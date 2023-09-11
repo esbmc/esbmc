@@ -649,6 +649,8 @@ void goto_convert_functionst::thrash_type_symbols()
       if(is_symbol(v))
       {
         symbolt *sym = const_cast<symbolt *>(G[v].symbol);
+        if(sym->is_type)
+          continue;
         log_debug(
           "thrash-ts", "thrashing symbolic types inside symbol {}", sym->id);
         rename_exprs(sym->value, *sym);
