@@ -15,6 +15,7 @@ const mode_table_et mode_table[] = {
   LANGAPI_MODE_C,
   LANGAPI_MODE_CPP,
 #endif
+  LANGAPI_MODE_PYTHON,
   LANGAPI_MODE_END};
 
 extern "C" const uint8_t buildidstring_buf[];
