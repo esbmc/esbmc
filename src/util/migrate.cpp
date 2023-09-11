@@ -1542,7 +1542,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         migrate_expr(it, tmp_op);
         args.push_back(tmp_op);
       }
-      new_expr_ref = code_printf2tc(args);
+
+      if(expr.base_name().empty())
+        assert(!"No base_name for code_printf2t");
+      std::string bs_name = expr.base_name().as_string();
+
+      new_expr_ref = code_printf2tc(args, bs_name);
       return;
     }
     else if(expr.statement() == "printf2")
@@ -1615,7 +1620,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       migrate_expr(it, tmp_op);
       ops.push_back(tmp_op);
     }
-    new_expr_ref = code_printf2tc(ops);
+
+    if(expr.base_name().empty())
+      assert(!"No base_name for code_printf2t");
+    std::string bs_name = expr.base_name().as_string();
+
+    new_expr_ref = code_printf2tc(ops, bs_name);
   }
   else if(expr.id() == irept::id_code && expr.statement() == "expression")
   {
@@ -2835,6 +2845,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.statement(irep_idt("printf"));
     for(auto const &it : ref2.operands)
       codeexpr.operands().push_back(migrate_expr_back(it));
+    codeexpr.base_name(ref2.bs_name);
     return codeexpr;
   }
   case expr2t::code_expression_id:

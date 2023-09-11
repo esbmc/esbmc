@@ -33,6 +33,5 @@ expr2tc compute_pointer_offset(const expr2tc &expr, const namespacet *ns);
 expr2tc compute_pointer_offset_bits(const expr2tc &expr, const namespacet *ns);
 
 const expr2tc &get_base_object(const expr2tc &expr);
-const irep_idt get_string_argument(const expr2tc &expr);
 
 #endif

@@ -83,7 +83,8 @@ void goto_convertt::do_printf(
   const exprt &lhs,
   const exprt &function,
   const exprt::operandst &arguments,
-  goto_programt &dest)
+  goto_programt &dest,
+  const std::string &bs_name)
 {
   exprt printf_code(
     "sideeffect", static_cast<const typet &>(function.type().return_type()));
@@ -92,6 +93,7 @@ void goto_convertt::do_printf(
 
   printf_code.operands() = arguments;
   printf_code.location() = function.location();
+  printf_code.base_name(bs_name);
 
   if(lhs.is_not_nil())
   {
@@ -598,7 +600,7 @@ void goto_convertt::do_function_call_symbol(
   }
   else if(base_name == "printf")
   {
-    do_printf(lhs, function, arguments, dest);
+    do_printf(lhs, function, arguments, dest, base_name);
   }
   else if(
     (base_name == "__ESBMC_atomic_begin") ||
@@ -648,11 +650,11 @@ void goto_convertt::do_function_call_symbol(
     do_free(lhs, function, arguments, dest);
   }
   else if(
-    base_name == "printf" || base_name == "fprintf" || base_name == "sprintf" ||
-    base_name == "snprintf" || base_name == "__stdio_common_vfprintf")
+    base_name == "printf" || base_name == "fprintf" || base_name == "dprintf" ||
+    base_name == "sprintf" || base_name == "snprintf" ||
+    base_name == "vfprintf")
   {
-    // "__stdio_common_vfprintf" for WINDOWS
-    do_printf(lhs, function, arguments, dest);
+    do_printf(lhs, function, arguments, dest, base_name);
   }
   else if(base_name == "__assert_rtn" || base_name == "__assert_fail")
   {

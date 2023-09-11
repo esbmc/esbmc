@@ -349,11 +349,76 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 
   code_printf2t &new_rhs = to_code_printf2t(renamed_rhs);
 
-  // The expr2tc in position 0 is the string format
-  const irep_idt fmt = get_string_argument(new_rhs.operands[0]);
+  if(new_rhs.bs_name.empty())
+  {
+    log_error("No base_name for code_printf2t");
+    return;
+  }
+
+  const std::string base_name = new_rhs.bs_name;
+
+  // get the format string base on the bs_name
+  irep_idt fmt;
+  size_t idx;
+  if(base_name == "printf")
+  {
+    // 1. printf: 1st argument
+    assert(new_rhs.operands.size() >= 1 && "Wrong printf signature");
+    const expr2tc &base_expr = get_base_object(new_rhs.operands[0]);
+    if(is_constant_string2t(base_expr))
+    {
+      fmt = to_constant_string2t(base_expr).value;
+      idx = 1;
+    }
+    else
+    {
+      // e.g.
+      // int x = 1;
+      // printf(x); // output ""
+      fmt = "";
+      idx = 0;
+    }
+  }
+  else if(
+    base_name == "fprintf" || base_name == "dprintf" ||
+    base_name == "sprintf" || base_name == "vfprintf")
+  {
+    // 2.fprintf, sprintf, dprintf: 2nd argument
+    assert(
+      new_rhs.operands.size() >= 2 &&
+      "Wrong fprintf/sprintf/dprintf/vfprintf signature");
+    const expr2tc &base_expr = get_base_object(new_rhs.operands[1]);
+    if(is_constant_string2t(base_expr))
+    {
+      fmt = to_constant_string2t(base_expr).value;
+      idx = 2;
+    }
+    else
+    {
+      fmt = "";
+      idx = 1;
+    }
+  }
+  else if(base_name == "snprintf")
+  {
+    // 3. snprintf: 3rd argument
+    assert(new_rhs.operands.size() >= 3 && "Wrong snprintf signature");
+    const expr2tc &base_expr = get_base_object(new_rhs.operands[2]);
+    if(is_constant_string2t(base_expr))
+    {
+      fmt = to_constant_string2t(base_expr).value;
+      idx = 3;
+    }
+    else
+    {
+      fmt = "";
+      idx = 2;
+    }
+  }
 
   // Now we pop the format
-  new_rhs.operands.erase(new_rhs.operands.begin());
+  for(size_t i = 0; i < idx; i++)
+    new_rhs.operands.erase(new_rhs.operands.begin());
 
   std::list<expr2tc> args;
   new_rhs.foreach_operand([this, &args](const expr2tc &e) {
@@ -383,7 +448,9 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       {
         // the current expression "arg" does not hold the value info (might be a bug)
         // thus we need to look it up from the symbol table
-        symbolt s = *ns.lookup(get_string_argument(arg));
+        const expr2tc &base_expr = get_base_object(arg);
+        assert(is_symbol2t(base_expr));
+        symbolt s = *ns.lookup(to_symbol2t(base_expr).thename);
         exprt dest;
         array2string(s, dest);
         migrate_expr(dest, arg);

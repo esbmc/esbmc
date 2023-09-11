@@ -14,6 +14,10 @@ on:
         description: 'File output name (to keep the logs)'
         required: false
         default: ''
+      svbenchmarks:
+        description: 'Git branch, tag, or commit of SV-Benchmarks to use'
+        required: true
+        default: 'svcomp23-rc.1'      	
       mode:
         type: choice
         description: Benchecex run mode
@@ -95,6 +99,8 @@ jobs:
     timeout-minutes: 12000
     needs: build-unix
     steps:
+      - name: Setup SV-Benchmarks version
+        run: cd $HOME/sv-benchmarks && git fetch --all --tags && git checkout ${{ inputs.svbenchmarks }}
       - name: Download Linux Build
         uses: actions/download-artifact@v1
         with:

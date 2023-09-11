@@ -7,6 +7,7 @@ BENCHEXEC_COMMON_FLAGS="-o ../esbmc-output/ -N 9 ./esbmc.xml --read-only-dir / -
 setup_folder () {
     echo "Setting up machine folder..."
     cp esbmc-src/scripts/competitions/svcomp/esbmc-wrapper.py $HOME/esbmc-wrapper.py
+    cp esbmc-src/scripts/competitions/svcomp/esbmc.xml $HOME/esbmc.xml
     rm -rf $HOME/output-action $HOME/esbmc-output esbmc-src $HOME/run-output.zip
     mkdir $HOME/output-action
     cp ./bin/esbmc $HOME/output-action
