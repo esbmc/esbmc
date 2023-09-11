@@ -13,13 +13,10 @@ void goto_convert(
 class goto_convert_functionst : public goto_convertt
 {
 public:
-  typedef std::map<irep_idt, std::set<irep_idt>> typename_mapt;
-  typedef std::set<irep_idt> typename_sett;
-
   void goto_convert();
   void convert_function(symbolt &symbol);
   void thrash_type_symbols();
-  void rename_types(irept &type, const symbolt &cur_name_sym);
+  void rename_types(typet &type, const symbolt &cur_name_sym);
   void rename_exprs(irept &expr, const symbolt &cur_name_sym);
 
   goto_convert_functionst(

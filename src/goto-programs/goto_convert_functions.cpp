@@ -188,6 +188,7 @@ void goto_convert(
 
 static bool denotes_thrashable_subtype(const irep_idt &id)
 {
+  /* only "type" and "subtype", not "definition" */
   return id == exprt::i_type || id == typet::f_subtype;
 }
 
@@ -464,7 +465,7 @@ struct node_map
 } // namespace
 
 void goto_convert_functionst::rename_types(
-  irept &type,
+  typet &type,
   const symbolt &cur_name_sym)
 {
   if(type.id() == typet::t_pointer)
@@ -482,35 +483,11 @@ void goto_convert_functionst::rename_types(
   // the current block of code came from and try to guess what type symbol it
   // should have.
 
-  typet type2;
   if(type.id() == typet::t_symbol)
   {
-    if(const symbolt *sym = ns.lookup(type.identifier()))
-    {
-      // If we can just look up the current type symbol, use that.
-      type2 = sym->type;
-    }
-    else
-    {
-      // Otherwise, try to guess the namespaced type symbol
-      std::string ident =
-        cur_name_sym.module.as_string() + type.identifier().as_string();
-
-      // Try looking that up.
-      if(const symbolt *sym = ns.lookup(irep_idt(ident)))
-      {
-        type2 = sym->type;
-      }
-      else
-      {
-        // And if we fail
-        log_error(
-          "Can't resolve type symbol {} at symbol squashing time", ident);
-        abort();
-      }
-    }
-
-    type = type2;
+    /* unfold the definition of this symbol but do not recurse into it */
+    type = type.definition();
+    assert(!type.id().empty());
     return;
   }
 
@@ -531,7 +508,7 @@ void goto_convert_functionst::rename_exprs(
   {
     if(denotes_thrashable_subtype(it->first))
     {
-      rename_types(it->second, cur_name_sym);
+      rename_types(static_cast<typet &>(it->second), cur_name_sym);
     }
     else
     {
@@ -651,6 +628,21 @@ void goto_convert_functionst::thrash_type_symbols()
 
   context_type_grapht G;
   node_id root = G.add_all(context);
+
+  G.forall_nodes(context_type_grapht::TYPE, [&G](node_id v) {
+    const symbolt *sym = nullptr;
+    for(edge e : G.adj(v))
+      if(is_symbol(e.target) && e.label == typet::t_symbol)
+      {
+        sym = G[e.target].symbol;
+        break;
+      }
+    if(!sym)
+      return;
+    typet *t = const_cast<typet *>(G[v].type);
+    assert(t->id() == typet::t_symbol);
+    t->definition() = sym->type; // copy
+  });
 
   sccst(G, [this, &G](const std::vector<node_id> &scc) {
     for(node_id v : scc)

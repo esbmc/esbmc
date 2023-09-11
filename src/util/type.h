@@ -58,12 +58,22 @@ public:
     return (locationt &)add(f_location);
   }
 
-  typet &add_type(const std::string &name)
+  typet &definition()
+  {
+    return add_type(f_definition);
+  }
+
+  const typet &definition() const
+  {
+    return find_type(f_definition);
+  }
+
+  typet &add_type(const irep_idt &name)
   {
     return (typet &)add(name);
   }
 
-  const typet &find_type(const std::string &name) const
+  const typet &find_type(const irep_idt &name) const
   {
     return (const typet &)find(name);
   }
@@ -119,6 +129,7 @@ public:
   static irep_idt f_subtype;
 
 protected:
+  static irep_idt f_definition;
   static irep_idt f_subtypes;
   static irep_idt f_location;
   static irep_idt f_can_carry_provenance;
