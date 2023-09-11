@@ -310,8 +310,9 @@ void goto_checkt::input_overflow_check(
     return;
 
   // obtain the format string
-  const std::string fmt =
-    get_string_argument(func_call.operands[fmt_idx]).as_string();
+  const expr2tc &base_expr = get_base_object(func_call.operands[fmt_idx]);
+  assert(is_constant_string2t(base_expr));
+  const std::string fmt = to_constant_string2t(base_expr).value.as_string();
 
   // obtain the length limits in the format string
   // TODO: A specific class for the scanf/fscanf format string(e.g scanf_formattert)
@@ -342,7 +343,10 @@ void goto_checkt::input_overflow_check(
   for(long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
       i++)
   {
-    irep_idt arg_name = get_string_argument(func_call.operands[i]);
+    const expr2tc &base_expr = get_base_object(func_call.operands[i]);
+    irep_idt arg_name;
+    if(is_symbol2t(base_expr))
+      arg_name = to_symbol2t(base_expr).thename;
 
     // e.g
     // int *arr = (int*) malloc(10 * sizeof(int));

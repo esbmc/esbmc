@@ -453,7 +453,8 @@ protected:
     const exprt &lhs,
     const exprt &rhs,
     const exprt::operandst &arguments,
-    goto_programt &dest);
+    goto_programt &dest,
+    const std::string &bs_name);
   void do_mem(
     bool is_malloc,
     const exprt &lhs,

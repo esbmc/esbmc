@@ -9,7 +9,8 @@ int main()
 #ifndef _WIN32
   assert(x == 6);
   assert(y == 13);
-#endif
   x+=1;
   y+=1;
+#endif
+
 }
