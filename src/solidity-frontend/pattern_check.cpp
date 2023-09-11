@@ -1,4 +1,5 @@
 #include <solidity-frontend/pattern_check.h>
+#include <util/message.h>
 #include <stdlib.h>
 
 pattern_checker::pattern_checker(
