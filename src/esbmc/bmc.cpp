@@ -738,8 +738,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &final_result,
                        &result_mutex,
                        &tracked_instrument,
-                       &reached_claims](const size_t &i)
-  {
+                       &reached_claims](const size_t &i) {
     // Since this is just a copy, we probably don't need a lock
     auto local_eq = std::make_shared<symex_target_equationt>(*eq);
 
@@ -770,8 +769,8 @@ smt_convt::resultt bmct::multi_property_check(
     /* TODO: We might move this into solver_convt. It is
        * useful to have the solver as a thread.
        */
-    std::thread solver_job([&result, &runtime_solver]()
-                           { result = runtime_solver->dec_solve(); });
+      std::thread solver_job(
+        [&result, &runtime_solver]() { result = runtime_solver->dec_solve(); });
 
     const bool fail_fast = options.get_bool_option("multi-fail-fast");
     // This loop is mainly for fail-fast.
