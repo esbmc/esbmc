@@ -1,13 +1,43 @@
 #include <python-frontend/python_language.h>
+#include <util/message.h>
+
+#include <cstdlib>
+
+#include <boost/filesystem.hpp>
+#include <boost/process.hpp>
+
+namespace bp = boost::process;
+namespace fs = boost::filesystem;
 
 languaget *new_python_language()
 {
   return new python_languaget;
 }
 
-bool python_languaget::parse(const std::string & /*path*/)
+bool python_languaget::parse(const std::string &path)
 {
-  return true;
+  log_debug("python", "Parsing: {}", path);
+
+  fs::path script(path);
+  if(!fs::exists(script))
+    return true;
+
+  // Execute python script to generate json file from AST
+  std::string cmd("python3 src/python-frontend/astgen.py ");
+  cmd += path;
+  // Create a child process to execute Python
+  bp::child process(cmd);
+
+  // Wait for execution
+  process.wait();
+
+  if(process.exit_code())
+  {
+	// Python execution failed
+    return true;
+  }
+
+  return false;
 }
 
 bool python_languaget::final(contextt & /*context*/)
