@@ -1,5 +1,6 @@
-#include <python-frontend/python_language.h>
-#include <util/message.h>
+#include "python-frontend/python_language.h"
+#include "python-frontend/python_converter.h"
+#include "util/message.h"
 
 #include <cstdlib>
 
@@ -33,7 +34,7 @@ bool python_languaget::parse(const std::string &path)
 
   if(process.exit_code())
   {
-	// Python execution failed
+    // Python execution failed
     return true;
   }
 
@@ -46,10 +47,11 @@ bool python_languaget::final(contextt & /*context*/)
 }
 
 bool python_languaget::typecheck(
-  contextt & /*context*/,
+  contextt &context,
   const std::string & /*module*/)
 {
-  return true;
+  python_converter converter(context);
+  return converter.convert();
 }
 
 void python_languaget::show_parse(std::ostream & /*out*/)
@@ -57,18 +59,18 @@ void python_languaget::show_parse(std::ostream & /*out*/)
 }
 
 bool python_languaget::from_expr(
-  const exprt &/*expr*/,
-  std::string &/*code*/,
-  const namespacet &/*ns*/)
+  const exprt & /*expr*/,
+  std::string & /*code*/,
+  const namespacet & /*ns*/)
 {
   assert(!"Not implemented yet");
   return false;
 }
 
 bool python_languaget::from_type(
-  const typet &/*type*/,
-  std::string &/*code*/,
-  const namespacet &/*ns*/)
+  const typet & /*type*/,
+  std::string & /*code*/,
+  const namespacet & /*ns*/)
 {
   assert(!"Not implemented yet");
   return false;
