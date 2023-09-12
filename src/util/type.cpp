@@ -53,7 +53,7 @@ irep_idt typet::a_integer_bits = dstring("integer_bits");
 irep_idt typet::a_f = dstring("f");
 
 irep_idt typet::f_subtype = dstring("subtype");
-irep_idt typet::f_definition = dstring("definition");
+irep_idt typet::f_definition = dstring("#definition");
 irep_idt typet::f_subtypes = dstring("subtypes");
 irep_idt typet::f_location = dstring("#location");
 irep_idt typet::f_can_carry_provenance = dstring("can_carry_provenance");

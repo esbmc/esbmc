@@ -127,9 +127,9 @@ public:
   static irep_idt a_f;
 
   static irep_idt f_subtype;
+  static irep_idt f_definition;
 
 protected:
-  static irep_idt f_definition;
   static irep_idt f_subtypes;
   static irep_idt f_location;
   static irep_idt f_can_carry_provenance;
