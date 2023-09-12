@@ -713,6 +713,7 @@ smt_convt::resultt bmct::multi_property_check(
   std::mutex result_mutex;
   // For coverage info
   int tracked_instrument = 0;
+  std::unordered_set<std::string> reached_claims;
 
   // TODO: This is the place to check a cache
   for(size_t i = 1; i <= remaining_claims; i++)
@@ -732,7 +733,7 @@ smt_convt::resultt bmct::multi_property_check(
    * if final_result is set to SAT
    */
   auto job_function =
-    [this, &eq, &ce_counter, &final_result, &result_mutex, &tracked_instrument](
+    [this, &eq, &ce_counter, &final_result, &result_mutex, &tracked_instrument, &reached_claims](
       const size_t &i) {
       // Since this is just a copy, we probably don't need a lock
       auto local_eq = std::make_shared<symex_target_equationt>(*eq);
@@ -819,7 +820,17 @@ smt_convt::resultt bmct::multi_property_check(
             options.get_bool_option("add-false-assert"))
           {
             if(claim.claim_msg.find("Instrumentation") != std::string::npos)
-              tracked_instrument++;
+            {
+              // E.g.
+              // "Claim 1: Instrumentation ASSERT(0) Added"
+              // "Claim 2: Instrumentation ASSERT(0) Converted"
+              if(!reached_claims.count(claim.claim_msg))
+              {
+                // avoid double counting the claims in loop/func_call
+                tracked_instrument++;
+                reached_claims.insert(claim.claim_msg);
+              }
+            }
           }
         }
         // TODO: This is the place to store into a cache
