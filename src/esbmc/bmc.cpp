@@ -732,114 +732,119 @@ smt_convt::resultt bmct::multi_property_check(
    * Finally, this function is affected by the "multi-fail-fast" option, which makes this instance stop
    * if final_result is set to SAT
    */
-  auto job_function =
-    [this, &eq, &ce_counter, &final_result, &result_mutex, &tracked_instrument, &reached_claims](
-      const size_t &i) {
-      // Since this is just a copy, we probably don't need a lock
-      auto local_eq = std::make_shared<symex_target_equationt>(*eq);
+  auto job_function = [this,
+                       &eq,
+                       &ce_counter,
+                       &final_result,
+                       &result_mutex,
+                       &tracked_instrument,
+                       &reached_claims](const size_t &i)
+  {
+    // Since this is just a copy, we probably don't need a lock
+    auto local_eq = std::make_shared<symex_target_equationt>(*eq);
 
     // Just to confirm that things are in parallel
 #ifndef _WIN32
 #ifndef __APPLE__ // sched_getcpu not supported in OS X
-      log_debug("multi-property", "Thread running on Core {}", sched_getcpu());
+    log_debug("multi-property", "Thread running on Core {}", sched_getcpu());
 #endif
 #endif
-      // Set up the current claim and slice it!
-      claim_slicer claim(i);
-      claim.run(local_eq->SSA_steps);
-      symex_slicet slicer(options);
-      slicer.run(local_eq->SSA_steps);
+    // Set up the current claim and slice it!
+    claim_slicer claim(i);
+    claim.run(local_eq->SSA_steps);
+    symex_slicet slicer(options);
+    slicer.run(local_eq->SSA_steps);
 
-      // Initialize a solver
-      auto runtime_solver =
-        std::shared_ptr<smt_convt>(create_solver("", ns, options));
-      // Save current instance
-      generate_smt_from_equation(runtime_solver, local_eq);
+    // Initialize a solver
+    auto runtime_solver =
+      std::shared_ptr<smt_convt>(create_solver("", ns, options));
+    // Save current instance
+    generate_smt_from_equation(runtime_solver, local_eq);
 
-      log_status(
-        "Solving claim '{}' with solver {}",
-        claim.claim_msg,
-        runtime_solver->solver_text());
+    log_status(
+      "Solving claim '{}' with solver {}",
+      claim.claim_msg,
+      runtime_solver->solver_text());
 
-      smt_convt::resultt result;
-      /* TODO: We might move this into solver_convt. It is
+    smt_convt::resultt result;
+    /* TODO: We might move this into solver_convt. It is
        * useful to have the solver as a thread.
        */
-      std::thread solver_job(
-        [&result, &runtime_solver]() { result = runtime_solver->dec_solve(); });
+    std::thread solver_job([&result, &runtime_solver]()
+                           { result = runtime_solver->dec_solve(); });
 
-      const bool fail_fast = options.get_bool_option("multi-fail-fast");
-      // This loop is mainly for fail-fast.
-      try
+    const bool fail_fast = options.get_bool_option("multi-fail-fast");
+    // This loop is mainly for fail-fast.
+    try
+    {
+      while(!solver_job.joinable())
       {
-        while(!solver_job.joinable())
+        // Try again 100ms later
+        std::this_thread::sleep_for(
+          std::chrono::duration<int, std::milli>(100));
+        // Did someone finished already?
+        if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
         {
-          // Try again 100ms later
-          std::this_thread::sleep_for(
-            std::chrono::duration<int, std::milli>(100));
-          // Did someone finished already?
-          if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
-          {
-            log_status("Other thread already found a SAT VCC.");
-            throw 0;
-          }
+          log_status("Other thread already found a SAT VCC.");
+          throw 0;
         }
-        solver_job.join();
-        // TODO: Fix the unordered output
-        // report_multi_property_trace(result, claim.claim_msg);
-        if(result == smt_convt::P_SATISFIABLE)
+      }
+      solver_job.join();
+      // TODO: Fix the unordered output
+      // report_multi_property_trace(result, claim.claim_msg);
+      if(result == smt_convt::P_SATISFIABLE)
+      {
+        const std::lock_guard<std::mutex> lock(result_mutex);
+        // Check if someone else found the solution
+        if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
         {
-          const std::lock_guard<std::mutex> lock(result_mutex);
-          // Check if someone else found the solution
-          if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
-          {
-            log_status(
-              "Found solution for VCC. But, other thread found it first.");
-            throw 0;
-          }
-          goto_tracet goto_trace;
-          build_goto_trace(local_eq, runtime_solver, goto_trace, false);
-          // TODO: Replace this with a test-case for coverage!
-          std::string output_file = options.get_option("cex-output");
-          if(output_file != "")
-          {
-            std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
-            show_goto_trace(out, ns, goto_trace);
-          }
-          std::ostringstream oss;
-          log_fail("\n[Counterexample]\n");
-          show_goto_trace(oss, ns, goto_trace);
-          log_result("{}", oss.str());
-          final_result = result;
+          log_status(
+            "Found solution for VCC. But, other thread found it first.");
+          throw 0;
+        }
+        goto_tracet goto_trace;
+        build_goto_trace(local_eq, runtime_solver, goto_trace, false);
+        // TODO: Replace this with a test-case for coverage!
+        std::string output_file = options.get_option("cex-output");
+        if(output_file != "")
+        {
+          std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
+          show_goto_trace(out, ns, goto_trace);
+        }
+        std::ostringstream oss;
+        log_fail("\n[Counterexample]\n");
+        show_goto_trace(oss, ns, goto_trace);
+        log_result("{}", oss.str());
+        final_result = result;
 
-          // collect the tracked instrumentation which is verified failed
-          // we assume it always works in multi-property checking mode
-          if(
-            options.get_bool_option("goto-coverage") ||
-            options.get_bool_option("make-assert-false") ||
-            options.get_bool_option("add-false-assert"))
+        // collect the tracked instrumentation which is verified failed
+        // we assume it always works in multi-property checking mode
+        if(
+          options.get_bool_option("goto-coverage") ||
+          options.get_bool_option("make-assert-false") ||
+          options.get_bool_option("add-false-assert"))
+        {
+          if(claim.claim_msg.find("Instrumentation") != std::string::npos)
           {
-            if(claim.claim_msg.find("Instrumentation") != std::string::npos)
+            // E.g.
+            // "Claim 1: Instrumentation ASSERT(0) Added"
+            // "Claim 2: Instrumentation ASSERT(0) Converted"
+            if(!reached_claims.count(claim.claim_msg))
             {
-              // E.g.
-              // "Claim 1: Instrumentation ASSERT(0) Added"
-              // "Claim 2: Instrumentation ASSERT(0) Converted"
-              if(!reached_claims.count(claim.claim_msg))
-              {
-                // avoid double counting the claims in loop/func_call
-                tracked_instrument++;
-                reached_claims.insert(claim.claim_msg);
-              }
+              // avoid double counting the claims in loop/func_call
+              tracked_instrument++;
+              reached_claims.insert(claim.claim_msg);
             }
           }
         }
-        // TODO: This is the place to store into a cache
       }
-      catch(...)
-      {
-        log_debug("multi-property", "Failing Fast");
-      }
-    };
+      // TODO: This is the place to store into a cache
+    }
+    catch(...)
+    {
+      log_debug("multi-property", "Failing Fast");
+    }
+  };
 
   // PARALLEL
   if(options.get_bool_option("parallel-solving"))
