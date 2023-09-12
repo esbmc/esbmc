@@ -769,8 +769,8 @@ smt_convt::resultt bmct::multi_property_check(
     /* TODO: We might move this into solver_convt. It is
        * useful to have the solver as a thread.
        */
-      std::thread solver_job(
-        [&result, &runtime_solver]() { result = runtime_solver->dec_solve(); });
+    std::thread solver_job(
+      [&result, &runtime_solver]() { result = runtime_solver->dec_solve(); });
 
     const bool fail_fast = options.get_bool_option("multi-fail-fast");
     // This loop is mainly for fail-fast.
