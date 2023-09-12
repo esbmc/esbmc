@@ -75,10 +75,6 @@
     <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-BusyBox-ReachSafety.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
   </tasks>
-  <tasks name="SoftwareSystems-coreutils-ReachSafety">
-    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-coreutils-ReachSafety.set</includesfile>
-    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
-  </tasks>
   <tasks name="SoftwareSystems-DeviceDriversLinux64-ReachSafety">
     <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-DeviceDriversLinux64-ReachSafety.set</includesfile>
     <excludesfile>$HOME/sv-benchmarks/c/SoftwareSystems-DeviceDriversLinux64Large-ReachSafety.set</excludesfile>
