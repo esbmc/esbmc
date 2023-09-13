@@ -43,7 +43,7 @@ bool python_languaget::parse(const std::string &path)
 
 bool python_languaget::final(contextt & /*context*/)
 {
-  return true;
+  return false;
 }
 
 bool python_languaget::typecheck(
