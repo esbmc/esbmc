@@ -1,4 +1,5 @@
 #include <cassert>
+#include <iostream> /* std::cout */
 #include <z3_conv.h>
 
 #define new_ast new_solver_ast<z3_smt_ast>
@@ -1304,19 +1305,14 @@ void z3_smt_ast::dump() const
 
 void z3_convt::dump_smt()
 {
-  const std::string &filename = options.get_option("output");
-  if(!filename.empty())
-  {
-    // print to output file
-    std::ofstream out(filename.c_str());
-    print_smt_formulae(out);
-  }
+  const std::string &path = options.get_option("output");
+  /* the iostream API is just unusable */
+  if(path == "-")
+    print_smt_formulae(std::cout);
   else
   {
-    // print to screen
-    std::ostringstream oss;
-    print_smt_formulae(oss);
-    log_status("{}", oss.str());
+    std::ofstream out(path);
+    print_smt_formulae(out);
   }
 }
 

@@ -246,7 +246,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "SMT lib program name"},
     {"output",
      boost::program_options::value<std::string>()->value_name("<filename>"),
-     "output VCCs in SMT lib format to given file"},
+     "output VCCs in SMT lib format to given file (or stdout if it is '-')"},
     {"floatbv",
      NULL,
      "encode floating-point using the SMT floating-point theory (default)"},

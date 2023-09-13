@@ -24,7 +24,7 @@ extern "C"
 #include <csignal>
 #include <cstdlib>
 #include <util/expr_util.h>
-#include <fstream>
+#include <iostream>
 #include <goto-programs/add_race_assertions.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/goto_convert_functions.h>
@@ -1833,15 +1833,12 @@ bool esbmc_parseoptionst::output_goto_program(
       if(!filename.empty())
       {
         // Outputting the translated program into the output file
-        std::ofstream out(filename.c_str());
-        if(out)
-        {
-          out << res;
-          out.close();
-        }
+        std::ofstream out(filename);
+        assert(out);
+        out << res;
       }
       else
-        log_status("{}", res);
+        std::cout << res;
       return true;
     }
   }
