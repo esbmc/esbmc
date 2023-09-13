@@ -266,7 +266,7 @@ static type2tc migrate_type0(const typet &type, type_mapt &map)
     // The return type could be a symbol: There are a variety of C++
     // things where a method returns itself, or similar.
     type2tc ret_type =
-      migrate_type(static_cast<const typet &>(type.return_type()));
+      migrate_type(static_cast<const typet &>(type.return_type()), map);
 
     return code_type2tc(args, ret_type, arg_names, ellipsis);
   }
