@@ -263,17 +263,10 @@ static type2tc migrate_type0(const typet &type, type_mapt &map)
       arg_names.push_back(old_arg.get_identifier());
     }
 
-    // Don't migrate return type if it's a symbol. There are a variety of C++
+    // The return type could be a symbol: There are a variety of C++
     // things where a method returns itself, or similar.
-    type2tc ret_type;
-    if(type.return_type().id() == typet::t_symbol)
-    {
-      ret_type = symbol_type2tc(type.return_type().identifier());
-    }
-    else
-    {
-      ret_type = migrate_type(static_cast<const typet &>(type.return_type()), map);
-    }
+    type2tc ret_type =
+      migrate_type(static_cast<const typet &>(type.return_type()));
 
     return code_type2tc(args, ret_type, arg_names, ellipsis);
   }
