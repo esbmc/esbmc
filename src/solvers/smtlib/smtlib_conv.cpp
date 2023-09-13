@@ -1487,12 +1487,12 @@ smt_sortt smtlib_convt::mk_bool_sort()
 
 smt_sortt smtlib_convt::mk_real_sort()
 {
-  return new smtlib_smt_sort(SMT_SORT_INT);
+  return new smtlib_smt_sort(SMT_SORT_REAL);
 }
 
 smt_sortt smtlib_convt::mk_int_sort()
 {
-  return new smtlib_smt_sort(SMT_SORT_REAL);
+  return new smtlib_smt_sort(SMT_SORT_INT);
 }
 
 smt_sortt smtlib_convt::mk_bv_sort(std::size_t width)
