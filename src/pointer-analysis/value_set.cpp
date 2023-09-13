@@ -548,6 +548,8 @@ void value_sett::get_value_set_rec(
       make_union(dest, v_it->second.object_map);
       return;
     }
+
+    log_debug("value-set", "symbol '{}' suffix {} unknown", sym.get_symbol_name(), suffix);
   }
 
   if(is_add2t(expr) || is_sub2t(expr))
