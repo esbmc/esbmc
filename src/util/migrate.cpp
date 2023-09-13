@@ -178,7 +178,7 @@ static type2tc migrate_type0(const typet &type, type_mapt &map)
     return get_empty_type();
 
   if(type.id() == typet::t_symbol)
-    return symbol_type2tc(type.identifier());
+    return symbol_type2tc(type.identifier(), type2tc{});
 
   if(type.id() == typet::t_struct)
   {
@@ -1868,7 +1868,10 @@ typet migrate_type_back(const type2tc &ref)
   case type2t::symbol_id:
   {
     const symbol_type2t &ref2 = to_symbol_type(ref);
-    return symbol_typet(ref2.symbol_name);
+    symbol_typet r(ref2.symbol_name);
+    if(ref2.definition)
+      r.definition() = migrate_type_back(ref2.definition);
+    return r;
   }
   case type2t::struct_id:
   {
