@@ -353,17 +353,21 @@ static type2tc migrate_type0(const typet &type, type_mapt &map)
 
 static type2tc migrate_type(const typet &type, type_mapt &map)
 {
-  auto [it, ins] = map.try_emplace(type, type2tc{});
-  if(ins)
+  if(auto it = map.find(type); it != map.end())
+    return it->second;
+  if(type.can_carry_provenance())
+    assert(
+      type.id() == typet::t_pointer || type.id() == "c_enum" ||
+      type.id() == typet::t_intcap || type.id() == typet::t_uintcap);
+  type2tc ty2 = migrate_type0(type, map);
+  bool yes = is_symbol_type(ty2) && !type.definition().is_nil();
+  auto [it,ins] = map.try_emplace(type, std::move(ty2));
+  if(ins && yes)
   {
-    if(type.can_carry_provenance())
-      assert(
-        type.id() == typet::t_pointer || type.id() == "c_enum" ||
-        type.id() == typet::t_intcap || type.id() == typet::t_uintcap);
-    type2tc ty2 = migrate_type0(type, map);
-    it->second = ty2;
+    type2tc *def = &static_cast<symbol_type2t &>(*it->second).definition;
+    *def = migrate_type(type.definition(), map);
   }
-  return it->second;
+  return map[type];
 }
 
 type2tc migrate_type(const typet &type)
@@ -1857,7 +1861,12 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref, type_mapt &map)
   }
 }
 
-typet migrate_type_back(const type2tc &ref)
+typedef std::unordered_map<type2tc, typet, type2_hash> type2mapt;
+
+static typet migrate_type_back(const type2tc &ref, type2mapt &map);
+static exprt migrate_expr_back(const expr2tc &ref, type2mapt &map);
+
+static typet migrate_type_back0(const type2tc &ref, type2mapt &map)
 {
   switch(ref->type_id)
   {
@@ -1869,8 +1878,8 @@ typet migrate_type_back(const type2tc &ref)
   {
     const symbol_type2t &ref2 = to_symbol_type(ref);
     symbol_typet r(ref2.symbol_name);
-    if(ref2.definition)
-      r.definition() = migrate_type_back(ref2.definition);
+    if(0 && ref2.definition)
+      r.definition() = migrate_type_back(ref2.definition, map);
     return r;
   }
   case type2t::struct_id:
@@ -1885,7 +1894,7 @@ typet migrate_type_back(const type2tc &ref)
     {
       struct_union_typet::componentt component;
       component.id("component");
-      component.type() = migrate_type_back(it);
+      component.type() = migrate_type_back(it, map);
       component.set_name(irep_idt(ref2.member_names[idx]));
       component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
       comps.push_back(component);
@@ -1910,7 +1919,7 @@ typet migrate_type_back(const type2tc &ref)
     {
       struct_union_typet::componentt component;
       component.id("component");
-      component.type() = migrate_type_back(it);
+      component.type() = migrate_type_back(it, map);
       component.set_name(irep_idt(ref2.member_names[idx]));
       component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
       comps.push_back(component);
@@ -1925,7 +1934,7 @@ typet migrate_type_back(const type2tc &ref)
   {
     const code_type2t &ref2 = to_code_type(ref);
     code_typet code;
-    typet ret_type = migrate_type_back(ref2.ret_type);
+    typet ret_type = migrate_type_back(ref2.ret_type, map);
 
     assert(ref2.arguments.size() == ref2.argument_names.size());
 
@@ -1933,7 +1942,7 @@ typet migrate_type_back(const type2tc &ref)
     unsigned int i = 0;
     for(auto const &it : ref2.arguments)
     {
-      args.emplace_back(migrate_type_back(it));
+      args.emplace_back(migrate_type_back(it, map));
       args.back().set_identifier(ref2.argument_names[i]);
       i++;
     }
@@ -1951,14 +1960,14 @@ typet migrate_type_back(const type2tc &ref)
     const array_type2t &ref2 = to_array_type(ref);
 
     array_typet thetype;
-    thetype.subtype() = migrate_type_back(ref2.subtype);
+    thetype.subtype() = migrate_type_back(ref2.subtype, map);
     if(ref2.size_is_infinite)
     {
       thetype.set("size", "infinity");
     }
     else
     {
-      thetype.size() = migrate_expr_back(ref2.array_size);
+      thetype.size() = migrate_expr_back(ref2.array_size, map);
     }
 
     return std::move(thetype);
@@ -1968,9 +1977,9 @@ typet migrate_type_back(const type2tc &ref)
     const vector_type2t &ref2 = to_vector_type(ref);
 
     vector_typet thetype;
-    thetype.subtype() = migrate_type_back(ref2.subtype);
+    thetype.subtype() = migrate_type_back(ref2.subtype, map);
     assert(!ref2.size_is_infinite);
-    thetype.size() = migrate_expr_back(ref2.array_size);
+    thetype.size() = migrate_expr_back(ref2.array_size, map);
 
     return std::move(thetype);
   }
@@ -1978,7 +1987,7 @@ typet migrate_type_back(const type2tc &ref)
   {
     const pointer_type2t &ref2 = to_pointer_type(ref);
 
-    typet subtype = migrate_type_back(ref2.subtype);
+    typet subtype = migrate_type_back(ref2.subtype, map);
     pointer_typet thetype(subtype);
     return std::move(thetype);
   }
@@ -2032,7 +2041,7 @@ typet migrate_type_back(const type2tc &ref)
       exprt &arglist = (exprt &)args.add("arguments");
       for(auto const &it : ref2.template_args)
       {
-        typet tmp = migrate_type_back(it);
+        typet tmp = migrate_type_back(it, map);
         exprt type("type");
         type.type() = tmp;
         arglist.copy_to_operands(type); // Yep, that's how it's structured.
@@ -2052,13 +2061,33 @@ typet migrate_type_back(const type2tc &ref)
   }
 }
 
+typet migrate_type_back(const type2tc &ref, type2mapt &map)
+{
+  if(auto it = map.find(ref); it != map.end())
+    return it->second;
+  typet ty = migrate_type_back0(ref, map);
+  auto [it, ins] = map.try_emplace(ref, std::move(ty));
+  if(is_symbol_type(ref) && to_symbol_type(ref).definition)
+  {
+    typet &def = it->second.definition();
+    def = migrate_type_back(to_symbol_type(ref).definition, map);
+  }
+  return map[ref];
+}
+
+typet migrate_type_back(const type2tc &ref)
+{
+  type2mapt map;
+  return migrate_type_back(ref, map);
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   type_mapt map;
   migrate_expr(expr, new_expr_ref, map);
 }
 
-exprt migrate_expr_back(const expr2tc &ref)
+static exprt migrate_expr_back(const expr2tc &ref, type2mapt &map)
 {
   if(ref.get() == nullptr)
     return nil_exprt();
@@ -2068,7 +2097,7 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::constant_int_id:
   {
     const constant_int2t &ref2 = to_constant_int2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
     theexpr.set_value(integer2binary(ref2.value, width));
@@ -2109,53 +2138,53 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::constant_struct_id:
   {
     const constant_struct2t &ref2 = to_constant_struct2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt thestruct("struct", thetype);
     for(auto const &it : ref2.datatype_members)
-      thestruct.operands().push_back(migrate_expr_back(it));
+      thestruct.operands().push_back(migrate_expr_back(it, map));
     return thestruct;
   }
   case expr2t::constant_union_id:
   {
     const constant_union2t &ref2 = to_constant_union2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt theunion("union", thetype);
     for(auto const &it : ref2.datatype_members)
-      theunion.operands().push_back(migrate_expr_back(it));
+      theunion.operands().push_back(migrate_expr_back(it, map));
     theunion.component_name(ref2.init_field);
     return theunion;
   }
   case expr2t::constant_array_id:
   {
     const constant_array2t &ref2 = to_constant_array2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt thearray("constant", thetype);
     for(auto const &it : ref2.datatype_members)
-      thearray.operands().push_back(migrate_expr_back(it));
+      thearray.operands().push_back(migrate_expr_back(it, map));
     return thearray;
   }
   case expr2t::constant_vector_id:
   {
     const constant_vector2t &ref2 = to_constant_vector2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt thearray("constant", thetype);
     for(auto const &it : ref2.datatype_members)
-      thearray.operands().push_back(migrate_expr_back(it));
+      thearray.operands().push_back(migrate_expr_back(it, map));
     return thearray;
   }
   case expr2t::constant_array_of_id:
   {
     const constant_array_of2t &ref2 = to_constant_array_of2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt thearray("array_of", thetype);
-    exprt initializer = migrate_expr_back(ref2.initializer);
+    exprt initializer = migrate_expr_back(ref2.initializer, map);
     thearray.operands().push_back(initializer);
     return thearray;
   }
   case expr2t::symbol_id:
   {
     const symbol2t &ref2 = to_symbol2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     if(has_prefix(ref2.thename.as_string(), "nondet$"))
     {
       exprt thesym("nondet_symbol", thetype);
@@ -2166,7 +2195,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     if(ref2.thename == "NULL")
     {
       // Special case.
-      constant_exprt const_expr(migrate_type_back(ref2.type));
+      constant_exprt const_expr(thetype);
       const_expr.set_value(ref2.get_symbol_name());
       return std::move(const_expr);
     }
@@ -2183,30 +2212,30 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::typecast_id:
   {
     const typecast2t &ref2 = to_typecast2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
 
-    typecast_exprt new_expr(migrate_expr_back(ref2.from), thetype);
-    new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    typecast_exprt new_expr(migrate_expr_back(ref2.from, map), thetype);
+    new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode, map));
     return std::move(new_expr);
   }
   case expr2t::nearbyint_id:
   {
     const nearbyint2t &ref2 = to_nearbyint2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
 
     exprt new_expr("nearbyint", thetype);
-    new_expr.copy_to_operands(migrate_expr_back(ref2.from));
-    new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    new_expr.copy_to_operands(migrate_expr_back(ref2.from, map));
+    new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode, map));
     return new_expr;
   }
   case expr2t::if_id:
   {
     const if2t &ref2 = to_if2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     if_exprt theif(
-      migrate_expr_back(ref2.cond),
-      migrate_expr_back(ref2.true_value),
-      migrate_expr_back(ref2.false_value));
+      migrate_expr_back(ref2.cond, map),
+      migrate_expr_back(ref2.true_value, map),
+      migrate_expr_back(ref2.false_value, map));
     theif.type() = thetype;
     return std::move(theif);
   }
@@ -2214,14 +2243,14 @@ exprt migrate_expr_back(const expr2tc &ref)
   {
     const equality2t &ref2 = to_equality2t(ref);
     return equality_exprt(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
   }
   case expr2t::notequal_id:
   {
     const notequal2t &ref2 = to_notequal2t(ref);
     exprt notequal("notequal", bool_typet());
     notequal.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return notequal;
   }
   case expr2t::lessthan_id:
@@ -2229,7 +2258,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const lessthan2t &ref2 = to_lessthan2t(ref);
     exprt lessthan("<", bool_typet());
     lessthan.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return lessthan;
   }
   case expr2t::greaterthan_id:
@@ -2237,7 +2266,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const greaterthan2t &ref2 = to_greaterthan2t(ref);
     exprt greaterthan(">", bool_typet());
     greaterthan.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return greaterthan;
   }
   case expr2t::lessthanequal_id:
@@ -2245,7 +2274,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const lessthanequal2t &ref2 = to_lessthanequal2t(ref);
     exprt lessthanequal("<=", bool_typet());
     lessthanequal.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return lessthanequal;
   }
   case expr2t::greaterthanequal_id:
@@ -2253,20 +2282,20 @@ exprt migrate_expr_back(const expr2tc &ref)
     const greaterthanequal2t &ref2 = to_greaterthanequal2t(ref);
     exprt greaterthanequal(">=", bool_typet());
     greaterthanequal.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return greaterthanequal;
   }
   case expr2t::not_id:
   {
     const not2t &ref2 = to_not2t(ref);
-    return not_exprt(migrate_expr_back(ref2.value));
+    return not_exprt(migrate_expr_back(ref2.value, map));
   }
   case expr2t::and_id:
   {
     const and2t &ref2 = to_and2t(ref);
     exprt andval("and", bool_typet());
     andval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return andval;
   }
   case expr2t::or_id:
@@ -2274,7 +2303,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const or2t &ref2 = to_or2t(ref);
     exprt orval("or", bool_typet());
     orval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return orval;
   }
   case expr2t::xor_id:
@@ -2282,7 +2311,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const xor2t &ref2 = to_xor2t(ref);
     exprt xorval("xor", bool_typet());
     xorval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return xorval;
   }
   case expr2t::implies_id:
@@ -2290,296 +2319,296 @@ exprt migrate_expr_back(const expr2tc &ref)
     const implies2t &ref2 = to_implies2t(ref);
     exprt impliesval("=>", bool_typet());
     impliesval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return impliesval;
   }
   case expr2t::bitand_id:
   {
     const bitand2t &ref2 = to_bitand2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt bitandval("bitand", thetype);
     bitandval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return bitandval;
   }
   case expr2t::bitor_id:
   {
     const bitor2t &ref2 = to_bitor2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt bitorval("bitor", thetype);
     bitorval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return bitorval;
   }
   case expr2t::bitxor_id:
   {
     const bitxor2t &ref2 = to_bitxor2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt bitxorval("bitxor", thetype);
     bitxorval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return bitxorval;
   }
   case expr2t::bitnand_id:
   {
     const bitnand2t &ref2 = to_bitnand2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt bitnandval("bitnand", thetype);
     bitnandval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return bitnandval;
   }
   case expr2t::bitnor_id:
   {
     const bitnor2t &ref2 = to_bitnor2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt bitnorval("bitnor", thetype);
     bitnorval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return bitnorval;
   }
   case expr2t::bitnxor_id:
   {
     const bitnxor2t &ref2 = to_bitnxor2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt bitnxorval("bitnxor", thetype);
     bitnxorval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return bitnxorval;
   }
   case expr2t::bitnot_id:
   {
     const bitnot2t &ref2 = to_bitnot2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt bitnotval("bitnot", thetype);
-    bitnotval.copy_to_operands(migrate_expr_back(ref2.value));
+    bitnotval.copy_to_operands(migrate_expr_back(ref2.value, map));
     return bitnotval;
   }
   case expr2t::lshr_id:
   {
     const lshr2t &ref2 = to_lshr2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt lshrval("lshr", thetype);
     lshrval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return lshrval;
   }
   case expr2t::neg_id:
   {
     const neg2t &ref2 = to_neg2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt neg("unary-", thetype);
-    neg.copy_to_operands(migrate_expr_back(ref2.value));
+    neg.copy_to_operands(migrate_expr_back(ref2.value, map));
     return neg;
   }
   case expr2t::abs_id:
   {
     const abs2t &ref2 = to_abs2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt abs("abs", thetype);
-    abs.copy_to_operands(migrate_expr_back(ref2.value));
+    abs.copy_to_operands(migrate_expr_back(ref2.value, map));
     return abs;
   }
   case expr2t::add_id:
   {
     const add2t &ref2 = to_add2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt addval("+", thetype);
     addval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return addval;
   }
   case expr2t::sub_id:
   {
     const sub2t &ref2 = to_sub2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt subval("-", thetype);
     subval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return subval;
   }
   case expr2t::mul_id:
   {
     const mul2t &ref2 = to_mul2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt mulval("*", thetype);
     mulval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return mulval;
   }
   case expr2t::div_id:
   {
     const div2t &ref2 = to_div2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt divval("/", thetype);
     divval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return divval;
   }
   case expr2t::ieee_add_id:
   {
     const ieee_add2t &ref2 = to_ieee_add2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt addval("ieee_add", thetype);
     addval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
 
     // Add rounding mode
-    addval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    addval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode, map));
     return addval;
   }
   case expr2t::ieee_sub_id:
   {
     const ieee_sub2t &ref2 = to_ieee_sub2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt subval("ieee_sub", thetype);
     subval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
 
     // Add rounding mode
-    subval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    subval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode, map));
     return subval;
   }
   case expr2t::ieee_mul_id:
   {
     const ieee_mul2t &ref2 = to_ieee_mul2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt mulval("ieee_mul", thetype);
     mulval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
 
     // Add rounding mode
-    mulval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    mulval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode, map));
     return mulval;
   }
   case expr2t::ieee_div_id:
   {
     const ieee_div2t &ref2 = to_ieee_div2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt divval("ieee_div", thetype);
     divval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
 
     // Add rounding mode
-    divval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    divval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode, map));
     return divval;
   }
   case expr2t::ieee_fma_id:
   {
     const ieee_fma2t &ref2 = to_ieee_fma2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt fmaval("ieee_fma", thetype);
     fmaval.copy_to_operands(
-      migrate_expr_back(ref2.value_1),
-      migrate_expr_back(ref2.value_2),
-      migrate_expr_back(ref2.value_3));
+      migrate_expr_back(ref2.value_1, map),
+      migrate_expr_back(ref2.value_2, map),
+      migrate_expr_back(ref2.value_3, map));
 
     // Add rounding mode
-    fmaval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    fmaval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode, map));
     return fmaval;
   }
   case expr2t::ieee_sqrt_id:
   {
     const ieee_sqrt2t &ref2 = to_ieee_sqrt2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt fmaval("ieee_sqrt", thetype);
-    fmaval.copy_to_operands(migrate_expr_back(ref2.value));
+    fmaval.copy_to_operands(migrate_expr_back(ref2.value, map));
 
     // Add rounding mode
-    fmaval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    fmaval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode, map));
     return fmaval;
   }
   case expr2t::modulus_id:
   {
     const modulus2t &ref2 = to_modulus2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt modval("mod", thetype);
     modval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return modval;
   }
   case expr2t::shl_id:
   {
     const shl2t &ref2 = to_shl2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt shlval("shl", thetype);
     shlval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return shlval;
   }
   case expr2t::ashr_id:
   {
     const ashr2t &ref2 = to_ashr2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt ashrval("ashr", thetype);
     ashrval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return ashrval;
   }
   case expr2t::same_object_id:
   {
     const same_object2t &ref2 = to_same_object2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt same_objectval("same-object", thetype);
     same_objectval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return same_objectval;
   }
   case expr2t::pointer_offset_id:
   {
     const pointer_offset2t &ref2 = to_pointer_offset2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt pointer_offsetval("pointer_offset", thetype);
-    pointer_offsetval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
+    pointer_offsetval.copy_to_operands(migrate_expr_back(ref2.ptr_obj, map));
     return pointer_offsetval;
   }
   case expr2t::pointer_object_id:
   {
     const pointer_object2t &ref2 = to_pointer_object2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt pointer_objectval("pointer_object", thetype);
-    pointer_objectval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
+    pointer_objectval.copy_to_operands(migrate_expr_back(ref2.ptr_obj, map));
     return pointer_objectval;
   }
   case expr2t::address_of_id:
   {
     const address_of2t &ref2 = to_address_of2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt address_ofval("address_of", thetype);
-    address_ofval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
+    address_ofval.copy_to_operands(migrate_expr_back(ref2.ptr_obj, map));
     return address_ofval;
   }
   case expr2t::byte_extract_id:
   {
     const byte_extract2t &ref2 = to_byte_extract2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt byte_extract(
       (ref2.big_endian) ? "byte_extract_big_endian"
                         : "byte_extract_little_endian",
       thetype);
     byte_extract.copy_to_operands(
-      migrate_expr_back(ref2.source_value),
-      migrate_expr_back(ref2.source_offset));
+      migrate_expr_back(ref2.source_value, map),
+      migrate_expr_back(ref2.source_offset, map));
     return byte_extract;
   }
   case expr2t::byte_update_id:
   {
     const byte_update2t &ref2 = to_byte_update2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt byte_update(
       (ref2.big_endian) ? "byte_update_big_endian"
                         : "byte_update_little_endian",
       thetype);
     byte_update.copy_to_operands(
-      migrate_expr_back(ref2.source_value),
-      migrate_expr_back(ref2.source_offset),
-      migrate_expr_back(ref2.update_value));
+      migrate_expr_back(ref2.source_value, map),
+      migrate_expr_back(ref2.source_offset, map),
+      migrate_expr_back(ref2.update_value, map));
     return byte_update;
   }
   case expr2t::with_id:
   {
     const with2t &ref2 = to_with2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt with("with", thetype);
 
     exprt memb_name;
@@ -2592,46 +2621,47 @@ exprt migrate_expr_back(const expr2tc &ref)
     }
     else
     {
-      memb_name = migrate_expr_back(ref2.update_field);
+      memb_name = migrate_expr_back(ref2.update_field, map);
     }
 
     with.copy_to_operands(
-      migrate_expr_back(ref2.source_value),
+      migrate_expr_back(ref2.source_value, map),
       memb_name,
-      migrate_expr_back(ref2.update_value));
+      migrate_expr_back(ref2.update_value, map));
     return with;
   }
   case expr2t::member_id:
   {
     const member2t &ref2 = to_member2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt member("member", thetype);
     member.set("component_name", ref2.member);
     exprt member_name("member_name");
-    member.copy_to_operands(migrate_expr_back(ref2.source_value));
+    member.copy_to_operands(migrate_expr_back(ref2.source_value, map));
     return member;
   }
   case expr2t::index_id:
   {
     const index2t &ref2 = to_index2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt index("index", thetype);
     index.copy_to_operands(
-      migrate_expr_back(ref2.source_value), migrate_expr_back(ref2.index));
+      migrate_expr_back(ref2.source_value, map),
+      migrate_expr_back(ref2.index, map));
     return index;
   }
   case expr2t::isnan_id:
   {
     const isnan2t &ref2 = to_isnan2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt isnan("isnan", thetype);
-    isnan.copy_to_operands(migrate_expr_back(ref2.value));
+    isnan.copy_to_operands(migrate_expr_back(ref2.value, map));
     return isnan;
   }
   case expr2t::overflow_id:
   {
     const overflow2t &ref2 = to_overflow2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt theexpr;
     theexpr.type() = thetype;
     if(is_add2t(ref2.operand))
@@ -2639,42 +2669,48 @@ exprt migrate_expr_back(const expr2tc &ref)
       theexpr.id("overflow-+");
       const add2t &addref = to_add2t(ref2.operand);
       theexpr.copy_to_operands(
-        migrate_expr_back(addref.side_1), migrate_expr_back(addref.side_2));
+        migrate_expr_back(addref.side_1, map),
+        migrate_expr_back(addref.side_2, map));
     }
     else if(is_sub2t(ref2.operand))
     {
       theexpr.id("overflow--");
       const sub2t &subref = to_sub2t(ref2.operand);
       theexpr.copy_to_operands(
-        migrate_expr_back(subref.side_1), migrate_expr_back(subref.side_2));
+        migrate_expr_back(subref.side_1, map),
+        migrate_expr_back(subref.side_2, map));
     }
     else if(is_mul2t(ref2.operand))
     {
       theexpr.id("overflow-*");
       const mul2t &mulref = to_mul2t(ref2.operand);
       theexpr.copy_to_operands(
-        migrate_expr_back(mulref.side_1), migrate_expr_back(mulref.side_2));
+        migrate_expr_back(mulref.side_1, map),
+        migrate_expr_back(mulref.side_2, map));
     }
     else if(is_div2t(ref2.operand))
     {
       theexpr.id("overflow-/");
       const div2t &divref = to_div2t(ref2.operand);
       theexpr.copy_to_operands(
-        migrate_expr_back(divref.side_1), migrate_expr_back(divref.side_2));
+        migrate_expr_back(divref.side_1, map),
+        migrate_expr_back(divref.side_2, map));
     }
     else if(is_modulus2t(ref2.operand))
     {
       theexpr.id("overflow-mod");
       const modulus2t &divref = to_modulus2t(ref2.operand);
       theexpr.copy_to_operands(
-        migrate_expr_back(divref.side_1), migrate_expr_back(divref.side_2));
+        migrate_expr_back(divref.side_1, map),
+        migrate_expr_back(divref.side_2, map));
     }
     else if(is_shl2t(ref2.operand))
     {
       theexpr.id("overflow-shl");
       const shl2t &divref = to_shl2t(ref2.operand);
       theexpr.copy_to_operands(
-        migrate_expr_back(divref.side_1), migrate_expr_back(divref.side_2));
+        migrate_expr_back(divref.side_1, map),
+        migrate_expr_back(divref.side_2, map));
     }
     else
     {
@@ -2692,43 +2728,43 @@ exprt migrate_expr_back(const expr2tc &ref)
 
     irep_idt tmp("overflow-typecast-" + std::string(buffer));
     exprt theexpr(tmp);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     theexpr.type() = thetype;
-    theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    theexpr.copy_to_operands(migrate_expr_back(ref2.operand, map));
     return theexpr;
   }
   case expr2t::overflow_neg_id:
   {
     const overflow_neg2t &ref2 = to_overflow_neg2t(ref);
     exprt theexpr("overflow-unary-");
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     theexpr.type() = thetype;
-    theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    theexpr.copy_to_operands(migrate_expr_back(ref2.operand, map));
     return theexpr;
   }
   case expr2t::invalid_id:
   {
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     const exprt theexpr("invalid", thetype);
     return theexpr;
   }
   case expr2t::unknown_id:
   {
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     const exprt theexpr("unknown", thetype);
     return theexpr;
   }
   case expr2t::null_object_id:
   {
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     const exprt theexpr("NULL-object", thetype);
     return theexpr;
   }
   case expr2t::dynamic_object_id:
   {
     const dynamic_object2t &ref2 = to_dynamic_object2t(ref);
-    typet thetype = migrate_type_back(ref->type);
-    exprt op0 = migrate_expr_back(ref2.instance);
+    typet thetype = migrate_type_back(ref->type, map);
+    exprt op0 = migrate_expr_back(ref2.instance, map);
     exprt op1;
     if(ref2.invalid)
       op1 = true_exprt();
@@ -2741,8 +2777,8 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::dereference_id:
   {
     const dereference2t &ref2 = to_dereference2t(ref);
-    typet thetype = migrate_type_back(ref->type);
-    exprt op0 = migrate_expr_back(ref2.value);
+    typet thetype = migrate_type_back(ref->type, map);
+    exprt op0 = migrate_expr_back(ref2.value, map);
     exprt theexpr("dereference", thetype);
     theexpr.copy_to_operands(op0);
     return theexpr;
@@ -2750,8 +2786,8 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::valid_object_id:
   {
     const valid_object2t &ref2 = to_valid_object2t(ref);
-    typet thetype = migrate_type_back(ref->type);
-    exprt op0 = migrate_expr_back(ref2.value);
+    typet thetype = migrate_type_back(ref->type, map);
+    exprt op0 = migrate_expr_back(ref2.value, map);
     exprt theexpr("valid_object", thetype);
     theexpr.copy_to_operands(op0);
     return theexpr;
@@ -2759,8 +2795,8 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::deallocated_obj_id:
   {
     const deallocated_obj2t &ref2 = to_deallocated_obj2t(ref);
-    typet thetype = migrate_type_back(ref->type);
-    exprt op0 = migrate_expr_back(ref2.value);
+    typet thetype = migrate_type_back(ref->type, map);
+    exprt op0 = migrate_expr_back(ref2.value, map);
     exprt theexpr("deallocated_object", thetype);
     theexpr.copy_to_operands(op0);
     return theexpr;
@@ -2768,8 +2804,8 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::dynamic_size_id:
   {
     const dynamic_size2t &ref2 = to_dynamic_size2t(ref);
-    typet thetype = migrate_type_back(ref->type);
-    exprt op0 = migrate_expr_back(ref2.value);
+    typet thetype = migrate_type_back(ref->type, map);
+    exprt op0 = migrate_expr_back(ref2.value, map);
     exprt theexpr("dynamic_size", thetype);
     theexpr.copy_to_operands(op0);
     return theexpr;
@@ -2777,25 +2813,25 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::sideeffect_id:
   {
     const sideeffect2t &ref2 = to_sideeffect2t(ref);
-    typet thetype = migrate_type_back(ref->type);
+    typet thetype = migrate_type_back(ref->type, map);
     exprt theexpr("sideeffect", thetype);
     typet cmttype;
     exprt size;
 
     if(!is_nil_type(ref2.alloctype))
-      cmttype = migrate_type_back(ref2.alloctype);
+      cmttype = migrate_type_back(ref2.alloctype, map);
 
     if(!is_nil_expr(ref2.size))
-      size = migrate_expr_back(ref2.size);
+      size = migrate_expr_back(ref2.size, map);
 
     if(ref2.kind == sideeffect2t::function_call)
     {
       // "Operand" is 1st op,
-      exprt operand = migrate_expr_back(ref2.operand);
+      exprt operand = migrate_expr_back(ref2.operand, map);
       // 2nd op is "arguments".
       exprt args("arguments");
       for(const auto &argument : ref2.arguments)
-        args.copy_to_operands(migrate_expr_back(argument));
+        args.copy_to_operands(migrate_expr_back(argument, map));
       theexpr.copy_to_operands(operand, args);
     }
     else if(ref2.kind == sideeffect2t::nondet)
@@ -2804,7 +2840,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     }
     else
     {
-      exprt operand = migrate_expr_back(ref2.operand);
+      exprt operand = migrate_expr_back(ref2.operand, map);
       theexpr.copy_to_operands(operand);
     }
 
@@ -2862,8 +2898,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_assign2t &ref2 = to_code_assign2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("assign"));
-    exprt op0 = migrate_expr_back(ref2.target);
-    exprt op1 = migrate_expr_back(ref2.source);
+    exprt op0 = migrate_expr_back(ref2.target, map);
+    exprt op1 = migrate_expr_back(ref2.source, map);
     codeexpr.copy_to_operands(op0, op1);
     return codeexpr;
   }
@@ -2872,7 +2908,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_decl2t &ref2 = to_code_decl2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("decl"));
-    typet thetype = migrate_type_back(ref2.type);
+    typet thetype = migrate_type_back(ref2.type, map);
     exprt symbol = symbol_exprt(ref2.value, thetype);
     codeexpr.copy_to_operands(symbol);
     return codeexpr;
@@ -2882,7 +2918,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_dead2t &ref2 = to_code_dead2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("dead"));
-    typet thetype = migrate_type_back(ref2.type);
+    typet thetype = migrate_type_back(ref2.type, map);
     exprt symbol = symbol_exprt(ref2.value, thetype);
     codeexpr.copy_to_operands(symbol);
     return codeexpr;
@@ -2893,7 +2929,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("printf"));
     for(auto const &it : ref2.operands)
-      codeexpr.operands().push_back(migrate_expr_back(it));
+      codeexpr.operands().push_back(migrate_expr_back(it, map));
     codeexpr.base_name(ref2.bs_name);
     return codeexpr;
   }
@@ -2902,7 +2938,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_expression2t &ref2 = to_code_expression2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("expression"));
-    exprt op0 = migrate_expr_back(ref2.operand);
+    exprt op0 = migrate_expr_back(ref2.operand, map);
     codeexpr.copy_to_operands(op0);
     return codeexpr;
   }
@@ -2911,7 +2947,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_return2t &ref2 = to_code_return2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("return"));
-    exprt op0 = migrate_expr_back(ref2.operand);
+    exprt op0 = migrate_expr_back(ref2.operand, map);
     codeexpr.copy_to_operands(op0);
     return codeexpr;
   }
@@ -2926,17 +2962,17 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_free2t &ref2 = to_code_free2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("free"));
-    exprt op0 = migrate_expr_back(ref2.operand);
+    exprt op0 = migrate_expr_back(ref2.operand, map);
     codeexpr.copy_to_operands(op0);
     return codeexpr;
   }
   case expr2t::object_descriptor_id:
   {
     const object_descriptor2t &ref2 = to_object_descriptor2t(ref);
-    typet thetype = migrate_type_back(ref2.type);
+    typet thetype = migrate_type_back(ref2.type, map);
     exprt obj("object_descriptor", thetype);
-    exprt op0 = migrate_expr_back(ref2.object);
-    exprt op1 = migrate_expr_back(ref2.offset);
+    exprt op0 = migrate_expr_back(ref2.object, map);
+    exprt op1 = migrate_expr_back(ref2.offset, map);
     obj.copy_to_operands(op0, op1);
     return obj;
   }
@@ -2945,28 +2981,28 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_function_call2t &ref2 = to_code_function_call2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("function_call"));
-    exprt op0 = migrate_expr_back(ref2.ret);
-    exprt op1 = migrate_expr_back(ref2.function);
+    exprt op0 = migrate_expr_back(ref2.ret, map);
+    exprt op1 = migrate_expr_back(ref2.function, map);
     exprt op2("arguments");
     codeexpr.copy_to_operands(op0, op1, op2);
     exprt &args = codeexpr.op2();
     for(auto const &it : ref2.operands)
-      args.operands().push_back(migrate_expr_back(it));
+      args.operands().push_back(migrate_expr_back(it, map));
     return codeexpr;
   }
   case expr2t::code_comma_id:
   {
     const code_comma2t &ref2 = to_code_comma2t(ref);
-    exprt codeexpr("comma", migrate_type_back(ref2.type));
+    exprt codeexpr("comma", migrate_type_back(ref2.type, map));
     codeexpr.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+      migrate_expr_back(ref2.side_1, map), migrate_expr_back(ref2.side_2, map));
     return codeexpr;
   }
   case expr2t::invalid_pointer_id:
   {
     const invalid_pointer2t &ref2 = to_invalid_pointer2t(ref);
     exprt theexpr("invalid-pointer", bool_typet());
-    theexpr.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
+    theexpr.copy_to_operands(migrate_expr_back(ref2.ptr_obj, map));
     return theexpr;
   }
   case expr2t::code_goto_id:
@@ -2980,7 +3016,7 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::code_asm_id:
   {
     const code_asm2t &ref2 = to_code_asm2t(ref);
-    exprt codeexpr("code", migrate_type_back(ref2.type));
+    exprt codeexpr("code", migrate_type_back(ref2.type, map));
     codeexpr.statement(irep_idt("asm"));
     // Don't actually set a piece of assembly as the operand here; it serves
     // no purpose.
@@ -2992,14 +3028,14 @@ exprt migrate_expr_back(const expr2tc &ref)
   {
     const code_cpp_del_array2t &ref2 = to_code_cpp_del_array2t(ref);
     exprt codeexpr("cpp_delete[]", typet());
-    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand, map));
     return codeexpr;
   }
   case expr2t::code_cpp_delete_id:
   {
     const code_cpp_delete2t &ref2 = to_code_cpp_delete2t(ref);
     exprt codeexpr("cpp_delete", typet());
-    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand, map));
     return codeexpr;
   }
   case expr2t::code_cpp_throw_id:
@@ -3011,64 +3047,64 @@ exprt migrate_expr_back(const expr2tc &ref)
     for(auto const &it : ref2.exception_list)
       exceptions_thrown.emplace_back(it);
 
-    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand, map));
     return codeexpr;
   }
   case expr2t::isinf_id:
   {
     const isinf2t &ref2 = to_isinf2t(ref);
     exprt back("isinf", bool_typet());
-    back.copy_to_operands(migrate_expr_back(ref2.value));
+    back.copy_to_operands(migrate_expr_back(ref2.value, map));
     return back;
   }
   case expr2t::isnormal_id:
   {
     const isnormal2t &ref2 = to_isnormal2t(ref);
     exprt back("isnormal", bool_typet());
-    back.copy_to_operands(migrate_expr_back(ref2.value));
+    back.copy_to_operands(migrate_expr_back(ref2.value, map));
     return back;
   }
   case expr2t::isfinite_id:
   {
     const isfinite2t &ref2 = to_isfinite2t(ref);
     exprt back("isfinite", bool_typet());
-    back.copy_to_operands(migrate_expr_back(ref2.value));
+    back.copy_to_operands(migrate_expr_back(ref2.value, map));
     return back;
   }
   case expr2t::signbit_id:
   {
     const signbit2t &ref2 = to_signbit2t(ref);
     exprt back("signbit", bool_typet());
-    back.copy_to_operands(migrate_expr_back(ref2.operand));
+    back.copy_to_operands(migrate_expr_back(ref2.operand, map));
     return back;
   }
   case expr2t::popcount_id:
   {
     const popcount2t &ref2 = to_popcount2t(ref);
-    exprt back("popcount", migrate_type_back(ref->type));
-    back.copy_to_operands(migrate_expr_back(ref2.operand));
+    exprt back("popcount", migrate_type_back(ref->type, map));
+    back.copy_to_operands(migrate_expr_back(ref2.operand, map));
     return back;
   }
   case expr2t::bswap_id:
   {
     const bswap2t &ref2 = to_bswap2t(ref);
-    exprt back("bswap", migrate_type_back(ref->type));
-    back.copy_to_operands(migrate_expr_back(ref2.value));
+    exprt back("bswap", migrate_type_back(ref->type, map));
+    back.copy_to_operands(migrate_expr_back(ref2.value, map));
     return back;
   }
   case expr2t::concat_id:
   {
     const concat2t &ref2 = to_concat2t(ref);
-    exprt back("concat", migrate_type_back(ref2.type));
-    back.copy_to_operands(migrate_expr_back(ref2.side_1));
-    back.copy_to_operands(migrate_expr_back(ref2.side_2));
+    exprt back("concat", migrate_type_back(ref2.type, map));
+    back.copy_to_operands(migrate_expr_back(ref2.side_1, map));
+    back.copy_to_operands(migrate_expr_back(ref2.side_2, map));
     return back;
   }
   case expr2t::extract_id:
   {
     const extract2t &ref2 = to_extract2t(ref);
-    exprt back("extract", migrate_type_back(ref2.type));
-    back.copy_to_operands(migrate_expr_back(ref2.from));
+    exprt back("extract", migrate_type_back(ref2.type, map));
+    back.copy_to_operands(migrate_expr_back(ref2.from, map));
 
     back.set("upper", irep_idt(std::to_string(ref2.upper)));
     back.set("lower", irep_idt(std::to_string(ref2.lower)));
@@ -3077,8 +3113,8 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::bitcast_id:
   {
     const bitcast2t &ref2 = to_bitcast2t(ref);
-    exprt back("bitcast", migrate_type_back(ref2.type));
-    back.copy_to_operands(migrate_expr_back(ref2.from));
+    exprt back("bitcast", migrate_type_back(ref2.type, map));
+    back.copy_to_operands(migrate_expr_back(ref2.from, map));
     return back;
   }
   default:
@@ -3086,4 +3122,10 @@ exprt migrate_expr_back(const expr2tc &ref)
     log_error("Unrecognized expr in migrate_expr_back");
     abort();
   }
+}
+
+exprt migrate_expr_back(const expr2tc &ref)
+{
+  type2mapt map;
+  return migrate_expr_back(ref, map);
 }

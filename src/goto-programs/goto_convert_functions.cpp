@@ -657,9 +657,10 @@ void goto_convert_functionst::thrash_type_symbols()
         rename_types(sym->type, *sym);
       }
   }).tarjan(root);
-
+/*
   G.forall_nodes(context_type_grapht::TYPE, [&G](node_id v) {
     typet *t = const_cast<typet *>(G[v].type);
     t->remove(typet::f_definition);
   });
+*/
 }
