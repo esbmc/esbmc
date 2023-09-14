@@ -1190,15 +1190,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     // equals to
     //    side1;
     //    res = side_2;
-    // thus we convert the two operands(side1, side2) individually and sequentially
     const code_comma2t &cm = to_code_comma2t(expr);
-    a = convert_ast(cm.side_1);
-    struct smt_cache_entryt entry1 = {expr, a, ctx_level};
-    smt_cache.insert(entry1);
     a = convert_ast(cm.side_2);
-    struct smt_cache_entryt entry2 = {expr, a, ctx_level};
-    smt_cache.insert(entry2);
-    return a;
+    break;
   }
   default:
     log_error("Couldn't convert expression in unrecognised format\n{}", *expr);
