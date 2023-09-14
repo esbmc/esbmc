@@ -1183,13 +1183,21 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::code_comma_id:
   {
+    // the expression on the right side will become
+    // the value of the entire comma-separated expression.
+    // e.g.
+    //    res = side_1, side_2;
+    // equals to
+    //    side1;
+    //    res = side_2;
+    // thus we convert the two operands(side1, side2) individually and sequentially
     const code_comma2t &cm = to_code_comma2t(expr);
     a = convert_ast(cm.side_1);
     struct smt_cache_entryt entry1 = {expr, a, ctx_level};
     smt_cache.insert(entry1);
     a = convert_ast(cm.side_2);
-    struct smt_cache_entryt entry = {expr, a, ctx_level};
-    smt_cache.insert(entry);
+    struct smt_cache_entryt entry2 = {expr, a, ctx_level};
+    smt_cache.insert(entry2);
     return a;
   }
   default:
