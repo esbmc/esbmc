@@ -1780,11 +1780,11 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     expr2tc tmp = value;
     if(dereference_type_compare(tmp, type))
     {
-      // Excellent. Guard that the offset is zero and finish.
+      // Excellent. Guard that the offset is zero.
+      // Still need to consider the fields, though, since the offset is dynamic.
       expr2tc offs_is_zero =
         and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
       output.emplace_back(offs_is_zero, tmp);
-      return;
     }
 
     // It's not compatible, but a subtype may be. Iterate over all of them.
