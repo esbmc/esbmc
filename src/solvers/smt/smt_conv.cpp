@@ -1181,6 +1181,17 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     a = mk_extract(a, ex.upper, ex.lower);
     break;
   }
+  case expr2t::code_comma_id:
+  {
+    const code_comma2t &cm = to_code_comma2t(expr);
+    a = convert_ast(cm.side_1);
+    struct smt_cache_entryt entry1 = {expr, a, ctx_level};
+    smt_cache.insert(entry1);
+    a = convert_ast(cm.side_2);
+    struct smt_cache_entryt entry = {expr, a, ctx_level};
+    smt_cache.insert(entry);
+    return a;
+  }
   default:
     log_error("Couldn't convert expression in unrecognised format\n{}", *expr);
     abort();
