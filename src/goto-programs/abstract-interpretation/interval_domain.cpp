@@ -71,10 +71,15 @@ void interval_domaint::apply_assume_symbol_truth(
     interval.set_lower(0);
   }
   // [1, infinity]
-  else if(
-    sym.type->type_id == type2t::unsignedbv_id ||
-    sym.type->type_id == type2t::bool_id)
+  else if(is_unsignedbv_type(sym.type) || is_bool_type(sym.type))
     interval.make_ge_than(1);
+  else if(is_signedbv_type(sym.type))
+  {
+    if(interval.lower_set && interval.get_lower() == 0)
+      interval.make_ge_than(1);
+    else if(interval.upper_set && interval.get_upper() == 0)
+      interval.make_le_than(-1);
+  }
 
   update_symbol_interval(sym, interval);
 }
