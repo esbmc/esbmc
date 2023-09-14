@@ -1183,13 +1183,14 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::code_comma_id:
   {
+    //! specifically for return statements
     // the expression on the right side will become
     // the value of the entire comma-separated expression.
     // e.g.
-    //    res = side_1, side_2;
+    //    return side_1, side_2;
     // equals to
     //    side1;
-    //    res = side_2;
+    //    return side_2;
     const code_comma2t &cm = to_code_comma2t(expr);
     a = convert_ast(cm.side_2);
     break;
