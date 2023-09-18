@@ -45,13 +45,13 @@ static expr2tc fixup_containerof_in_sizeof(const expr2tc &_expr)
 
   expr2tc expr = _expr;
 
-  // Blast through all typedefs
+  // Blast through all typecasts
   while(is_typecast2t(expr))
     expr = to_typecast2t(expr).from;
 
   // Base must be null; must start with an addressof.
   if(!is_address_of2t(expr))
-    return expr;
+    return _expr;
 
   const address_of2t &addrof = to_address_of2t(expr);
   return compute_pointer_offset(addrof.ptr_obj);
