@@ -569,8 +569,10 @@ expr2tc mul2t::do_simplify() const
   return simplify_arith_2ops<Multor, mul2t>(type, side_1, side_2);
 }
 
-template <class constant_type>
-struct Divtor
+namespace
+{
+template <bool Div, typename constant_type>
+struct DivModtor
 {
   static expr2tc simplify(
     const expr2tc &op1,
@@ -582,7 +584,10 @@ struct Divtor
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
-        return div2tc(t, e1, e2);
+        if constexpr(Div)
+          return div2tc(t, e1, e2);
+        else
+          return modulus2tc(t, e1, e2);
       };
       return distribute_vector_operation(op, op1, op2);
     }
@@ -597,7 +602,12 @@ struct Divtor
 
       // Denominator is one? Simplify to numerator's constant
       if(get_value(c2) == 1)
-        return op1;
+      {
+        if constexpr(Div)
+          return op1;
+        else
+          return gen_zero(op1->type);
+      }
     }
 
     // Two constants? Simplify to result of the division
@@ -611,13 +621,30 @@ struct Divtor
         return op1;
 
       expr2tc c2 = op2;
-      get_value(c1) /= get_value(c2);
+      if constexpr(Div)
+        get_value(c1) /= get_value(c2);
+      else
+        get_value(c1) %= get_value(c2);
       return c1;
     }
 
     return expr2tc();
   }
 };
+
+template <class constant_type>
+struct Divtor : DivModtor<true, constant_type>
+{
+  using DivModtor<true, constant_type>::simplify;
+};
+
+template <class constant_type>
+struct Modtor : DivModtor<false, constant_type>
+{
+  using DivModtor<false, constant_type>::simplify;
+};
+
+} // namespace
 
 expr2tc div2t::do_simplify() const
 {
@@ -626,59 +653,7 @@ expr2tc div2t::do_simplify() const
 
 expr2tc modulus2t::do_simplify() const
 {
-  if(!is_number_type(type) && !is_vector_type(type))
-    return expr2tc();
-
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_side_1 = try_simplification(side_1);
-  expr2tc simplied_side_2 = try_simplification(side_2);
-
-  if(!is_constant_expr(simplied_side_1) && !is_constant_expr(simplied_side_2))
-  {
-    // Were we able to simplify the sides?
-    if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
-    {
-      expr2tc new_mod = modulus2tc(type, simplied_side_1, simplied_side_2);
-
-      return typecast_check_return(type, new_mod);
-    }
-
-    return expr2tc();
-  }
-
-  // Is a vector operation ? Apply the op
-  if(
-    is_constant_vector2t(simplied_side_1) ||
-    is_constant_vector2t(simplied_side_2))
-  {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
-      return modulus2tc(t, e1, e2);
-    };
-    return distribute_vector_operation(op, simplied_side_1, simplied_side_2);
-  }
-
-  if(is_bv_type(type))
-  {
-    if(is_constant_int2t(simplied_side_2))
-    {
-      // Denominator is one? Simplify to zero
-      if(to_constant_int2t(simplied_side_2).value == 1)
-        return constant_int2tc(type, BigInt(0));
-    }
-
-    if(is_constant_int2t(simplied_side_1) && is_constant_int2t(simplied_side_2))
-    {
-      const constant_int2t &numerator = to_constant_int2t(simplied_side_1);
-      const constant_int2t &denominator = to_constant_int2t(simplied_side_2);
-
-      auto c = numerator.value;
-      c %= denominator.value;
-
-      return constant_int2tc(type, c);
-    }
-  }
-
-  return expr2tc();
+  return simplify_arith_2ops<Modtor, modulus2t>(type, side_1, side_2);
 }
 
 template <template <typename> class TFunctor, typename constructor>
