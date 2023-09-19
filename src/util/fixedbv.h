@@ -100,6 +100,7 @@ public:
   void negate();
 
   fixedbvt &operator/=(const fixedbvt &other);
+  fixedbvt &operator%=(const fixedbvt &other);
   fixedbvt &operator*=(const fixedbvt &other);
   fixedbvt &operator+=(const fixedbvt &other);
   fixedbvt &operator-=(const fixedbvt &other);

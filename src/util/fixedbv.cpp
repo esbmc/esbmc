@@ -140,6 +140,19 @@ fixedbvt &fixedbvt::operator/=(const fixedbvt &o)
   return *this;
 }
 
+fixedbvt &fixedbvt::operator%=(const fixedbvt &y)
+{
+  fixedbvt z = *this;
+  z /= y;
+  z.from_integer(z.to_integer());
+  z *= y;
+  // ensure z has the same sign as *this
+  if(v.is_negative() != z.v.is_negative())
+    z.v.negate();
+  *this -= z;
+  return *this;
+}
+
 bool fixedbvt::operator==(int i) const
 {
   return v == power(2, spec.get_fraction_bits()) * i;
