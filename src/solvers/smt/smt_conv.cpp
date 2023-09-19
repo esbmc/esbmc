@@ -2113,39 +2113,65 @@ type2tc smt_convt::flatten_array_type(const type2tc &type)
   return array_type2tc(subtype, arr_size, false);
 }
 
-expr2tc smt_convt::flatten_array_body(const expr2tc &expr)
+static expr2tc constant_index_into_array(const expr2tc &array, uint64_t idx)
 {
-  assert(is_constant_array2t(expr));
-  const constant_array2t &the_array = to_constant_array2t(expr);
-  const array_type2t &arr_type = to_array_type(the_array.type);
+  assert(is_array_type(array));
 
-  // inner most level, just return the array
-  if(!is_array_type(arr_type.subtype))
-    return expr;
+  const array_type2t &arr_type = to_array_type(array->type);
+  const expr2tc &arr_size = arr_type.array_size;
+  assert(arr_size);
+  assert(is_constant_int2t(arr_size));
 
-// This should be an array of arrays, glue the sub arrays together
-#ifndef NDEBUG
-  for(auto const &elem : the_array.datatype_members)
-    // Must only contain constant arrays, for now. No indirection should be
-    // expressable at this level.
-    assert(
-      is_constant_array2t(elem) &&
-      "Sub-member of constant array must be "
-      "constant array");
-#endif
-
-  std::vector<expr2tc> sub_expr_list;
-  for(auto const &elem : the_array.datatype_members)
+  if(is_constant_array2t(array))
   {
-    expr2tc flatten_elem = flatten_array_body(elem);
-
-    sub_expr_list.insert(
-      sub_expr_list.end(),
-      to_constant_array2t(flatten_elem).datatype_members.begin(),
-      to_constant_array2t(flatten_elem).datatype_members.end());
+    assert(idx < to_constant_int2t(arr_size).value);
+    return to_constant_array2t(array).datatype_members[idx];
   }
 
-  return constant_array2tc(flatten_array_type(expr->type), sub_expr_list);
+  return index2tc(
+    arr_type.subtype, array, constant_int2tc(arr_size->type, idx));
+}
+
+/**
+ * Transforms an expression of array type with constant size into a
+ * constant_array2t expression of flattened form, that is, the subtype is not of
+ * array type.
+ *
+ * Such expressions are created for instance when bitcasting to
+ * multi-dimensional arrays.
+ *
+ * Works in tandem with flatten_array_type().
+ */
+expr2tc smt_convt::flatten_array_body(const expr2tc &expr)
+{
+  const array_type2t &arr_type = to_array_type(expr->type);
+
+  // inner most level, just return the array
+  if(!is_array_type(arr_type.subtype) && is_constant_array2t(expr))
+    return expr;
+
+  expr2tc arr_size = arr_type.array_size;
+  assert(is_constant_int2t(arr_size));
+  const BigInt &size = to_constant_int2t(arr_size).value;
+  assert(size.is_uint64());
+
+  std::vector<expr2tc> sub_exprs;
+  for(uint64_t i = 0, sz = size.to_uint64(); i < sz; i++)
+  {
+    expr2tc elem = constant_index_into_array(expr, i);
+
+    if(is_array_type(elem))
+    {
+      expr2tc flat_elem = flatten_array_body(elem);
+      const constant_array2t &a = to_constant_array2t(flat_elem);
+      sub_exprs.insert(
+        sub_exprs.end(), a.datatype_members.begin(), a.datatype_members.end());
+    }
+    else
+      sub_exprs.push_back(elem);
+  }
+
+  return constant_array2tc(flatten_array_type(expr->type), sub_exprs);
 }
 
 type2tc smt_convt::get_flattened_array_subtype(const type2tc &type)
