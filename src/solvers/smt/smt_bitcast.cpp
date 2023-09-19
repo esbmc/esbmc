@@ -211,18 +211,18 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
       array_type2t arr_type = to_array_type(to_type);
       type2tc subtype = arr_type.subtype;
 
-      // We shouldn't have any bit left behind
       unsigned int sz = subtype->get_width();
+      // We shouldn't have any bit left behind
       assert(new_from->type->get_width() % sz == 0);
-      unsigned int num_el = new_from->type->get_width() / subtype->get_width();
+      unsigned int num_el = new_from->type->get_width() / sz;
 
-      std::vector<expr2tc> elems;
+      std::vector<expr2tc> elems(num_el);
+      type2tc uint_subtype = get_uint_type(sz);
       for(unsigned int i = 0; i < num_el; ++i)
       {
         unsigned int offset = i * sz;
-        expr2tc tmp =
-          extract2tc(get_uint_type(sz), new_from, offset + sz - 1, offset);
-        elems.push_back(bitcast2tc(subtype, tmp));
+        elems[i] = bitcast2tc(
+          subtype, extract2tc(uint_subtype, new_from, offset + sz - 1, offset));
       }
 
       /* In case to_type is a multi-dimensional array type, the constant_array2t
