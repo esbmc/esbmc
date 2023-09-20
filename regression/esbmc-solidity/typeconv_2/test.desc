@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--function Conv --sol contract.sol
+^VERIFICATION SUCCESSFUL$

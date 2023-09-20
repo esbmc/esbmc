@@ -314,11 +314,9 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     return;
 
   // go over all variables to see what changed
-  std::set<renaming::level2t::name_record> variables;
-  cur_state->level2.get_variables(variables);
+  const auto &variables = cur_state->level2.current_names;
 
-  std::set<renaming::level2t::name_record> goto_variables;
-  goto_state.level2.get_variables(goto_variables);
+  const auto &goto_variables = goto_state.level2.current_names;
 
   guardt tmp_guard;
   if(
@@ -331,7 +329,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     tmp_guard -= cur_state->guard;
   }
 
-  for(const auto &variable : variables)
+  for(const auto &[variable, _] : variables)
   {
     if(
       goto_state.level2.current_number(variable) ==

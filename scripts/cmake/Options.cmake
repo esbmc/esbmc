@@ -29,6 +29,7 @@ option(ENABLE_JIMPLE_FRONTEND "Enable Jimple language frontend (default: OFF)" O
 #############################
 # SOLVERS
 #############################
+option(ENABLE_SMTLIB "Use SMTLIB interface solver (default: ON)" ON)
 option(ENABLE_BOOLECTOR "Use Boolector solver (default: OFF)" OFF)
 option(ENABLE_Z3 "Use Z3 solver (default: OFF)" OFF)
 option(ENABLE_MATHSAT "Use MathSAT solver (default: OFF)" OFF)

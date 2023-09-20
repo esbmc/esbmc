@@ -633,12 +633,18 @@ expr2tc interval_domaint::make_expression_value<real_intervalt>(
   const type2tc &type,
   bool upper) const
 {
-  expr2tc value = constant_floatbv2tc(ieee_floatt(ieee_float_spect(
-    to_floatbv_type(type).fraction, to_floatbv_type(type).exponent)));
+  expr2tc value = gen_zero(type);
   constant_floatbv2t &v = to_constant_floatbv2t(value);
 
   const auto d = (upper ? interval.upper : interval.lower).convert_to<double>();
   v.value.from_double(d);
+
+  // 'from_double' changes the original spec. This makes solvers complain that we are comparing
+  // 'orange' floats to 'apple' floats. To fix this, we need to convert the spec back.
+  const ieee_float_spect original_spec(
+    to_floatbv_type(type).fraction, to_floatbv_type(type).exponent);
+  v.value.change_spec(original_spec);
+
   assert(!v.value.is_NaN() && !v.value.is_infinity());
   if(upper)
     v.value.increment(true);
@@ -963,7 +969,12 @@ void interval_domaint::assign(const expr2tc &expr)
   auto isfloatbvop = is_floatbv_type(c.source) && is_floatbv_type(c.target);
 
   if(!is_symbol2t(c.target))
+  {
+    if(is_dereference2t(c.target))
+      clear_state();
     return;
+  }
+
   if(isbvop)
   {
     if(enable_wrapped_intervals)

@@ -208,31 +208,25 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
     if(is_bv_type(new_from) || is_union_type(new_from))
     {
-      // TODO: handle multidimensional arrays
-      assert(
-        !is_multi_dimensional_array(to_type) &&
-        "Bitcasting to multidimensional arrays is not supported for now\n");
-
       array_type2t arr_type = to_array_type(to_type);
       type2tc subtype = arr_type.subtype;
 
+      unsigned int sz = subtype->get_width();
       // We shouldn't have any bit left behind
-      assert(new_from->type->get_width() % subtype->get_width() == 0);
-      unsigned int num_el = new_from->type->get_width() / subtype->get_width();
+      assert(new_from->type->get_width() % sz == 0);
+      unsigned int num_el = new_from->type->get_width() / sz;
 
-      std::vector<expr2tc> elems;
+      std::vector<expr2tc> elems(num_el);
+      type2tc uint_subtype = get_uint_type(sz);
       for(unsigned int i = 0; i < num_el; ++i)
       {
-        unsigned int sz = subtype->get_width();
         unsigned int offset = i * sz;
-        expr2tc tmp = extract2tc(
-          get_uint_type(subtype->get_width()),
-          new_from,
-          offset + sz - 1,
-          offset);
-        elems.push_back(bitcast2tc(subtype, tmp));
+        elems[i] = bitcast2tc(
+          subtype, extract2tc(uint_subtype, new_from, offset + sz - 1, offset));
       }
 
+      /* In case to_type is a multi-dimensional array type, the constant_array2t
+       * expression will get flattened by convert_ast(). */
       return convert_ast(constant_array2tc(to_type, elems));
     }
   }

@@ -26,6 +26,7 @@ set(inputs
            sys/_pthread/_pthread_t.h
            sys/_pthread/_pthread_types.h
            ubuntu20.04/kernel_5.15.0-76/include/linux/gfp.h
+           ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h
            ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h
            ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h
            # end pthreads

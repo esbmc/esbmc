@@ -51,6 +51,9 @@ endif()
 if(ENABLE_MATHSAT)
     set(REGRESSIONS_MATHSAT mathsat)
 endif()
+if(ENABLE_SMTLIB)
+    set(REGRESSIONS_SMTLIB smtlib)
+endif()
 if(ENABLE_Z3)
     set(REGRESSIONS_Z3 z3)
 endif()
@@ -141,6 +144,7 @@ elseif(WIN32)
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
+                    ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
        )
 else()
@@ -159,10 +163,12 @@ else()
                     csmith
                     k-induction-parallel
                     cuda/benchmarks
+                    cuda/Supported_long_time
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
+                    ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
                     incremental-smt
                     ${REGRESSIONS_CPP11}
@@ -171,7 +177,6 @@ else()
                     ${REGRESSIONS_JIMPLE}
                     extensions
                     cuda/COM_sanity_checks
-		    cuda/Supported_long_time
                     linux
                     ${REGRESSIONS_CHERI}
        )

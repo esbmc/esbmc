@@ -96,6 +96,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   depth_limit = sym.depth_limit;
   break_insn = sym.break_insn;
   memory_leak_check = sym.memory_leak_check;
+  no_reachable_memleak = sym.no_reachable_memleak;
   no_assertions = sym.no_assertions;
   no_simplify = sym.no_simplify;
   no_unwinding_assertions = sym.no_unwinding_assertions;
@@ -355,11 +356,85 @@ void goto_symext::symex_assign_typecast(
   const bool hidden)
 {
   // these may come from dereferencing on the lhs
+  assert(lhs->type->type_id == rhs->type->type_id);
+
   expr2tc rhs_typecasted, from;
   if(is_typecast2t(lhs))
   {
+    assert(!is_array_type(lhs));
+    assert(!is_vector_type(lhs));
+
     from = to_typecast2t(lhs).from;
-    rhs_typecasted = typecast2tc(from->type, rhs);
+    if(is_struct_type(lhs) && lhs->type != from->type)
+    {
+      /* See dereference_type_compare() for the conditions allowed here. */
+
+      /* cast only between structs */
+      assert(is_struct_type(from));
+
+      /* lhs->type must be a prefix of from->type; the prefix could be empty
+       * when it is, e.g., an empty C++ base class of from's type. */
+      assert(to_struct_type(migrate_type_back(lhs->type))
+               .is_prefix_of(to_struct_type(migrate_type_back(from->type))));
+
+      const struct_union_data &lhs_data = to_struct_type(lhs->type);
+      const struct_union_data &from_data = to_struct_type(from->type);
+
+      size_t n = lhs_data.members.size();
+      assert(n <= from_data.members.size());
+
+      /* Only the prefix changes, the members untouched by this assignment stay
+       * the same. Turn
+       *
+       *   (struct To)from := rhs
+       *
+       * into
+       *
+       *   from := new_rhs
+       *
+       * The 'new_rhs' is a big nested with2t
+       *
+       *   WITH (WITH (... (WITH from [? := ?]) ...) [? := ?]) [? := ?]
+       *
+       * where each element i in [0,n) has the form
+       *
+       *   WITH src_i [.from_name[i] := (from_type[i])rhs.lhs_name[i]]
+       *
+       * and where
+       * - 'src_i' is the inner element, the initial 'src_0' is 'from';
+       * - 'from_type[i]' is the type of the member in the struct type of 'from'
+       *   and 'from_name[i]' is its member_name;
+       * - 'lhs_name[i]' is the name of the corresponding member in the prefix
+       *   type of lhs.
+       */
+      expr2tc new_rhs = from;
+      const std::vector<type2tc> &lhs_type = lhs_data.members;
+      const std::vector<irep_idt> &lhs_name = lhs_data.member_names;
+      const std::vector<type2tc> &from_type = from_data.members;
+      const std::vector<irep_idt> &from_name = from_data.member_names;
+      for(size_t i = 0; i < n; i++)
+      {
+        new_rhs = with2tc(
+          from->type,
+          new_rhs,
+          constant_string2tc(string_type2tc(from_name[i].size()), from_name[i]),
+          typecast2tc(from_type[i], member2tc(lhs_type[i], rhs, lhs_name[i])));
+      }
+
+      /* XXX fbrausse: do we need to assign from := from in case the lhs->type
+       *               is empty? */
+      rhs_typecasted = new_rhs;
+    }
+    else
+    {
+      /* XXX fbrausse: is this really the semantics?
+       * What about
+       *
+       *   (int)f := 42
+       *
+       * where f is a symbol of float type? */
+      rhs_typecasted = typecast2tc(from->type, rhs);
+    }
   }
   else
   {

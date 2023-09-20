@@ -1181,6 +1181,25 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     a = mk_extract(a, ex.upper, ex.lower);
     break;
   }
+  case expr2t::code_comma_id:
+  {
+    /* 
+      TODO: for some reason comma expressions survive when they are under
+      * RETURN statements. They should have been taken care of at the GOTO
+      * level. Remove this code once we do!
+
+      the expression on the right side will become the value of the entire comma-separated expression.
+
+      e.g.
+        return side_1, side_2;
+      equals to
+        side1;
+        return side_2;
+    */
+    const code_comma2t &cm = to_code_comma2t(expr);
+    a = convert_ast(cm.side_2);
+    break;
+  }
   default:
     log_error("Couldn't convert expression in unrecognised format\n{}", *expr);
     abort();
@@ -2094,39 +2113,70 @@ type2tc smt_convt::flatten_array_type(const type2tc &type)
   return array_type2tc(subtype, arr_size, false);
 }
 
-expr2tc smt_convt::flatten_array_body(const expr2tc &expr)
+static expr2tc constant_index_into_array(const expr2tc &array, uint64_t idx)
 {
-  assert(is_constant_array2t(expr));
-  const constant_array2t &the_array = to_constant_array2t(expr);
-  const array_type2t &arr_type = to_array_type(the_array.type);
+  assert(is_array_type(array));
 
-  // inner most level, just return the array
-  if(!is_array_type(arr_type.subtype))
-    return expr;
+  const array_type2t &arr_type = to_array_type(array->type);
+  const expr2tc &arr_size = arr_type.array_size;
+  assert(arr_size);
+  assert(is_constant_int2t(arr_size));
 
-// This should be an array of arrays, glue the sub arrays together
-#ifndef NDEBUG
-  for(auto const &elem : the_array.datatype_members)
-    // Must only contain constant arrays, for now. No indirection should be
-    // expressable at this level.
-    assert(
-      is_constant_array2t(elem) &&
-      "Sub-member of constant array must be "
-      "constant array");
-#endif
-
-  std::vector<expr2tc> sub_expr_list;
-  for(auto const &elem : the_array.datatype_members)
+  if(is_constant_array_of2t(array))
   {
-    expr2tc flatten_elem = flatten_array_body(elem);
-
-    sub_expr_list.insert(
-      sub_expr_list.end(),
-      to_constant_array2t(flatten_elem).datatype_members.begin(),
-      to_constant_array2t(flatten_elem).datatype_members.end());
+    assert(idx < to_constant_int2t(arr_size).value);
+    return to_constant_array_of2t(array).initializer;
   }
 
-  return constant_array2tc(flatten_array_type(expr->type), sub_expr_list);
+  if(is_constant_array2t(array))
+  {
+    assert(idx < to_constant_int2t(arr_size).value);
+    return to_constant_array2t(array).datatype_members[idx];
+  }
+
+  return index2tc(
+    arr_type.subtype, array, constant_int2tc(arr_size->type, idx));
+}
+
+/**
+ * Transforms an expression of array type with constant size into a
+ * constant_array2t expression of flattened form, that is, the subtype is not of
+ * array type.
+ *
+ * Works in tandem with flatten_array_type().
+ *
+ * TODO: also support constant_array_of2t as an optimization
+ */
+expr2tc smt_convt::flatten_array_body(const expr2tc &expr)
+{
+  const array_type2t &arr_type = to_array_type(expr->type);
+  bool subtype_is_array = is_array_type(arr_type.subtype);
+
+  // innermost level, just return the array
+  if(!subtype_is_array && is_constant_array2t(expr))
+    return expr;
+
+  const expr2tc &arr_size = arr_type.array_size;
+  assert(is_constant_int2t(arr_size));
+  const BigInt &size = to_constant_int2t(arr_size).value;
+  assert(size.is_uint64());
+
+  std::vector<expr2tc> sub_exprs;
+  for(uint64_t i = 0, sz = size.to_uint64(); i < sz; i++)
+  {
+    expr2tc elem = constant_index_into_array(expr, i);
+
+    if(subtype_is_array)
+    {
+      expr2tc flat_elem = flatten_array_body(elem);
+      const auto &elems = to_constant_array2t(flat_elem).datatype_members;
+      sub_exprs.insert(sub_exprs.end(), elems.begin(), elems.end());
+    }
+    else
+      sub_exprs.push_back(elem);
+  }
+
+  return constant_array2tc(flatten_array_type(expr->type), sub_exprs);
 }
 
 type2tc smt_convt::get_flattened_array_subtype(const type2tc &type)
@@ -2311,13 +2361,17 @@ expr2tc smt_convt::get(const expr2tc &expr)
   }
 
   // Recurse on operands
-  res->Foreach_operand([this](expr2tc &e) {
+  bool have_all = true;
+  res->Foreach_operand([this, &have_all](expr2tc &e) {
     expr2tc new_e = get(e);
     e = new_e;
+    if(!e)
+      have_all = false;
   });
 
   // And simplify
-  simplify(res);
+  if(have_all)
+    simplify(res);
   return res;
 }
 

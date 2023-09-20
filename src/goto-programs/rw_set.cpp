@@ -36,7 +36,7 @@ void rw_sett::read_write_rec(
     const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
     if(symbol)
     {
-      if(!symbol->static_lifetime /*&& expr.type().id()=="pointer"*/)
+      if(!symbol->static_lifetime && !expr.type().is_pointer())
       {
         return; // ignore for now
       }
@@ -50,7 +50,11 @@ void rw_sett::read_write_rec(
         return; // ignore for now
       }
 
-      // TODO improvements for CUDA features
+      // Improvements for CUDA features
+      if(symbol->name == "indexOfThread" || symbol->name == "indexOfBlock")
+      {
+        return; // ignore for now
+      }
     }
 
     irep_idt object = id2string(symbol_expr.get_identifier()) + suffix;

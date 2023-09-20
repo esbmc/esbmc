@@ -3,10 +3,12 @@
 #include <ctype.h>
 #include <limits.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h>
+#include <ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h>
 #include <ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h>
-
 #include <assert.h>
+#define spin_limit 80
 
 typedef unsigned int gfp_t;
 
@@ -106,4 +108,39 @@ unsigned long copy_from_user(void *to, void *from, unsigned long size)
   memcpy(to, from, size);
 
   return 0;
+}
+
+void spin_lock_init(spinlock_t *lock)
+{
+  //check if the lock is valid
+  assert(lock != NULL);
+  //initialize the lock
+  lock->locked = false;
+}
+
+bool spin_lock(spinlock_t *lock)
+{
+  __ESBMC_assert(lock != NULL, "The lock is null, verfication failed");
+
+  int retries = 0;
+  while(retries < SPIN_LIMIT)
+  {
+    __ESBMC_atomic_begin();
+    if(lock->locked == false)
+    {
+      lock->locked = true;
+      __ESBMC_atomic_end();
+      return true;
+    }
+    __ESBMC_atomic_end();
+    retries++;
+  }
+
+  return false;
+}
+
+void spin_unlock(spinlock_t *lock)
+{
+  __ESBMC_assert(lock != NULL, "The lock is null, verfication failed");
+  lock->locked = false;
 }

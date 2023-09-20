@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--class Nested --function func
+^VERIFICATION SUCCESSFUL$

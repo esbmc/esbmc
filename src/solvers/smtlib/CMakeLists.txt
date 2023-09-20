@@ -1,3 +1,10 @@
+if(NOT ENABLE_SMTLIB)
+  set(ESBMC_ENABLE_smtlib 0 PARENT_SCOPE)
+  return()
+endif()
+
+find_package(BISON 2.6.1 REQUIRED)
+find_package(FLEX 2.6.1 REQUIRED)
 
 BISON_TARGET(smtliby smtlib.ypp ${CMAKE_CURRENT_BINARY_DIR}/smtlib.cpp COMPILE_FLAGS "-d -psmtlib")
 FLEX_TARGET(smtlibl smtlib_tok.lpp ${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp COMPILE_FLAGS "--header-file=smtlib_tok.hpp -Psmtlib_tok -osmtlib_tok.cpp ${OS_FLEX_SMTLIB_FLAGS}")
@@ -29,3 +36,10 @@ else()
   # GNU probably
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,stack-size=${stacksize}" CACHE STRING "Linker flags" FORCE)
 endif()
+
+# Add to solver link
+target_link_libraries(solvers INTERFACE smtlib)
+
+
+set(ESBMC_ENABLE_smtlib 1 PARENT_SCOPE)
+set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} smtlib" PARENT_SCOPE)

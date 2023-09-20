@@ -464,7 +464,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
         if(name == "__ESBMC_inf_size")
         {
           assert(t.is_array());
-          t.size(exprt("infinity", uint_type()));
+          t.size(exprt("infinity", size_type()));
         }
         else if(name == "__ESBMC_no_slice")
           no_slice = true;
@@ -547,20 +547,26 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
      * initializer can't have side-effects (it's a constant expression). */
     code_blockt *orig = current_block;
     current_block = nullptr;
+    const clang::Stmt *stmt = vd.getInit();
+
     exprt val;
-    bool r = get_expr(*vd.getInit(), val);
+    bool r = get_expr(*stmt, val);
     current_block = orig;
     if(r)
       return true;
 
+    bool aggregate_without_init =
+      aggregate_value_init &&
+      stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
+
     added_symbol = context.move_symbol_to_context(symbol);
     gen_typecast(ns, val, t);
-    if(!aggregate_value_init)
+    if(!aggregate_without_init)
       added_symbol->value = val;
 
     code_declt decl(symbol_expr(*added_symbol));
     decl.location() = location_begin;
-    if(!aggregate_value_init)
+    if(!aggregate_without_init)
       decl.operands().push_back(val);
 
     new_expr = decl;
@@ -1571,9 +1577,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
 
     new_expr = constant_exprt(
-      integer2binary(result.Val.getInt().getSExtValue(), bv_width(uint_type())),
+      integer2binary(result.Val.getInt().getSExtValue(), bv_width(size_type())),
       integer2string(result.Val.getInt().getSExtValue()),
-      uint_type());
+      size_type());
     break;
   }
 
@@ -1588,9 +1594,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       new_expr = constant_exprt(
         integer2binary(
-          result.Val.getInt().getZExtValue(), bv_width(uint_type())),
+          result.Val.getInt().getZExtValue(), bv_width(size_type())),
         integer2string(result.Val.getInt().getZExtValue()),
-        uint_type());
+        size_type());
     }
     else
     {

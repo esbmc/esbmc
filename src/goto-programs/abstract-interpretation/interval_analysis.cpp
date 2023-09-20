@@ -25,17 +25,66 @@ static inline void get_symbols(
     [&symbols](const expr2tc &e) -> void { get_symbols(e, symbols); });
 }
 
-static inline void simplify_guard(expr2tc &expr, const interval_domaint &state)
+static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 {
-  expr->Foreach_operand([&state](expr2tc &e) -> void {
-    tvt result = interval_domaint::eval_boolean_expression(e, state);
-    if(result.is_true())
-      e = gen_true_expr();
-    else if(result.is_false())
-      e = gen_false_expr();
-    else
-      simplify_guard(e, state);
-  });
+  // Preconditions
+  if(is_nil_expr(expr))
+    return;
+
+  // We can't simplify addr-of sub-expr.
+  // int x = 3; int *ptr = &x; would become int x = 3; int *ptr = &3;
+  if(is_address_of2t(expr))
+    return;
+
+  // We can't replace the target of an assignment.
+  // int x = 3; x = 4; would become int x = 3; 3 = 4;
+  if(is_code_assign2t(expr))
+  {
+    optimize_expression(to_code_assign2t(expr).source, state);
+    return;
+  }
+
+  // Function calls might have an implicit assignment
+  if(is_code_function_call2t(expr))
+  {
+    for(auto &x : to_code_function_call2t(expr).operands)
+      optimize_expression(x, state);
+    return;
+  }
+
+  // Forward Analysis
+  auto interval = state.get_interval<integer_intervalt>(expr);
+
+  // Singleton Propagation
+  if(interval.singleton() && is_bv_type(expr))
+  {
+    // Right now we can only do that for bitvectors (more implementation is needed for floats)
+    expr = state.make_expression_value<integer_intervalt>(
+      interval, expr->type, true);
+    return;
+  }
+
+  // Boolean intervals
+  if(is_bool_type(expr))
+  {
+    // Expression is always true
+    if(!interval.contains(0))
+    {
+      expr = gen_true_expr();
+      return;
+    }
+
+    // interval is [0,0] which is always false
+    if(interval.singleton())
+    {
+      expr = gen_false_expr();
+      return;
+    }
+  }
+
+  // Try sub-expressions
+  expr->Foreach_operand(
+    [&state](expr2tc &e) -> void { optimize_expression(e, state); });
   simplify(expr);
 }
 
@@ -43,122 +92,49 @@ void instrument_intervals(
   const ait<interval_domaint> &interval_analysis,
   goto_functiont &goto_function)
 {
-  std::unordered_set<expr2tc, irep2_hash> symbols;
-
-  forall_goto_program_instructions(i_it, goto_function.body)
-  {
-    get_symbols(i_it->code, symbols);
-    get_symbols(i_it->guard, symbols);
-  }
-
+  // Inline optimizations
   Forall_goto_program_instructions(i_it, goto_function.body)
   {
-    if(i_it == goto_function.body.instructions.begin())
-    {
-      // first instruction, we instrument
-    }
-    else
-    {
-      if(i_it->is_assume() || i_it->is_assert() || i_it->is_goto())
-      {
-        // We may be able to simplify here
-        const interval_domaint &d = interval_analysis[i_it];
+    const interval_domaint &d = interval_analysis[i_it];
 
-        // Let's try to simplify first
-        // if(interval_domaint::enable_assertion_simplification)
-        // simplify_guard(i_it->guard, d);
+    // Singleton Propagation
+    optimize_expression(i_it->code, d);
+    optimize_expression(i_it->guard, d);
 
-        // Evaluate the simplified expression
-        tvt guard = interval_domaint::eval_boolean_expression(i_it->guard, d);
-        if(i_it->is_goto())
-          guard = !guard;
-        // If guard is always true... convert it into a skip!
-        if(guard.is_true() && interval_domaint::enable_assertion_simplification)
-          i_it->make_skip();
-        // If guard is always false... convert it to trivial!
-        if(
-          guard.is_false() && interval_domaint::enable_assertion_simplification)
-          i_it->guard = i_it->is_goto() ? gen_true_expr() : gen_false_expr();
+    // TODO: Move Guard Simplification to here
+  }
 
-        // Let's instrument an assumption with symbols that affect the guard
-        std::vector<expr2tc> assumption;
-        std::unordered_set<expr2tc, irep2_hash> guard_symbols;
-        get_symbols(i_it->guard, guard_symbols);
-        for(const auto &symbol_expr : guard_symbols)
-        {
-          expr2tc tmp = d.make_expression(symbol_expr);
-          if(!is_true(tmp))
-            assumption.push_back(tmp);
-        }
+  // Instrumentation of assumptions
+  Forall_goto_program_instructions(i_it, goto_function.body)
+  {
+    if(!(i_it->is_goto() || i_it->is_assume() || i_it->is_assert()))
+      continue;
 
-        if(!assumption.empty())
-        {
-          goto_programt::targett t = goto_function.body.insert(i_it);
-          t->make_assumption(conjunction(assumption));
-          t->inductive_step_instruction = config.options.is_kind();
-        }
+    // Let's instrument everything that affect the current instruction
+    std::unordered_set<expr2tc, irep2_hash> symbols;
+    get_symbols(i_it->code, symbols);
+    get_symbols(i_it->guard, symbols);
 
-        continue;
-      }
-
-      /**
-       * The instrumentation of the assume will happen in:
-       *
-       * 1. After IF (and)
-       *  IF !(a > 42) GOTO 5
-       *    +++ ASSUME (a > 42)
-       *
-       * 2. After a function call
-       *  FUCTION_CALL(FOO)
-       *    +++ ASSUME(state-after-foo)
-       *
-       * 3. Before a function call
-       *  +++ ASSUME(state-before-foo)
-       *  FUCNTION_CALL(FOO)
-       *
-       * 4. Before a target
-       *  +++ ASSUME(current-state)
-       *  1: ....
-      */
-      goto_programt::const_targett previous = i_it;
-      previous--;
-      if(previous->is_goto() && !is_true(previous->guard))
-      {
-        // we follow a branch, instrument
-      }
-      else if(previous->is_function_call() && !is_true(previous->guard))
-      {
-        // we follow a function call, instrument
-      }
-      else if(i_it->is_target() || i_it->is_function_call())
-      {
-        // we are a target or a function call, instrument
-      }
-      else
-        continue; // don't instrument
-    }
+    if(!symbols.size())
+      continue;
 
     const interval_domaint &d = interval_analysis[i_it];
-    std::vector<expr2tc> assertion;
+    std::vector<expr2tc> symbol_constraints;
     for(const auto &symbol_expr : symbols)
     {
       expr2tc tmp = d.make_expression(symbol_expr);
       if(!is_true(tmp))
-        assertion.push_back(tmp);
+        symbol_constraints.push_back(tmp);
     }
 
-    if(!assertion.empty())
+    if(!symbol_constraints.empty())
     {
-      goto_programt::targett t = goto_function.body.insert(i_it);
-      t->make_assumption(conjunction(assertion));
-      t->inductive_step_instruction = config.options.is_kind();
-#if 0
-      // TODO: This is crashing cases like
-      // email_spec11_productSimulator_false-unreach-call_true-termination.cil.c
-      i_it++; // goes to original instruction
-      t->location = i_it->location;
-      t->function = i_it->function;
-#endif
+      goto_programt::instructiont instruction;
+      instruction.make_assumption(conjunction(symbol_constraints));
+      instruction.inductive_step_instruction = config.options.is_kind();
+      instruction.location = i_it->location;
+      instruction.function = i_it->function;
+      goto_function.body.insert_swap(i_it++, instruction);
     }
   }
 }

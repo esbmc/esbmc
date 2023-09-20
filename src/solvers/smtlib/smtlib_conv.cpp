@@ -167,7 +167,10 @@ void smtlib_convt::dump_smt()
   {
     assert(emit_opt_output);
     emit_opt_output.emit("%s\n", "(check-sat)");
-    log_status("SMT formula written to output file {}", path);
+    if(path == "-")
+      log_status("SMT formula written to standard output");
+    else
+      log_status("SMT formula written to output file {}", path);
   }
 }
 
@@ -179,7 +182,7 @@ smtlib_convt::file_emitter::file_emitter(const std::string &path)
     return;
 
   // Open a file, do nothing else.
-  out_stream = fopen(path.c_str(), "w");
+  out_stream = path == "-" ? stdout : fopen(path.c_str(), "w");
   if(!out_stream)
   {
     log_error("Failed to open \"{}\": {}", path, strerror(errno));
@@ -1487,12 +1490,12 @@ smt_sortt smtlib_convt::mk_bool_sort()
 
 smt_sortt smtlib_convt::mk_real_sort()
 {
-  return new smtlib_smt_sort(SMT_SORT_INT);
+  return new smtlib_smt_sort(SMT_SORT_REAL);
 }
 
 smt_sortt smtlib_convt::mk_int_sort()
 {
-  return new smtlib_smt_sort(SMT_SORT_REAL);
+  return new smtlib_smt_sort(SMT_SORT_INT);
 }
 
 smt_sortt smtlib_convt::mk_bv_sort(std::size_t width)

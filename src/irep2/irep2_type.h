@@ -534,6 +534,9 @@ public:
     // the checking process should exist to eliminate this requirement.
     if(!is_nil_expr(size))
     {
+      assert(
+        size->type->type_id == signedbv_id ||
+        size->type->type_id == unsignedbv_id);
       expr2tc sz = size->simplify();
       if(!is_nil_expr(sz))
         array_size = sz;

@@ -14,6 +14,7 @@ enum ContractBodyElementT
 {
   StateVarDecl = 0, // rule state-variable-declaration
   FunctionDef,      // rule function-definition
+  EnumDef,          // rule enum-definition
   ContractBodyElementTError
 };
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
@@ -42,6 +43,12 @@ enum TypeNameT
 
   // contract type
   ContractTypeName,
+
+  // typecast
+  TypeConversionName,
+
+  // enum
+  EnumTypeName,
 
   TypeNameTError
 };
@@ -123,12 +130,49 @@ enum ElementaryTypeNameT
   // rule bool
   BOOL,
 
-  // TODO: rule address
-  // TODO: rule address payable
+  // rule address
+  ADDRESS,
+  ADDRESS_PAYABLE,
+
   // rule string
   STRING,
   STRING_LITERAL,
-  // TODO: rule bytes
+
+  // rule bytes
+  BYTE_ARRAY,
+  BYTES1,
+  BYTES2,
+  BYTES3,
+  BYTES4,
+  BYTES5,
+  BYTES6,
+  BYTES7,
+  BYTES8,
+  BYTES9,
+  BYTES10,
+  BYTES11,
+  BYTES12,
+  BYTES13,
+  BYTES14,
+  BYTES15,
+  BYTES16,
+  BYTES17,
+  BYTES18,
+  BYTES19,
+  BYTES20,
+  BYTES21,
+  BYTES22,
+  BYTES23,
+  BYTES24,
+  BYTES25,
+  BYTES26,
+  BYTES27,
+  BYTES28,
+  BYTES29,
+  BYTES30,
+  BYTES31,
+  BYTES32,
+
   // TODO: rule signed-integer-type
   // TODO: rule e
   // TODO: fixed-bytes
@@ -142,6 +186,7 @@ unsigned int uint_type_name_to_size(ElementaryTypeNameT);
 
 unsigned int uint_type_name_to_size(ElementaryTypeNameT);
 unsigned int int_type_name_to_size(ElementaryTypeNameT);
+unsigned int bytesn_type_name_to_size(ElementaryTypeNameT);
 
 // rule parameter-list
 enum ParameterListT
@@ -219,6 +264,7 @@ enum ExpressionT
   BO_AndAssign, // &=
   BO_XorAssign, // ^=
   BO_OrAssign,  // |=
+  BO_Pow,       // **
 
   // UnaryOperator
   UnaryOperatorClass,
@@ -263,6 +309,9 @@ enum ExpressionT
   // equivalent toclang::Stmt::CXXMemberCallExprClass
   // i.e. x.caller();
   MemberCallClass,
+
+  // Type Converion
+  ElementaryTypeNameExpression,
 
   ExpressionTError
 };

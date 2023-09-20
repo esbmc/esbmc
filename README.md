@@ -46,7 +46,7 @@ The figure below illustrates the current ESBMC architecture. The tool inputs a C
 
 ![esbmc-architecture-v2](https://github.com/esbmc/esbmc/assets/3694109/28c423a3-39a2-41f1-828d-cb40dfbe4743)
 
-### Publications
+### Selected Publications
 
 * Yiannis Charalambous, Norbert Tihanyi, Ridhi Jain, Youcheng Sun, Mohamed Amine Ferrag, Lucas C. Cordeiro. [A New Era in Software Security: Towards Self-Healing Software via Large Language Models and Formal Verification](https://arxiv.org/pdf/2305.14752.pdf). Technical Report, CoRR abs/2305.14752, 2023. [DOI](https://doi.org/10.48550/arXiv.2305.14752)
   
@@ -194,4 +194,4 @@ The output will be in docs/HTML; open index.html to get started.
 
 ### Acknowledgments
 
-The ESBMC development was supported by various research funding agencies, including CNPq (Brazil), CAPES (Brazil), FAPEAM (Brazil), EPSRC (UK), Royal Society (UK), British Council (UK), European Commission (Horizon 2020), and companies including ARM, Intel, Motorola, Nokia Institute of Technology and Samsung. ESBMC is currently funded by Intel, EPSRC grants [EP/T026995/1](https://enncore.github.io), [EP/V000497/1](https://scorch-project.github.io), [EU H2020 ELEGANT 957286](https://www.elegant-h2020.eu) and [Soteria project](https://soteriaresearch.org) awarded by the UK Research and Innovation for the Digital Security by Design (DSbD) Programme.
+The ESBMC development was supported by various research funding agencies, including CNPq (Brazil), CAPES (Brazil), FAPEAM (Brazil), EPSRC (UK), Royal Society (UK), British Council (UK), European Commission (Horizon 2020), and companies including ARM, Intel, Motorola, Nokia Institute of Technology and Samsung. The ESBMC development is currently funded by ARM, Intel, EPSRC grants [EP/T026995/1](https://enncore.github.io), [EP/V000497/1](https://scorch-project.github.io), [EU H2020 ELEGANT 957286](https://www.elegant-h2020.eu) and [Soteria project](https://soteriaresearch.org) awarded by the UK Research and Innovation for the Digital Security by Design (DSbD) Programme.
