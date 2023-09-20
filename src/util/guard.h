@@ -5,7 +5,8 @@
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 
-/* Defines a guard. A guard is the antecedent (i.e. left-hand side) of an
+/**
+ * Defines a guard. A guard is the antecedent (i.e. left-hand side) of an
  * implication. This guard implementation is even more concrete in that on the
  * top level it is interpreted as a conjunction of conditions.
  *
@@ -39,17 +40,22 @@ public:
 
   guardt() noexcept = default;
 
+  /** \brief Adds a boolean condition to the end of this guard. */
   void add(const expr2tc &expr);
+
+  /** \brief Appends all conditions from a guard to the end of this guard. */
   void append(const guardt &guard);
 
-  /* Returns a formula equivalent to the conjunction of all conditions.
+  /**
+   * Returns a formula equivalent to the conjunction of all conditions.
    *
    * Does not have to be an and2tc expression, e.g., in case the guard just
    * contains a single formula, or a known-false formula, or in case it is
    * empty. */
   expr2tc as_expr() const;
 
-  /* Transforms the given expression 'dest' to a formula that is equivalent to
+  /**
+   * Transforms the given expression 'dest' to a formula that is equivalent to
    * the implication (G => dest) where G is this guard. */
   void guard_expr(expr2tc &dest) const;
 
@@ -61,7 +67,8 @@ public:
   void make_false();
   void swap(guardt &g);
 
-  /* Difference between two guards.
+  /**
+   * \brief Difference between two guards.
    *
    * Let P be the common prefix of the two guard-lists in terms of the
    * expressions being exact copies (in contrast to equivalent formulas like
@@ -72,7 +79,15 @@ public:
    */
   friend guardt &operator-=(guardt &g1, const guardt &g2);
 
-  /* Disjunction of two guards. */
+  /** \brief Disjunction of two guards.
+   *
+   * Keeps the prefix common to g1 and g2 unchanged and adds a disjunction of
+   * the remaining conditions in g1 and g2 to g1.
+   *
+   * \param [in,out] g1 guard set to the disjunction of g1 and g2
+   * \param [in]     g2 guard to build the disjunction of g1 with
+   * \return a reference to the modified g1
+   */
   friend guardt &operator|=(guardt &g1, const guardt &g2);
   friend bool operator==(const guardt &g1, const guardt &g2);
 
