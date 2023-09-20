@@ -37,6 +37,8 @@ class guardt
 public:
   typedef std::vector<expr2tc> guard_listt;
 
+  guardt() noexcept = default;
+
   void add(const expr2tc &expr);
   void append(const guardt &guard);
 
@@ -79,6 +81,8 @@ public:
 protected:
   guard_listt guard_list;
   expr2tc g_expr;
+
+  explicit guardt(guard_listt guard_list) noexcept;
 
   bool is_single_symbol() const;
   void clear();
