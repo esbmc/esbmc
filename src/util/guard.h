@@ -32,6 +32,13 @@
  *   The SMT backend relies on the order of operands to cache the converted
  *   expressions, you'll see huge slowdowns if the order of the guards is not
  *   stable (we should document it somewhere...).
+ *
+ * The \ref guardt class internally maintains two separate representations of
+ * the sequence of conditions: the `guard_list` and the `g_expr`. These two are
+ * kept in sync. Formulated as an invariant, the following always hold:
+ * 1. `!g_expr` iff `guard_list.empty()`
+ * 2. if `!guard_list.empty()` then `g_expr` is equivalent to the conjunction of
+ *    all conditions in `guard_list`
  */
 class guardt
 {
