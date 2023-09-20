@@ -5,18 +5,30 @@
 double pow(double base, double exponent)
 {
 __ESBMC_HIDE:;
-  int result = 1;
+  double result = 1.0;
   if(exponent == 0)
     return result;
 
   if(exponent < 0)
-    return 1 / pow(base, -exponent);
+  {
+    base = 1.0 / base;
+    exponent = -exponent;
+  }
 
-  float temp = pow(base, exponent / 2);
-  if((int)exponent % 2 == 0)
-    return temp * temp;
-
-  return (base * temp * temp);
+  while (exponent > 0)
+  {
+    if((int)exponent % 2 == 0)
+    {
+      base *= base;
+      exponent /= 2;
+    }
+    else
+    {
+      result *= base;
+      exponent--;
+    }
+  }
+  return result;
 }
 
 double __pow(double base, double exponent)
