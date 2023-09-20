@@ -39,6 +39,7 @@ void guardt::add(const expr2tc &expr)
   // Easy case, there is no g_expr
   if(is_nil_expr(g_expr))
   {
+    assert(guard_list.size() == 1);
     g_expr = expr;
   }
   else
@@ -70,14 +71,21 @@ void guardt::build_guard_expr()
   // This method closely related to guardt::add and guardt::guard_expr
   // We need to build the chain of ands, to avoid memory bloat on as_expr
 
-  // if the guard is true, or a single symbol, we don't need to build it
-  if(is_true() || is_single_symbol())
-    return;
-
   // This method will only be used, when the guard is nil, for instance,
   // guardt &operator -= and guardt &operator |=, all other cases should
   // be handled by guardt::add
   assert(is_nil_expr(g_expr));
+
+  // if the guard is true, we don't need to build it
+  if(is_true())
+    return;
+
+  // the expression is the single symbol in case the list just has this one
+  if(is_single_symbol())
+  {
+    g_expr = *guard_list.begin();
+    return;
+  }
 
   // We can assume at least two operands
   auto it = guard_list.begin();
