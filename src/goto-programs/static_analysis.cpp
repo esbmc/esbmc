@@ -227,7 +227,7 @@ void static_analysis_baset::do_function_call(
   locationt l_call,
   const goto_functionst &goto_functions,
   const goto_functionst::function_mapt::const_iterator f_it,
-  const std::vector<expr2tc> &, // XXX -- why?
+  const std::vector<expr2tc> &arguments, // XXX -- why?
   statet &new_state)
 {
   const goto_functiont &goto_function = f_it->second;
@@ -242,7 +242,7 @@ void static_analysis_baset::do_function_call(
     locationt l_begin = goto_function.body.instructions.begin();
 
     // do the edge from the call site to the beginning of the function
-    new_state.transform(ns, l_call, l_begin);
+    new_state.transform(ns, l_call, l_begin, arguments);
 
     statet &begin_state = get_state(l_begin);
 
@@ -300,6 +300,28 @@ void static_analysis_baset::do_function_call_rec(
   {
     irep_idt identifier = to_symbol2t(function).get_symbol_name();
 
+    const std::string id = identifier.as_string();
+
+    std::vector<expr2tc> new_args;
+
+    // When calling 'pthread_create' method, we need to make adjustments
+    // to properly make VSA understand the func we are going to
+    // call on the child thread
+
+    // TODO: A more robust way to find the method
+    if(id == "c:@F@pthread_create")
+    {
+      // pthread_create(id, *attr, void *func, void *arg);
+      // From this we get the func's identifier that was called,
+      // along with the arg of that func
+      exprt tmp = migrate_expr_back(arguments[2]);
+      identifier = to_symbol_expr(tmp.op0()).get_identifier();
+
+      new_args.push_back(arguments[3]);
+    }
+    else
+      new_args = arguments;
+
     if(recursion_set.find(identifier) != recursion_set.end())
     {
       // recursion detected!
@@ -314,7 +336,7 @@ void static_analysis_baset::do_function_call_rec(
     if(it == goto_functions.function_map.end())
       throw "failed to find function " + id2string(identifier);
 
-    do_function_call(l_call, goto_functions, it, arguments, new_state);
+    do_function_call(l_call, goto_functions, it, new_args, new_state);
 
     recursion_set.erase(identifier);
   }

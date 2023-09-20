@@ -27,8 +27,11 @@ public:
   //    to the instruction following the call site
   //    (for setting the LHS)
 
-  virtual void
-  transform(const namespacet &ns, locationt from, locationt to) = 0;
+  virtual void transform(
+    const namespacet &ns,
+    locationt from,
+    locationt to,
+    const std::vector<expr2tc> &arguments = {}) = 0;
 
   virtual ~abstract_domain_baset() = default;
 
