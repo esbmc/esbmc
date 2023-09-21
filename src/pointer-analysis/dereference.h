@@ -250,14 +250,19 @@ public:
    *  @param The way in which this dereference is being accessed. Only affects
    *         the assertions that are generated.
    */
-  virtual void dereference_expr(expr2tc &expr, guardt &guard, modet mode);
+  virtual void dereference_expr(
+    expr2tc &expr,
+    guardt &guard,
+    modet mode,
+    bool make_failed = true);
 
   virtual expr2tc dereference(
     const expr2tc &dest,
     const type2tc &type,
     const guardt &guard,
     modet mode,
-    const expr2tc &extra_offset);
+    const expr2tc &extra_offset,
+    bool make_failed = true);
 
   /** Does the given expression have a dereference in it somewhere?
    *  @param expr The expression to check for existance of a dereference.

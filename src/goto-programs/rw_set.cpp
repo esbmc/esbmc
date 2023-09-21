@@ -36,7 +36,9 @@ void rw_sett::read_write_rec(
     const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
     if(symbol)
     {
-      if(!symbol->static_lifetime && !expr.type().is_pointer())
+      if(
+        !symbol->static_lifetime &&
+        expr.type().subtype().id() != "dereferenced_symbol")
       {
         return; // ignore for now
       }
@@ -88,11 +90,17 @@ void rw_sett::read_write_rec(
     assert(expr.operands().size() == 1);
     read(expr.op0(), guard);
 
-    exprt tmp(expr.op0());
+    exprt tmp;
     expr2tc tmp_expr;
-    migrate_expr(tmp, tmp_expr);
+    migrate_expr(expr, tmp_expr);
     dereference(target, tmp_expr, ns, value_sets);
-    tmp = migrate_expr_back(tmp_expr);
+    if(!is_nil_expr(tmp_expr))
+    {
+      tmp = migrate_expr_back(tmp_expr);
+      tmp.type().subtype() = typet("dereferenced_symbol");
+    }
+    else
+      return;
 
     read_write_rec(tmp, r, w, suffix, guard);
   }

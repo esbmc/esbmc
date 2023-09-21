@@ -85,11 +85,11 @@ void goto_program_dereferencet::dereference_expr(
   if(checks_only)
   {
     expr2tc tmp = expr;
-    dereference.dereference_expr(tmp, guard, mode);
+    dereference.dereference_expr(tmp, guard, mode, false);
   }
   else
   {
-    dereference.dereference_expr(expr, guard, mode);
+    dereference.dereference_expr(expr, guard, mode, false);
   }
 }
 
