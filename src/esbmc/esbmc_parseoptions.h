@@ -10,18 +10,13 @@
 #include <util/algorithms.h>
 #include <util/threeval.h>
 
-extern const struct group_opt_templ all_cmd_options[];
-
 class esbmc_parseoptionst : public parseoptions_baset, public language_uit
 {
 public:
   int doit() override;
   void help() override;
 
-  esbmc_parseoptionst(int argc, const char **argv)
-    : parseoptions_baset(all_cmd_options, argc, argv), language_uit(cmdline)
-  {
-  }
+  esbmc_parseoptionst(int argc, const char **argv);
 
   ~esbmc_parseoptionst()
   {

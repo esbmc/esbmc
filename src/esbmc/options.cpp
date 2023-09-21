@@ -3,7 +3,7 @@
 #include <solvers/solver_config.h>
 #include <util/cmdline.h>
 
-const struct group_opt_templ all_cmd_options[] = {
+static const struct group_opt_templ all_cmd_options[] = {
   {"Main Usage",
    {{"input-file",
      boost::program_options::value<std::vector<std::string>>()->value_name(
@@ -485,3 +485,8 @@ const struct group_opt_templ all_cmd_options[] = {
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "instruction"},
     {"explain,h", NULL, ""}}}};
+
+esbmc_parseoptionst::esbmc_parseoptionst(int argc, const char **argv)
+: parseoptions_baset(all_cmd_options, argc, argv), language_uit(cmdline)
+{
+}
