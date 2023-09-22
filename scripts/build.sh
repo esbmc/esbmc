@@ -15,7 +15,7 @@ ubuntu_setup () {
     echo "Installing Python dependencies"
     pip3 install --user meson ast2json &&
     meson --version &&
-    BASE_ARGS="$BASE_ARGS -DENABLE_OLD_FRONTEND=On DENABLE_PYTHON_FRONTEND=On -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On" &&
+    BASE_ARGS="$BASE_ARGS -DENABLE_OLD_FRONTEND=On -DENABLE_PYTHON_FRONTEND=On -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On" &&
     SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=ON"
     # Hack: Boolector might fail to download some dependencies using curl (maybe we should patch it?)
     # curl: (60) SSL: no alternative certificate subject name matches target host name 'codeload.github.com'
