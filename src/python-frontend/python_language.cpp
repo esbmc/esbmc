@@ -23,9 +23,13 @@ bool python_languaget::parse(const std::string &path)
   if(!fs::exists(script))
     return true;
 
+  fs::path esbmc_binary_path = fs::read_symlink("/proc/self/exe").parent_path();
+  fs::path python_script_path = esbmc_binary_path / "../resources/astgen.py";
+
   // Execute python script to generate json file from AST
-  std::string cmd("python3 src/python-frontend/astgen.py ");
+  std::string cmd("python3 " + python_script_path.string() + " ");
   cmd += path;
+
   // Create a child process to execute Python
   bp::child process(cmd);
 
