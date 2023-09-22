@@ -380,7 +380,7 @@ void value_sett::get_value_set_rec(
     switch (side.kind)
     {
     case sideeffect2t::alloca:
-    case sideeffect2t::realloc:  
+    case sideeffect2t::realloc:
     case sideeffect2t::malloc:
     {
       assert(suffix == "");
@@ -415,7 +415,7 @@ void value_sett::get_value_set_rec(
 
     default:
       log_error("Unexpected side-effect: {}", *expr);
-      throw std::runtime_error("unsuported side-effect"); 
+      throw std::runtime_error("unsuported side-effect");
     }
   }
 
