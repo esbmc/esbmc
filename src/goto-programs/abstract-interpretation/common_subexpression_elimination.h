@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <util/message.h>
 #include <goto-programs/abstract-interpretation/ai.h>
 #include <pointer-analysis/value_set_analysis.h>
 /**
@@ -60,7 +61,8 @@ public:
   {
     // Theoretically there exists a TOP (all possible AE in the program).
     // In practice, there is no need for it.
-    throw "[CSE] Available Expressions does not implement make_top()";
+    log_error("[CSE] Available Expressions does not implement make_top()");
+    abort();
   };
 
   virtual bool is_bottom() const override
@@ -78,19 +80,11 @@ public:
     return false;
   }
 
-protected:
-  bool join(const cse_domaint &b);
-
 public:
   bool merge(
     const cse_domaint &b,
     goto_programt::const_targett,
-    goto_programt::const_targett)
-  {
-    // We don't care about the type of instruction to merge.
-    return join(b);
-  }
-
+    goto_programt::const_targett);
   /// All expressions available
   std::unordered_set<expr2tc, irep2_hash> available_expressions;
 
@@ -162,7 +156,7 @@ public:
     bool available = false;
 
     // There are some constraints that should be added here:
-    // kill.size() <= gen.size()
+    // kill.size() <= gen.size() (????)
     // sequence_counter is indexed by gen indexes
     // available might be a private member
     // this struct needs better naming
