@@ -110,8 +110,8 @@ static size_t
 common_prefix_size(const guardt::guard_listt &a, const guardt::guard_listt &b)
 {
   auto it1 = a.begin();
-  for(const expr2tc &e2 : b)
-    if(it1 != a.end() && *it1 == e2)
+  for (const expr2tc &e2 : b)
+    if (it1 != a.end() && *it1 == e2)
       ++it1;
     else
       break;
@@ -120,11 +120,20 @@ common_prefix_size(const guardt::guard_listt &a, const guardt::guard_listt &b)
 
 guardt &operator-=(guardt &g1, const guardt &g2)
 {
-  size_t n = common_prefix_size(g1.guard_list, g2.guard_list);
-
-  if(n != 0)
+  std::unordered_set<expr2tc, irep2_hash> s2(
+    g2.guard_list.begin(), g2.guard_list.end());
+  expr2tc *e = g1.guard_list.data();
+  size_t n = g1.guard_list.size();
+  const expr2tc *end = e + n;
+  for (expr2tc *f = e; f < end; f++)
   {
-    g1.guard_list.erase(g1.guard_list.begin(), g1.guard_list.begin() + n);
+    if (s2.find(*f) == s2.end())
+      *e++ = *f;
+  }
+  size_t m = e - g1.guard_list.data();
+  if (n != m)
+  {
+    g1.guard_list.resize(m);
     g1.g_expr.reset();
     g1.build_guard_expr();
   }
@@ -177,25 +186,30 @@ guardt &operator|=(guardt &g1, const guardt &g2)
     // Simplify equation: everything that's common in both guards, will not
     // be or'd
 
-    // Number of common guards
-    size_t common_size = common_prefix_size(g1.guard_list, g2.guard_list);
-
-    // New g1 and g2, without the common guards
-    guardt new_g1({g1.guard_list.begin() + common_size, g1.guard_list.end()});
-    guardt new_g2({g2.guard_list.begin() + common_size, g2.guard_list.end()});
+    std::unordered_set<expr2tc, irep2_hash> s1(
+      g1.guard_list.begin(), g1.guard_list.end());
+    std::unordered_set<expr2tc, irep2_hash> s2(
+      g2.guard_list.begin(), g2.guard_list.end());
+    guardt common, n1, n2;
+    for (const expr2tc &e : g1.guard_list)
+    {
+      guardt &g = s2.find(e) != s2.end() ? common : n1;
+      g.add(e);
+    }
+    for (const expr2tc &e : g2.guard_list)
+      if (s1.find(e) == s1.end())
+        n2.add(e);
 
     // Get the and expression from both guards
-    expr2tc or_expr = or2tc(new_g1.as_expr(), new_g2.as_expr());
+    expr2tc or_expr = or2tc(n1.as_expr(), n2.as_expr());
 
     // If the guards are single symbols, try to simplify the or expression
-    if (new_g1.is_single_symbol() && new_g2.is_single_symbol())
+    if (n1.is_single_symbol() && n2.is_single_symbol())
       simplify(or_expr);
 
     // keep common guards and add the new or_expr
-    g1.g_expr = expr2tc();
-    g1.guard_list.resize(common_size);
-    g1.guard_list.push_back(or_expr);
-    g1.build_guard_expr();
+    g1 = std::move(common);
+    g1.add(or_expr);
   }
 
   return g1;
