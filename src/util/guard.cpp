@@ -265,7 +265,7 @@ bool guardt::is_false() const
 
 void guardt::make_true()
 {
-  guard_list.clear();
+  clear();
 }
 
 void guardt::make_false()
