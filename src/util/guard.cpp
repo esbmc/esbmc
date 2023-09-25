@@ -106,18 +106,6 @@ void guardt::append(const guardt &guard)
     add(it);
 }
 
-static size_t
-common_prefix_size(const guardt::guard_listt &a, const guardt::guard_listt &b)
-{
-  auto it1 = a.begin();
-  for (const expr2tc &e2 : b)
-    if (it1 != a.end() && *it1 == e2)
-      ++it1;
-    else
-      break;
-  return it1 - a.begin();
-}
-
 guardt &operator-=(guardt &g1, const guardt &g2)
 {
   std::unordered_set<expr2tc, irep2_hash> s2(
