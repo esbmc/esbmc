@@ -613,7 +613,7 @@ bool solidity_convertert::get_function_definition(
       const nlohmann::json &func_param_decl = decl.value();
 
       code_typet::argumentt param;
-      if(get_function_params(func_param_decl, param))
+      if(get_function_params(func_param_decl, param, num_param_decl))
         return true;
 
       type.arguments().push_back(param);
@@ -644,7 +644,8 @@ bool solidity_convertert::get_function_definition(
 
 bool solidity_convertert::get_function_params(
   const nlohmann::json &pd,
-  exprt &param)
+  exprt &param,
+  const unsigned &num)
 {
   // 1. get parameter type
   typet param_type;
@@ -664,10 +665,18 @@ bool solidity_convertert::get_function_params(
   assert(current_functionDecl);
   get_var_decl_name(pd, name, id);
 
-  //3b. handle Omitted Names in Function Definitions
+  // 3b. handle Omitted Names in Function Definitions
+  // Items with omitted names will still be present on the stack, but they are inaccessible by name.
+  // e.g. ~omitted1, ~omitted2. which is a invalid name for solidity.
+  // Therefore it won't conflict with other arg names.
+
   if(name == "")
   {
-    name = "tmp";
+    name = "~omitted" + std::to_string(num);
+    id = "c:" + get_modulename_from_path(absolute_path) + ".solast" +
+         //"@"  + std::to_string(ast_node["scope"].get<int>()) +
+         "@" + std::to_string(445) + "@" + "F" + "@" + current_functionName +
+         "@" + name;
   }
 
   param = code_typet::argumentt();
@@ -2372,7 +2381,7 @@ bool solidity_convertert::get_func_decl_ref_type(
       const nlohmann::json &func_param_decl = decl.value();
 
       code_typet::argumentt param;
-      if(get_function_params(func_param_decl, param))
+      if(get_function_params(func_param_decl, param, num_param_decl))
         return true;
 
       type.arguments().push_back(param);

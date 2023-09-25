@@ -57,7 +57,10 @@ protected:
   bool get_var_decl_stmt(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node);
-  bool get_function_params(const nlohmann::json &pd, exprt &param);
+  bool get_function_params(
+    const nlohmann::json &pd,
+    exprt &param,
+    const unsigned &num);
   bool get_default_function(const std::string name, const std::string id);
   bool get_struct_class(const nlohmann::json &ast_node);
   void add_enum_member_val(nlohmann::json &ast_node);
