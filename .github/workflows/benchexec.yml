@@ -128,6 +128,8 @@ jobs:
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
+      - name: Show summary
+        run: tail $HOME/esbmc-output/*results.txt
       - name: Save logs
         if: ${{ inputs.output != '' }}
         run: cp $HOME/output.zip $HOME/${{ inputs.output }}
