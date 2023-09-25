@@ -211,8 +211,11 @@ void guardt::dump() const
 
 bool operator==(const guardt &g1, const guardt &g2)
 {
-  // Very simple: the guard list should be identical.
-  return g1.guard_list == g2.guard_list;
+  // Very simple: the guard sets should be identical.
+  return std::unordered_set<expr2tc, irep2_hash>(
+           g1.guard_list.begin(), g1.guard_list.end()) ==
+         std::unordered_set<expr2tc, irep2_hash>(
+           g2.guard_list.begin(), g2.guard_list.end());
 }
 
 void guardt::swap(guardt &g)
