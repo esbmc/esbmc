@@ -438,7 +438,7 @@ bool solidity_convertert::get_struct_class_method(
 {
   struct_typet::componentt comp;
   if(get_func_decl_ref(ast_node, comp))
-    return false;
+    return true;
 
   if(comp.is_code() && to_code(comp).statement() == "skip")
     return false;
@@ -493,7 +493,8 @@ void solidity_convertert::add_enum_member_val(nlohmann::json &contract_def)
 bool solidity_convertert::add_implicit_constructor()
 {
   std::string name, id;
-  name = id = current_contractName;
+  name = current_contractName;
+  id = get_ctor_call_id(current_contractName);
 
   if(context.find_symbol(id) != nullptr)
     return false;
@@ -564,6 +565,15 @@ bool solidity_convertert::get_function_definition(
   // 7. Populate "std::string id, name"
   std::string name, id;
   get_function_definition_name(ast_node, name, id);
+
+  // skip if the symbol is already inside
+  // if(context.find_symbol(id) != nullptr)
+  // {
+  //   current_functionDecl = old_functionDecl;
+  //   current_functionName = "";
+  //   new_expr = symbol_expr(*context.find_symbol(id));
+  //   return false;
+  // }
 
   if(name == "func_dynamic")
     printf("@@ found func_dynamic\n");
@@ -654,13 +664,15 @@ bool solidity_convertert::get_function_params(
   assert(current_functionDecl);
   get_var_decl_name(pd, name, id);
 
+  //3b. handle Omitted Names in Function Definitions
+  if(name == "")
+  {
+    name = "tmp";
+  }
+
   param = code_typet::argumentt();
   param.type() = param_type;
   param.cmt_base_name(name);
-
-  // 3b. check name empty: Not applicable to Solidity.
-  // In Solidity, a function definition should also have parameters names
-  assert(name != "");
 
   // 4. get location
   locationt location_begin;
@@ -2025,6 +2037,7 @@ bool solidity_convertert::get_func_decl_ref(
   exprt &new_expr)
 {
   // Function to configure new_expr that has a +ve referenced id, referring to a function declaration
+  // This allow to get func symbol before we add it to the symbol table
   assert(decl["nodeType"] == "FunctionDefinition");
   std::string name, id;
   get_function_definition_name(decl, name, id);
@@ -2332,6 +2345,42 @@ bool solidity_convertert::get_func_decl_ref_type(
 
     if(!type.arguments().size())
       type.make_ellipsis();
+
+    new_type = type;
+    break;
+  }
+  case SolidityGrammar::FunctionDeclRefT::FunctionProto:
+  {
+    code_typet type;
+
+    // need in get_function_params()
+    current_functionName = decl["name"].get<std::string>();
+    current_functionDecl = &decl;
+
+    const nlohmann::json &rtn_type = decl["returnParameters"];
+
+    typet return_type;
+    if(get_type_description(rtn_type, return_type))
+      return true;
+
+    type.return_type() = return_type;
+    // convert parameters if the function has them
+    // update the typet, since typet contains parameter annotations
+    unsigned num_param_decl = 0;
+    for(const auto &decl : decl["parameters"]["parameters"].items())
+    {
+      const nlohmann::json &func_param_decl = decl.value();
+
+      code_typet::argumentt param;
+      if(get_function_params(func_param_decl, param))
+        return true;
+
+      type.arguments().push_back(param);
+      ++num_param_decl;
+    }
+
+    current_functionName = "";
+    current_functionDecl = nullptr;
 
     new_type = type;
     break;
@@ -2723,6 +2772,12 @@ unsigned int solidity_convertert::add_offset(
   // already added 1 in start_position
   unsigned int end_position = start_position + std::stoul(offset);
   return end_position;
+}
+
+std::string
+solidity_convertert::get_ctor_call_id(const std::string &contract_name)
+{
+  return "c:@C@" + contract_name + "@F@" + contract_name + "#";
 }
 
 std::string
@@ -3391,7 +3446,7 @@ bool solidity_convertert::get_implicit_ctor_call(
   std::string name, id;
   if(get_contract_name(ref_decl_id, name))
     return true;
-  id = name;
+  id = get_ctor_call_id(name);
   if(context.find_symbol(id) == nullptr)
     return true;
 
@@ -3572,9 +3627,12 @@ bool solidity_convertert::move_functions_to_main(
   assert(contract.type.is_struct() && "A contract should be a struct");
 
   // 1.2 construct a constructor call and move to func_body
-  if(context.find_symbol(contractName) == nullptr)
+  std::string ctor_id;
+  ctor_id = get_ctor_call_id(contractName);
+
+  if(context.find_symbol(ctor_id) == nullptr)
     return true;
-  const symbolt &constructor = *context.find_symbol(contractName);
+  const symbolt &constructor = *context.find_symbol(ctor_id);
   code_function_callt call;
   call.location() = constructor.location;
   call.function() = symbol_expr(constructor);
@@ -3604,7 +3662,7 @@ bool solidity_convertert::move_functions_to_main(
     // then: function_call
     const std::string func_id = method.identifier().as_string();
     // skip constructor
-    if(func_id == contractName)
+    if(func_id == ctor_id)
       continue;
 
     if(context.find_symbol(func_id) == nullptr)
