@@ -603,7 +603,7 @@ bool solidity_convertert::get_function_definition(
       const nlohmann::json &func_param_decl = decl.value();
 
       code_typet::argumentt param;
-      if(get_function_params(func_param_decl, param))
+      if(get_function_params(func_param_decl, param, num_param_decl))
         return true;
 
       type.arguments().push_back(param);
@@ -632,7 +632,8 @@ bool solidity_convertert::get_function_definition(
 
 bool solidity_convertert::get_function_params(
   const nlohmann::json &pd,
-  exprt &param)
+  exprt &param,
+  const unsigned &num)
 {
   // 1. get parameter type
   typet param_type;
@@ -2561,7 +2562,7 @@ bool solidity_convertert::get_func_decl_ref_type(
       const nlohmann::json &func_param_decl = decl.value();
 
       code_typet::argumentt param;
-      if(get_function_params(func_param_decl, param))
+      if(get_function_params(func_param_decl, param, num_param_decl))
         return true;
 
       type.arguments().push_back(param);
