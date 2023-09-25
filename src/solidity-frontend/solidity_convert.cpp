@@ -557,6 +557,15 @@ bool solidity_convertert::get_function_definition(
   std::string name, id;
   get_function_definition_name(ast_node, name, id);
 
+  // skip if the symbol is already inside
+  // if(context.find_symbol(id) != nullptr)
+  // {
+  //   current_functionDecl = old_functionDecl;
+  //   current_functionName = "";
+  //   new_expr = symbol_expr(*context.find_symbol(id));
+  //   return false;
+  // }
+
   if(name == "func_dynamic")
     printf("@@ found func_dynamic\n");
 
