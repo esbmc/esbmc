@@ -407,8 +407,17 @@ unsigned int smtlib_convt::emit_terminal_ast(
   switch(ast->kind)
   {
   case SMT_FUNC_INT:
-    // Just the literal number itself.
-    output = integer2string(ast->intval);
+    if(ast->intval.is_negative())
+    {
+      // Negative integers need to be constructed from unary minus and a literal
+      ss << "(- " << integer2string(-ast->intval) << ")";
+      output = ss.str();
+    }
+    else
+    {
+      // Just the literal number itself.
+      output = integer2string(ast->intval);
+    }
     return 0;
   case SMT_FUNC_BOOL:
     if(ast->boolval)
