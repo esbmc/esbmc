@@ -261,10 +261,6 @@ void goto_symext::merge_gotos()
   {
     statet::goto_statet &goto_state = *list_it;
 
-    // Merge guards. Don't write this to `state` yet because we might move
-    // goto_state over it below.
-    guardt new_guard = merge_state_guards(goto_state, *cur_state);
-
     if (!goto_state.guard.is_false())
     {
       // do SSA phi functions
@@ -279,7 +275,7 @@ void goto_symext::merge_gotos()
         std::min(cur_state->num_instructions, goto_state.num_instructions);
     }
 
-    cur_state->guard = std::move(new_guard);
+    cur_state->guard = merge_state_guards(goto_state, *cur_state);
   }
 
   // clean up to save some memory
