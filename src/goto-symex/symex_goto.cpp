@@ -222,22 +222,23 @@ static inline guardt merge_state_guards(
   // impossible. Therefore we only integrate it when to do so simplifies the
   // state guard.
 
-  // This function can trash either state's guards, since goto_state is dying
-  // and state's guard will shortly be overwritten.
+  // In CBMC this function can trash either state's guards, since goto_state is
+  // dying and state's guard will shortly be overwritten. However, we still use
+  // either state's guard, so keep them intact.
   if(
     (!goto_state.guard.is_false() && !state.guard.is_false()) ||
     state.guard.disjunction_may_simplify(goto_state.guard))
   {
     state.guard |= goto_state.guard;
-    return std::move(state.guard);
+    return state.guard;
   }
   else if(state.guard.is_false() && !goto_state.guard.is_false())
   {
-    return std::move(goto_state.guard);
+    return goto_state.guard;
   }
   else
   {
-    return std::move(state.guard);
+    return state.guard;
   }
 }
 
