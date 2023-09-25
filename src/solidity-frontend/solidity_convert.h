@@ -162,6 +162,8 @@ protected:
     std::string id,
     locationt location);
 
+  std::string get_ctor_call_id(const std::string &contract_name);
+
   // literal conversion functions
   bool convert_integer_literal(
     const nlohmann::json &integer_literal,
