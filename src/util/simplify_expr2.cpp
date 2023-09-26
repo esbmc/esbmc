@@ -441,7 +441,7 @@ expr2tc add2t::do_simplify() const
 
   // Attempt associative simplification
   std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
-    [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
+    [](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
     expr2tc a = arg1, b = arg2;
     type2tc t = common_arith_op2_type(a, b);
     return add2tc(t, a, b);
