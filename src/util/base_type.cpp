@@ -20,7 +20,7 @@ void base_type(type2tc &type, const namespacet &ns)
   {
     base_type(to_array_type(type).subtype, ns);
   }
-  else if(is_struct_type(type) | is_union_type(type))
+  else if(is_structure_type(type))
   {
     struct_union_data &data = static_cast<struct_union_data &>(*type.get());
 
