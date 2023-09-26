@@ -18,6 +18,8 @@ template <class T>
 class interval_templatet
 {
 public:
+  virtual ~interval_templatet() = default;
+
   interval_templatet() : lower_set(false), upper_set(false)
   {
     // this is 'top'
