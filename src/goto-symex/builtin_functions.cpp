@@ -1016,7 +1016,7 @@ static inline expr2tc gen_byte_expression(
   auto value_downcast = typecast2tc(get_uint8_type(), value);
   auto value_upcast = typecast2tc(
     type,
-    value_downcast); // so smt_conv will complain about the width of the type
+    value_downcast); // so smt_conv won't complain about the width of the type
 
   expr2tc mask = gen_zero(type);
 
@@ -1070,8 +1070,8 @@ static inline expr2tc gen_value_by_byte(
    *
    */
 
-  // Bitwise operations are not valid for floats. Throw error (debug) or give up (release)
-  assert(!is_floatbv_type(type) && !is_fixedbv_type(type));
+  /* TODO: Bitwise operations are valid for floats, but we don't have an
+   * implementation, yet. Give up. */
   if(is_floatbv_type(type) || is_fixedbv_type(type))
     return expr2tc();
 
