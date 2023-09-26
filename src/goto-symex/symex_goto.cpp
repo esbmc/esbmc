@@ -222,22 +222,23 @@ static inline guardt merge_state_guards(
   // impossible. Therefore we only integrate it when to do so simplifies the
   // state guard.
 
-  // This function can trash either state's guards, since goto_state is dying
-  // and state's guard will shortly be overwritten.
+  // In CBMC this function can trash either state's guards, since goto_state is
+  // dying and state's guard will shortly be overwritten. However, we still use
+  // either state's guard, so keep them intact.
   if(
     (!goto_state.guard.is_false() && !state.guard.is_false()) ||
     state.guard.disjunction_may_simplify(goto_state.guard))
   {
     state.guard |= goto_state.guard;
-    return std::move(state.guard);
+    return state.guard;
   }
   else if(state.guard.is_false() && !goto_state.guard.is_false())
   {
-    return std::move(goto_state.guard);
+    return goto_state.guard;
   }
   else
   {
-    return std::move(state.guard);
+    return state.guard;
   }
 }
 
@@ -260,10 +261,6 @@ void goto_symext::merge_gotos()
   {
     statet::goto_statet &goto_state = *list_it;
 
-    // Merge guards. Don't write this to `state` yet because we might move
-    // goto_state over it below.
-    guardt new_guard = merge_state_guards(goto_state, *cur_state);
-
     if(!goto_state.guard.is_false())
     {
       // do SSA phi functions
@@ -278,7 +275,7 @@ void goto_symext::merge_gotos()
         std::min(cur_state->num_instructions, goto_state.num_instructions);
     }
 
-    cur_state->guard = std::move(new_guard);
+    cur_state->guard = merge_state_guards(goto_state, *cur_state);
   }
 
   // clean up to save some memory

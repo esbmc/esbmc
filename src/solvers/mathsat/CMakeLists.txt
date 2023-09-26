@@ -32,7 +32,7 @@ if (ENABLE_MATHSAT)
     endif ()
 
     message(STATUS "Using MathSAT at: ${Mathsat_LIB}")
-    string(REGEX MATCH "version ([0-9].[0-9].[0-9]) " REGEX_OUTPUT ${Mathsat_VERSION})
+    string(REGEX MATCH "version ([0-9]+\.[0-9]+\.[0-9]+) " REGEX_OUTPUT ${Mathsat_VERSION})
     set(Mathsat_VERSION "${CMAKE_MATCH_1}")
     message(STATUS "MathSAT version: ${Mathsat_VERSION}")
     if (Mathsat_VERSION VERSION_LESS Mathsat_MIN_VERSION)
