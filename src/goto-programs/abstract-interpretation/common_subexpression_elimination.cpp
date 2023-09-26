@@ -210,17 +210,16 @@ void cse_domaint::havoc_expr(
   for(auto x : to_remove)
   {
     x->dump();
-      available_expressions.erase(x);
-    }
+    available_expressions.erase(x);
+  }
 }
 bool goto_cse::common_expression::should_add_symbol(
   const goto_programt::const_targett &it,
   size_t threshold) const
 {
   auto index = std::find(gen.begin(), gen.end(), it);
-  return index == gen.end()
-    ? false : true;
-    //           : sequence_counter.at(index - gen.begin()) >= threshold;
+  return index == gen.end() ? false : true;
+  //           : sequence_counter.at(index - gen.begin()) >= threshold;
 }
 
 expr2tc goto_cse::common_expression::get_symbol_for_target(
@@ -283,7 +282,6 @@ goto_cse::obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const
   if(state.available_expressions.count(e))
     return e;
 
-
   expr2tc result = expr2tc();
   e->foreach_operand([this, &result, &state](const expr2tc e_inner) {
     if(!result && e_inner)
@@ -294,8 +292,9 @@ goto_cse::obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const
 
 void goto_cse::replace_max_sub_expr(
   expr2tc &e,
-  const expressions_map &expr2symbol,
-  const goto_programt::const_targett &to) const
+  const std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol,
+  const goto_programt::const_targett &to,
+  std::unordered_set<expr2tc, irep2_hash> &matched_expressions) const
 {
   if(!e)
     return;
@@ -307,16 +306,14 @@ void goto_cse::replace_max_sub_expr(
   auto common = expr2symbol.find(e);
   if(common != expr2symbol.end())
   {
-    auto symbol = common->second.get_symbol_for_target(to);
-    if(symbol)
-    {
-      e = symbol;
-      return;
-    }
+    matched_expressions.emplace(e);
+    e = common->second;
+    return;
   }
-  e->Foreach_operand([this, &expr2symbol, &to](expr2tc &e0) {
-    replace_max_sub_expr(e0, expr2symbol, to);
-  });
+  e->Foreach_operand(
+    [this, &expr2symbol, &to, &matched_expressions](expr2tc &e0) {
+      replace_max_sub_expr(e0, expr2symbol, to, matched_expressions);
+    });
 }
 
 bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
@@ -352,8 +349,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       exp.second.kill.push_back(it);
     }
 
-    
-
     const expr2tc max_sub = obtain_max_sub_expr(it->code, state);
     if(max_sub == expr2tc())
       continue;
@@ -372,8 +367,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     // Was the expression unavailable?
     if(!E->second.available)
     {
-
-
       E->second.sequence_counter[E->second.gen.size() - 1] = 0;
     }
 
@@ -410,15 +403,16 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     auto magic = context.move_symbol_to_context(symbol);
     const auto symbol_as_expr = symbol2tc(e->type, magic->id);
     goto_programt::targett decl = F.second.body.insert(it);
-      decl->make_decl();
-      decl->code = code_decl2tc(e->type, magic->id);
-      decl->location = it->location;
+    decl->make_decl();
+    decl->code = code_decl2tc(e->type, magic->id);
+    decl->location = it->location;
 
-      expr2symbol[e] = symbol_as_expr;
+    expr2symbol[e] = symbol_as_expr;
 
-   cse.symbol.push_back(symbol_as_expr);   
+    cse.symbol.push_back(symbol_as_expr);
   }
-  
+
+#if 0
   for(auto it = (F.second.body).instructions.begin();
       it != (F.second.body).instructions.end();
       ++it)
@@ -441,16 +435,27 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       F.second.body.insert_swap(itt, instruction);
     }
   }
+#endif
 
   // 4. Final step, let's replace the symbols!
   for(auto it = (F.second.body).instructions.begin();
       it != (F.second.body).instructions.end();
       ++it)
   {
+    try
+    {
+      available_expressions[it];
+    }
+    catch(...)
+    {
+      continue;
+    }
+
+    const cse_domaint &state = available_expressions[it];
     if(!it->is_assign())
       continue;
 
-    auto assignment = to_code_assign2t(it->code);
+    auto &assignment = to_code_assign2t(it->code);
     if(is_symbol2t(assignment.target))
     {
       // Are we dealing with our CSE symbol?
@@ -458,9 +463,55 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       if(has_prefix(name, prefix))
         continue;
     }
+    // RHS
+    std::unordered_set<expr2tc, irep2_hash> matched_rhs_expressions;
+    replace_max_sub_expr(
+      assignment.source, expr2symbol, it, matched_rhs_expressions);
 
-    log_status("{}", it->location.as_string());
-    replace_max_sub_expr(it->code, expressions, it);
+    for(auto &x : matched_rhs_expressions)
+    {
+      if(!state.available_expressions.count(x))
+      {
+        goto_programt::instructiont instruction;
+        instruction.make_assignment();
+        instruction.code = code_assign2tc(expr2symbol[x], x);
+        instruction.location = it->location;
+        instruction.function = it->function;
+        F.second.body.insert_swap(it, instruction);
+      }
+    }
+
+    // LHS
+    auto cpy = assignment;
+    std::unordered_set<expr2tc, irep2_hash> matched_lhs_expressions;
+    replace_max_sub_expr(
+      assignment.target, expr2symbol, it, matched_lhs_expressions);
+
+    for(auto &x : matched_lhs_expressions)
+    {
+      // First time seeing the expr
+      if(!state.available_expressions.count(x))
+      {
+        it->make_skip();
+        //  assignment.target = cpy;
+
+        goto_programt::instructiont instruction;
+        instruction.make_assignment();
+        instruction.code = code_assign2tc(cpy.target, cpy.source);
+        instruction.location = it->location;
+        instruction.function = it->function;
+
+        goto_programt::instructiont instruction2;
+        instruction2.make_assignment();
+        instruction2.code = code_assign2tc(expr2symbol[x], x);
+        instruction2.location = it->location;
+        instruction2.function = it->function;
+
+        F.second.body.insert_swap(it, instruction2);
+        F.second.body.insert_swap(it, instruction);
+        //F.second.body.insert_swap(it, cpy);
+      }
+    }
   }
   return true;
 }
