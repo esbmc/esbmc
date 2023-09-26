@@ -26,20 +26,42 @@ target_include_directories(smtlib
 # The smtlib backend needs a larger-than-default stack size (at least in Debug
 # builds) because the data structures built for the S-exprs in solver responses
 # could be very large and the std::list destructors use a lot of stack space
-set(stacksize 20971520)  # 20 MB ought to be enough for everyone
-if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:${stacksize}" CACHE STRING "Linker flags" FORCE)
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-  set(stacksize 0x1400000) # macOS uses hex by default (see Issue #1212)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-stack_size,${stacksize}" CACHE STRING "Linker flags" FORCE)
-else()
-  # GNU probably
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,stack-size=${stacksize}" CACHE STRING "Linker flags" FORCE)
+
+# 20 MB ought to be enough for everyone
+set(stacksize_dec 20971520)
+set(stacksize_hex 0x1400000)
+
+include(CheckLinkerFlag)
+
+set(variants
+    "/STACK:${stacksize_dec}"             # MSVC
+    "-Wl,-stack_size,${stacksize_hex}"    # ld.lld, ld64 on macOS, see issue #1212
+    "-Wl,-z,stack-size=${stacksize_dec}"  # ld.bfd, ld.gold
+   )
+
+if(NOT DEFINED has_stacksize_linker_flag)
+  foreach(flag IN LISTS variants)
+    unset(has_stacksize_linker_flag CACHE)
+    check_linker_flag(CXX "${flag}" has_stacksize_linker_flag)
+    if(has_stacksize_linker_flag)
+      message(STATUS "Setting stack-size for executables to 20 MiB via '${flag}'")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${flag}"
+          CACHE STRING "Linker flags" FORCE)
+      break()
+    endif()
+  endforeach()
+endif()
+
+if(NOT has_stacksize_linker_flag)
+  message(WARNING
+          "Unable to find flag to set stack-size for executables; "
+          "option --smtlib might produce stack overflows for deeply nested "
+          "terms; please let the ESBMC developers know about the compiler and "
+          "linker used.")
 endif()
 
 # Add to solver link
 target_link_libraries(solvers INTERFACE smtlib)
-
 
 set(ESBMC_ENABLE_smtlib 1 PARENT_SCOPE)
 set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} smtlib" PARENT_SCOPE)
