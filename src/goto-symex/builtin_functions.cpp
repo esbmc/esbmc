@@ -415,6 +415,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       idx = 2;
     }
   }
+  else
+    abort();
 
   // Now we pop the format
   for(size_t i = 0; i < idx; i++)
@@ -491,6 +493,8 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
     fmt_idx = 1;
     number_of_format_args = func_call.operands.size() - 2;
   }
+  else
+    abort();
 
   if(func_call.ret)
     symex_assign(code_assign2tc(
@@ -1200,9 +1204,10 @@ static inline expr2tc gen_value_by_byte(
 
     uint64_t union_total_size = type_byte_size(type).to_uint64();
     // Let's find a member with the biggest size
-    int selected_member_index;
+    size_t n = to_union_type(type).members.size();
+    size_t selected_member_index = n;
 
-    for(unsigned i = 0; i < to_union_type(type).members.size(); i++)
+    for(size_t i = 0; i < n; i++)
     {
       if(
         type_byte_size(to_union_type(type).members[i]).to_uint64() ==
@@ -1212,6 +1217,8 @@ static inline expr2tc gen_value_by_byte(
         break;
       }
     }
+
+    assert(selected_member_index < n);
 
     const irep_idt &name =
       to_union_type(type).member_names[selected_member_index];
