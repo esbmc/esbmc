@@ -858,8 +858,11 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
       // preserve #c_sizeof_type -- don't make it a reference!
       const irept c_sizeof_type = dest.op0().c_sizeof_type();
 
-      simplify_exprt simplify_expr;
-      simplify_expr.simplify_typecast(dest, false);
+      if(!no_simplify)
+      {
+        simplify_exprt simplify_expr;
+        simplify_expr.simplify_typecast(dest, false);
+      }
 
       if(c_sizeof_type.is_not_nil())
         dest.c_sizeof_type(c_sizeof_type);
@@ -897,8 +900,11 @@ void c_typecastt::do_typecast(expr2tc &dest, const type2tc &type)
       const irept c_sizeof_type=
         dest.op0().c_sizeof_type();
 
-      simplify_exprt simplify_expr;
-      simplify_expr.simplify_typecast(dest, simplify_exprt::NORMAL);
+      if(!no_simplify)
+      {
+        simplify_exprt simplify_expr;
+        simplify_expr.simplify_typecast(dest, simplify_exprt::NORMAL);
+      }
 
       if(c_sizeof_type.is_not_nil())
         dest.cmt_c_sizeof_type(c_sizeof_type);
