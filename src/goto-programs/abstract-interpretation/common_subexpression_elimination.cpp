@@ -1,4 +1,5 @@
 #include "irep2/irep2_expr.h"
+#include "util/std_code.h"
 #include <goto-programs/abstract-interpretation/common_subexpression_elimination.h>
 #include <ostream>
 #include <sstream>
@@ -40,6 +41,13 @@ void cse_domaint::transform(
   case DEAD:
     havoc_symbol(to_code_dead2t(instruction.code).value);
     break;
+
+  case RETURN:
+  {
+    const code_return2t &cr = to_code_return2t(instruction.code);
+    make_expression_available(cr.operand);
+    break;
+  }
 
   case FUNCTION_CALL:
   {
@@ -320,21 +328,20 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 {
   if(!program_initialized)
     return false;
+
+  auto name = F.first.as_string();
+  if(has_prefix(name, "c:@F@main"))
+    return false;
   if(!F.second.body_available)
     return false;
 
-  // 1. Let's count expressions
-
-  // Compute all possible sequences
+  // 1. Let's count expressions, the idea is to go through all program statements
+  //    and check if any sub-expr is already available
   expressions_map expressions;
   for(auto it = (F.second.body).instructions.begin();
       it != (F.second.body).instructions.end();
       ++it)
   {
-    //if(
-    //  !it->is_assign()) // Maybe we need to consider function call as well (havoc)
-    //  continue;
-
     const cse_domaint &state = available_expressions[it];
 
     // Are the intervals still available (TODO: this can be parallel)
@@ -397,72 +404,118 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
   // 3. Instrument new tmp symbols
   std::unordered_map<expr2tc, expr2tc, irep2_hash> expr2symbol;
   auto it = (F.second.body).instructions.begin();
+  const cse_domaint &state = available_expressions[it];
   for(auto &[e, cse] : expressions)
   {
     symbolt symbol = create_cse_symbol(e->type, it);
     auto magic = context.move_symbol_to_context(symbol);
     const auto symbol_as_expr = symbol2tc(e->type, magic->id);
-    goto_programt::targett decl = F.second.body.insert(it);
-    decl->make_decl();
-    decl->code = code_decl2tc(e->type, magic->id);
-    decl->location = it->location;
+
+    goto_programt::instructiont init;
+    init.make_assignment();
+    init.code = code_assign2tc(symbol_as_expr, e);
+    init.location = it->location;
+    init.function = it->function;
+
+    goto_programt::instructiont decl;
+    decl.make_decl();
+    decl.code = code_decl2tc(e->type, magic->id);
+    decl.location = it->location;
+
+    if(state.available_expressions.count(e))
+      F.second.body.insert_swap(it, init);
+
+    F.second.body.insert_swap(it, decl);
 
     expr2symbol[e] = symbol_as_expr;
 
     cse.symbol.push_back(symbol_as_expr);
   }
 
-#if 0
-  for(auto it = (F.second.body).instructions.begin();
-      it != (F.second.body).instructions.end();
-      ++it)
-  {
-    for(auto &[e, cse] :
-        expressions | std::ranges::views::filter([this, &it](auto elem) {
-          return elem.second.should_add_symbol(it, threshold);
-        }))
-    {
-      auto itt = it;
-      itt--;
-      //      itt--;
-      //      itt->dump();
-      goto_programt::instructiont instruction;
-      instruction.make_assignment();
-      instruction.code = code_assign2tc(expr2symbol[e], e);
-      //goto_programt::targett t = F.second.body.insert(itt);
-      instruction.location = it->location;
-      instruction.function = it->function;
-      F.second.body.insert_swap(itt, instruction);
-    }
-  }
-#endif
-
   // 4. Final step, let's replace the symbols!
   for(auto it = (F.second.body).instructions.begin();
       it != (F.second.body).instructions.end();
       ++it)
   {
-    try
+    if(!available_expressions.target_is_mapped(it))
+      continue;
+
+    const cse_domaint &state = available_expressions[it];
+
+    if(it->is_goto() || it->is_assume() || it->is_assert())
     {
-      available_expressions[it];
-    }
-    catch(...)
-    {
+      std::unordered_set<expr2tc, irep2_hash> matched_expressions;
+      replace_max_sub_expr(it->guard, expr2symbol, it, matched_expressions);
+      for(auto &x : matched_expressions)
+      {
+        if(!state.available_expressions.count(x))
+        {
+          goto_programt::instructiont instruction;
+          instruction.make_assignment();
+          instruction.code = code_assign2tc(expr2symbol[x], x);
+          instruction.location = it->location;
+          instruction.function = it->function;
+          F.second.body.insert_swap(it, instruction);
+        }
+      }
       continue;
     }
 
-    const cse_domaint &state = available_expressions[it];
-    if(!it->is_assign())
+    if(it->is_function_call())
+    {
+      std::unordered_set<expr2tc, irep2_hash> matched_expressions;
+      code_function_call2t &function = to_code_function_call2t(it->code);
+      replace_max_sub_expr(
+        function.function, expr2symbol, it, matched_expressions);
+      for(auto &x : matched_expressions)
+      {
+        if(!state.available_expressions.count(x))
+        {
+          goto_programt::instructiont instruction;
+          instruction.make_assignment();
+          instruction.code = code_assign2tc(expr2symbol[x], x);
+          instruction.location = it->location;
+          instruction.function = it->function;
+          F.second.body.insert_swap(it, instruction);
+        }
+      }
+    }
+
+    if(it->is_return())
+    {
+      std::unordered_set<expr2tc, irep2_hash> matched_expressions;
+      replace_max_sub_expr(it->code, expr2symbol, it, matched_expressions);
+      for(auto &x : matched_expressions)
+      {
+        if(!state.available_expressions.count(x))
+        {
+          goto_programt::instructiont instruction;
+          instruction.make_assignment();
+          instruction.code = code_assign2tc(expr2symbol[x], x);
+          instruction.location = it->location;
+          instruction.function = it->function;
+          F.second.body.insert_swap(it, instruction);
+        }
+      }
+      continue;
+    }
+
+    if(it->is_assign())
+    {
+      if(is_symbol2t(to_code_assign2t(it->code).target))
+      {
+        // Are we dealing with our CSE symbol?
+        auto name =
+          to_symbol2t(to_code_assign2t(it->code).target).thename.as_string();
+        if(has_prefix(name, prefix))
+          continue;
+      }
+    }
+    else
       continue;
 
     auto &assignment = to_code_assign2t(it->code);
-    if(is_symbol2t(assignment.target))
-    {
-      // Are we dealing with our CSE symbol?
-      auto name = to_symbol2t(assignment.target).thename.as_string();
-      if(has_prefix(name, prefix))
-        continue;
-    }
+
     // RHS
     std::unordered_set<expr2tc, irep2_hash> matched_rhs_expressions;
     replace_max_sub_expr(
@@ -493,8 +546,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       if(!state.available_expressions.count(x))
       {
         it->make_skip();
-        //  assignment.target = cpy;
-
         goto_programt::instructiont instruction;
         instruction.make_assignment();
         instruction.code = code_assign2tc(cpy.target, cpy.source);
@@ -509,7 +560,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 
         F.second.body.insert_swap(it, instruction2);
         F.second.body.insert_swap(it, instruction);
-        //F.second.body.insert_swap(it, cpy);
       }
     }
   }
