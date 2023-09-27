@@ -2778,6 +2778,9 @@ bool simplify_exprt::simplify_rec(exprt &expr, bool simpl_const_objects)
 
 bool simplify(exprt &expr)
 {
+  if(config.options.get_bool_option("no-simplify"))
+    return true;
+
   simplify_exprt simplify_expr;
 
   return simplify_expr.simplify(expr);
