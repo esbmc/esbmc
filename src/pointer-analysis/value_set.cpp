@@ -1291,6 +1291,11 @@ void value_sett::assign_rec(
   {
     // Ignored
   }
+  else if (is_invalid2t(lhs))
+  {
+    // Assigning an invalid object, not much we can do
+    return;
+  }
   else if (is_typecast2t(lhs))
   {
     assign_rec(to_typecast2t(lhs).from, values_rhs, suffix, add_to_sets);
@@ -1301,7 +1306,9 @@ void value_sett::assign_rec(
   }
   else
   {
-    throw std::runtime_error("assign NYI: `{}'" + get_expr_id(lhs));
+    log_error("[VSA] assign NYI: `{}'", get_expr_id(lhs));
+    lhs->dump();
+    throw std::runtime_error("unsupported NYI");
   }
 }
 
