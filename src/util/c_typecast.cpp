@@ -859,7 +859,7 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
       const irept c_sizeof_type = dest.op0().c_sizeof_type();
 
       simplify_exprt simplify_expr;
-      simplify_expr.simplify_typecast(dest);
+      simplify_expr.simplify_typecast(dest, false);
 
       if(c_sizeof_type.is_not_nil())
         dest.c_sizeof_type(c_sizeof_type);
