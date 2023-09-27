@@ -1,1 +1,1 @@
-my_var = 1/0
+my_var: float = 1/0
