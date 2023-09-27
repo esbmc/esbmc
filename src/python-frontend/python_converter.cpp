@@ -25,6 +25,13 @@ std::string get_op(const std::string &op)
   return std::string();
 }
 
+typet get_type(const json& json) {
+	std::string type = json["annotation"]["id"].get<std::string>();
+	if (type == "float") return float_type();
+	if (type == "int") return int_type();
+	return empty_typet();
+}
+
 bool python_converter::convert()
 {
   codet init_code = code_blockt();
@@ -35,7 +42,7 @@ bool python_converter::convert()
 
   for(auto &element : ast["body"])
   {
-    if(element["_type"] == "Assign")
+    if(element["_type"] == "AnnAssign")
     {
       std::string lhs("");
 
@@ -47,10 +54,11 @@ bool python_converter::convert()
         }
       }
 
-      typet type = uint_type();
+      typet type = get_type(element);
       locationt location;
       location.set_line(1);
       location.set_file("program.py");
+
       symbolt symbol;
       symbol.mode = "Python";
       symbol.module = "program.py";
