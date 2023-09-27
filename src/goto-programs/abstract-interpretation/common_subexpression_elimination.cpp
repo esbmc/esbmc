@@ -216,7 +216,6 @@ void cse_domaint::havoc_expr(
   }
   for(auto x : to_remove)
   {
-    x->dump();
     available_expressions.erase(x);
   }
 }
