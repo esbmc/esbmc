@@ -208,7 +208,6 @@ void cse_domaint::havoc_expr(
       }
     }
   }
-  log_status("Removing {}", *target);
   std::vector<expr2tc> to_remove;
   for(auto x : available_expressions)
   {
@@ -378,25 +377,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     }
 
     E->second.sequence_counter[E->second.gen.size() - 1] += 1;
-  }
-
-  // Let's filter sequences lower than the threshold
-
-  // 2. We might print some context now
-  if(verbose_mode)
-  {
-    for(const auto &[k, v] : expressions)
-    {
-      log_status("Expression {}", *k);
-
-      log_status("GEN");
-      for(const auto &g : v.gen)
-        log_status("\t{}", g->location.as_string());
-
-      log_status("KILL");
-      for(const auto &kill : v.kill)
-        log_status("\t{}", kill->location.as_string());
-    }
   }
 
   // Early exit, if no symbols.
