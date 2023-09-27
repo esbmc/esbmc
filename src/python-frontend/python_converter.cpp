@@ -7,10 +7,23 @@
 
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include <unordered_map>
 
 using json = nlohmann::json;
 
 const char *json_filename = "/tmp/ast.json";
+
+std::unordered_map<std::string, std::string> operator_map = {
+  {"Add", "+"},
+  {"Sub", "-"},
+  {"Mult", "*"},
+  {"Div", "/"},
+  {"BitOr", "bitor"},
+  {"BitAnd", "bitand"},
+  {"BitXor", "bitxor"},
+  {"Invert", "bitnot"},
+  {"LShift", "shl"},
+  {"RShift", "lsr"}};
 
 python_converter::python_converter(contextt &_context) : context(_context)
 {
@@ -18,18 +31,22 @@ python_converter::python_converter(contextt &_context) : context(_context)
 
 std::string get_op(const std::string &op)
 {
-  if(op == "Div")
-    return "/";
-  if(op == "Add")
-    return "+";
+  auto it = operator_map.find(op);
+  if(it != operator_map.end())
+  {
+    return it->second;
+  }
   return std::string();
 }
 
-typet get_type(const json& json) {
-	std::string type = json["annotation"]["id"].get<std::string>();
-	if (type == "float") return float_type();
-	if (type == "int") return int_type();
-	return empty_typet();
+typet get_type(const json &json)
+{
+  std::string type = json["annotation"]["id"].get<std::string>();
+  if(type == "float")
+    return float_type();
+  if(type == "int")
+    return int_type();
+  return empty_typet();
 }
 
 bool python_converter::convert()
