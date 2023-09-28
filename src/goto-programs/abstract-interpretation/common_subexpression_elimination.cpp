@@ -5,7 +5,6 @@
 #include <sstream>
 #include <util/prefix.h>
 #include <fmt/format.h>
-#include <ranges>
 // TODO: Do an points-to abstract interpreter
 std::unique_ptr<value_set_analysist> cse_domaint::vsa = nullptr;
 
@@ -104,9 +103,13 @@ bool cse_domaint::merge(
   }
 
   size_t size_before_intersection = available_expressions.size();
-  std::erase_if(available_expressions, [&b](const expr2tc &e) {
-    return !b.available_expressions.count(e);
-  });
+  for(auto it = available_expressions.begin();
+      it != available_expressions.end();
+      it++)
+  {
+    if(!b.available_expressions.count(*it))
+      it = available_expressions.erase(it);
+  }
 
   return size_before_intersection != available_expressions.size();
 }
@@ -343,16 +346,15 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     const cse_domaint &state = available_expressions[it];
 
     // Are the intervals still available (TODO: this can be parallel)
-    for(auto &exp :
-        expressions | std::ranges::views::filter([&state](auto &elem) {
-          // Expression was available and now it isn't
-          return elem.second.available &&
-                 !state.available_expressions.count(elem.first);
-        }))
+    for(auto &exp : expressions)
     {
+      if(exp.second.available && !state.available_expressions.count(exp.first))
+	{
       exp.second.available = false;
       exp.second.kill.push_back(it);
+	}
     }
+    
 
     const expr2tc max_sub = obtain_max_sub_expr(it->code, state);
     if(max_sub == expr2tc())
