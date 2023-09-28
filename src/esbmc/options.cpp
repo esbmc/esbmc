@@ -430,7 +430,8 @@ const struct group_opt_templ all_cmd_options[] = {
   {"Miscellaneous options",
    {{"memlimit",
      boost::program_options::value<std::string>()->value_name("limit"),
-     "configure memory limit, of form \"100m\" or \"2g\""},
+     "configure memory limit, of form \"100m\" or \"2g\"; without suffix the "
+     "default unit is 'm'."},
     {"memstats", NULL, "print memory usage statistics"},
     {"timeout",
      boost::program_options::value<std::string>()->value_name("t"),
