@@ -88,14 +88,8 @@ bool cse_domaint::merge(
    * Since we do not have a CFG GOTO abstract interpreter we
    * simulate one by just passing through common instructions
    * and only doing intersections at target destinations */
-  // We don't care about the type of instruction to merge.
-  if(is_bottom())
-  {
-    available_expressions = b.available_expressions;
-    return true;
-  }
-
-  if(!to->is_target() || !from->is_function_call())
+ 
+  if(!(to->is_target() || from->is_function_call()) || is_bottom())
   {
     bool changed = available_expressions != b.available_expressions;
     available_expressions = b.available_expressions;
@@ -330,9 +324,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
   if(!program_initialized)
     return false;
 
-  auto name = F.first.as_string();
-  if(has_prefix(name, "c:@F@main"))
-    return false;
   if(!F.second.body_available)
     return false;
 
