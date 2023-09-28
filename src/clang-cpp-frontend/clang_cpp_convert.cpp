@@ -758,7 +758,8 @@ bool clang_cpp_convertert::get_constructor_call(
   call.type() = type;
 
   // Try to get the object that this constructor is constructing
-  auto it = ASTContext->getParents(constructor_call).begin();
+  auto parents = ASTContext->getParents(constructor_call);
+  auto it = parents.begin();
   const clang::Decl *objectDecl = it->get<clang::Decl>();
 
   if(!objectDecl && need_new_object(it->get<clang::Stmt>(), constructor_call))
