@@ -1717,7 +1717,10 @@ bool esbmc_parseoptionst::process_goto_program(
       value_set_analysist value_set_analysis(ns);
       value_set_analysis(goto_functions);
 
-      add_race_assertions(value_set_analysis, context, goto_functions);
+      std::set<irep_idt> idts;
+      value_set_analysis.get_concurrent_idts(idts);
+
+      add_race_assertions(value_set_analysis, context, goto_functions, idts);
 
       value_set_analysis.update(goto_functions);
     }

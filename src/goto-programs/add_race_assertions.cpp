@@ -176,12 +176,18 @@ void add_race_assertions(
 void add_race_assertions(
   value_setst &value_sets,
   contextt &context,
-  goto_functionst &goto_functions)
+  goto_functionst &goto_functions,
+  std::set<irep_idt> idts)
 {
   w_guardst w_guards(context);
 
-  Forall_goto_functions(f_it, goto_functions)
-    add_race_assertions(value_sets, context, f_it->second.body, w_guards);
+  for(auto &identifier : idts)
+  {
+    goto_functionst::function_mapt::iterator it =
+      goto_functions.function_map.find(identifier);
+
+    add_race_assertions(value_sets, context, it->second.body, w_guards);
+  }
 
   // get "main"
   goto_functionst::function_mapt::iterator m_it =

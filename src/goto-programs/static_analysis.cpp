@@ -52,6 +52,16 @@ void static_analysis_baset::operator()(const goto_programt &goto_program)
   fixedpoint(goto_program, goto_functions);
 }
 
+void static_analysis_baset::get_concurrent_idts(std::set<irep_idt> &idts)
+{
+  // We use a recursive approach here to handle this situation: 
+  // func1 {func2(); func3()} we need to handle the inner function
+  for(const auto &identifier : pthread_set)
+  {
+    idts.insert(identifier);
+  }
+}
+
 void static_analysis_baset::output(
   const goto_functionst &goto_functions,
   std::ostream &out) const
@@ -300,8 +310,6 @@ void static_analysis_baset::do_function_call_rec(
   {
     irep_idt identifier = to_symbol2t(function).get_symbol_name();
 
-    const std::string id = identifier.as_string();
-
     std::vector<expr2tc> new_args;
 
     // When calling 'pthread_create' method, we need to make adjustments
@@ -309,7 +317,7 @@ void static_analysis_baset::do_function_call_rec(
     // call on the child thread
 
     // TODO: A more robust way to find the method
-    if(id == "c:@F@pthread_create")
+    if(id2string(identifier) == "c:@F@pthread_create")
     {
       // pthread_create(id, *attr, void *func, void *arg);
       // From this we get the func's identifier that was called,
@@ -318,6 +326,8 @@ void static_analysis_baset::do_function_call_rec(
       identifier = to_symbol_expr(tmp.op0()).get_identifier();
 
       new_args.push_back(arguments[3]);
+
+      pthread_set.insert(identifier);
     }
     else
       new_args = arguments;

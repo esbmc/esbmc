@@ -146,7 +146,7 @@ const expr2tc &dereferencet::get_symbol(const expr2tc &expr)
 
 /************************* Expression decomposing code ************************/
 
-void dereferencet::dereference_expr(expr2tc &expr, guardt &guard, modet mode, bool make_failed)
+void dereferencet::dereference_expr(expr2tc &expr, guardt &guard, modet mode)
 {
   if(!has_dereference(expr))
     return;
@@ -174,7 +174,7 @@ void dereferencet::dereference_expr(expr2tc &expr, guardt &guard, modet mode, bo
     dereference_expr(deref.value, guard, dereferencet::READ);
 
     expr2tc tmp_obj = deref.value;
-    expr2tc result = dereference(tmp_obj, deref.type, guard, mode, expr2tc(), make_failed);
+    expr2tc result = dereference(tmp_obj, deref.type, guard, mode, expr2tc());
     expr = result;
     break;
   }
@@ -459,8 +459,7 @@ expr2tc dereferencet::dereference(
   const type2tc &to_type,
   const guardt &guard,
   modet mode,
-  const expr2tc &lexical_offset,
-  bool make_failed)
+  const expr2tc &lexical_offset)
 {
   internal_items.clear();
 
@@ -495,7 +494,7 @@ expr2tc dereferencet::dereference(
     known_exhaustive &= !(is_unknown2t(target) || is_invalid2t(target));
 
   expr2tc value;
-  if(!known_exhaustive && make_failed)
+  if(!known_exhaustive)
     value = make_failed_symbol(type);
 
   for(const expr2tc &target : points_to_set)
@@ -532,7 +531,7 @@ expr2tc dereferencet::dereference(
     dereference_callback.dump_internal_state(internal_items);
     internal_items.clear();
   }
-  else if(is_nil_expr(value) && make_failed)
+  else if(is_nil_expr(value))
   {
     /* Fallback if dereference failes entirely: to make this a valid formula,
      * return a failed symbol, so that this assignment gets a well typed free

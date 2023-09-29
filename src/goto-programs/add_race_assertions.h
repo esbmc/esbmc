@@ -13,6 +13,7 @@ void add_race_assertions(
 void add_race_assertions(
   value_setst &value_sets,
   contextt &context,
-  goto_functionst &goto_functions);
+  goto_functionst &goto_functions,
+  std::set<irep_idt> idts);
 
 #endif

@@ -118,6 +118,8 @@ public:
     output(goto_program, "", out);
   }
 
+  void get_concurrent_idts(std::set<irep_idt> &idts);
+
   virtual bool has_location(locationt l) const = 0;
 
   void insert(locationt l)
@@ -173,6 +175,9 @@ protected:
 
   typedef std::set<irep_idt> recursion_sett;
   recursion_sett recursion_set;
+
+  typedef std::set<irep_idt> pthread_sett;
+  pthread_sett pthread_set;
 
   void generate_states(const goto_functionst &goto_functions);
 
