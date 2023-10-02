@@ -46,6 +46,13 @@ The figure below illustrates the current ESBMC architecture. The tool inputs a C
 
 ![esbmc-architecture-v2](https://github.com/esbmc/esbmc/assets/3694109/28c423a3-39a2-41f1-828d-cb40dfbe4743)
 
+### Awards
+
+* Distinguished Paper Award at ICSE’11
+* Best Paper Award at SBESC’15
+* Most Influential Paper Award at ASE’23
+* 29 awards from international competitions on software verification (SV-COMP) and testing (Test-Comp) 2012-2023 at TACAS/FASE (Bug Finding and Code Coverage).
+
 ### Selected Publications
 
 * Yiannis Charalambous, Norbert Tihanyi, Ridhi Jain, Youcheng Sun, Mohamed Amine Ferrag, Lucas C. Cordeiro. [A New Era in Software Security: Towards Self-Healing Software via Large Language Models and Formal Verification](https://arxiv.org/pdf/2305.14752.pdf). Technical Report, CoRR abs/2305.14752, 2023. [DOI](https://doi.org/10.48550/arXiv.2305.14752)
