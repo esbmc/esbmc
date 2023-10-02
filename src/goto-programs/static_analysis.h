@@ -118,7 +118,14 @@ public:
     output(goto_program, "", out);
   }
 
-  void get_concurrent_idts(std::set<irep_idt> &idts);
+  void get_concurrent_idts(
+    const goto_functionst &goto_functions,
+    std::set<irep_idt> &idts);
+
+  void insert_idt(
+    const goto_functionst &goto_functions,
+    std::set<irep_idt> &idts,
+    const irep_idt &idt);
 
   virtual bool has_location(locationt l) const = 0;
 
@@ -143,6 +150,13 @@ protected:
   {
     working_set.insert(std::pair<unsigned, locationt>(l->location_number, l));
   }
+
+  void visit_function(
+    locationt l,
+    working_sett &working_set,
+    const goto_programt &goto_program,
+    const goto_functionst &goto_functions,
+    std::set<irep_idt> &idts);
 
   // true = found s.th. new
   bool fixedpoint(

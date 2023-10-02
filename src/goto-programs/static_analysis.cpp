@@ -52,13 +52,81 @@ void static_analysis_baset::operator()(const goto_programt &goto_program)
   fixedpoint(goto_program, goto_functions);
 }
 
-void static_analysis_baset::get_concurrent_idts(std::set<irep_idt> &idts)
+void static_analysis_baset::get_concurrent_idts(
+  const goto_functionst &goto_functions,
+  std::set<irep_idt> &idts)
 {
-  // We use a recursive approach here to handle this situation: 
+  idts.insert(pthread_set.begin(), pthread_set.end());
+  // Use a recursive approach here to handle this situation:
   // func1 {func2(); func3()} we need to handle the inner function
   for(const auto &identifier : pthread_set)
   {
-    idts.insert(identifier);
+    insert_idt(goto_functions, idts, identifier);
+  }
+}
+
+void static_analysis_baset::insert_idt(
+  const goto_functionst &goto_functions,
+  std::set<irep_idt> &idts,
+  const irep_idt &idt)
+{
+  // Find the corresponding function in the map by the identifier
+  goto_functionst::function_mapt::const_iterator it =
+    goto_functions.function_map.find(idt);
+
+  const goto_functiont &goto_function = it->second;
+
+  working_sett working;
+
+  put_in_working_set(working, goto_function.body.instructions.begin());
+
+  // Here we are using a recursive approach, if there is a function
+  // call inside, we find the function and double check if there is a
+  // function call inside, collect identifiers from all relevant function calls
+  while(!working.empty())
+  {
+    locationt l = get_next(working);
+    visit_function(l, working, goto_function.body, goto_functions, idts);
+  }
+}
+
+void static_analysis_baset::visit_function(
+  locationt l,
+  working_sett &working,
+  const goto_programt &goto_program,
+  const goto_functionst &goto_functions,
+  std::set<irep_idt> &idts)
+{
+  goto_programt::const_targetst successors;
+
+  goto_program.get_successors(l, successors);
+
+  for(goto_programt::const_targetst::const_iterator it = successors.begin();
+      it != successors.end();
+      it++)
+  {
+    locationt to_l = *it;
+    // Recursively fetches the function calls inside and adds them to the set,
+    // func1{func2}->func2{func3}->fun3(),
+    // add idts of func1, func2, func3.
+    if(l->is_function_call())
+    {
+      const code_function_call2t &code = to_code_function_call2t(l->code);
+      irep_idt identifier = to_symbol2t(code.function).get_symbol_name();
+
+      // We should ignore all function calls from libraries,
+      // for some libraries, infinite recursion may occur,
+      // but there's no good way to identify all the libraries,
+      // so for now we'll only consider the following:
+      // pthread_mutex_lock(), pthread_mutex_unlock(),
+      // pthread_exit(NULL)
+      if(!has_prefix(id2string(identifier), "c:@F@pthread_"))
+      {
+        idts.insert(identifier);
+        insert_idt(goto_functions, idts, identifier);
+      }
+    }
+    put_in_working_set(working, to_l);
   }
 }
 
@@ -317,7 +385,7 @@ void static_analysis_baset::do_function_call_rec(
     // call on the child thread
 
     // TODO: A more robust way to find the method
-    if(id2string(identifier) == "c:@F@pthread_create")
+    if(has_prefix(id2string(identifier), "c:@F@pthread_create"))
     {
       // pthread_create(id, *attr, void *func, void *arg);
       // From this we get the func's identifier that was called,

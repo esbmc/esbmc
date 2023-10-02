@@ -90,17 +90,15 @@ void rw_sett::read_write_rec(
     assert(expr.operands().size() == 1);
     read(expr.op0(), guard);
 
-    exprt tmp;
     expr2tc tmp_expr;
     migrate_expr(expr, tmp_expr);
     dereference(target, tmp_expr, ns, value_sets);
-    if(!is_nil_expr(tmp_expr))
-    {
-      tmp = migrate_expr_back(tmp_expr);
-      tmp.type().subtype() = typet("dereferenced_symbol");
-    }
-    else
-      return;
+    exprt tmp = migrate_expr_back(tmp_expr);
+
+    // We add a subtype to the symbol we dereferenced,
+    // Since symbol is not static_lifetime, we will mark
+    // it as "dereferenced_symbol" for now to pass the filter
+    tmp.type().subtype() = typet("dereferenced_symbol");
 
     read_write_rec(tmp, r, w, suffix, guard);
   }
