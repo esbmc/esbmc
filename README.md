@@ -52,7 +52,7 @@ The figure below illustrates the current ESBMC architecture. The tool inputs a C
 * Best Paper Award at SBESC’15
 * Most Influential Paper Award at ASE’23
 * Best Tool Paper Award at SBSeg'23
-* 29 awards from international competitions on software verification (SV-COMP) and testing (Test-Comp) 2012-2023 at TACAS/FASE (Bug Finding and Code Coverage).
+* 29 awards from international competitions on software verification (SV-COMP) and testing (Test-Comp) 2012-2023 at TACAS/FASE (Strength: Bug Finding and Code Coverage).
 
 ### Selected Publications
 
