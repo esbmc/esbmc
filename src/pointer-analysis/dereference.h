@@ -406,28 +406,13 @@ private:
     const type2tc &type,
     const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
-  std::vector<expr2tc> extract_bytes_from_array(
-    const expr2tc &array,
-    unsigned int bytes,
-    const expr2tc &offset,
-    const guardt &guard,
-    modet mode,
-    unsigned int alignment);
-  std::vector<expr2tc> extract_bytes_from_scalar(
+  std::vector<expr2tc> extract_bytes(
     const expr2tc &object,
     unsigned int bytes,
     const expr2tc &offset,
     const guardt &guard,
     modet mode,
     unsigned int alignment);
-  void internal_extract_bytes(
-    const expr2tc &object,
-    unsigned int num_bytes,
-    const expr2tc &offset,
-    const guardt &guard,
-    modet mode,
-    unsigned int alignment,
-    std::vector<expr2tc> &bytes);
   expr2tc stitch_together_from_byte_array(
     unsigned int num_bytes,
     const std::vector<expr2tc> &bytes);
