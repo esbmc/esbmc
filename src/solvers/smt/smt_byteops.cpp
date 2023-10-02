@@ -1,18 +1,6 @@
 #include <solvers/smt/smt_conv.h>
 #include <util/type_byte_size.h>
 
-/* return index expression into array, updates offset */
-static expr2tc array_index_offset(const expr2tc &array, expr2tc &offset_bytes)
-{
-  assert(is_array_type(array));
-  const array_type2t &type = to_array_type(array->type);
-  const type2tc &subtype = type.subtype;
-  expr2tc subtype_size = type_byte_size_expr(subtype);
-  expr2tc div = div2tc(offset_bytes->type, offset_bytes, subtype_size);
-  offset_bytes = modulus2tc(offset_bytes->type, offset_bytes, subtype_size);
-  return index2tc(subtype, array, div);
-}
-
 smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 {
   if(int_encoding)
@@ -28,8 +16,6 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
   expr2tc offs = data.source_offset;
 
   assert(!is_array_type(source));
-  while(is_array_type(source))
-    source = array_index_offset(source, offs);
 
   unsigned int src_width = source->type->get_width();
 

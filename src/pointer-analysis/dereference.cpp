@@ -1295,8 +1295,9 @@ void dereferencet::construct_from_array(
     simplify(offset_bytes);
 
     // Extracting and stitching bytes together
-    value = stitch_together_from_byte_array(
-      num_bytes, extract_bytes_from_array(value, num_bytes, offset_bytes, guard, mode, alignment));
+    std::vector<expr2tc> bytes =
+      extract_bytes(value, num_bytes, offset_bytes, guard, mode, alignment);
+    value = stitch_together_from_byte_array(num_bytes, bytes);
 
     expr2tc offset_bits = typecast2tc(
       size_type2(),
@@ -1363,7 +1364,7 @@ void dereferencet::construct_from_const_offset(
 
   // Extracting and stitching bytes together
   value = stitch_together_from_byte_array(
-    num_bytes, extract_bytes_from_scalar(value, num_bytes, offset_bytes, guard, mode, alignment));
+    num_bytes, extract_bytes(value, num_bytes, offset_bytes, guard, mode, alignment));
 
   expr2tc offset_bits =
     modulus2tc(offset->type, offset, gen_long(offset->type, 8));
@@ -1636,7 +1637,7 @@ void dereferencet::construct_from_dyn_offset(
 
   // Extracting and stitching bytes together
   value = stitch_together_from_byte_array(
-    num_bytes, extract_bytes_from_scalar(value, num_bytes, offset_bytes, guard, mode, alignment));
+    num_bytes, extract_bytes(value, num_bytes, offset_bytes, guard, mode, alignment));
 
   // Extracting bits from the produced bv
   value = extract_bits_from_byte_array(
@@ -2042,95 +2043,7 @@ void dereferencet::alignment_failure(
     dereference_failure("Pointer alignment", error_name, guard);
 }
 
-void dereferencet::internal_extract_bytes(
-  const expr2tc &object,
-  unsigned int num_bytes,
-  const expr2tc &offset,
-  const guardt &guard,
-  modet mode,
-  unsigned int alignment,
-  std::vector<expr2tc> &bytes)
-{
-  if(!num_bytes)
-    return;
-
-  // Don't produce a byte update of a byte.
-  if(is_byte_type(object))
-  {
-    assert(num_bytes == 1);
-    bytes.push_back(object);
-    return;
-  }
-
-  const type2tc &bytetype = get_uint8_type();
-  for(unsigned i = 0; i < num_bytes; i++)
-  {
-    expr2tc o = offset;
-    if(i)
-      o = add2tc(o->type, o, gen_long(o->type, i));
-    bytes.emplace_back(
-      byte_extract2tc(bytetype, object, o, is_big_endian));
-  }
-}
-
-std::vector<expr2tc> dereferencet::extract_bytes_from_array(
-  const expr2tc &array,
-  unsigned int num_bytes,
-  const expr2tc &offset,
-  const guardt &guard,
-  modet mode,
-  unsigned int alignment)
-{
-  type2tc subtype, idx_type = index_type2();
-  assert(num_bytes != 0);
-
-  assert(
-    (is_array_type(array) || is_string_type(array)) &&
-    "Can only extract bytes for stitching from arrays");
-
-  if(is_array_type(array))
-  {
-    const array_type2t &arr_type = to_array_type(array->type);
-    subtype = arr_type.subtype;
-    if(arr_type.array_size)
-      idx_type = arr_type.array_size->type;
-    assert(
-      !is_array_type(subtype) &&
-      "Can't extract bytes from multi-dimensional arrays");
-  }
-  else
-  {
-    subtype = get_uint8_type(); //XXX signedness of chars
-  }
-
-  // Calculating how many bytes are occupied by each array element
-  unsigned int bytes_per_index = subtype->get_width() / 8;
-  std::vector<expr2tc> exprs;
-  exprs.reserve(num_bytes);
-
-  const type2tc &bytetype = get_uint8_type();
-  std::vector<expr2tc> elem_offsets(std::min(num_bytes, bytes_per_index));
-  expr2tc bpi = gen_long(offset->type, bytes_per_index);
-  for(unsigned i = 0; i < num_bytes; i++)
-  {
-    /* Calculate the array index based on the given byte offset, the remainder
-     * of the offset gives us the byte number of the indexed array element. */
-    expr2tc o = offset;
-    if(i)
-      o = add2tc(o->type, o, gen_long(o->type, i));
-    expr2tc elem_idx = typecast2tc(idx_type, div2tc(o->type, o, bpi));
-    expr2tc &elem_offs = elem_offsets[i % bytes_per_index];
-    if(!elem_offs)
-      elem_offs = modulus2tc(o->type, o, bpi);
-    expr2tc the_index = index2tc(subtype, array, elem_idx);
-    simplify(the_index);
-    internal_extract_bytes(the_index, 1, elem_offs, guard, mode, alignment, exprs);
-  }
-
-  return exprs;
-}
-
-std::vector<expr2tc> dereferencet::extract_bytes_from_scalar(
+std::vector<expr2tc> dereferencet::extract_bytes(
   const expr2tc &object,
   unsigned int num_bytes,
   const expr2tc &offset,
@@ -2142,7 +2055,51 @@ std::vector<expr2tc> dereferencet::extract_bytes_from_scalar(
 
   std::vector<expr2tc> bytes;
   bytes.reserve(num_bytes);
-  internal_extract_bytes(object, num_bytes, offset, guard, mode, alignment, bytes);
+
+  /* The SMT backend doesn't handle byte-extract expressions on arrays. To avoid
+   * extracting bytes from array symbols directly, for each byte to extract
+   * build the index expressions into it in the main loop over num_bytes below.
+   *
+   * Since the subtypes are known statically, pre-compute the subtypes and their
+   * size expressions (in case they are symbolically sized), for all array
+   * subtypes from the outer to the inner one. If the source object is not of
+   * array type, this vector will stay empty.
+   */
+  std::vector<std::pair<type2tc, expr2tc>> subtypes_sizes;
+  type2tc base = object->type;
+  while(is_array_type(base))
+  {
+    const type2tc &s = to_array_type(base).subtype;
+    subtypes_sizes.emplace_back(s, type_byte_size_expr(s));
+    base = s;
+  }
+
+  const type2tc &bytetype = get_uint8_type();
+  bool base_is_byte = is_byte_type(base);
+  for(unsigned i = 0; i < num_bytes; i++)
+  {
+    expr2tc off = offset;
+    if(i)
+      off = add2tc(off->type, off, gen_long(off->type, i));
+
+    /* As the offset is dynamic, build the index expressions for each byte to
+     * extract individually.  We could cache the offset expressions for each
+     * subtype level since modulo circles around, but num_bytes usually is small
+     * and this only works on arrays that are not VLAs. */
+    expr2tc src = object;
+    for(const auto &[type, size] : subtypes_sizes)
+    {
+      src = index2tc(type, src, div2tc(off->type, off, size));
+      off = modulus2tc(off->type, off, size);
+    }
+
+    assert(src->type == base);
+    if(!base_is_byte)  // Don't produce a byte update of a byte.
+      src = byte_extract2tc(bytetype, src, off, is_big_endian);
+
+    bytes.emplace_back(src);
+  }
+
   return bytes;
 }
 
@@ -2227,7 +2184,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
     extract_bits_from_byte_array(
       stitch_together_from_byte_array(
         num_bytes,
-        extract_bytes_from_array(byte_array, num_bytes, offset_bytes, guard, mode, alignment)),
+        extract_bytes(byte_array, num_bytes, offset_bytes, guard, mode, alignment)),
       offset_bits,
       num_bits64));
 }
