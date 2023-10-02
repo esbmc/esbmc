@@ -5,7 +5,6 @@
 #include "util/expr_util.h"
 #include "util/message.h"
 
-#include <nlohmann/json.hpp>
 #include <fstream>
 #include <unordered_map>
 
@@ -25,8 +24,31 @@ std::unordered_map<std::string, std::string> operator_map = {
   {"LShift", "shl"},
   {"RShift", "lsr"}};
 
-python_converter::python_converter(contextt &_context) : context(_context)
+enum class StatementType
 {
+  VARIABLE_ASSIGN,
+  FUNC_DEFINITION,
+  UNKNOWN,
+};
+
+enum class ExpressionType
+{
+  BINARY_OPERATION,
+  LITERAL,
+  UNKNOWN,
+};
+
+StatementType get_statement_type(const json &element)
+{
+  if(element["_type"] == "AnnAssign")
+  {
+    return StatementType::VARIABLE_ASSIGN;
+  }
+  else if(element["_type"] == "FunctionDef")
+  {
+    return StatementType::FUNC_DEFINITION;
+  }
+  return StatementType::UNKNOWN;
 }
 
 std::string get_op(const std::string &op)
@@ -39,73 +61,153 @@ std::string get_op(const std::string &op)
   return std::string();
 }
 
-typet get_type(const json &json)
+typet get_typet(const std::string &ast_type)
 {
-  std::string type = json["annotation"]["id"].get<std::string>();
-  if(type == "float")
+  if(ast_type == "float")
     return float_type();
-  if(type == "int")
+  if(ast_type == "int")
     return int_type();
   return empty_typet();
 }
 
+symbolt create_symbol(
+  const std::string &module,
+  const std::string &name,
+  const std::string id,
+  const locationt &location,
+  const typet &type)
+{
+  symbolt symbol;
+  symbol.mode = "Python";
+  symbol.module = module;
+  symbol.location = location;
+  symbol.type = type;
+  symbol.name = name;
+  symbol.id = id;
+  return symbol;
+}
+
+locationt get_location_from_decl(const nlohmann::json &ast_node)
+{
+  locationt location;
+  location.set_line(ast_node["target"]["lineno"].get<int>());
+  // TODO: Modify ast.py to include Python filename in the generated json
+  location.set_file("program.py"); // FIXME: This should be read from JSON
+  return location;
+}
+
+ExpressionType get_expression_type(const nlohmann::json &element)
+{
+  auto type = element["_type"];
+  if(type == "BinOp")
+  {
+    return ExpressionType::BINARY_OPERATION;
+  }
+  if(type == "Constant")
+  {
+    return ExpressionType::LITERAL;
+  }
+  return ExpressionType::UNKNOWN;
+}
+
+exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
+{
+  exprt bin_expr(
+    get_op(element["op"]["_type"].get<std::string>()), current_element_type);
+
+  exprt lhs = get_expr(element["left"]);
+  exprt rhs = get_expr(element["right"]);
+
+  bin_expr.copy_to_operands(lhs, rhs);
+  return bin_expr;
+}
+
+exprt python_converter::get_expr(const nlohmann::json &element)
+{
+  exprt expr;
+  ExpressionType type = get_expression_type(element);
+
+  switch(type)
+  {
+  case ExpressionType::BINARY_OPERATION:
+  {
+    expr = get_binary_operator_expr(element);
+    break;
+  }
+  case ExpressionType::LITERAL:
+  {
+    auto value = element["value"];
+    if(element["value"].is_number_integer())
+    {
+      expr = from_integer(value.get<int>(), int_type());
+    }
+    break;
+  }
+  default:
+  {
+    assert(!"Unimplemented type in rule expression");
+  }
+  }
+
+  return expr;
+}
+
+symbolt python_converter::get_var_decl(const nlohmann::json &ast_node)
+{
+  // 1. Get type
+  current_element_type =
+    get_typet(ast_node["annotation"]["id"].get<std::string>());
+
+  // 2. Populate id and name
+  std::string name, id;
+  auto target = ast_node["target"];
+  if(!target.is_null() && target["_type"] == "Name")
+  {
+    name = target["id"];
+    id = "c:@" + name;
+  }
+
+  // 3. Populate location
+  locationt location_begin = get_location_from_decl(ast_node);
+
+  // 4. Populate debug module name
+  // FIXME: This should be read from JSON
+  std::string module_name = "program.py";
+
+  // 5. Initialise symbol
+  symbolt symbol =
+    create_symbol(module_name, name, id, location_begin, current_element_type);
+  symbol.lvalue = true;
+  symbol.static_lifetime = false;
+  symbol.file_local = true;
+  symbol.is_extern = false;
+
+  // 6. Assign value
+  json value = ast_node["value"];
+  exprt val = get_expr(value);
+  symbol.value = val;
+
+  return symbol;
+}
+
 bool python_converter::convert()
 {
-  codet init_code = code_blockt();
-  init_code.make_block();
+  codet main_code = code_blockt();
+  main_code.make_block();
 
   std::ifstream f(json_filename);
   json ast = json::parse(f);
 
   for(auto &element : ast["body"])
   {
-    if(element["_type"] == "AnnAssign")
+    StatementType type = get_statement_type(element);
+
+    // Variable assignments
+    if(type == StatementType::VARIABLE_ASSIGN)
     {
-      std::string lhs("");
-
-      for(const auto &target : element["targets"])
-      {
-        if(target["_type"] == "Name")
-        {
-          lhs = target["id"];
-        }
-      }
-
-      typet type = get_type(element);
-      locationt location;
-      location.set_line(1);
-      location.set_file("program.py");
-
-      symbolt symbol;
-      symbol.mode = "Python";
-      symbol.module = "program.py";
-      symbol.location = location;
-      symbol.type = type;
-      symbol.name = lhs;
-      symbol.id = "c:@" + lhs;
-      symbol.lvalue = true;
-      symbol.static_lifetime = false;
-      symbol.file_local = true;
-      symbol.is_extern = false;
-
-      json value = element["value"];
-      if(value["_type"] == "BinOp")
-      {
-        int left = value["left"]["value"].get<int>();
-        std::string op = get_op(value["op"]["_type"].get<std::string>());
-        int right = value["right"]["value"].get<int>();
-
-        exprt left_op = from_integer(left, int_type());
-        exprt right_op = from_integer(right, int_type());
-
-        exprt val(op, int_type());
-        val.copy_to_operands(left_op, right_op);
-
-        symbol.value = val;
-
-        init_code.copy_to_operands(code_assignt(symbol_expr(symbol), val));
-      }
-
+      symbolt symbol = get_var_decl(element);
+      main_code.copy_to_operands(
+        code_assignt(symbol_expr(symbol), symbol.value));
       context.add(symbol);
     }
   }
@@ -119,7 +221,7 @@ bool python_converter::convert()
   main_symbol.id = "__ESBMC_main";
   main_symbol.name = "__ESBMC_main";
   main_symbol.type.swap(main_type);
-  main_symbol.value.swap(init_code);
+  main_symbol.value.swap(main_code);
 
   if(context.move(main_symbol))
   {
