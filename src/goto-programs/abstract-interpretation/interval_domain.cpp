@@ -752,7 +752,16 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
 
   if(!is_mapped<T>(src))
     return gen_true_expr();
-  const auto interval = get_interval_from_symbol<T>(src);
+  T interval = get_interval_from_symbol<T>(src);
+
+  // Some intervals can be beyond what the type can hold
+  // e.g., [-infinity,256] for an unsigned char.
+  // Althugh this is expected (when modular intervals are off)
+  // We still need to deal with the out-of-bounds when generating
+  // the expressions, as 256 would be converted to 0.
+  T type_interval = generate_modular_interval<T>(src);
+  interval.intersect_with(type_interval);
+
   if(interval.is_top())
     return gen_true_expr();
 
