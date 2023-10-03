@@ -266,7 +266,7 @@ bool goto_cse::runOnProgram(goto_functionst &F)
   {
     program_initialized = false;
     log_error("Unable to initialize the GCSE");
-    abort();
+    //abort();
   }
 
   return false;
