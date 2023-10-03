@@ -314,27 +314,44 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
     const array_type2t &bt = to_array_type(b);
     assert_type_compat_for_with(at.subtype, bt.subtype);
     assert(at.size_is_infinite == bt.size_is_infinite);
+    if(at.array_size == bt.array_size)
+      return;
     if(is_symbol2t(at.array_size) || is_symbol2t(bt.array_size))
       return;
-    assert(at.array_size == bt.array_size);
+    assert(!"array sizes differ");
   }
   else if(is_code_type(a))
   {
     assert(is_code_type(b));
-    const code_type2t &at [[maybe_unused]] = to_code_type(a);
-    const code_type2t &bt [[maybe_unused]] = to_code_type(b);
-    assert(at.arguments == bt.arguments);
-    assert(at.ret_type == bt.ret_type);
+    const code_type2t &at = to_code_type(a);
+    const code_type2t &bt = to_code_type(b);
+    assert(at.arguments.size() == bt.arguments.size());
+    for(size_t i = 0; i < at.arguments.size(); i++)
+      assert_type_compat_for_with(at.arguments[i], bt.arguments[i]);
+    assert_type_compat_for_with(at.ret_type, bt.ret_type);
     /* don't compare argument names, they could be empty on one side */
     assert(at.ellipsis == bt.ellipsis);
   }
   else if(is_pointer_type(a))
   {
     assert(is_pointer_type(b));
-    assert_type_compat_for_with(
-      to_pointer_type(a).subtype, to_pointer_type(b).subtype);
+    const type2tc &as = to_pointer_type(a).subtype;
+    const type2tc &bs = to_pointer_type(b).subtype;
+    if(is_empty_type(as) || is_empty_type(bs))
+      return;
+    assert_type_compat_for_with(as, bs);
   }
-  else
+  else if(is_structure_type(a) && is_structure_type(b))
+  {
+    assert(a->type_id == b->type_id);
+    const struct_union_data &at = static_cast<const struct_union_data &>(*a);
+    const struct_union_data &bt = static_cast<const struct_union_data &>(*b);
+    assert(at.members.size() == bt.members.size());
+    assert(at.packed == bt.packed);
+    for(size_t i = 0; i < at.members.size(); i++)
+      assert_type_compat_for_with(at.members[i], bt.members[i]);
+  }
+  else if(!is_symbol_type(a) && !is_symbol_type(b))
     assert(a == b);
 }
 

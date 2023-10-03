@@ -311,7 +311,7 @@ void dereferencet::dereference_addrof_expr(
       //  We have a base. There may be additional dereferences in it.
       dereference_expr(base, guard, mode);
       // Now compute the pointer offset involved.
-      expr2tc offs = compute_pointer_offset(addrof.ptr_obj);
+      expr2tc offs = compute_pointer_offset(addrof.ptr_obj, &ns);
       assert(
         !is_nil_expr(offs) &&
         "Pointer offset of index/member "
@@ -609,6 +609,15 @@ bool dereferencet::dereference_type_compare(
     }
   }
 
+  if(base_type_eq(ot_base, dt_base, ns))
+  {
+    assert(
+      !is_pointer_type(dt_base) ||
+      !is_symbol_type(to_pointer_type(dt_base).subtype));
+    object = typecast2tc(dereference_type, object);
+    return true;
+  }
+
   // really different
 
   return false;
@@ -896,6 +905,9 @@ void dereferencet::build_reference_rec(
   if(is_constant_int2t(offset))
     flags |= flag_is_const_offs;
 
+  if(is_symbol_type(value))
+    value->type = ns.follow(value->type);
+
   // All accesses to code need no further construction
   if(is_code_type(value) || is_code_type(type))
   {
@@ -1038,11 +1050,11 @@ void dereferencet::build_reference_rec(
   {
     const union_type2t &uni_type = to_union_type(value->type);
     assert(uni_type.members.size() != 0);
-    BigInt union_total_size = type_byte_size(value->type);
+    BigInt union_total_size = type_byte_size(value->type, &ns);
     // Let's find a member with the biggest size
     size_t selected_member_index = SIZE_MAX;
     for(size_t i = 0; i < uni_type.members.size(); i++)
-      if(type_byte_size(uni_type.members[i]) == union_total_size)
+      if(type_byte_size(uni_type.members[i], &ns) == union_total_size)
       {
         selected_member_index = i;
         break;
@@ -1083,7 +1095,7 @@ void dereferencet::construct_from_array(
     return;
   }
 
-  unsigned int subtype_size = type_byte_size_bits(arr_subtype).to_uint64();
+  uint64_t subtype_size = type_byte_size_bits(arr_subtype, &ns).to_uint64();
   expr2tc subtype_sz_expr = constant_int2tc(offset->type, BigInt(subtype_size));
   // The value of "div" does not depend on the offset units (i.e., bits or bytes)
   // as it essentially represents an index in the array of the given subtype
@@ -1113,7 +1125,7 @@ void dereferencet::construct_from_array(
   if(is_constant_int2t(offset))
   {
     // Constant offset is aligned with array boundaries?
-    unsigned int offs = to_constant_int2t(offset).value.to_uint64();
+    uint64_t offs = to_constant_int2t(offset).value.to_uint64();
     is_correctly_aligned = ((offs % subtype_size) == 0);
   }
   else
@@ -1150,7 +1162,7 @@ void dereferencet::construct_from_array(
     expr2tc replaced_dyn_offset = replace_dyn_offset_with_zero(offset);
     simplify(replaced_dyn_offset);
     unsigned int num_bytes = compute_num_bytes_to_extract(
-      replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
+      replaced_dyn_offset, type_byte_size_bits(type, &ns).to_uint64());
 
     // Converting offset to bytes for byte extracting
     expr2tc offset_bytes =
@@ -1169,7 +1181,7 @@ void dereferencet::construct_from_array(
     value = bitcast2tc(
       type,
       extract_bits_from_byte_array(
-        value, offset_bits, type_byte_size_bits(type).to_uint64()));
+        value, offset_bits, type_byte_size_bits(type, &ns).to_uint64()));
   }
 }
 
@@ -1212,8 +1224,8 @@ void dereferencet::construct_from_const_offset(
     }
   }
 
-  unsigned int num_bytes =
-    compute_num_bytes_to_extract(offset, type_byte_size_bits(type).to_uint64());
+  unsigned int num_bytes = compute_num_bytes_to_extract(
+    offset, type_byte_size_bits(type, &ns).to_uint64());
 
   // Converting offset to bytes before bytes extraction
   expr2tc offset_bytes = typecast2tc(
@@ -1229,7 +1241,7 @@ void dereferencet::construct_from_const_offset(
   simplify(offset_bits);
 
   value = extract_bits_from_byte_array(
-    value, offset_bits, type_byte_size_bits(type).to_uint64());
+    value, offset_bits, type_byte_size_bits(type, &ns).to_uint64());
 
   // Extracting bits from the produced bv
   value = bitcast2tc(type, value);
@@ -1245,7 +1257,7 @@ void dereferencet::construct_from_const_struct_offset(
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
   const BigInt int_offset = to_constant_int2t(offset).value;
-  BigInt access_size = type_byte_size_bits(type);
+  BigInt access_size = type_byte_size_bits(type, &ns);
 
   unsigned int i = 0;
   for(auto const &it : struct_type.members)
@@ -1353,7 +1365,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   modet mode,
   const expr2tc *failed_symbol)
 {
-  unsigned int access_sz = type_byte_size_bits(type).to_uint64();
+  unsigned int access_sz = type_byte_size_bits(type, &ns).to_uint64();
 
   // if we are accessing the struct using a byte, we can ignore alignment
   // rules, so convert the struct to bv and dispatch it to
@@ -1487,7 +1499,7 @@ void dereferencet::construct_from_dyn_offset(
   expr2tc replaced_dyn_offset = replace_dyn_offset_with_zero(offset);
   simplify(replaced_dyn_offset);
   unsigned int num_bytes = compute_num_bytes_to_extract(
-    replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
+    replaced_dyn_offset, type_byte_size_bits(type, &ns).to_uint64());
   // Converting offset to bytes before bytes extraction
   expr2tc offset_bytes =
     div2tc(offset->type, offset, gen_long(offset->type, 8));
@@ -1499,7 +1511,7 @@ void dereferencet::construct_from_dyn_offset(
 
   // Extracting bits from the produced bv
   value = extract_bits_from_byte_array(
-    value, offset, type_byte_size_bits(type).to_uint64());
+    value, offset, type_byte_size_bits(type, &ns).to_uint64());
   value = bitcast2tc(type, value);
 }
 
@@ -1518,7 +1530,7 @@ void dereferencet::construct_from_multidir_array(
   // is an alignment violation as that can possess extra padding.
   // So, divide the offset by size of the inner dimention, make an index2t, and
   // construct a reference to that.
-  expr2tc subtype_sz = type_byte_size_bits_expr(arr_type.subtype);
+  expr2tc subtype_sz = type_byte_size_bits_expr(arr_type.subtype, &ns);
   if(subtype_sz->type != offset->type)
   {
     /* TODO: subtype_sz is in bits (with its type being bitsize_type2()).
@@ -1585,7 +1597,7 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
         target, gen_ulong(struct_offset), target_type, guard, mode);
     }
     fields.push_back(target);
-    struct_offset += type_byte_size_bits(target_type);
+    struct_offset += type_byte_size_bits(target_type, &ns);
   }
 
   // We now have a vector of fields reconstructed from the byte array
@@ -1602,7 +1614,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
   // Minimal effort: the moment that we can throw this object out due to an
   // incompatible type, we do.
   const constant_int2t &intref = to_constant_int2t(offs);
-  BigInt type_size = type_byte_size_bits(type);
+  BigInt type_size = type_byte_size_bits(type, &ns);
 
   if(is_struct_type(value->type) || is_union_type(value->type))
   {
@@ -1627,8 +1639,8 @@ void dereferencet::construct_struct_ref_from_const_offset(
     unsigned int i = 0;
     for(auto const &it : data->members)
     {
-      BigInt offs = member_offset_bits(value->type, data->member_names[i]);
-      BigInt size = type_byte_size_bits(it);
+      BigInt offs = member_offset_bits(value->type, data->member_names[i], &ns);
+      BigInt size = type_byte_size_bits(it, &ns);
 
       if(
         !is_scalar_type(it) && intref.value >= offs &&
@@ -1749,7 +1761,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     // to guard for offsets that are inside this array, and modulus the offset
     // by the array size.
 
-    BigInt subtype_size = type_byte_size_bits(arr_type.subtype);
+    BigInt subtype_size = type_byte_size_bits(arr_type.subtype, &ns);
     expr2tc sub_size = constant_int2tc(offs->type, subtype_size);
     expr2tc div = div2tc(offs->type, offs, sub_size);
     expr2tc mod = modulus2tc(offs->type, offs, sub_size);
@@ -1800,8 +1812,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       }
 
       BigInt memb_offs =
-        member_offset_bits(value->type, struct_type.member_names[i]);
-      BigInt size = type_byte_size_bits(it);
+        member_offset_bits(value->type, struct_type.member_names[i], &ns);
+      BigInt size = type_byte_size_bits(it, &ns);
       expr2tc memb_offs_expr = gen_long(bitsize_type2(), memb_offs);
       expr2tc limit_expr = gen_long(offs->type, memb_offs + size);
       expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
@@ -1840,31 +1852,41 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
 
     // We are left with constructing a structure from a byte array. XXX, this
     // is duplicated from above, refactor?
+    assert(is_structure_type(type));
+    const struct_union_data &su_type =
+      static_cast<const struct_union_data &>(*type);
+    expr2tc result;
     std::vector<expr2tc> fields;
-    assert(is_struct_type(type));
-    const struct_type2t &structtype = to_struct_type(type);
-    expr2tc array_offset = offs;
-    for(const type2tc &target_type : structtype.members)
+    if(is_struct_type(type))
     {
-      expr2tc target = value; // The byte array;
+      expr2tc array_offset = offs;
+      for(const type2tc &target_type : su_type.members)
+      {
+        expr2tc target = value; // The byte array;
 
-      simplify(array_offset);
-      if(is_array_type(target_type))
-        construct_from_array(target, array_offset, target_type, tmp, mode);
-      else
-        build_reference_rec(target, array_offset, target_type, tmp, mode);
-      fields.push_back(target);
+        simplify(array_offset);
+        if(is_array_type(target_type))
+          construct_from_array(target, array_offset, target_type, tmp, mode);
+        else
+          build_reference_rec(target, array_offset, target_type, tmp, mode);
+        fields.push_back(target);
 
-      // Update dynamic offset into array
-      array_offset = add2tc(
-        array_offset->type,
-        array_offset,
-        gen_long(array_offset->type, type_byte_size_bits(target_type)));
+        // Update dynamic offset into array
+        array_offset = add2tc(
+          array_offset->type,
+          array_offset,
+          gen_long(array_offset->type, type_byte_size_bits(target_type, &ns)));
+      }
+
+      // We now have a vector of fields reconstructed from the byte array
+      result = constant_struct2tc(type, std::move(fields));
     }
-
-    // We now have a vector of fields reconstructed from the byte array
-    expr2tc the_struct = constant_struct2tc(type, std::move(fields));
-    output.emplace_back(accuml_guard, the_struct);
+    else
+    {
+      /* union */
+      result = stitch_together_from_byte_array(type, value, offs, tmp);
+    }
+    output.emplace_back(accuml_guard, result);
     return;
   }
 }
@@ -2077,7 +2099,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
     div2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8));
   simplify(offset_bytes);
 
-  BigInt num_bits = type_byte_size_bits(type);
+  BigInt num_bits = type_byte_size_bits(type, &ns);
   assert(num_bits.is_uint64());
   uint64_t num_bits64 = num_bits.to_uint64();
   assert(num_bits64 <= ULONG_MAX);
@@ -2203,7 +2225,7 @@ void dereferencet::bounds_check(
     return;
   }
 
-  unsigned int access_size = type_byte_size(type).to_uint64();
+  unsigned int access_size = type_byte_size(type, &ns).to_uint64();
 
   expr2tc arrsize;
   if(
@@ -2238,7 +2260,7 @@ void dereferencet::bounds_check(
 
     // Secondly, try to calc the size of the array.
     expr2tc subtype_size =
-      constant_int2tc(size_type2(), type_byte_size(arr_type.subtype));
+      constant_int2tc(size_type2(), type_byte_size(arr_type.subtype, &ns));
     expr2tc array_size = typecast2tc(size_type2(), arr_type.array_size);
     arrsize = mul2tc(size_type2(), array_size, subtype_size);
   }
@@ -2317,8 +2339,8 @@ void dereferencet::check_data_obj_access(
   assert(!is_array_type(value));
   assert(offset->type == bitsize_type2());
 
-  BigInt data_sz = type_byte_size_bits(value->type);
-  BigInt access_sz = type_byte_size_bits(type);
+  BigInt data_sz = type_byte_size_bits(value->type, &ns);
+  BigInt access_sz = type_byte_size_bits(type, &ns);
   expr2tc data_sz_e = gen_long(offset->type, data_sz);
   expr2tc access_sz_e = gen_long(offset->type, access_sz);
 

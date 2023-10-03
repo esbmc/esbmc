@@ -675,7 +675,7 @@ void goto_symext::run_intrinsic(
       // sized arrays (as expected)
       try
       {
-        type_byte_size(item.object->type).to_int64();
+        type_byte_size(item.object->type, &ns).to_int64();
       }
       catch(array_type2t::dyn_sized_array_excp *e)
       {

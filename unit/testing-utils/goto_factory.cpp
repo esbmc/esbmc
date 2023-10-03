@@ -185,16 +185,16 @@ bool goto_factory::parse(language_uit &l)
 program goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
 {
   goto_functionst goto_functions;
-  language_uit lui(cmd);
-  migrate_namespace_lookup = new namespacet(lui.context);
-  if(!goto_factory::parse(lui))
+  language_uit *lui = new language_uit(cmd);
+  migrate_namespace_lookup = new namespacet(lui->context);
+  if(!goto_factory::parse(*lui))
   {
-    return program(lui.context, goto_functions);
+    return program(lui->context, goto_functions);
   }
 
-  goto_convert(lui.context, opts, goto_functions);
+  goto_convert(lui->context, opts, goto_functions);
 
-  namespacet ns(lui.context);
+  namespacet ns(lui->context);
   goto_check(ns, opts, goto_functions);
   // remove no-op's
   remove_no_op(goto_functions);

@@ -824,7 +824,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
       if(is_constant_int2t(idx))
       {
         index_offset =
-          to_constant_int2t(idx).value * type_byte_size(index.type);
+          to_constant_int2t(idx).value * type_byte_size(index.type, &ns);
         has_const_index_offset = true;
       }
     }
@@ -864,7 +864,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         {
           // Non constant offset -- work out what the lowest alignment is.
           // Fetch the type size of the array index element.
-          BigInt m = type_byte_size_default(index.type, 1);
+          BigInt m = type_byte_size_default(index.type, 1, &ns);
 
           // This index operation, whatever the offset, will always multiply
           // by the size of the element type.
@@ -898,7 +898,8 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     if(is_union_type(memb.source_value->type))
       offset_in_bytes = BigInt(0);
     else
-      offset_in_bytes = member_offset(memb.source_value->type, memb.member);
+      offset_in_bytes =
+        member_offset(memb.source_value->type, memb.member, &ns);
 
     object_mapt struct_references;
     get_reference_set(memb.source_value, struct_references);
@@ -1022,8 +1023,13 @@ void value_sett::assign(
   }
 
   // Must have concrete type.
-  assert(!is_symbol_type(lhs));
-  const type2tc &lhs_type = lhs->type;
+  type2tc lhs_type = lhs->type;
+  expr2tc lhs_followed = lhs;
+  if(is_symbol_type(lhs_type))
+  {
+    lhs_type = ns.follow(lhs_type);
+    lhs_followed->type = lhs_type;
+  }
 
   if(is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
@@ -1049,7 +1055,7 @@ void value_sett::assign(
         if(is_code_type(subtype))
           continue;
 
-        expr2tc lhs_member = member2tc(subtype, lhs, name);
+        expr2tc lhs_member = member2tc(subtype, lhs_followed, name);
 
         expr2tc rhs_member;
         if(is_unknown2t(rhs))

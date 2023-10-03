@@ -437,6 +437,17 @@ protected:
     reachability_treet &art);
   /** Terminate the monitor thread */
   void intrinsic_kill_monitor(reachability_treet &art);
+
+  /**
+   * @brief Construct a new object, initializing it with the memset equivalent
+   */
+  expr2tc gen_value_by_byte(
+    const type2tc &type,
+    const expr2tc &src,
+    const expr2tc &value,
+    const size_t num_of_bytes,
+    const size_t offset) const;
+
   /**
    * @brief Intrinsic call for C memset function call
    * 

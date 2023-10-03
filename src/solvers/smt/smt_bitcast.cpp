@@ -21,7 +21,11 @@
  *         `start` to `start+n-1`) of the `extract` results and its size
  */
 template <typename Extract>
-static expr2tc concat_tree(size_t start, size_t n, const Extract &extract)
+static expr2tc concat_tree(
+  size_t start,
+  size_t n,
+  const Extract &extract,
+  const namespacet &ns)
 {
   assert(n);
   if(n == 1)
@@ -39,14 +43,14 @@ static expr2tc concat_tree(size_t start, size_t n, const Extract &extract)
    * `n`. However, I've not been able to measure performance benefits as the
    * dynamic allocations `extract` usually performs dwarf the size computation.
    */
-  expr2tc a = concat_tree(start, n / 2, extract);
-  expr2tc b = concat_tree(start + n / 2, n - n / 2, extract);
-  size_t sz = type_byte_size_bits(a->type).to_uint64() +
-              type_byte_size_bits(b->type).to_uint64();
+  expr2tc a = concat_tree(start, n / 2, extract, ns);
+  expr2tc b = concat_tree(start + n / 2, n - n / 2, extract, ns);
+  size_t sz = type_byte_size_bits(a->type, &ns).to_uint64() +
+              type_byte_size_bits(b->type, &ns).to_uint64();
   return concat2tc(get_uint_type(sz), a, b);
 }
 
-static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
+expr2tc smt_convt::flatten_to_bitvector(const expr2tc &new_expr) const
 {
   // Easy cases, no need to concat anything
 
@@ -80,7 +84,7 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
         arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)));
     };
 
-    return concat_tree(0, sz, extract);
+    return concat_tree(0, sz, extract, ns);
   }
 
   if(new_expr->type->get_width() == 0)
@@ -104,12 +108,12 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
         structtype.member_names[sz - i - 1]));
     };
 
-    return concat_tree(0, sz, extract);
+    return concat_tree(0, sz, extract, ns);
   }
 
   if(is_union_type(new_expr))
   {
-    size_t sz = type_byte_size_bits(new_expr->type).to_uint64();
+    size_t sz = type_byte_size_bits(new_expr->type, &ns).to_uint64();
     return extract2tc(get_uint_type(sz), new_expr, sz - 1, 0);
   }
 
@@ -177,9 +181,10 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
       for(unsigned int i = 0; i < structtype.members.size(); i++)
       {
         unsigned int offset =
-          member_offset_bits(to_type, structtype.member_names[i]).to_uint64();
+          member_offset_bits(to_type, structtype.member_names[i], &ns)
+            .to_uint64();
         unsigned int sz =
-          type_byte_size_bits(structtype.members[i]).to_uint64();
+          type_byte_size_bits(structtype.members[i], &ns).to_uint64();
         expr2tc tmp =
           extract2tc(get_uint_type(sz), new_from, offset + sz - 1, offset);
         fields.push_back(bitcast2tc(structtype.members[i], tmp));

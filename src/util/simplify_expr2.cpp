@@ -910,8 +910,8 @@ expr2tc pointer_offset2t::do_simplify() const
       const index2t &index = to_index2t(addrof.ptr_obj);
       if(is_constant_int2t(index.index))
       {
-        expr2tc offs =
-          try_simplification(compute_pointer_offset(addrof.ptr_obj));
+        expr2tc offs = try_simplification(
+          compute_pointer_offset(addrof.ptr_obj, migrate_namespace_lookup));
         if(is_constant_int2t(offs))
           return offs;
       }
@@ -1598,7 +1598,7 @@ expr2tc bitcast2t::do_simplify() const
 expr2tc typecast2t::do_simplify() const
 {
   // Follow approach of old irep, i.e., copy it
-  if(type == from->type)
+  if(base_type_eq(type, from->type, *migrate_namespace_lookup))
   {
     // Typecast to same type means this can be eliminated entirely
     return from;
@@ -1783,6 +1783,17 @@ expr2tc typecast2t::do_simplify() const
     {
       /* might happen if there is a symbolic type in a ptr's subtype; these
        * have not been squashed by thrash_type_symbols() */
+    }
+    catch(const array_type2t::inf_sized_array_excp &)
+    {
+      /* Happens when pointing into infinite size arrays; this is usually the
+       * case when there is a variable declared extern which has no complete
+       * type, but it still is being accessed.
+       * See regression/esbmc/github_1210-1-* for examples.
+       *
+       * In the past thrash_type_symbols() wouldn't touch those (as they would
+       * be under a pointer, but since we're also handling arrays of symbolic
+       * subtype under pointers now, they arrive here as well. */
     }
 
     return expr2tc();

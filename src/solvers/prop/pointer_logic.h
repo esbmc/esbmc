@@ -4,11 +4,13 @@
 #include <util/expr.h>
 #include <irep2/irep2.h>
 #include <util/mp_arith.h>
+#include <util/namespace.h>
 #include <util/numbering.h>
 
 class pointer_logict
 {
 public:
+  const namespacet &ns;
   // this numbers the objects
   typedef std::unordered_map<expr2tc, unsigned int, irep2_hash> objectst;
   objectst objects;
@@ -35,7 +37,7 @@ public:
   expr2tc pointer_expr(unsigned object, const type2tc &type) const;
 
   ~pointer_logict() = default;
-  pointer_logict();
+  explicit pointer_logict(const namespacet &ns);
 
   unsigned add_object(const expr2tc &expr);
 

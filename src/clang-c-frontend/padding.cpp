@@ -82,7 +82,7 @@ BigInt alignment(const typet &type, const namespacet &ns)
     type.id() == typet::t_bool || type.id() == typet::t_pointer)
   {
     type2tc thetype = migrate_type(type);
-    result = type_byte_size(thetype);
+    result = type_byte_size(thetype, &ns);
   }
   else if(type.id() == typet::t_symbol)
     result = alignment(ns.follow(type), ns);
