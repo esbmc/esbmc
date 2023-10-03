@@ -89,7 +89,7 @@ bool cse_domaint::merge(
    * simulate one by just passing through common instructions
    * and only doing intersections at target destinations */
  
-  if(!(to->is_target() || from->is_function_call()) || is_bottom())
+  if(!(to->is_target() || from->is_function_call()))
   {
     bool changed = available_expressions != b.available_expressions;
     available_expressions = b.available_expressions;
