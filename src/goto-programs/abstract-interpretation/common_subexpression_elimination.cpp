@@ -50,6 +50,9 @@ void cse_domaint::transform(
 
   case FUNCTION_CALL:
   {
+    break;
+#if 0
+    // TODO: https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/raw/main/c/reducercommutativity/sum05-2.yml
     const code_function_call2t &func =
       to_code_function_call2t(instruction.code);
     // each operand should be available now (unless someone is doing a sideeffect)
@@ -60,7 +63,7 @@ void cse_domaint::transform(
       havoc_expr(func.ret, to);
       make_expression_available(func.ret);
     }
-
+   #endif
   }
 
   default:;
@@ -106,7 +109,11 @@ bool cse_domaint::merge(
       it++)
   {
     if(!b.available_expressions.count(*it))
+    {
       it = available_expressions.erase(it);
+      if(it == available_expressions.end())
+	break;
+    }
   }
 
   return size_before_intersection != available_expressions.size();
@@ -428,6 +435,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     cse.symbol.push_back(symbol_as_expr);
   }
 
+  std::unordered_set<expr2tc, irep2_hash> initialized;
   // 4. Final step, let's replace the symbols!
   for(auto it = (F.second.body).instructions.begin();
       it != (F.second.body).instructions.end();
@@ -444,7 +452,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       replace_max_sub_expr(it->guard, expr2symbol, it, matched_expressions);
       for(auto &x : matched_expressions)
       {
-        if(!state.available_expressions.count(x) || is_in_loop(it))
+        if(!state.available_expressions.count(x) || is_in_loop(it) || !initialized.count(x))
         {
           goto_programt::instructiont instruction;
           instruction.make_assignment();
@@ -452,6 +460,8 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
           instruction.location = it->location;
           instruction.function = it->function;
           F.second.body.insert_swap(it, instruction);
+
+	  initialized.insert(x);
         }
       }
       continue;
@@ -465,7 +475,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
         function.function, expr2symbol, it, matched_expressions);
       for(auto &x : matched_expressions)
       {
-        if(!state.available_expressions.count(x) || is_in_loop(it))
+        if(!state.available_expressions.count(x) || is_in_loop(it) || !initialized.count(x))
         {
           goto_programt::instructiont instruction;
           instruction.make_assignment();
@@ -473,6 +483,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
           instruction.location = it->location;
           instruction.function = it->function;
           F.second.body.insert_swap(it, instruction);
+	  	  initialized.insert(x);
         }
       }
     }
@@ -483,7 +494,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       replace_max_sub_expr(it->code, expr2symbol, it, matched_expressions);
       for(auto &x : matched_expressions)
       {
-        if(!state.available_expressions.count(x) || is_in_loop(it))
+        if(!state.available_expressions.count(x) || is_in_loop(it) || !initialized.count(x))
         {
           goto_programt::instructiont instruction;
           instruction.make_assignment();
@@ -491,6 +502,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
           instruction.location = it->location;
           instruction.function = it->function;
           F.second.body.insert_swap(it, instruction);
+	  	  initialized.insert(x);
         }
       }
       continue;
@@ -519,7 +531,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 
     for(auto &x : matched_rhs_expressions)
     {
-      if(!state.available_expressions.count(x) || is_in_loop(it))
+      if(!state.available_expressions.count(x) || is_in_loop(it) || !initialized.count(x))
       {
         goto_programt::instructiont instruction;
         instruction.make_assignment();
@@ -527,6 +539,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
         instruction.location = it->location;
         instruction.function = it->function;
         F.second.body.insert_swap(it, instruction);
+		  initialized.insert(x);
       }
     }
 
@@ -539,7 +552,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     for(auto &x : matched_lhs_expressions)
     {
       // First time seeing the expr
-      if(!state.available_expressions.count(x) || is_in_loop(it))
+      if(!state.available_expressions.count(x) || is_in_loop(it) || !initialized.count(x))
       {
         it->make_skip();
         goto_programt::instructiont instruction;
@@ -556,6 +569,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 
         F.second.body.insert_swap(it, instruction2);
         F.second.body.insert_swap(it, instruction);
+		  initialized.insert(x);
       }
     }
   }
