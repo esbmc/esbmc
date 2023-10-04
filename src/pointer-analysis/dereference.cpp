@@ -1156,13 +1156,11 @@ void dereferencet::construct_from_array(
 
     // Converting offset to bytes for byte extracting
     expr2tc offset_bytes = typecast2tc(
-      size_type2(),
-      div2tc(offset->type, offset, gen_long(offset->type, 8)));
+      size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
     simplify(offset_bytes);
 
     // Extracting and stitching bytes together
-    std::vector<expr2tc> bytes =
-      extract_bytes(value, num_bytes, offset_bytes);
+    std::vector<expr2tc> bytes = extract_bytes(value, num_bytes, offset_bytes);
     value = stitch_together_from_byte_array(num_bytes, bytes);
 
     expr2tc offset_bits = typecast2tc(
@@ -1491,8 +1489,7 @@ void dereferencet::construct_from_dyn_offset(
     replaced_dyn_offset, type_byte_size_bits(type).to_uint64());
   // Converting offset to bytes before bytes extraction
   expr2tc offset_bytes = typecast2tc(
-    size_type2(),
-    div2tc(offset->type, offset, gen_long(offset->type, 8)));
+    size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
   simplify(offset_bytes);
 
   // Extracting and stitching bytes together
@@ -1951,7 +1948,7 @@ std::vector<expr2tc> dereferencet::extract_bytes(
     }
 
     assert(src->type == base);
-    if(!base_is_byte)  // Don't produce a byte update of a byte.
+    if(!base_is_byte) // Don't produce a byte update of a byte.
       src = byte_extract2tc(bytetype, src, off, is_big_endian);
 
     bytes.emplace_back(src);
@@ -2037,8 +2034,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
     type,
     extract_bits_from_byte_array(
       stitch_together_from_byte_array(
-        num_bytes,
-        extract_bytes(byte_array, num_bytes, offset_bytes)),
+        num_bytes, extract_bytes(byte_array, num_bytes, offset_bytes)),
       offset_bits,
       num_bits64));
 }
