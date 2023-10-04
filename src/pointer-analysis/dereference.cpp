@@ -614,138 +614,6 @@ bool dereferencet::dereference_type_compare(
   return false;
 }
 
-uint64_t dereferencet::natural_alignment(const type2tc &type) const
-{
-  if(is_symbol_type(type))
-    return natural_alignment(ns.follow(type));
-
-  if(is_array_type(type))
-    return natural_alignment(to_array_type(type).subtype);
-
-  if(is_structure_type(type))
-  {
-    auto &data = static_cast<const struct_union_data &>(*type);
-    using std::max;
-
-    uint64_t a = 1;
-    if(!data.packed)
-      for(size_t i = 0; i < data.members.size(); i++)
-      {
-        /* padding and invented members do not contribute to alignment */
-        if(strchr(data.member_names[i].c_str(), '$'))
-          continue;
-        a = max(a, natural_alignment(data.members[i]));
-      }
-    return a;
-  }
-
-  assert(is_number_type(type) || is_pointer_type(type) || is_vector_type(type));
-  return type_byte_size(type).to_uint64();
-}
-
-/* alignment of the target of 'deref_expr'. */
-uint64_t dereferencet::deref_alignment(
-  const expr2tc &deref_expr,
-  uint64_t tgt_align) const
-{
-  using std::min;
-
-  if(is_symbol2t(deref_expr))
-    return tgt_align;
-
-  if(is_typecast2t(deref_expr))
-    return deref_alignment(to_typecast2t(deref_expr).from, tgt_align);
-
-  if(is_bitcast2t(deref_expr))
-    return deref_alignment(to_bitcast2t(deref_expr).from, tgt_align);
-
-  if(is_add2t(deref_expr) || is_sub2t(deref_expr))
-  {
-    const arith_2ops &ops = static_cast<const arith_2ops &>(*deref_expr);
-    using std::swap;
-
-    expr2tc ptr_op = ops.side_1;
-    expr2tc int_op = ops.side_2;
-    if(!is_pointer_type(ptr_op))
-      swap(ptr_op, int_op);
-
-    if(!is_pointer_type(ptr_op))
-      return 1; /* not pointer arithmetic, all bets are off */
-
-    assert(is_bv_type(int_op));
-
-    uint64_t src_align = deref_alignment(ptr_op, tgt_align);
-    if(is_constant_int2t(int_op) && to_constant_int2t(int_op).value == 0)
-      return src_align;
-
-    const type2tc &tgt_type = to_pointer_type(ptr_op->type).subtype;
-    uint64_t type_align = natural_alignment(tgt_type);
-    return min(type_align, src_align);
-  }
-
-  /* lvalue instead of member, index, symbol? */
-
-  if(is_member2t(deref_expr))
-  {
-    const member2t &m = to_member2t(deref_expr);
-
-    /* shouldn't dereference padding or otherwise invented members */
-    assert(!strchr(m.member.c_str(), '$'));
-
-    const expr2tc &src = m.source_value;
-    if(is_symbol2t(src))
-      return tgt_align;
-
-    expr2tc e;
-    if(is_constant_struct2t(src))
-    {
-      auto &d = static_cast<const constant_datatype_data &>(*src);
-      auto &s = static_cast<const struct_union_data &>(*src->type);
-      size_t c = s.get_component_number(m.member);
-      e = d.datatype_members[c];
-    }
-    else if(is_constant_union2t(src))
-    {
-      const constant_union2t &u = to_constant_union2t(src);
-      assert(u.datatype_members.size() == 1);
-      e = u.datatype_members[0];
-    }
-
-    return e ? deref_alignment(e, tgt_align) : 1;
-  }
-
-  if(is_index2t(deref_expr))
-  {
-    const index2t &i = to_index2t(deref_expr);
-
-    const expr2tc &src = i.source_value;
-    if(is_symbol2t(src))
-      return tgt_align;
-
-    if(is_constant_array_of2t(src))
-      return deref_alignment(to_constant_array_of2t(src).initializer, tgt_align);
-
-    return 1;
-  }
-
-  if(is_if2t(deref_expr))
-  {
-    const if2t &i = to_if2t(deref_expr);
-    uint64_t ta = deref_alignment(i.true_value, tgt_align);
-    uint64_t tf = deref_alignment(i.false_value, tgt_align);
-    return min(ta, tf);
-  }
-
-  if(is_concat2t(deref_expr) || is_byte_update2t(deref_expr))
-    return 1; /* no guarantees */
-
-  // We could interpret it as future work.
-  return 1;
-
-  if(is_address_of2t(deref_expr))
-    return tgt_align;
-}
-
 expr2tc dereferencet::build_reference_to(
   const expr2tc &what,
   modet mode,
@@ -833,11 +701,9 @@ expr2tc dereferencet::build_reference_to(
 
     /* The expression being dereferenced doesn't need to be just a symbol: it
      * might have all kind of things messing with alignment in there. */
-    if(alignment > 1)
+    if(!is_symbol2t(deref_expr))
     {
-      uint64_t tgt_align = deref_alignment(deref_expr, alignment);
-      assert(tgt_align <= alignment);
-      alignment = tgt_align;
+      alignment = 1;
     }
 
     final_offset =
@@ -1074,7 +940,7 @@ void dereferencet::build_reference_rec(
   {
   case flag_src_scalar | flag_dst_scalar | flag_is_const_offs:
     // Access a scalar from a scalar.
-    construct_from_const_offset(value, offset, type, guard, mode, alignment);
+    construct_from_const_offset(value, offset, type);
     break;
   case flag_src_struct | flag_dst_scalar | flag_is_const_offs:
     // Extract a scalar from within a structure
@@ -1119,7 +985,7 @@ void dereferencet::build_reference_rec(
 
   case flag_src_scalar | flag_dst_scalar | flag_is_dyn_offs:
     // Access a scalar within a scalar (dyn offset)
-    construct_from_dyn_offset(value, offset, type, guard, mode, alignment);
+    construct_from_dyn_offset(value, offset, type);
     break;
   case flag_src_struct | flag_dst_scalar | flag_is_dyn_offs:
     // Extract a scalar from within a structure (dyn offset)
@@ -1296,7 +1162,7 @@ void dereferencet::construct_from_array(
 
     // Extracting and stitching bytes together
     std::vector<expr2tc> bytes =
-      extract_bytes(value, num_bytes, offset_bytes, guard, mode, alignment);
+      extract_bytes(value, num_bytes, offset_bytes);
     value = stitch_together_from_byte_array(num_bytes, bytes);
 
     expr2tc offset_bits = typecast2tc(
@@ -1315,10 +1181,7 @@ void dereferencet::construct_from_array(
 void dereferencet::construct_from_const_offset(
   expr2tc &value,
   const expr2tc &offset,
-  const type2tc &type,
-  const guardt &guard,
-  modet mode,
-  unsigned int alignment)
+  const type2tc &type)
 {
   const constant_int2t &theint = to_constant_int2t(offset);
 
@@ -1364,7 +1227,7 @@ void dereferencet::construct_from_const_offset(
 
   // Extracting and stitching bytes together
   value = stitch_together_from_byte_array(
-    num_bytes, extract_bytes(value, num_bytes, offset_bytes, guard, mode, alignment));
+    num_bytes, extract_bytes(value, num_bytes, offset_bytes));
 
   expr2tc offset_bits =
     modulus2tc(offset->type, offset, gen_long(offset->type, 8));
@@ -1504,7 +1367,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   {
     value = bitcast2tc(
       get_uint_type(type_byte_size_bits(value->type, &ns).to_uint64()), value);
-    return construct_from_dyn_offset(value, offset, type, guard, mode, alignment);
+    return construct_from_dyn_offset(value, offset, type);
   }
 
   // For each element of the struct, look at the alignment, and produce an
@@ -1599,10 +1462,7 @@ void dereferencet::construct_from_dyn_struct_offset(
 void dereferencet::construct_from_dyn_offset(
   expr2tc &value,
   const expr2tc &offset,
-  const type2tc &type,
-  const guardt &guard,
-  modet mode,
-  unsigned int alignment)
+  const type2tc &type)
 {
   expr2tc orig_value = value;
 
@@ -1637,7 +1497,7 @@ void dereferencet::construct_from_dyn_offset(
 
   // Extracting and stitching bytes together
   value = stitch_together_from_byte_array(
-    num_bytes, extract_bytes(value, num_bytes, offset_bytes, guard, mode, alignment));
+    num_bytes, extract_bytes(value, num_bytes, offset_bytes));
 
   // Extracting bits from the produced bv
   value = extract_bits_from_byte_array(
@@ -1718,7 +1578,7 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
     if(is_array_type(target_type))
     {
       target = stitch_together_from_byte_array(
-        target_type, value, gen_ulong(struct_offset), guard, mode, alignment);
+        target_type, value, gen_ulong(struct_offset));
     }
     else
     {
@@ -2046,10 +1906,7 @@ void dereferencet::alignment_failure(
 std::vector<expr2tc> dereferencet::extract_bytes(
   const expr2tc &object,
   unsigned int num_bytes,
-  const expr2tc &offset,
-  const guardt &guard,
-  modet mode,
-  unsigned int alignment)
+  const expr2tc &offset) const
 {
   assert(num_bytes != 0);
 
@@ -2139,10 +1996,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
 expr2tc dereferencet::stitch_together_from_byte_array(
   const type2tc &type,
   const expr2tc &byte_array,
-  expr2tc offset_bits,
-  const guardt &guard,
-  modet mode,
-  unsigned int alignment)
+  expr2tc offset_bits)
 {
   /* TODO: check array bounds, (alignment?) */
   assert(is_array_type(byte_array));
@@ -2184,7 +2038,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
     extract_bits_from_byte_array(
       stitch_together_from_byte_array(
         num_bytes,
-        extract_bytes(byte_array, num_bytes, offset_bytes, guard, mode, alignment)),
+        extract_bytes(byte_array, num_bytes, offset_bytes)),
       offset_bits,
       num_bits64));
 }

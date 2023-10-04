@@ -393,9 +393,6 @@ private:
     const expr2tc &lexical_offset,
     expr2tc &pointer_guard);
 
-  uint64_t natural_alignment(const type2tc &type) const;
-  uint64_t deref_alignment(const expr2tc &deref_expr, uint64_t tgt_align) const;
-
   void
   deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode);
 
@@ -409,20 +406,14 @@ private:
   std::vector<expr2tc> extract_bytes(
     const expr2tc &object,
     unsigned int bytes,
-    const expr2tc &offset,
-    const guardt &guard,
-    modet mode,
-    unsigned int alignment);
+    const expr2tc &offset) const;
   expr2tc stitch_together_from_byte_array(
     unsigned int num_bytes,
     const std::vector<expr2tc> &bytes);
   expr2tc stitch_together_from_byte_array(
     const type2tc &type,
     const expr2tc &byte_array,
-    expr2tc offset_bits,
-    const guardt &guard,
-    modet mode,
-    unsigned int alignment);
+    expr2tc offset_bits);
   void dereference_failure(
     const std::string &error_class,
     const std::string &error_name,
@@ -469,17 +460,11 @@ private:
   void construct_from_const_offset(
     expr2tc &value,
     const expr2tc &offset,
-    const type2tc &type,
-    const guardt &guard,
-    modet mode,
-    unsigned int alignment);
+    const type2tc &type);
   void construct_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offset,
-    const type2tc &type,
-    const guardt &guard,
-    modet mode,
-    unsigned int alignment);
+    const type2tc &type);
   void construct_from_const_struct_offset(
     expr2tc &value,
     const expr2tc &offset,
