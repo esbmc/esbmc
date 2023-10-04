@@ -89,7 +89,7 @@ bool cse_domaint::merge(
    * simulate one by just passing through common instructions
    * and only doing intersections at target destinations */
  
-  if(!(to->is_target() || from->is_function_call()))
+  if(!(to->is_target() || from->is_function_call()) || is_bottom())
   {
     bool changed = available_expressions != b.available_expressions;
     available_expressions = b.available_expressions;
@@ -319,6 +319,7 @@ void goto_cse::replace_max_sub_expr(
     });
 }
 
+
 bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 {
   if(!program_initialized)
@@ -327,6 +328,25 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
   if(!F.second.body_available)
     return false;
 
+  goto_loopst goto_loops(F.first, _goto_functions, F.second);
+  auto is_in_loop = [&goto_loops](const goto_programt::targett it)
+  {
+    for(const auto &l : goto_loops.get_loops())
+    {
+      // There must be a better way of doing this :O
+      goto_programt::targett l_begin = l.get_original_loop_head();
+      const goto_programt::targett l_exit = l.get_original_loop_exit();
+      if(l_begin == it)
+	return true;
+      while(l_begin != l_exit)
+      {
+	if(l_begin == it)
+	  return true;
+	l_begin++;
+      }
+    }
+    return false;
+  };
   // 1. Let's count expressions, the idea is to go through all program statements
   //    and check if any sub-expr is already available
   expressions_map expressions;
@@ -420,7 +440,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       replace_max_sub_expr(it->guard, expr2symbol, it, matched_expressions);
       for(auto &x : matched_expressions)
       {
-        if(!state.available_expressions.count(x))
+        if(!state.available_expressions.count(x) || is_in_loop(it))
         {
           goto_programt::instructiont instruction;
           instruction.make_assignment();
@@ -441,7 +461,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
         function.function, expr2symbol, it, matched_expressions);
       for(auto &x : matched_expressions)
       {
-        if(!state.available_expressions.count(x))
+        if(!state.available_expressions.count(x) || is_in_loop(it))
         {
           goto_programt::instructiont instruction;
           instruction.make_assignment();
@@ -459,7 +479,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       replace_max_sub_expr(it->code, expr2symbol, it, matched_expressions);
       for(auto &x : matched_expressions)
       {
-        if(!state.available_expressions.count(x))
+        if(!state.available_expressions.count(x) || is_in_loop(it))
         {
           goto_programt::instructiont instruction;
           instruction.make_assignment();
@@ -495,7 +515,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 
     for(auto &x : matched_rhs_expressions)
     {
-      if(!state.available_expressions.count(x))
+      if(!state.available_expressions.count(x) || is_in_loop(it))
       {
         goto_programt::instructiont instruction;
         instruction.make_assignment();
@@ -515,7 +535,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     for(auto &x : matched_lhs_expressions)
     {
       // First time seeing the expr
-      if(!state.available_expressions.count(x))
+      if(!state.available_expressions.count(x) || is_in_loop(it))
       {
         it->make_skip();
         goto_programt::instructiont instruction;
