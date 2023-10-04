@@ -56,7 +56,11 @@ void cse_domaint::transform(
     for(const expr2tc &e : func.operands)
       make_expression_available(e);
     if(func.ret)
+    {
       havoc_expr(func.ret, to);
+      make_expression_available(func.ret);
+    }
+
   }
 
   default:;
@@ -115,8 +119,8 @@ void cse_domaint::make_expression_available(const expr2tc &E)
 
   // Skip nondets
   if(
-    is_sideeffect2t(E) &&
-    to_sideeffect2t(E).kind == sideeffect_data::allockind::nondet)
+     is_sideeffect2t(E))
+    //to_sideeffect2t(E).kind == sideeffect_data::allockind::nondet)
     return;
 
   // I hate floats
