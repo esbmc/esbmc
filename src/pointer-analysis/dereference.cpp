@@ -1921,14 +1921,19 @@ std::vector<expr2tc> dereferencet::extract_bytes(
    */
   std::vector<std::pair<type2tc, expr2tc>> subtypes_sizes;
   type2tc base = object->type;
-  while(is_array_type(base))
+  const type2tc &bytetype = get_uint8_type();
+  while(1)
   {
-    const type2tc &s = to_array_type(base).subtype;
-    subtypes_sizes.emplace_back(s, type_byte_size_expr(s));
-    base = s;
+    if(is_array_type(base))
+      base = to_array_type(base).subtype;
+    else if(is_string_type(base))
+      base = bytetype;
+    else
+      break;
+
+    subtypes_sizes.emplace_back(base, type_byte_size_expr(base));
   }
 
-  const type2tc &bytetype = get_uint8_type();
   bool base_is_byte = is_byte_type(base);
   for(unsigned i = 0; i < num_bytes; i++)
   {
