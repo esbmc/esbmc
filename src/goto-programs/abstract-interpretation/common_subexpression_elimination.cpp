@@ -24,7 +24,7 @@ void cse_domaint::transform(
     // Expressions that contain the target will need to be recomputed
     havoc_expr(code.target, to);
     // Target may be an expression as well
-    make_expression_available(code.target);
+    //make_expression_available(code.target);
   }
   break;
 
