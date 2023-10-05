@@ -67,7 +67,12 @@ bool solidity_convertert::convert()
     {
       global_scope_id = (*itr)["id"];
       found_contract_def = true;
+
       // pattern-based verification
+      // disable if it's in contract mode
+      if(sol_func == "")
+        continue;
+
       assert(itr->contains("nodes"));
       auto pattern_check =
         std::make_unique<pattern_checker>((*itr)["nodes"], sol_func);
@@ -75,7 +80,7 @@ bool solidity_convertert::convert()
         return true; // 'true' indicates something goes wrong.
     }
   }
-  assert(found_contract_def);
+  assert(found_contract_def && "No contracts found in the program.");
 
   // reasoning-based verification
   index = 0;
@@ -106,6 +111,7 @@ bool solidity_convertert::convert()
       if(move_functions_to_main(current_contractName))
         return true;
     }
+    current_contractName = "";
   }
 
   return false; // 'false' indicates successful completion.
@@ -296,7 +302,7 @@ bool solidity_convertert::get_var_decl(
     nlohmann::json init_value =
       is_state_var ? ast_node["value"] : ast_node["initialValue"];
 
-    nlohmann::json int_literal_type = nullptr;
+    nlohmann::json literal_type = nullptr;
 
     auto expr_type = SolidityGrammar::get_expression_t(init_value);
     bool expr_is_literal = expr_type == SolidityGrammar::Literal;
@@ -308,24 +314,22 @@ bool solidity_convertert::get_var_decl(
                                 : SolidityGrammar::get_expression_t(subexpr) ==
                                     SolidityGrammar::Literal;
     if(expr_is_literal || (expr_is_un_op && subexpr_is_literal))
-      int_literal_type = ast_node["typeDescriptions"];
+      literal_type = ast_node["typeDescriptions"];
     else if(
       init_value["isInlineArray"] != nullptr && init_value["isInlineArray"])
     {
       // TODO: make a function to convert inline array initialisation to index access assignment.
-      int_literal_type =
-        make_array_elementary_type(init_value["typeDescriptions"]);
+      literal_type = make_array_elementary_type(init_value["typeDescriptions"]);
     }
     else if(
       init_value["isInlineArray"] != nullptr && init_value["isInlineArray"])
     {
       // TODO: make a function to convert inline array initialisation to index access assignment.
-      int_literal_type =
-        make_array_elementary_type(init_value["typeDescriptions"]);
+      literal_type = make_array_elementary_type(init_value["typeDescriptions"]);
     }
 
     exprt val;
-    if(get_expr(init_value, int_literal_type, val))
+    if(get_expr(init_value, literal_type, val))
       return true;
 
     solidity_gen_typecast(ns, val, t);
@@ -371,7 +375,9 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
   symbol.is_type = true;
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
-  // 5. populate fields(data member) and method(function)
+  // 5. populate fields(state var) and method(function)
+  // We have to add fields before methods as the fields are likely to be used
+  // in the methods
   nlohmann::json ast_nodes = contract_def["nodes"];
   for(nlohmann::json::iterator itr = ast_nodes.begin(); itr != ast_nodes.end();
       ++itr)
@@ -666,17 +672,13 @@ bool solidity_convertert::get_function_params(
   get_var_decl_name(pd, name, id);
 
   // 3b. handle Omitted Names in Function Definitions
-  // Items with omitted names will still be present on the stack, but they are inaccessible by name.
-  // e.g. ~omitted1, ~omitted2. which is a invalid name for solidity.
-  // Therefore it won't conflict with other arg names.
-
   if(name == "")
   {
-    name = "~omitted" + std::to_string(num);
-    id = "c:" + get_modulename_from_path(absolute_path) + ".solast" +
-         //"@"  + std::to_string(ast_node["scope"].get<int>()) +
-         "@" + std::to_string(445) + "@" + "F" + "@" + current_functionName +
-         "@" + name;
+    //TODO
+    // Items with omitted names will still be present on the stack, but they are inaccessible by name.
+    // e.g. ~omitted1, ~omitted2. which is a invalid name for solidity.
+    // Therefore it won't conflict with other arg names.
+    ;
   }
 
   param = code_typet::argumentt();
@@ -855,12 +857,12 @@ bool solidity_convertert::get_statement(
          (*current_functionDecl)["returnParameters"], return_type))
       return true;
 
-    nlohmann::json int_literal_type = nullptr;
+    nlohmann::json literal_type = nullptr;
 
     auto expr_type = SolidityGrammar::get_expression_t(stmt["expression"]);
     bool expr_is_literal = expr_type == SolidityGrammar::Literal;
     if(expr_is_literal)
-      int_literal_type = make_return_type_from_typet(return_type);
+      literal_type = make_return_type_from_typet(return_type);
 
     // 2. get return value
     code_returnt ret_expr;
@@ -882,11 +884,11 @@ bool solidity_convertert::get_statement(
       },
       "nodeType": "Return",
       }
-      Therefore, we need to pass the int_literal_type value.
+      Therefore, we need to pass the literal_type value.
       */
 
     exprt val;
-    if(get_expr(implicit_cast_expr, int_literal_type, val))
+    if(get_expr(implicit_cast_expr, literal_type, val))
       return true;
 
     solidity_gen_typecast(ns, val, return_type);
@@ -1021,18 +1023,29 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 
 /**
      * @brief Populate the out parameter with the expression based on
-     * the solidity expression grammar
-     *
+     * the solidity expression grammar. 
+     * 
+     * More specifically, parse each expression in the AST json and
+     * convert it to a exprt ("new_expr"). The expression may have sub-expression
+     * 
+     * !Always check if the expression is a Literal before calling get_expr
+     * !Unless you are 100% sure it will not be a constant (e.g. 1, "1", 0x01)
+     * 
+     * This function is called throught two approach:
+     * 1. get_decl => get_var_decl => get_expr
+     * 2. get_decl => get_function_definition => get_statement => get_expr
+     * 
      * @param expr The expression that is to be converted to the IR
-     * @param int_literal_type Type information ast to create the the literal
-     * type in the IR (only needed for when the expression is a literal)
+     * @param literal_type Type information ast to create the the literal
+     * type in the IR (only needed for when the expression is a literal).
+     * A literal_type is a "typeDescriptions" ast_node.
      * @param new_expr Out parameter to hold the conversion
      * @return true iff the conversion has failed
      * @return false iff the conversion was successful
      */
 bool solidity_convertert::get_expr(
   const nlohmann::json &expr,
-  const nlohmann::json &int_literal_type,
+  const nlohmann::json &literal_type,
   exprt &new_expr)
 {
   // For rule expression
@@ -1058,7 +1071,7 @@ bool solidity_convertert::get_expr(
   }
   case SolidityGrammar::ExpressionT::UnaryOperatorClass:
   {
-    if(get_unary_operator_expr(expr, int_literal_type, new_expr))
+    if(get_unary_operator_expr(expr, literal_type, new_expr))
       return true;
     break;
   }
@@ -1138,11 +1151,11 @@ bool solidity_convertert::get_expr(
       SolidityGrammar::elementary_type_name_to_str(type_name));
 
     if(
-      int_literal_type != nullptr &&
-      int_literal_type["typeString"].get<std::string>().find("bytes") !=
+      literal_type != nullptr &&
+      literal_type["typeString"].get<std::string>().find("bytes") !=
         std::string::npos)
     {
-      // int_literal_type["typeString"] could be
+      // literal_type["typeString"] could be
       //    "bytes1" ... "bytes32"
       //    "bytes storage ref"
       // e.g.
@@ -1152,7 +1165,7 @@ bool solidity_convertert::get_expr(
       //
 
       SolidityGrammar::ElementaryTypeNameT type =
-        SolidityGrammar::get_elementary_type_name_t(int_literal_type);
+        SolidityGrammar::get_elementary_type_name_t(literal_type);
 
       int byte_size;
       if(type == SolidityGrammar::ElementaryTypeNameT::BYTE_ARRAY)
@@ -1193,14 +1206,14 @@ bool solidity_convertert::get_expr(
     {
     case SolidityGrammar::ElementaryTypeNameT::INT_LITERAL:
     {
-      assert(int_literal_type != nullptr);
+      assert(literal_type != nullptr);
 
       if(the_value.substr(0, 2) == "0x") // meaning hex-string
       {
         if(convert_hex_literal(the_value, new_expr))
           return true;
       }
-      else if(convert_integer_literal(int_literal_type, the_value, new_expr))
+      else if(convert_integer_literal(literal_type, the_value, new_expr))
         return true;
       break;
     }
@@ -1236,7 +1249,7 @@ bool solidity_convertert::get_expr(
     // now, and check its subexpression
     for(const auto &arg : expr["components"].items())
     {
-      if(get_expr(arg.value(), int_literal_type, new_expr))
+      if(get_expr(arg.value(), literal_type, new_expr))
         return true;
     }
     break;
@@ -1270,7 +1283,8 @@ bool solidity_convertert::get_expr(
     for(const auto &arg : expr["arguments"].items())
     {
       exprt single_arg;
-      if(get_expr(arg.value(), single_arg))
+
+      if(get_expr(arg.value(), literal_type, single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
@@ -1285,7 +1299,7 @@ bool solidity_convertert::get_expr(
   }
   case SolidityGrammar::ExpressionT::ImplicitCastExprClass:
   {
-    if(get_cast_expr(expr, new_expr, int_literal_type))
+    if(get_cast_expr(expr, new_expr, literal_type))
       return true;
     break;
   }
@@ -1480,6 +1494,12 @@ bool solidity_convertert::get_expr(
 
   new_expr.location() = location;
   return false;
+}
+
+void solidity_convertert::get_literal(
+  const nlohmann::json &expr,
+  const nlohmann::json &expr_common_type)
+{
 }
 
 bool solidity_convertert::get_contract_name(
@@ -1859,7 +1879,7 @@ bool solidity_convertert::get_compound_assign_expr(
 
 bool solidity_convertert::get_unary_operator_expr(
   const nlohmann::json &expr,
-  const nlohmann::json &int_literal_type,
+  const nlohmann::json &literal_type,
   exprt &new_expr)
 {
   // TODO: Fix me! Currently just support prefix == true,e.g. pre-increment
@@ -1879,7 +1899,7 @@ bool solidity_convertert::get_unary_operator_expr(
 
   // 3. get subexpr
   exprt unary_sub;
-  if(get_expr(expr["subExpression"], int_literal_type, unary_sub))
+  if(get_expr(expr["subExpression"], literal_type, unary_sub))
     return true;
 
   switch(opcode)
@@ -1961,11 +1981,11 @@ bool solidity_convertert::get_conditional_operator_expr(
 bool solidity_convertert::get_cast_expr(
   const nlohmann::json &cast_expr,
   exprt &new_expr,
-  const nlohmann::json int_literal_type)
+  const nlohmann::json literal_type)
 {
   // 1. convert subexpr
   exprt expr;
-  if(get_expr(cast_expr["subExpr"], int_literal_type, expr))
+  if(get_expr(cast_expr["subExpr"], literal_type, expr))
     return true;
 
   // 2. get type
@@ -2730,7 +2750,11 @@ void solidity_convertert::get_state_var_decl_name(
       .get<
         std::
           string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
-  id = "c:@" + name;
+  assert(current_contractName != "");
+
+  // e.g. c:@C@Base@x
+  // The prefix is used to avoid duplicate names
+  id = "c:@C@" + current_contractName + "@" + name;
 }
 
 void solidity_convertert::get_var_decl_name(
