@@ -1625,6 +1625,12 @@ bool solidity_convertert::get_expr(
   return false;
 }
 
+void solidity_convertert::get_literal(
+  const nlohmann::json &expr,
+  const nlohmann::json &expr_common_type)
+{
+}
+
 bool solidity_convertert::get_contract_name(
   const int ref_decl_id,
   std::string &contract_name)
