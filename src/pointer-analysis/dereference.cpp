@@ -1915,7 +1915,7 @@ std::vector<expr2tc> dereferencet::extract_bytes(
    * build the index expressions into it in the main loop over num_bytes below.
    *
    * Since the subtypes are known statically, pre-compute the subtypes and their
-   * size expressions (in case they are symbolically sized), for all array
+   * size expressions (in case they are symbolically sized), for all array-like
    * subtypes from the outer to the inner one. If the source object is not of
    * array type, this vector will stay empty.
    */
@@ -1926,6 +1926,8 @@ std::vector<expr2tc> dereferencet::extract_bytes(
   {
     if(is_array_type(base))
       base = to_array_type(base).subtype;
+    else if(is_vector_type(base))
+      base = to_vector_type(base).subtype;
     else if(is_string_type(base))
       base = bytetype;
     else
