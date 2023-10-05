@@ -83,18 +83,21 @@ protected:
     const nlohmann::json &expr,
     const nlohmann::json &expr_common_type,
     exprt &new_expr);
+  void get_literal(
+    const nlohmann::json &expr,
+    const nlohmann::json &expr_common_type);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_compound_assign_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_unary_operator_expr(
     const nlohmann::json &expr,
-    const nlohmann::json &int_literal_type,
+    const nlohmann::json &literal_type,
     exprt &new_expr);
   bool
   get_conditional_operator_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_cast_expr(
     const nlohmann::json &cast_expr,
     exprt &new_expr,
-    const nlohmann::json int_literal_type = nullptr);
+    const nlohmann::json literal_type = nullptr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
