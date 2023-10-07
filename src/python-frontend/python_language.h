@@ -28,7 +28,6 @@ public:
   {
     return new python_languaget;
   }
-
 };
 
 languaget *new_python_language();
