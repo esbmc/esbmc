@@ -15,7 +15,7 @@ static const char *const extensions_cpp[] =
 static const char *const extensions_sol_ast[] = {"solast", nullptr};
 static const char *extensions_jimple[] = {"jimple", nullptr};
 
-const char* extensions_python[] = {"py", nullptr};
+const char *extensions_python[] = {"py", nullptr};
 
 static const language_desct language_desc_C = {"C", extensions_ansi_c};
 static const language_desct language_desc_CPP = {"C++", extensions_cpp};
