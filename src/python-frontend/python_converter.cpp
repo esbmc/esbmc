@@ -22,7 +22,8 @@ std::unordered_map<std::string, std::string> operator_map = {
   {"BitXor", "bitxor"},
   {"Invert", "bitnot"},
   {"LShift", "shl"},
-  {"RShift", "lsr"}};
+  {"RShift", "lsr"},
+  {"USub", "unary-"}};
 
 enum class StatementType
 {
@@ -33,6 +34,7 @@ enum class StatementType
 
 enum class ExpressionType
 {
+  UNARY_OPERATION,
   BINARY_OPERATION,
   LITERAL,
   UNKNOWN,
@@ -99,6 +101,10 @@ locationt get_location_from_decl(const nlohmann::json &ast_node)
 ExpressionType get_expression_type(const nlohmann::json &element)
 {
   auto type = element["_type"];
+  if(type == "UnaryOp")
+  {
+    return ExpressionType::UNARY_OPERATION;
+  }
   if(type == "BinOp")
   {
     return ExpressionType::BINARY_OPERATION;
@@ -122,6 +128,18 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   return bin_expr;
 }
 
+exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
+{
+  exprt unary_expr(
+    get_op(element["op"]["_type"].get<std::string>()), current_element_type);
+
+  // get subexpr
+  exprt unary_sub = get_expr(element["operand"]);
+  unary_expr.operands().push_back(unary_sub);
+
+  return unary_expr;
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -129,6 +147,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
   switch(type)
   {
+  case ExpressionType::UNARY_OPERATION:
+  {
+    expr = get_unary_operator_expr(element);
+    break;
+  }
   case ExpressionType::BINARY_OPERATION:
   {
     expr = get_binary_operator_expr(element);
@@ -154,11 +177,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
 symbolt python_converter::get_var_decl(const nlohmann::json &ast_node)
 {
-  // 1. Get type
+  // Get variable type
   current_element_type =
     get_typet(ast_node["annotation"]["id"].get<std::string>());
 
-  // 2. Populate id and name
+  // Id and name
   std::string name, id;
   auto target = ast_node["target"];
   if(!target.is_null() && target["_type"] == "Name")
@@ -167,14 +190,14 @@ symbolt python_converter::get_var_decl(const nlohmann::json &ast_node)
     id = "c:@" + name;
   }
 
-  // 3. Populate location
+  // Variable location
   locationt location_begin = get_location_from_decl(ast_node);
 
-  // 4. Populate debug module name
+  // Debug module name
   // FIXME: This should be read from JSON
   std::string module_name = "program.py";
 
-  // 5. Initialise symbol
+  // Create/init symbol
   symbolt symbol =
     create_symbol(module_name, name, id, location_begin, current_element_type);
   symbol.lvalue = true;
@@ -182,7 +205,7 @@ symbolt python_converter::get_var_decl(const nlohmann::json &ast_node)
   symbol.file_local = true;
   symbol.is_extern = false;
 
-  // 6. Assign value
+  // Assign a value
   json value = ast_node["value"];
   exprt val = get_expr(value);
   symbol.value = val;
