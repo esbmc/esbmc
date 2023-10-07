@@ -14,6 +14,7 @@ public:
 private:
   symbolt get_var_decl(const nlohmann::json &ast_node);
   exprt get_expr(const nlohmann::json &element);
+  exprt get_unary_operator_expr(const nlohmann::json &element);
   exprt get_binary_operator_expr(const nlohmann::json &element);
 
   contextt &context;
