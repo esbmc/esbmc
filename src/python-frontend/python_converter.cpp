@@ -53,6 +53,7 @@ StatementType get_statement_type(const json &element)
   return StatementType::UNKNOWN;
 }
 
+// Convert Python/AST to irep2 operations
 std::string get_op(const std::string &op)
 {
   auto it = operator_map.find(op);
@@ -63,6 +64,7 @@ std::string get_op(const std::string &op)
   return std::string();
 }
 
+// Convert Python/AST types to irep2 types
 typet get_typet(const std::string &ast_type)
 {
   if(ast_type == "float")
@@ -75,7 +77,7 @@ typet get_typet(const std::string &ast_type)
 symbolt create_symbol(
   const std::string &module,
   const std::string &name,
-  const std::string id,
+  const std::string &id,
   const locationt &location,
   const typet &type)
 {

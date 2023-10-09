@@ -13,8 +13,6 @@ def main():
     with open(filename, "r") as source:
         tree = ast.parse(source.read())
 
-    #print(ast.dump(tree, indent=4))
-
     ast_json = ast2json(tree)
     json_filename = "/tmp/ast.json"
 
