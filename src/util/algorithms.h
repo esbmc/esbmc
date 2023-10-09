@@ -70,10 +70,10 @@ protected:
     return false;
   }
   goto_functionst _goto_functions;
+
 private:
   unsigned number_of_functions = 0;
   unsigned number_of_loops = 0;
-;
 };
 
 /**
