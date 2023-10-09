@@ -16,7 +16,7 @@
  *
  *
  * There are some level of precision to be considered. We shouldn't track constants
- * or a symbols as there is no point in saying that something like '42' is available.
+ * or symbols as there is no point in saying that something like '42' is available.
  * However, '42 + a' will be cached. This opens a path for canonization algorithms as
  * '42 + a' = 'a + 42'
  *
@@ -25,7 +25,10 @@
  * In Summary, the abstract domain is implemented as:
  * - TOP --> all expressions possible for the program (not needed)
  * - BOTTOM --> no expressions are available
- * - Meet operator: AE1 `meet` AE2 = AE2
+ * - Meet operator: prev `meet` new:
+ *   If we are dealing with a basic edge (no split/join in the CFG)
+ *      then just replace the abstract state with "new".
+ *   Otherwise, compute the intersection between "prev" and "new".
  * - Transform operator:
  *   + END_FUNCTION: all local variables are not available anymore
  *   + ASSIGN: RHS (and sub-expressions) is now available, LHS (and dependencies) is not available anymore
@@ -74,7 +77,6 @@ public:
     // Not needed
     return false;
   }
-
   virtual bool ai_simplify(expr2tc &, const namespacet &) const override
   {
     return false;
@@ -111,14 +113,14 @@ public:
 
 #include <util/algorithms.h>
 /**
- * @brief Common Subexpression Elimination algorithm
+ * @brief Global Common Subexpression Elimination algorithm
  *
- * Compute all common subexpression (above the `threshold`)
- * in a goto program. For each common subexpression, a new intermediate
- * variable `__esbmc_cse_symbol$` is created and assigned to the common
+ * Compute all common subexpression in a goto program. 
+ * For each common subexpression, a new intermediate variable 
+ * `__esbmc_cse_symbol$` is created and assigned to the common
  * value.
  *
- * For ESBMC, the main advantage is for sequential dereferences/with
+ * In ESBMC, the main advantage is for sequential dereferences/with
  * statements. They generate lots of boilerplate to be dereferenced
  * during symex.
  *
@@ -142,36 +144,7 @@ public:
   virtual bool
   runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
 
-  unsigned threshold = 1;
-  bool verbose_mode = true;
-
-  struct common_expression
-  {
-    std::unordered_map<unsigned, size_t> sequence_counter;
-    std::vector<expr2tc> symbol;
-    std::vector<goto_programt::const_targett>
-      gen; // First time expression is used after being unavailable
-    std::vector<goto_programt::const_targett>
-      kill; // Expression becomes unavailable after being available
-    bool available = false;
-
-    // There are some constraints that should be added here:
-    // kill.size() <= gen.size() (????)
-    // sequence_counter is indexed by gen indexes
-    // available might be a private member
-    // this struct needs better naming
-
-    bool should_add_symbol(
-      const goto_programt::const_targett &itt,
-      size_t threshold) const;
-
-    expr2tc get_symbol_for_target(const goto_programt::const_targett &) const;
-  };
-
 protected:
-  typedef std::unordered_map<expr2tc, common_expression, irep2_hash>
-    expressions_map;
-
   ait<cse_domaint> available_expressions;
   contextt &context;
   expr2tc obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const;
@@ -187,5 +160,5 @@ protected:
 private:
   unsigned symbol_counter = 0;
   bool program_initialized = false;
-  const std::string prefix = "__esbmc_cse_symbol";
+  const std::string prefix = "__ESBMC_cse_symbol";
 };
