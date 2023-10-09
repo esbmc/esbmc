@@ -153,9 +153,8 @@ elseif(WIN32)
        )
 else()
   if(NOT BENCHBRINGUP)
-    set(REGRESSIONS
-		    #esbmc-unix
-                    #esbmc-unix2
+    set(REGRESSIONS esbmc-unix
+                    esbmc-unix2
                     esbmc
                     ${REGRESSIONS_SOLIDITY}
                     ${REGRESSIONS_OLD_FRONTEND}
