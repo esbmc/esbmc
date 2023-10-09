@@ -27,5 +27,5 @@ if(DEFINED BOOST_DLL_FILE)
 endif()
 
 if(ENABLE_PYTHON_FRONTEND)
-install(FILES src/python-frontend/astgen.py DESTINATION resources)
+  install(FILES src/python-frontend/astgen.py DESTINATION resources)
 endif()
