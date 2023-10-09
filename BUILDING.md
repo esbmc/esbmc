@@ -92,15 +92,15 @@ The Python frontend enables the analysis of Python code, leveraging the AST (Abs
 
 To use the Python frontend, follow these steps:
 
-1. **Install ast2json:**
+First __install ast2json:__
    ```bash
    pip3 install ast2json
    ```
 
-2. **Enable the Python frontend during the ESBMC build:**
-   ```
-   -DENABLE_PYTHON_FRONTEND=On
-   ```
+then __enable the Python frontend__ during the ESBMC build:  
+  ```
+  -DENABLE_PYTHON_FRONTEND=On
+  ```
 
 ## Preparing IBEX as the constraint programming solver for interval contraction
 

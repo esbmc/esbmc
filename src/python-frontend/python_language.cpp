@@ -38,7 +38,7 @@ bool python_languaget::parse(const std::string &path)
 
   if(process.exit_code())
   {
-    // Python execution failed
+    log_error("Python execution failed");
     return true;
   }
 
