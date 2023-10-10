@@ -13,9 +13,8 @@ static const char *const extensions_cpp[] =
 #endif
 
 static const char *const extensions_sol_ast[] = {"solast", nullptr};
-static const char *extensions_jimple[] = {"jimple", nullptr};
-
-const char *extensions_python[] = {"py", nullptr};
+static const char *const extensions_jimple[] = {"jimple", nullptr};
+static const char *const extensions_python[] = {"py", nullptr};
 
 static const language_desct language_desc_C = {"C", extensions_ansi_c};
 static const language_desct language_desc_CPP = {"C++", extensions_cpp};
@@ -26,7 +25,9 @@ static const language_desct language_desc_Jimple = {
   "Jimple",
   extensions_jimple};
 
-const language_desct language_desc_python = {"Python", extensions_python};
+static const language_desct language_desc_python = {
+  "Python",
+  extensions_python};
 
 const struct language_desct *language_desc(language_idt id)
 {

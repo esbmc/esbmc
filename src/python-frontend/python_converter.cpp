@@ -8,11 +8,9 @@
 #include <fstream>
 #include <unordered_map>
 
-using json = nlohmann::json;
+constexpr const char *json_filename = "/tmp/ast.json";
 
-const char *json_filename = "/tmp/ast.json";
-
-std::unordered_map<std::string, std::string> operator_map = {
+static const std::unordered_map<std::string, std::string> operator_map = {
   {"Add", "+"},
   {"Sub", "-"},
   {"Mult", "*"},
@@ -40,7 +38,7 @@ enum class ExpressionType
   UNKNOWN,
 };
 
-StatementType get_statement_type(const json &element)
+static StatementType get_statement_type(const nlohmann::json &element)
 {
   if(element["_type"] == "AnnAssign")
   {
@@ -54,7 +52,7 @@ StatementType get_statement_type(const json &element)
 }
 
 // Convert Python/AST to irep2 operations
-std::string get_op(const std::string &op)
+static std::string get_op(const std::string &op)
 {
   auto it = operator_map.find(op);
   if(it != operator_map.end())
@@ -65,7 +63,7 @@ std::string get_op(const std::string &op)
 }
 
 // Convert Python/AST types to irep2 types
-typet get_typet(const std::string &ast_type)
+static typet get_typet(const std::string &ast_type)
 {
   if(ast_type == "float")
     return float_type();
@@ -74,7 +72,7 @@ typet get_typet(const std::string &ast_type)
   return empty_typet();
 }
 
-symbolt create_symbol(
+static symbolt create_symbol(
   const std::string &module,
   const std::string &name,
   const std::string &id,
@@ -91,7 +89,7 @@ symbolt create_symbol(
   return symbol;
 }
 
-locationt get_location_from_decl(const nlohmann::json &ast_node)
+static locationt get_location_from_decl(const nlohmann::json &ast_node)
 {
   locationt location;
   location.set_line(ast_node["target"]["lineno"].get<int>());
@@ -100,7 +98,7 @@ locationt get_location_from_decl(const nlohmann::json &ast_node)
   return location;
 }
 
-ExpressionType get_expression_type(const nlohmann::json &element)
+static ExpressionType get_expression_type(const nlohmann::json &element)
 {
   auto type = element["_type"];
   if(type == "UnaryOp")
@@ -208,7 +206,7 @@ symbolt python_converter::get_var_decl(const nlohmann::json &ast_node)
   symbol.is_extern = false;
 
   // Assign a value
-  json value = ast_node["value"];
+  nlohmann::json value = ast_node["value"];
   exprt val = get_expr(value);
   symbol.value = val;
 
@@ -221,7 +219,7 @@ bool python_converter::convert()
   main_code.make_block();
 
   std::ifstream f(json_filename);
-  json ast = json::parse(f);
+  nlohmann::json ast = nlohmann::json::parse(f);
 
   for(auto &element : ast["body"])
   {
