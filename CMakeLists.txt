@@ -109,21 +109,6 @@ if(ENABLE_JIMPLE_FRONTEND)
 endif()
 
 if(ENABLE_PYTHON_FRONTEND)
-    # Command to check if ast2json is installed
-    execute_process(
-        COMMAND python3 -c "import ast2json"
-        RESULT_VARIABLE PYTHON_PACKAGE_RESULT
-        OUTPUT_QUIET
-    )
-
-    # Install ast2json if not available
-    if (NOT PYTHON_PACKAGE_RESULT EQUAL 0)
-        message("Installing ast2json")
-        execute_process(
-            COMMAND pip3 install ast2json
-        )
-    endif()
-
     add_definitions(-DENABLE_PYTHON_FRONTEND)
 endif()
 
