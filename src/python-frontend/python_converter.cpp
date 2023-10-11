@@ -217,17 +217,7 @@ bool python_converter::convert()
   codet main_code = code_blockt();
   main_code.make_block();
 
-  symbolt *ast_path_symbol = context.find_symbol("python_ast_path");
-  if(ast_path_symbol == nullptr)
-  {
-    log_error("python_ast_path symbol not found!\n");
-    abort();
-  }
-
-  exprt exp = ast_path_symbol->value;
-  auto ast_path = exp.get("path").as_string() + "/ast.json";
-
-  std::ifstream f(ast_path);
+  std::ifstream f(ast_output_dir + "/ast.json");
   nlohmann::json ast = nlohmann::json::parse(f);
 
   for(auto &element : ast["body"])
