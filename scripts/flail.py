@@ -123,6 +123,7 @@ class Flail:
         return self.prefix + (obj.name.replace('.hs', '_buf')
                                       .replace('.h', '_buf')
                                       .replace('.c', '_buf')
+                                      .replace('.py', '_buf')
                                       .replace('.goto', '_buf')
                                       .replace('.txt', '_buf')
                                       .replace('buildidobj', 'buildidstring')

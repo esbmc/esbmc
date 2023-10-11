@@ -1,6 +1,6 @@
 # Module to utilities used throughout the project
 
-set(ESBMC_BIN "${CMAKE_INSTALL_PREFIX}/bin/esbmc")
+set(ESBMC_BIN "${CMAKE_BINARY_DIR}/src/esbmc/esbmc")
 if(WIN32)
     set(ESBMC_BIN "${CMAKE_INSTALL_PREFIX}/bin/esbmc.exe")
 endif()
