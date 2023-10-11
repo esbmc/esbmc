@@ -60,6 +60,14 @@ const struct group_opt_templ all_cmd_options[] = {
       "set contract name"},
    }},
 #endif
+#ifdef ENABLE_PYTHON_FRONTEND
+  {"Python frontend",
+   {
+     {"show-python-ast",
+      NULL,
+      "show Python AST"},
+   }},
+#endif
   {"Frontend",
    {{"include,I",
      boost::program_options::value<std::vector<std::string>>()->value_name(
