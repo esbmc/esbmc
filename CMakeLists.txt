@@ -108,6 +108,10 @@ if(ENABLE_JIMPLE_FRONTEND)
     add_definitions(-DENABLE_JIMPLE_FRONTEND)
 endif()
 
+if(ENABLE_PYTHON_FRONTEND)
+    add_definitions(-DENABLE_PYTHON_FRONTEND)
+endif()
+
 if(ENABLE_GOTO_CONTRACTOR)
   add_compile_options(-DENABLE_GOTO_CONTRACTOR)
 endif()

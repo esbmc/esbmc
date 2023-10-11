@@ -5,6 +5,7 @@
 #include <util/context.h>
 #include <util/std_types.h>
 #include <util/c_types.h>
+#include <util/message.h>
 #include <nlohmann/json.hpp>
 
 // For json parsing

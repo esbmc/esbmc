@@ -13,9 +13,9 @@ ubuntu_setup () {
     echo "Configuring Ubuntu build"
     sudo apt-get update && sudo apt-get install -y clang clang-tidy python-is-python3 csmith python3 git ccache unzip wget curl libcsmith-dev gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev pkg-config python3-pip python3-toml python-is-python3 openjdk-11-jdk &&
     echo "Installing Python dependencies"
-    pip3 install --user meson &&
+    pip3 install --user meson ast2json &&
     meson --version &&
-    BASE_ARGS="$BASE_ARGS -DENABLE_OLD_FRONTEND=On  -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On" &&
+    BASE_ARGS="$BASE_ARGS -DENABLE_OLD_FRONTEND=On -DENABLE_PYTHON_FRONTEND=On -DDOWNLOAD_DEPENDENCIES=On -DBUILD_STATIC=On" &&
     SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=ON"
     # Hack: Boolector might fail to download some dependencies using curl (maybe we should patch it?)
     # curl: (60) SSL: no alternative certificate subject name matches target host name 'codeload.github.com'
@@ -26,7 +26,7 @@ ubuntu_setup () {
 # macOS setup (pre-config)
 macos_setup () {
     echo "Configuring macOS build"
-    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex && pip3 install PySMT toml &&
+    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex && pip3 install PySMT toml ast2json &&
     wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz &&
     tar xf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-apple-darwin ../clang &&
     BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=Off -DBUILD_STATIC=Off -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"

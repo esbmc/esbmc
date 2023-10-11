@@ -3,6 +3,7 @@
 #include <util/cpp_expr2string.h>
 #include <util/std_types.h>
 #include <util/symbol.h>
+#include <util/message.h>
 #include <unordered_set>
 
 class cpp_expr2stringt : public c_expr2stringt

@@ -69,6 +69,9 @@ endif()
 if(ENABLE_JIMPLE_FRONTEND)
     set(REGRESSIONS_JIMPLE jimple)
 endif()
+if(ENABLE_PYTHON_FRONTEND)
+    set(REGRESSIONS_PYTHON python)
+endif()
 
 if(ESBMC_CHERI_CLANG)
     set(REGRESSIONS_CHERI cheri-c
@@ -131,6 +134,7 @@ if(APPLE)
                     esbmc-cpp11/cbmc-constructors
                     extensions
                     ${REGRESSIONS_CHERI}
+                    ${REGRESSIONS_PYTHON}
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -179,6 +183,7 @@ else()
                     cuda/COM_sanity_checks
                     linux
                     ${REGRESSIONS_CHERI}
+                    ${REGRESSIONS_PYTHON}
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

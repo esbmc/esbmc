@@ -8,6 +8,7 @@
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/message.h>
 #include <regex>
 
 #include <fstream>
