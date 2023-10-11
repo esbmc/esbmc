@@ -18,7 +18,7 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"BitXor", "bitxor"},
   {"Invert", "bitnot"},
   {"LShift", "shl"},
-  {"RShift", "lsr"},
+  {"RShift", "ashr"},
   {"USub", "unary-"}};
 
 enum class StatementType
