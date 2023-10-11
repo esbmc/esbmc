@@ -67,6 +67,8 @@ static typet get_typet(const std::string &ast_type)
     return float_type();
   if(ast_type == "int")
     return int_type();
+  if(ast_type == "bool")
+    return bool_type();
   return empty_typet();
 }
 
@@ -161,6 +163,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if(element["value"].is_number_integer())
     {
       expr = from_integer(value.get<int>(), int_type());
+    }
+    else if(element["value"].is_boolean())
+    {
+      expr = gen_boolean(value.get<bool>());
     }
     break;
   }
