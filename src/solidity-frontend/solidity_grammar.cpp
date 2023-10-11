@@ -173,15 +173,22 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       return PointerArrayToPtr;
     }
     else if(
-      type_name["typeIdentifier"].get<std::string>().find("array") !=
+      type_name["typeIdentifier"].get<std::string>().find("t_array$") !=
       std::string::npos)
     {
       // Solidity's array type description is like:
       //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
       //  "typeString": "uint8[2] memory"
-      // Need to search for the substring "array" as in "typeIdentifier"
+      
+      // The Arrays in Solidity can be classified into the following two types based on size –
+      //   Fixed Size Array
+      //   Dynamic Array
+      // Furthermore, the solidity array can also be categorized based on where they are stored as –
+      //   Storage Array
+      //   Memory Array
+
       if(
-        type_name["typeIdentifier"].get<std::string>().find("dyn") !=
+        type_name["typeIdentifier"].get<std::string>().find("$dyn") !=
         std::string::npos)
         return DynArrayTypeName;
 
@@ -249,8 +256,10 @@ const char *type_name_to_str(TypeNameT type)
 }
 
 // rule elementary-type-name
+// return the type of expression
 ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
 {
+  std::string typeIdentifier = type_name["typeIdentifier"].get<std::string>();
   std::string typeString = type_name["typeString"].get<std::string>();
   // rule unsigned-integer-type
 
