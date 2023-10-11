@@ -78,13 +78,7 @@ bool python_languaget::typecheck(
   contextt &context,
   const std::string & /*module*/)
 {
-  // Add the output directory for ast.json to the context, allowing its retrieval in python_converter
-  symbolt ast_output_path;
-  ast_output_path.id = "python_ast_path";
-  ast_output_path.value.set("path", ast_output_dir);
-  context.add(ast_output_path);
-
-  python_converter converter(context);
+  python_converter converter(context, ast_output_dir);
   return converter.convert();
 }
 

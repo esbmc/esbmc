@@ -6,7 +6,8 @@
 class python_converter
 {
 public:
-  python_converter(contextt &_context) : context(_context)
+  python_converter(contextt &_context, const std::string &_ast_output_dir)
+    : context(_context), ast_output_dir(_ast_output_dir)
   {
   }
   bool convert();
@@ -18,5 +19,6 @@ private:
   exprt get_binary_operator_expr(const nlohmann::json &element);
 
   contextt &context;
+  std::string ast_output_dir;
   typet current_element_type;
 };
