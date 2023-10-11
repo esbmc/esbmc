@@ -48,11 +48,12 @@ bool python_languaget::parse(const std::string &path)
   if(!fs::exists(script))
     return true;
 
-  const std::string python_script_path = dump_python_script() + "/astgen.py";
+  ast_output_dir = dump_python_script();
+  const std::string python_script_path = ast_output_dir + "/astgen.py";
 
   // Execute python script to generate json file from AST
   std::string cmd("python3 " + python_script_path + " ");
-  cmd += path;
+  cmd += path + " " + ast_output_dir;
 
   // Create a child process to execute Python
   bp::child process(cmd);
@@ -78,6 +79,12 @@ bool python_languaget::typecheck(
   contextt &context,
   const std::string & /*module*/)
 {
+  // Add the output directory for ast.json to the context, allowing its retrieval in python_converter
+  symbolt ast_output_path;
+  ast_output_path.id = "python_ast_path";
+  ast_output_path.value.set("path", ast_output_dir);
+  context.add(ast_output_path);
+
   python_converter converter(context);
   return converter.convert();
 }

@@ -28,6 +28,9 @@ public:
   {
     return new python_languaget;
   }
+
+private:
+  std::string ast_output_dir;
 };
 
 languaget *new_python_language();
