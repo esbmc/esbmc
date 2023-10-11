@@ -8,8 +8,6 @@
 #include <fstream>
 #include <unordered_map>
 
-constexpr const char *json_filename = "/tmp/ast.json";
-
 static const std::unordered_map<std::string, std::string> operator_map = {
   {"Add", "+"},
   {"Sub", "-"},
@@ -168,7 +166,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   default:
   {
-    assert(!"Unimplemented type in rule expression");
+    log_error("Unimplemented type in rule expression");
+    abort();
   }
   }
 
@@ -218,7 +217,17 @@ bool python_converter::convert()
   codet main_code = code_blockt();
   main_code.make_block();
 
-  std::ifstream f(json_filename);
+  symbolt *ast_path_symbol = context.find_symbol("python_ast_path");
+  if(ast_path_symbol == nullptr)
+  {
+    log_error("python_ast_path symbol not found!\n");
+    abort();
+  }
+
+  exprt exp = ast_path_symbol->value;
+  auto ast_path = exp.get("path").as_string() + "/ast.json";
+
+  std::ifstream f(ast_path);
   nlohmann::json ast = nlohmann::json::parse(f);
 
   for(auto &element : ast["body"])
