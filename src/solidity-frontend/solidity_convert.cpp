@@ -313,6 +313,7 @@ bool solidity_convertert::get_var_decl(
       is_state_var ? ast_node["value"] : ast_node["initialValue"];
     nlohmann::json literal_type = ast_node["typeDescriptions"];
 
+    assert(literal_type != nullptr);
     exprt val;
     if(get_expr(init_value, literal_type, val))
       return true;
