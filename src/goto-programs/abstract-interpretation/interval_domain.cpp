@@ -1056,12 +1056,6 @@ void interval_domaint::assume_rec(
   expr2t::expr_ids id,
   const expr2tc &rhs)
 {
-  if(is_typecast2t(lhs))
-    return assume_rec(to_typecast2t(lhs).from, id, rhs);
-
-  if(is_typecast2t(rhs))
-    return assume_rec(lhs, id, to_typecast2t(rhs).from);
-
   if(id == expr2t::equality_id)
   {
     assume_rec(lhs, expr2t::greaterthanequal_id, rhs);
