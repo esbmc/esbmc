@@ -314,20 +314,18 @@ bool solidity_convertert::get_var_decl(
                                 : SolidityGrammar::get_expression_t(subexpr) ==
                                     SolidityGrammar::Literal;
     if(expr_is_literal || (expr_is_un_op && subexpr_is_literal))
+      // e.g. x = 1; x = -1; x = ~1;
       literal_type = ast_node["typeDescriptions"];
-    else if(
-      init_value["isInlineArray"] != nullptr && init_value["isInlineArray"])
+    else if(init_value.contains("isInlineArray") && init_value["isInlineArray"])
     {
       // TODO: make a function to convert inline array initialisation to index access assignment.
-      literal_type = make_array_elementary_type(init_value["typeDescriptions"]);
-    }
-    else if(
-      init_value["isInlineArray"] != nullptr && init_value["isInlineArray"])
-    {
-      // TODO: make a function to convert inline array initialisation to index access assignment.
-      literal_type = make_array_elementary_type(init_value["typeDescriptions"]);
+
+      // so instead of using init_value["typeDescriptions"];
+      // make_array_elementary_type was called later
+      literal_type = ast_node["typeName"]["typeDescriptions"];
     }
 
+    assert(literal_type != nullptr);
     exprt val;
     if(get_expr(init_value, literal_type, val))
       return true;
@@ -1245,13 +1243,63 @@ bool solidity_convertert::get_expr(
   }
   case SolidityGrammar::ExpressionT::Tuple:
   {
-    // This is an expr surrounded by parenthesis, we'll ignore it for
-    // now, and check its subexpression
-    for(const auto &arg : expr["components"].items())
+    // "nodeType": "TupleExpression":
+    //    1. InitList: uint[3] x = [1, 2, 3];
+    //    2. multiple returns: return (x, y);
+    //    3. (x, y) = (y, x)
+    //    4. expr inside tuple: (x, x) = (x+=1, x-=1)
+    //    ...?
+
+    assert(expr.contains("components"));
+    assert(literal_type != nullptr);
+    SolidityGrammar::TypeNameT type =
+      SolidityGrammar::get_type_name_t(expr["typeDescriptions"]);
+
+    switch(type)
     {
-      if(get_expr(arg.value(), literal_type, new_expr))
+    case SolidityGrammar::TypeNameT::ArrayTypeName: // case 1.
+    {
+      // get static array type
+      // will apply solidity_gen_typecast
+      typet arr_type;
+      if(get_type_description(
+           literal_type, arr_type)) //expr["typeDescriptions"]
         return true;
+
+      // get elem type
+      nlohmann::json elem_literal_type =
+        make_array_elementary_type(literal_type);
+
+      // declare static array tuple
+      exprt inits;
+      inits = gen_zero(arr_type);
+
+      // check bound
+      assert(inits.operands().size() >= expr["components"].size());
+
+      // populate array
+      uint i = 0;
+      for(const auto &arg : expr["components"].items())
+      {
+        exprt init;
+        if(get_expr(arg.value(), elem_literal_type, init))
+          return true;
+
+        inits.operands().at(i) = init;
+        i++;
+      }
+
+      new_expr = inits;
+      break;
     }
+    // case : RealTuple: not supported yet
+    default:
+    {
+      log_error("Unexpected tuple expression");
+      return true;
+    }
+    }
+
     break;
   }
   case SolidityGrammar::ExpressionT::CallExprClass:
@@ -1344,12 +1392,10 @@ bool solidity_convertert::get_expr(
     }
 
     // 2. get the decl ref of the array
-    // wrap it in an ImplicitCastExpr to perform conversion of ArrayToPointerDecay
-    nlohmann::json implicit_cast_expr =
-      make_implicit_cast_expr(expr["baseExpression"], "ArrayToPointerDecay");
-
     exprt array;
-    if(get_expr(implicit_cast_expr, array))
+    const nlohmann::json &decl =
+      find_decl_ref(expr["baseExpression"]["referencedDeclaration"]);
+    if(get_var_decl_ref(decl, array))
       return true;
 
     // 3. get the position index
@@ -1362,7 +1408,44 @@ bool solidity_convertert::get_expr(
   }
   case SolidityGrammar::ExpressionT::NewExpression:
   {
-    // call the constructor
+    // 1. new dynamic array, e.g.
+    //    uint[] memory a = new uint[](7);
+    // 2. new object, e.g.
+    //    Base x = new Base(1, 2);
+
+    // case 1
+    nlohmann::json callee_expr_json = expr["expression"];
+    if(callee_expr_json.contains("typeName"))
+    {
+      if(is_dyn_array(callee_expr_json["typeName"]["typeDescriptions"]))
+      {
+        // 1. get elem type
+        typet t;
+        const nlohmann::json elem_node =
+          callee_expr_json["typeName"]["baseType"]["typeDescriptions"];
+        if(get_type_description(elem_node, t))
+          return true;
+
+        // 2. get size
+        // e.g. new uint[](0x01); new uint[](1); => "int_const 1"
+        assert(expr.contains("arguments"));
+        assert(expr["arguments"].size() == 1);
+        const nlohmann::json literal = expr["arguments"][0];
+
+        exprt size;
+        if(get_expr(literal, literal_type, size))
+          return true;
+
+        // 3. declare a dyn array
+        new_expr = side_effect_exprt("cpp_new[]", t);
+        new_expr.size(size);
+
+        break;
+      }
+    }
+
+    // case 2
+    // first, call the constructor
     if(get_constructor_call(expr, new_expr))
       return true;
 
@@ -1472,7 +1555,7 @@ bool solidity_convertert::get_expr(
 
     // 1. get source expr
     // assume: only one argument
-    if(get_expr(expr["arguments"][0], from_expr))
+    if(get_expr(expr["arguments"][0], literal_type, from_expr))
       return true;
 
     // 2. get target type
@@ -2256,7 +2339,10 @@ bool solidity_convertert::get_type_description(
       // wrap it in an ImplicitCastExpr to convert LValue to RValue
       nlohmann::json implicit_cast_expr =
         make_implicit_cast_expr(rtn_expr, "LValueToRValue");
-      if(get_expr(implicit_cast_expr, size_expr))
+
+      assert(rtn_expr.contains("typeDescriptions"));
+      nlohmann::json l_type = rtn_expr["typeDescriptions"];
+      if(get_expr(implicit_cast_expr, l_type, size_expr))
         return true;
     }
     else
@@ -3322,26 +3408,46 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(
 nlohmann::json solidity_convertert::make_array_elementary_type(
   const nlohmann::json &type_descrpt)
 {
-  // Function used to extract the elementary type of array
+  // Function used to extract the type of the array and its elements
   // In order to keep the consistency and maximum the reuse of get_type_description function,
   // we used ["typeDescriptions"] instead of ["typeName"], despite the fact that the latter contains more information.
-  // Although ["typeDescriptions"] also contains all the information needed, we have to do some
-  // pre-processing, e.g. extract the
+  // Although ["typeDescriptions"] also contains all the information needed, we have to do some pre-processing
+
+  // e.g.
+  //   "typeDescriptions": {
+  //     "typeIdentifier": "t_array$_t_uint256_$dyn_memory_ptr",
+  //     "typeString": "uint256[] memory"
+  //      }
+  //
+  // convert to
+  //
+  //   "typeDescriptions": {
+  //     "typeIdentifier": "t_uint256",
+  //     "typeString": "uint256"
+  //     }
+
+  // 1. declare an empty json node
   nlohmann::json elementary_type;
-  if(
-    type_descrpt["typeString"].get<std::string>().find("uint8") !=
-    std::string::npos)
-  {
-    auto j = R"(
-          {
-            "typeIdentifier": "t_uint8",
-            "typeString": "uint8"
-          }
-        )"_json;
-    elementary_type = j;
-  }
-  else
-    assert(!"Unsupported array elementary type");
+  const std::string typeIdentifier =
+    type_descrpt["typeIdentifier"].get<std::string>();
+  const std::string typeString = type_descrpt["typeString"].get<std::string>();
+
+  // 2. extract type info
+  // e.g.
+  //  bytes[] memory x => "t_array$_t_bytes_$dyn_storage_ptr"  => t_bytes
+  //  [1,2,3]          => "t_array$_t_uint8_$3_memory_ptr      => t_uint8
+  assert(typeIdentifier.substr(0, 8) == "t_array$");
+  std::regex rgx("\\$_\\w*_\\$");
+
+  std::smatch match;
+  if(!std::regex_search(typeIdentifier, match, rgx))
+    assert(!"Cannot find array element type in typeIdentifier");
+  std::string sub_match = match[0];
+  std::string t_type = sub_match.substr(2, sub_match.length() - 4);
+  std::string type = t_type.substr(2);
+
+  // 3. populate node
+  elementary_type = {{"typeIdentifier", t_type}, {"typeString", type}};
 
   return elementary_type;
 }
