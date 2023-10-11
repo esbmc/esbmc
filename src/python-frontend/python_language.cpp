@@ -52,11 +52,10 @@ bool python_languaget::parse(const std::string &path)
   const std::string python_script_path = ast_output_dir + "/astgen.py";
 
   // Execute python script to generate json file from AST
-  std::string cmd("python3 " + python_script_path + " ");
-  cmd += path + " " + ast_output_dir;
+  std::vector<std::string> args = {python_script_path, path, ast_output_dir};
 
   // Create a child process to execute Python
-  bp::child process(cmd);
+  bp::child process(bp::search_path("python3"), args);
 
   // Wait for execution
   process.wait();
