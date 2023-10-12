@@ -224,12 +224,12 @@ bool python_converter::convert()
   main_code.make_block();
 
   std::ifstream f(ast_output_dir + "/ast.json");
-  nlohmann::json ast = nlohmann::json::parse(f);
+  ast_json = nlohmann::json::parse(f);
 
   if(!config.options.get_option("show-python-ast").empty())
-    log_status("AST:\n{}\n", ast.dump(4).c_str());
+    log_status("AST:\n{}\n", ast_json.dump(4).c_str());
 
-  for(auto &element : ast["body"])
+  for(auto &element : ast_json["body"])
   {
     StatementType type = get_statement_type(element);
 

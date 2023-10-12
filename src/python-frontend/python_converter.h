@@ -21,4 +21,5 @@ private:
   contextt &context;
   std::string ast_output_dir;
   typet current_element_type;
+  nlohmann::json ast_json;
 };
