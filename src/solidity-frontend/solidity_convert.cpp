@@ -325,7 +325,6 @@ bool solidity_convertert::get_var_decl(
       literal_type = ast_node["typeName"]["typeDescriptions"];
     }
 
-    assert(literal_type != nullptr);
     exprt val;
     if(get_expr(init_value, literal_type, val))
       return true;
@@ -899,10 +898,6 @@ bool solidity_convertert::get_statement(
   case SolidityGrammar::StatementT::ForStatement:
   {
     // Based on rule for-statement
-    // TODO: Fix me. Assuming for loop contains everything
-    assert(
-      stmt.contains("initializationExpression") && stmt.contains("condition") &&
-      stmt.contains("loopExpression") && stmt.contains("body"));
     // TODO: Fix me. Currently we don't support nested for loop
     assert(current_forStmt == nullptr);
     current_forStmt = &stmt;
@@ -910,27 +905,31 @@ bool solidity_convertert::get_statement(
     // 1. annotate init
     codet init =
       code_skipt(); // code_skipt() means no init in for-stmt, e.g. for (; i< 10; ++i)
-    if(get_statement(stmt["initializationExpression"], init))
-      return true;
+    if(stmt.contains("initializationExpression"))
+      if(get_statement(stmt["initializationExpression"], init))
+        return true;
 
     convert_expression_to_code(init);
 
     // 2. annotate condition
     exprt cond = true_exprt();
-    if(get_expr(stmt["condition"], cond))
-      return true;
+    if(stmt.contains("condition"))
+      if(get_expr(stmt["condition"], cond))
+        return true;
 
     // 3. annotate increment
     codet inc = code_skipt();
-    if(get_statement(stmt["loopExpression"], inc))
-      return true;
+    if(stmt.contains("loopExpression"))
+      if(get_statement(stmt["loopExpression"], inc))
+        return true;
 
     convert_expression_to_code(inc);
 
     // 4. annotate body
     codet body = code_skipt();
-    if(get_statement(stmt["body"], body))
-      return true;
+    if(stmt.contains("body"))
+      if(get_statement(stmt["body"], body))
+        return true;
 
     convert_expression_to_code(body);
 
@@ -1245,20 +1244,24 @@ bool solidity_convertert::get_expr(
   {
     // "nodeType": "TupleExpression":
     //    1. InitList: uint[3] x = [1, 2, 3];
-    //    2. multiple returns: return (x, y);
-    //    3. (x, y) = (y, x)
-    //    4. expr inside tuple: (x, x) = (x+=1, x-=1)
-    //    ...?
+    //    2. Operator:
+    //        - (x+1) % 2
+    //        - if( x && (y || z) )
+    //    3. realTupleExpr:
+    //        - multiple returns: return (x, y);
+    //        - (x, y) = (y, x)
 
     assert(expr.contains("components"));
-    assert(literal_type != nullptr);
     SolidityGrammar::TypeNameT type =
       SolidityGrammar::get_type_name_t(expr["typeDescriptions"]);
 
     switch(type)
     {
-    case SolidityGrammar::TypeNameT::ArrayTypeName: // case 1.
+    // case 1
+    case SolidityGrammar::TypeNameT::ArrayTypeName:
     {
+      assert(literal_type != nullptr);
+
       // get static array type
       // will apply solidity_gen_typecast
       typet arr_type;
@@ -1292,11 +1295,20 @@ bool solidity_convertert::get_expr(
       new_expr = inits;
       break;
     }
-    // case : RealTuple: not supported yet
+
+    // case 3
+    case SolidityGrammar::TypeNameT::TupleTypeName: // case 3
+    {
+      log_error("Currently we do not handle tuple.");
+      abort();
+    }
+
+    // case 2
     default:
     {
-      log_error("Unexpected tuple expression");
-      return true;
+      if(get_expr(expr["components"][0], literal_type, new_expr))
+        return true;
+      break;
     }
     }
 
@@ -1393,10 +1405,22 @@ bool solidity_convertert::get_expr(
 
     // 2. get the decl ref of the array
     exprt array;
-    const nlohmann::json &decl =
-      find_decl_ref(expr["baseExpression"]["referencedDeclaration"]);
-    if(get_var_decl_ref(decl, array))
-      return true;
+
+    // 2.1 arr[n]
+    if(expr["baseExpression"].contains("referencedDeclaration"))
+    {
+      const nlohmann::json &decl =
+        find_decl_ref(expr["baseExpression"]["referencedDeclaration"]);
+      if(get_var_decl_ref(decl, array))
+        return true;
+    }
+    else
+    {
+      //2.2 func()[n]
+      const nlohmann::json &decl = expr["baseExpression"]["expression"];
+      if(get_expr(decl, literal_type, array))
+        return true;
+    }
 
     // 3. get the position index
     exprt pos;
