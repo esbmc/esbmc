@@ -137,6 +137,13 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     // for AST node that contains ["typeName"]["typeDescriptions"]
     std::string typeString = type_name["typeString"].get<std::string>();
 
+    // we must first handle tuple
+    // otherwise we might parse tuple(literal_string, literal_string)
+    // as ElementaryTypeName
+    if(typeString.substr(0, 6) == "tuple(" && typeString != "tuple()")
+    {
+      return TupleTypeName;
+    }
     if(
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
@@ -179,7 +186,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       // Solidity's array type description is like:
       //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
       //  "typeString": "uint8[2] memory"
-      
+
       // The Arrays in Solidity can be classified into the following two types based on size –
       //   Fixed Size Array
       //   Dynamic Array

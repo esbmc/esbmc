@@ -50,6 +50,9 @@ enum TypeNameT
   // enum
   EnumTypeName,
 
+  // tuple
+  TupleTypeName,
+
   TypeNameTError
 };
 TypeNameT get_type_name_t(const nlohmann::json &type_name);
