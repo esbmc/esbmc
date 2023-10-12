@@ -1,0 +1,4 @@
+THOROUGH
+contract.solast
+--contract Base --sol contract.sol
+^VERIFICATION FAILED$

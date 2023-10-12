@@ -216,7 +216,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       // Solidity's array type description is like:
       //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
       //  "typeString": "uint8[2] memory"
-      
+
       // The Arrays in Solidity can be classified into the following two types based on size –
       //   Fixed Size Array
       //   Dynamic Array
