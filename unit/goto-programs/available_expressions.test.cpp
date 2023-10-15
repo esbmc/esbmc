@@ -61,7 +61,7 @@ public:
     // Run the Abstract Interpretation
     AE(P.functions, P.ns);
     REQUIRE(P.functions.function_map.size() > 0);
-    #if 0
+#if 0
     // Test!
     Forall_goto_functions(f_it, P.functions)
     {
@@ -137,7 +137,7 @@ public:
         }
       }
     }
-      #endif
+#endif
   }
 };
 } // namespace
@@ -154,7 +154,7 @@ TEST_CASE("Basic Expressions", "[ai][available-expressions]")
     "int c = a + b;\n" // Here no expression should be available
     "int d;\n"         // Here a + b should be available
     "a = 42;\n"        // Here a + b should not be available
-    "int *e = &d;\n"         // Here a + b should not be available
+    "int *e = &d;\n"   // Here a + b should not be available
     "return a;\n"
     "}";
   T.unavailable_expressions["4"] = {
