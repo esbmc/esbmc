@@ -241,6 +241,8 @@ bool goto_cse::runOnProgram(goto_functionst &F)
     log_error("Unable to initialize the GCSE");
   }
 
+  
+
   return false;
 }
 
@@ -390,6 +392,11 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     // However, when changing dereferences we need to them posterior
     // a[i] = &addr; *a[i] = 42 ===> a[i] = &addr; tmp = a[i]; *tmp = 42;
 
+    if(it->is_target())
+    {
+      // This might be a loop or an else statement.
+      initialized.clear();
+    }
     std::unordered_set<expr2tc, irep2_hash> matched_pre_expressions;
     std::unordered_set<expr2tc, irep2_hash> matched_post_expressions;
     switch(it->type)
@@ -421,6 +428,9 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
         it,
         matched_post_expressions);
       break;
+      case LOCATION:
+        initialized.clear();
+        continue;
     default:
       continue;
     }
@@ -429,7 +439,8 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     for(auto &x : matched_pre_expressions)
     {
       if(
-        !state.available_expressions.count(x) || is_in_loop(it) ||
+        !state.available_expressions.count(x) || 
+        is_in_loop(it) ||
         !initialized.count(x))
       {
         goto_programt::instructiont instruction;
@@ -451,7 +462,8 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     {
       // First time seeing the expr
       if(
-        !state.available_expressions.count(x) || is_in_loop(it) ||
+        !state.available_expressions.count(x) || 
+        is_in_loop(it) ||
         !initialized.count(x))
       {
         goto_programt::instructiont instruction;
