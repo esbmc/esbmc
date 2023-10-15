@@ -440,7 +440,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     {
       if(
         !state.available_expressions.count(x) || 
-        is_in_loop(it) ||
+        // is_in_loop(it) ||
         !initialized.count(x))
       {
         goto_programt::instructiont instruction;
@@ -463,7 +463,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       // First time seeing the expr
       if(
         !state.available_expressions.count(x) || 
-        is_in_loop(it) ||
+        // is_in_loop(it) ||
         !initialized.count(x))
       {
         goto_programt::instructiont instruction;
