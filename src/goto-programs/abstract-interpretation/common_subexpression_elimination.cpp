@@ -447,9 +447,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       continue;
 
     // So far, only assignments are supported
-    assert(is_code_assign2t(it->code));
-    auto &cpy = to_code_assign2t(it->code);
-
     for(auto &x : matched_post_expressions)
     {
       // First time seeing the expr
