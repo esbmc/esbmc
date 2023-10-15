@@ -390,7 +390,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     // However, when changing dereferences we need to them posterior
     // a[i] = &addr; *a[i] = 42 ===> a[i] = &addr; tmp = a[i]; *tmp = 42;
 
-    const expr2tc bck = it->code;
     std::unordered_set<expr2tc, irep2_hash> matched_pre_expressions;
     std::unordered_set<expr2tc, irep2_hash> matched_post_expressions;
     switch(it->type)
@@ -426,6 +425,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       continue;
     }
 
+    std::unordered_set<expr2tc, irep2_hash> local_initialized;
     for(auto &x : matched_pre_expressions)
     {
       if(
@@ -438,8 +438,8 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
         instruction.location = it->location;
         instruction.function = it->function;
         F.second.body.insert_swap(it, instruction);
-
         initialized.insert(x);
+        local_initialized.insert(x);
       }
     }
 
@@ -447,8 +447,8 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
       continue;
 
     // So far, only assignments are supported
-    assert(is_code_assign2t(bck));
-    auto &cpy = to_code_assign2t(bck);
+    assert(is_code_assign2t(it->code));
+    auto &cpy = to_code_assign2t(it->code);
 
     for(auto &x : matched_post_expressions)
     {
@@ -457,22 +457,17 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
         !state.available_expressions.count(x) || is_in_loop(it) ||
         !initialized.count(x))
       {
-        it->make_skip();
         goto_programt::instructiont instruction;
         instruction.make_assignment();
-        instruction.code = code_assign2tc(cpy.target, cpy.source);
+        instruction.code = code_assign2tc(expr2symbol[x], x);
         instruction.location = it->location;
         instruction.function = it->function;
 
-        goto_programt::instructiont instruction2;
-        instruction2.make_assignment();
-        instruction2.code = code_assign2tc(expr2symbol[x], x);
-        instruction2.location = it->location;
-        instruction2.function = it->function;
-
-        F.second.body.insert_swap(it, instruction2);
-        F.second.body.insert_swap(it, instruction);
-        initialized.insert(x);
+        if(!local_initialized.count(x))
+        {
+          F.second.body.insert_swap(it, instruction);
+          initialized.insert(x);
+        }
       }
     }
   }
