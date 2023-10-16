@@ -3,6 +3,8 @@
 #include "util/context.h"
 #include <nlohmann/json.hpp>
 
+class codet;
+
 class python_converter
 {
 public:
@@ -13,7 +15,7 @@ public:
   bool convert();
 
 private:
-  symbolt get_var_decl(const nlohmann::json &ast_node);
+  void get_var_assign(const nlohmann::json &ast_node, codet& target_block);
   exprt get_expr(const nlohmann::json &element);
   exprt get_unary_operator_expr(const nlohmann::json &element);
   exprt get_binary_operator_expr(const nlohmann::json &element);

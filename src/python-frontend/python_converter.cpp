@@ -180,7 +180,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   return expr;
 }
 
-symbolt python_converter::get_var_decl(const nlohmann::json &ast_node)
+void python_converter::get_var_assign(
+  const nlohmann::json &ast_node,
+  codet &target_block)
 {
   // Get variable type
   current_element_type =
@@ -215,7 +217,10 @@ symbolt python_converter::get_var_decl(const nlohmann::json &ast_node)
   exprt val = get_expr(value);
   symbol.value = val;
 
-  return symbol;
+  target_block.copy_to_operands(
+    code_assignt(symbol_expr(symbol), symbol.value));
+
+  context.add(symbol);
 }
 
 bool python_converter::convert()
@@ -236,10 +241,7 @@ bool python_converter::convert()
     // Variable assignments
     if(type == StatementType::VARIABLE_ASSIGN)
     {
-      symbolt symbol = get_var_decl(element);
-      main_code.copy_to_operands(
-        code_assignt(symbol_expr(symbol), symbol.value));
-      context.add(symbol);
+      get_var_assign(element, main_code);
     }
   }
 
