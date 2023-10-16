@@ -206,7 +206,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::VARIABLE_REF:
   {
-    // look for the variable declaration
+    // Find the variable declaration in the AST JSON
     std::string var_name = element["id"].get<std::string>();
     nlohmann::json ref = find_var_decl(var_name);
     assert(!ref.empty());
@@ -214,10 +214,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     typet type = get_typet(ref["annotation"]["id"].get<std::string>());
     std::string id = std::string("py:program.py") + std::string("@F@") +
                      current_function_name + std::string("@") + var_name;
-    expr = exprt("symbol", type);
-    expr.identifier(id);
-    expr.cmt_lvalue(true);
-    expr.name(var_name);
+
+    symbolt *symbol = context.find_symbol(std::string("py:@") + var_name);
+    if(symbol != nullptr)
+    {
+      expr = symbol_expr(*symbol);
+    }
+    else
+    {
+      log_error("Symbol not found\n");
+      abort();
+    }
 
     break;
   }
@@ -276,7 +283,6 @@ void python_converter::get_var_assign(
 
 exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
-  exprt block_expr = code_skipt();
   code_blockt block;
 
   for(auto &element : ast_block)
@@ -299,8 +305,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
   }
 
-  block_expr = block;
-  return block_expr;
+  return block;
 }
 
 static codet convert_expression_to_code(exprt &expr)
