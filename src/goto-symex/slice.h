@@ -85,6 +85,7 @@ public:
    */
   bool run(symex_target_equationt::SSA_stepst &eq) override
   {
+    sliced = 0;
     fine_timet algorithm_start = current_time();
     for(auto &step : boost::adaptors::reverse(eq))
       run_on_step(step);
