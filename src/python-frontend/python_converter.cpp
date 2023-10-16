@@ -19,12 +19,14 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"Invert", "bitnot"},
   {"LShift", "shl"},
   {"RShift", "ashr"},
-  {"USub", "unary-"}};
+  {"USub", "unary-"},
+  {"Eq", "="}};
 
 enum class StatementType
 {
   VARIABLE_ASSIGN,
   FUNC_DEFINITION,
+  IF_STATEMENT,
   UNKNOWN,
 };
 
@@ -33,6 +35,7 @@ enum class ExpressionType
   UNARY_OPERATION,
   BINARY_OPERATION,
   LITERAL,
+  VARIABLE_REF,
   UNKNOWN,
 };
 
@@ -45,6 +48,10 @@ static StatementType get_statement_type(const nlohmann::json &element)
   else if(element["_type"] == "FunctionDef")
   {
     return StatementType::FUNC_DEFINITION;
+  }
+  else if(element["_type"] == "If")
+  {
+    return StatementType::IF_STATEMENT;
   }
   return StatementType::UNKNOWN;
 }
@@ -92,7 +99,7 @@ static symbolt create_symbol(
 static locationt get_location_from_decl(const nlohmann::json &ast_node)
 {
   locationt location;
-  location.set_line(ast_node["target"]["lineno"].get<int>());
+  location.set_line(ast_node["lineno"].get<int>());
   // TODO: Modify ast.py to include Python filename in the generated json
   location.set_file("program.py"); // FIXME: This should be read from JSON
   return location;
@@ -105,7 +112,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   {
     return ExpressionType::UNARY_OPERATION;
   }
-  if(type == "BinOp")
+  if(type == "BinOp" || type == "Compare")
   {
     return ExpressionType::BINARY_OPERATION;
   }
@@ -113,16 +120,33 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   {
     return ExpressionType::LITERAL;
   }
+  if(type == "Name")
+  {
+    return ExpressionType::VARIABLE_REF;
+  }
   return ExpressionType::UNKNOWN;
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
-  exprt bin_expr(
-    get_op(element["op"]["_type"].get<std::string>()), current_element_type);
+  std::string op;
+
+  if(element.contains("op"))
+    op = element["op"]["_type"].get<std::string>();
+  else if(element.contains("ops"))
+    op = element["ops"][0]["_type"].get<std::string>();
+
+  assert(!op.empty());
+
+  exprt bin_expr(get_op(op), current_element_type);
 
   exprt lhs = get_expr(element["left"]);
-  exprt rhs = get_expr(element["right"]);
+
+  exprt rhs;
+  if(element.contains("right"))
+    rhs = get_expr(element["right"]);
+  else if(element.contains("comparators"))
+    rhs = get_expr(element["comparators"][0]);
 
   bin_expr.copy_to_operands(lhs, rhs);
   return bin_expr;
@@ -138,6 +162,16 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   unary_expr.operands().push_back(unary_sub);
 
   return unary_expr;
+}
+
+const nlohmann::json python_converter::find_var_decl(const std::string &id)
+{
+  for(auto &element : ast_json["body"])
+  {
+    if((element["_type"] == "AnnAssign") && (element["target"]["id"] == id))
+      return element;
+  }
+  return nlohmann::json();
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)
@@ -170,6 +204,23 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     break;
   }
+  case ExpressionType::VARIABLE_REF:
+  {
+    // look for the variable declaration
+    std::string var_name = element["id"].get<std::string>();
+    nlohmann::json ref = find_var_decl(var_name);
+    assert(!ref.empty());
+
+    typet type = get_typet(ref["annotation"]["id"].get<std::string>());
+    std::string id = std::string("py:program.py") + std::string("@F@") +
+                     current_function_name + std::string("@") + var_name;
+    expr = exprt("symbol", type);
+    expr.identifier(id);
+    expr.cmt_lvalue(true);
+    expr.name(var_name);
+
+    break;
+  }
   default:
   {
     log_error("Unimplemented type in rule expression");
@@ -194,11 +245,11 @@ void python_converter::get_var_assign(
   if(!target.is_null() && target["_type"] == "Name")
   {
     name = target["id"];
-    id = "c:@" + name;
+    id = "py:@" + name;
   }
 
   // Variable location
-  locationt location_begin = get_location_from_decl(ast_node);
+  locationt location_begin = get_location_from_decl(ast_node["target"]);
 
   // Debug module name
   // FIXME: This should be read from JSON
@@ -223,10 +274,71 @@ void python_converter::get_var_assign(
   context.add(symbol);
 }
 
+exprt python_converter::get_block(const nlohmann::json &ast_block)
+{
+  exprt block_expr = code_skipt();
+  code_blockt block;
+
+  for(auto &element : ast_block)
+  {
+    StatementType type = get_statement_type(element);
+
+    switch(type)
+    {
+    case StatementType::VARIABLE_ASSIGN:
+    {
+      get_var_assign(element, block);
+      break;
+    }
+    case StatementType::FUNC_DEFINITION:
+    case StatementType::IF_STATEMENT:
+    case StatementType::UNKNOWN:
+    default:
+      log_error("error");
+      abort();
+    }
+  }
+
+  block_expr = block;
+  return block_expr;
+}
+
+static codet convert_expression_to_code(exprt &expr)
+{
+  if(expr.is_code())
+    return static_cast<codet &>(expr);
+
+  codet code("expression");
+  code.location() = expr.location();
+  code.move_to_operands(expr);
+
+  return code;
+}
+
+void python_converter::get_if_statement(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  exprt cond = get_expr(ast_node["test"]);
+  exprt then = get_block(ast_node["body"]);
+  locationt location = get_location_from_decl(ast_node);
+  then.location() = location;
+  // TODO: Get location from block
+  then.end_location(location);
+
+  current_element_type = bool_type();
+  code_ifthenelset code_if;
+  code_if.cond() = cond;
+  code_if.then_case() = convert_expression_to_code(then);
+
+  target_block.copy_to_operands(code_if);
+}
+
 bool python_converter::convert()
 {
   codet main_code = code_blockt();
   main_code.make_block();
+  current_function_name = "globalscope";
 
   std::ifstream f(ast_output_dir + "/ast.json");
   ast_json = nlohmann::json::parse(f);
@@ -242,6 +354,10 @@ bool python_converter::convert()
     if(type == StatementType::VARIABLE_ASSIGN)
     {
       get_var_assign(element, main_code);
+    }
+    else if(type == StatementType::IF_STATEMENT)
+    {
+      get_if_statement(element, main_code);
     }
   }
 
