@@ -327,9 +327,15 @@ void python_converter::get_if_statement(
   then.end_location(location);
 
   current_element_type = bool_type();
-  code_ifthenelset code_if;
-  code_if.cond() = cond;
-  code_if.then_case() = convert_expression_to_code(then);
+
+  codet code_if("ifthenelse");
+  code_if.copy_to_operands(cond, convert_expression_to_code(then));
+
+  if(ast_node.contains("orelse") && !ast_node["orelse"].empty())
+  {
+    exprt else_expr = get_block(ast_node["orelse"]);
+    code_if.copy_to_operands(convert_expression_to_code(else_expr));
+  }
 
   target_block.copy_to_operands(code_if);
 }
