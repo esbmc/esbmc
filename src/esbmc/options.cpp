@@ -63,9 +63,7 @@ const struct group_opt_templ all_cmd_options[] = {
 #ifdef ENABLE_PYTHON_FRONTEND
   {"Python frontend",
    {
-     {"show-python-ast",
-      NULL,
-      "show Python AST"},
+     {"show-python-ast", NULL, "show Python AST"},
    }},
 #endif
   {"Frontend",
