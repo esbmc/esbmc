@@ -96,15 +96,6 @@ static symbolt create_symbol(
   return symbol;
 }
 
-static locationt get_location_from_decl(const nlohmann::json &ast_node)
-{
-  locationt location;
-  location.set_line(ast_node["lineno"].get<int>());
-  // TODO: Modify ast.py to include Python filename in the generated json
-  location.set_file("program.py"); // FIXME: This should be read from JSON
-  return location;
-}
-
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
   auto type = element["_type"];
@@ -172,6 +163,15 @@ const nlohmann::json python_converter::find_var_decl(const std::string &id)
       return element;
   }
   return nlohmann::json();
+}
+
+locationt
+python_converter::get_location_from_decl(const nlohmann::json &ast_node)
+{
+  locationt location;
+  location.set_line(ast_node["lineno"].get<int>());
+  location.set_file(ast_json["filename"].get<std::string>());
+  return location;
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)
@@ -257,8 +257,7 @@ void python_converter::get_var_assign(
   locationt location_begin = get_location_from_decl(ast_node["target"]);
 
   // Debug module name
-  // FIXME: This should be read from JSON
-  std::string module_name = "program.py";
+  std::string module_name = location_begin.get_file().as_string();
 
   // Create/init symbol
   symbolt symbol =
