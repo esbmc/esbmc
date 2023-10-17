@@ -284,6 +284,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
   code_blockt block;
 
+  // Iterate through the statements of the block
   for(auto &element : ast_block)
   {
     StatementType type = get_statement_type(element);
@@ -292,6 +293,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     {
     case StatementType::VARIABLE_ASSIGN:
     {
+      // Add an assignment to the block
       get_var_assign(element, block);
       break;
     }
@@ -323,18 +325,22 @@ void python_converter::get_if_statement(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  current_element_type = bool_type();
+
+  // Extract condition from AST
   exprt cond = get_expr(ast_node["test"]);
   cond.location() = get_location_from_decl(ast_node["test"]);
 
+  // Extract 'then' block from AST
   exprt then = get_block(ast_node["body"]);
   locationt location = get_location_from_decl(ast_node);
   then.location() = location;
 
-  current_element_type = bool_type();
-
+  // Create if code and append "then" block
   codet code_if("ifthenelse");
   code_if.copy_to_operands(cond, convert_expression_to_code(then));
 
+  // Append 'else' block to the statement
   if(ast_node.contains("orelse") && !ast_node["orelse"].empty())
   {
     exprt else_expr = get_block(ast_node["orelse"]);
@@ -365,6 +371,7 @@ bool python_converter::convert()
     {
       get_var_assign(element, main_code);
     }
+    // If statements
     else if(type == StatementType::IF_STATEMENT)
     {
       get_if_statement(element, main_code);
