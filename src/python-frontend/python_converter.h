@@ -17,6 +17,7 @@ public:
 private:
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
   void get_if_statement(const nlohmann::json &ast_node, codet &target_block);
+  locationt get_location_from_decl(const nlohmann::json &ast_node);
   exprt get_expr(const nlohmann::json &element);
   exprt get_unary_operator_expr(const nlohmann::json &element);
   exprt get_binary_operator_expr(const nlohmann::json &element);
