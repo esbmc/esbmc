@@ -256,19 +256,26 @@ size_t strlcat(char *dst, const char *src, size_t siz)
   return (dlen + (s - src)); /* count does not include NUL */
 }
 
-void *aligned_alloc(size_t align, size_t size)
+int posix_memalign(void **memptr, size_t align, size_t size)
 {
 __ESBMC_HIDE:;
   if(
     !align || (align & (align - 1)) || /* alignment must be a power of 2 */
     (size & (align - 1)) /* size must be a multiple of alignment */
   )
-  {
-    errno = EINVAL;
-    return NULL;
-  }
+    return EINVAL;
   void *r = malloc(size);
+  int ret = size && !r ? ENOMEM : 0;
   __ESBMC_assume(!((uintptr_t)r & (align - 1)));
+  *memptr = r;
+  return ret;
+}
+
+void *aligned_alloc(size_t align, size_t size)
+{
+__ESBMC_HIDE:;
+  void *r;
+  errno = posix_memalign(&r, align, size);
   return r;
 }
 

@@ -28,6 +28,9 @@ typedef struct {
 void * malloc ( size_t size );
 void free(void *p);
 
+int posix_memalign(void **memptr, size_t alignment, size_t size);
+void *aligned_alloc(size_t align, size_t size);
+
 int system(const char * command);
 
 void * bsearch(const void * key, const void * base, size_t num, size_t size,
