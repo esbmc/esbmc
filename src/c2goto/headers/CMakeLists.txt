@@ -27,6 +27,8 @@ set(inputs
            sys/_pthread/_pthread_rwlockattr_t.h
            sys/_pthread/_pthread_t.h
            sys/_pthread/_pthread_types.h
+           # FreeBSD-14
+           sys/_pthreadtypes.h
            # end pthreads
 
            # Linux operational models
