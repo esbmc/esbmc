@@ -2,7 +2,7 @@
 #define CURAND_KERNEL_H_
 
 #include "curand_precalc.h"
-#include <math.h>
+#include <cmath>
 #include <curand.h>
 
 #define MAX_XOR_N (5)
