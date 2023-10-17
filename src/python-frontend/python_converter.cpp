@@ -299,35 +299,6 @@ void python_converter::get_compound_assign(
   target_block.copy_to_operands(code_assign);
 }
 
-exprt python_converter::get_block(const nlohmann::json &ast_block)
-{
-  code_blockt block;
-
-  // Iterate through the statements of the block
-  for(auto &element : ast_block)
-  {
-    StatementType type = get_statement_type(element);
-
-    switch(type)
-    {
-    case StatementType::VARIABLE_ASSIGN:
-    {
-      // Add an assignment to the block
-      get_var_assign(element, block);
-      break;
-    }
-    case StatementType::FUNC_DEFINITION:
-    case StatementType::IF_STATEMENT:
-    case StatementType::UNKNOWN:
-    default:
-      log_error("error");
-      abort();
-    }
-  }
-
-  return block;
-}
-
 static codet convert_expression_to_code(exprt &expr)
 {
   if(expr.is_code())
@@ -369,33 +340,55 @@ void python_converter::get_if_statement(
   target_block.copy_to_operands(code_if);
 }
 
-bool python_converter::convert()
+exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
-  codet main_code = code_blockt();
-  main_code.make_block();
-  current_function_name = "globalscope";
+  code_blockt block;
 
-  for(auto &element : ast_json["body"])
+  // Iterate through the statements of the block
+  for(auto &element : ast_block)
   {
     StatementType type = get_statement_type(element);
 
-    // Variable assignments
-    if(type == StatementType::VARIABLE_ASSIGN)
+    switch(type)
     {
-      get_var_assign(element, main_code);
+    case StatementType::VARIABLE_ASSIGN:
+    {
+      // Add an assignment to the block
+      get_var_assign(element, block);
+      break;
     }
-    // If statements
-    else if(type == StatementType::IF_STATEMENT)
+    case StatementType::IF_STATEMENT:
     {
-      get_if_statement(element, main_code);
+      get_if_statement(element, block);
+      break;
     }
-    else if(type == StatementType::COMPOUND_ASSIGN)
+    case StatementType::COMPOUND_ASSIGN:
     {
-      get_compound_assign(element, main_code);
+      get_compound_assign(element, block);
+      break;
+    }
+    case StatementType::FUNC_DEFINITION:
+    case StatementType::UNKNOWN:
+    default:
+      log_error("error");
+      abort();
     }
   }
 
-  // add "main"
+  return block;
+}
+
+bool python_converter::convert()
+{
+  current_function_name = "globalscope";
+
+  // Read all statements
+  exprt block_expr = get_block(ast_json["body"]);
+
+  // Get main function code
+  codet main_code = convert_expression_to_code(block_expr);
+
+  // Create and populate "main" symbol
   symbolt main_symbol;
 
   code_typet main_type;
