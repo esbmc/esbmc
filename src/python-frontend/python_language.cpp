@@ -66,6 +66,9 @@ bool python_languaget::parse(const std::string &path)
     return true;
   }
 
+  std::ifstream ast_json(ast_output_dir + "/ast.json");
+  ast = nlohmann::json::parse(ast_json);
+
   return false;
 }
 
@@ -78,12 +81,14 @@ bool python_languaget::typecheck(
   contextt &context,
   const std::string & /*module*/)
 {
-  python_converter converter(context, ast_output_dir);
+  python_converter converter(context, ast);
   return converter.convert();
 }
 
-void python_languaget::show_parse(std::ostream & /*out*/)
+void python_languaget::show_parse(std::ostream &out)
 {
+  out << "AST:\n";
+  out << ast.dump(4) << std::endl;
 }
 
 bool python_languaget::from_expr(
