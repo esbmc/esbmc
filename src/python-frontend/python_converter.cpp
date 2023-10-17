@@ -356,12 +356,6 @@ bool python_converter::convert()
   main_code.make_block();
   current_function_name = "globalscope";
 
-  std::ifstream f(ast_output_dir + "/ast.json");
-  ast_json = nlohmann::json::parse(f);
-
-  if(!config.options.get_option("show-python-ast").empty())
-    log_status("AST:\n{}\n", ast_json.dump(4).c_str());
-
   for(auto &element : ast_json["body"])
   {
     StatementType type = get_statement_type(element);
