@@ -212,8 +212,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     assert(!ref.empty());
 
     typet type = get_typet(ref["annotation"]["id"].get<std::string>());
-    std::string id = std::string("py:program.py") + std::string("@F@") +
-                     current_function_name + std::string("@") + var_name;
 
     symbolt *symbol = context.find_symbol(std::string("py:@") + var_name);
     if(symbol != nullptr)
