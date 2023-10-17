@@ -134,10 +134,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if(is_with2t(expr))
   {
     const with2t &with = to_with2t(expr);
-    //For performance issue, below aims to enable propagation for sturcts only.
-    if(
-      is_constant_array_of2t(with.source_value) ||
-      is_constant_union2t(with.source_value))
+    if(is_constant_array_of2t(with.source_value))
     {
       return false;
     }
