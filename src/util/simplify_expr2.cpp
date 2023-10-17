@@ -852,6 +852,13 @@ expr2tc with2t::do_simplify() const
 
 expr2tc member2t::do_simplify() const
 {
+  if(is_with2t(source_value))
+  {
+    const with2t &with = to_with2t(source_value);
+    if(with.update_field)
+      return with.update_value;
+    return expr2tc();
+  }
   if(is_constant_struct2t(source_value) || is_constant_union2t(source_value))
   {
     unsigned no =
