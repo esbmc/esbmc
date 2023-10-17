@@ -275,8 +275,9 @@ void python_converter::get_var_assign(
   exprt val = get_expr(value);
   symbol.value = val;
 
-  target_block.copy_to_operands(
-    code_assignt(symbol_expr(symbol), symbol.value));
+  code_assignt code_assign(symbol_expr(symbol), symbol.value);
+  code_assign.location() = location_begin;
+  target_block.copy_to_operands(code_assign);
 
   context.add(symbol);
 }
@@ -325,11 +326,11 @@ void python_converter::get_if_statement(
   codet &target_block)
 {
   exprt cond = get_expr(ast_node["test"]);
+  cond.location() = get_location_from_decl(ast_node["test"]);
+
   exprt then = get_block(ast_node["body"]);
   locationt location = get_location_from_decl(ast_node);
   then.location() = location;
-  // TODO: Get location from block
-  then.end_location(location);
 
   current_element_type = bool_type();
 
