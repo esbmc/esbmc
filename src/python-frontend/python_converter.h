@@ -8,8 +8,8 @@ class codet;
 class python_converter
 {
 public:
-  python_converter(contextt &_context, const std::string &_ast_output_dir)
-    : context(_context), ast_output_dir(_ast_output_dir)
+  python_converter(contextt &_context, const nlohmann::json &ast)
+    : context(_context), ast_json(ast)
   {
   }
   bool convert();
@@ -25,8 +25,7 @@ private:
   const nlohmann::json find_var_decl(const std::string &id);
 
   contextt &context;
-  std::string ast_output_dir;
   typet current_element_type;
   std::string current_function_name;
-  nlohmann::json ast_json;
+  const nlohmann::json &ast_json;
 };
