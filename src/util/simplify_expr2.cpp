@@ -852,17 +852,23 @@ expr2tc with2t::do_simplify() const
 
 expr2tc member2t::do_simplify() const
 {
-  if(is_with2t(source_value))
+  expr2tc current_source = source_value;
+  while(is_with2t(current_source))
   {
-    const with2t &with = to_with2t(source_value);
+    const with2t &with = to_with2t(current_source);
     if(member == to_constant_string2t(with.update_field).value)
+    {
       return with.update_value;
+    }
 
     if(is_with2t(with.source_value))
     {
-      return to_member2t(with.source_value).do_simplify();
+      current_source = with.source_value;
     }
-    return expr2tc();
+    else
+    {
+      return expr2tc();
+    }
   }
   if(is_constant_struct2t(source_value) || is_constant_union2t(source_value))
   {
