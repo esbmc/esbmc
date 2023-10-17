@@ -8,6 +8,24 @@
 #include <fstream>
 #include <unordered_map>
 
+enum class ExpressionType
+{
+  UNARY_OPERATION,
+  BINARY_OPERATION,
+  LITERAL,
+  VARIABLE_REF,
+  UNKNOWN,
+};
+
+enum class StatementType
+{
+  VARIABLE_ASSIGN, // Simple assignments like x = 1
+  COMPOUND_ASSIGN, // Compound assignments (+=, -=, etc)
+  FUNC_DEFINITION,
+  IF_STATEMENT,
+  UNKNOWN,
+};
+
 static const std::unordered_map<std::string, std::string> operator_map = {
   {"Add", "+"},
   {"Sub", "-"},
@@ -22,36 +40,19 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"USub", "unary-"},
   {"Eq", "="}};
 
-enum class StatementType
-{
-  VARIABLE_ASSIGN,
-  FUNC_DEFINITION,
-  IF_STATEMENT,
-  UNKNOWN,
-};
-
-enum class ExpressionType
-{
-  UNARY_OPERATION,
-  BINARY_OPERATION,
-  LITERAL,
-  VARIABLE_REF,
-  UNKNOWN,
+static const std::unordered_map<std::string, StatementType> statement_map = {
+  {"AnnAssign", StatementType::VARIABLE_ASSIGN},
+  {"FunctionDef", StatementType::FUNC_DEFINITION},
+  {"If", StatementType::IF_STATEMENT},
+  {"AugAssign", StatementType::COMPOUND_ASSIGN},
 };
 
 static StatementType get_statement_type(const nlohmann::json &element)
 {
-  if(element["_type"] == "AnnAssign")
+  auto it = statement_map.find(element["_type"]);
+  if(it != statement_map.end())
   {
-    return StatementType::VARIABLE_ASSIGN;
-  }
-  else if(element["_type"] == "FunctionDef")
-  {
-    return StatementType::FUNC_DEFINITION;
-  }
-  else if(element["_type"] == "If")
-  {
-    return StatementType::IF_STATEMENT;
+    return it->second;
   }
   return StatementType::UNKNOWN;
 }
@@ -131,13 +132,19 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   exprt bin_expr(get_op(op), current_element_type);
 
-  exprt lhs = get_expr(element["left"]);
+  exprt lhs; // = get_expr(element["left"]);
+  if(element.contains("left"))
+    lhs = get_expr(element["left"]);
+  else if(element.contains("target"))
+    lhs = get_expr(element["target"]);
 
   exprt rhs;
   if(element.contains("right"))
     rhs = get_expr(element["right"]);
   else if(element.contains("comparators"))
     rhs = get_expr(element["comparators"][0]);
+  else if(element.contains("value"))
+    rhs = get_expr(element["value"]);
 
   bin_expr.copy_to_operands(lhs, rhs);
   return bin_expr;
@@ -279,6 +286,19 @@ void python_converter::get_var_assign(
   context.add(symbol);
 }
 
+void python_converter::get_compound_assign(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  exprt lhs = get_expr(ast_node["target"]);
+  exprt rhs = get_binary_operator_expr(ast_node);
+
+  code_assignt code_assign(lhs, rhs);
+  code_assign.location() = get_location_from_decl(ast_node);
+
+  target_block.copy_to_operands(code_assign);
+}
+
 exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
   code_blockt block;
@@ -368,6 +388,10 @@ bool python_converter::convert()
     else if(type == StatementType::IF_STATEMENT)
     {
       get_if_statement(element, main_code);
+    }
+    else if(type == StatementType::COMPOUND_ASSIGN)
+    {
+      get_compound_assign(element, main_code);
     }
   }
 
