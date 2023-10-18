@@ -1,4 +1,5 @@
 #include "python-frontend/python_converter.h"
+#include "python_frontend_types.h"
 #include "util/std_code.h"
 #include "util/c_types.h"
 #include "util/arith_tools.h"
@@ -7,45 +8,6 @@
 
 #include <fstream>
 #include <unordered_map>
-
-enum class ExpressionType
-{
-  UNARY_OPERATION,
-  BINARY_OPERATION,
-  LITERAL,
-  VARIABLE_REF,
-  UNKNOWN,
-};
-
-enum class StatementType
-{
-  VARIABLE_ASSIGN, // Simple assignments like x = 1
-  COMPOUND_ASSIGN, // Compound assignments (+=, -=, etc)
-  FUNC_DEFINITION,
-  IF_STATEMENT,
-  UNKNOWN,
-};
-
-static const std::unordered_map<std::string, std::string> operator_map = {
-  {"Add", "+"},
-  {"Sub", "-"},
-  {"Mult", "*"},
-  {"Div", "/"},
-  {"BitOr", "bitor"},
-  {"BitAnd", "bitand"},
-  {"BitXor", "bitxor"},
-  {"Invert", "bitnot"},
-  {"LShift", "shl"},
-  {"RShift", "ashr"},
-  {"USub", "unary-"},
-  {"Eq", "="}};
-
-static const std::unordered_map<std::string, StatementType> statement_map = {
-  {"AnnAssign", StatementType::VARIABLE_ASSIGN},
-  {"FunctionDef", StatementType::FUNC_DEFINITION},
-  {"If", StatementType::IF_STATEMENT},
-  {"AugAssign", StatementType::COMPOUND_ASSIGN},
-};
 
 static StatementType get_statement_type(const nlohmann::json &element)
 {
@@ -215,11 +177,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     // Find the variable declaration in the AST JSON
     std::string var_name = element["id"].get<std::string>();
-    nlohmann::json ref = find_var_decl(var_name);
-    assert(!ref.empty());
-
-    typet type = get_typet(ref["annotation"]["id"].get<std::string>());
-
     symbolt *symbol = context.find_symbol(std::string("py:@") + var_name);
     if(symbol != nullptr)
     {
@@ -291,6 +248,7 @@ void python_converter::get_compound_assign(
   codet &target_block)
 {
   exprt lhs = get_expr(ast_node["target"]);
+  current_element_type = lhs.type();
   exprt rhs = get_binary_operator_expr(ast_node);
 
   code_assignt code_assign(lhs, rhs);
@@ -311,7 +269,7 @@ static codet convert_expression_to_code(exprt &expr)
   return code;
 }
 
-void python_converter::get_if_statement(
+void python_converter::get_conditional_stms(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
@@ -327,17 +285,23 @@ void python_converter::get_if_statement(
   then.location() = location;
 
   // Create if code and append "then" block
-  codet code_if("ifthenelse");
-  code_if.copy_to_operands(cond, convert_expression_to_code(then));
+  codet code;
+  auto type = ast_node["_type"];
+  if(type == "If")
+    code.set_statement("ifthenelse");
+  else if(type == "While")
+    code.set_statement("while");
+
+  code.copy_to_operands(cond, convert_expression_to_code(then));
 
   // Append 'else' block to the statement
   if(ast_node.contains("orelse") && !ast_node["orelse"].empty())
   {
     exprt else_expr = get_block(ast_node["orelse"]);
-    code_if.copy_to_operands(convert_expression_to_code(else_expr));
+    code.copy_to_operands(convert_expression_to_code(else_expr));
   }
 
-  target_block.copy_to_operands(code_if);
+  target_block.copy_to_operands(code);
 }
 
 exprt python_converter::get_block(const nlohmann::json &ast_block)
@@ -358,8 +322,9 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       break;
     }
     case StatementType::IF_STATEMENT:
+    case StatementType::WHILE_STATEMENT:
     {
-      get_if_statement(element, block);
+      get_conditional_stms(element, block);
       break;
     }
     case StatementType::COMPOUND_ASSIGN:
@@ -398,6 +363,9 @@ bool python_converter::convert()
   main_symbol.name = "__ESBMC_main";
   main_symbol.type.swap(main_type);
   main_symbol.value.swap(main_code);
+  main_symbol.lvalue = true;
+  main_symbol.is_extern = false;
+  main_symbol.file_local = false;
 
   if(context.move(main_symbol))
   {
