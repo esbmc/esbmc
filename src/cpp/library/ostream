@@ -64,7 +64,7 @@ namespace std
   { return o; }
   inline ostream& operator<< ( ostream& o, unsigned int val )
   { return o; }
-#if __WORDSIZE == 64 // Is the same type as 'int' otherwise.
+#if defined(__clang__) || __WORDSIZE == 64 // Is the same type as 'int' otherwise.
   inline ostream& operator<< ( ostream& o, long val )
   { return o; }
   inline ostream& operator<< ( ostream& o, unsigned long val )
@@ -74,7 +74,7 @@ namespace std
   { return o; }
   inline ostream& operator<< ( ostream& o, double val )
   { return o; }
-#if 0
+#if defined(__clang__)
   // Identical to double under ESBMC.
   inline ostream& operator<< ( ostream& o, long double val )
   { return o; }
