@@ -2617,6 +2617,7 @@ bool clang_c_convertert::get_cast_expr(
 
   case clang::CK_AddressSpaceConversion:
   case clang::CK_NullToPointer:
+  case clang::CK_NullToMemberPointer:
     expr = gen_zero(type);
     break;
 
