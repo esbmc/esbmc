@@ -1,3 +1,4 @@
+#include "irep2/irep2_expr.h"
 #include <cassert>
 #include <goto-programs/static_analysis.h>
 #include <memory>
@@ -361,6 +362,10 @@ void static_analysis_baset::do_function_call_rec(
   else if (is_member2t(function) || is_index2t(function))
   {
     // ignore, can't be a function
+  }
+  else if(is_dynamic_object2t(function))
+  {
+    // TODO
   }
   else
   {

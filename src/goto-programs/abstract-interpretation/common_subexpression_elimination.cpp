@@ -228,6 +228,7 @@ bool goto_cse::runOnProgram(goto_functionst &F)
 
   try
   {
+    log_status("{}", "[CSE] Computing VSA");
     cse_domaint::vsa = std::make_unique<value_set_analysist>(ns);
     (*cse_domaint::vsa)(F);
     log_status("{}", "[CSE] Computing Available Expressions for program");
