@@ -264,17 +264,20 @@ __ESBMC_HIDE:;
     (size & (align - 1)) /* size must be a multiple of alignment */
   )
     return EINVAL;
+  int save = errno;
   void *r = malloc(size);
-  int ret = size && !r ? ENOMEM : 0;
+  errno = save;
   __ESBMC_assume(!((uintptr_t)r & (align - 1)));
+  if(size && !r)
+    return ENOMEM;
   *memptr = r;
-  return ret;
+  return 0;
 }
 
 void *aligned_alloc(size_t align, size_t size)
 {
 __ESBMC_HIDE:;
-  void *r;
+  void *r = NULL;
   errno = posix_memalign(&r, align, size);
   return r;
 }
