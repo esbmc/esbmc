@@ -711,6 +711,9 @@ smt_convt::resultt bmct::multi_property_check(
   std::atomic_size_t ce_counter = 0;
   std::unordered_set<size_t> jobs;
   std::mutex result_mutex;
+  // Store the location of the assertion
+  // to avoid double verifying the unwinding claims in loop/func_call
+  std::string loc = "";
   // For coverage info
   int tracked_instrument = 0;
   std::unordered_set<std::string> reached_claims;
@@ -737,8 +740,10 @@ smt_convt::resultt bmct::multi_property_check(
                        &ce_counter,
                        &final_result,
                        &result_mutex,
+                       &loc,
                        &tracked_instrument,
-                       &reached_claims](const size_t &i) {
+                       &reached_claims](const size_t &i)
+  {
     // Since this is just a copy, we probably don't need a lock
     auto local_eq = std::make_shared<symex_target_equationt>(*eq);
 
@@ -790,7 +795,7 @@ smt_convt::resultt bmct::multi_property_check(
       }
       solver_job.join();
       // TODO: Fix the unordered output
-      // report_multi_property_trace(result, claim.claim_msg);
+
       if(result == smt_convt::P_SATISFIABLE)
       {
         const std::lock_guard<std::mutex> lock(result_mutex);
@@ -803,41 +808,70 @@ smt_convt::resultt bmct::multi_property_check(
         }
         goto_tracet goto_trace;
         build_goto_trace(local_eq, runtime_solver, goto_trace, false);
-        // TODO: Replace this with a test-case for coverage!
-        std::string output_file = options.get_option("cex-output");
-        if(output_file != "")
-        {
-          std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
-          show_goto_trace(out, ns, goto_trace);
-        }
-        std::ostringstream oss;
-        log_fail("\n[Counterexample]\n");
-        show_goto_trace(oss, ns, goto_trace);
-        log_result("{}", oss.str());
-        final_result = result;
 
-        // collect the tracked instrumentation which is verified failed
-        // we assume it always works in multi-property checking mode
-        if(
-          options.get_bool_option("goto-coverage") ||
-          options.get_bool_option("make-assert-false") ||
-          options.get_bool_option("add-false-assert"))
+        // to avoid double verifying claims
+        // we use the location to distinguish each claim
+        if(!options.get_bool_option("keep-unwind-claims"))
         {
-          if(claim.claim_msg.find("Instrumentation") != std::string::npos)
-          {
-            // E.g.
-            // "Claim 1: Instrumentation ASSERT(0) Added"
-            // "Claim 2: Instrumentation ASSERT(0) Converted"
-            if(!reached_claims.count(claim.claim_msg))
+          for(const auto &step : goto_trace.steps)
+            if(step.type == goto_trace_stept::ASSERT)
             {
-              // avoid double counting the claims in loop/func_call
+              // since we only handle one claim at a time
+              // we will/should not overwrite the loc
+              // it's safe in parallel-solving as we have added the mutex_lock
+              assert(loc == "");
+              if(step.pc->location.is_nil())
+                loc = "nil";
+              else
+                loc = step.pc->location.as_string();
+            }
+        }
+        if(!reached_claims.count(loc))
+        {
+          if(loc != "nil" && !options.get_bool_option("keep-unwind-claims"))
+            reached_claims.insert(loc);
+          std::string output_file = options.get_option("cex-output");
+          if(output_file != "")
+          {
+            std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
+            show_goto_trace(out, ns, goto_trace);
+          }
+          std::ostringstream oss;
+          log_fail("\n[Counterexample]\n");
+          show_goto_trace(oss, ns, goto_trace);
+          log_result("{}", oss.str());
+          final_result = result;
+
+          // collect the tracked instrumentation which is verified failed
+          // we assume it always works in multi-property checking mode
+          if(
+            options.get_bool_option("goto-coverage") ||
+            options.get_bool_option("make-assert-false") ||
+            options.get_bool_option("add-false-assert"))
+          {
+            // skip the claims added by goto-check as they are not in the source code
+            if(claim.claim_msg.find("Instrumentation") != std::string::npos)
+            {
+              // E.g.
+              // "Claim 1: Instrumentation ASSERT(0) Added"
+              // "Claim 2: Instrumentation ASSERT(0) Converted"
               tracked_instrument++;
-              reached_claims.insert(claim.claim_msg);
             }
           }
         }
+        else
+        {
+          // we should not be here if "keep-unwind-claims" is set
+          assert(!options.get_bool_option("keep-unwind-claims"));
+          log_status("\nFound verified claim. Skipping...\n");
+
+          //TODO: this can still be annoying when we unind for many times
+          // e.g. '--unwind 100' will show 1 counterexample and 99 'skip's
+          // Maybe we should use log_debug instead, both in slicer.run and multi_property_check
+        }
+        // reset location
+        loc = "";
       }
-      // TODO: This is the place to store into a cache
     }
     catch(...)
     {
