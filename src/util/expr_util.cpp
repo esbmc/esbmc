@@ -258,6 +258,18 @@ exprt gen_address_of(const exprt &op)
   return tmp;
 }
 
+exprt gen_boolean(bool value)
+{
+  exprt expr("constant", typet("bool"));
+
+  if(value == true)
+    expr.make_true();
+  else
+    expr.make_false();
+
+  return expr;
+}
+
 void make_next_state(exprt &expr)
 {
   Forall_operands(it, expr)

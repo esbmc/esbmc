@@ -1,6 +1,8 @@
 #pragma once
 
-#include <util/language.h>
+#include "util/language.h"
+
+#include <nlohmann/json.hpp>
 
 class python_languaget : public languaget
 {
@@ -31,6 +33,7 @@ public:
 
 private:
   std::string ast_output_dir;
+  nlohmann::json ast;
 };
 
 languaget *new_python_language();

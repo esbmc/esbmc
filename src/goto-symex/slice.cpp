@@ -129,6 +129,7 @@ void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
  */
 bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
 {
+  sliced = 0;
   fine_timet algorithm_start = current_time();
   // just find the last assertion
   symex_target_equationt::SSA_stepst::iterator last_assertion = steps.end();
@@ -160,6 +161,7 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
 
 bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
 {
+  sliced = 0;
   fine_timet algorithm_start = current_time();
   size_t counter = 1;
   for(symex_target_equationt::SSA_stepst::iterator it = steps.begin();

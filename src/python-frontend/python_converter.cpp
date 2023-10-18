@@ -18,13 +18,15 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"BitXor", "bitxor"},
   {"Invert", "bitnot"},
   {"LShift", "shl"},
-  {"RShift", "lsr"},
-  {"USub", "unary-"}};
+  {"RShift", "ashr"},
+  {"USub", "unary-"},
+  {"Eq", "="}};
 
 enum class StatementType
 {
   VARIABLE_ASSIGN,
   FUNC_DEFINITION,
+  IF_STATEMENT,
   UNKNOWN,
 };
 
@@ -33,6 +35,7 @@ enum class ExpressionType
   UNARY_OPERATION,
   BINARY_OPERATION,
   LITERAL,
+  VARIABLE_REF,
   UNKNOWN,
 };
 
@@ -45,6 +48,10 @@ static StatementType get_statement_type(const nlohmann::json &element)
   else if(element["_type"] == "FunctionDef")
   {
     return StatementType::FUNC_DEFINITION;
+  }
+  else if(element["_type"] == "If")
+  {
+    return StatementType::IF_STATEMENT;
   }
   return StatementType::UNKNOWN;
 }
@@ -67,6 +74,8 @@ static typet get_typet(const std::string &ast_type)
     return float_type();
   if(ast_type == "int")
     return int_type();
+  if(ast_type == "bool")
+    return bool_type();
   return empty_typet();
 }
 
@@ -90,7 +99,7 @@ static symbolt create_symbol(
 static locationt get_location_from_decl(const nlohmann::json &ast_node)
 {
   locationt location;
-  location.set_line(ast_node["target"]["lineno"].get<int>());
+  location.set_line(ast_node["lineno"].get<int>());
   // TODO: Modify ast.py to include Python filename in the generated json
   location.set_file("program.py"); // FIXME: This should be read from JSON
   return location;
@@ -103,7 +112,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   {
     return ExpressionType::UNARY_OPERATION;
   }
-  if(type == "BinOp")
+  if(type == "BinOp" || type == "Compare")
   {
     return ExpressionType::BINARY_OPERATION;
   }
@@ -111,16 +120,33 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   {
     return ExpressionType::LITERAL;
   }
+  if(type == "Name")
+  {
+    return ExpressionType::VARIABLE_REF;
+  }
   return ExpressionType::UNKNOWN;
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
-  exprt bin_expr(
-    get_op(element["op"]["_type"].get<std::string>()), current_element_type);
+  std::string op;
+
+  if(element.contains("op"))
+    op = element["op"]["_type"].get<std::string>();
+  else if(element.contains("ops"))
+    op = element["ops"][0]["_type"].get<std::string>();
+
+  assert(!op.empty());
+
+  exprt bin_expr(get_op(op), current_element_type);
 
   exprt lhs = get_expr(element["left"]);
-  exprt rhs = get_expr(element["right"]);
+
+  exprt rhs;
+  if(element.contains("right"))
+    rhs = get_expr(element["right"]);
+  else if(element.contains("comparators"))
+    rhs = get_expr(element["comparators"][0]);
 
   bin_expr.copy_to_operands(lhs, rhs);
   return bin_expr;
@@ -136,6 +162,16 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   unary_expr.operands().push_back(unary_sub);
 
   return unary_expr;
+}
+
+const nlohmann::json python_converter::find_var_decl(const std::string &id)
+{
+  for(auto &element : ast_json["body"])
+  {
+    if((element["_type"] == "AnnAssign") && (element["target"]["id"] == id))
+      return element;
+  }
+  return nlohmann::json();
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)
@@ -162,6 +198,32 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     {
       expr = from_integer(value.get<int>(), int_type());
     }
+    else if(element["value"].is_boolean())
+    {
+      expr = gen_boolean(value.get<bool>());
+    }
+    break;
+  }
+  case ExpressionType::VARIABLE_REF:
+  {
+    // Find the variable declaration in the AST JSON
+    std::string var_name = element["id"].get<std::string>();
+    nlohmann::json ref = find_var_decl(var_name);
+    assert(!ref.empty());
+
+    typet type = get_typet(ref["annotation"]["id"].get<std::string>());
+
+    symbolt *symbol = context.find_symbol(std::string("py:@") + var_name);
+    if(symbol != nullptr)
+    {
+      expr = symbol_expr(*symbol);
+    }
+    else
+    {
+      log_error("Symbol not found\n");
+      abort();
+    }
+
     break;
   }
   default:
@@ -174,7 +236,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   return expr;
 }
 
-symbolt python_converter::get_var_decl(const nlohmann::json &ast_node)
+void python_converter::get_var_assign(
+  const nlohmann::json &ast_node,
+  codet &target_block)
 {
   // Get variable type
   current_element_type =
@@ -186,11 +250,11 @@ symbolt python_converter::get_var_decl(const nlohmann::json &ast_node)
   if(!target.is_null() && target["_type"] == "Name")
   {
     name = target["id"];
-    id = "c:@" + name;
+    id = "py:@" + name;
   }
 
   // Variable location
-  locationt location_begin = get_location_from_decl(ast_node);
+  locationt location_begin = get_location_from_decl(ast_node["target"]);
 
   // Debug module name
   // FIXME: This should be read from JSON
@@ -209,28 +273,102 @@ symbolt python_converter::get_var_decl(const nlohmann::json &ast_node)
   exprt val = get_expr(value);
   symbol.value = val;
 
-  return symbol;
+  code_assignt code_assign(symbol_expr(symbol), symbol.value);
+  code_assign.location() = location_begin;
+  target_block.copy_to_operands(code_assign);
+
+  context.add(symbol);
+}
+
+exprt python_converter::get_block(const nlohmann::json &ast_block)
+{
+  code_blockt block;
+
+  // Iterate through the statements of the block
+  for(auto &element : ast_block)
+  {
+    StatementType type = get_statement_type(element);
+
+    switch(type)
+    {
+    case StatementType::VARIABLE_ASSIGN:
+    {
+      // Add an assignment to the block
+      get_var_assign(element, block);
+      break;
+    }
+    case StatementType::FUNC_DEFINITION:
+    case StatementType::IF_STATEMENT:
+    case StatementType::UNKNOWN:
+    default:
+      log_error("error");
+      abort();
+    }
+  }
+
+  return block;
+}
+
+static codet convert_expression_to_code(exprt &expr)
+{
+  if(expr.is_code())
+    return static_cast<codet &>(expr);
+
+  codet code("expression");
+  code.location() = expr.location();
+  code.move_to_operands(expr);
+
+  return code;
+}
+
+void python_converter::get_if_statement(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  current_element_type = bool_type();
+
+  // Extract condition from AST
+  exprt cond = get_expr(ast_node["test"]);
+  cond.location() = get_location_from_decl(ast_node["test"]);
+
+  // Extract 'then' block from AST
+  exprt then = get_block(ast_node["body"]);
+  locationt location = get_location_from_decl(ast_node);
+  then.location() = location;
+
+  // Create if code and append "then" block
+  codet code_if("ifthenelse");
+  code_if.copy_to_operands(cond, convert_expression_to_code(then));
+
+  // Append 'else' block to the statement
+  if(ast_node.contains("orelse") && !ast_node["orelse"].empty())
+  {
+    exprt else_expr = get_block(ast_node["orelse"]);
+    code_if.copy_to_operands(convert_expression_to_code(else_expr));
+  }
+
+  target_block.copy_to_operands(code_if);
 }
 
 bool python_converter::convert()
 {
   codet main_code = code_blockt();
   main_code.make_block();
+  current_function_name = "globalscope";
 
-  std::ifstream f(ast_output_dir + "/ast.json");
-  nlohmann::json ast = nlohmann::json::parse(f);
-
-  for(auto &element : ast["body"])
+  for(auto &element : ast_json["body"])
   {
     StatementType type = get_statement_type(element);
 
     // Variable assignments
     if(type == StatementType::VARIABLE_ASSIGN)
     {
-      symbolt symbol = get_var_decl(element);
-      main_code.copy_to_operands(
-        code_assignt(symbol_expr(symbol), symbol.value));
-      context.add(symbol);
+      get_var_assign(element, main_code);
+    }
+    // If statements
+    else if(type == StatementType::IF_STATEMENT)
+    {
+      get_if_statement(element, main_code);
     }
   }
 
