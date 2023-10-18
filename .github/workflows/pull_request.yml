@@ -35,7 +35,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ${{ matrix.os }}
-      build-flags: '-b Debug -e On'
+      build-flags: '-b DebugOpt -e On'
       testing: true
       
     # Check project with clang-format
@@ -71,4 +71,4 @@ jobs:
       run: pip install cmakelint
     - name: Run CMake Lint
       run: find . -iname *.cmake -o -iname CMakeLists.txt | grep -v build | xargs cmakelint || echo "failure"
-      
+
