@@ -2,6 +2,7 @@
 #include "python-frontend/python_converter.h"
 #include "util/message.h"
 #include "util/filesystem.h"
+#include "util/c_expr2string.h"
 
 #include <cstdlib>
 
@@ -92,19 +93,19 @@ void python_languaget::show_parse(std::ostream &out)
 }
 
 bool python_languaget::from_expr(
-  const exprt & /*expr*/,
-  std::string & /*code*/,
-  const namespacet & /*ns*/)
+  const exprt &expr,
+  std::string &code,
+  const namespacet &ns)
 {
-  assert(!"Not implemented yet");
+  code = c_expr2string(expr, ns);
   return false;
 }
 
 bool python_languaget::from_type(
-  const typet & /*type*/,
-  std::string & /*code*/,
-  const namespacet & /*ns*/)
+  const typet &type,
+  std::string &code,
+  const namespacet &ns)
 {
-  assert(!"Not implemented yet");
+  code = c_type2string(type, ns);
   return false;
 }
