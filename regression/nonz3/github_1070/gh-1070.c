@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netinet/in.h> /* sockaddr_in */
 #include <unistd.h>
 #define BUFSIZE 4096
 
