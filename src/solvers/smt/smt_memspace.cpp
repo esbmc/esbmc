@@ -121,7 +121,12 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
         return the_ptr->update(this, convert_ast(the_ptr_offs), 1);
       }
 
-      return convert_ast(the_ptr_offs);
+      assert(offs1->type == offs2->type);
+      expr2tc type_size = type_byte_size_expr(offs1->type, &ns);
+      type_size = typecast2tc(the_ptr_offs->type, type_size); // diff is signed
+      expr2tc ptr_diff = div2tc(the_ptr_offs->type, the_ptr_offs, type_size);
+
+      return convert_ast(ptr_diff);
     }
     else
     {
