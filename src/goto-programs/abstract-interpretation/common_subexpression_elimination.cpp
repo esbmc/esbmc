@@ -1,6 +1,8 @@
 #include "goto-programs/goto_program.h"
 #include "irep2/irep2_expr.h"
+#include "irep2/irep2_type.h"
 #include "util/std_code.h"
+#include "util/std_expr.h"
 #include <goto-programs/abstract-interpretation/common_subexpression_elimination.h>
 #include <ostream>
 #include <sstream>
@@ -122,6 +124,17 @@ void cse_domaint::make_expression_available(const expr2tc &E)
   if(!E)
     return;
 
+  // Logical expressions can be short-circuited
+  // So, only the first operand will be available
+  if(is_and2t(E) || is_or2t(E))
+  {
+    return;
+  }
+
+  if(is_if2t(E))
+  {
+    return;
+  }
   // Skip sideeffects
   if(is_sideeffect2t(E))
     return;
@@ -302,33 +315,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
   if(!F.second.body_available)
     return false;
 
-  goto_loopst goto_loops(F.first, _goto_functions, F.second);
-  // Helper function to check wether the instruction belongs in a loop
-  // loops are trickier because they require the variable to be aways
-  // initialized.
-  // TODO: it might be worth to have a reverse index inside goto_loopst
-  // TODO: we should only initialize once per loop!
-  // TODO: variables that are not modified inside the loop could be skipped
-  // TODO: besides available expressions, we could use the same domain in
-  //       reverse to compute expressions that could be removed from loops
-  auto is_in_loop = [&goto_loops](const goto_programt::targett it) {
-    for(const auto &l : goto_loops.get_loops())
-    {
-      // There must be a better way of doing this :O
-      goto_programt::targett l_begin = l.get_original_loop_head();
-      const goto_programt::targett l_exit = l.get_original_loop_exit();
-      if(l_begin == it)
-        return true;
-      while(l_begin != l_exit)
-      {
-        if(l_begin == it)
-          return true;
-        l_begin++;
-      }
-    }
-    return false;
-  };
-
   // 1. Let's count expressions, the idea is to go through all program statements
   //    and check if any sub-expr is already available
   std::unordered_set<expr2tc, irep2_hash> expressions_set;
@@ -376,8 +362,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     expr2symbol[e] = symbol_as_expr;
   }
 
-  // TODO: this initialized set is used to be sure that it was initialized at least
-  //       once. It is a hack though.
   std::unordered_set<expr2tc, irep2_hash> initialized;
   // 3. Final step, let's initialize the symbols and replace the expressions!
   for(auto it = (F.second.body).instructions.begin();
@@ -396,6 +380,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     if(it->is_target())
     {
       // This might be a loop or an else statement.
+      // TODO: clear only expressions that are no longer available
       initialized.clear();
     }
     std::unordered_set<expr2tc, irep2_hash> matched_pre_expressions;
@@ -429,9 +414,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
         it,
         matched_post_expressions);
       break;
-      case LOCATION:
-        initialized.clear();
-        continue;
     default:
       continue;
     }
