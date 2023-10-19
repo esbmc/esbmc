@@ -1747,7 +1747,7 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("result-only", true);
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
-      options.set_option("keep-unwind-claims", false);
+      options.set_option("keep-verified-claims", false);
     }
 
     if(

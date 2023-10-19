@@ -485,7 +485,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"goto-coverage",
      NULL,
      "this activates --make-assert-false and --multi-property and"
-     "deactivates --keep-unwind-claims"},
+     "deactivates --keep-verified-claims"},
     {"goto-coverage-claims",
      NULL,
      "enable goto-coverage and shows all reached claims"}}},
