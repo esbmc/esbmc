@@ -33,7 +33,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
   VERBATIM
 )
 
-add_executable (esbmc main.cpp esbmc_parseoptions.cpp bmc.cpp globals.cpp document_subgoals.cpp show_vcc.cpp options.cpp expr2while.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
+add_executable (esbmc main.cpp esbmc_parseoptions.cpp bmc.cpp globals.cpp document_subgoals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
 target_include_directories(esbmc
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}

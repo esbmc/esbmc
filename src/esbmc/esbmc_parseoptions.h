@@ -48,9 +48,6 @@ protected:
   output_goto_program(optionst &options, goto_functionst &goto_functions);
 
   int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
-
-  int doit_rapid();
-
   int doit_k_induction_parallel();
 
   tvt is_base_case_violated(
