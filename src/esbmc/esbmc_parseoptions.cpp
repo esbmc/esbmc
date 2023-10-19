@@ -17,7 +17,6 @@ extern "C"
 #endif
 
 #include <esbmc/bmc.h>
-#include <esbmc/expr2while.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
@@ -469,9 +468,6 @@ int esbmc_parseoptionst::doit()
 
   if(cmdline.isset("falsification"))
     return doit_falsification();
-
-  if(cmdline.isset("rapid"))
-    return doit_rapid();
 
   if(cmdline.isset("k-induction"))
     return doit_k_induction();
@@ -1061,66 +1057,6 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   }
 
 #endif
-
-  return 0;
-}
-
-int esbmc_parseoptionst::doit_rapid()
-{
-  std::string rapid_file_name = tmpnam(NULL);
-  rapid_file_name = rapid_file_name + ".spec";
-
-  optionst opts;
-  get_command_line_options(opts);
-
-  // we dont need the GOTO program, but getting the program triggers
-  // parsing and reading into intermediate representation which we need
-  if(get_goto_program(opts, goto_functions))
-    return 6;
-
-  if(convert_to_while(context, rapid_file_name))
-    return 6;
-
-  if(
-    cmdline.isset("rapid-program-too") ||
-    cmdline.isset("rapid-program-only"))
-  {
-    std::ifstream f(rapid_file_name);
-    if(f) {
-      std::ostringstream oss;
-      oss << f.rdbuf();
-      log_status("{}", oss.str());
-    }
-    if(cmdline.isset("rapid-program-only"))
-      return 0;
-  }
-
-  std::string run_str;
-
-  if(cmdline.isset("rapid-path")){
-    run_str = std::string(cmdline.getval("rapid-path"));
-  } else {
-    log_error("unable to find rapid executable. try setting option rapid-path");
-    // what should this be?
-    return 6;
-  }
-
-  run_str += " -inlineSemantics off -integerIterations on -nat off -genInvariants on -vampViaFile on " + rapid_file_name;
-
-  std::array<char, 128> buffer;
-  std::string result;
-  std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(run_str.c_str(), "r"), pclose);
-  if (!pipe) {
-    log_error("unable to run Rapid");
-    return 6;
-  }
-  while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-    result += buffer.data();
-  }
-  log_status(result);
-
-  // delete the file no longer needed
-  remove(rapid_file_name.c_str()); 
 
   return 0;
 }
