@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util/context.h"
+#include <util/context.h>
 #include <nlohmann/json.hpp>
 
 class codet;
@@ -30,6 +30,5 @@ private:
 
   contextt &context;
   typet current_element_type;
-  std::string current_function_name;
   const nlohmann::json &ast_json;
 };

@@ -1,13 +1,39 @@
-#include "python-frontend/python_converter.h"
-#include "python_frontend_types.h"
-#include "util/std_code.h"
-#include "util/c_types.h"
-#include "util/arith_tools.h"
-#include "util/expr_util.h"
-#include "util/message.h"
+#include <python-frontend/python_converter.h>
+#include <python_frontend_types.h>
+#include <util/std_code.h>
+#include <util/c_types.h>
+#include <util/arith_tools.h>
+#include <util/expr_util.h>
+#include <util/message.h>
 
 #include <fstream>
 #include <unordered_map>
+
+static const std::unordered_map<std::string, std::string> operator_map = {
+  {"Add", "+"},
+  {"Sub", "-"},
+  {"Mult", "*"},
+  {"Div", "/"},
+  {"BitOr", "bitor"},
+  {"BitAnd", "bitand"},
+  {"BitXor", "bitxor"},
+  {"Invert", "bitnot"},
+  {"LShift", "shl"},
+  {"RShift", "ashr"},
+  {"USub", "unary-"},
+  {"Eq", "="},
+  {"Lt", "<"},
+  {"Gt", ">"},
+};
+
+static const std::unordered_map<std::string, StatementType> statement_map = {
+  {"AnnAssign", StatementType::VARIABLE_ASSIGN},
+  {"Assign", StatementType::VARIABLE_ASSIGN},
+  {"FunctionDef", StatementType::FUNC_DEFINITION},
+  {"If", StatementType::IF_STATEMENT},
+  {"AugAssign", StatementType::COMPOUND_ASSIGN},
+  {"While", StatementType::WHILE_STATEMENT},
+};
 
 static StatementType get_statement_type(const nlohmann::json &element)
 {
@@ -261,10 +287,8 @@ void python_converter::get_var_assign(
   {
     std::string id = ast_node["targets"][0]["id"].get<std::string>();
     symbolt *symbol = context.find_symbol(std::string("py:@") + id);
-    if(symbol != nullptr)
-    {
-      lhs = symbol_expr(*symbol);
-    }
+    assert(symbol);
+    lhs = symbol_expr(*symbol);
   }
 
   code_assignt code_assign(lhs, rhs);
@@ -373,8 +397,6 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
 bool python_converter::convert()
 {
-  current_function_name = "globalscope";
-
   // Read all statements
   exprt block_expr = get_block(ast_json["body"]);
 
