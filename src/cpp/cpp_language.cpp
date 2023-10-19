@@ -58,6 +58,9 @@ void cpp_languaget::internal_additions(std::ostream &out)
 
   // assume/assert
   out << "void __ESBMC_assume(bool assumption);" << std::endl;
+  out << "void __invariant(bool inv);" << std::endl;
+  out << "_Bool __forall(void *, _Bool);" << std::endl;
+  out << "_Bool __exists(void *, _Bool);" << std::endl;
   out << "void assert(bool assertion);" << std::endl;
   out << "void __ESBMC_assert("
          "bool assertion, const char *description);"

@@ -116,6 +116,12 @@ void goto_programt::instructiont::output_instruction(
     out << "\n";
     break;
 
+  case INVARIANT:
+    out << "INVARIANT ";
+
+    out << "\n";
+    break;
+
   case SKIP:
     out << "SKIP"
         << "\n";
@@ -474,11 +480,13 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case THROW_DECL_END:
     out << "THROW_DECL_END";
     break;
+  case INVARIANT:
+    out << "INVARIANT";
+    break;
   default:
     assert(!"Unknown instruction type");
     out << "unknown instruction";
   }
-
   return out;
 }
 

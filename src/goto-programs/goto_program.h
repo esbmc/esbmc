@@ -10,6 +10,7 @@
 #include <util/location.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
+#include <iostream>
 
 #define forall_goto_program_instructions(it, program)                          \
   for (goto_programt::instructionst::const_iterator it =                       \
@@ -43,7 +44,8 @@ typedef enum
   THROW = 17,         // throw an exception
   CATCH = 18,         // catch an exception
   THROW_DECL = 19,    // list of throws that a function can throw
-  THROW_DECL_END = 20 // end of throw declaration
+  THROW_DECL_END = 20,// end of throw declaration
+  INVARIANT = 21      // purported invariants (similar to assert)
 } goto_program_instruction_typet;
 
 std::ostream &operator<<(std::ostream &, goto_program_instruction_typet);
@@ -101,6 +103,9 @@ public:
     //! guard for gotos, assume, assert
     expr2tc guard;
 
+    //! invariants for use with __invariant
+    std::list<expr2tc> invariants;
+
     //! the target for gotos and for start_thread nodes
     typedef std::list<class instructiont>::iterator targett;
     typedef std::list<class instructiont>::const_iterator const_targett;
@@ -139,6 +144,11 @@ public:
 
     bool inductive_assertion;
 
+    // for vampire loop replacement
+  
+    bool is_loop_head;
+    bool is_break;
+ 
     //! is this node a branch target?
     inline bool is_target() const
     {
@@ -150,10 +160,13 @@ public:
     {
       type = _type;
       targets.clear();
+      invariants.clear();
       guard = gen_true_expr();
       code = expr2tc();
       inductive_step_instruction = false;
       inductive_assertion = false;
+      is_loop_head = false;
+      is_break = false;
     }
 
     inline void make_goto()
@@ -317,6 +330,11 @@ public:
       return type == ASSERT;
     }
 
+    inline bool is_invariant() const
+    {
+      return type == INVARIANT;
+    }
+
     inline bool is_atomic_begin() const
     {
       return type == ATOMIC_BEGIN;
@@ -337,6 +355,8 @@ public:
         type(NO_INSTRUCTION_TYPE),
         inductive_step_instruction(false),
         inductive_assertion(false),
+        is_loop_head(false),
+        is_break(false),
         location_number(0),
         loop_number(unsigned(0)),
         target_number(unsigned(-1))
@@ -349,6 +369,8 @@ public:
         type(_type),
         inductive_step_instruction(false),
         inductive_assertion(false),
+        is_loop_head(false),
+        is_break(false),
         location_number(0),
         loop_number(unsigned(0)),
         target_number(unsigned(-1))
@@ -364,13 +386,25 @@ public:
       std::swap(instruction.type, type);
       instruction.guard.swap(guard);
       instruction.targets.swap(targets);
+      instruction.invariants.swap(invariants);
       instruction.function.swap(function);
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
+      std::swap(is_loop_head, instruction.is_loop_head);
+      std::swap(is_break, instruction.is_break);
       std::swap(instruction.loop_number, loop_number);
     }
 
+    void add_invariant(expr2tc inv){
+      assert(is_invariant());
+      invariants.push_back(inv);
+    }
+
+    std::list<expr2tc>& get_invariants(){
+      return invariants;
+    }
+ 
     //! A globally unique number to identify a program location.
     //! It's guaranteed to be ordered in program order within
     //! one goto_program.

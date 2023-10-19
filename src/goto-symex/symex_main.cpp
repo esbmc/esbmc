@@ -5,7 +5,11 @@
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
 
+
 #include <pointer-analysis/value_set_analysis.h>
+
+#include <langapi/language_util.h>
+
 
 #include <util/c_types.h>
 #include <util/config.h>
@@ -19,6 +23,150 @@
 #include <util/time_stopping.h>
 
 #include <vector>
+
+void goto_symext::loop_inv_provert::do_base_cases(goto_symex_statet *cur_state)
+{
+  target->update_formula();
+
+  log_status("\nStarting to prove base cases for loop at location: {}", loop_location);
+
+  for(auto& inv : inv_instruction.invariants){
+    expr2tc new_expr = inv;
+
+    cur_state->rename(new_expr);
+
+    equality2tc question(gen_false_expr(), new_expr);
+    // check whether the assertion holds
+    target->assert_top_formula();
+    target->assert_fact(question);
+
+    log_status("Attempting to prove base case: {}", from_expr(ns, "", new_expr));
+
+    if(target->solve()){
+      log_status("Base case successfully proven");
+      invs_passed_base_case.push_back(inv);
+    } else {
+      log_status("Failed to prove base case");      
+    }
+  }  
+
+  log_status("Finished with base cases for loop at location: {}\n", loop_location);
+
+  if(!invs_passed_base_case.size()){
+    log_error("For loop at location: {}, no potential invariant passed the base case check. Aborting", loop_location);
+    abort();
+  }
+
+  target->push_ctx();
+}
+
+void goto_symext::loop_inv_provert::do_step_cases()
+{
+  target->update_formula();
+
+  bool solved_in_previous_round = true;
+  bool solved_at_lease_one = false;
+  // put this into loop
+  std::vector<expr2tc> proved_invs;
+
+  log_status("\nStarting to prove step cases for loop at location: {}", loop_location);
+
+  while(solved_in_previous_round){
+    solved_in_previous_round = false;
+
+    for(int i = 0; i < induction_hypotheses.size(); i++)
+    {
+      if(!invariants_proven[i]){
+        equality2tc hyp(gen_true_expr(), induction_hypotheses[i]);
+        equality2tc conc(gen_false_expr(), conclusions[i]);
+        target->assert_top_formula();
+        target->assert_fact(hyp);
+        target->assert_fact(conc);
+        for(auto& hyp : proved_invs){
+          equality2tc fact(gen_true_expr(), hyp);
+          target->assert_fact(fact);          
+        }
+
+        log_status("Attempting to prove step case: {}", from_expr(ns, "",  conclusions[i]));
+
+        if(target->solve()){
+          log_status("Step case successfully proven");
+          solved_at_lease_one = true;
+          invariants_proven[i] = true;
+          proved_invs.push_back(induction_hypotheses[i]);
+          solved_in_previous_round = true;
+        } else {
+          log_status("Failed to prove step case");      
+        }
+      } 
+    }
+  }
+
+  if(!solved_at_lease_one){
+    log_error("For loop at location: {}, no potential invariant passed the step case check. Aborting", loop_location);
+    abort();    
+  }
+  log_status("Finished with step cases for loop at location: {}\n", loop_location);
+
+  target->pop_ctx();
+}
+
+
+void goto_symext::loop_inv_provert::get_hypotheses(goto_symex_statet *cur_state)
+{ // TODO code sharing with function below
+  for(auto& base_case : invs_passed_base_case){
+    expr2tc hyp = base_case;
+    cur_state->rename(hyp);
+    induction_hypotheses.push_back(hyp);
+    // no invariants proven at start
+    invariants_proven.push_back(false);
+  }
+}
+
+void goto_symext::loop_inv_provert::get_conclusions(goto_symex_statet *cur_state)
+{
+  for(auto& base_case : invs_passed_base_case){
+    expr2tc conclusion = base_case;
+    cur_state->rename(conclusion);
+    conclusions.push_back(conclusion);
+  }
+}
+
+void goto_symext::loop_inv_provert::add_proven_invariants(goto_symext* parent)
+{
+  for(unsigned i = 0; i < invariants_proven.size(); i++){
+    if(invariants_proven[i]){ //ith invariant has been proven
+      expr2tc inv = invs_passed_base_case[i];
+      parent->cur_state->rename(inv);
+      parent->assume(inv);
+    }
+  }
+}
+
+bool goto_symext::check_with_vampire(const expr2tc &expr)
+{
+  auto t = std::dynamic_pointer_cast<vampire_equationt>(target);
+  
+  expr2tc new_expr = expr;
+  cur_state->guard.guard_expr(new_expr);
+
+  log_status("Attempting to prove assertion: {}", from_expr(ns, "", new_expr));
+
+  equality2tc question(gen_false_expr(), new_expr);
+  // check whether the assertion holds
+  t->update_formula();
+
+  t->assert_top_formula();
+  t->assert_fact(question);
+  bool res = t->solve();
+ 
+  if(res)
+    log_status("Assertion proved successfuly");
+  else
+    log_status("Failed to prove assertion");    
+
+  return res;
+}
 
 bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
 {
@@ -90,7 +238,14 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   if (is_true(new_expr))
     return;
 
-  if (options.get_bool_option("smt-symex-assert"))
+  if(options.get_bool_option("vampire-for-loops"))
+  {
+    if(check_with_vampire(new_expr))
+      // incremental verification has succeeded
+      return;
+  }
+
+  if(options.get_bool_option("smt-symex-assert"))
   {
     if (check_incremental(new_expr, msg))
       // incremental verification has succeeded
@@ -108,6 +263,7 @@ void goto_symext::assertion(
   expr2tc expr = the_assertion;
   cur_state->guard.guard_expr(expr);
   cur_state->global_guard.guard_expr(expr);
+
   remaining_claims++;
   target->assertion(
     cur_state->guard.as_expr(),
@@ -183,6 +339,8 @@ void goto_symext::symex_step(reachability_treet &art)
   // Remember the first loop we're entering
   if (inductive_step && instruction.loop_number && !first_loop)
     first_loop = instruction.loop_number;
+
+  // std::cout << "TYPE " << instruction.type << std::endl;
 
   // actually do instruction
   switch (instruction.type)
@@ -372,6 +530,14 @@ void goto_symext::symex_step(reachability_treet &art)
     cur_state->source.pc++;
     break;
 
+  case INVARIANT:
+    if(options.get_bool_option("vampire-for-loops")){
+      // if not running with vampire-for-loops just ignore
+      symex_invariant();
+    }
+    cur_state->source.pc++;
+    break;    
+
   case CATCH:
     symex_catch();
     break;
@@ -446,14 +612,31 @@ void goto_symext::symex_assert()
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
   expr2tc tmp = instruction.guard;
-  replace_nondet(tmp);
 
+  replace_nondet(tmp);
   dereference(tmp, dereferencet::READ);
   replace_dynamic_allocation(tmp);
 
   replace_races_check(tmp);
 
   claim(tmp, msg);
+}
+
+void goto_symext::symex_invariant()
+{
+  assert(options.get_bool_option("vampire-for-loops"));
+
+  if(cur_state->guard.is_false())
+    return;
+
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+  
+  std::string loop_loc = std::next(cur_state->source.pc)->location.as_string();
+
+
+  loop_inv_provers.push_back(loop_inv_provert(ns, instruction, target, loop_loc));
+  loop_inv_provers.back().do_base_cases(cur_state);
+
 }
 
 void goto_symext::run_intrinsic(

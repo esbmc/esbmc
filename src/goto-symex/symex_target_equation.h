@@ -14,6 +14,7 @@
 #include <irep2/irep2.h>
 #include <util/namespace.h>
 #include <vector>
+#include <solvers/smtlib/smtlib_conv.h>
 
 class symex_target_equationt : public symex_targett
 {
@@ -180,6 +181,10 @@ public:
     return it;
   }
 
+  unsigned steps_size() {
+    return SSA_steps.size();
+  }
+
   void output(std::ostream &out) const;
   void short_output(std::ostream &out, bool show_ignored = false) const;
 
@@ -231,12 +236,38 @@ public:
   void flush_latest_instructions();
 
   tvt ask_solver_question(const expr2tc &question);
-
+  
   smt_convt &conv;
   std::list<smt_convt::ast_vec> assert_vec_list;
   std::list<smt_astt> assumpt_chain;
   std::list<SSA_stepst::iterator> scoped_end_points;
   SSA_stepst::iterator cvt_progress;
+};
+
+class vampire_equationt : public symex_target_equationt
+{
+public:
+  vampire_equationt(const namespacet &_ns, smt_convt &conv);
+
+  static const std::string preamble;
+
+  std::shared_ptr<symex_targett> clone() const override;
+
+  void update_formula();
+  void assert_fact(const expr2tc &question);
+  bool solve(bool noisy = false);
+
+  void push_ctx() override;
+  void pop_ctx() override;
+
+  void assert_top_formula();
+
+  std::list<std::string> SMT_formulas;
+  std::list<SSA_stepst::iterator> scoped_end_points;
+
+  SSA_stepst::iterator cvt_progress;
+
+  smtlib_convt* conv;
 };
 
 extern inline bool operator<(

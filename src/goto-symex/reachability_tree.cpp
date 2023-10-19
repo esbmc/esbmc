@@ -79,7 +79,10 @@ void reachability_treet::setup_for_new_explore()
 
   execution_states.emplace_back(s);
   cur_state_it = execution_states.begin();
-  targ->push_ctx(); // Start with a depth of 1.
+  // not sure why we push and start with a depth of 1 here
+  // For Vampire, we don't want to do that
+  if(!options.get_bool_option("vampire-for-loops"))
+    targ->push_ctx(); // Start with a depth of 1.
 }
 
 execution_statet &reachability_treet::get_cur_state()

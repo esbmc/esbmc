@@ -18,6 +18,7 @@
 #include <util/std_expr.h>
 #include <util/string_constant.h>
 #include <util/type_byte_size.h>
+#include <iostream>
 
 static void get_string_constant(const exprt &expr, std::string &the_string)
 {
@@ -514,7 +515,9 @@ void goto_convertt::do_function_call_symbol(
     (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
   bool is_assert = (base_name == "assert");
 
-  if (is_assume || is_assert)
+  bool is_invariant =  (base_name == "__invariant");
+
+  if(is_assume || is_assert || is_invariant)
   {
     if (arguments.size() != 1)
     {
@@ -522,24 +525,46 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    if (options.get_bool_option("no-assertions") && !is_assume)
+    if(options.get_bool_option("no-assertions") && !is_assume && !is_invariant)
       return;
 
-    goto_programt::targett t =
-      dest.add_instruction(is_assume ? ASSUME : ASSERT);
-    migrate_expr(arguments.front(), t->guard);
+    goto_programt::targett t;
+    expr2tc guard;
+    migrate_expr(arguments.front(), guard);
 
+    bool multiple_invariants = false;
+
+    if(is_invariant){
+      if(!is_bool_type(guard))
+        log_error("invariants must be of bool type");
+
+      goto_programt::instructiont& final_instruct = dest.instructions.back();
+      if(final_instruct.is_invariant()){
+        multiple_invariants = true;
+        final_instruct.add_invariant(guard);
+      } else {
+        t = dest.add_instruction(INVARIANT);
+        t->add_invariant(guard);     
+      }
+    } else {
+      t = dest.add_instruction(is_assume ? ASSUME :  ASSERT);
+      t->guard = guard;
+    }
+ 
     // The user may have re-declared the assert or assume functions to take an
     // integer argument, rather than a boolean. This leads to problems at the
     // other end of the model checking process, because we assume that
     // ASSUME/ASSERT insns are boolean exprs.  So, if the given argument to
     // this function isn't a bool, typecast it.  We can't rely on the C/C++
     // type system to ensure that.
-    if (!is_bool_type(t->guard->type))
+    if(!is_invariant && !is_bool_type(t->guard->type))
       t->guard = typecast2tc(get_bool_type(), t->guard);
 
-    t->location = function.location();
-    t->location.user_provided(true);
+    // make sure that we don't alraedy have a location
+    if(!multiple_invariants){
+      t->location = function.location();
+      t->location.user_provided(true);
+    }
 
     if (is_assert)
       t->location.property("assertion");

@@ -379,11 +379,11 @@ void expr2whilet::convert_binary(
   auto op1 = src.op1();
 
   unsigned p;
+  std::string op;
 
   if(symbol == "+=" || symbol == "-=" || 
      symbol == "*=" || symbol == "%="){
  
-    std::string op;
     if(symbol == "+=") op = " + ";
     if(symbol == "-=") op = " - ";
     if(symbol == "*=") op = " * ";
@@ -399,11 +399,34 @@ void expr2whilet::convert_binary(
 
     convert(op1, p);
 
+  } else if(symbol == "="){
+    
+    std::vector<exprt> operands;
+    operands.push_back(op0);
+
+    exprt rhs = op1;
+    while(rhs.id() == "sideeffect" && rhs.statement() == "assign")
+    {
+      operands.push_back(rhs.op0());
+      rhs = rhs.op1();
+    }
+    
+    for(auto& op : operands){
+      convert(op,p);
+      rapid_file << " = ";
+      convert(rhs,p);
+      if(&op != &operands.back()){
+        rapid_file << "; ";      
+      }
+    }
+
   } else {
+
+    op = symbol == "%" ? "mod" : symbol;
 
     convert(op0, p);
 
-    rapid_file << " " << symbol << " ";
+    rapid_file << " " << op << " ";
 
     convert(op1, p);
   
@@ -435,6 +458,10 @@ void expr2whilet::convert_unary(
     // on the right hand side of an assignment
     rapid_file << "#";
     convert(src.op0(), p);
+  } else if (symbol == "!"){
+   rapid_file << "!(";
+   convert(src.op0(), p);
+   rapid_file << ")";
   } else {
     throw unsupported_error("unsupported unary symbol " + symbol);
   }
@@ -526,24 +553,23 @@ void expr2whilet::convert_unary_post(
 
 void expr2whilet::convert_index(const exprt &src, unsigned precedence)
 {
- /* if(src.operands().size() != 2)
-    return convert_norep(src, precedence);
+  if(src.operands().size() != 2)
+    throw norep_error("incorrect number of operands for index");
 
   unsigned p;
-  std::string op = convert(src.op0(), p);
+  convert(src.op0(), p);
 
-  std::string dest;
+  // TODO
+  /*std::string dest;
   if(precedence > p)
     dest += '(';
   dest += op;
   if(precedence > p)
-    dest += ')';
+    dest += ')';*/
 
-  dest += '[';
-  dest += convert(src.op1());
-  dest += ']';
-
-  return dest;*/
+  rapid_file << "[";
+  convert(src.op1());
+  rapid_file << ']';
 }
 
 void expr2whilet::convert_member(const exprt &src, unsigned precedence)
@@ -944,7 +970,15 @@ void expr2whilet::convert_function_call(const exprt &src, unsigned &)
     rapid_file << ")";
     return;
   }
-  if(function_str == "__ESBMC_assert"){
+  if(function_str == "__VERIFIER_nondet_int"){
+    rapid_file << "nondet()";    
+    return;
+  }  
+  if(function_str == "__VERIFIER_nondet_uint"){
+    rapid_file << "nondet_unsigned()";    
+    return;
+  }  
+  if(function_str == "__ESBMC_assert" || function_str == "__VERIFIER_assert"){
     rapid_file << "assert(";
     convert(src.op1().op0(), p);
     rapid_file << ")";
@@ -1139,7 +1173,7 @@ void expr2whilet::convert_code_dead(const codet &src, unsigned indent)
 }
 
 void expr2whilet::convert_code_decl(const codet &src, unsigned indent)
-{
+{ 
 
   if(src.operands().size() != 1 && src.operands().size() != 2)
   {
@@ -1213,10 +1247,12 @@ void expr2whilet::convert_code_block(const codet &src, unsigned indent)
 
   forall_operands(it, src)
   {
-    if(it->statement() == "block")
+    if(it->statement() == "block"){
       // TODO While has no support for code blocks
-      convert_code_block(to_code(*it), indent + 2);
-    else
+      // we don't increase the indent for the block,
+      // because ESBMC parses really unexpected things into blocks
+      convert_code_block(to_code(*it), indent);
+    }else
       convert_code(to_code(*it), indent);
   }
 }
@@ -1258,6 +1294,8 @@ void expr2whilet::convert_code_expression(const codet &src, unsigned indent)
       convert(op0);
     //  return convert_norep(src, precedence);
   }
+
+  
 
   rapid_file << ";\n";
 
@@ -1319,7 +1357,7 @@ void expr2whilet::convert_code(const codet &src, unsigned indent)
     throw unsupported_error("Rapid does not yet support goto statements");
 
   if(statement == "printf")
-  { // do nothing. assue that printf is sideeffect free, so we just ignore. presto!
+  { // do nothing. assume that printf is sideeffect free, so we just ignore. presto!
   }
 
   if(statement == "assume")
@@ -1575,6 +1613,9 @@ static bool is_pointer_arithmetic(const exprt &e, const exprt *&ptr, exprt &idx)
 void expr2whilet::convert(const exprt &src, unsigned &precedence)
 {
   precedence = 16;
+
+  //printf(src.id().c_str());
+  //printf("\n");
 
   if(src.id() == "+")
     convert_binary(src, "+", precedence = 12, false);

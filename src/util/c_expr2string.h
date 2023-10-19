@@ -11,6 +11,7 @@
 
 std::string
 c_expr2string(const exprt &expr, const namespacet &ns, unsigned flags = 0);
+
 std::string
 c_type2string(const typet &type, const namespacet &ns, unsigned flags = 0);
 
@@ -39,6 +40,7 @@ public:
   virtual ~c_expr2stringt() = default;
 
   virtual std::string convert(const typet &src);
+  virtual std::string convert(const codet &src);  
   virtual std::string convert(const exprt &src);
 
   void get_shorthands(const exprt &expr);

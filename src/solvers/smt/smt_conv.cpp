@@ -284,6 +284,32 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
   switch (expr->expr_id)
   {
+  case expr2t::sideeffect_id:{
+    const sideeffect2t &se = to_sideeffect2t(expr);
+
+    assert(se.kind == sideeffect2t::function_call);
+    
+    auto operand = se.operand;
+    
+    assert(se.arguments.size() == 2);
+
+    const expr2tc &var = se.arguments[0];
+    const expr2tc &formula = se.arguments[1];
+
+    auto sym = to_symbol2t(operand);
+    std::string func_name = sym.thename.as_string();
+    
+    bool forall = func_name.find("__forall") != std::string::npos;
+    bool exists = func_name.find("__exists") != std::string::npos;
+
+    assert(forall || exists);
+
+    auto var_ast  = convert_ast(var);
+    auto form_ast = convert_ast(formula);
+
+    return forall ? mk_forall(var_ast, form_ast) : mk_exists(var_ast, form_ast);
+  }
+
   case expr2t::with_id:
   case expr2t::constant_array_id:
   case expr2t::constant_vector_id:
@@ -3213,6 +3239,20 @@ smt_astt smt_convt::mk_bvand(smt_astt a, smt_astt b)
 }
 
 smt_astt smt_convt::mk_implies(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_forall(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_exists(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;

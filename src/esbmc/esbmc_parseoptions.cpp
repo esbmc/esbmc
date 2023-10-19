@@ -1240,7 +1240,7 @@ int esbmc_parseoptionst::doit_rapid()
     return 6;
   }
 
-  run_str += " -integerIterations on " + rapid_file_name;
+  run_str += " -inlineSemantics off -integerIterations on -nat off -genInvariants on -vampViaFile on " + rapid_file_name;
 
   std::array<char, 128> buffer;
   std::string result;
@@ -2020,7 +2020,8 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if (
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-      cmdline.isset("k-induction-parallel"))
+      cmdline.isset("k-induction-parallel") || cmdline.isset("vampire-for-loops"))
+
     {
       // Always remove skips before doing k-induction.
       // It seems to fix some issues for now

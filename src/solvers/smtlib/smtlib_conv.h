@@ -59,6 +59,8 @@ enum smt_func_kind
 
   // Logic
   SMT_FUNC_IMPLIES,
+  SMT_FUNC_FORALL,
+  SMT_FUNC_EXISTS,
   SMT_FUNC_XOR,
   SMT_FUNC_OR,
   SMT_FUNC_AND,
@@ -184,6 +186,10 @@ public:
   resultt dec_solve() override;
   const std::string solver_text() override;
 
+  void clear();
+  void output_content(std::string& cont);
+  std::string get_file_contents();
+
   smt_astt mk_add(smt_astt a, smt_astt b) override;
   smt_astt mk_bvadd(smt_astt a, smt_astt b) override;
   smt_astt mk_sub(smt_astt a, smt_astt b) override;
@@ -210,6 +216,8 @@ public:
   smt_astt mk_bvor(smt_astt a, smt_astt b) override;
   smt_astt mk_bvand(smt_astt a, smt_astt b) override;
   smt_astt mk_implies(smt_astt a, smt_astt b) override;
+  smt_astt mk_forall(smt_astt a, smt_astt b) override;
+  smt_astt mk_exists(smt_astt a, smt_astt b) override;
   smt_astt mk_xor(smt_astt a, smt_astt b) override;
   smt_astt mk_or(smt_astt a, smt_astt b) override;
   smt_astt mk_and(smt_astt a, smt_astt b) override;
@@ -321,6 +329,7 @@ public:
   struct file_emitter
   {
     FILE *out_stream;
+    std::string _path;
 
     explicit file_emitter(const std::string &path);
     file_emitter(const file_emitter &) = delete;
@@ -332,6 +341,10 @@ public:
     template <typename... Ts>
     void emit(const char *fmt, Ts &&...) const;
     void flush() const;
+
+    void clear();
+    void output_content(std::string cont);
+    std::string get_file_contents();
 
     explicit operator bool() const noexcept;
   } emit_opt_output;

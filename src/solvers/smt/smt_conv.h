@@ -307,6 +307,8 @@ public:
   virtual smt_astt mk_bvor(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvand(smt_astt a, smt_astt b);
   virtual smt_astt mk_implies(smt_astt a, smt_astt b);
+  virtual smt_astt mk_forall(smt_astt a, smt_astt b);
+  virtual smt_astt mk_exists(smt_astt a, smt_astt b);  
   virtual smt_astt mk_xor(smt_astt a, smt_astt b);
   virtual smt_astt mk_or(smt_astt a, smt_astt b);
   virtual smt_astt mk_and(smt_astt a, smt_astt b);

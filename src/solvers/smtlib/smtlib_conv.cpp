@@ -11,9 +11,11 @@
 #include <regex>
 #include <sstream>
 
+#include <fstream>
+
 #ifndef _WIN32
-#  include <unistd.h>
-#  include <signal.h>
+#include <unistd.h>
+#include <signal.h>
 #endif
 
 // clang-format off
@@ -55,6 +57,8 @@ static const std::array smt_func_name_table = {
 
   // Logic
   "=>",                     /* SMT_FUNC_IMPLIES, */
+  "forall",
+  "exists",
   "xor",                    /* SMT_FUNC_XOR, */
   "or",                     /* SMT_FUNC_OR, */
   "and",                    /* SMT_FUNC_AND, */
@@ -175,15 +179,16 @@ void smtlib_convt::dump_smt()
 }
 
 smtlib_convt::file_emitter::file_emitter(const std::string &path)
-  : out_stream(nullptr)
+  : out_stream(nullptr),
+   _path(path)
 {
   // We may be being instructed to just output to a file.
-  if (path == "")
+  if(path == "")
     return;
 
   // Open a file, do nothing else.
-  out_stream = path == "-" ? stdout : fopen(path.c_str(), "w");
-  if (!out_stream)
+  out_stream = fopen(path.c_str(), "w");
+  if(!out_stream)
   {
     log_error("Failed to open \"{}\": {}", path, strerror(errno));
     abort();
@@ -192,14 +197,43 @@ smtlib_convt::file_emitter::file_emitter(const std::string &path)
 
 smtlib_convt::file_emitter::~file_emitter() noexcept
 {
-  if (out_stream)
+  if(out_stream)
     fclose(out_stream);
+}
+
+void smtlib_convt::file_emitter::clear()
+{
+  // close current outstream
+  fclose(out_stream);  
+  // open it again
+  out_stream = fopen(_path.c_str(), "w");
+}
+
+std::string smtlib_convt::file_emitter::get_file_contents()
+{
+  fclose(out_stream);
+
+  std::ifstream in_file(_path);
+  std::string file_contents((std::istreambuf_iterator<char>(in_file)), std::istreambuf_iterator<char>());
+
+  // Close the file in C++
+  in_file.close();
+  
+  // removes contents
+  out_stream = fopen(_path.c_str(), "w");
+
+  return file_contents;
+}
+
+void smtlib_convt::file_emitter::output_content(std::string cont)
+{
+  emit("%s", cont.c_str()); 
 }
 
 smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
   : out_stream(nullptr), in_stream(nullptr), org_sigpipe_handler(nullptr)
 {
-  if (cmd == "")
+  if(cmd == "")
     return;
 
   // Setup: open a pipe to the smtlib solver. There seems to be no standard C++
@@ -329,6 +363,7 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
     solver_name,
     solver_version,
     solver_proc_pid);
+
 #  else
   log_status(
     "Using external solver cmd '{}' with PID {}", cmd, solver_proc_pid);
@@ -355,12 +390,36 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
     emit_proc(_options.get_option("smtlib-solver-prog")),
     emit_opt_output(_options.get_option("output"))
 {
-  std::string logic =
-    options.get_bool_option("int-encoding") ? "QF_AUFLIRA" : "QF_AUFBV";
+
+  bool int_encoding   =  options.get_bool_option("int-encoding");
+  bool vamp_for_loops =  options.get_bool_option("vampire-for-loops"); 
+
+  std::string logic = int_encoding ? (vamp_for_loops ?  "AUFLIRA" : "QF_AUFLIRA") : "QF_AUFBV";
 
   emit("%s", "(set-option :produce-models true)\n");
   emit("(set-logic %s)\n", logic.c_str());
   emit("%s", "(set-info :status unknown)\n");
+}
+
+void smtlib_convt::clear()
+{
+  if(emit_opt_output)
+    emit_opt_output.clear();
+}
+
+std::string smtlib_convt::get_file_contents()
+{
+  if(emit_opt_output){
+    return emit_opt_output.get_file_contents();
+  }
+  return "";
+}
+
+void smtlib_convt::output_content(std::string& cont)
+{
+  if(emit_opt_output){
+    emit_opt_output.output_content(cont);
+  }  
 }
 
 smtlib_convt::~smtlib_convt()
@@ -489,6 +548,7 @@ unsigned int smtlib_convt::emit_ast(
     // Continue.
   }
 
+
   if (auto it = temp_symbols.find(ast); it != temp_symbols.end())
   {
     output = it->second;
@@ -501,11 +561,15 @@ unsigned int smtlib_convt::emit_ast(
   ss << "?x" << tempnum;
   std::string tempname = ss.str();
 
+  bool quantified = ast->kind == SMT_FUNC_FORALL  || ast->kind == SMT_FUNC_EXISTS;
+
   temp_symbols.emplace(ast, tempname);
 
-  for (unsigned long int i = 0; i < ast->args.size(); i++)
-    brace_level += emit_ast(
-      static_cast<const smtlib_smt_ast *>(ast->args[i]), args[i], temp_symbols);
+  if(!quantified){
+    for(unsigned long int i = 0; i < ast->args.size(); i++)
+      brace_level += emit_ast(
+        static_cast<const smtlib_smt_ast *>(ast->args[i]), args[i], temp_symbols);
+  }
 
   // Emit a let, assigning the result of this AST func to the sym.
   // For some reason let requires a double-braced operand.
@@ -513,6 +577,7 @@ unsigned int smtlib_convt::emit_ast(
 
   // This asts function
   assert(static_cast<size_t>(ast->kind) < smt_func_name_table.size());
+
   if (ast->kind == SMT_FUNC_EXTRACT)
   {
     // Extract is an indexed function
@@ -521,11 +586,23 @@ unsigned int smtlib_convt::emit_ast(
   else
   {
     emit("%s", smt_func_name_table[ast->kind]);
+  } 
+ 
+  if(quantified){
+    std::string bound_var;
+    emit_terminal_ast(static_cast<const smtlib_smt_ast *>(ast->args[0]), bound_var);  
+    // have to treat quantified formulas differently to avoid leaking of bound vars
+    emit(" %s", "((");
+    emit("%s ", bound_var.c_str());
+    emit("%s",  sort_to_string(ast->args[0]->sort).c_str() );
+    emit("%s ", "))\n");
+    
+    emit_ast(static_cast<const smtlib_smt_ast *>(ast->args[1]));
+  } else {
+    // Its operands
+    for(unsigned long int i = 0; i < ast->args.size(); i++)
+      emit(" %s", args[i].c_str());
   }
-
-  // Its operands
-  for (unsigned long int i = 0; i < ast->args.size(); i++)
-    emit(" %s", args[i].c_str());
 
   // End func enclosing brace, then operand to let (two braces).
   emit("%s", ")))\n");
@@ -552,6 +629,7 @@ void smtlib_convt::emit_ast(const smtlib_smt_ast *ast) const
   emit("%s", output.c_str());
 
   // Emit a ton of end braces.
+
   for (unsigned int i = 0; i < brace_level; i++)
     emit("%c", ')');
 }
@@ -976,7 +1054,9 @@ void smtlib_convt::push_ctx()
 {
   smt_convt::push_ctx();
 
-  emit("%s", "(push 1)\n");
+  // Note: Why is this an issue for vampire?
+  if(!options.get_bool_option("vampire-for-loops"))
+    emit("%s", "(push 1)\n");
 }
 
 smt_astt smtlib_convt::mk_add(smt_astt a, smt_astt b)
@@ -1255,6 +1335,26 @@ smt_astt smtlib_convt::mk_implies(smt_astt a, smt_astt b)
   return ast;
 }
 
+smt_astt smtlib_convt::mk_forall(smt_astt a, smt_astt b)
+{
+  assert(b->sort->id == SMT_SORT_BOOL);
+  smtlib_smt_ast *ast =
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_FORALL);
+  ast->args.push_back(a);
+  ast->args.push_back(b);
+  return ast;
+}
+
+smt_astt smtlib_convt::mk_exists(smt_astt a, smt_astt b)
+{
+  assert(b->sort->id == SMT_SORT_BOOL);
+  smtlib_smt_ast *ast =
+    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_EXISTS);
+  ast->args.push_back(a);
+  ast->args.push_back(b);
+  return ast;
+}
+
 smt_astt smtlib_convt::mk_xor(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
@@ -1477,7 +1577,9 @@ smt_astt smtlib_convt::mk_isint(smt_astt a)
 
 void smtlib_convt::pop_ctx()
 {
-  emit("%s", "(pop 1)\n");
+  // Why is this an issue for vampire?
+  if(!options.get_bool_option("vampire-for-loops"))
+    emit("%s", "(pop 1)\n");
 
   // Wipe this level of symbol table.
   symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();

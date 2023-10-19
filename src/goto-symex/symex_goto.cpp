@@ -2,7 +2,6 @@
 #include <fstream>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/slice.h>
-#include <goto-symex/symex_target_equation.h>
 
 #include <langapi/language_ui.h>
 #include <solvers/smtlib/smtlib_conv.h>
@@ -18,6 +17,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   expr2tc new_guard = old_guard;
   cur_state->rename(new_guard);
+
   do_simplify(new_guard);
 
   bool new_guard_false = (is_false(new_guard) || cur_state->guard.is_false());
@@ -70,6 +70,44 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   assert(!instruction.targets.empty());
 
+  if(instruction.is_break){
+
+  }
+
+  if(instruction.is_loop_head){
+    assert(options.get_bool_option("vampire-for-loops"));
+    assert(forward);
+    BigInt &unwind = cur_state->loop_iterations[instruction.loop_number];
+
+    // get the newest loop_inv_prover object
+    // we add one of these each time we hit a loop
+    // and pop off once we finish processing the loop
+    auto& inv_prover = loop_inv_provers.back();
+
+    if(unwind == 0){
+      // first time we hit this loop
+      inv_prover.get_hypotheses(cur_state);
+      cur_state->source.pc++;
+      return;      
+    } else {   
+      // second time we hit the loop, try and prove invariants
+      // first we get the conclusions
+      inv_prover.get_conclusions(cur_state);
+      inv_prover.do_step_cases();
+      inv_prover.add_proven_invariants(this); 
+      // this is super confusing. Not sure how existing code works at all 
+      // here we deal with partial correctness. We do not prove that loop terminates,
+      // but assume that it does. Since we assume termination we can assume teh negation of 
+      // the loop guard (note that new_guard is already negated. This happened in the conversion to GOTO)
+      assume(new_guard);    
+      // dealt with loop, pop of the stack
+      loop_inv_provers.pop_back();
+
+      cur_state->source.pc = goto_target;
+      return;
+    }
+  }
+
   // we only do deterministic gotos for now
   if (instruction.targets.size() != 1)
     throw "no support for non-deterministic gotos";
@@ -100,7 +138,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     BigInt &unwind = cur_state->loop_iterations[instruction.loop_number];
     ++unwind;
 
-    if (get_unwind(cur_state->source, unwind))
+    // when running with vampire-for-loops we always unwind exactly once
+    if(!options.get_bool_option("vampire-for-loops") && get_unwind(cur_state->source, unwind))
     {
       loop_bound_exceeded(new_guard);
 
@@ -325,7 +364,6 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     !goto_state.guard.is_false())
   {
     tmp_guard = goto_state.guard;
-
     // this gets the diff between the guards
     tmp_guard -= cur_state->guard;
   }
@@ -411,7 +449,7 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
   expr2tc negated_cond = guard;
   make_not(negated_cond);
 
-  if (!no_unwinding_assertions)
+  if(!no_unwinding_assertions && !options.get_bool_option("vampire-for-loops"))
   {
     // generate unwinding assertion
     claim(negated_cond, "unwinding assertion loop " + i2string(loop_number));

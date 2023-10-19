@@ -418,6 +418,9 @@ void value_sett::get_value_set_rec(
     }
 
     case sideeffect2t::nondet:
+    case sideeffect2t::function_call:
+      // function call should only take place when we are dealing with forall and exists 
+      // quantifiers wihtin an assertion
       // Introduction of nondeterminism does not introduce new pointer vars
       return;
 

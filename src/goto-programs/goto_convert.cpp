@@ -93,7 +93,7 @@ void goto_convertt::optimize_guarded_gotos(goto_programt &dest)
 
     if (
       it_goto_y == dest.instructions.end() || !it_goto_y->is_goto() ||
-      !is_true(it_goto_y->guard) || it_goto_y->is_target())
+      !is_true(it_goto_y->guard) || it_goto_y->is_target() || it_goto_y->is_break)
       continue;
 
     auto it_z = std::next(it_goto_y);
@@ -121,7 +121,7 @@ void goto_convertt::goto_convert_rec(const codet &code, goto_programt &dest)
   convert(code, dest);
 
   finish_gotos(dest);
-  optimize_guarded_gotos(dest);
+  optimize_guarded_gotos(dest);  
 }
 
 void goto_convertt::copy(
@@ -1276,6 +1276,17 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   const exprt *cond = &tmp;
   const locationt &location = code.location();
 
+  bool mark_loop_head = true;
+
+  if(cond->has_operands()){
+    const exprt& op = cond->op0();
+    if(strcmp(op.name().c_str(), "__ESBMC_atexits") == 0 ){
+      // hack, this is some ESBMC internal loop
+      // we don't want to mark it as a loop for the purpose of invariant gen
+      mark_loop_head = false;
+    }
+  }
+
   //    while(c) P;
   //--------------------
   // v: if(!c) goto z;
@@ -1293,7 +1304,7 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   z->location = code.location();
 
   goto_programt tmp_branch;
-  generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
+  generate_conditional_branch(gen_not(*cond), z, location, tmp_branch, mark_loop_head);
 
   // do the v label
   goto_programt::targett v = tmp_branch.instructions.begin();
@@ -1520,6 +1531,11 @@ void goto_convertt::convert_break(const code_breakt &code, goto_programt &dest)
 
   goto_programt::targett t = dest.add_instruction();
   t->make_goto(targets.break_target);
+  if(options.get_bool_option("vampire-for-loops")){
+    t->is_break = true;
+    log_error("When running with Vampire for loops, we currently don't support breaks");
+    abort();
+  }
   t->location = code.location();
 }
 
@@ -1870,7 +1886,8 @@ void goto_convertt::generate_conditional_branch(
   const exprt &guard,
   goto_programt::targett target_true,
   const locationt &location,
-  goto_programt &dest)
+  goto_programt &dest,
+  bool loop_head)
 {
   if (!has_sideeffect(guard))
   {
@@ -1886,6 +1903,8 @@ void goto_convertt::generate_conditional_branch(
     t->make_goto(target_true);
     migrate_expr(g, t->guard);
     t->location = location;
+    if(options.get_bool_option("vampire-for-loops"))
+      t->is_loop_head = loop_head;
     return;
   }
 
@@ -1893,6 +1912,8 @@ void goto_convertt::generate_conditional_branch(
   //   becomes
   // if(guard) goto target; else goto next;
   // next: skip;
+
+
 
   goto_programt tmp;
   goto_programt::targett target_false = tmp.add_instruction();
