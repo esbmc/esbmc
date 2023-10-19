@@ -484,7 +484,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"make-assert-false", NULL, "convert every assertion to false"},
     {"goto-coverage",
      NULL,
-     "this activates --add-false-assert and --make-assert-false"}}},
+     "this activates --make-assert-false and --multi-property and"
+     "deactivates --keep-unwind-claims"}}},
   {"end", {{"", NULL, "end of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "instruction"},

@@ -1722,13 +1722,24 @@ bool esbmc_parseoptionst::process_goto_program(
       value_set_analysis.update(goto_functions);
     }
 
-    if(cmdline.isset("goto-coverage") || cmdline.isset("make-assert-false"))
+    if(cmdline.isset("goto-coverage"))
+    {
+      // for assertion coverage metric
+      options.set_option("add-false-assert", true);
+      // for multi-property
+      options.set_option("result-only", true);
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-unwind-claims", false);
+    }
+
+    if(cmdline.isset("make-assert-false"))
     {
       goto_coveraget tmp;
       tmp.make_asserts_false(goto_functions);
     }
 
-    if(cmdline.isset("goto-coverage") || cmdline.isset("add-false-assert"))
+    if(cmdline.isset("add-false-assert"))
     {
       goto_coveraget tmp;
       tmp.add_false_asserts(goto_functions);
