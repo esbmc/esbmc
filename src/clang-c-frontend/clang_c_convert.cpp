@@ -3446,8 +3446,9 @@ void clang_c_convertert::convert_expression_to_code(exprt &expr)
 const clang::Decl *
 clang_c_convertert::get_DeclContext_from_Stmt(const clang::Stmt &stmt)
 {
-  auto it = ASTContext->getParents(stmt).begin();
-  if(it == ASTContext->getParents(stmt).end())
+  auto parents = ASTContext->getParents(stmt);
+  auto it = parents.begin();
+  if(it == parents.end())
     return nullptr;
 
   const clang::Decl *aDecl = it->get<clang::Decl>();
