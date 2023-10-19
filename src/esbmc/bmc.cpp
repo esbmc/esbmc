@@ -706,6 +706,18 @@ smt_convt::resultt bmct::multi_property_check(
     options.get_bool_option("base-case") &&
     "Multi-property only supports base-case");
 
+  if(
+    options.get_bool_option("k-induction") ||
+    options.get_bool_option("k-induction-parallel"))
+  {
+    log_warning("multi-property should not work with k-induction");
+  }
+
+  if(options.get_bool_option("incremental-bmc"))
+  {
+    log_warning("multi-property should not work with incremental-bmc");
+  }
+
   // Initial values
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
   std::atomic_size_t ce_counter = 0;
@@ -810,7 +822,7 @@ smt_convt::resultt bmct::multi_property_check(
 
         // to avoid double verifying claims
         // we use the location (and comment) to distinguish each claim
-        if(!options.get_bool_option("keep-unwind-claims"))
+        if(!options.get_bool_option("keep-verified-claims"))
         {
           for(const auto &step : goto_trace.steps)
             if(step.type == goto_trace_stept::ASSERT)
@@ -832,7 +844,7 @@ smt_convt::resultt bmct::multi_property_check(
 
         if(!reached_claims.count(loc))
         {
-          if(loc != "nil" && !options.get_bool_option("keep-unwind-claims"))
+          if(loc != "nil" && !options.get_bool_option("keep-verified-claims"))
             reached_claims.insert(loc);
           std::string output_file = options.get_option("cex-output");
           if(output_file != "")
@@ -864,8 +876,8 @@ smt_convt::resultt bmct::multi_property_check(
         }
         else
         {
-          // we should not be here if "keep-unwind-claims" is set
-          assert(!options.get_bool_option("keep-unwind-claims"));
+          // we should not be here if "keep-verified-claims" is set
+          assert(!options.get_bool_option("keep-verified-claims"));
           log_status("\nFound verified claim. Skipping...\n");
 
           //TODO: this can still be annoying when we unind for many times
@@ -916,7 +928,7 @@ smt_convt::resultt bmct::multi_property_check(
     options.get_bool_option("goto-coverage-claims"))
   {
     // we should not double counting same assertion
-    assert(!options.get_bool_option("keep-unwind-claims"));
+    assert(!options.get_bool_option("keep-verified-claims"));
 
     int total = goto_coveraget().get_total_instrument();
     if(total)
