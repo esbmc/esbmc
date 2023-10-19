@@ -300,6 +300,12 @@ void python_converter::get_compound_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  // Get type from declaration node
+  std::string var_name = ast_node["target"]["id"].get<std::string>();
+  nlohmann::json ref = find_var_decl(var_name);
+  assert(!ref.empty());
+  current_element_type = get_typet(ref["annotation"]["id"].get<std::string>());
+
   exprt lhs = get_expr(ast_node["target"]);
   exprt rhs = get_binary_operator_expr(ast_node);
 
