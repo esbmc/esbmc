@@ -1,6 +1,7 @@
 #include <goto-programs/goto_coverage.h>
 
 int goto_coveraget::total_instrument = 0;
+std::unordered_set<std::string> all_claims;
 
 void goto_coveraget::make_asserts_false(goto_functionst &goto_functions)
 {
@@ -13,18 +14,23 @@ void goto_coveraget::make_asserts_false(goto_functionst &goto_functions)
       {
         if(it->is_assert())
         {
+          std::string cmt;
+          const std::string loc = it->location.as_string();
           const std::string old_comment = it->location.comment().as_string();
+
           it->guard = gen_false_expr();
           it->location.property("Instrumentation ASSERT(0)");
           if(old_comment != "")
-            it->location.comment(
-              "Claim " + std::to_string(total_instrument) +
-              ": Instrumentation ASSERT(0) Converted, was " + old_comment);
+            cmt = "Claim " + std::to_string(total_instrument) +
+                  ": Instrumentation ASSERT(0) Converted, was " + old_comment;
           else
-            it->location.comment(
-              "Claim " + std::to_string(total_instrument) +
-              ": Instrumentation ASSERT(0) Converted");
+            cmt = "Claim " + std::to_string(total_instrument) +
+                  ": Instrumentation ASSERT(0) Converted";
+          it->location.comment(cmt);
           it->location.user_provided(true);
+
+          // store claim location and comment, which will be shown in goto-cov-claims
+          all_claims.insert(cmt + "\t" + loc);
           total_instrument++;
         }
       }
@@ -79,4 +85,9 @@ void goto_coveraget::insert_false_assert(
 int goto_coveraget::get_total_instrument() const
 {
   return total_instrument;
+}
+
+std::unordered_set<std::string> goto_coveraget::get_all_claims()
+{
+  return all_claims;
 }

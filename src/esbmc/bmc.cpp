@@ -852,7 +852,6 @@ smt_convt::resultt bmct::multi_property_check(
             options.get_bool_option("goto-coverage") ||
             options.get_bool_option("goto-coverage-claims"))
           {
-            // skip the claims added by goto-check as they are not in the source code
             if(claim.claim_msg.find("Instrumentation") != std::string::npos)
             {
               // E.g.
@@ -931,8 +930,23 @@ smt_convt::resultt bmct::multi_property_check(
   // show claims
   if(options.get_bool_option("goto-coverage-claims"))
   {
+    // all claims:
+    std::unordered_set<std::string> all_claims =
+      goto_coveraget().get_all_claims();
+
+    // reached claims:
     log_success("\n[Reached Assertions]\n");
     for(const auto &claim : reached_claims)
+    {
+      log_status("{}", claim);
+
+      // removing reached claims in all claims
+      all_claims.erase(claim);
+    }
+
+    // unreached claims:
+    log_success("\n[Unreached Assertions]\n");
+    for(const auto &claim : all_claims)
     {
       log_status("{}", claim);
     }
