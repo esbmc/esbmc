@@ -83,7 +83,7 @@ In this case you can directly jump to the section "Building ESBMC".
 Remember that it is not necessary to keep all the features enabled.
 They are optional.
 
-### Preparing distributed Clang (recommnded for a shared build)
+### Preparing distributed Clang (recommended for a shared build)
 
 For shared builds it is recommended to use the system's LLVM/Clang, which on
 Ubuntu can be obtained by:
@@ -309,9 +309,7 @@ macOS:
 cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=${ESBMC_STATIC:-ON} $ESBMC_CLANG -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DBitwuzla_DIR=$PWD/../../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
 ```
 
-Note, this command uses the ESBMC_CLANG variable to define the location to a
-non-standard Clang installation. This variable is empty in case you followed the
-"distributed standard Clang" approach above.
+Note, this command uses the ESBMC_CLANG and ESBMC_STATIC variables set in the section on preparing Clang.
 
 Finally, we can trigger the build process, by using the following command:
 
