@@ -844,10 +844,7 @@ smt_convt::resultt bmct::multi_property_check(
 
           // collect the tracked instrumentation which is verified failed
           // we assume it always works in multi-property checking mode
-          if(
-            options.get_bool_option("goto-coverage") ||
-            options.get_bool_option("make-assert-false") ||
-            options.get_bool_option("add-false-assert"))
+          if(options.get_bool_option("goto-coverage"))
           {
             // skip the claims added by goto-check as they are not in the source code
             if(claim.claim_msg.find("Instrumentation") != std::string::npos)
@@ -908,11 +905,11 @@ smt_convt::resultt bmct::multi_property_check(
   else
     std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
-  if(
-    options.get_bool_option("make-assert-false") &&
-    !(options.get_bool_option("goto-coverage") ||
-      options.get_bool_option("add-false-assert")))
+  if(options.get_bool_option("goto-coverage"))
   {
+    // we should not double counting same assertion
+    assert(!options.get_bool_option("keep-unwind-claims"));
+
     int total = goto_coveraget().get_total_instrument();
     if(total)
     {
