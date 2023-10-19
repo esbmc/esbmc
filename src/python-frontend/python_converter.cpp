@@ -94,7 +94,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   exprt bin_expr(get_op(op), current_element_type);
 
-  exprt lhs; // = get_expr(element["left"]);
+  exprt lhs;
   if(element.contains("left"))
     lhs = get_expr(element["left"]);
   else if(element.contains("target"))
@@ -204,43 +204,72 @@ void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  // Get variable type
-  current_element_type =
-    get_typet(ast_node["annotation"]["id"].get<std::string>());
-
-  // Id and name
-  std::string name, id;
-  auto target = ast_node["target"];
-  if(!target.is_null() && target["_type"] == "Name")
+  if(ast_node.contains("annotation"))
   {
-    name = target["id"];
-    id = "py:@" + name;
+    // Get type from current annotation node
+    current_element_type =
+      get_typet(ast_node["annotation"]["id"].get<std::string>());
+  }
+  else
+  {
+    // Get type from declaration node
+    std::string var_name = ast_node["targets"][0]["id"].get<std::string>();
+    nlohmann::json ref = find_var_decl(var_name);
+    assert(!ref.empty());
+    current_element_type =
+      get_typet(ref["annotation"]["id"].get<std::string>());
   }
 
-  // Variable location
-  locationt location_begin = get_location_from_decl(ast_node["target"]);
+  exprt lhs;
 
-  // Debug module name
-  std::string module_name = location_begin.get_file().as_string();
-
-  // Create/init symbol
-  symbolt symbol =
-    create_symbol(module_name, name, id, location_begin, current_element_type);
-  symbol.lvalue = true;
-  symbol.static_lifetime = false;
-  symbol.file_local = true;
-  symbol.is_extern = false;
-
-  // Assign a value
   nlohmann::json value = ast_node["value"];
-  exprt val = get_expr(value);
-  symbol.value = val;
+  exprt rhs = get_expr(value);
 
-  code_assignt code_assign(symbol_expr(symbol), symbol.value);
+  locationt location_begin;
+
+  if(ast_node["_type"] == "AnnAssign")
+  {
+    // Id and name
+    std::string name, id;
+    auto target = ast_node["target"];
+    if(!target.is_null() && target["_type"] == "Name")
+    {
+      name = target["id"];
+      id = "py:@" + name;
+    }
+
+    // Location
+    location_begin = get_location_from_decl(ast_node["target"]);
+
+    // Debug module name
+    std::string module_name = location_begin.get_file().as_string();
+
+    // Create/init symbol
+    symbolt symbol = create_symbol(
+      module_name, name, id, location_begin, current_element_type);
+    symbol.lvalue = true;
+    symbol.static_lifetime = false;
+    symbol.file_local = true;
+    symbol.is_extern = false;
+    symbol.value = rhs;
+
+    lhs = symbol_expr(symbol);
+
+    context.add(symbol);
+  }
+  else if(ast_node["_type"] == "Assign")
+  {
+    std::string id = ast_node["targets"][0]["id"].get<std::string>();
+    symbolt *symbol = context.find_symbol(std::string("py:@") + id);
+    if(symbol != nullptr)
+    {
+      lhs = symbol_expr(*symbol);
+    }
+  }
+
+  code_assignt code_assign(lhs, rhs);
   code_assign.location() = location_begin;
   target_block.copy_to_operands(code_assign);
-
-  context.add(symbol);
 }
 
 void python_converter::get_compound_assign(
@@ -248,7 +277,6 @@ void python_converter::get_compound_assign(
   codet &target_block)
 {
   exprt lhs = get_expr(ast_node["target"]);
-  current_element_type = lhs.type();
   exprt rhs = get_binary_operator_expr(ast_node);
 
   code_assignt code_assign(lhs, rhs);
