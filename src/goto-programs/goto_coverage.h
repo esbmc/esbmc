@@ -18,8 +18,6 @@ public:
 
   int get_total_instrument() const;
 
-  std::unordered_set<std::string> get_all_claims();
-
 protected:
   static int total_instrument;
 };

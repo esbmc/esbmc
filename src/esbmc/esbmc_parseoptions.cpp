@@ -1743,11 +1743,13 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       // for assertion coverage metric
       options.set_option("make-assert-false", true);
+      // no-simplify, otherwise the coverage will always be 100%
+      options.set_option("no-simplify", true);
       // for multi-property
       options.set_option("result-only", true);
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
-      options.set_option("keep-verified-claims", false);
+      options.set_option("keep-verified-claims", true);
     }
 
     if(

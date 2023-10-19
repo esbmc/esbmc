@@ -715,8 +715,8 @@ smt_convt::resultt bmct::multi_property_check(
   // to avoid double verifying the unwinding claims in loop/func_call
   std::string loc = "";
   // For coverage info
-  int tracked_instrument = 0;
-  std::unordered_set<std::string> reached_claims;
+  int total_instance = 0;
+  std::unordered_multiset<std::string> reached_claims;
 
   // TODO: This is the place to check a cache
   for(size_t i = 1; i <= remaining_claims; i++)
@@ -741,8 +741,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &final_result,
                        &result_mutex,
                        &loc,
-                       &tracked_instrument,
-                       &reached_claims](const size_t &i) {
+                       &reached_claims,
+                       &total_instance](const size_t &i) {
     // Since this is just a copy, we probably don't need a lock
     auto local_eq = std::make_shared<symex_target_equationt>(*eq);
 
@@ -768,6 +768,7 @@ smt_convt::resultt bmct::multi_property_check(
       "Solving claim '{}' with solver {}",
       claim.claim_msg,
       runtime_solver->solver_text());
+    total_instance++;
 
     smt_convt::resultt result;
     /* TODO: We might move this into solver_convt. It is
@@ -793,7 +794,6 @@ smt_convt::resultt bmct::multi_property_check(
         }
       }
       solver_job.join();
-      // TODO: Fix the unordered output
 
       if(result == smt_convt::P_SATISFIABLE)
       {
@@ -808,32 +808,29 @@ smt_convt::resultt bmct::multi_property_check(
         goto_tracet goto_trace;
         build_goto_trace(local_eq, runtime_solver, goto_trace, false);
 
-        // to avoid double verifying claims
-        // we use the location (and comment) to distinguish each claim
-        if(!options.get_bool_option("keep-verified-claims"))
-        {
-          for(const auto &step : goto_trace.steps)
-            if(step.type == goto_trace_stept::ASSERT)
-            {
-              // since we only handle one claim at a time
-              // we will/should not overwrite the loc
-              // it's safe in parallel-solving as we have added the mutex_lock
-              assert(loc == "");
-              if(step.pc->location.is_nil())
-                loc = "nil";
-              else
-                loc = step.pc->location.as_string();
-              // we might add an assert in goto-check or goto-coverage
-              // which has the same location (e.g. add-false-assert)
-              // this can also be used in goto-cov output
-              loc = step.comment + "\t" + loc;
-            }
-        }
+        for(const auto &step : goto_trace.steps)
+          if(step.type == goto_trace_stept::ASSERT)
+          {
+            // since we only handle one claim at a time
+            // we will/should not overwrite the loc
+            // it's safe in parallel-solving as we have added the mutex_lock
+            assert(loc == "");
+            if(step.pc->location.is_nil())
+              loc = "nil";
+            else
+              loc = step.pc->location.as_string();
+            // we might add an assert in goto-check or goto-coverage
+            // which has the same location (e.g. add-false-assert)
+            // this can also be used in goto-cov output
+            // we use the location (and comment) to distinguish each claim
+            loc = step.comment + "\t" + loc;
+          }
 
-        if(!reached_claims.count(loc))
+        if(
+          !reached_claims.count(loc) ||
+          options.get_bool_option("keep-verified-claims"))
         {
-          if(loc != "nil" && !options.get_bool_option("keep-verified-claims"))
-            reached_claims.insert(loc);
+          reached_claims.insert(loc);
           std::string output_file = options.get_option("cex-output");
           if(output_file != "")
           {
@@ -845,26 +842,10 @@ smt_convt::resultt bmct::multi_property_check(
           show_goto_trace(oss, ns, goto_trace);
           log_result("{}", oss.str());
           final_result = result;
-
-          // collect the tracked instrumentation which is verified failed
-          // we assume it always works in multi-property checking mode
-          if(
-            options.get_bool_option("goto-coverage") ||
-            options.get_bool_option("goto-coverage-claims"))
-          {
-            if(claim.claim_msg.find("Instrumentation") != std::string::npos)
-            {
-              // E.g.
-              // "Claim 1: Instrumentation ASSERT(0) Added"
-              // "Claim 2: Instrumentation ASSERT(0) Converted"
-              tracked_instrument++;
-            }
-          }
         }
         else
         {
           // we should not be here if "keep-verified-claims" is set
-          assert(!options.get_bool_option("keep-verified-claims"));
           log_status("\nFound verified claim. Skipping...\n");
 
           //TODO: this can still be annoying when we unind for many times
@@ -914,42 +895,33 @@ smt_convt::resultt bmct::multi_property_check(
     options.get_bool_option("goto-coverage") ||
     options.get_bool_option("goto-coverage-claims"))
   {
-    // we should not double counting same assertion
-    assert(!options.get_bool_option("keep-verified-claims"));
-
     int total = goto_coveraget().get_total_instrument();
+    int tracked_instance = reached_claims.size();
+
     if(total)
     {
       log_success("\n[Coverage]\n");
-      log_result("  Total Asserts: {}", total);
-      log_result("  Reached Asserts: {}", tracked_instrument);
-      log_result("  Coverage: {}%", tracked_instrument * 100.0 / total);
+      log_result("Total Asserts   : {}", total);
+      log_result("Total Assertion Instances: {}", total_instance);
+      log_result("Reached Assertions Instances: ");
     }
-  }
 
-  // show claims
-  if(options.get_bool_option("goto-coverage-claims"))
-  {
-    // all claims:
-    std::unordered_set<std::string> all_claims =
-      goto_coveraget().get_all_claims();
-
-    // reached claims:
-    log_success("\n[Reached Assertions]\n");
-    for(const auto &claim : reached_claims)
+    // show claims
+    if(options.get_bool_option("goto-coverage-claims"))
     {
-      log_status("{}", claim);
-
-      // removing reached claims in all claims
-      all_claims.erase(claim);
+      // reached claims:
+      for(const auto &claim : reached_claims)
+      {
+        log_status("  {}", claim);
+      }
     }
 
-    // unreached claims:
-    log_success("\n[Unreached Assertions]\n");
-    for(const auto &claim : all_claims)
-    {
-      log_status("{}", claim);
-    }
+    //TODO: show unreached claims
+
+    if(total_instance != 0)
+      log_result("Coverage: {}%", tracked_instance * 100.0 / total_instance);
+    else
+      log_result("Coverage: 0.00%");
   }
 
   return final_result;
