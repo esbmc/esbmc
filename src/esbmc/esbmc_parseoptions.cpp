@@ -411,9 +411,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("result-only", true);
     options.set_option("base-case", true);
     options.set_option("multi-property", true);
-    // avoid removal
-    options.set_option("no-remove-no-op", false);
-    options.set_option("no-remove-unreachable", false);
   }
 
   // If multi-property is on, we should set result-only and base-case
@@ -421,9 +418,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     options.set_option("result-only", true);
     options.set_option("base-case", true);
-    // avoid removal
-    options.set_option("no-remove-no-op", false);
-    options.set_option("no-remove-unreachable", false);
   }
 
   config.options = options;
@@ -1654,10 +1648,16 @@ bool esbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     // Start by removing all no-op instructions and unreachable code
-    if(!cmdline.isset("no-remove-no-op"))
+    // We should skip this removal in goto-cov and multi-property
+    if(!(cmdline.isset("no-remove-no-op") || cmdline.isset("multi-property") ||
+         cmdline.isset("parallel-solving") || cmdline.isset("goto-coverage") ||
+         cmdline.isset("goto-coverage-claims")))
       remove_no_op(goto_functions);
 
-    if(!cmdline.isset("no-remove-unreachable"))
+    if(!(cmdline.isset("no-remove-unreachable") ||
+         cmdline.isset("multi-property") || cmdline.isset("parallel-solving") ||
+         cmdline.isset("goto-coverage") ||
+         cmdline.isset("goto-coverage-claims")))
       remove_unreachable(goto_functions);
 
     // Apply all the initialized algorithms
@@ -1708,10 +1708,15 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // Once again, remove all unreachable and no-op code that could have been
     // introduced by the above algorithms
-    if(!cmdline.isset("no-remove-no-op"))
+    if(!(cmdline.isset("no-remove-no-op") || cmdline.isset("multi-property") ||
+         cmdline.isset("parallel-solving") || cmdline.isset("goto-coverage") ||
+         cmdline.isset("goto-coverage-claims")))
       remove_no_op(goto_functions);
 
-    if(!cmdline.isset("no-remove-unreachable"))
+    if(!(cmdline.isset("no-remove-unreachable") ||
+         cmdline.isset("multi-property") || cmdline.isset("parallel-solving") ||
+         cmdline.isset("goto-coverage") ||
+         cmdline.isset("goto-coverage-claims")))
       remove_unreachable(goto_functions);
 
     goto_functions.update();
@@ -1727,11 +1732,17 @@ bool esbmc_parseoptionst::process_goto_program(
 
       value_set_analysis.update(goto_functions);
     }
+    if(cmdline.isset("add-false-assert"))
+    {
+      goto_coveraget tmp;
+      tmp.add_false_asserts(goto_functions);
+    }
 
-    if(cmdline.isset("goto-coverage"))
+    //! goto-cov will mutate the asserts added bt esbmc (e.g. overflow-check)
+    if(cmdline.isset("goto-coverage") || cmdline.isset("goto-coverage-claims"))
     {
       // for assertion coverage metric
-      options.set_option("add-false-assert", true);
+      options.set_option("make-assert-false", true);
       // for multi-property
       options.set_option("result-only", true);
       options.set_option("base-case", true);
@@ -1739,16 +1750,12 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("keep-unwind-claims", false);
     }
 
-    if(cmdline.isset("make-assert-false"))
+    if(
+      options.get_bool_option("make-assert-false") ||
+      cmdline.isset("make-assert-false"))
     {
       goto_coveraget tmp;
       tmp.make_asserts_false(goto_functions);
-    }
-
-    if(cmdline.isset("add-false-assert"))
-    {
-      goto_coveraget tmp;
-      tmp.add_false_asserts(goto_functions);
     }
   }
 
