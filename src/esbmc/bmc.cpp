@@ -706,18 +706,6 @@ smt_convt::resultt bmct::multi_property_check(
     options.get_bool_option("base-case") &&
     "Multi-property only supports base-case");
 
-  if(
-    options.get_bool_option("k-induction") ||
-    options.get_bool_option("k-induction-parallel"))
-  {
-    log_warning("multi-property should not work with k-induction");
-  }
-
-  if(options.get_bool_option("incremental-bmc"))
-  {
-    log_warning("multi-property should not work with incremental-bmc");
-  }
-
   // Initial values
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
   std::atomic_size_t ce_counter = 0;
