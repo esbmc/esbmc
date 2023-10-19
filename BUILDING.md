@@ -88,7 +88,7 @@ They are optional.
 For shared builds it is recommended to use the system's LLVM/Clang, which on
 Ubuntu can be obtained by:
 ```
-apt-get install libclang-cpp-dev &&
+apt-get install libclang-cpp11-dev &&
 ESBMC_CLANG="-DLLVM_DIR=/usr/lib/llvm-11/lib/cmake/llvm -DClang_DIR=/usr/lib/cmake/clang-11" &&
 ESBMC_STATIC=OFF
 ```
