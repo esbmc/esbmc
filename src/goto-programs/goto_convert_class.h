@@ -390,7 +390,8 @@ protected:
     const exprt &guard,
     goto_programt::targett target_true,
     const locationt &location,
-    goto_programt &dest);
+    goto_programt &dest,
+    bool loop_head = false);
 
   // turn a OP b OP c into a list a, b, c
   static void collect_operands(

@@ -1105,7 +1105,7 @@ int esbmc_parseoptionst::doit_rapid()
     return 6;
   }
 
-  run_str += " -integerIterations on " + rapid_file_name;
+  run_str += " -inlineSemantics off -integerIterations on -nat off -genInvariants on -vampViaFile on " + rapid_file_name;
 
   std::array<char, 128> buffer;
   std::string result;
@@ -1640,8 +1640,8 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     if(
-      cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-      cmdline.isset("k-induction-parallel"))
+      cmdline.isset("inductive-step")    || cmdline.isset("k-induction") ||
+      cmdline.isset("vampire-for-loops") || cmdline.isset("k-induction-parallel"))
     {
       goto_k_induction(goto_functions);
     }

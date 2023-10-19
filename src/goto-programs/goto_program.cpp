@@ -6,7 +6,7 @@ void goto_programt::instructiont::dump() const
 {
   std::ostringstream oss;
   output_instruction(*migrate_namespace_lookup, "", oss);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }
 
 void goto_programt::instructiont::output_instruction(
@@ -106,6 +106,12 @@ void goto_programt::instructiont::output_instruction(
       if(comment != "")
         out << " // " << comment;
     }
+
+    out << "\n";
+    break;
+
+  case INVARIANT:
+    out << "INVARIANT ";
 
     out << "\n";
     break;
@@ -465,6 +471,12 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case ASSIGN:
     out << "ASSIGN";
     break;
+  case DECL:
+    out << "DECL";
+    break;
+  case DEAD:
+    out << "DEAD";
+    break;
   case FUNCTION_CALL:
     out << "FUNCTION_CALL";
     break;
@@ -477,9 +489,12 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case THROW_DECL:
     out << "THROW_DECL";
     break;
+  case INVARIANT:
+    out << "INVARIANT";
+    break;
   default:
-    out << "? (number: " << t << ")";
-  }
+    out << "? UNKNOWN";
+  }    
 
   return out;
 }

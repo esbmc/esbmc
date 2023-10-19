@@ -2557,12 +2557,22 @@ std::string expr2ct::convert(const exprt &src)
   return convert(src, precedence);
 }
 
+std::string expr2ct::convert(const codet &src)
+{
+  return convert_code(src);
+}
+
 std::string expr2c(const exprt &expr, const namespacet &ns, bool fullname)
 {
-  std::string code;
   expr2ct expr2c(ns, fullname);
   expr2c.get_shorthands(expr);
   return expr2c.convert(expr);
+}
+
+std::string code2c(const codet &code, const namespacet &ns, bool fullname)
+{
+  expr2ct expr2c(ns, fullname);
+  return expr2c.convert(code);
 }
 
 std::string type2c(const typet &type, const namespacet &ns, bool fullname)

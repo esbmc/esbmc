@@ -10,6 +10,10 @@
 
 std::string
 expr2c(const exprt &expr, const namespacet &ns, bool fullname = false);
+
+std::string
+code2c(const codet &code, const namespacet &ns, bool fullname = false);
+
 std::string
 type2c(const typet &type, const namespacet &ns, bool fullname = false);
 
@@ -23,6 +27,7 @@ public:
   virtual ~expr2ct() = default;
 
   virtual std::string convert(const typet &src);
+  virtual std::string convert(const codet &src);  
   virtual std::string convert(const exprt &src);
 
   void get_shorthands(const exprt &expr);

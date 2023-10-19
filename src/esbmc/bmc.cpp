@@ -53,18 +53,34 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       algorithms.emplace_back(std::make_unique<assertion_cache>(
         config.ssa_caching_db, !options.get_bool_option("forward-condition")));
   }
+  
+  bool symex_during_smt = options.get_bool_option("smt-during-symex");
+  bool vampire_for_loops =  options.get_bool_option("vampire-for-loops");
 
-  if(options.get_bool_option("smt-during-symex"))
+  if(symex_during_smt && vampire_for_loops){
+    log_error("Cannot run symex during smt as well as Vampire for loops");
+    abort();
+  }
+
+  if(symex_during_smt || vampire_for_loops)
   {
-    runtime_solver = std::shared_ptr<smt_convt>(create_solver("", ns, options));
-
-    symex = std::make_shared<reachability_treet>(
-      funcs,
-      ns,
-      options,
-      std::shared_ptr<runtime_encoded_equationt>(
-        new runtime_encoded_equationt(ns, *runtime_solver)),
-      _context);
+    runtime_solver = std::shared_ptr<smt_convt>(create_solver(symex_during_smt ? "" : "smtlib", ns, options));
+    
+    if(symex_during_smt){
+      symex = std::make_shared<reachability_treet>(
+        funcs,
+        ns,
+        options,
+         std::shared_ptr<runtime_encoded_equationt>(new runtime_encoded_equationt(ns, *runtime_solver)),
+        _context);
+    } else {
+      symex = std::make_shared<reachability_treet>(
+        funcs,
+        ns,
+        options,
+         std::shared_ptr<vampire_equationt>(new vampire_equationt(ns, *runtime_solver)),
+        _context);
+    }
   }
   else
   {
@@ -629,6 +645,11 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       }
 
       return smt_convt::P_UNSATISFIABLE;
+    } 
+
+    if(result->remaining_claims && options.get_bool_option("vampire-for-loops"))
+    {
+      log_status("Vampire was unable to prove all assertions during symbolic execution. Falling back to SMT");
     }
 
     if(!options.get_bool_option("smt-during-symex"))

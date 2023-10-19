@@ -13,7 +13,7 @@ void goto_convertt::make_temp_symbol(exprt &expr, goto_programt &dest)
   const locationt location = expr.find_location();
 
   symbolt &new_symbol = new_tmp_symbol(expr.type());
-
+ 
   code_assignt assignment;
   assignment.lhs() = symbol_expr(new_symbol);
   assignment.rhs() = expr;
@@ -688,6 +688,22 @@ void goto_convertt::remove_function_call(
     const irep_idt &identifier = expr.op0().identifier();
     const symbolt *symbol = ns.lookup(identifier);
     assert(symbol);
+
+    auto name = id2string(symbol->name);
+    if(name == "__forall" || name == "__exists"){
+      // super inelegant
+      auto arg = expr.op1().op0();
+
+      if(arg.id() == "symbol"){
+        return;
+      }
+
+      arg = arg.op0().op0();
+      expr.op1().op0() = arg;
+  
+      // don't want to squish these
+      return;
+    }
 
     std::string new_base_name = id2string(new_symbol.name);
 
