@@ -19,8 +19,8 @@ void goto_coveraget::make_asserts_false(goto_functionst &goto_functions)
 
           it->guard = gen_false_expr();
           it->location.property("Instrumentation ASSERT(0)");
-          cmt =
-            "Claim " + std::to_string(total_instrument) + ": " + old_comment;
+          cmt = "Claim " + std::to_string(total_instrument + 1) + ": " +
+                old_comment;
           it->location.comment(cmt);
           it->location.user_provided(true);
           total_instrument++;
@@ -67,7 +67,7 @@ void goto_coveraget::insert_false_assert(
   t->location = it->location;
   t->location.property("Instrumentation ASSERT(0)");
   t->location.comment(
-    "Claim " + std::to_string(total_instrument) +
+    "Claim " + std::to_string(total_instrument + 1) +
     ": Instrumentation ASSERT(0) Added");
   t->location.user_provided(true);
   it = ++t;
