@@ -826,7 +826,8 @@ smt_convt::resultt bmct::multi_property_check(
                 loc = step.pc->location.as_string();
               // we might add an assert in goto-check or goto-coverage
               // which has the same location (e.g. add-false-assert)
-              loc += step.comment;
+              // this can also be used in goto-cov output
+              loc = step.comment + "\t" + loc;
             }
         }
 
@@ -848,7 +849,9 @@ smt_convt::resultt bmct::multi_property_check(
 
           // collect the tracked instrumentation which is verified failed
           // we assume it always works in multi-property checking mode
-          if(options.get_bool_option("goto-coverage"))
+          if(
+            options.get_bool_option("goto-coverage") ||
+            options.get_bool_option("goto-coverage-claims"))
           {
             // skip the claims added by goto-check as they are not in the source code
             if(claim.claim_msg.find("Instrumentation") != std::string::npos)
@@ -909,7 +912,9 @@ smt_convt::resultt bmct::multi_property_check(
   else
     std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
-  if(options.get_bool_option("goto-coverage"))
+  if(
+    options.get_bool_option("goto-coverage") ||
+    options.get_bool_option("goto-coverage-claims"))
   {
     // we should not double counting same assertion
     assert(!options.get_bool_option("keep-unwind-claims"));
@@ -921,6 +926,16 @@ smt_convt::resultt bmct::multi_property_check(
       log_result("  Total Asserts: {}", total);
       log_result("  Reached Asserts: {}", tracked_instrument);
       log_result("  Coverage: {}%", tracked_instrument * 100.0 / total);
+    }
+  }
+
+  // show claims
+  if(options.get_bool_option("goto-coverage-claims"))
+  {
+    log_success("\n[Reached Assertions]\n");
+    for(const auto &claim : reached_claims)
+    {
+      log_status("{}", claim);
     }
   }
 
