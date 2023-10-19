@@ -158,8 +158,8 @@ void dump_intervals(
           i_it->location.column().as_string(),
           i_it->location.function().as_string(),
           interval.first,
-          (interval.second.lower_set ? interval.second.lower : "-inf"),
-          (interval.second.upper_set ? interval.second.upper : "inf"),
+          (interval.second.lower ? *interval.second.lower : "-inf"),
+          (interval.second.upper ? *interval.second.upper : "inf"),
           interval.second.is_bottom(),
           interval.second.is_top());
       }

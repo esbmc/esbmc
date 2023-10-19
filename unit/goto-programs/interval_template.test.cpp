@@ -164,10 +164,10 @@ TEST_CASE(
     B.make_le_than(10);
 
     auto result = A + B;
-    REQUIRE(result.lower_set);
-    REQUIRE(result.upper_set);
-    REQUIRE(result.lower == 6);
-    REQUIRE(result.upper == 20);
+    REQUIRE(result.lower);
+    REQUIRE(result.upper);
+    REQUIRE(*result.lower == 6);
+    REQUIRE(*result.upper == 20);
   }
 
   SECTION("Add test 2")
@@ -179,9 +179,9 @@ TEST_CASE(
     B.make_le_than(10);
 
     auto result = A + B;
-    REQUIRE_FALSE(result.lower_set);
-    REQUIRE(result.upper_set);
-    REQUIRE(result.upper == 20);
+    REQUIRE_FALSE(result.lower);
+    REQUIRE(result.upper);
+    REQUIRE(*result.upper == 20);
   }
 
   SECTION("Add test 3")
@@ -192,8 +192,8 @@ TEST_CASE(
     B.make_ge_than(5);
 
     auto result = A + B;
-    REQUIRE_FALSE(result.lower_set);
-    REQUIRE_FALSE(result.upper_set);
+    REQUIRE_FALSE(result.lower);
+    REQUIRE_FALSE(result.upper);
   }
 
   SECTION("Sub test 1")
@@ -206,10 +206,10 @@ TEST_CASE(
     B.make_le_than(10);
 
     auto result = A - B;
-    REQUIRE(result.lower_set);
-    REQUIRE(result.upper_set);
-    REQUIRE(result.lower == -9);
-    REQUIRE(result.upper == 5);
+    REQUIRE(result.lower);
+    REQUIRE(result.upper);
+    REQUIRE(*result.lower == -9);
+    REQUIRE(*result.upper == 5);
   }
 
   SECTION("Sub test 2")
@@ -221,9 +221,9 @@ TEST_CASE(
     B.make_le_than(10);
 
     auto result = A - B;
-    REQUIRE_FALSE(result.lower_set);
-    REQUIRE(result.upper_set);
-    REQUIRE(result.upper == 5);
+    REQUIRE_FALSE(result.lower);
+    REQUIRE(result.upper);
+    REQUIRE(*result.upper == 5);
   }
 
   SECTION("Sub test 3")
@@ -234,9 +234,9 @@ TEST_CASE(
     B.make_ge_than(5);
 
     auto result = A - B;
-    REQUIRE_FALSE(result.lower_set);
-    REQUIRE(result.upper_set);
-    REQUIRE(result.upper == 5);
+    REQUIRE_FALSE(result.lower);
+    REQUIRE(result.upper);
+    REQUIRE(*result.upper == 5);
   }
 
   SECTION("Mul test 1")
@@ -248,10 +248,10 @@ TEST_CASE(
     B.make_le_than(1);
 
     auto result = A * B;
-    REQUIRE(result.lower_set);
-    REQUIRE(result.upper_set);
-    REQUIRE(result.lower == -10);
-    REQUIRE(result.upper == 10);
+    REQUIRE(result.lower);
+    REQUIRE(result.upper);
+    REQUIRE(*result.lower == -10);
+    REQUIRE(*result.upper == 10);
   }
 
   SECTION("Mul test 2")
@@ -263,10 +263,10 @@ TEST_CASE(
     B.make_le_than(2);
 
     auto result = A * B;
-    REQUIRE(result.lower_set);
-    REQUIRE(result.upper_set);
-    REQUIRE(result.lower == -30);
-    REQUIRE(result.upper == 20);
+    REQUIRE(result.lower);
+    REQUIRE(result.upper);
+    REQUIRE(*result.lower == -30);
+    REQUIRE(*result.upper == 20);
   }
 
   SECTION("Div test 1")
@@ -278,10 +278,10 @@ TEST_CASE(
     B.make_le_than(2);
 
     auto result = A / B;
-    REQUIRE(result.lower_set);
-    REQUIRE(result.upper_set);
-    REQUIRE(result.lower == 2);
-    REQUIRE(result.upper == 10);
+    REQUIRE(result.lower);
+    REQUIRE(result.upper);
+    REQUIRE(*result.lower == 2);
+    REQUIRE(*result.upper == 10);
   }
 
   SECTION("Copy constructor")
@@ -289,8 +289,8 @@ TEST_CASE(
     // Just to be sure
     auto tmp_a = A;
     A.make_ge_than(0);
-    REQUIRE(!tmp_a.lower_set);
-    REQUIRE(A.lower_set);
+    REQUIRE(!tmp_a.lower);
+    REQUIRE(A.lower);
   }
   SECTION("Contractor")
   {
@@ -305,15 +305,15 @@ TEST_CASE(
     B.make_ge_than(0);
 
     interval_templatet<int>::contract_interval_le(B, A);
-    REQUIRE(A.lower_set);
-    REQUIRE(A.upper_set);
-    REQUIRE(A.lower == 0);
-    REQUIRE(A.upper == 20);
+    REQUIRE(A.lower);
+    REQUIRE(A.upper);
+    REQUIRE(*A.lower == 0);
+    REQUIRE(*A.upper == 20);
 
-    REQUIRE(B.lower_set);
-    REQUIRE(B.upper_set);
-    REQUIRE(B.lower == 0);
-    REQUIRE(B.upper == 20);
+    REQUIRE(B.lower);
+    REQUIRE(B.upper);
+    REQUIRE(*B.lower == 0);
+    REQUIRE(*B.upper == 20);
   }
 }
 
@@ -363,14 +363,14 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     wrapped_interval A(t1_unsigned);
     wrapped_interval C(t2_unsigned);
 
-    REQUIRE(A.lower == 0);
-    REQUIRE(A.upper.to_uint64() == pow(2, N1) - 1);
+    REQUIRE(*A.lower == 0);
+    REQUIRE((*A.upper).to_uint64() == pow(2, N1) - 1);
     REQUIRE(!A.is_bottom());
     CAPTURE(A.cardinality());
     REQUIRE(A.is_top());
 
-    REQUIRE(C.lower == 0);
-    REQUIRE(C.upper.to_uint64() == pow(2, N2) - 1);
+    REQUIRE(*C.lower == 0);
+    REQUIRE((*C.upper).to_uint64() == pow(2, N2) - 1);
     REQUIRE(!C.is_bottom());
     REQUIRE(C.is_top());
 
@@ -379,8 +379,8 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     {
       A.set_lower(c);
       A.set_upper(c);
-      REQUIRE(A.lower >= 0);
-      REQUIRE(A.upper >= 0);
+      REQUIRE(*A.lower >= 0);
+      REQUIRE(*A.upper >= 0);
       REQUIRE(A.get_lower() == c);
       REQUIRE(A.get_upper() == c);
     }
@@ -389,9 +389,9 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
   SECTION("Init Signed")
   {
     wrapped_interval A(t1_signed);
-    CAPTURE(A.lower.to_int64(), A.upper.to_uint64());
-    REQUIRE(A.lower == 0);
-    REQUIRE(A.upper.to_uint64() == pow(2, N1) - 1);
+    CAPTURE((*A.lower).to_int64(), (*A.upper).to_uint64());
+    REQUIRE(*A.lower == 0);
+    REQUIRE((*A.upper).to_uint64() == pow(2, N1) - 1);
     REQUIRE(!A.is_bottom());
     REQUIRE(A.is_top());
 
@@ -400,8 +400,8 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     {
       A.set_lower(c);
       A.set_upper(c);
-      REQUIRE(A.lower >= 0);
-      REQUIRE(A.upper >= 0);
+      REQUIRE(*A.lower >= 0);
+      REQUIRE(*A.upper >= 0);
       REQUIRE(A.get_lower() == c);
       REQUIRE(A.get_upper() == c);
     }
@@ -495,8 +495,8 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     B.approx_union_with(A);
     CAPTURE(B.lower, B.upper);
     REQUIRE(!B.is_bottom());
-    REQUIRE(B.lower == 51);
-    REQUIRE(B.upper == 52);
+    REQUIRE(*B.lower == 51);
+    REQUIRE(*B.upper == 52);
   }
 
   SECTION("Join/Meet from bug")
@@ -578,8 +578,8 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
 
   SECTION("Addition Unsigned")
   {
-    REQUIRE(A.lower == 0);
-    REQUIRE(A.upper.to_uint64() == pow(2, N1) - 1);
+    REQUIRE(*A.lower == 0);
+    REQUIRE((*A.upper).to_uint64() == pow(2, N1) - 1);
     REQUIRE(!A.is_bottom());
     REQUIRE(A.is_top());
 
@@ -609,7 +609,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
   SECTION("Addition Unsigned wrap")
   {
     REQUIRE(A.lower == 0);
-    REQUIRE(A.upper.to_uint64() == pow(2, N1) - 1);
+    REQUIRE((*A.upper).to_uint64() == pow(2, N1) - 1);
     REQUIRE(!A.is_bottom());
     REQUIRE(A.is_top());
 
@@ -662,13 +662,13 @@ TEST_CASE("Interval templates arithmetic operations", "[ai][interval-analysis]")
   SECTION("North Pole")
   {
     auto np = wrapped_interval::north_pole(t1_signed);
-    REQUIRE((np.lower == 127 && np.upper == 128));
+    REQUIRE((*np.lower == 127 && *np.upper == 128));
   }
 
   SECTION("South Pole")
   {
     auto np = wrapped_interval::south_pole(t1_signed);
-    REQUIRE((np.upper == 0 && np.lower == 255));
+    REQUIRE((*np.upper == 0 && *np.lower == 255));
   }
 
   SECTION("North Split")
@@ -687,10 +687,10 @@ TEST_CASE("Interval templates arithmetic operations", "[ai][interval-analysis]")
     REQUIRE(w1_split.size() == 2);
 
     // The right part is returned as first element! (not a rule though)
-    REQUIRE(w1_split[0].lower == 128);
-    REQUIRE(w1_split[0].upper == 150);
-    REQUIRE(w1_split[1].lower == 100);
-    REQUIRE(w1_split[1].upper == 127);
+    REQUIRE(*w1_split[0].lower == 128);
+    REQUIRE(*w1_split[0].upper == 150);
+    REQUIRE(*w1_split[1].lower == 100);
+    REQUIRE(*w1_split[1].upper == 127);
   }
 
   SECTION("South Split")
@@ -711,10 +711,10 @@ TEST_CASE("Interval templates arithmetic operations", "[ai][interval-analysis]")
     REQUIRE(w1_split.size() == 2);
 
     // The left part is returned as first element! (not a rule though)
-    REQUIRE(w1_split[0].lower == 0);
-    REQUIRE(w1_split[0].upper == 150);
-    REQUIRE(w1_split[1].lower == 200);
-    REQUIRE(w1_split[1].upper == 255);
+    REQUIRE(*w1_split[0].lower == 0);
+    REQUIRE(*w1_split[0].upper == 150);
+    REQUIRE(*w1_split[1].lower == 200);
+    REQUIRE(*w1_split[1].upper == 255);
   }
 
   SECTION("Cut")
@@ -761,14 +761,14 @@ TEST_CASE("Interval templates arithmetic operations", "[ai][interval-analysis]")
     w.lower = 255;
     w.upper = 127;
 
-    REQUIRE(w.most_significant_bit(w.lower));
-    REQUIRE(!w.most_significant_bit(w.upper));
+    REQUIRE(w.most_significant_bit(*w.lower));
+    REQUIRE(!w.most_significant_bit(*w.upper));
 
     w.lower = 25;
     w.upper = 130;
 
-    REQUIRE(!w.most_significant_bit(w.lower));
-    REQUIRE(w.most_significant_bit(w.upper));
+    REQUIRE(!w.most_significant_bit(*w.lower));
+    REQUIRE(w.most_significant_bit(*w.upper));
   }
 
   SECTION("Difference")
@@ -783,8 +783,8 @@ TEST_CASE("Interval templates arithmetic operations", "[ai][interval-analysis]")
 
     auto result = w1.difference(w1, w2);
     CAPTURE(result.lower, result.upper);
-    REQUIRE(result.lower == 111);
-    REQUIRE(result.upper == 120);
+    REQUIRE(*result.lower == 111);
+    REQUIRE(*result.upper == 120);
   }
 }
 
@@ -808,8 +808,8 @@ TEST_CASE("Interval templates multiplication", "[ai][interval-analysis]")
     auto w3 = w1 * w2;
 
     CAPTURE(w3.lower, w3.upper);
-    REQUIRE(w3.lower == 10);
-    REQUIRE(w3.upper == 100);
+    REQUIRE(*w3.lower == 10);
+    REQUIRE(*w3.upper == 100);
 
     w1.lower = 1;
     w1.upper = 2;
@@ -819,8 +819,8 @@ TEST_CASE("Interval templates multiplication", "[ai][interval-analysis]")
 
     w3 = w1 * w2;
     CAPTURE(w3.lower, w3.upper);
-    REQUIRE(w3.lower == 0);
-    REQUIRE(w3.upper == 254);
+    REQUIRE(*w3.lower == 0);
+    REQUIRE(*w3.upper == 254);
   }
 
   SECTION("Multiply signed")
@@ -836,8 +836,8 @@ TEST_CASE("Interval templates multiplication", "[ai][interval-analysis]")
     auto w3 = w1 * w2;
 
     CAPTURE(w3.lower, w3.upper);
-    REQUIRE(w3.lower == 246);
-    REQUIRE(w3.upper == 255);
+    REQUIRE(*w3.lower == 246);
+    REQUIRE(*w3.upper == 255);
   }
 }
 
@@ -861,8 +861,8 @@ TEST_CASE("Interval templates division", "[ai][interval-analysis]")
     auto w3 = w1 / w2;
 
     CAPTURE(w3.lower, w3.upper);
-    REQUIRE(w3.lower == 0);
-    REQUIRE(w3.upper == 10);
+    REQUIRE(*w3.lower == 0);
+    REQUIRE(*w3.upper == 10);
 
     w1.lower = 10;
     w1.upper = 20;
@@ -872,8 +872,8 @@ TEST_CASE("Interval templates division", "[ai][interval-analysis]")
 
     w3 = w1 / w2;
     CAPTURE(w3.lower, w3.upper);
-    REQUIRE(w3.lower == 1);
-    REQUIRE(w3.upper == 10);
+    REQUIRE(*w3.lower == 1);
+    REQUIRE(*w3.upper == 10);
   }
 
   SECTION("Division signed")
@@ -889,8 +889,8 @@ TEST_CASE("Interval templates division", "[ai][interval-analysis]")
     auto w3 = w1 / w2;
 
     CAPTURE(w3.lower, w3.upper);
-    REQUIRE(w3.lower == 236);
-    REQUIRE(w3.upper == 251);
+    REQUIRE(*w3.lower == 236);
+    REQUIRE(*w3.upper == 251);
   }
 }
 
@@ -919,8 +919,8 @@ TEST_CASE("Wrapped Interval Typecast", "[ai][interval-analysis]")
 
     result1 = w1.trunc(t1_unsigned);
     CAPTURE(result1.lower, result1.upper);
-    REQUIRE(result1.lower == 0);
-    REQUIRE(result1.upper == 4);
+    REQUIRE(*result1.lower == 0);
+    REQUIRE(*result1.upper == 4);
   }
 
   SECTION("Truncation (signed)")
@@ -931,16 +931,16 @@ TEST_CASE("Wrapped Interval Typecast", "[ai][interval-analysis]")
 
     auto result1 = w1.trunc(t1_signed);
     CAPTURE(result1.lower, result1.upper);
-    REQUIRE(result1.lower == 30);
-    REQUIRE(result1.upper == 128);
+    REQUIRE(*result1.lower == 30);
+    REQUIRE(*result1.upper == 128);
 
     w1.lower = 30;
     w1.upper = 257;
 
     result1 = w1.trunc(t1_signed);
     CAPTURE(result1.lower, result1.upper);
-    REQUIRE(result1.lower == 30);
-    REQUIRE(result1.upper == 1);
+    REQUIRE(*result1.lower == 30);
+    REQUIRE(*result1.upper == 1);
   }
 
   SECTION("Unsigned to unsigned")
@@ -951,7 +951,7 @@ TEST_CASE("Wrapped Interval Typecast", "[ai][interval-analysis]")
 
     auto result1 = wrapped_interval::cast(w1, t2_unsigned);
     CAPTURE(result1.lower, result1.upper);
-    REQUIRE(result1.upper == 255);
+    REQUIRE(*result1.upper == 255);
   }
 
   SECTION("Signed to Signed 1")
@@ -962,7 +962,7 @@ TEST_CASE("Wrapped Interval Typecast", "[ai][interval-analysis]")
 
     auto result1 = wrapped_interval::cast(w1, t2_signed);
     CAPTURE(result1.lower, result1.upper);
-    REQUIRE(result1.upper == 0xffff);
+    REQUIRE(*result1.upper == 0xffff);
   }
 
   SECTION("Signed to Signed 2")
@@ -973,7 +973,7 @@ TEST_CASE("Wrapped Interval Typecast", "[ai][interval-analysis]")
 
     auto result1 = wrapped_interval::cast(w1, t2_signed);
     CAPTURE(result1.lower, result1.upper);
-    REQUIRE(result1.upper == 20);
+    REQUIRE(*result1.upper == 20);
   }
 
   SECTION("Unsigned to signed")
@@ -984,7 +984,7 @@ TEST_CASE("Wrapped Interval Typecast", "[ai][interval-analysis]")
 
     auto result1 = wrapped_interval::cast(w1, t2_signed);
     CAPTURE(result1.lower, result1.upper);
-    REQUIRE(result1.upper == 255);
+    REQUIRE(*result1.upper == 255);
   }
 
   SECTION("Signed to Unsigned")
@@ -995,7 +995,7 @@ TEST_CASE("Wrapped Interval Typecast", "[ai][interval-analysis]")
 
     auto result1 = wrapped_interval::cast(w1, t2_unsigned);
     CAPTURE(result1.lower, result1.upper);
-    REQUIRE(result1.upper == 0xffff);
+    REQUIRE(*result1.upper == 0xffff);
   }
 
   SECTION("Unsigned to BOOL")
@@ -1007,7 +1007,7 @@ TEST_CASE("Wrapped Interval Typecast", "[ai][interval-analysis]")
 
     auto result1 = wrapped_interval::cast(w1, get_bool_type());
     CAPTURE(result1.lower, 1);
-    REQUIRE(result1.upper == 1);
+    REQUIRE(*result1.upper == 1);
   }
 
   SECTION("Unsigned to BOOL 2")
@@ -1019,7 +1019,7 @@ TEST_CASE("Wrapped Interval Typecast", "[ai][interval-analysis]")
 
     auto result1 = wrapped_interval::cast(w1, get_bool_type());
     CAPTURE(result1.lower, 0);
-    REQUIRE(result1.upper == 0);
+    REQUIRE(*result1.upper == 0);
   }
 
   SECTION("Unsigned to BOOL 3")
@@ -1031,7 +1031,7 @@ TEST_CASE("Wrapped Interval Typecast", "[ai][interval-analysis]")
 
     auto result1 = wrapped_interval::cast(w1, get_bool_type());
     CAPTURE(result1.lower, 0);
-    REQUIRE(result1.upper == 1);
+    REQUIRE(*result1.upper == 1);
   }
 }
 
@@ -1049,16 +1049,16 @@ TEST_CASE("Wrapped Interval Left Shift", "[ai][interval-analysis]")
 
     auto result1 = w.left_shift(1);
     CAPTURE(result1.lower, result1.upper);
-    REQUIRE(result1.lower == 60);
-    REQUIRE(result1.upper == 160);
+    REQUIRE(*result1.lower == 60);
+    REQUIRE(*result1.upper == 160);
 
     w.lower = 50;
     w.upper = 100;
 
     auto result2 = w.left_shift(3);
     CAPTURE(result2.lower, result2.upper);
-    REQUIRE(result2.lower == 0);
-    REQUIRE(result2.upper == 248);
+    REQUIRE(*result2.lower == 0);
+    REQUIRE(*result2.upper == 248);
   }
 
   SECTION("Left shift signed")
@@ -1069,8 +1069,8 @@ TEST_CASE("Wrapped Interval Left Shift", "[ai][interval-analysis]")
 
     auto result1 = w.left_shift(1);
     CAPTURE(result1.lower, result1.upper);
-    REQUIRE(result1.lower == 0);
-    REQUIRE(result1.upper == 254);
+    REQUIRE(*result1.lower == 0);
+    REQUIRE(*result1.upper == 254);
   }
 
   SECTION("Logical right shift")
@@ -1081,16 +1081,16 @@ TEST_CASE("Wrapped Interval Left Shift", "[ai][interval-analysis]")
 
     auto result1 = w.logical_right_shift(1);
     CAPTURE(result1.lower, result1.upper);
-    REQUIRE(result1.lower == 15);
-    REQUIRE(result1.upper == 40);
+    REQUIRE(*result1.lower == 15);
+    REQUIRE(*result1.upper == 40);
 
     w.lower = 250;
     w.upper = 20; // [0, 127]
 
     auto result2 = w.logical_right_shift(1);
     CAPTURE(result2.lower, result2.upper);
-    REQUIRE(result2.lower == 0);
-    REQUIRE(result2.upper == 127);
+    REQUIRE(*result2.lower == 0);
+    REQUIRE(*result2.upper == 127);
   }
 
   SECTION("Arithmetic right shift")
@@ -1109,8 +1109,8 @@ TEST_CASE("Wrapped Interval Left Shift", "[ai][interval-analysis]")
 
     auto result2 = w.arithmetic_right_shift(1);
     CAPTURE(result2.lower, result2.upper);
-    REQUIRE(result2.lower == 254);
-    REQUIRE(result2.upper == 255);
+    REQUIRE(*result2.lower == 254);
+    REQUIRE(*result2.upper == 255);
   }
 }
 
@@ -1133,22 +1133,22 @@ TEST_CASE("Remainder Operations", "[ai][interval-analysis]")
     w2.upper = 10;
 
     auto result1 = w1 % w2;
-    REQUIRE(result1.lower == 0);
-    REQUIRE(result1.upper == 0);
+    REQUIRE(*result1.lower == 0);
+    REQUIRE(*result1.upper == 0);
 
     w2.lower = 9;
     w2.upper = 9;
 
     auto result2 = w1 % w2;
-    REQUIRE(result2.lower == 1);
-    REQUIRE(result2.upper == 1);
+    REQUIRE(*result2.lower == 1);
+    REQUIRE(*result2.upper == 1);
 
     w2.lower = 11;
     w2.upper = 11;
 
     auto result3 = w1 % w2;
-    REQUIRE(result3.lower == 10);
-    REQUIRE(result3.upper == 10);
+    REQUIRE(*result3.lower == 10);
+    REQUIRE(*result3.upper == 10);
 
     wrapped_interval w3(t1_signed);
     wrapped_interval w4(t1_signed);
@@ -1160,22 +1160,22 @@ TEST_CASE("Remainder Operations", "[ai][interval-analysis]")
     w4.upper = 10;
 
     auto result4 = w3 % w4;
-    REQUIRE(result4.lower == 0);
-    REQUIRE(result4.upper == 0);
+    REQUIRE(*result4.lower == 0);
+    REQUIRE(*result4.upper == 0);
 
     w4.lower = 9;
     w4.upper = 9;
 
     auto result5 = w3 % w4;
-    REQUIRE(result5.lower == 1);
-    REQUIRE(result5.upper == 1);
+    REQUIRE(*result5.lower == 1);
+    REQUIRE(*result5.upper == 1);
 
     w4.lower = 11;
     w4.upper = 11;
 
     auto result6 = w3 % w4;
-    REQUIRE(result6.lower == 10);
-    REQUIRE(result6.upper == 10);
+    REQUIRE(*result6.lower == 10);
+    REQUIRE(*result6.upper == 10);
 
     w3.set_lower(-10);
     w3.set_upper(-10);
@@ -1184,8 +1184,8 @@ TEST_CASE("Remainder Operations", "[ai][interval-analysis]")
     w4.upper = 10;
 
     auto result7 = w3 % w4;
-    REQUIRE(result7.lower == 0);
-    REQUIRE(result7.upper == 0);
+    REQUIRE(*result7.lower == 0);
+    REQUIRE(*result7.upper == 0);
 
     w4.lower = 9;
     w4.upper = 9;
@@ -1214,15 +1214,15 @@ TEST_CASE("Remainder Operations", "[ai][interval-analysis]")
     w2.upper = 5;
 
     auto result1 = w1 % w2;
-    REQUIRE(result1.lower == 0);
-    REQUIRE(result1.upper == 4);
+    REQUIRE(*result1.lower == 0);
+    REQUIRE(*result1.upper == 4);
 
     w1.lower = 10;
     w1.upper = 8;
 
     auto result2 = w1 % w2;
-    REQUIRE(result2.lower == 0);
-    REQUIRE(result2.upper == 4);
+    REQUIRE(*result2.lower == 0);
+    REQUIRE(*result2.upper == 4);
 
     w1.lower = 10;
     w1.upper = 10;
@@ -1231,16 +1231,16 @@ TEST_CASE("Remainder Operations", "[ai][interval-analysis]")
     w2.upper = 5;
 
     auto result3 = w1 % w2;
-    REQUIRE(result3.lower == 0);
-    REQUIRE(result3.upper == 2);
+    REQUIRE(*result3.lower == 0);
+    REQUIRE(*result3.upper == 2);
 
     w2.lower = 5;
     w2.upper = 1;
 
     // TODO: we can probably optimize this!
     auto result4 = w1 % w2;
-    REQUIRE(result4.lower == 0);
-    REQUIRE(result4.upper == 254);
+    REQUIRE(*result4.lower == 0);
+    REQUIRE(*result4.upper == 254);
   }
 
   SECTION("Non singletons (signed)")
@@ -1255,16 +1255,16 @@ TEST_CASE("Remainder Operations", "[ai][interval-analysis]")
     w2.upper = 5;
 
     auto result1 = w1 % w2;
-    REQUIRE(result1.lower == 0);
-    REQUIRE(result1.upper == 4);
+    REQUIRE(*result1.lower == 0);
+    REQUIRE(*result1.upper == 4);
 
     w1.lower = 10;
     w1.upper = 8;
 
     auto result2 = w1 % w2;
     CAPTURE(result2.upper, result2.lower);
-    REQUIRE(result2.lower == 252); // -4
-    REQUIRE(result2.upper == 4);   // 4
+    REQUIRE(*result2.lower == 252); // -4
+    REQUIRE(*result2.upper == 4);   // 4
 
     w1.lower = 200;
     w1.upper = 250;
@@ -1273,8 +1273,8 @@ TEST_CASE("Remainder Operations", "[ai][interval-analysis]")
     w2.upper = 4;
 
     auto result3 = w1 % w2;
-    REQUIRE(result3.lower == 253);
-    REQUIRE(result3.upper == 0);
+    REQUIRE(*result3.lower == 253);
+    REQUIRE(*result3.upper == 0);
   }
 }
 
@@ -1295,8 +1295,8 @@ TEST_CASE("Bitor Operations", "[ai][interval-analysis]")
 
     auto result = w1 | w2;
     CAPTURE(result.lower, result.upper);
-    REQUIRE(result.lower == 170); // 0xAA
-    REQUIRE(result.upper == 170); // 0xAA
+    REQUIRE(*result.lower == 170); // 0xAA
+    REQUIRE(*result.upper == 170); // 0xAA
   }
 
   SECTION("Intervals")
@@ -1308,8 +1308,8 @@ TEST_CASE("Bitor Operations", "[ai][interval-analysis]")
 
     auto result = w1 | w2;
     CAPTURE(result.lower, result.upper);
-    REQUIRE(result.lower == 170);
-    REQUIRE(result.upper == 174);
+    REQUIRE(*result.lower == 170);
+    REQUIRE(*result.upper == 174);
   }
   /*
   SECTION("Intervals Overlap")
@@ -1347,8 +1347,8 @@ TEST_CASE("Bitand Operations", "[ai][interval-analysis]")
 
     auto result = w1 & w2;
     CAPTURE(result.lower, result.upper);
-    REQUIRE(result.lower == 0); // 0x00
-    REQUIRE(result.upper == 0); // 0x00
+    REQUIRE(*result.lower == 0); // 0x00
+    REQUIRE(*result.upper == 0); // 0x00
   }
 
   SECTION("Singletons")
@@ -1360,8 +1360,8 @@ TEST_CASE("Bitand Operations", "[ai][interval-analysis]")
 
     auto result = w1 & w2;
     CAPTURE(result.lower, result.upper);
-    REQUIRE(result.lower == 1); // 0x01
-    REQUIRE(result.upper == 1); // 0x01
+    REQUIRE(*result.lower == 1); // 0x01
+    REQUIRE(*result.upper == 1); // 0x01
   }
 
   SECTION("Intervals")
@@ -1373,8 +1373,8 @@ TEST_CASE("Bitand Operations", "[ai][interval-analysis]")
 
     auto result = w1 & w2;
     CAPTURE(result.lower, result.upper);
-    REQUIRE(result.lower == 0);
-    REQUIRE(result.upper == 2);
+    REQUIRE(*result.lower == 0);
+    REQUIRE(*result.upper == 2);
   }
 
   SECTION("Hardware issue")
@@ -1386,8 +1386,8 @@ TEST_CASE("Bitand Operations", "[ai][interval-analysis]")
 
     auto result = w1 & w2;
     CAPTURE(result.lower, result.upper);
-    REQUIRE(result.lower == 0);
-    REQUIRE(result.upper == 1);
+    REQUIRE(*result.lower == 0);
+    REQUIRE(*result.upper == 1);
   }
 
   SECTION("Hardware issue 2")
@@ -1399,8 +1399,8 @@ TEST_CASE("Bitand Operations", "[ai][interval-analysis]")
 
     auto result = w1 & w2;
     CAPTURE(result.lower, result.upper);
-    REQUIRE(result.lower == 0);
-    REQUIRE(result.upper == 1);
+    REQUIRE(*result.lower == 0);
+    REQUIRE(*result.upper == 1);
   }
 }
 
@@ -1421,8 +1421,8 @@ TEST_CASE("Bitxor Operations", "[ai][interval-analysis]")
 
     auto result = w1 ^ w2;
     CAPTURE(result.lower, result.upper);
-    REQUIRE(result.lower == 170); // 0xAA
-    REQUIRE(result.upper == 170); // 0xAA
+    REQUIRE(*result.lower == 170); // 0xAA
+    REQUIRE(*result.upper == 170); // 0xAA
   }
 
   SECTION("Singletons")
@@ -1434,8 +1434,8 @@ TEST_CASE("Bitxor Operations", "[ai][interval-analysis]")
 
     auto result = w1 ^ w2;
     CAPTURE(result.lower, result.upper);
-    REQUIRE(result.lower == 160); // 0xA0
-    REQUIRE(result.upper == 160); // 0xA0
+    REQUIRE(*result.lower == 160); // 0xA0
+    REQUIRE(*result.upper == 160); // 0xA0
   }
 
   SECTION("Intervals")
@@ -1447,8 +1447,8 @@ TEST_CASE("Bitxor Operations", "[ai][interval-analysis]")
 
     auto result = w1 ^ w2;
     CAPTURE(result.lower, result.upper);
-    REQUIRE(result.lower == 168); // 1010 1100
-    REQUIRE(result.upper == 174); // 1010 1110
+    REQUIRE(*result.lower == 168); // 1010 1100
+    REQUIRE(*result.upper == 174); // 1010 1110
   }
 }
 
@@ -1465,16 +1465,16 @@ TEST_CASE("Bitnot Operations", "[ai][interval-analysis]")
 
     auto r = wrapped_interval::bitnot(w);
     CAPTURE(r.lower, r.upper);
-    REQUIRE(r.lower == 254);
-    REQUIRE(r.upper == 254);
+    REQUIRE(*r.lower == 254);
+    REQUIRE(*r.upper == 254);
 
     w.lower = 250; // 0xFA
     w.upper = 250; // 0xFA
 
     r = wrapped_interval::bitnot(w);
     CAPTURE(r.lower, r.upper);
-    REQUIRE(r.lower == 5); // 0x05
-    REQUIRE(r.upper == 5); // 0x05
+    REQUIRE(*r.lower == 5); // 0x05
+    REQUIRE(*r.upper == 5); // 0x05
   }
 
   SECTION("Intervals")
@@ -1484,7 +1484,7 @@ TEST_CASE("Bitnot Operations", "[ai][interval-analysis]")
 
     auto r = wrapped_interval::bitnot(w);
     CAPTURE(r.lower, r.upper);
-    REQUIRE(r.lower == 254); // 0xFE
-    REQUIRE(r.upper == 255); // 0xFF
+    REQUIRE(*r.lower == 254); // 0xFE
+    REQUIRE(*r.upper == 255); // 0xFF
   }
 }

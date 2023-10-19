@@ -13,8 +13,6 @@ public:
     : t(t), upper_bound(compute_upper_bound(t))
   {
     assert(is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t));
-    lower_set = true;
-    upper_set = true;
 
     lower = 0;
     upper = is_bool_type(t) ? 1 : compute_upper_bound(t) - 1;
@@ -50,11 +48,11 @@ public:
     if(is_signed)
     {
       auto middle = get_upper_bound() / 2; // [128] 256
-      if(value >= middle)
-        value -= middle * 2;
+      if(*value >= middle)
+        value = *value - middle * 2;
     }
 
-    return value;
+    return *value;
   }
 
   bool bottom = false;
@@ -78,10 +76,10 @@ public:
     if(!w.is_bottom())
     {
       auto mod = w.get_upper_bound();
-      result.lower = (w.upper + 1) % mod;
-      result.upper = (w.lower - 1) % mod;
+      result.lower = (*w.upper + 1) % mod;
+      result.upper = (*w.lower - 1) % mod;
       if(result.upper < 0)
-        result.upper += mod;
+        result.upper = *result.upper + mod;
     }
     return result;
   }
@@ -183,7 +181,7 @@ public:
 
     auto mod = get_upper_bound();
     assert(mod != 0);
-    auto card = (((upper - lower) % mod) + 1);
+    auto card = (((*upper - *lower) % mod) + 1);
     if(card < 0)
       card += mod;
     return card;
@@ -194,7 +192,7 @@ public:
     if(is_top())
       return true;
 
-    return wrapped_le(e, lower, upper, t);
+    return wrapped_le(e, *lower, *upper, t);
   }
 
   bool is_equal(const wrapped_interval &rhs) const
@@ -209,8 +207,8 @@ public:
     if(is_top() || rhs.is_bottom())
       return false;
 
-    return rhs.contains(lower) && rhs.contains(upper) &&
-           (!contains(rhs.lower) || !contains(rhs.upper));
+    return rhs.contains(*lower) && rhs.contains(*upper) &&
+           (!contains(*rhs.lower) || !contains(*rhs.upper));
   }
 
   static wrapped_interval
@@ -237,8 +235,8 @@ public:
   {
     wrapped_interval result(s.t);
     if(
-      !t.is_bottom() && !s.is_bottom() && !t.contains(s.upper) &&
-      !s.contains(t.lower))
+      !t.is_bottom() && !s.is_bottom() && !t.contains(*s.upper) &&
+      !s.contains(*t.lower))
     {
       result.lower = t.lower;
       result.upper = s.upper;
@@ -273,12 +271,12 @@ public:
       if(b.is_bottom())
         return false;
 
-      return a.lower < b.lower;
+      return *a.lower < *b.lower;
     });
 
     for(unsigned i = 0; i < r.size(); ++i)
     {
-      if(r[i].is_top() || (wrapped_le(r[i].upper, 0, r[i].lower, r[i].t)))
+      if(r[i].is_top() || (wrapped_le(*(r[i].upper), 0, *(r[i].lower), r[i].t)))
       {
         f = extend(f, r[i]);
       }
@@ -396,10 +394,10 @@ public:
       return result;
     }
 
-    const BigInt a = s.lower;
-    const BigInt b = s.upper;
-    const BigInt c = t.lower;
-    const BigInt d = t.upper;
+    const BigInt a = *s.lower;
+    const BigInt b = *s.upper;
+    const BigInt c = *t.lower;
+    const BigInt d = *t.upper;
 
     if(t.contains(a) && t.contains(b) && s.contains(c) && s.contains(d))
     {
@@ -463,10 +461,10 @@ public:
     if(t.is_included(s))
       return t;
 
-    const BigInt a = s.lower;
-    const BigInt b = s.upper;
-    const BigInt c = t.lower;
-    const BigInt d = t.upper;
+    const BigInt a = *s.lower;
+    const BigInt b = *s.upper;
+    const BigInt c = *t.lower;
+    const BigInt d = *t.upper;
 
     wrapped_interval result(s.t);
 
@@ -527,36 +525,36 @@ public:
     assert(!f1_to_f2.is_bottom());
 
     // Lower bound keeps the same but upper increases
-    if(f1_to_f2.lower == f1.lower && f1_to_f2.upper == f2.upper)
+    if(*f1_to_f2.lower == *f1.lower && *f1_to_f2.upper == *f2.upper)
     {
       wrapped_interval double_upper(f1.t);
-      double_upper.lower = f1_to_f2.lower;
+      double_upper.lower = *f1_to_f2.lower;
       double_upper.upper =
-        ((((2 * f1.upper) - f1.lower) % f1.get_upper_bound()) + 1) %
+        ((((2 * *f1.upper) - *f1.lower) % f1.get_upper_bound()) + 1) %
         f1.get_upper_bound();
       return over_join(f1_to_f2, double_upper);
     }
 
     // Upper bound keeps the same but lower decreases
-    if(f1_to_f2.lower == f2.lower && f1_to_f2.upper == f1.upper)
+    if(*f1_to_f2.lower == *f2.lower && *f1_to_f2.upper == *f1.upper)
     {
       wrapped_interval double_lower(f1.t);
       double_lower.lower =
-        ((((2 * f1.lower) - f1.upper) % f1.get_upper_bound()) - 1) %
+        ((((2 * *f1.lower) - *f1.upper) % f1.get_upper_bound()) - 1) %
         f1.get_upper_bound();
-      double_lower.upper = f1.upper;
+      double_lower.upper = *f1.upper;
       return over_join(f1_to_f2, double_lower);
     }
 
     // Lower and upper bound of f1 is included in f2
-    if(f2.contains(f1.lower) && f2.contains(f1.upper))
+    if(f2.contains(*f1.lower) && f2.contains(*f1.upper))
     {
       wrapped_interval magic(f1.t);
       // Maintain the lower
-      magic.lower = f2.lower;
+      magic.lower = *f2.lower;
       // Increase the upper by the difference between uppers
-      magic.upper = (((f2.upper + (((2 * f1.upper) - (2 * f1.lower)) %
-                                   f1.get_upper_bound())) %
+      magic.upper = (((*f2.upper + (((2 * *f1.upper) - (2 * *f1.lower)) %
+                                    f1.get_upper_bound())) %
                       f1.get_upper_bound()) +
                      1) %
                     f1.get_upper_bound();
@@ -583,10 +581,10 @@ public:
     auto mod = lhs.get_upper_bound();
     if(lhs.cardinality() + rhs.cardinality() <= mod)
     {
-      result.lower = (lhs.lower + rhs.lower) % mod;
-      result.upper = (lhs.upper + rhs.upper) % mod;
-      assert(result.lower >= 0);
-      assert(result.upper >= 0);
+      result.lower = (*lhs.lower + *rhs.lower) % mod;
+      result.upper = (*lhs.upper + *rhs.upper) % mod;
+      assert(*result.lower >= 0);
+      assert(*result.upper >= 0);
     }
 
     return result;
@@ -607,14 +605,14 @@ public:
     auto mod = lhs.get_upper_bound();
     if(lhs.cardinality() + rhs.cardinality() <= mod)
     {
-      result.lower = (lhs.lower - rhs.upper) % mod;
-      result.upper = (lhs.upper - rhs.lower) % mod;
-      if(result.lower < 0)
-        result.lower += mod;
-      if(result.upper < 0)
-        result.upper += mod;
-      assert(result.lower >= 0);
-      assert(result.upper >= 0);
+      result.lower = (*lhs.lower - *rhs.upper) % mod;
+      result.upper = (*lhs.upper - *rhs.lower) % mod;
+      if(*result.lower < 0)
+        result.lower = *result.lower + mod;
+      if(*result.upper < 0)
+        result.upper = *result.upper + mod;
+      assert(*result.lower >= 0);
+      assert(*result.upper >= 0);
     }
 
     return result;
@@ -810,11 +808,11 @@ public:
 
     wrapped_interval result(t);
     if(
-      trunc(lower, t->get_width() - k) == lower &&
-      trunc(upper, t->get_width() - k) == upper)
+      trunc(*lower, t->get_width() - k) == *lower &&
+      trunc(*upper, t->get_width() - k) == *upper)
     {
-      result.lower = lower << k;
-      result.upper = upper << k;
+      result.lower = *lower << k;
+      result.upper = *upper << k;
     }
     else
     {
@@ -854,8 +852,8 @@ public:
     }
     else
     {
-      result.lower = lower >> k;
-      result.upper = upper >> k;
+      result.lower = *lower >> k;
+      result.upper = *upper >> k;
     }
     return result;
   }
@@ -1016,11 +1014,11 @@ public:
     {
       wrapped_interval result(cast);
       result.lower =
-        compute_outer_region(most_significant_bit(interval.lower)) +
-        interval.lower;
+        compute_outer_region(most_significant_bit(*interval.lower)) +
+        *interval.lower;
       result.upper =
-        compute_outer_region(most_significant_bit(interval.upper)) +
-        interval.upper;
+        compute_outer_region(most_significant_bit(*interval.upper)) +
+        *interval.upper;
       parts.push_back(result);
     }
 
@@ -1036,18 +1034,18 @@ public:
       result.bottom = true;
 
     else if(
-      (lower >> k) == (upper >> k) && (trunc(lower, k) <= trunc(upper, k)))
+      (*lower >> k) == (*upper >> k) && (trunc(*lower, k) <= trunc(*upper, k)))
     {
-      result.lower = trunc(lower, k);
-      result.upper = trunc(upper, k);
+      result.lower = trunc(*lower, k);
+      result.upper = trunc(*upper, k);
     }
 
     else if(
-      ((lower >> k) + 1 % 2) == (upper >> k) % 2 &&
-      (trunc(lower, k) > trunc(upper, k)))
+      ((*lower >> k) + 1 % 2) == (*upper >> k) % 2 &&
+      (trunc(*lower, k) > trunc(*upper, k)))
     {
-      result.lower = trunc(lower, k);
-      result.upper = trunc(upper, k);
+      result.lower = trunc(*lower, k);
+      result.upper = trunc(*upper, k);
     }
     return result;
   }
@@ -1062,10 +1060,10 @@ public:
 
     auto up = lhs.get_upper_bound();
 
-    auto &a = lhs.lower;
-    auto &b = lhs.upper;
-    auto &c = rhs.lower;
-    auto &d = rhs.upper;
+    auto &a = *lhs.lower;
+    auto &b = *lhs.upper;
+    auto &c = *rhs.lower;
+    auto &d = *rhs.upper;
 
     if(b * d - a * c < up)
     {
@@ -1117,7 +1115,7 @@ public:
   {
     wrapped_interval r(rhs.t);
     r.lower = 0;
-    r.upper = rhs.upper - 1;
+    r.upper = *rhs.upper - 1;
     return r;
   }
 
@@ -1140,7 +1138,7 @@ public:
           r.push_back(u - ((u / v_non_zero) * v_non_zero));
           continue;
         }
-        if(is_signedbv_type(u.t) && s.most_significant_bit(u.upper))
+        if(is_signedbv_type(u.t) && s.most_significant_bit(*u.upper))
           r.push_back(-amb(v));
         else
           r.push_back(amb(v));
@@ -1165,8 +1163,8 @@ public:
         {
           auto non_zero = difference(v, zero);
           wrapped_interval temp(lhs.t);
-          temp.lower = u.lower / non_zero.upper;
-          temp.upper = u.upper / non_zero.lower;
+          temp.lower = *u.lower / *non_zero.upper;
+          temp.upper = *u.upper / *non_zero.lower;
           r.push_back(temp);
         }
     }
@@ -1178,8 +1176,8 @@ public:
           auto non_zero = difference(v, zero);
           wrapped_interval temp(lhs.t);
 
-          auto msb_a = temp.most_significant_bit(u.lower);
-          auto msb_c = temp.most_significant_bit(non_zero.lower);
+          auto msb_a = temp.most_significant_bit(*u.lower);
+          auto msb_c = temp.most_significant_bit(*non_zero.lower);
 
           if(!msb_a && !msb_c)
           {
@@ -1463,11 +1461,11 @@ private:
     for(auto &u : lhs.ssplit())
       for(auto &v : rhs.ssplit())
       {
-        auto u_lower = u.lower.to_uint64();
-        auto u_upper = u.upper.to_uint64();
+        auto u_lower = (*u.lower).to_uint64();
+        auto u_upper = (*u.upper).to_uint64();
 
-        auto v_lower = v.lower.to_uint64();
-        auto v_upper = v.upper.to_uint64();
+        auto v_lower = (*v.lower).to_uint64();
+        auto v_upper = (*v.upper).to_uint64();
 
         wrapped_interval temp(lhs.t);
         temp.lower = min(u_lower, u_upper, v_lower, v_upper);

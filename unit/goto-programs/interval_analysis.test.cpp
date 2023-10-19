@@ -180,14 +180,9 @@ public:
               // Hack to get values!
               auto cpy = interval->second;
               cpy.set_lower(value);
-              CAPTURE(
-                interval->second.get_lower(),
-                interval->second.get_upper(),
-                cpy.get_lower(),
-                property_it->var,
-                i_it->location.get_line().as_string());
+              assert(cpy.lower);
               REQUIRE(
-                interval->second.contains(cpy.lower) ==
+                interval->second.contains(*cpy.lower) ==
                 property_it->should_contain);
             }
           }
@@ -511,7 +506,6 @@ TEST_CASE(
 
   T.run_configs();
 }
-
 TEST_CASE("Interval Analysis - While Statement", "[ai][interval-analysis]")
 {
   // Setup global options here
