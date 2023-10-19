@@ -810,7 +810,7 @@ smt_convt::resultt bmct::multi_property_check(
         build_goto_trace(local_eq, runtime_solver, goto_trace, false);
 
         // to avoid double verifying claims
-        // we use the location to distinguish each claim
+        // we use the location (and comment) to distinguish each claim
         if(!options.get_bool_option("keep-unwind-claims"))
         {
           for(const auto &step : goto_trace.steps)
@@ -824,8 +824,12 @@ smt_convt::resultt bmct::multi_property_check(
                 loc = "nil";
               else
                 loc = step.pc->location.as_string();
+              // we might add an assert in goto-check or goto-coverage
+              // which has the same location (e.g. add-false-assert)
+              loc += step.comment;
             }
         }
+
         if(!reached_claims.count(loc))
         {
           if(loc != "nil" && !options.get_bool_option("keep-unwind-claims"))

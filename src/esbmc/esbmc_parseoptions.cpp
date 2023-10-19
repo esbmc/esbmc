@@ -411,6 +411,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("result-only", true);
     options.set_option("base-case", true);
     options.set_option("multi-property", true);
+    // avoid removal
+    options.set_option("no-remove-no-op", false);
+    options.set_option("no-remove-unreachable", false);
   }
 
   // If multi-property is on, we should set result-only and base-case
@@ -418,6 +421,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     options.set_option("result-only", true);
     options.set_option("base-case", true);
+    // avoid removal
+    options.set_option("no-remove-no-op", false);
+    options.set_option("no-remove-unreachable", false);
   }
 
   config.options = options;
