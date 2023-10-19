@@ -5,8 +5,18 @@
  * <math.h> does #include <cmath> and expects all the std::* functions to be
  * there. But we don't want theirs... */
 #define _GLIBCXX_INCLUDE_NEXT_C_HEADERS
-
+#if __has_include(<sys/_types.h>) /* FreeBSD nonsense about __char{16,32}_t */
+# include <sys/_types.h>
+#endif
+/* Support LLVM's libc++, which defines the float and long double overloads
+ * in the top-level :: namespace in <math.h> when __cplusplus is set. These
+ * clash with our definitions due to the exception declaration. */
+#pragma push_macro("__cplusplus")
+#undef __cplusplus
+extern "C" {
 #include <math.h>
+}
+#pragma pop_macro("__cplusplus") // restore macro
 
 namespace std {
 

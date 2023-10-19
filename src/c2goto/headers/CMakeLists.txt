@@ -1,12 +1,14 @@
 set(inputs
            ctype.h
            limits.h
+           fenv.h
            stdarg.h
            stdbool.h
            stddef.h
            stdlib.h
            string.h
            __esbmc/stddefs.h
+
            # pthreads
            pthread.h
            bits/pthreadtypes.h
@@ -25,11 +27,15 @@ set(inputs
            sys/_pthread/_pthread_rwlockattr_t.h
            sys/_pthread/_pthread_t.h
            sys/_pthread/_pthread_types.h
+           # FreeBSD-14
+           sys/_pthreadtypes.h
+           # end pthreads
+
+           # Linux operational models
            ubuntu20.04/kernel_5.15.0-76/include/linux/gfp.h
            ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h
            ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h
            ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h
-           # end pthreads
    )
 mangle(mangled_files ${CMAKE_CURRENT_SOURCE_DIR} ${inputs}
        PREFIX esbmc_libc_header_

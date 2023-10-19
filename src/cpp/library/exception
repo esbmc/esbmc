@@ -75,7 +75,7 @@ void unexpected()
 
 // Model for terminate function: calls the current
 // terminate handler function
-void terminate()
+void terminate() throw()
 {
   terminate_pf();
 }

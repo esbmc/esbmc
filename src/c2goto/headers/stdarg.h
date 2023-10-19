@@ -1,3 +1,10 @@
+
+#ifdef __clang__
+
+#include_next <stdarg.h>
+
+#else /* old frontend */
+
 #ifndef __ESBMC_HEADERS_STDARG_H_
 #define __ESBMC_HEADERS_STDARG_H_
 /* Define standard macros; esbmc currently copes with gcc internal forms,
@@ -24,3 +31,5 @@ typedef va_list __gnuc_va_list;
 #endif
 
 #endif /* __ESBMC_HEADERS_STDARG_H_ */
+
+#endif /* !defined __clang__ */
