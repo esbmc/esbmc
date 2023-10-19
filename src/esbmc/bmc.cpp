@@ -742,8 +742,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &result_mutex,
                        &loc,
                        &tracked_instrument,
-                       &reached_claims](const size_t &i)
-  {
+                       &reached_claims](const size_t &i) {
     // Since this is just a copy, we probably don't need a lock
     auto local_eq = std::make_shared<symex_target_equationt>(*eq);
 
