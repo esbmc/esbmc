@@ -2363,7 +2363,9 @@ expr2tc smt_convt::get(const expr2tc &expr)
   // Recurse on operands
   bool have_all = true;
   res->Foreach_operand([this, &have_all](expr2tc &e) {
-    expr2tc new_e = get(e);
+    expr2tc new_e;
+    if(e)
+      new_e = get(e);
     e = new_e;
     if(!e)
       have_all = false;
