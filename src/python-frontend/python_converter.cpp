@@ -396,7 +396,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     case StatementType::FUNC_DEFINITION:
     case StatementType::UNKNOWN:
     default:
-      log_error("error");
+      log_error("Unsupported statement: {}", element["_type"].get<std::string>());
       abort();
     }
   }
