@@ -805,8 +805,16 @@ smt_convt::resultt bmct::multi_property_check(
             "Found solution for VCC. But, other thread found it first.");
           throw 0;
         }
+
+        bool is_compact_trace = true;
+        if(
+          options.get_bool_option("no-slice") &&
+          !options.get_bool_option("compact-trace"))
+          is_compact_trace = false;
+
         goto_tracet goto_trace;
-        build_goto_trace(local_eq, runtime_solver, goto_trace, false);
+        build_goto_trace(
+          local_eq, runtime_solver, goto_trace, is_compact_trace);
 
         for(const auto &step : goto_trace.steps)
           if(step.type == goto_trace_stept::ASSERT)
