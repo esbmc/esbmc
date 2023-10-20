@@ -461,10 +461,10 @@ public:
     if(t.is_included(s))
       return t;
 
-    const BigInt a = *s.lower;
-    const BigInt b = *s.upper;
-    const BigInt c = *t.lower;
-    const BigInt d = *t.upper;
+    const BigInt &a = *s.lower;
+    const BigInt &b = *s.upper;
+    const BigInt &c = *t.lower;
+    const BigInt &d = *t.upper;
 
     wrapped_interval result(s.t);
 
