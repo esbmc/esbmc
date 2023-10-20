@@ -7,6 +7,7 @@ enum class StatementType
   FUNC_DEFINITION,
   IF_STATEMENT,
   WHILE_STATEMENT,
+  EXPR,
   UNKNOWN,
 };
 
