@@ -21,23 +21,16 @@ class interval_templatet
 public:
   virtual ~interval_templatet() = default;
 
-  interval_templatet()
-  {
-    // this is 'top'
-  }
+  interval_templatet() = default;
 
   explicit interval_templatet(const T &x) : lower(x), upper(x)
   {
   }
 
-  explicit interval_templatet(const T &l, const T &u) : lower(l), upper(u)
+  interval_templatet(const T &l, const T &u) : lower(l), upper(u)
   {
   }
 
-  /* TODO: There is a clear dependency between the lower/upper and
-  *        and lower_set/upper_set variable. Shouldn't we convert the
-  *        the uses into the constraints functions?
-  */
   /// Bound value
   std::optional<T> lower, upper;
 
@@ -113,7 +106,7 @@ public:
  */
   virtual bool empty() const
   {
-    return !is_top() && (lower && upper && *lower > *upper);
+    return lower && upper && *lower > *upper;
   }
 
   bool is_bottom() const // equivalent to 'false'
@@ -171,9 +164,9 @@ public:
               : upper          ? *upper
                                : *v.upper;
     if(lower || v.lower)
-      lower = lower && v.lower ? std::max(*lower, *v.lower)
-              : lower          ? *lower
-                               : *v.lower;
+      v.lower = lower && v.lower ? std::max(*lower, *v.lower)
+                : lower          ? *lower
+                                 : *v.lower;
   }
 
   virtual void make_ge_than(const T &v) // add lower bound
@@ -635,12 +628,6 @@ public:
       return false;
 
     if((lower != i.lower) || (upper != i.upper))
-      return true;
-
-    if(lower && *lower != *i.lower)
-      return true;
-
-    if(upper && *upper != *i.upper)
       return true;
 
     return false;

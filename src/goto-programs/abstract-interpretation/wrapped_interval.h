@@ -49,7 +49,7 @@ public:
     {
       auto middle = get_upper_bound() / 2; // [128] 256
       if(*value >= middle)
-        value = *value - middle * 2;
+        *value -= middle * 2;
     }
 
     return *value;
@@ -79,7 +79,7 @@ public:
       result.lower = (*w.upper + 1) % mod;
       result.upper = (*w.lower - 1) % mod;
       if(result.upper < 0)
-        result.upper = *result.upper + mod;
+        *result.upper += mod;
     }
     return result;
   }
@@ -608,9 +608,9 @@ public:
       result.lower = (*lhs.lower - *rhs.upper) % mod;
       result.upper = (*lhs.upper - *rhs.lower) % mod;
       if(*result.lower < 0)
-        result.lower = *result.lower + mod;
+        *result.lower += mod;
       if(*result.upper < 0)
-        result.upper = *result.upper + mod;
+        *result.upper += mod;
       assert(*result.lower >= 0);
       assert(*result.upper >= 0);
     }

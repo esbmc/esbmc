@@ -236,7 +236,7 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after)
     if(!before.lower)
       result.lower.reset();
     else
-      result.lower = *before.lower;
+      result.lower = before.lower;
   }
 
   // Set upper bound:
@@ -245,7 +245,7 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after)
     if(!before.upper)
       result.upper.reset();
     else
-      result.upper = *before.upper;
+      result.upper = before.upper;
   }
   return result;
 }
@@ -283,10 +283,10 @@ T interval_domaint::interpolate_intervals(const T &before, const T &after)
   bool upper_decreased = !before.upper && after.upper;
 
   if(lower_increased)
-    result.lower = *after.lower;
+    result.lower = after.lower;
 
   if(upper_decreased)
-    result.upper = *after.upper;
+    result.upper = after.upper;
   return result;
 }
 
