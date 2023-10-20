@@ -268,6 +268,25 @@ protected:
    * @brief Applies Extrapolation widening algorithm
    *
    * Given two intervals: (a0, b0) (before the computation) and (a1, b1) (after the computation):
+   * The objective of the extrapolation is to accelerate the convergence at the cost of precision
+   *
+   * Example:
+   * int i = 0;
+   * while(i < 10)
+   *  i++;  <--- what is the interval for i before the increment?
+   *
+   * Computing the interval of sum would need 11 iterations to arrive to [0,9],
+   * it 1 = [0,0]
+   * it 2 = [0,1]
+   * it 3 = [0,2]
+   * ...
+   * it 10 = [0,9]
+   * it 11 = [0,9] fixpoint
+   *
+   * By extrapolating, we can arrive at [0, +inf] in two iterations.
+   * it 1 = [0,0]
+   * it 2 = [0,1] => [0, inf]
+   * it 3 = [0,inf] fixpoint
    *
    * Widening((a0,b0), (a1,b1)) = (a1 < a0 ? -infinity : a0, b1 > b0 ? infinity : b0 )
    * @tparam Interval interval template specialization (Integers, Reals)
@@ -279,10 +298,22 @@ protected:
 
   /**
    * @brief Applies Interpolation narrowing algorithm
+   * 
    *
    * Given two intervals: (a0, b0) (before the computation) and (a1, b1) (after the computation):
+   * The objective of the interpolation is to bring back some of the precision lost from an extrapolation.
    *
-   * Narrowing((a0,b0), (a1,b1)) = (a1 > a0 ? a0 : a1, b1 < b0 ? b0 : b1 )
+   * Example:
+   * int i = 0;
+   * while(i < 10)
+   *  i++;  <--- what is the interval for i before the increment?
+   * 
+   * Coming back from an extrapolation [0, +inf] (which is a fixpoint)
+   * we can narrow the interval by checking the interval post the loop condition (i < 10)
+   * it 4 = narrowing([0, inf], [0, 9]) => [0,9]
+   * it 5 = [0,9]  
+   *
+   * Narrowing((a0,b0), (a1,b1)) = (a0 == -inf ? a1 : a0, b0 = +inf ? b1 : b0)
    * @tparam Interval interval template specialization (Integers, Reals)
    * @param lhs
    * @param rhs

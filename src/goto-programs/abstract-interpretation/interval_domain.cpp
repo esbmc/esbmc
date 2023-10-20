@@ -75,9 +75,9 @@ void interval_domaint::apply_assume_symbol_truth(
     interval.make_ge_than(1);
   else if(is_signedbv_type(sym.type))
   {
-    if(interval.lower_set && interval.get_lower() == 0)
+    if(interval.lower && interval.get_lower() == 0)
       interval.make_ge_than(1);
-    else if(interval.upper_set && interval.get_upper() == 0)
+    else if(interval.upper && interval.get_upper() == 0)
       interval.make_le_than(-1);
   }
 
@@ -222,31 +222,21 @@ template <class T>
 T interval_domaint::extrapolate_intervals(const T &before, const T &after)
 {
   T result; // Full extrapolation
-
-  bool lower_decreased =
-    !after.lower_set ||
-    (before.lower_set && after.lower_set && after.lower < before.lower);
-  bool upper_increased =
-    !after.upper_set ||
-    (before.upper_set && after.upper_set && after.upper > before.upper);
+  bool lower_decreased = !after.lower || (before.lower && after.lower &&
+                                          *after.lower < *before.lower);
+  bool upper_increased = !after.upper || (before.upper && after.upper &&
+                                          *after.upper > *before.upper);
 
   if((lower_decreased || upper_increased) && !widening_under_approximate_bound)
     return result;
 
   // Set lower bound: if we didn't decrease then just update the interval
   if(!lower_decreased)
-  {
-    result.lower_set = before.lower_set;
     result.lower = before.lower;
-  }
 
   // Set upper bound:
   if(!upper_increased)
-  {
-    result.upper_set = before.upper_set;
     result.upper = before.upper;
-  }
-
   return result;
 }
 
@@ -278,15 +268,15 @@ T interval_domaint::interpolate_intervals(const T &before, const T &after)
 {
   T result;
 
-  bool lower_increased = !before.lower_set;
-  bool upper_decreased = !before.upper_set;
+  // before: [-infinity, +infinity], after: [a,b] ==> [a,b]
+  bool lower_increased = !before.lower && after.lower;
+  bool upper_decreased = !before.upper && after.upper;
 
-  result.lower_set = lower_increased ? after.lower_set : before.lower_set;
-  result.lower = lower_increased ? after.lower : before.lower;
+  if(lower_increased)
+    result.lower = after.lower;
 
-  result.upper_set = upper_decreased ? after.upper_set : before.upper_set;
-  result.upper = upper_decreased ? after.upper : before.upper;
-
+  if(upper_decreased)
+    result.upper = after.upper;
   return result;
 }
 
@@ -582,10 +572,10 @@ void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
       lhs.make_sound_le(rhs);
     else
     {
-      if(rhs.upper_set)
+      if(rhs.upper)
         lhs.make_le_than(rhs.get_upper());
 
-      if(lhs.lower_set)
+      if(lhs.lower)
         rhs.make_ge_than(lhs.get_lower());
     }
   }
@@ -648,9 +638,9 @@ template <>
 expr2tc interval_domaint::make_expression_value<integer_intervalt>(
   const integer_intervalt &interval,
   const type2tc &type,
-  bool upper) const
+  bool is_upper) const
 {
-  return from_integer(upper ? interval.upper : interval.lower, type);
+  return from_integer(is_upper ? *interval.upper : *interval.lower, type);
 }
 
 template <>
@@ -662,7 +652,8 @@ expr2tc interval_domaint::make_expression_value<real_intervalt>(
   expr2tc value = gen_zero(type);
   constant_floatbv2t &v = to_constant_floatbv2t(value);
 
-  const auto d = (upper ? interval.upper : interval.lower).convert_to<double>();
+  const auto d =
+    (upper ? *interval.upper : *interval.lower).convert_to<double>();
   v.value.from_double(d);
 
   // 'from_double' changes the original spec. This makes solvers complain that we are comparing
@@ -716,12 +707,12 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(
   }
   else
   {
-    assert(interval.upper_set && interval.lower_set);
+    assert(interval.upper && interval.lower);
     // Interval: [a,b]
     std::vector<expr2tc> disjuncts;
 
     auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w) {
-      assert(w.lower <= w.upper);
+      assert(*w.lower <= *w.upper);
 
       std::vector<expr2tc> s_conjuncts;
       expr2tc value1 = make_expression_value(w, src.type, true);
@@ -780,13 +771,13 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
   }
   else
   {
-    if(interval.upper_set)
+    if(interval.upper)
     {
       expr2tc value = make_expression_value(interval, src.type, true);
       conjuncts.push_back(lessthanequal2tc(symbol, typecast(value)));
     }
 
-    if(interval.lower_set)
+    if(interval.lower)
     {
       expr2tc value = make_expression_value(interval, src.type, false);
       conjuncts.push_back(lessthanequal2tc(typecast(value), symbol));
@@ -810,11 +801,11 @@ void interval_domaint::output(std::ostream &out) const
   {
     if(interval.second.is_top())
       continue;
-    if(interval.second.lower_set)
-      out << interval.second.lower << " <= ";
+    if(interval.second.lower)
+      out << *interval.second.lower << " <= ";
     out << interval.first;
-    if(interval.second.upper_set)
-      out << " <= " << interval.second.upper;
+    if(interval.second.upper)
+      out << " <= " << *interval.second.upper;
     out << "\n";
   }
 
@@ -831,11 +822,11 @@ void interval_domaint::output(std::ostream &out) const
   {
     if(interval.second.is_top())
       continue;
-    if(interval.second.lower_set)
-      out << interval.second.lower << " <= ";
+    if(interval.second.lower)
+      out << *interval.second.lower << " <= ";
     out << interval.first;
-    if(interval.second.upper_set)
-      out << " <= " << interval.second.upper;
+    if(interval.second.upper)
+      out << " <= " << *interval.second.upper;
     out << "\n";
   }
 }

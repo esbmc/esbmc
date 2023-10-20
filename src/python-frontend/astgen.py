@@ -33,8 +33,11 @@ def main():
     with open(filename, "r") as source:
         tree = ast.parse(source.read())
 
-
     ast_json = ast2json_module.ast2json(tree)
+
+    # Add the filename to the JSON as ast2json does not include it automatically.
+    ast_json["filename"] = filename
+
     json_filename = os.path.join(output_dir, "ast.json")
 
     with open(json_filename, "w") as json_file:

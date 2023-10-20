@@ -1,0 +1,20 @@
+#pragma once
+
+enum class StatementType
+{
+  VARIABLE_ASSIGN,
+  COMPOUND_ASSIGN,
+  FUNC_DEFINITION,
+  IF_STATEMENT,
+  WHILE_STATEMENT,
+  UNKNOWN,
+};
+
+enum class ExpressionType
+{
+  UNARY_OPERATION,
+  BINARY_OPERATION,
+  LITERAL,
+  VARIABLE_REF,
+  UNKNOWN,
+};
