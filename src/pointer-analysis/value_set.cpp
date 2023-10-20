@@ -499,7 +499,7 @@ void value_sett::get_value_set_rec(
   }
 
   if(
-    is_bitor2t(expr) || is_bitand2t(expr) || is_bitxor2t(expr) ||
+    /*is_bitor2t(expr) || is_bitand2t(expr) ||*/ is_bitxor2t(expr) ||
     is_bitnand2t(expr) || is_bitnor2t(expr) || is_bitnxor2t(expr))
   {
     assert(expr->get_num_sub_exprs() == 2);
@@ -550,7 +550,7 @@ void value_sett::get_value_set_rec(
     }
   }
 
-  if(is_add2t(expr) || is_sub2t(expr))
+  if(is_add2t(expr) || is_sub2t(expr) || is_bitand2t(expr) || is_bitor2t(expr))
   {
     // Consider pointer arithmetic. This takes takes the form of finding the
     // value sets of the operands, then speculating on how the addition /
@@ -560,25 +560,42 @@ void value_sett::get_value_set_rec(
 
     // find the pointer operand
     // XXXjmorse - polymorphism.
-    const expr2tc &op0 =
-      (is_add2t(expr)) ? to_add2t(expr).side_1 : to_sub2t(expr).side_1;
-    const expr2tc &op1 =
-      (is_add2t(expr)) ? to_add2t(expr).side_2 : to_sub2t(expr).side_2;
+    const expr2tc *op0, *op1;
+    bool is_linear = false;
+    switch(expr->expr_id) {
+    case expr2t::add_id:
+    case expr2t::sub_id: {
+      auto *aop = static_cast<const arith_2ops *>(expr.get());
+      op0 = &aop->side_1;
+      op1 = &aop->side_2;
+      is_linear = true;
+      break;
+    }
+    case expr2t::bitand_id:
+    case expr2t::bitor_id: {
+      auto *aop = static_cast<const bit_2ops *>(expr.get());
+      op0 = &aop->side_1;
+      op1 = &aop->side_2;
+      break;
+    }
+    default:
+      abort();
+    }
 
     assert(
       (!is_pointer_type(expr) ||
-       !(is_pointer_type(op0) && is_pointer_type(op1))) &&
+       !(is_pointer_type(*op0) && is_pointer_type(*op1))) &&
       "Cannot have pointer arithmetic with two pointers as operands");
 
     // Find out what the pointer operand points at, and suck that data into
     // new object maps.
     object_mapt op0_set;
-    if(!is_pointer_type(op1))
-      get_value_set_rec(op0, op0_set, "", op0->type, false);
+    if(!is_pointer_type(*op1))
+      get_value_set_rec(*op0, op0_set, "", (*op0)->type, false);
 
     object_mapt op1_set;
-    if(!is_pointer_type(op0))
-      get_value_set_rec(op1, op1_set, "", op1->type, false);
+    if(!is_pointer_type(*op0))
+      get_value_set_rec(*op1, op1_set, "", (*op1)->type, false);
 
     /* TODO: The case that both, op0_set and op1_set, are non-empty is not
      *       handled, yet. */
@@ -587,8 +604,8 @@ void value_sett::get_value_set_rec(
     {
       bool op0_is_ptr = !op0_set.empty();
 
-      const expr2tc &ptr_op = op0_is_ptr ? op0 : op1;
-      const expr2tc &non_ptr_op = op0_is_ptr ? op1 : op0;
+      const expr2tc &ptr_op = op0_is_ptr ? *op0 : *op1;
+      const expr2tc &non_ptr_op = op0_is_ptr ? *op1 : *op0;
       const object_mapt &pointer_expr_set = op0_is_ptr ? op0_set : op1_set;
 
       type2tc subtype;
@@ -602,7 +619,7 @@ void value_sett::get_value_set_rec(
       bool is_const = false;
       try
       {
-        if(is_constant_int2t(non_ptr_op))
+        if(is_linear && is_constant_int2t(non_ptr_op))
         {
           if(to_constant_int2t(non_ptr_op).value.is_zero())
           {
