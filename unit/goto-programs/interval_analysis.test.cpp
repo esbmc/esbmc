@@ -1,3 +1,4 @@
+#include "migrate.h"
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 
 #define CATCH_CONFIG_MAIN
@@ -98,6 +99,7 @@ public:
       ait<interval_domaint> baseline;
       run_test<interval_domaint::wrap_mapt>(baseline, true);
     }
+    delete(migrate_namespace_lookup);
   }
 
   static void set_baseline_config()
