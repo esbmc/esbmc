@@ -36,6 +36,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"If", StatementType::IF_STATEMENT},
   {"AugAssign", StatementType::COMPOUND_ASSIGN},
   {"While", StatementType::WHILE_STATEMENT},
+  {"Expr", StatementType::EXPR},
 };
 
 static StatementType get_statement_type(const nlohmann::json &element)
@@ -443,6 +444,27 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     case StatementType::FUNC_DEFINITION:
     {
       get_function_definition(element);
+      break;
+    }
+    case StatementType::EXPR:
+    {
+      // Function call
+      if(
+        element["value"].contains("func") &&
+        element["value"]["_type"] == "Call")
+      {
+        std::string func_name = element["value"]["func"]["id"];
+        std::string symbol_id = "py:@F@" + func_name;
+        symbolt* func_symbol = context.find_symbol(symbol_id.c_str());
+
+        assert(func_symbol);
+
+        code_function_callt call;
+        call.location() = func_symbol->location;
+        call.function() = symbol_expr(*func_symbol);
+
+        block.move_to_operands(call);
+      }
       break;
     }
     case StatementType::UNKNOWN:
