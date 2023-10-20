@@ -168,7 +168,7 @@ python_converter::get_location_from_decl(const nlohmann::json &ast_node)
 {
   locationt location;
   location.set_line(ast_node["lineno"].get<int>());
-  location.set_file(ast_json["filename"].get<std::string>());
+  location.set_file(python_filename.c_str());
   return location;
 }
 
@@ -345,7 +345,7 @@ void python_converter::get_conditional_stms(
   locationt location = get_location_from_decl(ast_node);
   then.location() = location;
 
-  // Create if code and append "then" block
+  // Create if or while code
   codet code;
   auto type = ast_node["_type"];
   if(type == "If")
@@ -353,16 +353,63 @@ void python_converter::get_conditional_stms(
   else if(type == "While")
     code.set_statement("while");
 
+  // Append "then" block
   code.copy_to_operands(cond, convert_expression_to_code(then));
 
-  // Append 'else' block to the statement
   if(ast_node.contains("orelse") && !ast_node["orelse"].empty())
   {
+    // Append 'else' block to the statement
     exprt else_expr = get_block(ast_node["orelse"]);
     code.copy_to_operands(convert_expression_to_code(else_expr));
   }
 
   target_block.copy_to_operands(code);
+}
+
+void python_converter::get_function_definition(
+  const nlohmann::json &function_node)
+{
+  // Function return type
+  code_typet type;
+  if(function_node["return"].contains("id"))
+  {
+    type.return_type() =
+      get_typet(function_node["return"]["id"].get<std::string>());
+  }
+
+  // Function location
+  locationt location = get_location_from_decl(function_node);
+
+  // Symbol identification
+  std::string name = function_node["name"].get<std::string>();
+  std::string id = "py:@F@" + name;
+  std::string module_name =
+    python_filename.substr(0, python_filename.find_last_of("."));
+
+  // Handle function arguments
+  if(function_node["args"]["args"].empty())
+  {
+    type.make_ellipsis();
+  }
+  else
+  {
+    // Handle args..
+  }
+
+  // Function body
+  exprt function_body = get_block(function_node["body"]);
+
+  // Create symbol
+  symbolt symbol = create_symbol(module_name, name, id, location, type);
+  symbol.lvalue = true;
+  symbol.is_extern = false;
+  symbol.file_local = false;
+  symbol.value = function_body;
+
+  printf("SYMBOL:\n");
+  symbol.dump();
+
+  context.add(symbol);
 }
 
 exprt python_converter::get_block(const nlohmann::json &ast_block)
@@ -394,9 +441,14 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       break;
     }
     case StatementType::FUNC_DEFINITION:
+    {
+      get_function_definition(element);
+      break;
+    }
     case StatementType::UNKNOWN:
     default:
-      log_error("Unsupported statement: {}", element["_type"].get<std::string>());
+      log_error(
+        "Unsupported statement: {}", element["_type"].get<std::string>());
       abort();
     }
   }
@@ -406,6 +458,8 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
 bool python_converter::convert()
 {
+  python_filename = ast_json["filename"].get<std::string>();
+
   // Read all statements
   exprt block_expr = get_block(ast_json["body"]);
 

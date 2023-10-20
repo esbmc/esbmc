@@ -19,6 +19,7 @@ private:
   void get_compound_assign(const nlohmann::json &ast_node, codet &target_block);
   void
   get_conditional_stms(const nlohmann::json &ast_node, codet &target_block);
+  void get_function_definition(const nlohmann::json &function_node);
 
   locationt get_location_from_decl(const nlohmann::json &ast_node);
   exprt get_expr(const nlohmann::json &element);
@@ -30,5 +31,6 @@ private:
 
   contextt &context;
   typet current_element_type;
+  std::string python_filename;
   const nlohmann::json &ast_json;
 };
