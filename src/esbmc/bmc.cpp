@@ -711,9 +711,6 @@ smt_convt::resultt bmct::multi_property_check(
   std::atomic_size_t ce_counter = 0;
   std::unordered_set<size_t> jobs;
   std::mutex result_mutex;
-  // Store the location of the assertion
-  // to avoid double verifying the unwinding claims in loop/func_call
-  std::string loc = "";
   // For coverage info
   int total_instance = 0;
   std::unordered_multiset<std::string> reached_claims;
@@ -730,7 +727,6 @@ smt_convt::resultt bmct::multi_property_check(
    * This job also affects the environment by using:
    * - &ce_counter: for generating the Counter Example file name
    * - &final_result: if the current instance is SAT, then we known that the current k contains a bug
-   * - &result_mutex: a mutex for step 3.
    *
    * Finally, this function is affected by the "multi-fail-fast" option, which makes this instance stop
    * if final_result is set to SAT
@@ -740,18 +736,15 @@ smt_convt::resultt bmct::multi_property_check(
                        &ce_counter,
                        &final_result,
                        &result_mutex,
-                       &loc,
                        &reached_claims,
                        &total_instance](const size_t &i) {
     // Since this is just a copy, we probably don't need a lock
     auto local_eq = std::make_shared<symex_target_equationt>(*eq);
 
-    // Just to confirm that things are in parallel
-#ifndef _WIN32
-#ifndef __APPLE__ // sched_getcpu not supported in OS X
-    log_debug("multi-property", "Thread running on Core {}", sched_getcpu());
-#endif
-#endif
+    // Store the location of the assertion
+    // to avoid double verifying the unwinding claims in loop/func_call
+    std::string loc = "";
+
     // Set up the current claim and slice it!
     claim_slicer claim(i);
     claim.run(local_eq->SSA_steps);
@@ -771,38 +764,16 @@ smt_convt::resultt bmct::multi_property_check(
     total_instance++;
 
     smt_convt::resultt result;
-    /* TODO: We might move this into solver_convt. It is
-       * useful to have the solver as a thread.
-       */
-    std::thread solver_job(
-      [&result, &runtime_solver]() { result = runtime_solver->dec_solve(); });
 
     const bool fail_fast = options.get_bool_option("multi-fail-fast");
-    // This loop is mainly for fail-fast.
+    // This try-catch is mainly for fail-fast.
+    //?TODO: "multi-fail-fast n": stop after first n SATs found.
     try
     {
-      while(!solver_job.joinable())
-      {
-        // Try again 100ms later
-        std::this_thread::sleep_for(
-          std::chrono::duration<int, std::milli>(100));
-        // Did someone finished already?
-        if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
-        {
-          log_status("Other thread already found a SAT VCC.");
-          throw 0;
-        }
-      }
-      solver_job.join();
-
       if(result == smt_convt::P_SATISFIABLE)
       {
-        const std::lock_guard<std::mutex> lock(result_mutex);
-        // Check if someone else found the solution
-        if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
+        if(fail_fast)
         {
-          log_status(
-            "Found solution for VCC. But, other thread found it first.");
           throw 0;
         }
 
@@ -821,7 +792,6 @@ smt_convt::resultt bmct::multi_property_check(
           {
             // since we only handle one claim at a time
             // we will/should not overwrite the loc
-            // it's safe in parallel-solving as we have added the mutex_lock
             assert(loc == "");
             if(step.pc->location.is_nil())
               loc = "nil";
@@ -870,34 +840,7 @@ smt_convt::resultt bmct::multi_property_check(
     }
   };
 
-  // PARALLEL
-  if(options.get_bool_option("parallel-solving"))
-  {
-    /* NOTE: I would love to use std::for_each here, but it is not giving
-       * the result I would expect. My guess is either compiler version
-       * or some magic flag that we are not using.
-       *
-       * Nevertheless, we can achieve the same results by just creating
-       * threads.
-       */
-
-    // TODO: Running everything in parallel might be a bad idea.
-    //       Should we also add a thread pool?
-    std::vector<std::thread> parallel_jobs;
-    for(const auto &i : jobs)
-      parallel_jobs.push_back(std::thread(job_function, i));
-
-    // Main driver
-    for(auto &t : parallel_jobs)
-    {
-      t.join();
-    }
-    // We could remove joined jobs from the parallel_jobs vector.
-    // However, its probably not worth for small vectors.
-  }
-  // SEQUENTIAL
-  else
-    std::for_each(std::begin(jobs), std::end(jobs), job_function);
+  std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
   if(
     options.get_bool_option("goto-coverage") ||
@@ -909,7 +852,7 @@ smt_convt::resultt bmct::multi_property_check(
     if(total)
     {
       log_success("\n[Coverage]\n");
-      log_result("Total Asserts   : {}", total);
+      log_result("Total Asserts: {}", total);
       log_result("Total Assertion Instances: {}", total_instance);
       log_result("Reached Assertions Instances: ");
     }
