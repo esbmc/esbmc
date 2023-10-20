@@ -232,21 +232,11 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after)
 
   // Set lower bound: if we didn't decrease then just update the interval
   if(!lower_decreased)
-  {
-    if(!before.lower)
-      result.lower.reset();
-    else
-      result.lower = before.lower;
-  }
+    result.lower = before.lower;
 
   // Set upper bound:
   if(!upper_increased)
-  {
-    if(!before.upper)
-      result.upper.reset();
-    else
-      result.upper = before.upper;
-  }
+    result.upper = before.upper;
   return result;
 }
 
