@@ -1,4 +1,3 @@
-#include "migrate.h"
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 
 #define CATCH_CONFIG_MAIN
