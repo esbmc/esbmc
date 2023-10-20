@@ -405,14 +405,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
-  // parallel solving activates "--multi-property"
-  if(cmdline.isset("parallel-solving"))
-  {
-    options.set_option("result-only", true);
-    options.set_option("base-case", true);
-    options.set_option("multi-property", true);
-  }
-
   // If multi-property is on, we should set result-only and base-case
   if(cmdline.isset("multi-property"))
   {
@@ -1650,13 +1642,12 @@ bool esbmc_parseoptionst::process_goto_program(
     // Start by removing all no-op instructions and unreachable code
     // We should skip this removal in goto-cov and multi-property
     if(!(cmdline.isset("no-remove-no-op") || cmdline.isset("multi-property") ||
-         cmdline.isset("parallel-solving") || cmdline.isset("goto-coverage") ||
+         cmdline.isset("goto-coverage") ||
          cmdline.isset("goto-coverage-claims")))
       remove_no_op(goto_functions);
 
     if(!(cmdline.isset("no-remove-unreachable") ||
-         cmdline.isset("multi-property") || cmdline.isset("parallel-solving") ||
-         cmdline.isset("goto-coverage") ||
+         cmdline.isset("multi-property") || cmdline.isset("goto-coverage") ||
          cmdline.isset("goto-coverage-claims")))
       remove_unreachable(goto_functions);
 
@@ -1709,13 +1700,12 @@ bool esbmc_parseoptionst::process_goto_program(
     // Once again, remove all unreachable and no-op code that could have been
     // introduced by the above algorithms
     if(!(cmdline.isset("no-remove-no-op") || cmdline.isset("multi-property") ||
-         cmdline.isset("parallel-solving") || cmdline.isset("goto-coverage") ||
+         cmdline.isset("goto-coverage") ||
          cmdline.isset("goto-coverage-claims")))
       remove_no_op(goto_functions);
 
     if(!(cmdline.isset("no-remove-unreachable") ||
-         cmdline.isset("multi-property") || cmdline.isset("parallel-solving") ||
-         cmdline.isset("goto-coverage") ||
+         cmdline.isset("multi-property") || cmdline.isset("goto-coverage") ||
          cmdline.isset("goto-coverage-claims")))
       remove_unreachable(goto_functions);
 
