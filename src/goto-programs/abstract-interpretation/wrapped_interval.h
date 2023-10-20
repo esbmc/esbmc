@@ -302,10 +302,10 @@ public:
     if(t.is_included(s))
       return s;
 
-    const BigInt a = s.lower;
-    const BigInt b = s.upper;
-    const BigInt c = t.lower;
-    const BigInt d = t.upper;
+    const BigInt &a = s.lower;
+    const BigInt &b = s.upper;
+    const BigInt &c = t.lower;
+    const BigInt &d = t.upper;
 
     wrapped_interval result(s.t);
 
@@ -394,10 +394,10 @@ public:
       return result;
     }
 
-    const BigInt a = *s.lower;
-    const BigInt b = *s.upper;
-    const BigInt c = *t.lower;
-    const BigInt d = *t.upper;
+    const BigInt &a = *s.lower;
+    const BigInt &b = *s.upper;
+    const BigInt &c = *t.lower;
+    const BigInt &d = *t.upper;
 
     if(t.contains(a) && t.contains(b) && s.contains(c) && s.contains(d))
     {
