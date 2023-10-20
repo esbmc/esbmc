@@ -157,7 +157,7 @@ public:
   // Sound version (considering over approximations)
   void make_sound_le(interval_templatet<T> &v)
   {
-    // [lower, upper] <= [v.lower,v.upper] <==> [lower, min(upper,v.upper)] <= [max(lower, v.lower)]
+    // [lower, upper] <= [v.lower,v.upper] <==> [lower, min(upper,v.upper)] <= [max(lower, v.lower), v.upper]
 
     if(upper || v.upper)
       upper = upper && v.upper ? std::min(*upper, *v.upper)
