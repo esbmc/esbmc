@@ -1640,8 +1640,8 @@ bool esbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     bool is_no_remove = cmdline.isset("multi-property") ||
-                           cmdline.isset("goto-coverage") ||
-                           cmdline.isset("goto-coverage-claims");
+                        cmdline.isset("goto-coverage") ||
+                        cmdline.isset("goto-coverage-claims");
 
     // Start by removing all no-op instructions and unreachable code
     // We should skip this removal in goto-cov and multi-property
@@ -1650,10 +1650,9 @@ bool esbmc_parseoptionst::process_goto_program(
     // - however, the optimisations below will remove codes during the Goto stage
     if(!(cmdline.isset("no-remove-no-op") || is_no_remove))
       remove_no_op(goto_functions);
-    s
 
-      if(!(cmdline.isset("no-remove-unreachable") || is_no_remove))
-        remove_unreachable(goto_functions);
+    if(!(cmdline.isset("no-remove-unreachable") || is_no_remove))
+      remove_unreachable(goto_functions);
 
     // Apply all the initialized algorithms
     for(auto &algorithm : goto_preprocess_algorithms)
