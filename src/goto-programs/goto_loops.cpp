@@ -1,3 +1,4 @@
+#include "irep2/irep2_utils.h"
 #include <goto-programs/goto_loops.h>
 #include <util/expr_util.h>
 
@@ -49,7 +50,18 @@ void goto_loopst::find_function_loops()
     if(it->is_backwards_goto())
     {
       assert(it->targets.size() == 1);
-      create_function_loop(*it->targets.begin(), it);
+      goto_programt::instructionst::iterator &loop_head = *it->targets.begin();
+      goto_programt::instructionst::iterator &loop_exit = it;
+
+      // This means something like:
+      // A: goto A;
+      if(loop_head->location_number == loop_exit->location_number)
+      {
+        // In TACAS, this is a common setup for reaching a "dead state" (no violation)
+        it->make_assumption(gen_false_expr());
+        continue;
+      }
+      create_function_loop(loop_head, loop_exit);
     }
   }
 }
@@ -58,12 +70,6 @@ void goto_loopst::create_function_loop(
   goto_programt::instructionst::iterator loop_head,
   goto_programt::instructionst::iterator loop_exit)
 {
-  // This means something like:
-  // A: goto A;
-  // There is no body, so we can skip it
-  if(loop_head->location_number == loop_exit->location_number)
-    return;
-
   goto_programt::instructionst::iterator it = loop_head;
 
   function_loops.push_front(loopst());
