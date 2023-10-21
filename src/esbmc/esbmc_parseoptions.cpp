@@ -1644,13 +1644,13 @@ bool esbmc_parseoptionst::process_goto_program(
                         cmdline.isset("goto-coverage-claims");
 
     // Start by removing all no-op instructions and unreachable code
-    // We should skip this removal in goto-cov and multi-property
-    // - multi-property wants to find all the bugs in the src code
-    // - goto-coverage wants to find out unreached codes
-    // - however, the optimisations below will remove codes during the Goto stage
-    if(!(cmdline.isset("no-remove-no-op") || is_no_remove))
+    if(!(cmdline.isset("no-remove-no-op")))
       remove_no_op(goto_functions);
 
+    // We should skip this 'remove-unreachable' removal in goto-cov and multi-property
+    // - multi-property wants to find all the bugs in the src code
+    // - goto-coverage wants to find out unreached codes (asserts)
+    // - however, the optimisation below will remove codes during the Goto stage
     if(!(cmdline.isset("no-remove-unreachable") || is_no_remove))
       remove_unreachable(goto_functions);
 
@@ -1702,7 +1702,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // Once again, remove all unreachable and no-op code that could have been
     // introduced by the above algorithms
-    if(!(cmdline.isset("no-remove-no-op") || is_no_remove))
+    if(!(cmdline.isset("no-remove-no-op")))
       remove_no_op(goto_functions);
 
     if(!(cmdline.isset("no-remove-unreachable") || is_no_remove))
