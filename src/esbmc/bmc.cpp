@@ -746,10 +746,6 @@ smt_convt::resultt bmct::multi_property_check(
     // Since this is just a copy, we probably don't need a lock
     auto local_eq = std::make_shared<symex_target_equationt>(*eq);
 
-    // Store the comment and location of the assertion
-    // to avoid double verifying the claims that are already verified
-    std::string cmt_loc = "";
-
     // Set up the current claim and slice it
     claim_slicer claim(i);
     claim.run(local_eq->SSA_steps);
@@ -791,6 +787,10 @@ smt_convt::resultt bmct::multi_property_check(
         goto_tracet goto_trace;
         build_goto_trace(
           local_eq, runtime_solver, goto_trace, is_compact_trace);
+
+        // Store the comment and location of the assertion
+        // to avoid double verifying the claims that are already verified
+        std::string cmt_loc = "";
 
         for(const auto &step : goto_trace.steps)
           if(step.type == goto_trace_stept::ASSERT)
@@ -849,8 +849,6 @@ smt_convt::resultt bmct::multi_property_check(
           // e.g. '--unwind 100' will show 1 counterexample and 99 'skip's
           // Maybe we should use log_debug instead, both in slicer.run and multi_property_check
         }
-        // reset
-        cmt_loc = "";
       }
     }
     catch(...)
