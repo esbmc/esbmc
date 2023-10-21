@@ -1639,7 +1639,7 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
 
-    bool is_mul_goto_cov = cmdline.isset("multi-property") ||
+    bool is_no_remove = cmdline.isset("multi-property") ||
                            cmdline.isset("goto-coverage") ||
                            cmdline.isset("goto-coverage-claims");
 
@@ -1648,11 +1648,11 @@ bool esbmc_parseoptionst::process_goto_program(
     // - multi-property wants to find all the bugs in the src code
     // - goto-coverage wants to find out unreached codes
     // - however, the optimisations below will remove codes during the Goto stage
-    if(!(cmdline.isset("no-remove-no-op") || is_mul_goto_cov))
+    if(!(cmdline.isset("no-remove-no-op") || is_no_remove))
       remove_no_op(goto_functions);
     s
 
-      if(!(cmdline.isset("no-remove-unreachable") || is_mul_goto_cov))
+      if(!(cmdline.isset("no-remove-unreachable") || is_no_remove))
         remove_unreachable(goto_functions);
 
     // Apply all the initialized algorithms
@@ -1703,10 +1703,10 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // Once again, remove all unreachable and no-op code that could have been
     // introduced by the above algorithms
-    if(!(cmdline.isset("no-remove-no-op") || is_mul_goto_cov))
+    if(!(cmdline.isset("no-remove-no-op") || is_no_remove))
       remove_no_op(goto_functions);
 
-    if(!(cmdline.isset("no-remove-unreachable") || is_mul_goto_cov))
+    if(!(cmdline.isset("no-remove-unreachable") || is_no_remove))
       remove_unreachable(goto_functions);
 
     goto_functions.update();

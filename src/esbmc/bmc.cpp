@@ -812,21 +812,21 @@ smt_convt::resultt bmct::multi_property_check(
             cmt_loc = step.comment + "\t" + loc;
           }
 
-        bool is_not_verified = false;
+        bool is_unverified = false;
 
         if(is_goto_cov)
         {
           reached_mul_claims.emplace(cmt_loc);
-          is_not_verified = true;
+          is_unverified = true;
         }
         else
         {
           // the ins is true if the element was actually inserted
           auto [it, ins] = reached_claims.emplace(cmt_loc);
-          is_not_verified = ins;
+          is_unverified = ins;
         }
 
-        if(is_not_verified || options.get_bool_option("keep-verified-claims"))
+        if(is_unverified || options.get_bool_option("keep-verified-claims"))
         {
           std::string output_file = options.get_option("cex-output");
           if(output_file != "")
