@@ -870,13 +870,13 @@ smt_convt::resultt bmct::multi_property_check(
       log_success("\n[Coverage]\n");
       log_result("Total Asserts: {}", total);
       log_result("Total Assertion Instances: {}", total_instance);
-      log_result("Reached Assertions Instances: ");
     }
 
     // show claims
     if(options.get_bool_option("goto-coverage-claims"))
     {
       // reached claims:
+      log_result("Reached Assertions Instances: ");
       for(const auto &claim : reached_mul_claims)
       {
         log_status("  {}", claim);
