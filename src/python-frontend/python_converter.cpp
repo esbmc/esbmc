@@ -23,7 +23,9 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"USub", "unary-"},
   {"Eq", "="},
   {"Lt", "<"},
+  {"LtE", "<="},
   {"Gt", ">"},
+  {"GtE", ">="},
 };
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
