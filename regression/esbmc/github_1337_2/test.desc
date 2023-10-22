@@ -1,0 +1,7 @@
+CORE
+main.c
+--k-induction --goto-coverage
+^Total Asserts: 4
+^Total Assertion Instances: 4
+^Coverage: 50%
+^VERIFICATION FAILED$
