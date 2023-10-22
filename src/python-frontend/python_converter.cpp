@@ -14,6 +14,7 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"Sub", "-"},
   {"Mult", "*"},
   {"Div", "/"},
+  {"Mod", "mod"},
   {"BitOr", "bitor"},
   {"BitAnd", "bitand"},
   {"BitXor", "bitxor"},
