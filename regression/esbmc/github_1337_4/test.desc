@@ -1,0 +1,7 @@
+CORE
+main.c
+--goto-coverage --goto-unwind
+^Total Asserts: 6
+^Total Assertion Instances: 6
+^Coverage: 100%
+^VERIFICATION FAILED$
