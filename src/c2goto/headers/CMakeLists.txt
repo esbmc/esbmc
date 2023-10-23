@@ -32,7 +32,7 @@ set(inputs
            # end pthreads
 
            # Windows math headers
-           ucrt/corecrt_math.h
+           corecrt_math.h
 
            # Linux operational models
            ubuntu20.04/kernel_5.15.0-76/include/linux/gfp.h
