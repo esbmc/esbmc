@@ -705,6 +705,31 @@ void goto_symext::run_intrinsic(
   {
     add_memory_leak_checks();
   }
+  else if(symname == "c:@F@__ESBMC_bitcast")
+  {
+    assert(
+      func_call.operands.size() == 2 && "Wrong __ESBMC_init_object signature");
+    expr2tc tgtptr = func_call.operands[0];
+    expr2tc srcptr = func_call.operands[1];
+    expr2tc deref;
+
+    internal_deref_items.clear();
+    deref = dereference2tc(get_empty_type(), tgtptr);
+    dereference(deref, dereferencet::INTERNAL);
+    assert(internal_deref_items.size() == 1);
+    expr2tc tgt = internal_deref_items.front().object;
+
+    internal_deref_items.clear();
+    deref = dereference2tc(get_empty_type(), srcptr);
+    dereference(deref, dereferencet::INTERNAL);
+    assert(internal_deref_items.size() == 1);
+    expr2tc src = internal_deref_items.front().object;
+
+    symex_assign(
+      code_assign2tc(tgt, bitcast2tc(tgt->type, src)),
+      false,
+      cur_state->guard);
+  }
   else
   {
     log_error(
