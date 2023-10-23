@@ -1,7 +1,6 @@
 
 #include <math.h>
 #include <stdint.h> /* uint64_t */
-#include <string.h> /* memcpy */
 #include <float.h>  /* *_MANT_DIG */
 #include <limits.h> /* INT_(MIN|MAX) */
 
