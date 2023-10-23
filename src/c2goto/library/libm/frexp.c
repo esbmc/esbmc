@@ -33,12 +33,12 @@ double frexp(double x, int *exp)
     off -= DBL_MANT_BITS;
   }
   uint64_t v;
-  memcpy(&v, &x, sizeof(x));
+  __ESBMC_bitcast(&v, &x);
   int e = (v & DBL_EXP_MASK) >> DBL_MANT_BITS;
   *exp = e - (DBL_EXP_BIAS - 1) + off;                /* range [0.5, 1) */
   v &= ~DBL_EXP_MASK;                                 /* clear exponent */
   v |= (uint64_t)(DBL_EXP_BIAS - 1) << DBL_MANT_BITS; /* set exponent to -1 */
-  memcpy(&x, &v, sizeof(x));
+  __ESBMC_bitcast(&x, &v);
   return x;
 }
 
@@ -47,7 +47,7 @@ double ldexp(double x, int exp)
   if(!isfinite(x) || x == 0.0)
     return x;
   uint64_t v, m;
-  memcpy(&v, &x, sizeof(x));
+  __ESBMC_bitcast(&v, &x);
   m = v & (((uint64_t)1 << DBL_MANT_BITS) - 1); /* mantissa encoding */
   int e = (v & DBL_EXP_MASK) >> DBL_MANT_BITS;
   exp += e; /* add exponent encoding */
@@ -64,6 +64,6 @@ double ldexp(double x, int exp)
   }
   v &= 1ULL << 63;                         /* keep only sign bit */
   v |= (uint64_t)exp << DBL_MANT_BITS | m; /* set exponent and mantissa */
-  memcpy(&x, &v, sizeof(x));
+  __ESBMC_bitcast(&x, &v);
   return x;
 }
