@@ -11,7 +11,8 @@ int main()
 	assert(isinf(xm) == isinf(x));
 	assert(isnan(xm) == isnan(x));
 	if (!isnan(x)) {
-		assert(ldexp(xm, xe) == x);
+		double x2 = ldexp(xm, xe);
+		assert(x2 == x);
 		assert(signbit(x) == signbit(xm));
 	}
 	if (isfinite(x) && x > 0.0) {
@@ -19,7 +20,7 @@ int main()
 		assert(xm < 1.0);
 		assert(xe >= -1022 - 52);
 		assert(xe <=  1024);
-		assert((fpclassify(x) == FP_SUBNORMAL) == (xe <= -1022));
+		assert((fpclassify(x) == FP_SUBNORMAL) == (xe < DBL_MIN_EXP));
 	}
 
 	double y = nondet_double();
