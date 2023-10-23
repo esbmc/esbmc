@@ -31,6 +31,9 @@ set(inputs
            sys/_pthreadtypes.h
            # end pthreads
 
+           # Windows math headers
+           ucrt/corecrt_math.h
+
            # Linux operational models
            ubuntu20.04/kernel_5.15.0-76/include/linux/gfp.h
            ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h
