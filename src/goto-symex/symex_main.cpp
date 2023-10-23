@@ -707,8 +707,7 @@ void goto_symext::run_intrinsic(
   }
   else if(symname == "c:@F@__ESBMC_bitcast")
   {
-    assert(
-      func_call.operands.size() == 2 && "Wrong __ESBMC_init_object signature");
+    assert(func_call.operands.size() == 2 && "Wrong __ESBMC_bitcast signature");
     expr2tc tgtptr = func_call.operands[0];
     expr2tc srcptr = func_call.operands[1];
     expr2tc deref;
@@ -726,9 +725,7 @@ void goto_symext::run_intrinsic(
     expr2tc src = internal_deref_items.front().object;
 
     symex_assign(
-      code_assign2tc(tgt, bitcast2tc(tgt->type, src)),
-      false,
-      cur_state->guard);
+      code_assign2tc(tgt, bitcast2tc(tgt->type, src)), false, cur_state->guard);
   }
   else
   {
