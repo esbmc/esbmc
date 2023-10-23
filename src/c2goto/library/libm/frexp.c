@@ -44,6 +44,7 @@ _Static_assert(
 #define FREXP(name, type, pre)                                                 \
   type name(type x, int *exp)                                                  \
   {                                                                            \
+  __ESBMC_HIDE:;                                                               \
     if(!isfinite(x))                                                           \
       return x;                                                                \
     if(x == 0)                                                                 \
@@ -71,6 +72,7 @@ _Static_assert(
 #define LDEXP(name, type, pre, suff, SUFF)                                     \
   type name(type x, int exp)                                                   \
   {                                                                            \
+  __ESBMC_HIDE:;                                                               \
     if(!isfinite(x) || x == 0.0##suff)                                         \
       return x;                                                                \
     TYPE(pre) v, m;                                                            \
