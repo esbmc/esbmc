@@ -29,22 +29,22 @@ int main()
 	assert(isfinite(y));
 
 	int ze;
-	frexp(FLT_MIN, &ze);
+	frexpf(FLT_MIN, &ze);
 	assert(ze == FLT_MIN_EXP);
 
 #if __STDC_VERSION__ >= 201112L && __FLT_HAS_DENORM__
-	frexp(FLT_TRUE_MIN, &ze);
+	frexpf(FLT_TRUE_MIN, &ze);
 	assert(ze == FLT_MIN_EXP - (FLT_MANT_DIG - 1));
 #endif
-	frexp(0.0, &ze);
+	frexpf(0.0, &ze);
 	assert(ze == 0);
 
-	frexp(0x1p42, &ze);
+	frexpf(0x1p42, &ze);
 	assert(ze == 43);
 
-	frexp(0x1p-42, &ze);
+	frexpf(0x1p-42, &ze);
 	assert(ze == -41);
 
-	frexp(FLT_MAX, &ze);
+	frexpf(FLT_MAX, &ze);
 	assert(ze == FLT_MAX_EXP);
 }
