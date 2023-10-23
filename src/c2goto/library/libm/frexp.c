@@ -1,6 +1,4 @@
 
-#undef _CRT_FUNCTIONS_REQUIRED
-
 #include <math.h>
 #include <stdint.h> /* uint64_t */
 #include <string.h> /* memcpy */
