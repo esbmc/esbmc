@@ -1,5 +1,6 @@
 #include <math.h>
 #include <assert.h>
+#include <float.h>  /* DBL_TRUE_MIN */
 
 int main()
 {
@@ -26,4 +27,24 @@ int main()
 	double ym = frexp(y, &ye);
 	__ESBMC_assume(ym == 0.0 || (ym >= 0.5 && ym < 1));
 	assert(isfinite(y));
+
+	int ze;
+	frexp(DBL_MIN, &ze);
+	assert(ze == DBL_MIN_EXP);
+
+#if __STDC_VERSION__ >= 201112L && __DBL_HAS_DENORM__
+	frexp(DBL_TRUE_MIN, &ze);
+	assert(ze == DBL_MIN_EXP - (DBL_MANT_DIG - 1));
+#endif
+	frexp(0.0, &ze);
+	assert(ze == 0);
+
+	frexp(0x1p42, &ze);
+	assert(ze == 43);
+
+	frexp(0x1p-42, &ze);
+	assert(ze == -41);
+
+	frexp(DBL_MAX, &ze);
+	assert(ze == DBL_MAX_EXP);
 }

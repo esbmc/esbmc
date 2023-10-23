@@ -2,6 +2,20 @@
 #include <math.h>
 #include <stdint.h> /* uint64_t */
 #include <string.h> /* memcpy */
+#include <float.h>  /* *_MANT_DIG */
+
+_Static_assert(FLT_RADIX == 2, "binary IEEE-754 float format");
+
+#ifdef __FLOAT_WORD_ORDER__ /* Clang doesn't define __FLOAT_WORD_ORDER__ :( */
+_Static_assert(
+  __FLOAT_WORD_ORDER__ == __BYTE_ORDER__,
+  "implementation via memcpy() assumes float and integer endianness matches");
+#endif
+
+#define DBL_EXP_BIAS 1023
+#define DBL_MANT_BITS (DBL_MANT_DIG - 1)
+#define DBL_EXP_BITS (64 - 1 - DBL_MANT_BITS)
+#define DBL_EXP_MASK ((((uint64_t)1 << DBL_EXP_BITS) - 1) << DBL_MANT_BITS)
 
 double frexp(double x, int *exp)
 {
@@ -12,20 +26,18 @@ double frexp(double x, int *exp)
     *exp = 0;
     return x;
   }
-  uint64_t v, m, z = 0;
-  memcpy(&v, &x, sizeof(x));
-  int e = (v >> 52) & ((1 << 11) - 1);
-  m = v & (~z >> (64 - 52)); /* mantissa encoding */
-  if(e == 0)
-  { /* adjust for sub-normal numbers */
-    for(int k = 0; k < 52; k++, e--, m <<= 1)
-      if(m >> 52)
-        break;
-    m &= (1ULL << 52) - 1;
+  int off = 0;
+  if(!isnormal(x))
+  {
+    x *= 1ULL << DBL_MANT_BITS;
+    off -= DBL_MANT_BITS;
   }
-  *exp = e - 1022;
-  v &= 1ULL << 63;               /* keep only sign bit */
-  v |= (uint64_t)1022 << 52 | m; /* add normalized exponent and mantissa */
+  uint64_t v;
+  memcpy(&v, &x, sizeof(x));
+  int e = (v & DBL_EXP_MASK) >> DBL_MANT_BITS;
+  *exp = e - (DBL_EXP_BIAS - 1) + off;                /* range [0.5, 1) */
+  v &= ~DBL_EXP_MASK;                                 /* clear exponent */
+  v |= (uint64_t)(DBL_EXP_BIAS - 1) << DBL_MANT_BITS; /* set exponent to -1 */
   memcpy(&x, &v, sizeof(x));
   return x;
 }
@@ -34,25 +46,24 @@ double ldexp(double x, int exp)
 {
   if(!isfinite(x) || x == 0.0)
     return x;
-  uint64_t v, m, z = 0;
+  uint64_t v, m;
   memcpy(&v, &x, sizeof(x));
-  m = v & (~z >> (64 - 52)); /* mantissa encoding */
-  int e = (v >> 52) & ((1 << 11) - 1);
+  m = v & (((uint64_t)1 << DBL_MANT_BITS) - 1); /* mantissa encoding */
+  int e = (v & DBL_EXP_MASK) >> DBL_MANT_BITS;
   exp += e; /* add exponent encoding */
-  if(exp < -52)
+  if(exp < -DBL_MANT_BITS)
     return copysign(0.0, x);
-  if(exp >= (1 << 11) - 1)
+  if(exp >= (1 << DBL_EXP_BITS) - 1)
     return copysign(HUGE_VAL, x);
-  if(exp < 0)
+  if(exp <= 0)
   {
-    if(e)
-      m |= 1ULL << 52;
-    m >>= -exp;
+    /* make a denormalized number */
+    m |= 1ULL << DBL_MANT_BITS;
+    m >>= 1 - exp;
     exp = 0;
   }
-  v &= 1ULL << 63; /* keep only sign bit */
-  m &= (1ULL << 52) - 1;
-  v |= (uint64_t)exp << 52 | m; /* set exponent and mantissa */
+  v &= 1ULL << 63;                         /* keep only sign bit */
+  v |= (uint64_t)exp << DBL_MANT_BITS | m; /* set exponent and mantissa */
   memcpy(&x, &v, sizeof(x));
   return x;
 }
