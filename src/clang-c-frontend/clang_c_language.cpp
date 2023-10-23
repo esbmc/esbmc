@@ -414,6 +414,10 @@ int __ESBMC_rounding_mode = 0;
 
 void *__ESBMC_memset(void *, int, unsigned int);
 
+/* same semantics as memcpy(tgt, src, size) where size matches the size of the
+ * types tgt and src point to. */
+void __ESBMC_bitcast(void * /* tgt */, void * /* src */);
+
 void __ESBMC_memory_leak_checks();
 
 // Forward decs for pthread main thread begin/end hooks. Because they're
