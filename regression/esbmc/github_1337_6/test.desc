@@ -1,0 +1,4 @@
+CORE
+main.c
+--make-assert-false --multi-property
+^VERIFICATION FAILED$

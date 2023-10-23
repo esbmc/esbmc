@@ -3,5 +3,4 @@ main.c
 --goto-unwind --goto-coverage
 ^Total Asserts: 8
 ^Total Assertion Instances: 8
-^Coverage: 25%
 ^VERIFICATION FAILED$
