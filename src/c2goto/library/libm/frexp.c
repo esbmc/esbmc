@@ -3,6 +3,7 @@
 #include <stdint.h> /* uint64_t */
 #include <string.h> /* memcpy */
 #include <float.h>  /* *_MANT_DIG */
+#include <limits.h> /* INT_(MIN|MAX) */
 
 _Static_assert(FLT_RADIX == 2, "binary IEEE-754 float format");
 
@@ -106,4 +107,30 @@ LDEXP(ldexp, double, DBL, , )
 #ifdef LDBL_BITS
 FREXP(frexpl, long double, LDBL)
 LDEXP(ldexpl, long double, LDBL, l, L)
+#endif
+
+/* we asserted this above for the definitions to work, but if they change let's
+ * better be safe */
+#if FLT_RADIX == 2
+#define SCALBN(type, suff)                                                     \
+  type scalbn##suff(type x, int exp)                                           \
+  {                                                                            \
+    return ldexp##suff(x, exp);                                                \
+  }
+SCALBN(float, f)
+SCALBN(double, )
+SCALBN(long double, l)
+
+#define SCALBLN(type, suff, SUFF)                                              \
+  type scalbln##suff(type x, long exp)                                         \
+  {                                                                            \
+    exp = exp > INT_MAX ? INT_MAX : exp < INT_MIN ? INT_MIN : exp;             \
+    return ldexp##suff(x, exp);                                                \
+  }
+SCALBLN(float, f, F)
+SCALBLN(double, , )
+SCALBLN(long double, l, L)
+
+#else /* FLT_RADIX != 2 */
+/* TODO: missing implementation */
 #endif
