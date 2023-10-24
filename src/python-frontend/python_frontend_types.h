@@ -8,6 +8,7 @@ enum class StatementType
   IF_STATEMENT,
   WHILE_STATEMENT,
   EXPR,
+  RETURN,
   UNKNOWN,
 };
 
