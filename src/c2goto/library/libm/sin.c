@@ -1,4 +1,3 @@
-#define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #ifdef _MSVC
 #define _USE_MATH_DEFINES
