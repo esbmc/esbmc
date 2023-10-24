@@ -32,6 +32,7 @@ set(inputs
            # end pthreads
 
            # Windows math headers
+           corecrt.h
            corecrt_math.h
 
            # Linux operational models
