@@ -37,6 +37,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"AugAssign", StatementType::COMPOUND_ASSIGN},
   {"While", StatementType::WHILE_STATEMENT},
   {"Expr", StatementType::EXPR},
+  {"Return", StatementType::RETURN},
 };
 
 static StatementType get_statement_type(const nlohmann::json &element)
@@ -372,10 +373,15 @@ void python_converter::get_function_definition(
 {
   // Function return type
   code_typet type;
-  if(function_node["return"].contains("id"))
+  if(function_node["returns"].contains("id"))
   {
     type.return_type() =
-      get_typet(function_node["return"]["id"].get<std::string>());
+      get_typet(function_node["returns"]["id"].get<std::string>());
+  }
+  else
+  {
+    log_error("Return type undefined\n");
+    abort();
   }
 
   // Function location
@@ -407,10 +413,17 @@ void python_converter::get_function_definition(
   symbol.file_local = false;
   symbol.value = function_body;
 
-  printf("SYMBOL:\n");
-  symbol.dump();
-
   context.add(symbol);
+}
+
+void python_converter::get_return_statements(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  code_returnt return_code;
+  return_code.return_value() = get_expr(ast_node["value"]);
+  return_code.location() = get_location_from_decl(ast_node);
+  target_block.copy_to_operands(return_code);
 }
 
 exprt python_converter::get_block(const nlohmann::json &ast_block)
@@ -446,6 +459,11 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       get_function_definition(element);
       break;
     }
+    case StatementType::RETURN:
+    {
+      get_return_statements(element, block);
+      break;
+    }
     case StatementType::EXPR:
     {
       // Function call
@@ -455,7 +473,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       {
         std::string func_name = element["value"]["func"]["id"];
         std::string symbol_id = "py:@F@" + func_name;
-        symbolt* func_symbol = context.find_symbol(symbol_id.c_str());
+        symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
 
         assert(func_symbol);
 

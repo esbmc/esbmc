@@ -19,6 +19,8 @@ private:
   void get_compound_assign(const nlohmann::json &ast_node, codet &target_block);
   void
   get_conditional_stms(const nlohmann::json &ast_node, codet &target_block);
+  void
+  get_return_statements(const nlohmann::json &ast_node, codet &target_block);
   void get_function_definition(const nlohmann::json &function_node);
 
   locationt get_location_from_decl(const nlohmann::json &ast_node);
