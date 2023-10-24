@@ -194,10 +194,6 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "id"),
      "disable slicing for the symbol with the given id"},
-    {"initialize-nondet-variables",
-     NULL,
-     "initialize declarations with nondet expression (if it hasn`t a default "
-     "value)"},
     {"goto-unwind", NULL, "unroll bounded loops at goto level"},
     {"unlimited-goto-unwind",
      NULL,
