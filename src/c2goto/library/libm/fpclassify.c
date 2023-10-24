@@ -1,7 +1,4 @@
 
-#ifdef _MSVC
-#define _USE_MATH_DEFINES
-#endif
 #include <math.h>
 #ifdef _MSVC
 #undef isnan

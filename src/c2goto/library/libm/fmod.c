@@ -1,7 +1,4 @@
 
-#ifdef _MSVC
-#define _USE_MATH_DEFINES
-#endif
 #include <math.h>
 
 #define fmod_def(type, name, isnan_func, isinf_func, isfinite_func)                    \
