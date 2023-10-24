@@ -199,7 +199,7 @@ public:
 
   bool is_finite() const
   {
-    return !(infinity_flag && NaN_flag);
+    return !infinity_flag && !NaN_flag;
   }
 
   bool is_normal() const;
