@@ -11,6 +11,7 @@ set(inputs
 
            # pthreads
            pthread.h
+           # Glibc
            bits/pthreadtypes.h
            bits/thread-shared-types.h
            # MacOSX10.x
@@ -32,7 +33,6 @@ set(inputs
            # end pthreads
 
            # Windows math headers
-           corecrt.h
            corecrt_math.h
 
            # Linux operational models
