@@ -359,7 +359,7 @@ void ieee_floatt::unpack(const BigInt &i)
 
 bool ieee_floatt::is_normal() const
 {
-  return fraction >= power(2, spec.f);
+  return !NaN_flag && fraction >= power(2, spec.f);
 }
 
 BigInt ieee_floatt::pack() const
