@@ -1,4 +1,7 @@
 
+/* their <fenv.h> contains inline function definitions incompatible with ours */
+#ifdef __FreeBSD__
+
 /* partially taken from FreeBSD-14 */
 
 #pragma once
@@ -48,3 +51,10 @@ int feholdexcept(fenv_t *envp);
 int fesetenv(const fenv_t *envp);
 int feupdateenv(const fenv_t *envp);
 
+#else /* !defined __FreeBSD__ */
+
+/* For SV-COMP's pre-processed sources we need the system's definitions of
+ * (at least) the constants for the rounding modes. */
+#include_next <fenv.h>
+
+#endif
