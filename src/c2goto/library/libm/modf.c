@@ -1,7 +1,4 @@
 
-#ifdef _MSVC
-#define _USE_MATH_DEFINES
-#endif
 #include <fenv.h>
 #include <math.h>
 
