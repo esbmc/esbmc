@@ -475,9 +475,8 @@ int esbmc_parseoptionst::doit()
     }
 
     // Explicitly marking all declared variables as "nondet"
-    if(cmdline.isset("initialize-nondet-variables"))
-      goto_preprocess_algorithms.emplace_back(
-        std::make_unique<mark_decl_as_non_det>(context));
+    goto_preprocess_algorithms.emplace_back(
+      std::make_unique<mark_decl_as_non_det>(context));
   }
 
   // Run this before the main flow. This method performs its own
