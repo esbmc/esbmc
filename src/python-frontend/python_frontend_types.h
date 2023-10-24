@@ -18,5 +18,6 @@ enum class ExpressionType
   BINARY_OPERATION,
   LITERAL,
   VARIABLE_REF,
+  FUNC_CALL,
   UNKNOWN,
 };

@@ -109,6 +109,10 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   {
     return ExpressionType::VARIABLE_REF;
   }
+  if(type == "Call")
+  {
+    return ExpressionType::FUNC_CALL;
+  }
   return ExpressionType::UNKNOWN;
 }
 
@@ -221,6 +225,28 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     break;
   }
+  case ExpressionType::FUNC_CALL:
+  {
+    if(element.contains("func") && element["_type"] == "Call")
+    {
+      std::string func_name = element["func"]["id"];
+      std::string symbol_id = "py:@F@" + func_name;
+      symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
+
+      assert(func_symbol);
+
+      code_function_callt call;
+      call.location() = func_symbol->location;
+      call.function() = symbol_expr(*func_symbol);
+      return call;
+    }
+    else
+    {
+      log_error("Invalid function call");
+      abort();
+    }
+    break;
+  }
   default:
   {
     log_error("Unimplemented type in rule expression");
@@ -294,6 +320,15 @@ void python_converter::get_var_assign(
     symbolt *symbol = context.find_symbol(std::string("py:@") + id);
     assert(symbol);
     lhs = symbol_expr(*symbol);
+  }
+
+  /* If the right-hand side (rhs) of the assignment is a function, such as: x : int = func()
+   * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
+   */
+  if(rhs.is_code())
+  {
+    rhs.op0() =
+      lhs; // op0() references the left-hand side (lhs) of the function call
   }
 
   code_assignt code_assign(lhs, rhs);
@@ -466,23 +501,9 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::EXPR:
     {
-      // Function call
-      if(
-        element["value"].contains("func") &&
-        element["value"]["_type"] == "Call")
-      {
-        std::string func_name = element["value"]["func"]["id"];
-        std::string symbol_id = "py:@F@" + func_name;
-        symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
-
-        assert(func_symbol);
-
-        code_function_callt call;
-        call.location() = func_symbol->location;
-        call.function() = symbol_expr(*func_symbol);
-
-        block.move_to_operands(call);
-      }
+      // Function calls are handled here
+      exprt expr = get_expr(element["value"]);
+      block.move_to_operands(expr);
       break;
     }
     case StatementType::UNKNOWN:
