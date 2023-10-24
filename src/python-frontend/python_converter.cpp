@@ -212,7 +212,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     // Find the variable declaration in the AST JSON
     std::string var_name = element["id"].get<std::string>();
-    symbolt *symbol = context.find_symbol(std::string("py:@") + var_name);
+    std::string symbol_id = "py:" + python_filename + "@" + "F" + "@" +
+                            current_func_name + "@" + var_name;
+    symbolt *symbol = context.find_symbol(symbol_id);
     if(symbol != nullptr)
     {
       expr = symbol_expr(*symbol);
@@ -230,7 +232,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if(element.contains("func") && element["_type"] == "Call")
     {
       std::string func_name = element["func"]["id"];
-      std::string symbol_id = "py:@F@" + func_name;
+      std::string symbol_id = "py:" + python_filename + "@F@" + func_name;
       symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
 
       assert(func_symbol);
@@ -238,6 +240,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       code_function_callt call;
       call.location() = func_symbol->location;
       call.function() = symbol_expr(*func_symbol);
+
+      for(const auto &arg_node : element["args"])
+      {
+        call.arguments().push_back(get_expr(arg_node));
+      }
+
       return call;
     }
     else
@@ -292,7 +300,7 @@ void python_converter::get_var_assign(
     if(!target.is_null() && target["_type"] == "Name")
     {
       name = target["id"];
-      id = "py:@" + name;
+      id = "py:" + python_filename + "@F@" + current_func_name + "@" + name;
     }
 
     // Location
@@ -316,8 +324,10 @@ void python_converter::get_var_assign(
   }
   else if(ast_node["_type"] == "Assign")
   {
-    std::string id = ast_node["targets"][0]["id"].get<std::string>();
-    symbolt *symbol = context.find_symbol(std::string("py:@") + id);
+    std::string name = ast_node["targets"][0]["id"].get<std::string>();
+    std::string symbol_id =
+      "py:" + python_filename + "@F@" + current_func_name + "@" + name;
+    symbolt *symbol = context.find_symbol(symbol_id);
     assert(symbol);
     lhs = symbol_expr(*symbol);
   }
@@ -327,13 +337,16 @@ void python_converter::get_var_assign(
    */
   if(rhs.is_code())
   {
-    rhs.op0() =
-      lhs; // op0() references the left-hand side (lhs) of the function call
+    // op0() references the left-hand side (lhs) of the function call
+    rhs.op0() = lhs;
+    target_block.copy_to_operands(rhs);
   }
-
-  code_assignt code_assign(lhs, rhs);
-  code_assign.location() = location_begin;
-  target_block.copy_to_operands(code_assign);
+  else
+  {
+    code_assignt code_assign(lhs, rhs);
+    code_assign.location() = location_begin;
+    target_block.copy_to_operands(code_assign);
+  }
 }
 
 void python_converter::get_compound_assign(
@@ -408,10 +421,14 @@ void python_converter::get_function_definition(
 {
   // Function return type
   code_typet type;
-  if(function_node["returns"].contains("id"))
+  nlohmann::json return_node = function_node["returns"];
+  if(return_node.contains("id"))
   {
-    type.return_type() =
-      get_typet(function_node["returns"]["id"].get<std::string>());
+    type.return_type() = get_typet(return_node["id"].get<std::string>());
+  }
+  else if(return_node.contains("value") && return_node["value"].is_null())
+  {
+    type.return_type() = empty_typet();
   }
   else
   {
@@ -423,26 +440,61 @@ void python_converter::get_function_definition(
   locationt location = get_location_from_decl(function_node);
 
   // Symbol identification
-  std::string name = function_node["name"].get<std::string>();
-  std::string id = "py:@F@" + name;
+  current_func_name = function_node["name"].get<std::string>();
+  std::string id = "py:" + python_filename + "@F@" + current_func_name;
   std::string module_name =
     python_filename.substr(0, python_filename.find_last_of("."));
 
-  // Handle function arguments
+  // Handle empty function arguments
   if(function_node["args"]["args"].empty())
   {
     type.make_ellipsis();
   }
   else
   {
-    // Handle args..
+    // Iterate over function arguments
+    for(const nlohmann::json &element : function_node["args"]["args"])
+    {
+      // Argument type
+      typet arg_type =
+        get_typet(element["annotation"]["id"].get<std::string>());
+      code_typet::argumentt arg;
+      arg.type() = arg_type;
+
+      // Argument name
+      std::string arg_name = element["arg"].get<std::string>();
+      arg.cmt_base_name(arg_name);
+
+      // Argument id
+      std::string arg_id = "py:" + python_filename + "@" + "F" + "@" +
+                           current_func_name + "@" + arg_name;
+      arg.cmt_identifier(arg_id);
+
+      // Location
+      locationt location = get_location_from_decl(element);
+      arg.location() = location;
+
+      // Push arg
+      type.arguments().push_back(arg);
+
+      // Create and add symbol to context
+      symbolt param_symbol = create_symbol(
+        location.get_file().as_string(), arg_name, arg_id, location, arg_type);
+      param_symbol.lvalue = true;
+      param_symbol.is_parameter = true;
+      param_symbol.file_local = true;
+      param_symbol.static_lifetime = false;
+      param_symbol.is_extern = false;
+      context.add(param_symbol);
+    }
   }
 
   // Function body
   exprt function_body = get_block(function_node["body"]);
 
   // Create symbol
-  symbolt symbol = create_symbol(module_name, name, id, location, type);
+  symbolt symbol =
+    create_symbol(module_name, current_func_name, id, location, type);
   symbol.lvalue = true;
   symbol.is_extern = false;
   symbol.file_local = false;

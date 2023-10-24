@@ -9,7 +9,7 @@ class python_converter
 {
 public:
   python_converter(contextt &_context, const nlohmann::json &ast)
-    : context(_context), ast_json(ast)
+    : context(_context), ast_json(ast), current_func_name("")
   {
   }
   bool convert();
@@ -35,4 +35,5 @@ private:
   typet current_element_type;
   std::string python_filename;
   const nlohmann::json &ast_json;
+  std::string current_func_name;
 };
