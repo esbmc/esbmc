@@ -27,12 +27,14 @@ _Static_assert(
  * numbers and not IEEE-conformant; this default can be turned off via the
  * -mabi=ieeelongdouble switch.
  */
-#if __SIZEOF_LONG_DOUBLE__ == 16 && !defined(__LONG_DOUBLE_IBM128__)
+#if __SIZEOF_LONG_DOUBLE__ == __SIZEOF_INT128__ &&                             \
+  !defined(__LONG_DOUBLE_IBM128__)
 #define LDBL_BITS 128
 #define LDBL_EXP_BITS 15
+typedef __uint128_t __UINT128_TYPE__;
 #endif
 
-#define TYPE1(n) __uint##n##_t
+#define TYPE1(n) __UINT##n##_TYPE__
 #define TYPE0(n) TYPE1(n)
 #define BITS(pre) pre##_BITS
 #define TYPE(pre) TYPE0(BITS(pre))
