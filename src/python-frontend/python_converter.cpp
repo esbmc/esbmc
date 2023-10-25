@@ -38,6 +38,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"While", StatementType::WHILE_STATEMENT},
   {"Expr", StatementType::EXPR},
   {"Return", StatementType::RETURN},
+  {"Assert", StatementType::ASSERT},
 };
 
 static StatementType get_statement_type(const nlohmann::json &element)
@@ -539,6 +540,14 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     case StatementType::RETURN:
     {
       get_return_statements(element, block);
+      break;
+    }
+    case StatementType::ASSERT:
+    {
+      exprt test = get_expr(element["test"]);
+      code_assertt assert_code;
+      assert_code.assertion() = test;
+      block.move_to_operands(assert_code);
       break;
     }
     case StatementType::EXPR:
