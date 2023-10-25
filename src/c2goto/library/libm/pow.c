@@ -21,27 +21,24 @@ __ESBMC_HIDE:;
     return +0.0;
   }
 
-  __ESBMC_assert(isfinite(y), "");
+  /* here we know y is finite */
+
   int ye;
   double ym = frexp(y, &ye);
   int is_int = nearbyint(y) == y;
   int odd_int = ye > 0 && ye <= 53 && is_int && ((long long)y & 1);
 
   if (x == 0.0) {
-    if (signbit(y))
-      return odd_int ? copysign(HUGE_VAL, x) : HUGE_VAL;
-    if (odd_int)
-      return copysign(0.0, x);
-    return 0.0;
+    double r = signbit(y) ? HUGE_VAL : 0.0;
+    return odd_int ? copysign(r, x) : r;
   }
 
   if (isinf(x)) {
-    if (signbit(x) && odd_int)
-      return signbit(y) ? -0.0 : -INFINITY;
-    return signbit(y) ? +0.0 : INFINITY;
+    double r = signbit(y) ? 0.0 : INFINITY;
+    return odd_int ? copysign(r, x) : r;
   }
 
-  __ESBMC_assert(isfinite(x), "");
+  /* here we know x is finite */
 
   if (signbit(x) && !is_int)
     return NAN;
