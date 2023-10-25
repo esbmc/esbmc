@@ -332,21 +332,20 @@ void python_converter::get_var_assign(
     lhs = symbol_expr(*symbol);
   }
 
-  /* If the right-hand side (rhs) of the assignment is a function, such as: x : int = func()
+  /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
    * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
    */
-  if(rhs.is_code())
+  if(rhs.is_code() && rhs.get("statement") == "function_call")
   {
     // op0() references the left-hand side (lhs) of the function call
     rhs.op0() = lhs;
     target_block.copy_to_operands(rhs);
+    return;
   }
-  else
-  {
-    code_assignt code_assign(lhs, rhs);
-    code_assign.location() = location_begin;
-    target_block.copy_to_operands(code_assign);
-  }
+
+  code_assignt code_assign(lhs, rhs);
+  code_assign.location() = location_begin;
+  target_block.copy_to_operands(code_assign);
 }
 
 void python_converter::get_compound_assign(
