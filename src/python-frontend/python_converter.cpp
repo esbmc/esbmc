@@ -10,24 +10,13 @@
 #include <unordered_map>
 
 static const std::unordered_map<std::string, std::string> operator_map = {
-  {"Add", "+"},
-  {"Sub", "-"},
-  {"Mult", "*"},
-  {"Div", "/"},
-  {"Mod", "mod"},
-  {"BitOr", "bitor"},
-  {"BitAnd", "bitand"},
-  {"BitXor", "bitxor"},
-  {"Invert", "bitnot"},
-  {"LShift", "shl"},
-  {"RShift", "ashr"},
-  {"USub", "unary-"},
-  {"Eq", "="},
-  {"Lt", "<"},
-  {"LtE", "<="},
-  {"Gt", ">"},
-  {"GtE", ">="},
-  {"And", "and"},
+  {"Add", "+"},         {"Sub", "-"},         {"Mult", "*"},
+  {"Div", "/"},         {"Mod", "mod"},       {"BitOr", "bitor"},
+  {"BitAnd", "bitand"}, {"BitXor", "bitxor"}, {"Invert", "bitnot"},
+  {"LShift", "shl"},    {"RShift", "ashr"},   {"USub", "unary-"},
+  {"Eq", "="},          {"Lt", "<"},          {"LtE", "<="},
+  {"Gt", ">"},          {"GtE", ">="},        {"And", "and"},
+  {"Or", "or"},
 };
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
