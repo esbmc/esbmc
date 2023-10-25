@@ -9,6 +9,7 @@ enum class StatementType
   WHILE_STATEMENT,
   EXPR,
   RETURN,
+  ASSERT,
   UNKNOWN,
 };
 
