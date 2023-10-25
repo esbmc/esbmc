@@ -444,44 +444,39 @@ void python_converter::get_function_definition(
   std::string module_name =
     python_filename.substr(0, python_filename.find_last_of("."));
 
-  // Handle empty function arguments
-  if(!function_node["args"]["args"].empty())
+  // Iterate over function arguments
+  for(const nlohmann::json &element : function_node["args"]["args"])
   {
-    // Iterate over function arguments
-    for(const nlohmann::json &element : function_node["args"]["args"])
-    {
-      // Argument type
-      typet arg_type =
-        get_typet(element["annotation"]["id"].get<std::string>());
-      code_typet::argumentt arg;
-      arg.type() = arg_type;
+    // Argument type
+    typet arg_type = get_typet(element["annotation"]["id"].get<std::string>());
+    code_typet::argumentt arg;
+    arg.type() = arg_type;
 
-      // Argument name
-      std::string arg_name = element["arg"].get<std::string>();
-      arg.cmt_base_name(arg_name);
+    // Argument name
+    std::string arg_name = element["arg"].get<std::string>();
+    arg.cmt_base_name(arg_name);
 
-      // Argument id
-      std::string arg_id = "py:" + python_filename + "@" + "F" + "@" +
-                           current_func_name + "@" + arg_name;
-      arg.cmt_identifier(arg_id);
+    // Argument id
+    std::string arg_id = "py:" + python_filename + "@" + "F" + "@" +
+                         current_func_name + "@" + arg_name;
+    arg.cmt_identifier(arg_id);
 
-      // Location
-      locationt location = get_location_from_decl(element);
-      arg.location() = location;
+    // Location
+    locationt location = get_location_from_decl(element);
+    arg.location() = location;
 
-      // Push arg
-      type.arguments().push_back(arg);
+    // Push arg
+    type.arguments().push_back(arg);
 
-      // Create and add symbol to context
-      symbolt param_symbol = create_symbol(
-        location.get_file().as_string(), arg_name, arg_id, location, arg_type);
-      param_symbol.lvalue = true;
-      param_symbol.is_parameter = true;
-      param_symbol.file_local = true;
-      param_symbol.static_lifetime = false;
-      param_symbol.is_extern = false;
-      context.add(param_symbol);
-    }
+    // Create and add symbol to context
+    symbolt param_symbol = create_symbol(
+      location.get_file().as_string(), arg_name, arg_id, location, arg_type);
+    param_symbol.lvalue = true;
+    param_symbol.is_parameter = true;
+    param_symbol.file_local = true;
+    param_symbol.static_lifetime = false;
+    param_symbol.is_extern = false;
+    context.add(param_symbol);
   }
 
   // Function body
