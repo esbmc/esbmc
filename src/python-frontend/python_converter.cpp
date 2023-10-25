@@ -27,6 +27,7 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"LtE", "<="},
   {"Gt", ">"},
   {"GtE", ">="},
+  {"And", "and"},
 };
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
@@ -102,6 +103,10 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   {
     return ExpressionType::BINARY_OPERATION;
   }
+  if(type == "BoolOp")
+  {
+    return ExpressionType::LOGICAL_OPERATION;
+  }
   if(type == "Constant")
   {
     return ExpressionType::LITERAL;
@@ -115,6 +120,21 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
     return ExpressionType::FUNC_CALL;
   }
   return ExpressionType::UNKNOWN;
+}
+
+exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
+{
+  std::string op(element["op"]["_type"].get<std::string>());
+  exprt logical_expr(get_op(op), current_element_type);
+
+  // Iterate over operands of logical operations (and/or)
+  for(const auto &operand : element["values"])
+  {
+    exprt operand_expr = get_expr(operand);
+    logical_expr.copy_to_operands(operand_expr);
+  }
+
+  return logical_expr;
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
@@ -196,6 +216,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     expr = get_binary_operator_expr(element);
     break;
   }
+  case ExpressionType::LOGICAL_OPERATION:
+  {
+    expr = get_logical_operator_expr(element);
+    break;
+  }
   case ExpressionType::LITERAL:
   {
     auto value = element["value"];
@@ -258,7 +283,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   default:
   {
-    log_error("Unimplemented type in rule expression");
+    log_error(
+      "Unsupported expression type: {}", element["_type"].get<std::string>());
     abort();
   }
   }
