@@ -1,21 +1,57 @@
 
 #include <math.h>
 
-double pow(double base, double exponent)
+double pow(double x, double y)
 {
 __ESBMC_HIDE:;
-  int result = 1;
-  if(exponent == 0)
-    return result;
+  if (x == 1.0 || y == 0.0)
+    return 1.0;
 
-  if(exponent < 0)
-    return 1 / pow(base, -exponent);
+  if (isnan(x))
+    return x;
+  if (isnan(y))
+    return y;
 
-  float temp = pow(base, exponent / 2);
-  if((int)exponent % 2 == 0)
-    return temp * temp;
+  if (isinf(y)) {
+    if (x == -1.0)
+      return 1.0;
+    x = fabs(x);
+    if ((x < 1) == signbit(y)) /* x < 1 && y < 0 || x > 1 && y > 0 */
+      return INFINITY;
+    return +0.0;
+  }
 
-  return (base * temp * temp);
+  __ESBMC_assert(isfinite(y), "");
+  int ye;
+  double ym = frexp(y, &ye);
+  int is_int = nearbyint(y) == y;
+  int odd_int = ye > 0 && ye <= 53 && is_int && ((long long)y & 1);
+
+  if (x == 0.0) {
+    if (signbit(y))
+      return odd_int ? copysign(HUGE_VAL, x) : HUGE_VAL;
+    if (odd_int)
+      return copysign(0.0, x);
+    return 0.0;
+  }
+
+  if (isinf(x)) {
+    if (signbit(x) && odd_int)
+      return signbit(y) ? -0.0 : -INFINITY;
+    return signbit(y) ? +0.0 : INFINITY;
+  }
+
+  __ESBMC_assert(isfinite(x), "");
+
+  if (signbit(x) && !is_int)
+    return NAN;
+
+  /* TODO: for integer exponents (when is_int) we could use an iterative
+   * approach, e.g., exponentiating by squaring for increased accuracy */
+
+  double l = log(fabs(x));
+  double r = exp(l * y);
+  return odd_int ? copysign(r, x) : r;
 }
 
 double __pow(double base, double exponent)
