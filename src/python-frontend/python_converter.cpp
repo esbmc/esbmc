@@ -445,11 +445,7 @@ void python_converter::get_function_definition(
     python_filename.substr(0, python_filename.find_last_of("."));
 
   // Handle empty function arguments
-  if(function_node["args"]["args"].empty())
-  {
-    type.make_ellipsis();
-  }
-  else
+  if(!function_node["args"]["args"].empty())
   {
     // Iterate over function arguments
     for(const nlohmann::json &element : function_node["args"]["args"])
