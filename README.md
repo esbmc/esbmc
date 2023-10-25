@@ -43,8 +43,7 @@ While our main website is [esbmc.org](http://esbmc.org).
 
 The figure below illustrates the current ESBMC architecture. The tool inputs a C/C++/CUDA, Java/Kotlin, Solidity, or CHERI-C program, then converts an abstract syntax tree (AST) into a state transition system called a GOTO program. Its symbolic execution engine unrolls the GOTO program and generates a sequence of static single assignments (SSAs). The SSAs are then converted to an SMT formula, which is satisfiable if and only if the program contains errors.
 
-
-![esbmc-architecture-v2](https://github.com/esbmc/esbmc/assets/3694109/28c423a3-39a2-41f1-828d-cb40dfbe4743)
+![esbmc-architecture-v3](https://github.com/esbmc/esbmc/assets/3694109/f6a07f63-0718-4456-a5db-b0de0ac5d623)
 
 ### Awards
 
