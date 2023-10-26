@@ -246,6 +246,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   compiler_args.emplace_back(
     "-D__builtin_constant_p=__ESBMC_builtin_constant_p");
 
+  compiler_args.emplace_back("-D__ESBMC_execution");
   compiler_args.emplace_back("-D__builtin_memcpy=memcpy");
 
   compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
