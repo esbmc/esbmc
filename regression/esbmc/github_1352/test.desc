@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 gh-1352.c
 --unwind 1 --no-unwinding-assertion --force-malloc-success
 ^VERIFICATION SUCCESSFUL$
