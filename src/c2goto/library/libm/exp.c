@@ -31,15 +31,15 @@ double expm1(double x) /* exp(x) - 1 */
 	}
 
 	/* Taylor series converges everywhere, but the rate of convergence
-	 * is pretty bad; below we do a simple range reduction for larger x. */
+	 * is pretty bad; below we do a simple range reduction for larger |x|.
+	 */
 	if (fabs(x) < 0x1p-3)
 		return expm1_taylor(x);
 
 	/* range reduction: exp(xm * 2^xe) = exp(xm) ^ (2^xe) */
 	int xe;
-	double xm = frexp(x, &xe);
-	xm *= 0x1p-3;
-	xe += 3;
+	double xm = frexp(x, &xe);       // |xm| in [2^-1,2^-0)
+	xm *= 0x1p-3; xe += 3;           // |xm| in [2^-4,2^-3)
 	double r = expm1_taylor(xm) + 1; // r = exp(xm)
 	/* xe is > 0 and xe < 1025+3, square xe times to account for 2^xe */
 	for (int i = 0; i < xe; i++)
