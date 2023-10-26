@@ -1194,10 +1194,8 @@ c_expr2stringt::convert_union(const exprt &src, unsigned &precedence)
   const exprt::operandst &operands = src.operands();
   const irep_idt &init [[maybe_unused]] = src.component_name();
 
-  if(operands.size() == 1)
+  if(operands.size() == 1 && !init.empty())
   {
-    /* Initializer known */
-    assert(!init.empty());
     std::string dest = "{ ";
 
     std::string tmp = convert(src.op0());
