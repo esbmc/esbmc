@@ -1873,13 +1873,11 @@ void goto_convertt::generate_conditional_branch(
   // if(guard) goto target; else goto next;
   // next: skip;
 
-
-
   goto_programt tmp;
   goto_programt::targett target_false = tmp.add_instruction();
   target_false->make_skip();
 
-  generate_conditional_branch(guard, target_true, target_false, location, dest);
+  generate_conditional_branch(guard, target_true, target_false, location, dest, loop_head);
 
   dest.destructive_append(tmp);
 }
@@ -1889,14 +1887,15 @@ void goto_convertt::generate_conditional_branch(
   goto_programt::targett target_true,
   goto_programt::targett target_false,
   const locationt &location,
-  goto_programt &dest)
+  goto_programt &dest,
+  bool loop_head)
 {
   if(guard.id() == "not")
   {
     assert(guard.operands().size() == 1);
     // swap targets
     generate_conditional_branch(
-      guard.op0(), target_false, target_true, location, dest);
+      guard.op0(), target_false, target_true, location, dest, loop_head);
     return;
   }
 
@@ -1964,7 +1963,6 @@ void goto_convertt::generate_conditional_branch(
     t_false->make_goto(target_false);
     t_false->guard = gen_true_expr();
     t_false->location = guard.location();
-
     return;
   }
 
@@ -1982,6 +1980,8 @@ void goto_convertt::generate_conditional_branch(
   t_true->make_goto(target_true);
   migrate_expr(cond, t_true->guard);
   t_true->location = guard.location();
+  if(options.get_bool_option("vampire-for-loops"))
+    t_true->is_loop_head = loop_head;
 
   goto_programt::targett t_false = dest.add_instruction();
   t_false->make_goto(target_false);

@@ -386,9 +386,12 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
     emit_proc(_options.get_option("smtlib-solver-prog")),
     emit_opt_output(_options.get_option("output"))
 {
-
   bool int_encoding   =  options.get_bool_option("int-encoding");
-  bool vamp_for_loops =  options.get_bool_option("vampire-for-loops"); 
+  vamp_for_loops =  options.get_bool_option("vampire-for-loops"); 
+
+  if(vamp_for_loops){
+    vampire_sym_table.push_back(map_tablet());
+  }
 
   std::string logic = int_encoding ? (vamp_for_loops ?  "AUFLIRA" : "QF_AUFLIRA") : "QF_AUFBV";
 
@@ -462,8 +465,17 @@ unsigned int smtlib_convt::emit_terminal_ast(
   switch(ast->kind)
   {
   case SMT_FUNC_INT:
-    // Just the literal number itself.
-    output = integer2string(ast->intval);
+    if(ast->intval.is_negative())
+    {
+      // Negative integers need to be constructed from unary minus and a literal
+      ss << "(- " << integer2string(-ast->intval) << ")";
+      output = ss.str();
+    }
+    else
+    {
+      // Just the literal number itself.
+      output = integer2string(ast->intval);
+    }
     return 0;
   case SMT_FUNC_BOOL:
     if(ast->boolval)
@@ -934,16 +946,31 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_SYMBOL);
   a->symname = name;
 
-  symbol_tablet::iterator it = symbol_table.find(name);
 
- // log_error(name);
+  if(vamp_for_loops){
 
-  if(it != symbol_table.end())
-    return a;
+    auto it = vampire_sym_table.back().find(name);
+  
+    if(it != vampire_sym_table.back().end())
+      return a;  
+
+  } else {
+
+    symbol_tablet::iterator it = symbol_table.find(name);
+
+    if(it != symbol_table.end())
+      return a;
+
+  }
 
   // Record the type of this symbol
   struct symbol_table_rec record = {name, ctx_level, s};
-  symbol_table.insert(record);
+
+  if(vamp_for_loops){
+    vampire_sym_table.back().insert({name, record});
+  } else {
+    symbol_table.insert(record);
+  }
 
   if(s->id == SMT_SORT_STRUCT)
     return a;
@@ -1039,8 +1066,11 @@ void smtlib_convt::push_ctx()
 {
   smt_convt::push_ctx();
 
-  if(!options.get_bool_option("vampire-for-loops"))
+  if(!vamp_for_loops)
     emit("%s", "(push 1)\n");
+  else
+    vampire_sym_table.push_back(map_tablet());
+
 }
 
 smt_astt smtlib_convt::mk_add(smt_astt a, smt_astt b)
@@ -1565,8 +1595,12 @@ void smtlib_convt::pop_ctx()
     emit("%s", "(pop 1)\n");
 
   // Wipe this level of symbol table.
-  symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();
-  syms_numindex.erase(ctx_level);
+  if(vamp_for_loops){
+    vampire_sym_table.pop_back();
+  } else {
+    symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();
+    syms_numindex.erase(ctx_level);
+  }
 
   smt_convt::pop_ctx();
 }

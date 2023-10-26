@@ -503,7 +503,7 @@ void goto_programt::dump() const
 {
   std::ostringstream oss;
   output(*migrate_namespace_lookup, "", oss);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }
 
 void goto_programt::get_decl_identifiers(
