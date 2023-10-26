@@ -34,6 +34,7 @@ void goto_symext::loop_inv_provert::do_base_cases(goto_symex_statet *cur_state)
     expr2tc new_expr = inv;
 
     cur_state->rename(new_expr);
+    cur_state->guard.guard_expr(new_expr);
 
     equality2tc question(gen_false_expr(), new_expr);
     // check whether the assertion holds

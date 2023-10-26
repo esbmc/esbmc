@@ -489,10 +489,6 @@ void runtime_encoded_equationt::pop_ctx()
   assumpt_chain.pop_back();
 }
 
-
-const std::string vampire_equationt::preamble = 
-  "(set-option :produce-models true)\n(set-logic AUFLIRA)\n(set-info :status unknown)\n";
-
 vampire_equationt::vampire_equationt(
   const namespacet &_ns,
   smt_convt &_conv)
@@ -504,7 +500,8 @@ vampire_equationt::vampire_equationt(
 
   // add other ESBMC stuff relating to memory model etc.
   conv->flush();
-  SMT_formulas.push_back(conv->get_file_contents());
+  preamble = conv->get_file_contents();
+  SMT_formulas.push_back(preamble);
 }
 
 

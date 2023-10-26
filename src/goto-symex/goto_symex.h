@@ -79,7 +79,8 @@ public:
       const goto_programt::instructiont& i, 
       std::shared_ptr<symex_targett> t,
       std::string loop_loc)
-      : ns(_ns), 
+      : loop_head_hit(false),
+        ns(_ns), 
         inv_instruction(i),
         loop_location(loop_loc)
     {
@@ -93,7 +94,12 @@ public:
     void get_hypotheses(goto_symex_statet *cur_state);
     void get_conclusions(goto_symex_statet *cur_state);
 
+    bool hit_loop_head(){ return loop_head_hit; }
+    void update_loop_head_hit(){ loop_head_hit = true; }
+
   private:
+    // used to record whether we have hit the head once or twice
+    bool loop_head_hit;
     guardt pre_loop_guard;
     std::shared_ptr<vampire_equationt> target;
     const namespacet &ns;
@@ -953,10 +959,13 @@ protected:
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
+
   /** Analyze the shared varables in a function call, this is because an argumemt
    *  may be renamed to constant bool in symex_function_call_code(), while we need
    *  to get the information for context switch.*/
   virtual void analyze_args(const expr2tc &expr) = 0;
+
+  unsigned nested_loop_depth;
   std::vector<loop_inv_provert> loop_inv_provers;
   friend void build_goto_symex_classes();
 };

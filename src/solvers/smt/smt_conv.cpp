@@ -66,7 +66,13 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
 smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   : ctx_level(0), boolean_sort(nullptr), ns(_ns), options(_options)
 {
-  int_encoding = options.get_bool_option("int-encoding");
+  int_encoding  = options.get_bool_option("int-encoding");
+  vamp_encoding = options.get_bool_option("vampire-for-loops"); 
+
+  if(vamp_encoding){
+    vampire_cache.push_back(map_cachet());
+  }
+
   tuple_api = nullptr;
   array_api = nullptr;
   fp_api = nullptr;
@@ -164,6 +170,10 @@ void smt_convt::smt_post_init()
 
 void smt_convt::push_ctx()
 {
+  if(vamp_encoding){
+    vampire_cache.push_back(map_cachet());
+  }
+
   tuple_api->push_tuple_ctx();
   array_api->push_array_ctx();
 
@@ -181,8 +191,12 @@ void smt_convt::pop_ctx()
 {
   // Erase everything in caches added in the current context level. Everything
   // before the push is going to disappear.
-  smt_cachet::nth_index<1>::type &cache_numindex = smt_cache.get<1>();
-  cache_numindex.erase(ctx_level);
+  if(vamp_encoding){
+    vampire_cache.pop_back();
+  } else {
+    smt_cachet::nth_index<1>::type &cache_numindex = smt_cache.get<1>();
+    cache_numindex.erase(ctx_level);
+  }
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
@@ -227,16 +241,31 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   // in that one can choose to create a set of expressions and their ASTs, then
   // store them in the cache, rather than have a more sophisticated conversion.
   smt_cache_entryt e = {eq.side_1, side2, ctx_level};
-  smt_cache.insert(e);
-
+  if(vamp_encoding){
+    vampire_cache.back().insert({eq.side_1, e});
+  } else {
+    smt_cache.insert(e);
+  }
+ 
   return side2;
 }
 
 smt_astt smt_convt::convert_ast(const expr2tc &expr)
 {
-  smt_cachet::const_iterator cache_result = smt_cache.find(expr);
-  if (cache_result != smt_cache.end())
-    return (cache_result->ast);
+  // use templates to avoid duplication???
+  if(vamp_encoding){
+    
+    auto cache_result = vampire_cache.back().find(expr);
+    if(cache_result != vampire_cache.back().end())
+      return (cache_result->second.ast);
+
+  } else {
+
+    smt_cachet::const_iterator cache_result = smt_cache.find(expr);
+    if(cache_result != smt_cache.end())
+      return (cache_result->ast);
+
+  }
 
   /* Vectors!
    *
@@ -1263,7 +1292,11 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
 
   struct smt_cache_entryt entry = {expr, a, ctx_level};
-  smt_cache.insert(entry);
+  if(vamp_encoding){
+    vampire_cache.back().insert({expr, entry});
+  } else {
+    smt_cache.insert(entry);
+  }
 
   return a;
 }

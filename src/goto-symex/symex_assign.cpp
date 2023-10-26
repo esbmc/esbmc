@@ -44,7 +44,8 @@ goto_symext::goto_symext(
     k_induction(options.is_kind()),
     base_case(options.get_bool_option("base-case")),
     forward_condition(options.get_bool_option("forward-condition")),
-    inductive_step(options.get_bool_option("inductive-step"))
+    inductive_step(options.get_bool_option("inductive-step")),
+    nested_loop_depth(0)
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();

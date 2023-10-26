@@ -369,7 +369,13 @@ public:
         std::greater<unsigned int>>>>
     symbol_tablet;
 
+  typedef std::map<std::string, symbol_table_rec> map_tablet;
+  typedef std::vector<map_tablet> vampire_tablet;
+
+  bool vamp_for_loops;
+
   symbol_tablet symbol_table;
+  vampire_tablet vampire_sym_table;
 
   static const std::string temp_prefix;
 

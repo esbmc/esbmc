@@ -383,7 +383,8 @@ protected:
     goto_programt::targett target_true,
     goto_programt::targett target_false,
     const locationt &location,
-    goto_programt &dest);
+    goto_programt &dest,
+    bool loop_head = false);
 
   // if(guard) goto target;
   void generate_conditional_branch(

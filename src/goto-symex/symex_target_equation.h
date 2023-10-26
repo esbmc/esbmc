@@ -236,7 +236,7 @@ public:
   void flush_latest_instructions();
 
   tvt ask_solver_question(const expr2tc &question);
-  
+
   smt_convt &conv;
   std::list<smt_convt::ast_vec> assert_vec_list;
   std::list<smt_astt> assumpt_chain;
@@ -249,7 +249,8 @@ class vampire_equationt : public symex_target_equationt
 public:
   vampire_equationt(const namespacet &_ns, smt_convt &conv);
 
-  static const std::string preamble;
+  // TODO make static (const?)
+  std::string preamble;
 
   std::shared_ptr<symex_targett> clone() const override;
 
