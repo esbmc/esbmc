@@ -73,7 +73,7 @@ __ESBMC_HIDE:;
   int ye;
   frexp(y, &ye);
   int is_int = nearbyint(y) == y;
-  int odd_int = ye > 0 && ye <= 53 && is_int && ((long long)y & 1);
+  int odd_int = ye <= 53 && is_int && ((long long)y & 1);
 
   if(x == 0.0)
   {
@@ -94,7 +94,7 @@ __ESBMC_HIDE:;
 
   if(is_int && ye <= 32) /* y is integral and fits into 32 bits */
   {
-    if(fabs(x) == 2.0 && ye <= sizeof(int) * CHAR_BIT)
+    if(fabs(x) == 2.0)
     {
       double r = ye > 11 ? signbit(y) ? 0.0 : INFINITY : ldexp(1.0, y);
       return odd_int ? copysign(r, x) : r;
