@@ -1,5 +1,51 @@
 
 #include <math.h>
+#include <stdint.h> /* uint32_t */
+#include <limits.h> /* CHAR_BIT */
+
+/* compute x^n (with n != 0) */
+static double pow_by_squaring(double x, uint32_t n)
+{
+  double result = 1.0;
+
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+  if(n & 1) result *= x; x *= x; n >>= 1;
+
+  return result;
+}
 
 double pow(double x, double y)
 {
@@ -25,7 +71,7 @@ __ESBMC_HIDE:;
   /* here we know y is finite */
 
   int ye;
-  double ym = frexp(y, &ye);
+  frexp(y, &ye);
   int is_int = nearbyint(y) == y;
   int odd_int = ye > 0 && ye <= 53 && is_int && ((long long)y & 1);
 
@@ -43,11 +89,18 @@ __ESBMC_HIDE:;
 
   /* here we know x is finite */
 
-  if(signbit(x) && !is_int)
+  if(!is_int && signbit(x))
     return NAN;
 
-  /* TODO: for integer exponents (when is_int) we could use an iterative
-   * approach, e.g., exponentiating by squaring for increased accuracy */
+  if(is_int && ye <= 32) /* y is integral and fits into 32 bits */
+  {
+    if(fabs(x) == 2.0 && ye <= sizeof(int) * CHAR_BIT)
+    {
+      double r = ye > 11 ? signbit(y) ? 0.0 : INFINITY : ldexp(1.0, y);
+      return odd_int ? copysign(r, x) : r;
+    }
+    return pow_by_squaring(signbit(y) ? 1.0 / x : x, fabs(y));
+  }
 
   double l = log(fabs(x));
   double r = exp(l * y);

@@ -47,7 +47,7 @@ int main()
 {
     int n = getUserInput();
     __ESBMC_assume(n >= 0);
-    __ESBMC_assume(n < 32 - 2); /* 2 = log2(sizeof(char *)) */
+    __ESBMC_assume(n < 32);
     double N = pow(2,n);
     char **fractal = (char **)malloc(N * sizeof(char *));
     int i, j;
