@@ -6,7 +6,7 @@ It has been tested with Ubuntu 20.04.1, Ubuntu 22.04 and macOS Catalina as well 
 
 It is recommended that the RAM should be 6 GB at least.
 
-Before starting, note that ESBMC is mainly distributed under the terms of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), so please make sure to read it carefully.
+Before starting, note that ESBMC is mainly distributed under the terms of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), so please read it carefully.
 
 ## Dependency overview
 
@@ -22,11 +22,11 @@ Before starting, note that ESBMC is mainly distributed under the terms of the [A
 | Z3        | no       | 4.8.9           |
 | Bitwuzla  | no       | 0.2.0           |
 
-The version requirements are usually pretty stable, but can change between releases.
+The version requirements are stable but can change between releases.
 
 ## Installing build tools and basic dependencies
 
-We need to install some dependencies before moving into next steps.
+We need to install some dependencies before moving into the next steps.
 
 All of them are listed in the following installation command:
 
@@ -54,7 +54,7 @@ mkdir ESBMC_Project && cd ESBMC_Project && git clone https://github.com/esbmc/es
 
 ## Preparing Clang
 
-Here you have a choice: either build against the standard LLVM/Clang as
+Here, you have a choice: either build against the standard LLVM/Clang as
 distributed by the developers or the distribution, or to use a CHERI-enabled
 LLVM/Clang toolchain for ESBMC's frontend in case you want to verify CHERI-C
 programs as well. Note that the CHERI-support in ESBMC is experimental and
@@ -77,15 +77,15 @@ ESBMC_CLANG=-DDOWNLOAD_DEPENDENCIES=ON
 ESBMC_STATIC=ON
 ```
 
-We'll use these variable later in the build process. Note that downloading
-dependencies works for most of the dependencies covered below as well.
-In this case you can directly jump to the section "Building ESBMC".
-Remember that it is not necessary to keep all the features enabled.
+We'll use these variables later in the build process. Note that downloading
+dependencies work for most of the dependencies covered below as well.
+In this case, you can directly jump to the section "Building ESBMC".
+Remember that it is optional to keep all the features enabled.
 They are optional.
 
 ### Preparing distributed Clang (recommended for a shared build)
 
-For shared builds it is recommended to use the system's LLVM/Clang, which on
+For shared builds, it is recommended to use the system's LLVM/Clang, which on
 Ubuntu can be obtained by:
 ```
 apt-get install libclang-cpp11-dev &&
@@ -123,7 +123,7 @@ ESBMC_STATIC=ON
 
 We developed a solidity frontend for the efficient SMT-based context-bounded model checker (ESBMC). ESBMC-solidity is a permissively licensed open-source context-bounded model checker to verify Solidity smart contracts. It can verify both predefined safety properties (e.g., bounds check, overflow, underflow) and user-defined program assertions automatically.
 
-In order to verify Solidity smart contract, ESBMC should be built with the option:
+To verify Solidity smart contract, ESBMC should be built with the option:
 
 ```
 -DENABLE_SOLIDITY_FRONTEND=On
@@ -161,9 +161,9 @@ Currently we support the following solvers: __Bitwuzla__, __Boolector__, __CVC4_
 
 Since this guide focuses primarily on ESBMC build, we will only cover the steps needed by it.
 
-Note all solvers are optional and you don't need to enable them. However,
-without any solver ESBMC will not be able to verify many programs. It is
-recommended to include at least Boolector.
+Note that all solvers are optional, and you don't need to enable them. However,
+without any solver, ESBMC will not be able to verify many programs. It is
+recommended to include at least the SMT solver Boolector.
 
 ### Setting Up Boolector
 
@@ -173,7 +173,7 @@ We have wrapped the entire build and setup of Boolector in the following command
 git clone --depth=1 --branch=3.2.2 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd .. && cd ..
 ```
 
-If you need more details on Boolector, please refer to [its Github](https://github.com/Boolector/boolector).
+For more details on Boolector, please refer to [its Github](https://github.com/Boolector/boolector).
 
 ### Setting Up CVC4 (Linux Only)
 
@@ -203,7 +203,7 @@ In macOS, the following command is required:
 ln -s /usr/local/include/gmp.h mathsat/include/gmp.h
 ```
 
-If you need more details on MathSAT, please refer to [its webpage](https://mathsat.fbk.eu).
+For more details on MathSAT, please refer to [its webpage](https://mathsat.fbk.eu).
 
 ### Setting Up Yices
 
@@ -213,7 +213,7 @@ First, we need to setup and build [GMP library](https://gmplib.org), by entering
 wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz && tar xf gmp-6.1.2.tar.xz && rm gmp-6.1.2.tar.xz && cd gmp-6.1.2 && ./configure --prefix $PWD/../gmp --disable-shared ABI=64 CFLAGS=-fPIC CPPFLAGS=-DPIC && make -j4 && make install && cd ..
 ```
 
-Then, we are able build and setup Yices 2 using the following command:
+Then, we are able to build and setup Yices 2 using the following command:
 
 ```
 Linux:
@@ -254,7 +254,7 @@ Linux/macOS:
 git clone --depth=1 --branch=0.2.0 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install
 ```
 
-If you need more details on Bitwuzla, please refer to [its Github](https://github.com/bitwuzla/bitwuzla).
+For more details on Bitwuzla, please refer to [its Github](https://github.com/bitwuzla/bitwuzla).
 
 Before proceeding to the next section, make sure you have clang, LLVM and all the solvers ready in your workspace:
 
@@ -358,7 +358,7 @@ programs that use header files from the C standard library will require a setup
 of a C standard library for one of these platforms.
 
 CHERI-enabled ESBMC defaults to the platform mips64-unknown-freebsd and
-expects a the corresponding sysroot, the default of which can be configured by
+expects the corresponding sysroot, the default of which can be configured by
 passing the CMake flags
 ```
 -DESBMC_CHERI_HYBRID_SYSROOT=<path> -DESBMC_CHERI_PURECAP_SYSROOT=<path>
