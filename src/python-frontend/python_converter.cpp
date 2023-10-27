@@ -16,7 +16,7 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"LShift", "shl"},    {"RShift", "ashr"},   {"USub", "unary-"},
   {"Eq", "="},          {"Lt", "<"},          {"LtE", "<="},
   {"Gt", ">"},          {"GtE", ">="},        {"And", "and"},
-  {"Or", "or"},
+  {"Or", "or"},         {"Not", "not"},
 };
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
