@@ -1192,7 +1192,7 @@ c_expr2stringt::convert_union(const exprt &src, unsigned &precedence)
     return convert_norep(src, precedence);
 
   const exprt::operandst &operands = src.operands();
-  const irep_idt &init [[maybe_unused]] = src.component_name();
+  const irep_idt &init = src.component_name();
 
   if(operands.size() == 1 && !init.empty())
   {
