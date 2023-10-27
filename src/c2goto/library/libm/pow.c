@@ -8,6 +8,7 @@ static double pow_by_squaring(double x, uint32_t n)
 {
   double result = 1.0;
 
+  // clang-format off
   if(n & 1) result *= x; x *= x; n >>= 1;
   if(n & 1) result *= x; x *= x; n >>= 1;
   if(n & 1) result *= x; x *= x; n >>= 1;
@@ -43,6 +44,7 @@ static double pow_by_squaring(double x, uint32_t n)
   if(n & 1) result *= x; x *= x; n >>= 1;
   if(n & 1) result *= x; x *= x; n >>= 1;
   if(n & 1) result *= x; x *= x; n >>= 1;
+  // clang-format on
 
   return result;
 }
