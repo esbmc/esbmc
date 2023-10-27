@@ -79,7 +79,7 @@ The figure below illustrates the current ESBMC architecture. The tool inputs a C
 
 ### Features
 
-ESBMC aims to support all of C99/C11, and detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of problems that can be detected include:
+ESBMC detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of implementation errors that can be detected include:
  * User-specified assertion failures
  * Out-of-bounds array access
  * Illegal pointer dereferences, such as:
