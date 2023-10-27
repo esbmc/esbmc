@@ -49,7 +49,6 @@ static std::string get_op(const std::string &op)
   {
     return it->second;
   }
-  printf("%s\n", op.c_str());
   return std::string();
 }
 
