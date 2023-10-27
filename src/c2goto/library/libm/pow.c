@@ -95,9 +95,16 @@ __ESBMC_HIDE:;
 
   if(is_int && ye <= 32) /* y is integral and fits into 32 bits */
   {
-    if(fabs(x) == 2.0)
+    int xe;
+    if(fabs(frexp(x, &xe)) == 0.5) /* |x| = 2^(xe-1) is a power of 2 */
     {
-      double r = ye > 11 ? signbit(y) ? 0.0 : INFINITY : ldexp(1.0, y);
+      /* If y is too large to fit into the exponent, check whether |x| > 1 is
+       * equivalent to y < 0. If so, 0.0 is the result, otherwise infinity.
+       * In case y could fit into the exponent, ldexp() will do the necessary
+       * under-/overflow checks. The multiplication (xe - 1) * (int)y cannot
+       * overflow because (xe - 1) and (int)y both have at most 12 bits. */
+      double r = ye > 12 ? (xe > 1) != !signbit(y) ? 0.0 : INFINITY
+                         : ldexp(1.0, (xe - 1) * (int)y);
       return odd_int ? copysign(r, x) : r;
     }
     return pow_by_squaring(signbit(y) ? 1.0 / x : x, fabs(y));
