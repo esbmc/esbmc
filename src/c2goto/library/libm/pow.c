@@ -4,19 +4,20 @@
 double pow(double x, double y)
 {
 __ESBMC_HIDE:;
-  if (x == 1.0 || y == 0.0)
+  if(x == 1.0 || y == 0.0)
     return 1.0;
 
-  if (isnan(x))
+  if(isnan(x))
     return x;
-  if (isnan(y))
+  if(isnan(y))
     return y;
 
-  if (isinf(y)) {
-    if (x == -1.0)
+  if(isinf(y))
+  {
+    if(x == -1.0)
       return 1.0;
     x = fabs(x);
-    if ((x < 1) == signbit(y)) /* x < 1 && y < 0 || x > 1 && y > 0 */
+    if((x < 1) == signbit(y)) /* x < 1 && y < 0 || x > 1 && y > 0 */
       return INFINITY;
     return +0.0;
   }
@@ -28,19 +29,21 @@ __ESBMC_HIDE:;
   int is_int = nearbyint(y) == y;
   int odd_int = ye > 0 && ye <= 53 && is_int && ((long long)y & 1);
 
-  if (x == 0.0) {
+  if(x == 0.0)
+  {
     double r = signbit(y) ? HUGE_VAL : 0.0;
     return odd_int ? copysign(r, x) : r;
   }
 
-  if (isinf(x)) {
+  if(isinf(x))
+  {
     double r = signbit(y) ? 0.0 : INFINITY;
     return odd_int ? copysign(r, x) : r;
   }
 
   /* here we know x is finite */
 
-  if (signbit(x) && !is_int)
+  if(signbit(x) && !is_int)
     return NAN;
 
   /* TODO: for integer exponents (when is_int) we could use an iterative
