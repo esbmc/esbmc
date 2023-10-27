@@ -64,8 +64,7 @@ __ESBMC_HIDE:;
   {
     if(x == -1.0)
       return 1.0;
-    x = fabs(x);
-    if((x < 1) == signbit(y)) /* x < 1 && y < 0 || x > 1 && y > 0 */
+    if((fabs(x) < 1) == signbit(y)) /* |x| < 1 && y < 0 || |x| > 1 && y > 0 */
       return INFINITY;
     return +0.0;
   }

@@ -4,7 +4,7 @@
 static double expm1_taylor(double x)
 {
   /* Compute truncated Taylor series for e^x - 1 around 0:
-	 * x + x^2/2! + x^3/3! + x^4/4! + ... + x^n/n! */
+   * x + x^2/2! + x^3/3! + x^4/4! + ... + x^n/n! */
   double acc = x;
   double smd = x;
   acc += (smd *= x / 2);
@@ -32,8 +32,8 @@ double expm1(double x) /* exp(x) - 1 */
   }
 
   /* Taylor series converges everywhere, but the rate of convergence
-	 * is pretty bad; below we do a simple range reduction for larger |x|.
-	 */
+   * is pretty bad; below we do a simple range reduction for larger |x|.
+   */
   if(fabs(x) < 0x1p-3)
     return expm1_taylor(x);
 
@@ -57,7 +57,7 @@ double exp(double x)
 static double log1p_taylor(double x)
 {
   /* Compute truncated Taylor series of ln(x+1) around 0:
-	 * x - x^2/2! + x^3/3! - x^4/4! + ... +- x^n/n! */
+   * x - x^2/2! + x^3/3! - x^4/4! + ... +- x^n/n! */
   double acc = x;
   double smd = x;
   acc += (smd *= x / -2);
@@ -124,12 +124,12 @@ double log2(double x)
     xe--;
   }
   int n = 1; /* xm in [0.666..., 1.333...) */
-  xm = sqrt(xm);
-  n *= 2; /* xm in [0.816..., 1.154...) */
-  xm = sqrt(xm);
-  n *= 2; /* xm in [0.903..., 1.074...) */
+  // clang-format off
+  xm = sqrt(xm); n *= 2; /* xm in [0.816..., 1.154...) */
+  xm = sqrt(xm); n *= 2; /* xm in [0.903..., 1.074...) */
   // xm = sqrt(xm); n *= 2;  /* xm in [0.950..., 1.036...) */
   // xm = sqrt(xm); n *= 2;  /* xm in [0.974..., 1.018...) */
+  // clang-format on
   int xe2 = xe;
   return xe2 + n * log1p_taylor(xm - 1) / M_LN2;
 }
