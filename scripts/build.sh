@@ -24,7 +24,7 @@ STATIC=
 CLANG_VERSION=11
 
 error() {
-    echo "$*" >&2
+    echo "error: $*" >&2
     exit 1
 }
 
@@ -53,7 +53,7 @@ ubuntu_setup () {
             -DLLVM_DIR=/usr/lib/llvm-$CLANG_VERSION/lib/cmake/llvm \
             -DZ3_DIR=/usr \
         "
-        echo "Configuring shared Ubuntu build with Clang v$CLANG_VERSION"
+        echo "Configuring shared Ubuntu build with Clang-$CLANG_VERSION frontend"
     else
         echo "Configuring static Ubuntu build"
     fi
@@ -106,27 +106,55 @@ macos_post_setup () {
   chmod +x build/macos-wrapper.sh
 }
 
-# Create build directory
-mkdir build && cd build || exit $?
+usage() {
+    echo "$0 [-OPTS]"
+    echo
+    echo "Options [defaults]:"
+    echo "  -h         display this help message"
+    echo "  -b BTYPE   set cmake build type to BTYPE [RelWithDebInfo]"
+    echo "  -s STYPE   enable sanitizer STYPE and compile with clang [disabled]"
+    echo "  -e ON|OFF  enable/disable -Werror [OFF]"
+    echo "  -r ON|OFF  enable/disable 'benchbringup' [OFF]"
+    echo "  -d         enable debug output for this script and c2goto"
+    echo "  -S ON|OFF  enable/disable static build [ON for Ubuntu, OFF for macOS]"
+    echo "  -c VERS    use packaged clang-VERS in a shared build on Ubuntu [11]"
+    echo
+    echo "This script prepares the environment, downloads dependencies, configures"
+    echo "the ESBMC build and runs the commands to compile and install ESBMC into"
+    echo "the directory: $PWD/release"
+    echo "Needs to be executed from the top-level directory of ESBMC's source tree."
+    echo "The build directory 'build' must not exist and will be created by this script."
+    echo
+    echo "Supported environments are: Ubuntu-22.04 and macOS."
+}
+
+# Setup build flags (release, debug, sanitizer, ...)
+while getopts hb:s:e:r:dS:c: flag
+do
+    case "${flag}" in
+    h) usage; exit 0 ;;
+    b) BASE_ARGS="$BASE_ARGS -DCMAKE_BUILD_TYPE=${OPTARG}" ;;
+    s) BASE_ARGS="$BASE_ARGS -DSANITIZER_TYPE=${OPTARG}"
+       COMPILER_ARGS="$COMPILER_ARGS CC=clang CXX=clang++" ;;
+    e) BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=${OPTARG}" ;;
+    r) BASE_ARGS="$BASE_ARGS -DBENCHBRINGUP=${OPTARG}" ;;
+    d) set -x; export ESBMC_OPTS='--verbosity 9' ;;
+    S) STATIC=$OPTARG ;; # should be capital ON or OFF
+    c) CLANG_VERSION=$OPTARG ;; # LLVM/Clang major version
+    *) exit 1 ;;
+    esac
+done
+if [ $# -ge $OPTIND ]; then
+    shift $((OPTIND-1))
+    error "unknown trailing parameters: $*"
+fi
 
 # Detect the platform ($OSTYPE was not working on github actions for ubuntu)
 # Note: Linux here means Ubuntu, this will mostly not work anywhere else.
 OS=`uname`
 
-# Setup build flags (release, debug, sanitizer, ...)
-while getopts b:s:e:r:dS:c: flag
-do
-    case "${flag}" in
-        b) BASE_ARGS="$BASE_ARGS -DCMAKE_BUILD_TYPE=${OPTARG}";;
-        s) BASE_ARGS="$BASE_ARGS -DSANITIZER_TYPE=${OPTARG}"
-           COMPILER_ARGS="$COMPILER_ARGS CC=clang CXX=clang++";;
-        e) BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=${OPTARG}";;
-        r) BASE_ARGS="$BASE_ARGS -DBENCHBRINGUP=${OPTARG}" ;;
-        d) set -x; export ESBMC_OPTS='--verbosity 9' ;;
-        S) STATIC=$OPTARG ;; # should be capital ON or OFF
-        c) CLANG_VERSION=$OPTARG ;; # LLVM/Clang major version
-    esac
-done
+# Create build directory
+mkdir build && cd build || exit $?
 
 case $OS in
   'Linux')
