@@ -21,6 +21,7 @@ SOLVER_FLAGS="\
 COMPILER_ARGS=''
 
 STATIC=
+CLANG_VERSION=11
 
 error() {
     echo "$*" >&2
@@ -31,24 +32,28 @@ error() {
 ubuntu_setup () {
     # Tested on ubuntu 22.04
     PKGS="\
-        clang-11 clang-tidy-11 python-is-python3 csmith python3 \
+        clang-$CLANG_VERSION clang-tidy-$CLANG_VERSION \
+        python-is-python3 csmith python3 \
         git ccache unzip wget curl libcsmith-dev gperf \
         libgmp-dev cmake bison flex g++-multilib linux-libc-dev \
         libboost-all-dev ninja-build python3-setuptools \
         libtinfo-dev pkg-config python3-pip python3-toml \
-        python-is-python3 openjdk-11-jdk \
+        openjdk-11-jdk \
     "
     if [ -z "$STATIC" ]; then STATIC=ON; fi
     if [ $STATIC = OFF ]; then
         PKGS="$PKGS \
-            llvm-11-dev libclang-11-dev libclang-cpp11-dev libz3-dev \
+            llvm-$CLANG_VERSION-dev \
+            libclang-$CLANG_VERSION-dev \
+            libclang-cpp$CLANG_VERSION-dev \
+            libz3-dev \
         "
         BASE_ARGS="$BASE_ARGS \
-            -DClang_DIR=/usr/lib/cmake/clang-11 \
-            -DLLVM_DIR=/usr/lib/llvm-11/lib/cmake/llvm \
+            -DClang_DIR=/usr/lib/cmake/clang-$CLANG_VERSION \
+            -DLLVM_DIR=/usr/lib/llvm-$CLANG_VERSION/lib/cmake/llvm \
             -DZ3_DIR=/usr \
         "
-        echo "Configuring shared Ubuntu build"
+        echo "Configuring shared Ubuntu build with Clang v$CLANG_VERSION"
     else
         echo "Configuring static Ubuntu build"
     fi
@@ -109,7 +114,7 @@ mkdir build && cd build || exit $?
 OS=`uname`
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts b:s:e:r:dS: flag
+while getopts b:s:e:r:dS:c: flag
 do
     case "${flag}" in
         b) BASE_ARGS="$BASE_ARGS -DCMAKE_BUILD_TYPE=${OPTARG}";;
@@ -119,6 +124,7 @@ do
         r) BASE_ARGS="$BASE_ARGS -DBENCHBRINGUP=${OPTARG}" ;;
         d) set -x; export ESBMC_OPTS='--verbosity 9' ;;
         S) STATIC=$OPTARG ;; # should be capital ON or OFF
+        c) CLANG_VERSION=$OPTARG ;; # LLVM/Clang major version
     esac
 done
 
