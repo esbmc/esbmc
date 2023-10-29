@@ -1,5 +1,72 @@
 Release Notes of the ESBMC model checker
 
+*** Version 7.4
+* Python Frontend
+- Support for logical and/or (#1423)
+- Handling asserts (#1420)
+- Function definitions/calls (#1419)
+- Add support for GtE, LtE, and mod operators (#1414)
+- While statements (#1406)
+- If/else support (#1396)
+- Initial implementation of Python frontend (#1390)
+* Operational Models
+- RFC: Low-precision models for log() family, exp() and pow() (#1421)
+- <fenv.h> only use own definitions on FreeBSD (#1417)
+- Add models for frexp() and ldexp() (#1413)
+- Replaced malloc with __ESBMC_alloca in getenv (#1250)
+* Abstract Interpretation
+- Interval Analysis unit tests now deletes migration reference (#1409)
+- Interval now uses std::optional to keep the bounds (#1407)
+- CNF generation no longer removes typecast (#1393)
+- Support for symbol expressions during interval analysis (#1330)
+- Support for symbol expressions during interval analysis (#1330)
+- Interval expression generation for floats (#1327)
+- Interval Analysis assumptions now only uses local symbols (#1319)
+- Propagation of Boolean Intervals (#1313)
+- Interval singleton propagation (#1305)
+- Make Interval Analysis reset state after pointer operation (#1234)
+* Solidity frontend
+- Support "require" keywords (#1321)
+- Verify the contract as a whole (#1309)
+- Set the class/contract name for function verification (#1304)
+- Solidity frontend update (#1298)
+* SMT backend
+- Added Bitwutzla 0.2.0 to ESBMC (#1318)
+- Bring smtlib backend on par with other backends (#1237)
+- Fix emitting bvsgt (#1235)
+- fp_conv: fix gte: not(less) is not equiv to get (#1227)
+- Changed smtlib linker flags (#1216)
+* Concurrency
+- CUDA verification: Support for more TCS (#1314)
+- Analyze global variables for goto instructions during symex (#1276)
+- CUDA OM: replaced __ESBMC_alloca with infinite array size (#1275)
+- Remove unviable interleaving (#1269)
+- Kernel concurrency model - SPIN LOCK (#1268)
+- Do not produce interleavings after __ESBMC_main ends (#1265)
+- CUDA: Add CuDNN OM (#1260)
+- CUDA OM: Clean up and optimize the CUDA operational models #1258
+- Guard fix (#1242)
+- Add benchmarks for CUDA (#1228)
+* Memory Safety
+- Enhance the memsafety analysis (#1295)
+- Add memory cleanup check (#1273)
+- Add option to avoid checking memory-leaks on abort() (#1270)
+* General Improvements:
+- Unions are not required to have an init member anymore (#1427)
+- Empty loops are now converted to assume 0 (#1412)
+- Counter-example: only recurse if generating a sub-expr has been possible (#1410)
+- Adhere to C semantics for pointer-arithmetic (#1402)
+- FreeBSD/CheriBSD compatibility (#1397)
+- Simplify irep1: do not resolve index on constants under addr-of #1376
+- Unify simplification of modulus2t with div2t (#1360)
+- Support bit-casting to multi-dimensional arrays (#1358)
+- --unwindset refine (#1306)
+- Allow more fine-grained control over debug log messages (#1281)
+- Add memory consumption metrics (#1272)
+- Make irep2 construction a bit more C++ (#1264)
+- K-induction fix (#1218)
+- Show the exact location of function call (#1217)
+
 *** Version 7.3
 * Clang CHERI-C frontend
 - Prepare CHERI-C support (#905).
