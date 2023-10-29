@@ -32,10 +32,15 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
+        build-flags: [-b DebugOpt -e On]
+        include:
+          # Also run a build with frontend linked shared against Ubuntu's clang-13
+          - os: ubuntu-latest
+            build-flags: -b DebugOpt -e On -S OFF -c 13
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ${{ matrix.os }}
-      build-flags: '-b DebugOpt -e On'
+      build-flags: ${{ matrix.build-flags }}
       testing: true
       
     # Check project with clang-format
