@@ -1,4 +1,4 @@
-name: PR Checks
+name: PR
 
 on: [pull_request]
 
@@ -40,13 +40,10 @@ jobs:
 
   # Also run a build with frontend linked shared against Ubuntu's clang-13
   build-shared:
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-    name: Dyn. clang-13 build
+    name: dyn. llvm-13
     uses: ./.github/workflows/build.yml
     with:
-      operating-system: ${{ matrix.os }}
+      operating-system: ubuntu-latest
       build-flags: -b DebugOpt -e On -S OFF -c 13
       testing: true
 
