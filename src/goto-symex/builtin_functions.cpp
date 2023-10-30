@@ -1694,5 +1694,15 @@ bool goto_symext::run_builtin(
     return true;
   }
 
+  if(has_prefix(symname, "c:@F@__builtin_constant_p"))
+  {
+    expr2tc op1 = func_call.operands[0];
+    cur_state->rename(op1);
+    symex_assign(code_assign2tc(
+      func_call.ret,
+      is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
+    return true;
+  }
+
   return false;
 }

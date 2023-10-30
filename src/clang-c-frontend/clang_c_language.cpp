@@ -213,9 +213,6 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   for (auto const &inc : config.ansi_c.warnings)
     compiler_args.push_back("-W" + inc);
 
-  compiler_args.emplace_back(
-    "-D__builtin_constant_p=__ESBMC_builtin_constant_p");
-
   compiler_args.emplace_back("-D__builtin_memcpy=memcpy");
 
   compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
@@ -398,7 +395,8 @@ void __ESBMC_memory_leak_checks();
 void __ESBMC_pthread_start_main_hook(void);
 void __ESBMC_pthread_end_main_hook(void);
 
-// Forward decls
+// Forward decl of the intrinsic function that calls atexit registered functions.
+// We need this here or it won't be pulled from the C library
 void __ESBMC_atexit_handler(void);
 
 // Forward declarations for nondeterministic types.
@@ -433,8 +431,6 @@ void __VERIFIER_error();
 void __VERIFIER_assume(int);
 void __VERIFIER_atomic_begin();
 void __VERIFIER_atomic_end();
-
-int __ESBMC_builtin_constant_p(int);
 
 /* Causes a verification error when its call is reachable; internal use in math
  * models */
