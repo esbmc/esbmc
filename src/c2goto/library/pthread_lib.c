@@ -226,7 +226,7 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_end();
 
   // Ensure that there is no subsequent execution path
-  abort();
+  __ESBMC_assume(0);
 }
 #pragma clang diagnostic pop
 
