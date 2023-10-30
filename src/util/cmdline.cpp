@@ -210,7 +210,7 @@ bool cmdlinet::parse(
   }
   catch(std::exception &e)
   {
-    log_error("ESBMC error: {}", e.what());
+    log_error("{}", e.what());
     return true;
   }
 

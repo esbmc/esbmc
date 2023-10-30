@@ -92,13 +92,8 @@ bool clang_c_maint::clang_main()
 
   if(matches.size() >= 2)
   {
-    if(matches.size() == 2)
-      log_error("warning: main symbol `{}' is ambiguous", main);
-    else
-    {
-      log_error("main symbol `{}' is ambiguous", main);
-      return true;
-    }
+    log_error("main symbol `{}' is ambiguous", main);
+    return true;
   }
 
   main_symbol = matches.front();

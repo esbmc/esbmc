@@ -188,7 +188,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   {
     if(has_prefix(identifier.as_string(), "symex::invalid_object"))
     {
-      log_warning("WARNING: function ptr call with no target, ");
+      log_warning("function ptr call with no target, ");
       cur_state->source.pc++;
       return;
     }
