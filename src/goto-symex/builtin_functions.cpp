@@ -710,8 +710,7 @@ void goto_symext::intrinsic_spawn_thread(
     !options.get_bool_option("disable-inductive-step"))
   {
     log_warning(
-      "WARNING: k-induction does not support concurrency yet. "
-      "Disabling inductive step");
+      "k-induction does not support concurrency yet. Disabling inductive step");
 
     // Disable inductive step on multi threaded code
     options.set_option("disable-inductive-step", true);

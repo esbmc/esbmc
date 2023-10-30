@@ -162,7 +162,7 @@ bool configt::set(const cmdlinet &cmdline)
     else if(mode != "off")
     {
       log_error(
-        "error: only 'hybrid' and 'purecap' modes supported for --cheri, "
+        "only 'hybrid' and 'purecap' modes supported for --cheri, "
         "argument was: {}",
         mode);
       abort();
