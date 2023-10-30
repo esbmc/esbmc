@@ -293,7 +293,6 @@ public:
     return_type().swap(_return_type);
   }
 
-
   class argumentt : public exprt
   {
   public:
