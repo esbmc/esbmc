@@ -108,6 +108,10 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   {
     return ExpressionType::FUNC_CALL;
   }
+  if(type == "IfExp")
+  {
+    return ExpressionType::IF_EXPR;
+  }
   return ExpressionType::UNKNOWN;
 }
 
@@ -270,6 +274,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     break;
   }
+  // Ternary operator
+  case ExpressionType::IF_EXPR:
+  {
+    expr = get_conditional_stm(element);
+    break;
+  }
   default:
   {
     log_error(
@@ -395,40 +405,73 @@ static codet convert_expression_to_code(exprt &expr)
   return code;
 }
 
-void python_converter::get_conditional_stms(
-  const nlohmann::json &ast_node,
-  codet &target_block)
+exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
+  // Copy current type
+  typet t = current_element_type;
+  // Change to boolean before extracting condition
   current_element_type = bool_type();
 
   // Extract condition from AST
   exprt cond = get_expr(ast_node["test"]);
   cond.location() = get_location_from_decl(ast_node["test"]);
 
+  // Recover type
+  current_element_type = t;
   // Extract 'then' block from AST
-  exprt then = get_block(ast_node["body"]);
+  exprt then;
+  if(ast_node["body"].is_array())
+  {
+    then = get_block(ast_node["body"]);
+  }
+  else
+  {
+    then = get_expr(ast_node["body"]);
+  }
+
   locationt location = get_location_from_decl(ast_node);
   then.location() = location;
 
+  // Extract 'else' block from AST
+  exprt else_expr;
+  if(ast_node.contains("orelse") && !ast_node["orelse"].empty())
+  {
+    // Append 'else' block to the statement
+    if(ast_node["orelse"].is_array())
+    {
+      else_expr = get_block(ast_node["orelse"]);
+    }
+    else
+    {
+      else_expr = get_expr(ast_node["orelse"]);
+    }
+  }
+
+  auto type = ast_node["_type"];
+
+  // ternary operator
+  if(type == "IfExp")
+  {
+    exprt if_expr("if", current_element_type);
+    if_expr.copy_to_operands(cond, then, else_expr);
+    return if_expr;
+  }
+
   // Create if or while code
   codet code;
-  auto type = ast_node["_type"];
   if(type == "If")
     code.set_statement("ifthenelse");
   else if(type == "While")
     code.set_statement("while");
 
   // Append "then" block
-  code.copy_to_operands(cond, convert_expression_to_code(then));
-
-  if(ast_node.contains("orelse") && !ast_node["orelse"].empty())
+  code.copy_to_operands(cond, then);
+  if(!else_expr.id_string().empty())
   {
-    // Append 'else' block to the statement
-    exprt else_expr = get_block(ast_node["orelse"]);
-    code.copy_to_operands(convert_expression_to_code(else_expr));
+    code.copy_to_operands(else_expr);
   }
 
-  target_block.copy_to_operands(code);
+  return code;
 }
 
 void python_converter::get_function_definition(
@@ -450,6 +493,8 @@ void python_converter::get_function_definition(
     log_error("Return type undefined\n");
     abort();
   }
+
+  current_element_type = type.return_type();
 
   // Function location
   locationt location = get_location_from_decl(function_node);
@@ -539,7 +584,8 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     case StatementType::IF_STATEMENT:
     case StatementType::WHILE_STATEMENT:
     {
-      get_conditional_stms(element, block);
+      exprt cond = get_conditional_stm(element);
+      block.copy_to_operands(cond);
       break;
     }
     case StatementType::COMPOUND_ASSIGN:
@@ -568,8 +614,12 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     case StatementType::EXPR:
     {
       // Function calls are handled here
+      exprt empty;
       exprt expr = get_expr(element["value"]);
-      block.move_to_operands(expr);
+      if(expr != empty)
+      {
+        block.move_to_operands(expr);
+      }
       break;
     }
     case StatementType::UNKNOWN:
