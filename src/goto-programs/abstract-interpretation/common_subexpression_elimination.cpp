@@ -255,8 +255,6 @@ bool goto_cse::runOnProgram(goto_functionst &F)
     log_error("Unable to initialize the GCSE");
   }
 
-  
-
   return false;
 }
 
@@ -267,7 +265,12 @@ goto_cse::obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const
     return expr2tc();
 
   // No need to add primitives
+
   if(is_constant(e) || is_symbol2t(e))
+    return expr2tc();
+
+  // TODO
+  if(is_array_type(e->type))
     return expr2tc();
 
   if(state.available_expressions.count(e))
@@ -422,7 +425,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     for(auto &x : matched_pre_expressions)
     {
       if(
-        !state.available_expressions.count(x) || 
+        !state.available_expressions.count(x) ||
         // is_in_loop(it) ||
         !initialized.count(x))
       {
@@ -445,7 +448,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     {
       // First time seeing the expr
       if(
-        !state.available_expressions.count(x) || 
+        !state.available_expressions.count(x) ||
         // is_in_loop(it) ||
         !initialized.count(x))
       {
