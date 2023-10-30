@@ -177,8 +177,7 @@ void add_cprover_library(contextt &context, const languaget *c_language)
   {
   case 16:
     log_warning(
-      "Warning: this version of ESBMC does not have a C library "
-      "for 16 bit machines");
+      "this version of ESBMC does not have a C library for 16 bit machines");
     return;
   case 32:
   case 64:
@@ -195,7 +194,7 @@ void add_cprover_library(contextt &context, const languaget *c_language)
   {
     if(c_language)
       return add_bundled_library_sources(context, *c_language);
-    log_error("error: Zero-lengthed internal C library");
+    log_error("Zero-lengthed internal C library");
     abort();
   }
 

@@ -41,6 +41,8 @@ void messaget::statet::println(
   {
     if(lvl == VerbosityLevel::Error)
       fmt::print(f, "ERROR: ");
+    if(lvl == VerbosityLevel::Warning)
+      fmt::print(f, "WARNING: ");
     fmt::vprint(f, format, args);
   }
 

@@ -252,8 +252,8 @@ bool solidity_convertert::get_var_decl(
   }
   else
   {
-    assert(
-      !"Error: ESBMC could not find the parent scope for this local variable");
+    log_error("ESBMC could not find the parent scope for this local variable");
+    return true;
   }
 
   // 3. populate location
@@ -810,7 +810,12 @@ bool solidity_convertert::get_statement(
   case SolidityGrammar::StatementT::ReturnStatement:
   {
     if(!current_functionDecl)
-      assert(!"Error: ESBMC could not find the parent scope for this ReturnStatement");
+    {
+      log_error(
+        "Error: ESBMC could not find the parent scope for this "
+        "ReturnStatement");
+      return true;
+    }
 
     // 1. get return type
     // TODO: Fix me! Assumptions:

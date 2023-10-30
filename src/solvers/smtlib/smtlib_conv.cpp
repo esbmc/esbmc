@@ -609,7 +609,7 @@ smt_convt::resultt smtlib_convt::dec_solve()
   }
   else if(smtlib_output->token == TOK_KW_ERROR)
   {
-    log_error("SMTLIB solver returned error: \"{}\"", smtlib_output->data);
+    log_error("SMTLIB solver returned: \"{}\"", smtlib_output->data);
     return smt_convt::P_ERROR;
   }
   else
@@ -968,7 +968,7 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 
 int smtliberror(int startsym [[maybe_unused]], const std::string &error)
 {
-  log_error("SMTLIB response parsing error: \"{}\"", error);
+  log_error("SMTLIB response parsing: \"{}\"", error);
   abort();
 }
 
