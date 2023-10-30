@@ -1401,6 +1401,7 @@ void clang_cpp_convertert::get_base_map(
       continue;
 
     auto status = map.insert({class_id, base_cxxrd});
+    (void)status;
     assert(status.second);
   }
 }
