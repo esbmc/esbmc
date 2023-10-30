@@ -207,6 +207,7 @@ __ESBMC_HIDE:;
   return 0; // We never fail
 }
 
+void abort();
 void pthread_exit(void *retval)
 {
 __ESBMC_HIDE:;
@@ -224,7 +225,7 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_end();
 
   // Ensure that there is no subsequent execution path
-  __ESBMC_assume(0);
+  abort();
 }
 
 pthread_t pthread_self(void)
