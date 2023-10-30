@@ -367,6 +367,10 @@ void static_analysis_baset::do_function_call_rec(
   {
     // TODO
   }
+  else if(is_constant_string2t(function))
+  {
+    // ignore, can't be a function
+  }
   else
   {
     log_error("unexpected function_call argument: {}", get_expr_id(function));
