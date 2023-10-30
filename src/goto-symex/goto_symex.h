@@ -462,7 +462,8 @@ protected:
     const code_function_call2t &func_call);
 
   // Function to call a symname function, in case where were not able to optimize it
-  void bump_call(const code_function_call2t &func_call, const std::string &symname);
+  void
+  bump_call(const code_function_call2t &func_call, const std::string &symname);
 
   /** Returns the size of the object
    *

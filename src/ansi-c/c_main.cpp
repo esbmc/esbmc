@@ -294,7 +294,8 @@ bool c_main(contextt &context, const std::string &standard_main)
 
   code_function_callt thread_start_call;
   thread_start_call.location() = symbol.location;
-  thread_start_call.function() = symbol_exprt("__ESBMC_pthread_start_main_hook");
+  thread_start_call.function() =
+    symbol_exprt("__ESBMC_pthread_start_main_hook");
   code_function_callt thread_end_call;
   thread_end_call.location() = symbol.location;
   thread_end_call.function() = symbol_exprt("__ESBMC_pthread_end_main_hook");
