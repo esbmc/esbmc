@@ -17,7 +17,7 @@ on:
 
 jobs:
   build:
-    name: Build ESBMC (Windows)
+    name: Build ESBMC (${{ inputs.operating-system }})
     runs-on: ${{ inputs.operating-system }}
     steps:
     - name: Set up Python
