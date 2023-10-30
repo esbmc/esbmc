@@ -28,23 +28,29 @@ jobs:
         name: Developer-Manual
         path: manual.pdf    
 
-  build:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    uses: ./.github/workflows/build.yml
+  build-ubuntu:
+    uses: ./.github/workflows/build-unix.yml
+    name: build (ubuntu-latest)
     with:
-      operating-system: ${{ matrix.os }}
+      operating-system: ubuntu-latest
+      build-flags: '-b DebugOpt -e On'
+      testing: true
+
+  build-windows:
+    uses: ./.github/workflows/build-windows.yml
+    name: build (windows-latest)
+    with:
+      operating-system: windows-latest
       build-flags: '-b DebugOpt -e On'
       testing: true
 
   # Also run a build with frontend linked shared against Ubuntu's clang-13
   build-shared:
     name: dyn. llvm-13
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/build-unix.yml
     with:
       operating-system: ubuntu-latest
-      build-flags: -b DebugOpt -e On -S OFF -c 13
+      build-flags: '-b DebugOpt -e On -S OFF -c 13'
       testing: true
 
     # Check project with clang-format
