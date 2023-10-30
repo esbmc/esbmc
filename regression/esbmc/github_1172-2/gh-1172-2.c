@@ -36,35 +36,4 @@ int main(){
         q = rand()%100 + 1;
     }
     n = p * q;
-    phi = (p-1) * (q-1);
-
-    //Choosing a public key
-    do{
-        e = rand()%phi;
-    }while(gcd(e, phi) != 1);
-
-    //Calculating private key
-    int k = 1;
-    while(1){
-        k = k + phi;
-        if(k % e == 0){
-            d = k/e;
-            break;
-        }
-    }
-
-    printf("Public Key: (%d, %d)\n", e, n);
-    printf("Private Key: (%d, %d)\n", d, n);
-
-    //Encryption
-    printf("Enter the plaintext (a single letter): ");
-    scanf("%d", &plaintext);
-    ciphertext = fmod(pow(plaintext, e), n);
-    printf("The ciphertext is: %d\n", ciphertext);
-
-    //Decryption
-    plaintext = fmod(pow(ciphertext, d), n);
-    printf("The plaintext is: %d\n", plaintext);
-
-    return 0;
 }
