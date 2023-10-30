@@ -134,33 +134,39 @@ void goto2ct::check_goto(goto_programt::instructiont instruction)
   assert(instruction.targets.size() == 1);
 }
 
-void goto2ct::check_function_call(goto_programt::instructiont instruction)
+void goto2ct::check_function_call(goto_programt::instructiont instruction
+                                  [[maybe_unused]])
 {
   assert(is_code_function_call2t(instruction.code));
 }
 
-void goto2ct::check_return(goto_programt::instructiont instruction)
+void goto2ct::check_return(goto_programt::instructiont instruction
+                           [[maybe_unused]])
 {
   assert(is_code_return2t(instruction.code));
 }
 
-void goto2ct::check_end_function(goto_programt::instructiont instruction)
+void goto2ct::check_end_function(goto_programt::instructiont instruction
+                                 [[maybe_unused]])
 {
   assert(is_nil_expr(instruction.code));
   assert(is_true(instruction.guard));
 }
 
-void goto2ct::check_decl(goto_programt::instructiont instruction)
+void goto2ct::check_decl(goto_programt::instructiont instruction
+                         [[maybe_unused]])
 {
   assert(is_code_decl2t(instruction.code));
 }
 
-void goto2ct::check_dead(goto_programt::instructiont instruction)
+void goto2ct::check_dead(goto_programt::instructiont instruction
+                         [[maybe_unused]])
 {
   assert(is_code_dead2t(instruction.code));
 }
 
-void goto2ct::check_assign(goto_programt::instructiont instruction)
+void goto2ct::check_assign(goto_programt::instructiont instruction
+                           [[maybe_unused]])
 {
   assert(is_code_assign2t(instruction.code));
 }
@@ -179,12 +185,14 @@ void goto2ct::check_skip(goto_programt::instructiont instruction
   // or something else
 }
 
-void goto2ct::check_throw(goto_programt::instructiont instruction)
+void goto2ct::check_throw(goto_programt::instructiont instruction
+                          [[maybe_unused]])
 {
   assert(is_code_cpp_throw2t(instruction.code));
 }
 
-void goto2ct::check_catch(goto_programt::instructiont instruction)
+void goto2ct::check_catch(goto_programt::instructiont instruction
+                          [[maybe_unused]])
 {
   assert(is_code_cpp_catch2t(instruction.code));
 }
@@ -199,12 +207,14 @@ void goto2ct::check_atomic_end(goto_programt::instructiont instruction
 {
 }
 
-void goto2ct::check_throw_decl(goto_programt::instructiont instruction)
+void goto2ct::check_throw_decl(goto_programt::instructiont instruction
+                               [[maybe_unused]])
 {
   assert(is_code_cpp_throw_decl2t(instruction.code));
 }
 
-void goto2ct::check_throw_decl_end(goto_programt::instructiont instruction)
+void goto2ct::check_throw_decl_end(goto_programt::instructiont instruction
+                                   [[maybe_unused]])
 {
   assert(is_code_cpp_throw_decl_end2t(instruction.code));
 }
@@ -214,7 +224,7 @@ void goto2ct::check_other(goto_programt::instructiont instruction
 {
 }
 
-void check_if_sideeffect_or_assign_expr(expr2tc expr)
+void check_if_sideeffect_or_assign_expr(expr2tc expr [[maybe_unused]])
 {
   assert(!is_code_assign2t(expr));
   assert(!is_sideeffect2t(expr));
