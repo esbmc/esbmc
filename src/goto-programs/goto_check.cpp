@@ -639,7 +639,6 @@ void goto_checkt::bounds_check(
 
   assert(is_array_type(t) || is_string_type(t) || is_vector_type(t));
 
-  
   const expr2tc &array_size =
     is_array_type(t) ? to_array_type(t).array_size
     : is_vector_type(t)
