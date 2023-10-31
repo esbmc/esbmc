@@ -558,15 +558,6 @@ bool solidity_convertert::get_function_definition(
   std::string name, id;
   get_function_definition_name(ast_node, name, id);
 
-  // skip if the symbol is already inside
-  // if(context.find_symbol(id) != nullptr)
-  // {
-  //   current_functionDecl = old_functionDecl;
-  //   current_functionName = "";
-  //   new_expr = symbol_expr(*context.find_symbol(id));
-  //   return false;
-  // }
-
   if(name == "func_dynamic")
     printf("@@ found func_dynamic\n");
 
@@ -604,7 +595,7 @@ bool solidity_convertert::get_function_definition(
       const nlohmann::json &func_param_decl = decl.value();
 
       code_typet::argumentt param;
-      if(get_function_params(func_param_decl, param, num_param_decl))
+      if(get_function_params(func_param_decl, param))
         return true;
 
       type.arguments().push_back(param);
@@ -633,8 +624,7 @@ bool solidity_convertert::get_function_definition(
 
 bool solidity_convertert::get_function_params(
   const nlohmann::json &pd,
-  exprt &param,
-  const unsigned &num)
+  exprt &param)
 {
   // 1. get parameter type
   typet param_type;
@@ -1273,15 +1263,15 @@ bool solidity_convertert::get_expr(
       inits = gen_zero(arr_type);
 
       // populate array
-      uint i = 0;
+      int cnt = 0;
       for(const auto &arg : expr["components"].items())
       {
         exprt init;
         if(get_expr(arg.value(), elem_literal_type, init))
           return true;
 
-        inits.operands().at(i) = init;
-        i++;
+        inits.operands().at(cnt) = init;
+        cnt++;
       }
 
       new_expr = inits;
@@ -1452,7 +1442,13 @@ bool solidity_convertert::get_expr(
     //    bytes memory b = new bytes(7)
     // 3. new object, e.g.
     //    Base x = new Base(1, 2);
-    ;
+
+    // case 1
+    // e.g.
+    //    a = new uint[](7)
+    // convert to
+    //    uint y[7] = {0,0,0,0,0,0,0};
+    //    a = y;
     nlohmann::json callee_expr_json = expr["expression"];
     if(callee_expr_json.contains("typeName"))
     {
@@ -1624,12 +1620,6 @@ bool solidity_convertert::get_expr(
 
   new_expr.location() = location;
   return false;
-}
-
-void solidity_convertert::get_literal(
-  const nlohmann::json &expr,
-  const nlohmann::json &expr_common_type)
-{
 }
 
 bool solidity_convertert::get_contract_name(
@@ -2569,7 +2559,7 @@ bool solidity_convertert::get_func_decl_ref_type(
       const nlohmann::json &func_param_decl = decl.value();
 
       code_typet::argumentt param;
-      if(get_function_params(func_param_decl, param, num_param_decl))
+      if(get_function_params(func_param_decl, param))
         return true;
 
       type.arguments().push_back(param);
