@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 contract.solast
 --function Derive --sol contract.sol
 ^VERIFICATION FAILED$
