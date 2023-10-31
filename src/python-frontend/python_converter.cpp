@@ -640,6 +640,29 @@ bool python_converter::convert()
   // Read all statements
   exprt block_expr = get_block(ast_json["body"]);
 
+  const std::string function = config.options.get_option("function");
+  if(!function.empty())
+  {
+    std::string symbol_id = "py:" + python_filename + "@F@" + function;
+    symbolt *symbol = context.find_symbol(symbol_id);
+    if(symbol != nullptr)
+    {
+      code_function_callt call;
+      call.location() = symbol->location;
+      call.function() = symbol_expr(*symbol);
+      const code_typet::argumentst &arguments =
+        to_code_type(symbol->type).arguments();
+      call.arguments().resize(
+        arguments.size(), static_cast<const exprt &>(get_nil_irep()));
+      block_expr = call;
+    }
+    else
+    {
+      log_error("Function \"{}\" not found\n", function);
+      return true;
+    }
+  }
+
   // Get main function code
   codet main_code = convert_expression_to_code(block_expr);
 
