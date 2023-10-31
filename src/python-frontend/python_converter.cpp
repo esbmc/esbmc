@@ -421,13 +421,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // Extract 'then' block from AST
   exprt then;
   if(ast_node["body"].is_array())
-  {
     then = get_block(ast_node["body"]);
-  }
   else
-  {
     then = get_expr(ast_node["body"]);
-  }
 
   locationt location = get_location_from_decl(ast_node);
   then.location() = location;
