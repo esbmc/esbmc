@@ -1301,23 +1301,6 @@ void goto_symext::intrinsic_memset(
   if (ex_state.cur_state->guard.is_false())
     return;
 
-  // Define a local function for translating to calling the unwinding C
-  // implementation of memset
-  auto bump_call = [this, &func_call]() -> void {
-    // We're going to execute a function call, and that's going to mess with
-    // the program counter. Set it back *onto* pointing at this intrinsic, so
-    // symex_function_call calculates the right return address. Misery.
-    cur_state->source.pc--;
-
-    expr2tc newcall = func_call.clone();
-    code_function_call2t &mutable_funccall = to_code_function_call2t(newcall);
-    mutable_funccall.function =
-      symbol2tc(get_empty_type(), "c:@F@__memset_impl");
-    // Execute call
-    symex_function_call(newcall);
-    return;
-  };
-
   /* Get the arguments
    * arg0: ptr to object
    * arg1: int for the new byte value
@@ -1345,7 +1328,7 @@ void goto_symext::intrinsic_memset(
     /* Not sure what to do here, let's rely
        * on the default implementation then */
     log_debug("memset", "Couldn't optimize memset due to precondition");
-    bump_call();
+    bump_call(func_call, "c:@F@__memset_impl");
     return;
   }
 
@@ -1353,7 +1336,7 @@ void goto_symext::intrinsic_memset(
   if (!is_constant_int2t(arg2))
   {
     log_debug("memset", "TODO: simplifier issues :/");
-    bump_call();
+    bump_call(func_call, "c:@F@__memset_impl");
     return;
   }
 
@@ -1376,7 +1359,7 @@ void goto_symext::intrinsic_memset(
     if (!item_object || !item_offset)
     {
       log_debug("memset", "Couldn't get item_object/item_offset");
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
 
@@ -1388,7 +1371,7 @@ void goto_symext::intrinsic_memset(
         "memset",
         "Item offset is symbolic: {}",
         to_symbol2t(item_offset).get_symbol_name());
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
 
@@ -1425,7 +1408,7 @@ void goto_symext::intrinsic_memset(
        */
       log_debug(
         "memset", "TODO: some simplifications are missing, bumping call");
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
 
@@ -1442,7 +1425,7 @@ void goto_symext::intrinsic_memset(
     }
     catch (const array_type2t::dyn_sized_array_excp &)
     {
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
 
@@ -1482,7 +1465,7 @@ void goto_symext::intrinsic_memset(
     if (!new_object)
     {
       log_debug("memset", "gen_value_by_byte failed");
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
     // 4. Assign the new object
