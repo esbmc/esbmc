@@ -636,6 +636,9 @@ bool python_converter::convert()
   // Read all statements
   exprt block_expr = get_block(ast_json["body"]);
 
+  /* If the user passes --function, we add only a call to the
+   * respective function in __ESBMC_main instead of full Python content
+   */
   const std::string function = config.options.get_option("function");
   if(!function.empty())
   {
