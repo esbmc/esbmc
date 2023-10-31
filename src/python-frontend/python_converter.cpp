@@ -633,33 +633,61 @@ bool python_converter::convert()
 {
   python_filename = ast_json["filename"].get<std::string>();
 
-  // Read all statements
-  exprt block_expr = get_block(ast_json["body"]);
+  exprt block_expr;
 
-  /* If the user passes --function, we add only a call to the
-   * respective function in __ESBMC_main instead of full Python content
-   */
+  // Handle --function option
   const std::string function = config.options.get_option("function");
   if(!function.empty())
   {
-    std::string symbol_id = "py:" + python_filename + "@F@" + function;
-    symbolt *symbol = context.find_symbol(symbol_id);
-    if(symbol != nullptr)
+    /* If the user passes --function, we add only a call to the
+     * respective function in __ESBMC_main instead of entire Python program
+     */
+
+    nlohmann::json function_node;
+    // Find function node in AST
+    for(const auto &element : ast_json["body"])
     {
-      code_function_callt call;
-      call.location() = symbol->location;
-      call.function() = symbol_expr(*symbol);
-      const code_typet::argumentst &arguments =
-        to_code_type(symbol->type).arguments();
-      call.arguments().resize(
-        arguments.size(), static_cast<const exprt &>(get_nil_irep()));
-      block_expr = call;
+      if(element["_type"] == "FunctionDef" && element["name"] == function)
+      {
+        function_node = element;
+        break;
+      }
     }
-    else
+
+    if(function_node.empty())
     {
       log_error("Function \"{}\" not found\n", function);
       return true;
     }
+
+    // Convert a single function
+    get_function_definition(function_node);
+
+    // Get function symbol
+    std::string symbol_id = "py:" + python_filename + "@F@" + function;
+    symbolt *symbol = context.find_symbol(symbol_id);
+    if(!symbol)
+    {
+      log_error("Symbol \"{}\" not found\n", symbol_id.c_str());
+      return true;
+    }
+
+    // Create function call
+    code_function_callt call;
+    call.location() = symbol->location;
+    call.function() = symbol_expr(*symbol);
+
+    const code_typet::argumentst &arguments =
+      to_code_type(symbol->type).arguments();
+    call.arguments().resize(
+      arguments.size(), static_cast<const exprt &>(get_nil_irep()));
+
+    block_expr = call;
+  }
+  else
+  {
+    // Convert all statements
+    block_expr = get_block(ast_json["body"]);
   }
 
   // Get main function code
