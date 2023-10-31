@@ -57,10 +57,7 @@ protected:
   bool get_var_decl_stmt(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node);
-  bool get_function_params(
-    const nlohmann::json &pd,
-    exprt &param,
-    const unsigned &num);
+  bool get_function_params(const nlohmann::json &pd, exprt &param);
   bool get_default_function(const std::string name, const std::string id);
   bool get_struct_class(const nlohmann::json &ast_node);
   void add_enum_member_val(nlohmann::json &ast_node);
@@ -83,9 +80,6 @@ protected:
     const nlohmann::json &expr,
     const nlohmann::json &expr_common_type,
     exprt &new_expr);
-  void get_literal(
-    const nlohmann::json &expr,
-    const nlohmann::json &expr_common_type);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_compound_assign_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_unary_operator_expr(
@@ -122,6 +116,8 @@ protected:
     std::string &id);
   bool get_constructor_call(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_contract_name(const int ref_decl_id, std::string &contract_name);
+  bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
+
   // line number and locations
   void
   get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
