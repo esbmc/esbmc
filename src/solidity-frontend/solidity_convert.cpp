@@ -233,11 +233,19 @@ bool solidity_convertert::get_var_decl(
   bool dyn_array = is_dyn_array(ast_node["typeDescriptions"]);
   if(dyn_array)
   {
-    // append size expr in typeDescription JSON object
-    const nlohmann::json &type_descriptor = add_dyn_array_size_expr(
-      ast_node["typeName"]["typeDescriptions"], ast_node);
-    if(get_type_description(type_descriptor, t))
-      return true;
+    if(ast_node.contains("initialValue"))
+    {
+      // append size expr in typeDescription JSON object
+      const nlohmann::json &type_descriptor =
+        add_dyn_array_size_expr(ast_node["typeDescriptions"], ast_node);
+      if(get_type_description(type_descriptor, t))
+        return true;
+    }
+    else
+    {
+      if(get_type_description(ast_node["typeDescriptions"], t))
+        return true;
+    }
   }
   else
   {
@@ -569,15 +577,6 @@ bool solidity_convertert::get_function_definition(
   std::string name, id;
   get_function_definition_name(ast_node, name, id);
 
-  // skip if the symbol is already inside
-  // if(context.find_symbol(id) != nullptr)
-  // {
-  //   current_functionDecl = old_functionDecl;
-  //   current_functionName = "";
-  //   new_expr = symbol_expr(*context.find_symbol(id));
-  //   return false;
-  // }
-
   if(name == "func_dynamic")
     printf("@@ found func_dynamic\n");
 
@@ -610,19 +609,16 @@ bool solidity_convertert::get_function_definition(
   {
     // convert parameters if the function has them
     // update the typet, since typet contains parameter annotations
-    unsigned num_param_decl = 0;
     for(const auto &decl : ast_node["parameters"]["parameters"].items())
     {
       const nlohmann::json &func_param_decl = decl.value();
 
       code_typet::argumentt param;
-      if(get_function_params(func_param_decl, param, num_param_decl))
+      if(get_function_params(func_param_decl, param))
         return true;
 
       type.arguments().push_back(param);
-      ++num_param_decl;
     }
-    log_debug("solidity", "  @@@ number of param decls: {}", num_param_decl);
   }
 
   added_symbol.type = type;
@@ -647,8 +643,7 @@ bool solidity_convertert::get_function_definition(
 
 bool solidity_convertert::get_function_params(
   const nlohmann::json &pd,
-  exprt &param,
-  const unsigned &num)
+  exprt &param)
 {
   // 1. get parameter type
   typet param_type;
@@ -1026,7 +1021,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
      * convert it to a exprt ("new_expr"). The expression may have sub-expression
      * 
      * !Always check if the expression is a Literal before calling get_expr
-     * !Unless you are 100% sure it will not be a constant (e.g. 1, "1", 0x01)
+     * !Unless you are 100% sure it will not be a constant
      * 
      * This function is called throught two approach:
      * 1. get_decl => get_var_decl => get_expr
@@ -1036,6 +1031,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
      * @param literal_type Type information ast to create the the literal
      * type in the IR (only needed for when the expression is a literal).
      * A literal_type is a "typeDescriptions" ast_node.
+     * we need this due to some info is missing in the child node.
      * @param new_expr Out parameter to hold the conversion
      * @return true iff the conversion has failed
      * @return false iff the conversion was successful
@@ -1247,7 +1243,7 @@ bool solidity_convertert::get_expr(
     //    2. Operator:
     //        - (x+1) % 2
     //        - if( x && (y || z) )
-    //    3. realTupleExpr:
+    //    3. TupleExpr:
     //        - multiple returns: return (x, y);
     //        - (x, y) = (y, x)
 
@@ -1277,19 +1273,16 @@ bool solidity_convertert::get_expr(
       exprt inits;
       inits = gen_zero(arr_type);
 
-      // check bound
-      assert(inits.operands().size() >= expr["components"].size());
-
       // populate array
-      uint i = 0;
+      int cnt = 0;
       for(const auto &arg : expr["components"].items())
       {
         exprt init;
         if(get_expr(arg.value(), elem_literal_type, init))
           return true;
 
-        inits.operands().at(i) = init;
-        i++;
+        inits.operands().at(cnt) = init;
+        cnt++;
       }
 
       new_expr = inits;
@@ -1438,32 +1431,18 @@ bool solidity_convertert::get_expr(
     //    Base x = new Base(1, 2);
 
     // case 1
+    // e.g.
+    //    a = new uint[](7)
+    // convert to
+    //    uint y[7] = {0,0,0,0,0,0,0};
+    //    a = y;
     nlohmann::json callee_expr_json = expr["expression"];
     if(callee_expr_json.contains("typeName"))
     {
       if(is_dyn_array(callee_expr_json["typeName"]["typeDescriptions"]))
       {
-        // 1. get elem type
-        typet t;
-        const nlohmann::json elem_node =
-          callee_expr_json["typeName"]["baseType"]["typeDescriptions"];
-        if(get_type_description(elem_node, t))
+        if(get_empty_array_ref(expr, new_expr))
           return true;
-
-        // 2. get size
-        // e.g. new uint[](0x01); new uint[](1); => "int_const 1"
-        assert(expr.contains("arguments"));
-        assert(expr["arguments"].size() == 1);
-        const nlohmann::json literal = expr["arguments"][0];
-
-        exprt size;
-        if(get_expr(literal, literal_type, size))
-          return true;
-
-        // 3. declare a dyn array
-        new_expr = side_effect_exprt("cpp_new[]", t);
-        new_expr.size(size);
-
         break;
       }
     }
@@ -1601,12 +1580,6 @@ bool solidity_convertert::get_expr(
 
   new_expr.location() = location;
   return false;
-}
-
-void solidity_convertert::get_literal(
-  const nlohmann::json &expr,
-  const nlohmann::json &expr_common_type)
-{
 }
 
 bool solidity_convertert::get_contract_name(
@@ -2355,10 +2328,28 @@ bool solidity_convertert::get_type_description(
   }
   case SolidityGrammar::TypeNameT::DynArrayTypeName:
   {
-    // Deal with dynamic array
+    // Dynamic array in Solidity is complicated. We have
+    // 1. dynamic_memory: which will convert to fixed array and
+    //    cannot be modified once got allocated. This can be seen
+    //    as a fixed array whose length will be set later.
+    //    e.g.
+    //      uint[] memory data;
+    //      data = new uint[](10);
+    //    and
+    //      uint[] memory data = new uint[](10);
+    // 2. dynamic_storage: which can be re-allocated or changed at any time.
+    //    e.g.
+    //      uint[] data;
+    //      func(){ data = [1,2,3]; data = new uint[](10); }
+    //    and
+    //      data.pop(); data.push();
+    //    Idealy, this should be set as a vector_type.
     exprt size_expr;
+
     if(type_name.contains("sizeExpr"))
     {
+      // dynamic memory with initial list
+
       const nlohmann::json &rtn_expr = type_name["sizeExpr"];
       // wrap it in an ImplicitCastExpr to convert LValue to RValue
       nlohmann::json implicit_cast_expr =
@@ -2368,20 +2359,38 @@ bool solidity_convertert::get_type_description(
       nlohmann::json l_type = rtn_expr["typeDescriptions"];
       if(get_expr(implicit_cast_expr, l_type, size_expr))
         return true;
+      typet subtype;
+      nlohmann::json array_elementary_type =
+        make_array_elementary_type(type_name);
+      if(get_type_description(array_elementary_type, subtype))
+        return true;
+
+      new_type = array_typet(subtype, size_expr);
     }
     else
     {
-      new_type = empty_typet();
+      // e.g.
+      // "typeDescriptions": {
+      //     "typeIdentifier": "t_array$_t_uint256_$dyn_memory_ptr",
+      //     "typeString": "uint256[]"
+
+      // 1. rebuild baseType
+      nlohmann::json new_json;
+      std::string typeString = type_name["typeString"].get<std::string>();
+      auto pos = typeString.find("[]"); // e.g. "uint256[] memory"
+      typeString = typeString.substr(0, pos);
+      std::string typeIdentifier = "t_" + typeString;
+      new_json["typeString"] = typeString;
+      new_json["typeIdentifier"] = typeIdentifier;
+
+      // 2. get subType
+      typet sub_type;
+      if(get_type_description(new_json, sub_type))
+        return true;
+
+      // 3. make pointer
+      new_type = gen_pointer_type(sub_type);
     }
-
-    typet subtype;
-    nlohmann::json array_elementary_type =
-      make_array_elementary_type(type_name);
-    if(get_type_description(array_elementary_type, subtype))
-      return true;
-
-    new_type = array_typet(subtype, size_expr);
-
     break;
   }
   case SolidityGrammar::TypeNameT::ContractTypeName:
@@ -2505,17 +2514,15 @@ bool solidity_convertert::get_func_decl_ref_type(
     type.return_type() = return_type;
     // convert parameters if the function has them
     // update the typet, since typet contains parameter annotations
-    unsigned num_param_decl = 0;
     for(const auto &decl : decl["parameters"]["parameters"].items())
     {
       const nlohmann::json &func_param_decl = decl.value();
 
       code_typet::argumentt param;
-      if(get_function_params(func_param_decl, param, num_param_decl))
+      if(get_function_params(func_param_decl, param))
         return true;
 
       type.arguments().push_back(param);
-      ++num_param_decl;
     }
 
     current_functionName = "";
@@ -3498,9 +3505,9 @@ nlohmann::json solidity_convertert::add_dyn_array_size_expr(
   nlohmann::json adjusted_descriptor;
   adjusted_descriptor = type_descriptor;
   // get the JSON object for size expr and merge it with the original type descriptor
-  assert(dyn_array_node.contains("initialValue"));
   adjusted_descriptor.push_back(nlohmann::json::object_t::value_type(
     "sizeExpr", dyn_array_node["initialValue"]["arguments"][0]));
+
   return adjusted_descriptor;
 }
 
@@ -3729,6 +3736,68 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
       dest.move_to_operands(function_call);
     }
   });
+}
+
+// declare an empty array symbol and move it to the context
+bool solidity_convertert::get_empty_array_ref(
+  const nlohmann::json &expr,
+  exprt &new_expr)
+{
+  // Get Name
+  nlohmann::json callee_expr_json = expr["expression"];
+  nlohmann::json callee_arg_json = expr["arguments"][0];
+
+  // get unique label
+  std::string label = std::to_string(callee_expr_json["id"].get<int>());
+  std::string name, id;
+  name = "array@" + label;
+  id = "c:" + get_modulename_from_path(absolute_path) + ".solast" + "@" +
+       std::to_string(445) + "@" + "F" + "@" + current_functionName + "@" +
+       name;
+
+  // Get Location
+  locationt location_begin;
+  get_location_from_decl(callee_expr_json, location_begin);
+
+  // Get Debug Module Name
+  std::string debug_modulename =
+    get_modulename_from_path(location_begin.file().as_string());
+
+  // Get Type
+  // 1. get elem type
+  typet elem_type;
+  const nlohmann::json elem_node =
+    callee_expr_json["typeName"]["baseType"]["typeDescriptions"];
+  if(get_type_description(elem_node, elem_type))
+    return true;
+
+  // 2. get array size
+  exprt size;
+  const nlohmann::json literal_type = callee_arg_json["typeDescriptions"];
+  if(get_expr(callee_arg_json, literal_type, size))
+    return true;
+
+  // 3. declare array
+  typet arr_type = array_typet(elem_type, size);
+
+  // 4. poplate default value
+  exprt inits;
+  inits = gen_zero(arr_type);
+
+  // Get Symbol
+  symbolt symbol;
+  get_default_symbol(
+    symbol, debug_modulename, inits.type(), name, id, location_begin);
+
+  symbol.lvalue = true;
+  symbol.static_lifetime = false;
+  symbol.file_local = true;
+  symbol.is_extern = false;
+
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
+
+  new_expr = symbol_expr(added_symbol);
+  return false;
 }
 
 /*

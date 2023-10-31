@@ -17,9 +17,6 @@ bool solidity_convertert::convert_integer_literal(
   if(get_type_description(integer_literal, type))
     return true;
 
-  assert(
-    type.is_unsignedbv() || type.is_signedbv()); // for "_x=100", false || true
-
   exprt the_val;
   // extract the value: unsigned
   BigInt z_ext_value = string2integer(the_value);
