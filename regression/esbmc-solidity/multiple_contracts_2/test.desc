@@ -1,4 +1,4 @@
-THOROUGH
+KNOWNBUG
 mul.solast
 --function empty --sol mul.sol
 ^VERIFICATION SUCCESSFUL$
