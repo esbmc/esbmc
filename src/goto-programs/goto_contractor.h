@@ -379,7 +379,7 @@ public:
     this->map = map;
     this->vars = vars;
   }
-  expr_to_ibex_parser()= default;
+  expr_to_ibex_parser() = default;
   ibex::Ctc *parse(irep_container<expr2t> expr)
   {
     return create_contractor_from_expr2t(expr);
@@ -418,7 +418,7 @@ public:
       if(!function_loops.empty())
       {
         vars = new ibex::Variable(CspMap::MAX_VAR);
-        parser = expr_to_ibex_parser(&map,vars);
+        parser = expr_to_ibex_parser(&map, vars);
         log_debug(
           "contractor", "1/4 - Parsing asserts to create CSP Constraints.");
         get_contractors(_goto_functions);
@@ -538,7 +538,6 @@ public:
     vars = new ibex::Variable(CspMap::MAX_VAR);
     map = CspMap();
     parser = expr_to_ibex_parser(&map, vars);
-
   }
   ~interval_analysis_ibex_contractor()
   {
