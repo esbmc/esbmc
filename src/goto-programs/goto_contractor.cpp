@@ -337,7 +337,6 @@ void goto_contractort::goto_contractor_condition(
           map.update_intervals(X_out);
 
           auto goto_target = i_it->get_target();
-          goto_target->location_number;
           goto_target--;
 
           if(goto_target->is_goto()) //tarrget-1 is goto and
