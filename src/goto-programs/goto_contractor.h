@@ -389,7 +389,8 @@ public:
 class goto_contractort : public goto_functions_algorithm
 {
 public:
-  void run_algorithm_2(const namespacet &namespacet, optionst &optionst);
+  void
+  goto_contractor_condition(const namespacet &namespacet, optionst &optionst);
 
   /**
    * This constructor will run the goto-contractor procedure.
@@ -406,10 +407,10 @@ public:
     optionst options)
     : goto_functions_algorithm(true), goto_functions(_goto_functions)
   {
-    if(options.get_bool_option("goto-contractor-algo2"))
+    if(options.get_bool_option("goto-contractor-condition"))
     {
       vars = new ibex::Variable(CspMap::MAX_VAR);
-      run_algorithm_2(ns, options);
+      goto_contractor_condition(ns, options);
     }
     else
     {
@@ -547,7 +548,6 @@ public:
   bool parse_guard(expr2tc &guard)
   {
     auto t_0 = std::chrono::steady_clock::now();
-    //ibex::Ctc *c = create_contractor_from_expr2t(guard);
     ibex::Ctc *c = parser.parse(guard);
     parse_time =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - t_0)
