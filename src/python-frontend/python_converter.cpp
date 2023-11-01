@@ -32,6 +32,13 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Assert", StatementType::ASSERT},
 };
 
+static bool is_relational_op(const std::string &op)
+{
+  return (
+    op == "Eq" || op == "Lt" || op == "LtE" || op == "NotEq" || op == "Gt" ||
+    op == "GtE" || op == "And" || op == "Or");
+}
+
 static StatementType get_statement_type(const nlohmann::json &element)
 {
   auto it = statement_map.find(element["_type"]);
@@ -133,17 +140,6 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
-  std::string op;
-
-  if(element.contains("op"))
-    op = element["op"]["_type"].get<std::string>();
-  else if(element.contains("ops"))
-    op = element["ops"][0]["_type"].get<std::string>();
-
-  assert(!op.empty());
-
-  exprt bin_expr(get_op(op), current_element_type);
-
   exprt lhs;
   if(element.contains("left"))
     lhs = get_expr(element["left"]);
@@ -157,6 +153,19 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     rhs = get_expr(element["comparators"][0]);
   else if(element.contains("value"))
     rhs = get_expr(element["value"]);
+
+  std::string op;
+
+  if(element.contains("op"))
+    op = element["op"]["_type"].get<std::string>();
+  else if(element.contains("ops"))
+    op = element["ops"][0]["_type"].get<std::string>();
+
+  assert(!op.empty());
+  assert(lhs.type() == rhs.type());
+
+  typet type = (is_relational_op(op)) ? bool_type() : lhs.type();
+  exprt bin_expr(get_op(op), type);
 
   bin_expr.copy_to_operands(lhs, rhs);
   return bin_expr;
