@@ -269,7 +269,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     has_prefix(identifier.as_string(), "c:@F@__sync_xor_and_fetch") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_nand_and_fetch"))
   {
-    __builtin_unreachable();
+    // TODO
   }
   else if(
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_add") ||
@@ -352,20 +352,20 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   else if(has_prefix(
             identifier.as_string(), "c:@F@__sync_bool_compare_and_swap"))
   {
-    __builtin_unreachable();
+    // TODO
   }
   else if(has_prefix(
             identifier.as_string(), "c:@F@__sync_val_compare_and_swap"))
   {
-    __builtin_unreachable();
+    // TODO
   }
   else if(has_prefix(identifier.as_string(), "c:@F@__sync_lock_release"))
   {
-    __builtin_unreachable();
+    // TODO
   }
   else if(has_prefix(identifier.as_string(), "c:@F@__sync_lock_test_and_set"))
   {
-    __builtin_unreachable();
+    // TODO
   }
   else if(has_prefix(identifier.as_string(), "c:@F@__atomic_load_n"))
   {
@@ -415,7 +415,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   }
   else if(has_prefix(identifier.as_string(), "c:@F@__atomic_exchange_n"))
   {
-    __builtin_unreachable();
+    // TODO
   }
   else if(has_prefix(identifier.as_string(), "c:@F@__atomic_load"))
   {
@@ -455,17 +455,17 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   }
   else if(has_prefix(identifier.as_string(), "c:@F@__atomic_exchange"))
   {
-    __builtin_unreachable();
+    // TODO
   }
   else if(has_prefix(
             identifier.as_string(), "c:@F@__atomic_compare_exchange_n"))
   {
-    __builtin_unreachable();
+    // TODO
   }
   else if(has_prefix(
             identifier.as_string(), "c:@F@__atomic_compare_exchange_n"))
   {
-    __builtin_unreachable();
+    // TODO
   }
   else if(
     has_prefix(identifier.as_string(), "c:@F@__atomic_add_fetch") ||
@@ -475,7 +475,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     has_prefix(identifier.as_string(), "c:@F@__atomic_or_fetch") ||
     has_prefix(identifier.as_string(), "c:@F@__atomic_nand_fetch"))
   {
-    __builtin_unreachable();
+    // TODO
   }
   else if(
     has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_add") ||
@@ -485,7 +485,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_or") ||
     has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_nand"))
   {
-    __builtin_unreachable();
+    // TODO
   }
 
   return block;
