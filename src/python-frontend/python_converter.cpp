@@ -624,6 +624,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::ASSERT:
     {
+      current_element_type = bool_type();
       exprt test = get_expr(element["test"]);
       code_assertt assert_code;
       assert_code.assertion() = test;
