@@ -10,13 +10,13 @@
 #include <unordered_map>
 
 static const std::unordered_map<std::string, std::string> operator_map = {
-  {"Add", "+"},         {"Sub", "-"},         {"Mult", "*"},
-  {"Div", "/"},         {"Mod", "mod"},       {"BitOr", "bitor"},
-  {"BitAnd", "bitand"}, {"BitXor", "bitxor"}, {"Invert", "bitnot"},
-  {"LShift", "shl"},    {"RShift", "ashr"},   {"USub", "unary-"},
-  {"Eq", "="},          {"Lt", "<"},          {"LtE", "<="},
-  {"Gt", ">"},          {"GtE", ">="},        {"And", "and"},
-  {"Or", "or"},         {"Not", "not"},
+  {"Add", "+"},          {"Sub", "-"},         {"Mult", "*"},
+  {"Div", "/"},          {"Mod", "mod"},       {"BitOr", "bitor"},
+  {"BitAnd", "bitand"},  {"BitXor", "bitxor"}, {"Invert", "bitnot"},
+  {"LShift", "shl"},     {"RShift", "ashr"},   {"USub", "unary-"},
+  {"Eq", "="},           {"Lt", "<"},          {"LtE", "<="},
+  {"NotEq", "notequal"}, {"Gt", ">"},          {"GtE", ">="},
+  {"And", "and"},        {"Or", "or"},         {"Not", "not"},
 };
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
@@ -251,6 +251,26 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if(element.contains("func") && element["_type"] == "Call")
     {
       std::string func_name = element["func"]["id"];
+
+      // Non-determinism
+      auto starts_with = [](const std::string &str, const std::string &prefix) {
+        return str.compare(0, prefix.length(), prefix) == 0;
+      };
+
+      std::string nondet("nondet");
+      if(starts_with(func_name, nondet))
+      {
+        // Function name pattern: nondet_(type). e.g: nondet_bool(), nondet_int()
+        size_t underscore_pos = func_name.find("_");
+        if(underscore_pos != std::string::npos)
+        {
+          std::string type = func_name.substr(underscore_pos + 1);
+          exprt rhs = exprt("sideeffect", get_typet(type));
+          rhs.statement("nondet");
+          return rhs;
+        }
+      }
+
       std::string symbol_id = "py:" + python_filename + "@F@" + func_name;
       symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
 
