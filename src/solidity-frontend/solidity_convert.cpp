@@ -1263,15 +1263,15 @@ bool solidity_convertert::get_expr(
       inits = gen_zero(arr_type);
 
       // populate array
-      int cnt = 0;
+      uint i = 0;
       for(const auto &arg : expr["components"].items())
       {
         exprt init;
         if(get_expr(arg.value(), elem_literal_type, init))
           return true;
 
-        inits.operands().at(cnt) = init;
-        cnt++;
+        inits.operands().at(i) = init;
+        i++;
       }
 
       new_expr = inits;
