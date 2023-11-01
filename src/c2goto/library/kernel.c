@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -58,6 +59,7 @@ void *kmalloc(int size, int flags)
 
   (void)flags; // Ignore flags.
   return __kmalloc(size, flags);
+
 }
 
 void kfree(const void *ptr)

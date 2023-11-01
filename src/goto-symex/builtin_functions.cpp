@@ -1,3 +1,4 @@
+#include "goto_symex.h"
 #include <cassert>
 #include <complex>
 #include <functional>
@@ -103,7 +104,123 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
 
   symex_assign(code_assign2tc(lhs, result), true);
 }
+//kai
+expr2tc goto_symext::symex_kmalloc(const expr2tc &lhs, const sideeffect2t &code)
+{
+  return symex_mem(true, lhs, code);
+}
+expr2tc goto_symext::symex_kmem(
+  const bool is_malloc,
+  const expr2tc &lhs,
+  const sideeffect2t &code)
+{
+  if(is_nil_expr(lhs))
+    return expr2tc(); // ignore
 
+  // size
+  type2tc type = code.alloctype;
+  expr2tc size = code.size;
+  bool size_is_one = false;
+
+  if(is_nil_expr(size))
+    size_is_one = true;
+  else
+  {
+    cur_state->rename(size);
+    BigInt i;
+    if(is_constant_int2t(size) && to_constant_int2t(size).as_ulong() == 1)
+      size_is_one = true;
+  }
+
+  if(is_nil_type(type))
+    type = char_type2();
+
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
+
+  // value
+  symbolt symbol;
+
+  symbol.name = "dynamic_" + i2string(dynamic_counter) +
+                (size_is_one ? "_value" : "_array");
+
+  symbol.id = std::string("symex_dynamic::") + (!is_malloc ? "alloca::" : "") +
+              id2string(symbol.name);
+  symbol.lvalue = true;
+
+  typet renamedtype = ns.follow(migrate_type_back(type));
+  if(size_is_one)
+    symbol.type = renamedtype;
+  else
+  {
+    symbol.type = typet(typet::t_array);
+    symbol.type.subtype() = renamedtype;
+    symbol.type.size(migrate_expr_back(size));
+  }
+
+  symbol.type.dynamic(true);
+
+  symbol.mode = "C";
+
+  new_context.add(symbol);
+
+  type2tc new_type = migrate_type(symbol.type);
+
+  address_of2tc rhs_addrof(get_empty_type(), expr2tc());
+
+  if(size_is_one)
+  {
+    rhs_addrof->type = migrate_type(pointer_typet(symbol.type));
+    rhs_addrof->ptr_obj = symbol2tc(new_type, symbol.id);
+  }
+  else
+  {
+    type2tc subtype = migrate_type(symbol.type.subtype());
+    expr2tc sym = symbol2tc(new_type, symbol.id);
+    expr2tc idx_val = gen_long(size->type, 0L);
+    expr2tc idx = index2tc(subtype, sym, idx_val);
+    rhs_addrof->type = migrate_type(pointer_typet(symbol.type.subtype()));
+    rhs_addrof->ptr_obj = idx;
+  }
+
+  expr2tc rhs = rhs_addrof;
+  expr2tc ptr_rhs = rhs;
+  guardt alloc_guard = cur_state->guard;
+
+  if(!options.get_bool_option("force-malloc-success") && is_malloc)
+  {
+    symbol2tc null_sym(rhs->type, "NULL");
+    sideeffect2tc choice(
+      get_bool_type(),
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::nondet);
+    replace_nondet(choice);
+
+    rhs = if2tc(rhs->type, choice, rhs, null_sym);
+    alloc_guard.add(choice);
+
+    ptr_rhs = rhs;
+  }
+
+  if(rhs->type != lhs->type)
+    rhs = typecast2tc(lhs->type, rhs);
+
+  cur_state->rename(rhs);
+  expr2tc rhs_copy(rhs);
+
+  symex_assign(code_assign2tc(lhs, rhs), true);
+
+  pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
+  track_new_pointer(ptr_obj, new_type);
+
+  dynamic_memory.emplace_back(
+    rhs_copy, alloc_guard, !is_malloc, symbol.name.as_string());
+
+  return rhs_addrof->ptr_obj;
+}
 expr2tc goto_symext::symex_mem(
   const bool is_malloc,
   const expr2tc &lhs,
@@ -336,6 +453,86 @@ void goto_symext::symex_free(const expr2tc &expr)
 
   expr2tc valid_sym = symbol2tc(sym_type, valid_ptr_arr_name);
   expr2tc valid_index_expr = index2tc(get_bool_type(), valid_sym, ptr_obj);
+  expr2tc falsity = gen_false_expr();
+  symex_assign(code_assign2tc(valid_index_expr, falsity), true);
+}
+//kai
+//define symbolic implementation for kfree
+void goto_symext::symex_kfree(const expr2tc &expr)
+{
+  //convert type
+  const code_free2t &code = to_code_free2t(expr);
+
+  //get operand from code object
+  expr2tc tmp = code.operand;
+  //trigger failure callback
+  //there are various mode of dereferencet,e.g.internal
+  dereference(tmp, dereferencet::FREE);
+
+  //create temporary dereference
+  //uint8 type, dereference type
+  tmp = dereference2tc(get_uint8_type(), tmp);
+  //dereference on tmp
+  dereference(tmp, dereferencet::INTERNAL);
+
+  if(!options.get_bool_option("no-pointer-check"))
+  {
+    //get all dynamic objects which are allocated using alloca(allocte on stack)
+    //alloca is dynamic allocation on stack instead of heap
+    std::vector<allocated_obj> allocad;
+    //traverse all dynamic memory
+    //put allocad memory into the vector
+    for(auto const &item : dynamic_memory)
+      if(item.auto_deallocd)
+        allocad.push_back(item);
+
+    //apply pointer checks on internal dereference items
+    for(auto const &item : internal_deref_items)
+    {
+      //get guard
+      guardt g = cur_state->guard;
+
+      g.add(item.guard);
+
+      //get the offset, the purpose is to check if the offset is 0
+      expr2tc offset = item.offset;
+      //check if the offset is 0
+      expr2tc eq = equality2tc(offset, gen_ulong(0));
+      g.guard_expr(eq);
+
+      //claim the assertion, if false, the content wil be reported
+      claim(eq, "Operand of free must have zero pointer offset");
+
+      // Check if we are not freeing an dynamic object allocated using alloca
+      for(auto const &a : allocad)
+      {
+        //get the base object of allocad object
+        expr2tc alloc_obj = get_base_object(a.obj);
+        //get the symbol name of allocad object
+        const irep_idt &id_alloc_obj = to_symbol2t(alloc_obj).thename;
+        //get the symbol name of item object
+        const irep_idt &id_item_obj = to_symbol2t(item.object).thename;
+        // Check if the object allocated with alloca is the same as the one given in the free function
+        if(id_alloc_obj == id_item_obj)
+        {
+          //check if the alloc_obj is equal to item.object
+          //create a new assertion
+          expr2tc noteq = notequal2tc(alloc_obj, item.object);
+          g.guard_expr(noteq);
+          //claim the assertion, if false, the content wil be reported
+          claim(noteq, "dereference failure: invalid pointer freed");
+        }
+      }
+    }
+  }
+  // Clear the alloc bit.
+  type2tc sym_type =
+    type2tc(new array_type2t(get_bool_type(), expr2tc(), true));
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), code.operand);
+  dereference(ptr_obj, dereferencet::READ);
+
+  symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
+  index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
   expr2tc falsity = gen_false_expr();
   symex_assign(code_assign2tc(valid_index_expr, falsity), true);
 }

@@ -213,6 +213,85 @@ void goto_convertt::do_mem(
   t_n->location = location;
 }
 
+//just for testing purpose to keep original code do_mem unchanged
+void goto_convertt::do_kmem(
+  bool is_kmalloc,
+  const exprt &lhs,
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  std::string func = "kmalloc";
+
+  if(lhs.is_nil())
+    return; // does nothing
+
+  locationt location = function.location();
+
+  // get alloc type and size
+  typet alloc_type;
+  exprt alloc_size;
+
+  get_alloc_type(arguments[0], alloc_type, alloc_size);
+
+  if(alloc_size.is_nil())
+    alloc_size = from_integer(1, uint_type());
+
+  if(alloc_type.is_nil())
+    alloc_type = char_type();
+
+  if(alloc_type.id() == "symbol")
+    alloc_type = ns.follow(alloc_type);
+
+  if(alloc_size.type() != uint_type())
+  {
+    alloc_size.make_typecast(uint_type());
+    simplify(alloc_size);
+  }
+
+  // produce new object
+
+  exprt new_expr("sideeffect", lhs.type());
+  new_expr.statement(func);
+  new_expr.copy_to_operands(arguments[0]);
+  new_expr.cmt_size(alloc_size);
+  new_expr.cmt_type(alloc_type);
+  new_expr.location() = location;
+
+  goto_programt::targett t_n = dest.add_instruction(ASSIGN);
+
+  exprt new_assign = code_assignt(lhs, new_expr);
+  expr2tc new_assign_expr;
+  migrate_expr(new_assign, new_assign_expr);
+  t_n->code = new_assign_expr;
+  t_n->location = location;
+}
+//Kai
+void goto_convertt::do_kmalloc(
+  const exprt &lhs,
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  do_mem(true, lhs, function, arguments, dest);
+}
+
+void goto_convertt::do_kfree(
+  const exprt &lhs,
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  // preserve the call
+  codet free_statement("kfree");
+  free_statement.location() = function.location();
+  free_statement.copy_to_operands(arguments[0]);
+
+  goto_programt::targett t_f = dest.add_instruction(OTHER);
+  migrate_expr(free_statement, t_f->code);
+  t_f->location = function.location();
+}
+
 void goto_convertt::do_alloca(
   const exprt &lhs,
   const exprt &function,
@@ -647,6 +726,23 @@ void goto_convertt::do_function_call_symbol(
   }
   else if(base_name == "free")
   {
+    do_free(lhs, function, arguments, dest);
+  }
+  //kai
+  else if(base_name == "kmalloc")
+  {
+    // right now i directly call do_malloc() for debugging
+    // but my question is that, if my kmalloc function implementation calls malloc(size),
+    // then in go to programs we are actually dealing with malloc,e.g,do_malloc() instead
+    // of kmalloc right?
+
+    // do_kmalloc(lhs, function, arguments, dest);
+    do_malloc(lhs, function, arguments, dest);
+  }
+  else if(base_name == "kfree")
+  {
+    // do_kfree(lhs, function, arguments, dest);
+    // right now directly calls free
     do_free(lhs, function, arguments, dest);
   }
   else if(
