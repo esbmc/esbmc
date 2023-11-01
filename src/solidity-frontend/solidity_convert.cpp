@@ -1258,31 +1258,39 @@ bool solidity_convertert::get_expr(
     {
       assert(literal_type != nullptr);
 
-      // get static array type
-      // will apply solidity_gen_typecast
-      typet arr_type;
-      if(get_type_description(
-           literal_type, arr_type)) //expr["typeDescriptions"]
-        return true;
-
       // get elem type
       nlohmann::json elem_literal_type =
         make_array_elementary_type(literal_type);
+
+      // get size
+      exprt size;
+      size = constant_exprt(
+        integer2binary(expr["components"].size(), bv_width(int_type())),
+        integer2string(expr["components"].size()),
+        int_type());
+
+      // get array type
+      typet arr_type;
+      if(get_type_description(literal_type, arr_type))
+        return true;
+
+      // reallocate array size
+      arr_type = array_typet(arr_type.subtype(), size);
 
       // declare static array tuple
       exprt inits;
       inits = gen_zero(arr_type);
 
       // populate array
-      int cnt = 0;
+      uint i = 0;
       for(const auto &arg : expr["components"].items())
       {
         exprt init;
         if(get_expr(arg.value(), elem_literal_type, init))
           return true;
 
-        inits.operands().at(cnt) = init;
-        cnt++;
+        inits.operands().at(i) = init;
+        i++;
       }
 
       new_expr = inits;
