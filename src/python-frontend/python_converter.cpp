@@ -7,6 +7,7 @@
 #include <util/message.h>
 
 #include <fstream>
+#include <regex>
 #include <unordered_map>
 
 static const std::unordered_map<std::string, std::string> operator_map = {
@@ -252,16 +253,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     {
       std::string func_name = element["func"]["id"];
 
-      // Non-determinism
-      auto starts_with = [](const std::string &str, const std::string &prefix) {
-        return str.compare(0, prefix.length(), prefix) == 0;
-      };
+      // Non-determinism functions restricted to basic types supported in Python
+      std::regex pattern(
+        R"(nondet_(int|char|bool|float)|__VERIFIER_nondet_(int|char|bool|float))");
 
-      std::string nondet("nondet");
-      if(starts_with(func_name, nondet))
+      if(std::regex_match(func_name, pattern))
       {
         // Function name pattern: nondet_(type). e.g: nondet_bool(), nondet_int()
-        size_t underscore_pos = func_name.find("_");
+        size_t underscore_pos = func_name.rfind("_");
         if(underscore_pos != std::string::npos)
         {
           std::string type = func_name.substr(underscore_pos + 1);
@@ -274,7 +273,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       std::string symbol_id = "py:" + python_filename + "@F@" + func_name;
       symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
 
-      assert(func_symbol);
+      if(func_symbol == nullptr)
+      {
+        log_error("Undefined function: {}", func_name.c_str());
+        abort();
+      }
 
       code_function_callt call;
       call.location() = func_symbol->location;
