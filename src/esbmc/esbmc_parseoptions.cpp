@@ -1679,7 +1679,7 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_k_induction(goto_functions);
     }
 
-    if(cmdline.isset("goto-contractor") || cmdline.isset("goto-contractor-algo2"))
+    if(cmdline.isset("goto-contractor") || cmdline.isset("goto-contractor-condition"))
     {
 #ifdef ENABLE_GOTO_CONTRACTOR
       goto_contractor(goto_functions,ns, options);

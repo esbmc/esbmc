@@ -6,8 +6,9 @@
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/std_expr.h>
+#ifdef ENABLE_GOTO_CONTRACTOR
 #include <goto-programs/goto_contractor.h>
-
+#endif
 // Let's start with all templates specializations.
 
 template <>
@@ -1121,20 +1122,20 @@ void interval_domaint::assume(const expr2tc &cond)
   }
 #endif
 
+#ifdef ENABLE_GOTO_CONTRACTOR
+  /// use ibex contractors to reduce the intervals for interval analysis
   if(enable_ibex_contractor)
   {
     interval_analysis_ibex_contractor contractor;
     if(contractor.parse_guard(new_cond))
     {
       contractor.maps_to_domains(int_map, real_map);
-      //contractor.modularize_intervals();
       contractor.apply_contractor();
-      contractor.dump();
       new_cond = contractor.result_of_outer(new_cond);
       simplify(new_cond);
     }
   }
-
+#endif
 
   assume_rec(new_cond, false);
 }
@@ -1235,6 +1236,7 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
     else if(is_floatbv_type(cond) && enable_real_intervals)
       apply_assume_symbol_truth<real_intervalt>(to_symbol2t(cond), negation);
   }
+  //added in case "cond = false" which happens when the ibex contractor results in empty set.
   else if(is_constant_bool2t(cond))
   {
     if((negation && is_true(cond)) || (!negation && is_false(cond)))

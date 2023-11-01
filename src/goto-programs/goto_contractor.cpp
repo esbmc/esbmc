@@ -19,8 +19,7 @@ void goto_contractort::get_contractors(goto_functionst goto_functions)
   {
     if(ins.is_assert())
     {
-      contractors.add_contractor(
-        parser.parse(ins.guard), ins.location_number);
+      contractors.add_contractor(parser.parse(ins.guard), ins.location_number);
     }
     else if(
       ins.is_function_call() &&
@@ -28,8 +27,7 @@ void goto_contractort::get_contractors(goto_functionst goto_functions)
       to_symbol2t(to_code_function_call2t(ins.code).function)
           .get_symbol_name() == "c:@F@__VERIFIER_assert")
       contractors.add_contractor(
-        parser.parse(
-          to_code_function_call2t(ins.code).operands[0]),
+        parser.parse(to_code_function_call2t(ins.code).operands[0]),
         ins.location_number);
   }
 }
@@ -39,15 +37,11 @@ void goto_contractort::get_intervals(
   const namespacet &ns)
 {
   ait<interval_domaint> interval_analysis;
-
   interval_analysis(goto_functions, ns);
 
   std::ostringstream oss;
   interval_analysis.output(goto_functions, oss);
 
-  std::ostringstream oss2;
-
-  //Forall_goto_functions(f_it, goto_functions)
   auto f_it = goto_functions.function_map.find("c:@F@main");
   {
     Forall_goto_program_instructions(i_it, f_it->second.body)
@@ -70,9 +64,9 @@ void goto_contractort::get_intervals(
             auto ub = new_interval.get_upper().to_int64();
             auto i = it->second.getInterval();
 
-            std::cout << "at location: " << i_it->location_number
-                      << " Var: " << var_name << " this out " << i
-                      << " should be: " << new_interval << std::endl;
+            oss << "at location: " << i_it->location_number
+                << " Var: " << var_name << " this out " << i
+                << " should be: " << new_interval << std::endl;
 
             if(new_interval.lower && (isinf(i.lb()) || i.lb() > lb))
               map.update_lb_interval(lb, var_name);
@@ -81,10 +75,10 @@ void goto_contractort::get_intervals(
           }
           it++;
         }
+        log_debug("contractor", "{}", oss.str());
       }
     }
   }
-  // instrument_intervals(interval_analysis, f_it->second);
   goto_functions.update();
 }
 
@@ -239,12 +233,14 @@ void goto_contractort::insert_assume_at(
   goto_functiont goto_function,
   std::_List_iterator<goto_programt::instructiont> instruction)
 {
+  /// Here we build an assume instruction with a conjunction of multiple conditions.
+  /// We start with a true expression and add other conditions with and2tc
+  /// eventually, we will have somthing like: true and x>0 and x<10
   expr2tc cond = gen_true_expr();
   for(auto const &var : map.var_map)
   {
     //testing with updating both bounds after reduction.
     auto X = var.second.getSymbol();
-    //if(var.second.isIntervalChanged())
     {
       if(var.second.getInterval().is_empty())
         continue;
@@ -283,12 +279,14 @@ void goto_contractort::insert_assume_at(
   instruction->targets.clear();
 }
 
-void goto_contractort::run_algorithm_2(const namespacet &ns, optionst &options)
+void goto_contractort::goto_contractor_condition(
+  const namespacet &namespacet,
+  optionst &optionst)
 {
   ait<interval_domaint> interval_analysis;
 
-  interval_domaint::set_options(options);
-  interval_analysis(goto_functions, ns);
+  interval_domaint::set_options(optionst);
+  interval_analysis(goto_functions, namespacet);
   std::ostringstream oss;
 
   Forall_goto_functions(f_it, goto_functions)
@@ -313,7 +311,7 @@ void goto_contractort::run_algorithm_2(const namespacet &ns, optionst &options)
             continue;
           }
 
-          interval_analysis(goto_functions, ns);
+          interval_analysis(goto_functions, namespacet);
           auto interval_map = interval_analysis[i_it].get_int_map();
           auto it = interval_map.begin();
 
@@ -383,7 +381,7 @@ void goto_contractort::run_algorithm_2(const namespacet &ns, optionst &options)
         //first create the contractor to populate cspmap with the variables.
         vars = new ibex::Variable(CspMap::MAX_VAR);
         map = CspMap();
-        parser = expr_to_ibex_parser(&map,vars);
+        parser = expr_to_ibex_parser(&map, vars);
         Contractor contractor(parser.parse(i_it->guard), 0);
         auto out = contractor.get_outer();
         if(out == nullptr)
@@ -392,7 +390,7 @@ void goto_contractort::run_algorithm_2(const namespacet &ns, optionst &options)
         }
 
         //get intervals and convert them to ibex intervals by updating the map
-        interval_analysis(goto_functions, ns);
+        interval_analysis(goto_functions, namespacet);
         auto interval_map = interval_analysis[i_it].get_int_map();
         auto it = interval_map.begin();
         while(it != interval_map.end())
@@ -435,9 +433,6 @@ vart::vart(const string &varName, const expr2tc &symbol, const size_t &index)
   this->symbol = symbol;
   this->index = index;
   interval_changed = false;
-  std::ostringstream oss;
-  oss << "new variable created with name: " << varName;
-  log_debug("contractor", "{}", oss.str());
 }
 
 void vart::setInterval(const ibex::Interval &interval)
