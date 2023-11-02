@@ -894,7 +894,9 @@ smt_convt::resultt bmct::multi_property_check(
     //TODO: show unreached claims
 
     if(total_instance != 0)
-      log_result("Assertion Instances Coverage: {}%", tracked_instance * 100.0 / total_instance);
+      log_result(
+        "Assertion Instances Coverage: {}%",
+        tracked_instance * 100.0 / total_instance);
     else
       log_result("Assertion Instances Coverage: 0%");
   }
