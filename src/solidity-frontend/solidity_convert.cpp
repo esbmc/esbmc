@@ -70,6 +70,7 @@ bool solidity_convertert::convert()
 
       // pattern-based verification
       // disable if it's in contract mode
+      // otherwise leads to error. To be fixed.
       if(sol_func == "")
         continue;
 
@@ -80,7 +81,7 @@ bool solidity_convertert::convert()
         return true; // 'true' indicates something goes wrong.
     }
   }
-  assert(found_contract_def && "No contracts found in the program.");
+  assert(found_contract_def && "No contracts were found in the program.");
 
   // reasoning-based verification
   index = 0;
@@ -111,6 +112,8 @@ bool solidity_convertert::convert()
       if(move_functions_to_main(current_contractName))
         return true;
     }
+
+    // reset
     current_contractName = "";
   }
 
@@ -1000,7 +1003,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
      * !Always check if the expression is a Literal before calling get_expr
      * !Unless you are 100% sure it will not be a constant
      * 
-     * This function is called throught two approach:
+     * This function is called throught two paths:
      * 1. get_decl => get_var_decl => get_expr
      * 2. get_decl => get_function_definition => get_statement => get_expr
      * 
@@ -1305,12 +1308,10 @@ bool solidity_convertert::get_expr(
       return true;
 
     // 2. Get type
-    // Need to "decrypt" the typeDescriptions and manually make a typeDescription
-    nlohmann::json callee_rtn_type =
-      make_callexpr_return_type(callee_expr_json["typeDescriptions"]);
-    typet type;
-    if(get_type_description(callee_rtn_type, type))
-      return true;
+    // extract from the return_type
+    assert(callee_expr.is_symbol() && callee_expr.type().is_code());
+    typet type = to_code_type(callee_expr.type()).return_type();
+    log_status("{}", type.type().to_string());
 
     side_effect_expr_function_callt call;
     call.function() = callee_expr;
@@ -3386,73 +3387,6 @@ nlohmann::json solidity_convertert::make_return_type_from_typet(typet type)
   return adjusted_expr;
 }
 
-nlohmann::json solidity_convertert::make_callexpr_return_type(
-  const nlohmann::json &type_descrpt)
-{
-  nlohmann::json adjusted_expr;
-
-  if(
-    type_descrpt["typeString"].get<std::string>().find("function") !=
-    std::string::npos)
-  {
-    if(
-      type_descrpt["typeString"].get<std::string>().find("returns") !=
-      std::string::npos)
-    {
-      // e.g. for typeString like:
-      // "typeString": "function () returns (uint8)"
-      // use regex to capture the type and convert it to shorter form.
-      std::smatch matches;
-      std::regex e("returns \\((\\w+)\\)");
-      std::string typeString = type_descrpt["typeString"].get<std::string>();
-      if(std::regex_search(typeString, matches, e))
-      {
-        auto j2 = nlohmann::json::parse(
-          R"({
-              "typeIdentifier": "t_)" +
-          matches[1].str() + R"(",
-              "typeString": ")" +
-          matches[1].str() + R"("
-            })");
-        adjusted_expr = j2;
-      }
-      else if(
-        type_descrpt["typeString"].get<std::string>().find(
-          "returns (contract") != std::string::npos)
-      {
-        // TODO: Fix me. We treat contract as void
-        auto j2 = R"(
-              {
-                "nodeType": "ParameterList",
-                "parameters": []
-              }
-            )"_json;
-
-        adjusted_expr = j2;
-      }
-      else
-        assert(!"Unsupported types in callee's return in CallExpr");
-    }
-    else
-    {
-      // Since Solidity allows multiple parameters and multiple returns for functions,
-      // we need to use "parameters" in conjunction with "returnParameters" to convert.
-      // the following configuration will lead to "void".
-      auto j2 = R"(
-              {
-                "nodeType": "ParameterList",
-                "parameters": []
-              }
-            )"_json;
-      adjusted_expr = j2;
-    }
-  }
-  else
-    assert(!"Unsupported pointee - currently we only support the semantics of function to pointer decay");
-
-  return adjusted_expr;
-}
-
 nlohmann::json solidity_convertert::make_array_elementary_type(
   const nlohmann::json &type_descrpt)
 {
@@ -3473,6 +3407,8 @@ nlohmann::json solidity_convertert::make_array_elementary_type(
   //     "typeIdentifier": "t_uint256",
   //     "typeString": "uint256"
   //     }
+
+  //! current implement does not consider Multi-Dimensional Arrays
 
   // 1. declare an empty json node
   nlohmann::json elementary_type;
