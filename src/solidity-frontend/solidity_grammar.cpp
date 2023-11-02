@@ -132,10 +132,13 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
 TypeNameT get_type_name_t(const nlohmann::json &type_name)
 {
   // Solidity AST node has duplicate descrptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
+
   if(type_name.contains("typeString"))
   {
     // for AST node that contains ["typeName"]["typeDescriptions"]
-    std::string typeString = type_name["typeString"].get<std::string>();
+    const std::string typeString = type_name["typeString"].get<std::string>();
+    const std::string typeIdentifier =
+      type_name["typeIdentifier"].get<std::string>();
 
     // we must first handle tuple
     // otherwise we might parse tuple(literal_string, literal_string)
@@ -144,9 +147,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return TupleTypeName;
     }
-    else if(
-      type_name["typeIdentifier"].get<std::string>().find("t_array$") !=
-      std::string::npos)
+    else if(typeIdentifier.find("t_array$") != std::string::npos)
     {
       // Solidity's array type description is like:
       //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
@@ -159,9 +160,14 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       //   Storage Array
       //   Memory Array
 
-      if(
-        type_name["typeIdentifier"].get<std::string>().find("$dyn") !=
-        std::string::npos)
+      // Multi-Dimensional Arrays
+      if(typeIdentifier.find("t_array$_t_array$") != std::string::npos)
+      {
+        log_error("Multi-Dimensional Arrays are not supported.");
+        abort();
+      }
+
+      if(typeIdentifier.find("$dyn") != std::string::npos)
         return DynArrayTypeName;
 
       return ArrayTypeName;
