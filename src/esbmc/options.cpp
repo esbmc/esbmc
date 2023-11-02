@@ -339,7 +339,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "enable contractor-based interval refinements on goto level on asserts"},
     {"goto-contractor-condition",
      NULL,
-     "enable contractor-based interval refinements on goto level on conditions"},
+     "enable contractor-based interval refinements on goto level on "
+     "conditions"},
     {"k-induction-parallel",
      NULL,
      "prove by k-induction, running each step on a separate process"},
