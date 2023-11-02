@@ -208,8 +208,6 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       return PointerArrayToPtr;
     }
     else if(
-<<<<<<< HEAD
-=======
       type_name["typeIdentifier"].get<std::string>().find("t_array$") !=
       std::string::npos)
     {
@@ -232,7 +230,6 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       return ArrayTypeName;
     }
     else if(
->>>>>>> fcb15bae8 (fix array)
       type_name["typeIdentifier"].get<std::string>().find("t_contract") !=
       std::string::npos)
     {
