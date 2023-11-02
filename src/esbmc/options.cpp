@@ -184,8 +184,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"unroll-loops", NULL, ""},
     {"no-slice", NULL, "do not remove unused equations"},
     {"multi-fail-fast",
-     NULL,
-     "stops after first VCC violation in multi property mode"},
+     boost::program_options::value<int>()->value_name("n"),
+     "stops after first n VCC violation found in multi property mode"},
     {"no-slice-name",
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "name"),
@@ -478,7 +478,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"goto-coverage",
      NULL,
      "this activates --make-assert-false and --multi-property and "
-     "deactivates --keep-verified-claims"},
+     "deactivates --keep-verified-claims, and "
+     "shows the coverage of assertion instances"},
     {"goto-coverage-claims",
      NULL,
      "enable goto-coverage and shows all reached claims"}}},

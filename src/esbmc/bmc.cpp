@@ -721,6 +721,9 @@ smt_convt::resultt bmct::multi_property_check(
   std::unordered_multiset<std::string> reached_mul_claims;
   bool is_goto_cov = options.get_bool_option("goto-coverage") ||
                      options.get_bool_option("goto-coverage-claims");
+  // For multi-fail-fast
+  const std::string fail_fast = options.get_option("multi-fail-fast");
+  int counter = 0;
 
   // TODO: This is the place to check a cache
   for(size_t i = 1; i <= remaining_claims; i++)
@@ -746,7 +749,20 @@ smt_convt::resultt bmct::multi_property_check(
                        &reached_claims,
                        &reached_mul_claims,
                        &total_instance,
-                       &is_goto_cov](const size_t &i) {
+                       &is_goto_cov,
+                       &fail_fast,
+                       &counter](const size_t &i) {
+    //"multi-fail-fast n": stop after first n SATs found.
+    if(!fail_fast.empty() && counter >= stoi(fail_fast))
+    {
+      if(stoi(fail_fast) < 0)
+      {
+        log_error("the value of multi-fail-fast should be positive!");
+        abort();
+      }
+      return;
+    }
+
     // Since this is just a copy, we probably don't need a lock
     auto local_eq = std::make_shared<symex_target_equationt>(*eq);
 
@@ -770,94 +786,81 @@ smt_convt::resultt bmct::multi_property_check(
 
     smt_convt::resultt result = runtime_solver->dec_solve();
 
-    const bool fail_fast = options.get_bool_option("multi-fail-fast");
     // This try-catch is mainly for fail-fast.
-    //?TODO: "multi-fail-fast n": stop after first n SATs found.
-    try
+
+    if(result == smt_convt::P_SATISFIABLE)
     {
-      if(result == smt_convt::P_SATISFIABLE)
+      bool is_compact_trace = true;
+      if(
+        options.get_bool_option("no-slice") &&
+        !options.get_bool_option("compact-trace"))
+        is_compact_trace = false;
+
+      goto_tracet goto_trace;
+      build_goto_trace(local_eq, runtime_solver, goto_trace, is_compact_trace);
+
+      // Store the comment and location of the assertion
+      // to avoid double verifying the claims that are already verified
+      std::string cmt_loc = "";
+
+      for(const auto &step : goto_trace.steps)
+        if(step.type == goto_trace_stept::ASSERT)
+        {
+          // since we only handle one claim at a time
+          // we will/should not overwrite the loc
+          assert(cmt_loc == "");
+          std::string loc;
+          if(step.pc->location.is_nil())
+            loc = "nil";
+          else
+            loc = step.pc->location.as_string();
+
+          // we use the "comment + location" to distinguish each claim
+          // e.g. "Claim x: ... location line y"
+          // x is unique. However, the unwinding asserts do not have these Claim x prefixes.
+          // Therefore we add the location behind, as the line number y for each unwinding assert is different.
+          cmt_loc = step.comment + "\t" + loc;
+        }
+
+      bool is_unverified = false;
+
+      if(is_goto_cov)
       {
-        if(fail_fast)
-        {
-          throw 0;
-        }
-
-        bool is_compact_trace = true;
-        if(
-          options.get_bool_option("no-slice") &&
-          !options.get_bool_option("compact-trace"))
-          is_compact_trace = false;
-
-        goto_tracet goto_trace;
-        build_goto_trace(
-          local_eq, runtime_solver, goto_trace, is_compact_trace);
-
-        // Store the comment and location of the assertion
-        // to avoid double verifying the claims that are already verified
-        std::string cmt_loc = "";
-
-        for(const auto &step : goto_trace.steps)
-          if(step.type == goto_trace_stept::ASSERT)
-          {
-            // since we only handle one claim at a time
-            // we will/should not overwrite the loc
-            assert(cmt_loc == "");
-            std::string loc;
-            if(step.pc->location.is_nil())
-              loc = "nil";
-            else
-              loc = step.pc->location.as_string();
-
-            // we use the "comment + location" to distinguish each claim
-            // - locaiton: ideally, the loc is enough for distinguishuing claims.
-            // - comment: we add a claim number prefix in comment. Note that the unwinding assertions which are not processed by goto-cov.
-            // Another reason is that we need to display this info in goto-coverage-claims
-
-            cmt_loc = step.comment + "\t" + loc;
-          }
-
-        bool is_unverified = false;
-
-        if(is_goto_cov)
-        {
-          reached_mul_claims.emplace(cmt_loc);
-          is_unverified = true;
-        }
-        else
-        {
-          // the ins is true if the element was actually inserted
-          auto [it, ins] = reached_claims.emplace(cmt_loc);
-          is_unverified = ins;
-        }
-
-        if(is_unverified || options.get_bool_option("keep-verified-claims"))
-        {
-          std::string output_file = options.get_option("cex-output");
-          if(output_file != "")
-          {
-            std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
-            show_goto_trace(out, ns, goto_trace);
-          }
-          std::ostringstream oss;
-          log_fail("\n[Counterexample]\n");
-          show_goto_trace(oss, ns, goto_trace);
-          log_result("{}", oss.str());
-          final_result = result;
-        }
-        else
-        {
-          // we should not be here if "keep-verified-claims" is enabled
-          log_status("\nFound verified claim. Skipping...\n");
-
-          //TODO: this can still be annoying when we unind for many times
-          // e.g. '--unwind 100' will show 1 counterexample and 99 'skip's
-          // Maybe we should use log_debug instead, both in slicer.run and multi_property_check
-        }
+        reached_mul_claims.emplace(cmt_loc);
+        is_unverified = true;
       }
-    }
-    catch(...)
-    {
-      log_debug("multi-property", "Failing Fast");
+      else
+      {
+        // the ins is true if the element was actually inserted
+        auto [it, ins] = reached_claims.emplace(cmt_loc);
+        is_unverified = ins;
+      }
+
+      if(is_unverified || options.get_bool_option("keep-verified-claims"))
+      {
+        std::string output_file = options.get_option("cex-output");
+        if(output_file != "")
+        {
+          std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
+          show_goto_trace(out, ns, goto_trace);
+        }
+        std::ostringstream oss;
+        log_fail("\n[Counterexample]\n");
+        show_goto_trace(oss, ns, goto_trace);
+        log_result("{}", oss.str());
+        final_result = result;
+        // fail-fast-counter
+        counter++;
+      }
+      else
+      {
+        // we should not be here if "keep-verified-claims" is enabled
+        log_status("\nFound verified claim. Skipping...\n");
+
+        //TODO: this can still be annoying when we unind for many times
+        // e.g. '--unwind 100' will show 1 counterexample and 99 'skip's
+        // Maybe we should use log_debug instead, both in slicer.run and multi_property_check
+      }
     }
   };
 
@@ -872,6 +875,7 @@ smt_convt::resultt bmct::multi_property_check(
     if(total)
     {
       log_success("\n[Coverage]\n");
+      // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
       log_result("Total Asserts: {}", total);
       log_result("Total Assertion Instances: {}", total_instance);
     }
@@ -890,9 +894,9 @@ smt_convt::resultt bmct::multi_property_check(
     //TODO: show unreached claims
 
     if(total_instance != 0)
-      log_result("Coverage: {}%", tracked_instance * 100.0 / total_instance);
+      log_result("Assertion Instances Coverage: {}%", tracked_instance * 100.0 / total_instance);
     else
-      log_result("Coverage: 0%");
+      log_result("Assertion Instances Coverage: 0%");
   }
 
   return final_result;
