@@ -1352,11 +1352,13 @@ bool solidity_convertert::get_expr(
     if(t.get("#sol_type").as_string().find("BYTES") != std::string::npos)
     {
       // this means we are dealing with bytes type
-      // jump out if it's "bytes[]" or "bytesN[]" array
+      // jump out if it's "bytes[]" or "bytesN[]" or "func()[]"
       SolidityGrammar::TypeNameT tname = SolidityGrammar::get_type_name_t(
         expr["baseExpression"]["typeDescriptions"]);
-      if(!(tname == SolidityGrammar::ArrayTypeName ||
-           tname == SolidityGrammar::DynArrayTypeName))
+      if(
+        !(tname == SolidityGrammar::ArrayTypeName ||
+          tname == SolidityGrammar::DynArrayTypeName) &&
+        expr["baseExpression"].contains("referencedDeclaration"))
       {
         // e.g.
         //    bytes3 x = 0x123456
@@ -2854,7 +2856,7 @@ bool solidity_convertert::get_parameter_list(
       type_name["parameters"].size() ==
       1); // TODO: Fix me! assuming one return parameter
     const nlohmann::json &rtn_type =
-      type_name["parameters"].at(0)["typeName"]["typeDescriptions"];
+      type_name["parameters"].at(0)["typeDescriptions"];
     return get_type_description(rtn_type, new_type);
 
     break;

@@ -223,7 +223,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
   }
   else
   {
-    // for AST node that contains ["typeDescriptions"] only
+    // for AST node that does not contain ["typeDescriptions"] only
+    // function returnParameters
     if(type_name["nodeType"] == "ParameterList")
     {
       return ParameterList;
