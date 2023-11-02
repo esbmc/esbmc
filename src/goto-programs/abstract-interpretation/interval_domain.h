@@ -14,7 +14,6 @@
 #include <util/threeval.h>
 #include <boost/multiprecision/cpp_bin_float.hpp>
 
-
 typedef interval_templatet<BigInt> integer_intervalt;
 using real_intervalt =
   interval_templatet<boost::multiprecision::cpp_bin_float_100>;
