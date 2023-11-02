@@ -27,6 +27,7 @@ private:
   exprt get_binary_operator_expr(const nlohmann::json &element);
   exprt get_logical_operator_expr(const nlohmann::json &element);
   exprt get_conditional_stm(const nlohmann::json &ast_node);
+  exprt get_function_call(const nlohmann::json &ast_block);
   exprt get_block(const nlohmann::json &ast_block);
 
   const nlohmann::json find_var_decl(const std::string &id);
