@@ -1,0 +1,4 @@
+THOROUGH
+inheritance.solast
+--function test_inheritance --sol inheritance.sol
+^VERIFICATION FAILED$
