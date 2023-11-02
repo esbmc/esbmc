@@ -290,8 +290,7 @@ bool solidity_convertert::get_var_decl(
   // For state var decl, we look for "value".
   // For local var decl, we look for "initialValue"
   bool has_init =
-    (ast_node.contains("value") || ast_node.contains("initialValue")) &&
-    !dyn_array;
+    (ast_node.contains("value") || ast_node.contains("initialValue"));
   if(symbol.static_lifetime && !symbol.is_extern && !has_init)
   {
     symbol.value = gen_zero(t, true);
@@ -309,29 +308,7 @@ bool solidity_convertert::get_var_decl(
   {
     nlohmann::json init_value =
       is_state_var ? ast_node["value"] : ast_node["initialValue"];
-
-    nlohmann::json literal_type = nullptr;
-
-    auto expr_type = SolidityGrammar::get_expression_t(init_value);
-    bool expr_is_literal = expr_type == SolidityGrammar::Literal;
-    bool expr_is_un_op = expr_type == SolidityGrammar::UnaryOperatorClass;
-
-    auto subexpr = init_value["subExpression"];
-    bool subexpr_is_literal = subexpr == nullptr
-                                ? false
-                                : SolidityGrammar::get_expression_t(subexpr) ==
-                                    SolidityGrammar::Literal;
-    if(expr_is_literal || (expr_is_un_op && subexpr_is_literal))
-      // e.g. x = 1; x = -1; x = ~1;
-      literal_type = ast_node["typeDescriptions"];
-    else if(init_value.contains("isInlineArray") && init_value["isInlineArray"])
-    {
-      // TODO: make a function to convert inline array initialisation to index access assignment.
-
-      // so instead of using init_value["typeDescriptions"];
-      // make_array_elementary_type was called later
-      literal_type = ast_node["typeName"]["typeDescriptions"];
-    }
+    nlohmann::json literal_type = ast_node["typeDescriptions"];
 
     exprt val;
     if(get_expr(init_value, literal_type, val))
@@ -1374,34 +1351,41 @@ bool solidity_convertert::get_expr(
     // for BYTESN, where the index access is read-only
     if(t.get("#sol_type").as_string().find("BYTES") != std::string::npos)
     {
-      // e.g.
-      //    bytes3 x = 0x123456
-      //    bytes1 y = x[0]; // 0x12
-      //    bytes1 z = x[1]; // 0x34
-      // which equals to
-      //    bytes1 z = bswap(x) >> 1 & 0xff
-      // for bytes32 x = "test";
-      //    x[10] == 0x00 due to the padding
+      // this means we are dealing with bytes type
+      // jump out if it's "bytes[]" or "bytesN[]" array
+      SolidityGrammar::TypeNameT tname = SolidityGrammar::get_type_name_t(
+        expr["baseExpression"]["typeDescriptions"]);
+      if(!(tname == SolidityGrammar::ArrayTypeName ||
+           tname == SolidityGrammar::DynArrayTypeName))
+      {
+        // e.g.
+        //    bytes3 x = 0x123456
+        //    bytes1 y = x[0]; // 0x12
+        //    bytes1 z = x[1]; // 0x34
+        // which equals to
+        //    bytes1 z = bswap(x) >> 1 & 0xff
+        // for bytes32 x = "test";
+        //    x[10] == 0x00 due to the padding
+        exprt src_val, src_offset, bswap, bexpr;
 
-      exprt src_val, src_offset, bswap, bexpr;
+        const nlohmann::json &decl = find_decl_ref(
+          expr["baseExpression"]["referencedDeclaration"].get<int>());
+        if(get_var_decl_ref(decl, src_val))
+          return true;
 
-      const nlohmann::json &decl = find_decl_ref(
-        expr["baseExpression"]["referencedDeclaration"].get<int>());
-      if(get_var_decl_ref(decl, src_val))
-        return true;
+        if(get_expr(
+             expr["indexExpression"], expr["typeDescriptions"], src_offset))
+          return true;
 
-      if(get_expr(
-           expr["indexExpression"], expr["typeDescriptions"], src_offset))
-        return true;
+        // extract particular byte based on idx (offset)
+        bexpr = exprt("byte_extract_big_endian", src_val.type());
+        bexpr.copy_to_operands(src_val, src_offset);
 
-      // extract particular byte based on idx (offset)
-      bexpr = exprt("byte_extract_big_endian", src_val.type());
-      bexpr.copy_to_operands(src_val, src_offset);
+        solidity_gen_typecast(ns, bexpr, unsignedbv_typet(8));
 
-      solidity_gen_typecast(ns, bexpr, unsignedbv_typet(8));
-
-      new_expr = bexpr;
-      break;
+        new_expr = bexpr;
+        break;
+      }
     }
 
     // 2. get the decl ref of the array
@@ -1435,27 +1419,50 @@ bool solidity_convertert::get_expr(
   {
     // 1. new dynamic array, e.g.
     //    uint[] memory a = new uint[](7);
-    // 2. new object, e.g.
+    // 2. new bytes array e.g.
+    //    bytes memory b = new bytes(7)
+    // 3. new object, e.g.
     //    Base x = new Base(1, 2);
-
-    // case 1
-    // e.g.
-    //    a = new uint[](7)
-    // convert to
-    //    uint y[7] = {0,0,0,0,0,0,0};
-    //    a = y;
+    ;
     nlohmann::json callee_expr_json = expr["expression"];
     if(callee_expr_json.contains("typeName"))
     {
+      // case 1
+      // e.g.
+      //    a = new uint[](7)
+      // convert to
+      //    uint y[7] = {0,0,0,0,0,0,0};
+      //    a = y;
       if(is_dyn_array(callee_expr_json["typeName"]["typeDescriptions"]))
       {
         if(get_empty_array_ref(expr, new_expr))
           return true;
         break;
       }
+      //case 2:
+      // the contract/constructor name cannot be "bytes"
+      if(
+        callee_expr_json["typeName"]["typeDescriptions"]["typeString"]
+          .get<std::string>() == "bytes")
+      {
+        // populate 0x00 to bytes array
+        // same process in case SolidityGrammar::ExpressionT::Literal
+        assert(expr.contains("arguments") && expr["arguments"].size() == 1);
+
+        int byte_size = stoi(expr["arguments"][0]["value"].get<std::string>());
+        std::string hex_val = "";
+
+        for(int i = 0; i < byte_size; i++)
+          hex_val += "00";
+        hex_val.resize(byte_size * 2);
+
+        if(convert_hex_literal(hex_val, new_expr, byte_size * 8))
+          return true;
+        break;
+      }
     }
 
-    // case 2
+    // case 3
     // first, call the constructor
     if(get_constructor_call(expr, new_expr))
       return true;
@@ -3756,12 +3763,11 @@ bool solidity_convertert::get_empty_array_ref(
   nlohmann::json callee_arg_json = expr["arguments"][0];
 
   // get unique label
+  // e.g. "c:@C@BASE@array#14"
   std::string label = std::to_string(callee_expr_json["id"].get<int>());
   std::string name, id;
-  name = "array@" + label;
-  id = "c:" + get_modulename_from_path(absolute_path) + ".solast" + "@" +
-       std::to_string(445) + "@" + "F" + "@" + current_functionName + "@" +
-       name;
+  name = "array#" + label;
+  id = "c:@C@" + current_contractName + "@" + name;
 
   // Get Location
   locationt location_begin;
@@ -3788,21 +3794,24 @@ bool solidity_convertert::get_empty_array_ref(
   // 3. declare array
   typet arr_type = array_typet(elem_type, size);
 
-  // 4. poplate default value
-  exprt inits;
-  inits = gen_zero(arr_type);
-
   // Get Symbol
   symbolt symbol;
   get_default_symbol(
-    symbol, debug_modulename, inits.type(), name, id, location_begin);
+    symbol, debug_modulename, arr_type, name, id, location_begin);
 
   symbol.lvalue = true;
-  symbol.static_lifetime = false;
-  symbol.file_local = true;
-  symbol.is_extern = false;
+  symbol.static_lifetime = true;
+  symbol.file_local = false;
+  symbol.is_extern = true;
 
   symbolt &added_symbol = *move_symbol_to_context(symbol);
+
+  // Poplulate default value
+  if(size.value().as_string() != "" && size.value().as_string() != "0")
+  {
+    added_symbol.value = gen_zero(arr_type);
+    added_symbol.value.zero_initializer(true);
+  }
 
   new_expr = symbol_expr(added_symbol);
   return false;

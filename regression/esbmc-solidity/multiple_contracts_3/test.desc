@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 mul.solast
 --function testInheritance --sol mul.sol
 ^VERIFICATION FAILED$
