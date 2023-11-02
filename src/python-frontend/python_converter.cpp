@@ -216,13 +216,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     {
       // Function name pattern: nondet_(type). e.g: nondet_bool(), nondet_int()
       size_t underscore_pos = func_name.rfind("_");
-      if(underscore_pos != std::string::npos)
-      {
-        std::string type = func_name.substr(underscore_pos + 1);
-        exprt rhs = exprt("sideeffect", get_typet(type));
-        rhs.statement("nondet");
-        return rhs;
-      }
+      std::string type = func_name.substr(underscore_pos + 1);
+      exprt rhs = exprt("sideeffect", get_typet(type));
+      rhs.statement("nondet");
+      return rhs;
     }
 
     locationt location = get_location_from_decl(element);
