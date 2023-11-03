@@ -65,10 +65,6 @@
     <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Hardness.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
   </tasks>
-  <tasks name="ReachSafety-Fuzzle">
-    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Fuzzle.set</includesfile>
-    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
-  </tasks>
 
   <tasks name="ConcurrencySafety-Main">
     <includesfile>$HOME/sv-benchmarks/c/ConcurrencySafety-Main.set</includesfile>
@@ -77,6 +73,14 @@
 
   <tasks name="SoftwareSystems-AWS-C-Common-ReachSafety">
     <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-AWS-C-Common-ReachSafety.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
+  <tasks name="SoftwareSystems-BusyBox-ReachSafety">
+    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-BusyBox-ReachSafety.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
+  <tasks name="SoftwareSystems-coreutils-ReachSafety">
+    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-coreutils-ReachSafety.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
   </tasks>
   <tasks name="SoftwareSystems-DeviceDriversLinux64-ReachSafety">
@@ -140,6 +144,10 @@
     <propertyfile>$HOME/sv-benchmarks/c/properties/valid-memsafety.prp</propertyfile>
   </tasks>
 
+  <tasks name="SoftwareSystems-coreutils-MemSafety">
+    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-coreutils-MemSafety.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/valid-memsafety.prp</propertyfile>
+  </tasks>
   <tasks name="SoftwareSystems-coreutils-MemSafety">
     <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-coreutils-MemSafety.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/valid-memsafety.prp</propertyfile>
