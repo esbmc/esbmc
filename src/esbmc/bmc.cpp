@@ -723,7 +723,14 @@ smt_convt::resultt bmct::multi_property_check(
                      options.get_bool_option("goto-coverage-claims");
   // For multi-fail-fast
   const std::string fail_fast = options.get_option("multi-fail-fast");
-  int counter = 0;
+  const bool is_fail_fast = !fail_fast.empty() ? true : false;
+  const int fail_fast_limit = is_fail_fast ? stoi(fail_fast) : 0;
+  int fail_fast_cnt = 0;
+  if(is_fail_fast && fail_fast_limit < 0)
+  {
+    log_error("the value of multi-fail-fast should be positive!");
+    abort();
+  }
 
   // TODO: This is the place to check a cache
   for(size_t i = 1; i <= remaining_claims; i++)
@@ -750,18 +757,12 @@ smt_convt::resultt bmct::multi_property_check(
                        &reached_mul_claims,
                        &total_instance,
                        &is_goto_cov,
-                       &fail_fast,
-                       &counter](const size_t &i) {
+                       &is_fail_fast,
+                       &fail_fast_limit,
+                       &fail_fast_cnt](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found.
-    if(!fail_fast.empty() && counter >= stoi(fail_fast))
-    {
-      if(stoi(fail_fast) < 0)
-      {
-        log_error("the value of multi-fail-fast should be positive!");
-        abort();
-      }
+    if(is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
-    }
 
     // Since this is just a copy, we probably don't need a lock
     auto local_eq = std::make_shared<symex_target_equationt>(*eq);
@@ -841,7 +842,7 @@ smt_convt::resultt bmct::multi_property_check(
         std::string output_file = options.get_option("cex-output");
         if(output_file != "")
         {
-          std::ofstream out(fmt::format("{}-{}", output_file, ce_counter++));
+          std::ofstream out(fmt::format("{}-{}", ce_counter++, output_file));
           show_goto_trace(out, ns, goto_trace);
         }
         std::ostringstream oss;
@@ -849,8 +850,8 @@ smt_convt::resultt bmct::multi_property_check(
         show_goto_trace(oss, ns, goto_trace);
         log_result("{}", oss.str());
         final_result = result;
-        // fail-fast-counter
-        counter++;
+        // update fail-fast-counter
+        fail_fast_cnt++;
       }
       else
       {
