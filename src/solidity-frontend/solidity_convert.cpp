@@ -1392,6 +1392,7 @@ bool solidity_convertert::get_expr(
     }
 
     // 2. get the decl ref of the array
+
     exprt array;
 
     // 2.1 arr[n]
@@ -1405,8 +1406,10 @@ bool solidity_convertert::get_expr(
     else
     {
       //2.2 func()[n]
-      const nlohmann::json &decl = expr["baseExpression"]["expression"];
-      if(get_expr(decl, literal_type, array))
+      const nlohmann::json &decl = expr["baseExpression"];
+      nlohmann::json implicit_cast_expr =
+        make_implicit_cast_expr(decl, "ArrayToPointerDecay");
+      if(get_expr(implicit_cast_expr, literal_type, array))
         return true;
     }
 
