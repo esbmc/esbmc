@@ -295,7 +295,6 @@ const char *type_name_to_str(TypeNameT type)
 // return the type of expression
 ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
 {
-  std::string typeIdentifier = type_name["typeIdentifier"].get<std::string>();
   std::string typeString = type_name["typeString"].get<std::string>();
   // rule unsigned-integer-type
 
