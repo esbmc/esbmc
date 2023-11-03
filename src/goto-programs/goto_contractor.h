@@ -25,7 +25,7 @@
 void goto_contractor(
   goto_functionst &goto_functions,
   const namespacet &namespacet,
-  optionst options);
+  const optionst options);
 
 class vart
 {
@@ -58,6 +58,12 @@ class Contractor
   unsigned int location;
 
 public:
+  Contractor()
+  {
+    outer = nullptr;
+    location = 0;
+    inner = nullptr;
+  }
   Contractor(ibex::Ctc *c, unsigned int loc)
   {
     outer = c;
@@ -68,8 +74,19 @@ public:
   {
     outer = c;
     location = 0;
+    inner = nullptr;
   }
-  Contractor() = default;
+  ~Contractor()
+  {
+    //clean up
+    for(auto it : list_ctc)
+      delete(it);
+    for(auto it : list_nc)
+      delete(it);
+    for(auto it : list_f)
+      delete(it);
+  }
+
   void set_outer(ibex::Ctc *outer)
   {
     Contractor::outer = outer;
@@ -96,6 +113,11 @@ public:
   }
 
 private:
+  //Cleanup
+  std::list<ibex::Function*> list_f;
+  std::list<ibex::NumConstraint*> list_nc;
+  std::list<ibex::Ctc*> list_ctc;
+
   ibex::Ctc *get_complement_contractor(ibex::Ctc *c)
   {
     if(auto ctc_compo = dynamic_cast<ibex::CtcCompo *>(c))
@@ -103,38 +125,63 @@ private:
       ibex::Array<ibex::Ctc> list_of_contractors;
       for(auto &it : ctc_compo->list)
         list_of_contractors.add(*get_complement_contractor(&it));
-      return new ibex::CtcUnion(list_of_contractors);
+      auto ctc_union = new ibex::CtcUnion(list_of_contractors);
+      list_ctc.push_front(ctc_union);
+      return c;
     }
     else if(auto ctc_union = dynamic_cast<ibex::CtcUnion *>(c))
     {
       ibex::Array<ibex::Ctc> list_of_contractors;
       for(auto &it : ctc_union->list)
         list_of_contractors.add(*get_complement_contractor(&it));
-      return new ibex::CtcCompo(list_of_contractors);
+      auto ctc_compo = new ibex::CtcCompo(list_of_contractors);
+      list_ctc.push_front(ctc_compo);
+      return ctc_compo;
     }
     else if(auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd *>(c))
     {
       ibex::NumConstraint *ctr;
+      ibex::CtcFwdBwd *contractor;
       switch(fwdbwd->ctr.op)
       {
       case ibex::GEQ:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::LT);
-        return new ibex::CtcFwdBwd(*ctr);
+        list_nc.push_front(ctr);
+        contractor = new ibex::CtcFwdBwd(*ctr);
+        list_ctc.push_front(contractor);
+        return contractor;
       case ibex::GT:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::LEQ);
-        return new ibex::CtcFwdBwd(*ctr);
+        list_nc.push_front(ctr);
+        contractor = new ibex::CtcFwdBwd(*ctr);
+        list_ctc.push_front(contractor);
+        return contractor;
       case ibex::LEQ:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::GT);
-        return new ibex::CtcFwdBwd(*ctr);
+        list_nc.push_front(ctr);
+        contractor = new ibex::CtcFwdBwd(*ctr);
+        list_ctc.push_front(contractor);
+        return contractor;
       case ibex::LT:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::GEQ);
-        return new ibex::CtcFwdBwd(*ctr);
+        list_nc.push_front(ctr);
+        contractor = new ibex::CtcFwdBwd(*ctr);
+        list_ctc.push_front(contractor);
+        return contractor;
       case ibex::EQ:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::GT);
         auto ctr2 = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::LT);
         auto *side1 = new ibex::CtcFwdBwd(*ctr);
         auto *side2 = new ibex::CtcFwdBwd(*ctr2);
-        return new ibex::CtcUnion(*side1, *side2);
+        auto ctc_union = new ibex::CtcUnion(*side1, *side2);
+        //for clean up
+        list_nc.push_front(ctr);
+        list_nc.push_front(ctr2);
+        list_ctc.push_front(side1);
+        list_ctc.push_front(side2);
+        list_ctc.push_front(ctc_union);
+
+        return ctc_union;
       }
     }
     else
@@ -147,12 +194,31 @@ private:
 
 class Contractors
 {
+private:
+  Contractor *c;
   std::list<Contractor *> contractors;
 
 public:
+  Contractors()
+  {
+    c= nullptr;
+  }
+  ~Contractors()
+  {
+    if(c!= nullptr)
+    {
+      if(c->get_outer() != nullptr)
+        delete(c->get_outer());
+      if(c->get_inner() != nullptr)
+        delete(c->get_inner());
+      delete(c);
+    }
+    for(auto cont: contractors)
+      delete(cont);
+  }
   Contractor *get_contractors_up_to_loc(unsigned int loc)
   {
-    Contractor *c = new Contractor();
+    c = new Contractor();
 
     auto size = contractors.size();
     ibex::Array<ibex::Ctc> outer[size];
@@ -347,6 +413,12 @@ class expr_to_ibex_parser
 private:
   CspMap *map;
   ibex::Variable *vars = nullptr;
+
+  //Cleanup
+  std::list<ibex::Function*> list_f;
+  std::list<ibex::NumConstraint*> list_nc;
+  std::list<ibex::Ctc*> list_ctc;
+
   static bool is_constraint_operator(const expr2tc &);
   static bool is_unsupported_operator_in_constraint(const expr2tc &);
   ibex::Ctc *create_contractor_from_expr2t(const expr2tc &);
@@ -384,13 +456,23 @@ public:
   {
     return create_contractor_from_expr2t(expr);
   }
+  ~expr_to_ibex_parser()
+  {
+    //clean up
+    for(auto it : list_ctc)
+      delete(it);
+    for(auto it : list_nc)
+      delete(it);
+    for(auto it : list_f)
+      delete(it);
+  }
 };
 //-----------------------------------------------------------------------------------------------------------------
 class goto_contractort : public goto_functions_algorithm
 {
 public:
   void
-  goto_contractor_condition(const namespacet &namespacet, optionst &optionst);
+  goto_contractor_condition(const namespacet &namespacet, const optionst &optionst);
 
   /**
    * This constructor will run the goto-contractor procedure.
@@ -404,7 +486,7 @@ public:
   goto_contractort(
     goto_functionst &_goto_functions,
     const namespacet &ns,
-    optionst options)
+    const optionst options)
     : goto_functions_algorithm(true), goto_functions(_goto_functions)
   {
     if(options.get_bool_option("goto-contractor-condition"))
@@ -424,7 +506,7 @@ public:
         get_contractors(_goto_functions);
         if(contractors.is_empty())
         {
-          log_status(
+          log_debug(
             "contractor",
             "Contractors: expression not supported, No Contractors were "
             "created.");
@@ -569,7 +651,7 @@ public:
 
   void dump();
 
-  [[maybe_unused]] [[maybe_unused]] void modularize_intervals();
+  [[maybe_unused]] void modularize_intervals();
 
 private:
   ibex::IntervalVector domains;

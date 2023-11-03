@@ -5,7 +5,7 @@
 void goto_contractor(
   goto_functionst &goto_functions,
   const namespacet &ns,
-  optionst options)
+  const optionst options)
 {
   goto_contractort gotoContractort(goto_functions, ns, options);
 
@@ -281,7 +281,7 @@ void goto_contractort::insert_assume_at(
 
 void goto_contractort::goto_contractor_condition(
   const namespacet &namespacet,
-  optionst &optionst)
+  const optionst &optionst)
 {
   ait<interval_domaint> interval_analysis;
 
@@ -411,6 +411,7 @@ void goto_contractort::goto_contractor_condition(
         next++;
 
         insert_assume_at(f_it->second, next);
+        delete(vars);
       }
     }
   }
@@ -484,6 +485,7 @@ expr_to_ibex_parser::create_contractor_from_expr2t(const expr2tc &expr)
     if(cons == nullptr)
       return nullptr;
     contractor = new ibex::CtcFwdBwd(*cons);
+    list_ctc.push_front(contractor);
   }
   else
   {
@@ -495,7 +497,10 @@ expr_to_ibex_parser::create_contractor_from_expr2t(const expr2tc &expr)
       auto side1 = create_contractor_from_expr2t(logic_op.side_1);
       auto side2 = create_contractor_from_expr2t(logic_op.side_2);
       if(side1 != nullptr && side2 != nullptr)
+      {
         contractor = new ibex::CtcCompo(*side1, *side2);
+        list_ctc.push_front(contractor);
+      }
       break;
     }
     case expr2t::expr_ids::or_id:
@@ -504,7 +509,10 @@ expr_to_ibex_parser::create_contractor_from_expr2t(const expr2tc &expr)
       auto side1 = create_contractor_from_expr2t(logic_op.side_1);
       auto side2 = create_contractor_from_expr2t(logic_op.side_2);
       if(side1 != nullptr && side2 != nullptr)
+      {
         contractor = new ibex::CtcUnion(*side1, *side2);
+        list_ctc.push_front(contractor);
+      }
       break;
     }
     case expr2t::expr_ids::notequal_id:
@@ -515,11 +523,19 @@ expr_to_ibex_parser::create_contractor_from_expr2t(const expr2tc &expr)
       ibex::Function *g = create_function_from_expr2t(rel.side_2);
       if(g == nullptr || f == nullptr)
         return nullptr;
+
       auto *side1 = new ibex::NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
       auto *side2 = new ibex::NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
       auto *c_side1 = new ibex::CtcFwdBwd(*side1);
       auto *c_side2 = new ibex::CtcFwdBwd(*side2);
       contractor = new ibex::CtcUnion(*c_side1, *c_side2);
+
+      //for clean up
+      list_nc.push_front(side1);
+      list_nc.push_front(side2);
+      list_ctc.push_front(c_side1);
+      list_ctc.push_front(c_side1);
+      list_ctc.push_front(contractor);
       break;
     }
     case expr2t::expr_ids::typecast_id:
@@ -552,6 +568,7 @@ expr_to_ibex_parser::create_contractor_from_expr2t_not(const expr2tc &expr)
     if(cons == nullptr)
       return nullptr;
     contractor = new ibex::CtcFwdBwd(*cons);
+    list_ctc.push_front(contractor);
   }
   else
   {
@@ -563,7 +580,10 @@ expr_to_ibex_parser::create_contractor_from_expr2t_not(const expr2tc &expr)
       auto side1 = create_contractor_from_expr2t_not(logic_op.side_1);
       auto side2 = create_contractor_from_expr2t_not(logic_op.side_2);
       if(side1 != nullptr && side2 != nullptr)
+      {
         contractor = new ibex::CtcCompo(*side1, *side2);
+        list_ctc.push_front(contractor);
+      }
       break;
     }
     case expr2t::expr_ids::and_id:
@@ -572,7 +592,10 @@ expr_to_ibex_parser::create_contractor_from_expr2t_not(const expr2tc &expr)
       auto side1 = create_contractor_from_expr2t_not(logic_op.side_1);
       auto side2 = create_contractor_from_expr2t_not(logic_op.side_2);
       if(side1 != nullptr && side2 != nullptr)
+      {
         contractor = new ibex::CtcUnion(*side1, *side2);
+        list_ctc.push_front(contractor);
+      }
       break;
     }
     case expr2t::expr_ids::equality_id:
@@ -587,6 +610,13 @@ expr_to_ibex_parser::create_contractor_from_expr2t_not(const expr2tc &expr)
       auto *c_side1 = new ibex::CtcFwdBwd(*side1);
       auto *c_side2 = new ibex::CtcFwdBwd(*side2);
       contractor = new ibex::CtcUnion(*c_side1, *c_side2);
+
+      //for clean up
+      list_nc.push_front(side1);
+      list_nc.push_front(side2);
+      list_ctc.push_front(c_side1);
+      list_ctc.push_front(c_side1);
+      list_ctc.push_front(contractor);
       break;
     }
     case expr2t::expr_ids::typecast_id:
@@ -660,6 +690,9 @@ expr_to_ibex_parser::create_constraint_from_expr2t(const expr2tc &expr)
   default:
     return nullptr;
   }
+  //for clean up
+  list_nc.push_front(c);
+
   return c;
 }
 
@@ -706,6 +739,9 @@ expr_to_ibex_parser::create_constraint_from_expr2t_not(const expr2tc &expr)
   default:
     return nullptr;
   }
+  //for clean up
+  list_nc.push_front(c);
+
   return c;
 }
 
@@ -814,6 +850,8 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
   default:
     f = nullptr;
   }
+  //for clean up
+  list_f.push_front(f);
 
   return f;
 }
