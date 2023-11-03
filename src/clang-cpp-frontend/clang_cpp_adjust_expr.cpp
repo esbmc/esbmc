@@ -140,10 +140,9 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     // where bleh has been declared and there exists a corresponding symbol
     side_effect_expr_function_callt &rhs_func_call =
       to_side_effect_expr_function_call(rhs);
-    exprt &f_op = rhs_func_call.function();
 
     // callee must be a constructor
-    assert(f_op.type().return_type().id() == "constructor");
+    assert(rhs_func_call.function().type().return_type().id() == "constructor");
 
     // just populate rhs' argument and replace the entire expression
     exprt &lhs = expr.op0();

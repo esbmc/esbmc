@@ -622,6 +622,10 @@ void goto_checkt::bounds_check(
   if(has_dereference(ind.source_value))
     return;
 
+  // We can't check bounds of an infinite sized array
+  if(is_array_type(t) && to_array_type(t).size_is_infinite)
+    return;
+
   std::string name =
     "array bounds violated: " + array_name(ns, ind.source_value);
   const expr2tc &the_index = ind.index;
@@ -634,10 +638,6 @@ void goto_checkt::bounds_check(
   add_guarded_claim(lower, name + " lower bound", "array bounds", loc, guard);
 
   assert(is_array_type(t) || is_string_type(t) || is_vector_type(t));
-
-  // We can't check the upper bound of an infinite sized array
-  if(is_array_type(t) && to_array_type(t).size_is_infinite)
-    return;
 
   const expr2tc &array_size =
     is_array_type(t) ? to_array_type(t).array_size

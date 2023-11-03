@@ -715,8 +715,12 @@ smt_convt::resultt bmct::multi_property_check(
   std::atomic_size_t ce_counter = 0;
   std::unordered_set<size_t> jobs;
   std::mutex result_mutex;
+  std::unordered_set<std::string> reached_claims;
   // For coverage info
-  int tracked_instrument = 0;
+  int total_instance = 0;
+  std::unordered_multiset<std::string> reached_mul_claims;
+  bool is_goto_cov = options.get_bool_option("goto-coverage") ||
+                     options.get_bool_option("goto-coverage-claims");
 
   // TODO: This is the place to check a cache
   for(size_t i = 1; i <= remaining_claims; i++)
@@ -730,79 +734,104 @@ smt_convt::resultt bmct::multi_property_check(
    * This job also affects the environment by using:
    * - &ce_counter: for generating the Counter Example file name
    * - &final_result: if the current instance is SAT, then we known that the current k contains a bug
-   * - &result_mutex: a mutex for step 3.
    *
    * Finally, this function is affected by the "multi-fail-fast" option, which makes this instance stop
    * if final_result is set to SAT
    */
-  auto job_function =
-    [this, &eq, &ce_counter, &final_result, &result_mutex, &tracked_instrument](
-      const size_t &i) {
-      // Since this is just a copy, we probably don't need a lock
-      auto local_eq = std::make_shared<symex_target_equationt>(*eq);
+  auto job_function = [this,
+                       &eq,
+                       &ce_counter,
+                       &final_result,
+                       &result_mutex,
+                       &reached_claims,
+                       &reached_mul_claims,
+                       &total_instance,
+                       &is_goto_cov](const size_t &i) {
+    // Since this is just a copy, we probably don't need a lock
+    auto local_eq = std::make_shared<symex_target_equationt>(*eq);
 
-    // Just to confirm that things are in parallel
-#ifndef _WIN32
-#ifndef __APPLE__ // sched_getcpu not supported in OS X
-      log_debug("multi-property", "Thread running on Core {}", sched_getcpu());
-#endif
-#endif
-      // Set up the current claim and slice it!
-      claim_slicer claim(i);
-      claim.run(local_eq->SSA_steps);
-      symex_slicet slicer(options);
-      slicer.run(local_eq->SSA_steps);
+    // Set up the current claim and slice it
+    claim_slicer claim(i);
+    claim.run(local_eq->SSA_steps);
+    symex_slicet slicer(options);
+    slicer.run(local_eq->SSA_steps);
 
-      // Initialize a solver
-      auto runtime_solver =
-        std::shared_ptr<smt_convt>(create_solver("", ns, options));
-      // Save current instance
-      generate_smt_from_equation(runtime_solver, local_eq);
+    // Initialize a solver
+    auto runtime_solver =
+      std::shared_ptr<smt_convt>(create_solver("", ns, options));
+    // Save current instance
+    generate_smt_from_equation(runtime_solver, local_eq);
 
-      log_status(
-        "Solving claim '{}' with solver {}",
-        claim.claim_msg,
-        runtime_solver->solver_text());
+    log_status(
+      "Solving claim '{}' with solver {}",
+      claim.claim_msg,
+      runtime_solver->solver_text());
+    total_instance++;
 
-      smt_convt::resultt result;
-      /* TODO: We might move this into solver_convt. It is
-       * useful to have the solver as a thread.
-       */
-      std::thread solver_job(
-        [&result, &runtime_solver]() { result = runtime_solver->dec_solve(); });
+    smt_convt::resultt result = runtime_solver->dec_solve();
 
-      const bool fail_fast = options.get_bool_option("multi-fail-fast");
-      // This loop is mainly for fail-fast.
-      try
+    const bool fail_fast = options.get_bool_option("multi-fail-fast");
+    // This try-catch is mainly for fail-fast.
+    //?TODO: "multi-fail-fast n": stop after first n SATs found.
+    try
+    {
+      if(result == smt_convt::P_SATISFIABLE)
       {
-        while(!solver_job.joinable())
+        if(fail_fast)
         {
-          // Try again 100ms later
-          std::this_thread::sleep_for(
-            std::chrono::duration<int, std::milli>(100));
-          // Did someone finished already?
-          if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
-          {
-            log_status("Other thread already found a SAT VCC.");
-            throw 0;
-          }
+          throw 0;
         }
-        solver_job.join();
-        // TODO: Fix the unordered output
-        // report_multi_property_trace(result, claim.claim_msg);
-        if(result == smt_convt::P_SATISFIABLE)
-        {
-          const std::lock_guard<std::mutex> lock(result_mutex);
-          // Check if someone else found the solution
-          if(fail_fast && final_result == smt_convt::P_SATISFIABLE)
+
+        bool is_compact_trace = true;
+        if(
+          options.get_bool_option("no-slice") &&
+          !options.get_bool_option("compact-trace"))
+          is_compact_trace = false;
+
+        goto_tracet goto_trace;
+        build_goto_trace(
+          local_eq, runtime_solver, goto_trace, is_compact_trace);
+
+        // Store the comment and location of the assertion
+        // to avoid double verifying the claims that are already verified
+        std::string cmt_loc = "";
+
+        for(const auto &step : goto_trace.steps)
+          if(step.type == goto_trace_stept::ASSERT)
           {
-            log_status(
-              "Found solution for VCC. But, other thread found it first.");
-            throw 0;
+            // since we only handle one claim at a time
+            // we will/should not overwrite the loc
+            assert(cmt_loc == "");
+            std::string loc;
+            if(step.pc->location.is_nil())
+              loc = "nil";
+            else
+              loc = step.pc->location.as_string();
+
+            // we use the "comment + location" to distinguish each claim
+            // - locaiton: ideally, the loc is enough for distinguishuing claims.
+            // - comment: we add a claim number prefix in comment. Note that the unwinding assertions which are not processed by goto-cov.
+            // Another reason is that we need to display this info in goto-coverage-claims
+
+            cmt_loc = step.comment + "\t" + loc;
           }
-          goto_tracet goto_trace;
-          build_goto_trace(local_eq, runtime_solver, goto_trace, false);
-          // TODO: Replace this with a test-case for coverage!
+
+        bool is_unverified = false;
+
+        if(is_goto_cov)
+        {
+          reached_mul_claims.emplace(cmt_loc);
+          is_unverified = true;
+        }
+        else
+        {
+          // the ins is true if the element was actually inserted
+          auto [it, ins] = reached_claims.emplace(cmt_loc);
+          is_unverified = ins;
+        }
+
+        if(is_unverified || options.get_bool_option("keep-verified-claims"))
+        {
           std::string output_file = options.get_option("cex-output");
           if(output_file != "")
           {
@@ -814,68 +843,56 @@ smt_convt::resultt bmct::multi_property_check(
           show_goto_trace(oss, ns, goto_trace);
           log_result("{}", oss.str());
           final_result = result;
-
-          // collect the tracked instrumentation which is verified failed
-          // we assume it always works in multi-property checking mode
-          if(
-            options.get_bool_option("goto-coverage") ||
-            options.get_bool_option("make-assert-false") ||
-            options.get_bool_option("add-false-assert"))
-          {
-            if(claim.claim_msg.find("Instrumentation") != std::string::npos)
-              tracked_instrument++;
-          }
         }
-        // TODO: This is the place to store into a cache
+        else
+        {
+          // we should not be here if "keep-verified-claims" is enabled
+          log_status("\nFound verified claim. Skipping...\n");
+
+          //TODO: this can still be annoying when we unind for many times
+          // e.g. '--unwind 100' will show 1 counterexample and 99 'skip's
+          // Maybe we should use log_debug instead, both in slicer.run and multi_property_check
+        }
       }
-      catch(...)
-      {
-        log_debug("multi-property", "Failing Fast");
-      }
-    };
-
-  // PARALLEL
-  if(options.get_bool_option("parallel-solving"))
-  {
-    /* NOTE: I would love to use std::for_each here, but it is not giving
-       * the result I would expect. My guess is either compiler version
-       * or some magic flag that we are not using.
-       *
-       * Nevertheless, we can achieve the same results by just creating
-       * threads.
-       */
-
-    // TODO: Running everything in parallel might be a bad idea.
-    //       Should we also add a thread pool?
-    std::vector<std::thread> parallel_jobs;
-    for(const auto &i : jobs)
-      parallel_jobs.push_back(std::thread(job_function, i));
-
-    // Main driver
-    for(auto &t : parallel_jobs)
-    {
-      t.join();
     }
-    // We could remove joined jobs from the parallel_jobs vector.
-    // However, its probably not worth for small vectors.
-  }
-  // SEQUENTIAL
-  else
-    std::for_each(std::begin(jobs), std::end(jobs), job_function);
+    catch(...)
+    {
+      log_debug("multi-property", "Failing Fast");
+    }
+  };
 
-  if(
-    options.get_bool_option("make-assert-false") &&
-    !(options.get_bool_option("goto-coverage") ||
-      options.get_bool_option("add-false-assert")))
+  std::for_each(std::begin(jobs), std::end(jobs), job_function);
+
+  // For coverage
+  if(is_goto_cov)
   {
     int total = goto_coveraget().get_total_instrument();
+    int tracked_instance = reached_mul_claims.size();
+
     if(total)
     {
       log_success("\n[Coverage]\n");
-      log_result("  Total Asserts: {}", total);
-      log_result("  Reached Asserts: {}", tracked_instrument);
-      log_result("  Coverage: {}%", tracked_instrument * 100.0 / total);
+      log_result("Total Asserts: {}", total);
+      log_result("Total Assertion Instances: {}", total_instance);
     }
+
+    // show claims
+    if(options.get_bool_option("goto-coverage-claims"))
+    {
+      // reached claims:
+      log_result("Reached Assertions Instances: ");
+      for(const auto &claim : reached_mul_claims)
+      {
+        log_status("  {}", claim);
+      }
+    }
+
+    //TODO: show unreached claims
+
+    if(total_instance != 0)
+      log_result("Coverage: {}%", tracked_instance * 100.0 / total_instance);
+    else
+      log_result("Coverage: 0%");
   }
 
   return final_result;

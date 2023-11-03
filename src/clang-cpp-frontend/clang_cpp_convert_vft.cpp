@@ -621,6 +621,7 @@ void clang_cpp_convertert::get_overriden_methods(
       continue;
 
     auto status = map.insert({method_id, *md_overriden});
+    (void)status;
     assert(status.second);
   }
 }

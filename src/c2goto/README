@@ -8,10 +8,10 @@ This directory contains three related things:
 
 2. The support code for loading the GOTO binaries and providing their contents
    to the rest of ESBMC. Together with item 1. these provide methods to embed
-   and use pre-compiled versions of operational models in ESBMC in order to
+   and use pre-compiled versions of operational models in ESBMC to
    support programs using libraries.
 
-3. In the `library` subdirectory some (but not all, see
+3. In the `library` subdirectory, some (but not all; see
    `src/goto-programs/builtin_functions.cpp` for more details) operational models
    of functions from the C standard library and pthreads. These models make use
    of specialized type and function prototype definitions that are located in
@@ -23,10 +23,10 @@ This directory contains three related things:
    at compile time.
 
    The `headers` are also bundled with ESBMC and used to pre-process the
-   to-be-verified programs. That means, any header and any type therein that
+   to-be-verified programs. That means any header and any type therein that
    overrides those provided by the operating system ESBMC is running on will
-   be used instead. E.g. `headers/pthread.h` defines a type `pthread_t` which
-   differs from those types provided by Glibc, MinGW or on MacOS. This ESBMC
+   be used instead. E.g., `headers/pthread.h` defines a type `pthread_t`, which
+   differs from those types provided by Glibc, MinGW, or on MacOS. This ESBMC
    specific type will be used when running ESBMC on programs like this:
    ```c
    #include <pthread.h>
@@ -40,11 +40,11 @@ This directory contains three related things:
    }
    ```
 
-   The same holds true for all other types and prototypes defined in `headers`.
+   The same holds for all other types and prototypes defined in `headers`.
 
    These headers in plain text are bundled with the ESBMC executable and
    extracted into a temporary directory before the given program is
-   preprocessed. The list of include paths for this preprocessing is constructed
+   preprocessed. The list of included paths for this preprocessing is constructed
    such that they are processed in the following order:
    1. any `-I` paths from the ESBMC invocation,
    2. the temporary directory containing all from `headers`,
@@ -53,7 +53,7 @@ This directory contains three related things:
       `/usr/include`, and finally
    6. any `--idirafter` paths from the invocation.
 
-   Depending on compile- and/or runtime-options, there may be additional paths
+   Depending on compile- and/or runtime options, there may be additional paths
    inserted into a specific step, usually just the first.
 
    Since the contents of `headers` are used before the standard paths of the

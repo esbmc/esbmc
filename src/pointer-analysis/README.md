@@ -1,4 +1,4 @@
-Here we describe some informal notes about the ESBMC's memory model.
+Here, we describe some informal notes about the ESBMC's memory model.
 
 The C specification demands that absolutely every `data object` has an equivalent representation as a sequence of bytes, whether it is a struct, union, or float. This is how `memcpy` works: you pass it two pointers, and it copies them byte by byte. What this also means is that you can:
  
@@ -8,7 +8,7 @@ The C specification demands that absolutely every `data object` has an equivalen
  object
 * Dereference it with predictable results.
 
-The trouble comes from the fact that SMT solvers do not like this one bit. It would be OK if we were to treat all variable storage as one big SMT array of bytes, and repeatedly store and load from it. Arbitrary byte accesses would be regular array access to memory. However, then we'd almost certainly have terrible solving performance (the SMT solver would have to explore state space in a fixed order).
+The trouble comes from the fact that SMT solvers do not like this one bit. It would be OK to treat all variable storage as one big SMT array of bytes and repeatedly store and load from it. Arbitrary byte accesses would be regular array access to memory. However, we'd almost certainly need better solving performance (the SMT solver would have to explore state space in a fixed order).
 
 What ESBMC does instead is use the primitives that SMT provides (bitvectors, arrays, possibly floatbvs) as variables to store values. That means that whenever we have code like this:
 
@@ -21,7 +21,7 @@ What ESBMC does instead is use the primitives that SMT provides (bitvectors, arr
  *baz = 1;
 ```
 
-We have to translate the `store` through baz into an arbitrary byte access to an arbitrary SMT primitive, as either a load or store. Assuming a store, there are at least three types in play:
+We must translate the `store` through baz into an arbitrary byte access to an arbitrary SMT primitive as either a load or store. Assuming a store, there are at least three types in play:
 * The type that the `rhs` of the assignment evaluates to,
 * The type of the pointer that is being dereferenced in the store,
 * The type of the primitive backing the data object.
@@ -33,7 +33,7 @@ Taking a look at `dereference.cpp` then: for the unary operand of the `*` operat
  *(nondet_bool() ? foo : bar)
 ```
 
-It produces an appropriate guard along the way. If the type of the dereference is not a scalar (i.e. it is an array or struct), it goes via `dereference_expr_nonscalar`, which collects a list of `index2t`'s or `member2t`'s applied to the base expression. Any expression that has an array or struct type might be a plain symbol, or a field in some struct, for example:
+It produces an appropriate guard along the way. If the type of the dereference is not a scalar (i.e., it is an array or struct), it goes via `dereference_expr_nonscalar`, which collects a list of `index2t`'s or `member2t`'s applied to the base expression. Any expression that has an array or struct type might be a plain symbol or a field in some struct, for example:
 
 ```
  struct xyzzy {
@@ -60,13 +60,13 @@ This all feeds into `dereferencet::dereference`, which takes:
 
 A list of all variable names that the base expression can point to is fetched. These variable names are `l1` renamed variables: they identify what the C spec might term `storage`, an `lvalue`, or data object. The points-at information comes from `the value_sett` tracking. Each pointed-at object is passed to `build_reference_to`; then they are all chained together with a big `if-then-else`. The resulting expression describes the data being accessed in terms of SMT primitives.
 
-All of that is easy though: the hard stuff is in `dereferencet::build_reference_to`. There we have the core problem of:
+All of that is easy, though: the hard stuff is in `dereferencet::build_reference_to`. There we have the core problem of:
 
 * Here is an SMT primitive (`what`),
 * Here is the offset into it we want to read/write (`lexical_offset`)
 * Here is the type of data to read/write (`type`)
 
-We call `build_reference_rec` with that information. Take a look at the switch-statement in there; here we have the cross product of all the types and different configurations of information encapsulated in one memory load.
+We call `build_reference_rec` with that information. Look at the switch statement; here, we have the cross-product of all the types and different configurations of information encapsulated in one memory load.
 
 In the switch-statement, some facts are accumulated about the types we are dealing with into a single flags number, which is switched on. We have to consider:
 
@@ -113,6 +113,6 @@ The cases in `build_reference_rec` become increasingly hellish as you go down: f
  *((struct bar *)foo) = baz;
 ```
 
-Involves decomposing a structure SMT primitive into sixteen individual bytes and then assigning them into the byte array returned by malloc. A lot of the more complicated cases boil down to `dereferencet::stitch_together_from_byte_array`, where the underlying primitive has an expression produced for each byte of it, which is then
+Involves decomposing a structure SMT primitive into sixteen individual bytes and then assigning them to the byte array returned by malloc. A lot of the more complicated cases boil down to `dereferencet::stitch_together_from_byte_array`, where the underlying primitive has an expression produced for each byte of it, which is then
 turned into one massive expression identifying the set of bytes that might be accessed, for each offset.
 

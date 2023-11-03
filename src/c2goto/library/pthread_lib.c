@@ -207,6 +207,8 @@ __ESBMC_HIDE:;
   return 0; // We never fail
 }
 
+#pragma clang diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void pthread_exit(void *retval)
 {
 __ESBMC_HIDE:;
@@ -226,6 +228,7 @@ __ESBMC_HIDE:;
   // Ensure that there is no subsequent execution path
   __ESBMC_assume(0);
 }
+#pragma clang diagnostic pop
 
 pthread_t pthread_self(void)
 {

@@ -64,10 +64,7 @@ class Property:
   termination = 4
   memcleanup = 5
 
-# Function to run esbmc
-def run(cmd_line):
-  print("Verifying with ESBMC")
-  print("Command: " + cmd_line)
+def do_exec(cmd_line):
 
   if args.dry_run:
     exit(0)
@@ -77,9 +74,15 @@ def run(cmd_line):
   p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   (stdout, stderr) = p.communicate()
 
-  print(stderr.decode())
+  return stdout + stderr
 
-  return stderr
+# Function to run esbmc
+def run(cmd_line):
+  print("Verifying with ESBMC")
+  print("Command: " + cmd_line)
+  out = do_exec(cmd_line)
+  print(out.decode())
+  return out
 
 def parse_result(the_output, prop):
 
@@ -345,7 +348,7 @@ strategy = args.strategy
 concurrency = args.concurrency
 
 if version:
-  print(os.popen(esbmc_path + "--version").read()[6:].strip()),
+  print(do_exec(esbmc_path + "--version").decode()[6:].strip()),
   exit(0)
 
 if property_file is None:

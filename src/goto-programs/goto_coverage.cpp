@@ -13,14 +13,15 @@ void goto_coveraget::make_asserts_false(goto_functionst &goto_functions)
       {
         if(it->is_assert())
         {
+          std::string cmt;
+          const std::string loc = it->location.as_string();
           const std::string old_comment = it->location.comment().as_string();
+
           it->guard = gen_false_expr();
           it->location.property("Instrumentation ASSERT(0)");
-          if(old_comment != "")
-            it->location.comment(
-              "Instrumentation ASSERT(0) Converted, was " + old_comment);
-          else
-            it->location.comment("Instrumentation ASSERT(0) Converted");
+          cmt = "Claim " + std::to_string(total_instrument + 1) + ": " +
+                old_comment;
+          it->location.comment(cmt);
           it->location.user_provided(true);
           total_instrument++;
         }
@@ -65,7 +66,9 @@ void goto_coveraget::insert_false_assert(
   t->guard = gen_false_expr();
   t->location = it->location;
   t->location.property("Instrumentation ASSERT(0)");
-  t->location.comment("Instrumentation ASSERT(0) Added");
+  t->location.comment(
+    "Claim " + std::to_string(total_instrument + 1) +
+    ": Instrumentation ASSERT(0) Added");
   t->location.user_provided(true);
   it = ++t;
   total_instrument++;

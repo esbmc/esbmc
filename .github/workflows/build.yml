@@ -32,53 +32,18 @@ on:
             type: boolean
 
 jobs:
-    build-unix:
-        name: Build ESBMC (${{ inputs.operating-system }})
-        if: ${{ inputs.operating-system != 'windows-latest' }}
-        runs-on: ${{ inputs.operating-system }}
-        steps:
-        - uses: actions/checkout@v2
-        - name: Build ESBMC
-          run: ./scripts/build.sh ${{ inputs.build-flags }}
-        - uses: actions/upload-artifact@v1
-          with:
-            name: release-${{ inputs.operating-system }}
-            path: ./release
-        - name: Run tests
-          if: ${{ inputs.testing == true }}
-          run: cd build/ && ctest -j4 --output-on-failure --progress .
+  build-unix:
+    if: ${{ !startsWith(inputs.operating-system, 'windows-') }}
+    uses: ./.github/workflows/build-unix.yml
+    with:
+      operating-system: ${{ inputs.operating-system }}
+      build-flags: ${{ inputs.build-flags }}
+      testing: ${{ inputs.testing }}
 
-    build-windows:
-        name: Build ESBMC (Windows)
-        if: ${{ inputs.operating-system == 'windows-latest' }}
-        runs-on: windows-latest
-        steps:
-        - name: Set up Python
-          uses: actions/setup-python@v2
-          with:
-            python-version: 3.8
-        - name: check python
-          run: python --version
-        - name: Update vcpkg
-          run: |
-            vcpkg.exe update
-            cd C:/vcpkg
-            git.exe pull
-            .\bootstrap-vcpkg.bat
-        - name: Make git use LF only
-          run: |
-            git config --system core.autocrlf false
-            git config --system core.eol lf
-        - uses: actions/checkout@v2
-        - name: Configure ESBMC
-          run: ./scripts/build.ps1
-        - uses: actions/upload-artifact@v2
-          with:
-            name: release-windows-latest
-            path: C:/deps/esbmc
-        - name: Run Tests
-          if: ${{ inputs.testing == true }}
-          run: |
-            cd build
-            ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
-        
+  build-windows:
+    if: ${{ startsWith(inputs.operating-system, 'windows-') }}
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      operating-system: ${{ inputs.operating-system }}
+      build-flags: ${{ inputs.build-flags }}
+      testing: ${{ inputs.testing }}

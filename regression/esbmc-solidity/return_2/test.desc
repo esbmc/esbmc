@@ -1,4 +1,0 @@
-CORE
-contract.solast
---function getResult --sol contract.sol
-^VERIFICATION FAILED$

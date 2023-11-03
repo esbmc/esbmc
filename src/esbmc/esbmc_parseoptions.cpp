@@ -405,14 +405,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
-  // parallel solving activates "--multi-property"
-  if(cmdline.isset("parallel-solving"))
-  {
-    options.set_option("result-only", true);
-    options.set_option("base-case", true);
-    options.set_option("multi-property", true);
-  }
-
   // If multi-property is on, we should set result-only and base-case
   if(cmdline.isset("multi-property"))
   {
@@ -1645,11 +1637,19 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
 
+    bool is_no_remove = cmdline.isset("multi-property") ||
+                        cmdline.isset("goto-coverage") ||
+                        cmdline.isset("goto-coverage-claims");
+
     // Start by removing all no-op instructions and unreachable code
-    if(!cmdline.isset("no-remove-no-op"))
+    if(!(cmdline.isset("no-remove-no-op")))
       remove_no_op(goto_functions);
 
-    if(!cmdline.isset("no-remove-unreachable"))
+    // We should skip this 'remove-unreachable' removal in goto-cov and multi-property
+    // - multi-property wants to find all the bugs in the src code
+    // - goto-coverage wants to find out unreached codes (asserts)
+    // - however, the optimisation below will remove codes during the Goto stage
+    if(!(cmdline.isset("no-remove-unreachable") || is_no_remove))
       remove_unreachable(goto_functions);
 
     // Apply all the initialized algorithms
@@ -1700,10 +1700,10 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // Once again, remove all unreachable and no-op code that could have been
     // introduced by the above algorithms
-    if(!cmdline.isset("no-remove-no-op"))
+    if(!(cmdline.isset("no-remove-no-op")))
       remove_no_op(goto_functions);
 
-    if(!cmdline.isset("no-remove-unreachable"))
+    if(!(cmdline.isset("no-remove-unreachable") || is_no_remove))
       remove_unreachable(goto_functions);
 
     goto_functions.update();
@@ -1719,17 +1719,31 @@ bool esbmc_parseoptionst::process_goto_program(
 
       value_set_analysis.update(goto_functions);
     }
-
-    if(cmdline.isset("goto-coverage") || cmdline.isset("make-assert-false"))
-    {
-      goto_coveraget tmp;
-      tmp.make_asserts_false(goto_functions);
-    }
-
-    if(cmdline.isset("goto-coverage") || cmdline.isset("add-false-assert"))
+    if(cmdline.isset("add-false-assert"))
     {
       goto_coveraget tmp;
       tmp.add_false_asserts(goto_functions);
+    }
+
+    //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
+    if(cmdline.isset("goto-coverage") || cmdline.isset("goto-coverage-claims"))
+    {
+      // for assertion coverage metric
+      options.set_option("make-assert-false", true);
+      // no-simplify, otherwise the coverage will always be 100%
+      // seems that the simplication will remove unreachable claims
+      options.set_option("no-simplify", true);
+      // for multi-property
+      options.set_option("result-only", true);
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", true);
+    }
+
+    if(options.get_bool_option("make-assert-false"))
+    {
+      goto_coveraget tmp;
+      tmp.make_asserts_false(goto_functions);
     }
   }
 
