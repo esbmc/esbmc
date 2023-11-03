@@ -1,4 +1,4 @@
 KNOWNBUG
 contract.solast
---function DD --sol contract.sol
+--function DD --contract DD --sol contract.sol
 ^VERIFICATION FAILED$
