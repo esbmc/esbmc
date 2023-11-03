@@ -313,11 +313,11 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   if(typeString.find("int_const") != std::string::npos)
   {
     /**
-       * For Literal, their typeString is like "int_const 100".
-       * There is no additional type info (bitsize, signed/unsigned),
-       * This means it will require additional type info from the parent
-       * expr to create an internal type.
-       */
+     * For Literal, their typeString is like "int_const 100".
+     * There is no additional type info (bitsize, signed/unsigned),
+     * This means it will require additional type info from the parent
+     * expr to create an internal type.
+     */
     return INT_LITERAL;
   }
   if(typeString.find("literal_string") == 0)
