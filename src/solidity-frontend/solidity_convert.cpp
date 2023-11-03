@@ -1141,7 +1141,7 @@ bool solidity_convertert::get_expr(
         SolidityGrammar::get_elementary_type_name_t(literal_type);
 
       int byte_size;
-      if(type == SolidityGrammar::ElementaryTypeNameT::BYTE_ARRAY)
+      if(type == SolidityGrammar::ElementaryTypeNameT::BYTES)
         // dynamic bytes array, the type is set to uint_type()
         byte_size = 0;
       else
@@ -1311,7 +1311,6 @@ bool solidity_convertert::get_expr(
     // extract from the return_type
     assert(callee_expr.is_symbol() && callee_expr.type().is_code());
     typet type = to_code_type(callee_expr.type()).return_type();
-    log_status("{}", type.type().to_string());
 
     side_effect_expr_function_callt call;
     call.function() = callee_expr;
@@ -1405,7 +1404,7 @@ bool solidity_convertert::get_expr(
     }
     else
     {
-      //2.2 func()[n]
+      // 2.2 func()[n]
       const nlohmann::json &decl = expr["baseExpression"];
       nlohmann::json implicit_cast_expr =
         make_implicit_cast_expr(decl, "ArrayToPointerDecay");
@@ -1417,6 +1416,19 @@ bool solidity_convertert::get_expr(
     exprt pos;
     if(get_expr(expr["indexExpression"], expr["typeDescriptions"], pos))
       return true;
+
+    // BYTES:  func_ret_bytes()[]
+    // same process as above
+    if(
+      array.type().get("#sol_type").as_string().find("BYTES") !=
+      std::string::npos)
+    {
+      exprt bexpr = exprt("byte_extract_big_endian", pos.type());
+      bexpr.copy_to_operands(array, pos);
+      solidity_gen_typecast(ns, bexpr, unsignedbv_typet(8));
+      new_expr = bexpr;
+      break;
+    }
 
     new_expr = index_exprt(array, pos, t);
     break;
@@ -2813,7 +2825,7 @@ bool solidity_convertert::get_elementary_type_name(
 
     break;
   }
-  case SolidityGrammar::ElementaryTypeNameT::BYTE_ARRAY:
+  case SolidityGrammar::ElementaryTypeNameT::BYTES:
   {
     new_type = uint_type();
     new_type.set("#sol_type", elementary_type_name_to_str(type));

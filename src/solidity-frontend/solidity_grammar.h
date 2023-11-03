@@ -142,7 +142,7 @@ enum ElementaryTypeNameT
   STRING_LITERAL,
 
   // rule bytes
-  BYTE_ARRAY,
+  BYTES,
   BYTES1,
   BYTES2,
   BYTES3,
