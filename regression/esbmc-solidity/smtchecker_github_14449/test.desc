@@ -1,4 +1,0 @@
-THOROUGH
-contract.solast
---contract C --sol contract.sol
-^VERIFICATION SUCCESSFUL$

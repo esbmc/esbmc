@@ -329,7 +329,7 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
     //    bytes
     //    bytes storage ref
     //    bytes memory
-    return BYTE_ARRAY;
+    return BYTES;
   }
   log_error(
     "Got elementary-type-name typeString={}. Unsupported "
@@ -412,7 +412,7 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
     ENUM_TO_STR(STRING)
     ENUM_TO_STR(ADDRESS)
     ENUM_TO_STR(ADDRESS_PAYABLE)
-    ENUM_TO_STR(BYTE_ARRAY)
+    ENUM_TO_STR(BYTES)
     ENUM_TO_STR(BYTES1)
     ENUM_TO_STR(BYTES2)
     ENUM_TO_STR(BYTES3)
