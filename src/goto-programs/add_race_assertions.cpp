@@ -86,11 +86,16 @@ void add_race_assertions(
 {
   namespacet ns(context);
 
+  bool is_atomic = false;
+
   Forall_goto_program_instructions(i_it, goto_program)
   {
     goto_programt::instructiont &instruction = *i_it;
 
-    if(instruction.is_assign())
+    if(instruction.is_atomic_begin())
+      is_atomic = true;
+
+    if(instruction.is_assign() && !is_atomic)
     {
       exprt tmp_expr = migrate_expr_back(instruction.code);
       rw_sett rw_set(ns, value_sets, i_it, to_code(tmp_expr));
@@ -155,6 +160,9 @@ void add_race_assertions(
 
       i_it--; // the for loop already counts us up
     }
+
+    if(instruction.is_atomic_end())
+      is_atomic = false;
   }
 
   remove_no_op(goto_program);
@@ -181,7 +189,8 @@ void add_race_assertions(
   w_guardst w_guards(context);
 
   Forall_goto_functions(f_it, goto_functions)
-    add_race_assertions(value_sets, context, f_it->second.body, w_guards);
+    if(f_it->first != goto_functions.main_id())
+      add_race_assertions(value_sets, context, f_it->second.body, w_guards);
 
   // get "main"
   goto_functionst::function_mapt::iterator m_it =
