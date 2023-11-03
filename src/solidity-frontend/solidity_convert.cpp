@@ -2409,10 +2409,10 @@ bool solidity_convertert::get_type_description(
 
       // 1. rebuild baseType
       nlohmann::json new_json;
-      std::string typeString = type_name["typeString"].get<std::string>();
-      auto pos = typeString.find("[]"); // e.g. "uint256[] memory"
-      typeString = typeString.substr(0, pos);
-      std::string typeIdentifier = "t_" + typeString;
+      std::string temp = type_name["typeString"].get<std::string>();
+      auto pos = temp.find("[]"); // e.g. "uint256[] memory"
+      const std::string typeString = temp.substr(0, pos);
+      const std::string typeIdentifier = "t_" + typeString;
       new_json["typeString"] = typeString;
       new_json["typeIdentifier"] = typeIdentifier;
 
@@ -3429,7 +3429,6 @@ nlohmann::json solidity_convertert::make_array_elementary_type(
   nlohmann::json elementary_type;
   const std::string typeIdentifier =
     type_descrpt["typeIdentifier"].get<std::string>();
-  const std::string typeString = type_descrpt["typeString"].get<std::string>();
 
   // 2. extract type info
   // e.g.
