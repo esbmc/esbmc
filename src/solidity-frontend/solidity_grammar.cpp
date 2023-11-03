@@ -208,28 +208,6 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       return PointerArrayToPtr;
     }
     else if(
-      type_name["typeIdentifier"].get<std::string>().find("t_array$") !=
-      std::string::npos)
-    {
-      // Solidity's array type description is like:
-      //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
-      //  "typeString": "uint8[2] memory"
-
-      // The Arrays in Solidity can be classified into the following two types based on size –
-      //   Fixed Size Array
-      //   Dynamic Array
-      // Furthermore, the solidity array can also be categorized based on where they are stored as –
-      //   Storage Array
-      //   Memory Array
-
-      if(
-        type_name["typeIdentifier"].get<std::string>().find("$dyn") !=
-        std::string::npos)
-        return DynArrayTypeName;
-
-      return ArrayTypeName;
-    }
-    else if(
       type_name["typeIdentifier"].get<std::string>().find("t_contract") !=
       std::string::npos)
     {
