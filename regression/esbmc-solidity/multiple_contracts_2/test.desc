@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 mul.solast
---function empty --sol mul.sol
+--function empty --contract A --sol mul.sol
 ^VERIFICATION SUCCESSFUL$
