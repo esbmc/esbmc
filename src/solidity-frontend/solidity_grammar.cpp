@@ -132,12 +132,47 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
 TypeNameT get_type_name_t(const nlohmann::json &type_name)
 {
   // Solidity AST node has duplicate descrptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
+
   if(type_name.contains("typeString"))
   {
     // for AST node that contains ["typeName"]["typeDescriptions"]
-    std::string typeString = type_name["typeString"].get<std::string>();
+    const std::string typeString = type_name["typeString"].get<std::string>();
+    const std::string typeIdentifier =
+      type_name["typeIdentifier"].get<std::string>();
 
-    if(
+    // we must first handle tuple
+    // otherwise we might parse tuple(literal_string, literal_string)
+    // as ElementaryTypeName
+    if(typeString.substr(0, 6) == "tuple(" && typeString != "tuple()")
+    {
+      return TupleTypeName;
+    }
+    else if(typeIdentifier.find("t_array$") != std::string::npos)
+    {
+      // Solidity's array type description is like:
+      //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
+      //  "typeString": "uint8[2] memory"
+
+      // The Arrays in Solidity can be classified into the following two types based on size –
+      //   Fixed Size Array
+      //   Dynamic Array
+      // Furthermore, the solidity array can also be categorized based on where they are stored as –
+      //   Storage Array
+      //   Memory Array
+
+      // Multi-Dimensional Arrays
+      if(typeIdentifier.find("t_array$_t_array$") != std::string::npos)
+      {
+        log_error("Multi-Dimensional Arrays are not supported.");
+        abort();
+      }
+
+      if(typeIdentifier.find("$dyn") != std::string::npos)
+        return DynArrayTypeName;
+
+      return ArrayTypeName;
+    }
+    else if(
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
       typeString == "string" || typeString.find("literal_string") == 0 ||
@@ -173,21 +208,6 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       return PointerArrayToPtr;
     }
     else if(
-      type_name["typeIdentifier"].get<std::string>().find("array") !=
-      std::string::npos)
-    {
-      // Solidity's array type description is like:
-      //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
-      //  "typeString": "uint8[2] memory"
-      // Need to search for the substring "array" as in "typeIdentifier"
-      if(
-        type_name["typeIdentifier"].get<std::string>().find("dyn") !=
-        std::string::npos)
-        return DynArrayTypeName;
-
-      return ArrayTypeName;
-    }
-    else if(
       type_name["typeIdentifier"].get<std::string>().find("t_contract") !=
       std::string::npos)
     {
@@ -209,7 +229,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
   }
   else
   {
-    // for AST node that contains ["typeDescriptions"] only
+    // for AST node that does not contain ["typeDescriptions"] only
+    // function returnParameters
     if(type_name["nodeType"] == "ParameterList")
     {
       return ParameterList;
@@ -249,6 +270,7 @@ const char *type_name_to_str(TypeNameT type)
 }
 
 // rule elementary-type-name
+// return the type of expression
 ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
 {
   std::string typeString = type_name["typeString"].get<std::string>();
@@ -294,15 +316,19 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   {
     return ADDRESS_PAYABLE;
   }
-  if(typeString == "bytes" || typeString == "bytes storage ref")
-  {
-    // dynamic bytes array
-    return BYTE_ARRAY;
-  }
   if(bytesn_to_type_map.count(typeString))
   {
     // fixed-size arrays bytesN, where N is a number between 1 and 32
     return bytesn_to_type_map.at(typeString);
+  }
+  if(typeString.find("bytes") != std::string::npos)
+  {
+    // dynamic bytes array
+    // e.g.
+    //    bytes
+    //    bytes storage ref
+    //    bytes memory
+    return BYTES;
   }
   log_error(
     "Got elementary-type-name typeString={}. Unsupported "
@@ -385,7 +411,7 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
     ENUM_TO_STR(STRING)
     ENUM_TO_STR(ADDRESS)
     ENUM_TO_STR(ADDRESS_PAYABLE)
-    ENUM_TO_STR(BYTE_ARRAY)
+    ENUM_TO_STR(BYTES)
     ENUM_TO_STR(BYTES1)
     ENUM_TO_STR(BYTES2)
     ENUM_TO_STR(BYTES3)

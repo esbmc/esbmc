@@ -126,7 +126,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   std::string op(element["op"]["_type"].get<std::string>());
-  exprt logical_expr(get_op(op), current_element_type);
+  exprt logical_expr(get_op(op), bool_type());
 
   // Iterate over operands of logical operations (and/or)
   for(const auto &operand : element["values"])
@@ -202,6 +202,71 @@ python_converter::get_location_from_decl(const nlohmann::json &ast_node)
   return location;
 }
 
+exprt python_converter::get_function_call(const nlohmann::json &element)
+{
+  if(element.contains("func") && element["_type"] == "Call")
+  {
+    std::string func_name = element["func"]["id"];
+
+    // nondet_X() functions restricted to basic types supported in Python
+    std::regex pattern(
+      R"(nondet_(int|char|bool|float)|__VERIFIER_nondet_(int|char|bool|float))");
+
+    if(std::regex_match(func_name, pattern))
+    {
+      // Function name pattern: nondet_(type). e.g: nondet_bool(), nondet_int()
+      size_t underscore_pos = func_name.rfind("_");
+      std::string type = func_name.substr(underscore_pos + 1);
+      exprt rhs = exprt("sideeffect", get_typet(type));
+      rhs.statement("nondet");
+      return rhs;
+    }
+
+    locationt location = get_location_from_decl(element);
+    std::string symbol_id = "py:" + python_filename + "@F@" + func_name;
+
+    // __ESBMC_assume
+    if(func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume")
+    {
+      symbol_id = func_name;
+      if(context.find_symbol(symbol_id.c_str()) == nullptr)
+      {
+        // Create/init symbol
+        symbolt symbol;
+        symbol.mode = "C";
+        symbol.module = python_filename;
+        symbol.location = location;
+        symbol.type = code_typet();
+        symbol.name = func_name;
+        symbol.id = func_name;
+
+        context.add(symbol);
+      }
+    }
+
+    symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
+    if(func_symbol == nullptr)
+    {
+      log_error("Undefined function: {}", func_name.c_str());
+      abort();
+    }
+
+    code_function_callt call;
+    call.location() = location;
+    call.function() = symbol_expr(*func_symbol);
+
+    for(const auto &arg_node : element["args"])
+    {
+      call.arguments().push_back(get_expr(arg_node));
+    }
+
+    return call;
+  }
+
+  log_error("Invalid function call");
+  abort();
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -258,52 +323,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::FUNC_CALL:
   {
-    if(element.contains("func") && element["_type"] == "Call")
-    {
-      std::string func_name = element["func"]["id"];
-
-      // Non-determinism functions restricted to basic types supported in Python
-      std::regex pattern(
-        R"(nondet_(int|char|bool|float)|__VERIFIER_nondet_(int|char|bool|float))");
-
-      if(std::regex_match(func_name, pattern))
-      {
-        // Function name pattern: nondet_(type). e.g: nondet_bool(), nondet_int()
-        size_t underscore_pos = func_name.rfind("_");
-        if(underscore_pos != std::string::npos)
-        {
-          std::string type = func_name.substr(underscore_pos + 1);
-          exprt rhs = exprt("sideeffect", get_typet(type));
-          rhs.statement("nondet");
-          return rhs;
-        }
-      }
-
-      std::string symbol_id = "py:" + python_filename + "@F@" + func_name;
-      symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
-
-      if(func_symbol == nullptr)
-      {
-        log_error("Undefined function: {}", func_name.c_str());
-        abort();
-      }
-
-      code_function_callt call;
-      call.location() = func_symbol->location;
-      call.function() = symbol_expr(*func_symbol);
-
-      for(const auto &arg_node : element["args"])
-      {
-        call.arguments().push_back(get_expr(arg_node));
-      }
-
-      return call;
-    }
-    else
-    {
-      log_error("Invalid function call");
-      abort();
-    }
+    expr = get_function_call(element);
     break;
   }
   // Ternary operator

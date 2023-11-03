@@ -50,6 +50,9 @@ enum TypeNameT
   // enum
   EnumTypeName,
 
+  // tuple
+  TupleTypeName,
+
   TypeNameTError
 };
 TypeNameT get_type_name_t(const nlohmann::json &type_name);
@@ -139,7 +142,7 @@ enum ElementaryTypeNameT
   STRING_LITERAL,
 
   // rule bytes
-  BYTE_ARRAY,
+  BYTES,
   BYTES1,
   BYTES2,
   BYTES3,

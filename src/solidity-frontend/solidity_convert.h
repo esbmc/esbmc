@@ -84,14 +84,14 @@ protected:
   bool get_compound_assign_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_unary_operator_expr(
     const nlohmann::json &expr,
-    const nlohmann::json &int_literal_type,
+    const nlohmann::json &literal_type,
     exprt &new_expr);
   bool
   get_conditional_operator_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_cast_expr(
     const nlohmann::json &cast_expr,
     exprt &new_expr,
-    const nlohmann::json int_literal_type = nullptr);
+    const nlohmann::json literal_type = nullptr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
@@ -116,6 +116,8 @@ protected:
     std::string &id);
   bool get_constructor_call(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_contract_name(const int ref_decl_id, std::string &contract_name);
+  bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
+
   // line number and locations
   void
   get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
@@ -145,7 +147,6 @@ protected:
     std::string cast_type);
   nlohmann::json make_return_type_from_typet(typet type);
   nlohmann::json make_pointee_type(const nlohmann::json &sub_expr);
-  nlohmann::json make_callexpr_return_type(const nlohmann::json &type_descrpt);
   nlohmann::json make_array_elementary_type(const nlohmann::json &type_descrpt);
   nlohmann::json make_array_to_pointer_type(const nlohmann::json &type_descrpt);
   std::string get_array_size(const nlohmann::json &type_descrpt);
@@ -161,6 +162,8 @@ protected:
     std::string name,
     std::string id,
     locationt location);
+
+  std::string get_ctor_call_id(const std::string &contract_name);
 
   // literal conversion functions
   bool convert_integer_literal(
