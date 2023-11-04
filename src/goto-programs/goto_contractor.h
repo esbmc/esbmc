@@ -114,9 +114,9 @@ public:
 
 private:
   //Cleanup
-  std::list<ibex::Function*> list_f;
-  std::list<ibex::NumConstraint*> list_nc;
-  std::list<ibex::Ctc*> list_ctc;
+  std::list<ibex::Function *> list_f;
+  std::list<ibex::NumConstraint *> list_nc;
+  std::list<ibex::Ctc *> list_ctc;
 
   ibex::Ctc *get_complement_contractor(ibex::Ctc *c)
   {
@@ -201,11 +201,11 @@ private:
 public:
   Contractors()
   {
-    c= nullptr;
+    c = nullptr;
   }
   ~Contractors()
   {
-    if(c!= nullptr)
+    if(c != nullptr)
     {
       if(c->get_outer() != nullptr)
         delete(c->get_outer());
@@ -213,7 +213,7 @@ public:
         delete(c->get_inner());
       delete(c);
     }
-    for(auto cont: contractors)
+    for(auto cont : contractors)
       delete(cont);
   }
   Contractor *get_contractors_up_to_loc(unsigned int loc)
@@ -415,9 +415,9 @@ private:
   ibex::Variable *vars = nullptr;
 
   //Cleanup
-  std::list<ibex::Function*> list_f;
-  std::list<ibex::NumConstraint*> list_nc;
-  std::list<ibex::Ctc*> list_ctc;
+  std::list<ibex::Function *> list_f;
+  std::list<ibex::NumConstraint *> list_nc;
+  std::list<ibex::Ctc *> list_ctc;
 
   static bool is_constraint_operator(const expr2tc &);
   static bool is_unsupported_operator_in_constraint(const expr2tc &);
@@ -471,8 +471,9 @@ public:
 class goto_contractort : public goto_functions_algorithm
 {
 public:
-  void
-  goto_contractor_condition(const namespacet &namespacet, const optionst &optionst);
+  void goto_contractor_condition(
+    const namespacet &namespacet,
+    const optionst &optionst);
 
   /**
    * This constructor will run the goto-contractor procedure.
