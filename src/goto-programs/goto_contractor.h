@@ -25,7 +25,7 @@
 void goto_contractor(
   goto_functionst &goto_functions,
   const namespacet &namespacet,
-  const optionst options);
+  const optionst &options);
 
 class vart
 {
@@ -415,9 +415,9 @@ private:
   ibex::Variable *vars = nullptr;
 
   //Cleanup
-  std::list<ibex::Function *> list_f;
-  std::list<ibex::NumConstraint *> list_nc;
-  std::list<ibex::Ctc *> list_ctc;
+  std::vector<ibex::Function *> vector_f;
+  std::vector<ibex::NumConstraint *> vector_nc;
+  std::vector<ibex::Ctc *> vector_ctc;
 
   static bool is_constraint_operator(const expr2tc &);
   static bool is_unsupported_operator_in_constraint(const expr2tc &);
@@ -459,12 +459,12 @@ public:
   ~expr_to_ibex_parser()
   {
     //clean up
-    for(auto it : list_ctc)
-      delete(it);
-    for(auto it : list_nc)
-      delete(it);
-    for(auto it : list_f)
-      delete(it);
+    for (auto it =  vector_ctc.rbegin(); it != vector_ctc.rend(); ++it)
+      delete(*it);
+    for (auto it =  vector_nc.rbegin(); it != vector_nc.rend(); ++it)
+      delete(*it);
+    for (auto it =  vector_f.rbegin(); it != vector_f.rend(); ++it)
+      delete(*it);
   }
 };
 //-----------------------------------------------------------------------------------------------------------------
@@ -487,7 +487,7 @@ public:
   goto_contractort(
     goto_functionst &_goto_functions,
     const namespacet &ns,
-    const optionst options)
+    const optionst &options)
     : goto_functions_algorithm(true), goto_functions(_goto_functions)
   {
     if(options.get_bool_option("goto-contractor-condition"))
@@ -640,7 +640,8 @@ public:
     else if(map.var_map.size() == 0)
       return false;
 
-    contractor = Contractor(c);
+    ibex::CtcFixPoint *f = new ibex::CtcFixPoint(*c);
+    contractor = Contractor(f);
     return true;
   }
 
