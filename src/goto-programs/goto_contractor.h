@@ -79,11 +79,11 @@ public:
   ~Contractor()
   {
     //clean up
-    for(auto it : list_ctc)
+    for(auto it : vector_ctc)
       delete(it);
-    for(auto it : list_nc)
+    for(auto it : vector_nc)
       delete(it);
-    for(auto it : list_f)
+    for(auto it : vector_f)
       delete(it);
   }
 
@@ -114,9 +114,9 @@ public:
 
 private:
   //Cleanup
-  std::list<ibex::Function *> list_f;
-  std::list<ibex::NumConstraint *> list_nc;
-  std::list<ibex::Ctc *> list_ctc;
+  std::vector<ibex::Function *> vector_f;
+  std::vector<ibex::NumConstraint *> vector_nc;
+  std::vector<ibex::Ctc *> vector_ctc;
 
   ibex::Ctc *get_complement_contractor(ibex::Ctc *c)
   {
@@ -126,7 +126,7 @@ private:
       for(auto &it : ctc_compo->list)
         list_of_contractors.add(*get_complement_contractor(&it));
       auto ctc_union = new ibex::CtcUnion(list_of_contractors);
-      list_ctc.push_front(ctc_union);
+      vector_ctc.push_back(ctc_union);
       return c;
     }
     else if(auto ctc_union = dynamic_cast<ibex::CtcUnion *>(c))
@@ -135,7 +135,7 @@ private:
       for(auto &it : ctc_union->list)
         list_of_contractors.add(*get_complement_contractor(&it));
       auto ctc_compo = new ibex::CtcCompo(list_of_contractors);
-      list_ctc.push_front(ctc_compo);
+      vector_ctc.push_back(ctc_compo);
       return ctc_compo;
     }
     else if(auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd *>(c))
@@ -146,27 +146,27 @@ private:
       {
       case ibex::GEQ:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::LT);
-        list_nc.push_front(ctr);
+        vector_nc.push_back(ctr);
         contractor = new ibex::CtcFwdBwd(*ctr);
-        list_ctc.push_front(contractor);
+        vector_ctc.push_back(contractor);
         return contractor;
       case ibex::GT:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::LEQ);
-        list_nc.push_front(ctr);
+        vector_nc.push_back(ctr);
         contractor = new ibex::CtcFwdBwd(*ctr);
-        list_ctc.push_front(contractor);
+        vector_ctc.push_back(contractor);
         return contractor;
       case ibex::LEQ:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::GT);
-        list_nc.push_front(ctr);
+        vector_nc.push_back(ctr);
         contractor = new ibex::CtcFwdBwd(*ctr);
-        list_ctc.push_front(contractor);
+        vector_ctc.push_back(contractor);
         return contractor;
       case ibex::LT:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::GEQ);
-        list_nc.push_front(ctr);
+        vector_nc.push_back(ctr);
         contractor = new ibex::CtcFwdBwd(*ctr);
-        list_ctc.push_front(contractor);
+        vector_ctc.push_back(contractor);
         return contractor;
       case ibex::EQ:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::GT);
@@ -175,11 +175,11 @@ private:
         auto *side2 = new ibex::CtcFwdBwd(*ctr2);
         auto ctc_union = new ibex::CtcUnion(*side1, *side2);
         //for clean up
-        list_nc.push_front(ctr);
-        list_nc.push_front(ctr2);
-        list_ctc.push_front(side1);
-        list_ctc.push_front(side2);
-        list_ctc.push_front(ctc_union);
+        vector_nc.push_back(ctr);
+        vector_nc.push_back(ctr2);
+        vector_ctc.push_back(side1);
+        vector_ctc.push_back(side2);
+        vector_ctc.push_back(ctc_union);
 
         return ctc_union;
       }
@@ -459,11 +459,11 @@ public:
   ~expr_to_ibex_parser()
   {
     //clean up
-    for (auto it =  vector_ctc.rbegin(); it != vector_ctc.rend(); ++it)
+    for(auto it = vector_ctc.rbegin(); it != vector_ctc.rend(); ++it)
       delete(*it);
-    for (auto it =  vector_nc.rbegin(); it != vector_nc.rend(); ++it)
+    for(auto it = vector_nc.rbegin(); it != vector_nc.rend(); ++it)
       delete(*it);
-    for (auto it =  vector_f.rbegin(); it != vector_f.rend(); ++it)
+    for(auto it = vector_f.rbegin(); it != vector_f.rend(); ++it)
       delete(*it);
   }
 };
