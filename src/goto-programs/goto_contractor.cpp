@@ -534,7 +534,7 @@ expr_to_ibex_parser::create_contractor_from_expr2t(const expr2tc &expr)
       vector_nc.push_back(side1);
       vector_nc.push_back(side2);
       vector_ctc.push_back(c_side1);
-      vector_ctc.push_back(c_side1);
+      vector_ctc.push_back(c_side2);
       vector_ctc.push_back(contractor);
       break;
     }
@@ -615,7 +615,7 @@ expr_to_ibex_parser::create_contractor_from_expr2t_not(const expr2tc &expr)
       vector_nc.push_back(side1);
       vector_nc.push_back(side2);
       vector_ctc.push_back(c_side1);
-      vector_ctc.push_back(c_side1);
+      vector_ctc.push_back(c_side2);
       vector_ctc.push_back(contractor);
       break;
     }
@@ -832,6 +832,7 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
   }
   case expr2t::expr_ids::typecast_id:
     f = create_function_from_expr2t(to_typecast2t(expr).from);
+    return f;
     break;
   case expr2t::expr_ids::constant_int_id:
   {
