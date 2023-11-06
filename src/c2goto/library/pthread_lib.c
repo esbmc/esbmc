@@ -68,6 +68,7 @@ static __ESBMC_thread_key *head = NULL;
 
 int insert_key_value(pthread_key_t key, const void *value)
 {
+  __ESBMC_atomic_begin();
   __ESBMC_thread_key *l =
     (__ESBMC_thread_key *)__ESBMC_alloca(sizeof(__ESBMC_thread_key));
   if(l == NULL)
@@ -77,6 +78,7 @@ int insert_key_value(pthread_key_t key, const void *value)
   l->value = value;
   l->next = (head == NULL) ? NULL : head;
   head = l;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -338,7 +340,9 @@ __ESBMC_HIDE:;
 int pthread_mutex_unlock_noassert(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -458,7 +462,9 @@ int pthread_rwlock_init(
   const pthread_rwlockattr_t *attr)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -492,7 +498,9 @@ PTHREAD_RWLOCK_TRYWRLOCK_END:
 int pthread_rwlock_unlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -535,14 +543,18 @@ __ESBMC_HIDE:;
 int pthread_cond_destroy(pthread_cond_t *__cond)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*__cond) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
 extern int pthread_cond_signal(pthread_cond_t *__cond)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*__cond) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
