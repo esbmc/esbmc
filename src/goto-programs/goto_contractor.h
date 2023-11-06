@@ -79,12 +79,12 @@ public:
   ~Contractor()
   {
     //clean up
-    for(auto it : vector_ctc)
-      delete(it);
-    for(auto it : vector_nc)
-      delete(it);
-    for(auto it : vector_f)
-      delete(it);
+    for(auto it = vector_ctc.rbegin(); it != vector_ctc.rend(); ++it)
+      delete(*it);
+    for(auto it = vector_nc.rbegin(); it != vector_nc.rend(); ++it)
+      delete(*it);
+    for(auto it = vector_f.rbegin(); it != vector_f.rend(); ++it)
+      delete(*it);
   }
 
   void set_outer(ibex::Ctc *outer)
