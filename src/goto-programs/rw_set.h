@@ -15,6 +15,7 @@ public:
     irep_idt object;
     bool r, w;
     exprt guard;
+    exprt original_expr;
 
     entryt() : r(false), w(false), guard(true_exprt())
     {
@@ -62,14 +63,14 @@ public:
     compute(code);
   }
 
-  void read(const exprt &expr)
+  void read_rec(const exprt &expr)
   {
-    read_write_rec(expr, true, false, "", guardt());
+    read_write_rec(expr, true, false, "", guardt(), exprt());
   }
 
-  void read(const exprt &expr, const guardt &guard)
+  void read_rec(const exprt &expr, const guardt &guard, const exprt &original_expr)
   {
-    read_write_rec(expr, true, false, "", guard);
+    read_write_rec(expr, true, false, "", guard, original_expr);
   }
 
 protected:
@@ -84,7 +85,8 @@ protected:
     bool r,
     bool w,
     const std::string &suffix,
-    const guardt &guard);
+    const guardt &guard,
+    const exprt &original_expr);
 };
 
 #define forall_rw_set_entries(it, rw_set)                                      \
