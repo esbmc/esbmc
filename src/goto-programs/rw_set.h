@@ -68,7 +68,8 @@ public:
     read_write_rec(expr, true, false, "", guardt(), exprt());
   }
 
-  void read_rec(const exprt &expr, const guardt &guard, const exprt &original_expr)
+  void
+  read_rec(const exprt &expr, const guardt &guard, const exprt &original_expr)
   {
     read_write_rec(expr, true, false, "", guard, original_expr);
   }
