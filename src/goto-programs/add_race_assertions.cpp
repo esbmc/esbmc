@@ -15,7 +15,8 @@ public:
 
   std::list<irep_idt> w_guards;
 
-  const symbolt &get_guard_symbol(const irep_idt &object)
+  const symbolt &
+  get_guard_symbol(const irep_idt &object, const exprt &original_expr)
   {
     const irep_idt identifier = "tmp_" + id2string(object);
 
@@ -25,10 +26,13 @@ public:
 
     w_guards.push_back(identifier);
 
+    type2tc index = type2tc(array_type2tc(get_bool_type(), expr2tc(), true));
+
     symbolt new_symbol;
     new_symbol.id = identifier;
     new_symbol.name = identifier;
-    new_symbol.type = typet("bool");
+    new_symbol.type =
+      original_expr.is_index() ? migrate_type_back(index) : typet("bool");
     new_symbol.static_lifetime = true;
     new_symbol.value.make_false();
 
@@ -37,20 +41,35 @@ public:
     return *symbol_ptr;
   }
 
-  const exprt get_guard_symbol_expr(const irep_idt &object)
+  const exprt
+  get_guard_symbol_expr(const irep_idt &object, const exprt &original_expr)
   {
-    return symbol_expr(get_guard_symbol(object));
+    exprt expr = symbol_expr(get_guard_symbol(object, original_expr));
+
+    if(original_expr.is_index() && expr.type().is_array())
+    {
+      index_exprt full_expr = to_index_expr(original_expr);
+
+      index_exprt index;
+      index.array() = expr;
+      index.index() = full_expr.index();
+      index.type() = typet("bool");
+
+      expr.swap(index);
+    }
+
+    return expr;
   }
 
   const exprt get_w_guard_expr(const rw_sett::entryt &entry)
   {
     assert(entry.w);
-    return get_guard_symbol_expr(entry.object);
+    return get_guard_symbol_expr(entry.object, entry.original_expr);
   }
 
   const exprt get_assertion(const rw_sett::entryt &entry)
   {
-    return gen_not(get_guard_symbol_expr(entry.object));
+    return gen_not(get_guard_symbol_expr(entry.object, entry.original_expr));
   }
 
   void add_initialization(goto_programt &goto_program) const;
@@ -66,13 +85,16 @@ void w_guardst::add_initialization(goto_programt &goto_program) const
 
   for(const auto &w_guard : w_guards)
   {
-    exprt symbol = symbol_expr(*ns.lookup(w_guard));
+    const symbolt s = *ns.lookup(w_guard);
+    exprt symbol = symbol_expr(s);
     expr2tc new_sym;
     migrate_expr(symbol, new_sym);
 
+    expr2tc falsity = s.type.is_array() ? gen_zero(migrate_type(s.type), true)
+                                        : gen_false_expr();
     t = goto_program.insert(t);
     t->type = ASSIGN;
-    t->code = code_assign2tc(new_sym, gen_false_expr());
+    t->code = code_assign2tc(new_sym, falsity);
 
     t++;
   }

@@ -18,8 +18,8 @@ void rw_sett::compute(const codet &code)
 
 void rw_sett::assign(const exprt &lhs, const exprt &rhs)
 {
-  read(rhs);
-  read_write_rec(lhs, false, true, "", guardt());
+  read_rec(rhs);
+  read_write_rec(lhs, false, true, "", guardt(), exprt());
 }
 
 void rw_sett::read_write_rec(
@@ -27,7 +27,8 @@ void rw_sett::read_write_rec(
   bool r,
   bool w,
   const std::string &suffix,
-  const guardt &guard)
+  const guardt &guard,
+  const exprt &original_expr)
 {
   if(expr.id() == "symbol" && !expr.has_operands())
   {
@@ -64,29 +65,24 @@ void rw_sett::read_write_rec(
     entry.r = entry.r || r;
     entry.w = entry.w || w;
     entry.guard = migrate_expr_back(guard.as_expr());
+    entry.original_expr = original_expr;
   }
   else if(expr.id() == "member")
   {
     assert(expr.operands().size() == 1);
     const std::string &component_name = expr.component_name().as_string();
-    read_write_rec(expr.op0(), r, w, "." + component_name + suffix, guard);
+    read_write_rec(
+      expr.op0(), r, w, "." + component_name + suffix, guard, original_expr);
   }
   else if(expr.id() == "index")
   {
-    // we don't distinguish the array elements for now
     assert(expr.operands().size() == 2);
-    std::string tmp;
-
-    tmp =
-      integer2string(binary2integer(expr.op1().value().as_string(), true), 10);
-
-    read_write_rec(expr.op0(), r, w, "[" + suffix + tmp + "]", guard);
-    read(expr.op1(), guard);
+    read_write_rec(expr.op0(), r, w, suffix, guard, expr);
   }
   else if(expr.id() == "dereference")
   {
     assert(expr.operands().size() == 1);
-    read(expr.op0(), guard);
+    read_rec(expr.op0(), guard, original_expr);
 
     exprt tmp(expr.op0());
     expr2tc tmp_expr;
@@ -94,7 +90,7 @@ void rw_sett::read_write_rec(
     dereference(target, tmp_expr, ns, value_sets);
     tmp = migrate_expr_back(tmp_expr);
 
-    read_write_rec(tmp, r, w, suffix, guard);
+    read_write_rec(tmp, r, w, suffix, guard, original_expr);
   }
   else if(expr.is_address_of() || expr.id() == "implicit_address_of")
   {
@@ -103,22 +99,22 @@ void rw_sett::read_write_rec(
   else if(expr.id() == "if")
   {
     assert(expr.operands().size() == 3);
-    read(expr.op0(), guard);
+    read_rec(expr.op0(), guard, original_expr);
 
     guardt true_guard(guard);
     expr2tc tmp_expr;
     migrate_expr(expr.op0(), tmp_expr);
     true_guard.add(tmp_expr);
-    read_write_rec(expr.op1(), r, w, suffix, true_guard);
+    read_write_rec(expr.op1(), r, w, suffix, true_guard, original_expr);
 
     guardt false_guard(guard);
     migrate_expr(gen_not(expr.op0()), tmp_expr);
     false_guard.add(tmp_expr);
-    read_write_rec(expr.op2(), r, w, suffix, false_guard);
+    read_write_rec(expr.op2(), r, w, suffix, false_guard, original_expr);
   }
   else
   {
     forall_operands(it, expr)
-      read_write_rec(*it, r, w, suffix, guard);
+      read_write_rec(*it, r, w, suffix, guard, original_expr);
   }
 }
