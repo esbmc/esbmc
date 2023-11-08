@@ -34,4 +34,5 @@ endif()
 find_package(PkgConfig)
 
 set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:${IBEX_DIR}/share/pkgconfig")
+pkg_search_module(IBEX REQUIRED IMPORTED_TARGET ibex)
 pkg_check_modules(IBEX REQUIRED ibex)
