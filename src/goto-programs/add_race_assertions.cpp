@@ -26,7 +26,7 @@ public:
 
     w_guards.push_back(identifier);
 
-    type2tc index = type2tc(array_type2tc(get_bool_type(), expr2tc(), true));
+    type2tc index = array_type2tc(get_bool_type(), expr2tc(), true);
 
     symbolt new_symbol;
     new_symbol.id = identifier;
@@ -85,7 +85,7 @@ void w_guardst::add_initialization(goto_programt &goto_program) const
 
   for(const auto &w_guard : w_guards)
   {
-    const symbolt s = *ns.lookup(w_guard);
+    const symbolt &s = *ns.lookup(w_guard);
     exprt symbol = symbol_expr(s);
     expr2tc new_sym;
     migrate_expr(symbol, new_sym);
