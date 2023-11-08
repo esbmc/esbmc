@@ -39,7 +39,7 @@ ubuntu_setup () {
         libgmp-dev cmake bison flex g++-multilib linux-libc-dev \
         libboost-all-dev ninja-build python3-setuptools \
         libtinfo-dev pkg-config python3-pip python3-toml \
-        openjdk-11-jdk python2.7 \
+        openjdk-11-jdk \
     "
     if [ -z "$STATIC" ]; then STATIC=ON; fi
     if [ $STATIC = OFF ]; then
