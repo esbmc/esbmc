@@ -32,6 +32,7 @@
 cudaError_t
 __cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind)
 {
+  __ESBMC_atomic_begin();
   __ESBMC_assert(count > 0, "Size to be allocated may not be less than zero");
 
   char *cdst = (char *)dst;
@@ -42,6 +43,7 @@ __cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind)
     cdst[i] = csrc[i];
 
   lastError = CUDA_SUCCESS;
+  __ESBMC_atomic_end();
   return CUDA_SUCCESS;
 }
 
@@ -53,6 +55,7 @@ cudaError_t cudaMemcpy(T1 dst, T2 src, size_t count, enum cudaMemcpyKind kind)
 
 cudaError_t cudaMalloc(void **devPtr, size_t size)
 {
+  __ESBMC_atomic_begin();
   cudaError_t tmp;
   //pre-conditions
   __ESBMC_assert(size > 0, "Size to be allocated may not be less than zero");
@@ -67,13 +70,16 @@ cudaError_t cudaMalloc(void **devPtr, size_t size)
   __ESBMC_assert(tmp == CUDA_SUCCESS, "Memory was not allocated");
 
   lastError = tmp;
+  __ESBMC_atomic_end();
   return tmp;
 }
 
 cudaError_t cudaFree(void *devPtr)
 {
+  __ESBMC_atomic_begin();
   free(devPtr);
   lastError = CUDA_SUCCESS;
+  __ESBMC_atomic_end();
   return CUDA_SUCCESS;
 }
 
@@ -291,7 +297,6 @@ void cudaDeviceInsert(int device)
     }
     auxDevice = auxDevice->prox;
   }
-
   //Insert new device
   cudaDeviceList_t *newCudaDevice;
 
@@ -313,7 +318,6 @@ void cudaDeviceInsert(int device)
     newCudaDevice->prox = cudaDeviceList;
     cudaDeviceList = newCudaDevice;
   }
-
   //	return 1;
 }
 
@@ -321,7 +325,7 @@ void cudaDeviceInsert(int device)
 void cudaPrintDevice()
 {
   //printf("\n\n*** CUDA Device\n");
-
+  __ESBMC_atomic_begin();
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
   while(auxDevice != NULL)
@@ -329,6 +333,7 @@ void cudaPrintDevice()
     //printf("->Device: %d Active:%d\n",auxDevice->id,auxDevice->active);
     auxDevice = auxDevice->prox;
   }
+  __ESBMC_atomic_end();
 }
 
 //Searching for a device in the devices list
@@ -460,11 +465,13 @@ cudaError_t cudaMemcpyToSymbol(
   size_t offset __dv(0),
   enum cudaMemcpyKind kind __dv(cudaMemcpyHostToDevice))
 {
+  __ESBMC_atomic_begin();
   cudaError_t out;
 
   out = __cudaMemcpy((void *)(symbol), (const void *)src, count, kind);
 
   lastError = out;
+  __ESBMC_atomic_end();
   return out;
 }
 
@@ -475,11 +482,13 @@ cudaError_t cudaMemcpyFromSymbol(
   size_t offset __dv(0),
   enum cudaMemcpyKind kind __dv(cudaMemcpyDeviceToHost))
 {
+  __ESBMC_atomic_begin();
   cudaError_t out;
 
   out = __cudaMemcpy((void *)dst, (const void *)(symbol), count, kind);
 
   lastError = out;
+  __ESBMC_atomic_end();
   return out;
 }
 
@@ -507,7 +516,6 @@ cudaGetDeviceProperties(struct cudaDeviceProp *prop, int device)
     }
     auxDevice = auxDevice->prox;
   }
-
   return CUDA_ERROR_INVALID_VALUE;
 }
 
@@ -526,6 +534,7 @@ threadsList_t *cudaThreadList = NULL;
 
 cudaError_t cudaThreadSynchronize()
 {
+  __ESBMC_atomic_begin();
   cudaError_t tmp;
 
   while(cudaThreadList != NULL)
@@ -537,6 +546,7 @@ cudaError_t cudaThreadSynchronize()
     free(node);
   }
   lastError = CUDA_SUCCESS;
+  __ESBMC_atomic_end();
   return CUDA_SUCCESS;
 }
 
