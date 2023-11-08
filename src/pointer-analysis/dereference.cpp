@@ -563,8 +563,13 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
 
   // Due to migration hiccups, migration must occur after the symbol
   // appears in the symbol table.
+  namespacet new_ns(new_context);
+  const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &new_ns);
+
   expr2tc value;
   migrate_expr(symbol_expr(*s), value);
+  migrate_namespace_lookup = old_ns;
+
   return value;
 }
 

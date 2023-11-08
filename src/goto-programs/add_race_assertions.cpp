@@ -15,16 +15,20 @@ public:
 
   std::list<irep_idt> w_guards;
 
-  const symbolt &
-  get_guard_symbol(const irep_idt &object, const exprt &original_expr)
+  const symbolt &get_guard_symbol(
+    const irep_idt &object,
+    const exprt &original_expr,
+    bool deref)
   {
-    const irep_idt identifier = "tmp_" + id2string(object);
+    const irep_idt identifier =
+      deref ? "_ESBMC_deref_" + id2string(object) : "tmp_" + id2string(object);
 
     const symbolt *s = context.find_symbol(identifier);
     if(s != nullptr)
       return *s;
 
-    w_guards.push_back(identifier);
+    if(!deref)
+      w_guards.push_back(identifier);
 
     type2tc index = array_type2tc(get_bool_type(), expr2tc(), true);
 
@@ -41,10 +45,12 @@ public:
     return *symbol_ptr;
   }
 
-  const exprt
-  get_guard_symbol_expr(const irep_idt &object, const exprt &original_expr)
+  const exprt get_guard_symbol_expr(
+    const irep_idt &object,
+    const exprt &original_expr,
+    bool deref)
   {
-    exprt expr = symbol_expr(get_guard_symbol(object, original_expr));
+    exprt expr = symbol_expr(get_guard_symbol(object, original_expr, deref));
 
     if(original_expr.is_index() && expr.type().is_array())
     {
@@ -63,13 +69,15 @@ public:
 
   const exprt get_w_guard_expr(const rw_sett::entryt &entry)
   {
-    assert(entry.w);
-    return get_guard_symbol_expr(entry.object, entry.original_expr);
+    assert(entry.w || entry.deref);
+    return get_guard_symbol_expr(
+      entry.object, entry.original_expr, entry.deref);
   }
 
   const exprt get_assertion(const rw_sett::entryt &entry)
   {
-    return gen_not(get_guard_symbol_expr(entry.object, entry.original_expr));
+    return gen_not(
+      get_guard_symbol_expr(entry.object, entry.original_expr, entry.deref));
   }
 
   void add_initialization(goto_programt &goto_program) const;
@@ -154,7 +162,8 @@ void add_race_assertions(
       }
 
       // now add assignments for what is written -- reset
-      forall_rw_set_entries(e_it, rw_set) if(e_it->second.w)
+      forall_rw_set_entries(
+        e_it, rw_set) if(e_it->second.w || e_it->second.deref)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
