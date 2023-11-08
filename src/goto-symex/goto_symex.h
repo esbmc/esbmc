@@ -457,6 +457,8 @@ protected:
     const code_function_call2t &func_call,
     reachability_treet &art);
 
+  void intrinsic_races_check_dereference(expr2tc &expr);
+
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
 
