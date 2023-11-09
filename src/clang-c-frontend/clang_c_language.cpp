@@ -282,11 +282,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   }
 
 #if ESBMC_SVCOMP
-#define STR(x) #x
-#define XSTR(x) STR(x)
-  compiler_args.push_back("-D__ESBMC_SVCOMP=" XSTR(ESBMC_SVCOMP));
-#undef XSTR
-#undef STR
+  compiler_args.push_back("-D__ESBMC_SVCOMP");
 #endif
 
   // Increase maximum bracket depth
