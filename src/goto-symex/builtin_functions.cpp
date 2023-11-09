@@ -1518,6 +1518,9 @@ void goto_symext::intrinsic_races_check_dereference(expr2tc &expr)
   exprt tmp_exprt = migrate_expr_back(expr);
   std::string iden;
 
+  // There are two kinds of instructions generated in a data races check:
+  // assignment and assertion (_ESBMC_deref_a = false; assert !_ESBMC_deref_a)
+
   if(!tmp_exprt.is_not())
     iden = tmp_exprt.is_index() ? id2string(tmp_exprt.op0().identifier())
                                 : id2string(tmp_exprt.identifier());
@@ -1528,6 +1531,8 @@ void goto_symext::intrinsic_races_check_dereference(expr2tc &expr)
                                 : id2string(tmp_exprt.identifier());
   }
 
+  // Only instructions with special prefixes are processed
+  // _ESBMC_deref_a = "_ESBMC_deref_" + "a"
   if(has_prefix(iden, "_ESBMC_deref"))
   {
     const irep_idt identifier = iden.substr(13);
