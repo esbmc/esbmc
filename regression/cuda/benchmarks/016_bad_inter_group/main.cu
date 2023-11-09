@@ -9,7 +9,7 @@
 
 __global__ void foo(int* A) {
 
-   A[ blockIdx.x*blockDim.x + threadIdx.x ] += (A[ (blockIdx.x + 1)*blockDim.x + threadIdx.x ]);
+   A[ blockIdx.x*blockDim.x] += (A[ (blockIdx.x + 1)*blockDim.x]);
 
 }
 
