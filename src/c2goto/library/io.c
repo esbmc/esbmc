@@ -84,7 +84,7 @@ __ESBMC_HIDE:;
 FILE *fopen(const char *filename, const char *m)
 {
 __ESBMC_HIDE:;
-#if __ESBMC_SVCOMP >= 24
+#if __ESBMC_SVCOMP
   FILE *f = (void *)1;
 #else
   FILE *f = malloc(sizeof(FILE));
@@ -95,7 +95,7 @@ __ESBMC_HIDE:;
 int fclose(FILE *stream)
 {
 __ESBMC_HIDE:;
-#if __ESBMC_SVCOMP >= 24
+#if __ESBMC_SVCOMP
 #else
   free(stream);
 #endif
