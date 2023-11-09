@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.cu
 --context-bound 3 --force-malloc-success --state-hashing --unwind 9 --data-races-check
 
