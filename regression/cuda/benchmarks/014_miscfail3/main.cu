@@ -39,7 +39,7 @@ int main(){
 	printf("a:  ");
 
 	//inline_test<<<1,N>>>(dev_a, 2);		//you can change this offset for tests
-	ESBMC_verify_kernel_intt(inline_test, 1, N, dev_a, 2);
+	ESBMC_verify_kernel_intt(inline_test, 1, N, dev_a, 1);
 	
 	cudaMemcpy(a,dev_a,size,cudaMemcpyDeviceToHost);
 
