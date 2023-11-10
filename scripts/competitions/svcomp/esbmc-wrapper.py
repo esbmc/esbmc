@@ -28,6 +28,7 @@ class Result:
   unknown = 11
   fail_memcleanup = 12
   fail_termination = 13
+  fail_race = 14
 
   @staticmethod
   def is_fail(res):
@@ -44,6 +45,8 @@ class Result:
     if res == Result.fail_memcleanup:
       return True
     if res == result.fail_termination:
+      return True
+    if res == Result.fail_race:
       return True
     return False
 
@@ -63,6 +66,7 @@ class Property:
   overflow = 3
   termination = 4
   memcleanup = 5
+  datarace = 6
 
 def do_exec(cmd_line):
 
@@ -108,6 +112,7 @@ def parse_result(the_output, prop):
   free_error = "dereference failure: free() of non-dynamic memory"
   bounds_violated = "array bounds violated"
   free_offset = "Operand of free must have zero pointer offset"
+  data_race = "/W data race on"
 
   if "VERIFICATION FAILED" in the_output:
     if "unwinding assertion loop" in the_output:
@@ -163,6 +168,9 @@ def parse_result(the_output, prop):
     if prop == Property.reach:
       return Result.fail_reach
 
+    if prop == Property.datarace:
+      return Result.fail_race
+
   if "VERIFICATION SUCCESSFUL" in the_output:
     return Result.success
 
@@ -189,6 +197,9 @@ def get_result_string(the_result):
 
   if the_result == Result.fail_termination:
     return "FALSE_TERMINATION"
+
+  if the_result == Result.fail_race:
+    return "FALSE_DATARACE"
 
   if the_result == Result.success:
     return "TRUE"
@@ -240,7 +251,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   else:
     command_line += "--64 "
 
-  concurrency = (prop == Property.reach) and check_if_benchmark_contains_pthread(benchmark)
+  concurrency = ((prop in (Property.reach, Property.datarace)) and
+                 check_if_benchmark_contains_pthread(benchmark))
 
   if concurrency:
     command_line += " --no-por --context-bound 2 "
@@ -273,6 +285,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
       command_line += "--no-pointer-check --no-bounds-check "
     else:
       command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR --goto-unwind --unlimited-goto-unwind "
+  elif prop == Property.datarace:
+    # TODO: can we do better in case 'concurrency == False'?
+    command_line += "--no-pointer-check --no-bounds-check --data-races-check --no-assertions "
   else:
     print("Unknown property")
     exit(1)
@@ -374,6 +389,8 @@ elif "CHECK( init(main()), LTL(F end) )" in property_file_content:
   category_property = Property.termination
 elif "CHECK( init(main()), LTL(G valid-memcleanup) )" in property_file_content:
   category_property = Property.memcleanup
+elif "CHECK( init(main()), LTL(G ! data-race) )" in property_file_content:
+  category_property = Property.datarace
 else:
   print("Unsupported Property")
   exit(1)
