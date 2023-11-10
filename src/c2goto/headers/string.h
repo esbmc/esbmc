@@ -22,6 +22,7 @@ char *strpbrk(const char *s, const char *accept);
 char *strstr(const char *str1, const char *str2);
 char *strtok(char *__ESBMC_restrict str, const char *__ESBMC_restrict delim);
 char *strdup(const char *str);
+char *strerror(int errnum);
 void *memcpy(void *__ESBMC_restrict dst, const void *__ESBMC_restrict src, size_t n);
 void *memset(void *s, int c, size_t n);
 void *memmove(void *dest, const void *src, size_t n);
