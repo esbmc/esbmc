@@ -44,7 +44,7 @@ class Result:
       return True
     if res == Result.fail_memcleanup:
       return True
-    if res == result.fail_termination:
+    if res == result.fail_termination: # XXX fbrausse: shouldn't "result" be capitalized?
       return True
     if res == Result.fail_race:
       return True
