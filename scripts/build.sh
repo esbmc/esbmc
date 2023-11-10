@@ -118,6 +118,7 @@ usage() {
     echo "  -d         enable debug output for this script and c2goto"
     echo "  -S ON|OFF  enable/disable static build [ON for Ubuntu, OFF for macOS]"
     echo "  -c VERS    use packaged clang-VERS in a shared build on Ubuntu [11]"
+    echo "  -C         build an SV-COMP version [disabled]"
     echo
     echo "This script prepares the environment, downloads dependencies, configures"
     echo "the ESBMC build and runs the commands to compile and install ESBMC into"
@@ -129,7 +130,7 @@ usage() {
 }
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts hb:s:e:r:dS:c: flag
+while getopts hb:s:e:r:dS:c:C flag
 do
     case "${flag}" in
     h) usage; exit 0 ;;
@@ -141,6 +142,7 @@ do
     d) set -x; export ESBMC_OPTS='--verbosity 9' ;;
     S) STATIC=$OPTARG ;; # should be capital ON or OFF
     c) CLANG_VERSION=$OPTARG ;; # LLVM/Clang major version
+    C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON" ;;
     *) exit 1 ;;
     esac
 done

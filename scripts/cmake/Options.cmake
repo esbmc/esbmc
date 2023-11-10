@@ -49,6 +49,7 @@ option(ENABLE_CSMITH "Add csmith Tests (default: OFF) (depends: ENABLE_REGRESSIO
 option(BENCHBRINGUP "Run a user-specified benchmark in Github workflow" OFF)
 option(DOWNLOAD_DEPENDENCIES "Download and build dpendencies if needed (default: OFF)" OFF)
 option(ACADEMIC_BUILD "Check and Enable libs that available only in Academic builds (default: OFF)" OFF)
+option(ESBMC_SVCOMP "Enable an SV-COMP build of ESBMC (default: OFF)" OFF)
 
 #############################
 # PRE-BUILT DEPENDENCIES

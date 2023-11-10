@@ -281,6 +281,10 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.push_back("-D_USE_MATH_DEFINES");
   }
 
+#if ESBMC_SVCOMP
+  compiler_args.push_back("-D__ESBMC_SVCOMP");
+#endif
+
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");
 
