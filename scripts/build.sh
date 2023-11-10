@@ -129,6 +129,8 @@ usage() {
     echo "Supported environments are: Ubuntu-22.04 and macOS."
 }
 
+set -- "$@" -C
+
 # Setup build flags (release, debug, sanitizer, ...)
 while getopts hb:s:e:r:dS:c:C flag
 do
