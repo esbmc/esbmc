@@ -1117,10 +1117,10 @@ static inline expr2tc gen_value_by_byte(
     return expr2tc();
   }
 
-  if (is_scalar_type(type) && type->get_width() == 8 && offset == 0)
+  if(type->get_width() == 8 && offset == 0)
     return typecast2tc(type, value);
 
-  if (is_array_type(type))
+  if(is_array_type(type))
   {
     /*
      * Very straighforward, get the total number_of_bytes and keep subtracting until
