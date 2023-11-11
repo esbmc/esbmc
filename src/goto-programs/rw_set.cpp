@@ -38,8 +38,7 @@ void rw_sett::read_write_rec(
     const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
     if(symbol)
     {
-      if(
-        !symbol->static_lifetime && !dereferenced /*!expr.type().is_pointer()*/)
+      if(!symbol->static_lifetime && !dereferenced)
       {
         return; // ignore for now
       }
@@ -92,6 +91,8 @@ void rw_sett::read_write_rec(
     dereference(target, tmp_expr, ns, value_sets);
     exprt tmp = migrate_expr_back(tmp_expr);
 
+    // If dereferencing fails, then we revert the variable 
+    // and we will attempt dereferencing in symex
     if(
       has_prefix(id2string(tmp.identifier()), "symex::invalid_object") ||
       id2string(tmp.identifier()) == "")
