@@ -91,7 +91,7 @@ void rw_sett::read_write_rec(
     dereference(target, tmp_expr, ns, value_sets);
     exprt tmp = migrate_expr_back(tmp_expr);
 
-    // If dereferencing fails, then we revert the variable 
+    // If dereferencing fails, then we revert the variable
     // and we will attempt dereferencing in symex
     if(
       has_prefix(id2string(tmp.identifier()), "symex::invalid_object") ||
