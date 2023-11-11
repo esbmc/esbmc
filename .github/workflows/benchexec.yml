@@ -17,7 +17,7 @@ on:
       svbenchmarks:
         description: 'Git branch, tag, or commit of SV-Benchmarks to use'
         required: true
-        default: 'svcomp23'      	
+        default: 'main'
       mode:
         type: choice
         description: Benchecex run mode
