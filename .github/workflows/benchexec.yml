@@ -108,6 +108,8 @@ jobs:
           cd $HOME/sv-benchmarks
           git fetch --all --tags
           git checkout ${{ inputs.svbenchmarks }}
+          upstream=`git branch -vv | sed -rn 's/^\* [^[]+\[([^]]+)\].*/\1/p'`
+          test -z "$upstream" || git merge --ff-only
           echo "sv-benchmarks revision:"
           git rev-parse HEAD
       - name: Download Linux Build
