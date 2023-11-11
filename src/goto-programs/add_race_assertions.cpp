@@ -21,7 +21,7 @@ public:
     bool deref)
   {
     const irep_idt identifier =
-      deref ? "_ESBMC_deref_" + id2string(object) : "tmp_" + id2string(object);
+      deref ? "__ESBMC_deref_" + id2string(object) : "tmp_" + id2string(object);
 
     const symbolt *s = context.find_symbol(identifier);
     if(s != nullptr)
