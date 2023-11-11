@@ -1530,9 +1530,9 @@ void goto_symext::intrinsic_races_check_dereference(expr2tc &expr)
 
   // Only instructions with special prefixes are processed
   // _ESBMC_deref_a = "_ESBMC_deref_" + "a"
-  if(has_prefix(iden, "_ESBMC_deref"))
+  if(has_prefix(iden, "__ESBMC_deref"))
   {
-    const irep_idt identifier = iden.substr(13);
+    const irep_idt identifier = iden.substr(14);
 
     const symbolt *symbol = new_context.find_symbol(identifier);
 
