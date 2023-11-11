@@ -1048,7 +1048,19 @@ c_expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
   else if(type.id() == "unsignedbv" || type.id() == "signedbv")
   {
     BigInt int_value = binary2integer(value, type.id() == "signedbv");
-    dest = integer2string(int_value);
+    BigInt llong_ub;
+    llong_ub.setPower2(config.ansi_c.long_long_int_width - 1);
+    if(int_value == -llong_ub)
+    {
+      dest = integer2string(int_value + 1);
+      dest += " - 1";
+    }
+    else if(int_value >= llong_ub)
+    {
+      dest = "0x" + integer2string(int_value, 16);
+    }
+    else
+      dest = integer2string(int_value);
   }
   else if(type.id() == "floatbv")
   {
