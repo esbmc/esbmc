@@ -238,13 +238,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         symbol.location = location;
         symbol.type = code_typet();
         symbol.name = func_name;
-        symbol.id = func_name;
+        symbol.id = symbol_id;
 
         context.add(symbol);
       }
     }
 
-    symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
+    const symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
     if(func_symbol == nullptr)
     {
       log_error("Undefined function: {}", func_name.c_str());
@@ -254,6 +254,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     code_function_callt call;
     call.location() = location;
     call.function() = symbol_expr(*func_symbol);
+    call.type() = func_symbol->type;
 
     for(const auto &arg_node : element["args"])
     {
@@ -304,7 +305,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::VARIABLE_REF:
   {
-    // Find the variable declaration in the AST JSON
+    // Find the variable declaration in the current function
     std::string var_name = element["id"].get<std::string>();
     std::string symbol_id = "py:" + python_filename + "@" + "F" + "@" +
                             current_func_name + "@" + var_name;
@@ -588,18 +589,18 @@ void python_converter::get_function_definition(
     context.add(param_symbol);
   }
 
-  // Function body
-  exprt function_body = get_block(function_node["body"]);
-
   // Create symbol
-  symbolt symbol =
-    create_symbol(module_name, current_func_name, id, location, type);
+  symbolt symbol = create_symbol(
+    module_name, current_func_name, id, location, type);
   symbol.lvalue = true;
   symbol.is_extern = false;
   symbol.file_local = false;
-  symbol.value = function_body;
 
-  context.add(symbol);
+  symbolt *added_symbol = context.move_symbol_to_context(symbol);
+
+  // Function body
+  exprt function_body = get_block(function_node["body"]);
+  added_symbol->value = function_body;
 }
 
 void python_converter::get_return_statements(
