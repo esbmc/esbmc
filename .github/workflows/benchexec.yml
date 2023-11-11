@@ -33,9 +33,8 @@ on:
         - SV-COMP24_no-data-race
         - SV-COMP24_valid-memcleanup
         - SV-COMP24_valid-memsafety
-        - SV-COMP24_termination
         - SV-COMP24_no-overflow
-        - Custom
+        - SV-COMP24_termination
       task:
         type: choice
         description: Task to use Run-set to use (be sure to set mode to "Task")
@@ -54,33 +53,32 @@ on:
         - ReachSafety-Combinations
         - ReachSafety-Hardware
         - ReachSafety-Hardness
-        - ReachSafety-Fuzzle
         - ConcurrencySafety-Main
-        - ConcurrencySafety-MemSafety
-        - ConcurrencySafety-NoOverflows
+        - SoftwareSystems-AWS-C-Common-ReachSafety
+        - SoftwareSystems-BusyBox-ReachSafety
+        - SoftwareSystems-coreutils-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
+        - SoftwareSystems-uthash-ReachSafety
         - NoDataRace-Main
-        - NoOverflows-Main
-        - NoOverflows-Juliet
         - MemSafety-MemCleanup
         - MemSafety-Arrays
         - MemSafety-Heap
         - MemSafety-LinkedLists
         - MemSafety-Other
         - MemSafety-Juliet
-        - SoftwareSystems-AWS-C-Common-ReachSafety
-        - SoftwareSystems-BusyBox-ReachSafety
         - SoftwareSystems-BusyBox-MemSafety
-        - SoftwareSystems-BusyBox-NoOverflows
-        - SoftwareSystems-coreutils-ReachSafety
         - SoftwareSystems-coreutils-MemSafety
-        - SoftwareSystems-coreutils-NoOverflows
-        - SoftwareSystems-DeviceDriversLinux64-ReachSafety
         - SoftwareSystems-DeviceDriversLinux64-MemSafety
-        - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
-        - SoftwareSystems-uthash-ReachSafety
-        - SoftwareSystems-uthash-MemSafety
-        - SoftwareSystems-uthash-NoOverflows
         - SoftwareSystems-OpenBSD-MemSafety
+        - SoftwareSystems-uthash-MemSafety
+        - ConcurrencySafety-MemSafety
+        - NoOverflows-Main
+        - NoOverflows-Juliet
+        - SoftwareSystems-BusyBox-NoOverflows
+        - SoftwareSystems-coreutils-NoOverflows
+        - SoftwareSystems-uthash-NoOverflows
+        - ConcurrencySafety-NoOverflows
         - Termination-BitVectors
         - Termination-MainControlFlow
         - Termination-MainHeap
@@ -106,7 +104,12 @@ jobs:
     needs: build-unix
     steps:
       - name: Setup SV-Benchmarks version
-        run: cd $HOME/sv-benchmarks && git fetch --all --tags && git checkout ${{ inputs.svbenchmarks }}
+        run: |
+          cd $HOME/sv-benchmarks
+          git fetch --all --tags
+          git checkout ${{ inputs.svbenchmarks }}
+          echo "sv-benchmarks revision:"
+          git rev-parse HEAD
       - name: Download Linux Build
         uses: actions/download-artifact@v4
         with:
