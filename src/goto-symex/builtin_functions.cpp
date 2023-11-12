@@ -496,6 +496,8 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
   else
     abort();
 
+  cur_state->source.pc--;
+
   if(func_call.ret)
     symex_assign(code_assign2tc(
       func_call.ret,
@@ -527,6 +529,8 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
       symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
     }
   }
+
+  cur_state->source.pc++;
 }
 
 void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)

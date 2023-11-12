@@ -283,7 +283,8 @@ void violation_graphml_goto_trace(
     case goto_trace_stept::ASSIGNMENT:
       if(
         step.pc->is_assign() || step.pc->is_return() ||
-        (step.pc->is_other() && is_nil_expr(step.lhs)))
+        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+        step.pc->is_function_call())
       {
         std::string assignment = get_formated_assignment(ns, step);
 
@@ -411,7 +412,8 @@ void show_goto_trace(
     case goto_trace_stept::ASSIGNMENT:
       if(
         step.pc->is_assign() || step.pc->is_return() ||
-        (step.pc->is_other() && is_nil_expr(step.lhs)))
+        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+        step.pc->is_function_call())
       {
         if(prev_step_nr != step.step_nr || first_step)
         {
