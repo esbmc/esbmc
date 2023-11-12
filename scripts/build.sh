@@ -22,10 +22,11 @@ SOLVER_FLAGS="\
     -DACADEMIC_BUILD=On \
 "
 # Check if academic build and goto contractor options are enabled and warn about soplex.
-if [ "$ACADEMIC_BUILD" = "On" ] && [ "$ENABLE_GOTO_CONTRACTOR" = "On" ]; then
-    echo "WARNING: Academic build with Goto Contractor is enabled. Which means ibex will download soplex. \
-    Soplex is a tierce library under ZIB licence, not LGPL. By configuring Ibex with Soplex, you implicitely \
-    accept the terms of this licence. Disable ACADEMIC_BUILD to use ibex without soplex."
+if [ "$(echo "$SOLVER_FLAGS" | grep -c '\-DENABLE_GOTO_CONTRACTOR=On')" -gt 0 ] &&
+      [ "$(echo "$SOLVER_FLAGS" | grep -c '\-DACADEMIC_BUILD=On')" -gt 0 ]; then
+    echo "WARNING: Academic build with Goto Contractor is enabled. Which means ibex will download soplex."
+    echo "Soplex is a tierce library under ZIB licence, not LGPL. By configuring Ibex with Soplex, you implicitely"
+    echo "accept the terms of this licence. Disable ACADEMIC_BUILD to use ibex without soplex."
 fi
 
 COMPILER_ARGS=''
