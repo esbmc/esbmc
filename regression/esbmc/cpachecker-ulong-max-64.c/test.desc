@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 ulong-max.c
 --64
 ^VERIFICATION FAILED$
