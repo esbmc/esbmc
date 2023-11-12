@@ -13,6 +13,9 @@ if(DOWNLOAD_DEPENDENCIES AND (NOT DEFINED IBEX_DIR))
 
    message("[ibex] Setting up ibex")
    if(ACADEMIC_BUILD)
+      message(WARNING "ibex is using soplex. Soplex is a tierce library under ZIB licence, not LGPL. \
+      By configuring Ibex with Soplex, you implicitely accept the terms of this licence. \
+      Disable ACADEMIC_BUILD to use ibex without soplex.")
       execute_process(COMMAND ./waf --prefix=${ibex_BINARY_DIR} --lp-lib=soplex  configure
          WORKING_DIRECTORY ${ibex_SOURCE_DIR})
    else()
