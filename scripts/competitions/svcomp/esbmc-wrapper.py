@@ -239,7 +239,7 @@ def check_if_benchmark_contains_pthread(benchmark):
         return True
   return False
 
-def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
+def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci):
   command_line = esbmc_path + dargs
 
   # Add benchmark
@@ -259,7 +259,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
-  command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
+  witness_name = os.path.basename(benchmark) if esbmc_ci else "witness"
+  command_line += "--witness-output " + witness_name + ".graphml "
 
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.termination:
@@ -309,9 +310,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
 
   return command_line
 
-def verify(strat, prop, concurrency, dargs):
+def verify(strat, prop, concurrency, dargs, esbmc_ci):
   # Get command line
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs)
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
 
   # Call ESBMC
   output = run(esbmc_command_line)
@@ -320,13 +321,12 @@ def verify(strat, prop, concurrency, dargs):
   # Parse output
   return res
 
-def witness_to_sha256(benchmark):
+def witness_to_sha256(benchmark, esbmc_ci):
   sha256hash = ''
   with open(benchmark, 'r') as f:
     data = f.read().encode('utf-8')
     sha256hash = sha256(data).hexdigest()
-  witness = os.path.basename(benchmark) + ".graphml"
-
+  witness = os.path.basename(benchmark) + ".graphml" if esbmc_ci else "witness.graphml"
   fin = open(witness, "rt")
   data = fin.readlines()
   fin.close()
@@ -352,6 +352,7 @@ parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
 parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="fixed")
 parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
 parser.add_argument("-n", "--dry-run", help="do not actually run ESBMC, just print the command", action='store_true')
+parser.add_argument("--ci", help="run this wrapper with special options for the CI (internal use)", action='store_true')
 
 args = parser.parse_args()
 
@@ -361,6 +362,7 @@ property_file = args.propertyfile
 benchmark = args.benchmark
 strategy = args.strategy
 concurrency = args.concurrency
+esbmc_ci = args.ci
 
 if version:
   print(do_exec(esbmc_path + "--version").decode()[6:].strip()),
@@ -395,9 +397,9 @@ else:
   print("Unsupported Property")
   exit(1)
 
-result = verify(strategy, category_property, concurrency, esbmc_dargs)
+result = verify(strategy, category_property, concurrency, esbmc_dargs, esbmc_ci)
 try:
-  witness_to_sha256(benchmark)
+  witness_to_sha256(benchmark, esbmc_ci)
 except:
   pass
 print(get_result_string(result))
