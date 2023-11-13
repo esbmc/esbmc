@@ -154,6 +154,22 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if(element.contains("value"))
     rhs = get_expr(element["value"]);
 
+  auto to_side_effect_call = [](exprt &expr) {
+    side_effect_expr_function_callt side_effect;
+    code_function_callt &code = static_cast<code_function_callt &>(expr);
+    side_effect.function() = code.function();
+    side_effect.location() = code.location();
+    side_effect.type() = code.type();
+    side_effect.arguments() = code.arguments();
+    expr = side_effect;
+  };
+
+  // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
+  if(lhs.is_function_call())
+    to_side_effect_call(lhs);
+  if(rhs.is_function_call())
+    to_side_effect_call(rhs);
+
   std::string op;
 
   if(element.contains("op"))
@@ -238,13 +254,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         symbol.location = location;
         symbol.type = code_typet();
         symbol.name = func_name;
-        symbol.id = func_name;
+        symbol.id = symbol_id;
 
         context.add(symbol);
       }
     }
 
-    symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
+    const symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
     if(func_symbol == nullptr)
     {
       log_error("Undefined function: {}", func_name.c_str());
@@ -254,6 +270,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     code_function_callt call;
     call.location() = location;
     call.function() = symbol_expr(*func_symbol);
+    const typet &return_type = to_code_type(func_symbol->type).return_type();
+    call.type() = return_type;
 
     for(const auto &arg_node : element["args"])
     {
@@ -304,7 +322,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::VARIABLE_REF:
   {
-    // Find the variable declaration in the AST JSON
+    // Find the variable declaration in the current function
     std::string var_name = element["id"].get<std::string>();
     std::string symbol_id = "py:" + python_filename + "@" + "F" + "@" +
                             current_func_name + "@" + var_name;
@@ -413,9 +431,9 @@ void python_converter::get_var_assign(
   /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
    * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
    */
-  if(rhs.is_code() && rhs.get("statement") == "function_call")
+  if(rhs.is_function_call())
   {
-    // op0() references the left-hand side (lhs) of the function call
+    // op0() refers to the left-hand side (lhs) of the function call
     rhs.op0() = lhs;
     target_block.copy_to_operands(rhs);
     return;
@@ -544,6 +562,9 @@ void python_converter::get_function_definition(
 
   current_element_type = type.return_type();
 
+  // Copy caller function name
+  const std::string caller_func_name = current_func_name;
+
   // Function location
   locationt location = get_location_from_decl(function_node);
 
@@ -588,18 +609,21 @@ void python_converter::get_function_definition(
     context.add(param_symbol);
   }
 
-  // Function body
-  exprt function_body = get_block(function_node["body"]);
-
   // Create symbol
   symbolt symbol =
     create_symbol(module_name, current_func_name, id, location, type);
   symbol.lvalue = true;
   symbol.is_extern = false;
   symbol.file_local = false;
-  symbol.value = function_body;
 
-  context.add(symbol);
+  symbolt *added_symbol = context.move_symbol_to_context(symbol);
+
+  // Function body
+  exprt function_body = get_block(function_node["body"]);
+  added_symbol->value = function_body;
+
+  // Restore caller function name
+  current_func_name = caller_func_name;
 }
 
 void python_converter::get_return_statements(
