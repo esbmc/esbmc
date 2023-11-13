@@ -125,7 +125,7 @@ void add_race_assertions(
     if(instruction.is_atomic_begin())
       is_atomic = true;
 
-    if(instruction.is_assign() && !is_atomic)
+    if((instruction.is_assign() || instruction.is_other()) && !is_atomic)
     {
       exprt tmp_expr = migrate_expr_back(instruction.code);
       rw_sett rw_set(ns, value_sets, i_it, to_code(tmp_expr));
