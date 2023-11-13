@@ -121,11 +121,14 @@ void add_race_assertions(
   Forall_goto_program_instructions(i_it, goto_program)
   {
     goto_programt::instructiont &instruction = *i_it;
-    
+
     if(instruction.is_atomic_begin())
       is_atomic = true;
 
-    if((instruction.is_assign() || instruction.is_other() || instruction.is_return()) && !is_atomic)
+    if(
+      (instruction.is_assign() || instruction.is_other() ||
+       instruction.is_return()) &&
+      !is_atomic)
     {
       exprt tmp_expr = migrate_expr_back(instruction.code);
       rw_sett rw_set(ns, value_sets, i_it, to_code(tmp_expr));
