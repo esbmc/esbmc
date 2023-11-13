@@ -21,13 +21,6 @@ SOLVER_FLAGS="\
     -DENABLE_GOTO_CONTRACTOR=On \
     -DACADEMIC_BUILD=Off \
 "
-# Check if academic build and goto contractor options are enabled and warn about soplex.
-if [ "$(echo "$SOLVER_FLAGS" | grep -c '\-DENABLE_GOTO_CONTRACTOR=On')" -gt 0 ] &&
-      [ "$(echo "$SOLVER_FLAGS" | grep -c '\-DACADEMIC_BUILD=On')" -gt 0 ]; then
-    echo "WARNING: Academic build with Goto Contractor is enabled. Which means ibex will download soplex."
-    echo "Soplex is a tierce library under ZIB licence, not LGPL. By configuring Ibex with Soplex, you implicitely"
-    echo "accept the terms of this licence. Disable ACADEMIC_BUILD to use ibex without soplex."
-fi
 
 COMPILER_ARGS=''
 
@@ -73,8 +66,7 @@ ubuntu_setup () {
     echo "Installing Python dependencies" &&
     pip3 install --user meson ast2json &&
     meson --version &&
-    # Must disable goto contractor to enable enable old front end. github issue #1110
-    # https://github.com/esbmc/esbmc/issues/1110.
+
     BASE_ARGS="$BASE_ARGS \
         -DENABLE_OLD_FRONTEND=Off \
         -DENABLE_PYTHON_FRONTEND=On \
