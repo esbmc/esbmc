@@ -20,6 +20,11 @@ void rw_sett::compute(const codet &code)
     Forall_operands(it, expr)
       read_rec(*it);
   }
+  else if(statement == "return")
+  {
+    assert(code.operands().size() == 1);
+    read_rec(code.op0());
+  }
 }
 
 void rw_sett::assign(const exprt &lhs, const exprt &rhs)
