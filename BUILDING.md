@@ -309,6 +309,8 @@ macOS:
 cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=${ESBMC_STATIC:-ON} $ESBMC_CLANG -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DBitwuzla_DIR=$PWD/../../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
 ```
 
+***If you are on Linux, be extra sure to have `-GNinja` flag (see [#1479](https://github.com/esbmc/esbmc/issues/1479))***
+
 Note, this command uses the ESBMC_CLANG and ESBMC_STATIC variables set in the section on preparing Clang.
 
 Finally, we can trigger the build process, by using the following command:
