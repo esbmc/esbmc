@@ -14,6 +14,17 @@ void rw_sett::compute(const codet &code)
     assert(code.operands().size() == 2);
     assign(code.op0(), code.op1());
   }
+  else if(statement == "printf")
+  {
+    exprt expr = code;
+    Forall_operands(it, expr)
+      read_rec(*it);
+  }
+  else if(statement == "return")
+  {
+    assert(code.operands().size() == 1);
+    read_rec(code.op0());
+  }
 }
 
 void rw_sett::assign(const exprt &lhs, const exprt &rhs)
@@ -47,7 +58,8 @@ void rw_sett::read_write_rec(
         symbol->name == "__ESBMC_alloc" ||
         symbol->name == "__ESBMC_alloc_size" || symbol->name == "stdin" ||
         symbol->name == "stdout" || symbol->name == "stderr" ||
-        symbol->name == "sys_nerr")
+        symbol->name == "sys_nerr" || symbol->name == "operator=::ref" ||
+        symbol->name == "this")
       {
         return; // ignore for now
       }
