@@ -58,7 +58,8 @@ void rw_sett::read_write_rec(
         symbol->name == "__ESBMC_alloc" ||
         symbol->name == "__ESBMC_alloc_size" || symbol->name == "stdin" ||
         symbol->name == "stdout" || symbol->name == "stderr" ||
-        symbol->name == "sys_nerr")
+        symbol->name == "sys_nerr" || symbol->name == "operator=::ref" ||
+        symbol->name == "this")
       {
         return; // ignore for now
       }
