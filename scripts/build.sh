@@ -19,7 +19,7 @@ SOLVER_FLAGS="\
     -DENABLE_CVC4=OFF \
     -DENABLE_BITWUZLA=On \
     -DENABLE_GOTO_CONTRACTOR=On \
-    -DACADEMIC_BUILD=On \
+    -DACADEMIC_BUILD=Off \
 "
 # Check if academic build and goto contractor options are enabled and warn about soplex.
 if [ "$(echo "$SOLVER_FLAGS" | grep -c '\-DENABLE_GOTO_CONTRACTOR=On')" -gt 0 ] &&
