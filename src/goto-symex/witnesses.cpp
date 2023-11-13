@@ -583,8 +583,14 @@ void _create_graph_node(
   if(options.get_bool_option("overflow-check"))
     pDataSpecification.put_value("CHECK( init(main()), LTL(G ! overflow) )");
   else if(options.get_bool_option("memory-leak-check"))
-    pDataSpecification.put_value(
-      "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
+  {
+    if(options.get_bool_option("no-reachable-memory-leak"))
+      pDataSpecification.put_value(
+        "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
+    else
+      pDataSpecification.put_value(
+        "CHECK( init(main()), LTL(G valid-memcleanup) )");
+  }
   else
     pDataSpecification.put_value(
       "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )");
