@@ -154,6 +154,22 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if(element.contains("value"))
     rhs = get_expr(element["value"]);
 
+  auto to_side_effect_call = [](exprt &expr) {
+    side_effect_expr_function_callt side_effect;
+    code_function_callt &code = static_cast<code_function_callt &>(expr);
+    side_effect.function() = code.function();
+    side_effect.location() = code.location();
+    side_effect.type() = code.type();
+    side_effect.arguments() = code.arguments();
+    expr = side_effect;
+  };
+
+  // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
+  if(lhs.is_function_call())
+    to_side_effect_call(lhs);
+  if(rhs.is_function_call())
+    to_side_effect_call(rhs);
+
   std::string op;
 
   if(element.contains("op"))
@@ -415,7 +431,7 @@ void python_converter::get_var_assign(
   /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
    * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
    */
-  if(rhs.is_code() && rhs.get("statement") == "function_call")
+  if(rhs.is_function_call())
   {
     // op0() refers to the left-hand side (lhs) of the function call
     rhs.op0() = lhs;
@@ -546,6 +562,9 @@ void python_converter::get_function_definition(
 
   current_element_type = type.return_type();
 
+  // Copy caller function name
+  const std::string caller_func_name = current_func_name;
+
   // Function location
   locationt location = get_location_from_decl(function_node);
 
@@ -602,6 +621,9 @@ void python_converter::get_function_definition(
   // Function body
   exprt function_body = get_block(function_node["body"]);
   added_symbol->value = function_body;
+
+  // Restore caller function name
+  current_func_name = caller_func_name;
 }
 
 void python_converter::get_return_statements(
