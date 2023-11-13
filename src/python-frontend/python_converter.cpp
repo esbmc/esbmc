@@ -254,7 +254,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     code_function_callt call;
     call.location() = location;
     call.function() = symbol_expr(*func_symbol);
-    call.type() = func_symbol->type;
+    const typet &return_type = to_code_type(func_symbol->type).return_type();
+    call.type() = return_type;
 
     for(const auto &arg_node : element["args"])
     {
@@ -416,7 +417,7 @@ void python_converter::get_var_assign(
    */
   if(rhs.is_code() && rhs.get("statement") == "function_call")
   {
-    // op0() references the left-hand side (lhs) of the function call
+    // op0() refers to the left-hand side (lhs) of the function call
     rhs.op0() = lhs;
     target_block.copy_to_operands(rhs);
     return;
@@ -590,8 +591,8 @@ void python_converter::get_function_definition(
   }
 
   // Create symbol
-  symbolt symbol = create_symbol(
-    module_name, current_func_name, id, location, type);
+  symbolt symbol =
+    create_symbol(module_name, current_func_name, id, location, type);
   symbol.lvalue = true;
   symbol.is_extern = false;
   symbol.file_local = false;
