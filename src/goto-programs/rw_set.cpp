@@ -14,6 +14,12 @@ void rw_sett::compute(const codet &code)
     assert(code.operands().size() == 2);
     assign(code.op0(), code.op1());
   }
+  else if(statement == "printf")
+  {
+    exprt expr = code;
+    Forall_operands(it, expr)
+      read_rec(*it);
+  }
 }
 
 void rw_sett::assign(const exprt &lhs, const exprt &rhs)
