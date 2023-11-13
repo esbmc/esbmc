@@ -42,7 +42,7 @@ void interval_domaint::update_symbol_interval(
   // as the analysis is not context-aware
   //
   if(has_prefix(sym.thename, "c:@"))
-     return;
+    return;
   int_map[sym.thename] = value;
 }
 
