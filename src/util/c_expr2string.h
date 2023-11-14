@@ -2,6 +2,7 @@
 #define CPROVER_C_EXPR2STRING_H
 
 #include <map>
+#include <optional>
 #include <set>
 #include <util/c_qualifiers.h>
 #include <util/expr.h>
@@ -178,6 +179,8 @@ protected:
   virtual std::string convert_union(const exprt &src, unsigned &precedence);
   std::string convert_array(const exprt &src, unsigned &precedence);
   std::string convert_array_list(const exprt &src, unsigned &precedence);
+
+  std::optional<std::string> is_recursively_zero(const exprt &op);
 };
 
 #endif
