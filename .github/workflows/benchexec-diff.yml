@@ -2,51 +2,90 @@ name: Generate diff page for benchexec artifacts
 on:
   workflow_dispatch:
     inputs:
-      old-workflow:
-        description: 'Workflow ID for OLD run'
+      workflow-id:
+        description: 'Workflow ID for run to be validated'
         required: true
-      new-workflow:
-        description: 'Workflow ID for NEW run'
+      timeout:
+        description: 'Timeout for each benchmarks (in seconds)'
         required: true
+        default: '30'
+      svbenchmarks:
+        description: 'Git branch, tag, or commit of SV-Benchmarks to use'
+        required: true
+        default: 'svcomp23'      	
+      mode:
+        type: choice
+        description: Benchexec run mode
+        options:
+        - Full
+        - Task
+        - RunSet
+      runset:
+        type: choice
+        description: Run-set to use (be sure to set mode to "RunSet")
+        options:
+        - SV-COMP23_unreach-call
+        - SV-COMP23_no-data-race
+        - SV-COMP23_valid-memcleanup
+        - SV-COMP23_valid-memsafety
+        - SV-COMP23_termination
+        - SV-COMP23_no-overflow
+      task:
+        type: choice
+        description: Task to use Run-set to use (be sure to set mode to "Task")
+        options:
+        - ReachSafety-Arrays
+        - ReachSafety-BitVectors
+        - ReachSafety-ControlFlow
+        - ReachSafety-ECA
+        - ReachSafety-Floats
+        - ReachSafety-Heap
+        - ReachSafety-Loops
+        - ReachSafety-ProductLines
+        - ReachSafety-Recursive
+        - ReachSafety-Sequentialized
+        - ReachSafety-XCSP
+        - ReachSafety-Combinations
+        - ReachSafety-Hardware
+        - ConcurrencySafety-Main
+        - ConcurrencySafety-MemSafety
+        - ConcurrencySafety-NoOverflows
+        - NoDataRace-Main
+        - NoOverflows-Main
+        - NoOverflows-Juliet
+        - MemSafety-MemCleanup
+        - MemSafety-Arrays
+        - MemSafety-Heap
+        - MemSafety-LinkedLists
+        - MemSafety-Other
+        - MemSafety-Juliet
+        - SoftwareSystems-AWS-C-Common-ReachSafety
+        - SoftwareSystems-BusyBox-ReachSafety
+        - SoftwareSystems-BusyBox-MemSafety
+        - SoftwareSystems-BusyBox-NoOverflows
+        - SoftwareSystems-coreutils-ReachSafety
+        - SoftwareSystems-coreutils-MemSafety
+        - SoftwareSystems-coreutils-NoOverflows
+        - SoftwareSystems-DeviceDriversLinux64-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64-MemSafety
+        - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64-MemSafety
+        - SoftwareSystems-uthash-ReachSafety
+        - SoftwareSystems-uthash-MemSafety
+        - SoftwareSystems-uthash-NoOverflows
+        - SoftwareSystems-OpenBSD-MemSafety
+        - Termination-BitVectors
+        - Termination-MainControlFlow
+        - Termination-MainHeap
+        - Termination-Other
 jobs:
-  benchexec-diff:
-    name: Compare two benchexec runs
-    runs-on: ubuntu-20.04
+  witness-validation:
+    runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
+    timeout-minutes: 12000
     steps:
-    - name: Set up Python 3.8
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.8
-    - name: Install benchexec
-      run: pip install benchexec
     - name: Checkout code
       uses: actions/checkout@master
-    - name: Download old artifact
-      id: download-old-artifact
-      uses: dawidd6/action-download-artifact@v2
       with:
-        github_token: ${{secrets.GITHUB_TOKEN}}
-        workflow: benchexec.yml
-        run_id: ${{ inputs.old-workflow }}
-        name: benchexec-result
-    - name: Extract old results
-      run: |
-        mkdir ../output && unzip -: run-output.zip && rm run-output.zip && ls ../output && mv ../output old
-    - name: Download new artifact
-      id: download-new-artifact
-      uses: dawidd6/action-download-artifact@v2
-      with:
-        github_token: ${{secrets.GITHUB_TOKEN}}
-        workflow: benchexec.yml
-        run_id: ${{ inputs.new-workflow }}
-        name: benchexec-result
-    - name: Extract new results
-      run: |
-        mkdir ../output && unzip -: run-output.zip && rm run-output.zip && ls ../output && mv ../output new
-    - name: Run comparation script
-      run: |
-        ./scripts/competitions/compare-runs.sh old new
-    - uses: actions/upload-artifact@v1
-      with:
-        name: diff
-        path: ./diff-old-new
+        path: esbmc-src
+    - name: Try thing
+      run: ./esbmc-src/scripts/witness.sh
