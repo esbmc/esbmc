@@ -1,3 +1,4 @@
+
 #include <util/c_expr2string.h>
 #include <util/arith_tools.h>
 #include <util/c_misc.h>
@@ -746,13 +747,119 @@ std::string c_expr2stringt::convert_function(
   return dest;
 }
 
+std::optional<std::string> c_expr2stringt::is_recursively_zero(const exprt &op)
+{
+  if(op.id() == exprt::arrayof)
+  {
+    if(auto init = is_recursively_zero(op.op0()))
+      return "{ " + *init + " }";
+    return {};
+  }
+
+  const typet &ty = ns.follow(op.type());
+  if(op.is_zero())
+  {
+    unsigned precedence;
+    return convert_constant(op, precedence);
+  }
+
+  if(ty.incomplete())
+    return {};
+
+  if(
+    (op.is_constant() && is_array_like(ty)) || op.id() == typet::t_array ||
+    op.id() == typet::t_vector)
+  {
+    /* fixed size array */
+    const exprt &sz = static_cast<const exprt &>(ty.find(typet::a_size));
+    if(!sz.is_constant())
+      return {};
+    BigInt N = binary2integer(sz.value().as_string(), sz.type().is_signedbv());
+    if(!N.is_uint64() || N.is_negative())
+      return {};
+    uint64_t n = N.to_uint64();
+    if(size_t k = op.operands().size(); k < n)
+      n = k;
+    std::string first_init;
+    for(unsigned i = 0; i < n; i++)
+      if(auto init = is_recursively_zero(op.operands()[i]); !init)
+        return {};
+      else if(!i)
+        first_init = std::move(*init);
+    if(n)
+      return "{ " + first_init + " }";
+    return "{}";
+  }
+
+  if(op.id() == typet::t_struct || op.id() == typet::t_union)
+  {
+    /* constant struct or union */
+    const struct_union_typet::componentst &cc =
+      to_struct_union_type(ty).components();
+    size_t n = cc.size();
+    if(n != op.operands().size())
+      return {};
+    if(n == 0)
+      return "{}";
+    std::optional<std::string> first;
+    for(size_t i = 0; i < n; i++)
+    {
+      if(cc[i].type().is_code())
+        return {};
+      const exprt &e = op.operands()[i];
+      if(cc[i].get_is_padding())
+      {
+        if(e.is_zero())
+          continue;
+        return {};
+      }
+      if(auto init = is_recursively_zero(e); !init)
+        return {};
+      else if(!first)
+        first = "{ ." + cc[i].pretty_name().as_string() + " = " + *init + " }";
+    }
+    return first;
+  }
+
+  return {};
+}
+
 std::string
 c_expr2stringt::convert_array_of(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
 
-  return "ARRAY_OF(" + convert(src.op0()) + ')';
+  /* Special-case where C allows a shorter output and we don't have to copy
+   * the initializer N times, where N is the array size */
+  if(auto init = is_recursively_zero(src))
+    return *init;
+
+  std::string init = convert(src.op0());
+
+  const typet &ty = ns.follow(src.type());
+  const exprt &sz = static_cast<const exprt &>(ty.find(typet::a_size));
+  if(sz.is_constant())
+  {
+    /* It appears that we need to duplicate the init terms... */
+    BigInt N = binary2integer(sz.value().as_string(), sz.type().is_signedbv());
+    if(N.is_uint64() && !N.is_negative())
+    {
+      uint64_t n = N.to_uint64();
+      std::ostringstream oss;
+      oss << "{ ";
+      for(size_t i = 0; i < n; i++)
+      {
+        if(i)
+          oss << ", ";
+        oss << init;
+      }
+      oss << " }";
+      return oss.str();
+    }
+  }
+
+  return "ARRAY_OF(" + init + ')';
 }
 
 std::string
