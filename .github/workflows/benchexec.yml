@@ -20,7 +20,7 @@ on:
         default: 'svcomp23'      	
       mode:
         type: choice
-        description: Benchecex run mode
+        description: Benchexec run mode
         options:
         - Full
         - Task
