@@ -20,7 +20,7 @@ on:
         default: 'main'
       mode:
         type: choice
-        description: Benchecex run mode
+        description: Benchexec run mode
         options:
         - Full
         - Task
