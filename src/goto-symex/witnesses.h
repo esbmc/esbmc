@@ -2,7 +2,7 @@
 #include <util/namespace.h>
 #include <irep2/irep2.h>
 #include <langapi/language_util.h>
-#include <goto_trace.h>
+#include <goto-symex/goto_trace.h>
 #include <string>
 #include <regex>
 
@@ -173,3 +173,11 @@ int generate_sha1_hash_for_file(const char *path, std::string &output);
  */
 std::string
 get_invariant(std::string verified_file, BigInt line_number, optionst &options);
+
+/// This generates test-cases as described in: https://gitlab.com/sosy-lab/test-comp/test-format/-/tree/main/
+#include <goto-symex/symex_target_equation.h>
+void generate_testcase_metadata();
+void generate_testcase(
+  const std::string &file_name,
+  const std::shared_ptr<symex_target_equationt> &target,
+  std::shared_ptr<smt_convt> &smt_conv);

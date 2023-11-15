@@ -1,0 +1,4 @@
+CORE
+main.c
+--overflow-check --64 --no-unlimited-scanf-check
+^VERIFICATION SUCCESSFUL$

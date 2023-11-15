@@ -49,7 +49,7 @@ protected:
   void adjust_expr_shifts(exprt &expr);
   void adjust_expr_unary_boolean(exprt &expr);
   void adjust_expr_binary_boolean(exprt &expr);
-  void adjust_expr_rel(exprt &expr);
+  virtual void adjust_expr_rel(exprt &expr);
   void adjust_float_arith(exprt &expr);
   void adjust_index(index_exprt &index);
   void adjust_dereference(exprt &deref);
@@ -59,7 +59,8 @@ protected:
   void adjust_symbol(exprt &expr);
   void adjust_comma(exprt &expr);
   void adjust_builtin_va_arg(exprt &expr);
-  void adjust_function_call_arguments(side_effect_expr_function_callt &expr);
+  virtual void
+  adjust_function_call_arguments(side_effect_expr_function_callt &expr);
   void do_special_functions(side_effect_expr_function_callt &expr);
   void adjust_operands(exprt &expr);
 
@@ -76,6 +77,13 @@ protected:
   void adjust_decl(codet &code);
   // For class instantiation in C++, we need to adjust the side-effect of constructor
   virtual void adjust_decl_block(codet &code);
+
+  /**
+   * ancillary methods to support the expr/code adjustments above
+   */
+  virtual void align_se_function_call_return_type(
+    exprt &f_op,
+    side_effect_expr_function_callt &expr);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */

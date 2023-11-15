@@ -1094,6 +1094,10 @@ public:
   {
     return id() == id_code;
   }
+  inline bool is_function_call() const
+  {
+    return is_code() && statement() == "function_call";
+  }
   inline bool is_constant() const
   {
     return id() == id_constant;

@@ -1,4 +1,5 @@
 #include <solidity-frontend/pattern_check.h>
+#include <util/message.h>
 #include <stdlib.h>
 
 pattern_checker::pattern_checker(
@@ -11,7 +12,7 @@ pattern_checker::pattern_checker(
 bool pattern_checker::do_pattern_check()
 {
   // TODO: add more functions here to perform more pattern-based checks
-  log_status("Checking function {} ...", target_func.c_str());
+  log_progress("Checking function {} ...", target_func.c_str());
 
   unsigned index = 0;
   for(nlohmann::json::const_iterator itr = ast_nodes.begin();
@@ -48,7 +49,7 @@ void pattern_checker::check_authorization_through_tx_origin(
   const nlohmann::json &body_stmt = func["body"]["statements"];
   log_progress(
     "  - Pattern-based checking: SWC-115 Authorization through tx.origin");
-  log_debug("statements in function body array ... \n");
+  log_debug("solidity", "statements in function body array ... \n");
 
   unsigned index = 0;
 
@@ -128,7 +129,7 @@ void pattern_checker::check_tx_origin(const nlohmann::json &left_expr)
         //assert(!"Found vulnerability SWC-115 Authorization through tx.origin");
         log_error(
           "Found vulnerability SWC-115 Authorization through tx.origin");
-        log_error("VERIFICATION FAILED");
+        log_fail("VERIFICATION FAILED");
         exit(EXIT_SUCCESS);
       }
     }

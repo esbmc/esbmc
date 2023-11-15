@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--function comp --sol contract.sol --unwind 1
+^VERIFICATION SUCCESSFUL$

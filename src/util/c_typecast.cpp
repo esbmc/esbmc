@@ -54,7 +54,7 @@ bool check_c_implicit_typecast(
   c_typecastt c_typecast(ns);
   // It seems that this expression is just a vehicle for the type to be
   // renamed.
-  symbol2tc tmp(src_type, "shoes");
+  expr2tc tmp = symbol2tc(src_type, "shoes");
   c_typecast.implicit_typecast(tmp, dest_type);
   return !c_typecast.errors.empty();
 }
@@ -107,10 +107,15 @@ bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type)
       return false;
     if(dest_type.id() == "c_enum")
       return false;
+    if(dest_type.id() == typet::t_intcap)
+      return false;
+    if(dest_type.id() == typet::t_uintcap)
+      return false;
   }
   else if(
     src_type_id == "unsignedbv" || src_type_id == "signedbv" ||
-    src_type_id == "c_enum" || src_type_id == "incomplete_c_enum")
+    src_type_id == "c_enum" || src_type_id == "incomplete_c_enum" ||
+    src_type.id() == typet::t_intcap || src_type.id() == typet::t_uintcap)
   {
     if(dest_type.id() == "unsignedbv")
       return false;
@@ -128,6 +133,10 @@ bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type)
       return false;
     if(dest_type.id() == "incomplete_c_enum")
       return false;
+    if(dest_type.id() == typet::t_intcap)
+      return false;
+    if(dest_type.id() == typet::t_uintcap)
+      return false;
   }
   else if(src_type_id == "floatbv" || src_type_id == "fixedbv")
   {
@@ -140,6 +149,10 @@ bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type)
     if(dest_type.id() == "floatbv")
       return false;
     if(dest_type.id() == "fixedbv")
+      return false;
+    if(dest_type.id() == typet::t_intcap)
+      return false;
+    if(dest_type.id() == typet::t_uintcap)
       return false;
   }
   else if(
@@ -169,6 +182,10 @@ bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type)
     if(dest_type.id() == "unsignedbv")
       return false;
     if(dest_type.id() == "signedbv")
+      return false;
+    if(dest_type.id() == typet::t_intcap)
+      return false;
+    if(dest_type.id() == typet::t_uintcap)
       return false;
   }
 
@@ -227,10 +244,8 @@ bool check_c_implicit_typecast(
   {
     if(is_pointer_type(dest_type))
     {
-      pointer_type2tc dest_ptr_type = dest_type;
-      pointer_type2tc src_ptr_type = src_type;
-      type2tc dest_subtype = dest_ptr_type->subtype;
-      type2tc src_subtype = src_ptr_type->subtype;
+      type2tc dest_subtype = to_pointer_type(dest_type).subtype;
+      type2tc src_subtype = to_pointer_type(src_type).subtype;
 
       if(src_subtype == dest_subtype)
         return false;
@@ -350,8 +365,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
 {
   if(is_signedbv_type(type))
   {
-    signedbv_type2tc signed_type = type;
-    unsigned width = signed_type->width;
+    unsigned width = to_signedbv_type(type).width;
 
     if(width <= config.ansi_c.char_width)
       return CHAR;
@@ -366,8 +380,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
   }
   else if(is_unsignedbv_type(type))
   {
-    unsignedbv_type2tc unsigned_type = type;
-    unsigned width = unsigned_type->width;
+    unsigned width = to_unsignedbv_type(type).width;
 
     if(width <= config.ansi_c.char_width)
       return UCHAR;
@@ -384,8 +397,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
     return BOOL;
   else if(is_fixedbv_type(type))
   {
-    fixedbv_type2tc fixedbv_type = type;
-    unsigned width = fixedbv_type->width;
+    unsigned width = to_fixedbv_type(type).width;
     if(width <= config.ansi_c.single_width)
       return SINGLE;
     else if(width <= config.ansi_c.double_width)
@@ -395,8 +407,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
   }
   else if(is_pointer_type(type))
   {
-    pointer_type2tc ptr_type = type;
-    if(is_empty_type(ptr_type->subtype))
+    if(is_empty_type(to_pointer_type(type).subtype))
       return VOIDPTR;
     else
       return PTR;
@@ -487,8 +498,7 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr, c_typet c_type)
   case PTR:
     if(is_array_type(expr_type))
     {
-      array_type2tc arr_type = expr_type;
-      new_type = pointer_type2tc(arr_type->subtype);
+      new_type = pointer_type2tc(to_array_type(expr_type).subtype);
       break;
     }
     return;
@@ -542,10 +552,11 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr, c_typet c_type)
   {
     if(is_pointer_type(new_type) && is_array_type(expr_type))
     {
-      array_type2tc arr_type = expr_type;
-      pointer_type2tc ptr_type = new_type;
-      index2tc index_expr(arr_type->subtype, expr, gen_zero(index_type2()));
-      address_of2tc addrof(ptr_type->subtype, index_expr);
+      const array_type2t &arr_type = to_array_type(expr_type);
+      const pointer_type2t &ptr_type = to_pointer_type(new_type);
+      expr2tc index_expr =
+        index2tc(arr_type.subtype, expr, gen_zero(index_type2()));
+      expr2tc addrof = address_of2tc(ptr_type.subtype, index_expr);
       expr = addrof;
     }
     else
@@ -663,6 +674,29 @@ void c_typecastt::implicit_typecast_followed(
       base_ptr.location() = expr.location();
       expr.swap(base_ptr);
     }
+
+    if(dest_type.get_bool("#reference"))
+    {
+      // if a destination type is an lvalue reference,
+      // which has been modelled as a pointer, but
+      // source type is not a pointer, then we just need to take
+      // the address of the source. e.g. the return statement
+      // of a function that returns an lvalue reference:
+      //    T& F(T& a) { return a; }
+      // is converted to `return &a;` rather than `return (int *)a;`
+      // See TC: regression/esbmc-cpp/template/template_1/3
+
+      // got to make sure the subtypes match each other
+      // to prevent anything that may surprise us.
+      if(dest_type.subtype().id() == src_type.id())
+      {
+        address_of_exprt tmp_addr;
+        tmp_addr.type() = dest_type;
+        tmp_addr.object() = expr;
+        tmp_addr.location() = expr.location();
+        expr.swap(tmp_addr);
+      }
+    }
   }
   else if(dest_type.id() == "array")
   {
@@ -691,7 +725,7 @@ void c_typecastt::implicit_typecast_followed(
 {
   if(is_pointer_type(dest_type))
   {
-    pointer_type2tc dest_ptr_type = dest_type;
+    const pointer_type2t &dest_ptr_type = to_pointer_type(dest_type);
     // special case: 0 == NULL
 
     if(
@@ -712,13 +746,13 @@ void c_typecastt::implicit_typecast_followed(
         src_subtype = to_array_type(src_type).subtype;
 
       const type2tc &src_sub = ns.follow(src_subtype);
-      const type2tc &dest_sub = ns.follow(dest_ptr_type->subtype);
+      const type2tc &dest_sub = ns.follow(dest_ptr_type.subtype);
 
       if(is_empty_type(src_sub) || is_empty_type(dest_sub))
       {
         // from/to void is always good
       }
-      else if(base_type_eq(dest_ptr_type->subtype, src_subtype, ns))
+      else if(base_type_eq(dest_ptr_type.subtype, src_subtype, ns))
       {
       }
       else if(is_code_type(src_sub) && is_code_type(dest_sub))
@@ -824,8 +858,11 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
       // preserve #c_sizeof_type -- don't make it a reference!
       const irept c_sizeof_type = dest.op0().c_sizeof_type();
 
-      simplify_exprt simplify_expr;
-      simplify_expr.simplify_typecast(dest);
+      if(!no_simplify)
+      {
+        simplify_exprt simplify_expr;
+        simplify_expr.simplify_typecast(dest, false);
+      }
 
       if(c_sizeof_type.is_not_nil())
         dest.c_sizeof_type(c_sizeof_type);
@@ -842,9 +879,9 @@ void c_typecastt::do_typecast(expr2tc &dest, const type2tc &type)
 
   if(is_array_type(dest_type))
   {
-    array_type2tc arr_type = dest_type;
-    index2tc index(arr_type->subtype, dest, gen_zero(index_type2()));
-    address_of2tc tmp(arr_type->subtype, index);
+    const array_type2t &arr_type = to_array_type(dest_type);
+    expr2tc index = index2tc(arr_type.subtype, dest, gen_zero(index_type2()));
+    expr2tc tmp = address_of2tc(arr_type.subtype, index);
     dest = tmp;
     if(ns.follow(dest->type) != ns.follow(type))
       dest = typecast2tc(type, dest);
@@ -863,8 +900,11 @@ void c_typecastt::do_typecast(expr2tc &dest, const type2tc &type)
       const irept c_sizeof_type=
         dest.op0().c_sizeof_type();
 
-      simplify_exprt simplify_expr;
-      simplify_expr.simplify_typecast(dest, simplify_exprt::NORMAL);
+      if(!no_simplify)
+      {
+        simplify_exprt simplify_expr;
+        simplify_expr.simplify_typecast(dest, simplify_exprt::NORMAL);
+      }
 
       if(c_sizeof_type.is_not_nil())
         dest.cmt_c_sizeof_type(c_sizeof_type);

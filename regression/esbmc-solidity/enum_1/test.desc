@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--function setLarge --sol contract.sol
+^VERIFICATION SUCCESSFUL$

@@ -10,8 +10,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
 
   expr2tc zero = gen_zero(opers.side_1->type);
-  lessthan2tc op1neg(opers.side_1, zero);
-  lessthan2tc op2neg(opers.side_2, zero);
+  expr2tc op1neg = lessthan2tc(opers.side_1, zero);
+  expr2tc op2neg = lessthan2tc(opers.side_2, zero);
 
   // Guess whether we're performing a signed or unsigned comparison.
   bool is_signed =
@@ -25,26 +25,26 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     {
       // Two cases: pos/pos, and neg/neg, which can over and underflow resp.
       // In pos/neg cases, no overflow or underflow is possible, for any value.
-      lessthan2tc op1pos(zero, opers.side_1);
-      lessthan2tc op2pos(zero, opers.side_2);
-      and2tc both_pos(op1pos, op2pos);
+      expr2tc op1pos = lessthan2tc(zero, opers.side_1);
+      expr2tc op2pos = lessthan2tc(zero, opers.side_2);
+      expr2tc both_pos = and2tc(op1pos, op2pos);
 
-      not2tc negop1(op1pos);
-      not2tc negop2(op2pos);
-      and2tc both_neg(negop1, negop2);
+      expr2tc negop1 = not2tc(op1pos);
+      expr2tc negop2 = not2tc(op2pos);
+      expr2tc both_neg = and2tc(negop1, negop2);
 
-      implies2tc nooverflow(
-        both_pos, greaterthanequal2tc(overflow.operand, zero));
-      implies2tc nounderflow(
-        both_neg, lessthanequal2tc(overflow.operand, zero));
+      expr2tc nooverflow =
+        implies2tc(both_pos, greaterthanequal2tc(overflow.operand, zero));
+      expr2tc nounderflow =
+        implies2tc(both_neg, lessthanequal2tc(overflow.operand, zero));
       return convert_ast(not2tc(and2tc(nooverflow, nounderflow)));
     }
 
     // Just ensure the result is >= both operands.
-    greaterthanequal2tc ge1(overflow.operand, opers.side_1);
-    greaterthanequal2tc ge2(overflow.operand, opers.side_2);
-    and2tc res(ge1, ge2);
-    not2tc inv(res);
+    expr2tc ge1 = greaterthanequal2tc(overflow.operand, opers.side_1);
+    expr2tc ge2 = greaterthanequal2tc(overflow.operand, opers.side_2);
+    expr2tc res = and2tc(ge1, ge2);
+    expr2tc inv = not2tc(res);
     return convert_ast(inv);
   }
 
@@ -53,23 +53,23 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     if(is_signed)
     {
       // Convert to be an addition
-      neg2tc negop2(opers.side_2->type, opers.side_2);
-      add2tc anadd(opers.side_1->type, opers.side_1, negop2);
-      expr2tc add_overflows(new overflow2t(anadd));
+      expr2tc negop2 = neg2tc(opers.side_2->type, opers.side_2);
+      expr2tc anadd = add2tc(opers.side_1->type, opers.side_1, negop2);
+      expr2tc add_overflows = overflow2tc(anadd);
 
       // Corner case: subtracting MIN_INT from many things overflows. The result
       // should always be positive.
       uint64_t topbit = 1ULL << (opers.side_1->type->get_width() - 1);
-      constant_int2tc min_int(opers.side_1->type, BigInt(topbit));
-      equality2tc is_min_int(min_int, opers.side_2);
+      expr2tc min_int = constant_int2tc(opers.side_1->type, BigInt(topbit));
+      expr2tc is_min_int = equality2tc(min_int, opers.side_2);
       return convert_ast(or2tc(add_overflows, is_min_int));
     }
 
     // Just ensure the result is >= the operands.
-    lessthanequal2tc le1(overflow.operand, opers.side_1);
-    lessthanequal2tc le2(overflow.operand, opers.side_2);
-    and2tc res(le1, le2);
-    not2tc inv(res);
+    expr2tc le1 = lessthanequal2tc(overflow.operand, opers.side_1);
+    expr2tc le2 = lessthanequal2tc(overflow.operand, opers.side_2);
+    expr2tc res = and2tc(le1, le2);
+    expr2tc inv = not2tc(res);
     return convert_ast(inv);
   }
 
@@ -80,12 +80,13 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     {
       // We can't divide -MIN_INT/-1
       uint64_t topbit = 1ULL << (opers.side_1->type->get_width() - 1);
-      constant_int2tc min_int(opers.side_1->type, -BigInt(topbit));
-      equality2tc is_min_int(min_int, opers.side_1);
-      implies2tc imp(is_min_int, greaterthan2tc(overflow.operand, zero));
+      expr2tc min_int = constant_int2tc(opers.side_1->type, -BigInt(topbit));
+      expr2tc is_min_int = equality2tc(min_int, opers.side_1);
+      expr2tc imp =
+        implies2tc(is_min_int, greaterthan2tc(overflow.operand, zero));
 
-      constant_int2tc minus_one(opers.side_1->type, -BigInt(1));
-      equality2tc is_minus_one(minus_one, opers.side_2);
+      expr2tc minus_one = constant_int2tc(opers.side_1->type, -BigInt(1));
+      expr2tc is_minus_one = equality2tc(minus_one, opers.side_2);
 
       return convert_ast(and2tc(is_minus_one, is_min_int));
     }
@@ -122,10 +123,10 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz - 1);
 
       // Create a now base 2 type
-      unsignedbv_type2tc newtype(sz + 1);
+      type2tc newtype = unsignedbv_type2tc(sz + 1);
 
       // All one bit vector is tricky, might be 64 bits wide for all we know.
-      constant_int2tc allonesexpr(newtype, BigInt((1ULL << (sz + 1)) - 1));
+      expr2tc allonesexpr = constant_int2tc(newtype, ones(sz + 1));
       smt_astt allonesvector = convert_ast(allonesexpr);
 
       // It should either be zero or all one's;
@@ -173,8 +174,8 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   // are zero. If neg, then all the top are 1's /and/ the next bit, so that
   // it's considered negative in the next interpretation.
 
-  constant_int2tc zero(ocast.operand->type, BigInt(0));
-  lessthan2tc isnegexpr(ocast.operand, zero);
+  expr2tc zero = constant_int2tc(ocast.operand->type, BigInt(0));
+  expr2tc isnegexpr = lessthan2tc(ocast.operand, zero);
   smt_astt isneg = convert_ast(isnegexpr);
   smt_astt orig_val = convert_ast(ocast.operand);
 
@@ -210,7 +211,8 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   const overflow_neg2t &neg = to_overflow_neg2t(expr);
   unsigned int width = neg.operand->type->get_width();
 
-  constant_int2tc min_int(neg.operand->type, BigInt(1 << (width - 1)));
-  equality2tc val(neg.operand, min_int);
+  expr2tc min_int =
+    constant_int2tc(neg.operand->type, BigInt(1 << (width - 1)));
+  expr2tc val = equality2tc(neg.operand, min_int);
   return convert_ast(val);
 }

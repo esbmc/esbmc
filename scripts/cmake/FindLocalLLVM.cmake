@@ -1,7 +1,13 @@
 # Module to find LLVM and checks it's version
 
-if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL "")))
+if(DOWNLOAD_DEPENDENCIES AND ("${LLVM_DIR}" STREQUAL ""))
+    download_zip_and_extract(LLVM ${ESBMC_LLVM_URL})
+    set(LLVM_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})
+    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})    
+endif()
 
+if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL "")))
+  message("Looking for LLVM in: ${LLVM_DIR}")
   find_package(LLVM REQUIRED CONFIG
     PATHS ${LLVM_DIR}
     NO_DEFAULT_PATH
@@ -11,9 +17,21 @@ if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL 
     PATHS ${Clang_DIR}
     NO_DEFAULT_PATH
   )
-else()
+else()  
   find_package(LLVM REQUIRED CONFIG)
   find_package(Clang REQUIRED CONFIG)
+endif()
+
+if (LLVM_PACKAGE_BUGREPORT STREQUAL https://github.com/CTSRD-CHERI/llvm-project/issues)
+  set(ESBMC_CHERI_CLANG ON)
+  message(STATUS "Clang is CHERI-enabled, enabling CHERI support.")
+elseif(EXISTS "${CLANG_INSTALL_PREFIX}/include/llvm/Support/Morello.h")
+  set(ESBMC_CHERI_CLANG ON)
+  set(ESBMC_CHERI_CLANG_MORELLO ON)
+  message(STATUS "Clang is CHERI-enabled, enabling CHERI support for Morello.")
+else()
+  unset(ESBMC_CHERI_CLANG)
+  message(STATUS "Clang is not CHERI-enabled, disabling CHERI support.")
 endif()
 
 if (${LLVM_VERSION_MAJOR} LESS 11)

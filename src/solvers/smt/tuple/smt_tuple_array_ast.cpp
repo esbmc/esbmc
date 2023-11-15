@@ -15,7 +15,7 @@ array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   const array_type2t &array_type = to_array_type(sort->get_tuple_type());
 
   std::string name = ctx->mk_fresh_name("tuple_array_ite::") + ".";
-  symbol2tc result(sort->get_tuple_type(), name);
+  expr2tc result = symbol2tc(sort->get_tuple_type(), name);
   smt_astt result_sym = ctx->convert_ast(result);
 
   const struct_union_data &data = ctx->get_type_def(array_type.subtype);
@@ -24,8 +24,8 @@ array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   unsigned int i = 0;
   for(auto const &it : data.members)
   {
-    array_type2tc arrtype(
-      it, array_type.array_size, array_type.size_is_infinite);
+    type2tc arrtype =
+      array_type2tc(it, array_type.array_size, array_type.size_is_infinite);
 
     smt_astt truepart = true_val->project(ctx, i);
     smt_astt falsepart = false_val->project(ctx, i);
@@ -59,8 +59,8 @@ smt_astt array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   unsigned int i = 0;
   for(auto const &it : data.members)
   {
-    type2tc tmparrtype(
-      new array_type2t(it, arrtype.array_size, arrtype.size_is_infinite));
+    type2tc tmparrtype =
+      array_type2tc(it, arrtype.array_size, arrtype.size_is_infinite);
     smt_astt side1 = ta->project(ctx, i);
     smt_astt side2 = tb->project(ctx, i);
     eqs.push_back(side1->eq(ctx, side2));
@@ -83,8 +83,7 @@ smt_astt array_sym_smt_ast::update(
   expr2tc index;
   if(is_nil_expr(idx_expr))
   {
-    index =
-      constant_int2tc(ctx->make_array_domain_type(array_type), BigInt(idx));
+    index = constant_int2tc(make_array_domain_type(array_type), BigInt(idx));
   }
   else
   {
@@ -98,8 +97,8 @@ smt_astt array_sym_smt_ast::update(
   unsigned int i = 0;
   for(auto const &it : data.members)
   {
-    type2tc arrtype(
-      new array_type2t(it, array_type.array_size, array_type.size_is_infinite));
+    type2tc arrtype =
+      array_type2tc(it, array_type.array_size, array_type.size_is_infinite);
 
     // Project and update a field in 'this'
     smt_astt field = project(ctx, i);
@@ -128,8 +127,8 @@ smt_astt array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   unsigned int i = 0;
   for(auto const &it : data.members)
   {
-    type2tc arrtype(
-      new array_type2t(it, array_type.array_size, array_type.size_is_infinite));
+    type2tc arrtype =
+      array_type2tc(it, array_type.array_size, array_type.size_is_infinite);
 
     smt_astt result_field = result->project(ctx, i);
     smt_astt sub_array = project(ctx, i);
@@ -157,8 +156,8 @@ smt_astt array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   std::string sym_name = name + fieldname;
 
   const type2tc &restype = data.members[idx];
-  type2tc new_arr_type(
-    new array_type2t(restype, arr.array_size, arr.size_is_infinite));
+  type2tc new_arr_type =
+    array_type2tc(restype, arr.array_size, arr.size_is_infinite);
   smt_sortt s = ctx->convert_sort(new_arr_type);
 
   if(is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype))
@@ -186,7 +185,8 @@ void array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   unsigned int i = 0;
   for(auto const &it : data.members)
   {
-    array_type2tc tmparrtype(it, arrtype.array_size, arrtype.size_is_infinite);
+    type2tc tmparrtype =
+      array_type2tc(it, arrtype.array_size, arrtype.size_is_infinite);
     smt_astt source = src->project(ctx, i);
     smt_astt destination = dst->project(ctx, i);
     source->assign(ctx, destination);

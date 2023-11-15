@@ -3,7 +3,7 @@
 #include <util/arith_tools.h>
 #include <util/ieee_float.h>
 #include <util/std_types.h>
-#include <goto-programs/interval_template.h>
+#include <goto-programs/abstract-interpretation/interval_template.h>
 
 BigInt ieee_float_spect::bias() const
 {
@@ -37,16 +37,16 @@ ieee_float_spect::ieee_float_spect(const floatbv_typet &type)
   e = width - f - 1;
 }
 
-ieee_float_spect::ieee_float_spect(const floatbv_type2tc &type)
+ieee_float_spect::ieee_float_spect(const floatbv_type2t &type)
 {
-  unsigned width = type->get_width();
-  f = type->fraction;
+  unsigned width = type.get_width();
+  f = type.fraction;
   assert(f != 0);
   assert(f < width);
   e = width - f - 1;
 }
 
-const floatbv_type2tc ieee_float_spect::get_type() const
+type2tc ieee_float_spect::get_type() const
 {
   return floatbv_type2tc(f, e);
 }
@@ -152,9 +152,9 @@ std::string ieee_floatt::to_string_decimal(unsigned precision) const
 
   // special cases
   if(NaN_flag)
-    result += "NaN";
+    result += "NAN";
   else if(infinity_flag)
-    result += "inf";
+    result += "INFINITY";
   else if(is_zero())
   {
     result += '0';
@@ -359,7 +359,7 @@ void ieee_floatt::unpack(const BigInt &i)
 
 bool ieee_floatt::is_normal() const
 {
-  return fraction >= power(2, spec.f);
+  return !NaN_flag && fraction >= power(2, spec.f);
 }
 
 BigInt ieee_floatt::pack() const
@@ -549,7 +549,6 @@ void ieee_floatt::align()
   }
 
   BigInt biased_exponent = exponent + exponent_offset + spec.bias();
-
   // exponent too large (infinity)?
   if(biased_exponent >= spec.max_exponent())
   {
@@ -1183,7 +1182,7 @@ double ieee_floatt::to_double() const
   union
   {
     double f;
-    unsigned int i;
+    unsigned long long i;
   } a;
 
   if(infinity_flag)
@@ -1298,29 +1297,4 @@ void ieee_floatt::next_representable(bool greater)
 
   // sign change impossible (zero case caught earler)
   set_sign(old_sign);
-}
-
-template <>
-void interval_templatet<ieee_floatt>::make_lower_interval()
-{
-  // [-infinity, 0]
-  upper_set = true;
-  upper.set_sign(true);
-  upper.make_zero();
-  lower_set = false;
-  lower.make_minus_infinity();
-}
-
-template <>
-bool interval_templatet<const ieee_floatt>::is_top() const
-{
-  return (!lower_set || lower.is_infinity()) &&
-         (!upper_set || upper.is_infinity());
-}
-
-template <>
-bool interval_templatet<ieee_floatt>::is_top() const
-{
-  return (!lower_set || lower.is_infinity()) &&
-         (!upper_set || upper.is_infinity());
 }

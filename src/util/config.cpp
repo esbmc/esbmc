@@ -3,6 +3,7 @@
 
 #include <util/config.h>
 #include <util/message.h>
+#include <ac_config.h>
 
 configt config;
 
@@ -18,13 +19,13 @@ void configt::ansi_ct::set_data_model(enum data_model dm)
   short_int_width = next();
   int_width = next();
   long_int_width = next();
-  pointer_width = next();
+  address_width = next();
   word_size = next();
   long_double_width = next();
 
   long_long_int_width = 64;
   bool_width = char_width;
-  pointer_diff_width = pointer_width;
+  pointer_diff_width = address_width;
   single_width = 32;
   double_width = 64;
   char_is_unsigned = false;
@@ -48,10 +49,17 @@ static const eregex X86("i[3456]86|x86_64|x64");
 static const eregex ARM("(arm|thumb|aarch64c?)(eb|_be)?");
 static const eregex MIPS("mips(64|isa64|isa64sb1)?(r[0-9]+)?(el|le)?.*");
 static const eregex POWERPC("(ppc|powerpc)(64)?(le)?");
+static const eregex RISCV("riscv(32|64)(be)?");
+
+bool configt::triple::is_riscv() const
+{
+  std::smatch r;
+  return std::regex_match(arch, r, RISCV);
+}
 
 static configt::ansi_ct::endianesst arch_endianness(const std::string &arch)
 {
-  if(std::regex_match(arch, X86) || arch == "riscv32" || arch == "riscv64")
+  if(std::regex_match(arch, X86))
     return configt::ansi_ct::IS_LITTLE_ENDIAN;
   std::smatch r;
   if(std::regex_match(arch, r, ARM))
@@ -63,6 +71,9 @@ static configt::ansi_ct::endianesst arch_endianness(const std::string &arch)
   if(std::regex_match(arch, r, POWERPC))
     return r.length(3) > 0 ? configt::ansi_ct::IS_LITTLE_ENDIAN
                            : configt::ansi_ct::IS_BIG_ENDIAN;
+  if(std::regex_match(arch, r, RISCV))
+    return r.length(2) > 0 ? configt::ansi_ct::IS_BIG_ENDIAN
+                           : configt::ansi_ct::IS_LITTLE_ENDIAN;
   if(arch == "none")
     return configt::ansi_ct::NO_ENDIANESS;
   log_error("unknown arch '{}', cannot determine endianness", arch);
@@ -99,6 +110,12 @@ bool configt::set(const cmdlinet &cmdline)
   if(cmdline.isset("function"))
     main = cmdline.getval("function");
 
+  if(cmdline.isset("class"))
+    cname = cmdline.getval("class");
+
+  if(cmdline.isset("contract"))
+    cname = cmdline.getval("contract");
+
   if(cmdline.isset("define"))
     ansi_c.defines = cmdline.get_values("define");
 
@@ -134,8 +151,36 @@ bool configt::set(const cmdlinet &cmdline)
 
   ansi_c.use_fixed_for_float = cmdline.isset("fixedbv");
 
+  ansi_c.cheri = ansi_ct::CHERI_OFF;
+  if(cmdline.isset("cheri"))
+  {
+    std::string mode = cmdline.getval("cheri");
+    if(mode == "hybrid")
+      ansi_c.cheri = ansi_ct::CHERI_HYBRID;
+    else if(mode == "purecap")
+      ansi_c.cheri = ansi_ct::CHERI_PURECAP;
+    else if(mode != "off")
+    {
+      log_error(
+        "only 'hybrid' and 'purecap' modes supported for --cheri, "
+        "argument was: {}",
+        mode);
+      abort();
+    }
+  }
+  ansi_c.cheri_concentrate = !cmdline.isset("cheri-uncompressed");
+#ifndef ESBMC_CHERI_CLANG
+  if(ansi_c.cheri)
+  {
+    log_error(
+      "This build of ESBMC does not have CHERI support, can't honour "
+      "'--cheri'.");
+    abort();
+  }
+#endif /* !def ESBMC_CHERI_CLANG */
+
   // this is the default
-  std::string arch = this_architecture(), os = this_operating_system();
+  std::string arch = this_architecture(), os = this_operating_system(), flavor;
   int req_target = 0;
 
   if(cmdline.isset("i386-linux"))
@@ -173,16 +218,36 @@ bool configt::set(const cmdlinet &cmdline)
     req_target++;
   }
 
+  /* CHERI-TODO: remove, either determine through sysroot or leave to user to specify */
+  if(ansi_c.cheri)
+  {
+#ifdef ESBMC_CHERI_CLANG_MORELLO
+    arch = "aarch64c";
+#else
+    arch = "mips64el"; /* CHERI-TODO: either big-endian MIPS or maybe RISC-V */
+#endif
+    os = "freebsd";
+    if(ansi_c.cheri == ansi_ct::CHERI_PURECAP)
+    {
+      if(!flavor.empty() && flavor != "purecap")
+        log_warning(
+          "overriding flavor '{}' by 'purecap' due to --cheri", flavor);
+      flavor = "purecap";
+    }
+    req_target++;
+  }
+
   if(req_target > 1)
   {
     log_error(
       "only at most one target can be specified via "
-      "--i386-{win32,macos,linux}, --ppc-macos and --no-arch\n");
+      "--i386-{{win32,macos,linux}}, --ppc-macos, --cheri and --no-arch");
     return true;
   }
 
   ansi_c.target.arch = arch;
   ansi_c.target.os = os;
+  ansi_c.target.flavor = flavor;
 
   bool have_16 = cmdline.isset("16");
   bool have_32 = cmdline.isset("32");
@@ -202,6 +267,12 @@ bool configt::set(const cmdlinet &cmdline)
   else
     dm = ansi_c.target.is_windows_abi() ? LLP64 : LP64;
   ansi_c.set_data_model(dm);
+
+  if(ansi_c.cheri && ansi_c.word_size != 64)
+  {
+    log_error("--cheri!=off is only supported with 64-bit targets");
+    return true;
+  }
 
   if(cmdline.isset("little-endian") && cmdline.isset("big-endian"))
   {

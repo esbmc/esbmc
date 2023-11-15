@@ -13,7 +13,7 @@ void symex_target_equationt::debug_print_step(const SSA_stept &step) const
 {
   std::ostringstream oss;
   step.output(ns, oss);
-  log_debug("{}", oss.str());
+  log_debug("ssa", "{}", oss.str());
 }
 
 void symex_target_equationt::assignment(
@@ -214,8 +214,9 @@ void symex_target_equationt::convert_internal_step(
         step.converted_output_args.push_back(tmp);
       else
       {
-        symbol2tc sym(tmp->type, "symex::output::" + i2string(output_count++));
-        equality2tc eq(sym, tmp);
+        expr2tc sym =
+          symbol2tc(tmp->type, "symex::output::" + i2string(output_count++));
+        expr2tc eq = equality2tc(sym, tmp);
         smt_conv.set_to(eq, true);
         step.converted_output_args.push_back(sym);
       }
@@ -267,7 +268,7 @@ void symex_target_equationt::SSA_stept::dump() const
 {
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }
 
 void symex_target_equationt::SSA_stept::output(

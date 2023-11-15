@@ -1,4 +1,5 @@
 CORE
 main.c
 
-\n\s*res = ([^ ]+) .*\n.*\n.*\n.*\s*a = \1 
+^VERIFICATION FAILED$
+\bFailed as expected\b

@@ -3,7 +3,7 @@
  *  - travere virtual methods
  *  - generate VFT type symbol
  *  - generate VFT variable symbols
- *  - genearte thunk functions for overriding methods
+ *  - generate thunk functions for overriding methods
  */
 #include <util/compiler_defs.h>
 // Remove warnings from Clang headers
@@ -25,12 +25,13 @@ CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <util/expr_util.h>
+#include <util/message.h>
 
 bool clang_cpp_convertert::get_struct_class_virtual_methods(
-  const clang::CXXRecordDecl *cxxrd,
+  const clang::CXXRecordDecl &cxxrd,
   struct_typet &type)
 {
-  for(const auto &md : cxxrd->methods())
+  for(const auto &md : cxxrd.methods())
   {
     if(!md->isVirtual())
       continue;
@@ -43,7 +44,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
       return true;
 
     // additional annotations for virtual/overriding methods
-    if(annotate_virtual_overriding_methods(md, comp))
+    if(annotate_virtual_overriding_methods(*md, comp))
       return true;
     type.methods().push_back(comp);
 
@@ -80,7 +81,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
        * method in each level.
        */
       overriden_map cxxmethods_overriden;
-      get_overriden_methods(md, cxxmethods_overriden);
+      get_overriden_methods(*md, cxxmethods_overriden);
 
       for(const auto &overriden_md_entry : cxxmethods_overriden)
         add_thunk_method(overriden_md_entry.second, comp, type);
@@ -97,18 +98,18 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
 }
 
 bool clang_cpp_convertert::annotate_virtual_overriding_methods(
-  const clang::CXXMethodDecl *md,
+  const clang::CXXMethodDecl &md,
   struct_typet::componentt &comp)
 {
   std::string method_id, method_name;
-  clang_c_convertert::get_decl_name(*md, method_name, method_id);
+  clang_c_convertert::get_decl_name(md, method_name, method_id);
 
   comp.type().set("#is_virtual", true);
   comp.type().set("#virtual_name", method_name);
   comp.set("is_virtual", true);
   comp.set("virtual_name", method_name);
 
-  if(md->isPure())
+  if(md.isPure())
     comp.set("is_pure_virtual", true);
 
   return false;
@@ -180,6 +181,8 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
   component.set("access", "public");
   // add to the class' type
   type.components().push_back(component);
+
+  has_vptr_component = true;
 }
 
 void clang_cpp_convertert::add_vtable_type_entry(
@@ -221,7 +224,7 @@ void clang_cpp_convertert::add_vtable_type_entry(
 }
 
 void clang_cpp_convertert::add_thunk_method(
-  const clang::CXXMethodDecl *md,
+  const clang::CXXMethodDecl &md,
   const struct_typet::componentt &component,
   struct_typet &type)
 {
@@ -257,7 +260,7 @@ void clang_cpp_convertert::add_thunk_method(
    */
 
   std::string base_class_id, base_class_name;
-  get_decl_name(*md->getParent(), base_class_name, base_class_id);
+  get_decl_name(*md.getParent(), base_class_name, base_class_id);
 
   // Create the thunk method symbol
   symbolt thunk_func_symb;
@@ -283,7 +286,8 @@ void clang_cpp_convertert::add_thunk_method(
   add_thunk_method_body(thunk_func_symb, component);
 
   // add thunk function symbol to the symbol table
-  symbolt &added_thunk_symbol = *move_symbol_to_context(thunk_func_symb);
+  symbolt &added_thunk_symbol =
+    *context.move_symbol_to_context(thunk_func_symb);
 
   // add thunk function as a `method` in the derived class' type
   add_thunk_component_to_type(added_thunk_symbol, type, component);
@@ -467,7 +471,7 @@ void clang_cpp_convertert::add_thunk_component_to_type(
 }
 
 void clang_cpp_convertert::setup_vtable_struct_variables(
-  const clang::CXXRecordDecl *cxxrd,
+  const clang::CXXRecordDecl &cxxrd,
   const struct_typet &type)
 {
   /*
@@ -532,7 +536,7 @@ void clang_cpp_convertert::build_vtable_map(
 }
 
 void clang_cpp_convertert::add_vtable_variable_symbols(
-  const clang::CXXRecordDecl *cxxrd,
+  const clang::CXXRecordDecl &cxxrd,
   const struct_typet &type,
   const switch_table &vtable_value_map)
 {
@@ -556,7 +560,7 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
 
     // This is the class we are currently dealing with
     std::string class_id, class_name;
-    get_decl_name(*cxxrd, class_name, class_id);
+    get_decl_name(cxxrd, class_name, class_id);
 
     symbolt vt_symb_var;
     vt_symb_var.id = vt_symb_type.id.as_string() + "@" + class_id;
@@ -595,18 +599,18 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
 }
 
 void clang_cpp_convertert::get_overriden_methods(
-  const clang::CXXMethodDecl *md,
+  const clang::CXXMethodDecl &md,
   overriden_map &map)
 {
   /*
    * This function gets all the overriden methods to which we need to create a thunk
    */
-  for(const auto &md_overriden : md->overridden_methods())
+  for(const auto &md_overriden : md.overridden_methods())
   {
     if(
       md_overriden->begin_overridden_methods() !=
       md_overriden->end_overridden_methods())
-      get_overriden_methods(md_overriden, map);
+      get_overriden_methods(*md_overriden, map);
 
     // get the id for this overriden method
     std::string method_id, method_name;
@@ -616,7 +620,8 @@ void clang_cpp_convertert::get_overriden_methods(
     if(map.find(method_id) != map.end())
       continue;
 
-    auto status = map.insert({method_id, md_overriden});
+    auto status = map.insert({method_id, *md_overriden});
+    (void)status;
     assert(status.second);
   }
 }

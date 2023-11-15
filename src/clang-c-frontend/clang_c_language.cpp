@@ -12,7 +12,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
-#include <clang-c-frontend/expr2c.h>
+#include <util/c_expr2string.h>
 #include <sstream>
 #include <util/c_link.h>
 
@@ -29,6 +29,14 @@ clang_c_languaget::clang_c_languaget()
 {
   // Build the compile arguments
   build_compiler_args(clang_headers_path());
+
+  if(FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
+  {
+    fprintf(f, "clang invocation:");
+    for(const std::string &s : compiler_args)
+      fprintf(f, " '%s'", s.c_str());
+    fprintf(f, "\n");
+  }
 }
 
 void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
@@ -94,15 +102,97 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   for(auto const &def : config.ansi_c.defines)
     compiler_args.push_back("-D" + def);
 
-  if(messaget::state.verbosity >= VerbosityLevel::Debug)
+  if(messaget::state.target("clang", VerbosityLevel::Debug))
     compiler_args.emplace_back("-v");
 
   compiler_args.emplace_back("-target");
   compiler_args.emplace_back(config.ansi_c.target.to_string());
 
-  std::string sysroot = config.options.get_option("sysroot");
+  std::string sysroot;
+
+  if(config.ansi_c.cheri)
+  {
+    bool is_purecap = config.ansi_c.cheri == configt::ansi_ct::CHERI_PURECAP;
+    compiler_args.emplace_back(
+      "-cheri=" + std::to_string(config.ansi_c.capability_width()));
+
+    if(config.ansi_c.target.is_riscv()) /* unused as of yet: arch is mips64el */
+    {
+      compiler_args.emplace_back("-march=rv64imafdcxcheri");
+      compiler_args.emplace_back(
+        std::string("-mabi=") + (is_purecap ? "l64pc128d" : "lp64d"));
+    }
+    else if(config.ansi_c.target.arch == "aarch64c")
+    {
+      /* for morello-llvm 11.0.0 from
+       * https://git.morello-project.org/morello/llvm-project.git
+       * 94e1dbacf1d854b48386ec2c07a35e0694d626e2
+       */
+      std::string march = "-march=morello";
+      if(is_purecap)
+      {
+        march += "+c64";
+        compiler_args.emplace_back("-mabi=purecap");
+      }
+      compiler_args.emplace_back(std::move(march));
+      compiler_args.emplace_back("-D__ESBMC_CHERI_MORELLO__");
+    }
+    else if(is_purecap)
+      compiler_args.emplace_back("-mabi=purecap");
+
+    compiler_args.emplace_back(
+      "-D__ESBMC_CHERI__=" + std::to_string(config.ansi_c.capability_width()));
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_length_get(p)=__esbmc_cheri_length_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_bounds_set(p,n)=__esbmc_cheri_bounds_set(p,n)");
+
+    /* DEMO */
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_base_get(p)=__esbmc_cheri_base_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_top_get(p)=__esbmc_cheri_top_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_perms_get(p)=__esbmc_cheri_perms_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_type_get(p)=__esbmc_cheri_type_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_flags_get(p)=__esbmc_cheri_flags_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_sealed_get(p)=__esbmc_cheri_sealed_get(p)");
+
+    /* TODO: DEMO */
+    compiler_args.emplace_back("-D__builtin_cheri_tag_get(p)=1");
+    compiler_args.emplace_back("-D__builtin_clzll(n)=__esbmc_clzll(n)");
+
+    switch(config.ansi_c.cheri)
+    {
+    case configt::ansi_ct::CHERI_OFF:
+      break;
+    case configt::ansi_ct::CHERI_HYBRID:
+#ifdef ESBMC_CHERI_HYBRID_SYSROOT
+      sysroot = ESBMC_CHERI_HYBRID_SYSROOT;
+#endif
+      break;
+    case configt::ansi_ct::CHERI_PURECAP:
+#ifdef ESBMC_CHERI_PURECAP_SYSROOT
+      sysroot = ESBMC_CHERI_PURECAP_SYSROOT;
+#endif
+      break;
+    }
+  }
+
+  config.options.get_option("sysroot", sysroot);
   if(!sysroot.empty())
     compiler_args.push_back("--sysroot=" + sysroot);
+  else
+    compiler_args.emplace_back("--sysroot=" ESBMC_C2GOTO_SYSROOT);
+
+  if(config.options.get_bool_option("nostdinc"))
+  {
+    compiler_args.push_back("-nostdinc");
+    compiler_args.push_back("-ibuiltininc");
+  }
 
   for(const auto &dir : config.ansi_c.idirafter_paths)
   {
@@ -166,6 +256,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   if(config.ansi_c.target.is_macos())
   {
     compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
+    compiler_args.push_back("-D_DONT_USE_CTYPE_INLINE_");
     compiler_args.push_back("-D_SECURE__STRING_H_");
     compiler_args.push_back("-U__BLOCKS__");
     compiler_args.push_back("-Wno-nullability-completeness");
@@ -176,7 +267,11 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
      * 'soft': the system's <fenv.h> won't work.
      */
     if(config.ansi_c.target.is_arm() && config.ansi_c.word_size == 32)
+    {
+      compiler_args.emplace_back("-arch");
+      compiler_args.emplace_back("armv6");
       compiler_args.push_back("-mfloat-abi=softfp");
+    }
   }
 
   if(config.ansi_c.target.is_windows_abi())
@@ -185,6 +280,10 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.push_back("-D__CRT__NO_INLINE");
     compiler_args.push_back("-D_USE_MATH_DEFINES");
   }
+
+#if ESBMC_SVCOMP
+  compiler_args.push_back("-D__ESBMC_SVCOMP");
+#endif
 
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");
@@ -273,8 +372,8 @@ bool clang_c_languaget::preprocess(const std::string &, std::ostream &)
 bool clang_c_languaget::final(contextt &context)
 {
   add_cprover_library(context, this);
-  // adds __ESBMC__main symbol
-  return clang_main(context);
+  clang_c_maint c_main(context);
+  return c_main.clang_main();
 }
 
 std::string clang_c_languaget::internal_additions()
@@ -296,8 +395,8 @@ long int __ESBMC_labs(long int);
 long long int __ESBMC_llabs(long long int);
 
 // pointers
-unsigned __ESBMC_POINTER_OBJECT(const void *);
-signed __ESBMC_POINTER_OFFSET(const void *);
+__UINTPTR_TYPE__ __ESBMC_POINTER_OBJECT(const void *);
+__PTRDIFF_TYPE__ __ESBMC_POINTER_OFFSET(const void *);
 
 // malloc
 __attribute__((annotate("__ESBMC_inf_size")))
@@ -307,10 +406,10 @@ __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_is_dynamic[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
-unsigned __ESBMC_alloc_size[1];
+__SIZE_TYPE__ __ESBMC_alloc_size[1];
 
 // Get object size
-unsigned __ESBMC_get_object_size(const void *);
+__SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
 
 _Bool __ESBMC_is_little_endian();
@@ -318,6 +417,10 @@ _Bool __ESBMC_is_little_endian();
 int __ESBMC_rounding_mode = 0;
 
 void *__ESBMC_memset(void *, int, unsigned int);
+
+/* same semantics as memcpy(tgt, src, size) where size matches the size of the
+ * types tgt and src point to. */
+void __ESBMC_bitcast(void * /* tgt */, void * /* src */);
 
 void __ESBMC_memory_leak_checks();
 
@@ -401,7 +504,26 @@ int __ESBMC_builtin_constant_p(int);
 
 // TODO: implement this similarly to printf
   #define fscanf __ESBMC_fscanf
+
+  #define scanf __ESBMC_scanf
     )";
+
+  if(config.ansi_c.cheri)
+  {
+    intrinsics += R"(
+__SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability);
+void *__capability __esbmc_cheri_bounds_set(void *__capability, __SIZE_TYPE__);
+__SIZE_TYPE__ __esbmc_cheri_base_get(void *__capability);
+#if __ESBMC_CHERI__ == 128
+__UINT64_TYPE__ __esbmc_cheri_top_get(void *__capability);
+__SIZE_TYPE__ __esbmc_cheri_perms_get(void *__capability);
+__UINT16_TYPE__ __esbmc_cheri_flags_get(void *__capability);
+__UINT32_TYPE__ __esbmc_cheri_type_get(void *__capability);
+_Bool __esbmc_cheri_sealed_get(void *__capability);
+#endif
+__UINT64_TYPE__ __esbmc_clzll(__UINT64_TYPE__);
+    )";
+  }
 
   return intrinsics;
 }
@@ -411,7 +533,7 @@ bool clang_c_languaget::from_expr(
   std::string &code,
   const namespacet &ns)
 {
-  code = expr2c(expr, ns);
+  code = c_expr2string(expr, ns);
   return false;
 }
 
@@ -420,6 +542,6 @@ bool clang_c_languaget::from_type(
   std::string &code,
   const namespacet &ns)
 {
-  code = type2c(type, ns);
+  code = c_type2string(type, ns);
   return false;
 }

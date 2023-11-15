@@ -357,13 +357,14 @@ void value_sett::get_value_set_rec(
     const sideeffect2t &side = to_sideeffect2t(expr);
     switch(side.kind)
     {
+    case sideeffect2t::alloca:
     case sideeffect2t::malloc:
     {
       assert(suffix == "");
       const type2tc &dynamic_type = side.alloctype;
 
       expr2tc locnum = gen_ulong(location_number);
-      dynamic_object2tc dynobj(dynamic_type, locnum, false, false);
+      expr2tc dynobj = dynamic_object2tc(dynamic_type, locnum, false, false);
 
       insert(dest, dynobj, BigInt(0));
       return;
@@ -379,7 +380,7 @@ void value_sett::get_value_set_rec(
 
       const pointer_type2t &ptr = to_pointer_type(side.type);
 
-      dynamic_object2tc dynobj(ptr.subtype, locnum, false, false);
+      expr2tc dynobj = dynamic_object2tc(ptr.subtype, locnum, false, false);
 
       insert(dest, dynobj, BigInt(0));
       return;
@@ -398,7 +399,7 @@ void value_sett::get_value_set_rec(
   if(is_constant_struct2t(expr))
   {
     // The use of an explicit constant struct value evaluates to it's address.
-    address_of2tc tmp(expr->type, expr);
+    expr2tc tmp = address_of2tc(expr->type, expr);
     insert(dest, tmp, BigInt(0));
     return;
   }
@@ -508,6 +509,17 @@ void value_sett::get_value_set_rec(
     // members we've picked out of it at a higher level.
     valuest::const_iterator v_it = values.find(sym.get_symbol_name() + suffix);
 
+    if(sym.rlevel == symbol2t::renaming_level::level1_global)
+      assert(sym.level1_num == 0);
+    assert(sym.rlevel != symbol2t::renaming_level::level2_global);
+    /* This assertion does not hold: during value_sett::assign() the RHS is the
+     * L2 symbol c:pthread_lib.c@5466@F@pthread_create@startdata in e.g.
+     * - regression/esbmc-unix/02_account_symbolic_06
+     * - regression/esbmc/10_bicycle_01
+     * - regression/nonz3/10_bicycle_02
+    // assert(sym.rlevel != symbol2t::renaming_level::level2);
+     */
+
     // If it points at things, put those things into the destination object map.
     if(v_it != values.end())
     {
@@ -583,8 +595,7 @@ void value_sett::get_value_set_rec(
                 throw type2t::symbolic_type_excp();
 
               // Potentially rename,
-              const type2tc renamed = ns.follow(subtype);
-              elem_size = type_byte_size(renamed);
+              elem_size = type_byte_size(subtype, &ns);
             }
             const BigInt &val = to_constant_int2t(non_ptr_op).value;
             total_offs = val * elem_size;
@@ -689,7 +700,12 @@ void value_sett::get_value_set_rec(
 
   // If none of those expressions matched, then we don't really know what this
   // expression evaluates to. So just record it as being unknown.
-  unknown2tc tmp(original_type);
+  log_debug(
+    "value-set",
+    "unknown expr {} of type {} -> inserting unknown value",
+    get_expr_id(expr),
+    get_type_id(expr->type));
+  expr2tc tmp = unknown2tc(original_type);
   insert(dest, tmp, BigInt(0));
 }
 
@@ -799,7 +815,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
       if(is_unknown2t(object))
       {
         // Once an unknown, always an unknown.
-        unknown2tc unknown(expr->type);
+        expr2tc unknown = unknown2tc(expr->type);
         insert(dest, unknown, BigInt(0));
       }
       else
@@ -820,7 +836,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         {
           // Non constant offset -- work out what the lowest alignment is.
           // Fetch the type size of the array index element.
-          BigInt m = type_byte_size_default(index.source_value->type, 1);
+          BigInt m = type_byte_size_default(index.type, 1);
 
           // This index operation, whatever the offset, will always multiply
           // by the size of the element type.
@@ -868,7 +884,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         is_unknown2t(object) || is_null_object2t(object) ||
         (is_typecast2t(object) && is_null_object2t(to_typecast2t(object).from)))
       {
-        unknown2tc unknown(memb.type);
+        expr2tc unknown = unknown2tc(memb.type);
         insert(dest, unknown, BigInt(0));
       }
       else
@@ -941,7 +957,12 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
 
   // If we didn't recognize the expression, then we have no idea what this
   // refers to, so store an unknown expr.
-  unknown2tc unknown(expr->type);
+  log_debug(
+    "value-set",
+    "unknown expr {} of type {} -> inserting unknown reference",
+    get_expr_id(expr),
+    get_type_id(expr->type));
+  expr2tc unknown = unknown2tc(expr->type);
   insert(dest, unknown, BigInt(0));
 }
 
@@ -961,14 +982,14 @@ void value_sett::assign(
 
     // Build a sym specific to this type. Give l1 number to guard against
     // recursively entering this code path
-    symbol2tc xchg_sym(
-      lhs->type, xchg_name, symbol2t::level1, xchg_num++, 0, 0, 0);
+    expr2tc xchg_sym =
+      symbol2tc(lhs->type, xchg_name, symbol2t::level1, xchg_num++, 0, 0, 0);
 
     assign(xchg_sym, ifref.true_value, false);
     assign(xchg_sym, ifref.false_value, true);
     assign(lhs, xchg_sym, add_to_sets);
 
-    erase(xchg_sym->get_symbol_name());
+    erase(to_symbol2t(xchg_sym).get_symbol_name());
     return;
   }
 
@@ -1013,8 +1034,8 @@ void value_sett::assign(
         // ignore methods
         if(is_code_type(subtype))
           continue;
-        log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
-        member2tc lhs_member(subtype, lhs, name);
+
+        expr2tc lhs_member = member2tc(subtype, lhs, name);
 
         expr2tc rhs_member;
         if(is_unknown2t(rhs))
@@ -1043,13 +1064,14 @@ void value_sett::assign(
   if(is_array_type(lhs_type))
   {
     const array_type2t &arr_type = to_array_type(lhs_type);
-    unknown2tc unknown(index_type2());
-    index2tc lhs_index(arr_type.subtype, lhs, unknown);
+    expr2tc unknown = unknown2tc(
+      arr_type.array_size ? arr_type.array_size->type : index_type2());
+    expr2tc lhs_index = index2tc(arr_type.subtype, lhs, unknown);
 
     if(is_unknown2t(rhs) || is_invalid2t(rhs))
     {
-      // Assign an uknown subtype value to the array's (unknown) index.
-      unknown2tc unknown_field(arr_type.subtype);
+      // Assign an unknown subtype value to the array's (unknown) index.
+      expr2tc unknown_field = unknown2tc(arr_type.subtype);
       assign(lhs_index, unknown_field, add_to_sets);
     }
     else
@@ -1072,16 +1094,15 @@ void value_sett::assign(
       {
         const with2t &with = to_with2t(rhs);
 
-        unknown2tc unknown(index_type2());
-        index2tc idx(arr_type.subtype, with.source_value, unknown);
+        expr2tc unknown = unknown2tc(index_type2());
+        expr2tc idx = index2tc(arr_type.subtype, with.source_value, unknown);
 
         assign(lhs_index, idx, add_to_sets);
         assign(lhs_index, with.update_value, true);
       }
       else
       {
-        unknown2tc unknown(index_type2());
-        index2tc rhs_idx(arr_type.subtype, rhs, unknown);
+        expr2tc rhs_idx = index2tc(arr_type.subtype, rhs, unknown);
         assign(lhs_index, rhs_idx, true);
       }
     }
@@ -1145,10 +1166,10 @@ void value_sett::do_free(const expr2tc &op)
         {
           // adjust
           objectt o = o_it->second;
-          dynamic_object2tc new_dyn(object);
-          new_dyn->invalid = false;
-          new_dyn->unknown = true;
-          insert(new_object_map, new_dyn, o);
+          dynamic_object2t new_dyn = to_dynamic_object2t(object); // copy
+          new_dyn.invalid = false;
+          new_dyn.unknown = true;
+          insert(new_object_map, dynamic_object2tc(std::move(new_dyn)), o);
           changed = true;
         }
       }
@@ -1316,9 +1337,9 @@ void value_sett::do_function_call(
 
     add_var(identifier, "");
 
-    symbol2tc v_expr(*it2, "value_set::dummy_arg_" + i2string(i));
+    expr2tc v_expr = symbol2tc(*it2, "value_set::dummy_arg_" + i2string(i));
 
-    symbol2tc actual_lhs(*it2, identifier);
+    expr2tc actual_lhs = symbol2tc(*it2, identifier);
     assign(actual_lhs, v_expr, true);
     i++;
   }
@@ -1337,7 +1358,7 @@ void value_sett::do_end_function(const expr2tc &lhs)
   if(is_nil_expr(lhs))
     return;
 
-  symbol2tc rhs(lhs->type, irep_idt("value_set::return_value"));
+  expr2tc rhs = symbol2tc(lhs->type, irep_idt("value_set::return_value"));
 
   assign(lhs, rhs);
 }
@@ -1363,8 +1384,8 @@ void value_sett::apply_code(const expr2tc &code)
   else if(is_code_decl2t(code))
   {
     const code_decl2t &ref = to_code_decl2t(code);
-    symbol2tc sym(ref.type, ref.value);
-    invalid2tc invalid(ref.type);
+    expr2tc sym = symbol2tc(ref.type, ref.value);
+    expr2tc invalid = invalid2tc(ref.type);
     assign(sym, invalid);
   }
   else if(is_code_expression2t(code))
@@ -1387,7 +1408,7 @@ void value_sett::apply_code(const expr2tc &code)
     const code_return2t &ref = to_code_return2t(code);
     if(!is_nil_expr(ref.operand))
     {
-      symbol2tc sym(ref.operand->type, "value_set::return_value");
+      expr2tc sym = symbol2tc(ref.operand->type, "value_set::return_value");
       assign(sym, ref.operand);
     }
   }
@@ -1447,8 +1468,7 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   unsigned no = static_cast<const struct_union_data &>(*type.get())
                   .get_component_number(component_name);
   const type2tc &subtype = members[no];
-  log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
-  member2tc memb(subtype, src, component_name);
+  expr2tc memb = member2tc(subtype, src, component_name);
   return memb;
 }
 
@@ -1456,7 +1476,7 @@ void value_sett::dump() const
 {
   std::ostringstream oss;
   output(oss);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }
 
 void value_sett::obj_numbering_ref(unsigned int num)

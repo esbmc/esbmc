@@ -410,7 +410,7 @@ private:
   expr2tc *extract_bytes_from_scalar(
     const expr2tc &object,
     unsigned int bytes,
-    const expr2tc &offset);
+    const expr2tc &offset) const;
   void stitch_together_from_byte_array(
     expr2tc &value,
     unsigned int num_bytes,
@@ -449,9 +449,9 @@ private:
     const guardt &guard,
     modet mode);
   void check_alignment(
-    unsigned long minwidth,
-    const expr2tc &&offset,
-    const guardt &guard);
+    BigInt minwidth,
+    const expr2tc &offset_bits,
+  const guardt &guard);
   unsigned int
   compute_num_bytes_to_extract(const expr2tc offset, unsigned long num_bits);
   void extract_bits_from_byte_array(
@@ -471,12 +471,12 @@ public:
 private:
   void construct_from_const_offset(
     expr2tc &value,
-    const expr2tc &offset,
-    const type2tc &type);
+  const expr2tc &offset,
+  const type2tc &type);
   void construct_from_dyn_offset(
     expr2tc &value,
-    const expr2tc &offset,
-    const type2tc &type);
+  const expr2tc &offset,
+  const type2tc &type);
   void construct_from_const_struct_offset(
     expr2tc &value,
     const expr2tc &offset,
@@ -509,7 +509,8 @@ private:
     expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
-    const guardt &guard);
+    const guardt &guard,
+    modet mode);
   void construct_struct_ref_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offs,
@@ -541,6 +542,9 @@ public:
   {
     block_assertions = false;
   }
+
+  
+
 };
 
 #endif

@@ -1,5 +1,5 @@
 THOROUGH
 main.cpp
---memlimit 14000000 --timeout 900
+ --timeout 900
 
 ^VERIFICATION SUCCESSFUL$

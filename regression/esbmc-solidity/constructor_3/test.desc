@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 contract.solast
---function Derive --contract contract.sol
+--function Derive --contract Derive --sol contract.sol
 ^VERIFICATION FAILED$

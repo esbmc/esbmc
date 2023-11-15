@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function state_var_init --contract contract.sol
+--function state_var_init --sol contract.sol
 ^VERIFICATION SUCCESSFUL$

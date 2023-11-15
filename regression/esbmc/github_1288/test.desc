@@ -1,0 +1,5 @@
+CORE
+gh-1288.c
+--unwind 1
+^VERIFICATION FAILED$
+\bunwinding assertion loop\b

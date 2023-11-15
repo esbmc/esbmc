@@ -171,6 +171,11 @@ public:
   expr2tc tuple_get(const expr2tc &expr) override;
   expr2tc tuple_get(const type2tc &type, smt_astt sym) override;
 
+  expr2tc tuple_get_array_elem(
+    smt_astt array,
+    uint64_t index,
+    const type2tc &subtype) override;
+
   smt_astt tuple_array_create(
     const type2tc &array_type,
     smt_astt *input_args,

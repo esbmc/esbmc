@@ -6,7 +6,7 @@ void goto_programt::instructiont::dump() const
 {
   std::ostringstream oss;
   output_instruction(*migrate_namespace_lookup, "", oss);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }
 
 void goto_programt::instructiont::output_instruction(
@@ -243,70 +243,59 @@ void goto_programt::compute_loop_numbers(unsigned int &num)
     }
 }
 
-void goto_programt::get_successors(targett target, targetst &successors)
-{
-  successors.clear();
-  if(target == instructions.end())
-    return;
-
-  targett next = target;
-  next++;
-
-  const instructiont &i = *target;
-
-  if(i.is_goto())
-  {
-    for(auto target : i.targets)
-      successors.push_back(target);
-
-    if(!is_true(i.guard))
-      successors.push_back(next);
-  }
-  else if(i.is_throw())
-  {
-    // the successors are non-obvious
-  }
-  else if(i.is_return())
-  {
-    // the successor is the end_function at the end of the function
-    successors.push_back(--instructions.end());
-  }
-  else if(i.is_assume())
-  {
-    if(!is_false(i.guard))
-      successors.push_back(next);
-  }
-  else
-    successors.push_back(next);
-}
-
+// This method takes an iterator "target" into the list of instructions
+// and returns a list of iterators "successors" to the successor
+// instructions of "target".
+//
+// In this context, a successor is any instruction that may be
+// executed after the given instruction (i.e., specified by "target").
+// In some cases (see below) we can trivially reject
+// some instructions as successors.
 void goto_programt::get_successors(
   const_targett target,
   const_targetst &successors) const
 {
   successors.clear();
+
+  // The last instruction does not have any successors
   if(target == instructions.end())
     return;
 
   const auto next = std::next(target);
-
   const instructiont &i = *target;
 
   if(i.is_goto())
   {
-    for(auto target : i.targets)
-      successors.emplace_back(target);
+    // GOTO instructions may have multiple successors:
+    // the next instruction in the list + all the instructions
+    // this jump may lead to.
 
+    // If the guard is definitely FALSE, then the corresponding
+    // jump can never occur. Hence, we can ignore all jump targets
+    // as successors. Otherwise, we consider these targets as successors.
+    if(!is_false(i.guard))
+    {
+      for(auto target : i.targets)
+        successors.emplace_back(target);
+    }
+
+    // If the guard is definitely TRUE, then this GOTO
+    // jump always happens. Hence, only one kind of successors
+    // is possible -- the target instructions of the GOTO jump.
     if(!is_true(i.guard) && next != instructions.end())
       successors.push_back(next);
   }
   else if(i.is_return())
   {
-    // the successor is the end_function at the end
+    // A RETURN instruction is basically an "unguarded" jump to
+    // the corresponding END_FUNCTION instruction.
     successors.push_back(--instructions.end());
   }
-  else if(i.is_assume())
+  else if(i.is_assume() || i.is_assert())
   {
+    // This is an ASSERT or ASSUME with a guard that
+    // might hold (i.e., definitely not FALSE), so the next target
+    // might be reached.
     if(!is_false(i.guard))
       successors.push_back(next);
   }
@@ -465,6 +454,12 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case ASSIGN:
     out << "ASSIGN";
     break;
+  case DECL:
+    out << "DECL";
+    break;
+  case DEAD:
+    out << "DEAD";
+    break;
   case FUNCTION_CALL:
     out << "FUNCTION_CALL";
     break;
@@ -477,8 +472,12 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case THROW_DECL:
     out << "THROW_DECL";
     break;
+  case THROW_DECL_END:
+    out << "THROW_DECL_END";
+    break;
   default:
-    out << "? (number: " << t << ")";
+    assert(!"Unknown instruction type");
+    out << "unknown instruction";
   }
 
   return out;
@@ -488,7 +487,7 @@ void goto_programt::dump() const
 {
   std::ostringstream oss;
   output(*migrate_namespace_lookup, "", oss);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }
 
 void goto_programt::get_decl_identifiers(

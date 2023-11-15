@@ -74,7 +74,7 @@ expr2tc expr2t::simplify() const
     expr2tc new_us = clone();
     std::list<expr2tc>::iterator it2 = newoperands.begin();
     new_us->Foreach_operand([&it2](expr2tc &e) {
-      if((*it2) == nullptr)
+      if(!*it2)
         ; // No change in operand;
       else
         e = *it2; // Operand changed; overwrite with new one.
@@ -278,8 +278,8 @@ static expr2tc simplify_arith_2ops(
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_op =
-        expr2tc(new constructor(type, simplied_side_1, simplied_side_2));
+      expr2tc new_op(
+        std::make_shared<constructor>(type, simplied_side_1, simplied_side_2));
 
       return typecast_check_return(type, new_op);
     }
@@ -405,7 +405,7 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
   bool p1 = is_pointer_type(a);
   bool p2 = is_pointer_type(b);
   if(p1 && p2)
-    return get_int_type(config.ansi_c.pointer_width);
+    return get_int_type(config.ansi_c.address_width);
   if(p1)
     return a;
   if(p2)
@@ -441,7 +441,7 @@ expr2tc add2t::do_simplify() const
 
   // Attempt associative simplification
   std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
-    [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
+    [](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
     expr2tc a = arg1, b = arg2;
     type2tc t = common_arith_op2_type(a, b);
     return add2tc(t, a, b);
@@ -474,7 +474,7 @@ struct Subtor
       expr2tc c1 = op1;
       if(get_value(c1) == 0)
       {
-        neg2tc c(op2->type, op2);
+        expr2tc c = neg2tc(op2->type, op2);
         ::simplify(c);
         return c;
       }
@@ -569,8 +569,10 @@ expr2tc mul2t::do_simplify() const
   return simplify_arith_2ops<Multor, mul2t>(type, side_1, side_2);
 }
 
-template <class constant_type>
-struct Divtor
+namespace
+{
+template <bool Div, typename constant_type>
+struct DivModtor
 {
   static expr2tc simplify(
     const expr2tc &op1,
@@ -582,7 +584,10 @@ struct Divtor
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
-        return div2tc(t, e1, e2);
+        if constexpr(Div)
+          return div2tc(t, e1, e2);
+        else
+          return modulus2tc(t, e1, e2);
       };
       return distribute_vector_operation(op, op1, op2);
     }
@@ -597,7 +602,12 @@ struct Divtor
 
       // Denominator is one? Simplify to numerator's constant
       if(get_value(c2) == 1)
-        return op1;
+      {
+        if constexpr(Div)
+          return op1;
+        else
+          return gen_zero(op1->type);
+      }
     }
 
     // Two constants? Simplify to result of the division
@@ -611,13 +621,30 @@ struct Divtor
         return op1;
 
       expr2tc c2 = op2;
-      get_value(c1) /= get_value(c2);
+      if constexpr(Div)
+        get_value(c1) /= get_value(c2);
+      else
+        get_value(c1) %= get_value(c2);
       return c1;
     }
 
     return expr2tc();
   }
 };
+
+template <class constant_type>
+struct Divtor : DivModtor<true, constant_type>
+{
+  using DivModtor<true, constant_type>::simplify;
+};
+
+template <class constant_type>
+struct Modtor : DivModtor<false, constant_type>
+{
+  using DivModtor<false, constant_type>::simplify;
+};
+
+} // namespace
 
 expr2tc div2t::do_simplify() const
 {
@@ -626,60 +653,7 @@ expr2tc div2t::do_simplify() const
 
 expr2tc modulus2t::do_simplify() const
 {
-  if(!is_number_type(type) && !is_vector_type(type))
-    return expr2tc();
-
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_side_1 = try_simplification(side_1);
-  expr2tc simplied_side_2 = try_simplification(side_2);
-
-  if(!is_constant_expr(simplied_side_1) && !is_constant_expr(simplied_side_2))
-  {
-    // Were we able to simplify the sides?
-    if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
-    {
-      expr2tc new_mod =
-        expr2tc(new modulus2t(type, simplied_side_1, simplied_side_2));
-
-      return typecast_check_return(type, new_mod);
-    }
-
-    return expr2tc();
-  }
-
-  // Is a vector operation ? Apply the op
-  if(
-    is_constant_vector2t(simplied_side_1) ||
-    is_constant_vector2t(simplied_side_2))
-  {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
-      return modulus2tc(t, e1, e2);
-    };
-    return distribute_vector_operation(op, simplied_side_1, simplied_side_2);
-  }
-
-  if(is_bv_type(type))
-  {
-    if(is_constant_int2t(simplied_side_2))
-    {
-      // Denominator is one? Simplify to zero
-      if(to_constant_int2t(simplied_side_2).value == 1)
-        return constant_int2tc(type, BigInt(0));
-    }
-
-    if(is_constant_int2t(simplied_side_1) && is_constant_int2t(simplied_side_2))
-    {
-      const constant_int2t &numerator = to_constant_int2t(simplied_side_1);
-      const constant_int2t &denominator = to_constant_int2t(simplied_side_2);
-
-      auto c = numerator.value;
-      c %= denominator.value;
-
-      return constant_int2tc(type, c);
-    }
-  }
-
-  return expr2tc();
+  return simplify_arith_2ops<Modtor, modulus2t>(type, side_1, side_2);
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -695,7 +669,7 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
     // Were we able to simplify anything?
     if(value != to_simplify)
     {
-      expr2tc new_neg = expr2tc(new constructor(type, to_simplify));
+      expr2tc new_neg(std::make_shared<constructor>(type, to_simplify));
       return typecast_check_return(type, new_neg);
     }
 
@@ -749,14 +723,13 @@ expr2tc neg2t::do_simplify() const
 {
   if(is_constant_vector2t(value))
   {
-    constant_vector2tc vector(value);
-    for(size_t i = 0; i < vector->datatype_members.size(); i++)
+    std::vector<expr2tc> members = to_constant_vector2t(value).datatype_members;
+    for(size_t i = 0; i < members.size(); i++)
     {
-      auto &op = vector->datatype_members[i];
-      neg2tc neg(op->type, op);
-      vector->datatype_members[i] = neg;
+      auto &op = members[i];
+      members[i] = neg2tc(op->type, op);
     }
-    return vector;
+    return constant_vector2tc(value->type, std::move(members));
   }
   return simplify_arith_1op<Negator, neg2t>(type, value);
 }
@@ -794,9 +767,9 @@ expr2tc with2t::do_simplify() const
     assert(no < c_struct.datatype_members.size());
 
     // Clone constant struct, update its field according to this "with".
-    constant_struct2tc s = c_struct;
-    s->datatype_members[no] = update_value;
-    return expr2tc(s);
+    constant_struct2t copy = c_struct;
+    copy.datatype_members[no] = update_value;
+    return constant_struct2tc(std::move(copy));
   }
   if(is_constant_union2t(source_value))
   {
@@ -830,9 +803,9 @@ expr2tc with2t::do_simplify() const
     if(index.value >= array.datatype_members.size())
       return expr2tc();
 
-    constant_array2tc arr = array;
-    arr->datatype_members[index.as_ulong()] = update_value;
-    return arr;
+    constant_array2t arr = array; // copy
+    arr.datatype_members[index.as_ulong()] = update_value;
+    return constant_array2tc(std::move(arr));
   }
   else if(is_constant_vector2t(source_value))
   {
@@ -847,9 +820,9 @@ expr2tc with2t::do_simplify() const
     if(index.value >= vec.datatype_members.size())
       return expr2tc();
 
-    constant_vector2tc vec2 = vec;
-    vec2->datatype_members[index.as_ulong()] = update_value;
-    return vec2;
+    constant_vector2t vec2 = vec; // copy
+    vec2.datatype_members[index.as_ulong()] = update_value;
+    return constant_vector2tc(std::move(vec2));
   }
   else if(is_constant_array_of2t(source_value))
   {
@@ -893,7 +866,7 @@ expr2tc member2t::do_simplify() const
       s = to_constant_struct2t(source_value).datatype_members[no];
       assert(
         is_pointer_type(type) ||
-        base_type_eq(type, s->type, namespacet(contextt())));
+        base_type_eq(type, s->type, *migrate_namespace_lookup));
     }
     else
     {
@@ -909,11 +882,10 @@ expr2tc member2t::do_simplify() const
       /* If the type we just selected isn't compatible, it means that whatever
        * field is in the constant union /isn't/ the field we're selecting from
        * it. So don't simplify it, because we can't. */
-      // This can be the default, because base_type will not print anything
 
       if(
         !is_pointer_type(type) &&
-        !base_type_eq(type, s->type, namespacet(contextt())))
+        !base_type_eq(type, s->type, *migrate_namespace_lookup))
         return expr2tc();
     }
 
@@ -989,14 +961,13 @@ expr2tc pointer_offset2t::do_simplify() const
     expr2tc new_ptr_op = pointer_offset2tc(type, ptr_op);
     // And multiply the non pointer one by the type size.
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
-    BigInt thesize = type_byte_size(ptr_subtype);
-    constant_int2tc type_size(type, thesize);
+    expr2tc type_size =
+      type_byte_size_expr(ptr_subtype, migrate_namespace_lookup);
 
-    // SV-Comp workaround
-    if(non_ptr_op->type->get_width() != type->get_width())
+    if(non_ptr_op->type != type)
       non_ptr_op = typecast2tc(type, non_ptr_op);
 
-    mul2tc new_non_ptr_op(type, non_ptr_op, type_size);
+    expr2tc new_non_ptr_op = mul2tc(type, non_ptr_op, type_size);
 
     expr2tc new_add = add2tc(type, new_ptr_op, new_non_ptr_op);
 
@@ -1096,7 +1067,7 @@ expr2tc not2t::do_simplify() const
     return expr2tc();
 
   const constant_bool2t &val = to_constant_bool2t(simp);
-  return expr2tc(new constant_bool2t(!val.value));
+  return constant_bool2tc(!val.value);
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -1117,8 +1088,8 @@ static expr2tc simplify_logic_2ops(
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_op =
-        expr2tc(new constructor(simplied_side_1, simplied_side_2));
+      expr2tc new_op(
+        std::make_shared<constructor>(simplied_side_1, simplied_side_2));
 
       return typecast_check_return(type, new_op);
     }
@@ -1352,9 +1323,9 @@ expr2tc implies2t::do_simplify() const
   return simplify_logic_2ops<Impliestor, implies2t>(type, side_1, side_2);
 }
 
-template <typename constructor>
+template <typename constructor, typename U64Op>
 static expr2tc do_bit_munge_operation(
-  const std::function<int64_t(int64_t, int64_t)> &opfunc,
+  U64Op opfunc,
   const type2tc &type,
   const expr2tc &side_1,
   const expr2tc &side_2)
@@ -1369,43 +1340,82 @@ static expr2tc do_bit_munge_operation(
     is_constant_int2t(simplified_side_1) &&
     is_constant_int2t(simplified_side_2) && type->get_width() <= 64)
   {
-    // So - we can't make BigInt by itself do the operation. But we can map it
-    // to the corresponding operation on our native types.
+    // So - we can't make BigInt by itself do the operation. But we can try to
+    // map it to the corresponding operation on our native types.
     const constant_int2t &int1 = to_constant_int2t(simplified_side_1);
     const constant_int2t &int2 = to_constant_int2t(simplified_side_2);
+    const BigInt &bl = int1.value;
+    const BigInt &br = int2.value;
 
-    // Dump will zero-prefix and right align the output number.
-    int64_t val1 = int1.value.to_int64();
-    int64_t val2 = int2.value.to_int64();
+    /* the bit pattern in two's complement, including the sign */
+    uint64_t l = bl.to_int64();
+    uint64_t r = br.to_int64();
 
-    uint64_t r = opfunc(val1, val2);
+    bool is_shift = false;
+    bool can_eval = true;
 
-    if(type->get_width() < 64)
+    /* For &, |, ^, ~, << our low bits are determined only by the corresponding
+     * low bits of the arguments, however for >> this is not necessarily true!
+     */
+    if constexpr(
+      std::is_same_v<constructor, lshr2t> ||
+      std::is_same_v<constructor, ashr2t>)
     {
-      // truncate the result to the type's width
-      uint64_t trunc_mask = ~(uint64_t)0 << type->get_width();
-      r &= ~trunc_mask;
-      // if the type is signed and r's sign-bit is set, sign-extend it
-      if(is_signedbv_type(type) && r >> (type->get_width() - 1))
-        r |= trunc_mask;
+      /* do we have a small enough LHS to evaluate on uint64_t? */
+      can_eval &=
+        br == 0 ||
+        (is_signedbv_type(simplified_side_1) ? bl.is_int64() : bl.is_uint64());
+      is_shift = true;
     }
-    return constant_int2tc(type, BigInt((int64_t)r));
+    else
+      is_shift = std::is_same_v<constructor, shl2t>;
+
+    /* TODO fbrausse: In C, a << b is undefined for signed a if the result is
+     * not representable. */
+
+    /* Evaluating shifts with the shift amount >= 64 on (u)int64_t is undefined
+     * behaviour in C++, we should avoid doing that during simplification. */
+    can_eval &= !is_shift || br < 64;
+    if(can_eval)
+    {
+      uint64_t res = opfunc(l, r);
+
+      uint64_t trunc_mask = 0;
+      if(type->get_width() < 64)
+      {
+        // truncate the result to the type's width
+        trunc_mask = ~(uint64_t)0 << type->get_width();
+        res &= ~trunc_mask;
+      }
+
+      BigInt z;
+      if(is_signedbv_type(type))
+      {
+        // if res's sign-bit is set, sign-extend it
+        if(res >> (type->get_width() - 1))
+          res |= trunc_mask;
+        z = BigInt((int64_t)res);
+      }
+      else
+        z = BigInt((uint64_t)res);
+
+      return constant_int2tc(type, z);
+    }
   }
 
   // Were we able to simplify any side?
   if(side_1 != simplified_side_1 || side_2 != simplified_side_2)
     return typecast_check_return(
       type,
-      expr2tc(new constructor(type, simplified_side_1, simplified_side_2)));
+      expr2tc(std::make_shared<constructor>(
+        type, simplified_side_1, simplified_side_2)));
 
   return expr2tc();
 }
 
 expr2tc bitand2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 & op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return (op1 & op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1421,9 +1431,7 @@ expr2tc bitand2t::do_simplify() const
 
 expr2tc bitor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 | op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1439,9 +1447,7 @@ expr2tc bitor2t::do_simplify() const
 
 expr2tc bitxor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 ^ op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return (op1 ^ op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1457,9 +1463,7 @@ expr2tc bitxor2t::do_simplify() const
 
 expr2tc bitnand2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ~(op1 & op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 & op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1475,9 +1479,7 @@ expr2tc bitnand2t::do_simplify() const
 
 expr2tc bitnor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ~(op1 | op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 | op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1493,9 +1495,7 @@ expr2tc bitnor2t::do_simplify() const
 
 expr2tc bitnxor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ~(op1 ^ op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 ^ op2); };
 
   // Is a vector operation ? Apply the op
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
@@ -1511,20 +1511,17 @@ expr2tc bitnxor2t::do_simplify() const
 
 expr2tc bitnot2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t) {
-    return ~(op1);
-  };
+  auto op = [](uint64_t op1, uint64_t) { return ~(op1); };
 
   if(is_constant_vector2t(value))
   {
-    constant_vector2tc vector(value);
-    for(size_t i = 0; i < vector->datatype_members.size(); i++)
+    constant_vector2t vector = to_constant_vector2t(value); // copy
+    for(size_t i = 0; i < vector.datatype_members.size(); i++)
     {
-      auto &op = vector->datatype_members[i];
-      bitnot2tc neg(op->type, op);
-      vector->datatype_members[i] = neg;
+      auto &op = vector.datatype_members[i];
+      vector.datatype_members[i] = bitnot2tc(op->type, op);
     }
-    return vector;
+    return constant_vector2tc(std::move(vector));
   }
 
   return do_bit_munge_operation<bitnot2t>(op, type, value, value);
@@ -1532,9 +1529,7 @@ expr2tc bitnot2t::do_simplify() const
 
 expr2tc shl2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ((uint64_t)op1 << op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return op1 << op2; };
 
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
@@ -1549,9 +1544,7 @@ expr2tc shl2t::do_simplify() const
 
 expr2tc lshr2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return ((uint64_t)op1) >> ((uint64_t)op2);
-  };
+  auto op = [](uint64_t op1, uint64_t op2) { return op1 >> op2; };
 
   if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
@@ -1566,8 +1559,9 @@ expr2tc lshr2t::do_simplify() const
 
 expr2tc ashr2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 >> op2);
+  auto op = [](uint64_t op1, uint64_t op2) {
+    /* simulating the arithmetic right shift in C++ requires LHS to be signed */
+    return (int64_t)op1 >> op2;
   };
 
   // Is a vector operation ? Apply the op
@@ -1587,12 +1581,14 @@ expr2tc bitcast2t::do_simplify() const
   // Follow approach of old irep, i.e., copy it
   if(type == from->type)
   {
-    // Typecast to same type means this can be eliminated entirely
+    // Bitcast to same type means this can be eliminated entirely
     return from;
   }
 
   // This should be fine, just use typecast
-  if(!is_floatbv_type(type) && !is_floatbv_type(from->type))
+  if(
+    !is_floatbv_type(type) && !is_floatbv_type(from->type) &&
+    !is_fixedbv_type(type) && !is_fixedbv_type(from->type))
     return typecast2tc(type, from)->do_simplify();
 
   return expr2tc();
@@ -1776,21 +1772,25 @@ expr2tc typecast2t::do_simplify() const
 
       if(to_width == from_width)
         return simp;
-
-      return expr2tc();
     }
     catch(const array_type2t::dyn_sized_array_excp &e)
     {
       // Something crazy, and probably C++ based, occurred. Don't attempt to
       // simplify.
-      return expr2tc();
     }
+    catch(const type2t::symbolic_type_excp &e)
+    {
+      /* might happen if there is a symbolic type in a ptr's subtype; these
+       * have not been squashed by thrash_type_symbols() */
+    }
+
+    return expr2tc();
   }
   else if(is_typecast2t(simp) && type == simp->type)
   {
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
-    return expr2tc(new typecast2t(type, to_typecast2t(simp).from));
+    return typecast2tc(type, to_typecast2t(simp).from);
   }
 
   return expr2tc();
@@ -1865,8 +1865,8 @@ static expr2tc simplify_relations(
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_op =
-        expr2tc(new constructor(simplied_side_1, simplied_side_2));
+      expr2tc new_op(
+        std::make_shared<constructor>(simplied_side_1, simplied_side_2));
 
       return typecast_check_return(type, new_op);
     }
@@ -1979,7 +1979,8 @@ static expr2tc simplify_floatbv_relations(
   // Were we able to simplify the sides?
   if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
   {
-    expr2tc new_op = expr2tc(new constructor(simplied_side_1, simplied_side_2));
+    expr2tc new_op(
+      std::make_shared<constructor>(simplied_side_1, simplied_side_2));
 
     return typecast_check_return(type, new_op);
   }
@@ -2006,7 +2007,7 @@ struct IEEE_equalitytor
     if(op1 == op2)
     {
       // x == x is the same as saying !isnan(x)
-      expr2tc is_nan(new isnan2t(op1));
+      expr2tc is_nan = isnan2tc(op1);
       expr2tc is_not_nan = not2tc(is_nan);
       return try_simplification(is_not_nan);
     }
@@ -2072,7 +2073,7 @@ struct IEEE_notequalitytor
     if(op1 == op2)
     {
       // x != x is the same as saying isnan(x)
-      expr2tc is_nan(new isnan2t(op1));
+      expr2tc is_nan = isnan2tc(op1);
       return try_simplification(is_nan);
     }
 
@@ -2442,7 +2443,7 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
     // Were we able to simplify anything?
     if(value != to_simplify)
     {
-      expr2tc new_neg = expr2tc(new constructor(to_simplify));
+      expr2tc new_neg(std::make_shared<constructor>(to_simplify));
       return typecast_check_return(type, new_neg);
     }
 
@@ -2627,8 +2628,8 @@ static expr2tc simplify_floatbv_2ops(
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_op = expr2tc(
-        new constructor(type, simplied_side_1, simplied_side_2, rounding_mode));
+      expr2tc new_op(std::make_shared<constructor>(
+        type, simplied_side_1, simplied_side_2, rounding_mode));
 
       return typecast_check_return(type, new_op);
     }

@@ -286,7 +286,7 @@ exprt cpp_typecheck_resolvet::convert_template_argument(
       location.dump();
       str << "internal error: template parameter without instance:" << std::endl
           << identifier << std::endl;
-      log_error(str.str());
+      log_error("{}", str.str());
       throw 0;
     }
 
@@ -882,13 +882,13 @@ exprt cpp_typecheck_resolvet::do_builtin(
     dest = exprt("constant", typet("empty"));
     str << "Scopes in location " << location << std::endl;
     cpp_typecheck.cpp_scopes.get_root_scope().print(str);
-    log_warning(str.str());
+    log_warning("{}", str.str());
   }
   else if(base_name == "current_scope")
   {
     dest = exprt("constant", typet("empty"));
     str << "Scope in location " << location << ": " << original_scope->prefix;
-    log_warning(str.str());
+    log_warning("{}", str.str());
   }
   else if(base_name == "context")
   {

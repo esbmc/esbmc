@@ -78,17 +78,17 @@ bool c_main(contextt &context, const std::string &standard_main)
 
   if(matches.empty())
   {
-    log_error("main symbol `" + themain + "' not found");
+    log_error("main symbol `{}' not found", themain);
     return true; // give up
   }
 
   if(matches.size() >= 2)
   {
     if(matches.size() == 2)
-      log_error("warning: main symbol `" + themain + "' is ambiguous");
+      log_error("warning: main symbol `{}' is ambiguous", themain);
     else
     {
-      log_error("main symbol `" + themain + " is ambiguous");
+      log_error("main symbol `{} is ambiguous", themain);
       return true;
     }
   }

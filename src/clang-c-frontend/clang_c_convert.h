@@ -40,6 +40,7 @@ class FloatingLiteral;
 class TagDecl;
 class FieldDecl;
 class MemberExpr;
+class EnumConstantDecl;
 } // namespace clang
 
 std::string
@@ -66,7 +67,8 @@ public:
  * @param type Union type
  * @param msg  Message object
  */
-  static void gen_typecast_to_union(exprt &dest, const typet &type);
+  static void
+  gen_typecast_to_union(const namespacet &ns, exprt &dest, const typet &type);
 
   static std::string get_decl_name(const clang::NamedDecl &nd);
 
@@ -133,7 +135,7 @@ protected:
    *  name: name for this function parameter
    *  param: ESBMC's IR representing the function parameter
    */
-  virtual bool name_param_and_continue(
+  virtual void name_param_and_continue(
     const clang::ParmVarDecl &pd,
     std::string &id,
     std::string &name,
@@ -165,15 +167,19 @@ protected:
    */
   virtual bool get_struct_union_class_methods_decls(
     const clang::RecordDecl &recordd,
-    struct_typet &type);
+    typet &type);
 
   virtual bool get_type(const clang::QualType &type, typet &new_type);
 
   virtual bool get_type(const clang::Type &the_type, typet &new_type);
 
+  void get_ref_to_struct_type(typet &type);
+
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
 
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
+
+  void get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
 
   virtual bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
 
@@ -224,8 +230,6 @@ protected:
 
   void convert_expression_to_code(exprt &expr);
 
-  symbolt *move_symbol_to_context(symbolt &symbol);
-
   bool convert_character_literal(
     const clang::CharacterLiteral &char_literal,
     exprt &dest);
@@ -266,13 +270,6 @@ protected:
   bool is_field_global_storage(const clang::FieldDecl *field);
 
   /*
-   * check if a method is constructor or destructor
-   * Arguments:
-   *  fd: clang AST representing a C++ method
-   */
-  bool is_ConstructorOrDestructor(const clang::FunctionDecl &fd);
-
-  /*
    * Function to check whether a member function call refers to
    * a virtual/overriding method.
    *
@@ -310,6 +307,13 @@ protected:
    * For C, it always return false.
    */
   virtual bool is_fd_virtual_or_overriding(const clang::FunctionDecl &fd);
+
+  virtual bool is_aggregate_type(const clang::QualType &q_type);
+
+  /*
+   * Function to check whether a MemberExpr references to a static variable
+   */
+  bool is_member_decl_static(const clang::MemberExpr &member);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

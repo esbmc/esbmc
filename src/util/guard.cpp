@@ -39,12 +39,13 @@ void guardt::add(const expr2tc &expr)
   // Easy case, there is no g_expr
   if(is_nil_expr(g_expr))
   {
+    assert(guard_list.size() == 1);
     g_expr = expr;
   }
   else
   {
     // Otherwise, just update the chain of ands
-    and2tc new_g_expr(g_expr, expr);
+    expr2tc new_g_expr = and2tc(g_expr, expr);
     g_expr.swap(new_g_expr);
   }
 }
@@ -62,7 +63,7 @@ void guardt::guard_expr(expr2tc &dest) const
     return;
   }
 
-  dest = expr2tc(new implies2t(as_expr(), dest));
+  dest = implies2tc(as_expr(), dest);
 }
 
 void guardt::build_guard_expr()
@@ -70,14 +71,21 @@ void guardt::build_guard_expr()
   // This method closely related to guardt::add and guardt::guard_expr
   // We need to build the chain of ands, to avoid memory bloat on as_expr
 
-  // if the guard is true, or a single symbol, we don't need to build it
-  if(is_true() || is_single_symbol())
-    return;
-
   // This method will only be used, when the guard is nil, for instance,
   // guardt &operator -= and guardt &operator |=, all other cases should
   // be handled by guardt::add
   assert(is_nil_expr(g_expr));
+
+  // if the guard is true, we don't need to build it
+  if(is_true())
+    return;
+
+  // the expression is the single symbol in case the list just has this one
+  if(is_single_symbol())
+  {
+    g_expr = *guard_list.begin();
+    return;
+  }
 
   // We can assume at least two operands
   auto it = guard_list.begin();
@@ -85,7 +93,7 @@ void guardt::build_guard_expr()
   expr2tc arg1, arg2;
   arg1 = *it++;
   arg2 = *it++;
-  and2tc res(arg1, arg2);
+  expr2tc res = and2tc(arg1, arg2);
   while(it != guard_list.end())
     res = and2tc(res, *it++);
 
@@ -132,7 +140,7 @@ guardt &operator|=(guardt &g1, const guardt &g2)
   {
     // Both guards have one symbol, so check if we opposite symbols, e.g,
     // g1 == sym1 and g2 == !sym1
-    expr2tc or_expr(new or2t(*g1.guard_list.begin(), *g2.guard_list.begin()));
+    expr2tc or_expr = or2tc(*g1.guard_list.begin(), *g2.guard_list.begin());
     simplify(or_expr);
 
     if(::is_true(or_expr))
@@ -185,7 +193,7 @@ guardt &operator|=(guardt &g1, const guardt &g2)
     new_g2.build_guard_expr();
 
     // Get the and expression from both guards
-    expr2tc or_expr(new or2t(new_g1.as_expr(), new_g2.as_expr()));
+    expr2tc or_expr = or2tc(new_g1.as_expr(), new_g2.as_expr());
 
     // If the guards single symbols, try to simplify the or expression
     if(new_g1.is_single_symbol() && new_g2.is_single_symbol())
@@ -248,7 +256,7 @@ bool guardt::is_false() const
 
 void guardt::make_true()
 {
-  guard_list.clear();
+  clear();
 }
 
 void guardt::make_false()

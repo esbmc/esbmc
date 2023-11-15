@@ -1,0 +1,32 @@
+
+on:
+  workflow_call:
+    inputs:
+      operating-system:
+        description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
+        required: true
+        type: string
+      build-flags:
+        description: "Flags to be passed to build.sh script"
+        required: true
+        type: string
+      testing:
+        description: "Whether to run tests (regression) for this build"
+        required: true
+        type: boolean
+
+jobs:
+  build:
+    name: Build ESBMC (${{ inputs.operating-system }})
+    runs-on: ${{ inputs.operating-system }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build ESBMC
+      run: ./scripts/build.sh ${{ inputs.build-flags }}
+    - uses: actions/upload-artifact@v1
+      with:
+        name: release-${{ inputs.operating-system }}
+        path: ./release
+    - name: Run tests
+      if: ${{ inputs.testing == true }}
+      run: cd build/ && ctest -j4 --output-on-failure --progress .

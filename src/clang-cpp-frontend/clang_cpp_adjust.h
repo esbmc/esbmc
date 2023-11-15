@@ -41,6 +41,10 @@ public:
    */
   void adjust_member(member_exprt &expr) override;
   void adjust_side_effect(side_effect_exprt &expr) override;
+  void adjust_side_effect_assign(side_effect_exprt &expr);
+  void adjust_function_call_arguments(
+    side_effect_expr_function_callt &expr) override;
+  void adjust_expr_rel(exprt &expr) override;
   void adjust_new(exprt &expr);
   void adjust_cpp_member(member_exprt &expr);
 
@@ -73,6 +77,11 @@ public:
    * ancillary methods to support the expr/code adjustments above
    */
   void convert_expression_to_code(exprt &expr);
+  void convert_lvalue_ref_to_deref_symbol(exprt &expr);
+  void convert_lvalue_ref_to_deref_sideeffect(exprt &expr);
+  void align_se_function_call_return_type(
+    exprt &f_op,
+    side_effect_expr_function_callt &expr) override;
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */

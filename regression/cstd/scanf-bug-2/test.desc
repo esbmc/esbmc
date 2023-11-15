@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--overflow-check --64
+^VERIFICATION SUCCESSFUL$

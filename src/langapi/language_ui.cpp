@@ -28,7 +28,7 @@ bool language_uit::parse(const std::string &filename)
 
   if(mode < 0)
   {
-    log_error("failed to figure out type of file", filename);
+    log_error("failed to figure out type of file {}", filename);
     return true;
   }
 
@@ -48,7 +48,7 @@ bool language_uit::parse(const std::string &filename)
   std::ifstream infile(filename.c_str());
   if(!infile)
   {
-    log_error("failed to open input file", filename);
+    log_error("failed to open input file {}", filename);
     return true;
   }
 
@@ -64,21 +64,22 @@ bool language_uit::parse(const std::string &filename)
   lf.language = mode_table[mode].new_language();
   languaget &language = *lf.language;
 
-  log_status("Parsing", filename);
+  log_progress("Parsing {}", filename);
 
 #ifdef ENABLE_SOLIDITY_FRONTEND
   if(mode == get_mode(language_idt::SOLIDITY))
   {
-    language.set_func_name(_cmdline.vm["function"].as<std::string>());
+    if(!config.options.get_option("function").empty())
+      language.set_func_name(_cmdline.vm["function"].as<std::string>());
 
-    if(config.options.get_option("contract") == "")
+    if(config.options.get_option("sol") == "")
     {
       log_error("Please set the smart contract source file.");
       return true;
     }
     else
     {
-      language.set_smart_contract_source(config.options.get_option("contract"));
+      language.set_smart_contract_source(config.options.get_option("sol"));
     }
   }
 #endif
@@ -96,7 +97,7 @@ bool language_uit::parse(const std::string &filename)
 
 bool language_uit::typecheck()
 {
-  log_status("Converting");
+  log_progress("Converting");
 
   if(language_files.typecheck(context))
   {

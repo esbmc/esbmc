@@ -1,5 +1,6 @@
 #include <util/filesystem.h>
 #include <boost/filesystem.hpp>
+#include <fstream>
 
 using namespace file_operations;
 
@@ -129,4 +130,16 @@ file_operations::get_unique_tmp_path(const std::string &format)
   }
 
   return path.string();
+}
+
+void file_operations::create_path_and_write(
+  const std::string &path,
+  const char *s,
+  size_t n)
+{
+  boost::filesystem::path p(path);
+  if(!boost::filesystem::exists(p.parent_path()))
+    boost::filesystem::create_directories(p.parent_path());
+
+  std::ofstream(path).write(s, n);
 }

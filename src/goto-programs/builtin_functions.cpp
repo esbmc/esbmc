@@ -83,7 +83,8 @@ void goto_convertt::do_printf(
   const exprt &lhs,
   const exprt &function,
   const exprt::operandst &arguments,
-  goto_programt &dest)
+  goto_programt &dest,
+  const std::string &bs_name)
 {
   exprt printf_code(
     "sideeffect", static_cast<const typet &>(function.type().return_type()));
@@ -92,6 +93,7 @@ void goto_convertt::do_printf(
 
   printf_code.operands() = arguments;
   printf_code.location() = function.location();
+  printf_code.base_name(bs_name);
 
   if(lhs.is_not_nil())
   {
@@ -179,7 +181,7 @@ void goto_convertt::do_mem(
   get_alloc_type(arguments[0], alloc_type, alloc_size);
 
   if(alloc_size.is_nil())
-    alloc_size = from_integer(1, uint_type());
+    alloc_size = from_integer(1, size_type());
 
   if(alloc_type.is_nil())
     alloc_type = char_type();
@@ -187,9 +189,9 @@ void goto_convertt::do_mem(
   if(alloc_type.id() == "symbol")
     alloc_type = ns.follow(alloc_type);
 
-  if(alloc_size.type() != uint_type())
+  if(alloc_size.type() != size_type())
   {
-    alloc_size.make_typecast(uint_type());
+    alloc_size.make_typecast(size_type());
     simplify(alloc_size);
   }
 
@@ -272,8 +274,8 @@ void goto_convertt::do_cpp_new(
   if(rhs.statement() == "cpp_new[]")
   {
     alloc_size = static_cast<const exprt &>(rhs.size_irep());
-    if(alloc_size.type() != uint_type())
-      alloc_size.make_typecast(uint_type());
+    if(alloc_size.type() != size_type())
+      alloc_size.make_typecast(size_type());
 
     remove_sideeffects(alloc_size, dest);
 
@@ -283,21 +285,21 @@ void goto_convertt::do_cpp_new(
     migrate_expr(alloc_size, alloc_units);
 
     BigInt sz = type_byte_size(subtype);
-    constant_int2tc sz_expr(uint_type2(), sz);
-    mul2tc byte_size(uint_type2(), alloc_units, sz_expr);
+    expr2tc sz_expr = constant_int2tc(size_type2(), sz);
+    expr2tc byte_size = mul2tc(size_type2(), alloc_units, sz_expr);
     alloc_size = migrate_expr_back(byte_size);
 
     const_cast<irept &>(rhs.size_irep()) = alloc_size;
   }
   else
-    alloc_size = from_integer(1, uint_type());
+    alloc_size = from_integer(1, size_type());
 
   if(alloc_size.is_nil())
-    alloc_size = from_integer(1, uint_type());
+    alloc_size = from_integer(1, size_type());
 
-  if(alloc_size.type() != uint_type())
+  if(alloc_size.type() != size_type())
   {
-    alloc_size.make_typecast(uint_type());
+    alloc_size.make_typecast(size_type());
     simplify(alloc_size);
   }
 
@@ -328,7 +330,7 @@ void goto_convertt::do_cpp_new(
 
   // set size
   //nec: ex37.c
-  exprt dynamic_size("dynamic_size", uint_type());
+  exprt dynamic_size("dynamic_size", size_type());
   dynamic_size.copy_to_operands(lhs);
   dynamic_size.location() = rhs.find_location();
   goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
@@ -469,15 +471,14 @@ void goto_convertt::do_function_call_symbol(
   const symbolt *symbol = ns.lookup(identifier);
   if(!symbol)
   {
-    log_error("error: function `{}' not found", id2string(identifier));
+    log_error("Function `{}' not found", id2string(identifier));
     abort();
   }
 
   if(!symbol->type.is_code())
   {
     log_error(
-      "error: function `{}' type mismatch: expected code",
-      id2string(identifier));
+      "Function `{}' type mismatch: expected code", id2string(identifier));
   }
 
   // If the symbol is not nil, i.e., the user defined the expected behaviour of
@@ -598,7 +599,7 @@ void goto_convertt::do_function_call_symbol(
   }
   else if(base_name == "printf")
   {
-    do_printf(lhs, function, arguments, dest);
+    do_printf(lhs, function, arguments, dest, base_name);
   }
   else if(
     (base_name == "__ESBMC_atomic_begin") ||
@@ -648,10 +649,11 @@ void goto_convertt::do_function_call_symbol(
     do_free(lhs, function, arguments, dest);
   }
   else if(
-    base_name == "printf" || base_name == "fprintf" || base_name == "sprintf" ||
-    base_name == "snprintf")
+    base_name == "printf" || base_name == "fprintf" || base_name == "dprintf" ||
+    base_name == "sprintf" || base_name == "snprintf" ||
+    base_name == "vfprintf")
   {
-    do_printf(lhs, function, arguments, dest);
+    do_printf(lhs, function, arguments, dest, base_name);
   }
   else if(base_name == "__assert_rtn" || base_name == "__assert_fail")
   {
@@ -744,7 +746,7 @@ void goto_convertt::do_function_call_symbol(
 
     do_cpp_new(lhs, new_function, dest);
   }
-  else if(base_name == "builtin_va_arg")
+  else if(base_name == "__ESBMC_va_arg")
   {
     // This does two things.
     // 1) Move list pointer to next argument.
@@ -783,7 +785,7 @@ void goto_convertt::do_function_call_symbol(
       t2->location = function.location();
     }
   }
-  else if(base_name == "__builtin_va_copy")
+  else if(base_name == "__ESBMC_va_copy")
   {
     if(arguments.size() != 2)
     {
@@ -805,7 +807,7 @@ void goto_convertt::do_function_call_symbol(
     migrate_expr(assign_expr, t->code);
     t->location = function.location();
   }
-  else if(base_name == "__builtin_va_start")
+  else if(base_name == "__ESBMC_va_start")
   {
     // Set the list argument to be the address of the
     // parameter argument.
@@ -830,7 +832,7 @@ void goto_convertt::do_function_call_symbol(
     migrate_expr(assign_expr, t->code);
     t->location = function.location();
   }
-  else if(base_name == "__builtin_va_end")
+  else if(base_name == "__ESBMC_va_end")
   {
     // Invalidates the argument. We do so by setting it to NULL.
     if(arguments.size() != 1)

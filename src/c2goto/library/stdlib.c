@@ -1,12 +1,22 @@
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
+#include <limits.h>
+#include <errno.h>
+#include <stdint.h> /* uintptr_t */
+
+#include <assert.h>
+
+#undef errno
+extern _Thread_local int errno;
 
 #undef exit
 #undef abort
 #undef calloc
+#undef getenv
 #undef atoi
 #undef atol
-#undef getenv
+#undef atoll
 
 typedef struct atexit_key
 {
@@ -55,10 +65,13 @@ __ESBMC_HIDE:;
   __ESBMC_assume(0);
 }
 
+_Bool __ESBMC_no_abnormal_memory_leak(void);
+
 void abort(void)
 {
 __ESBMC_HIDE:;
-  __ESBMC_memory_leak_checks();
+  if(!__ESBMC_no_abnormal_memory_leak())
+    __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
 
@@ -83,21 +96,109 @@ __ESBMC_HIDE:;
   return res;
 }
 
-int atoi(const char *nptr)
+long int strtol(const char *str, char **endptr, int base)
 {
 __ESBMC_HIDE:;
-  int res;
-  /* XXX - does nothing without strabs */
-  return res;
+  long int result = 0;
+  int sign = 1;
+
+  // Handle whitespace
+  while(isspace(*str))
+    str++;
+
+  // Handle sign
+  if(*str == '-')
+  {
+    sign = -1;
+    str++;
+  }
+  else if(*str == '+')
+    str++;
+
+  // Handle base
+  if(base == 0)
+  {
+    if(*str == '0')
+    {
+      base = 8;
+      if(tolower(str[1]) == 'x')
+      {
+        base = 16;
+        str += 2;
+      }
+      else
+        str++;
+    }
+    else
+      base = 10;
+  }
+  else if(base == 16 && *str == '0' && tolower(str[1]) == 'x')
+    str += 2;
+
+  // Convert digits
+  while(isdigit(*str) || (base == 16 && isxdigit(*str)))
+  {
+    int digit = tolower(*str) - '0';
+    if(digit > 9)
+      digit -= 7;
+    if(result > (LONG_MAX - digit) / base)
+      return sign == -1 ? LONG_MIN : LONG_MAX;
+    result = result * base + digit;
+    str++;
+  }
+
+  // Set end pointer
+  if(endptr != NULL)
+    *endptr = (char *)str;
+
+  return sign * result;
 }
 
-long atol(const char *nptr)
-{
-__ESBMC_HIDE:;
-  long res;
-  /* XXX - does nothing without strabs */
-  return res;
-}
+/* one plus the numeric value, rest is zero */
+static const unsigned char ATOI_MAP[256] = {
+  ['0'] = 1,
+  ['1'] = 2,
+  ['2'] = 3,
+  ['3'] = 4,
+  ['4'] = 5,
+  ['5'] = 6,
+  ['6'] = 7,
+  ['7'] = 8,
+  ['8'] = 9,
+  ['9'] = 10,
+};
+
+#define ATOI_DEF(name, type, TYPE)                                             \
+  type name(const char *s)                                                     \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    while(isspace(*s))                                                         \
+      s++;                                                                     \
+    int neg = 0;                                                               \
+    if(*s == '-')                                                              \
+    {                                                                          \
+      neg = 1;                                                                 \
+      s++;                                                                     \
+    }                                                                          \
+    else if(*s == '+')                                                         \
+      s++;                                                                     \
+    unsigned type r = 0;                                                       \
+    for(unsigned char c; (c = ATOI_MAP[(unsigned char)*s]); s++)               \
+    {                                                                          \
+      c--;                                                                     \
+      if(r > (TYPE##_MAX - c) / 10)                                            \
+        return neg ? TYPE##_MIN : TYPE##_MAX;                                  \
+      r *= 10;                                                                 \
+      r += c;                                                                  \
+    }                                                                          \
+    return neg ? -r : r;                                                       \
+  }
+
+ATOI_DEF(atoi, int, INT)
+ATOI_DEF(atol, long, LONG)
+ATOI_DEF(atoll, long long, LLONG)
+
+#undef ATOI_DEF
 
 char *getenv(const char *name)
 {
@@ -111,29 +212,9 @@ __ESBMC_HIDE:;
   size_t buf_size;
 
   __ESBMC_assume(buf_size >= 1);
-  buffer = (char *)malloc(buf_size);
+  buffer = (char *)__ESBMC_alloca(buf_size);
   buffer[buf_size - 1] = 0;
   return buffer;
-}
-
-typedef unsigned int gfp_t;
-
-void *__kmalloc(size_t size, gfp_t flags)
-{
-  (void)flags;
-  return malloc(size);
-}
-
-void *kmalloc(size_t size, gfp_t flags)
-{
-  (void)flags;
-  return malloc(size);
-}
-
-void *kzalloc(size_t size, gfp_t flags)
-{
-  (void)flags;
-  return malloc(size);
 }
 
 void *ldv_malloc(size_t size)
@@ -144,22 +225,6 @@ void *ldv_malloc(size_t size)
 void *ldv_zalloc(size_t size)
 {
   return malloc(size);
-}
-
-void *kmalloc_array(size_t n, size_t size, gfp_t flags)
-{
-  return __kmalloc(n * size, flags);
-}
-
-void *kcalloc(size_t n, size_t size, gfp_t flags)
-{
-  (void)flags;
-  return calloc(n, size);
-}
-
-void kfree(void *objp)
-{
-  free(objp);
 }
 
 size_t strlcat(char *dst, const char *src, size_t siz)
@@ -190,3 +255,89 @@ size_t strlcat(char *dst, const char *src, size_t siz)
 
   return (dlen + (s - src)); /* count does not include NUL */
 }
+
+int posix_memalign(void **memptr, size_t align, size_t size)
+{
+__ESBMC_HIDE:;
+  if(
+    !align || (align & (align - 1)) || /* alignment must be a power of 2 */
+    (size & (align - 1)) /* size must be a multiple of alignment */
+  )
+    return EINVAL;
+  int save = errno;
+  void *r = malloc(size);
+  errno = save;
+  __ESBMC_assume(!((uintptr_t)r & (align - 1)));
+  if(size && !r)
+    return ENOMEM;
+  *memptr = r;
+  return 0;
+}
+
+void *aligned_alloc(size_t align, size_t size)
+{
+__ESBMC_HIDE:;
+  void *r = NULL;
+  errno = posix_memalign(&r, align, size);
+  return r;
+}
+
+int rand(void)
+{
+  return nondet_uint() % RAND_MAX;
+}
+
+long random(void)
+{
+  return nondet_ulong() % RAND_MAX;
+}
+
+#if 0
+void srand (unsigned int s)
+{
+	seed = s;
+}
+#endif
+
+#if 0
+char get_char(int digit) {
+	char charstr[] = "0123456789ABCDEF";
+	return charstr[digit];
+}
+
+void rev(char *p) {
+	char *q = &p[strlen(p) - 1];
+	char *r = p;
+	for (; q > r; q--, r++) {
+		char s = *q;
+		*q = *r;
+		*r = s;
+	}
+}
+
+char * itoa(int value, char * str, int base) {
+	int count = 0;
+	bool flag = true;
+	if (value < 0 && base == 10) {
+		flag = false;
+	}
+	while (value != 0) {
+		int dig = value % base;
+		value -= dig;
+		value /= base;
+
+		if (flag == true)
+			str[count] = get_char(dig);
+		else
+			str[count] = get_char(-dig);
+		count++;
+	}
+	if (flag == false) {
+		str[count] = '-';
+		count++;
+	}
+	str[count] = 0;
+	rev(str);
+	return str;
+}
+#endif

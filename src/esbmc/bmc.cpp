@@ -1,8 +1,13 @@
 #include <csignal>
+#include <memory>
 #include <sys/types.h>
+#include <algorithm>
+#include <thread>
+#include <chrono>
 
 #ifndef _WIN32
 #include <unistd.h>
+#include <sched.h>
 #else
 #include <windows.h>
 #include <winbase.h>
@@ -33,6 +38,8 @@
 #include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
 #include <util/cache.h>
+#include <atomic>
+#include <goto-symex/witnesses.h>
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -77,13 +84,6 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   }
 }
 
-void bmct::do_cbmc(
-  std::shared_ptr<smt_convt> &smt_conv,
-  std::shared_ptr<symex_target_equationt> &eq)
-{
-  eq->convert(*smt_conv.get());
-}
-
 void bmct::successful_trace()
 {
   if(options.get_bool_option("result-only"))
@@ -93,7 +93,7 @@ void bmct::successful_trace()
   if(witness_output != "")
   {
     goto_tracet goto_trace;
-    log_status("Building successful trace");
+    log_progress("Building successful trace");
     /* build_successful_goto_trace(eq, ns, goto_trace); */
     correctness_graphml_goto_trace(options, ns, goto_trace);
   }
@@ -106,7 +106,7 @@ void bmct::error_trace(
   if(options.get_bool_option("result-only"))
     return;
 
-  log_status("Building error trace");
+  log_progress("Building error trace");
 
   bool is_compact_trace = true;
   if(
@@ -128,13 +128,19 @@ void bmct::error_trace(
   if(witness_output != "")
     violation_graphml_goto_trace(options, ns, goto_trace);
 
+  if(options.get_bool_option("generate-testcase"))
+  {
+    generate_testcase_metadata();
+    generate_testcase("testcase.xml", eq, smt_conv);
+  }
+
   std::ostringstream oss;
-  oss << "\nCounterexample:\n";
+  log_fail("\n[Counterexample]\n");
   show_goto_trace(oss, ns, goto_trace);
   log_result("{}", oss.str());
 }
 
-smt_convt::resultt bmct::run_decision_procedure(
+void bmct::generate_smt_from_equation(
   std::shared_ptr<smt_convt> &smt_conv,
   std::shared_ptr<symex_target_equationt> &eq)
 {
@@ -152,11 +158,17 @@ smt_convt::resultt bmct::run_decision_procedure(
   log_status("Encoding remaining VCC(s) using {}", logic);
 
   fine_timet encode_start = current_time();
-  do_cbmc(smt_conv, eq);
+  eq->convert(*smt_conv.get());
   fine_timet encode_stop = current_time();
-
   log_status(
     "Encoding to solver time: {}s", time2string(encode_stop - encode_start));
+}
+
+smt_convt::resultt bmct::run_decision_procedure(
+  std::shared_ptr<smt_convt> &smt_conv,
+  std::shared_ptr<symex_target_equationt> &eq)
+{
+  generate_smt_from_equation(smt_conv, eq);
 
   if(
     options.get_bool_option("smt-formula-too") ||
@@ -167,7 +179,7 @@ smt_convt::resultt bmct::run_decision_procedure(
       return smt_convt::P_SMTLIB;
   }
 
-  log_status("Solving with solver {}", smt_conv->solver_text());
+  log_progress("Solving with solver {}", smt_conv->solver_text());
 
   fine_timet sat_start = current_time();
   smt_convt::resultt dec_result = smt_conv->dec_solve();
@@ -182,12 +194,12 @@ smt_convt::resultt bmct::run_decision_procedure(
 
 void bmct::report_success()
 {
-  log_status("\nVERIFICATION SUCCESSFUL");
+  log_success("\nVERIFICATION SUCCESSFUL");
 }
 
 void bmct::report_failure()
 {
-  log_status("\nVERIFICATION FAILED");
+  log_fail("\nVERIFICATION FAILED");
 }
 
 void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
@@ -288,12 +300,41 @@ void bmct::report_trace(
   }
 }
 
+void bmct::report_multi_property_trace(
+  smt_convt::resultt &res,
+  const std::string &msg)
+{
+  assert(options.get_bool_option("base-case"));
+
+  switch(res)
+  {
+  case smt_convt::P_UNSATISFIABLE:
+    // UNSAT means that the property was correct up to K
+    log_success("Claim '{}' holds up to the current K", msg);
+    break;
+
+  case smt_convt::P_SATISFIABLE:
+    // SAT means that we found a error!
+    log_fail("Claim '{}' fails", msg);
+    break;
+
+  default:
+    log_fail("Claim '{}' could not be solved", msg);
+    break;
+  }
+}
+
 void bmct::report_result(smt_convt::resultt &res)
 {
+  // k-induction prints its own messages
+  if(options.get_bool_option("k-induction-parallel"))
+    return;
+
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
   bool term = options.get_bool_option("termination");
+  bool mul = options.get_bool_option("multi-property");
 
   switch(res)
   {
@@ -302,7 +343,7 @@ void bmct::report_result(smt_convt::resultt &res)
     {
       report_failure();
     }
-    else if(!bs)
+    else if(!bs || mul)
     {
       report_success();
     }
@@ -340,12 +381,8 @@ void bmct::report_result(smt_convt::resultt &res)
 
   if((interleaving_number > 0) && options.get_bool_option("all-runs"))
   {
-    log_status(
-      "Number of generated interleavings: " +
-      integer2string((interleaving_number)));
-    log_status(
-      "Number of failed interleavings: " +
-      integer2string((interleaving_failed)));
+    log_status("Number of generated interleavings: {}", interleaving_number);
+    log_status("Number of failed interleavings: {}", interleaving_failed);
   }
 }
 
@@ -614,7 +651,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     {
       std::ostringstream oss;
       document_subgoals(*eq.get(), oss);
-      log_status(oss.str());
+      log_status("{}", oss.str());
       return smt_convt::P_SMTLIB;
     }
 
@@ -643,6 +680,11 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         std::shared_ptr<smt_convt>(create_solver("", ns, options));
     }
 
+    if(
+      options.get_bool_option("multi-property") &&
+      options.get_bool_option("base-case"))
+      return multi_property_check(eq, result->remaining_claims);
+
     return run_decision_procedure(runtime_solver, eq);
   }
 
@@ -663,4 +705,208 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     log_error("Out of memory\n");
     return smt_convt::P_ERROR;
   }
+}
+
+smt_convt::resultt bmct::multi_property_check(
+  std::shared_ptr<symex_target_equationt> &eq,
+  size_t remaining_claims)
+{
+  // As of now, it only makes sense to do this for the base-case
+  assert(
+    options.get_bool_option("base-case") &&
+    "Multi-property only supports base-case");
+
+  // Initial values
+  smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
+  std::atomic_size_t ce_counter = 0;
+  std::unordered_set<size_t> jobs;
+  std::mutex result_mutex;
+  std::unordered_set<std::string> reached_claims;
+  // For coverage info
+  int total_instance = 0;
+  std::unordered_multiset<std::string> reached_mul_claims;
+  bool is_goto_cov = options.get_bool_option("goto-coverage") ||
+                     options.get_bool_option("goto-coverage-claims");
+  // For multi-fail-fast
+  const std::string fail_fast = options.get_option("multi-fail-fast");
+  const bool is_fail_fast = !fail_fast.empty() ? true : false;
+  const int fail_fast_limit = is_fail_fast ? stoi(fail_fast) : 0;
+  int fail_fast_cnt = 0;
+  if(is_fail_fast && fail_fast_limit < 0)
+  {
+    log_error("the value of multi-fail-fast should be positive!");
+    abort();
+  }
+
+  // TODO: This is the place to check a cache
+  for(size_t i = 1; i <= remaining_claims; i++)
+    jobs.emplace(i);
+
+  /* This is a JOB that will:
+   * 1. Generate a solver instance for a specific claim (@parameter i)
+   * 2. Solve the instance
+   * 3. Generate a Counter-Example (or Witness)
+   *
+   * This job also affects the environment by using:
+   * - &ce_counter: for generating the Counter Example file name
+   * - &final_result: if the current instance is SAT, then we known that the current k contains a bug
+   *
+   * Finally, this function is affected by the "multi-fail-fast" option, which makes this instance stop
+   * if final_result is set to SAT
+   */
+  auto job_function = [this,
+                       &eq,
+                       &ce_counter,
+                       &final_result,
+                       &result_mutex,
+                       &reached_claims,
+                       &reached_mul_claims,
+                       &total_instance,
+                       &is_goto_cov,
+                       &is_fail_fast,
+                       &fail_fast_limit,
+                       &fail_fast_cnt](const size_t &i) {
+    //"multi-fail-fast n": stop after first n SATs found.
+    if(is_fail_fast && fail_fast_cnt >= fail_fast_limit)
+      return;
+
+    // Since this is just a copy, we probably don't need a lock
+    auto local_eq = std::make_shared<symex_target_equationt>(*eq);
+
+    // Set up the current claim and slice it
+    claim_slicer claim(i);
+    claim.run(local_eq->SSA_steps);
+    symex_slicet slicer(options);
+    slicer.run(local_eq->SSA_steps);
+
+    // Initialize a solver
+    auto runtime_solver =
+      std::shared_ptr<smt_convt>(create_solver("", ns, options));
+    // Save current instance
+    generate_smt_from_equation(runtime_solver, local_eq);
+
+    log_status(
+      "Solving claim '{}' with solver {}",
+      claim.claim_msg,
+      runtime_solver->solver_text());
+    total_instance++;
+
+    smt_convt::resultt result = runtime_solver->dec_solve();
+
+    // This try-catch is mainly for fail-fast.
+
+    if(result == smt_convt::P_SATISFIABLE)
+    {
+      bool is_compact_trace = true;
+      if(
+        options.get_bool_option("no-slice") &&
+        !options.get_bool_option("compact-trace"))
+        is_compact_trace = false;
+
+      goto_tracet goto_trace;
+      build_goto_trace(local_eq, runtime_solver, goto_trace, is_compact_trace);
+
+      // Store the comment and location of the assertion
+      // to avoid double verifying the claims that are already verified
+      std::string cmt_loc = "";
+
+      for(const auto &step : goto_trace.steps)
+        if(step.type == goto_trace_stept::ASSERT)
+        {
+          // since we only handle one claim at a time
+          // we will/should not overwrite the loc
+          assert(cmt_loc == "");
+          std::string loc;
+          if(step.pc->location.is_nil())
+            loc = "nil";
+          else
+            loc = step.pc->location.as_string();
+
+          // we use the "comment + location" to distinguish each claim
+          // e.g. "Claim x: ... location line y"
+          // x is unique. However, the unwinding asserts do not have these Claim x prefixes.
+          // Therefore we add the location behind, as the line number y for each unwinding assert is different.
+          cmt_loc = step.comment + "\t" + loc;
+        }
+
+      bool is_unverified = false;
+
+      if(is_goto_cov)
+      {
+        reached_mul_claims.emplace(cmt_loc);
+        is_unverified = true;
+      }
+      else
+      {
+        // the ins is true if the element was actually inserted
+        auto [it, ins] = reached_claims.emplace(cmt_loc);
+        is_unverified = ins;
+      }
+
+      if(is_unverified || options.get_bool_option("keep-verified-claims"))
+      {
+        std::string output_file = options.get_option("cex-output");
+        if(output_file != "")
+        {
+          std::ofstream out(fmt::format("{}-{}", ce_counter++, output_file));
+          show_goto_trace(out, ns, goto_trace);
+        }
+        std::ostringstream oss;
+        log_fail("\n[Counterexample]\n");
+        show_goto_trace(oss, ns, goto_trace);
+        log_result("{}", oss.str());
+        final_result = result;
+        // update fail-fast-counter
+        fail_fast_cnt++;
+      }
+      else
+      {
+        // we should not be here if "keep-verified-claims" is enabled
+        log_status("\nFound verified claim. Skipping...\n");
+
+        //TODO: this can still be annoying when we unind for many times
+        // e.g. '--unwind 100' will show 1 counterexample and 99 'skip's
+        // Maybe we should use log_debug instead, both in slicer.run and multi_property_check
+      }
+    }
+  };
+
+  std::for_each(std::begin(jobs), std::end(jobs), job_function);
+
+  // For coverage
+  if(is_goto_cov)
+  {
+    int total = goto_coveraget().get_total_instrument();
+    int tracked_instance = reached_mul_claims.size();
+
+    if(total)
+    {
+      log_success("\n[Coverage]\n");
+      // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
+      log_result("Total Asserts: {}", total);
+      log_result("Total Assertion Instances: {}", total_instance);
+    }
+
+    // show claims
+    if(options.get_bool_option("goto-coverage-claims"))
+    {
+      // reached claims:
+      log_result("Reached Assertions Instances: ");
+      for(const auto &claim : reached_mul_claims)
+      {
+        log_status("  {}", claim);
+      }
+    }
+
+    //TODO: show unreached claims
+
+    if(total_instance != 0)
+      log_result(
+        "Assertion Instances Coverage: {}%",
+        tracked_instance * 100.0 / total_instance);
+    else
+      log_result("Assertion Instances Coverage: 0%");
+  }
+
+  return final_result;
 }

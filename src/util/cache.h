@@ -36,4 +36,5 @@ protected:
 
 private:
   BigInt hits = 0;
+  BigInt total = 0;
 };

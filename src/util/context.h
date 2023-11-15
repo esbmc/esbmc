@@ -7,7 +7,9 @@
 #include <util/config.h>
 #include <util/symbol.h>
 #include <util/type.h>
+#ifdef ENABLE_OLD_FRONTEND
 #include <util/message.h>
+#endif
 
 typedef std::unordered_map<irep_idt, symbolt, irep_id_hash> symbolst;
 typedef std::vector<symbolt *> ordered_symbolst;
@@ -82,6 +84,10 @@ public:
     ordered_symbols.swap(other.ordered_symbols);
   }
 
+  symbolt *find_symbol(const char *name)
+  {
+    return find_symbol(irep_idt(name));
+  }
   symbolt *find_symbol(irep_idt name);
   const symbolt *find_symbol(irep_idt name) const;
 

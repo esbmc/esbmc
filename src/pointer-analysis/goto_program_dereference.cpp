@@ -156,7 +156,7 @@ void goto_program_dereferencet::dereference_instruction(
       // Rather than derefing function ptr, which we're moving to not collect
       // via pointer analysis, instead just assert that it's a valid pointer.
       const dereference2t &deref = to_dereference2t(func_call.function);
-      invalid_pointer2tc invalid_ptr(deref.value);
+      expr2tc invalid_ptr = invalid_pointer2tc(deref.value);
       guardt guard;
       guard.add(invalid_ptr);
       if(!options.get_bool_option("no-pointer-check"))
@@ -210,69 +210,6 @@ void goto_program_dereferencet::dereference_expression(
 {
   current_target = target;
   dereference_expr(expr, false, dereferencet::READ);
-}
-
-void goto_program_dereferencet::pointer_checks(goto_programt &goto_program)
-{
-  dereference_program(goto_program, true);
-}
-
-void goto_program_dereferencet::pointer_checks(goto_functionst &goto_functions)
-{
-  dereference_program(goto_functions, true);
-}
-
-void remove_pointers(
-  goto_programt &goto_program,
-  contextt &context,
-  const optionst &options,
-  value_setst &value_sets)
-{
-  namespacet ns(context);
-
-  goto_program_dereferencet goto_program_dereference(
-    ns, context, options, value_sets);
-
-  goto_program_dereference.dereference_program(goto_program);
-}
-
-void remove_pointers(
-  goto_functionst &goto_functions,
-  contextt &context,
-  const optionst &options,
-  value_setst &value_sets)
-{
-  namespacet ns(context);
-
-  goto_program_dereferencet goto_program_dereference(
-    ns, context, options, value_sets);
-
-  Forall_goto_functions(it, goto_functions)
-    goto_program_dereference.dereference_program(it->second.body);
-}
-
-void pointer_checks(
-  goto_programt &goto_program,
-  const namespacet &ns,
-  const optionst &options,
-  value_setst &value_sets)
-{
-  contextt new_context;
-  goto_program_dereferencet goto_program_dereference(
-    ns, new_context, options, value_sets);
-  goto_program_dereference.pointer_checks(goto_program);
-}
-
-void pointer_checks(
-  goto_functionst &goto_functions,
-  const namespacet &ns,
-  contextt &context,
-  const optionst &options,
-  value_setst &value_sets)
-{
-  goto_program_dereferencet goto_program_dereference(
-    ns, context, options, value_sets);
-  goto_program_dereference.pointer_checks(goto_functions);
 }
 
 void dereference(

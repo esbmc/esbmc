@@ -1,0 +1,4 @@
+CORE
+main.c
+--cheri purecap --64 --big-endian
+^VERIFICATION SUCCESSFUL$

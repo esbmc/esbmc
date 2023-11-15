@@ -1,7 +1,7 @@
 #################################
 # Project Information           #
 #################################
-cmake_minimum_required (VERSION 3.7)
+cmake_minimum_required (VERSION 3.18)
 
 # HACK: This msvc policy needs to be setted before project()
 # This can be removed when we move to CMake >= 3.15
@@ -10,7 +10,7 @@ cmake_policy(SET CMP0091 NEW)
 project (ESBMC)
 
 set (ESBMC_VERSION_MAJOR 7)
-set (ESBMC_VERSION_MINOR 1)
+set (ESBMC_VERSION_MINOR 4)
 set (ESBMC_VERSION_PATCH 0)
 set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
@@ -30,14 +30,25 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(STATUS "Setting build type to '${default_build_type}' as none was specified.")
   set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
       STRING "Choose the type of build." FORCE)
-  # Set the possible values of build type for cmake-gui
-  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
-    "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Sanitizer")
 endif()
 
-if(CMAKE_COMPILER_IS_GNUCXX)
-  add_compile_options(-Wall -Wextra)
-endif()
+# Set the possible values of build type for cmake-gui
+set(CMAKE_CXX_FLAGS_DEBUGOPT "-O2 -g" CACHE STRING "C++ compiler flags for DebugOpt build" FORCE)
+set(CMAKE_C_FLAGS_DEBUGOPT "-O2 -g" CACHE STRING "C compiler flags for DebugOpt build" FORCE)
+#set(CMAKE_EXE_LINKER_FLAGS_DEBUGOPT "")
+#set(CMAKE_SHARED_LINKER_FLAGS_DEBUGOPT "")
+mark_as_advanced(
+  CMAKE_CXX_FLAGS_DEBUGOPT
+  CMAKE_C_FLAGS_DEBUGOPT
+  #CMAKE_EXE_LINKER_FLAGS_DEBUGOPT
+  #CMAKE_SHARED_LINKER_FLAGS_DEBUGOPT
+)
+set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+             "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Sanitizer" "DebugOpt")
+
+set(ESBMC_CXX_Clang_DEFAULTS -Wall -Wextra -pipe)
+set(ESBMC_CXX_GNU_DEFAULTS -Wall -Wextra -pipe)
+add_compile_options(${ESBMC_CXX_${CMAKE_CXX_COMPILER_ID}_DEFAULTS})
 
 include(CheckIncludeFile)
 check_include_file(unistd.h HAVE_UNISTD)
@@ -55,8 +66,6 @@ include(Coverage)
 if(BUILD_STATIC)
   include(BuildStatic)
 endif()
-
-include(ExternalDependencies)
 
 # Copied from https://stackoverflow.com/questions/53877344/cannot-configure-cmake-to-look-for-homebrew-installed-version-of-bison
 # On macOS, search Homebrew for keg-only versions of Bison and Flex. Xcode does
@@ -85,18 +94,21 @@ if (CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
     endif()
 endif()
 
-find_package(BISON 2.6.1 REQUIRED)
-find_package(FLEX 2.6.1 REQUIRED)
+
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
 find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options iostreams)
 include(FindLocalLLVM)
+
+include(ExternalDependencies)
 
 # Optimization
 include(OptimizationCCache)
 include(WError)
 
 if(ENABLE_OLD_FRONTEND)
+  find_package(BISON 2.6.1 REQUIRED)
+  find_package(FLEX 2.6.1 REQUIRED)
   add_definitions(-DENABLE_OLD_FRONTEND)
 endif()
 
@@ -105,6 +117,10 @@ if(ENABLE_SOLIDITY_FRONTEND)
 endif()
 if(ENABLE_JIMPLE_FRONTEND)
     add_definitions(-DENABLE_JIMPLE_FRONTEND)
+endif()
+
+if(ENABLE_PYTHON_FRONTEND)
+    add_definitions(-DENABLE_PYTHON_FRONTEND)
 endif()
 
 if(ENABLE_GOTO_CONTRACTOR)

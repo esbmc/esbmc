@@ -58,7 +58,9 @@ ieee_floatt cvc_convt::get_fpbv(smt_astt a)
   CVC4::FloatingPoint foo = e.getConst<CVC4::FloatingPoint>();
 
   ieee_floatt number(ieee_float_spect(
-    a->sort->get_significand_width(), a->sort->get_exponent_width()));
+    /* in mk_bvfp_sort() we added +1 for the sign bit */
+    a->sort->get_significand_width() - 1,
+    a->sort->get_exponent_width()));
 
   if(foo.isNaN())
     number.make_NaN();
@@ -1096,9 +1098,12 @@ smt_astt cvc_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
 
-  // Seems we can't make negative bitvectors; so just pull the value out and
-  // assume CVC is going to cut the top off correctly.
-  CVC4::BitVector bv = CVC4::BitVector(w, theint.to_uint64());
+  CVC4::BitVector bv;
+  if(theint.is_negative() || !theint.is_uint64())
+    bv = CVC4::BitVector(integer2binary(theint, w), 2);
+  else
+    bv = CVC4::BitVector(w, theint.to_uint64());
+
   CVC4::Expr e = em.mkConst(bv);
   return new_ast(e, s);
 }
@@ -1272,12 +1277,12 @@ void cvc_convt::dump_smt()
   auto const &assertions = smt.getAssertions();
   for(auto const &a : assertions)
     a.printAst(oss, 0);
-  log_debug("{}", oss.str());
+  log_debug("cvc4", "{}", oss.str());
 }
 
 void cvc_smt_ast::dump() const
 {
   std::ostringstream oss;
   a.printAst(oss, 0);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }

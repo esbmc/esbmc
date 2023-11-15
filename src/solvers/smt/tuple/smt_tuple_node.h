@@ -29,6 +29,11 @@ public:
 
   expr2tc tuple_get_rec(tuple_node_smt_astt tuple);
 
+  expr2tc tuple_get_array_elem(
+    smt_astt array,
+    uint64_t index,
+    const type2tc &subtype) override;
+
   smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
   smt_astt tuple_array_of(const expr2tc &init_value, unsigned long domain_width)
     override;

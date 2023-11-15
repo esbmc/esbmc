@@ -1,5 +1,6 @@
 #include <goto-symex/slice.h>
 
+#include <util/prefix.h>
 static bool no_slice(const symbol2t &sym)
 {
   return config.no_slice_names.count(sym.thename.as_string()) ||
@@ -50,10 +51,11 @@ void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
     ++sliced;
     if(is_symbol2t(SSA_step.cond))
       log_debug(
+        "slice",
         "slice ignoring assume symbol {}",
         to_symbol2t(SSA_step.cond).get_symbol_name());
     else
-      log_debug("slide ignoring assume expression");
+      log_debug("slice", "slice ignoring assume expression");
   }
   else
   {
@@ -71,10 +73,23 @@ void symex_slicet::run_on_assignment(
 
   if(!get_symbols<false>(SSA_step.lhs))
   {
+    // Should we add nondet to the dependency list (mostly for test cases)?
+    if(!slice_nondet)
+    {
+      auto expr = get_nondet_symbol(SSA_step.rhs);
+      if(expr && is_symbol2t(expr))
+      {
+        auto &sym = to_symbol2t(expr);
+        if(has_prefix(sym.thename.as_string(), "nondet$"))
+          return;
+      }
+    }
+
     // we don't really need it
     SSA_step.ignore = true;
     ++sliced;
     log_debug(
+      "slice",
       "slice ignoring assignment to symbol {}",
       to_symbol2t(SSA_step.lhs).get_symbol_name());
   }
@@ -99,6 +114,7 @@ void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
     SSA_step.ignore = true;
     ++sliced;
     log_debug(
+      "slice",
       "slice ignoring renumbering symbol {}",
       to_symbol2t(SSA_step.lhs).get_symbol_name());
   }
@@ -113,6 +129,7 @@ void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
  */
 bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
 {
+  sliced = 0;
   fine_timet algorithm_start = current_time();
   // just find the last assertion
   symex_target_equationt::SSA_stepst::iterator last_assertion = steps.end();
@@ -140,4 +157,71 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
     sliced);
 
   return true;
+}
+
+bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
+{
+  sliced = 0;
+  fine_timet algorithm_start = current_time();
+  size_t counter = 1;
+  for(symex_target_equationt::SSA_stepst::iterator it = steps.begin();
+      it != steps.end();
+      it++)
+  {
+    // just find the next assertion
+    if(it->is_assert())
+    {
+      if(
+        counter++ ==
+        claim_to_keep) // this is the assertion that we should not skip!
+      {
+        it->ignore = false;
+        claim_msg = it->comment;
+        continue;
+      }
+
+      it->ignore = true;
+      ++sliced;
+    }
+  }
+
+  fine_timet algorithm_stop = current_time();
+  log_status(
+    "Slicing for Claim {} ({}s)",
+    claim_msg,
+    time2string(algorithm_stop - algorithm_start));
+
+  return true;
+}
+// Recursively try to extract the nondet symbol of an expression
+expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
+{
+  switch(expr->expr_id)
+  {
+  case expr2t::symbol_id:
+    return expr;
+
+  case expr2t::with_id:
+    return get_nondet_symbol(to_with2t(expr).update_value);
+
+  case expr2t::byte_extract_id:
+    return get_nondet_symbol(to_byte_extract2t(expr).source_value);
+
+  case expr2t::typecast_id:
+    return get_nondet_symbol(to_typecast2t(expr).from);
+
+  case expr2t::bitcast_id:
+    return get_nondet_symbol(to_bitcast2t(expr).from);
+
+  case expr2t::if_id:
+  {
+    // TODO: I am not sure whether it is possible for both sides to have inputs
+    // Might ask the solver for this
+    auto side_1 = get_nondet_symbol(to_if2t(expr).true_value);
+    auto side_2 = get_nondet_symbol(to_if2t(expr).false_value);
+    return side_1 ? side_1 : side_2;
+  }
+  default:
+    return expr2tc();
+  }
 }

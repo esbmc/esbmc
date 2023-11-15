@@ -277,12 +277,12 @@ void goto_symext::update_throw_target(
   // Assign that something to a variable and make records so that it's merged
   // into the right place in the future.
   assert(!is_nil_expr(code));
-  code_cpp_throw2tc throw_insn(code);
+  const code_cpp_throw2t &throw_insn = to_code_cpp_throw2t(code);
 
   // Generate a name to assign this to.
-  symbol2tc thrown_obj(
-    throw_insn->operand->type, irep_idt("symex_throw::thrown_obj"));
-  expr2tc operand(throw_insn->operand);
+  expr2tc thrown_obj =
+    symbol2tc(throw_insn.operand->type, irep_idt("symex_throw::thrown_obj"));
+  expr2tc operand = throw_insn.operand;
   symex_assign(code_assign2tc(thrown_obj, operand));
 
   // Now record that value for future reference.
@@ -297,7 +297,7 @@ void goto_symext::update_throw_target(
 
   // Signal assignment code to fetch the thrown object and rewrite the
   // assignment, assigning the thrown obj to the local variable.
-  thrown_obj_map[target] = thrown_obj;
+  thrown_obj_map.insert_or_assign(target, thrown_obj);
 
   if(!options.get_bool_option("extended-try-analysis"))
   {

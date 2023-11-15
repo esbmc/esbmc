@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 memset-good.c
 --bitwuzla
 ^VERIFICATION SUCCESSFUL$

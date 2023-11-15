@@ -1,6 +1,7 @@
 #ifndef CPROVER_CBMC_BMC_H
 #define CPROVER_CBMC_BMC_H
 
+#include <goto-programs/goto_coverage.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
 #include <langapi/language_ui.h>
@@ -36,10 +37,6 @@ protected:
     std::shared_ptr<smt_convt> &smt_conv,
     std::shared_ptr<symex_target_equationt> &eq);
 
-  virtual void do_cbmc(
-    std::shared_ptr<smt_convt> &smt_conv,
-    std::shared_ptr<symex_target_equationt> &eq);
-
   virtual void show_program(std::shared_ptr<symex_target_equationt> &eq);
   virtual void report_success();
   virtual void report_failure();
@@ -59,6 +56,9 @@ protected:
     smt_convt::resultt &res,
     std::shared_ptr<symex_target_equationt> &eq);
 
+  virtual void
+  report_multi_property_trace(smt_convt::resultt &res, const std::string &msg);
+
   virtual void report_result(smt_convt::resultt &res);
 
   virtual void bidirectional_search(
@@ -66,7 +66,14 @@ protected:
     std::shared_ptr<symex_target_equationt> &eq);
 
   smt_convt::resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
+  smt_convt::resultt multi_property_check(
+    std::shared_ptr<symex_target_equationt> &eq,
+    size_t remaining_claims);
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
+
+  void generate_smt_from_equation(
+    std::shared_ptr<smt_convt> &smt_conv,
+    std::shared_ptr<symex_target_equationt> &eq);
 };
 
 #endif

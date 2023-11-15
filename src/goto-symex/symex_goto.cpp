@@ -27,7 +27,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   {
     auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 
-    equality2tc question(gen_true_expr(), new_guard);
+    expr2tc question = equality2tc(gen_true_expr(), new_guard);
     try
     {
       tvt res = rte->ask_solver_question(question);
@@ -193,7 +193,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       do_simplify(guard_expr);
     }
 
-    not2tc not_guard_expr(guard_expr);
+    expr2tc not_guard_expr = not2tc(guard_expr);
     do_simplify(not_guard_expr);
 
     if(forward)
@@ -222,22 +222,23 @@ static inline guardt merge_state_guards(
   // impossible. Therefore we only integrate it when to do so simplifies the
   // state guard.
 
-  // This function can trash either state's guards, since goto_state is dying
-  // and state's guard will shortly be overwritten.
+  // In CBMC this function can trash either state's guards, since goto_state is
+  // dying and state's guard will shortly be overwritten. However, we still use
+  // either state's guard, so keep them intact.
   if(
     (!goto_state.guard.is_false() && !state.guard.is_false()) ||
     state.guard.disjunction_may_simplify(goto_state.guard))
   {
     state.guard |= goto_state.guard;
-    return std::move(state.guard);
+    return state.guard;
   }
   else if(state.guard.is_false() && !goto_state.guard.is_false())
   {
-    return std::move(goto_state.guard);
+    return goto_state.guard;
   }
   else
   {
-    return std::move(state.guard);
+    return state.guard;
   }
 }
 
@@ -314,11 +315,9 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     return;
 
   // go over all variables to see what changed
-  std::set<renaming::level2t::name_record> variables;
-  cur_state->level2.get_variables(variables);
+  const auto &variables = cur_state->level2.current_names;
 
-  std::set<renaming::level2t::name_record> goto_variables;
-  goto_state.level2.get_variables(goto_variables);
+  const auto &goto_variables = goto_state.level2.current_names;
 
   guardt tmp_guard;
   if(
@@ -331,7 +330,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     tmp_guard -= cur_state->guard;
   }
 
-  for(const auto &variable : variables)
+  for(const auto &[variable, _] : variables)
   {
     if(
       goto_state.level2.current_number(variable) ==
@@ -445,14 +444,11 @@ bool goto_symext::get_unwind(
   if(!options.get_bool_option("quiet"))
   {
     log_status(
-      stop_unwind ? "Not unwinding "
-                  : "Unwinding "
-                    "loop {} {} {} {} {}",
+      "{} loop {} iteration {}   {}",
+      stop_unwind ? "Not unwinding" : "Unwinding",
       i2string(cur_state->source.pc->loop_number),
-      " iteration ",
       integer2string(unwind),
-      " ",
-      cur_state->source.pc->location.as_string());
+      cur_state->source.pc->location);
   }
 
   return stop_unwind;

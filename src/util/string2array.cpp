@@ -9,15 +9,14 @@ void string2array(const exprt &src, exprt &dest)
   unsigned actual_size = str.size();
 
   BigInt str_size;
-  to_integer(to_array_type(src.type()).size(), str_size);
+  array_typet arr_type = to_array_type(src.type());
+  to_integer(arr_type.size(), str_size);
   uint64_t string_size = str_size.to_uint64();
 
   const typet &char_type = src.type().subtype();
   bool char_is_unsigned = char_type.is_unsignedbv();
 
-  exprt size("constant", typet("signedbv"));
-  size.type().width(config.ansi_c.int_width);
-  size.value(integer2binary(string_size, config.ansi_c.int_width));
+  exprt size = arr_type.size();
 
   dest = exprt("constant", typet("array"));
   dest.type().subtype() = char_type;

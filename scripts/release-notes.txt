@@ -1,5 +1,162 @@
 Release Notes of the ESBMC model checker
 
+*** Version 7.4
+* Python Frontend
+- Support for logical and/or (#1423)
+- Handling asserts (#1420)
+- Function definitions/calls (#1419)
+- Add support for GtE, LtE, and mod operators (#1414)
+- While statements (#1406)
+- If/else support (#1396)
+- Initial implementation of Python frontend (#1390)
+* Operational Models
+- RFC: Low-precision models for log() family, exp() and pow() (#1421)
+- <fenv.h> only use own definitions on FreeBSD (#1417)
+- Add models for frexp() and ldexp() (#1413)
+- Replaced malloc with __ESBMC_alloca in getenv (#1250)
+* Abstract Interpretation
+- Interval Analysis unit tests now deletes migration reference (#1409)
+- Interval now uses std::optional to keep the bounds (#1407)
+- CNF generation no longer removes typecast (#1393)
+- Support for symbol expressions during interval analysis (#1330)
+- Support for symbol expressions during interval analysis (#1330)
+- Interval expression generation for floats (#1327)
+- Interval Analysis assumptions now only uses local symbols (#1319)
+- Propagation of Boolean Intervals (#1313)
+- Interval singleton propagation (#1305)
+- Make Interval Analysis reset state after pointer operation (#1234)
+* Solidity frontend
+- Support "require" keywords (#1321)
+- Verify the contract as a whole (#1309)
+- Set the class/contract name for function verification (#1304)
+- Solidity frontend update (#1298)
+* SMT backend
+- Added Bitwutzla 0.2.0 to ESBMC (#1318)
+- Bring smtlib backend on par with other backends (#1237)
+- Fix emitting bvsgt (#1235)
+- fp_conv: fix gte: not(less) is not equiv to get (#1227)
+- Changed smtlib linker flags (#1216)
+* Concurrency
+- CUDA verification: Support for more TCS (#1314)
+- Analyze global variables for goto instructions during symex (#1276)
+- CUDA OM: replaced __ESBMC_alloca with infinite array size (#1275)
+- Remove unviable interleaving (#1269)
+- Kernel concurrency model - SPIN LOCK (#1268)
+- Do not produce interleavings after __ESBMC_main ends (#1265)
+- CUDA: Add CuDNN OM (#1260)
+- CUDA OM: Clean up and optimize the CUDA operational models #1258
+- Guard fix (#1242)
+- Add benchmarks for CUDA (#1228)
+* Memory Safety
+- Enhance the memsafety analysis (#1295)
+- Add memory cleanup check (#1273)
+- Add option to avoid checking memory-leaks on abort() (#1270)
+* General Improvements:
+- Unions are not required to have an init member anymore (#1427)
+- Empty loops are now converted to assume 0 (#1412)
+- Counter-example: only recurse if generating a sub-expr has been possible (#1410)
+- Adhere to C semantics for pointer-arithmetic (#1402)
+- FreeBSD/CheriBSD compatibility (#1397)
+- Simplify irep1: do not resolve index on constants under addr-of #1376
+- Unify simplification of modulus2t with div2t (#1360)
+- Support bit-casting to multi-dimensional arrays (#1358)
+- --unwindset refine (#1306)
+- Allow more fine-grained control over debug log messages (#1281)
+- Add memory consumption metrics (#1272)
+- Make irep2 construction a bit more C++ (#1264)
+- K-induction fix (#1218)
+- Show the exact location of function call (#1217)
+
+*** Version 7.3
+* Clang CHERI-C frontend
+- Prepare CHERI-C support (#905).
+* Abstract Interpretation Framework:
+- Revamp on interval analysis options (#1153).
+- Replaced cmath with its cpp counterpart (#1073).
+- Interval Analysis: the get_interval function is more generic (#1065).
+- Fixed wrong computation for type bounds (#1052).
+- Abstract interpretation revamp (#915).
+* GOTO to C translator (#842)
+* Linux Kernel Verification:
+- simulation for Kernel user space copy (#1192).
+- Mock kernel (#1135).
+* Clang C++ Frontend:
+- Improve code structure/ add new methods (#1189).
+- Fix temporary object constructs for a single argument (#1196).
+- Replaced throw with assert in string OM (#1163).
+- Various fixes for C++ verification (#1138).
+- Added CUDA and Qt/QtCore to include paths in CPP (#1131).
+- Fix for TC template2 in 1108 (#1134).
+- Embed CPP headers into ESBMC (#1124).
+- Return a constant for MemberExpr to enumerator (#1119).
+- Decouple TC20/36/39 from zero initialization (#1113).
+- Fixed missing argument in copy constructor (#1112).
+- Refactor/modify the COM (#1111).
+- Fixed nested MemberExpr to struct/class method (#1102).
+- Add TCs for CUDA OM (#1095).
+- Fixed static member access (#1094).
+- Fixed global initialization (#1086).
+- Fixed inconsistent template specialization ids (#1079).
+* SMT-backend:
+- Fix usage of mk_ite by properly dispatching (#1201).
+- More smtlib fixes (#1193).
+- Fix symbol names and emission of AST node types in the smtlib backend (#1117).
+- Restore some smtlib functionality with external solver (#1114).
+- tuple-array-ast requires flattened array subtype in tuple-node-flattener (#1096).
+* General Fixes:
+- Fix intrinsic memset errors (#1199).
+- Check for overflow during the generation of VLAs (#1190).
+- Added an option to ignore strings (#1185).
+- Only use custom limits.h for the old frontend; otherwise, clang provides its own for us (#1168).
+- Restrict --unsigned-overflow-check to unsigned types only (#1143).
+- Fixing arch for 32-bit arm analysis as armv6 (#1142).
+- rename_type() should also recurse into operands (#1123).
+- Bug fixing for printf return value (#1115).
+- Add some more support for dynamic array sizes (#1101).
+- Support dyn-off structures w/ array members from byte-arrays (#1090).
+- Adjust also symbol's type and handle VLAs in adjust_type() (#1083).
+- Opt into collecting types only for (some?) known irep annotations (#1077).
+- Fix scanf bigint bug (#1076).
+- Add support for malloc-scanf overflow checking (#1063).
+- Fix overflow check for unsigned integer (#1058).
+- Improve code coverage by modifing/adding assertions in GOTO (#1048).
+
+*** Version 7.2
+* Clang-C++ frontend:
+  ** Added support for polymorphism (#919, #922, #923, #926, #927)
+  ** Fixed crash regarding the definition of template functions in structs (#1045).
+  ** Used value initialization for aggregate, including Plain Old Data (#1040).
+  ** Fixed object composition, turning "this->itr = iterator()" into "iterator(&this->itr)" (#1007).
+  ** Fixed various issues in our C++ operational models (e..g, #948, #995, #993, #988).
+* Solidity frontend:
+  ** Extended solidity-frontend to support Method Overload, Inheritance, and more return types for function calls (#1013).
+  ** Added support for the solidity constructor and multiple contracts #949
+  ** Fixed an error when calling a member function to get the Solidity return value (#1002).
+* Operational models:
+  ** Added overflow checks for the C functions scanf and fscanf (#976).
+  ** Added model for aligned_alloc() via the combination of malloc and __ESBMC_assume on the address (#1035).
+  ** Added lookup-based atoi, atol and atoll (#957, #958, #960, #1014, #1033).
+  ** Optimize memset operations by initializing the entire object with the result of the C memset function (#640).
+* Property Checking
+  ** Added support for checking undefined behavior for shift operations  (#996, #1024).
+  ** Added support for multiple property verification with three options: --multi-property, --multi-fail-fast, and  --parallel-solving (#1022).
+  ** Added a color scheme when printing a message if a property has been successful or violated (#1022).
+* Concurrency support:
+  ** Added missing global variable information for a context switch (#1012).
+  ** Fixed guard issues for multi-threaded goto programs (#974).
+* Test case generation:
+  ** Produce a test case in XML if a counterexample is found via the option --generate-testcase (#855).
+* General fixes:
+  ** Fixed the union used to generate doubles (Fix ieee_floatt to_double() #1038).
+  ** Fixed access to multi-dim array members of unions (#1036).
+  ** Added support for LLVM-16 compat (#1034).
+  ** Made Z3 SMT formulas compatible with other solvers (#1023).
+  ** ESBMC no longer throws errors for returning void expressions. (#1020).
+  ** Improved bit mungling in the simplifier by adding a check that the operation can actually be performed meaningfully (#1019).
+  ** Removed __ESBMC prefix when generating CE for intrinsic functions (#999).
+  ** Do not call tuple_node_flattener for constant arrays of unions (#917).
+  ** Fixed union initializer for cast-to-union cases supported by Clang and GCC (#1000).
+
 *** Version 7.1
 * Added an experimental flag to cache SSA assertions with `--cache-asserts` (SSA caching #827).
 * Support for macOS M1 architecture (Fixed macOS M1 build #810).

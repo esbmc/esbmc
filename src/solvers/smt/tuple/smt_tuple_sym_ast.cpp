@@ -69,7 +69,7 @@ tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   tuple_sym_smt_astt false_val = to_tuple_sym_ast(falseop);
 
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
-  symbol2tc result(sort->get_tuple_type(), name);
+  expr2tc result = symbol2tc(sort->get_tuple_type(), name);
   smt_astt result_sym = ctx->convert_ast(result);
 
   const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());

@@ -11,6 +11,11 @@ import re
 import xml.etree.ElementTree as ET
 import time
 import shlex
+import subprocess
+
+if sys.platform.startswith('linux'):
+    from resource import *
+
 #####################
 # Testing Tool
 #####################
@@ -54,6 +59,13 @@ class BaseTest:
             if x != "":
                 p = os.path.join(self.test_dir, x)
                 result.append(p if os.path.exists(p) else x)
+        if BaseTest.SMT_ONLY:
+            result.append("--smtlib")
+            result.append("--smt-formula-only")
+            result.append("--output")
+            result.append(f"{self.test_dir}.smt2")
+            result.append("--array-flattener")
+
         return result
 
     def mark_test_as_knownbug(self, issue: str):
@@ -74,6 +86,11 @@ class BaseTest:
         self.test_file = None
         self.test_mode = "CORE"
         self._initialize_test_case()
+
+    """Ignore regex and only check for crashes"""
+    RUN_ONLY = False
+    """SMT only test"""
+    SMT_ONLY = False
 
 
 class CTestCase(BaseTest):
@@ -107,8 +124,6 @@ class XMLTestCase(BaseTest):
     """This specialization will parse XML test descriptions"""
 
     UNSUPPORTED_OPTIONS = ["--timeout", "--memlimit"]
-    # Custom library for CPP abstract libraries
-    CPP_INCLUDE_DIR: str = None
 
     def __init__(self, test_dir: str, name: str):
         super().__init__(test_dir, name)
@@ -132,7 +147,10 @@ class XMLTestCase(BaseTest):
         self.module: str = root[1].text.strip()
         self.description: str = root[2].text.strip()
         self.test_file: str = root[3].text.strip()
-        self.test_args: str = root[4].text.strip()
+        try:
+            self.test_args: str = root[4].text.strip()
+        except:
+            self.test_args: str = ""
         # TODO: Multiline regex
         self.test_regex = [root[5].text.strip()]
         self.priority = root[6].text.strip()
@@ -150,17 +168,6 @@ class XMLTestCase(BaseTest):
 
     def generate_run_argument_list(self, *tool):
         result = super().generate_run_argument_list(*tool)
-        # Some sins were committed into test.desc hack them here
-        try:
-            index = result.index("~/libraries/")
-            if XMLTestCase.CPP_INCLUDE_DIR is None:
-                result.pop(index-1)
-                result.pop(index-1)
-            else:
-                result[index] = XMLTestCase.CPP_INCLUDE_DIR
-        except ValueError:
-            pass
-
         for x in self.__class__.UNSUPPORTED_OPTIONS:
             try:
                 index = result.index(x)
@@ -190,7 +197,7 @@ class TestParser:
     def from_file(test_dir: str, name: str) -> BaseTest:
         """Tries to open a file and selects which class to parse the file"""
         file_path = os.path.join(test_dir, "test.desc")
-        assert os.path.exists(file_path)
+        assert os.path.exists(file_path), file_path
         with open(file_path) as fp:
             first_line = fp.readline().strip()
             return TestParser.MODES[TestParser.detect_mode_by_header(first_line)](test_dir, name)
@@ -203,17 +210,24 @@ class Executor:
 
     def run(self, test_case: BaseTest):
         """Execute the test case with `executable`"""
-        process = Popen(test_case.generate_run_argument_list(*self.tool),
-                        stdout=PIPE, stderr=PIPE)
+        cmd = test_case.generate_run_argument_list(*self.tool)
+
         try:
-            stdout, stderr = process.communicate(timeout=self.timeout)
-        except:
-            process.stdout.close()
-            process.stderr.close()
-            process.kill()
-            process.wait()
-            return None, None
-        return stdout, stderr
+            # use subprocess.run because we want to wait for the subprocess to finish
+            p = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, timeout=self.timeout);
+
+            # get the RSS (resident set size) of the subprocess that just terminated.
+            # Save the output in a tmp.log and then use the command below
+            # to get the total maximum RSS:
+            #   egrep "mem_usage=[0-9]+" tmp.log -o | cut -d'=' -f2 | paste -sd+ - | bc
+            # see https://docs.python.org/3/library/resource.html for more details
+            if sys.platform.startswith('linux'):
+                print("mem_usage={0} kilobytes".format(getrusage(RUSAGE_CHILDREN).ru_maxrss))
+
+        except subprocess.CalledProcessError:
+            return None, None, 0
+
+        return p.stdout, p.stderr, p.returncode
 
 
 def get_test_objects(base_dir: str):
@@ -249,10 +263,17 @@ def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
 
     def test(self):
-        stdout, stderr = executor.run(test_case)
+        stdout, stderr, rc = executor.run(test_case)
+
         if stdout == None:
             timeout_message ="\nTIMEOUT TEST: " + str(test_case.test_dir)
             self.fail(timeout_message)
+
+        if BaseTest.RUN_ONLY:
+            if rc != 0:
+                self.fail(f"Wrong output for process. Bombed out with exit code {rc}")
+            return
+
         output_to_validate = stdout.decode() + stderr.decode()
         error_message_prefix = "\nTEST: " + \
             str(test_case.test_dir) + "\nEXPECTED TO FIND: " + \
@@ -322,17 +343,17 @@ def _arg_parsing():
     parser.add_argument("--mode", required=False, help="tests to be executed [CORE, "
                                                       "KNOWNBUG, FUTURE, THOROUGH")
     parser.add_argument("--file", required=False, help="specific test to be executed")
-    parser.add_argument("--library", required=False,
-                        help="Path for the Standard C++ Libraries abstractions")
     parser.add_argument("--mark_knownbug_with_word", required=False,
                         help="If test fails with word then mark it as a knownbug")
     parser.add_argument("--benchbringup", default=False, action="store_true",
             help="Flag to run a specific benchmark and collect logs in Github workflow")
 
+    parser.add_argument("--smt_test", default=False, action="store_true",
+            help="Replaces usual tests with crash check while producing formulas (adds --smt-formula-only).")
+
     main_args = parser.parse_args()
     if main_args.timeout:
         RegressionBase.TIMEOUT = int(main_args.timeout)
-    XMLTestCase.CPP_INCLUDE_DIR = main_args.library
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
 
     regression_path = os.path.join(os.path.dirname(os.path.relpath(__file__)),
@@ -342,6 +363,11 @@ def _arg_parsing():
     if(main_args.benchbringup):
         BENCHMARK_BRINGUP = True
 
+    if(main_args.smt_test):
+        print("Checking SMT generation only")
+        BaseTest.RUN_ONLY = True
+        BaseTest.SMT_ONLY = True
+
     if main_args.file:
         gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
     else:
@@ -350,6 +376,7 @@ def _arg_parsing():
 def main():
     _arg_parsing()
     suite = unittest.TestLoader().loadTestsFromTestCase(RegressionBase)
+    # run all test cases
     unittest.main(argv=[sys.argv[0], "-v"])
 
 if __name__ == "__main__":

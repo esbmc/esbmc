@@ -84,17 +84,17 @@ expr2tc from_integer(const BigInt &int_value, const type2tc &type)
 
   case type2t::fixedbv_id:
   {
-    constant_fixedbv2tc f(fixedbvt(fixedbv_spect(
+    expr2tc f = constant_fixedbv2tc(fixedbvt(fixedbv_spect(
       to_fixedbv_type(type).width, to_fixedbv_type(type).integer_bits)));
-    f->value.from_integer(int_value);
+    to_constant_fixedbv2t(f).value.from_integer(int_value);
     return f;
   }
 
   case type2t::floatbv_id:
   {
-    constant_floatbv2tc f(ieee_floatt(ieee_float_spect(
+    expr2tc f = constant_floatbv2tc(ieee_floatt(ieee_float_spect(
       to_floatbv_type(type).fraction, to_floatbv_type(type).exponent)));
-    f->value.from_integer(int_value);
+    to_constant_floatbv2t(f).value.from_integer(int_value);
     return f;
   }
   default:

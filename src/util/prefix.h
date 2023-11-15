@@ -1,11 +1,12 @@
 #ifndef CPROVER_UTIL_PREFIX_H
 #define CPROVER_UTIL_PREFIX_H
 
-#include <string>
+#include <string_view>
 
-inline bool has_prefix(const std::string &s, const std::string &prefix)
+inline bool has_prefix(std::string_view s, std::string_view prefix)
 {
-  return std::string(s, 0, prefix.size()) == prefix;
+  size_t n = prefix.size();
+  return s.size() >= n && std::string_view(s.data(), n) == prefix;
 }
 
 #endif

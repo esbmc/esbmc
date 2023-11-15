@@ -2,11 +2,31 @@ set(CVC4_MIN_VERSION "1.6")
 
 if(DEFINED CVC4_DIR)
     set(ENABLE_CVC4 ON)
+
+elseif(EXISTS $ENV{HOME}/cvc4)
+    set(ENABLE_CVC4 ON)
+
+else()
+    if(ENABLE_CVC4 AND DOWNLOAD_DEPENDENCIES)
+        # TODO: Replace this file when we go for CVC5!
+        CPMAddPackage(
+            NAME cvc5
+            DOWNLOAD_ONLY YES
+            GITHUB_REPOSITORY cvc5/cvc5
+            GIT_TAG cvc5-1.0.5)
+
+        message("[cvc5] Configuring")
+        execute_process(COMMAND ./configure.sh --auto-download --prefix=${cvc5_BINARY_DIR}
+                            WORKING_DIRECTORY ${cvc5_SOURCE_DIR})
+
+        message("[cvc5] Building")
+        execute_process(COMMAND make -j4 install
+            WORKING_DIRECTORY ${cvc5_SOURCE_DIR}/build)
+
+        set(CVC4_DIR ${cvc5_BINARY_DIR})
+    endif()
 endif()
 
-if(EXISTS $ENV{HOME}/cvc4)
-    set(ENABLE_CVC4 ON)
-endif()
 
 if(ENABLE_CVC4)
     find_package(CVC4 REQUIRED

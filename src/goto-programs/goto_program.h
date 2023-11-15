@@ -383,6 +383,13 @@ public:
     //! This is -1 if it's not a target.
     unsigned target_number;
 
+    //! Id of the scope within which a variable is declared (i.e., DECL).
+    //! It does not have a lot of meaning for other types of instructions.
+    unsigned int scope_id = 0;
+
+    //! Id of the parent scope for the current "scope_id".
+    unsigned int parent_scope_id = 0;
+
     //! Returns true if the instruction is a backwards branch.
     bool is_backwards_goto() const
     {
@@ -425,8 +432,6 @@ public:
 
   //! The list of instructions in the goto program
   instructionst instructions;
-
-  void get_successors(targett target, targetst &successors);
 
   void get_successors(const_targett target, const_targetst &successors) const;
 
@@ -581,43 +586,9 @@ public:
   //! Copy a full goto program, preserving targets
   void copy_from(const goto_programt &src);
 
-  //! Does the goto program have an assertion?
-  bool has_assertion() const;
-
   typedef std::set<irep_idt> decl_identifierst;
   /// get the variables in decl statements
   void get_decl_identifiers(decl_identifierst &decl_identifiers) const;
-
-  // Template for extracting instructions /from/ a goto program, to a type
-  // abstract something else.
-  template <
-    typename OutList,
-    typename ListAppender,
-    typename OutElem,
-    typename SetAttrObj,
-    typename SetAttrNil>
-  void extract_instructions(
-    OutList &list,
-    ListAppender listappend,
-    SetAttrObj setattrobj,
-    SetAttrNil setattrnil) const;
-
-  // Template for extracting instructions /from/ a type abstract something,
-  // to a goto program.
-  template <
-    typename InList,
-    typename InElem,
-    typename FetchElem,
-    typename ElemToInsn,
-    typename GetAttr,
-    typename IsAttrNil>
-  void inject_instructions(
-    InList list,
-    unsigned int len,
-    FetchElem fetchelem,
-    ElemToInsn elemtoinsn,
-    GetAttr getattr,
-    IsAttrNil isattrnil);
 };
 
 bool operator<(

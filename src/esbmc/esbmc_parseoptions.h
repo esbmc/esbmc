@@ -8,6 +8,7 @@
 #include <util/options.h>
 #include <util/parseoptions.h>
 #include <util/algorithms.h>
+#include <util/threeval.h>
 
 extern const struct group_opt_templ all_cmd_options[];
 
@@ -25,8 +26,6 @@ public:
   ~esbmc_parseoptionst()
   {
     close_file(out);
-    if(out != err)
-      close_file(err);
   }
 
 protected:
@@ -37,35 +36,39 @@ protected:
   get_goto_program(optionst &options, goto_functionst &goto_functions);
 
   virtual bool
+  create_goto_program(optionst &options, goto_functionst &goto_functions);
+
+  virtual bool
+  parse_goto_program(optionst &options, goto_functionst &goto_functions);
+
+  virtual bool
   process_goto_program(optionst &options, goto_functionst &goto_functions);
 
-  int doit_k_induction();
+  virtual bool
+  output_goto_program(optionst &options, goto_functionst &goto_functions);
+
+  int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
+
   int doit_k_induction_parallel();
 
-  int doit_falsification();
-  int doit_incremental();
-  int doit_termination();
-
-  int do_base_case(
-    optionst &opts,
+  tvt is_base_case_violated(
+    optionst &options,
     goto_functionst &goto_functions,
     const BigInt &k_step);
 
-  int do_forward_condition(
-    optionst &opts,
+  tvt does_forward_condition_hold(
+    optionst &options,
     goto_functionst &goto_functions,
     const BigInt &k_step);
 
-  int do_inductive_step(
-    optionst &opts,
+  tvt is_inductive_step_violated(
+    optionst &options,
     goto_functionst &goto_functions,
     const BigInt &k_step);
 
   bool read_goto_binary(goto_functionst &goto_functions);
 
   bool set_claims(goto_functionst &goto_functions);
-
-  void set_verbosity_msg();
 
   uint64_t read_time_spec(const char *str);
   uint64_t read_mem_spec(const char *str);
@@ -74,8 +77,7 @@ protected:
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
 
-  FILE *out = stdout;
-  FILE *err = stderr;
+  FILE *out = stderr;
 
   std::vector<std::unique_ptr<goto_functions_algorithm>>
     goto_preprocess_algorithms;

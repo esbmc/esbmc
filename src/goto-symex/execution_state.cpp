@@ -252,6 +252,7 @@ void execution_statet::symex_step(reachability_treet &art)
     if(instruction.function == "__ESBMC_main")
     {
       end_thread();
+      owning_rt->main_thread_ended = true;
     }
     else if(
       instruction.function == "c:@F@main" &&
@@ -327,13 +328,8 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
 
   goto_symext::symex_goto(old_guard);
 
-  if(!pre_goto_guard.is_false())
-  {
-    if(threads_state.size() >= thread_cswitch_threshold)
-    {
-      analyze_read(old_guard);
-    }
-  }
+  if(threads_state.size() >= thread_cswitch_threshold)
+    analyze_read(old_guard);
 }
 
 void execution_statet::assume(const expr2tc &assumption)
@@ -427,6 +423,13 @@ bool execution_statet::check_if_ileaves_blocked()
     // Don't generate interleavings automatically - instead, the user will
     // inserts intrinsics identifying where they want interleavings to occur,
     // and to what thread.
+    return true;
+
+  if(
+    owning_rt->main_thread_ended &&
+    !options.get_bool_option("deadlock-check") &&
+    !options.get_bool_option("data-races-check"))
+    // Don't generate further interleavings since __ESBMC_main thread has ended.
     return true;
 
   if(threads_state.size() < 2)
@@ -647,7 +650,7 @@ bool execution_statet::is_cur_state_guard_false(const expr2tc &guard)
     runtime_encoded_equationt *rte =
       dynamic_cast<runtime_encoded_equationt *>(target.get());
 
-    equality2tc the_question(gen_true_expr(), parent_guard);
+    expr2tc the_question = equality2tc(gen_true_expr(), parent_guard);
 
     try
     {
@@ -664,7 +667,7 @@ bool execution_statet::is_cur_state_guard_false(const expr2tc &guard)
     }
   }
 
-  return false;
+  return is_false(guard);
 }
 
 void execution_statet::execute_guard()
@@ -724,7 +727,7 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
   unsigned int thread_nr = threads_state.size();
   new_state.source.thread_nr = thread_nr;
-  new_state.global_guard.make_true();
+  new_state.global_guard = cur_state->guard;
   new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
   preserved_paths.emplace_back();
@@ -886,6 +889,7 @@ void execution_statet::get_expr_globals(
           art1->vars_map.insert(
             std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
           globals_list.insert(expr);
+          art1->is_global.insert(expr);
         }
       }
     }

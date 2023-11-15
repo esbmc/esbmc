@@ -1,0 +1,5 @@
+CORE
+test.c
+--function func --no-pointer-check
+^VERIFICATION SUCCESSFUL$
+

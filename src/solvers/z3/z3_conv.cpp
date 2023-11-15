@@ -1,4 +1,5 @@
 #include <cassert>
+#include <iostream> /* std::cout */
 #include <z3_conv.h>
 
 #define new_ast new_solver_ast<z3_smt_ast>
@@ -17,7 +18,28 @@ smt_convt *create_new_z3_solver(
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  Z3_open_log("z3.log");
+  std::string z3_file = options.get_option("z3-debug-dump-file");
+  if(options.get_bool_option("z3-debug"))
+  {
+    // Generate Z3 API file
+    Z3_open_log(z3_file.empty() ? "z3.log" : z3_file.c_str());
+
+    // Add Type checker
+    z3::config().set("stats", "true");
+
+    // Add typecheck
+    z3::config().set("type_check", "true");
+    z3::config().set("well_sorted_check", "true");
+
+    // SMT2 Compliant
+    z3::config().set("smtlib2_compliant", "true");
+  }
+
+  if(
+    options.get_bool_option("--smt-formula-only") ||
+    options.get_bool_option("--smt-formula-too"))
+    z3::config().set("smtlib2_compliant", "true");
+
   z3_convt *conv = new z3_convt(ns, options);
   *tuple_api = static_cast<tuple_iface *>(conv);
   *array_api = static_cast<array_iface *>(conv);
@@ -40,7 +62,6 @@ z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
   p.set("model", true);
   p.set("proof", false);
   solver.set(p);
-
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
   Z3_set_error_handler(z3_ctx, error_handler);
 }
@@ -802,11 +823,19 @@ smt_astt z3_convt::mk_smt_real(const std::string &str)
 smt_astt z3_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
+  z3::expr e(z3_ctx);
 
-  if(theint.is_negative())
-    return new_ast(z3_ctx.bv_val(theint.to_int64(), w), s);
+  if(theint.is_int64())
+    e = z3_ctx.bv_val(theint.to_int64(), w);
+  else if(theint.is_uint64())
+    e = z3_ctx.bv_val(theint.to_uint64(), w);
+  else
+  {
+    std::string dec = integer2string(theint, 10);
+    e = z3_ctx.bv_val(dec.c_str(), w);
+  }
 
-  return new_ast(z3_ctx.bv_val(theint.to_uint64(), w), s);
+  return new_ast(e, s);
 }
 
 smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
@@ -1090,7 +1119,7 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
 {
   const struct_union_data &strct = get_type_def(type);
 
-  assert(is_pointer_type(type));
+  if(is_pointer_type(type))
   {
     // Pointer have two fields, a base address and an offset, so we just
     // need to get the two numbers and call the pointer API
@@ -1112,11 +1141,11 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
   }
 
   // Otherwise, run through all fields and dispatch to 'get_by_ast' again.
-  constant_struct2tc outstruct(type, std::vector<expr2tc>());
+  std::vector<expr2tc> outmem;
   unsigned int i = 0;
   for(auto const &it : strct.members)
   {
-    outstruct->datatype_members.push_back(get_by_ast(
+    outmem.push_back(get_by_ast(
       it,
       new_ast(
         mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, i),
@@ -1124,7 +1153,7 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
     i++;
   }
 
-  return outstruct;
+  return constant_struct2tc(type, std::move(outmem));
 }
 
 expr2tc z3_convt::tuple_get(const expr2tc &expr)
@@ -1155,17 +1184,16 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
   }
 
   // Otherwise, run through all fields and dispatch to 'get' again.
-  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
+  std::vector<expr2tc> outmem;
   unsigned int i = 0;
   for(auto const &it : strct.members)
   {
-    log_debug("[{}, {}] Creating member", __FILE__, __LINE__);
-    member2tc memb(it, expr, strct.member_names[i]);
-    outstruct->datatype_members.push_back(get(memb));
+    expr2tc memb = member2tc(it, expr, strct.member_names[i]);
+    outmem.push_back(get(memb));
     i++;
   }
 
-  return outstruct;
+  return constant_struct2tc(expr->type, std::move(outmem));
 }
 
 // ***************************** 'get' api *******************************
@@ -1268,50 +1296,57 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
   return get_by_ast(subtype, new_ast(e, convert_sort(subtype)));
 }
 
+expr2tc z3_convt::tuple_get_array_elem(
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
+{
+  return get_array_elem(array, index, get_flattened_array_subtype(subtype));
+}
+
 void z3_smt_ast::dump() const
 {
-  log_debug(
-    "{}\nsort is {}",
-    Z3_ast_to_string(a.ctx(), a),
-    Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a)));
+  std::string ast(Z3_ast_to_string(a.ctx(), a));
+  log_status(
+    "{}\nsort is {}", ast, Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a)));
 }
 
 void z3_convt::dump_smt()
 {
-  const std::string &filename = options.get_option("output");
-  if(!filename.empty())
-  {
-    // print to output file
-    std::ofstream out(filename.c_str());
-    print_smt_formulae(out);
-  }
+  const std::string &path = options.get_option("output");
+  /* the iostream API is just unusable */
+  if(path == "-")
+    print_smt_formulae(std::cout);
   else
   {
-    // print to screen
-
-    std::ostringstream oss;
-    print_smt_formulae(oss);
-    log_debug("{}", oss.str());
+    std::ofstream out(path);
+    print_smt_formulae(out);
   }
 }
 
 void z3_convt::print_smt_formulae(std::ostream &dest)
 {
+  /*
+   * HACK: ESBMC uses backslash (\) for some of its symbols, this is fine for
+   * Z3 but not for all solvers. Maybe we should consider using another naming
+   * for those symbols
+   */
+  auto smt_formula = solver.to_smt2();
+  std::replace(smt_formula.begin(), smt_formula.end(), '\\', '_');
+
   Z3_ast_vector __z3_assertions = Z3_solver_get_assertions(z3_ctx, solver);
   // Add whatever logic is needed.
-  // Add sovler specific declarations as well.
+  // Add solver specific declarations as well.
   dest << "(set-info :smt-lib-version 2.6)\n";
-  dest << "(set-option :print-success true)\n";
   dest << "(set-option :produce-models true)\n";
   dest << "; Asserts from ESMBC starts\n";
-  dest << solver; // All VCC conditions in SMTLIB format.
+  dest << smt_formula; // All VCC conditions in SMTLIB format.
   dest << "; Asserts from ESMBC ends\n";
-  dest << "(apply (then simplify solve-eqs))\n";
-  dest << "(check-sat)\n";
   dest << "(get-model)\n";
   dest << "(exit)\n";
-  dest << "Total number of safety properties: "
-       << Z3_ast_vector_size(z3_ctx, __z3_assertions) << std::endl;
+  log_status(
+    "Total number of safety properties: {}",
+    Z3_ast_vector_size(z3_ctx, __z3_assertions));
 }
 
 smt_astt z3_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)

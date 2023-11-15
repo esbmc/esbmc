@@ -1,4 +1,5 @@
 #include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -11,6 +12,7 @@
 #include <util/message/format.h>
 #include <util/prefix.h>
 #include <util/std_code.h>
+#include <util/type_byte_size.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
@@ -22,7 +24,7 @@ bool clang_c_adjust::adjust()
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
-  context.Foreach_operand(
+  context.Foreach_operand_in_order(
     [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
 
   // Adjust types first, so that symbolic-type resolution always receives
@@ -53,6 +55,8 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
 
   if(symbol.type.is_code() && has_prefix(symbol.id.as_string(), "c:@F@main"))
     adjust_argc_argv(symbol);
+
+  adjust_type(symbol.type);
 }
 
 void clang_c_adjust::adjust_expr(exprt &expr)
@@ -135,6 +139,28 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   {
     adjust_code(to_code(expr));
   }
+  else if(expr.is_struct())
+  {
+    const typet &t = ns.follow(expr.type());
+    /* can't be an initializer of an incomplete type, it's not allowed by C */
+    assert(!t.incomplete());
+    /* adjust_type() above may have added padding members.
+     * Adjust the init expression accordingly. */
+    const struct_union_typet::componentst &new_comp =
+      to_struct_union_type(t).components();
+    exprt::operandst &ops = expr.operands();
+    for(size_t i = 0; i < new_comp.size(); i++)
+    {
+      const struct_union_typet::componentt &c = new_comp[i];
+      if(c.get_is_padding())
+      {
+        // TODO: should we initialize pads with nondet values?
+        ops.insert(ops.begin() + i, gen_zero(c.type()));
+      }
+      adjust_expr(ops[i]);
+    }
+    assert(new_comp.size() == ops.size());
+  }
   else
   {
     // Just check operands of everything else
@@ -180,15 +206,6 @@ void clang_c_adjust::adjust_symbol(exprt &expr)
       // special case: this is sugar for &f
       address_of_exprt tmp(expr);
       tmp.implicit(true);
-      tmp.location() = expr.location();
-      expr.swap(tmp);
-    }
-
-    if(expr.type().get_bool("#reference")) // lvalue reference
-    {
-      // r is an lvalue ref.
-      // turn `r = 1;` into `*r = 1;`
-      dereference_exprt tmp(expr, expr.type());
       tmp.location() = expr.location();
       expr.swap(tmp);
     }
@@ -511,7 +528,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
 
 void clang_c_adjust::adjust_type(typet &type)
 {
-  if(type.id() == "symbol")
+  if(type.is_symbol())
   {
     const irep_idt &identifier = type.identifier();
 
@@ -533,7 +550,41 @@ void clang_c_adjust::adjust_type(typet &type)
     }
 
     if(symbol.is_macro)
+    {
       type = symbol.type; // overwrite
+      adjust_type(type);
+    }
+  }
+  else if(is_array_like(type))
+  {
+    const irept &size = type.size_irep();
+    if(size.is_not_nil() && size.id() != "infinity")
+    {
+      /* adjust the size expression for VLAs */
+      adjust_expr((exprt &)size);
+    }
+    adjust_type(type.subtype());
+  }
+  else if((type.is_struct() || type.is_union()) && !type.incomplete())
+  {
+    /* components only exist for complete types */
+    for(auto &f : to_struct_union_type(type).components())
+      adjust_expr(f);
+
+    add_padding(type, ns);
+
+#ifndef NDEBUG
+    if(!type.get_bool("packed"))
+    {
+      type2tc t2 = migrate_type(type);
+      BigInt sz = type_byte_size(t2, &ns);
+      BigInt a = alignment(type, ns);
+      assert(sz % a == 0);
+    }
+    typet copy = type;
+    add_padding(copy, ns);
+    assert(copy == type);
+#endif
   }
 }
 
@@ -600,10 +651,6 @@ void clang_c_adjust::adjust_side_effect_function_call(
       new_symbol.type = f_op.type();
       new_symbol.mode = "C";
 
-      // Adjust type
-      to_code_type(new_symbol.type).make_ellipsis();
-      to_code_type(f_op.type()).make_ellipsis();
-
       symbolt *symbol_ptr;
       bool res = context.move(new_symbol, symbol_ptr);
       assert(!res);
@@ -626,6 +673,8 @@ void clang_c_adjust::adjust_side_effect_function_call(
 
       if(symbol.lvalue)
         f_op.cmt_lvalue(true);
+
+      align_se_function_call_return_type(f_op, expr);
     }
   }
   else
@@ -1177,7 +1226,7 @@ void clang_c_adjust::adjust_builtin_va_arg(exprt &expr)
   // turn into function call
   side_effect_expr_function_callt result;
   result.location() = expr.location();
-  result.function() = symbol_exprt("builtin_va_arg");
+  result.function() = symbol_exprt("__ESBMC_va_arg");
   result.function().location() = expr.location();
   result.function().type() = new_type;
   result.arguments().push_back(arg);
@@ -1193,8 +1242,8 @@ void clang_c_adjust::adjust_builtin_va_arg(exprt &expr)
   symbol_type.return_type() = empty_typet();
 
   symbolt symbol;
-  symbol.name = "builtin_va_arg";
-  symbol.id = "builtin_va_arg";
+  symbol.name = "__ESBMC_va_arg";
+  symbol.id = "__ESBMC_va_arg";
   symbol.type = symbol_type;
 
   context.move(symbol);
@@ -1207,4 +1256,11 @@ void clang_c_adjust::adjust_operands(exprt &expr)
 
   for(auto &op : expr.operands())
     adjust_expr(op);
+}
+
+void clang_c_adjust::align_se_function_call_return_type(
+  exprt &,
+  side_effect_expr_function_callt &)
+{
+  // nothing to be aligned for C
 }

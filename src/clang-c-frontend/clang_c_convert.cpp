@@ -13,7 +13,8 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <llvm/Support/raw_os_ostream.h>
 CC_DIAGNOSTIC_POP()
 
-#include <clang-c-frontend/padding.h>
+#include <ac_config.h>
+#include <clang-c-frontend/symbolic_types.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -298,51 +299,73 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   std::string id, name;
   get_decl_name(rd, name, id);
 
+  locationt location_begin;
+  get_location_from_decl(rd, location_begin);
+
+  irep_idt c_tag = rd.isUnion() ? typet::t_union : typet::t_struct;
+
   // Check if the symbol is already added to the context, do nothing if it is
-  // already in the context. See next comment
-  if(context.find_symbol(id) != nullptr)
-    return false;
+  // already in the context.
+  symbolt *sym = context.find_symbol(id);
+  if(!sym)
+  {
+    /* First put a symbol with a incomplete type into the context, then resolve
+     * all subtypes and finally set this symbol's correctly resolved type. */
+    struct_union_typet t("incomplete_" + c_tag.as_string());
+    t.location() = location_begin;
+    t.incomplete(true); /* for now just a declaration */
+    t.tag(name);
+
+    symbolt symbol;
+    get_default_symbol(
+      symbol,
+      get_modulename_from_path(location_begin.file().as_string()),
+      t,
+      name,
+      id,
+      location_begin);
+
+    symbol.is_type = true;
+
+    // We have to add the struct/union/class to the context before converting its
+    // fields because there might be recursive struct/union/class (pointers) and
+    // the code at get_type, case clang::Type::Record, needs to find the correct
+    // type (itself). Note that the type is incomplete at this stage, it doesn't
+    // contain the fields, which are added to the symbol later on this method.
+
+    sym = context.move_symbol_to_context(symbol);
+  }
+
+  assert(sym->is_type);
 
   // TODO: Fix me when we have a test case using C++ union.
   //       A C++ union can have member functions but not virtual functions.
   //       Just use struct_typet for C++?
-  struct_union_typet t;
-  if(rd.isUnion())
-    t = union_typet();
-  else
-    t = struct_typet();
-  t.tag(name);
 
-  locationt location_begin;
-  get_location_from_decl(rd, location_begin);
-
-  symbolt symbol;
-  get_default_symbol(
-    symbol,
-    get_modulename_from_path(location_begin.file().as_string()),
-    t,
-    name,
-    id,
-    location_begin);
-
-  std::string symbol_name = symbol.id.as_string();
-  symbol.is_type = true;
-
-  // We have to add the struct/union/class to the context before converting its
-  // fields because there might be recursive struct/union/class (pointers) and
-  // the code at get_type, case clang::Type::Record, needs to find the correct
-  // type (itself). Note that the type is incomplete at this stage, it doesn't
-  // contain the fields, which are added to the symbol later on this method.
-  move_symbol_to_context(symbol);
-
-  // Don't continue to parse if it doesn't have a complete definition
-  // Try to get the definition
+  /* Don't continue to parse if it doesn't have a complete definition, yet.
+   * This can happen in two cases:
+   * a) there is no complete type definition in the translation unit, or
+   * b) the type is being referred to under a pointer inside another type
+   *    definition and up to this definition has not been defined, yet.
+   */
   clang::RecordDecl *rd_def = rd.getDefinition();
   if(!rd_def)
     return false;
 
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
+  /* Don't continue if it's not incomplete; use the .incomplete() flag to avoid
+   * infinite recursion if the type we're defining refers to itself
+   * (via pointers): it either is already being defined (up the stack somewhere)
+   * or it's already a complete struct or union in the context. */
+  if(!sym->type.incomplete())
+    return false;
+  sym->type.remove(irept::a_incomplete);
+
+  /* it has a definition, now build the complete type */
+  struct_union_typet t(c_tag);
+  t.tag(name);
+
+  /* update location with that of the type's definition */
+  get_location_from_decl(*rd_def, t.location());
 
   // We have to add fields before methods as the fields are likely to be used
   // in the methods
@@ -372,16 +395,20 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  if(get_struct_union_class_methods_decls(*rd_def, to_struct_type(t)))
+  if(get_struct_union_class_methods_decls(*rd_def, t))
     return true;
 
-  if(rd.isUnion())
-    add_padding(to_union_type(t), ns);
-  else
-    add_padding(to_struct_type(t), ns);
+  /* We successfully constructed the type of this symbol; replace the
+   * symbol with the incomplete type by one with the now-complete type
+   * definition.
+   * Do this by erasing and re-inserting because the order of definitions in the
+   * context matters. This type should be defined after any of the types that it
+   * is composed of. */
+  symbolt symbol = *sym;
+  context.erase_symbol(symbol.id);
+  symbol.type = t;
+  context.move_symbol_to_context(symbol);
 
-  t.location() = location_begin;
-  added_symbol.type = t;
   return false;
 }
 
@@ -412,7 +439,7 @@ bool clang_c_convertert::get_struct_union_class_fields(
 
 bool clang_c_convertert::get_struct_union_class_methods_decls(
   const clang::RecordDecl &,
-  struct_typet &)
+  typet &)
 {
   // We don't add methods or static members to the struct in C
   return false;
@@ -425,7 +452,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   if(get_type(vd.getType(), t))
     return true;
 
-  // Check if we annotated it to be have an infinity size
+  // Check if we annotated it to have an infinity size
   bool no_slice = false;
   if(vd.hasAttrs())
   {
@@ -437,7 +464,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
         if(name == "__ESBMC_inf_size")
         {
           assert(t.is_array());
-          t.size(exprt("infinity", uint_type()));
+          t.size(exprt("infinity", size_type()));
         }
         else if(name == "__ESBMC_no_slice")
           no_slice = true;
@@ -445,6 +472,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     }
   }
 
+  // Get id and name
   std::string id, name;
   get_decl_name(vd, name, id);
 
@@ -470,11 +498,18 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
-  if(symbol.static_lifetime && !symbol.is_extern && !vd.hasInit())
+  bool aggregate_value_init = is_aggregate_type(vd.getType());
+
+  if(
+    symbol.static_lifetime && !symbol.is_extern &&
+    (!vd.hasInit() || aggregate_value_init))
   {
+    // the type might contains symbolic types,
+    // replace them with complete types before generating zero initialization
+
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    symbol.value = gen_zero(t, true);
+    symbol.value = gen_zero(get_complete_type(t, ns), true);
     symbol.value.zero_initializer(true);
   }
 
@@ -512,19 +547,27 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
      * initializer can't have side-effects (it's a constant expression). */
     code_blockt *orig = current_block;
     current_block = nullptr;
+    const clang::Stmt *stmt = vd.getInit();
+
     exprt val;
-    bool r = get_expr(*vd.getInit(), val);
+    bool r = get_expr(*stmt, val);
     current_block = orig;
     if(r)
       return true;
 
-    added_symbol = move_symbol_to_context(symbol);
+    bool aggregate_without_init =
+      aggregate_value_init &&
+      stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
+
+    added_symbol = context.move_symbol_to_context(symbol);
     gen_typecast(ns, val, t);
-    added_symbol->value = val;
+    if(!aggregate_without_init)
+      added_symbol->value = val;
 
     code_declt decl(symbol_expr(*added_symbol));
     decl.location() = location_begin;
-    decl.operands().push_back(val);
+    if(!aggregate_without_init)
+      decl.operands().push_back(val);
 
     new_expr = decl;
   }
@@ -533,7 +576,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     // We have to add the symbol before converting the initial assignment
     // because we might have something like 'int x = x + 1;' which is
     // completely wrong but allowed by the language
-    added_symbol = move_symbol_to_context(symbol);
+    added_symbol = context.move_symbol_to_context(symbol);
 
     code_declt decl(symbol_expr(*added_symbol));
     decl.location() = location_begin;
@@ -559,12 +602,6 @@ bool clang_c_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
 {
-  // Don't convert if implicit, unless it's a constructor or destructor
-  // A compiler-generated default ctor/dtor is considered implicit, but we have
-  // to parse it.
-  if(fd.isImplicit() && !is_ConstructorOrDestructor(fd))
-    return false;
-
   // If the function is not defined but this is not the definition, skip it
   if(fd.isDefined() && !fd.isThisDeclarationADefinition())
   {
@@ -617,16 +654,12 @@ bool clang_c_convertert::get_function(
                      fd.getStorageClass() == clang::SC_PrivateExtern;
   symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
 
-  symbolt &added_symbol = *move_symbol_to_context(symbol);
+  symbolt &added_symbol = *context.move_symbol_to_context(symbol);
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
   if(get_function_params(fd, type.arguments()))
     return true;
-
-  // Apparently, if the type has no arguments, we assume ellipsis
-  if(!type.arguments().size())
-    type.make_ellipsis();
 
   added_symbol.type = type;
   new_expr.type() = type;
@@ -670,7 +703,7 @@ bool clang_c_convertert::get_function_params(
   {
     code_typet::argumentt param;
     if(get_function_param(*pdecl, param))
-      return true; // return true if failling to parse a parameter
+      return true; // return true if failing to parse a parameter
 
     params.push_back(param);
   }
@@ -700,9 +733,8 @@ bool clang_c_convertert::get_function_param(
   param.type() = param_type;
   param.cmt_base_name(name);
 
-  if(name.empty())
-    if(!name_param_and_continue(pd, id, name, param))
-      return false;
+  if(id.empty() && name.empty())
+    name_param_and_continue(pd, id, name, param);
 
   locationt location_begin;
   get_location_from_decl(pd, location_begin);
@@ -731,16 +763,16 @@ bool clang_c_convertert::get_function_param(
   const clang::FunctionDecl &fd =
     static_cast<const clang::FunctionDecl &>(*pd.getParentFunctionOrMethod());
 
-  // If the function is not defined, we don't need to add it's parameter
+  // If the function is not defined, we don't need to add its parameter
   // to the context, they will never be used
   if(!fd.isDefined())
     return false;
 
-  move_symbol_to_context(param_symbol);
+  context.move_symbol_to_context(param_symbol);
   return false;
 }
 
-bool clang_c_convertert::name_param_and_continue(
+void clang_c_convertert::name_param_and_continue(
   const clang::ParmVarDecl &,
   std::string &,
   std::string &,
@@ -752,7 +784,6 @@ bool clang_c_convertert::name_param_and_continue(
    * when the function is defined, the exprt is filled for the sake of
    * beautification
    */
-  return false;
 }
 
 bool clang_c_convertert::get_type(
@@ -771,6 +802,11 @@ bool clang_c_convertert::get_type(
 
   if(q_type.isRestrictQualified())
     new_type.restricted(true);
+
+#ifdef ESBMC_CHERI_CLANG
+  if(the_type.canCarryProvenance(*ASTContext))
+    new_type.can_carry_provenance(true);
+#endif
 
   return false;
 }
@@ -816,12 +852,29 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     // Special case, pointers to structs/unions/classes must not
     // have a copy of it, but a reference to the type
-    // TODO: classes
-    if(sub_type.is_struct() || sub_type.is_union())
-    {
-      struct_union_typet t = to_struct_union_type(sub_type);
-      sub_type = symbol_typet(tag_prefix + t.tag().as_string());
-    }
+    get_ref_to_struct_type(sub_type);
+
+#if 0
+    // true for pointers that are implemented as CHERI capabilities
+    // and _Atomic with capability pointers as the underlying type.
+    bool is_cap = pt.isCapabilityPointerType();
+
+    // Whether this type can hold tagged capability values.
+    // This is true for capability types that have not been annotated with
+    // attr::CHERINoProvenance.
+    // In hybrid mode this also returns true for pointer types since they can
+    // be converted to capabilities.
+    bool can_prov = pt.canCarryProvenance(*ASTContext);
+
+    // true if this type is a CHERI capability type.
+    // If \p IncludeIntCap
+    // is true this also includes __uintcap_t and __intcap_t, otherwise it will
+    // return false for these types. This is useful for cases such as checking
+    // the validity of casts where __uintcap_t is not handled the same way as
+    // pointers.
+    bool IncludeIntCap = true;
+    bool is_cheri = pt.isCHERICapabilityType(*ASTContext, IncludeIntCap);
+#endif
 
     new_type = gen_pointer_type(sub_type);
     break;
@@ -861,9 +914,9 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     new_type = array_typet(
       the_type,
       constant_exprt(
-        integer2binary(val.getSExtValue(), bv_width(int_type())),
+        integer2binary(val.getSExtValue(), bv_width(size_type())),
         integer2string(val.getSExtValue()),
-        int_type()));
+        size_type()));
     break;
   }
 
@@ -877,7 +930,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if(get_type(arr.getElementType(), sub_type))
       return true;
 
-    new_type = array_typet(sub_type, gen_one(index_type()));
+    new_type = array_typet(sub_type, gen_one(size_type()));
     break;
   }
 
@@ -933,8 +986,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       type.arguments().emplace_back(param_type);
     }
 
-    // Apparently, if the type has no arguments, we assume ellipsis
-    if(!type.arguments().size() || func.isVariadic())
+    if(func.isVariadic())
       type.make_ellipsis();
 
     new_type = type;
@@ -956,10 +1008,6 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       return true;
 
     type.return_type() = return_type;
-
-    // Apparently, if the type has no arguments, we assume ellipsis
-    if(!type.arguments().size())
-      type.make_ellipsis();
 
     new_type = type;
     break;
@@ -985,14 +1033,15 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::RecordDecl &rd =
       *(static_cast<const clang::RecordType &>(the_type)).getDecl();
 
-    if(get_struct_union_class(rd))
-      return true;
-
     std::string id, name;
     get_decl_name(rd, name, id);
 
-    symbolt &s = *context.find_symbol(id);
-    new_type = s.type;
+    /* record in context if not already there */
+    get_struct_union_class(rd);
+
+    /* symbolic type referring to that type */
+    new_type = symbol_typet(id);
+
     break;
   }
 
@@ -1328,6 +1377,18 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "__uint128";
     break;
 
+#ifdef ESBMC_CHERI_CLANG
+  case clang::BuiltinType::IntCap:
+    new_type = intcap_typet();
+    c_type = "__intcap";
+    break;
+
+  case clang::BuiltinType::UIntCap:
+    new_type = uintcap_typet();
+    c_type = "unsigned __intcap";
+    break;
+#endif
+
   default:
   {
     std::ostringstream oss;
@@ -1516,9 +1577,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
 
     new_expr = constant_exprt(
-      integer2binary(result.Val.getInt().getSExtValue(), bv_width(uint_type())),
+      integer2binary(result.Val.getInt().getSExtValue(), bv_width(size_type())),
       integer2string(result.Val.getInt().getSExtValue()),
-      uint_type());
+      size_type());
     break;
   }
 
@@ -1533,9 +1594,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       new_expr = constant_exprt(
         integer2binary(
-          result.Val.getInt().getZExtValue(), bv_width(uint_type())),
+          result.Val.getInt().getZExtValue(), bv_width(size_type())),
         integer2string(result.Val.getInt().getZExtValue()),
-        uint_type());
+        size_type());
     }
     else
     {
@@ -1602,28 +1663,40 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::MemberExpr &member =
       static_cast<const clang::MemberExpr &>(stmt);
 
+    // special treatment for MemberExpr referring to an enumerator
+    if(
+      const auto *e =
+        llvm::dyn_cast<clang::EnumConstantDecl>(member.getMemberDecl()))
+    {
+      get_enum_value(e, new_expr);
+      break;
+    }
+
     if(!perform_virtual_dispatch(member))
     {
-      exprt base;
-      if(get_expr(*member.getBase(), base))
-        return true;
-
       exprt comp;
       if(get_decl(*member.getMemberDecl(), comp))
         return true;
 
-      if(!comp.name().empty())
+      if(!is_member_decl_static(member))
       {
-        // for MemberExpr referring to struct field (an/or method in case of C++)
+        exprt base;
+        if(get_expr(*member.getBase(), base))
+          return true;
+
+        assert(!comp.name().empty());
+        // for MemberExpr referring to struct field (or method in case of C++ class)
         new_expr = member_exprt(base, comp.name(), comp.type());
       }
       else
       {
-        // for MemberExpr in referring to a static member
-        // which is essentially a VarDecl
+        // for static members, use the member decl symbol directly
+        // without making a member_exprt, e.g.
+        // If the member_exprt refers to a class static member, then
+        // replace "OBJECT.MyStatic = 1" with "MyStatic = 1;"
         assert(comp.statement() == "decl");
         assert(comp.op0().is_symbol());
-        new_expr = member_exprt(base, comp.op0().identifier(), comp.type());
+        new_expr = comp.op0();
       }
     }
     else
@@ -1891,23 +1964,27 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     exprt inits;
 
+    t = get_complete_type(t, ns);
+
     // Structs/unions/arrays put the initializer on operands
     if(t.is_struct() || t.is_array() || t.is_vector())
     {
-      // Initializer everything to zero, even pads
-      // TODO: should we initialize pads with nondet values?
+      /* Initialize everything to zero;
+       * padding is taken care of later in adjust() */
       inits = gen_zero(t);
 
       unsigned int num = init_stmt.getNumInits();
       for(unsigned int i = 0, j = 0; (i < inits.operands().size() && j < num);
           ++i)
       {
-        // if it is an struct/union, we should skip padding
+        const struct_union_typet::componentt *c = nullptr;
         if(t.is_struct())
-          if(
-            to_struct_union_type(t).components()[i].get_is_padding() ||
-            to_struct_union_type(t).components()[i].get_is_unnamed_bitfield())
+        {
+          c = &to_struct_union_type(t).components()[i];
+          assert(!c->get_is_padding());
+          if(c->get_is_unnamed_bitfield())
             continue;
+        }
 
         // Get the value being initialized
         exprt init;
@@ -1916,7 +1993,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
         typet elem_type;
         if(t.is_struct())
-          elem_type = to_struct_union_type(t).components()[i].type();
+          elem_type = c->type();
         else if(t.is_array())
           elem_type = to_array_type(t).subtype();
         else
@@ -1968,7 +2045,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if(get_type(init_stmt.getType(), t))
       return true;
 
-    new_expr = gen_zero(t);
+    new_expr = gen_zero(get_complete_type(t, ns));
     break;
   }
 
@@ -2441,18 +2518,25 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   return false;
 }
 
+void clang_c_convertert::get_enum_value(
+  const clang::EnumConstantDecl *e,
+  exprt &new_expr)
+{
+  assert(e);
+  // For enum constants, we get their value directly
+  new_expr = constant_exprt(
+    integer2binary(e->getInitVal().getSExtValue(), bv_width(int_type())),
+    integer2string(e->getInitVal().getSExtValue()),
+    int_type());
+}
+
 bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 {
   // Special case for Enums, we return the constant instead of a reference
   // to the name
   if(const auto *e = llvm::dyn_cast<clang::EnumConstantDecl>(&d))
   {
-    // For enum constants, we get their value directly
-    new_expr = constant_exprt(
-      integer2binary(e->getInitVal().getSExtValue(), bv_width(int_type())),
-      integer2string(e->getInitVal().getSExtValue()),
-      int_type());
-
+    get_enum_value(e, new_expr);
     return false;
   }
 
@@ -2533,15 +2617,25 @@ bool clang_c_convertert::get_cast_expr(
 
   case clang::CK_AddressSpaceConversion:
   case clang::CK_NullToPointer:
+  case clang::CK_NullToMemberPointer:
     expr = gen_zero(type);
     break;
 
   case clang::CK_ToUnion:
-    gen_typecast_to_union(expr, type);
+    gen_typecast_to_union(ns, expr, type);
     break;
 
   case clang::CK_VectorSplat:
     break;
+
+#ifdef ESBMC_CHERI_CLANG
+  case clang::CK_PointerToCHERICapability:
+    /* An explicit __cheri_tocap means this value might be tagged. */
+  case clang::CK_CHERICapabilityToPointer:
+    /* both should not be generated in purecap mode */
+    break;
+#endif
+
   default:
   {
     std::ostringstream oss;
@@ -3117,9 +3211,8 @@ void clang_c_convertert::get_decl_name(
     {
       // Anonymous fields, generate a name based on the type
       const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(nd);
-      name = "anon";
-      id = getFullyQualifiedName(fd.getType(), *ASTContext) + "$" +
-           std::to_string(fd.getFieldIndex());
+      name = "__anon_field_" + std::to_string(fd.getFieldIndex());
+      id = name;
     }
     return;
 
@@ -3129,19 +3222,60 @@ void clang_c_convertert::get_decl_name(
       // Anonymous fields, generate a name based on the type
       const clang::IndirectFieldDecl &fd =
         static_cast<const clang::IndirectFieldDecl &>(nd);
-      name = "anon";
-      id = getFullyQualifiedName(fd.getType(), *ASTContext) + "$" +
-           std::to_string(fd.getAnonField()->getFieldIndex());
+      name = "__anon_indirect_field_" +
+             std::to_string(fd.getAnonField()->getFieldIndex());
+      id = name;
       return;
     }
     break;
 
   case clang::Decl::Record:
   case clang::Decl::CXXRecord:
+  case clang::Decl::ClassTemplateSpecialization:
   {
     const clang::RecordDecl &rd = static_cast<const clang::RecordDecl &>(nd);
-    name = getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
-    id = tag_prefix + name;
+    std::string kind_name = rd.getKindName().str();
+
+    // Checking if it is not a typedef, but the tag name is empty. If so we give it a new
+    // unique name based on its location
+    if(
+      rd.getCanonicalDecl()->getNameAsString().empty() &&
+      !rd.getCanonicalDecl()->getTypedefNameForAnonDecl())
+    {
+      locationt location_begin;
+      get_location_from_decl(rd, location_begin);
+      std::string location_begin_str = location_begin.file().as_string() + "_" +
+                                       location_begin.function().as_string() +
+                                       "_" + location_begin.line().as_string() +
+                                       "_" +
+                                       location_begin.column().as_string();
+      std::string kind_name = rd.getKindName().str();
+      name = kind_name + " __anon_" + kind_name + "_at_" + location_begin_str;
+      std::replace(name.begin(), name.end(), '.', '_');
+    }
+    else if(
+      rd.getCanonicalDecl()->getNameAsString().empty() &&
+      rd.getCanonicalDecl()->getTypedefNameForAnonDecl())
+    {
+      locationt location_begin;
+      get_location_from_decl(rd, location_begin);
+      std::string location_begin_str = location_begin.file().as_string() + "_" +
+                                       location_begin.function().as_string() +
+                                       "_" + location_begin.line().as_string() +
+                                       "_" +
+                                       location_begin.column().as_string();
+      std::string kind_name = rd.getKindName().str();
+      std::string tag_name =
+        getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
+      name =
+        kind_name + " __anon_typedef_" + tag_name + "_at_" + location_begin_str;
+      std::replace(name.begin(), name.end(), '.', '_');
+    }
+    else
+      name =
+        getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
+
+    id = "tag-" + name;
     return;
   }
 
@@ -3151,7 +3285,14 @@ void clang_c_convertert::get_decl_name(
       // Anonymous variable, generate a name based on the type,
       // see regression union1
       const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(nd);
-      name = "anon";
+      locationt location_begin;
+      get_location_from_decl(vd, location_begin);
+      std::string location_begin_str = location_begin.file().as_string() + "_" +
+                                       location_begin.function().as_string() +
+                                       "_" + location_begin.line().as_string() +
+                                       "_" +
+                                       location_begin.column().as_string();
+      name = "__anon_var_at_" + location_begin_str;
       id = getFullyQualifiedName(vd.getType(), *ASTContext);
       return;
     }
@@ -3250,7 +3391,14 @@ void clang_c_convertert::get_presumed_location(
     return;
 
   clang::SourceLocation FileLoc = sm->getFileLoc(loc);
-  PLoc = sm->getPresumedLoc(FileLoc);
+  bool use_line_directives = true;
+#if ESBMC_SVCOMP
+  /* Do not use #line directives, because the GraphML witness format appearently
+   * wants to use the physical line in the pre-processed .i file; at least
+   * CPAchecker and UAutomizer do. */
+  use_line_directives = false;
+#endif
+  PLoc = sm->getPresumedLoc(FileLoc, use_line_directives);
 }
 
 void clang_c_convertert::set_location(
@@ -3266,6 +3414,7 @@ void clang_c_convertert::set_location(
 
   location.set_line(PLoc.getLine());
   location.set_file(get_filename_from_path(PLoc.getFilename()));
+  location.set_column(PLoc.getColumn());
 
   if(!function_name.empty())
     location.set_function(function_name);
@@ -3289,11 +3438,6 @@ std::string clang_c_convertert::get_filename_from_path(std::string path)
   return path;
 }
 
-symbolt *clang_c_convertert::move_symbol_to_context(symbolt &symbol)
-{
-  return context.move_symbol_to_context(symbol);
-}
-
 void clang_c_convertert::convert_expression_to_code(exprt &expr)
 {
   if(expr.is_code())
@@ -3309,8 +3453,9 @@ void clang_c_convertert::convert_expression_to_code(exprt &expr)
 const clang::Decl *
 clang_c_convertert::get_DeclContext_from_Stmt(const clang::Stmt &stmt)
 {
-  auto it = ASTContext->getParents(stmt).begin();
-  if(it == ASTContext->getParents(stmt).end())
+  auto parents = ASTContext->getParents(stmt);
+  auto it = parents.begin();
+  if(it == parents.end())
     return nullptr;
 
   const clang::Decl *aDecl = it->get<clang::Decl>();
@@ -3388,13 +3533,6 @@ bool clang_c_convertert::is_field_global_storage(const clang::FieldDecl *field)
   return false;
 }
 
-bool clang_c_convertert::is_ConstructorOrDestructor(
-  const clang::FunctionDecl &fd)
-{
-  return fd.getKind() == clang::Decl::CXXConstructor ||
-         fd.getKind() == clang::Decl::CXXDestructor;
-}
-
 bool clang_c_convertert::perform_virtual_dispatch(const clang::MemberExpr &)
 {
   // It just can't happen in C
@@ -3416,4 +3554,51 @@ bool clang_c_convertert::get_vft_binding_expr(
     "MemberExpr call to virtual/overriding function cannot happen in C");
   abort();
   return true;
+}
+
+void clang_c_convertert::get_ref_to_struct_type(typet &type)
+{
+  /*
+   * For some special cases, we need to get a symbol type referring to
+   * a struct/union/class type so that we don't have to copy it, e.g.
+   * A pointer to an object of class BLAH would have:
+   * * type: pointer
+   *   * subtype: symbol
+   *      * identifier: tag-BLAH
+   * instead of copying the struct type:
+   * * type: pointer
+   *   * subtype: struct
+   *      * tag: BLAH
+   *      * components:
+   *        * <BLAH components 0,1,2,3...>
+   *      * methods:
+   *        * <BLAH method 0,1,2,3...>
+   */
+  if(type.is_struct() || type.is_union())
+  {
+    struct_union_typet t = to_struct_union_type(type);
+    type = symbol_typet(tag_prefix + t.tag().as_string());
+  }
+}
+
+bool clang_c_convertert::is_aggregate_type(const clang::QualType &)
+{
+  return false;
+}
+
+bool clang_c_convertert::is_member_decl_static(const clang::MemberExpr &member)
+{
+  // follow the MemberExpr node (might be nested) to check
+  // whether it's ultimately referring to a static member decl
+  // which is essentially a VarDecl with static life time
+  // Note that in a nested MemberExpr node, e.g. `X.Y.data`
+  // `getMemberDecl` will give the ultimate MemberDecl representing `data`.
+  if(member.getMemberDecl()->getKind() == clang::Decl::Var)
+  {
+    const clang::VarDecl &vd =
+      static_cast<const clang::VarDecl &>(*member.getMemberDecl());
+    return (vd.getStorageClass() == clang::SC_Static) || vd.hasGlobalStorage();
+  }
+
+  return false;
 }

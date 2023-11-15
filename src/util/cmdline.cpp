@@ -99,7 +99,7 @@ simple_shell_unescape(const char *s, const char *var)
       log_warning(
         "cannot parse environment variable {}: unfinished {}, ignoring...",
         var,
-        mode);
+        fmt::underlying(mode));
       return {};
     }
     split.emplace_back(std::move(arg));
@@ -210,7 +210,7 @@ bool cmdlinet::parse(
   }
   catch(std::exception &e)
   {
-    log_error("ESBMC error: {}", e.what());
+    log_error("{}", e.what());
     return true;
   }
 

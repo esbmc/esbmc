@@ -7,8 +7,9 @@
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <clang-c-frontend/clang_c_main.h>
 
-static inline void init_variable(codet &dest, const symbolt &sym)
+void clang_c_maint::init_variable(codet &dest, const symbolt &sym)
 {
   const exprt &value = sym.value;
 
@@ -23,15 +24,23 @@ static inline void init_variable(codet &dest, const symbolt &sym)
   code_assignt code(symbol, sym.value);
   code.location() = sym.location;
 
-  dest.move_to_operands(code);
+  codet adjusted("decl-block");
+  adjust_init(code, adjusted);
+
+  dest.move_to_operands(adjusted.has_operands() ? adjusted : code);
 }
 
-static inline void static_lifetime_init(const contextt &context, codet &dest)
+void clang_c_maint::adjust_init(code_assignt &, codet &)
+{
+  // currently nothing to be adjusted for C
+}
+
+void clang_c_maint::static_lifetime_init(const contextt &context, codet &dest)
 {
   dest = code_blockt();
 
   // Do assignments based on "value".
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
+  context.foreach_operand_in_order([&dest, this](const symbolt &s) {
     if(s.static_lifetime)
       init_variable(dest, s);
   });
@@ -47,7 +56,7 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
-bool clang_main(contextt &context)
+bool clang_c_maint::clang_main()
 {
   irep_idt main_symbol;
 
@@ -58,6 +67,13 @@ bool clang_main(contextt &context)
 
   forall_symbol_base_map(it, context.symbol_base_map, main)
   {
+    // if user provided class/contract name
+    if(!config.cname.empty() && !config.main.empty())
+    {
+      const std::string fmt = "@" + config.cname + "@F@" + main;
+      if(it->second.as_string().find(fmt) == std::string::npos)
+        continue;
+    }
     // look it up
     symbolt *s = context.find_symbol(it->second);
 
@@ -70,19 +86,14 @@ bool clang_main(contextt &context)
 
   if(matches.empty())
   {
-    log_error("main symbol `" + main + "' not found");
+    log_error("main symbol `{}' not found", main);
     return true; // give up
   }
 
   if(matches.size() >= 2)
   {
-    if(matches.size() == 2)
-      log_error("warning: main symbol `" + main + "' is ambiguous");
-    else
-    {
-      log_error("main symbol `" + main + "' is ambiguous");
-      return true;
-    }
+    log_error("main symbol `{}' is ambiguous", main);
+    return true;
   }
 
   main_symbol = matches.front();
@@ -127,9 +138,23 @@ bool clang_main(contextt &context)
       const symbolt &argc_symbol = *ns.lookup("argc'");
       const symbolt &argv_symbol = *ns.lookup("argv'");
 
-      // assume argc is at least one
       exprt one = from_integer(1, argc_symbol.type);
 
+      exprt add("+", uint_type());
+      add.copy_to_operands(symbol_expr(argc_symbol), one); // argc + 1
+
+      exprt mult("*", uint_type());
+      exprt char_pointer_size = from_integer(
+        config.ansi_c.pointer_width() / config.ansi_c.char_width, uint_type());
+      mult.copy_to_operands(
+        add, char_pointer_size); // (argc + 1) * sizeof(char *)
+
+      // Adjust __ESBMC_alloc_size as argv is handled as dynamic array
+      exprt dynamic_size("dynamic_size", size_type());
+      dynamic_size.copy_to_operands(gen_address_of(symbol_expr(argv_symbol)));
+      init_code.copy_to_operands(code_assignt(dynamic_size, mult));
+
+      // assume argc is at least one
       exprt ge(">=", bool_type());
       ge.copy_to_operands(symbol_expr(argc_symbol), one);
 
@@ -144,6 +169,9 @@ bool clang_main(contextt &context)
         max = power(2, atoi(argc_symbol.type.width().c_str())) - 1;
       else
         assert(false);
+
+      // The argv array of MAX elements of pointer type has to fit
+      max /= config.ansi_c.pointer_width() / 8;
 
       exprt max_minus_one = from_integer(max - 1, argc_symbol.type);
 

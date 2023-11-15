@@ -108,7 +108,7 @@ unsigned goto_symext::argument_assignments(
       }
 
       // 'Declare' the argument before assigning a value to it
-      symbol2tc lhs(function_type.arguments[name_idx], identifier);
+      expr2tc lhs = symbol2tc(function_type.arguments[name_idx], identifier);
       symex_decl(code_decl2tc(lhs->type, identifier));
 
       // Assign value to function argument
@@ -149,7 +149,7 @@ unsigned goto_symext::argument_assignments(
       // 'Declare' the argument before assigning a value to it
       symex_decl(code_decl2tc((*it1)->type, identifier));
 
-      symbol2tc sym((*it1)->type, identifier);
+      expr2tc sym = symbol2tc((*it1)->type, identifier);
       cur_state->top().level1.get_ident_name(sym);
 
       // Assign value to function argument
@@ -188,7 +188,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   {
     if(has_prefix(identifier.as_string(), "symex::invalid_object"))
     {
-      log_warning("WARNING: function ptr call with no target, ");
+      log_warning("function ptr call with no target, ");
       cur_state->source.pc++;
       return;
     }
@@ -214,7 +214,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     {
       // Add an unwinding assumption.
       expr2tc now_guard = cur_state->guard.as_expr();
-      not2tc not_now(now_guard);
+      expr2tc not_now = not2tc(now_guard);
       target->assumption(now_guard, not_now, cur_state->source, first_loop);
     }
 
@@ -234,8 +234,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     if(!is_nil_expr(call.ret))
     {
       unsigned int &nondet_count = get_nondet_counter();
-      symbol2tc rhs(
-        call.ret->type, "nondet$symex::" + i2string(nondet_count++));
+      expr2tc rhs =
+        symbol2tc(call.ret->type, "nondet$symex::" + i2string(nondet_count++));
 
       symex_assign(code_assign2tc(call.ret, rhs));
     }
@@ -288,17 +288,17 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   cur_state->source.prog = &goto_function.body;
 }
 
-static std::list<std::pair<guardt, symbol2tc>>
+static std::list<std::pair<guardt, expr2tc>>
 get_function_list(const expr2tc &expr)
 {
-  std::list<std::pair<guardt, symbol2tc>> l;
+  std::list<std::pair<guardt, expr2tc>> l;
 
   if(is_if2t(expr))
   {
-    std::list<std::pair<guardt, symbol2tc>> l1, l2;
+    std::list<std::pair<guardt, expr2tc>> l1, l2;
     const if2t &ifexpr = to_if2t(expr);
     expr2tc guardexpr = ifexpr.cond;
-    not2tc notguardexpr(guardexpr);
+    expr2tc notguardexpr = not2tc(guardexpr);
 
     // Get sub items, them iterate over adding the relevant guard
     l1 = get_function_list(ifexpr.true_value);
@@ -317,8 +317,7 @@ get_function_list(const expr2tc &expr)
   {
     guardt guard;
     guard.make_true();
-    std::pair<guardt, symbol2tc> p(guard, symbol2tc(expr));
-    l.push_back(p);
+    l.emplace_back(guard, expr);
     return l;
   }
 
@@ -371,37 +370,42 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     return;
   }
 
-  std::list<std::pair<guardt, symbol2tc>> l = get_function_list(func_ptr);
+  std::list<std::pair<guardt, expr2tc>> l = get_function_list(func_ptr);
 
   /* Internal check that all symbols are actually of 'code' type (modulo the
    * guard) */
   for(const auto &elem : l)
   {
     const guardt &guard = elem.first;
-    const symbol2tc &sym = elem.second;
-    if(!guard.is_false() && !is_code_type(sym))
+    const symbol2t &sym = to_symbol2t(elem.second);
+    if(!guard.is_false() && !is_code_type(sym.type))
     {
       bool known_internal_error = guard.is_true();
       if(known_internal_error)
       {
         log_error(
           "non-code call target '{}' generated at {}",
-          sym->thename.as_string());
-        abort();
+          sym.thename.as_string(),
+          cur_state->source.pc->location);
+        return false;
       }
-      log_debug(
-        "non-code call target '{}' generated at {}", sym->thename.as_string());
+
+      log_status(
+        "non-code call target '{}' generated at {}",
+        sym.thename.as_string(),
+        cur_state->source.pc->location);
     }
   }
 
   // Store.
   for(auto &it : l)
   {
+    const symbol2t &sym = to_symbol2t(it.second);
     goto_functionst::function_mapt::const_iterator fit =
-      goto_functions.function_map.find(it.second->thename);
+      goto_functions.function_map.find(sym.thename);
 
-    const std::string pretty_name = it.second->thename.as_string().substr(
-      it.second->thename.as_string().find_last_of('@') + 1);
+    const std::string pretty_name = sym.thename.as_string().substr(
+      sym.thename.as_string().find_last_of('@') + 1);
 
     if(fit == goto_functions.function_map.end() || !fit->second.body_available)
     {
@@ -476,14 +480,14 @@ bool goto_symext::run_next_function_ptr_target(bool first)
   cur_state->source.pc = cur_state->top().function_ptr_call_loc;
 
   // And setup the function call.
-  code_function_call2tc call = cur_state->top().orig_func_ptr_call;
-  call->function = target_symbol;
+  expr2tc state_call = cur_state->top().orig_func_ptr_call;
+  to_code_function_call2t(state_call).function = target_symbol;
   goto_symex_statet::framet &cur_frame = cur_state->top();
 
   if(cur_state->top().cur_function_ptr_targets.size() == 0)
     cur_frame.orig_func_ptr_call = expr2tc();
 
-  symex_function_call_code(call);
+  symex_function_call_code(state_call);
 
   return true;
 }
@@ -504,8 +508,8 @@ void goto_symext::pop_frame()
   // clear locals from L2 renaming
   for(auto const &it : frame.local_variables)
   {
-    type2tc ptr(new pointer_type2t(pointer_type2()));
-    symbol2tc l1_sym(ptr, it.base_name);
+    type2tc ptr = pointer_type2tc(pointer_type2());
+    expr2tc l1_sym = symbol2tc(ptr, it.base_name);
     frame.level1.get_ident_name(l1_sym);
 
     // Call free on alloca'd objects
@@ -515,13 +519,13 @@ void goto_symext::pop_frame()
       symex_free(code_free2tc(l1_sym));
 
     // Erase from level 1 propagation
-    cur_state->value_set.erase(l1_sym->get_symbol_name());
+    cur_state->value_set.erase(to_symbol2t(l1_sym).get_symbol_name());
 
     cur_state->level2.remove(it);
 
     // Construct an l1 name on the fly - this is a temporary hack for when
     // the value set is storing things in a not-an-irep-idt form.
-    symbol2tc tmp_expr(
+    expr2tc tmp_expr = symbol2tc(
       get_empty_type(), it.base_name, it.lev, it.l1_num, 0, it.t_num, 0);
     cur_state->value_set.erase(to_symbol2t(tmp_expr).get_symbol_name());
   }
@@ -555,7 +559,7 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
 
       if(frame.return_value->type != value->type)
       {
-        typecast2tc cast(frame.return_value->type, value);
+        expr2tc cast = typecast2tc(frame.return_value->type, value);
         assign = code_assign2tc(frame.return_value, cast);
       }
 

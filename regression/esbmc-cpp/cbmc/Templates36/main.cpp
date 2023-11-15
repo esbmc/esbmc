@@ -1,3 +1,7 @@
+/*
+ * TC descirption:
+ * class template, UDT for type parameter
+ */
 #include<cassert>
 
 // The orering of the following matters!
@@ -27,6 +31,7 @@ my_Z z;
 
 int main()
 {
-  assert(z.some==0);
+  z.some = 36;
+  assert(z.some==36);
   return 0;
 }

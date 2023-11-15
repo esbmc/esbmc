@@ -14,6 +14,11 @@ void goto_convertt::make_temp_symbol(exprt &expr, goto_programt &dest)
 
   symbolt &new_symbol = new_tmp_symbol(expr.type());
 
+  // declare this symbol first
+  code_declt decl(symbol_expr(new_symbol));
+  decl.location() = location;
+  convert_decl(decl, dest);
+
   code_assignt assignment;
   assignment.lhs() = symbol_expr(new_symbol);
   assignment.rhs() = expr;
@@ -61,6 +66,9 @@ void goto_convertt::remove_sideeffects(
       // ID_or
       tmp = false_exprt();
 
+    // Make sure we do not lose the location in tmp
+    tmp.location() = expr.location();
+
     exprt::operandst &ops = expr.operands();
 
     // start with last one
@@ -68,6 +76,10 @@ void goto_convertt::remove_sideeffects(
         ++it)
     {
       exprt &op = *it;
+
+      // This is a hack for now. We need to solve this properly by
+      // correctly tracking all locations through all GOTO transformations
+      op.location() = expr.location();
 
       if(!op.is_boolean())
       {
@@ -77,17 +89,26 @@ void goto_convertt::remove_sideeffects(
 
       if(expr.is_and())
       {
-        if_exprt if_e(op, tmp, false_exprt());
+        // We need to reacord the location of the newly generated expression
+        exprt false_expr = false_exprt();
+        false_expr.location() = op.location();
+        if_exprt if_e(op, tmp, false_expr);
+        if_e.location() = op.location();
         tmp.swap(if_e);
       }
       else // ID_or
       {
-        if_exprt if_e(op, true_exprt(), tmp);
+        // We need to reacord the location of the newly generated expression
+        exprt true_expr = true_exprt();
+        true_expr.location() = op.location();
+        if_exprt if_e(op, true_expr, tmp);
+        if_e.location() = op.location();
         tmp.swap(if_e);
       }
     }
 
     expr.swap(tmp);
+    expr.location() = tmp.location();
 
     remove_sideeffects(expr, dest, result_is_used);
     return;
@@ -110,7 +131,7 @@ void goto_convertt::remove_sideeffects(
     if(!if_expr.cond().is_boolean())
       throw "first argument of `if' must be boolean, but got ";
 
-    const locationt location = expr.location();
+    const locationt location = expr.op0().location();
 
     goto_programt tmp_true;
     remove_sideeffects(if_expr.true_case(), tmp_true, result_is_used);
@@ -121,6 +142,11 @@ void goto_convertt::remove_sideeffects(
     if(result_is_used)
     {
       symbolt &new_symbol = new_tmp_symbol(expr.type());
+
+      // declare this symbol first
+      code_declt decl(symbol_expr(new_symbol));
+      decl.location() = location;
+      convert_decl(decl, dest);
 
       code_assignt assignment_true;
       assignment_true.lhs() = symbol_expr(new_symbol);
@@ -272,7 +298,7 @@ void goto_convertt::remove_sideeffects(
   {
     const irep_idt &statement = expr.statement();
 
-    if(statement == "function_call") // might do anything
+    if(statement == "function_call")
       remove_function_call(expr, dest, result_is_used);
     else if(
       statement == "assign" || statement == "assign+" ||
@@ -344,10 +370,8 @@ void goto_convertt::remove_assignment(
   {
     if(expr.operands().size() != 2)
     {
-      std::ostringstream str;
-      str << statement << " takes two arguments\n";
-      str << "Location: " << expr.location();
-      log_error(str.str());
+      log_error(
+        "{} takes two arguments\nLocation: {}", statement, expr.location());
       abort();
     }
 
@@ -526,10 +550,10 @@ void goto_convertt::remove_pre(
       constant_type = op_type;
     else
     {
-      std::ostringstream str;
-      str << "no constant one of type " + op_type.to_string() << "\n";
-      str << "Location: " << expr.location();
-      log_error(str.str());
+      log_error(
+        "no constant one of type {}\nLocation: {}",
+        op_type.to_string(),
+        expr.location());
       abort();
     }
 
@@ -617,10 +641,10 @@ void goto_convertt::remove_post(
       constant_type = op_type;
     else
     {
-      std::ostringstream str;
-      str << "no constant one of type " + op_type.to_string();
-      str << "Location: " << expr.location();
-      log_error(str.str());
+      log_error(
+        "no constant one of type {}\nLocation: {}",
+        op_type.to_string(),
+        expr.location());
       abort();
     }
 
@@ -651,12 +675,34 @@ void goto_convertt::remove_post(
   dest.destructive_append(tmp);
 }
 
+// The below code introduces some special treatment for function calls.
+// For example, the following code:
+//    ...
+//    a = b + foo();
+//    ...
+// is transformed to:
+//    ...
+//    <type> return_value$_foo;
+//    return_value$_foo = foo();
+//    a = b + return_value$_foo;
+//    ...
+//  However, if the return value of function "foo()" is never
+//  used in the program, or the return type <type> of "foo()"
+//  is void, the same code is tranformed to:
+//    ...
+//    foo();
+//    a = b;
+//    ...
 void goto_convertt::remove_function_call(
   exprt &expr,
   goto_programt &dest,
   bool result_is_used)
 {
-  if(!result_is_used)
+  // If the result of the function call is never used
+  // or the return type of the invoked function is "void",
+  // we can just call the above function without any
+  // further modifications.
+  if(!result_is_used || expr.type().id() == "empty")
   {
     assert(expr.operands().size() == 2);
     code_function_callt call;
@@ -703,24 +749,60 @@ void goto_convertt::remove_function_call(
   new_name(new_symbol);
 
   {
+    // temporary declaration:
+    // T return_value$_BLAH$1;
+    // where T denotes the type of the return value from the function,
+    // BLAH denotes the name of the function
     code_declt decl(symbol_expr(new_symbol));
     decl.location() = new_symbol.location;
     convert_decl(decl, dest);
   }
 
+  // up to this point, we've got the declaration for the temporary return value
+  // The next step is to flatten the side effect of this function call
   code_function_callt call;
   call.lhs() = symbol_expr(new_symbol);
   call.function() = expr.op0();
   call.arguments() = expr.op1().operands();
   call.location() = new_symbol.location;
 
-  codet assignment("assign");
-  assignment.reserve_operands(2);
-  assignment.copy_to_operands(symbol_expr(new_symbol));
-  assignment.move_to_operands(call);
-
   goto_programt tmp_program;
-  convert(assignment, tmp_program);
+  const typet &ftype = call.function().type();
+  if(ftype.return_type().id() == "constructor")
+  {
+    // for constructor, we need to add the implicit `this` as the first argument,
+    // so convert to:
+    // BLAH(&return_value$_BLAH$1, ...)
+    side_effect_expr_function_callt ctor_call;
+    ctor_call.function() = call.function();
+    exprt::operandst &args = ctor_call.arguments();
+    address_of_exprt tmp_result = address_of_exprt(call.lhs());
+    // first push the implicit `this` arg
+    args.push_back(tmp_result);
+    // then append the remaining operands
+    args.insert(args.end(), call.arguments().begin(), call.arguments().end());
+    ctor_call.location() = call.location();
+    // now convert this expr to code
+    codet ctor_call_code("expression");
+    ctor_call_code.location() = call.location();
+    ctor_call_code.move_to_operands(ctor_call);
+
+    convert(ctor_call_code, tmp_program);
+  }
+  else
+  {
+    // otherwise just convert to something like:
+    // return_value$_BLAH$1 = BLAH(...),
+    // where BLAH denotes the function name
+    codet assignment("assign");
+    assignment.reserve_operands(2);
+    assignment.copy_to_operands(symbol_expr(new_symbol));
+    assignment.move_to_operands(call);
+    assignment.location() = new_symbol.location;
+
+    convert(assignment, tmp_program);
+  }
+
   dest.destructive_append(tmp_program);
 
   expr = symbol_expr(new_symbol);
@@ -791,12 +873,18 @@ void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
 
   new_symbol.mode = expr.mode();
 
+  // declare this symbol first
+  code_declt decl(symbol_expr(new_symbol));
+  decl.location() = expr.location();
+  convert_decl(decl, dest);
+
   if(expr.operands().size() == 1)
   {
     codet assignment("assign");
     assignment.reserve_operands(2);
     assignment.copy_to_operands(symbol_expr(new_symbol));
     assignment.move_to_operands(expr.op0());
+    assignment.location() = expr.location();
 
     goto_programt tmp_program;
     convert(assignment, tmp_program);
@@ -848,6 +936,11 @@ void goto_convertt::remove_statement_expression(
   locationt location = last.location();
 
   symbolt &new_symbol = new_tmp_symbol(expr.type());
+
+  // declare this symbol first
+  code_declt decl(symbol_expr(new_symbol));
+  decl.location() = location;
+  convert_decl(decl, dest);
 
   symbol_exprt tmp_symbol_expr(new_symbol.id, new_symbol.type);
   tmp_symbol_expr.location() = location;

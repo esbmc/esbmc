@@ -1,0 +1,4 @@
+THOROUGH
+main.cpp
+--unwind 10 --no-unwinding-assertions --timeout 900 --old-frontend --goto-functions-only
+END_FUNCTION$

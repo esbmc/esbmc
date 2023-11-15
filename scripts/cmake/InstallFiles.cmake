@@ -25,3 +25,7 @@ install(FILES scripts/release-notes.txt DESTINATION .)
 if(DEFINED BOOST_DLL_FILE)
   install(FILES ${BOOST_DLL_FILE} DESTINATION bin)
 endif()
+
+if(ENABLE_PYTHON_FRONTEND)
+  install(FILES src/python-frontend/astgen.py DESTINATION resources)
+endif()

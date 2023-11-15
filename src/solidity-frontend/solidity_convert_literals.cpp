@@ -17,9 +17,6 @@ bool solidity_convertert::convert_integer_literal(
   if(get_type_description(integer_literal, type))
     return true;
 
-  assert(
-    type.is_unsignedbv() || type.is_signedbv()); // for "_x=100", false || true
-
   exprt the_val;
   // extract the value: unsigned
   BigInt z_ext_value = string2integer(the_value);
@@ -84,6 +81,39 @@ bool solidity_convertert::convert_string_literal(
 
   return false;
 }
+
+/**
+ * convert hex-string to uint constant
+ * @n: the bit width, default 0 (meaning config.ansi_c.int_width)
+*/
+bool solidity_convertert::convert_hex_literal(
+  std::string the_value,
+  exprt &dest,
+  const int n)
+{
+  // remove "0x" prefix
+  if(the_value.length() >= 2)
+    if(the_value.substr(0, 2) == "0x")
+    {
+      the_value.erase(0, 2);
+    }
+
+  typet type;
+  if(n)
+    type = unsignedbv_typet(n);
+  else
+    type = size_type();
+
+  // e.g. 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
+  BigInt hex_addr = string2integer(the_value, 16);
+  exprt the_val;
+  the_val = constant_exprt(
+    integer2binary(hex_addr, bv_width(type)), integer2string(hex_addr), type);
+
+  dest.swap(the_val);
+  return false;
+}
+
 // TODO: Float literal.
 //    - Note: Currently Solidity does NOT support floating point data types or fp arithmetic.
 //      Everything is done in fixed-point arithmetic as of Solidity compiler v0.8.6.

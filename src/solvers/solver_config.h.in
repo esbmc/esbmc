@@ -25,3 +25,7 @@
 #if @ESBMC_ENABLE_bitwuzla@
 #define BITWUZLA
 #endif
+
+#if @ESBMC_ENABLE_smtlib@
+#define SMTLIB
+#endif

@@ -1,0 +1,4 @@
+CORE
+gh-1093.c
+--unwind 6
+^VERIFICATION FAILED$

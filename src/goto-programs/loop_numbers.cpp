@@ -13,7 +13,7 @@ void show_loop_numbers(const goto_programt &goto_program)
     {
       unsigned loop_id = instruction.loop_number;
 
-      log_debug("Loop {}:\n {}\n", loop_id, instruction.location);
+      log_status("goto-loop Loop {}:\n {}\n", loop_id, instruction.location);
     }
   }
 }

@@ -26,7 +26,7 @@ void c_typecheck_baset::implicit_typecast(exprt &expr, const typet &type)
     err_location(expr);
     str << "conversion from `" << to_string(original_expr_type) << "' to `"
         << to_string(type) << "': " << *it;
-    log_error(str.str());
+    log_error("{}", str.str());
     abort();
   }
 
@@ -40,7 +40,7 @@ void c_typecheck_baset::implicit_typecast(exprt &expr, const typet &type)
     err_location(expr);
     str << "warning: conversion from `" << to_string(original_expr_type)
         << "' to `" << to_string(type) << "': " << *it;
-    log_warning(str.str());
+    log_warning("{}", str.str());
   }
 }
 

@@ -142,8 +142,7 @@ expr2tc smt_tuple_node_flattener::tuple_get(const expr2tc &expr)
 expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 {
   // XXX - what's the correct type to return here.
-  constant_struct2tc outstruct(
-    tuple->sort->get_tuple_type(), std::vector<expr2tc>());
+  std::vector<expr2tc> outmem;
   const struct_union_data &strct =
     ctx->get_type_def(tuple->sort->get_tuple_type());
 
@@ -152,8 +151,8 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
   if(tuple->elements.size() == 0)
   {
     for(unsigned int i = 0; i < strct.members.size(); i++)
-      outstruct->datatype_members.emplace_back();
-    return outstruct;
+      outmem.emplace_back();
+    return constant_struct2tc(tuple->sort->get_tuple_type(), std::move(outmem));
   }
 
   // Run through all fields and despatch to 'get' again.
@@ -199,7 +198,7 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
       abort();
     }
 
-    outstruct->datatype_members.push_back(res);
+    outmem.push_back(res);
     i++;
   }
 
@@ -209,19 +208,25 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     tuple->sort->get_tuple_type() == ctx->pointer_struct)
   {
     // Guard against a free pointer though
-    if(is_nil_expr(outstruct->datatype_members[0]))
+    if(is_nil_expr(outmem[0]))
       return expr2tc();
 
-    unsigned int num =
-      to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
-    const BigInt &offs =
-      to_constant_int2t(outstruct->datatype_members[1]).value;
+    unsigned int num = to_constant_int2t(outmem[0]).value.to_uint64();
+    const BigInt &offs = to_constant_int2t(outmem[1]).value;
     return ctx->pointer_logic.back().pointer_expr(
-      pointer_logict::pointert(num, offs),
-      type2tc(new pointer_type2t(get_empty_type())));
+      pointer_logict::pointert(num, offs), pointer_type2tc(get_empty_type()));
   }
 
-  return outstruct;
+  return constant_struct2tc(tuple->sort->get_tuple_type(), std::move(outmem));
+}
+
+expr2tc smt_tuple_node_flattener::tuple_get_array_elem(
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
+{
+  return array_conv.get_array_elem(
+    array, index, ctx->get_flattened_array_subtype(subtype));
 }
 
 smt_astt smt_tuple_node_flattener::tuple_array_of(
@@ -229,12 +234,9 @@ smt_astt smt_tuple_node_flattener::tuple_array_of(
   unsigned long array_size)
 {
   uint64_t elems = 1ULL << array_size;
-  array_type2tc array_type(init_val->type, gen_ulong(elems), false);
+  type2tc array_type = array_type2tc(init_val->type, gen_ulong(elems), false);
   smt_sortt array_sort = new smt_sort(
-    SMT_SORT_ARRAY,
-    array_type,
-    array_size,
-    ctx->convert_sort(array_type->subtype));
+    SMT_SORT_ARRAY, array_type, array_size, ctx->convert_sort(init_val->type));
 
   return array_conv.convert_array_of_wsort(
     ctx->convert_ast(init_val), array_size, array_sort);
@@ -249,7 +251,7 @@ smt_sortt smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
       !is_array_type(arrtype.subtype) &&
       "Arrays dimensions should be flattened by the time they reach tuple "
       "interface");
-    unsigned int dom_width = ctx->calculate_array_domain_width(arrtype);
+    unsigned int dom_width = calculate_array_domain_width(arrtype);
 
     return new smt_sort(
       SMT_SORT_ARRAY, type, dom_width, ctx->convert_sort(arrtype.subtype));

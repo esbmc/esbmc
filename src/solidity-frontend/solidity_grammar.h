@@ -14,6 +14,7 @@ enum ContractBodyElementT
 {
   StateVarDecl = 0, // rule state-variable-declaration
   FunctionDef,      // rule function-definition
+  EnumDef,          // rule enum-definition
   ContractBodyElementTError
 };
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
@@ -42,6 +43,15 @@ enum TypeNameT
 
   // contract type
   ContractTypeName,
+
+  // typecast
+  TypeConversionName,
+
+  // enum
+  EnumTypeName,
+
+  // tuple
+  TupleTypeName,
 
   TypeNameTError
 };
@@ -123,12 +133,49 @@ enum ElementaryTypeNameT
   // rule bool
   BOOL,
 
-  // TODO: rule address
-  // TODO: rule address payable
+  // rule address
+  ADDRESS,
+  ADDRESS_PAYABLE,
+
   // rule string
   STRING,
   STRING_LITERAL,
-  // TODO: rule bytes
+
+  // rule bytes
+  BYTES,
+  BYTES1,
+  BYTES2,
+  BYTES3,
+  BYTES4,
+  BYTES5,
+  BYTES6,
+  BYTES7,
+  BYTES8,
+  BYTES9,
+  BYTES10,
+  BYTES11,
+  BYTES12,
+  BYTES13,
+  BYTES14,
+  BYTES15,
+  BYTES16,
+  BYTES17,
+  BYTES18,
+  BYTES19,
+  BYTES20,
+  BYTES21,
+  BYTES22,
+  BYTES23,
+  BYTES24,
+  BYTES25,
+  BYTES26,
+  BYTES27,
+  BYTES28,
+  BYTES29,
+  BYTES30,
+  BYTES31,
+  BYTES32,
+
   // TODO: rule signed-integer-type
   // TODO: rule e
   // TODO: fixed-bytes
@@ -142,6 +189,7 @@ unsigned int uint_type_name_to_size(ElementaryTypeNameT);
 
 unsigned int uint_type_name_to_size(ElementaryTypeNameT);
 unsigned int int_type_name_to_size(ElementaryTypeNameT);
+unsigned int bytesn_type_name_to_size(ElementaryTypeNameT);
 
 // rule parameter-list
 enum ParameterListT
@@ -190,24 +238,58 @@ enum ExpressionT
   BO_Assign, // =
   BO_Add,    // +
   BO_Sub,    // -
-  BO_GT,     // >
-  BO_LT,     // <
-  BO_NE,     // !=
-  BO_EQ,     // ==
+  BO_Mul,    // *
+  BO_Div,    // /
   BO_Rem,    // %
-  BO_LAnd,   // &&
+
+  BO_Shl, // <<
+  BO_Shr, // >>
+  BO_And, // &
+  BO_Xor, // ^
+  BO_Or,  // |
+
+  BO_GT,   // >
+  BO_LT,   // <
+  BO_GE,   // >=
+  BO_LE,   // <=
+  BO_NE,   // !=
+  BO_EQ,   // ==
+  BO_LAnd, // &&
+  BO_LOr,  // ||
+
+  BO_AddAssign, // +=
+  BO_SubAssign, // -=
+  BO_MulAssign, // *=
+  BO_DivAssign, // /=
+  BO_RemAssign, // %=
+  BO_ShlAssign, // <<=
+  BO_ShrAssign, // >>=
+  BO_AndAssign, // &=
+  BO_XorAssign, // ^=
+  BO_OrAssign,  // |=
+  BO_Pow,       // **
 
   // UnaryOperator
   UnaryOperatorClass,
-  UO_PreDec,
-  UO_PreInc,
-  UO_Minus,
+  UO_PreDec,  // --
+  UO_PreInc,  // ++
+  UO_PostDec, // --
+  UO_PostInc, // ++
+  UO_Minus,   // -
+  UO_Not,     // ~
+  UO_LNot,    // !
+
+  //TenaryOperator
+  ConditionalOperatorClass, // ?...:...
 
   // rule identifier
   DeclRefExprClass,
 
   // rule literal
   Literal,
+
+  // rule Tuple
+  Tuple,
 
   // FunctionCall
   CallExprClass,
@@ -230,6 +312,9 @@ enum ExpressionT
   // equivalent toclang::Stmt::CXXMemberCallExprClass
   // i.e. x.caller();
   MemberCallClass,
+
+  // Type Converion
+  ElementaryTypeNameExpression,
 
   ExpressionTError
 };

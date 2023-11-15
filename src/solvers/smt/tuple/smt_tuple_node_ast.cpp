@@ -35,7 +35,8 @@ void tuple_node_smt_ast::make_free(smt_convt *ctx)
     else if(is_tuple_array_ast_type(it))
     {
       std::string newname = ctx->mk_fresh_name(fieldname);
-      smt_sortt subsort = ctx->convert_sort(get_array_subtype(it));
+      smt_sortt subsort =
+        ctx->convert_sort(ctx->get_flattened_array_subtype(it));
       elements[i] = flat.array_conv.mk_array_symbol(newname, newsort, subsort);
     }
     else if(is_array_type(it))
@@ -116,6 +117,8 @@ smt_astt tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 
   smt_convt::ast_vec eqs;
   eqs.reserve(data.members.size());
+
+  assert(sort->get_tuple_type() == other->sort->get_tuple_type());
 
   // Iterate through each field and encode an equality.
   for(unsigned int i = 0; i < data.members.size(); i++)

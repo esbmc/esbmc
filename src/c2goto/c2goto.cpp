@@ -16,32 +16,44 @@ const struct group_opt_templ c2goto_options[] = {
        "file.c ..."),
      "source file names"}}},
   {"Options",
-   {{"16", NULL, "set width of machine word (default is 64)"},
-    {"32", NULL, "set width of machine word (default is 64)"},
-    {"64", NULL, "set width of machine word (default is 64)"},
-    {"fixedbv", NULL, "encode floating-point as fixed bit-vectors"},
-    {"floatbv",
-     NULL,
-     "encode floating-point using the SMT floating-point theory (default)"},
-    {"output",
-     boost::program_options::value<std::string>()->value_name("<filename>"),
-     "output VCCs in SMT lib format to given file"},
-    {"include,I",
-     boost::program_options::value<std::vector<std::string>>()->value_name(
-       "path"),
-     "set include path"},
-    {"idirafter",
-     boost::program_options::value<std::vector<std::string>>()->value_name(
-       "path"),
-     "append system include path to search after system headers"},
-    {"define,D",
-     boost::program_options::value<std::vector<std::string>>()->value_name(
-       "macro"),
-     "define preprocessor macro"},
-    {"sysroot",
-     boost::program_options::value<std::string>()->value_name("<path>"),
-     "set the sysroot for the frontend"}
-
+   {
+     {"16", NULL, "set width of machine word (default is 64)"},
+     {"32", NULL, "set width of machine word (default is 64)"},
+     {"64", NULL, "set width of machine word (default is 64)"},
+     {"cheri",
+      boost::program_options::value<std::string>()->value_name("mode"),
+      "enable CHERI-C mode (default is off)"},
+     {"cheri-uncompressed",
+      NULL,
+      "use full CHERI capabilites instead of the concentrate format"},
+     {"fixedbv", NULL, "encode floating-point as fixed bit-vectors"},
+     {"floatbv",
+      NULL,
+      "encode floating-point using the SMT floating-point theory (default)"},
+     {"output",
+      boost::program_options::value<std::string>()->value_name("<filename>"),
+      "output VCCs in SMT lib format to given file"},
+     {"include,I",
+      boost::program_options::value<std::vector<std::string>>()->value_name(
+        "path"),
+      "set include path"},
+     {"nostdinc", NULL, "do not include from standard system paths"},
+     {"idirafter",
+      boost::program_options::value<std::vector<std::string>>()->value_name(
+        "path"),
+      "append system include path to search after system headers"},
+     {"define,D",
+      boost::program_options::value<std::vector<std::string>>()->value_name(
+        "macro"),
+      "define preprocessor macro"},
+     {"sysroot",
+      boost::program_options::value<std::string>()->value_name("<path>"),
+      "set the sysroot for the frontend"},
+     {"verbosity",
+      boost::program_options::value<std::vector<std::string>>(),
+      "Verbosity of log output, can be given multiple times. Parameter is "
+      "either a decimal N or 'module:N' to set the log-level of debug messages "
+      "of the module to N; without module, it sets the global log-level"},
    }},
   {"end", {{"", NULL, "end of options"}}},
   {"Hidden Options", {{"", NULL, ""}}}};
@@ -61,7 +73,7 @@ public:
     if(config.set(cmdline))
       return 1;
     config.options.cmdline(cmdline);
-    messaget::state.verbosity = VerbosityLevel::Result;
+    set_verbosity_msg(VerbosityLevel::Debug);
 
     if(!cmdline.isset("output"))
     {

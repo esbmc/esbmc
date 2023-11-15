@@ -1641,9 +1641,8 @@ smt_astt fp_convt::mk_smt_fpbv_lt(smt_astt x, smt_astt y)
 
 smt_astt fp_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
 {
-  // This is !FPLT
-  smt_astt a = mk_smt_fpbv_lt(lhs, rhs);
-  return ctx->mk_not(a);
+  // (a >= b) iff (b <= a)
+  return mk_smt_fpbv_lte(rhs, lhs);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)

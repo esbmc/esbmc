@@ -17,6 +17,7 @@ public:
     std::string os = "elf";
     std::string flavor;
 
+    bool is_riscv() const;
     bool is_windows_abi() const;
     bool is_freebsd() const;
     bool is_macos() const;
@@ -57,7 +58,7 @@ public:
     unsigned char_width;
     unsigned short_int_width;
     unsigned long_long_int_width;
-    unsigned pointer_width;
+    unsigned address_width;
     unsigned single_width;
     unsigned double_width;
     unsigned long_double_width;
@@ -65,8 +66,28 @@ public:
     unsigned word_size;
     unsigned wchar_t_width;
 
+    unsigned pointer_width() const noexcept
+    {
+      return cheri == CHERI_PURECAP ? capability_width() : address_width;
+    }
+
+    unsigned int capability_width() const noexcept
+    {
+      assert(cheri);
+      return (cheri_concentrate ? 2 : 4) * address_width;
+    }
+
     bool char_is_unsigned;
     bool use_fixed_for_float;
+
+    enum cheri_flavor
+    {
+      CHERI_OFF,
+      CHERI_HYBRID,
+      CHERI_PURECAP,
+    } cheri;
+    /* otherwise, uncompressed encoding to quadruple the size of addresses */
+    bool cheri_concentrate;
 
     // for fixed size
     unsigned int_128_width = 128;
@@ -98,6 +119,8 @@ public:
   } ansi_c;
 
   std::string main;
+  // the name of class/contract/namespace where the function is inside
+  std::string cname;
   std::unordered_set<std::string> no_slice_names;
   std::unordered_set<std::string> no_slice_ids;
 

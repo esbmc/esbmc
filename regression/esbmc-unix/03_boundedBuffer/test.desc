@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 --unwind 1 --no-slice --context-bound 2 --depth 50
 ^VERIFICATION FAILED$

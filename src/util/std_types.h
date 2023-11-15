@@ -683,4 +683,21 @@ inline const vector_typet &to_vector_type(const typet &type)
   assert(type.id() == typet::t_vector);
   return static_cast<const vector_typet &>(type);
 }
+
+class intcap_typet : public typet
+{
+public:
+  intcap_typet() : typet(t_intcap)
+  {
+  }
+};
+
+class uintcap_typet : public typet
+{
+public:
+  uintcap_typet() : typet(t_uintcap)
+  {
+  }
+};
+
 #endif

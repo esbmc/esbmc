@@ -2,9 +2,6 @@
 #include <pthread.h>
 #include <stddef.h>
 
-void *malloc(size_t size);
-void free(void *ptr);
-
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
 void __ESBMC_terminate_thread(void);
 unsigned int __ESBMC_spawn_thread(void (*)(void));
@@ -48,9 +45,9 @@ void(
 /* TODO: these should be 'static', right? */
 pthread_key_t __ESBMC_next_thread_key = 0;
 
-unsigned int __ESBMC_num_total_threads = 0;
-unsigned int __ESBMC_num_threads_running = 0;
-unsigned int __ESBMC_blocked_threads_count = 0;
+unsigned short int __ESBMC_num_total_threads = 0;
+unsigned short int __ESBMC_num_threads_running = 0;
+unsigned short int __ESBMC_blocked_threads_count = 0;
 
 pthread_t __ESBMC_get_thread_id(void);
 
@@ -71,8 +68,9 @@ static __ESBMC_thread_key *head = NULL;
 
 int insert_key_value(pthread_key_t key, const void *value)
 {
+  __ESBMC_atomic_begin();
   __ESBMC_thread_key *l =
-    (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key));
+    (__ESBMC_thread_key *)__ESBMC_alloca(sizeof(__ESBMC_thread_key));
   if(l == NULL)
     return -1;
   l->thread = __ESBMC_get_thread_id();
@@ -80,6 +78,7 @@ int insert_key_value(pthread_key_t key, const void *value)
   l->value = value;
   l->next = (head == NULL) ? NULL : head;
   head = l;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -110,7 +109,6 @@ __ESBMC_HIDE:;
   }
   else if(l->next != NULL)
     head = l->next;
-  free(l);
   return 0;
   __ESBMC_atomic_end();
 }
@@ -179,6 +177,9 @@ __ESBMC_HIDE:;
   pthread_exec_key_destructors();
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end(); // Never reached; doesn't matter.
+
+  // Ensure that we cut all subsequent execution paths.
+  __ESBMC_assume(0);
   return;
 }
 
@@ -208,6 +209,8 @@ __ESBMC_HIDE:;
   return 0; // We never fail
 }
 
+#pragma clang diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void pthread_exit(void *retval)
 {
 __ESBMC_HIDE:;
@@ -223,7 +226,11 @@ __ESBMC_HIDE:;
   __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end();
+
+  // Ensure that there is no subsequent execution path
+  __ESBMC_assume(0);
 }
+#pragma clang diagnostic pop
 
 pthread_t pthread_self(void)
 {
@@ -333,7 +340,9 @@ __ESBMC_HIDE:;
 int pthread_mutex_unlock_noassert(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -453,7 +462,9 @@ int pthread_rwlock_init(
   const pthread_rwlockattr_t *attr)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -487,7 +498,9 @@ PTHREAD_RWLOCK_TRYWRLOCK_END:
 int pthread_rwlock_unlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -530,14 +543,18 @@ __ESBMC_HIDE:;
 int pthread_cond_destroy(pthread_cond_t *__cond)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*__cond) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
 extern int pthread_cond_signal(pthread_cond_t *__cond)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*__cond) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 

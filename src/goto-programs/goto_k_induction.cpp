@@ -1,5 +1,5 @@
 #include <goto-programs/goto_k_induction.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>

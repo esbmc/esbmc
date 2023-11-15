@@ -306,44 +306,40 @@ public:
 // Then give them a typedef name
 
 #define irep_typedefs(basename, superclass)                                    \
-  typedef esbmct::something2tc<                                                \
-    type2t,                                                                    \
-    basename##_type2t,                                                         \
-    type2t::basename##_id,                                                     \
-    const type2t::type_ids,                                                    \
-    &type2t::type_id,                                                          \
-    superclass>                                                                \
-    basename##_type2tc;                                                        \
-  typedef esbmct::type_methods2<                                               \
-    basename##_type2t,                                                         \
-    superclass,                                                                \
-    superclass::traits,                                                        \
-    basename##_type2tc>                                                        \
-    basename##_type_methods;                                                   \
-  extern template class esbmct::type_methods2<                                 \
-    basename##_type2t,                                                         \
-    superclass,                                                                \
-    superclass::traits,                                                        \
-    basename##_type2tc>;
+  template <typename... Args>                                                  \
+  inline type2tc basename##_type2tc(Args &&...args)                            \
+  {                                                                            \
+    return type2tc(std::static_pointer_cast<type2t>(                           \
+      std::make_shared<basename##_type2t>(std::forward<Args>(args)...)));      \
+  }                                                                            \
+  typedef esbmct::                                                             \
+    type_methods2<basename##_type2t, superclass, superclass::traits>           \
+      basename##_type_methods;                                                 \
+  extern template class esbmct::                                               \
+    type_methods2<basename##_type2t, superclass, superclass::traits>;
 
-irep_typedefs(bool, type2t) irep_typedefs(empty, type2t)
-  irep_typedefs(symbol, symbol_type_data)
-    irep_typedefs(struct, struct_union_data)
-      irep_typedefs(union, struct_union_data) irep_typedefs(unsignedbv, bv_data)
-        irep_typedefs(signedbv, bv_data) irep_typedefs(code, code_data)
-          irep_typedefs(array, array_data) irep_typedefs(pointer, pointer_data)
-            irep_typedefs(fixedbv, fixedbv_data)
-              irep_typedefs(floatbv, floatbv_data)
-                irep_typedefs(string, string_data)
-                  irep_typedefs(cpp_name, cpp_name_data)
-                    irep_typedefs(vector, array_data)
+irep_typedefs(bool, type2t);
+irep_typedefs(empty, type2t);
+irep_typedefs(symbol, symbol_type_data);
+irep_typedefs(struct, struct_union_data);
+irep_typedefs(union, struct_union_data);
+irep_typedefs(unsignedbv, bv_data);
+irep_typedefs(signedbv, bv_data);
+irep_typedefs(code, code_data);
+irep_typedefs(array, array_data);
+irep_typedefs(pointer, pointer_data);
+irep_typedefs(fixedbv, fixedbv_data);
+irep_typedefs(floatbv, floatbv_data);
+irep_typedefs(string, string_data);
+irep_typedefs(cpp_name, cpp_name_data);
+irep_typedefs(vector, array_data);
 #undef irep_typedefs
 
-  /** Boolean type.
+/** Boolean type.
  *  Identifies a boolean type. Contains no additional data.
- *  @extends typet
+ *  @extends type2t
  */
-  class bool_type2t : public bool_type_methods
+class bool_type2t : public bool_type_methods
 {
 public:
   bool_type2t() : bool_type_methods(bool_id)
@@ -538,6 +534,9 @@ public:
     // the checking process should exist to eliminate this requirement.
     if(!is_nil_expr(size))
     {
+      assert(
+        size->type->type_id == signedbv_id ||
+        size->type->type_id == unsignedbv_id);
       expr2tc sz = size->simplify();
       if(!is_nil_expr(sz))
         array_size = sz;
@@ -656,7 +655,7 @@ public:
  *  Contains a spec for a floating point number -- this is the equivalent of a
  *  ieee_float_spect in the old irep situation. Stores how bits are distributed
  *  over fraction bits and exponent bits.
- *  @extend floatbv_type_methods
+ *  @extend floatbv_data
  */
 class floatbv_type2t : public floatbv_type_methods
 {

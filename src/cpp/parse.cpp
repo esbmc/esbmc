@@ -294,9 +294,9 @@ bool Parser::SyntaxError()
         message += t[i].text;
       }
 
-    message += "'\nLocation{}";
+    message += "'\nLocation: " + location.to_string();
 
-    log_error(message, location.to_string());
+    log_error("{}", message);
   }
 
   return bool(++number_of_errors < MaxErrors);
@@ -6111,15 +6111,14 @@ bool Parser::rTryStatement(codet &statement)
       // catch(...) must always be the last catch
       if(has_catch_ellipsis)
       {
-        std::string message =
-          "‘...’ handler must be the last handler for its try block\nLocation: "
-          "{}";
-
         locationt location;
         location.set_file(op.filename);
         location.set_line(i2string(op.line_no));
 
-        log_error(message, location.to_string());
+        log_error(
+          "‘...’ handler must be the last handler for its try block\nLocation: "
+          "{}",
+          location);
         return false;
       }
 

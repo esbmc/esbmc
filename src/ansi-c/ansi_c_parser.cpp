@@ -123,7 +123,7 @@ void ansi_c_parsert::convert_declarator(
     }
     if(t.id() == "")
     {
-      log_status("D: " + declarator.pretty());
+      log_status("D: {}", declarator.pretty());
       assert(0);
     }
     else if(t.is_nil())

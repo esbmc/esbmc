@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_convert_type.h>
 #include <cpp/cpp_declarator.h>
 #include <cpp/cpp_typecheck.h>
-#include <clang-cpp-frontend/expr2cpp.h>
+#include <util/cpp_expr2string.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
@@ -31,12 +31,12 @@ const struct_typet &cpp_typecheckt::this_struct_type()
 
 std::string cpp_typecheckt::to_string(const exprt &expr)
 {
-  return expr2cpp(expr, *this);
+  return cpp_expr2string(expr, *this);
 }
 
 std::string cpp_typecheckt::to_string(const typet &type)
 {
-  return type2cpp(type, *this);
+  return cpp_type2string(type, *this);
 }
 
 void cpp_typecheckt::convert(cpp_itemt &item)

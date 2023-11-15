@@ -7,9 +7,10 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/remove_unreachable.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <util/cmdline.h>
 #include <util/message.h>
+#include <util/filesystem.h>
 
 const mode_table_et mode_table[] = {
   LANGAPI_MODE_CLANG_C,
@@ -34,6 +35,22 @@ void goto_factory::create_file_from_istream(
     output << line;
     output << " ";
   }
+
+  output.close();
+}
+
+void goto_factory::create_file_from_string(
+  std::string &str,
+  std::string filename)
+{
+  std::ofstream output(filename); // Change this for C++
+  if(!output.good())
+  {
+    perror("Could not create output C file\n");
+    exit(1);
+  }
+
+  output << str;
 
   output.close();
 }
@@ -65,7 +82,7 @@ void goto_factory::config_environment(
   config.options = o;
 }
 
-goto_functionst goto_factory::get_goto_functions(
+program goto_factory::get_goto_functions(
   std::istream &c_file,
   goto_factory::Architecture arch)
 {
@@ -77,7 +94,9 @@ goto_functionst goto_factory::get_goto_functions(
 
   // Create tmp file
   std::string filename(
-    "tmp.c"); // TODO: Make this unique and add support for CPP
+    file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
+  filename += "/test.c";
+  log_status("Creating {}", filename);
   goto_factory::create_file_from_istream(c_file, filename);
 
   cmdlinet cmd = goto_factory::get_default_cmdline(filename);
@@ -87,7 +106,30 @@ goto_functionst goto_factory::get_goto_functions(
   return goto_factory::get_goto_functions(cmd, opts);
 }
 
-goto_functionst goto_factory::get_goto_functions(
+program goto_factory::get_goto_functions(
+  std::string &str,
+  goto_factory::Architecture arch)
+{
+  /*
+     * 1. Create an tmp file from istream
+     * 2. Parse the file using clang-frontend
+     * 3. Return the result
+     */
+
+  // Create tmp file
+  std::string filename(
+    file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
+  filename += "/test.c";
+  goto_factory::create_file_from_string(str, filename);
+
+  cmdlinet cmd = goto_factory::get_default_cmdline(filename);
+  optionst opts = goto_factory::get_default_options(cmd);
+
+  goto_factory::config_environment(arch, cmd, opts);
+  return goto_factory::get_goto_functions(cmd, opts);
+}
+
+program goto_factory::get_goto_functions(
   std::istream &c_file,
   cmdlinet &cmd,
   optionst &opts,
@@ -100,8 +142,11 @@ goto_functionst goto_factory::get_goto_functions(
      */
 
   // Create tmp file
+
+  // Create tmp file
   std::string filename(
-    "tmp.c"); // TODO: Make this unique and add support for CPP
+    file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
+  filename += "/test.c";
   goto_factory::create_file_from_istream(c_file, filename);
   goto_factory::config_environment(arch, cmd, opts);
   return goto_factory::get_goto_functions(cmd, opts);
@@ -137,33 +182,30 @@ bool goto_factory::parse(language_uit &l)
   return true;
 }
 
-goto_functionst goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
+program goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
 {
   goto_functionst goto_functions;
   language_uit lui(cmd);
-  if(!goto_factory::parse(lui))
-    return goto_functions;
-
   migrate_namespace_lookup = new namespacet(lui.context);
+  if(!goto_factory::parse(lui))
+  {
+    return program(lui.context, goto_functions);
+  }
 
   goto_convert(lui.context, opts, goto_functions);
 
   namespacet ns(lui.context);
   goto_check(ns, opts, goto_functions);
-  // remove skips
-  remove_skip(goto_functions);
+  // remove no-op's
+  remove_no_op(goto_functions);
 
-  // remove unreachable code
-  Forall_goto_functions(f_it, goto_functions)
-    remove_unreachable(f_it->second.body);
-
-  // remove skips
-  remove_skip(goto_functions);
+  // Remove unreachable code
+  remove_unreachable(goto_functions);
 
   // recalculate numbers, etc.
   goto_functions.update();
 
   // add loop ids
   goto_functions.compute_loop_numbers();
-  return goto_functions;
+  return program(ns, goto_functions);
 }

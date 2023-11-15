@@ -1,3 +1,4 @@
+#include "irep2/irep2_expr.h"
 #include <goto-symex/witnesses.h>
 #include <ac_config.h>
 #include <boost/property_tree/ptree.hpp>
@@ -582,8 +583,14 @@ void _create_graph_node(
   if(options.get_bool_option("overflow-check"))
     pDataSpecification.put_value("CHECK( init(main()), LTL(G ! overflow) )");
   else if(options.get_bool_option("memory-leak-check"))
-    pDataSpecification.put_value(
-      "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
+  {
+    if(options.get_bool_option("no-reachable-memory-leak"))
+      pDataSpecification.put_value(
+        "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
+    else
+      pDataSpecification.put_value(
+        "CHECK( init(main()), LTL(G valid-memcleanup) )");
+  }
   else
     pDataSpecification.put_value(
       "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )");
@@ -843,4 +850,132 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options)
     }
   }
   return invariant;
+}
+
+void generate_testcase_metadata()
+{
+  xmlnodet metadata;
+
+  metadata.put("test-metadata.sourcecodelang", "C");
+
+  std::string producer = config.options.get_option("witness-producer");
+  if(producer.empty())
+  {
+    producer = "ESBMC " + std::string(ESBMC_VERSION);
+    if(config.options.get_bool_option("k-induction"))
+      producer += " kind";
+    else if(config.options.get_bool_option("k-induction-parallel"))
+      producer += " kind";
+    else if(config.options.get_bool_option("falsification"))
+      producer += " falsi";
+    else if(config.options.get_bool_option("incremental-bmc"))
+      producer += " incr";
+  }
+
+  metadata.put("test-metadata.producer", producer);
+  metadata.put(
+    "test-metadata.specification",
+    "CHECK( LTL(G ! call(__VERIFIER_error())) )");
+  metadata.put(
+    "test-metadata.programfile", config.options.get_option("input-file"));
+  std::string programFileHash;
+  generate_sha1_hash_for_file(
+    config.options.get_option("input-file").c_str(), programFileHash);
+  metadata.put("test-metadata.programhash", programFileHash);
+  metadata.put("test-metadata.entryfunction", "main");
+  metadata.put(
+    "test-metadata.architecture",
+    std::to_string(config.ansi_c.word_size) + "bit");
+
+  // Conversion to string using the ISO 8601.
+  // Source: https://www.boost.org/doc/libs/1_49_0/doc/html/date_time/posix_time.html
+  boost::posix_time::ptime creation_time =
+    boost::posix_time::microsec_clock::universal_time();
+
+  std::string tmp = boost::posix_time::to_iso_extended_string(creation_time);
+  std::string new_creation_time = tmp.substr(0, tmp.find(".", 0));
+  metadata.put("test-metadata.creationtime", new_creation_time);
+
+  std::ofstream file("metadata.xml");
+  boost::property_tree::write_xml(file, metadata);
+}
+
+#include <util/prefix.h>
+#include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
+#include <goto-symex/slice.h>
+void generate_testcase(
+  const std::string &file_name,
+  const std::shared_ptr<symex_target_equationt> &target,
+  std::shared_ptr<smt_convt> &smt_conv)
+{
+  /*
+     * Unfortunately, TestCov rely on checking for '<!DOCTYPE test' and as Boost
+     * Property Tree is not a proper XML generator... it does not support this
+     */
+
+  std::ofstream test_case(file_name);
+  test_case << R"(<?xml version="1.0" encoding="UTF-8" standalone="no"?>)"
+            << "\n";
+  test_case
+    << R"(<!DOCTYPE testcase PUBLIC "+//IDN sosy-lab.org//DTD test-format testcase 1.1//EN" "https://sosy-lab.org/test-format/testcase-1.1.dtd">)"
+    << "\n";
+  test_case << R"(<testcase coversError="true">)"
+            << "\n";
+
+  // We should only show the symbol one time
+  std::unordered_set<std::string> nondet;
+
+  auto generate_input = [&test_case, &smt_conv, &nondet](const expr2tc &expr) {
+    if(!expr || !is_symbol2t(expr))
+      return;
+    const symbol2t &sym = to_symbol2t(expr);
+    if(
+      config.options.get_bool_option("generate-testcase") &&
+      has_prefix(sym.thename.as_string(), "nondet$") &&
+      !nondet.count(sym.thename.as_string()))
+    {
+      nondet.insert(sym.thename.as_string());
+      auto new_rhs = smt_conv->get(expr);
+
+      // I don't think there is anything beyond constant int Test-Comp
+      if(is_constant_int2t(new_rhs))
+        test_case << fmt::format(
+          "<input>{}</input>\n", to_constant_int2t(new_rhs).value);
+      else if(is_constant_floatbv2t(new_rhs))
+        test_case << fmt::format(
+          "<input>{}</input>\n",
+          to_constant_floatbv2t(new_rhs).value.to_ansi_c_string());
+      else if(is_constant_bool2t(new_rhs))
+        test_case << fmt::format(
+          "<input>{}</input>\n", to_constant_bool2t(new_rhs).value ? "1" : "0");
+
+      else
+      {
+        log_error(
+          "Could not convert the symbol into test "
+          "input");
+        new_rhs->dump();
+        abort();
+      }
+    }
+  };
+  for(auto const &SSA_step : target->SSA_steps)
+  {
+    if(!smt_conv->l_get(SSA_step.guard_ast).is_true())
+      continue;
+
+    if(SSA_step.is_assignment())
+    {
+      /*
+         * AFAIK there are two ways to arrive here with a nondet symbol
+         *
+         * 1. As a plain symbol `int a = __VERIFIER_nondet_int();`
+         * 2. As a with operation `arr[4] == __VERIFIER_nondet_int();`
+         */
+      SSA_step.dump();
+      generate_input(symex_slicet::get_nondet_symbol(SSA_step.rhs));
+    }
+  }
+  test_case << "</testcase>";
+  test_case.close();
 }

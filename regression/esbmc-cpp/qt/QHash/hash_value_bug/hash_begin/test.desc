@@ -4,7 +4,7 @@
   <item_02_id>esbmc-list</item_02_id>
   <item_03_summary>Aims to analyze the main function from module: esbmc-list</item_03_summary>
   <item_04_file_C_to_test>main.cpp </item_04_file_C_to_test>
-  <item_05_option_to_run_esbmc>--unwind 3 --no-unwinding-assertions -I ~/libraries/Qt/QtCore/ -I ~/libraries --timeout 15m</item_05_option_to_run_esbmc>
+  <item_05_option_to_run_esbmc>--unwind 3 --no-unwinding-assertions --timeout 15m</item_05_option_to_run_esbmc>
   <item_06_expected_result>^VERIFICATION SUCCESSFUL$</item_06_expected_result>
   <item_07_test_importance>High</item_07_test_importance>
   <item_08_execution_type>Automated</item_08_execution_type>

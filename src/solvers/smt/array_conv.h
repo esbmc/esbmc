@@ -73,7 +73,7 @@ public:
 
   void dump() const override
   {
-    log_debug("name: {}", symname);
+    log_status("name: {}", symname);
     for(auto const &e : array_fields)
       e->dump();
   }

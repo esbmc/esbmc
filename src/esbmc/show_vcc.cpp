@@ -1,6 +1,6 @@
 #include <esbmc/bmc.h>
 #include <fmt/format.h>
-#include <fstream>
+#include <iostream>
 
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
@@ -19,7 +19,7 @@ void bmct::show_vcc(
       it != eq->SSA_steps.end();
       it++)
   {
-    if(!it->is_assert())
+    if(!it->is_assert() || it->ignore)
       continue;
 
     if(it->source.pc->location.is_not_nil())
@@ -58,11 +58,8 @@ void bmct::show_vcc(std::shared_ptr<symex_target_equationt> &eq)
 
   if(filename.empty() || filename == "-")
   {
-    std::ostringstream oss;
-    show_vcc(oss, eq);
-    log_status("{}", oss.str());
+    show_vcc(std::cout, eq);
   }
-
   else
   {
     std::ofstream out(filename.c_str());

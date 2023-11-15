@@ -1,4 +1,4 @@
-#include <clang-c-frontend/expr2c.h>
+#include <util/c_expr2string.h>
 #include <unordered_set>
 #include <util/base_type.h>
 #include <util/c_link.h>
@@ -90,12 +90,12 @@ protected:
 
 std::string c_linkt::to_string(const exprt &expr)
 {
-  return expr2c(expr, ns);
+  return c_expr2string(expr, ns);
 }
 
 std::string c_linkt::to_string(const typet &type)
 {
-  return type2c(type, ns);
+  return c_type2string(type, ns);
 }
 
 void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)
@@ -169,7 +169,7 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
   if(is_code_in_context != is_code_new_symbol)
   {
     log_error(
-      "error: conflicting definition for symbol \"{}\"\n"
+      "conflicting definition for symbol \"{}\"\n"
       "old definition: {}\n"
       "Module: {}\n"
       "new definition: {}\n"
@@ -206,8 +206,8 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       {
         // keep the one in in_context -- libraries come last!
         log_warning(
-          "warning: function `{}' in module `{}' "
-          "is shadowed by a definition in module `{}'",
+          "function `{}' in module `{}' is shadowed by a definition in module "
+          "`{}'",
           in_context.name,
           new_symbol.module,
           in_context.module);
@@ -215,11 +215,12 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       else
       {
         log_error(
-          "error: duplicate definition of function `{}'\n"
+          "duplicate definition of function `{}'\n"
           "In module `{}' and module `{}'\n"
           "Location: {}",
           in_context.name,
           in_context.module,
+          new_symbol.module,
           new_symbol.value.location());
       }
     }
@@ -274,7 +275,7 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       else
       {
         log_error(
-          "error: conflicting definition for variable `{}'\n"
+          "conflicting definition for variable `{}'\n"
           "old definition: {}\n"
           "Module: {}\n"
           "new definition: {}\n"
@@ -300,7 +301,7 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       else if(!base_type_eq(in_context.value, new_symbol.value, ns))
       {
         log_error(
-          "error: conflicting initializers for variable `{}'\n"
+          "conflicting initializers for variable `{}'\n"
           "old value: {}\n"
           "Module: {}\n"
           "new value: {}\n"

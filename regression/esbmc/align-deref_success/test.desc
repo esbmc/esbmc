@@ -1,0 +1,4 @@
+CORE
+align.c
+--func f
+^VERIFICATION SUCCESSFUL$

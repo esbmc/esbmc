@@ -209,13 +209,14 @@ void goto_symex_statet::rename_type(expr2tc &expr)
   if(is_nil_expr(expr))
     return;
 
-  if(is_array_type(expr->type))
+  type2tc &type = expr->type;
+  if(is_array_type(type))
   {
-    expr2tc &arr_size = to_array_type(expr->type).array_size;
+    expr2tc &arr_size = to_array_type(type).array_size;
     if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       rename(arr_size);
 
-    expr->type->Foreach_subtype([this](type2tc &t) {
+    type->Foreach_subtype([this](type2tc &t) {
       if(!is_array_type(t))
         return;
 
@@ -224,6 +225,10 @@ void goto_symex_statet::rename_type(expr2tc &expr)
         rename(arr_size);
     });
   }
+
+  /* All subexpressions' types should also be renamed, this is in line with
+   * how goto_convert_functionst::rename_types() is defined */
+  expr->Foreach_operand([this](expr2tc &expr) { rename_type(expr); });
 }
 
 void goto_symex_statet::rename(expr2tc &expr)

@@ -75,7 +75,7 @@ void goto_symext::symex_decl(const expr2tc code)
   const irep_idt &identifier = decl_code.value;
 
   // Generate dummy symbol as a vehicle for renaming.
-  symbol2tc l1_sym(get_empty_type(), identifier);
+  expr2tc l1_sym = symbol2tc(get_empty_type(), identifier);
 
   // increase the frame if we have seen this declaration before
   statet::framet &frame = cur_state->top();
@@ -83,7 +83,7 @@ void goto_symext::symex_decl(const expr2tc code)
   {
     unsigned &index = cur_state->variable_instance_nums[identifier];
     frame.level1.rename(l1_sym, ++index);
-    l1_sym->level1_num = index;
+    to_symbol2t(l1_sym).level1_num = index;
   } while(frame.declaration_history.find(renaming::level2t::name_record(
             to_symbol2t(l1_sym))) != frame.declaration_history.end());
 
@@ -125,7 +125,7 @@ void goto_symext::symex_dead(const expr2tc code)
   const irep_idt &identifier = dead_code.value;
 
   // Generate dummy symbol as a vehicle for renaming.
-  symbol2tc l1_sym(dead_code.type, identifier);
+  expr2tc l1_sym = symbol2tc(dead_code.type, identifier);
 
   // Rename it to level 1
   cur_state->top().level1.get_ident_name(l1_sym);
@@ -135,7 +135,7 @@ void goto_symext::symex_dead(const expr2tc code)
     symex_free(code_free2tc(l1_sym));
 
   // Erase from level 1 propagation
-  cur_state->value_set.erase(l1_sym->get_symbol_name());
+  cur_state->value_set.erase(to_symbol2t(l1_sym).get_symbol_name());
 
   // Erase from local_variables map
   cur_state->top().local_variables.erase(

@@ -1,0 +1,5 @@
+CORE
+gh-1172-1.c
+
+^VERIFICATION FAILED$
+\bdivision by zero\b

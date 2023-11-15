@@ -31,7 +31,9 @@ namespace
 {
 void gen_typecast_to_union(exprt &dest, const typet &type)
 {
-  clang_c_convertert::gen_typecast_to_union(dest, type);
+  contextt ctx;
+  namespacet ns(ctx);
+  clang_c_convertert::gen_typecast_to_union(ns, dest, type);
 }
 } // namespace
 

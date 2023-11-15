@@ -84,7 +84,7 @@ public:
 
   virtual void dump() const
   {
-    log_debug("Chosen solver doesn't support printing the AST\n");
+    log_status("Chosen solver doesn't support printing the AST\n");
   }
 };
 

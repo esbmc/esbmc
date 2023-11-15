@@ -15,7 +15,7 @@ public:
   BigInt bias() const;
 
   ieee_float_spect(const floatbv_typet &type);
-  ieee_float_spect(const floatbv_type2tc &type);
+  ieee_float_spect(const floatbv_type2t &type);
 
   ieee_float_spect() : f(0), e(0)
   {
@@ -30,7 +30,8 @@ public:
     return f + e + 1;
   }
 
-  const floatbv_type2tc get_type() const;
+  /* that's a floatbv_type2t */
+  type2tc get_type() const;
 
   BigInt max_exponent() const;
   BigInt max_fraction() const;
@@ -198,7 +199,7 @@ public:
 
   bool is_finite() const
   {
-    return !(infinity_flag && NaN_flag);
+    return !infinity_flag && !NaN_flag;
   }
 
   bool is_normal() const;

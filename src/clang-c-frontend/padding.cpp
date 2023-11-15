@@ -106,7 +106,7 @@ static struct_typet::componentst::iterator pad_bit_field(
 
   std::string index = std::to_string(where - components.begin());
   struct_typet::componentt component(
-    "bit_field_pad$" + index, "anon_bit_field_pad$" + index, padding_type);
+    "anon_bit_field_pad$" + index, "anon_bit_field_pad$" + index, padding_type);
 
   component.type().set("#bitfield", true);
   component.set_is_padding(true);
@@ -139,17 +139,24 @@ static struct_typet::componentst::iterator pad(
 
   std::string index = std::to_string(where - components.begin());
   struct_typet::componentt component(
-    "pad$" + index, "anon_pad$" + index, padding_type);
+    "anon_pad$" + index, "anon_pad$" + index, padding_type);
 
   component.set_is_padding(true);
   return std::next(components.insert(where, component));
 }
 
-void add_padding(struct_typet &type, const namespacet &ns)
+static void add_padding(struct_typet &type, const namespacet &ns)
 {
+  /* components only exist for complete types */
+  assert(!type.incomplete());
+
   struct_typet::componentst &components = type.components();
 
-  // First make bit-fields appear on byte boundaries
+  // First let's pad all components
+  for(struct_typet::componentt &c : components)
+    add_padding(c.type(), ns);
+
+  // Next make bit-fields appear on byte boundaries
   {
     std::size_t bit_field_bits = 0;
 
@@ -253,6 +260,19 @@ void add_padding(struct_typet &type, const namespacet &ns)
       assert(bit_field_bits == 0);
       continue;
     }
+    else if(it->get_is_padding())
+    {
+      /* Can't pad padding "members", they're not officially members of C
+       * structures. If we're here, most likely this structure has already been
+       * padded.
+       *
+       * TODO: We should record this fact as a flag on the type, similar (but
+       *       not equivalent) to "packed". It's not equivalent because for
+       *       non-packed but padded structs we still have the alignment
+       *       guarantees for all the non-padding members.
+       */
+      a = 1;
+    }
     else
       a = alignment(it_type, ns);
 
@@ -298,7 +318,7 @@ void add_padding(struct_typet &type, const namespacet &ns)
     }
 
     type2tc thetype = migrate_type(it_type);
-    offset += type_byte_size(thetype);
+    offset += type_byte_size(thetype, &ns);
   }
 
   // any explicit alignment for the struct?
@@ -328,8 +348,11 @@ void add_padding(struct_typet &type, const namespacet &ns)
   }
 }
 
-void add_padding(union_typet &type, const namespacet &ns)
+static void add_padding(union_typet &type, const namespacet &ns)
 {
+  /* components only exist for complete types */
+  assert(!type.incomplete());
+
   BigInt max_alignment_bits = alignment(type, ns) * config.ansi_c.char_width;
   BigInt size_bits = 0;
 
@@ -337,7 +360,7 @@ void add_padding(union_typet &type, const namespacet &ns)
   for(const auto &c : type.components())
   {
     type2tc thetype = migrate_type(c.type());
-    size_bits = std::max(size_bits, type_byte_size_bits(thetype));
+    size_bits = std::max(size_bits, type_byte_size_bits(thetype, &ns));
   }
 
   // Is the union packed?
@@ -362,4 +385,16 @@ void add_padding(union_typet &type, const namespacet &ns)
 
     type.components().push_back(component);
   }
+}
+
+void add_padding(typet &type, const namespacet &ns)
+{
+  if(type.is_symbol())
+    return add_padding(const_cast<typet &>(ns.lookup(type)->type), ns);
+
+  /* Only structs and unions get padded, all other types are fine */
+  if(type.is_struct())
+    add_padding(to_struct_type(type), ns);
+  else if(type.is_union())
+    add_padding(to_union_type(type), ns);
 }

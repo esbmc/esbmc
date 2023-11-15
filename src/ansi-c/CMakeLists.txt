@@ -25,7 +25,7 @@ target_include_directories(ansicfrontend_stuff
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(ansicfrontend_stuff ansic_with_register fmt::fmt)
+target_link_libraries(ansicfrontend_stuff ansic_with_register esbmc_internal_cpp fmt::fmt)
 
 add_library(ansicfrontend INTERFACE)
 target_link_libraries(ansicfrontend INTERFACE ansicfrontend_stuff ansiccpp)

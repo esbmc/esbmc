@@ -47,8 +47,7 @@ std::string get_type_id(const type2t &type)
   return std::string(type_names[type.type_id]);
 }
 
-type2t::type2t(type_ids id)
-  : std::enable_shared_from_this<type2t>(), type_id(id), crc_val(0)
+type2t::type2t(type_ids id) : type_id(id), crc_val(0)
 {
 }
 
@@ -175,7 +174,8 @@ unsigned int vector_type2t::get_width() const
 
 unsigned int pointer_type2t::get_width() const
 {
-  return config.ansi_c.pointer_width;
+  /* CHERI-TODO: take into account whether we can-carry-provenance. */
+  return config.ansi_c.pointer_width();
 }
 
 unsigned int empty_type2t::get_width() const
@@ -185,14 +185,12 @@ unsigned int empty_type2t::get_width() const
 
 unsigned int symbol_type2t::get_width() const
 {
-  assert(0 && "Fetching width of symbol type - invalid operation");
-  abort();
+  throw symbolic_type_excp();
 }
 
 unsigned int cpp_name_type2t::get_width() const
 {
-  assert(0 && "Fetching width of cpp_name type - invalid operation");
-  abort();
+  throw symbolic_type_excp();
 }
 
 unsigned int struct_type2t::get_width() const

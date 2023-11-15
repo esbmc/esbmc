@@ -1,7 +1,7 @@
 #include <cassert>
 #include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/cprover_prefix.h>
@@ -16,7 +16,7 @@
 static bool is_empty(const goto_programt &goto_program)
 {
   forall_goto_program_instructions(it, goto_program)
-    if(!is_skip(goto_program, it))
+    if(!is_no_op(goto_program, it))
       return false;
 
   return true;
@@ -189,6 +189,7 @@ void goto_convertt::convert_switch_case(
   convert(code.code(), tmp);
 
   goto_programt::targett target = tmp.instructions.begin();
+  target->location = code.code().location();
   dest.destructive_append(tmp);
 
   // default?
@@ -286,6 +287,7 @@ void goto_convertt::convert(const codet &code, goto_programt &dest)
   {
     dest.add_instruction(SKIP);
     dest.instructions.back().code = expr2tc();
+    dest.instructions.back().location = code.location();
   }
 }
 
@@ -294,9 +296,10 @@ void goto_convertt::convert_throw_decl_end(
   goto_programt &dest)
 {
   // add the THROW_DECL_END instruction to 'dest'
+  std::vector<irep_idt> exc; /* TODO: should this really be empty? */
   goto_programt::targett throw_decl_end_instruction = dest.add_instruction();
   throw_decl_end_instruction->make_throw_decl_end();
-  throw_decl_end_instruction->code = code_cpp_throw_decl_end2tc();
+  throw_decl_end_instruction->code = code_cpp_throw_decl_end2tc(exc);
   throw_decl_end_instruction->location = expr.location();
 }
 
@@ -306,6 +309,7 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   goto_programt::targett throw_decl_instruction = dest.add_instruction();
   codet c("code");
   c.set_statement("throw-decl");
+  c.location() = expr.location();
 
   // the THROW_DECL instruction is annotated with a list of IDs,
   // one per target
@@ -457,7 +461,7 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
   }
   else
   {
-    remove_sideeffects(expr, dest, false); // result not used
+    remove_sideeffects(expr, dest, false);
 
     if(expr.is_not_nil())
     {
@@ -487,14 +491,20 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
   // We have to replace the symbol by a temporary, because it might
   // change its value in the future
   // Don't create a symbol for temporary symbols
-  if(size.identifier().as_string().find("tmp$") == std::string::npos)
+  if(size.identifier().as_string().find("__ESBMC_tmp_") == std::string::npos)
   {
     // Old size symbol
     exprt old_size = size;
 
     // Replace the size by a new variable, to avoid wrong results
     // when the symbol used to create the VLA is changed
-    size = symbol_expr(new_tmp_symbol(size.type()));
+    symbolt size_sym = new_tmp_symbol(size.type());
+    size = symbol_expr(size_sym);
+
+    // declare this symbol first
+    code_declt decl(symbol_expr(size_sym));
+    decl.location() = old_size.location();
+    convert_decl(decl, dest);
 
     codet assignment("assign");
     assignment.reserve_operands(2);
@@ -534,8 +544,42 @@ void goto_convertt::generate_dynamic_size_vla(
 {
   assert(var.type().is_array());
 
+  bool disable_check = options.get_bool_option("no-vla-size-check");
+  /* these constraints are pointless with --ir as they'll be thrown away during
+   * smt-conv anyway, but let's keep the "int-encoding" option for the backends
+   * only */
+  auto assert_not = [&](irep_idt op_id, const exprt &e) {
+    if(disable_check)
+      return;
+
+    exprt ovfl(op_id, bool_type());
+    ovfl.operands() = e.operands();
+
+    expr2tc ovfl2;
+    migrate_expr(ovfl, ovfl2);
+
+    if(is_overflow_cast2t(ovfl2))
+    {
+      const overflow_cast2t &oc = to_overflow_cast2t(ovfl2);
+
+      /* smt_conv doesn't like contradictory overflow_cast2t expressions */
+      if(oc.bits >= oc.operand->type->get_width())
+        return;
+    }
+
+    goto_programt::targett ovfl_tgt = dest.add_instruction(ASSERT);
+    ovfl_tgt->guard = not2tc(ovfl2);
+    ovfl_tgt->location = loc;
+    ovfl_tgt->location.comment(
+      "VLA array size in bytes overflows address space size");
+  };
+
   array_typet arr_type = to_array_type(var.type());
-  exprt size = to_array_type(var.type()).size();
+  exprt size = typecast_exprt(to_array_type(var.type()).size(), size_type());
+
+  irep_idt ovfl_cast_id =
+    "overflow-typecast-" + size.type().width().as_string();
+  assert_not(ovfl_cast_id, size);
 
   // First, if it's a multidimensional vla, the size will be the
   // multiplication of the dimensions
@@ -543,8 +587,13 @@ void goto_convertt::generate_dynamic_size_vla(
   {
     array_typet arr_subtype = to_array_type(arr_type.subtype());
 
+    exprt cast = typecast_exprt(arr_subtype.size(), size.type());
+    assert_not(ovfl_cast_id, cast);
+
     exprt mult(exprt::mult, size.type());
-    mult.copy_to_operands(size, arr_subtype.size());
+    mult.copy_to_operands(size, cast);
+    assert_not("overflow-*", mult);
+
     size.swap(mult);
 
     arr_type = arr_subtype;
@@ -560,15 +609,18 @@ void goto_convertt::generate_dynamic_size_vla(
   exprt st_size_expr = from_integer(st_size, size.type());
   exprt mult(exprt::mult, size.type());
   mult.copy_to_operands(size, st_size_expr);
+  assert_not("overflow-*", mult);
+  expr2tc mult2;
+  migrate_expr(mult, mult2);
 
   // Set the array to have a dynamic size
   address_of_exprt addrof(var);
-  exprt dynamic_size("dynamic_size", uint_type());
-  dynamic_size.copy_to_operands(addrof);
+  expr2tc addrof2;
+  migrate_expr(addrof, addrof2);
+  expr2tc dynamic_size = dynamic_size2tc(addrof2);
 
   goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
-  exprt assign = code_assignt(dynamic_size, typecast_exprt(mult, uint_type()));
-  migrate_expr(assign, t_s_s->code);
+  t_s_s->code = code_assign2tc(dynamic_size, mult2);
   t_s_s->location = loc;
 }
 
@@ -865,6 +917,12 @@ void goto_convertt::break_globals2assignments_rec(
       // make new assignment to temp for each global symbol
       symbolt &new_symbol = new_tmp_symbol(rhs.type());
       new_symbol.static_lifetime = true;
+
+      // declare this symbol first
+      code_declt decl(symbol_expr(new_symbol));
+      decl.location() = location;
+      convert_decl(decl, dest);
+
       equality_exprt eq_expr;
       irept irep;
       new_symbol.to_irep(irep);
@@ -894,6 +952,12 @@ void goto_convertt::break_globals2assignments_rec(
       // make new assignment to temp for each global symbol
       symbolt &new_symbol = new_tmp_symbol(rhs.type());
       new_symbol.static_lifetime = true;
+
+      // declare this symbol first
+      code_declt decl(symbol_expr(new_symbol));
+      decl.location() = location;
+      convert_decl(decl, dest);
+
       equality_exprt eq_expr;
       irept irep;
       new_symbol.to_irep(irep);
@@ -1213,7 +1277,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   migrate_expr(cond, tmp_cond);
   tmp_cond = not2tc(tmp_cond);
   v->guard = tmp_cond;
-  v->location = cond.location();
+  v->location = code.location();
 
   // do the w label
   goto_programt tmp_w;
@@ -1263,13 +1327,14 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
-  z->location = location;
+  z->location = code.location();
 
   goto_programt tmp_branch;
   generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
 
   // do the v label
   goto_programt::targett v = tmp_branch.instructions.begin();
+  v->location = code.location();
 
   // do the y label
   goto_programt tmp_y;
@@ -1538,15 +1603,12 @@ void goto_convertt::convert_return(
     migrate_expr(new_code, t->code);
     t->location = new_code.location();
   }
-  else
+  else if(
+    new_code.has_return_value() &&
+    new_code.return_value().type().id() != "empty")
   {
-    if(
-      new_code.has_return_value() &&
-      new_code.return_value().type().id() != "empty")
-    {
-      log_error("function must not return value");
-      abort();
-    }
+    log_warning("function should not return value");
+    code.location().dump();
   }
 
   // add goto to end-of-function
@@ -1628,6 +1690,7 @@ void goto_convertt::generate_ifthenelse(
     goto_programt tmp_z;
     goto_programt::targett z = tmp_z.add_instruction();
     z->make_skip();
+    z->location = location;
     goto_programt::targett v = dest.add_instruction();
     expr2tc g;
     migrate_expr(guard, g);
@@ -1654,7 +1717,7 @@ void goto_convertt::generate_ifthenelse(
     if(
       is_empty(false_case) ||
       (false_case.instructions.size() == 1 &&
-       is_skip(false_case, false_case.instructions.begin())))
+       is_no_op(false_case, false_case.instructions.begin())))
       return;
   }
 
@@ -1675,7 +1738,7 @@ void goto_convertt::generate_ifthenelse(
     if(
       is_empty(true_case) ||
       (true_case.instructions.size() == 1 &&
-       is_skip(true_case, true_case.instructions.begin())))
+       is_no_op(true_case, true_case.instructions.begin())))
       return;
   }
 
@@ -1721,11 +1784,13 @@ void goto_convertt::generate_ifthenelse(
   // do the x label
   goto_programt tmp_x;
   goto_programt::targett x = tmp_x.add_instruction();
+  x->location = location;
 
   // do the z label
   goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
+  z->location = location;
 
   // y: Q;
   goto_programt tmp_y;
@@ -1734,6 +1799,7 @@ void goto_convertt::generate_ifthenelse(
   {
     tmp_y.swap(false_case);
     y = tmp_y.instructions.begin();
+    y->location = location;
   }
 
   // v: if(!c) goto z/y;
@@ -1857,6 +1923,7 @@ void goto_convertt::generate_conditional_branch(
   goto_programt tmp;
   goto_programt::targett target_false = tmp.add_instruction();
   target_false->make_skip();
+  target_false->location = location;
 
   generate_conditional_branch(guard, target_true, target_false, location, dest);
 
@@ -1942,7 +2009,7 @@ void goto_convertt::generate_conditional_branch(
     goto_programt::targett t_false = dest.add_instruction();
     t_false->make_goto(target_false);
     t_false->guard = gen_true_expr();
-    t_false->location = guard.location();
+    t_false->location = location;
 
     return;
   }
@@ -1960,12 +2027,12 @@ void goto_convertt::generate_conditional_branch(
   goto_programt::targett t_true = dest.add_instruction();
   t_true->make_goto(target_true);
   migrate_expr(cond, t_true->guard);
-  t_true->location = guard.location();
+  t_true->location = location;
 
   goto_programt::targett t_false = dest.add_instruction();
   t_false->make_goto(target_false);
   t_false->guard = gen_true_expr();
-  t_false->location = guard.location();
+  t_false->location = location;
 }
 
 symbolt &goto_convertt::new_tmp_symbol(const typet &type)

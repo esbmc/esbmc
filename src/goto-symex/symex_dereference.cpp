@@ -87,14 +87,14 @@ void symex_dereference_statet::get_value_set(
         if(is_null_object2t(obj.object))
         {
           // create NULL pointer type in case the object is a NULL-object
-          type2tc nullptrtype = type2tc(new pointer_type2t(expr->type));
+          type2tc nullptrtype = pointer_type2tc(expr->type);
           obj_ptr = symbol2tc(nullptrtype, "NULL");
         }
         else
           obj_ptr = add2tc(
             expr->type, address_of2tc(expr->type, obj.object), obj.offset);
 
-        same_object2tc eq = same_object2tc(expr, obj_ptr);
+        expr2tc eq = same_object2tc(expr, obj_ptr);
 
         // note that the pointer could point to any of the accumulated objects.
         // However, if we have just one element, our or_accuml should store just that single element.

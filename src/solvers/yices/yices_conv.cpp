@@ -64,7 +64,7 @@ void yices_convt::push_ctx()
 
   if(res != 0)
   {
-    yices_print_error(messaget::state.err);
+    yices_print_error(messaget::state.out);
     log_error("Error pushing yices context");
     abort();
   }
@@ -76,7 +76,7 @@ void yices_convt::pop_ctx()
 
   if(res != 0)
   {
-    yices_print_error(messaget::state.err);
+    yices_print_error(messaget::state.out);
     log_error("Error poping yices context");
     abort();
   }
@@ -681,7 +681,18 @@ smt_astt yices_convt::mk_smt_real(const std::string &str)
 smt_astt yices_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
-  term_t term = yices_bvconst_uint64(w, theint.to_int64());
+  term_t term;
+
+  if(theint.is_int64())
+    term = yices_bvconst_int64(w, theint.to_int64());
+  else if(theint.is_uint64())
+    term = yices_bvconst_uint64(w, theint.to_uint64());
+  else
+  {
+    std::string bits = integer2binary(theint, w);
+    term = yices_parse_bvbin(bits.c_str());
+  }
+
   return new_ast(term, s);
 }
 
@@ -839,6 +850,14 @@ expr2tc yices_convt::get_array_elem(
   smt_sortt subsort = convert_sort(subtype);
   smt_astt container = new_ast(app, subsort);
   return get_by_ast(subtype, container);
+}
+
+expr2tc yices_convt::tuple_get_array_elem(
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
+{
+  return get_array_elem(array, index, get_flattened_array_subtype(subtype));
 }
 
 void yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
@@ -1042,11 +1061,11 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
   }
 
   // Otherwise, run through all fields and despatch to 'get_by_ast' again.
-  constant_struct2tc outstruct(type, std::vector<expr2tc>());
+  std::vector<expr2tc> outmem;
   unsigned int i = 0;
   for(auto const &it : strct.members)
   {
-    outstruct->datatype_members.push_back(smt_convt::get_by_ast(
+    outmem.push_back(smt_convt::get_by_ast(
       it,
       new_ast(
         yices_select(1 + i, to_solver_smt_ast<yices_smt_ast>(sym)->a),
@@ -1054,7 +1073,7 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
     i++;
   }
 
-  return outstruct;
+  return constant_struct2tc(type, std::move(outmem));
 }
 
 expr2tc yices_convt::tuple_get(const expr2tc &expr)
@@ -1085,16 +1104,16 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
   }
 
   // Otherwise, run through all fields and despatch to 'get' again.
-  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
+  std::vector<expr2tc> outmem;
   unsigned int i = 0;
   for(auto const &it : strct.members)
   {
-    member2tc memb(it, expr, strct.member_names[i]);
-    outstruct->datatype_members.push_back(get(memb));
+    expr2tc memb = member2tc(it, expr, strct.member_names[i]);
+    outmem.push_back(get(memb));
     i++;
   }
 
-  return outstruct;
+  return constant_struct2tc(expr->type, std::move(outmem));
 }
 
 void yices_convt::print_model()

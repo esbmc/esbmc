@@ -711,15 +711,6 @@ public:
   /** Given an array index, extract the lower n bits of it, where n is the
    *  bitwidth of the array domain. */
   expr2tc fix_array_idx(const expr2tc &idx, const type2tc &array_type);
-  /** Convert the size of an array to its bit width. Essential log2 with
-   *  some rounding. */
-  unsigned long size_to_bit_width(unsigned long sz);
-  /** Given an array type, calculate the domain bitwidth it should have. For
-   *  nondeterministically or infinite sized arrays, this defaults to the
-   *  machine integer width. */
-  unsigned long calculate_array_domain_width(const array_type2t &arr);
-  /** Given an array type, create a type2tc representing its domain. */
-  type2tc make_array_domain_type(const array_type2t &arr);
   /** For a multi-dimensional array, convert the type into a single dimension
    *  array. This works by concatenating the domain widths together into one
    *  large domain. */
@@ -760,6 +751,7 @@ public:
   // Ours:
   /** Given an array expression, attempt to extract its valuation from the
    *  solver model, computing a constant_array2tc by calling get_array_elem. */
+  expr2tc get_array(const type2tc &type, smt_astt array);
   expr2tc get_array(const expr2tc &expr);
 
   void delete_all_asts();
@@ -803,7 +795,7 @@ public:
   std::list<pointer_logict> pointer_logic;
   /** Constant struct representing the implementation of the pointer type --
    *  i.e., the struct type that pointers get translated to. */
-  struct_type2tc pointer_struct;
+  type2tc pointer_struct;
   /** The type of the machine integer that can store a pointer. */
   type2tc machine_ptr;
   /** Sort for booleans. For fast access. */
@@ -835,13 +827,17 @@ public:
   std::list<unsigned int> addr_space_sym_num;
   /** Type of the address space allocation records. Currently a start address
    *  integer and an end address integer. */
-  struct_type2tc addr_space_type;
+  type2tc addr_space_type;
   /** Type of the array of address space allocation records. */
-  array_type2tc addr_space_arr_type;
+  type2tc addr_space_arr_type;
   /** List of address space allocation sizes. A map from the object number to
    *  the nubmer of bytes allocated. In a list to support pushing and
    *  popping. */
   std::list<std::map<unsigned, unsigned>> addr_space_data;
+
+  /** Holds the `__ESBMC_alloc` symbol convert_terminal() was last invoked with.
+   */
+  expr2tc current_valid_objects_sym;
 
   // XXX - push-pop will break here.
   typedef std::map<std::string, smt_astt> renumber_mapt;
@@ -864,11 +860,26 @@ public:
   smt_astt int_shift_op_array;
 };
 
+/** Given an array type, create a type2tc representing its domain. */
+type2tc make_array_domain_type(const array_type2t &arr);
+
+/** Given an array type, calculate the domain bitwidth it should have. For
+ *  nondeterministically or infinite sized arrays, this defaults to the
+ *  machine integer width. */
+unsigned long calculate_array_domain_width(const array_type2t &arr);
+
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)
 {
   assert(sort != nullptr);
   ctx->live_asts.push_back(this);
+}
+
+inline BigInt ones(unsigned n_bits)
+{
+  BigInt r;
+  r.setPower2(n_bits);
+  return r -= 1;
 }
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */

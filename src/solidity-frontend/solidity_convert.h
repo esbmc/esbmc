@@ -58,8 +58,11 @@ protected:
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node);
   bool get_function_params(const nlohmann::json &pd, exprt &param);
+  bool get_default_function(const std::string name, const std::string id);
   bool get_struct_class(const nlohmann::json &ast_node);
+  void add_enum_member_val(nlohmann::json &ast_node);
   bool add_implicit_constructor();
+  bool get_implicit_ctor_call(const int ref_decl_id, exprt &new_expr);
   bool
   get_struct_class_fields(const nlohmann::json &ast_node, struct_typet &type);
   bool
@@ -78,13 +81,20 @@ protected:
     const nlohmann::json &expr_common_type,
     exprt &new_expr);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
+  bool get_compound_assign_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_unary_operator_expr(
     const nlohmann::json &expr,
-    const nlohmann::json &int_literal_type,
+    const nlohmann::json &literal_type,
     exprt &new_expr);
-  bool get_cast_expr(const nlohmann::json &cast_expr, exprt &new_expr);
+  bool
+  get_conditional_operator_expr(const nlohmann::json &expr, exprt &new_expr);
+  bool get_cast_expr(
+    const nlohmann::json &cast_expr,
+    exprt &new_expr,
+    const nlohmann::json literal_type = nullptr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
+  bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
   bool get_func_decl_ref_type(const nlohmann::json &decl, typet &new_type);
@@ -105,8 +115,9 @@ protected:
     std::string &name,
     std::string &id);
   bool get_constructor_call(const nlohmann::json &ast_node, exprt &new_expr);
-  bool
-  get_contract_name(const nlohmann::json &ast_node, std::string &contract_name);
+  bool get_contract_name(const int ref_decl_id, std::string &contract_name);
+  bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
+
   // line number and locations
   void
   get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
@@ -122,6 +133,7 @@ protected:
   std::string get_src_from_json(const nlohmann::json &ast_node);
 
   symbolt *move_symbol_to_context(symbolt &symbol);
+  bool move_functions_to_main(const std::string &contractName);
 
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
@@ -133,8 +145,8 @@ protected:
   nlohmann::json make_implicit_cast_expr(
     const nlohmann::json &sub_expr,
     std::string cast_type);
+  nlohmann::json make_return_type_from_typet(typet type);
   nlohmann::json make_pointee_type(const nlohmann::json &sub_expr);
-  nlohmann::json make_callexpr_return_type(const nlohmann::json &type_descrpt);
   nlohmann::json make_array_elementary_type(const nlohmann::json &type_descrpt);
   nlohmann::json make_array_to_pointer_type(const nlohmann::json &type_descrpt);
   std::string get_array_size(const nlohmann::json &type_descrpt);
@@ -151,6 +163,8 @@ protected:
     std::string id,
     locationt location);
 
+  std::string get_ctor_call_id(const std::string &contract_name);
+
   // literal conversion functions
   bool convert_integer_literal(
     const nlohmann::json &integer_literal,
@@ -161,17 +175,28 @@ protected:
     std::string the_value,
     exprt &dest);
   bool convert_string_literal(std::string the_value, exprt &dest);
+  void convert_type_expr(const namespacet &ns, exprt &dest, const typet &type);
+  bool convert_hex_literal(std::string the_value, exprt &dest, const int n = 0);
 
   static constexpr const char *mode = "C++";
 
   // The prefix for the id of each class
   std::string prefix = "tag-";
 
+  // json nodes that always empty
+  // used as the return value for find_constructor_ref when
+  // dealing with the implicit constructor call
+  // this is to avoid reference to stack memory associated with local variable returned
+  const nlohmann::json empty_json;
+
 private:
   bool get_elementary_type_name_uint(
     SolidityGrammar::ElementaryTypeNameT &type,
     typet &out);
   bool get_elementary_type_name_int(
+    SolidityGrammar::ElementaryTypeNameT &type,
+    typet &out);
+  bool get_elementary_type_name_bytesn(
     SolidityGrammar::ElementaryTypeNameT &type,
     typet &out);
 };

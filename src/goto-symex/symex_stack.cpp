@@ -3,7 +3,7 @@
 #include <util/expr_util.h>
 #include <irep2/irep2.h>
 
-lessthanequal2tc goto_symex_statet::framet::process_stack_size(
+expr2tc goto_symex_statet::framet::process_stack_size(
   const expr2tc &expr,
   unsigned long stack_limit)
 {
@@ -13,8 +13,8 @@ lessthanequal2tc goto_symex_statet::framet::process_stack_size(
   // Create two constants to define stack frame size and stack limit.
   BigInt f_size(stack_frame_total);
   BigInt s_size(stack_limit);
-  constant_int2tc function_irep2(get_uint64_type(), f_size);
-  constant_int2tc limit_irep2(get_uint64_type(), s_size);
+  expr2tc function_irep2 = constant_int2tc(get_uint64_type(), f_size);
+  expr2tc limit_irep2 = constant_int2tc(get_uint64_type(), s_size);
 
   // Ensure that the stack frame size is smaller than the stack limit.
   return lessthanequal2tc(function_irep2, limit_irep2);

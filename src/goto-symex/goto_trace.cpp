@@ -21,7 +21,7 @@ void goto_trace_stept::dump() const
 {
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
-  log_debug("{}", oss.str());
+  log_debug("goto-trace", "{}", oss.str());
 }
 
 void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
@@ -246,7 +246,7 @@ void violation_graphml_goto_trace(
   grapht graph(grapht::VIOLATION);
   graph.verified_file = options.get_option("input-file");
 
-  log_status("Generating Violation Witness for: {}", graph.verified_file);
+  log_progress("Generating Violation Witness for: {}", graph.verified_file);
 
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
@@ -283,7 +283,8 @@ void violation_graphml_goto_trace(
     case goto_trace_stept::ASSIGNMENT:
       if(
         step.pc->is_assign() || step.pc->is_return() ||
-        (step.pc->is_other() && is_nil_expr(step.lhs)))
+        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+        step.pc->is_function_call())
       {
         std::string assignment = get_formated_assignment(ns, step);
 
@@ -319,7 +320,7 @@ void correctness_graphml_goto_trace(
 {
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = options.get_option("input-file");
-  log_status("Generating Correctness Witness for: {}", graph.verified_file);
+  log_progress("Generating Correctness Witness for: {}", graph.verified_file);
 
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
@@ -379,6 +380,25 @@ void show_goto_trace(
             << "\n";
         if(!step.pc->location.is_nil())
           out << "  " << step.pc->location << "\n";
+        if(config.options.get_bool_option("show-stacktrace"))
+        {
+          // Print stack trace
+          out << "Stack trace:" << std::endl;
+          for(const auto &it : step.stack_trace)
+          {
+            if(it.src == nullptr)
+              out << "  " << it.function.as_string() << std::endl;
+            else
+            {
+              out << "  " << it.function.as_string();
+              if(it.src->pc->location.is_not_nil())
+                out << " at " << it.src->pc->location << std::endl;
+              else
+                out << std::endl;
+            }
+          }
+        }
+
         out << "  " << step.comment << "\n";
 
         if(step.pc->is_assert())
@@ -392,7 +412,8 @@ void show_goto_trace(
     case goto_trace_stept::ASSIGNMENT:
       if(
         step.pc->is_assign() || step.pc->is_return() ||
-        (step.pc->is_other() && is_nil_expr(step.lhs)))
+        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+        step.pc->is_function_call())
       {
         if(prev_step_nr != step.step_nr || first_step)
         {

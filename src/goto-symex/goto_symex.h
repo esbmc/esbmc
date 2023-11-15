@@ -104,9 +104,9 @@ public:
    *  These guards are symbolic names for the truth of a guard on a GOTO jump.
    *  Assertions and other activity during the course of symbolic execution
    *  encode these execution guard in them.
-   *  @return Symbol of the guard
+   *  @return Symbol expression naming the guard
    */
-  symbol2tc guard_identifier()
+  expr2tc guard_identifier()
   {
     return symbol2tc(
       get_bool_type(),
@@ -437,7 +437,15 @@ protected:
     reachability_treet &art);
   /** Terminate the monitor thread */
   void intrinsic_kill_monitor(reachability_treet &art);
-  /** Memset optimiser */
+  /**
+   * @brief Intrinsic call for C memset function call
+   * 
+   * This will either invoke our operational model (at string.c)
+   * or try to compute the resulting value directly
+   * 
+   * @param art 
+   * @param func_call memset function call
+   */
   void intrinsic_memset(
     reachability_treet &art,
     const code_function_call2t &func_call);
@@ -448,6 +456,9 @@ protected:
   void intrinsic_get_object_size(
     const code_function_call2t &func_call,
     reachability_treet &art);
+
+  /* Handles dereferencing between threads and is used only in data race checks. **/
+  void intrinsic_races_check_dereference(expr2tc &expr);
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
@@ -742,9 +753,9 @@ protected:
   /** Symbolic implementation of c++'s new. */
   void symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code);
   /** Symbolic implementation of printf */
-  void symex_printf(const expr2tc &lhs, const expr2tc &code);
-  /** Symbolic implementation of fscanf */
-  void symex_fscanf(const expr2tc &lhs, const std::vector<expr2tc> &operands);
+  void symex_printf(const expr2tc &lhs, expr2tc &code);
+  /** Symbolic implementation of scanf and fscanf */
+  void symex_input(const code_function_call2t &expr);
   /** Symbolic implementation of va_arg */
   void symex_va_arg(const expr2tc &lhs, const sideeffect2t &code);
 
@@ -826,9 +837,9 @@ protected:
 
   /** Map of currently active exception targets, i.e. instructions where an
    *  exception is going to be merged in in the future. Keys are iterators to
-   *  the instruction catching the object; domain is a symbol that the thrown
-   *  piece of data has been assigned to. */
-  std::map<goto_programt::const_targett, symbol2tc> thrown_obj_map;
+   *  the instruction catching the object; values are the symbols that the
+   *  thrown piece of data has been assigned to. */
+  std::map<goto_programt::const_targett, expr2tc> thrown_obj_map;
 
   /** Flag to indicate if we are go into the unexpected flow. */
   bool inside_unexpected;
@@ -846,6 +857,10 @@ protected:
   /** Flag as to whether we're performing memory leak checks. Corresponds to
    *  the option --memory-leak-check */
   bool memory_leak_check;
+  /** Flag as to whether we're pruning the objects from the memory leak check
+   *  that are still reachable via global pointers. Corresponds to the option
+   *  --no-reachable-memory-leak */
+  bool no_reachable_memleak;
   /** Flag as to whether we're checking user assertions. Corresponds to
    *  the option --no-assertions */
   bool no_assertions;

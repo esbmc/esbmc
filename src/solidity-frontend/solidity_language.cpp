@@ -12,7 +12,6 @@ CC_DIAGNOSTIC_POP()
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <c2goto/cprover_library.h>
-#include <clang-c-frontend/expr2c.h>
 #include <util/c_link.h>
 
 languaget *new_solidity_language()
@@ -136,7 +135,8 @@ void solidity_languaget::show_parse(std::ostream &)
 bool solidity_languaget::final(contextt &context)
 {
   add_cprover_library(context);
-  return clang_main(context);
+  clang_c_maint c_main(context);
+  return c_main.clang_main();
 }
 
 std::string solidity_languaget::temp_c_file()

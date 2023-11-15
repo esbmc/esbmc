@@ -267,7 +267,7 @@ void jimple_expr_invoke::from_json(const json &j)
   // TODO: Move intrinsics to backend
   if(base_class == "java.lang.Integer" && method == "valueOf_1")
   {
-    log_debug("Got an intrinsic call to valueOf int");
+    log_debug("jimple", "Got an intrinsic call to valueOf int");
     is_intrinsic_method = true;
   }
 }

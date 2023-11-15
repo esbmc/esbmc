@@ -1,0 +1,4 @@
+CORE
+fixedbv.c
+--fixedbv
+^VERIFICATION SUCCESSFUL$

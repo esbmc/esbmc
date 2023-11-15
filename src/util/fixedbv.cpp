@@ -8,13 +8,13 @@ fixedbv_spect::fixedbv_spect(const fixedbv_typet &type)
   width = type.get_width();
 }
 
-fixedbv_spect::fixedbv_spect(const fixedbv_type2tc &type)
+fixedbv_spect::fixedbv_spect(const fixedbv_type2t &type)
 {
-  integer_bits = type->integer_bits;
-  width = type->get_width();
+  integer_bits = type.integer_bits;
+  width = type.get_width();
 }
 
-const fixedbv_type2tc fixedbv_spect::get_type() const
+type2tc fixedbv_spect::get_type() const
 {
   return fixedbv_type2tc(width, integer_bits);
 }
@@ -137,6 +137,19 @@ fixedbvt &fixedbvt::operator/=(const fixedbvt &o)
   v *= power(2, o.spec.get_fraction_bits());
   v /= o.v;
 
+  return *this;
+}
+
+fixedbvt &fixedbvt::operator%=(const fixedbvt &y)
+{
+  fixedbvt z = *this;
+  z /= y;
+  z.from_integer(z.to_integer());
+  z *= y;
+  // ensure z has the same sign as *this
+  if(v.is_negative() != z.v.is_negative())
+    z.v.negate();
+  *this -= z;
   return *this;
 }
 

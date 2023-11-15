@@ -3,6 +3,7 @@
 #include <util/c_types.h>
 #include <irep2/irep2_utils.h>
 #include <util/format_constant.h>
+#include <util/type_byte_size.h>
 
 const expr2tc
 printf_formattert::make_type(const expr2tc &src, const type2tc &dest)
@@ -10,7 +11,7 @@ printf_formattert::make_type(const expr2tc &src, const type2tc &dest)
   if(src->type == dest)
     return src;
 
-  typecast2tc tmp(dest, src);
+  expr2tc tmp = typecast2tc(dest, src);
   simplify(tmp);
   return tmp;
 }
@@ -120,10 +121,15 @@ void printf_formattert::process_format(std::ostream &out)
     if(next_operand == operands.end())
       break;
 
-    // this is the address of a string
+    // 1. address_of2t -> constant_string2t
+    // 2. address_of2t -> index2taddress_of2t -> constant_string2t
     const expr2tc &op = *(next_operand++);
-    if(is_address_of2t(op) && is_string_type(to_address_of2t(op).ptr_obj))
-      out << format_constant(to_address_of2t(op).ptr_obj);
+    const expr2tc symbol2 = get_base_object(op);
+    exprt char_array = migrate_expr_back(symbol2);
+
+    // string
+    if(char_array.id() == "string-constant")
+      out << char_array.value().as_string();
   }
   break;
 

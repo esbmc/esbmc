@@ -9,7 +9,7 @@ void jimple_languaget::show_parse(std::ostream &out)
 
 bool jimple_languaget::parse(const std::string &path)
 {
-  log_debug("Parsing: {}", path);
+  log_debug("jimple", "Parsing: {}", path);
   try
   {
     root.load_file(path);

@@ -37,8 +37,18 @@ bool clang_c_convertert::convert_string_literal(
   if(get_type(string_literal.getType(), type))
     return true;
 
-  string_constantt string(string_literal.getBytes().str(), type);
-  dest.swap(string);
+  // When strings are just used for initialization, it might be worth
+  // to just replace them by null. See https://github.com/esbmc/esbmc/pull/1185#issuecomment-1631166527
+  if(config.options.get_bool_option("no-string-literal"))
+  {
+    auto value = gen_zero(type);
+    dest.swap(value);
+  }
+  else
+  {
+    string_constantt string(string_literal.getBytes().str(), type);
+    dest.swap(string);
+  }
 
   return false;
 }

@@ -166,7 +166,7 @@ public:
      *  can point at, and that need to have calls set up to and executed. This
      *  member contains an iterator to the first goto instruction in the target
      *  and the target symbol name. */
-    std::list<std::pair<goto_programt::const_targett, symbol2tc>>
+    std::list<std::pair<goto_programt::const_targett, expr2tc>>
       cur_function_ptr_targets;
     /** Instruction where function pointer calls should seem to originate
      *  from. */
@@ -183,10 +183,9 @@ public:
      * Process a block adding the width of each symbol into the stack length
      * @param expr Expr to search for symbols.
      * @param stack_limit to limit size for stack.
-     * @return Constrain the stack limit.
+     * @return Constrain the stack limit (lessthanequal2t)
      */
-    lessthanequal2tc
-    process_stack_size(const expr2tc &expr, unsigned long stack_limit);
+    expr2tc process_stack_size(const expr2tc &expr, unsigned long stack_limit);
 
     /**
      * Decrease the stack frame size when the variables go out of scope

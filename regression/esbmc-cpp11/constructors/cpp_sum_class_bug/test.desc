@@ -1,4 +1,4 @@
 THOROUGH
 main.cpp
---k-induction -I ~/libraries
+--k-induction 
 ^VERIFICATION FAILED$

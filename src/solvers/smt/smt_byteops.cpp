@@ -13,17 +13,20 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   const byte_extract2t &data = to_byte_extract2t(expr);
   expr2tc source = data.source_value;
+  expr2tc offs = data.source_offset;
+
+  assert(!is_array_type(source));
+
   unsigned int src_width = source->type->get_width();
 
   if(!is_bv_type(source->type) && !is_fixedbv_type(source->type))
     source = bitcast2tc(get_uint_type(src_width), source);
 
-  if(!is_constant_int2t(data.source_offset))
+  if(!is_constant_int2t(offs))
   {
     // The approach: the argument is now a bitvector. Just shift it the
     // appropriate amount, according to the source offset, and select out the
     // bottom byte.
-    expr2tc offs = data.source_offset;
     if(offs->type->get_width() != src_width)
       offs = typecast2tc(source->type, data.source_offset);
 
@@ -32,20 +35,20 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
     if(data.big_endian)
     {
       auto data_size = type_byte_size(source->type);
-      constant_int2tc data_size_expr(source->type, data_size - 1);
-      sub2tc sub(source->type, data_size_expr, offs);
+      expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
+      expr2tc sub = sub2tc(source->type, data_size_expr, offs);
       offs = sub;
     }
 
     offs = mul2tc(offs->type, offs, constant_int2tc(offs->type, BigInt(8)));
 
-    lshr2tc shr(source->type, source, offs);
+    expr2tc shr = lshr2tc(source->type, source, offs);
     smt_astt ext = convert_ast(shr);
     smt_astt res = mk_extract(ext, 7, 0);
     return res;
   }
 
-  const constant_int2t &intref = to_constant_int2t(data.source_offset);
+  const constant_int2t &intref = to_constant_int2t(offs);
 
   unsigned width;
   width = data.source_value->type->get_width();
@@ -65,8 +68,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   smt_astt source_ast = convert_ast(source);
 
-  unsigned int sort_sz = data.source_value->type->get_width();
-  if(sort_sz <= upper)
+  if(width <= upper)
   {
     smt_sortt s = mk_int_bv_sort(8);
     return mk_smt_symbol("out_of_bounds_byte_extract", s);
@@ -112,14 +114,14 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     // casting of it in the body of this function, so wrap it up as a bitvector
     // and re-apply.
     type2tc bit_type = get_uint_type(data.type->get_width());
-    bitcast2tc src_obj(bit_type, data.source_value);
-    byte_update2tc new_update(
+    expr2tc src_obj = bitcast2tc(bit_type, data.source_value);
+    expr2tc new_update = byte_update2tc(
       bit_type,
       src_obj,
       data.source_offset,
       data.update_value,
       data.big_endian);
-    bitcast2tc cast_back(data.type, new_update);
+    expr2tc cast_back = bitcast2tc(data.type, new_update);
     return convert_ast(cast_back);
   }
 
@@ -127,11 +129,15 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   {
     expr2tc source = data.source_value;
     unsigned int src_width = source->type->get_width();
-    if(!is_bv_type(source))
-      source = typecast2tc(get_uint_type(src_width), source);
+    type2tc org_type;
+    if(!is_unsignedbv_type(source))
+    {
+      org_type = source->type;
+      source = bitcast2tc(get_uint_type(src_width), source);
+    }
 
     expr2tc offs = data.source_offset;
-    if(offs->type->get_width() != src_width)
+    if(!is_unsignedbv_type(offs) || offs->type->get_width() != src_width)
       offs = typecast2tc(get_uint_type(src_width), offs);
 
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
@@ -139,14 +145,16 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     if(data.big_endian)
     {
       auto data_size = type_byte_size(source->type);
-      constant_int2tc data_size_expr(source->type, data_size - 1);
-      sub2tc sub(source->type, data_size_expr, offs);
+      expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
+      expr2tc sub = sub2tc(source->type, data_size_expr, offs);
       offs = sub;
     }
 
     expr2tc update = data.update_value;
-    if(update->type->get_width() != src_width)
-      update = typecast2tc(get_uint_type(src_width), update);
+    if(!is_unsignedbv_type(update) || update->type->get_width() != src_width)
+      update = typecast2tc(
+        get_uint_type(src_width),
+        bitcast2tc(get_uint_type(update->type->get_width()), update));
 
     // The approach: mask, shift and or. Quite inefficient.
 
@@ -159,7 +167,12 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     source = bitand2tc(source->type, source, noteffs);
 
     expr2tc shl2 = shl2tc(offs->type, update, offs);
-    return convert_ast(bitor2tc(offs->type, shl2, source));
+    expr2tc e = bitor2tc(offs->type, shl2, source);
+
+    if(org_type)
+      e = bitcast2tc(org_type, e);
+
+    return convert_ast(e);
   }
 
   // We are merging two values: an 8 bit update value, and a larger source

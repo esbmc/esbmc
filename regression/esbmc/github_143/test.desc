@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-slice --z3
+^VERIFICATION FAILED$
