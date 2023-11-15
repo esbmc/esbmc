@@ -334,7 +334,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"k-induction", NULL, "prove by k-induction "},
     {"goto-contractor",
      NULL,
-     "enable contractor-based interval refinements on goto level"},
+     "enable contractor-based interval refinements on goto level on asserts"},
+    {"goto-contractor-condition",
+     NULL,
+     "enable contractor-based interval refinements on goto level on "
+     "conditions"},
     {"k-induction-parallel",
      NULL,
      "prove by k-induction, running each step on a separate process"},
@@ -411,6 +415,9 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "evaluates assumptions/guards as boolean operators, accelerating the "
      "convergence (Integers, Reals)"},
+    {"interval-analysis-ibex-contractor",
+     NULL,
+     "enable use of ibex contractors"},
     {"interval-analysis-extrapolate",
      NULL,
      "enables use of extrapolation in abstract states (all)"},

@@ -6,7 +6,9 @@
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/std_expr.h>
-
+#ifdef ENABLE_GOTO_CONTRACTOR
+#include <goto-programs/goto_contractor.h>
+#endif
 // Let's start with all templates specializations.
 
 template <>
@@ -1124,6 +1126,21 @@ void interval_domaint::assume(const expr2tc &cond)
   }
 #endif
 
+#ifdef ENABLE_GOTO_CONTRACTOR
+  /// use ibex contractors to reduce the intervals for interval analysis
+  if(enable_ibex_contractor)
+  {
+    interval_analysis_ibex_contractor contractor;
+    if(contractor.parse_guard(new_cond))
+    {
+      contractor.maps_to_domains(int_map, real_map);
+      contractor.apply_contractor();
+      new_cond = contractor.result_of_outer(new_cond);
+      simplify(new_cond);
+    }
+  }
+#endif
+
   assume_rec(new_cond, false);
 }
 
@@ -1223,6 +1240,14 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
     else if(is_floatbv_type(cond) && enable_real_intervals)
       apply_assume_symbol_truth<real_intervalt>(to_symbol2t(cond), negation);
   }
+  //added in case "cond = false" which happens when the ibex contractor results in empty set.
+  else if(is_constant_bool2t(cond))
+  {
+    if((negation && is_true(cond)) || (!negation && is_false(cond)))
+    {
+      make_bottom();
+    }
+  }
   else
     log_debug("interval", "[assume_rec] Missing support: {}", *cond);
 }
@@ -1291,6 +1316,8 @@ void interval_domaint::set_options(const optionst &options)
     options.get_bool_option("interval-analysis-assume-asserts");
   enable_eval_assumptions =
     options.get_bool_option("interval-analysis-eval-assumptions");
+  enable_ibex_contractor =
+    options.get_bool_option("interval-analysis-ibex-contractor");
 
   auto fixpoint_str = options.get_option("interval-analysis-extrapolate-limit");
   fixpoint_limit = fixpoint_str.empty() ? 5 : atoi(fixpoint_str.c_str());
@@ -1312,6 +1339,7 @@ bool interval_domaint::enable_wrapped_intervals = false;
 bool interval_domaint::enable_real_intervals = true;
 bool interval_domaint::enable_assume_asserts = true;
 bool interval_domaint::enable_eval_assumptions = true;
+bool interval_domaint::enable_ibex_contractor = false;
 
 // Widening options
 unsigned interval_domaint::fixpoint_limit = 5;

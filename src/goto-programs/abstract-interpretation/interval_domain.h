@@ -13,6 +13,7 @@
 #include <util/mp_arith.h>
 #include <util/threeval.h>
 #include <boost/multiprecision/cpp_bin_float.hpp>
+
 typedef interval_templatet<BigInt> integer_intervalt;
 using real_intervalt =
   interval_templatet<boost::multiprecision::cpp_bin_float_100>;
@@ -60,6 +61,7 @@ public:
   static bool enable_assume_asserts; /// Asserts are propagates as assumptions
   static bool
     enable_eval_assumptions; /// Try to evaluate in a guard in a TVT to accelerate bottoms
+  static bool enable_ibex_contractor; /// Use ibex contractor
   // Widening options
   static unsigned
     fixpoint_limit; /// Sets a limit for number of iteartions before widening
