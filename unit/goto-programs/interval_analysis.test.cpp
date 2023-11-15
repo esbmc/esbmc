@@ -392,7 +392,7 @@ TEST_CASE(
     "a = -52;\n"
     "b = 2;\n" // a: [-52, -52]
     "} else {\n"
-    "b = 4;\n" // a: [-50, MAX_INT]
+    "b = 4;\n" // a: [-49, MAX_INT]
     "a = 51;\n"
     "b = 4;\n" // a: [51, 51]
     "}\n"
@@ -403,7 +403,7 @@ TEST_CASE(
   T.property["4"].push_back({"@F@main@a", -50, true});
   T.property["6"].push_back({"@F@main@a", -52, true});
   T.property["8"].push_back({"@F@main@a", (long long)pow(2, 31) - 1, true});
-  T.property["8"].push_back({"@F@main@a", -50, true});
+  T.property["8"].push_back({"@F@main@a", -49, true});
   T.property["10"].push_back({"@F@main@a", 51, true});
   T.property["13"].push_back({"@F@main@a", -52, true});
 
