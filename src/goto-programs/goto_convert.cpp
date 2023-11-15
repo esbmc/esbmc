@@ -1799,7 +1799,6 @@ void goto_convertt::generate_ifthenelse(
   {
     tmp_y.swap(false_case);
     y = tmp_y.instructions.begin();
-    y->location = location;
   }
 
   // v: if(!c) goto z/y;
