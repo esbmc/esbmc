@@ -11,13 +11,17 @@ BASE_ARGS="\
     -DENABLE_JIMPLE_FRONTEND=On \
     -DCMAKE_INSTALL_PREFIX:PATH=$PWD/release \
 "
+# Must disable old frontend to enable goto contractor. github issue #1110
+# https://github.com/esbmc/esbmc/issues/1110.
 SOLVER_FLAGS="\
     -DENABLE_BOOLECTOR=On \
     -DENABLE_YICES=Off \
     -DENABLE_CVC4=OFF \
     -DENABLE_BITWUZLA=On \
-    -DENABLE_GOTO_CONTRACTOR=OFF \
+    -DENABLE_GOTO_CONTRACTOR=On \
+    -DACADEMIC_BUILD=Off \
 "
+
 COMPILER_ARGS=''
 
 STATIC=
@@ -62,8 +66,9 @@ ubuntu_setup () {
     echo "Installing Python dependencies" &&
     pip3 install --user meson ast2json &&
     meson --version &&
+
     BASE_ARGS="$BASE_ARGS \
-        -DENABLE_OLD_FRONTEND=On \
+        -DENABLE_OLD_FRONTEND=Off \
         -DENABLE_PYTHON_FRONTEND=On \
         -DBUILD_STATIC=$STATIC \
     " &&
