@@ -1086,7 +1086,6 @@ smt_astt z3_convt::tuple_array_create(
     log_error("Maybe error:");
   }
   z3::expr output = z3_ctx.constant("magic", array_sort);
-  log_debug("Variable was created");
   for(std::size_t i = 0; i < to_constant_int2t(arrtype.array_size).as_ulong();
       ++i)
   {
