@@ -1,14 +1,27 @@
 <?xml version="1.0"?>
 <!DOCTYPE benchmark PUBLIC "+//IDN sosy-lab.org//DTD BenchExec benchmark 1.9//EN" "https://www.sosy-lab.org/benchexec/benchmark-2.3.dtd">
-<benchmark tool="esbmc" timelimit="15 min" memlimit="6 GB" cpuCores="2">
-
+<benchmark tool="cpachecker" timelimit="90 s" hardtimelimit="96 s" memlimit="7 GB" cpuCores="2">
 <require cpuModel="Intel Xeon E3-1230 v5 @ 3.40 GHz"/>
+ 
+  <resultfiles>**/witness.{graphml,yml}</resultfiles>
 
-  <resultfiles>**/*.graphml</resultfiles>
-  
-  <option name="-s">kinduction</option>
+  <option name="-violation-witness-validation"/>
+  <option name="-setprop">witness.checkProgramHash=false</option>
+  <option name="-heap">5000m</option>
+  <option name="-benchmark"/>
+  <option name="-setprop">cpa.predicate.memoryAllocationsAlwaysSucceed=true</option>
 
-<rundefinition name="SV-COMP24_unreach-call">
+  <option name="-setprop">cpa.smg.memoryAllocationFunctions=malloc,__kmalloc,kmalloc,kzalloc,kzalloc_node,ldv_zalloc,ldv_malloc</option>
+  <option name="-setprop">cpa.smg.arrayAllocationFunctions=calloc,kmalloc_array,kcalloc</option>
+  <option name="-setprop">cpa.smg.zeroingMemoryAllocation=calloc,kzalloc,kcalloc,kzalloc_node,ldv_zalloc</option>
+  <option name="-setprop">cpa.smg.deallocationFunctions=free,kfree,kfree_const</option>
+
+
+<rundefinition name="SV-COMP23_unreach-call">
+
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.graphml</requiredfiles>
+  <option name="-witness">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.graphml</option>
+	
   <tasks name="ReachSafety-Arrays">
     <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Arrays.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
@@ -61,10 +74,6 @@
     <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Hardware.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
   </tasks>
-  <tasks name="ReachSafety-Hardness">
-    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Hardness.set</includesfile>
-    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
-  </tasks>
 
   <tasks name="ConcurrencySafety-Main">
     <includesfile>$HOME/sv-benchmarks/c/ConcurrencySafety-Main.set</includesfile>
@@ -77,10 +86,6 @@
   </tasks>
   <tasks name="SoftwareSystems-BusyBox-ReachSafety">
     <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-BusyBox-ReachSafety.set</includesfile>
-    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
-  </tasks>
-  <tasks name="SoftwareSystems-coreutils-ReachSafety">
-    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-coreutils-ReachSafety.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
   </tasks>
   <tasks name="SoftwareSystems-DeviceDriversLinux64-ReachSafety">
@@ -98,21 +103,29 @@
   </tasks>
 </rundefinition>
 
-<rundefinition name="SV-COMP24_no-data-race">
+<rundefinition name="SV-COMP23_no-data-race">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.graphml</requiredfiles>
+  <option name="-witness">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.graphml</option>
+
   <tasks name="NoDataRace-Main">
     <includesfile>$HOME/sv-benchmarks/c/NoDataRace-Main.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/no-data-race.prp</propertyfile>
   </tasks>
 </rundefinition>
 
-<rundefinition name="SV-COMP24_valid-memcleanup">
+<rundefinition name="SV-COMP23_valid-memcleanup">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.graphml</requiredfiles>
+  <option name="-witness">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.graphml</option>
+
   <tasks name="MemSafety-MemCleanup">
     <includesfile>$HOME/sv-benchmarks/c/MemSafety-MemCleanup.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/valid-memcleanup.prp</propertyfile>
   </tasks>
 </rundefinition>
 
-<rundefinition name="SV-COMP24_valid-memsafety">
+<rundefinition name="SV-COMP23_valid-memsafety">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.graphml</requiredfiles>
+  <option name="-witness">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.graphml</option>
   <tasks name="MemSafety-Arrays">
     <includesfile>$HOME/sv-benchmarks/c/MemSafety-Arrays.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/valid-memsafety.prp</propertyfile>
@@ -138,10 +151,6 @@
     <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-BusyBox-MemSafety.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/valid-memsafety.prp</propertyfile>
   </tasks>
-  <tasks name="SoftwareSystems-coreutils-MemSafety">
-    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-coreutils-MemSafety.set</includesfile>
-    <propertyfile>$HOME/sv-benchmarks/c/properties/valid-memsafety.prp</propertyfile>
-  </tasks>
   <tasks name="SoftwareSystems-DeviceDriversLinux64-MemSafety">
     <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-DeviceDriversLinux64-MemSafety.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/valid-memsafety.prp</propertyfile>
@@ -161,7 +170,10 @@
   </tasks>
 </rundefinition>
 
-<rundefinition name="SV-COMP24_no-overflow">
+<rundefinition name="SV-COMP23_no-overflow">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.graphml</requiredfiles>
+  <option name="-witness">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.graphml</option>
+
   <tasks name="NoOverflows-Main">
     <includesfile>$HOME/sv-benchmarks/c/NoOverflows-Main.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/no-overflow.prp</propertyfile>
@@ -175,10 +187,6 @@
     <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-BusyBox-NoOverflows.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/no-overflow.prp</propertyfile>
   </tasks>
-  <tasks name="SoftwareSystems-coreutils-NoOverflows">
-    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-coreutils-NoOverflows.set</includesfile>
-    <propertyfile>$HOME/sv-benchmarks/c/properties/no-overflow.prp</propertyfile>
-  </tasks>
   <tasks name="SoftwareSystems-uthash-NoOverflows">
     <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-uthash-NoOverflows.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/no-overflow.prp</propertyfile>
@@ -190,7 +198,10 @@
   </tasks>
 </rundefinition>
 
-<rundefinition name="SV-COMP24_termination">
+<rundefinition name="SV-COMP23_termination">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.graphml</requiredfiles>
+  <option name="-witness">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.graphml</option>
+
   <tasks name="Termination-BitVectors">
     <includesfile>$HOME/sv-benchmarks/c/Termination-BitVectors.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/termination.prp</propertyfile>
@@ -210,3 +221,4 @@
 </rundefinition>
 
 </benchmark>
+

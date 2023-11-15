@@ -20,7 +20,7 @@ on:
         default: 'main'
       mode:
         type: choice
-        description: Benchecex run mode
+        description: Benchexec run mode
         options:
         - Full
         - Task
@@ -83,6 +83,10 @@ on:
         - Termination-MainControlFlow
         - Termination-MainHeap
         - Termination-Other
+      cpachecker:
+            description: "Run CPAChecker for violation witness validation"
+            required: true
+            type: boolean
 
 jobs:
 
@@ -135,7 +139,7 @@ jobs:
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
-      - name: Show summary
+      - name: Show summary (ESBMC)
         run: tail $HOME/esbmc-output/*results*.txt
       - name: Save logs
         if: ${{ inputs.output != '' }}
@@ -144,8 +148,33 @@ jobs:
         run: mv $HOME/output.zip ./output.zip      
       - name: Debug Info
         run: ls
+      - name: Checkout code
+        uses: actions/checkout@master
+        with:
+          path: esbmc-src      
       - uses: actions/upload-artifact@v1
         with:
-          name: benchexec-result
+          name: esbmc-result
           path: output.zip
+      - name: Run Validation (Full)
+        if: ${{ inputs.cpachecker == true && inputs.mode == 'Full' }}
+        run: ./esbmc-src/scripts/witness.sh -f
+      - name: Run Validation (RunSet)
+        if: ${{ inputs.cpachecker == true && inputs.mode == 'RunSet' }}
+        run: ./esbmc-src/scripts/witness.sh -r ${{ inputs.runset }}
+      - name: Run Validation (Task)
+        if: ${{ inputs.cpachecker == true && inputs.mode == 'Task' }}
+        run: ./esbmc-src/scripts/witness.sh -t ${{ inputs.task }}
+      - name: Move output
+        if: ${{ inputs.cpachecker == true }}
+        run: mv $HOME/witness-output.zip ./witness-output.zip      
+      - name: Show summary (CPAChecker)
+        if: ${{ inputs.cpachecker == true }}
+        run: tail $HOME/esbmc-output/*results*.txt
+      - uses: actions/upload-artifact@v1
+        if: ${{ inputs.cpachecker == true }}
+        with:
+          name: witness-result
+          path: witness-output.zip
+
       
