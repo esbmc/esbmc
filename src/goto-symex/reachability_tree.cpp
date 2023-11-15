@@ -56,7 +56,6 @@ void reachability_treet::setup_for_new_explore()
   execution_statet *s;
   if(schedule)
   {
-    log_debug("Schedule execution mode");
     schedule_target = target_template->clone();
     targ = schedule_target;
     s = reinterpret_cast<execution_statet *>(new schedule_execution_statet(
@@ -71,7 +70,6 @@ void reachability_treet::setup_for_new_explore()
   }
   else
   {
-    log_debug("DFS execution mode");
     targ = target_template->clone();
     s = reinterpret_cast<execution_statet *>(new dfs_execution_statet(
       goto_functions, ns, this, targ, permanent_context, options));
@@ -535,7 +533,6 @@ reachability_treet::get_next_formula()
            get_cur_state().check_if_ileaves_blocked()) &&
           get_cur_state().can_execution_continue())
     {
-      log_debug("Exploring step {}", step++);
       get_cur_state().symex_step(*this);
     }
 

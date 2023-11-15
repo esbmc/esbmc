@@ -171,7 +171,7 @@ protected:
 
   std::string convert_norep(const exprt &src, unsigned &precedence);
 
-  virtual std::string convert_struct(const exprt &src, unsigned &precedence);
+  std::string convert_struct(const exprt &src, unsigned &precedence);
   virtual std::string convert_union(const exprt &src, unsigned &precedence);
   std::string convert_array(const exprt &src, unsigned &precedence);
   std::string convert_array_list(const exprt &src, unsigned &precedence);

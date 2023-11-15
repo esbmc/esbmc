@@ -30,7 +30,7 @@ protected:
   virtual std::string convert_cpp_new(const exprt &src, unsigned precedence);
   virtual std::string
   convert_code_cpp_delete(const exprt &src, unsigned precedence);
-  std::string convert_struct(const exprt &src, unsigned &precedence) override;
+  //std::string convert_struct(const exprt &src, unsigned &precedence) override;
   std::string convert_code(const codet &src, unsigned indent) override;
   std::string convert_constant(const exprt &src, unsigned &precedence) override;
 
@@ -41,7 +41,7 @@ protected:
 
   typedef std::unordered_set<std::string> id_sett;
 };
-
+#if 0
 std::string
 cpp_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
 {
@@ -100,7 +100,7 @@ cpp_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
 
   return dest;
 }
-
+#endif
 std::string
 cpp_expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
 {

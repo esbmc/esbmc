@@ -387,7 +387,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
           "non-code call target '{}' generated at {}",
           sym.thename.as_string(),
           cur_state->source.pc->location);
-        return false;
+        abort();
       }
 
       log_status(

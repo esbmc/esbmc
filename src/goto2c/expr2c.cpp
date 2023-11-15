@@ -1036,7 +1036,7 @@ std::string expr2ct::convert_code_decl(const codet &src, unsigned indent)
 
   return dest;
 }
-
+#if 0
 std::string expr2ct::convert_struct(const exprt &src, unsigned &precedence)
 {
   const typet full_type = ns.follow(src.type());
@@ -1052,7 +1052,7 @@ std::string expr2ct::convert_struct(const exprt &src, unsigned &precedence)
 
   return convert_struct_union_body(src, src.operands(), components);
 }
-
+#endif
 std::string expr2ct::convert_union(const exprt &src, unsigned &precedence)
 {
   const typet full_type = ns.follow(src.type());
@@ -1159,7 +1159,6 @@ std::string expr2ct::convert_struct_union_body(
 
   return dest;
 }
-
 std::string expr2ct::convert_member(const exprt &src, unsigned precedence)
 {
   if(src.operands().size() != 1)

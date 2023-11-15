@@ -430,8 +430,7 @@ void goto_convert_functionst::fix_union_type(typet &type, bool is_pointer)
     // one authorative type_byte_size function
     type2tc new_type = migrate_type(type);
     auto size = type_byte_size(new_type);
-    new_type = type2tc(
-      new array_type2t(get_uint8_type(), gen_ulong(size.to_uint64()), false));
+    new_type = array_type2tc(get_uint8_type(), gen_ulong(size.to_uint64()), false);
     type = migrate_type_back(new_type);
     return;
   }
@@ -465,13 +464,12 @@ void goto_convert_functionst::fix_union_expr(exprt &expr)
       migrate_expr(expr.op0(), dataobj);
       type2tc union_type = dataobj->type;
       auto size = type_byte_size(union_type);
-      type2tc array_type = type2tc(
-        new array_type2t(get_uint8_type(), gen_ulong(size.to_uint64()), false));
-      type2tc union_pointer(new pointer_type2t(union_type));
+      type2tc array_type = array_type2tc(get_uint8_type(), gen_ulong(size.to_uint64()), false);
+      type2tc union_pointer = pointer_type2tc(union_type);
 
-      address_of2tc addrof(array_type, dataobj);
-      typecast2tc cast(union_pointer, addrof);
-      dereference2tc deref(union_type, cast);
+      auto addrof = address_of2tc (array_type, dataobj);
+      auto cast = typecast2tc(union_pointer, addrof);
+      auto deref = dereference2tc(union_type, cast);
       expr.op0() = migrate_expr_back(deref);
 
       // Fix type -- it needs to remain a union at the top level

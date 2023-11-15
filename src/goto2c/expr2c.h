@@ -47,7 +47,7 @@ protected:
     const exprt &src,
     const exprt::operandst &operands,
     const struct_union_typet::componentst &components);
-  std::string convert_struct(const exprt &src, unsigned &precedence) override;
+  //std::string convert_struct(const exprt &src, unsigned &precedence) override;
   std::string convert_union(const exprt &src, unsigned &precedence) override;
 
   std::string convert_typecast(const exprt &src, unsigned &precedence) override;
