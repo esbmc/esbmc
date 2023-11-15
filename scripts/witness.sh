@@ -8,7 +8,7 @@ setup_folder () {
     echo "Setting up machine folder..."
     mv $HOME/esbmc-output/*.files $HOME/witness-files
     cp esbmc-src/scripts/competitions/svcomp/cpachecker.xml $HOME/cpachecker.xml
-    rm -rf $HOME/validation-action $HOME/witness-output
+    rm -rf $HOME/validation-action $HOME/witness-output $HOME/witness-output.zip
     mkdir $HOME/validation-action
     cd $HOME/validation-action
     # Don't ask
