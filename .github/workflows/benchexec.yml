@@ -167,7 +167,7 @@ jobs:
         run: mv $HOME/witness-output.zip ./witness-output.zip      
       - name: Show summary (CPAChecker)
         if: ${{ inputs.cpachecker == true }}
-        run: tail $HOME/esbmc-output/*results*.txt
+        run: tail $HOME/witness-output/*results*.txt
       - uses: actions/upload-artifact@v1
         if: ${{ inputs.cpachecker == true }}
         with:
