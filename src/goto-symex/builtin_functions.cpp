@@ -1077,6 +1077,9 @@ static inline expr2tc gen_value_by_byte(
    *
    */
 
+  if(num_of_bytes == 0)
+    return value;
+
   /* TODO: Bitwise operations are valid for floats, but we don't have an
    * implementation, yet. Give up. */
   if(is_floatbv_type(type) || is_fixedbv_type(type))
