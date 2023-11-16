@@ -114,6 +114,7 @@ def parse_result(the_output, prop):
   bounds_violated = "array bounds violated"
   free_offset = "Operand of free must have zero pointer offset"
   data_race = "/W data race on"
+  unreachability_intrinsic = "reachability: unreachable code reached"
 
   if "VERIFICATION FAILED" in the_output:
     if "unwinding assertion loop" in the_output:
@@ -167,7 +168,8 @@ def parse_result(the_output, prop):
       return Result.fail_overflow
 
     if prop == Property.reach:
-      return Result.fail_reach
+      if unreachability_intrinsic not in the_output:
+        return Result.fail_reach
 
     if prop == Property.datarace:
       return Result.fail_race
@@ -283,6 +285,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
     command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
     strat = "incr"
   elif prop == Property.reach:
+    command_line += "--enable-unreachability-intrinsic "
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
