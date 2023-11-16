@@ -486,6 +486,10 @@ _Bool __ESBMC_overflow_umulll(unsigned long long int, unsigned long long int, un
 int __ESBMC_sync_fetch_and_add(int*, int);
 int __ESBMC_builtin_constant_p(int);
 
+/* Causes a verification error when its call is reachable; internal use in math
+ * models */
+void __ESBMC_unreachable();
+
 // This is causing problems when using the C++ frontend. It needs to be rewritten
 #define __atomic_load_n(PTR, MO)                                               \
   __extension__({                                                              \
