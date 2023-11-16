@@ -1,3 +1,6 @@
+
+#include <ac_config.h>
+
 #include <cassert>
 #include <goto-programs/goto_convert_class.h>
 #include <regex>
