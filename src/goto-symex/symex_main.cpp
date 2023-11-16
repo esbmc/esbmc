@@ -729,6 +729,13 @@ void goto_symext::run_intrinsic(
     symex_assign(
       code_assign2tc(tgt, bitcast2tc(tgt->type, src)), false, cur_state->guard);
   }
+  else if(symname == "c:@F@__ESBMC_unreachable")
+  {
+    if(options.get_bool_option("enable-unreachability-intrinsic"))
+      claim(
+        not2tc(cur_state->guard.as_expr()),
+        "reachability: unreachable code reached");
+  }
   else
   {
     log_error(
