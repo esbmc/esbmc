@@ -725,6 +725,10 @@ bool clang_c_convertert::get_function_param(
     param_type.remove("size");
     param_type.remove("#constant");
   }
+  else if (param_type.is_code())
+  {
+    param_type = pointer_typet(param_type);
+  }
 
   std::string id, name;
   get_decl_name(pd, name, id);
