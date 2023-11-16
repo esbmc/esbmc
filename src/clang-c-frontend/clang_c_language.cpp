@@ -447,6 +447,9 @@ float nondet_float();
 double nondet_double();
 
 // TACAS definitions,
+#ifndef __ESBMC_SVCOMP
+// Some TACAS benchmarks use the wrong signature for nondet
+// e.g. uthash_SFH_nondet_test4-2.i  contains `extern int __VERIFIER_nondet_uint(void);`
 int __VERIFIER_nondet_int();
 unsigned int __VERIFIER_nondet_uint();
 long __VERIFIER_nondet_long();
@@ -459,6 +462,7 @@ signed char __VERIFIER_nondet_schar();
 _Bool __VERIFIER_nondet_bool();
 float __VERIFIER_nondet_float();
 double __VERIFIER_nondet_double();
+#endif
 
 void __VERIFIER_error();
 void __VERIFIER_assume(int);
