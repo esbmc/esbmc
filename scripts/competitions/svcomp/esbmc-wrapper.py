@@ -238,7 +238,7 @@ import re
 def check_benchmark_usage(benchmark):
   r = set()
   pats = {}
-  for (p,v) in (("\\bpthread_create\\b", USAGE_PTHREAD),
+  for (p,v) in (("pthread_create", USAGE_PTHREAD),
                 ("\\bvoid\\s+__builtin_unreachable\\(", USAGE_BUILTIN_UNREACHABLE_DEF)):
     pats[v] = re.compile(p)
   with open(benchmark, "r") as f:
