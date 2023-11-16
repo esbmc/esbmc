@@ -227,20 +227,27 @@ esbmc_path = "./esbmc "
 # ESBMC default commands: this is the same for every submission
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets "
 esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
-# <https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/issues/1296>
-esbmc_dargs += "-D'__builtin_unreachable()' "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
 esbmc_dargs += "--no-vla-size-check "
 
+USAGE_PTHREAD = 0
+USAGE_BUILTIN_UNREACHABLE_DEF = 1
 
 import re
-def check_if_benchmark_contains_pthread(benchmark):
+def check_benchmark_usage(benchmark):
+  r = set()
+  pats = {}
+  for (p,v) in (("pthread_create", USAGE_PTHREAD),
+                ("\\bvoid\\s+__builtin_unreachable\\(", USAGE_BUILTIN_UNREACHABLE_DEF)):
+    pats[v] = re.compile(p)
   with open(benchmark, "r") as f:
     for line in f:
-      if re.search("pthread_create", line.strip()):
-        return True
-  return False
+      line = line.strip()
+      for (v,p) in pats.items():
+        if re.search(p, line):
+          r.add(v)
+  return r
 
 def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci):
   command_line = esbmc_path + dargs
@@ -254,8 +261,14 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   else:
     command_line += "--64 "
 
+  usage = check_benchmark_usage(benchmark)
+
   concurrency = ((prop in (Property.reach, Property.datarace)) and
-                 check_if_benchmark_contains_pthread(benchmark))
+                 USAGE_PTHREAD in usage)
+
+  if USAGE_BUILTIN_UNREACHABLE_DEF not in usage:
+    # <https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/issues/1296>
+    command_line += "-D'__builtin_unreachable()' "
 
   if concurrency:
     command_line += " --no-por --context-bound 2 "
