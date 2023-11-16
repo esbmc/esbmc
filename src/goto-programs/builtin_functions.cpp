@@ -578,6 +578,12 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
+#if ESBMC_SVCOMP
+    /* <https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/issues/1296> */
+    if(base_name == "__builtin_unreachable")
+      return;
+#endif
+
     goto_programt::targett t = dest.add_instruction(ASSERT);
     t->guard = gen_false_expr();
     t->location = function.location();
