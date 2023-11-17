@@ -1439,9 +1439,9 @@ void goto_symext::intrinsic_memset(
       std::string error_msg =
         fmt::format("dereference failure: trying to deref a ptr code");
 
-      expr2tc false_expr = gen_false_expr();
-      guard.guard_expr(false_expr);
-      claim(false_expr, error_msg);
+      // SAME_OBJECT(ptr, item) => DEREF ERROR
+      expr2tc check = implies2tc(item.guard, gen_false_expr());
+      claim(check, error_msg);
       continue;
     }
 
@@ -1457,8 +1457,9 @@ void goto_symext::intrinsic_memset(
         type_size - number_of_offset,
         number_of_bytes);
 
-      guard.add(gen_false_expr());
-      claim(gen_false_expr(), error_msg);
+      // SAME_OBJECT(ptr, item) => DEREF ERROR
+      expr2tc check = implies2tc(item.guard, gen_false_expr());
+      claim(check, error_msg);
       continue;
     }
 
