@@ -5,13 +5,13 @@
 
 static int mode_from_symbol(const symbolt *symbol)
 {
-  if(!symbol)
+  if (!symbol)
     return 0;
 
-  if(symbol->mode == "")
+  if (symbol->mode == "")
     return 0;
 
-  if(int mode = get_mode(id2string(symbol->mode)); mode >= 0)
+  if (int mode = get_mode(id2string(symbol->mode)); mode >= 0)
     return mode;
 
   log_error("symbol '{}' has unknown mode '{}'", symbol->name, symbol->mode);

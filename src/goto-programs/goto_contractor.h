@@ -79,12 +79,12 @@ public:
   ~Contractor()
   {
     //clean up
-    for(auto it = vector_ctc.rbegin(); it != vector_ctc.rend(); ++it)
-      delete(*it);
-    for(auto it = vector_nc.rbegin(); it != vector_nc.rend(); ++it)
-      delete(*it);
-    for(auto it = vector_f.rbegin(); it != vector_f.rend(); ++it)
-      delete(*it);
+    for (auto it = vector_ctc.rbegin(); it != vector_ctc.rend(); ++it)
+      delete (*it);
+    for (auto it = vector_nc.rbegin(); it != vector_nc.rend(); ++it)
+      delete (*it);
+    for (auto it = vector_f.rbegin(); it != vector_f.rend(); ++it)
+      delete (*it);
   }
 
   void set_outer(ibex::Ctc *outer)
@@ -120,29 +120,29 @@ private:
 
   ibex::Ctc *get_complement_contractor(ibex::Ctc *c)
   {
-    if(auto ctc_compo = dynamic_cast<ibex::CtcCompo *>(c))
+    if (auto ctc_compo = dynamic_cast<ibex::CtcCompo *>(c))
     {
       ibex::Array<ibex::Ctc> list_of_contractors;
-      for(auto &it : ctc_compo->list)
+      for (auto &it : ctc_compo->list)
         list_of_contractors.add(*get_complement_contractor(&it));
       auto ctc_union = new ibex::CtcUnion(list_of_contractors);
       vector_ctc.push_back(ctc_union);
       return c;
     }
-    else if(auto ctc_union = dynamic_cast<ibex::CtcUnion *>(c))
+    else if (auto ctc_union = dynamic_cast<ibex::CtcUnion *>(c))
     {
       ibex::Array<ibex::Ctc> list_of_contractors;
-      for(auto &it : ctc_union->list)
+      for (auto &it : ctc_union->list)
         list_of_contractors.add(*get_complement_contractor(&it));
       auto ctc_compo = new ibex::CtcCompo(list_of_contractors);
       vector_ctc.push_back(ctc_compo);
       return ctc_compo;
     }
-    else if(auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd *>(c))
+    else if (auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd *>(c))
     {
       ibex::NumConstraint *ctr;
       ibex::CtcFwdBwd *contractor;
-      switch(fwdbwd->ctr.op)
+      switch (fwdbwd->ctr.op)
       {
       case ibex::GEQ:
         ctr = new ibex::NumConstraint(fwdbwd->ctr.f, ibex::LT);
@@ -205,16 +205,16 @@ public:
   }
   ~Contractors()
   {
-    if(c != nullptr)
+    if (c != nullptr)
     {
-      if(c->get_outer() != nullptr)
-        delete(c->get_outer());
-      if(c->get_inner() != nullptr)
-        delete(c->get_inner());
-      delete(c);
+      if (c->get_outer() != nullptr)
+        delete (c->get_outer());
+      if (c->get_inner() != nullptr)
+        delete (c->get_inner());
+      delete (c);
     }
-    for(auto cont : contractors)
-      delete(cont);
+    for (auto cont : contractors)
+      delete (cont);
   }
   Contractor *get_contractors_up_to_loc(unsigned int loc)
   {
@@ -223,8 +223,8 @@ public:
     auto size = contractors.size();
     ibex::Array<ibex::Ctc> outer[size];
     ibex::Array<ibex::Ctc> inner[size];
-    for(auto const &ctc : contractors)
-      if(ctc->get_location() < loc)
+    for (auto const &ctc : contractors)
+      if (ctc->get_location() < loc)
       {
         outer->add(*(ctc->get_outer()));
         inner->add(*(ctc->get_inner()));
@@ -243,7 +243,7 @@ public:
     auto size = contractors.size();
     ibex::Array<ibex::Ctc> outer[size];
     ibex::Array<ibex::Ctc> inner[size];
-    for(auto const &ctc : contractors)
+    for (auto const &ctc : contractors)
     {
       outer->add(*(ctc->get_outer()));
       inner->add(*(ctc->get_inner()));
@@ -258,7 +258,7 @@ public:
   {
     std::ostringstream oss;
 
-    for(auto const &c : contractors)
+    for (auto const &c : contractors)
     {
       oss << "outer :" << to_oss(c->get_outer()).str() << "\n";
       oss << "inner :" << to_oss(c->get_inner()).str() << "\n";
@@ -272,7 +272,7 @@ public:
     auto it = list->begin();
     oss << "( " << to_oss(&*it).str();
     it++;
-    while(it != list->end())
+    while (it != list->end())
     {
       oss << (is_compo ? " && " : " || ") << to_oss(&*it).str();
       it++;
@@ -283,11 +283,11 @@ public:
   std::ostringstream to_oss(ibex::Ctc *c)
   {
     std::ostringstream oss;
-    if(auto ctc_compo = dynamic_cast<ibex::CtcCompo *>(c))
+    if (auto ctc_compo = dynamic_cast<ibex::CtcCompo *>(c))
       oss = list_to_oss(&ctc_compo->list, true);
-    else if(auto ctc_union = dynamic_cast<ibex::CtcUnion *>(c))
+    else if (auto ctc_union = dynamic_cast<ibex::CtcUnion *>(c))
       oss = list_to_oss(&ctc_union->list, false);
-    else if(auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd *>(c))
+    else if (auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd *>(c))
       oss << fwdbwd->ctr;
 
     return oss;
@@ -295,7 +295,7 @@ public:
 
   void add_contractor(ibex::Ctc *ctc, unsigned int loc)
   {
-    if(ctc != nullptr)
+    if (ctc != nullptr)
     {
       Contractor *c = new Contractor(ctc, loc);
       contractors.insert(contractors.end(), c);
@@ -327,7 +327,7 @@ public:
   size_t add_var(const std::string &name, const expr2tc &symbol)
   {
     auto find = var_map.find(name);
-    if(find == var_map.end())
+    if (find == var_map.end())
     {
       vart var(name, symbol, n);
       var_map.insert(std::make_pair(name, var));
@@ -340,7 +340,7 @@ public:
   void update_lb_interval(double lb, const std::string &name)
   {
     auto find = var_map.find(name);
-    if(find == var_map.end())
+    if (find == var_map.end())
       return;
     ibex::Interval X(lb, find->second.getInterval().ub());
     find->second.setInterval(X);
@@ -348,7 +348,7 @@ public:
   void update_ub_interval(double ub, const std::string &name)
   {
     auto find = var_map.find(name);
-    if(find == var_map.end())
+    if (find == var_map.end())
       return;
     ibex::Interval X(find->second.getInterval().lb(), ub);
     find->second.setInterval(X);
@@ -356,7 +356,7 @@ public:
   int find(const std::string &name)
   {
     auto find = var_map.find(name);
-    if(find == var_map.end())
+    if (find == var_map.end())
       return NOT_FOUND;
     return find->second.getIndex();
   }
@@ -367,11 +367,11 @@ public:
 
   ibex::IntervalVector create_interval_vector()
   {
-    if(this->is_empty_vector)
+    if (this->is_empty_vector)
       return ibex::IntervalVector::empty(var_map.size());
 
     ibex::IntervalVector X(var_map.size());
-    for(auto const &var : var_map)
+    for (auto const &var : var_map)
       X[var.second.getIndex()] = var.second.getInterval();
     return X;
   }
@@ -380,15 +380,15 @@ public:
   {
     //check if interval box is empty set or if the interval is degenerated
     // in the case of a single interval
-    if(vector.is_empty())
+    if (vector.is_empty())
     {
       is_empty_vector = true;
       return;
     }
 
-    for(auto &var : var_map)
+    for (auto &var : var_map)
     {
-      if(var.second.getInterval() != vector[var.second.getIndex()])
+      if (var.second.getInterval() != vector[var.second.getIndex()])
       {
         var.second.setInterval(vector[var.second.getIndex()]);
         var.second.setIntervalChanged(true);
@@ -459,12 +459,12 @@ public:
   ~expr_to_ibex_parser()
   {
     //clean up
-    for(auto it = vector_ctc.rbegin(); it != vector_ctc.rend(); ++it)
-      delete(*it);
-    for(auto it = vector_nc.rbegin(); it != vector_nc.rend(); ++it)
-      delete(*it);
-    for(auto it = vector_f.rbegin(); it != vector_f.rend(); ++it)
-      delete(*it);
+    for (auto it = vector_ctc.rbegin(); it != vector_ctc.rend(); ++it)
+      delete (*it);
+    for (auto it = vector_nc.rbegin(); it != vector_nc.rend(); ++it)
+      delete (*it);
+    for (auto it = vector_f.rbegin(); it != vector_f.rend(); ++it)
+      delete (*it);
   }
 };
 //-----------------------------------------------------------------------------------------------------------------
@@ -490,7 +490,7 @@ public:
     const optionst &options)
     : goto_functions_algorithm(true), goto_functions(_goto_functions)
   {
-    if(options.get_bool_option("goto-contractor-condition"))
+    if (options.get_bool_option("goto-contractor-condition"))
     {
       vars = new ibex::Variable(CspMap::MAX_VAR);
       goto_contractor_condition(ns, options);
@@ -498,14 +498,14 @@ public:
     else
     {
       initialize_main_function_loops();
-      if(!function_loops.empty())
+      if (!function_loops.empty())
       {
         vars = new ibex::Variable(CspMap::MAX_VAR);
         parser = expr_to_ibex_parser(&map, vars);
         log_debug(
           "contractor", "1/4 - Parsing asserts to create CSP Constraints.");
         get_contractors(_goto_functions);
-        if(contractors.is_empty())
+        if (contractors.is_empty())
         {
           log_debug(
             "contractor",
@@ -624,7 +624,7 @@ public:
   }
   ~interval_analysis_ibex_contractor()
   {
-    delete(vars);
+    delete (vars);
   }
 
   bool parse_guard(expr2tc &guard)
@@ -635,9 +635,9 @@ public:
       std::chrono::duration<double>(std::chrono::steady_clock::now() - t_0)
         .count();
 
-    if(c == nullptr)
+    if (c == nullptr)
       return false;
-    else if(map.var_map.size() == 0)
+    else if (map.var_map.size() == 0)
       return false;
 
     ibex::CtcFixPoint *f = new ibex::CtcFixPoint(*c);
@@ -680,7 +680,7 @@ private:
     auto it = list->begin();
     oss << "( " << to_oss(&*it).str();
     it++;
-    while(it != list->end())
+    while (it != list->end())
     {
       oss << (is_compo ? " && " : " || ") << to_oss(&*it).str();
       it++;
@@ -691,11 +691,11 @@ private:
   std::ostringstream to_oss(ibex::Ctc *c)
   {
     std::ostringstream oss;
-    if(auto ctc_compo = dynamic_cast<ibex::CtcCompo *>(c))
+    if (auto ctc_compo = dynamic_cast<ibex::CtcCompo *>(c))
       oss = list_to_oss(&ctc_compo->list, true);
-    else if(auto ctc_union = dynamic_cast<ibex::CtcUnion *>(c))
+    else if (auto ctc_union = dynamic_cast<ibex::CtcUnion *>(c))
       oss = list_to_oss(&ctc_union->list, false);
-    else if(auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd *>(c))
+    else if (auto fwdbwd = dynamic_cast<ibex::CtcFwdBwd *>(c))
       oss << fwdbwd->ctr;
 
     return oss;

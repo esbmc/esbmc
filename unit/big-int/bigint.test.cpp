@@ -205,15 +205,15 @@ TEST_CASE("arbitrary precision integers", "[core][big-int][bigint]")
     REQUIRE(BigInt(0) <= r);
 
     BigInt i(1);
-    for(int j = 0; j < 1000; j++)
+    for (int j = 0; j < 1000; j++)
       i += 100000000;
     REQUIRE(to_string(i) == "100000000001");
 
-    for(int j = 0; j < 2000; j++)
+    for (int j = 0; j < 2000; j++)
       i -= 100000000;
     REQUIRE(to_string(i) == "-99999999999");
 
-    for(int j = 0; j < 1000; j++)
+    for (int j = 0; j < 1000; j++)
       i += 100000000;
     REQUIRE(to_string(i) == "1");
   }
@@ -272,7 +272,7 @@ TEST_CASE("arbitrary precision integers", "[core][big-int][bigint]")
 #include "number.tst"
     };
 
-    for(std::size_t i = 0; i < number_tst.size(); i += 4)
+    for (std::size_t i = 0; i < number_tst.size(); i += 4)
     {
       const std::string op = number_tst[i];
       REQUIRE(!op.empty());
@@ -282,7 +282,7 @@ TEST_CASE("arbitrary precision integers", "[core][big-int][bigint]")
       REQUIRE(read(number_tst[i + 2], b));
       REQUIRE(read(number_tst[i + 3], er));
 
-      switch(op[0])
+      switch (op[0])
       {
       case '+':
         r = a + b;
@@ -308,7 +308,7 @@ TEST_CASE("arbitrary precision integers", "[core][big-int][bigint]")
         BigInt m = a % b;
         // The test-data from the Lisp testsuite are assuming
         // floored divide. Fix the results accordingly.
-        if(!m.is_zero() && a.is_positive() != b.is_positive())
+        if (!m.is_zero() && a.is_positive() != b.is_positive())
         {
           r -= 1;
           m += b;
@@ -319,7 +319,7 @@ TEST_CASE("arbitrary precision integers", "[core][big-int][bigint]")
         // Also try the method returning both.
         BigInt::div(a, b, r, m);
         // Again, transform to floored divide.
-        if(!m.is_zero() && a.is_positive() != b.is_positive())
+        if (!m.is_zero() && a.is_positive() != b.is_positive())
         {
           r -= 1;
           m += b;

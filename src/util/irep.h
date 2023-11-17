@@ -17,18 +17,20 @@ typedef dstring irep_namet;
 typedef dstring_hash irep_id_hash;
 
 #define forall_irep(it, irep)                                                  \
-  for(irept::subt::const_iterator it = (irep).begin(); it != (irep).end(); it++)
+  for (irept::subt::const_iterator it = (irep).begin(); it != (irep).end();    \
+       it++)
 
 #define Forall_irep(it, irep)                                                  \
-  for(irept::subt::iterator it = (irep).begin(); it != (irep).end(); it++)
+  for (irept::subt::iterator it = (irep).begin(); it != (irep).end(); it++)
 
 #define forall_named_irep(it, irep)                                            \
-  for(irept::named_subt::const_iterator it = (irep).begin();                   \
-      it != (irep).end();                                                      \
-      it++)
+  for (irept::named_subt::const_iterator it = (irep).begin();                  \
+       it != (irep).end();                                                     \
+       it++)
 
 #define Forall_named_irep(it, irep)                                            \
-  for(irept::named_subt::iterator it = (irep).begin(); it != (irep).end(); it++)
+  for (irept::named_subt::iterator it = (irep).begin(); it != (irep).end();    \
+       it++)
 
 class typet;
 
@@ -61,7 +63,7 @@ public:
 
   inline irept(const irept &irep) : data(irep.data)
   {
-    if(data != nullptr)
+    if (data != nullptr)
     {
       assert(data->ref_count != 0);
       data->ref_count++;
@@ -74,7 +76,7 @@ public:
     assert(&irep != this); // check if we assign to ourselves
     tmp = data;
     data = irep.data;
-    if(data != nullptr)
+    if (data != nullptr)
       data->ref_count++;
     remove_ref(tmp);
     return *this;

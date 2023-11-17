@@ -20,7 +20,7 @@ void cpp_typecheckt::convert_argument(
 {
   std::string identifier = id2string(argument.get_identifier());
 
-  if(identifier.empty())
+  if (identifier.empty())
   {
     identifier = "#anon_arg" + i2string(anon_counter++);
     argument.set_base_name(identifier);
@@ -44,7 +44,7 @@ void cpp_typecheckt::convert_argument(
 
   symbolt *new_symbol;
 
-  if(context.move(symbol, new_symbol))
+  if (context.move(symbol, new_symbol))
   {
     err_location(symbol.location);
     str << "cpp_typecheckt::convert_argument: context.move(" << symbol.id
@@ -62,7 +62,7 @@ void cpp_typecheckt::convert_arguments(
 {
   code_typet::argumentst &arguments = function_type.arguments();
 
-  for(auto &argument : arguments)
+  for (auto &argument : arguments)
     convert_argument(mode, argument);
 }
 
@@ -75,17 +75,17 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   // itself would never be instantiated in a real compilation. This is the tail
   // end of SFINAE, but instead of discarding compilation errors in unused
   // templates, we just don't convert them.
-  if(
+  if (
     symbol.value.get("#speculative_template") == "1" &&
     symbol.value.get("#template_in_use") != "1")
     return;
 
   // only a prototype?
-  if(symbol.value.is_nil())
+  if (symbol.value.is_nil())
     return;
 
   // if it is a destructor, add the implicit code
-  if(symbol.type.get("return_type") == "destructor")
+  if (symbol.type.get("return_type") == "destructor")
   {
     const symbolt &msymb = *lookup(symbol.type.get("#member_name"));
 
@@ -98,10 +98,10 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
     code_blockt vtables, dtors;
     dtor(msymb, vtables, dtors);
 
-    if(vtables.has_operands())
+    if (vtables.has_operands())
       symbol.value.operands().insert(symbol.value.operands().begin(), vtables);
 
-    if(dtors.has_operands())
+    if (dtors.has_operands())
       symbol.value.copy_to_operands(dtors);
   }
 
@@ -116,7 +116,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   convert_arguments(symbol.mode, function_type);
 
   // create "this" if it's a non-static method
-  if(function_scope.is_method && !function_scope.is_static_member)
+  if (function_scope.is_method && !function_scope.is_static_member)
   {
     code_typet::argumentst &arguments = function_type.arguments();
     assert(arguments.size() >= 1);
@@ -136,7 +136,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   return_type = function_type.return_type();
 
   // constructor, destructor?
-  if(return_type.id() == "constructor" || return_type.id() == "destructor")
+  if (return_type.id() == "constructor" || return_type.id() == "destructor")
     return_type = empty_typet();
 
   typecheck_code(to_code(symbol.value));
@@ -164,13 +164,13 @@ irep_idt cpp_typecheckt::function_identifier(const typet &type)
 
   code_typet::argumentst::const_iterator it = arguments.begin();
 
-  if(it != arguments.end() && it->get_identifier() == "this")
+  if (it != arguments.end() && it->get_identifier() == "this")
   {
     const typet &pointer = it->type();
     const typet &symbol = pointer.subtype();
-    if(symbol.cmt_constant())
+    if (symbol.cmt_constant())
       result += "const$";
-    if(symbol.cmt_volatile())
+    if (symbol.cmt_volatile())
       result += "volatile$";
     result += "this";
     first = false;
@@ -179,9 +179,9 @@ irep_idt cpp_typecheckt::function_identifier(const typet &type)
 
   // we skipped the "this", on purpose!
 
-  for(; it != arguments.end(); it++)
+  for (; it != arguments.end(); it++)
   {
-    if(first)
+    if (first)
       first = false;
     else
       result += ",";

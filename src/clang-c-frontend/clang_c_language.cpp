@@ -30,10 +30,10 @@ clang_c_languaget::clang_c_languaget()
   // Build the compile arguments
   build_compiler_args(clang_headers_path());
 
-  if(FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
+  if (FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
   {
     fprintf(f, "clang invocation:");
-    for(const std::string &s : compiler_args)
+    for (const std::string &s : compiler_args)
       fprintf(f, " '%s'", s.c_str());
     fprintf(f, "\n");
   }
@@ -47,7 +47,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   // we are still following the way old ESBMC++ includes these operational models using -I.
   // See discussions in PR834.
   const std::string *libc_headers = internal_libc_header_dir();
-  if(libc_headers)
+  if (libc_headers)
   {
     compiler_args.push_back("-isystem");
     compiler_args.push_back(*libc_headers);
@@ -57,7 +57,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   compiler_args.push_back(tmp_dir);
 
   // Append mode arg
-  switch(config.ansi_c.word_size)
+  switch (config.ansi_c.word_size)
   {
   case 16:
   case 32:
@@ -70,7 +70,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     abort();
   }
 
-  if(config.options.get_bool_option("deadlock-check"))
+  if (config.options.get_bool_option("deadlock-check"))
   {
     compiler_args.emplace_back("-Dpthread_join=pthread_join_switch");
     compiler_args.emplace_back("-Dpthread_mutex_lock=pthread_mutex_lock_check");
@@ -78,7 +78,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
       "-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_check");
   }
-  else if(config.options.get_bool_option("lock-order-check"))
+  else if (config.options.get_bool_option("lock-order-check"))
   {
     compiler_args.emplace_back("-Dpthread_join=pthread_join_noswitch");
     compiler_args.emplace_back(
@@ -99,10 +99,10 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
 
-  for(auto const &def : config.ansi_c.defines)
+  for (auto const &def : config.ansi_c.defines)
     compiler_args.push_back("-D" + def);
 
-  if(messaget::state.target("clang", VerbosityLevel::Debug))
+  if (messaget::state.target("clang", VerbosityLevel::Debug))
     compiler_args.emplace_back("-v");
 
   compiler_args.emplace_back("-target");
@@ -110,26 +110,27 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
 
   std::string sysroot;
 
-  if(config.ansi_c.cheri)
+  if (config.ansi_c.cheri)
   {
     bool is_purecap = config.ansi_c.cheri == configt::ansi_ct::CHERI_PURECAP;
     compiler_args.emplace_back(
       "-cheri=" + std::to_string(config.ansi_c.capability_width()));
 
-    if(config.ansi_c.target.is_riscv()) /* unused as of yet: arch is mips64el */
+    if (config.ansi_c.target
+          .is_riscv()) /* unused as of yet: arch is mips64el */
     {
       compiler_args.emplace_back("-march=rv64imafdcxcheri");
       compiler_args.emplace_back(
         std::string("-mabi=") + (is_purecap ? "l64pc128d" : "lp64d"));
     }
-    else if(config.ansi_c.target.arch == "aarch64c")
+    else if (config.ansi_c.target.arch == "aarch64c")
     {
       /* for morello-llvm 11.0.0 from
        * https://git.morello-project.org/morello/llvm-project.git
        * 94e1dbacf1d854b48386ec2c07a35e0694d626e2
        */
       std::string march = "-march=morello";
-      if(is_purecap)
+      if (is_purecap)
       {
         march += "+c64";
         compiler_args.emplace_back("-mabi=purecap");
@@ -137,7 +138,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
       compiler_args.emplace_back(std::move(march));
       compiler_args.emplace_back("-D__ESBMC_CHERI_MORELLO__");
     }
-    else if(is_purecap)
+    else if (is_purecap)
       compiler_args.emplace_back("-mabi=purecap");
 
     compiler_args.emplace_back(
@@ -165,7 +166,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.emplace_back("-D__builtin_cheri_tag_get(p)=1");
     compiler_args.emplace_back("-D__builtin_clzll(n)=__esbmc_clzll(n)");
 
-    switch(config.ansi_c.cheri)
+    switch (config.ansi_c.cheri)
     {
     case configt::ansi_ct::CHERI_OFF:
       break;
@@ -183,30 +184,30 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   }
 
   config.options.get_option("sysroot", sysroot);
-  if(!sysroot.empty())
+  if (!sysroot.empty())
     compiler_args.push_back("--sysroot=" + sysroot);
   else
     compiler_args.emplace_back("--sysroot=" ESBMC_C2GOTO_SYSROOT);
 
-  if(config.options.get_bool_option("nostdinc"))
+  if (config.options.get_bool_option("nostdinc"))
   {
     compiler_args.push_back("-nostdinc");
     compiler_args.push_back("-ibuiltininc");
   }
 
-  for(const auto &dir : config.ansi_c.idirafter_paths)
+  for (const auto &dir : config.ansi_c.idirafter_paths)
   {
     compiler_args.push_back("-idirafter");
     compiler_args.push_back(dir);
   }
 
-  for(auto const &inc : config.ansi_c.include_paths)
+  for (auto const &inc : config.ansi_c.include_paths)
     compiler_args.push_back("-I" + inc);
 
-  for(auto const &inc : config.ansi_c.forces)
+  for (auto const &inc : config.ansi_c.forces)
     compiler_args.push_back("-f" + inc);
 
-  for(auto const &inc : config.ansi_c.warnings)
+  for (auto const &inc : config.ansi_c.warnings)
     compiler_args.push_back("-W" + inc);
 
   compiler_args.emplace_back("-D__builtin_sadd_overflow=__ESBMC_overflow_sadd");
@@ -253,7 +254,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
 
-  if(config.ansi_c.target.is_macos())
+  if (config.ansi_c.target.is_macos())
   {
     compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
     compiler_args.push_back("-D_DONT_USE_CTYPE_INLINE_");
@@ -266,7 +267,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
      * to armv4t in 32-bit mode and the default for that is the incompatible
      * 'soft': the system's <fenv.h> won't work.
      */
-    if(config.ansi_c.target.is_arm() && config.ansi_c.word_size == 32)
+    if (config.ansi_c.target.is_arm() && config.ansi_c.word_size == 32)
     {
       compiler_args.emplace_back("-arch");
       compiler_args.emplace_back("armv6");
@@ -274,7 +275,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     }
   }
 
-  if(config.ansi_c.target.is_windows_abi())
+  if (config.ansi_c.target.is_windows_abi())
   {
     compiler_args.push_back("-D_INC_TIME_INL");
     compiler_args.push_back("-D__CRT__NO_INLINE");
@@ -310,7 +311,7 @@ bool clang_c_languaget::parse(const std::string &path)
   // preprocessing
 
   std::ostringstream o_preprocessed;
-  if(preprocess(path, o_preprocessed))
+  if (preprocess(path, o_preprocessed))
     return true;
 
   // Force the file type, .c for the C frontend and .cpp for the C++ one
@@ -329,8 +330,8 @@ bool clang_c_languaget::parse(const std::string &path)
   ASTs.push_back(std::move(AST));
 
   // Use diagnostics to find errors, rather than the return code.
-  for(auto const &astunit : ASTs)
-    if(astunit->getDiagnostics().hasErrorOccurred())
+  for (auto const &astunit : ASTs)
+    if (astunit->getDiagnostics().hasErrorOccurred())
       return true;
 
   return false;
@@ -341,14 +342,14 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
   contextt new_context;
 
   clang_c_convertert converter(new_context, ASTs, "C");
-  if(converter.convert())
+  if (converter.convert())
     return true;
 
   clang_c_adjust adjuster(new_context);
-  if(adjuster.adjust())
+  if (adjuster.adjust())
     return true;
 
-  if(c_link(context, new_context, module))
+  if (c_link(context, new_context, module))
     return true;
 
   return false;
@@ -356,7 +357,7 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
 
 void clang_c_languaget::show_parse(std::ostream &)
 {
-  for(auto const &translation_unit : ASTs)
+  for (auto const &translation_unit : ASTs)
     (*translation_unit).getASTContext().getTranslationUnitDecl()->dump();
 }
 
@@ -512,7 +513,7 @@ void __ESBMC_unreachable();
   #define scanf __ESBMC_scanf
     )";
 
-  if(config.ansi_c.cheri)
+  if (config.ansi_c.cheri)
   {
     intrinsics += R"(
 __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability);
@@ -555,7 +556,7 @@ bool clang_c_languaget::from_type(
 unsigned clang_c_languaget::default_flags(presentationt target) const
 {
   unsigned f = 0;
-  switch(target)
+  switch (target)
   {
   case presentationt::HUMAN:
     f |= c_expr2stringt::SHORT_ZERO_COMPOUNDS;

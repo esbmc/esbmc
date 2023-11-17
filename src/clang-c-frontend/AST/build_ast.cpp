@@ -69,7 +69,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
     new clang::DiagnosticOptions();
 
   std::vector<const char *> Argv;
-  for(const std::string &Str : compiler_args)
+  for (const std::string &Str : compiler_args)
     Argv.push_back(Str.c_str());
   const char *const BinaryName = Argv[0];
 
@@ -107,7 +107,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
     clang::tooling::newInvocation(Diagnostics, *CC1Args, BinaryName));
 
   // Show the invocation, with -v.
-  if(Invocation->getHeaderSearchOpts().Verbose)
+  if (Invocation->getHeaderSearchOpts().Verbose)
   {
     llvm::errs() << "clang Invocation:\n";
     Compilation->getJobs().Print(llvm::errs(), "\n", true);
@@ -128,7 +128,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
 
   // The action is only used locally, we can delete it now
   // See: https://clang.llvm.org/doxygen/ASTUnit_8cpp_source.html#l01510
-  delete(action);
+  delete (action);
 
   return unit;
 }

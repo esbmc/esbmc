@@ -137,7 +137,7 @@ bool ansi_c_languaget::parse(const std::string &path)
 
   std::ostringstream o_preprocessed;
 
-  if(preprocess(path, o_preprocessed))
+  if (preprocess(path, o_preprocessed))
     return true;
 
   std::istringstream i_preprocessed(o_preprocessed.str());
@@ -154,7 +154,7 @@ bool ansi_c_languaget::parse(const std::string &path)
   //ansi_c_parser.set_message_handler(&message_handler);
   ansi_c_parser.grammar = ansi_c_parsert::LANGUAGE;
 
-  if(config.ansi_c.target.is_windows_abi())
+  if (config.ansi_c.target.is_windows_abi())
     ansi_c_parser.mode = ansi_c_parsert::MSC;
   else
     ansi_c_parser.mode = ansi_c_parsert::GCC;
@@ -163,7 +163,7 @@ bool ansi_c_languaget::parse(const std::string &path)
 
   bool result = ansi_c_parser.parse();
 
-  if(!result)
+  if (!result)
   {
     ansi_c_parser.line_no = 0;
     ansi_c_parser.filename = path;
@@ -183,15 +183,15 @@ bool ansi_c_languaget::parse(const std::string &path)
 
 bool ansi_c_languaget::typecheck(contextt &context, const std::string &module)
 {
-  if(ansi_c_convert(parse_tree, module))
+  if (ansi_c_convert(parse_tree, module))
     return true;
 
   contextt new_context;
 
-  if(ansi_c_typecheck(parse_tree, new_context, module))
+  if (ansi_c_typecheck(parse_tree, new_context, module))
     return true;
 
-  if(c_link(context, new_context, module))
+  if (c_link(context, new_context, module))
     return true;
 
   return false;
@@ -199,9 +199,9 @@ bool ansi_c_languaget::typecheck(contextt &context, const std::string &module)
 
 bool ansi_c_languaget::final(contextt &context)
 {
-  if(c_final(context))
+  if (c_final(context))
     return true;
-  if(c_main(context, "main"))
+  if (c_main(context, "main"))
     return true;
 
   return false;

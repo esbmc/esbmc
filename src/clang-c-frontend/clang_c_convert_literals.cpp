@@ -18,7 +18,7 @@ bool clang_c_convertert::convert_character_literal(
   exprt &dest)
 {
   typet type;
-  if(get_type(char_literal.getType(), type))
+  if (get_type(char_literal.getType(), type))
     return true;
 
   dest = constant_exprt(
@@ -34,12 +34,12 @@ bool clang_c_convertert::convert_string_literal(
   exprt &dest)
 {
   typet type;
-  if(get_type(string_literal.getType(), type))
+  if (get_type(string_literal.getType(), type))
     return true;
 
   // When strings are just used for initialization, it might be worth
   // to just replace them by null. See https://github.com/esbmc/esbmc/pull/1185#issuecomment-1631166527
-  if(config.options.get_bool_option("no-string-literal"))
+  if (config.options.get_bool_option("no-string-literal"))
   {
     auto value = gen_zero(type);
     dest.swap(value);
@@ -58,7 +58,7 @@ bool clang_c_convertert::convert_integer_literal(
   exprt &dest)
 {
   typet type;
-  if(get_type(integer_literal.getType(), type))
+  if (get_type(integer_literal.getType(), type))
     return true;
 
   assert(type.is_unsignedbv() || type.is_signedbv());
@@ -66,7 +66,7 @@ bool clang_c_convertert::convert_integer_literal(
   llvm::APInt val = integer_literal.getValue();
 
   exprt the_val;
-  if(type.is_unsignedbv())
+  if (type.is_unsignedbv())
   {
     the_val = constant_exprt(
       integer2binary(val.getZExtValue(), bv_width(type)),
@@ -104,7 +104,7 @@ static void parse_float(
 
   // get fraction part
   std::string str_fraction_part;
-  while(src[p] != 'E')
+  while (src[p] != 'E')
     str_fraction_part += src[p++];
 
   // skip E
@@ -115,23 +115,23 @@ static void parse_float(
   assert(src[p] == '+' || src[p] == '-');
 
   // skip +
-  if(src[p] == '+')
+  if (src[p] == '+')
     p++;
 
   std::string str_exponent;
   str_exponent += src[p++];
 
-  while(p < src.size())
+  while (p < src.size())
     str_exponent += src[p++];
 
   std::string str_number = str_whole_number + str_fraction_part;
 
-  if(str_number.empty())
+  if (str_number.empty())
     significand = 0;
   else
     significand = string2integer(str_number);
 
-  if(str_exponent.empty())
+  if (str_exponent.empty())
     exponent = 0;
   else
     exponent = string2integer(str_exponent);
@@ -144,7 +144,7 @@ bool clang_c_convertert::convert_float_literal(
   exprt &dest)
 {
   typet type;
-  if(get_type(floating_literal.getType(), type))
+  if (get_type(floating_literal.getType(), type))
     return true;
 
   // Get the value and convert it to string
@@ -166,12 +166,12 @@ bool clang_c_convertert::convert_float_literal(
   std::string value_string;
 
   // Fixed bvs
-  if(config.ansi_c.use_fixed_for_float)
+  if (config.ansi_c.use_fixed_for_float)
   {
     // If it's +oo or -oo, we can't parse it
-    if(val.isInfinity())
+    if (val.isInfinity())
     {
-      if(val.isNegative())
+      if (val.isNegative())
       {
         // saturate: use "smallest value"
         value = -power(2, width - 1);
@@ -182,7 +182,7 @@ bool clang_c_convertert::convert_float_literal(
         value = power(2, width - 1) - 1;
       }
     }
-    else if(val.isNaN())
+    else if (val.isNaN())
     {
       value = 0;
     }
@@ -194,7 +194,7 @@ bool clang_c_convertert::convert_float_literal(
       unsigned fraction_bits;
       const std::string &integer_bits = type.integer_bits().as_string();
 
-      if(integer_bits == "")
+      if (integer_bits == "")
         fraction_bits = width / 2;
       else
         fraction_bits = width - atoi(integer_bits.c_str());
@@ -202,18 +202,18 @@ bool clang_c_convertert::convert_float_literal(
       BigInt factor = BigInt(1) << fraction_bits;
       value = significand * factor;
 
-      if(exponent < 0)
+      if (exponent < 0)
         value /= power(10, -exponent);
       else
       {
         value *= power(10, exponent);
 
-        if(value <= -power(2, width - 1) - 1)
+        if (value <= -power(2, width - 1) - 1)
         {
           // saturate: use "smallest value"
           value = -power(2, width - 1);
         }
-        else if(value >= power(2, width - 1))
+        else if (value >= power(2, width - 1))
         {
           // saturate: use "biggest value"
           value = power(2, width - 1) - 1;
@@ -230,9 +230,9 @@ bool clang_c_convertert::convert_float_literal(
     a.spec = to_floatbv_type(type);
 
     // If it's +oo or -oo, we can't parse it
-    if(val.isInfinity())
+    if (val.isInfinity())
     {
-      if(val.isNegative())
+      if (val.isNegative())
       {
         a = ieee_floatt::minus_infinity(a.spec);
       }
@@ -241,7 +241,7 @@ bool clang_c_convertert::convert_float_literal(
         a = ieee_floatt::plus_infinity(a.spec);
       }
     }
-    else if(val.isNaN())
+    else if (val.isNaN())
     {
       a = ieee_floatt::NaN(a.spec);
     }

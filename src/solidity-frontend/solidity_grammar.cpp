@@ -85,19 +85,19 @@ const std::map<ElementaryTypeNameT, unsigned int> bytesn_size_map = {
 // rule contract-body-element
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
 {
-  if(
+  if (
     element["nodeType"] == "VariableDeclaration" &&
     element["stateVariable"] == true)
   {
     return StateVarDecl;
   }
-  else if(
+  else if (
     element["nodeType"] == "FunctionDefinition" &&
     (element["kind"] == "function" || element["kind"] == "constructor"))
   {
     return FunctionDef;
   }
-  else if(element["nodeType"] == "EnumDefinition")
+  else if (element["nodeType"] == "EnumDefinition")
   {
     return EnumDef;
   }
@@ -114,7 +114,7 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
 
 const char *contract_body_element_to_str(ContractBodyElementT type)
 {
-  switch(type)
+  switch (type)
   {
     ENUM_TO_STR(StateVarDecl)
     ENUM_TO_STR(FunctionDef)
@@ -133,7 +133,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
 {
   // Solidity AST node has duplicate descrptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
 
-  if(type_name.contains("typeString"))
+  if (type_name.contains("typeString"))
   {
     // for AST node that contains ["typeName"]["typeDescriptions"]
     const std::string typeString = type_name["typeString"].get<std::string>();
@@ -143,11 +143,11 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     // we must first handle tuple
     // otherwise we might parse tuple(literal_string, literal_string)
     // as ElementaryTypeName
-    if(typeString.substr(0, 6) == "tuple(" && typeString != "tuple()")
+    if (typeString.substr(0, 6) == "tuple(" && typeString != "tuple()")
     {
       return TupleTypeName;
     }
-    else if(typeIdentifier.find("t_array$") != std::string::npos)
+    else if (typeIdentifier.find("t_array$") != std::string::npos)
     {
       // Solidity's array type description is like:
       //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
@@ -161,18 +161,18 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       //   Memory Array
 
       // Multi-Dimensional Arrays
-      if(typeIdentifier.find("t_array$_t_array$") != std::string::npos)
+      if (typeIdentifier.find("t_array$_t_array$") != std::string::npos)
       {
         log_error("Multi-Dimensional Arrays are not supported.");
         abort();
       }
 
-      if(typeIdentifier.find("$dyn") != std::string::npos)
+      if (typeIdentifier.find("$dyn") != std::string::npos)
         return DynArrayTypeName;
 
       return ArrayTypeName;
     }
-    else if(
+    else if (
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
       typeString == "string" || typeString.find("literal_string") == 0 ||
@@ -183,37 +183,37 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       // For state var declaration,
       return ElementaryTypeName;
     }
-    else if(typeString.find("type(") != std::string::npos)
+    else if (typeString.find("type(") != std::string::npos)
     {
       // For type conversion
       return TypeConversionName;
     }
-    else if(typeString.find("int_const") != std::string::npos)
+    else if (typeString.find("int_const") != std::string::npos)
     {
       // For Literal, their typeString is like "int_const 100".
       return ElementaryTypeName;
     }
-    else if(
+    else if (
       typeString.find("function") != std::string::npos &&
       typeString.find("contract ") == std::string::npos)
     {
       // FunctionToPointer decay in CallExpr when making a function call
       return Pointer;
     }
-    else if(
+    else if (
       type_name["typeIdentifier"].get<std::string>().find("ArrayToPtr") !=
       std::string::npos)
     {
       // ArrayToPointer decay in DeclRefExpr when dereferencing an array, e.g. a[0]
       return PointerArrayToPtr;
     }
-    else if(
+    else if (
       type_name["typeIdentifier"].get<std::string>().find("t_contract") !=
       std::string::npos)
     {
       return ContractTypeName;
     }
-    else if(
+    else if (
       type_name["typeIdentifier"].get<std::string>().find("t_enum") !=
       std::string::npos)
     {
@@ -231,7 +231,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
   {
     // for AST node that does not contain ["typeDescriptions"] only
     // function returnParameters
-    if(type_name["nodeType"] == "ParameterList")
+    if (type_name["nodeType"] == "ParameterList")
     {
       return ParameterList;
     }
@@ -249,7 +249,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
 
 const char *type_name_to_str(TypeNameT type)
 {
-  switch(type)
+  switch (type)
   {
     ENUM_TO_STR(ElementaryTypeName)
     ENUM_TO_STR(ParameterList)
@@ -276,19 +276,19 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   std::string typeString = type_name["typeString"].get<std::string>();
   // rule unsigned-integer-type
 
-  if(uint_string_to_type_map.count(typeString))
+  if (uint_string_to_type_map.count(typeString))
   {
     return uint_string_to_type_map.at(typeString);
   }
-  if(int_string_to_type_map.count(typeString))
+  if (int_string_to_type_map.count(typeString))
   {
     return int_string_to_type_map.at(typeString);
   }
-  if(typeString == "bool")
+  if (typeString == "bool")
   {
     return BOOL;
   }
-  if(typeString.find("int_const") != std::string::npos)
+  if (typeString.find("int_const") != std::string::npos)
   {
     /**
      * For Literal, their typeString is like "int_const 100".
@@ -298,30 +298,30 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
      */
     return INT_LITERAL;
   }
-  if(typeString.find("literal_string") == 0)
+  if (typeString.find("literal_string") == 0)
   {
     return STRING_LITERAL;
   }
-  if(
+  if (
     typeString == "string" || typeString == "string storage ref" ||
     typeString == "string memory")
   {
     return STRING;
   }
-  if(typeString == "address")
+  if (typeString == "address")
   {
     return ADDRESS;
   }
-  if(typeString == "address payable")
+  if (typeString == "address payable")
   {
     return ADDRESS_PAYABLE;
   }
-  if(bytesn_to_type_map.count(typeString))
+  if (bytesn_to_type_map.count(typeString))
   {
     // fixed-size arrays bytesN, where N is a number between 1 and 32
     return bytesn_to_type_map.at(typeString);
   }
-  if(typeString.find("bytes") != std::string::npos)
+  if (typeString.find("bytes") != std::string::npos)
   {
     // dynamic bytes array
     // e.g.
@@ -339,7 +339,7 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
 
 const char *elementary_type_name_to_str(ElementaryTypeNameT type)
 {
-  switch(type)
+  switch (type)
   {
     ENUM_TO_STR(UINT8)
     ENUM_TO_STR(UINT16)
@@ -471,7 +471,7 @@ unsigned int bytesn_type_name_to_size(ElementaryTypeNameT type)
 // rule parameter-list
 ParameterListT get_parameter_list_t(const nlohmann::json &type_name)
 {
-  if(type_name["parameters"].size() == 0)
+  if (type_name["parameters"].size() == 0)
   {
     return EMPTY;
   }
@@ -485,7 +485,7 @@ ParameterListT get_parameter_list_t(const nlohmann::json &type_name)
 
 const char *parameter_list_to_str(ParameterListT type)
 {
-  switch(type)
+  switch (type)
   {
     ENUM_TO_STR(EMPTY)
     ENUM_TO_STR(NONEMPTY)
@@ -501,7 +501,7 @@ const char *parameter_list_to_str(ParameterListT type)
 // rule block
 BlockT get_block_t(const nlohmann::json &block)
 {
-  if(block["nodeType"] == "Block" && block.contains("statements"))
+  if (block["nodeType"] == "Block" && block.contains("statements"))
   {
     return Statement;
   }
@@ -517,7 +517,7 @@ BlockT get_block_t(const nlohmann::json &block)
 
 const char *block_to_str(BlockT type)
 {
-  switch(type)
+  switch (type)
   {
     ENUM_TO_STR(Statement)
     ENUM_TO_STR(UncheckedBlock)
@@ -533,31 +533,31 @@ const char *block_to_str(BlockT type)
 // rule statement
 StatementT get_statement_t(const nlohmann::json &stmt)
 {
-  if(stmt["nodeType"] == "ExpressionStatement")
+  if (stmt["nodeType"] == "ExpressionStatement")
   {
     return ExpressionStatement;
   }
-  else if(stmt["nodeType"] == "VariableDeclarationStatement")
+  else if (stmt["nodeType"] == "VariableDeclarationStatement")
   {
     return VariableDeclStatement;
   }
-  else if(stmt["nodeType"] == "Return")
+  else if (stmt["nodeType"] == "Return")
   {
     return ReturnStatement;
   }
-  else if(stmt["nodeType"] == "ForStatement")
+  else if (stmt["nodeType"] == "ForStatement")
   {
     return ForStatement;
   }
-  else if(stmt["nodeType"] == "Block")
+  else if (stmt["nodeType"] == "Block")
   {
     return Block;
   }
-  else if(stmt["nodeType"] == "IfStatement")
+  else if (stmt["nodeType"] == "IfStatement")
   {
     return IfStatement;
   }
-  else if(stmt["nodeType"] == "WhileStatement")
+  else if (stmt["nodeType"] == "WhileStatement")
   {
     return WhileStatement;
   }
@@ -573,7 +573,7 @@ StatementT get_statement_t(const nlohmann::json &stmt)
 
 const char *statement_to_str(StatementT type)
 {
-  switch(type)
+  switch (type)
   {
     ENUM_TO_STR(Block)
     ENUM_TO_STR(ExpressionStatement)
@@ -594,57 +594,57 @@ const char *statement_to_str(StatementT type)
 // rule expression
 ExpressionT get_expression_t(const nlohmann::json &expr)
 {
-  if(expr["nodeType"] == "Assignment" || expr["nodeType"] == "BinaryOperation")
+  if (expr["nodeType"] == "Assignment" || expr["nodeType"] == "BinaryOperation")
   {
     return BinaryOperatorClass;
   }
-  else if(expr["nodeType"] == "UnaryOperation")
+  else if (expr["nodeType"] == "UnaryOperation")
   {
     return UnaryOperatorClass;
   }
-  else if(expr["nodeType"] == "Conditional")
+  else if (expr["nodeType"] == "Conditional")
   {
     return ConditionalOperatorClass;
   }
-  else if(
+  else if (
     expr["nodeType"] == "Identifier" && expr.contains("referencedDeclaration"))
   {
     return DeclRefExprClass;
   }
-  else if(expr["nodeType"] == "Literal")
+  else if (expr["nodeType"] == "Literal")
   {
     return Literal;
   }
-  else if(expr["nodeType"] == "TupleExpression")
+  else if (expr["nodeType"] == "TupleExpression")
   {
     return Tuple;
   }
-  else if(expr["nodeType"] == "FunctionCall")
+  else if (expr["nodeType"] == "FunctionCall")
   {
-    if(expr["expression"]["nodeType"] == "NewExpression")
+    if (expr["expression"]["nodeType"] == "NewExpression")
       return NewExpression;
-    if(expr["expression"]["nodeType"] == "MemberAccess")
+    if (expr["expression"]["nodeType"] == "MemberAccess")
       return MemberCallClass;
-    if(
+    if (
       expr["expression"]["nodeType"] == "ElementaryTypeNameExpression" &&
       expr["kind"] == "typeConversion")
       return ElementaryTypeNameExpression;
     return CallExprClass;
   }
-  else if(expr["nodeType"] == "MemberAccess")
+  else if (expr["nodeType"] == "MemberAccess")
   {
     // get enum.member
-    if(expr["expression"]["nodeType"] == "Identifier")
+    if (expr["expression"]["nodeType"] == "Identifier")
       return DeclRefExprClass;
 
     // get contractInstance.function
     return CallExprClass;
   }
-  else if(expr["nodeType"] == "ImplicitCastExprClass")
+  else if (expr["nodeType"] == "ImplicitCastExprClass")
   {
     return ImplicitCastExprClass;
   }
-  else if(expr["nodeType"] == "IndexAccess")
+  else if (expr["nodeType"] == "IndexAccess")
   {
     return IndexAccess;
   }
@@ -660,29 +660,29 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
 
 ExpressionT get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre)
 {
-  if(expr["operator"] == "--")
+  if (expr["operator"] == "--")
   {
-    if(uo_pre)
+    if (uo_pre)
       return UO_PreDec;
     else
       return UO_PostDec;
   }
-  else if(expr["operator"] == "++")
+  else if (expr["operator"] == "++")
   {
-    if(uo_pre)
+    if (uo_pre)
       return UO_PreInc;
     else
       return UO_PostInc;
   }
-  else if(expr["operator"] == "-")
+  else if (expr["operator"] == "-")
   {
     return UO_Minus;
   }
-  else if(expr["operator"] == "~")
+  else if (expr["operator"] == "~")
   {
     return UO_Not;
   }
-  else if(expr["operator"] == "!")
+  else if (expr["operator"] == "!")
   {
     return UO_LNot;
   }
@@ -698,123 +698,123 @@ ExpressionT get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre)
 
 ExpressionT get_expr_operator_t(const nlohmann::json &expr)
 {
-  if(expr["operator"] == "=")
+  if (expr["operator"] == "=")
   {
     return BO_Assign;
   }
-  else if(expr["operator"] == "+")
+  else if (expr["operator"] == "+")
   {
     return BO_Add;
   }
-  else if(expr["operator"] == "-")
+  else if (expr["operator"] == "-")
   {
     return BO_Sub;
   }
-  else if(expr["operator"] == "*")
+  else if (expr["operator"] == "*")
   {
     return BO_Mul;
   }
-  else if(expr["operator"] == "/")
+  else if (expr["operator"] == "/")
   {
     return BO_Div;
   }
-  else if(expr["operator"] == "%")
+  else if (expr["operator"] == "%")
   {
     return BO_Rem;
   }
-  else if(expr["operator"] == "<<")
+  else if (expr["operator"] == "<<")
   {
     return BO_Shl;
   }
-  else if(expr["operator"] == ">>")
+  else if (expr["operator"] == ">>")
   {
     return BO_Shr;
   }
-  else if(expr["operator"] == "&")
+  else if (expr["operator"] == "&")
   {
     return BO_And;
   }
-  else if(expr["operator"] == "^")
+  else if (expr["operator"] == "^")
   {
     return BO_Xor;
   }
-  else if(expr["operator"] == "|")
+  else if (expr["operator"] == "|")
   {
     return BO_Or;
   }
-  else if(expr["operator"] == ">")
+  else if (expr["operator"] == ">")
   {
     return BO_GT;
   }
-  else if(expr["operator"] == "<")
+  else if (expr["operator"] == "<")
   {
     return BO_LT;
   }
-  else if(expr["operator"] == ">=")
+  else if (expr["operator"] == ">=")
   {
     return BO_GE;
   }
-  else if(expr["operator"] == "<=")
+  else if (expr["operator"] == "<=")
   {
     return BO_LE;
   }
-  else if(expr["operator"] == "!=")
+  else if (expr["operator"] == "!=")
   {
     return BO_NE;
   }
-  else if(expr["operator"] == "==")
+  else if (expr["operator"] == "==")
   {
     return BO_EQ;
   }
-  else if(expr["operator"] == "&&")
+  else if (expr["operator"] == "&&")
   {
     return BO_LAnd;
   }
-  else if(expr["operator"] == "||")
+  else if (expr["operator"] == "||")
   {
     return BO_LOr;
   }
-  else if(expr["operator"] == "+=")
+  else if (expr["operator"] == "+=")
   {
     return BO_AddAssign;
   }
-  else if(expr["operator"] == "-=")
+  else if (expr["operator"] == "-=")
   {
     return BO_SubAssign;
   }
-  else if(expr["operator"] == "*=")
+  else if (expr["operator"] == "*=")
   {
     return BO_MulAssign;
   }
-  else if(expr["operator"] == "/=")
+  else if (expr["operator"] == "/=")
   {
     return BO_DivAssign;
   }
-  else if(expr["operator"] == "%=")
+  else if (expr["operator"] == "%=")
   {
     return BO_RemAssign;
   }
-  else if(expr["operator"] == "<<=")
+  else if (expr["operator"] == "<<=")
   {
     return BO_ShlAssign;
   }
-  else if(expr["operator"] == ">>=")
+  else if (expr["operator"] == ">>=")
   {
     return BO_ShrAssign;
   }
-  else if(expr["operator"] == "&=")
+  else if (expr["operator"] == "&=")
   {
     return BO_AndAssign;
   }
-  else if(expr["operator"] == "^=")
+  else if (expr["operator"] == "^=")
   {
     return BO_XorAssign;
   }
-  else if(expr["operator"] == "|=")
+  else if (expr["operator"] == "|=")
   {
     return BO_OrAssign;
   }
-  else if(expr["operator"] == "**")
+  else if (expr["operator"] == "**")
   {
     return BO_Pow;
   }
@@ -831,7 +831,7 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr)
 
 const char *expression_to_str(ExpressionT type)
 {
-  switch(type)
+  switch (type)
   {
     ENUM_TO_STR(BinaryOperatorClass)
     ENUM_TO_STR(BO_Assign)
@@ -900,7 +900,7 @@ const char *expression_to_str(ExpressionT type)
 // rule variable-declaration-statement
 VarDeclStmtT get_var_decl_stmt_t(const nlohmann::json &stmt)
 {
-  if(
+  if (
     stmt["nodeType"] == "VariableDeclaration" && stmt["stateVariable"] == false)
   {
     return VariableDecl;
@@ -918,7 +918,7 @@ VarDeclStmtT get_var_decl_stmt_t(const nlohmann::json &stmt)
 
 const char *var_decl_statement_to_str(VarDeclStmtT type)
 {
-  switch(type)
+  switch (type)
   {
     ENUM_TO_STR(VariableDecl)
     ENUM_TO_STR(VariableDeclTuple)
@@ -935,7 +935,7 @@ const char *var_decl_statement_to_str(VarDeclStmtT type)
 FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
 {
   assert(decl["nodeType"] == "FunctionDefinition");
-  if(
+  if (
     decl["parameters"]["parameters"].size() == 0 ||
     decl["kind"] == "constructor")
   {
@@ -950,7 +950,7 @@ FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
 
 const char *func_decl_ref_to_str(FunctionDeclRefT type)
 {
-  switch(type)
+  switch (type)
   {
     ENUM_TO_STR(FunctionProto)
     ENUM_TO_STR(FunctionNoProto)
@@ -966,15 +966,15 @@ const char *func_decl_ref_to_str(FunctionDeclRefT type)
 // auxiliary type for implicit casting
 ImplicitCastTypeT get_implicit_cast_type_t(std::string cast)
 {
-  if(cast == "LValueToRValue")
+  if (cast == "LValueToRValue")
   {
     return LValueToRValue;
   }
-  else if(cast == "FunctionToPointerDecay")
+  else if (cast == "FunctionToPointerDecay")
   {
     return FunctionToPointerDecay;
   }
-  else if(cast == "ArrayToPointerDecay")
+  else if (cast == "ArrayToPointerDecay")
   {
     return ArrayToPointerDecay;
   }
@@ -989,7 +989,7 @@ ImplicitCastTypeT get_implicit_cast_type_t(std::string cast)
 
 const char *implicit_cast_type_to_str(ImplicitCastTypeT type)
 {
-  switch(type)
+  switch (type)
   {
     ENUM_TO_STR(LValueToRValue)
     ENUM_TO_STR(FunctionToPointerDecay)
@@ -1006,19 +1006,19 @@ const char *implicit_cast_type_to_str(ImplicitCastTypeT type)
 VisibilityT get_access_t(const nlohmann::json &ast_node)
 {
   std::string access = ast_node["visibility"].get<std::string>();
-  if(access == "public")
+  if (access == "public")
   {
     return PublicT;
   }
-  else if(access == "private")
+  else if (access == "private")
   {
     return PrivateT;
   }
-  else if(access == "external")
+  else if (access == "external")
   {
     return ExternalT;
   }
-  else if(access == "internal")
+  else if (access == "internal")
   {
     return InternalT;
   }

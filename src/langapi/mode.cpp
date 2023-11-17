@@ -31,7 +31,7 @@ static const language_desct language_desc_python = {
 
 const struct language_desct *language_desc(language_idt id)
 {
-  switch(id)
+  switch (id)
   {
   case language_idt::NONE:
     break;
@@ -51,27 +51,27 @@ const struct language_desct *language_desc(language_idt id)
 
 language_idt language_id_by_name(const std::string &name)
 {
-  for(int i = 0;; i++)
+  for (int i = 0;; i++)
   {
     language_idt lid = static_cast<language_idt>(i);
     const language_desct *desc = language_desc(lid);
-    if(!desc)
+    if (!desc)
       return language_idt::NONE;
-    if(desc->name == name)
+    if (desc->name == name)
       return lid;
   }
 }
 
 language_idt language_id_by_ext(const std::string &ext)
 {
-  for(int i = 0;; i++)
+  for (int i = 0;; i++)
   {
     language_idt lid = static_cast<language_idt>(i);
     const language_desct *desc = language_desc(lid);
-    if(!desc)
+    if (!desc)
       return language_idt::NONE;
-    for(const char *const *e = desc->filename_extensions; *e; e++)
-      if(*e == ext)
+    for (const char *const *e = desc->filename_extensions; *e; e++)
+      if (*e == ext)
         return lid;
   }
 }
@@ -80,12 +80,12 @@ language_idt language_id_by_path(const std::string &path)
 {
   const char *ext = strrchr(path.c_str(), '.');
 
-  if(ext == nullptr)
+  if (ext == nullptr)
     return language_idt::NONE;
 
   std::string extension = ext + 1;
 
-  if(extension == "")
+  if (extension == "")
     return language_idt::NONE;
 
   return language_id_by_ext(extension);
@@ -95,8 +95,8 @@ int get_mode(language_idt lang)
 {
   assert(language_desc(lang));
 
-  for(int i = 0; mode_table[i].new_language; i++)
-    if(lang == mode_table[i].language_id)
+  for (int i = 0; mode_table[i].new_language; i++)
+    if (lang == mode_table[i].language_id)
       return i;
 
   return -1;
@@ -105,7 +105,7 @@ int get_mode(language_idt lang)
 int get_mode(const std::string &str)
 {
   language_idt id = language_id_by_name(str);
-  if(id == language_idt::NONE)
+  if (id == language_idt::NONE)
     return -1;
 
   return get_mode(id);
@@ -114,8 +114,8 @@ int get_mode(const std::string &str)
 int get_old_frontend_mode(int current_mode)
 {
   language_idt expected = mode_table[current_mode].language_id;
-  for(int i = current_mode + 1; mode_table[i].new_language; i++)
-    if(expected == mode_table[i].language_id)
+  for (int i = current_mode + 1; mode_table[i].new_language; i++)
+    if (expected == mode_table[i].language_id)
       return i;
 
   return -1;
@@ -124,7 +124,7 @@ int get_old_frontend_mode(int current_mode)
 int get_mode_filename(const std::string &filename)
 {
   language_idt id = language_id_by_path(filename);
-  if(id == language_idt::NONE)
+  if (id == language_idt::NONE)
     return -1;
 
   return get_mode(id);

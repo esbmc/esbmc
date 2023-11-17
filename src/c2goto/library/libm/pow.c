@@ -52,19 +52,19 @@ static double pow_by_squaring(double x, uint32_t n)
 double pow(double x, double y)
 {
 __ESBMC_HIDE:;
-  if(x == 1.0 || y == 0.0)
+  if (x == 1.0 || y == 0.0)
     return 1.0;
 
-  if(isnan(x))
+  if (isnan(x))
     return x;
-  if(isnan(y))
+  if (isnan(y))
     return y;
 
-  if(isinf(y))
+  if (isinf(y))
   {
-    if(x == -1.0)
+    if (x == -1.0)
       return 1.0;
-    if((fabs(x) < 1) != !signbit(y)) /* |x| < 1 && y < 0 || |x| > 1 && y > 0 */
+    if ((fabs(x) < 1) != !signbit(y)) /* |x| < 1 && y < 0 || |x| > 1 && y > 0 */
       return INFINITY;
     return +0.0;
   }
@@ -76,13 +76,13 @@ __ESBMC_HIDE:;
   int is_int = nearbyint(y) == y;
   int odd_int = ye <= 53 && is_int && ((long long)y & 1);
 
-  if(x == 0.0)
+  if (x == 0.0)
   {
     double r = signbit(y) ? HUGE_VAL : 0.0;
     return odd_int ? copysign(r, x) : r;
   }
 
-  if(isinf(x))
+  if (isinf(x))
   {
     double r = signbit(y) ? 0.0 : INFINITY;
     return odd_int ? copysign(r, x) : r;
@@ -90,13 +90,13 @@ __ESBMC_HIDE:;
 
   /* here we know x is finite */
 
-  if(!is_int && signbit(x))
+  if (!is_int && signbit(x))
     return NAN;
 
-  if(is_int && ye <= 32) /* y is integral and fits into 32 bits */
+  if (is_int && ye <= 32) /* y is integral and fits into 32 bits */
   {
     int xe;
-    if(fabs(frexp(x, &xe)) == 0.5) /* |x| = 2^(xe-1) is a power of 2 */
+    if (fabs(frexp(x, &xe)) == 0.5) /* |x| = 2^(xe-1) is a power of 2 */
     {
       /* If y is too large to fit into the exponent, check whether |x| > 1 is
        * equivalent to y < 0. If so, 0.0 is the result, otherwise infinity.

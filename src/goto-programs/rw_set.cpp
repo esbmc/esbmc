@@ -9,18 +9,18 @@ void rw_sett::compute(const codet &code)
 {
   const irep_idt &statement = code.get_statement();
 
-  if(statement == "assign")
+  if (statement == "assign")
   {
     assert(code.operands().size() == 2);
     assign(code.op0(), code.op1());
   }
-  else if(statement == "printf")
+  else if (statement == "printf")
   {
     exprt expr = code;
-    Forall_operands(it, expr)
+    Forall_operands (it, expr)
       read_rec(*it);
   }
-  else if(statement == "return")
+  else if (statement == "return")
   {
     assert(code.operands().size() == 1);
     read_rec(code.op0());
@@ -42,19 +42,19 @@ void rw_sett::read_write_rec(
   const exprt &original_expr,
   bool dereferenced)
 {
-  if(expr.id() == "symbol" && !expr.has_operands())
+  if (expr.id() == "symbol" && !expr.has_operands())
   {
     const symbol_exprt &symbol_expr = to_symbol_expr(expr);
 
     const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
-    if(symbol)
+    if (symbol)
     {
-      if(!symbol->static_lifetime && !dereferenced)
+      if (!symbol->static_lifetime && !dereferenced)
       {
         return; // ignore for now
       }
 
-      if(
+      if (
         symbol->name == "__ESBMC_alloc" ||
         symbol->name == "__ESBMC_alloc_size" || symbol->name == "stdin" ||
         symbol->name == "stdout" || symbol->name == "stderr" ||
@@ -65,7 +65,7 @@ void rw_sett::read_write_rec(
       }
 
       // Improvements for CUDA features
-      if(symbol->name == "indexOfThread" || symbol->name == "indexOfBlock")
+      if (symbol->name == "indexOfThread" || symbol->name == "indexOfBlock")
       {
         return; // ignore for now
       }
@@ -81,19 +81,19 @@ void rw_sett::read_write_rec(
     entry.guard = migrate_expr_back(guard.as_expr());
     entry.original_expr = original_expr;
   }
-  else if(expr.id() == "member")
+  else if (expr.id() == "member")
   {
     assert(expr.operands().size() == 1);
     const std::string &component_name = expr.component_name().as_string();
     read_write_rec(
       expr.op0(), r, w, "." + component_name + suffix, guard, original_expr);
   }
-  else if(expr.id() == "index")
+  else if (expr.id() == "index")
   {
     assert(expr.operands().size() == 2);
     read_write_rec(expr.op0(), r, w, suffix, guard, expr, dereferenced);
   }
-  else if(expr.id() == "dereference")
+  else if (expr.id() == "dereference")
   {
     assert(expr.operands().size() == 1);
     read_rec(expr.op0(), guard, original_expr);
@@ -105,12 +105,12 @@ void rw_sett::read_write_rec(
 
     // If dereferencing fails, then we revert the variable
     // and we will attempt dereferencing in symex
-    if(
+    if (
       has_prefix(id2string(tmp.identifier()), "symex::invalid_object") ||
       id2string(tmp.identifier()) == "")
       tmp = expr.op0();
 
-    if(tmp.id() == "+")
+    if (tmp.id() == "+")
     {
       index_exprt tmp_index(tmp.op0(), tmp.op1(), tmp.type());
       tmp.swap(tmp_index);
@@ -118,11 +118,11 @@ void rw_sett::read_write_rec(
 
     read_write_rec(tmp, r, w, suffix, guard, original_expr, true);
   }
-  else if(expr.is_address_of() || expr.id() == "implicit_address_of")
+  else if (expr.is_address_of() || expr.id() == "implicit_address_of")
   {
     assert(expr.operands().size() == 1);
   }
-  else if(expr.id() == "if")
+  else if (expr.id() == "if")
   {
     assert(expr.operands().size() == 3);
     read_rec(expr.op0(), guard, original_expr);
@@ -140,7 +140,7 @@ void rw_sett::read_write_rec(
   }
   else
   {
-    forall_operands(it, expr)
+    forall_operands (it, expr)
       read_write_rec(*it, r, w, suffix, guard, original_expr);
   }
 }

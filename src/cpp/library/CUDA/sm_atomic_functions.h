@@ -124,7 +124,7 @@ extern __device__ int __iAtomicMin(int *address, int val)
   int old_value;
 
   old_value = *address;
-  if(val < old_value)
+  if (val < old_value)
     *address = val;
 
   __ESBMC_atomic_end();
@@ -138,7 +138,7 @@ __uAtomicMin(unsigned int *address, unsigned int val)
   unsigned int old_value;
 
   old_value = *address;
-  if(val < old_value)
+  if (val < old_value)
     *address = val;
 
   __ESBMC_atomic_end();
@@ -151,7 +151,7 @@ extern __device__ int __iAtomicMax(int *address, int val)
   int old_value;
 
   old_value = *address;
-  if(val > old_value)
+  if (val > old_value)
     *address = val;
 
   __ESBMC_atomic_end();
@@ -165,7 +165,7 @@ __uAtomicMax(unsigned int *address, unsigned int val)
   unsigned int old_value;
 
   old_value = *address;
-  if(val > old_value)
+  if (val > old_value)
     *address = val;
 
   __ESBMC_atomic_end();
@@ -183,7 +183,7 @@ __uAtomicInc(unsigned int *address, unsigned int val)
   //	((old >= val) ? 0 : (old+1))
   //	(old_value >= val) ? (*address = 0) : (*address = (old_value+1));
 
-  if(old_value >= val)
+  if (old_value >= val)
     *address = 0;
   else
     *address = (old_value + 1);
@@ -203,7 +203,7 @@ __uAtomicDec(unsigned int *address, unsigned int val)
   //	(((old == 0) | (old > val)) ? val : (old-1) )
   //	((old_value == val) | (old_value > val)) ? (*address = val) : (*address = (old_value-1));
 
-  if((old_value == val) | (old_value > val))
+  if ((old_value == val) | (old_value > val))
     *address = val;
   else
     *address = (old_value - 1);
@@ -296,7 +296,7 @@ extern __device__ int __iAtomicCAS(int *address, int compare, int val)
   //	(old == compare ? val : old)
   //	(old_value == compare ? val : old_value)
 
-  if(old_value == compare)
+  if (old_value == compare)
     *address = val;
   else
     *address = old_value;
@@ -315,7 +315,7 @@ __uAtomicCAS(unsigned int *address, unsigned int compare, unsigned int val)
   //	(old == compare ? val : old)
   //	(old_value == compare ? val : old_value)
 
-  if(old_value == compare)
+  if (old_value == compare)
     *address = val;
   else
     *address = old_value;
@@ -502,7 +502,7 @@ extern __device__ unsigned long long int __ullAtomicCAS(
   //	(old == compare ? val : old)
   //	(old_value == compare ? val : old_value)
 
-  if(old_value == compare)
+  if (old_value == compare)
     *address = val;
   else
     *address = old_value;
@@ -602,7 +602,7 @@ __illAtomicMin(long long *address, long long val)
   long long old_value;
 
   old_value = *address;
-  if(val < old_value)
+  if (val < old_value)
     *address = val;
 
   __ESBMC_atomic_end();
@@ -616,7 +616,7 @@ __illAtomicMax(long long *address, long long val)
   long long old_value;
 
   old_value = *address;
-  if(val > old_value)
+  if (val > old_value)
     *address = val;
 
   __ESBMC_atomic_end();
@@ -630,7 +630,7 @@ __ullAtomicMin(unsigned long long *address, unsigned long long val)
   unsigned long long old_value;
 
   old_value = *address;
-  if(val < old_value)
+  if (val < old_value)
     *address = val;
 
   __ESBMC_atomic_end();
@@ -644,7 +644,7 @@ __ullAtomicMax(unsigned long long *address, unsigned long long val)
   unsigned long long old_value;
 
   old_value = *address;
-  if(val > old_value)
+  if (val > old_value)
     *address = val;
 
   __ESBMC_atomic_end();

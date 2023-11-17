@@ -32,14 +32,14 @@ bool clang_c_adjust::adjust()
   Forall_symbol_list(it, symbol_list)
   {
     symbolt &symbol = **it;
-    if(symbol.is_type)
+    if (symbol.is_type)
       adjust_type(symbol.type);
   }
 
   Forall_symbol_list(it, symbol_list)
   {
     symbolt &symbol = **it;
-    if(symbol.is_type)
+    if (symbol.is_type)
       continue;
 
     adjust_symbol(symbol);
@@ -50,10 +50,10 @@ bool clang_c_adjust::adjust()
 
 void clang_c_adjust::adjust_symbol(symbolt &symbol)
 {
-  if(!symbol.value.is_nil())
+  if (!symbol.value.is_nil())
     adjust_expr(symbol.value);
 
-  if(symbol.type.is_code() && has_prefix(symbol.id.as_string(), "c:@F@main"))
+  if (symbol.type.is_code() && has_prefix(symbol.id.as_string(), "c:@F@main"))
     adjust_argc_argv(symbol);
 
   adjust_type(symbol.type);
@@ -63,64 +63,64 @@ void clang_c_adjust::adjust_expr(exprt &expr)
 {
   adjust_type(expr.type());
 
-  if(expr.id() == "sideeffect")
+  if (expr.id() == "sideeffect")
   {
     adjust_side_effect(to_side_effect_expr(expr));
   }
-  else if(expr.id() == "symbol")
+  else if (expr.id() == "symbol")
   {
     adjust_symbol(expr);
   }
-  else if(expr.id() == "not")
+  else if (expr.id() == "not")
   {
     adjust_expr_unary_boolean(expr);
   }
-  else if(expr.is_and() || expr.is_or())
+  else if (expr.is_and() || expr.is_or())
   {
     adjust_expr_binary_boolean(expr);
   }
-  else if(expr.is_address_of())
+  else if (expr.is_address_of())
   {
     adjust_address_of(expr);
   }
-  else if(expr.is_dereference())
+  else if (expr.is_dereference())
   {
     adjust_dereference(expr);
   }
-  else if(expr.is_member())
+  else if (expr.is_member())
   {
     adjust_member(to_member_expr(expr));
   }
-  else if(
+  else if (
     expr.id() == "=" || expr.id() == "notequal" || expr.id() == "<" ||
     expr.id() == "<=" || expr.id() == ">" || expr.id() == ">=")
   {
     adjust_expr_rel(expr);
   }
-  else if(expr.is_index())
+  else if (expr.is_index())
   {
     adjust_index(to_index_expr(expr));
   }
-  else if(expr.id() == "sizeof")
+  else if (expr.id() == "sizeof")
   {
     adjust_sizeof(expr);
   }
-  else if(
+  else if (
     expr.id() == "+" || expr.id() == "-" || expr.id() == "*" ||
     expr.id() == "/" || expr.id() == "mod" || expr.id() == "bitand" ||
     expr.id() == "bitxor" || expr.id() == "bitor")
   {
     adjust_expr_binary_arithmetic(expr);
   }
-  else if(expr.id() == "shl" || expr.id() == "shr")
+  else if (expr.id() == "shl" || expr.id() == "shr")
   {
     adjust_expr_shifts(expr);
   }
-  else if(expr.id() == "comma")
+  else if (expr.id() == "comma")
   {
     adjust_comma(expr);
   }
-  else if(expr.id() == "if")
+  else if (expr.id() == "if")
   {
     // Check all operands
     adjust_operands(expr);
@@ -131,15 +131,15 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     // Typecast both the true and false results
     gen_typecast_arithmetic(ns, expr.op1(), expr.op2());
   }
-  else if(expr.id() == "builtin_va_arg")
+  else if (expr.id() == "builtin_va_arg")
   {
     adjust_builtin_va_arg(expr);
   }
-  else if(expr.is_code())
+  else if (expr.is_code())
   {
     adjust_code(to_code(expr));
   }
-  else if(expr.is_struct())
+  else if (expr.is_struct())
   {
     const typet &t = ns.follow(expr.type());
     /* can't be an initializer of an incomplete type, it's not allowed by C */
@@ -149,10 +149,10 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     const struct_union_typet::componentst &new_comp =
       to_struct_union_type(t).components();
     exprt::operandst &ops = expr.operands();
-    for(size_t i = 0; i < new_comp.size(); i++)
+    for (size_t i = 0; i < new_comp.size(); i++)
     {
       const struct_union_typet::componentt &c = new_comp[i];
-      if(c.get_is_padding())
+      if (c.get_is_padding())
       {
         // TODO: should we initialize pads with nondet values?
         ops.insert(ops.begin() + i, gen_zero(c.type()));
@@ -175,7 +175,7 @@ void clang_c_adjust::adjust_symbol(exprt &expr)
   // look it up
   symbolt *s = context.find_symbol(identifier);
 
-  if(s == nullptr)
+  if (s == nullptr)
     return;
 
   // found it
@@ -184,7 +184,7 @@ void clang_c_adjust::adjust_symbol(exprt &expr)
   // save location
   locationt location = expr.location();
 
-  if(symbol.is_macro)
+  if (symbol.is_macro)
   {
     expr = symbol.value;
 
@@ -198,10 +198,10 @@ void clang_c_adjust::adjust_symbol(exprt &expr)
     // put it back
     expr.location() = location;
 
-    if(symbol.lvalue)
+    if (symbol.lvalue)
       expr.cmt_lvalue(true);
 
-    if(expr.type().is_code()) // function designator
+    if (expr.type().is_code()) // function designator
     {
       // special case: this is sugar for &f
       address_of_exprt tmp(expr);
@@ -216,22 +216,22 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
 {
   const irep_idt &statement = expr.get_statement();
 
-  if(statement == "function_call")
+  if (statement == "function_call")
     adjust_side_effect_function_call(to_side_effect_expr_function_call(expr));
   else
   {
     adjust_operands(expr);
 
-    if(
+    if (
       statement == "preincrement" || statement == "predecrement" ||
       statement == "postincrement" || statement == "postdecrement")
     {
     }
-    else if(has_prefix(id2string(statement), "assign"))
+    else if (has_prefix(id2string(statement), "assign"))
       adjust_side_effect_assignment(expr);
-    else if(statement == "statement_expression")
+    else if (statement == "statement_expression")
       adjust_side_effect_statement_expression(expr);
-    else if(statement == "gcc_conditional_expression")
+    else if (statement == "gcc_conditional_expression")
     {
     }
     else
@@ -247,7 +247,7 @@ void clang_c_adjust::adjust_member(member_exprt &expr)
   adjust_operands(expr);
 
   exprt &base = expr.struct_op();
-  if(base.type().is_pointer())
+  if (base.type().is_pointer())
   {
     exprt deref("dereference");
     deref.type() = base.type().subtype();
@@ -271,21 +271,21 @@ void clang_c_adjust::adjust_expr_shifts(exprt &expr)
   gen_typecast_arithmetic(ns, op0);
   gen_typecast_arithmetic(ns, op1);
 
-  if(is_number(op0.type()) && is_number(op1.type()))
+  if (is_number(op0.type()) && is_number(op1.type()))
   {
     expr.type() = op0.type();
 
-    if(expr.id() == "shr") // shifting operation depends on types
+    if (expr.id() == "shr") // shifting operation depends on types
     {
       const typet &op0_type = op0.type();
 
-      if(op0_type.id() == "unsignedbv")
+      if (op0_type.id() == "unsignedbv")
       {
         expr.id("lshr");
         return;
       }
 
-      if(op0_type.id() == "signedbv")
+      if (op0_type.id() == "signedbv")
       {
         expr.id("ashr");
         return;
@@ -309,10 +309,10 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
   const typet &type0 = op0.type();
   const typet &type1 = op1.type();
 
-  if(type0 == type1 && is_number(type0))
+  if (type0 == type1 && is_number(type0))
     expr.type() = type0;
 
-  if(
+  if (
     expr.id() == "+" || expr.id() == "-" || expr.id() == "*" ||
     expr.id() == "/")
   {
@@ -333,7 +333,7 @@ void clang_c_adjust::adjust_index(index_exprt &index)
     const typet &array_full_type = ns.follow(array_expr.type());
     const typet &index_full_type = ns.follow(index_expr.type());
 
-    if(
+    if (
       !array_full_type.is_array() && !array_full_type.is_pointer() &&
       (index_full_type.is_array() || index_full_type.is_pointer()))
       std::swap(array_expr, index_expr);
@@ -342,12 +342,12 @@ void clang_c_adjust::adjust_index(index_exprt &index)
   gen_typecast(ns, index_expr, index_type());
 
   const typet &final_array_type = ns.follow(array_expr.type());
-  if(final_array_type.is_array() || final_array_type.is_incomplete_array())
+  if (final_array_type.is_array() || final_array_type.is_incomplete_array())
   {
-    if(array_expr.cmt_lvalue())
+    if (array_expr.cmt_lvalue())
       index.cmt_lvalue(true);
   }
-  else if(final_array_type.id() == "pointer")
+  else if (final_array_type.id() == "pointer")
   {
     // p[i] is syntactic sugar for *(p+i)
 
@@ -384,31 +384,31 @@ void clang_c_adjust::adjust_float_arith(exprt &expr)
    * this is needed because a operation such as {0.1, 0.2} + 1
    * needs to use the float version
    */
-  if(!need_float_adjust && t.is_vector())
+  if (!need_float_adjust && t.is_vector())
     need_float_adjust = to_vector_type(t).subtype().is_floatbv();
 
-  if(need_float_adjust)
+  if (need_float_adjust)
   {
     // And change id
-    if(expr.id() == "+")
+    if (expr.id() == "+")
     {
       expr.id("ieee_add");
     }
-    else if(expr.id() == "-")
+    else if (expr.id() == "-")
     {
       expr.id("ieee_sub");
     }
-    else if(expr.id() == "*")
+    else if (expr.id() == "*")
     {
       expr.id("ieee_mul");
     }
-    else if(expr.id() == "/")
+    else if (expr.id() == "/")
     {
       expr.id("ieee_div");
     }
 
     // BUG: setting rounding_mode breaks migration
-    if(t.is_vector())
+    if (t.is_vector())
       return;
 
     // Add rounding mode
@@ -427,7 +427,7 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
   // special case: address of function designator
   // ANSI-C 99 section 6.3.2.1 paragraph 4
 
-  if(
+  if (
     op.is_address_of() && op.implicit() && op.operands().size() == 1 &&
     op.op0().id() == "symbol" && op.op0().type().is_code())
   {
@@ -442,7 +442,7 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
   expr.type() = typet("pointer");
 
   // turn &array into &(array[0])
-  if(is_array_like(op.type()))
+  if (is_array_like(op.type()))
   {
     index_exprt index;
     index.array() = op;
@@ -463,7 +463,7 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
 
   const typet op_type = ns.follow(op.type());
 
-  if(is_array_like(op_type))
+  if (is_array_like(op_type))
   {
     // *a is the same as a[0]
     deref.id("index");
@@ -471,7 +471,7 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
     deref.copy_to_operands(gen_zero(index_type()));
     assert(deref.operands().size() == 2);
   }
-  else if(op_type.id() == "pointer")
+  else if (op_type.id() == "pointer")
   {
     deref.type() = op_type.subtype();
   }
@@ -481,7 +481,7 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
   // if you dereference a pointer pointing to
   // a function, you get a pointer again
   // allowing ******...*p
-  if(deref.type().is_code())
+  if (deref.type().is_code())
   {
     exprt tmp("address_of", pointer_typet());
     tmp.implicit(true);
@@ -495,12 +495,12 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
 void clang_c_adjust::adjust_sizeof(exprt &expr)
 {
   typet type;
-  if(expr.operands().size() == 0)
+  if (expr.operands().size() == 0)
   {
     type = ((typet &)expr.c_sizeof_type());
     adjust_type(type);
   }
-  else if(expr.operands().size() == 1)
+  else if (expr.operands().size() == 1)
   {
     type.swap(expr.op0().type());
     adjust_type(type);
@@ -516,7 +516,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
 
   exprt new_expr = c_sizeof(type, ns);
 
-  if(new_expr.is_nil())
+  if (new_expr.is_nil())
   {
     log_error("type has no size, {}", type.name());
     abort();
@@ -528,14 +528,14 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
 
 void clang_c_adjust::adjust_type(typet &type)
 {
-  if(type.is_symbol())
+  if (type.is_symbol())
   {
     const irep_idt &identifier = type.identifier();
 
     // look it up
     symbolt *s = context.find_symbol(identifier);
 
-    if(s == nullptr)
+    if (s == nullptr)
     {
       log_error("{}: type symbol `{}' not found", __func__, identifier);
       abort();
@@ -543,38 +543,38 @@ void clang_c_adjust::adjust_type(typet &type)
 
     const symbolt &symbol = *s;
 
-    if(!symbol.is_type)
+    if (!symbol.is_type)
     {
       log_error("expected type symbol, but got\n{}", symbol);
       abort();
     }
 
-    if(symbol.is_macro)
+    if (symbol.is_macro)
     {
       type = symbol.type; // overwrite
       adjust_type(type);
     }
   }
-  else if(is_array_like(type))
+  else if (is_array_like(type))
   {
     const irept &size = type.size_irep();
-    if(size.is_not_nil() && size.id() != "infinity")
+    if (size.is_not_nil() && size.id() != "infinity")
     {
       /* adjust the size expression for VLAs */
       adjust_expr((exprt &)size);
     }
     adjust_type(type.subtype());
   }
-  else if((type.is_struct() || type.is_union()) && !type.incomplete())
+  else if ((type.is_struct() || type.is_union()) && !type.incomplete())
   {
     /* components only exist for complete types */
-    for(auto &f : to_struct_union_type(type).components())
+    for (auto &f : to_struct_union_type(type).components())
       adjust_expr(f);
 
     add_padding(type, ns);
 
 #ifndef NDEBUG
-    if(!type.get_bool("packed"))
+    if (!type.get_bool("packed"))
     {
       type2tc t2 = migrate_type(type);
       BigInt sz = type_byte_size(t2, &ns);
@@ -598,28 +598,28 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
   const typet type0 = op0.type();
   expr.type() = type0;
 
-  if(statement == "assign")
+  if (statement == "assign")
   {
     gen_typecast(ns, op1, type0);
     return;
   }
 
-  if(statement == "assign_shl" || statement == "assign_shr")
+  if (statement == "assign_shl" || statement == "assign_shr")
   {
     gen_typecast_arithmetic(ns, op1);
 
-    if(is_number(op1.type()))
+    if (is_number(op1.type()))
     {
-      if(statement == "assign_shl")
+      if (statement == "assign_shl")
         return;
 
-      if(type0.id() == "unsignedbv")
+      if (type0.id() == "unsignedbv")
       {
         expr.statement("assign_lshr");
         return;
       }
 
-      if(type0.id() == "signedbv")
+      if (type0.id() == "signedbv")
       {
         expr.statement("assign_ashr");
         return;
@@ -635,11 +635,11 @@ void clang_c_adjust::adjust_side_effect_function_call(
 {
   exprt &f_op = expr.function();
 
-  if(f_op.is_symbol())
+  if (f_op.is_symbol())
   {
     const irep_idt &identifier = f_op.identifier();
     symbolt *s = context.find_symbol(identifier);
-    if(s == nullptr)
+    if (s == nullptr)
     {
       // maybe this is an undeclared function
       // let's just add it
@@ -671,7 +671,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
       // Restore location
       f_op.location() = location;
 
-      if(symbol.lvalue)
+      if (symbol.lvalue)
         f_op.cmt_lvalue(true);
 
       align_se_function_call_return_type(f_op, expr);
@@ -681,13 +681,13 @@ void clang_c_adjust::adjust_side_effect_function_call(
     adjust_expr(f_op);
 
   // do implicit dereference
-  if(f_op.is_address_of() && f_op.implicit() && (f_op.operands().size() == 1))
+  if (f_op.is_address_of() && f_op.implicit() && (f_op.operands().size() == 1))
   {
     exprt tmp;
     tmp.swap(f_op.op0());
     f_op.swap(tmp);
   }
-  else if(f_op.type().is_pointer())
+  else if (f_op.type().is_pointer())
   {
     exprt tmp("dereference", f_op.type().subtype());
     tmp.implicit(true);
@@ -709,12 +709,12 @@ void clang_c_adjust::adjust_function_call_arguments(
   exprt::operandst &arguments = expr.arguments();
   const code_typet::argumentst &argument_types = code_type.arguments();
 
-  for(unsigned i = 0; i < arguments.size(); i++)
+  for (unsigned i = 0; i < arguments.size(); i++)
   {
     exprt &op = arguments[i];
     adjust_expr(op);
 
-    if(i < argument_types.size())
+    if (i < argument_types.size())
     {
       const code_typet::argumentt &argument_type = argument_types[i];
       const typet &op_type = argument_type.type();
@@ -725,7 +725,7 @@ void clang_c_adjust::adjust_function_call_arguments(
       // don't know type, just do standard conversion
 
       const typet &type = ns.follow(op.type());
-      if(is_array_like(type))
+      if (is_array_like(type))
         gen_typecast(ns, op, pointer_typet(empty_typet()));
     }
   }
@@ -771,13 +771,13 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
   const locationt location = expr.location();
 
   // some built-in functions
-  if(f_op.is_symbol())
+  if (f_op.is_symbol())
   {
     const irep_idt &identifier = to_symbol_expr(f_op).name();
 
-    if(identifier == CPROVER_PREFIX "same_object")
+    if (identifier == CPROVER_PREFIX "same_object")
     {
-      if(expr.arguments().size() != 2)
+      if (expr.arguments().size() != 2)
       {
         log_error("same_object expects two operands\n{}", expr);
         abort();
@@ -787,9 +787,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       same_object_expr.operands() = expr.arguments();
       expr.swap(same_object_expr);
     }
-    else if(identifier == CPROVER_PREFIX "POINTER_OFFSET")
+    else if (identifier == CPROVER_PREFIX "POINTER_OFFSET")
     {
-      if(expr.arguments().size() != 1)
+      if (expr.arguments().size() != 1)
       {
         log_error("pointer_offset expects one argument\n{}", expr);
         abort();
@@ -799,9 +799,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       pointer_offset_expr.operands() = expr.arguments();
       expr.swap(pointer_offset_expr);
     }
-    else if(identifier == CPROVER_PREFIX "POINTER_OBJECT")
+    else if (identifier == CPROVER_PREFIX "POINTER_OBJECT")
     {
-      if(expr.arguments().size() != 1)
+      if (expr.arguments().size() != 1)
       {
         log_error("pointer_object expects one argument\n{}", expr);
         abort();
@@ -811,13 +811,13 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       pointer_object_expr.operands() = expr.arguments();
       expr.swap(pointer_object_expr);
     }
-    else if(compare_unscore_builtin(identifier, "isnan"))
+    else if (compare_unscore_builtin(identifier, "isnan"))
     {
       exprt isnan_expr("isnan", bool_typet());
       isnan_expr.operands() = expr.arguments();
       expr.swap(isnan_expr);
     }
-    else if(
+    else if (
       compare_float_suffix(identifier, "finite") ||
       compare_unscore_builtin(identifier, "isfinite") ||
       compare_unscore_builtin(identifier, "finite"))
@@ -826,14 +826,14 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       isfinite_expr.operands() = expr.arguments();
       expr.swap(isfinite_expr);
     }
-    else if(
+    else if (
       compare_unscore_builtin(identifier, "inf") ||
       compare_unscore_builtin(identifier, "huge_val"))
     {
       typet t = expr.type();
 
       constant_exprt infl_expr;
-      if(config.ansi_c.use_fixed_for_float)
+      if (config.ansi_c.use_fixed_for_float)
       {
         // We saturate to the biggest value
         BigInt value = power(2, bv_width(t) - 1) - 1;
@@ -849,14 +849,14 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(infl_expr);
     }
-    else if(
+    else if (
       compare_float_suffix(identifier, "nan") ||
       compare_unscore_builtin(identifier, "nan"))
     {
       typet t = expr.type();
 
       constant_exprt nan_expr;
-      if(config.ansi_c.use_fixed_for_float)
+      if (config.ansi_c.use_fixed_for_float)
       {
         BigInt value = 0;
         nan_expr = constant_exprt(
@@ -870,7 +870,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(nan_expr);
     }
-    else if(
+    else if (
       identifier == "abs" || identifier == "labs" || identifier == "imaxabs" ||
       identifier == "llabs" || compare_float_suffix(identifier, "fabs") ||
       compare_unscore_builtin(identifier, "fabs"))
@@ -879,25 +879,25 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       abs_expr.operands() = expr.arguments();
       expr.swap(abs_expr);
     }
-    else if(compare_unscore_builtin(identifier, "isinf"))
+    else if (compare_unscore_builtin(identifier, "isinf"))
     {
       exprt isinf_expr("isinf", bool_typet());
       isinf_expr.operands() = expr.arguments();
       expr.swap(isinf_expr);
     }
-    else if(compare_unscore_builtin(identifier, "isnormal"))
+    else if (compare_unscore_builtin(identifier, "isnormal"))
     {
       exprt isnormal_expr("isnormal", bool_typet());
       isnormal_expr.operands() = expr.arguments();
       expr.swap(isnormal_expr);
     }
-    else if(compare_unscore_builtin(identifier, "signbit"))
+    else if (compare_unscore_builtin(identifier, "signbit"))
     {
       exprt sign_expr("signbit", int_type());
       sign_expr.operands() = expr.arguments();
       expr.swap(sign_expr);
     }
-    else if(
+    else if (
       identifier == "__popcnt16" || identifier == "__popcnt" ||
       identifier == "__popcnt64" || identifier == "__builtin_popcount" ||
       identifier == "__builtin_popcountl" ||
@@ -907,7 +907,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       popcount_expr.operands() = expr.arguments();
       expr.swap(popcount_expr);
     }
-    else if(
+    else if (
       identifier == "__builtin_bswap16" || identifier == "__builtin_bswap32" ||
       identifier == "__builtin_bswap64")
     {
@@ -915,37 +915,37 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       bswap_expr.operands() = expr.arguments();
       expr.swap(bswap_expr);
     }
-    else if(identifier == "__builtin_expect")
+    else if (identifier == "__builtin_expect")
     {
       // this is a gcc extension to provide branch prediction
       exprt tmp = expr.arguments()[0];
       expr.swap(tmp);
     }
-    else if(identifier == "__builtin_isgreater")
+    else if (identifier == "__builtin_isgreater")
     {
       exprt op(">", bool_typet());
       op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
       expr.swap(op);
     }
-    else if(identifier == "__builtin_isgreaterequal")
+    else if (identifier == "__builtin_isgreaterequal")
     {
       exprt op(">=", bool_typet());
       op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
       expr.swap(op);
     }
-    else if(identifier == "__builtin_isless")
+    else if (identifier == "__builtin_isless")
     {
       exprt op("<", bool_typet());
       op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
       expr.swap(op);
     }
-    else if(identifier == "__builtin_islessequal")
+    else if (identifier == "__builtin_islessequal")
     {
       exprt op("<=", bool_typet());
       op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
       expr.swap(op);
     }
-    else if(identifier == "__builtin_islessgreater")
+    else if (identifier == "__builtin_islessgreater")
     {
       exprt op1("<", bool_typet());
       op1.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
@@ -958,7 +958,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(op);
     }
-    else if(identifier == "__builtin_isunordered")
+    else if (identifier == "__builtin_isunordered")
     {
       exprt op1("isnan", bool_typet());
       op1.copy_to_operands(expr.arguments()[0]);
@@ -971,19 +971,19 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(op);
     }
-    else if(compare_float_suffix(identifier, "nearbyint"))
+    else if (compare_float_suffix(identifier, "nearbyint"))
     {
       exprt new_expr("nearbyint", expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
-    else if(compare_float_suffix(identifier, "fma"))
+    else if (compare_float_suffix(identifier, "fma"))
     {
       exprt new_expr("ieee_fma", expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
-    else if(identifier == "__builtin_isinf_sign")
+    else if (identifier == "__builtin_isinf_sign")
     {
       exprt isinf_expr("isinf", bool_typet());
       isinf_expr.operands() = expr.arguments();
@@ -1000,7 +1000,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
         from_integer(0, expr.type()));
       expr.swap(new_expr);
     }
-    else if(identifier == "__builtin_fpclassify")
+    else if (identifier == "__builtin_fpclassify")
     {
       // This gets 5 integers followed by a float or double.
       // The five integers are the return values for the cases
@@ -1035,7 +1035,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(new_expr);
     }
-    else if(compare_float_suffix(identifier, "sqrt"))
+    else if (compare_float_suffix(identifier, "sqrt"))
     {
       exprt new_expr("ieee_sqrt", expr.type());
       new_expr.operands() = expr.arguments();
@@ -1059,12 +1059,12 @@ void clang_c_adjust::adjust_side_effect_statement_expression(
 
   irep_idt last_statement = last.get_statement();
 
-  if(last_statement == "expression")
+  if (last_statement == "expression")
   {
     assert(last.operands().size() == 1);
     expr.type() = last.op0().type();
   }
-  else if(last_statement == "function_call")
+  else if (last_statement == "function_call")
   {
     // make the last statement an expression
 
@@ -1081,7 +1081,7 @@ void clang_c_adjust::adjust_side_effect_statement_expression(
 
     expr.type() = sideeffect.type();
 
-    if(fc.lhs().is_nil())
+    if (fc.lhs().is_nil())
     {
       codet code_expr("expression");
       code_expr.location() = fc.location();
@@ -1132,10 +1132,10 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
   const code_typet::argumentst &arguments =
     to_code_type(main_symbol.type).arguments();
 
-  if(arguments.size() == 0)
+  if (arguments.size() == 0)
     return;
 
-  if(arguments.size() != 2 && arguments.size() != 3)
+  if (arguments.size() != 2 && arguments.size() != 3)
     return;
 
   const exprt &op0 = arguments[0];
@@ -1168,7 +1168,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
   symbolt *argv_new_symbol;
   context.move(argv_symbol, argv_new_symbol);
 
-  if(arguments.size() == 3)
+  if (arguments.size() == 3)
   {
     const exprt &op2 = arguments[2];
 
@@ -1201,7 +1201,7 @@ void clang_c_adjust::adjust_comma(exprt &expr)
   expr.type() = expr.op1().type();
 
   // make this an l-value if the last operand is one
-  if(expr.op1().cmt_lvalue())
+  if (expr.op1().cmt_lvalue())
     expr.cmt_lvalue(true);
 }
 
@@ -1251,10 +1251,10 @@ void clang_c_adjust::adjust_builtin_va_arg(exprt &expr)
 
 void clang_c_adjust::adjust_operands(exprt &expr)
 {
-  if(!expr.has_operands())
+  if (!expr.has_operands())
     return;
 
-  for(auto &op : expr.operands())
+  for (auto &op : expr.operands())
     adjust_expr(op);
 }
 

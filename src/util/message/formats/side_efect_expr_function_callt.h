@@ -14,7 +14,7 @@ struct fmt::formatter<side_effect_expr_function_callt>
   constexpr auto parse(format_parse_context &ctx)
   {
     auto it = ctx.begin(), end = ctx.end();
-    if(it != end && *it != '}')
+    if (it != end && *it != '}')
       throw format_error("invalid format");
     return it;
   }

@@ -29,7 +29,7 @@ public:
     std::string get_comment() const
     {
       std::string result;
-      if(w)
+      if (w)
         result = "W/W";
       else
         result = "R/W";
@@ -92,8 +92,8 @@ protected:
 };
 
 #define forall_rw_set_entries(it, rw_set)                                      \
-  for(rw_sett::entriest::const_iterator it = (rw_set).entries.begin();         \
-      it != (rw_set).entries.end();                                            \
-      it++)
+  for (rw_sett::entriest::const_iterator it = (rw_set).entries.begin();        \
+       it != (rw_set).entries.end();                                           \
+       it++)
 
 #endif

@@ -532,13 +532,13 @@ public:
     // If we can simplify the array size, do so
     // XXX, this is probably massively inefficient. Some kind of boundry in
     // the checking process should exist to eliminate this requirement.
-    if(!is_nil_expr(size))
+    if (!is_nil_expr(size))
     {
       assert(
         size->type->type_id == signedbv_id ||
         size->type->type_id == unsignedbv_id);
       expr2tc sz = size->simplify();
-      if(!is_nil_expr(sz))
+      if (!is_nil_expr(sz))
         array_size = sz;
     }
   }
@@ -598,10 +598,10 @@ public:
     // If we can simplify the array size, do so
     // XXX, this is probably massively inefficient. Some kind of boundry in
     // the checking process should exist to eliminate this requirement.
-    if(!is_nil_expr(size))
+    if (!is_nil_expr(size))
     {
       expr2tc sz = size->simplify();
-      if(!is_nil_expr(sz))
+      if (!is_nil_expr(sz))
         array_size = sz;
     }
   }

@@ -17,12 +17,12 @@ void convert_integer_literal(const std::string &src, exprt &dest)
   unsigned long_cnt = 0;
   unsigned base = 10;
 
-  for(unsigned i = src.size(); i != 0; i--)
+  for (unsigned i = src.size(); i != 0; i--)
   {
     char ch = src[i - 1];
-    if(ch == 'u' || ch == 'U')
+    if (ch == 'u' || ch == 'U')
       is_unsigned = true;
-    else if(ch == 'l' || ch == 'L')
+    else if (ch == 'l' || ch == 'L')
       long_cnt++;
     else
       break;
@@ -30,7 +30,7 @@ void convert_integer_literal(const std::string &src, exprt &dest)
 
   BigInt value;
 
-  if(src.size() >= 2 && src[0] == '0' && tolower(src[1]) == 'x')
+  if (src.size() >= 2 && src[0] == '0' && tolower(src[1]) == 'x')
   {
     // hex; strip "0x"
     base = 16;
@@ -38,7 +38,7 @@ void convert_integer_literal(const std::string &src, exprt &dest)
     std::string without_prefix(src, 2, std::string::npos);
     value = string2integer(without_prefix, 16);
   }
-  else if(src.size() >= 2 && src[0] == '0')
+  else if (src.size() >= 2 && src[0] == '0')
   {
     // octal
     base = 8;
@@ -55,14 +55,14 @@ void convert_integer_literal(const std::string &src, exprt &dest)
   typet type;
   irep_idt cpp_type;
 
-  if(is_unsigned)
+  if (is_unsigned)
     type = typet("unsignedbv");
   else
     type = typet("signedbv");
 
   BigInt value_abs = value;
 
-  if(value < 0)
+  if (value < 0)
     value_abs.negate();
 
   bool is_hex_or_oct_or_bin = (base == 8) || (base == 16) || (base == 2);
@@ -71,35 +71,38 @@ void convert_integer_literal(const std::string &src, exprt &dest)
   ((signed ? !is_unsigned : (is_unsigned || is_hex_or_oct_or_bin)) &&          \
    (power(2, signed ? width - 1 : width) > value_abs))
 
-  if(FITS(config.ansi_c.int_width, true) && long_cnt == 0) // int
+  if (FITS(config.ansi_c.int_width, true) && long_cnt == 0) // int
   {
     type.width(config.ansi_c.int_width);
     cpp_type = "signed_int";
   }
-  else if(FITS(config.ansi_c.int_width, false) && long_cnt == 0) // unsigned int
+  else if (
+    FITS(config.ansi_c.int_width, false) && long_cnt == 0) // unsigned int
   {
     type.width(config.ansi_c.int_width);
     cpp_type = "unsigned_int";
   }
-  else if(FITS(config.ansi_c.long_int_width, true) && long_cnt != 2) // long int
+  else if (
+    FITS(config.ansi_c.long_int_width, true) && long_cnt != 2) // long int
   {
     type.width(config.ansi_c.long_int_width);
     cpp_type = "signed_long_int";
   }
-  else if(
+  else if (
     FITS(config.ansi_c.long_int_width, false) &&
     long_cnt != 2) // unsigned long int
   {
     type.width(config.ansi_c.long_int_width);
     cpp_type = "unsigned_long_int";
   }
-  else if(FITS(config.ansi_c.long_long_int_width, true)) // long long int
+  else if (FITS(config.ansi_c.long_long_int_width, true)) // long long int
   {
     type.width(config.ansi_c.long_long_int_width);
     cpp_type = "signed_long_long_int";
   }
-  else if(FITS(
-            config.ansi_c.long_long_int_width, false)) // unsigned long long int
+  else if (FITS(
+             config.ansi_c.long_long_int_width,
+             false)) // unsigned long long int
   {
     type.width(config.ansi_c.long_long_int_width);
     cpp_type = "unsigned_long_long_int";
@@ -109,7 +112,7 @@ void convert_integer_literal(const std::string &src, exprt &dest)
     // Way too large. Should consider issuing a warning.
     type.width(config.ansi_c.long_long_int_width);
 
-    if(is_unsigned)
+    if (is_unsigned)
       cpp_type = "unsigned_long_long_int";
     else
       cpp_type = "signed_long_long_int";

@@ -177,7 +177,7 @@ public:
   domainT &operator[](goto_programt::const_targett l)
   {
     typename state_mapt::iterator it = state_map.find(l);
-    if(it == state_map.end())
+    if (it == state_map.end())
       throw "failed to find state";
 
     return it->second;
@@ -186,7 +186,7 @@ public:
   const domainT &operator[](goto_programt::const_targett l) const
   {
     typename state_mapt::const_iterator it = state_map.find(l);
-    if(it == state_map.end())
+    if (it == state_map.end())
       throw "failed to find state";
 
     return it->second;
@@ -196,7 +196,7 @@ public:
   abstract_state_before(goto_programt::const_targett t) const override
   {
     typename state_mapt::const_iterator it = state_map.find(t);
-    if(it == state_map.end())
+    if (it == state_map.end())
     {
       std::unique_ptr<statet> d = std::make_unique<domainT>();
       assert(d->is_bottom());
@@ -231,7 +231,7 @@ protected:
   const statet &find_state(goto_programt::const_targett l) const override
   {
     typename state_mapt::const_iterator it = state_map.find(l);
-    if(it == state_map.end())
+    if (it == state_map.end())
       throw "failed to find state";
 
     return it->second;

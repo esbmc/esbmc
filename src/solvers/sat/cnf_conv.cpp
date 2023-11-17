@@ -16,11 +16,11 @@ literalt cnf_convt::lnot(literalt a)
 
 literalt cnf_convt::lselect(literalt a, literalt b, literalt c)
 { // a?b:c = (a AND b) OR (/a AND c)
-  if(a == const_literal(true))
+  if (a == const_literal(true))
     return b;
-  if(a == const_literal(false))
+  if (a == const_literal(false))
     return c;
-  if(b == c)
+  if (b == c)
     return b;
 
   bvt bv;
@@ -42,13 +42,13 @@ literalt cnf_convt::limplies(literalt a, literalt b)
 
 literalt cnf_convt::lxor(literalt a, literalt b)
 {
-  if(a == const_literal(false))
+  if (a == const_literal(false))
     return b;
-  if(b == const_literal(false))
+  if (b == const_literal(false))
     return a;
-  if(a == const_literal(true))
+  if (a == const_literal(true))
     return lnot(b);
-  if(b == const_literal(true))
+  if (b == const_literal(true))
     return lnot(a);
 
   literalt output = this->new_variable();
@@ -58,13 +58,13 @@ literalt cnf_convt::lxor(literalt a, literalt b)
 
 literalt cnf_convt::lor(literalt a, literalt b)
 {
-  if(a == const_literal(false))
+  if (a == const_literal(false))
     return b;
-  if(b == const_literal(false))
+  if (b == const_literal(false))
     return a;
-  if(a == const_literal(true))
+  if (a == const_literal(true))
     return const_literal(true);
-  if(b == const_literal(true))
+  if (b == const_literal(true))
     return const_literal(true);
 
   literalt output = this->new_variable();
@@ -74,15 +74,15 @@ literalt cnf_convt::lor(literalt a, literalt b)
 
 literalt cnf_convt::land(literalt a, literalt b)
 {
-  if(a == const_literal(true))
+  if (a == const_literal(true))
     return b;
-  if(b == const_literal(true))
+  if (b == const_literal(true))
     return a;
-  if(a == const_literal(false))
+  if (a == const_literal(false))
     return const_literal(false);
-  if(b == const_literal(false))
+  if (b == const_literal(false))
     return const_literal(false);
-  if(a == b)
+  if (a == b)
     return a;
 
   literalt output = this->new_variable();
@@ -179,22 +179,22 @@ void cnf_convt::gate_and(literalt a, literalt b, literalt o)
 
 void cnf_convt::set_equal(literalt a, literalt b)
 {
-  if(a == const_literal(false))
+  if (a == const_literal(false))
   {
     cnf_api->setto(b, false);
     return;
   }
-  else if(b == const_literal(false))
+  else if (b == const_literal(false))
   {
     cnf_api->setto(a, false);
     return;
   }
-  else if(a == const_literal(true))
+  else if (a == const_literal(true))
   {
     cnf_api->setto(b, true);
     return;
   }
-  else if(b == const_literal(true))
+  else if (b == const_literal(true))
   {
     cnf_api->setto(a, true);
     return;

@@ -26,7 +26,7 @@ boolector_convt::boolector_convt(const namespacet &ns, const optionst &options)
   : smt_convt(ns, options), array_iface(true, true), fp_convt(this)
 
 {
-  if(options.get_bool_option("int-encoding"))
+  if (options.get_bool_option("int-encoding"))
   {
     log_error("Boolector does not support integer encoding mode");
     abort();
@@ -35,7 +35,7 @@ boolector_convt::boolector_convt(const namespacet &ns, const optionst &options)
   btor = boolector_new();
   boolector_set_opt(btor, BTOR_OPT_MODEL_GEN, 1);
   boolector_set_opt(btor, BTOR_OPT_AUTO_CLEANUP, 1);
-  if(options.get_bool_option("smt-during-symex"))
+  if (options.get_bool_option("smt-during-symex"))
     boolector_set_opt(btor, BTOR_OPT_INCREMENTAL, 1);
   boolector_set_abort(error_handler);
 }
@@ -64,10 +64,10 @@ smt_convt::resultt boolector_convt::dec_solve()
 
   int result = boolector_sat(btor);
 
-  if(result == BOOLECTOR_SAT)
+  if (result == BOOLECTOR_SAT)
     return P_SATISFIABLE;
 
-  if(result == BOOLECTOR_UNSAT)
+  if (result == BOOLECTOR_UNSAT)
     return P_UNSATISFIABLE;
 
   return P_ERROR;
@@ -548,12 +548,12 @@ smt_astt
 boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   symtable_type::iterator it = symtable.find(name);
-  if(it != symtable.end())
+  if (it != symtable.end())
     return it->second;
 
   BoolectorNode *node;
 
-  switch(s->id)
+  switch (s->id)
   {
   case SMT_SORT_BV:
   case SMT_SORT_FIXEDBV:
@@ -644,7 +644,7 @@ bool boolector_convt::get_bool(smt_astt a)
   assert(result != NULL && "Boolector returned null bv assignment string");
 
   bool res;
-  switch(*result)
+  switch (*result)
   {
   case '1':
     res = true;
@@ -685,10 +685,10 @@ expr2tc boolector_convt::get_array_elem(
 
   expr2tc ret = gen_zero(subtype);
 
-  for(uint32_t i = 0; i < size; i++)
+  for (uint32_t i = 0; i < size; i++)
   {
     auto idx = string2integer(indicies[i], 2);
-    if(idx == index)
+    if (idx == index)
     {
       BigInt val = binary2integer(values[i], is_signedbv_type(subtype));
       /* Boolector only supports BVs in arrays, but for instance unions also
@@ -696,7 +696,7 @@ expr2tc boolector_convt::get_array_elem(
        * BV or a more complex type, which get_by_value() does not handle.
        * In the simple type case we can avoid the overhead of constructing new
        * SMT nodes and sort conversion. */
-      if(is_bv_type(subtype))
+      if (is_bv_type(subtype))
         ret = get_by_value(subtype, val);
       else
         ret = get_by_ast(subtype, mk_smt_bv(val, convert_sort(subtype)));
@@ -723,9 +723,9 @@ smt_astt boolector_convt::overflow_arith(const expr2tc &expr)
     (is_signedbv_type(opers.side_1) || is_signedbv_type(opers.side_2));
 
   BoolectorNode *res;
-  if(is_add2t(overflow.operand))
+  if (is_add2t(overflow.operand))
   {
-    if(is_signed)
+    if (is_signed)
     {
       res = boolector_saddo(btor, side1->a, side2->a);
     }
@@ -734,9 +734,9 @@ smt_astt boolector_convt::overflow_arith(const expr2tc &expr)
       res = boolector_uaddo(btor, side1->a, side2->a);
     }
   }
-  else if(is_sub2t(overflow.operand))
+  else if (is_sub2t(overflow.operand))
   {
-    if(is_signed)
+    if (is_signed)
     {
       res = boolector_ssubo(btor, side1->a, side2->a);
     }
@@ -745,9 +745,9 @@ smt_astt boolector_convt::overflow_arith(const expr2tc &expr)
       res = boolector_usubo(btor, side1->a, side2->a);
     }
   }
-  else if(is_mul2t(overflow.operand))
+  else if (is_mul2t(overflow.operand))
   {
-    if(is_signed)
+    if (is_signed)
     {
       res = boolector_smulo(btor, side1->a, side2->a);
     }
@@ -756,7 +756,7 @@ smt_astt boolector_convt::overflow_arith(const expr2tc &expr)
       res = boolector_umulo(btor, side1->a, side2->a);
     }
   }
-  else if(is_div2t(overflow.operand) || is_modulus2t(overflow.operand))
+  else if (is_div2t(overflow.operand) || is_modulus2t(overflow.operand))
   {
     res = boolector_sdivo(btor, side1->a, side2->a);
   }

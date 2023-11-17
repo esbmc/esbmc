@@ -2,7 +2,7 @@
 void jimple_modifiers::from_json(const json &j)
 {
   auto modifiers_list = j.get<std::vector<std::string>>();
-  for(auto &modifier : modifiers_list)
+  for (auto &modifier : modifiers_list)
   {
     this->modifiers.push_back(from_string(modifier));
   }
@@ -23,7 +23,7 @@ std::string jimple_modifiers::to_string() const
   std::ostringstream oss;
 
   oss << "Modifiers: ||";
-  for(auto &modifier : this->modifiers)
+  for (auto &modifier : this->modifiers)
   {
     oss << " " << to_string(modifier) << " |";
   }

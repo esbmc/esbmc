@@ -85,7 +85,7 @@ protected:
 private:
   void close_file(FILE *f)
   {
-    if(f != stdout && f != stderr)
+    if (f != stdout && f != stderr)
     {
       fclose(f);
     }

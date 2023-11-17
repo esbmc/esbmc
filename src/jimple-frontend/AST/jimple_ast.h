@@ -200,7 +200,7 @@ protected:
   {
     locationt l;
     l.set_file(module + ".jimple");
-    if(!function_name.empty())
+    if (!function_name.empty())
       l.set_function(function_name);
     return l;
   }

@@ -17,7 +17,7 @@ public:
   size_t to_size_t() const
   {
     size_t result = hash[0];
-    for(int i = 1; i < 5; i++)
+    for (int i = 1; i < 5; i++)
       // Do we care about overlaps?
       result ^= hash[i];
     return result;

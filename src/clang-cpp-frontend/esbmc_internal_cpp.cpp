@@ -16,7 +16,7 @@ const std::string &esbmct::abstract_cpp_includes()
    * during a run. And no more than one is required anyway */
   static auto p =
     file_operations::create_tmp_dir("esbmc-cpp-headers-%%%%-%%%%-%%%%");
-  if(!dumped)
+  if (!dumped)
   {
     dumped = true;
 #define ESBMC_FLAIL(body, size, ...)                                           \

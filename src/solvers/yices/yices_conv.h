@@ -11,7 +11,7 @@ public:
     : solver_smt_ast<term_t>(ctx, _t, _s)
   {
     // Detect term errors
-    if(a == NULL_TERM)
+    if (a == NULL_TERM)
     {
       yices_print_error(stderr);
       log_error("Error creating yices term");

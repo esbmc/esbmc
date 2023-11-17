@@ -55,7 +55,7 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
   // and then switch between those results afterwards.
   // Result list is the address of the reallocated piece of data, and the guard.
   std::list<std::pair<expr2tc, expr2tc>> result_list;
-  for(auto &item : internal_deref_items)
+  for (auto &item : internal_deref_items)
   {
     expr2tc guard = item.guard;
     cur_state->rename_address(item.object);
@@ -69,7 +69,8 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
     // renaming, the address_of we just generated compares differently to
     // previous address_of's before the realloc.
     unsigned int cur_num = 0;
-    if(cur_state->realloc_map.find(item.object) != cur_state->realloc_map.end())
+    if (
+      cur_state->realloc_map.find(item.object) != cur_state->realloc_map.end())
     {
       cur_num = cur_state->realloc_map[item.object];
     }
@@ -81,7 +82,7 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
 
   // Rebuild a gigantic if-then-else chain from the result list.
   expr2tc result;
-  if(result_list.size() == 0)
+  if (result_list.size() == 0)
   {
     // Nothing happened; there was nothing, or only null, to point at.
     // In this case, just return right now and leave the pointer free. The
@@ -89,9 +90,9 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
     return;
   }
 
-  for(auto const &it : result_list)
+  for (auto const &it : result_list)
   {
-    if(is_nil_expr(result))
+    if (is_nil_expr(result))
       result = it.first;
     else
       result = if2tc(result->type, it.second, it.first, result);
@@ -109,7 +110,7 @@ expr2tc goto_symext::symex_mem(
   const expr2tc &lhs,
   const sideeffect2t &code)
 {
-  if(is_nil_expr(lhs))
+  if (is_nil_expr(lhs))
     return expr2tc(); // ignore
 
   // size
@@ -117,21 +118,21 @@ expr2tc goto_symext::symex_mem(
   expr2tc size = code.size;
   bool size_is_one = false;
 
-  if(is_nil_type(type))
+  if (is_nil_type(type))
     type = char_type2();
 
-  if(is_nil_expr(size))
+  if (is_nil_expr(size))
     size_is_one = true;
   else
   {
     cur_state->rename(size);
     BigInt i;
-    if(is_constant_int2t(size))
+    if (is_constant_int2t(size))
     {
       uint64_t v = to_constant_int2t(size).value.to_uint64();
-      if(v == 1)
+      if (v == 1)
         size_is_one = true;
-      else if(v == 0 && options.get_bool_option("malloc-zero-is-null"))
+      else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
         return symbol2tc(pointer_type2tc(type), "NULL");
     }
   }
@@ -150,7 +151,7 @@ expr2tc goto_symext::symex_mem(
   symbol.lvalue = true;
 
   typet renamedtype = ns.follow(migrate_type_back(type));
-  if(size_is_one)
+  if (size_is_one)
     symbol.type = renamedtype;
   else
   {
@@ -170,7 +171,7 @@ expr2tc goto_symext::symex_mem(
   type2tc rhs_type;
   expr2tc rhs_ptr_obj;
 
-  if(size_is_one)
+  if (size_is_one)
   {
     rhs_type = migrate_type(symbol.type);
     rhs_ptr_obj = symbol2tc(new_type, symbol.id);
@@ -191,7 +192,7 @@ expr2tc goto_symext::symex_mem(
   expr2tc ptr_rhs = rhs;
   guardt alloc_guard = cur_state->guard;
 
-  if(options.get_bool_option("malloc-zero-is-null"))
+  if (options.get_bool_option("malloc-zero-is-null"))
   {
     expr2tc null_sym = symbol2tc(rhs->type, "NULL");
     expr2tc choice = greaterthan2tc(size, gen_long(size->type, 0));
@@ -199,7 +200,7 @@ expr2tc goto_symext::symex_mem(
     rhs = if2tc(rhs->type, choice, rhs, null_sym);
   }
 
-  if(!options.get_bool_option("force-malloc-success") && is_malloc)
+  if (!options.get_bool_option("force-malloc-success") && is_malloc)
   {
     expr2tc null_sym = symbol2tc(rhs->type, "NULL");
     expr2tc choice = sideeffect2tc(
@@ -217,7 +218,7 @@ expr2tc goto_symext::symex_mem(
     ptr_rhs = rhs;
   }
 
-  if(rhs->type != lhs->type)
+  if (rhs->type != lhs->type)
     rhs = typecast2tc(lhs->type, rhs);
 
   cur_state->rename(rhs);
@@ -284,15 +285,15 @@ void goto_symext::symex_free(const expr2tc &expr)
   dereference(tmp, dereferencet::INTERNAL);
 
   // Only add assertions to check pointer offset if pointer check is enabled
-  if(!options.get_bool_option("no-pointer-check"))
+  if (!options.get_bool_option("no-pointer-check"))
   {
     // Get all dynamic objects allocated using alloca
     std::vector<allocated_obj> allocad;
-    for(auto const &item : dynamic_memory)
-      if(item.auto_deallocd)
+    for (auto const &item : dynamic_memory)
+      if (item.auto_deallocd)
         allocad.push_back(item);
 
-    for(auto const &item : internal_deref_items)
+    for (auto const &item : internal_deref_items)
     {
       guardt g = cur_state->guard;
       g.add(item.guard);
@@ -304,10 +305,10 @@ void goto_symext::symex_free(const expr2tc &expr)
       claim(eq, "Operand of free must have zero pointer offset");
 
       // Check if we are not freeing an dynamic object allocated using alloca
-      for(auto const &a : allocad)
+      for (auto const &a : allocad)
       {
         expr2tc alloc_obj = get_base_object(a.obj);
-        while(is_if2t(alloc_obj))
+        while (is_if2t(alloc_obj))
         {
           const if2t &the_if = to_if2t(alloc_obj);
           assert(is_symbol2t(the_if.false_value));
@@ -319,7 +320,7 @@ void goto_symext::symex_free(const expr2tc &expr)
         const irep_idt &id_item_obj = to_symbol2t(item.object).thename;
         // Check if the object allocated with alloca is the same
         // as given in the free function
-        if(id_alloc_obj == id_item_obj)
+        if (id_alloc_obj == id_item_obj)
         {
           expr2tc noteq = notequal2tc(alloc_obj, item.object);
           g.guard_expr(noteq);
@@ -349,7 +350,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 
   code_printf2t &new_rhs = to_code_printf2t(renamed_rhs);
 
-  if(new_rhs.bs_name.empty())
+  if (new_rhs.bs_name.empty())
   {
     log_error("No base_name for code_printf2t");
     return;
@@ -360,12 +361,12 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   // get the format string base on the bs_name
   irep_idt fmt;
   size_t idx;
-  if(base_name == "printf")
+  if (base_name == "printf")
   {
     // 1. printf: 1st argument
     assert(new_rhs.operands.size() >= 1 && "Wrong printf signature");
     const expr2tc &base_expr = get_base_object(new_rhs.operands[0]);
-    if(is_constant_string2t(base_expr))
+    if (is_constant_string2t(base_expr))
     {
       fmt = to_constant_string2t(base_expr).value;
       idx = 1;
@@ -379,7 +380,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       idx = 0;
     }
   }
-  else if(
+  else if (
     base_name == "fprintf" || base_name == "dprintf" ||
     base_name == "sprintf" || base_name == "vfprintf")
   {
@@ -388,7 +389,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       new_rhs.operands.size() >= 2 &&
       "Wrong fprintf/sprintf/dprintf/vfprintf signature");
     const expr2tc &base_expr = get_base_object(new_rhs.operands[1]);
-    if(is_constant_string2t(base_expr))
+    if (is_constant_string2t(base_expr))
     {
       fmt = to_constant_string2t(base_expr).value;
       idx = 2;
@@ -399,12 +400,12 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       idx = 1;
     }
   }
-  else if(base_name == "snprintf")
+  else if (base_name == "snprintf")
   {
     // 3. snprintf: 3rd argument
     assert(new_rhs.operands.size() >= 3 && "Wrong snprintf signature");
     const expr2tc &base_expr = get_base_object(new_rhs.operands[2]);
-    if(is_constant_string2t(base_expr))
+    if (is_constant_string2t(base_expr))
     {
       fmt = to_constant_string2t(base_expr).value;
       idx = 3;
@@ -419,7 +420,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     abort();
 
   // Now we pop the format
-  for(size_t i = 0; i < idx; i++)
+  for (size_t i = 0; i < idx; i++)
     new_rhs.operands.erase(new_rhs.operands.begin());
 
   std::list<expr2tc> args;
@@ -429,7 +430,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     args.push_back(tmp);
   });
 
-  if(!is_nil_expr(lhs))
+  if (!is_nil_expr(lhs))
   {
     // get the return value from code_printf2tc
     // 1. covert code_printf2tc back to sideeffect2tc
@@ -444,9 +445,9 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 
     // 2 check if it is a char array. if so, convert it to a string
     // this is due to printf_formatter does not handle the char array.
-    for(auto &arg : args)
+    for (auto &arg : args)
     {
-      if(is_array_type(get_base_object(arg)))
+      if (is_array_type(get_base_object(arg)))
       {
         // the current expression "arg" does not hold the value info (might be a bug)
         // thus we need to look it up from the symbol table
@@ -481,13 +482,13 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
   const std::string func_name =
     to_symbol2t(func_call.function).thename.as_string();
 
-  if(func_name.find("__ESBMC_scanf") != std::string::npos)
+  if (func_name.find("__ESBMC_scanf") != std::string::npos)
   {
     assert(func_call.operands.size() >= 2 && "Wrong __ESBMC_scanf signature");
     fmt_idx = 0;
     number_of_format_args = func_call.operands.size() - 1;
   }
-  else if(func_name.find("__ESBMC_fscanf") != std::string::npos)
+  else if (func_name.find("__ESBMC_fscanf") != std::string::npos)
   {
     assert(func_call.operands.size() >= 3 && "Wrong __ESBMC_fscanf signature");
     fmt_idx = 1;
@@ -498,22 +499,22 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
   cur_state->source.pc--;
 
-  if(func_call.ret)
+  if (func_call.ret)
     symex_assign(code_assign2tc(
       func_call.ret,
       constant_int2tc(int_type2(), BigInt(number_of_format_args))));
 
   // TODO: fill / cut off the inputs stream based on the length limits.
 
-  for(long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
-      i++)
+  for (long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
+       i++)
   {
     expr2tc operand = func_call.operands[i];
     internal_deref_items.clear();
     expr2tc deref = dereference2tc(get_empty_type(), operand);
     dereference(deref, dereferencet::INTERNAL);
 
-    for(const auto &item : internal_deref_items)
+    for (const auto &item : internal_deref_items)
     {
       assert(is_symbol2t(item.object) && "This only works for variables");
 
@@ -568,7 +569,7 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
 
   // make symbol expression
   expr2tc rhs_ptr_obj;
-  if(do_array)
+  if (do_array)
   {
     expr2tc sym = symbol2tc(newtype, symbol.id);
     expr2tc idx = index2tc(renamedtype2, sym, gen_ulong(0));
@@ -607,7 +608,7 @@ void goto_symext::symex_cpp_delete(const expr2tc &)
 void goto_symext::intrinsic_yield(reachability_treet &art)
 {
   // Don't context switch if the guard is false.
-  if(!cur_state->guard.is_false())
+  if (!cur_state->guard.is_false())
     art.get_cur_state().force_cswitch();
 }
 
@@ -617,7 +618,7 @@ void goto_symext::intrinsic_switch_to(
 {
   // Switch to other thread.
   const expr2tc &num = call.operands[0];
-  if(!is_constant_int2t(num))
+  if (!is_constant_int2t(num))
   {
     log_error("Can't switch to non-constant thread id no\n{}", *num);
     abort();
@@ -626,7 +627,7 @@ void goto_symext::intrinsic_switch_to(
   const constant_int2t &thread_num = to_constant_int2t(num);
 
   unsigned int tid = thread_num.value.to_uint64();
-  if(tid != art.get_cur_state().get_active_state_number())
+  if (tid != art.get_cur_state().get_active_state_number())
     art.get_cur_state().switch_to_thread(tid);
 }
 
@@ -666,10 +667,10 @@ void goto_symext::intrinsic_set_thread_data(
   state.rename(threadid);
   state.rename(startdata);
 
-  while(is_typecast2t(threadid))
+  while (is_typecast2t(threadid))
     threadid = to_typecast2t(threadid).from;
 
-  if(!is_constant_int2t(threadid))
+  if (!is_constant_int2t(threadid))
   {
     log_error("__ESBMC_set_start_data received nonconstant thread id");
     abort();
@@ -687,10 +688,10 @@ void goto_symext::intrinsic_get_thread_data(
 
   state.level2.rename(threadid);
 
-  while(is_typecast2t(threadid))
+  while (is_typecast2t(threadid))
     threadid = to_typecast2t(threadid).from;
 
-  if(!is_constant_int2t(threadid))
+  if (!is_constant_int2t(threadid))
   {
     log_error("__ESBMC_get_start_data received nonconstant thread id");
     abort();
@@ -709,7 +710,7 @@ void goto_symext::intrinsic_spawn_thread(
   const code_function_call2t &call,
   reachability_treet &art)
 {
-  if(
+  if (
     (k_induction || inductive_step) &&
     !options.get_bool_option("disable-inductive-step"))
   {
@@ -731,13 +732,13 @@ void goto_symext::intrinsic_spawn_thread(
 
   goto_functionst::function_mapt::const_iterator it =
     art.goto_functions.function_map.find(symname);
-  if(it == art.goto_functions.function_map.end())
+  if (it == art.goto_functions.function_map.end())
   {
     log_error("Spawning thread \"{}\": symbol not found", symname);
     abort();
   }
 
-  if(!it->second.body_available)
+  if (!it->second.body_available)
   {
     log_error("Spawning thread \"{}\": no body", symname);
     abort();
@@ -777,10 +778,10 @@ void goto_symext::intrinsic_get_thread_state(
   expr2tc threadid = call.operands[0];
   state.level2.rename(threadid);
 
-  while(is_typecast2t(threadid))
+  while (is_typecast2t(threadid))
     threadid = to_typecast2t(threadid).from;
 
-  if(!is_constant_int2t(threadid))
+  if (!is_constant_int2t(threadid))
   {
     log_error("__ESBMC_get_thread_state received nonconstant thread id");
     abort();
@@ -815,7 +816,7 @@ void goto_symext::intrinsic_switch_to_monitor(reachability_treet &art)
   execution_statet &ex_state = art.get_cur_state();
 
   // Don't do this if we're in the initialization function.
-  if(cur_state->source.pc->function == "__ESBMC_main")
+  if (cur_state->source.pc->function == "__ESBMC_main")
     return;
 
   ex_state.switch_to_monitor();
@@ -833,7 +834,7 @@ void goto_symext::intrinsic_register_monitor(
 {
   execution_statet &ex_state = art.get_cur_state();
 
-  if(ex_state.tid_is_set)
+  if (ex_state.tid_is_set)
     assert(
       0 && "Monitor thread ID was already set (__ESBMC_register_monitor)\n");
 
@@ -841,10 +842,10 @@ void goto_symext::intrinsic_register_monitor(
   expr2tc threadid = call.operands[0];
   state.level2.rename(threadid);
 
-  while(is_typecast2t(threadid))
+  while (is_typecast2t(threadid))
     threadid = to_typecast2t(threadid).from;
 
-  if(!is_constant_int2t(threadid))
+  if (!is_constant_int2t(threadid))
   {
     log_error("__ESBMC_register_monitor received nonconstant thread id");
     abort();
@@ -873,10 +874,10 @@ void goto_symext::symex_va_arg(const expr2tc &lhs, const sideeffect2t &code)
   do_simplify(symbol);
 
   expr2tc next_symbol = symbol;
-  if(is_typecast2t(next_symbol))
+  if (is_typecast2t(next_symbol))
     next_symbol = to_typecast2t(symbol).from;
 
-  if(is_address_of2t(next_symbol))
+  if (is_address_of2t(next_symbol))
     next_symbol = to_address_of2t(next_symbol).ptr_obj;
 
   assert(is_symbol2t(next_symbol));
@@ -889,7 +890,7 @@ void goto_symext::symex_va_arg(const expr2tc &lhs, const sideeffect2t &code)
   expr2tc va_rhs;
 
   const symbolt *s = new_context.find_symbol(id);
-  if(s != nullptr)
+  if (s != nullptr)
   {
     type2tc symbol_type = migrate_type(s->type);
 
@@ -922,11 +923,11 @@ expr2tc gen_byte_expression_byte_update(
 
   auto found_constant = false;
   auto optimized = src->simplify();
-  if(optimized)
+  if (optimized)
   {
     found_constant = is_typecast2t(optimized) &&
                      is_constant_int2t(to_typecast2t(optimized).from);
-    if(found_constant)
+    if (found_constant)
     {
       new_src = to_typecast2t(optimized).from;
       new_type = get_int64_type();
@@ -937,7 +938,7 @@ expr2tc gen_byte_expression_byte_update(
   auto value_downcast = typecast2tc(get_uint8_type(), value);
 
   expr2tc off = constant_int2tc(get_int32_type(), BigInt(offset));
-  for(size_t counter = 0; counter < num_of_bytes; counter++)
+  for (size_t counter = 0; counter < num_of_bytes; counter++)
   {
     expr2tc increment = constant_int2tc(get_int32_type(), BigInt(counter));
     result = byte_update2tc(
@@ -948,7 +949,7 @@ expr2tc gen_byte_expression_byte_update(
       false);
   }
 
-  if(found_constant)
+  if (found_constant)
     result = typecast2tc(type, result);
 
   simplify(result);
@@ -1013,10 +1014,10 @@ static inline expr2tc gen_byte_expression(
    */
 
   /* Can't set string constants */
-  if(is_string_type(type))
+  if (is_string_type(type))
     return expr2tc();
 
-  if(is_pointer_type(type))
+  if (is_pointer_type(type))
     return gen_byte_expression_byte_update(
       type, src, value, num_of_bytes, offset);
   expr2tc result = gen_zero(type);
@@ -1029,12 +1030,12 @@ static inline expr2tc gen_byte_expression(
 
   const auto eight = constant_int2tc(int_type2(), BigInt(8));
   const auto one = constant_int2tc(int_type2(), BigInt(1));
-  for(unsigned i = 0; i < num_of_bytes; i++)
+  for (unsigned i = 0; i < num_of_bytes; i++)
   {
     result = shl2tc(type, result, eight);
     result = bitor2tc(type, result, value_upcast);
 
-    for(int m = 0; m < 8; m++)
+    for (int m = 0; m < 8; m++)
     {
       mask = shl2tc(type, mask, one);
       mask = bitor2tc(type, mask, one);
@@ -1042,7 +1043,7 @@ static inline expr2tc gen_byte_expression(
   }
 
   // Do the rest of the offset!
-  for(unsigned i = 0; i < offset; i++)
+  for (unsigned i = 0; i < offset; i++)
   {
     result = shl2tc(type, result, eight);
     mask = shl2tc(type, mask, eight);
@@ -1077,23 +1078,23 @@ static inline expr2tc gen_value_by_byte(
    *
    */
 
-  if(num_of_bytes == 0)
+  if (num_of_bytes == 0)
     return src;
 
   /* TODO: Bitwise operations are valid for floats, but we don't have an
    * implementation, yet. Give up. */
-  if(is_floatbv_type(type) || is_fixedbv_type(type))
+  if (is_floatbv_type(type) || is_fixedbv_type(type))
   {
     unsigned int type_size = type_byte_size(type).to_uint64();
     // HACK: this should fix the NN-benchmarks (see #1508)
-    if(
+    if (
       is_constant_int2t(value) && to_constant_int2t(value).value.is_zero() &&
       num_of_bytes == type_size && offset == 0)
       return gen_zero(type);
     return expr2tc();
   }
 
-  if(is_array_type(type))
+  if (is_array_type(type))
   {
     /*
      * Very straighforward, get the total number_of_bytes and keep subtracting until
@@ -1108,7 +1109,7 @@ static inline expr2tc gen_value_by_byte(
     uint64_t bytes_left = num_of_bytes;
     uint64_t offset_left = offset;
 
-    for(unsigned i = 0; i < data.datatype_members.size(); i++)
+    for (unsigned i = 0; i < data.datatype_members.size(); i++)
     {
       BigInt position(i);
       expr2tc local_member = index2tc(
@@ -1116,7 +1117,7 @@ static inline expr2tc gen_value_by_byte(
         src,
         constant_int2tc(get_uint32_type(), position));
       // Skip offsets
-      if(offset_left >= base_size)
+      if (offset_left >= base_size)
       {
         data.datatype_members[i] = local_member;
         offset_left -= base_size;
@@ -1131,7 +1132,7 @@ static inline expr2tc gen_value_by_byte(
           value,
           bytes_to_write,
           offset_left);
-        if(!data.datatype_members[i])
+        if (!data.datatype_members[i])
           return expr2tc();
         bytes_left =
           bytes_left <= base_size ? 0 : bytes_left - (base_size - offset_left);
@@ -1142,7 +1143,7 @@ static inline expr2tc gen_value_by_byte(
     return result;
   }
 
-  if(is_struct_type(type))
+  if (is_struct_type(type))
   {
     /** Similar to array, however get the size of
      * each component
@@ -1152,17 +1153,17 @@ static inline expr2tc gen_value_by_byte(
     uint64_t bytes_left = num_of_bytes;
     uint64_t offset_left = offset;
 
-    for(unsigned i = 0; i < data.datatype_members.size(); i++)
+    for (unsigned i = 0; i < data.datatype_members.size(); i++)
     {
       irep_idt name = to_struct_type(type).member_names[i];
       // TODO: We need a better way to detect bitfields
-      if(has_prefix(name.as_string(), "bit_field_pad$"))
+      if (has_prefix(name.as_string(), "bit_field_pad$"))
         return expr2tc();
       expr2tc local_member =
         member2tc(to_struct_type(type).members[i], src, name);
 
       // Since it is a symbol, lets start from the old value
-      if(is_pointer_type(to_struct_type(type).members[i]))
+      if (is_pointer_type(to_struct_type(type).members[i]))
         data.datatype_members[i] = local_member;
 
       type2tc current_member_type = data.datatype_members[i]->type;
@@ -1171,7 +1172,7 @@ static inline expr2tc gen_value_by_byte(
         type_byte_size(current_member_type).to_uint64();
 
       // Skip offsets
-      if(offset_left >= current_member_size)
+      if (offset_left >= current_member_size)
       {
         data.datatype_members[i] = local_member;
         offset_left -= current_member_size;
@@ -1187,7 +1188,7 @@ static inline expr2tc gen_value_by_byte(
           bytes_to_write,
           offset_left);
 
-        if(!data.datatype_members[i])
+        if (!data.datatype_members[i])
           return expr2tc();
 
         bytes_left = bytes_left < current_member_size
@@ -1199,7 +1200,7 @@ static inline expr2tc gen_value_by_byte(
     return result;
   }
 
-  if(is_union_type(type))
+  if (is_union_type(type))
   {
     /**
      * Unions are not nice, let's go through every member
@@ -1221,9 +1222,9 @@ static inline expr2tc gen_value_by_byte(
     size_t n = to_union_type(type).members.size();
     size_t selected_member_index = n;
 
-    for(size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++)
     {
-      if(
+      if (
         type_byte_size(to_union_type(type).members[i]).to_uint64() ==
         union_total_size)
       {
@@ -1294,7 +1295,7 @@ void goto_symext::intrinsic_memset(
 
   assert(func_call.operands.size() == 3 && "Wrong memset signature");
   const execution_statet &ex_state = art.get_cur_state();
-  if(ex_state.cur_state->guard.is_false())
+  if (ex_state.cur_state->guard.is_false())
     return;
 
   // Define a local function for translating to calling the unwinding C
@@ -1334,7 +1335,7 @@ void goto_symext::intrinsic_memset(
    * D: This is a simplification. So don't run with --no-simplify */
   cur_state->rename(arg1);
   cur_state->rename(arg2);
-  if(
+  if (
     !internal_deref_items.size() || !arg1 || !arg2 || is_symbol2t(arg2) ||
     options.get_bool_option("no-simplify"))
   {
@@ -1346,7 +1347,7 @@ void goto_symext::intrinsic_memset(
   }
 
   simplify(arg2);
-  if(!is_constant_int2t(arg2))
+  if (!is_constant_int2t(arg2))
   {
     log_debug("memset", "TODO: simplifier issues :/");
     bump_call();
@@ -1356,7 +1357,7 @@ void goto_symext::intrinsic_memset(
   unsigned long number_of_bytes = to_constant_int2t(arg2).as_ulong();
 
   // Where are we pointing to?
-  for(auto &item : internal_deref_items)
+  for (auto &item : internal_deref_items)
   {
     guardt guard = ex_state.cur_state->guard;
     expr2tc item_object = item.object;
@@ -1369,7 +1370,7 @@ void goto_symext::intrinsic_memset(
     /* Pre-requisites locally:
        * item_object must be something!
        * item_offset must be something! */
-    if(!item_object || !item_offset)
+    if (!item_object || !item_offset)
     {
       log_debug("memset", "Couldn't get item_object/item_offset");
       bump_call();
@@ -1378,7 +1379,7 @@ void goto_symext::intrinsic_memset(
 
     simplify(item_offset);
     // We can't optimize symbolic offsets :/
-    if(is_symbol2t(item_offset))
+    if (is_symbol2t(item_offset))
     {
       log_debug(
         "memset",
@@ -1391,19 +1392,19 @@ void goto_symext::intrinsic_memset(
     /* TODO: Shouldn't the simplifier be able to solve pointer arithmethic
      *  when it multiplies and divides for the same value?
      */
-    if(is_div2t(item_offset))
+    if (is_div2t(item_offset))
     {
       auto as_div = to_div2t(item_offset);
-      if(is_mul2t(as_div.side_1) && is_constant_int2t(as_div.side_2))
+      if (is_mul2t(as_div.side_1) && is_constant_int2t(as_div.side_2))
       {
         auto as_mul = to_mul2t(as_div.side_1);
-        if(
+        if (
           is_constant_int2t(as_mul.side_2) &&
           (to_constant_int2t(as_mul.side_2).as_ulong() ==
            to_constant_int2t(as_div.side_2).as_ulong()))
         {
           // if side_1 of mult is a pointer_offset, then it is just zero
-          if(is_pointer_offset2t(as_mul.side_1))
+          if (is_pointer_offset2t(as_mul.side_1))
           {
             log_debug("memset", "TODO: some simplifications are missing");
             item_offset = constant_int2tc(get_uint64_type(), BigInt(0));
@@ -1412,7 +1413,7 @@ void goto_symext::intrinsic_memset(
       }
     }
 
-    if(!is_constant_int2t(item_offset))
+    if (!is_constant_int2t(item_offset))
     {
       /* If we reached here, item_offset is not symbolic
        * and we don't know what the actual value of it is...
@@ -1436,13 +1437,13 @@ void goto_symext::intrinsic_memset(
     {
       type_size = type_byte_size(item_object->type).to_uint64();
     }
-    catch(const array_type2t::dyn_sized_array_excp &)
+    catch (const array_type2t::dyn_sized_array_excp &)
     {
       bump_call();
       return;
     }
 
-    if(is_code_type(item_object->type))
+    if (is_code_type(item_object->type))
     {
       std::string error_msg =
         fmt::format("dereference failure: trying to deref a ptr code");
@@ -1455,7 +1456,7 @@ void goto_symext::intrinsic_memset(
 
     bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
                          (number_of_offset > type_size);
-    if(
+    if (
       is_out_bounds && !options.get_bool_option("no-pointer-check") &&
       !options.get_bool_option("no-bounds-check"))
     {
@@ -1475,7 +1476,7 @@ void goto_symext::intrinsic_memset(
       item_object->type, item_object, arg1, number_of_bytes, number_of_offset);
 
     // Were we able to optimize it? If not... bump call
-    if(!new_object)
+    if (!new_object)
     {
       log_debug("memset", "gen_value_by_byte failed");
       bump_call();
@@ -1485,7 +1486,7 @@ void goto_symext::intrinsic_memset(
     symex_assign(code_assign2tc(item.object, new_object), false, guard);
   }
   // Lastly, let's add a NULL ptr check
-  if(!options.get_bool_option("no-pointer-check"))
+  if (!options.get_bool_option("no-pointer-check"))
   {
     expr2tc null_sym = symbol2tc(arg0->type, "NULL");
     expr2tc obj = same_object2tc(arg0, null_sym);
@@ -1525,7 +1526,7 @@ void goto_symext::intrinsic_get_object_size(
 
 void goto_symext::intrinsic_races_check_dereference(expr2tc &expr)
 {
-  if(!options.get_bool_option("data-races-check"))
+  if (!options.get_bool_option("data-races-check"))
     return;
 
   exprt tmp_exprt = migrate_expr_back(expr);
@@ -1534,7 +1535,7 @@ void goto_symext::intrinsic_races_check_dereference(expr2tc &expr)
   // There are two kinds of instructions generated in a data races check:
   // assignment and assertion (_ESBMC_deref_a = false; assert !_ESBMC_deref_a)
 
-  if(!tmp_exprt.is_not())
+  if (!tmp_exprt.is_not())
     iden = tmp_exprt.is_index() ? id2string(tmp_exprt.op0().identifier())
                                 : id2string(tmp_exprt.identifier());
   else
@@ -1546,13 +1547,13 @@ void goto_symext::intrinsic_races_check_dereference(expr2tc &expr)
 
   // Only instructions with special prefixes are processed
   // _ESBMC_deref_a = "_ESBMC_deref_" + "a"
-  if(has_prefix(iden, "__ESBMC_deref"))
+  if (has_prefix(iden, "__ESBMC_deref"))
   {
     const irep_idt identifier = iden.substr(14);
 
     const symbolt *symbol = new_context.find_symbol(identifier);
 
-    if(!symbol)
+    if (!symbol)
       return;
 
     exprt deref("dereference");
@@ -1568,14 +1569,14 @@ void goto_symext::intrinsic_races_check_dereference(expr2tc &expr)
                                ? "tmp_" + id2string(deref.identifier())
                                : "tmp_" + id2string(deref.op0().identifier());
 
-    if(new_idt == "tmp_")
+    if (new_idt == "tmp_")
       return;
 
     const symbolt *s = new_context.find_symbol(new_idt);
 
     symbolt new_symbol;
 
-    if(s)
+    if (s)
       new_symbol = *s;
     else
     {
@@ -1593,7 +1594,7 @@ void goto_symext::intrinsic_races_check_dereference(expr2tc &expr)
 
     deref = symbol_expr(new_symbol);
 
-    if(tmp_exprt.is_index())
+    if (tmp_exprt.is_index())
     {
       index_exprt index(
         symbol_expr(new_symbol),
@@ -1602,7 +1603,7 @@ void goto_symext::intrinsic_races_check_dereference(expr2tc &expr)
       deref.swap(index);
     }
 
-    if(expr->expr_id != expr2t::not_id)
+    if (expr->expr_id != expr2t::not_id)
       migrate_expr(deref, expr);
     else
       migrate_expr(gen_not(deref), expr);

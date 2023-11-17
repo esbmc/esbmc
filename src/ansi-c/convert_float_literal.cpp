@@ -27,12 +27,12 @@ void convert_float_literal(const std::string &src, exprt &dest)
 
   dest.cformat(src);
 
-  if(is_float)
+  if (is_float)
   {
     dest.type() = float_type();
     dest.type().set("#cpp_type", "float");
   }
-  else if(is_long)
+  else if (is_long)
   {
     dest.type() = long_double_type();
     dest.type().set("#cpp_type", "long_double");
@@ -43,13 +43,13 @@ void convert_float_literal(const std::string &src, exprt &dest)
     dest.type().set("#cpp_type", "double");
   }
 
-  if(config.ansi_c.use_fixed_for_float)
+  if (config.ansi_c.use_fixed_for_float)
   {
     unsigned width = atoi(dest.type().width().c_str());
     unsigned fraction_bits;
     const std::string &integer_bits = dest.type().integer_bits().as_string();
 
-    if(integer_bits == "")
+    if (integer_bits == "")
       fraction_bits = width / 2;
     else
       fraction_bits = width - atoi(integer_bits.c_str());
@@ -57,20 +57,20 @@ void convert_float_literal(const std::string &src, exprt &dest)
     BigInt factor = BigInt(1) << fraction_bits;
     BigInt value = significand * factor;
 
-    if(value != 0)
+    if (value != 0)
     {
-      if(exponent < 0)
+      if (exponent < 0)
         value /= power(base, -exponent);
       else
       {
         value *= power(base, exponent);
 
-        if(value >= power(2, width - 1))
+        if (value >= power(2, width - 1))
         {
           // saturate: use "biggest value"
           value = power(2, width - 1) - 1;
         }
-        else if(value <= -power(2, width - 1) - 1)
+        else if (value <= -power(2, width - 1) - 1)
         {
           // saturate: use "smallest value"
           value = -power(2, width - 1);
@@ -86,9 +86,9 @@ void convert_float_literal(const std::string &src, exprt &dest)
 
     a.spec = to_floatbv_type(dest.type());
 
-    if(base == 10)
+    if (base == 10)
       a.from_base10(significand, exponent);
-    else if(base == 2) // hex
+    else if (base == 2) // hex
       a.build(significand, exponent);
     else
       assert(false);

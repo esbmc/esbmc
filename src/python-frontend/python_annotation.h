@@ -17,9 +17,9 @@ public:
     add_annotation(ast_);
 
     // Add type annotation in function bodies
-    for(Json &element : ast_["body"])
+    for (Json &element : ast_["body"])
     {
-      if(element["_type"] == "FunctionDef")
+      if (element["_type"] == "FunctionDef")
       {
         add_annotation(element);
         update_end_col_offset(element);
@@ -30,9 +30,9 @@ public:
   // Add annotation in a specific function
   void add_type_annotation(const std::string &func_name)
   {
-    for(Json &elem : ast_["body"])
+    for (Json &elem : ast_["body"])
     {
-      if(elem["_type"] == "FunctionDef" && elem["name"] == func_name)
+      if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
         add_annotation(elem);
         update_end_col_offset(elem);
@@ -45,9 +45,9 @@ private:
   void update_end_col_offset(Json &ast)
   {
     int max_col_offset = ast["end_col_offset"];
-    for(auto &elem : ast["body"])
+    for (auto &elem : ast["body"])
     {
-      if(elem["end_col_offset"] > max_col_offset)
+      if (elem["end_col_offset"] > max_col_offset)
         max_col_offset = elem["end_col_offset"];
     }
     ast["end_col_offset"] = max_col_offset;
@@ -55,37 +55,37 @@ private:
 
   void add_annotation(Json &body)
   {
-    for(auto &element : body["body"])
+    for (auto &element : body["body"])
     {
-      if(element["_type"] == "Assign" && element["type_comment"].is_null())
+      if (element["_type"] == "Assign" && element["type_comment"].is_null())
       {
         std::string type;
         // Get type from rhs constant
-        if(element["value"]["_type"] == "Constant")
+        if (element["value"]["_type"] == "Constant")
         {
           // Get type from rhs constant
           auto rhs = element["value"]["value"];
           type = get_type_from_element(rhs);
         }
         // Get type from rhs variable
-        else if(element["value"]["_type"] == "Name")
+        else if (element["value"]["_type"] == "Name")
         {
           // Find rhs variable declaration in the current function
           auto rhs_node = find_node(element["value"]["id"], body["body"]);
 
           // Find rhs variable in the function args
-          if(rhs_node.empty() && body.contains("args"))
+          if (rhs_node.empty() && body.contains("args"))
           {
             rhs_node = find_node(element["value"]["id"], body["args"]["args"]);
           }
 
           // Find rhs variable node in the global scope
-          if(rhs_node.empty())
+          if (rhs_node.empty())
           {
             rhs_node = find_node(element["value"]["id"], ast_["body"]);
           }
 
-          if(rhs_node.empty())
+          if (rhs_node.empty())
           {
             log_error(
               "Variable {} not found.",
@@ -139,11 +139,11 @@ private:
 
   std::string get_type_from_element(const Json &elem) const
   {
-    if(elem.is_number_integer() || elem.is_number_unsigned())
+    if (elem.is_number_integer() || elem.is_number_unsigned())
       return std::string("int");
-    else if(elem.is_boolean())
+    else if (elem.is_boolean())
       return std::string("bool");
-    else if(elem.is_number_float())
+    else if (elem.is_number_float())
       return std::string("float");
 
     return std::string();
@@ -151,9 +151,9 @@ private:
 
   const Json find_node(const std::string &node_name, const Json &body)
   {
-    for(const Json &elem : body)
+    for (const Json &elem : body)
     {
-      if(
+      if (
         elem.contains("_type") &&
         ((elem["_type"] == "AnnAssign" && elem.contains("target") &&
           elem["target"].contains("id") &&

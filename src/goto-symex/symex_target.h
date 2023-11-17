@@ -101,17 +101,17 @@ public:
   stack_framet(const stack_framet &ref)
   {
     *this = ref;
-    if(src != nullptr)
+    if (src != nullptr)
       src = &_src;
   }
 
   bool _cmp(const stack_framet &ref) const
   {
-    if(function != ref.function)
+    if (function != ref.function)
       return false;
-    if(src == nullptr && ref.src == src)
+    if (src == nullptr && ref.src == src)
       return true;
-    if(src == nullptr || ref.src == nullptr)
+    if (src == nullptr || ref.src == nullptr)
       return false;
 
     return src->pc->location_number == ref.src->pc->location_number;

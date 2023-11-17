@@ -5,13 +5,13 @@ int goto_coveraget::total_instrument = 0;
 void goto_coveraget::make_asserts_false(goto_functionst &goto_functions)
 {
   log_progress("Converting all assertions to false...");
-  Forall_goto_functions(f_it, goto_functions)
-    if(f_it->second.body_available && f_it->first != "__ESBMC_main")
+  Forall_goto_functions (f_it, goto_functions)
+    if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       goto_programt &goto_program = f_it->second.body;
-      Forall_goto_program_instructions(it, goto_program)
+      Forall_goto_program_instructions (it, goto_program)
       {
-        if(it->is_assert())
+        if (it->is_assert())
         {
           std::string cmt;
           const std::string loc = it->location.as_string();
@@ -32,19 +32,19 @@ void goto_coveraget::make_asserts_false(goto_functionst &goto_functions)
 void goto_coveraget::add_false_asserts(goto_functionst &goto_functions)
 {
   log_progress("Adding false assertions...");
-  Forall_goto_functions(f_it, goto_functions)
-    if(f_it->second.body_available && f_it->first != "__ESBMC_main")
+  Forall_goto_functions (f_it, goto_functions)
+    if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       goto_programt &goto_program = f_it->second.body;
-      Forall_goto_program_instructions(it, goto_program)
+      Forall_goto_program_instructions (it, goto_program)
       {
-        if(it->is_end_function())
+        if (it->is_end_function())
         {
           insert_false_assert(goto_program, it);
           continue;
         }
 
-        if((!is_true(it->guard) && it->is_goto()) || it->is_target())
+        if ((!is_true(it->guard) && it->is_goto()) || it->is_target())
         {
           it++; // add an assertion behind the instruciton
           insert_false_assert(goto_program, it);

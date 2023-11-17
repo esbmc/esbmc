@@ -17,7 +17,7 @@ __ESBMC_HIDE:;
   double y = 1;
   double e = 1;
   int i = 0;
-  while(i++ < 15) //Change this line to increase precision
+  while (i++ < 15) //Change this line to increase precision
   {
     x = (x + y) / 2.0;
     y = n / x;

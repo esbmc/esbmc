@@ -38,7 +38,7 @@ void test_sync_fetch_add(int initial, int value)
 
 extern "C" int LLVMFuzzerTestOneInput(const int *Data, size_t Size)
 {
-  if(!is_valid_input(Data, Size))
+  if (!is_valid_input(Data, Size))
     return 0;
   test_sync_fetch_add(Data[0], Data[1]);
   return 0;

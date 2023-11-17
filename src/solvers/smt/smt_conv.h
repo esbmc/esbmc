@@ -217,7 +217,7 @@ public:
 
     // Chain these.
     smt_astt result = v.front();
-    for(std::size_t i = 1; i < v.size(); ++i)
+    for (std::size_t i = 1; i < v.size(); ++i)
       result = (o->*m)(result, v[i]);
 
     return result;
@@ -352,10 +352,10 @@ public:
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(std::size_t width)
   {
-    if(int_encoding)
+    if (int_encoding)
       return mk_int_sort();
 
-    if(width == 0)
+    if (width == 0)
       width = 1;
 
     return mk_bv_sort(width);
@@ -364,10 +364,10 @@ public:
   /** Create an real or floating-point/fixed-point sort */
   smt_sortt mk_real_fp_sort(std::size_t ew, std::size_t sw)
   {
-    if(int_encoding)
+    if (int_encoding)
       return mk_real_sort();
 
-    if(config.ansi_c.use_fixed_for_float)
+    if (config.ansi_c.use_fixed_for_float)
       return mk_fbv_sort(ew + sw);
 
     return fp_api->mk_fpbv_sort(ew, sw);

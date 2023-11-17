@@ -26,7 +26,7 @@ static const std::string &dump_python_script()
   static bool dumped = false;
   static auto p =
     file_operations::create_tmp_dir("esbmc-python-astgen-%%%%-%%%%-%%%%");
-  if(!dumped)
+  if (!dumped)
   {
     dumped = true;
 #define ESBMC_FLAIL(body, size, ...)                                           \
@@ -48,7 +48,7 @@ bool python_languaget::parse(const std::string &path)
   log_debug("python", "Parsing: {}", path);
 
   fs::path script(path);
-  if(!fs::exists(script))
+  if (!fs::exists(script))
     return true;
 
   ast_output_dir = dump_python_script();
@@ -63,7 +63,7 @@ bool python_languaget::parse(const std::string &path)
   // Wait for execution
   process.wait();
 
-  if(process.exit_code())
+  if (process.exit_code())
   {
     log_error("Python execution failed");
     return true;
@@ -76,7 +76,7 @@ bool python_languaget::parse(const std::string &path)
   // Add annotation
   python_annotation<nlohmann::json> ann(ast);
   const std::string function = config.options.get_option("function");
-  if(!function.empty())
+  if (!function.empty())
     ann.add_type_annotation(function);
   else
     ann.add_type_annotation();
@@ -126,7 +126,7 @@ bool python_languaget::from_type(
 unsigned python_languaget::default_flags(presentationt target) const
 {
   unsigned f = 0;
-  switch(target)
+  switch (target)
   {
   case presentationt::HUMAN:
     f |= c_expr2stringt::SHORT_ZERO_COMPOUNDS;

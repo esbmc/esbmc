@@ -2,7 +2,7 @@
 
 const char *tvt::to_string() const
 {
-  switch(value)
+  switch (value)
   {
   case TV_TRUE:
     return "TRUE";

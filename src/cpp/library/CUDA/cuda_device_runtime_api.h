@@ -3,7 +3,7 @@
 
 #if defined(__CUDABE__)
 
-#if(__CUDA_ARCH__ >= 350) && !defined(__CUDADEVRT_INTERNAL__)
+#if (__CUDA_ARCH__ >= 350) && !defined(__CUDADEVRT_INTERNAL__)
 struct cudaFuncAttributes;
 
 __device__ __attribute__((nv_weak)) cudaError_t cudaMalloc(void **p, size_t s)

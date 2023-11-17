@@ -39,7 +39,7 @@ __cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind)
   const char *csrc = (const char *)src;
   int numbytes = count / (sizeof(char));
 
-  for(int i = 0; i < numbytes; i++)
+  for (int i = 0; i < numbytes; i++)
     cdst[i] = csrc[i];
 
   lastError = CUDA_SUCCESS;
@@ -61,7 +61,7 @@ cudaError_t cudaMalloc(void **devPtr, size_t size)
   __ESBMC_assert(size > 0, "Size to be allocated may not be less than zero");
   *devPtr = malloc(size);
 
-  if(*devPtr == NULL)
+  if (*devPtr == NULL)
     tmp = CUDA_ERROR_OUT_OF_MEMORY;
   else
     tmp = CUDA_SUCCESS;
@@ -87,7 +87,7 @@ const char *cudaGetErrorString(cudaError_t error)
 {
   char *erroReturn;
 
-  switch(error)
+  switch (error)
   {
   case 0:
     return "CUDA_SUCCESS";
@@ -288,9 +288,9 @@ void cudaDeviceInsert(int device)
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
   //Verifies that the device exists in the list
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   {
-    if(auxDevice->id == device)
+    if (auxDevice->id == device)
     {
       //printf("\nDevice existing");
       //return 0;
@@ -301,7 +301,7 @@ void cudaDeviceInsert(int device)
   cudaDeviceList_t *newCudaDevice;
 
   newCudaDevice = (cudaDeviceList_t *)__ESBMC_alloca(sizeof(cudaDeviceList_t));
-  if(newCudaDevice == NULL)
+  if (newCudaDevice == NULL)
     return;
 
   newCudaDevice->id = device;
@@ -309,7 +309,7 @@ void cudaDeviceInsert(int device)
   //newCudaDevice->deviceProp.regsPerBlock = var; //Insert fields to deviceProp
   newCudaDevice->prox = NULL;
 
-  if(cudaDeviceList == NULL)
+  if (cudaDeviceList == NULL)
   {
     cudaDeviceList = newCudaDevice;
   }
@@ -328,7 +328,7 @@ void cudaPrintDevice()
   __ESBMC_atomic_begin();
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   {
     //printf("->Device: %d Active:%d\n",auxDevice->id,auxDevice->active);
     auxDevice = auxDevice->prox;
@@ -341,9 +341,9 @@ int searchCudaDevice(int device)
 {
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   {
-    if(auxDevice->id == device)
+    if (auxDevice->id == device)
     {
       return 1;
     }
@@ -360,11 +360,11 @@ int cudaDeviceActive(int device)
 {
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   {
-    if(auxDevice->id == device)
+    if (auxDevice->id == device)
     {
-      if(auxDevice->active == 1)
+      if (auxDevice->active == 1)
       {
         return 1;
       }
@@ -382,9 +382,9 @@ int cudaDeviceStart(int device)
 {
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   {
-    if(auxDevice->id == device)
+    if (auxDevice->id == device)
     {
       auxDevice->active = 1;
       return 1;
@@ -399,11 +399,11 @@ cudaError_t cudaSetDevice(int device)
 {
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   { //Scroll through the list
-    if(auxDevice->id == device)
+    if (auxDevice->id == device)
     { //Checks if the device
-      if(auxDevice->active == 1)
+      if (auxDevice->active == 1)
       {                                     //Verifies that the device is active
         return cudaErrorDeviceAlreadyInUse; //cudaErrorDeviceAlreadyInUse
         lastError = cudaErrorDeviceAlreadyInUse;
@@ -506,9 +506,9 @@ cudaGetDeviceProperties(struct cudaDeviceProp *prop, int device)
 
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   {
-    if(auxDevice->id == device)
+    if (auxDevice->id == device)
     {
       deviceChosen = auxDevice->deviceProp;
       prop = &deviceChosen;
@@ -537,7 +537,7 @@ cudaError_t cudaThreadSynchronize()
   __ESBMC_atomic_begin();
   cudaError_t tmp;
 
-  while(cudaThreadList != NULL)
+  while (cudaThreadList != NULL)
   {
     threadsList_t *node;
     pthread_join(cudaThreadList->thread, NULL);

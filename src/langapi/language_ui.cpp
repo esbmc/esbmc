@@ -12,9 +12,9 @@ language_uit::language_uit(const cmdlinet &__cmdline) : _cmdline(__cmdline)
 
 bool language_uit::parse()
 {
-  for(const auto &arg : _cmdline.args)
+  for (const auto &arg : _cmdline.args)
   {
-    if(parse(arg))
+    if (parse(arg))
       return true;
   }
 
@@ -26,16 +26,16 @@ bool language_uit::parse(const std::string &filename)
   language_idt lang = language_id_by_path(filename);
   int mode = get_mode(lang);
 
-  if(mode < 0)
+  if (mode < 0)
   {
     log_error("failed to figure out type of file {}", filename);
     return true;
   }
 
-  if(config.options.get_bool_option("old-frontend"))
+  if (config.options.get_bool_option("old-frontend"))
   {
     mode = get_old_frontend_mode(mode);
-    if(mode == -1)
+    if (mode == -1)
     {
       log_error("old-frontend was not built on this version of ESBMC");
       return true;
@@ -46,7 +46,7 @@ bool language_uit::parse(const std::string &filename)
 
   // Check that it opens
   std::ifstream infile(filename.c_str());
-  if(!infile)
+  if (!infile)
   {
     log_error("failed to open input file {}", filename);
     return true;
@@ -67,12 +67,12 @@ bool language_uit::parse(const std::string &filename)
   log_progress("Parsing {}", filename);
 
 #ifdef ENABLE_SOLIDITY_FRONTEND
-  if(mode == get_mode(language_idt::SOLIDITY))
+  if (mode == get_mode(language_idt::SOLIDITY))
   {
-    if(!config.options.get_option("function").empty())
+    if (!config.options.get_option("function").empty())
       language.set_func_name(_cmdline.vm["function"].as<std::string>());
 
-    if(config.options.get_option("sol") == "")
+    if (config.options.get_option("sol") == "")
     {
       log_error("Please set the smart contract source file.");
       return true;
@@ -84,7 +84,7 @@ bool language_uit::parse(const std::string &filename)
   }
 #endif
 
-  if(language.parse(filename))
+  if (language.parse(filename))
   {
     log_error("PARSING ERROR");
     return true;
@@ -99,7 +99,7 @@ bool language_uit::typecheck()
 {
   log_progress("Converting");
 
-  if(language_files.typecheck(context))
+  if (language_files.typecheck(context))
   {
     log_error("CONVERSION ERROR");
     return true;
@@ -110,7 +110,7 @@ bool language_uit::typecheck()
 
 bool language_uit::final()
 {
-  if(language_files.final(context))
+  if (language_files.final(context))
   {
     log_error("CONVERSION ERROR");
     return true;

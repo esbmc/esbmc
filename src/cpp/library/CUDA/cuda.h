@@ -30,12 +30,12 @@ void cudaInsertThread(pthread_t threadAux)
 {
   threadsList_t *newCudaThread;
   newCudaThread = (threadsList_t *)__ESBMC_alloca(sizeof(threadsList_t));
-  if(newCudaThread == NULL)
+  if (newCudaThread == NULL)
     return;
   newCudaThread->thread = threadAux;
   newCudaThread->prox = NULL;
 
-  if(cudaThreadList == NULL)
+  if (cudaThreadList == NULL)
   {
     cudaThreadList = newCudaThread;
   }

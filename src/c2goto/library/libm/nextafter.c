@@ -9,7 +9,7 @@ extern _Thread_local int errno;
 #define NEXTAFTER(suff, dbl, ui)                                               \
   dbl nextafter##suff(dbl x, dbl y)                                            \
   {                                                                            \
-    if(isnan(y))                                                               \
+    if (isnan(y))                                                              \
       return y;                                                                \
     union                                                                      \
     {                                                                          \
@@ -18,14 +18,14 @@ extern _Thread_local int errno;
     } v;                                                                       \
     v.d = x;                                                                   \
     int dir = isless(x, y) ? +1 : isgreater(x, y) ? -1 : 0;                    \
-    if(signbit(x))                                                             \
+    if (signbit(x))                                                            \
       dir = -dir;                                                              \
-    switch(fpclassify(x))                                                      \
+    switch (fpclassify(x))                                                     \
     {                                                                          \
     case FP_NAN:                                                               \
       break;                                                                   \
     case FP_ZERO:                                                              \
-      if(!dir)                                                                 \
+      if (!dir)                                                                \
         return y;                                                              \
       v.u = 1;                                                                 \
       v.d = copysign##suff(v.d, y);                                            \
@@ -39,13 +39,13 @@ extern _Thread_local int errno;
     default:                                                                   \
       __ESBMC_assert(0, "invalid fpclassify value");                           \
     }                                                                          \
-    if(isfinite(x) && !isfinite(v.d))                                          \
+    if (isfinite(x) && !isfinite(v.d))                                         \
     {                                                                          \
       feraiseexcept(FE_OVERFLOW);                                              \
       errno = ERANGE;                                                          \
       v.d = copysign##suff(HUGE_VAL, x);                                       \
     }                                                                          \
-    if(                                                                        \
+    if (                                                                       \
       islessgreater(x, y) && isfinite(v.d) &&                                  \
       (!isnormal(v.d) || v.d == (dbl)0))                                       \
     {                                                                          \

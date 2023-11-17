@@ -58,10 +58,10 @@ smt_convt::resultt bitwuzla_convt::dec_solve()
 
   BitwuzlaResult result = bitwuzla_check_sat(bitw);
 
-  if(result == BITWUZLA_SAT)
+  if (result == BITWUZLA_SAT)
     return P_SATISFIABLE;
 
-  if(result == BITWUZLA_UNSAT)
+  if (result == BITWUZLA_UNSAT)
     return P_UNSATISFIABLE;
 
   return P_ERROR;
@@ -550,12 +550,12 @@ smt_astt
 bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   symtable_type::iterator it = symtable.find(name);
-  if(it != symtable.end())
+  if (it != symtable.end())
     return it->second;
 
   BitwuzlaTerm node;
 
-  switch(s->id)
+  switch (s->id)
   {
   case SMT_SORT_BV:
   case SMT_SORT_FIXEDBV:
@@ -644,9 +644,9 @@ bool bitwuzla_convt::get_bool(smt_astt a)
   assert(result != NULL && "Bitwuzla returned null bv value string");
 
   bool res;
-  if(!strcmp(result, "true"))
+  if (!strcmp(result, "true"))
     res = true;
-  else if(!strcmp(result, "false"))
+  else if (!strcmp(result, "false"))
     res = false;
   else
   {
@@ -674,7 +674,7 @@ expr2tc bitwuzla_convt::get_array_elem(
   const bitw_smt_ast *za = to_solver_smt_ast<bitw_smt_ast>(array);
   size_t array_bound = array->sort->get_domain_width();
   const bitw_smt_ast *idx;
-  if(int_encoding)
+  if (int_encoding)
     idx = to_solver_smt_ast<bitw_smt_ast>(mk_smt_int(BigInt(index)));
   else
     idx = to_solver_smt_ast<bitw_smt_ast>(
@@ -703,9 +703,9 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
     (is_signedbv_type(opers.side_1) || is_signedbv_type(opers.side_2));
 
   BitwuzlaTerm res;
-  if(is_add2t(overflow.operand))
+  if (is_add2t(overflow.operand))
   {
-    if(is_signed)
+    if (is_signed)
     {
       res =
         bitwuzla_mk_term2(BITWUZLA_KIND_BV_SADD_OVERFLOW, side1->a, side2->a);
@@ -716,9 +716,9 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
         bitwuzla_mk_term2(BITWUZLA_KIND_BV_UADD_OVERFLOW, side1->a, side2->a);
     }
   }
-  else if(is_sub2t(overflow.operand))
+  else if (is_sub2t(overflow.operand))
   {
-    if(is_signed)
+    if (is_signed)
     {
       res =
         bitwuzla_mk_term2(BITWUZLA_KIND_BV_SSUB_OVERFLOW, side1->a, side2->a);
@@ -729,9 +729,9 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
         bitwuzla_mk_term2(BITWUZLA_KIND_BV_USUB_OVERFLOW, side1->a, side2->a);
     }
   }
-  else if(is_mul2t(overflow.operand))
+  else if (is_mul2t(overflow.operand))
   {
-    if(is_signed)
+    if (is_signed)
     {
       res =
         bitwuzla_mk_term2(BITWUZLA_KIND_BV_SMUL_OVERFLOW, side1->a, side2->a);
@@ -742,7 +742,7 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
         bitwuzla_mk_term2(BITWUZLA_KIND_BV_UMUL_OVERFLOW, side1->a, side2->a);
     }
   }
-  else if(is_div2t(overflow.operand) || is_modulus2t(overflow.operand))
+  else if (is_div2t(overflow.operand) || is_modulus2t(overflow.operand))
   {
     res = bitwuzla_mk_term2(BITWUZLA_KIND_BV_SDIV_OVERFLOW, side1->a, side2->a);
   }

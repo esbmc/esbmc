@@ -97,7 +97,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
   op1_is_ptr = (is_pointer_type(side1)) ? 2 : 0;
   op2_is_ptr = (is_pointer_type(side2)) ? 1 : 0;
 
-  switch(ret_is_ptr | op1_is_ptr | op2_is_ptr)
+  switch (ret_is_ptr | op1_is_ptr | op2_is_ptr)
   {
   case 0:
     assert(false);
@@ -108,13 +108,13 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     // the offset of one from the other. However, they absolutely have to
     // point at the same data object, or it's undefined operation. This is
     // already asserted for elsewhere.
-    if(expr->expr_id == expr2t::sub_id)
+    if (expr->expr_id == expr2t::sub_id)
     {
       expr2tc offs1 = pointer_offset2tc(signed_size_type2(), side1);
       expr2tc offs2 = pointer_offset2tc(signed_size_type2(), side2);
       expr2tc the_ptr_offs = sub2tc(offs1->type, offs1, offs2);
 
-      if(ret_is_ptr)
+      if (ret_is_ptr)
       {
         // Update field in tuple.
         smt_astt the_ptr = convert_ast(side1);
@@ -164,7 +164,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     type2tc inttype = machine_ptr;
     type2tc difftype = get_int_type(config.ansi_c.address_width);
 
-    if(non_ptr_op->type->get_width() != config.ansi_c.pointer_width())
+    if (non_ptr_op->type->get_width() != config.ansi_c.pointer_width())
       non_ptr_op = typecast2tc(machine_ptr, non_ptr_op);
 
     expr2tc mul = mul2tc(inttype, non_ptr_op, pointee_size);
@@ -174,7 +174,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       typecast2tc(inttype, pointer_offset2tc(difftype, ptr_op));
 
     expr2tc newexpr;
-    if(is_add2t(expr))
+    if (is_add2t(expr))
     {
       newexpr = add2tc(inttype, mul, ptr_offset);
     }
@@ -212,7 +212,7 @@ void smt_convt::renumber_symbol_address(
   // variable already.
 
   renumber_mapt::iterator it = renumber_map.back().find(str);
-  if(it != renumber_map.back().end())
+  if (it != renumber_map.back().end())
   {
     // There's already an address-of variable for this pointer. Set up a new
     // object number, and nondeterministically pick the new value.
@@ -244,17 +244,17 @@ smt_astt smt_convt::convert_identifier_pointer(
   std::string cte, identifier;
   unsigned int obj_num;
 
-  if(!ptr_foo_inited)
+  if (!ptr_foo_inited)
   {
     log_error(
       "SMT solver must call smt_post_init immediately after construction");
     abort();
   }
 
-  if(is_symbol2t(expr))
+  if (is_symbol2t(expr))
   {
     const symbol2t &sym = to_symbol2t(expr);
-    if(sym.thename == "NULL")
+    if (sym.thename == "NULL")
     {
       // For null, other pieces of code will have already initialized its
       // value, so we can just refer to a symbol.
@@ -270,12 +270,12 @@ smt_astt smt_convt::convert_identifier_pointer(
   // alas.
   expr2tc new_addr_of = address_of2tc(expr->type, expr);
   smt_cachet::const_iterator cache_result = smt_cache.find(new_addr_of);
-  if(cache_result != smt_cache.end())
+  if (cache_result != smt_cache.end())
     return cache_result->ast;
 
   // Has this been touched by realloc / been re-numbered?
   renumber_mapt::iterator it = renumber_map.back().find(symbol);
-  if(it != renumber_map.back().end())
+  if (it != renumber_map.back().end())
   {
     // Yes -- take current obj num and we're done.
     return it->second;
@@ -292,7 +292,7 @@ smt_astt smt_convt::convert_identifier_pointer(
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
   // the address space record.
-  if(addr_space_data.back().find(obj_num) == addr_space_data.back().end())
+  if (addr_space_data.back().find(obj_num) == addr_space_data.back().end())
   {
     // Fetch a size.
     type2tc ptr_loc_type = size_type2();
@@ -301,7 +301,7 @@ smt_astt smt_convt::convert_identifier_pointer(
     {
       size = type_byte_size_expr(expr->type, &ns);
     }
-    catch(const array_type2t::inf_sized_array_excp &e)
+    catch (const array_type2t::inf_sized_array_excp &e)
     {
       // This can occur when external symbols with no known size are used.
       // in that case, make a reasonable assumption on how large they might be,
@@ -326,7 +326,7 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   const struct_type2t &ptr_struct = to_struct_type(pointer_struct);
   membs.push_back(constant_int2tc(ptr_struct.members[0], BigInt(obj_num)));
   membs.push_back(constant_int2tc(ptr_struct.members[1], BigInt(0)));
-  if(config.ansi_c.cheri)
+  if (config.ansi_c.cheri)
     membs.push_back(
       constant_int2tc(ptr_struct.members[2], BigInt(0))); /* CHERI-TODO */
   expr2tc ptr_val_s = constant_struct2tc(pointer_struct, membs);
@@ -389,7 +389,7 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
 {
   type2tc inttype = ptraddr_type2();
   unsigned int num_ptrs = addr_space_data.back().size();
-  if(num_ptrs == 0)
+  if (num_ptrs == 0)
     return;
 
   std::stringstream start1, end1;
@@ -398,10 +398,10 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
   expr2tc start_i = symbol2tc(inttype, start1.str());
   expr2tc end_i = symbol2tc(inttype, end1.str());
 
-  for(unsigned int j = 0; j < objnum; j++)
+  for (unsigned int j = 0; j < objnum; j++)
   {
     // Obj1 is designed to overlap
-    if(j == 1)
+    if (j == 1)
       continue;
 
     std::stringstream startj, endj;
@@ -429,7 +429,7 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
      * version of the __ESBMC_alloc symbol stored in `current_valid_objects_sym`
      * is the one this new object i gets registered with.
      */
-    if(j && current_valid_objects_sym)
+    if (j && current_valid_objects_sym)
     {
       expr2tc alive =
         index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j));
@@ -446,7 +446,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
 
   std::string symbol_name, out;
 
-  if(is_index2t(obj.ptr_obj) || is_member2t(obj.ptr_obj))
+  if (is_index2t(obj.ptr_obj) || is_member2t(obj.ptr_obj))
   {
     // This might be a composite index/member/blah chain
     expr2tc offs = compute_pointer_offset(obj.ptr_obj);
@@ -460,13 +460,13 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     return a->update(this, convert_ast(offs), 1);
   }
 
-  if(is_symbol2t(obj.ptr_obj))
+  if (is_symbol2t(obj.ptr_obj))
   {
     const symbol2t &symbol = to_symbol2t(obj.ptr_obj);
     return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name());
   }
 
-  if(is_constant_string2t(obj.ptr_obj))
+  if (is_constant_string2t(obj.ptr_obj))
   {
     // XXXjmorse - we should avoid encoding invalid characters in the symbol,
     // but this works for now.
@@ -480,7 +480,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     return convert_identifier_pointer(obj.ptr_obj, identifier);
   }
 
-  if(is_constant_array2t(obj.ptr_obj))
+  if (is_constant_array2t(obj.ptr_obj))
   {
     // This can occur (rather than being a constant string) when the C++
     // frontend performs const propagation in functions that pass around
@@ -494,7 +494,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     return convert_identifier_pointer(obj.ptr_obj, ss.str());
   }
 
-  if(is_if2t(obj.ptr_obj))
+  if (is_if2t(obj.ptr_obj))
   {
     // We can't nondeterministically take the address of something; So instead
     // rewrite this to be if (cond) ? &a : &b;.
@@ -507,7 +507,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     return convert_ast(newif);
   }
 
-  if(is_typecast2t(obj.ptr_obj))
+  if (is_typecast2t(obj.ptr_obj))
   {
     // Take the address of whatevers being casted. Either way, they all end up
     // being of a pointer_tuple type, so this should be fine.
@@ -566,7 +566,7 @@ void smt_convt::init_addr_space_array()
                          constant_int2tc(ptr_struct.members[0], 1),
                          constant_int2tc(ptr_struct.members[1], 0),
                        };
-  if(config.ansi_c.cheri)
+  if (config.ansi_c.cheri)
   {
     null_members.emplace_back(constant_int2tc(ptr_struct.members[2], 0));
     /* same as NULL capability */
