@@ -32,22 +32,22 @@ void value_set_analysist::add_vars(const goto_programt &goto_program)
   typedef std::unordered_map<irep_idt, entry_listt, irep_id_hash> entry_cachet;
   entry_cachet entry_cache;
 
-  for(goto_programt::instructionst::const_iterator i_it =
-        goto_program.instructions.begin();
-      i_it != goto_program.instructions.end();
-      i_it++)
+  for (goto_programt::instructionst::const_iterator i_it =
+         goto_program.instructions.begin();
+       i_it != goto_program.instructions.end();
+       i_it++)
   {
     value_sett &v = *(*this)[i_it].value_set;
     v.add_vars(globals);
 
-    for(goto_programt::decl_identifierst::const_iterator l_it = locals.begin();
-        l_it != locals.end();
-        l_it++)
+    for (goto_programt::decl_identifierst::const_iterator l_it = locals.begin();
+         l_it != locals.end();
+         l_it++)
     {
       // cache hit?
       entry_cachet::const_iterator e_it = entry_cache.find(*l_it);
 
-      if(e_it == entry_cache.end())
+      if (e_it == entry_cache.end())
       {
         const symbolt &symbol = *ns.lookup(*l_it);
 
@@ -76,23 +76,23 @@ void value_set_analysist::get_entries_rec(
 {
   const typet &t = ns.follow(type);
 
-  if(t.id() == "struct" || t.id() == "union")
+  if (t.id() == "struct" || t.id() == "union")
   {
     const struct_typet &struct_type = to_struct_type(t);
 
     const struct_typet::componentst &c = struct_type.components();
 
-    for(const auto &it : c)
+    for (const auto &it : c)
     {
       get_entries_rec(
         identifier, suffix + "." + it.name().as_string(), it.type(), dest);
     }
   }
-  else if(t.is_array())
+  else if (t.is_array())
   {
     get_entries_rec(identifier, suffix + "[]", t.subtype(), dest);
   }
-  else if(check_type(t))
+  else if (check_type(t))
   {
     dest.emplace_back(identifier, std::move(suffix));
   }
@@ -104,12 +104,12 @@ void value_set_analysist::add_vars(const goto_functionst &goto_functions)
   std::list<value_sett::entryt> globals;
   get_globals(globals);
 
-  for(goto_functionst::function_mapt::const_iterator f_it =
-        goto_functions.function_map.begin();
-      f_it != goto_functions.function_map.end();
-      f_it++)
+  for (goto_functionst::function_mapt::const_iterator f_it =
+         goto_functions.function_map.begin();
+       f_it != goto_functions.function_map.end();
+       f_it++)
 
-    forall_goto_program_instructions(i_it, f_it->second.body)
+    forall_goto_program_instructions (i_it, f_it->second.body)
     {
       value_sett &v = *(*this)[i_it].value_set;
       v.add_vars(globals);
@@ -118,7 +118,7 @@ void value_set_analysist::add_vars(const goto_functionst &goto_functions)
       std::set<irep_idt> locals;
       get_local_identifiers(f_it->second, locals);
 
-      for(auto const &l_it : locals)
+      for (auto const &l_it : locals)
       {
         const symbolt &symbol = *ns.lookup(l_it);
 
@@ -133,30 +133,30 @@ void value_set_analysist::get_globals(std::list<value_sett::entryt> &dest)
 {
   // static ones
   ns.get_context().foreach_operand([this, &dest](const symbolt &s) {
-    if(s.lvalue && s.static_lifetime)
+    if (s.lvalue && s.static_lifetime)
       get_entries(s, dest);
   });
 }
 
 bool value_set_analysist::check_type(const typet &type)
 {
-  if(type.id() == "pointer")
+  if (type.id() == "pointer")
     return true;
-  if(type.id() == "struct" || type.id() == "union")
+  if (type.id() == "struct" || type.id() == "union")
   {
     const struct_typet &struct_type = to_struct_type(type);
 
     const struct_typet::componentst &components = struct_type.components();
 
-    for(const auto &component : components)
+    for (const auto &component : components)
     {
-      if(check_type(component.type()))
+      if (check_type(component.type()))
         return true;
     }
   }
-  else if(type.is_array())
+  else if (type.is_array())
     return check_type(type.subtype());
-  else if(type.id() == "symbol")
+  else if (type.id() == "symbol")
     return check_type(ns.follow(type));
 
   return false;
@@ -169,14 +169,14 @@ void value_set_analysist::convert(
 {
   ::locationt previous_location;
 
-  forall_goto_program_instructions(i_it, goto_program)
+  forall_goto_program_instructions (i_it, goto_program)
   {
     const ::locationt &location = i_it->location;
 
-    if(location == previous_location)
+    if (location == previous_location)
       continue;
 
-    if(location.is_nil() || location.get_file() == "")
+    if (location.is_nil() || location.get_file() == "")
       continue;
 
     // find value set
@@ -187,7 +187,7 @@ void value_set_analysist::convert(
     ::convert(location, xml_location);
     xml_location.name = "location";
 
-    for(const auto &value : value_set.values)
+    for (const auto &value : value_set.values)
     {
       xmlt &var = i.new_element("variable");
       var.new_element("identifier").data = value.first.as_string();
@@ -219,7 +219,7 @@ void convert(
 {
   dest = xmlt("value_set_analysis");
 
-  for(const auto &f_it : goto_functions.function_map)
+  for (const auto &f_it : goto_functions.function_map)
   {
     xmlt &f = dest.new_element("function");
 

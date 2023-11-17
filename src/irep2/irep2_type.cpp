@@ -64,9 +64,9 @@ bool type2t::operator!=(const type2t &ref) const
 bool type2t::operator<(const type2t &ref) const
 {
   int tmp = type2t::lt(ref);
-  if(tmp < 0)
+  if (tmp < 0)
     return true;
-  else if(tmp > 0)
+  else if (tmp > 0)
     return false;
   else
     return (lt(ref) < 0);
@@ -75,7 +75,7 @@ bool type2t::operator<(const type2t &ref) const
 int type2t::ltchecked(const type2t &ref) const
 {
   int tmp = type2t::lt(ref);
-  if(tmp != 0)
+  if (tmp != 0)
     return tmp;
 
   return lt(ref);
@@ -83,7 +83,7 @@ int type2t::ltchecked(const type2t &ref) const
 
 bool type2t::cmpchecked(const type2t &ref) const
 {
-  if(type_id == ref.type_id)
+  if (type_id == ref.type_id)
     return cmp(ref);
 
   return false;
@@ -91,9 +91,9 @@ bool type2t::cmpchecked(const type2t &ref) const
 
 int type2t::lt(const type2t &ref) const
 {
-  if(type_id < ref.type_id)
+  if (type_id < ref.type_id)
     return -1;
-  if(type_id > ref.type_id)
+  if (type_id > ref.type_id)
     return 1;
   return 0;
 }
@@ -141,10 +141,10 @@ unsigned int array_type2t::get_width() const
 {
   // Two edge cases: the array can have infinite size, or it can have a dynamic
   // size that's determined by the solver.
-  if(size_is_infinite)
+  if (size_is_infinite)
     throw inf_sized_array_excp();
 
-  if(array_size->expr_id != expr2t::constant_int_id)
+  if (array_size->expr_id != expr2t::constant_int_id)
     throw dyn_sized_array_excp(array_size);
 
   // Otherwise, we can multiply the size of the subtype by the number of elements.
@@ -198,7 +198,7 @@ unsigned int struct_type2t::get_width() const
   // Iterate over members accumulating width.
   std::vector<type2tc>::const_iterator it;
   unsigned int width = 0;
-  for(it = members.begin(); it != members.end(); it++)
+  for (it = members.begin(); it != members.end(); it++)
     width += (*it)->get_width();
 
   return width;
@@ -209,7 +209,7 @@ unsigned int union_type2t::get_width() const
   // Iterate over members accumulating width.
   std::vector<type2tc>::const_iterator it;
   unsigned int width = 0;
-  for(it = members.begin(); it != members.end(); it++)
+  for (it = members.begin(); it != members.end(); it++)
     width = std::max(width, (*it)->get_width());
 
   return width;
@@ -259,9 +259,9 @@ const irep_idt &struct_union_data::get_structure_name() const
 unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
 {
   unsigned int i = 0, count = 0, pos = 0;
-  for(auto const &it : member_names)
+  for (auto const &it : member_names)
   {
-    if(it == comp)
+    if (it == comp)
     {
       pos = i;
       ++count;
@@ -269,10 +269,10 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
     i++;
   }
 
-  if(count == 1)
+  if (count == 1)
     return pos;
 
-  if(!count)
+  if (!count)
   {
     log_error(
       "Looking up index of nonexistant member \"{}\" in struct/union \"{}\"",
@@ -280,7 +280,7 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
       name);
     abort();
   }
-  else if(count > 1)
+  else if (count > 1)
   {
     log_error(
       "Name \"{}\" matches more than one member in struct/union \"{}\"",

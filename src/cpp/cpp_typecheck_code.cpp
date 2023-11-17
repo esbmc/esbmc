@@ -20,26 +20,26 @@ void cpp_typecheckt::typecheck_code(codet &code)
 {
   const irep_idt &statement = code.statement();
 
-  if(statement == "cpp-catch")
+  if (statement == "cpp-catch")
   {
     code.type() = typet("code");
     typecheck_catch(code);
   }
-  else if(statement == "throw_decl")
+  else if (statement == "throw_decl")
   {
     code.type() = typet("code");
     typecheck_throw_decl(code);
   }
-  else if(statement == "throw_decl_end")
+  else if (statement == "throw_decl_end")
   {
     // Ignore
   }
-  else if(statement == "member_initializer")
+  else if (statement == "member_initializer")
   {
     code.type() = typet("code");
     typecheck_member_initializer(code);
   }
-  else if(statement == "msc_if_exists" || statement == "msc_if_not_exists")
+  else if (statement == "msc_if_exists" || statement == "msc_if_not_exists")
   {
   }
   else
@@ -50,11 +50,11 @@ void cpp_typecheckt::typecheck_throw_decl(codet &code)
 {
   codet::operandst &operands = code.operands();
 
-  for(auto &operand : operands)
+  for (auto &operand : operands)
   {
     codet &op = to_code(operand);
 
-    if(op.operands().size() != 1)
+    if (op.operands().size() != 1)
     {
       err_location(code);
       throw "declaration expected to have one operand";
@@ -83,7 +83,7 @@ void cpp_typecheckt::typecheck_catch(codet &code)
   typecheck_code(try_block);
 
   // The following operands are the catchs
-  for(it = ++operands.begin(); it != operands.end(); it++)
+  for (it = ++operands.begin(); it != operands.end(); it++)
   {
     code_blockt &block = to_code_block(to_code(*it));
     typecheck_code(block);
@@ -115,7 +115,7 @@ void cpp_typecheckt::typecheck_ifthenelse(codet &code)
   // as condition. E.g.,
   // if(void *p=...) ...
 
-  if(code.op0().id() == "code")
+  if (code.op0().id() == "code")
   {
     codet decl = to_code(code.op0());
     typecheck_decl(decl);
@@ -142,7 +142,7 @@ void cpp_typecheckt::typecheck_while(codet &code)
   // In addition to the C syntax, C++ also allows a declaration
   // as condition. E.g.,
   // while(void *p=...) ...
-  if(code.op0().id() == "code")
+  if (code.op0().id() == "code")
   {
     codet decl = to_code(code.op0());
     typecheck_decl(decl);
@@ -170,7 +170,7 @@ void cpp_typecheckt::typecheck_switch(codet &code)
   // as condition. E.g.,
   // switch(int i=...) ...
 
-  if(code.op0().id() == "code")
+  if (code.op0().id() == "code")
   {
     codet decl = to_code(code.op0());
     typecheck_decl(decl);
@@ -211,7 +211,7 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
   // the constructor because of the constructor arguments.
   exprt symbol_expr = resolve(member, cpp_typecheck_resolvet::BOTH, fargs);
 
-  if(symbol_expr.id() == "type" && follow(symbol_expr.type()).id() == "struct")
+  if (symbol_expr.id() == "type" && follow(symbol_expr.type()).id() == "struct")
   {
     // It's a parent. Call the constructor that we got.
     side_effect_expr_function_callt function_call;
@@ -233,14 +233,14 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
 
     assert(function_call.statement() == "temporary_object");
 
-    if(function_call.get_bool("#not_accessible"))
+    if (function_call.get_bool("#not_accessible"))
     {
       irep_idt access = function_call.get("#access");
 
       assert(
         access == "private" || access == "protected" || access == "noaccess");
 
-      if(access == "private" || access == "noaccess")
+      if (access == "private" || access == "noaccess")
       {
         err_location(code.location());
         str << "error: constructor of `" << to_string(symbol_expr)
@@ -261,10 +261,10 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
     make_ptr_typecast(this_expr, tmp_this.type());
     tmp_this.swap(this_expr);
     code = code_expressiont();
-    if(code.operands().size() == 1)
+    if (code.operands().size() == 1)
     {
       // remove zombie operands
-      if(code.operands().front().id() == "")
+      if (code.operands().front().id() == "")
         code.operands().clear();
     }
     code.move_to_operands(initializer);
@@ -272,7 +272,7 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
   else
   {
     // a reference member
-    if(
+    if (
       symbol_expr.id() == "dereference" && symbol_expr.op0().id() == "member" &&
       symbol_expr.implicit() == true)
     {
@@ -281,7 +281,7 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
       symbol_expr.swap(tmp);
     }
 
-    if(symbol_expr.id() == "symbol" && symbol_expr.type().id() != "code")
+    if (symbol_expr.id() == "symbol" && symbol_expr.type().id() != "code")
     {
       // maybe the name of the member collides with a parameter of the constructor
       symbol_expr.make_nil();
@@ -298,7 +298,7 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
         symbol_expr = resolve(member, cpp_typecheck_resolvet::VAR, fargs);
       }
 
-      if(
+      if (
         symbol_expr.id() == "dereference" &&
         symbol_expr.op0().id() == "member" && symbol_expr.implicit() == true)
       {
@@ -308,14 +308,14 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
       }
     }
 
-    if(
+    if (
       symbol_expr.id() == "member" && symbol_expr.op0().id() == "dereference" &&
       symbol_expr.op0().op0() == cpp_scopes.current_scope().this_expr)
     {
-      if(is_reference(symbol_expr.type()))
+      if (is_reference(symbol_expr.type()))
       {
         // it's a reference member
-        if(code.operands().size() != 1)
+        if (code.operands().size() != 1)
         {
           err_location(code);
           str << " reference `" + to_string(symbol_expr) +
@@ -336,10 +336,10 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
         typecheck_side_effect_assignment(assign);
         code_expressiont new_code;
 
-        if(new_code.operands().size() == 1)
+        if (new_code.operands().size() == 1)
         {
           // remove zombie operands
-          if(new_code.operands().front().id() == "")
+          if (new_code.operands().front().id() == "")
             new_code.operands().clear();
         }
 
@@ -353,7 +353,7 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
         exprt call =
           cpp_constructor(code.location(), symbol_expr, code.operands());
 
-        if(call.is_nil())
+        if (call.is_nil())
         {
           call = codet("skip");
           call.location() = code.location();
@@ -373,7 +373,7 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
 
 void cpp_typecheckt::typecheck_decl(codet &code)
 {
-  if(code.operands().size() != 1)
+  if (code.operands().size() != 1)
   {
     err_location(code);
     throw "declaration expected to have one operand";
@@ -390,10 +390,10 @@ void cpp_typecheckt::typecheck_decl(codet &code)
   typecheck_type(type);
   assert(type.is_not_nil());
 
-  if(
+  if (
     declaration.declarators().empty() && follow(type).get_bool("#is_anonymous"))
   {
-    if(follow(type).id() != "union")
+    if (follow(type).id() != "union")
     {
       err_location(code);
       throw "declaration statement does not declare anything";
@@ -416,7 +416,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
     const symbolt &symbol =
       cpp_declarator_converter.convert(declaration, declarator);
 
-    if(is_typedef)
+    if (is_typedef)
       continue;
 
     codet decl_statement("decl");
@@ -425,7 +425,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
     decl_statement.copy_to_operands(cpp_symbol_expr(symbol));
 
     // Do we have an initializer that's not code?
-    if(symbol.value.is_not_nil() && symbol.value.id() != "code")
+    if (symbol.value.is_not_nil() && symbol.value.id() != "code")
     {
       decl_statement.copy_to_operands(symbol.value);
       assert(follow(decl_statement.op1().type()) == follow(symbol.type));
@@ -434,13 +434,13 @@ void cpp_typecheckt::typecheck_decl(codet &code)
     new_code.move_to_operands(decl_statement);
 
     // is there a constructor to be called?
-    if(symbol.value.is_not_nil())
+    if (symbol.value.is_not_nil())
     {
       assert(it->find("init_args").is_nil());
-      if(symbol.value.id() == "code")
+      if (symbol.value.id() == "code")
         new_code.copy_to_operands(symbol.value);
     }
-    else if(!declarator.find("name").get_bool("catch_decl"))
+    else if (!declarator.find("name").get_bool("catch_decl"))
     {
       exprt object_expr = cpp_symbol_expr(symbol);
 
@@ -453,7 +453,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
       exprt constructor_call = cpp_constructor(
         symbol.location, object_expr, declarator.init_args().operands());
 
-      if(constructor_call.is_not_nil())
+      if (constructor_call.is_not_nil())
         new_code.move_to_operands(constructor_call);
     }
   }
@@ -471,7 +471,7 @@ void cpp_typecheckt::typecheck_block(codet &code)
 
 void cpp_typecheckt::typecheck_assign(codet &code)
 {
-  if(code.operands().size() != 2)
+  if (code.operands().size() != 2)
     throw "assignment statement expected to have two operands";
 
   // turn into a sideeffect
@@ -481,10 +481,10 @@ void cpp_typecheckt::typecheck_assign(codet &code)
 
   code_expressiont code_expr;
 
-  if(code_expr.operands().size() == 1)
+  if (code_expr.operands().size() == 1)
   {
     // remove zombie operands
-    if(code_expr.operands().front().id() == "")
+    if (code_expr.operands().front().id() == "")
       code_expr.operands().clear();
   }
 

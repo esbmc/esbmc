@@ -133,7 +133,7 @@ expr2t::expr2t(const expr2t &ref)
 
 bool expr2t::operator==(const expr2t &ref) const
 {
-  if(!expr2t::cmp(ref))
+  if (!expr2t::cmp(ref))
     return false;
 
   return cmp(ref);
@@ -147,9 +147,9 @@ bool expr2t::operator!=(const expr2t &ref) const
 bool expr2t::operator<(const expr2t &ref) const
 {
   int tmp = expr2t::lt(ref);
-  if(tmp < 0)
+  if (tmp < 0)
     return true;
-  else if(tmp > 0)
+  else if (tmp > 0)
     return false;
   else
     return (lt(ref) < 0);
@@ -158,7 +158,7 @@ bool expr2t::operator<(const expr2t &ref) const
 int expr2t::ltchecked(const expr2t &ref) const
 {
   int tmp = expr2t::lt(ref);
-  if(tmp != 0)
+  if (tmp != 0)
     return tmp;
 
   return lt(ref);
@@ -166,10 +166,10 @@ int expr2t::ltchecked(const expr2t &ref) const
 
 bool expr2t::cmp(const expr2t &ref) const
 {
-  if(expr_id != ref.expr_id)
+  if (expr_id != ref.expr_id)
     return false;
 
-  if(type != ref.type)
+  if (type != ref.type)
     return false;
 
   return true;
@@ -177,9 +177,9 @@ bool expr2t::cmp(const expr2t &ref) const
 
 int expr2t::lt(const expr2t &ref) const
 {
-  if(expr_id < ref.expr_id)
+  if (expr_id < ref.expr_id)
     return -1;
-  if(expr_id > ref.expr_id)
+  if (expr_id > ref.expr_id)
     return 1;
 
   return type->ltchecked(*ref.type.get());
@@ -259,7 +259,7 @@ bool constant_bool2t::is_false() const
 
 std::string symbol_data::get_symbol_name() const
 {
-  switch(rlevel)
+  switch (rlevel)
   {
   case level0:
     return thename.as_string();
@@ -290,7 +290,7 @@ expr2tc constant_string2t::to_array() const
 
   type2tc type = get_uint8_type();
 
-  for(i = 0; i < length; i++)
+  for (i = 0; i < length; i++)
     contents.push_back(constant_int2tc(type, BigInt(value.as_string()[i])));
 
   // Null terminator is implied.
@@ -307,18 +307,18 @@ expr2tc constant_string2t::to_array() const
 
 static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
 {
-  if(is_array_type(a))
+  if (is_array_type(a))
   {
     assert(is_array_type(b));
     const array_type2t &at = to_array_type(a);
     const array_type2t &bt = to_array_type(b);
     assert_type_compat_for_with(at.subtype, bt.subtype);
     assert(at.size_is_infinite == bt.size_is_infinite);
-    if(is_symbol2t(at.array_size) || is_symbol2t(bt.array_size))
+    if (is_symbol2t(at.array_size) || is_symbol2t(bt.array_size))
       return;
     assert(at.array_size == bt.array_size);
   }
-  else if(is_code_type(a))
+  else if (is_code_type(a))
   {
     assert(is_code_type(b));
     const code_type2t &at [[maybe_unused]] = to_code_type(a);
@@ -328,7 +328,7 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
     /* don't compare argument names, they could be empty on one side */
     assert(at.ellipsis == bt.ellipsis);
   }
-  else if(is_pointer_type(a))
+  else if (is_pointer_type(a))
   {
     assert(is_pointer_type(b));
     assert_type_compat_for_with(
@@ -340,19 +340,19 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
 
 void with2t::assert_consistency() const
 {
-  if(is_array_type(source_value))
+  if (is_array_type(source_value))
   {
     assert(is_bv_type(update_field->type));
     const array_type2t &arr_type = to_array_type(source_value->type);
     assert_type_compat_for_with(arr_type.subtype, update_value->type);
   }
-  else if(is_vector_type(source_value))
+  else if (is_vector_type(source_value))
   {
     assert(is_bv_type(update_field->type));
     assert_type_compat_for_with(
       to_vector_type(source_value->type).subtype, update_value->type);
   }
-  else if(is_string_type(source_value))
+  else if (is_string_type(source_value))
   {
     assert(is_bv_type(update_field->type));
     assert(is_bv_type(update_value->type));
@@ -377,13 +377,13 @@ const expr2tc &object_descriptor2t::get_root_object() const
 
   do
   {
-    if(is_member2t(*tmp))
+    if (is_member2t(*tmp))
       tmp = &to_member2t(*tmp).source_value;
-    else if(is_index2t(*tmp))
+    else if (is_index2t(*tmp))
       tmp = &to_index2t(*tmp).source_value;
     else
       return *tmp;
-  } while(1);
+  } while (1);
 }
 
 arith_2ops::arith_2ops(
@@ -400,13 +400,13 @@ arith_2ops::arith_2ops(
     return t->type_id == type2t::unsignedbv_id ||
            t->type_id == type2t::signedbv_id;
   };
-  if(p1 && p2)
+  if (p1 && p2)
   {
     assert(id == expr2t::sub_id);
     assert(is_bv_type(t));
     assert(t->get_width() == config.ansi_c.address_width);
   }
-  else if(!(is_vector_type(v1->type) || is_vector_type(v2->type)))
+  else if (!(is_vector_type(v1->type) || is_vector_type(v2->type)))
   {
     assert(
       p2 || (is_bv_type(t) == is_bv_type(v1->type) &&

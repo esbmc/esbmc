@@ -278,7 +278,7 @@ bool do_get_sub_expr<expr2tc>(
   unsigned int &it,
   const expr2tc *&ptr)
 {
-  if(idx == it)
+  if (idx == it)
   {
     ptr = &item;
     return true;
@@ -297,7 +297,7 @@ bool do_get_sub_expr<std::vector<expr2tc>>(
   unsigned int &it,
   const expr2tc *&ptr)
 {
-  if(idx < it + item.size())
+  if (idx < it + item.size())
   {
     ptr = &item[idx - it];
     return true;
@@ -317,7 +317,7 @@ bool do_get_sub_expr_nc<expr2tc>(
   unsigned int &it,
   expr2tc *&ptr)
 {
-  if(idx == it)
+  if (idx == it)
   {
     ptr = &item;
     return true;
@@ -336,7 +336,7 @@ bool do_get_sub_expr_nc<std::vector<expr2tc>>(
   unsigned int &it,
   expr2tc *&ptr)
 {
-  if(idx < it + item.size())
+  if (idx < it + item.size())
   {
     ptr = &item[idx - it];
     return true;
@@ -382,7 +382,7 @@ void call_expr_delegate<const std::vector<expr2tc>, expr2t::const_op_delegate>(
   const std::vector<expr2tc> &ref,
   expr2t::const_op_delegate &f)
 {
-  for(const expr2tc &r : ref)
+  for (const expr2tc &r : ref)
     f(r);
 }
 
@@ -391,7 +391,7 @@ void call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>(
   std::vector<expr2tc> &ref,
   expr2t::op_delegate &f)
 {
-  for(expr2tc &r : ref)
+  for (expr2tc &r : ref)
     f(r);
 }
 
@@ -418,7 +418,7 @@ void call_type_delegate<
   const std::vector<type2tc> &ref,
   type2t::const_subtype_delegate &f)
 {
-  for(const type2tc &r : ref)
+  for (const type2tc &r : ref)
     f(r);
 }
 
@@ -427,6 +427,6 @@ void call_type_delegate<std::vector<type2tc>, type2t::subtype_delegate>(
   std::vector<type2tc> &ref,
   type2t::subtype_delegate &f)
 {
-  for(type2tc &r : ref)
+  for (type2tc &r : ref)
     f(r);
 }

@@ -24,7 +24,7 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
     std::istringstream empty("");
     auto goto_function = goto_factory::get_goto_functions(empty).functions;
     unsigned functions = 0;
-    Forall_goto_functions(it, goto_function)
+    Forall_goto_functions (it, goto_function)
     {
       functions++;
     }

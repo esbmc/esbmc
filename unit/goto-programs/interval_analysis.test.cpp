@@ -22,7 +22,7 @@ public:
 
   void run_configs(bool needs_overflow_support = false)
   {
-    if(!needs_overflow_support)
+    if (!needs_overflow_support)
     {
       // Common Interval Analysis (Linear from -infinity into +infinity)
       SECTION("Baseline")
@@ -100,7 +100,7 @@ public:
     }
     // A namespace is instatiated at goto_factory::get_goto_functions
     // and it needs to be released now
-    delete(migrate_namespace_lookup);
+    delete (migrate_namespace_lookup);
   }
 
   static void set_baseline_config()
@@ -132,44 +132,44 @@ public:
     interval_analysis(P.functions, P.ns);
     CHECK(P.functions.function_map.size() > 0);
 
-    Forall_goto_functions(f_it, P.functions)
+    Forall_goto_functions (f_it, P.functions)
     {
-      if(f_it->first == "c:@F@main")
+      if (f_it->first == "c:@F@main")
       {
         REQUIRE(f_it->second.body_available);
-        forall_goto_program_instructions(i_it, f_it->second.body)
+        forall_goto_program_instructions (i_it, f_it->second.body)
         {
           const auto &to_check =
             property.find(i_it->location.get_line().as_string());
-          if(to_check != property.end())
+          if (to_check != property.end())
           {
             auto state = get_map<IntervalMap>(interval_analysis[i_it]);
 
-            for(auto property_it = to_check->second.begin();
-                property_it != to_check->second.end();
-                property_it++)
+            for (auto property_it = to_check->second.begin();
+                 property_it != to_check->second.end();
+                 property_it++)
             {
-              if(!property_it->should_contain && !precise_intervals)
+              if (!property_it->should_contain && !precise_intervals)
                 continue;
 
               const auto &value = property_it->v;
 
               // we need to find the actual interval however... getting the original name is hard
               auto interval = state.begin();
-              for(; interval != state.end(); interval++)
+              for (; interval != state.end(); interval++)
               {
                 auto real_name = interval->first.as_string();
                 auto var_name = property_it->var;
 
-                if(var_name.size() > real_name.size())
+                if (var_name.size() > real_name.size())
                   continue;
 
-                if(std::equal(
-                     var_name.rbegin(), var_name.rend(), real_name.rbegin()))
+                if (std::equal(
+                      var_name.rbegin(), var_name.rend(), real_name.rbegin()))
                   break;
               }
 
-              if(interval == state.end())
+              if (interval == state.end())
               {
                 CAPTURE(
                   precise_intervals,

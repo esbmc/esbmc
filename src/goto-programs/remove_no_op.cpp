@@ -15,21 +15,21 @@ bool is_no_op(
   goto_programt::const_targett it,
   bool ignore_labels)
 {
-  if(!ignore_labels && !it->labels.empty())
+  if (!ignore_labels && !it->labels.empty())
     return false;
 
-  if(it->is_skip())
+  if (it->is_skip())
     return true;
 
-  if(it->is_goto())
+  if (it->is_goto())
   {
-    if(is_false(it->guard))
+    if (is_false(it->guard))
       return true;
 
     goto_programt::const_targett next_it = it;
     next_it++;
 
-    if(next_it == body.instructions.end())
+    if (next_it == body.instructions.end())
       return false;
 
     // A branch to the next instruction is a no-op
@@ -38,19 +38,19 @@ bool is_no_op(
            it->get_target() == next_it;
   }
 
-  if(it->is_other())
+  if (it->is_other())
   {
-    if(is_nil_expr(it->code))
+    if (is_nil_expr(it->code))
       return true;
 
-    if(is_code_skip2t(it->code))
+    if (is_code_skip2t(it->code))
       return true;
 
-    if(is_code_expression2t(it->code))
+    if (is_code_expression2t(it->code))
     {
       const auto &code_expression = to_code_expression2t(it->code);
       const auto &expr = code_expression.operand;
-      if(
+      if (
         is_typecast2t(expr) && is_empty_type(expr->type) &&
         is_constant_expr(to_typecast2t(expr).from))
       {
@@ -90,18 +90,18 @@ void remove_no_op(
     new_targetst new_targets;
 
     // remove no-op statements
-    for(goto_programt::instructionst::iterator it = begin; it != end;)
+    for (goto_programt::instructionst::iterator it = begin; it != end;)
     {
       goto_programt::targett old_target = it;
 
       // for collecting labels
       std::list<irep_idt> labels;
 
-      while(is_no_op(goto_program, it, true))
+      while (is_no_op(goto_program, it, true))
       {
         // don't remove the last no-op statement,
         // it could be a target
-        if(
+        if (
           it == std::prev(end) || (std::next(it)->is_end_function() &&
                                    (!labels.empty() || !it->labels.empty())))
         {
@@ -118,9 +118,9 @@ void remove_no_op(
       // save labels
       it->labels.splice(it->labels.begin(), labels);
 
-      if(new_target != old_target)
+      if (new_target != old_target)
       {
-        for(; old_target != new_target; ++old_target)
+        for (; old_target != new_target; ++old_target)
           new_targets[old_target] = new_target; // remember the old targets
       }
       else
@@ -128,41 +128,41 @@ void remove_no_op(
     }
 
     // adjust gotos across the full goto program body
-    for(auto &ins : goto_program.instructions)
+    for (auto &ins : goto_program.instructions)
     {
-      if(ins.is_goto() || ins.is_catch())
+      if (ins.is_goto() || ins.is_catch())
       {
-        for(auto &target : ins.targets)
+        for (auto &target : ins.targets)
         {
           new_targetst::const_iterator result = new_targets.find(target);
 
-          if(result != new_targets.end())
+          if (result != new_targets.end())
             target = result->second;
         }
       }
     }
 
-    while(new_targets.find(begin) != new_targets.end())
+    while (new_targets.find(begin) != new_targets.end())
       ++begin;
 
     // now delete the no-op's -- we do so after adjusting the
     // gotos to avoid dangling targets
-    for(const auto &new_target : new_targets)
+    for (const auto &new_target : new_targets)
       goto_program.instructions.erase(new_target.first);
 
     // remove the last no-op statement unless it's a target
     goto_program.compute_target_numbers();
 
-    if(begin != end)
+    if (begin != end)
     {
       goto_programt::targett last = std::prev(end);
-      if(begin == last)
+      if (begin == last)
         ++begin;
 
-      if(is_no_op(goto_program, last) && !last->is_target())
+      if (is_no_op(goto_program, last) && !last->is_target())
         goto_program.instructions.erase(last);
     }
-  } while(goto_program.instructions.size() < old_size);
+  } while (goto_program.instructions.size() < old_size);
 }
 
 // Remove unnecessary no-op statements in the entire GOTO program
@@ -183,7 +183,7 @@ void remove_no_op(goto_programt &goto_program)
 // \param goto_functions  list of goto functions to be cleaned
 void remove_no_op(goto_functionst &goto_functions)
 {
-  Forall_goto_functions(f_it, goto_functions)
+  Forall_goto_functions (f_it, goto_functions)
     remove_no_op(
       f_it->second.body,
       f_it->second.body.instructions.begin(),

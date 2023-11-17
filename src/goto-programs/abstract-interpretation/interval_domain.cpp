@@ -43,7 +43,7 @@ void interval_domaint::update_symbol_interval(
   // TODO: we can't handle globals
   // as the analysis is not context-aware
   //
-  if(has_prefix(sym.thename, "c:@"))
+  if (has_prefix(sym.thename, "c:@"))
     return;
   int_map[sym.thename] = value;
 }
@@ -71,19 +71,19 @@ void interval_domaint::apply_assume_symbol_truth(
 {
   Interval interval = get_interval_from_symbol<Interval>(sym);
   // [0,0]
-  if(is_false)
+  if (is_false)
   {
     interval.set_upper(0);
     interval.set_lower(0);
   }
   // [1, infinity]
-  else if(is_unsignedbv_type(sym.type) || is_bool_type(sym.type))
+  else if (is_unsignedbv_type(sym.type) || is_bool_type(sym.type))
     interval.make_ge_than(1);
-  else if(is_signedbv_type(sym.type))
+  else if (is_signedbv_type(sym.type))
   {
-    if(interval.lower && interval.get_lower() == 0)
+    if (interval.lower && interval.get_lower() == 0)
       interval.make_ge_than(1);
-    else if(interval.upper && interval.get_upper() == 0)
+    else if (interval.upper && interval.get_upper() == 0)
       interval.make_le_than(-1);
   }
 
@@ -95,7 +95,7 @@ integer_intervalt
 interval_domaint::get_interval_from_const(const expr2tc &e) const
 {
   integer_intervalt result; // (-infinity, infinity)
-  if(!is_constant_int2t(e))
+  if (!is_constant_int2t(e))
     return result;
   auto value = to_constant_int2t(e).value;
   result.make_le_than(value);
@@ -109,15 +109,15 @@ template <>
 real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) const
 {
   real_intervalt result; // (-infinity, infinity)
-  if(!is_constant_floatbv2t(e))
+  if (!is_constant_floatbv2t(e))
     return result;
 
   auto real_value = to_constant_floatbv2t(e).value;
 
   // Health check, is the convertion to double ok? See #1037
-  if(!std::isnormal(real_value.to_double()) || real_value.is_zero())
+  if (!std::isnormal(real_value.to_double()) || real_value.is_zero())
   {
-    if(real_value.is_double())
+    if (real_value.is_double())
       log_warning("ESBMC fails to to convert {} into double", *e);
 
     // Give up for top!
@@ -129,7 +129,7 @@ real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) const
   value1.increment(true);
   value2.decrement(true);
 
-  if(value1.is_NaN() || value1.is_infinity())
+  if (value1.is_NaN() || value1.is_infinity())
   {
     assert(result.is_top() && !result.is_bottom());
     return result;
@@ -150,7 +150,7 @@ wrapped_interval
 interval_domaint::get_interval_from_const(const expr2tc &e) const
 {
   wrapped_interval result(e->type); // [0, 2^(length(e->type)) - 1]
-  if(!is_constant_int2t(e))
+  if (!is_constant_int2t(e))
     return result;
   auto value = to_constant_int2t(e).value;
   result.set_lower(value);
@@ -167,13 +167,13 @@ interval_domaint::generate_modular_interval<integer_intervalt>(
   auto t = sym.type;
   BigInt b;
   integer_intervalt result;
-  if(is_unsignedbv_type(t))
+  if (is_unsignedbv_type(t))
   {
     b.setPower2(t->get_width());
     result.make_le_than(b - 1);
     result.make_ge_than(0);
   }
-  else if(is_signedbv_type(t))
+  else if (is_signedbv_type(t))
   {
     b.setPower2(t->get_width() - 1);
     result.make_ge_than(-b);
@@ -214,7 +214,7 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
   assert(is_symbol2t(lhs));
   // a = b
   auto b = get_interval<T>(rhs);
-  if(enable_modular_intervals)
+  if (enable_modular_intervals)
   {
     auto a = generate_modular_interval<T>(to_symbol2t(lhs));
     b.intersect_with(a);
@@ -233,15 +233,15 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after)
   bool upper_increased = !after.upper || (before.upper && after.upper &&
                                           *after.upper > *before.upper);
 
-  if((lower_decreased || upper_increased) && !widening_under_approximate_bound)
+  if ((lower_decreased || upper_increased) && !widening_under_approximate_bound)
     return result;
 
   // Set lower bound: if we didn't decrease then just update the interval
-  if(!lower_decreased)
+  if (!lower_decreased)
     result.lower = before.lower;
 
   // Set upper bound:
-  if(!upper_increased)
+  if (!upper_increased)
     result.upper = before.upper;
   return result;
 }
@@ -278,10 +278,10 @@ T interval_domaint::interpolate_intervals(const T &before, const T &after)
   bool lower_increased = !before.lower && after.lower;
   bool upper_decreased = !before.upper && after.upper;
 
-  if(lower_increased)
+  if (lower_increased)
     result.lower = after.lower;
 
-  if(upper_decreased)
+  if (upper_decreased)
     result.upper = after.upper;
   return result;
 }
@@ -292,7 +292,7 @@ T interval_domaint::get_interval(const expr2tc &e) const
   T result = get_top_interval_from_expr<T>(e);
 
   // TODO: I probably can refactor these in a better way
-  switch(e->expr_id)
+  switch (e->expr_id)
   {
   case expr2t::constant_bool_id:
     result.set_lower(to_constant_bool2t(e).is_true());
@@ -326,10 +326,10 @@ T interval_domaint::get_interval(const expr2tc &e) const
     tvt lhs = eval_boolean_expression(logic_op.side_1, *this);
     tvt rhs = eval_boolean_expression(logic_op.side_2, *this);
 
-    if(is_and2t(e))
+    if (is_and2t(e))
     {
       // If any side is false, (and => false)
-      if((lhs.is_false() || rhs.is_false()))
+      if ((lhs.is_false() || rhs.is_false()))
       {
         result.set_lower(0);
         result.set_upper(0);
@@ -337,7 +337,7 @@ T interval_domaint::get_interval(const expr2tc &e) const
       }
 
       // Both sides are true, then true
-      if(lhs.is_true() && rhs.is_true())
+      if (lhs.is_true() && rhs.is_true())
       {
         result.set_lower(1);
         result.set_upper(1);
@@ -345,9 +345,9 @@ T interval_domaint::get_interval(const expr2tc &e) const
       }
     }
 
-    else if(is_or2t(e))
+    else if (is_or2t(e))
     {
-      if(lhs.is_true() || rhs.is_true())
+      if (lhs.is_true() || rhs.is_true())
       {
         result.set_lower(1);
         result.set_upper(1);
@@ -355,7 +355,7 @@ T interval_domaint::get_interval(const expr2tc &e) const
       }
 
       // Both sides are false, then false
-      if(lhs.is_false() && rhs.is_false())
+      if (lhs.is_false() && rhs.is_false())
       {
         result.set_lower(0);
         result.set_upper(0);
@@ -363,14 +363,14 @@ T interval_domaint::get_interval(const expr2tc &e) const
       }
     }
 
-    else if(is_xor2t(e))
+    else if (is_xor2t(e))
     {
-      if(lhs.is_unknown() || rhs.is_unknown())
+      if (lhs.is_unknown() || rhs.is_unknown())
       {
         result.set_lower(0);
         result.set_upper(1);
       }
-      else if(lhs == rhs)
+      else if (lhs == rhs)
       {
         result.set_lower(0);
         result.set_upper(0);
@@ -384,15 +384,15 @@ T interval_domaint::get_interval(const expr2tc &e) const
       break;
     }
 
-    else if(is_implies2t(e))
+    else if (is_implies2t(e))
     {
       // A --> B <=== > ¬A or B
-      if(lhs.is_true() && rhs.is_false())
+      if (lhs.is_true() && rhs.is_false())
       {
         result.set_lower(0);
         result.set_upper(0);
       }
-      else if(lhs.is_false() || rhs.is_true())
+      else if (lhs.is_false() || rhs.is_true())
       {
         result.set_lower(1);
         result.set_upper(1);
@@ -421,16 +421,16 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::typecast_id:
   {
     // Special case: boolean
-    if(is_bool_type(to_typecast2t(e).type))
+    if (is_bool_type(to_typecast2t(e).type))
     {
       tvt truth = eval_boolean_expression(to_typecast2t(e).from, *this);
       result.set_lower(0);
       result.set_upper(1);
 
-      if(truth.is_true())
+      if (truth.is_true())
         result.set_lower(1);
 
-      if(truth.is_false())
+      if (truth.is_false())
         result.set_upper(0);
 
       break;
@@ -445,25 +445,25 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::mul_id:
   case expr2t::div_id:
   case expr2t::modulus_id:
-    if(enable_interval_arithmetic)
+    if (enable_interval_arithmetic)
     {
       const auto &arith_op = dynamic_cast<const arith_2ops &>(*e);
       auto lhs = get_interval<T>(arith_op.side_1);
       auto rhs = get_interval<T>(arith_op.side_2);
 
-      if(is_add2t(e))
+      if (is_add2t(e))
         result = lhs + rhs;
 
-      else if(is_sub2t(e))
+      else if (is_sub2t(e))
         result = lhs - rhs;
 
-      else if(is_mul2t(e))
+      else if (is_mul2t(e))
         result = lhs * rhs;
 
-      else if(is_div2t(e))
+      else if (is_div2t(e))
         result = lhs / rhs;
 
-      else if(is_modulus2t(e))
+      else if (is_modulus2t(e))
         result = lhs % rhs;
     }
     break;
@@ -477,40 +477,40 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::bitnand_id:
   case expr2t::bitnor_id:
   case expr2t::bitnxor_id:
-    if(enable_interval_bitwise_arithmetic)
+    if (enable_interval_bitwise_arithmetic)
     {
       const auto &bit_op = dynamic_cast<const bit_2ops &>(*e);
       auto lhs = get_interval<T>(bit_op.side_1);
       auto rhs = get_interval<T>(bit_op.side_2);
 
-      if(is_shl2t(e))
+      if (is_shl2t(e))
         result = T::left_shift(lhs, rhs);
 
-      else if(is_ashr2t(e))
+      else if (is_ashr2t(e))
         result = T::arithmetic_right_shift(lhs, rhs);
 
-      else if(is_lshr2t(e))
+      else if (is_lshr2t(e))
         result = T::logical_right_shift(lhs, rhs);
 
-      else if(is_bitor2t(e))
+      else if (is_bitor2t(e))
         result = lhs | rhs;
 
-      else if(is_bitand2t(e))
+      else if (is_bitand2t(e))
         result = lhs & rhs;
-      else if(is_bitxor2t(e))
+      else if (is_bitxor2t(e))
         result = lhs ^ rhs;
 
-      else if(is_bitnand2t(e))
+      else if (is_bitnand2t(e))
         result = T::bitnot(lhs & rhs);
-      else if(is_bitnor2t(e))
+      else if (is_bitnor2t(e))
         result = T::bitnot(lhs | rhs);
-      else if(is_bitnxor2t(e))
+      else if (is_bitnxor2t(e))
         result = T::bitnot(lhs ^ rhs);
     }
     break;
 
   case expr2t::bitnot_id:
-    if(enable_interval_bitwise_arithmetic)
+    if (enable_interval_bitwise_arithmetic)
       result = T::bitnot(get_interval<T>(to_bitnot2t(e).value));
     break;
 
@@ -527,22 +527,22 @@ T interval_domaint::get_interval(const expr2tc &e) const
     auto lhs_i = get_interval<T>(lhs);
     auto rhs_i = get_interval<T>(rhs);
 
-    if(is_equality2t(e))
+    if (is_equality2t(e))
       result = T::equality(lhs_i, rhs_i);
 
-    else if(is_notequal2t(e))
+    else if (is_notequal2t(e))
       result = T::not_equal(lhs_i, rhs_i);
 
-    else if(is_lessthan2t(e))
+    else if (is_lessthan2t(e))
       result = T::less_than(lhs_i, rhs_i);
 
-    else if(is_greaterthan2t(e))
+    else if (is_greaterthan2t(e))
       result = T::greater_than(lhs_i, rhs_i);
 
-    else if(is_lessthanequal2t(e))
+    else if (is_lessthanequal2t(e))
       result = T::less_than_equal(lhs_i, rhs_i);
 
-    else if(is_greaterthanequal2t(e))
+    else if (is_greaterthanequal2t(e))
       result = T::greater_than_equal(lhs_i, rhs_i);
 
     break;
@@ -570,29 +570,29 @@ void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
   auto rhs = get_interval<Interval>(b);
 
   // TODO: Add less than equal
-  if(enable_contraction_for_abstract_states)
+  if (enable_contraction_for_abstract_states)
     Interval::contract_interval_le(lhs, rhs);
   else
   {
-    if(is_symbol2t(a) && is_symbol2t(b))
+    if (is_symbol2t(a) && is_symbol2t(b))
       lhs.make_sound_le(rhs);
     else
     {
-      if(rhs.upper)
+      if (rhs.upper)
         lhs.make_le_than(rhs.get_upper());
 
-      if(lhs.lower)
+      if (lhs.lower)
         rhs.make_ge_than(lhs.get_lower());
     }
   }
   // No need for widening, this is a restriction!
-  if(is_symbol2t(a))
+  if (is_symbol2t(a))
     update_symbol_interval<Interval>(to_symbol2t(a), lhs);
 
-  if(is_symbol2t(b))
+  if (is_symbol2t(b))
     update_symbol_interval<Interval>(to_symbol2t(b), rhs);
 
-  if(rhs.is_bottom() || lhs.is_bottom())
+  if (rhs.is_bottom() || lhs.is_bottom())
     make_bottom();
 }
 
@@ -612,13 +612,13 @@ void interval_domaint::apply_assume_less<wrapped_interval>(
   t.make_ge_than(lhs);
 
   // No need for widening, this is a restriction!
-  if(is_symbol2t(a))
+  if (is_symbol2t(a))
     update_symbol_interval(to_symbol2t(a), s);
 
-  if(is_symbol2t(b))
+  if (is_symbol2t(b))
     update_symbol_interval(to_symbol2t(b), t);
 
-  if(s.is_bottom() || t.is_bottom())
+  if (s.is_bottom() || t.is_bottom())
     make_bottom();
 }
 
@@ -669,7 +669,7 @@ expr2tc interval_domaint::make_expression_value<real_intervalt>(
   v.value.change_spec(original_spec);
 
   assert(!v.value.is_NaN() && !v.value.is_infinity());
-  if(upper)
+  if (upper)
     v.value.increment(true);
   else
     v.value.decrement(true);
@@ -693,20 +693,20 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(
 {
   symbol2t src = to_symbol2t(symbol);
 
-  if(!is_mapped<wrapped_interval>(src))
+  if (!is_mapped<wrapped_interval>(src))
     return gen_true_expr();
   const auto interval = get_interval_from_symbol<wrapped_interval>(src);
 
-  if(interval.is_top())
+  if (interval.is_top())
     return gen_true_expr();
 
-  if(interval.is_bottom())
+  if (interval.is_bottom())
     return gen_false_expr();
 
   std::vector<expr2tc> conjuncts;
   assert(src.type == interval.t);
 
-  if(interval.singleton())
+  if (interval.singleton())
   {
     expr2tc value = make_expression_value(interval, src.type, true);
     conjuncts.push_back(equality2tc(symbol, value));
@@ -722,7 +722,7 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(
 
       std::vector<expr2tc> s_conjuncts;
       expr2tc value1 = make_expression_value(w, src.type, true);
-      if(w.singleton())
+      if (w.singleton())
       {
         disjuncts.push_back(equality2tc(symbol, value1));
         return;
@@ -733,7 +733,7 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(
       disjuncts.push_back(conjunction(s_conjuncts));
     };
 
-    for(auto &c : wrapped_interval::cut(interval))
+    for (auto &c : wrapped_interval::cut(interval))
     {
       convert(c);
     }
@@ -747,7 +747,7 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
 {
   symbol2t src = to_symbol2t(symbol);
 
-  if(!is_mapped<T>(src))
+  if (!is_mapped<T>(src))
     return gen_true_expr();
   T interval = get_interval_from_symbol<T>(src);
 
@@ -759,10 +759,10 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
   T type_interval = generate_modular_interval<T>(src);
   interval.intersect_with(type_interval);
 
-  if(interval.is_top())
+  if (interval.is_top())
     return gen_true_expr();
 
-  if(interval.is_bottom())
+  if (interval.is_bottom())
     return gen_false_expr();
 
   std::vector<expr2tc> conjuncts;
@@ -770,20 +770,20 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
     c_implicit_typecast(v, symbol->type, *migrate_namespace_lookup);
     return v;
   };
-  if(interval.singleton())
+  if (interval.singleton())
   {
     expr2tc value = make_expression_value(interval, src.type, true);
     conjuncts.push_back(equality2tc(typecast(value), symbol));
   }
   else
   {
-    if(interval.upper)
+    if (interval.upper)
     {
       expr2tc value = make_expression_value(interval, src.type, true);
       conjuncts.push_back(lessthanequal2tc(symbol, typecast(value)));
     }
 
-    if(interval.lower)
+    if (interval.lower)
     {
       expr2tc value = make_expression_value(interval, src.type, false);
       conjuncts.push_back(lessthanequal2tc(typecast(value), symbol));
@@ -797,25 +797,25 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
 // TODO: refactor
 void interval_domaint::output(std::ostream &out) const
 {
-  if(bottom)
+  if (bottom)
   {
     out << "BOTTOM\n";
     return;
   }
 
-  for(const auto &interval : int_map)
+  for (const auto &interval : int_map)
   {
-    if(interval.second.is_top())
+    if (interval.second.is_top())
       continue;
-    if(interval.second.lower)
+    if (interval.second.lower)
       out << *interval.second.lower << " <= ";
     out << interval.first;
-    if(interval.second.upper)
+    if (interval.second.upper)
       out << " <= " << *interval.second.upper;
     out << "\n";
   }
 
-  for(const auto &interval : wrap_map)
+  for (const auto &interval : wrap_map)
   {
     out << interval.second.get_lower() << " <= ";
     out << interval.first;
@@ -824,14 +824,14 @@ void interval_domaint::output(std::ostream &out) const
     out << "\n";
   }
 
-  for(const auto &interval : real_map)
+  for (const auto &interval : real_map)
   {
-    if(interval.second.is_top())
+    if (interval.second.is_top())
       continue;
-    if(interval.second.lower)
+    if (interval.second.lower)
       out << *interval.second.lower << " <= ";
     out << interval.first;
-    if(interval.second.upper)
+    if (interval.second.upper)
       out << " <= " << *interval.second.upper;
     out << "\n";
   }
@@ -839,12 +839,12 @@ void interval_domaint::output(std::ostream &out) const
 
 bool contains_float(const expr2tc &e)
 {
-  if(is_floatbv_type(e->type))
+  if (is_floatbv_type(e->type))
     return true;
 
   bool inner_float = false;
   e->foreach_operand([&inner_float](auto &it) {
-    if(contains_float(it))
+    if (contains_float(it))
       inner_float = true;
   });
 
@@ -860,7 +860,7 @@ void interval_domaint::transform(
   (void)ns;
 
   const goto_programt::instructiont &instruction = *from;
-  switch(instruction.type)
+  switch (instruction.type)
   {
   case DECL:
     havoc_rec(instruction.code);
@@ -876,9 +876,9 @@ void interval_domaint::transform(
     // of instructions because this is a GOTO.
     goto_programt::const_targett next = from;
     next++;
-    if(from->targets.front() != next) // If equal then a skip
+    if (from->targets.front() != next) // If equal then a skip
     {
-      if(next == to)
+      if (next == to)
       {
         expr2tc guard = instruction.guard;
         make_not(guard);
@@ -898,7 +898,7 @@ void interval_domaint::transform(
   {
     const code_function_call2t &code_function_call =
       to_code_function_call2t(instruction.code);
-    if(!is_nil_expr(code_function_call.ret))
+    if (!is_nil_expr(code_function_call.ret))
       havoc_rec(code_function_call.ret);
     break;
   }
@@ -906,7 +906,7 @@ void interval_domaint::transform(
   case ASSERT:
   {
     // There is a bug in Floats that need to be investigated! regression-float/nextafter
-    if(!contains_float(instruction.guard) && enable_assume_asserts)
+    if (!contains_float(instruction.guard) && enable_assume_asserts)
       assume(instruction.guard);
     break;
   }
@@ -921,16 +921,16 @@ bool interval_domaint::join(
   const IntervalMap &previous_map)
 {
   bool result = false;
-  for(auto new_it = new_map.begin(); new_it != new_map.end();) // no new_it++
+  for (auto new_it = new_map.begin(); new_it != new_map.end();) // no new_it++
   {
     // search for the variable that needs to be merged
     // containers have different sizes and ordering
     const auto b_it = previous_map.find(new_it->first);
     const auto f_it = fixpoint_map.find(new_it->first);
-    if(b_it == previous_map.end())
+    if (b_it == previous_map.end())
     {
       new_it = new_map.erase(new_it);
-      if(f_it != fixpoint_map.end())
+      if (f_it != fixpoint_map.end())
         fixpoint_map.erase(f_it);
       result = true;
     }
@@ -940,16 +940,17 @@ bool interval_domaint::join(
       auto after = b_it->second;      // [1,100] ... [1, 100]
       new_it->second.join(after);     // HULL // [0,100] ... [0, +inf]
       // Did we reach a fixpoint?
-      if(new_it->second != previous)
+      if (new_it->second != previous)
       {
-        if(f_it != fixpoint_map.end())
+        if (f_it != fixpoint_map.end())
           f_it->second += 1;
         else
           fixpoint_map[new_it->first] = 0;
 
         result = true;
         // Try to extrapolate
-        if(widening_extrapolate && fixpoint_map[new_it->first] > fixpoint_limit)
+        if (
+          widening_extrapolate && fixpoint_map[new_it->first] > fixpoint_limit)
         {
           new_it->second = extrapolate_intervals(
             previous,
@@ -961,7 +962,7 @@ bool interval_domaint::join(
       else
       {
         // Found a fixpoint, we might try to narrow now!
-        if(widening_narrowing)
+        if (widening_narrowing)
         {
           after = interpolate_intervals(
             new_it->second,
@@ -980,9 +981,9 @@ bool interval_domaint::join(
 
 bool interval_domaint::join(const interval_domaint &b)
 {
-  if(b.is_bottom())
+  if (b.is_bottom())
     return false;
-  if(is_bottom())
+  if (is_bottom())
   {
     *this = b;
     return true;
@@ -1000,48 +1001,48 @@ void interval_domaint::assign(const expr2tc &expr)
   auto isbvop = is_bv_type(c.source) && is_bv_type(c.target);
   auto isfloatbvop = is_floatbv_type(c.source) && is_floatbv_type(c.target);
 
-  if(!is_symbol2t(c.target))
+  if (!is_symbol2t(c.target))
   {
-    if(is_dereference2t(c.target))
+    if (is_dereference2t(c.target))
       clear_state();
     return;
   }
 
-  if(isbvop)
+  if (isbvop)
   {
-    if(enable_wrapped_intervals)
+    if (enable_wrapped_intervals)
       apply_assignment<wrapped_interval>(c.target, c.source);
     else
       apply_assignment<integer_intervalt>(c.target, c.source);
   }
-  if(isfloatbvop && enable_real_intervals)
+  if (isfloatbvop && enable_real_intervals)
     apply_assignment<real_intervalt>(c.target, c.source);
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
 {
-  if(is_if2t(expr))
+  if (is_if2t(expr))
   {
     havoc_rec(to_if2t(expr).true_value);
     havoc_rec(to_if2t(expr).false_value);
   }
-  else if(is_typecast2t(expr))
+  else if (is_typecast2t(expr))
   {
     havoc_rec(to_typecast2t(expr).from);
   }
-  else if(is_symbol2t(expr) || is_code_decl2t(expr))
+  else if (is_symbol2t(expr) || is_code_decl2t(expr))
   {
     // Reset the interval domain if it is being reasigned (-infinity, +infinity).
     irep_idt identifier = is_symbol2t(expr) ? to_symbol2t(expr).thename
                                             : to_code_decl2t(expr).value;
-    if(is_bv_type(expr))
+    if (is_bv_type(expr))
     {
-      if(enable_wrapped_intervals)
+      if (enable_wrapped_intervals)
         wrap_map.erase(identifier);
       else
         int_map.erase(identifier);
     }
-    if(is_floatbv_type(expr))
+    if (is_floatbv_type(expr))
       real_map.erase(identifier);
   }
   else
@@ -1053,41 +1054,41 @@ void interval_domaint::assume_rec(
   expr2t::expr_ids id,
   const expr2tc &rhs)
 {
-  if(id == expr2t::equality_id)
+  if (id == expr2t::equality_id)
   {
     assume_rec(lhs, expr2t::greaterthanequal_id, rhs);
     assume_rec(lhs, expr2t::lessthanequal_id, rhs);
     return;
   }
 
-  if(id == expr2t::notequal_id)
+  if (id == expr2t::notequal_id)
     return; // won't do split
 
-  if(id == expr2t::greaterthanequal_id)
+  if (id == expr2t::greaterthanequal_id)
     return assume_rec(rhs, expr2t::lessthanequal_id, lhs);
 
-  if(id == expr2t::greaterthan_id)
+  if (id == expr2t::greaterthan_id)
     return assume_rec(rhs, expr2t::lessthan_id, lhs);
 
-  if(id == expr2t::lessthan_id)
+  if (id == expr2t::lessthan_id)
   {
-    if(is_bv_type(lhs) && is_bv_type(rhs))
+    if (is_bv_type(lhs) && is_bv_type(rhs))
     {
       // TODO: To properly do this we need a way to invert functions
-      if(!is_symbol2t(lhs))
+      if (!is_symbol2t(lhs))
       {
         // Gave-up for optimization
         auto new_lhs =
           add2tc(lhs->type, lhs, constant_int2tc(lhs->type, BigInt(1)));
-        if(simplify(new_lhs))
+        if (simplify(new_lhs))
           return assume_rec(new_lhs, expr2t::lessthanequal_id, rhs);
       }
-      else if(!is_symbol2t(rhs))
+      else if (!is_symbol2t(rhs))
       {
         // Gave-up for optimization
         auto new_rhs =
           sub2tc(rhs->type, rhs, constant_int2tc(rhs->type, BigInt(1)));
-        if(simplify(new_rhs))
+        if (simplify(new_rhs))
           return assume_rec(lhs, expr2t::lessthanequal_id, new_rhs);
       }
     }
@@ -1098,14 +1099,15 @@ void interval_domaint::assume_rec(
 
   assert(id == expr2t::lessthanequal_id);
 
-  if(is_bv_type(lhs) && is_bv_type(rhs))
+  if (is_bv_type(lhs) && is_bv_type(rhs))
   {
-    if(enable_wrapped_intervals)
+    if (enable_wrapped_intervals)
       apply_assume_less<wrapped_interval>(lhs, rhs);
     else
       apply_assume_less<integer_intervalt>(lhs, rhs);
   }
-  else if(is_floatbv_type(lhs) && is_floatbv_type(rhs) && enable_real_intervals)
+  else if (
+    is_floatbv_type(lhs) && is_floatbv_type(rhs) && enable_real_intervals)
     apply_assume_less<real_intervalt>(lhs, rhs);
 }
 
@@ -1128,10 +1130,10 @@ void interval_domaint::assume(const expr2tc &cond)
 
 #ifdef ENABLE_GOTO_CONTRACTOR
   /// use ibex contractors to reduce the intervals for interval analysis
-  if(enable_ibex_contractor)
+  if (enable_ibex_contractor)
   {
     interval_analysis_ibex_contractor contractor;
-    if(contractor.parse_guard(new_cond))
+    if (contractor.parse_guard(new_cond))
     {
       contractor.maps_to_domains(int_map, real_map);
       contractor.apply_contractor();
@@ -1149,13 +1151,13 @@ tvt interval_domaint::eval_boolean_expression(
   const interval_domaint &id)
 {
   // TODO: for now we will only support integer expressions (no mix!)
-  if(enable_wrapped_intervals)
+  if (enable_wrapped_intervals)
   {
     log_debug("interval", "[eval_boolean_expression] Disabled for wrapped");
     return tvt(tvt::TV_UNKNOWN);
   }
 
-  if(contains_float(cond))
+  if (contains_float(cond))
   {
     log_debug(
       "interval", "[eval_boolean_expression] No support for floats/mixing");
@@ -1165,11 +1167,11 @@ tvt interval_domaint::eval_boolean_expression(
   auto interval = id.get_interval<integer_intervalt>(cond);
 
   // If the interval does not contain zero then it's always true
-  if(!interval.contains(0))
+  if (!interval.contains(0))
     return tvt(tvt::TV_TRUE);
 
   // If it does contain zero and its singleton then it's always false
-  if(interval.singleton())
+  if (interval.singleton())
     return tvt(tvt::TV_FALSE);
 
   return tvt(tvt::TV_UNKNOWN);
@@ -1177,73 +1179,73 @@ tvt interval_domaint::eval_boolean_expression(
 
 void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
 {
-  if(is_comp_expr(cond))
+  if (is_comp_expr(cond))
   {
     assert(cond->get_num_sub_exprs() == 2);
 
-    if(negation) // !x<y  ---> x>=y
+    if (negation) // !x<y  ---> x>=y
     {
-      if(is_lessthan2t(cond))
+      if (is_lessthan2t(cond))
         assume_rec(
           *cond->get_sub_expr(0),
           expr2t::greaterthanequal_id,
           *cond->get_sub_expr(1));
-      else if(is_lessthanequal2t(cond))
+      else if (is_lessthanequal2t(cond))
         assume_rec(
           *cond->get_sub_expr(0),
           expr2t::greaterthan_id,
           *cond->get_sub_expr(1));
-      else if(is_greaterthan2t(cond))
+      else if (is_greaterthan2t(cond))
         assume_rec(
           *cond->get_sub_expr(0),
           expr2t::lessthanequal_id,
           *cond->get_sub_expr(1));
-      else if(is_greaterthanequal2t(cond))
+      else if (is_greaterthanequal2t(cond))
         assume_rec(
           *cond->get_sub_expr(0), expr2t::lessthan_id, *cond->get_sub_expr(1));
-      else if(is_equality2t(cond))
+      else if (is_equality2t(cond))
         assume_rec(
           *cond->get_sub_expr(0), expr2t::notequal_id, *cond->get_sub_expr(1));
-      else if(is_notequal2t(cond))
+      else if (is_notequal2t(cond))
         assume_rec(
           *cond->get_sub_expr(0), expr2t::equality_id, *cond->get_sub_expr(1));
     }
     else
       assume_rec(*cond->get_sub_expr(0), cond->expr_id, *cond->get_sub_expr(1));
   }
-  else if(is_not2t(cond))
+  else if (is_not2t(cond))
   {
     assume_rec(to_not2t(cond).value, !negation);
   }
   // de morgan
-  else if(is_and2t(cond))
+  else if (is_and2t(cond))
   {
-    if(!negation)
+    if (!negation)
       cond->foreach_operand([this](const expr2tc &e) { assume_rec(e, false); });
   }
-  else if(is_or2t(cond))
+  else if (is_or2t(cond))
   {
-    if(negation)
+    if (negation)
       cond->foreach_operand([this](const expr2tc &e) { assume_rec(e, true); });
   }
-  else if(is_symbol2t(cond))
+  else if (is_symbol2t(cond))
   {
-    if(is_bv_type(cond) || is_bool_type(cond))
+    if (is_bv_type(cond) || is_bool_type(cond))
     {
-      if(enable_wrapped_intervals)
+      if (enable_wrapped_intervals)
         apply_assume_symbol_truth<wrapped_interval>(
           to_symbol2t(cond), negation);
       else
         apply_assume_symbol_truth<integer_intervalt>(
           to_symbol2t(cond), negation);
     }
-    else if(is_floatbv_type(cond) && enable_real_intervals)
+    else if (is_floatbv_type(cond) && enable_real_intervals)
       apply_assume_symbol_truth<real_intervalt>(to_symbol2t(cond), negation);
   }
   //added in case "cond = false" which happens when the ibex contractor results in empty set.
-  else if(is_constant_bool2t(cond))
+  else if (is_constant_bool2t(cond))
   {
-    if((negation && is_true(cond)) || (!negation && is_false(cond)))
+    if ((negation && is_true(cond)) || (!negation && is_false(cond)))
     {
       make_bottom();
     }
@@ -1261,14 +1263,14 @@ void interval_domaint::dump() const
 expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
 {
   assert(is_symbol2t(symbol));
-  if(is_bv_type(symbol))
+  if (is_bv_type(symbol))
   {
-    if(enable_wrapped_intervals)
+    if (enable_wrapped_intervals)
       return make_expression_helper<wrapped_interval>(symbol);
     else
       return make_expression_helper<integer_intervalt>(symbol);
   }
-  if(is_floatbv_type(symbol) && enable_real_intervals)
+  if (is_floatbv_type(symbol) && enable_real_intervals)
     return make_expression_helper<real_intervalt>(symbol);
   return gen_true_expr();
 }
@@ -1279,16 +1281,16 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
 {
   (void)ns;
 
-  if(!enable_assertion_simplification)
+  if (!enable_assertion_simplification)
     return true;
 
   tvt eval = eval_boolean_expression(condition, *this);
-  if(eval.is_true())
+  if (eval.is_true())
   {
     // TODO: convert to 1?
   }
 
-  if(eval.is_false())
+  if (eval.is_false())
   {
     // TODO: convert to 0?
   }

@@ -17,44 +17,44 @@ void preprocessor_line(const char *text, unsigned &line_no, irep_idt &file_name)
   std::string line_number;
 
   // skip WS
-  while(*ptr == ' ' || *ptr == '\t')
+  while (*ptr == ' ' || *ptr == '\t')
     ptr++;
 
   // skip #
-  if(*ptr != '#')
+  if (*ptr != '#')
     return;
   ptr++;
 
   // skip WS
-  while(*ptr == ' ' || *ptr == '\t')
+  while (*ptr == ' ' || *ptr == '\t')
     ptr++;
 
   // skip "line"
-  if(*ptr == 'l')
+  if (*ptr == 'l')
   {
-    while(*ptr != 0 && *ptr != ' ' && *ptr != '\t')
+    while (*ptr != 0 && *ptr != ' ' && *ptr != '\t')
       ptr++;
   }
 
   // skip WS
-  while(*ptr == ' ' || *ptr == '\t')
+  while (*ptr == ' ' || *ptr == '\t')
     ptr++;
 
   // get line number
-  while(isdigit(*ptr))
+  while (isdigit(*ptr))
   {
     line_number += *ptr;
     ptr++;
   }
 
   // skip until "
-  while(*ptr != '\n' && *ptr != '"')
+  while (*ptr != '\n' && *ptr != '"')
     ptr++;
 
   line_no = atoi(line_number.c_str());
 
   // skip "
-  if(*ptr != '"')
+  if (*ptr != '"')
     return;
 
   ptr++;
@@ -62,7 +62,7 @@ void preprocessor_line(const char *text, unsigned &line_no, irep_idt &file_name)
   std::string file_name_tmp;
 
   // get file name
-  while(*ptr != '\n' && *ptr != '"')
+  while (*ptr != '\n' && *ptr != '"')
   {
     file_name_tmp += *ptr;
     ptr++;

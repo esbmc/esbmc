@@ -1891,7 +1891,7 @@ public:
     {
       assert(type->get_width() == from->type->get_width());
     }
-    catch(const type2t::symbolic_type_excp &)
+    catch (const type2t::symbolic_type_excp &)
     {
       /* ignore */
     }
@@ -3124,7 +3124,7 @@ public:
     allockind k)
     : sideeffect_expr_methods(t, sideeffect_id, oper, sz, a, alloct, k)
   {
-    if(k == allockind::alloca)
+    if (k == allockind::alloca)
       assert(oper->type == sz->type);
   }
   sideeffect2t(const sideeffect2t &ref) = default;

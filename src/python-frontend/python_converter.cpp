@@ -43,7 +43,7 @@ static bool is_relational_op(const std::string &op)
 static StatementType get_statement_type(const nlohmann::json &element)
 {
   auto it = statement_map.find(element["_type"]);
-  if(it != statement_map.end())
+  if (it != statement_map.end())
   {
     return it->second;
   }
@@ -54,7 +54,7 @@ static StatementType get_statement_type(const nlohmann::json &element)
 static std::string get_op(const std::string &op)
 {
   auto it = operator_map.find(op);
-  if(it != operator_map.end())
+  if (it != operator_map.end())
   {
     return it->second;
   }
@@ -64,22 +64,22 @@ static std::string get_op(const std::string &op)
 // Convert Python/AST types to irep2 types
 static typet get_typet(const std::string &ast_type)
 {
-  if(ast_type == "float")
+  if (ast_type == "float")
     return float_type();
-  if(ast_type == "int")
+  if (ast_type == "int")
     return int_type();
-  if(ast_type == "bool")
+  if (ast_type == "bool")
     return bool_type();
   return empty_typet();
 }
 
 static typet get_typet(const nlohmann::json &elem)
 {
-  if(elem.is_number_integer() || elem.is_number_unsigned())
+  if (elem.is_number_integer() || elem.is_number_unsigned())
     return int_type();
-  else if(elem.is_boolean())
+  else if (elem.is_boolean())
     return bool_type();
-  else if(elem.is_number_float())
+  else if (elem.is_number_float())
     return float_type();
 
   log_error("Invalid type\n");
@@ -106,31 +106,31 @@ static symbolt create_symbol(
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
   auto type = element["_type"];
-  if(type == "UnaryOp")
+  if (type == "UnaryOp")
   {
     return ExpressionType::UNARY_OPERATION;
   }
-  if(type == "BinOp" || type == "Compare")
+  if (type == "BinOp" || type == "Compare")
   {
     return ExpressionType::BINARY_OPERATION;
   }
-  if(type == "BoolOp")
+  if (type == "BoolOp")
   {
     return ExpressionType::LOGICAL_OPERATION;
   }
-  if(type == "Constant")
+  if (type == "Constant")
   {
     return ExpressionType::LITERAL;
   }
-  if(type == "Name")
+  if (type == "Name")
   {
     return ExpressionType::VARIABLE_REF;
   }
-  if(type == "Call")
+  if (type == "Call")
   {
     return ExpressionType::FUNC_CALL;
   }
-  if(type == "IfExp")
+  if (type == "IfExp")
   {
     return ExpressionType::IF_EXPR;
   }
@@ -143,7 +143,7 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   exprt logical_expr(get_op(op), bool_type());
 
   // Iterate over operands of logical operations (and/or)
-  for(const auto &operand : element["values"])
+  for (const auto &operand : element["values"])
   {
     exprt operand_expr = get_expr(operand);
     logical_expr.copy_to_operands(operand_expr);
@@ -155,17 +155,17 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   exprt lhs;
-  if(element.contains("left"))
+  if (element.contains("left"))
     lhs = get_expr(element["left"]);
-  else if(element.contains("target"))
+  else if (element.contains("target"))
     lhs = get_expr(element["target"]);
 
   exprt rhs;
-  if(element.contains("right"))
+  if (element.contains("right"))
     rhs = get_expr(element["right"]);
-  else if(element.contains("comparators"))
+  else if (element.contains("comparators"))
     rhs = get_expr(element["comparators"][0]);
-  else if(element.contains("value"))
+  else if (element.contains("value"))
     rhs = get_expr(element["value"]);
 
   auto to_side_effect_call = [](exprt &expr) {
@@ -179,16 +179,16 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   };
 
   // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
-  if(lhs.is_function_call())
+  if (lhs.is_function_call())
     to_side_effect_call(lhs);
-  if(rhs.is_function_call())
+  if (rhs.is_function_call())
     to_side_effect_call(rhs);
 
   std::string op;
 
-  if(element.contains("op"))
+  if (element.contains("op"))
     op = element["op"]["_type"].get<std::string>();
-  else if(element.contains("ops"))
+  else if (element.contains("ops"))
     op = element["ops"][0]["_type"].get<std::string>();
 
   assert(!op.empty());
@@ -202,7 +202,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // So we need to emulate this behaviour here:
   // int result = (num/div) - (num%div != 0 && ((num < 0) ^ (den<0)) ? 1 : 0)
   // e.g.: -5//2 equals to -3, and 5//2 equals to 2
-  if(op == "FloorDiv")
+  if (op == "FloorDiv")
   {
     // remainder = num%den;
     exprt remainder("mod", int_type());
@@ -240,7 +240,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 {
   typet type = current_element_type;
-  if(element["operand"].contains("value"))
+  if (element["operand"].contains("value"))
     type = get_typet(element["operand"]["value"]);
 
   exprt unary_expr(get_op(element["op"]["_type"].get<std::string>()), type);
@@ -254,9 +254,9 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 
 const nlohmann::json python_converter::find_var_decl(const std::string &id)
 {
-  for(auto &element : ast_json["body"])
+  for (auto &element : ast_json["body"])
   {
-    if((element["_type"] == "AnnAssign") && (element["target"]["id"] == id))
+    if ((element["_type"] == "AnnAssign") && (element["target"]["id"] == id))
       return element;
   }
   return nlohmann::json();
@@ -273,7 +273,7 @@ python_converter::get_location_from_decl(const nlohmann::json &ast_node)
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
-  if(element.contains("func") && element["_type"] == "Call")
+  if (element.contains("func") && element["_type"] == "Call")
   {
     std::string func_name = element["func"]["id"];
 
@@ -281,7 +281,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     std::regex pattern(
       R"(nondet_(int|char|bool|float)|__VERIFIER_nondet_(int|char|bool|float))");
 
-    if(std::regex_match(func_name, pattern))
+    if (std::regex_match(func_name, pattern))
     {
       // Function name pattern: nondet_(type). e.g: nondet_bool(), nondet_int()
       size_t underscore_pos = func_name.rfind("_");
@@ -295,10 +295,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     std::string symbol_id = "py:" + python_filename + "@F@" + func_name;
 
     // __ESBMC_assume
-    if(func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume")
+    if (func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume")
     {
       symbol_id = func_name;
-      if(context.find_symbol(symbol_id.c_str()) == nullptr)
+      if (context.find_symbol(symbol_id.c_str()) == nullptr)
       {
         // Create/init symbol
         symbolt symbol;
@@ -314,7 +314,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
 
     const symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
-    if(func_symbol == nullptr)
+    if (func_symbol == nullptr)
     {
       log_error("Undefined function: {}", func_name.c_str());
       abort();
@@ -326,7 +326,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     const typet &return_type = to_code_type(func_symbol->type).return_type();
     call.type() = return_type;
 
-    for(const auto &arg_node : element["args"])
+    for (const auto &arg_node : element["args"])
     {
       call.arguments().push_back(get_expr(arg_node));
     }
@@ -343,7 +343,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   exprt expr;
   ExpressionType type = get_expression_type(element);
 
-  switch(type)
+  switch (type)
   {
   case ExpressionType::UNARY_OPERATION:
   {
@@ -363,11 +363,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::LITERAL:
   {
     auto value = element["value"];
-    if(element["value"].is_number_integer())
+    if (element["value"].is_number_integer())
     {
       expr = from_integer(value.get<int>(), int_type());
     }
-    else if(element["value"].is_boolean())
+    else if (element["value"].is_boolean())
     {
       expr = gen_boolean(value.get<bool>());
     }
@@ -380,7 +380,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     std::string symbol_id = "py:" + python_filename + "@" + "F" + "@" +
                             current_func_name + "@" + var_name;
     symbolt *symbol = context.find_symbol(symbol_id);
-    if(symbol != nullptr)
+    if (symbol != nullptr)
     {
       expr = symbol_expr(*symbol);
     }
@@ -418,7 +418,7 @@ void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  if(ast_node.contains("annotation"))
+  if (ast_node.contains("annotation"))
   {
     // Get type from current annotation node
     current_element_type =
@@ -441,12 +441,12 @@ void python_converter::get_var_assign(
 
   locationt location_begin;
 
-  if(ast_node["_type"] == "AnnAssign")
+  if (ast_node["_type"] == "AnnAssign")
   {
     // Id and name
     std::string name, id;
     auto target = ast_node["target"];
-    if(!target.is_null() && target["_type"] == "Name")
+    if (!target.is_null() && target["_type"] == "Name")
     {
       name = target["id"];
       id = "py:" + python_filename + "@F@" + current_func_name + "@" + name;
@@ -471,7 +471,7 @@ void python_converter::get_var_assign(
 
     context.add(symbol);
   }
-  else if(ast_node["_type"] == "Assign")
+  else if (ast_node["_type"] == "Assign")
   {
     std::string name = ast_node["targets"][0]["id"].get<std::string>();
     std::string symbol_id =
@@ -484,7 +484,7 @@ void python_converter::get_var_assign(
   /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
    * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
    */
-  if(rhs.is_function_call())
+  if (rhs.is_function_call())
   {
     // op0() refers to the left-hand side (lhs) of the function call
     rhs.op0() = lhs;
@@ -518,7 +518,7 @@ void python_converter::get_compound_assign(
 
 static codet convert_expression_to_code(exprt &expr)
 {
-  if(expr.is_code())
+  if (expr.is_code())
     return static_cast<codet &>(expr);
 
   codet code("expression");
@@ -543,7 +543,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   current_element_type = t;
   // Extract 'then' block from AST
   exprt then;
-  if(ast_node["body"].is_array())
+  if (ast_node["body"].is_array())
     then = get_block(ast_node["body"]);
   else
     then = get_expr(ast_node["body"]);
@@ -553,10 +553,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   // Extract 'else' block from AST
   exprt else_expr;
-  if(ast_node.contains("orelse") && !ast_node["orelse"].empty())
+  if (ast_node.contains("orelse") && !ast_node["orelse"].empty())
   {
     // Append 'else' block to the statement
-    if(ast_node["orelse"].is_array())
+    if (ast_node["orelse"].is_array())
     {
       else_expr = get_block(ast_node["orelse"]);
     }
@@ -569,7 +569,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   auto type = ast_node["_type"];
 
   // ternary operator
-  if(type == "IfExp")
+  if (type == "IfExp")
   {
     exprt if_expr("if", current_element_type);
     if_expr.copy_to_operands(cond, then, else_expr);
@@ -578,14 +578,14 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   // Create if or while code
   codet code;
-  if(type == "If")
+  if (type == "If")
     code.set_statement("ifthenelse");
-  else if(type == "While")
+  else if (type == "While")
     code.set_statement("while");
 
   // Append "then" block
   code.copy_to_operands(cond, then);
-  if(!else_expr.id_string().empty())
+  if (!else_expr.id_string().empty())
   {
     code.copy_to_operands(else_expr);
   }
@@ -599,11 +599,11 @@ void python_converter::get_function_definition(
   // Function return type
   code_typet type;
   nlohmann::json return_node = function_node["returns"];
-  if(return_node.contains("id"))
+  if (return_node.contains("id"))
   {
     type.return_type() = get_typet(return_node["id"].get<std::string>());
   }
-  else if(return_node.contains("value") && return_node["value"].is_null())
+  else if (return_node.contains("value") && return_node["value"].is_null())
   {
     type.return_type() = empty_typet();
   }
@@ -628,7 +628,7 @@ void python_converter::get_function_definition(
     python_filename.substr(0, python_filename.find_last_of("."));
 
   // Iterate over function arguments
-  for(const nlohmann::json &element : function_node["args"]["args"])
+  for (const nlohmann::json &element : function_node["args"]["args"])
   {
     // Argument type
     typet arg_type = get_typet(element["annotation"]["id"].get<std::string>());
@@ -694,11 +694,11 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
   code_blockt block;
 
   // Iterate through the statements of the block
-  for(auto &element : ast_block)
+  for (auto &element : ast_block)
   {
     StatementType type = get_statement_type(element);
 
-    switch(type)
+    switch (type)
     {
     case StatementType::VARIABLE_ASSIGN:
     {
@@ -742,7 +742,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       // Function calls are handled here
       exprt empty;
       exprt expr = get_expr(element["value"]);
-      if(expr != empty)
+      if (expr != empty)
       {
         block.move_to_operands(expr);
       }
@@ -767,7 +767,7 @@ bool python_converter::convert()
 
   // Handle --function option
   const std::string function = config.options.get_option("function");
-  if(!function.empty())
+  if (!function.empty())
   {
     /* If the user passes --function, we add only a call to the
      * respective function in __ESBMC_main instead of entire Python program
@@ -775,16 +775,16 @@ bool python_converter::convert()
 
     nlohmann::json function_node;
     // Find function node in AST
-    for(const auto &element : ast_json["body"])
+    for (const auto &element : ast_json["body"])
     {
-      if(element["_type"] == "FunctionDef" && element["name"] == function)
+      if (element["_type"] == "FunctionDef" && element["name"] == function)
       {
         function_node = element;
         break;
       }
     }
 
-    if(function_node.empty())
+    if (function_node.empty())
     {
       log_error("Function \"{}\" not found\n", function);
       return true;
@@ -796,7 +796,7 @@ bool python_converter::convert()
     // Get function symbol
     std::string symbol_id = "py:" + python_filename + "@F@" + function;
     symbolt *symbol = context.find_symbol(symbol_id);
-    if(!symbol)
+    if (!symbol)
     {
       log_error("Symbol \"{}\" not found\n", symbol_id.c_str());
       return true;
@@ -837,7 +837,7 @@ bool python_converter::convert()
   main_symbol.is_extern = false;
   main_symbol.file_local = false;
 
-  if(context.move(main_symbol))
+  if (context.move(main_symbol))
   {
     log_error("main already defined by another language module");
     return true;

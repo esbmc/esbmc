@@ -72,24 +72,24 @@ public:
 
   bool operator<(const cpp_typecast_rank &ref) const
   {
-    if(rank < ref.rank)
+    if (rank < ref.rank)
       return true;
-    if(rank > ref.rank)
+    if (rank > ref.rank)
       return false;
 
     // Put funkier rules here. Note that less-than means a better match.
 
     // Prefer functions with the fewest template parameters.
-    if(templ_distance < ref.templ_distance)
+    if (templ_distance < ref.templ_distance)
       return true;
-    if(templ_distance > ref.templ_distance)
+    if (templ_distance > ref.templ_distance)
       return false;
 
-    if(!has_ptr_to_bool && ref.has_ptr_to_bool)
+    if (!has_ptr_to_bool && ref.has_ptr_to_bool)
       return true;
 
     // Pointer-to-base-ptr is better than casting it to void.
-    if(has_ptr_to_base && ref.has_ptr_to_voidptr)
+    if (has_ptr_to_base && ref.has_ptr_to_voidptr)
       return true;
 
     // Insert here: other rules.

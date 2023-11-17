@@ -522,7 +522,7 @@ void ESBMC_verify_kernel_no_params(void *(*kernel)(), int blocks, int threads)
   dev_no_params.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_no_params, NULL);
 
   __ESBMC_atomic_end();
@@ -543,7 +543,7 @@ void ESBMC_verify_kernel_with_one_arg(
   threadGlobal = threads;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_one, NULL);
 
   __ESBMC_atomic_end();
@@ -564,7 +564,7 @@ void ESBMC_verify_kernel_with_two_args(
   dev_two.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_two, NULL);
 
   __ESBMC_atomic_end();
@@ -589,7 +589,7 @@ void ESBMC_verify_kernel_with_three_args(
   dev_three.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_three, NULL);
 
   __ESBMC_atomic_end();
@@ -609,7 +609,7 @@ void ESBMC_verify_kernel_with_two_args_i(
   dev_two_i.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_two_i, NULL);
 
   __ESBMC_atomic_end();
@@ -628,7 +628,7 @@ void ESBMC_verify_kernel_with_one_args_u(
   dev_one_u.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_one_u, NULL);
 
   __ESBMC_atomic_end();
@@ -650,7 +650,7 @@ void ESBMC_verify_kernel_with_two_args_u(
   dev_two_u.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_two_u, NULL);
 
   __ESBMC_atomic_end();
@@ -671,7 +671,7 @@ void ESBMC_verify_kernel_with_three_args_u(
   dev_three_u.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_three_u, NULL);
 
   __ESBMC_atomic_end();
@@ -690,7 +690,7 @@ void ESBMC_verify_kernel_float(
   dev_float.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_float, NULL);
 
   __ESBMC_atomic_end();
@@ -710,7 +710,7 @@ void ESBMC_verify_kernel_ffloat(
   dev_ffloat.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_ffloat, NULL);
 
   __ESBMC_atomic_end();
@@ -745,7 +745,7 @@ void ESBMC_verify_kernel_f5i2(
   dev_f5i2.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_f5i2, NULL);
 
   __ESBMC_atomic_end();
@@ -764,7 +764,7 @@ void ESBMC_verify_kernel_d1(
   dev_d1.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_d1, NULL);
 
   __ESBMC_atomic_end();
@@ -783,7 +783,7 @@ void ESBMC_verify_kernel_d2(
   dev_d2.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_d2, NULL);
 
   __ESBMC_atomic_end();
@@ -808,7 +808,7 @@ void ESBMC_verify_kernel_c3(
   dev_c3.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_c3, NULL);
 
   __ESBMC_atomic_end();
@@ -830,7 +830,7 @@ void ESBMC_verify_kernel__intt(
   dev_intt.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_intt, NULL);
 
   __ESBMC_atomic_end();
@@ -854,7 +854,7 @@ void ESBMC_verify_kernel__fuintt(
   dev_fuintt.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_fuintt, NULL);
 
   __ESBMC_atomic_end();
@@ -875,7 +875,7 @@ void ESBMC_verify_kernel__fuint(
   dev_fuint.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_fuint, NULL);
 
   __ESBMC_atomic_end();
@@ -899,7 +899,7 @@ void ESBMC_verify_kernel__fuintint(
   dev_fuintint.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_fuintint, NULL);
 
   __ESBMC_atomic_end();
@@ -919,7 +919,7 @@ void ESBMC_verify_kernel__fint(
   dev_fint.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_fint, NULL);
 
   __ESBMC_atomic_end();
@@ -947,7 +947,7 @@ void ESBMC_verify_kernel_with_three_args_iuull(
   dev_three_iuull.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(
       &threads_id[i], NULL, ESBMC_execute_kernel_three_iuull, NULL);
   __ESBMC_atomic_end();
@@ -978,7 +978,7 @@ void ESBMC_verify_kernel_with_four__args_i_ui_ull_f(
   dev_four_i_ui_ull_f.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(
       &threads_id[i], NULL, ESBMC_execute_kernel_four_i_ui_ull_f, NULL);
 
@@ -998,7 +998,7 @@ void ESBMC_verify_kernel_one_ui(
   dev_ui.func = kernel;
 
   assignIndexes();
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_create(&threads_id[i], NULL, ESBMC_execute_kernel_ui, NULL);
 
   __ESBMC_atomic_end();
@@ -1018,7 +1018,7 @@ void ESBMC_verify_kernel(RET *kernel, BLOCK blocks, THREAD threads)
     gridDim.x * gridDim.y * gridDim.z,
     blockDim.x * blockDim.y * blockDim.z);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1037,7 +1037,7 @@ void ESBMC_verify_kernel(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1062,7 +1062,7 @@ void ESBMC_verify_kernel(
     (void *)arg,
     (void *)arg2);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1089,7 +1089,7 @@ void ESBMC_verify_kernel(
     (void *)arg2,
     (void *)arg3);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1115,7 +1115,7 @@ void ESBMC_verify_kernel_i(
     arg,
     arg2);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1135,7 +1135,7 @@ void ESBMC_verify_kernel_u(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
     blockDim.x * blockDim.y * blockDim.z,
     arg);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1160,7 +1160,7 @@ void ESBMC_verify_kernel_u(
     (void *)arg,
     (void *)arg2);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1187,7 +1187,7 @@ void ESBMC_verify_kernel_u(
     arg2,
     arg3);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1213,7 +1213,7 @@ void ESBMC_verify_kernel_f(
     (void *)arg,
     arg2);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1232,7 +1232,7 @@ void ESBMC_verify_kernel_f(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1276,7 +1276,7 @@ void ESBMC_verify_kernel_f(
     arg6,
     arg7);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1304,7 +1304,7 @@ void ESBMC_verify_kernel_c(
     (void *)arg2,
     (void *)arg3);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1323,7 +1323,7 @@ void ESBMC_verify_kernel_c(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1348,7 +1348,7 @@ void ESBMC_verify_kernel_c(
     arg,
     arg2);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1374,7 +1374,7 @@ void ESBMC_verify_kernel_intt(
     (void *)arg,
     arg2);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1402,7 +1402,7 @@ void ESBMC_verify_kernel_fuintt(
     arg2,
     arg3);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1427,7 +1427,7 @@ void ESBMC_verify_kernel_fuintt(
     (void *)arg,
     arg2);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1455,7 +1455,7 @@ void ESBMC_verify_kernel_fuintint(
     arg2,
     arg3);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1480,7 +1480,7 @@ void ESBMC_verify_kernel_fuintint(
     (void *)arg,
     arg2);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1508,7 +1508,7 @@ void ESBMC_verify_kernel_three_args_iuull(
     (void *)arg2,
     (void *)arg3);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1546,7 +1546,7 @@ void ESBMC_verify_kernel_four(
     (void *)arg3,
     (void *)arg4);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();
@@ -1566,7 +1566,7 @@ void ESBMC_verify_kernel_ui(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
     blockDim.x * blockDim.y * blockDim.z,
     (void *)arg);
 
-  for(unsigned short int i = 0; i < GPU_threads; i++)
+  for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
   //ESBMC_atomic_end();

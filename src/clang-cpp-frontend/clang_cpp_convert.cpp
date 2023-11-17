@@ -36,15 +36,15 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 {
   new_expr = code_skipt();
 
-  switch(decl.getKind())
+  switch (decl.getKind())
   {
   case clang::Decl::LinkageSpec:
   {
     const clang::LinkageSpecDecl &lsd =
       static_cast<const clang::LinkageSpecDecl &>(decl);
 
-    for(auto decl : lsd.decls())
-      if(get_decl(*decl, new_expr))
+    for (auto decl : lsd.decls())
+      if (get_decl(*decl, new_expr))
         return true;
     break;
   }
@@ -54,7 +54,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::CXXRecordDecl &cxxrd =
       static_cast<const clang::CXXRecordDecl &>(decl);
 
-    if(get_struct_union_class(cxxrd))
+    if (get_struct_union_class(cxxrd))
       return true;
 
     break;
@@ -69,7 +69,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       static_cast<const clang::CXXMethodDecl &>(decl);
 
     assert(llvm::dyn_cast<clang::TemplateDecl>(&cxxmd) == nullptr);
-    if(get_method(cxxmd, new_expr))
+    if (get_method(cxxmd, new_expr))
       return true;
 
     break;
@@ -80,8 +80,8 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::NamespaceDecl &namesd =
       static_cast<const clang::NamespaceDecl &>(decl);
 
-    for(auto decl : namesd.decls())
-      if(get_decl(*decl, new_expr))
+    for (auto decl : namesd.decls())
+      if (get_decl(*decl, new_expr))
         return true;
 
     break;
@@ -92,7 +92,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::FunctionTemplateDecl &fd =
       static_cast<const clang::FunctionTemplateDecl &>(decl);
 
-    if(get_template_decl(&fd, true, new_expr))
+    if (get_template_decl(&fd, true, new_expr))
       return true;
     break;
   }
@@ -102,7 +102,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::ClassTemplateDecl &cd =
       static_cast<const clang::ClassTemplateDecl &>(decl);
 
-    if(get_template_decl(&cd, false, new_expr))
+    if (get_template_decl(&cd, false, new_expr))
       return true;
     break;
   }
@@ -112,7 +112,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     const clang::ClassTemplateSpecializationDecl &cd =
       static_cast<const clang::ClassTemplateSpecializationDecl &>(decl);
 
-    if(get_struct_union_class(cd))
+    if (get_struct_union_class(cd))
       return true;
     break;
   }
@@ -121,8 +121,8 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   {
     const clang::FriendDecl &fd = static_cast<const clang::FriendDecl &>(decl);
 
-    if(fd.getFriendDecl() != nullptr)
-      if(get_decl(*fd.getFriendDecl(), new_expr))
+    if (fd.getFriendDecl() != nullptr)
+      if (get_decl(*fd.getFriendDecl(), new_expr))
         return true;
     break;
   }
@@ -158,14 +158,14 @@ bool clang_cpp_convertert::get_type(
   const clang::Type &the_type,
   typet &new_type)
 {
-  switch(the_type.getTypeClass())
+  switch (the_type.getTypeClass())
   {
   case clang::Type::SubstTemplateTypeParm:
   {
     const clang::SubstTemplateTypeParmType &substmpltt =
       static_cast<const clang::SubstTemplateTypeParmType &>(the_type);
 
-    if(get_type(substmpltt.getReplacementType(), new_type))
+    if (get_type(substmpltt.getReplacementType(), new_type))
       return true;
     break;
   }
@@ -175,7 +175,7 @@ bool clang_cpp_convertert::get_type(
     const clang::TemplateSpecializationType &templSpect =
       static_cast<const clang::TemplateSpecializationType &>(the_type);
 
-    if(get_type(templSpect.desugar(), new_type))
+    if (get_type(templSpect.desugar(), new_type))
       return true;
     break;
   }
@@ -186,11 +186,11 @@ bool clang_cpp_convertert::get_type(
       static_cast<const clang::MemberPointerType &>(the_type);
 
     typet sub_type;
-    if(get_type(mpt.getPointeeType(), sub_type))
+    if (get_type(mpt.getPointeeType(), sub_type))
       return true;
 
     typet class_type;
-    if(get_type(*mpt.getClass(), class_type))
+    if (get_type(*mpt.getClass(), class_type))
       return true;
 
     new_type = gen_pointer_type(sub_type);
@@ -208,7 +208,7 @@ bool clang_cpp_convertert::get_type(
 bool clang_cpp_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 {
   // Only convert instantiated variables
-  if(vd.getDeclContext()->isDependentContext())
+  if (vd.getDeclContext()->isDependentContext())
     return false;
 
   return clang_c_convertert::get_var(vd, new_expr);
@@ -219,22 +219,22 @@ bool clang_cpp_convertert::get_method(
   exprt &new_expr)
 {
   // Only convert instantiated functions/methods not depending on a template parameter
-  if(md.isDependentContext())
+  if (md.isDependentContext())
     return false;
 
   // Don't convert if implicit, unless it's a constructor/destructor/
   // Copy assignment Operator/Move assignment Operator
   // A compiler-generated default ctor/dtor is considered implicit, but we have
   // to parse it.
-  if(
+  if (
     md.isImplicit() && !is_ConstructorOrDestructor(md) &&
     !is_CopyOrMoveOperator(md))
     return false;
 
-  if(clang_c_convertert::get_function(md, new_expr))
+  if (clang_c_convertert::get_function(md, new_expr))
     return true;
 
-  if(annotate_class_method(md, new_expr))
+  if (annotate_class_method(md, new_expr))
     return true;
 
   return false;
@@ -243,7 +243,7 @@ bool clang_cpp_convertert::get_method(
 bool clang_cpp_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
   // Only convert RecordDecl not depending on a template parameter
-  if(rd.isDependentContext())
+  if (rd.isDependentContext())
     return false;
 
   return clang_c_convertert::get_struct_union_class(rd);
@@ -256,9 +256,9 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   // Note: If a struct is defined inside an extern C, it will be a RecordDecl
 
   // pull bases in
-  if(auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
+  if (auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
   {
-    if(cxxrd->bases_begin() != cxxrd->bases_end())
+    if (cxxrd->bases_begin() != cxxrd->bases_end())
     {
       base_map bases;
       get_base_map(*cxxrd, bases);
@@ -267,21 +267,21 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   }
 
   // Parse the fields
-  for(auto const &field : rd.fields())
+  for (auto const &field : rd.fields())
   {
     struct_typet::componentt comp;
-    if(get_decl(*field, comp))
+    if (get_decl(*field, comp))
       return true;
 
     // Check for alignment attributes
-    if(check_alignment_attributes(field, comp))
+    if (check_alignment_attributes(field, comp))
       return true;
 
     // Don't add fields that have global storage (e.g., static)
-    if(is_field_global_storage(field))
+    if (is_field_global_storage(field))
       continue;
 
-    if(annotate_class_field(*field, type, comp))
+    if (annotate_class_field(*field, type, comp))
       return true;
 
     type.components().push_back(comp);
@@ -298,7 +298,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
 
   const clang::CXXRecordDecl *cxxrd =
     llvm::dyn_cast<clang::CXXRecordDecl>(&recordd);
-  if(cxxrd == nullptr)
+  if (cxxrd == nullptr)
     return false;
 
   /*
@@ -310,45 +310,45 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
    */
 
   // skip unions as they don't have virtual methods
-  if(!recordd.isUnion())
+  if (!recordd.isUnion())
   {
     assert(type.is_struct());
-    if(get_struct_class_virtual_methods(*cxxrd, to_struct_type(type)))
+    if (get_struct_class_virtual_methods(*cxxrd, to_struct_type(type)))
       return true;
   }
 
   // Iterate over the declarations stored in this context
-  for(const auto &decl : cxxrd->decls())
+  for (const auto &decl : cxxrd->decls())
   {
     // Fields were already added
-    if(decl->getKind() == clang::Decl::Field)
+    if (decl->getKind() == clang::Decl::Field)
       continue;
 
     // ignore self-referring implicit class node
-    if(decl->getKind() == clang::Decl::CXXRecord && decl->isImplicit())
+    if (decl->getKind() == clang::Decl::CXXRecord && decl->isImplicit())
       continue;
 
     // virtual methods were already added
-    if(decl->getKind() == clang::Decl::CXXMethod)
+    if (decl->getKind() == clang::Decl::CXXMethod)
     {
       const auto md = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
-      if(md->isVirtual())
+      if (md->isVirtual())
         continue;
     }
 
     struct_typet::componentt comp;
 
-    if(
+    if (
       const clang::FunctionTemplateDecl *ftd =
         llvm::dyn_cast<clang::FunctionTemplateDecl>(decl))
     {
-      for(auto *spec : ftd->specializations())
+      for (auto *spec : ftd->specializations())
       {
-        if(get_template_decl_specialization(spec, true, comp))
+        if (get_template_decl_specialization(spec, true, comp))
           return true;
 
         // Add only if it isn't static
-        if(spec->getStorageClass() != clang::SC_Static)
+        if (spec->getStorageClass() != clang::SC_Static)
           to_struct_type(type).methods().push_back(comp);
       }
 
@@ -356,7 +356,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
     }
     else
     {
-      if(get_decl(*decl, comp))
+      if (get_decl(*decl, comp))
         return true;
     }
 
@@ -366,15 +366,15 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
     //       Need to use a proper logic to confirm a nested class, e.g.
     //       decl->getParent() == recordd, where recordd is the class
     //       we are currently dealing with
-    if(comp.is_code() && to_code(comp).statement() == "skip")
+    if (comp.is_code() && to_code(comp).statement() == "skip")
       continue;
 
-    if(
+    if (
       const clang::CXXMethodDecl *cxxmd =
         llvm::dyn_cast<clang::CXXMethodDecl>(decl))
     {
       // Add only if it isn't static
-      if(!cxxmd->isStatic())
+      if (!cxxmd->isStatic())
       {
         assert(type.is_struct() || type.is_union());
         to_struct_type(type).methods().push_back(comp);
@@ -397,7 +397,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   locationt location;
   get_start_location_from_stmt(stmt, location);
 
-  switch(stmt.getStmtClass())
+  switch (stmt.getStmtClass())
   {
   case clang::Stmt::CXXReinterpretCastExprClass:
   // TODO: ReinterpretCast should actually generate a bitcast
@@ -407,7 +407,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   {
     const clang::CastExpr &cast = static_cast<const clang::CastExpr &>(stmt);
 
-    if(get_cast_expr(cast, new_expr))
+    if (get_cast_expr(cast, new_expr))
       return true;
 
     break;
@@ -418,7 +418,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXDefaultArgExpr &cxxdarg =
       static_cast<const clang::CXXDefaultArgExpr &>(stmt);
 
-    if(get_expr(*cxxdarg.getExpr(), new_expr))
+    if (get_expr(*cxxdarg.getExpr(), new_expr))
       return true;
 
     break;
@@ -429,15 +429,15 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXDynamicCastExpr &cast =
       static_cast<const clang::CXXDynamicCastExpr &>(stmt);
 
-    if(cast.isAlwaysNull())
+    if (cast.isAlwaysNull())
     {
       typet t;
-      if(get_type(cast.getType(), t))
+      if (get_type(cast.getType(), t))
         return true;
 
       new_expr = gen_zero(gen_pointer_type(t));
     }
-    else if(get_cast_expr(cast, new_expr))
+    else if (get_cast_expr(cast, new_expr))
       return true;
 
     break;
@@ -448,7 +448,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXBoolLiteralExpr &bool_literal =
       static_cast<const clang::CXXBoolLiteralExpr &>(stmt);
 
-    if(bool_literal.getValue())
+    if (bool_literal.getValue())
       new_expr = true_exprt();
     else
       new_expr = false_exprt();
@@ -463,11 +463,11 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::Stmt *callee = member_call.getCallee();
 
     exprt callee_expr;
-    if(get_expr(*callee, callee_expr))
+    if (get_expr(*callee, callee_expr))
       return true;
 
     typet type;
-    if(get_type(member_call.getType(), type))
+    if (get_type(member_call.getType(), type))
       return true;
 
     side_effect_expr_function_callt call;
@@ -476,16 +476,16 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // Add implicit object call: a this pointer or an object
     exprt implicit_object;
-    if(get_expr(*member_call.getImplicitObjectArgument(), implicit_object))
+    if (get_expr(*member_call.getImplicitObjectArgument(), implicit_object))
       return true;
 
     call.arguments().push_back(implicit_object);
 
     // Do args
-    for(const clang::Expr *arg : member_call.arguments())
+    for (const clang::Expr *arg : member_call.arguments())
     {
       exprt single_arg;
-      if(get_expr(*arg, single_arg))
+      if (get_expr(*arg, single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
@@ -503,11 +503,11 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::Stmt *callee = operator_call.getCallee();
 
     exprt callee_expr;
-    if(get_expr(*callee, callee_expr))
+    if (get_expr(*callee, callee_expr))
       return true;
 
     typet type;
-    if(get_type(operator_call.getType(), type))
+    if (get_type(operator_call.getType(), type))
       return true;
 
     side_effect_expr_function_callt call;
@@ -515,10 +515,10 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     call.type() = type;
 
     // Do args
-    for(const clang::Expr *arg : operator_call.arguments())
+    for (const clang::Expr *arg : operator_call.arguments())
     {
       exprt single_arg;
-      if(get_expr(*arg, single_arg))
+      if (get_expr(*arg, single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
@@ -533,7 +533,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::ExprWithCleanups &ewc =
       static_cast<const clang::ExprWithCleanups &>(stmt);
 
-    if(get_expr(*ewc.getSubExpr(), new_expr))
+    if (get_expr(*ewc.getSubExpr(), new_expr))
       return true;
 
     break;
@@ -544,7 +544,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXBindTemporaryExpr &cxxbtmp =
       static_cast<const clang::CXXBindTemporaryExpr &>(stmt);
 
-    if(get_expr(*cxxbtmp.getSubExpr(), new_expr))
+    if (get_expr(*cxxbtmp.getSubExpr(), new_expr))
       return true;
 
     break;
@@ -555,7 +555,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::SubstNonTypeTemplateParmExpr &substnttp =
       static_cast<const clang::SubstNonTypeTemplateParmExpr &>(stmt);
 
-    if(get_expr(*substnttp.getReplacement(), new_expr))
+    if (get_expr(*substnttp.getReplacement(), new_expr))
       return true;
 
     break;
@@ -567,10 +567,10 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::MaterializeTemporaryExpr &>(stmt);
 
     exprt tmp;
-    if(get_expr(*mtemp.getSubExpr(), tmp))
+    if (get_expr(*mtemp.getSubExpr(), tmp))
       return true;
 
-    if(mtemp.isBoundToLvalueReference())
+    if (mtemp.isBoundToLvalueReference())
       new_expr = address_of_exprt(tmp);
     else
       new_expr.swap(tmp);
@@ -583,17 +583,17 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXNewExpr &ne = static_cast<const clang::CXXNewExpr &>(stmt);
 
     typet t;
-    if(get_type(ne.getType(), t))
+    if (get_type(ne.getType(), t))
       return true;
 
-    if(ne.isArray())
+    if (ne.isArray())
     {
       new_expr = side_effect_exprt("cpp_new[]", t);
 
       // TODO: Implement support when the array size is empty
       assert(ne.getArraySize());
       exprt size;
-      if(get_expr(**ne.getArraySize(), size))
+      if (get_expr(**ne.getArraySize(), size))
         return true;
 
       new_expr.size(size);
@@ -603,10 +603,10 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       new_expr = side_effect_exprt("cpp_new", t);
     }
 
-    if(ne.hasInitializer())
+    if (ne.hasInitializer())
     {
       exprt init;
-      if(get_expr(*ne.getInitializer(), init))
+      if (get_expr(*ne.getInitializer(), init))
         return true;
 
       convert_expression_to_code(init);
@@ -627,15 +627,15 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
                  : side_effect_exprt("cpp_delete", empty_typet());
 
     exprt arg;
-    if(get_expr(*de.getArgument(), arg))
+    if (get_expr(*de.getArgument(), arg))
       return true;
 
     new_expr.move_to_operands(arg);
 
-    if(de.getDestroyedType()->getAsCXXRecordDecl())
+    if (de.getDestroyedType()->getAsCXXRecordDecl())
     {
       typet destt;
-      if(get_type(de.getDestroyedType(), destt))
+      if (get_type(de.getDestroyedType(), destt))
         return true;
       new_expr.type() = destt;
     }
@@ -655,7 +655,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::CXXScalarValueInitExpr &>(stmt);
 
     typet t;
-    if(get_type(cxxsvi.getType(), t))
+    if (get_type(cxxsvi.getType(), t))
       return true;
 
     new_expr = gen_zero(t);
@@ -667,7 +667,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::TypeTraitExpr &tt =
       static_cast<const clang::TypeTraitExpr &>(stmt);
 
-    if(tt.getValue())
+    if (tt.getValue())
       new_expr = true_exprt();
     else
       new_expr = false_exprt();
@@ -679,7 +679,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXConstructExpr &cxxc =
       static_cast<const clang::CXXConstructExpr &>(stmt);
 
-    if(get_constructor_call(cxxc, new_expr))
+    if (get_constructor_call(cxxc, new_expr))
       return true;
 
     break;
@@ -694,7 +694,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
 
     this_mapt::iterator it = this_map.find(address);
-    if(this_map.find(address) == this_map.end())
+    if (this_map.find(address) == this_map.end())
     {
       log_error(
         "Pointer `this' for method {} was not added to scope",
@@ -703,7 +703,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
 
     typet this_type;
-    if(get_type(this_expr.getType(), this_type))
+    if (get_type(this_expr.getType(), this_type))
       return true;
 
     assert(this_type == it->second.second);
@@ -718,7 +718,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::CXXTemporaryObjectExpr &>(stmt);
 
     // get the constructor call making this temporary
-    if(get_constructor_call(cxxtoe, new_expr))
+    if (get_constructor_call(cxxtoe, new_expr))
       return true;
 
     // make the temporary
@@ -746,12 +746,12 @@ bool clang_cpp_convertert::get_constructor_call(
 {
   // Get constructor call
   exprt callee_decl;
-  if(get_decl_ref(*constructor_call.getConstructor(), callee_decl))
+  if (get_decl_ref(*constructor_call.getConstructor(), callee_decl))
     return true;
 
   // Get type
   typet type;
-  if(get_type(constructor_call.getType(), type))
+  if (get_type(constructor_call.getType(), type))
     return true;
 
   side_effect_expr_function_callt call;
@@ -763,7 +763,7 @@ bool clang_cpp_convertert::get_constructor_call(
   auto it = parents.begin();
   const clang::Decl *objectDecl = it->get<clang::Decl>();
 
-  if(!objectDecl && need_new_object(it->get<clang::Stmt>(), constructor_call))
+  if (!objectDecl && need_new_object(it->get<clang::Stmt>(), constructor_call))
   {
     address_of_exprt tmp_expr;
     tmp_expr.type() = pointer_typet();
@@ -780,14 +780,14 @@ bool clang_cpp_convertert::get_constructor_call(
   }
 
   // Calling base constructor from derived constructor
-  if(new_expr.base_ctor_derived())
+  if (new_expr.base_ctor_derived())
     gen_typecast_base_ctor_call(callee_decl, call, new_expr);
 
   // Do args
-  for(const clang::Expr *arg : constructor_call.arguments())
+  for (const clang::Expr *arg : constructor_call.arguments())
   {
     exprt single_arg;
-    if(get_expr(*arg, single_arg))
+    if (get_expr(*arg, single_arg))
       return true;
 
     call.arguments().push_back(single_arg);
@@ -810,7 +810,7 @@ void clang_cpp_convertert::build_member_from_component(
   std::size_t address = reinterpret_cast<std::size_t>(fd.getFirstDecl());
 
   this_mapt::iterator it = this_map.find(address);
-  if(this_map.find(address) == this_map.end())
+  if (this_map.find(address) == this_map.end())
   {
     log_error(
       "Pointer `this' for method {} was not added to scope",
@@ -832,23 +832,23 @@ bool clang_cpp_convertert::get_function_body(
   const code_typet &ftype)
 {
   // do nothing if function body doesn't exist
-  if(!fd.hasBody())
+  if (!fd.hasBody())
     return false;
 
   // Parse body
-  if(clang_c_convertert::get_function_body(fd, new_expr, ftype))
+  if (clang_c_convertert::get_function_body(fd, new_expr, ftype))
     return true;
 
   code_blockt &body = to_code_block(to_code(new_expr));
 
   // if it's a constructor, check for initializers
-  if(fd.getKind() == clang::Decl::CXXConstructor)
+  if (fd.getKind() == clang::Decl::CXXConstructor)
   {
     const clang::CXXConstructorDecl &cxxcd =
       static_cast<const clang::CXXConstructorDecl &>(fd);
 
     // Parse the initializers, if any
-    if(cxxcd.init_begin() != cxxcd.init_end())
+    if (cxxcd.init_begin() != cxxcd.init_end())
     {
       log_debug(
         "c++",
@@ -862,17 +862,17 @@ bool clang_cpp_convertert::get_function_body(
       initializers.reserve(cxxcd.getNumCtorInitializers());
 
       // `init` type is clang::CXXCtorInitializer
-      for(auto init : cxxcd.inits())
+      for (auto init : cxxcd.inits())
       {
         exprt initializer;
 
-        if(!init->isBaseInitializer())
+        if (!init->isBaseInitializer())
         {
           exprt lhs;
-          if(init->isMemberInitializer())
+          if (init->isMemberInitializer())
           {
             // parsing non-static member initializer
-            if(get_decl_ref(*init->getMember(), lhs))
+            if (get_decl_ref(*init->getMember(), lhs))
               return true;
           }
           else
@@ -884,7 +884,7 @@ bool clang_cpp_convertert::get_function_body(
           build_member_from_component(fd, lhs);
 
           exprt rhs;
-          if(get_expr(*init->getInit(), rhs))
+          if (get_expr(*init->getInit(), rhs))
             return true;
 
           initializer = side_effect_exprt("assign", lhs.type());
@@ -896,7 +896,7 @@ bool clang_cpp_convertert::get_function_body(
           initializer.derived_this_arg(
             ftype.arguments().at(0).get("#identifier"));
           initializer.base_ctor_derived(true);
-          if(get_expr(*init->getInit(), initializer))
+          if (get_expr(*init->getInit(), initializer))
             return true;
         }
 
@@ -924,7 +924,7 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
 {
   // Parse this pointer
   code_typet::argumentt this_param;
-  if(get_type(cxxmd.getThisType(), this_param.type()))
+  if (get_type(cxxmd.getThisType(), this_param.type()))
     return true;
 
   locationt location_begin;
@@ -945,7 +945,7 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
 
   // If the method is not defined, we don't need to add it's parameter
   // to the context, they will never be used
-  if(!cxxmd.isDefined())
+  if (!cxxmd.isDefined())
     return false;
 
   symbolt param_symbol;
@@ -982,11 +982,11 @@ bool clang_cpp_convertert::get_function_params(
   // If it's a C-style function, fallback to C mode
   // Static methods don't have the this arg and can be handled as
   // C functions
-  if(!fd.isCXXClassMember() || cxxmd.isStatic())
+  if (!fd.isCXXClassMember() || cxxmd.isStatic())
     return clang_c_convertert::get_function_params(fd, params);
 
   // Add this pointer to first arg
-  if(get_function_this_pointer_param(cxxmd, params))
+  if (get_function_this_pointer_param(cxxmd, params))
     return true;
 
   // reserve space for `this' pointer and params
@@ -994,12 +994,12 @@ bool clang_cpp_convertert::get_function_params(
 
   // TODO: replace the loop with get_function_params
   // Parse other args
-  for(std::size_t i = 0; i < fd.parameters().size(); ++i)
+  for (std::size_t i = 0; i < fd.parameters().size(); ++i)
   {
     const clang::ParmVarDecl &pd = *fd.parameters()[i];
 
     code_typet::argumentt param;
-    if(get_function_param(pd, param))
+    if (get_function_param(pd, param))
       return true;
 
     // All args are added shifted by one position, because
@@ -1034,9 +1034,9 @@ void clang_cpp_convertert::name_param_and_continue(
   assert(id.empty() && name.empty());
 
   const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
-  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
+  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
   {
-    if(
+    if (
       (is_CopyOrMoveOperator(*md) && md->isImplicit()) ||
       (is_ConstructorOrDestructor(*md) && is_defaulted_ctor(*md)))
     {
@@ -1060,10 +1060,10 @@ bool clang_cpp_convertert::get_template_decl_specialization(
   bool DumpExplicitInst,
   exprt &new_expr)
 {
-  for(auto const *redecl_with_bad_type : D->redecls())
+  for (auto const *redecl_with_bad_type : D->redecls())
   {
     auto *redecl = llvm::dyn_cast<SpecializationDecl>(redecl_with_bad_type);
-    if(!redecl)
+    if (!redecl)
     {
       assert(
         llvm::isa<clang::CXXRecordDecl>(redecl_with_bad_type) &&
@@ -1071,17 +1071,17 @@ bool clang_cpp_convertert::get_template_decl_specialization(
       continue;
     }
 
-    switch(redecl->getTemplateSpecializationKind())
+    switch (redecl->getTemplateSpecializationKind())
     {
     case clang::TSK_ExplicitInstantiationDeclaration:
     case clang::TSK_ExplicitInstantiationDefinition:
     case clang::TSK_ExplicitSpecialization:
-      if(!DumpExplicitInst)
+      if (!DumpExplicitInst)
         break;
       // Fall through.
     case clang::TSK_Undeclared:
     case clang::TSK_ImplicitInstantiation:
-      if(get_decl(*redecl, new_expr))
+      if (get_decl(*redecl, new_expr))
         return true;
       break;
     }
@@ -1096,8 +1096,8 @@ bool clang_cpp_convertert::get_template_decl(
   bool DumpExplicitInst,
   exprt &new_expr)
 {
-  for(auto *Child : D->specializations())
-    if(get_template_decl_specialization(Child, DumpExplicitInst, new_expr))
+  for (auto *Child : D->specializations())
+    if (get_template_decl_specialization(Child, DumpExplicitInst, new_expr))
       return true;
 
   return false;
@@ -1110,12 +1110,12 @@ bool clang_cpp_convertert::get_decl_ref(
   std::string name, id;
   typet type;
 
-  switch(decl.getKind())
+  switch (decl.getKind())
   {
   case clang::Decl::ParmVar:
   {
     // first follow the base conversion flow to fill new_expr
-    if(clang_c_convertert::get_decl_ref(decl, new_expr))
+    if (clang_c_convertert::get_decl_ref(decl, new_expr))
       return true;
 
     const auto *param = llvm::dyn_cast<const clang::ParmVarDecl>(&decl);
@@ -1123,7 +1123,7 @@ bool clang_cpp_convertert::get_decl_ref(
 
     get_decl_name(*param, name, id);
 
-    if(id.empty() && name.empty())
+    if (id.empty() && name.empty())
       name_param_and_continue(*param, id, name, new_expr);
 
     return false;
@@ -1135,11 +1135,11 @@ bool clang_cpp_convertert::get_decl_ref(
 
     get_decl_name(fd, name, id);
 
-    if(get_type(fd.getType(), type))
+    if (get_type(fd.getType(), type))
       return true;
 
     code_typet &fd_type = to_code_type(type);
-    if(get_function_params(fd, fd_type.arguments()))
+    if (get_function_params(fd, fd_type.arguments()))
       return true;
 
     // annotate return type - will be used to adjust the initiliazer or decl-derived stmt
@@ -1170,7 +1170,7 @@ bool clang_cpp_convertert::annotate_class_field(
   struct_typet::componentt &comp)
 {
   // set parent in component's type
-  if(type.tag().empty())
+  if (type.tag().empty())
   {
     log_error("Goto empty tag in parent class type in {}", __func__);
     return true;
@@ -1179,7 +1179,7 @@ bool clang_cpp_convertert::annotate_class_field(
   comp.type().set("#member_name", parent_class_id);
 
   // set access in component
-  if(annotate_class_field_access(field, comp))
+  if (annotate_class_field_access(field, comp))
   {
     log_error("Failed to annotate class field access in {}", __func__);
     return true;
@@ -1193,7 +1193,7 @@ bool clang_cpp_convertert::annotate_class_field_access(
   struct_typet::componentt &comp)
 {
   std::string access;
-  if(get_access_from_decl(field, access))
+  if (get_access_from_decl(field, access))
     return true;
 
   // annotate access in component
@@ -1205,7 +1205,7 @@ bool clang_cpp_convertert::get_access_from_decl(
   const clang::Decl &decl,
   std::string &access)
 {
-  switch(decl.getAccess())
+  switch (decl.getAccess())
   {
   case clang::AS_public:
   {
@@ -1248,7 +1248,7 @@ bool clang_cpp_convertert::annotate_class_method(
   component_type.set("#member_name", parent_class_id);
 
   // annotate ctor and dtor
-  if(is_ConstructorOrDestructor(cxxmdd))
+  if (is_ConstructorOrDestructor(cxxmdd))
   {
     // annotate ctor and dtor return type
     annotate_ctor_dtor_rtn_type(cxxmdd, component_type.return_type());
@@ -1262,7 +1262,7 @@ bool clang_cpp_convertert::annotate_class_method(
      * So let's do the sync before adding more annotations.
      */
     symbolt *fd_symb = get_fd_symbol(cxxmdd);
-    if(fd_symb)
+    if (fd_symb)
     {
       fd_symb->type = component_type;
       /*
@@ -1280,7 +1280,7 @@ bool clang_cpp_convertert::annotate_class_method(
 
   // annotate access
   std::string access;
-  if(get_access_from_decl(cxxmdd, access))
+  if (get_access_from_decl(cxxmdd, access))
     return true;
   new_expr.set("access", access);
 
@@ -1300,8 +1300,8 @@ bool clang_cpp_convertert::annotate_class_method(
 
   // We need to add a non-static method as a `component` to class symbol's type
   // remove "statement: skip" otherwise it won't be added
-  if(!cxxmdd.isStatic())
-    if(to_code(new_expr).statement() == "skip")
+  if (!cxxmdd.isStatic())
+    if (to_code(new_expr).statement() == "skip")
       to_code(new_expr).remove("statement");
 
   return false;
@@ -1345,9 +1345,9 @@ bool clang_cpp_convertert::need_new_object(
    *  1. we are dealing with new operator
    *  2. we are binding a temporary
    */
-  if(parentStmt)
+  if (parentStmt)
   {
-    switch(parentStmt->getStmtClass())
+    switch (parentStmt->getStmtClass())
     {
     case clang::Stmt::CXXNewExprClass:
     case clang::Stmt::CXXBindTemporaryExprClass:
@@ -1358,7 +1358,7 @@ bool clang_cpp_convertert::need_new_object(
        * A POD temporary is bound to a CXXBindTemporaryExprClass node.
        * But we still need to build a new_object in this case.
        */
-      if(call.getStmtClass() == clang::Stmt::CXXTemporaryObjectExprClass)
+      if (call.getStmtClass() == clang::Stmt::CXXTemporaryObjectExprClass)
         return true;
     }
     }
@@ -1382,14 +1382,14 @@ void clang_cpp_convertert::get_base_map(
   /*
    * This function gets all the base classes from which we need to get the components/methods
    */
-  for(const clang::CXXBaseSpecifier &base : cxxrd.bases())
+  for (const clang::CXXBaseSpecifier &base : cxxrd.bases())
   {
     // The base class is always a CXXRecordDecl
     const clang::CXXRecordDecl &base_cxxrd =
       *(base.getType().getTypePtr()->getAsCXXRecordDecl());
 
     // recursively get more bases for this `base`
-    if(base_cxxrd.bases_begin() != base_cxxrd.bases_end())
+    if (base_cxxrd.bases_begin() != base_cxxrd.bases_end())
       get_base_map(base_cxxrd, map);
 
     // get base class id
@@ -1397,7 +1397,7 @@ void clang_cpp_convertert::get_base_map(
     clang_c_convertert::get_decl_name(base_cxxrd, class_name, class_id);
 
     // avoid adding the same base, e.g. in case of diamond problem
-    if(map.find(class_id) != map.end())
+    if (map.find(class_id) != map.end())
       continue;
 
     auto status = map.insert({class_id, base_cxxrd});
@@ -1410,7 +1410,7 @@ void clang_cpp_convertert::get_base_components_methods(
   base_map &map,
   struct_union_typet &type)
 {
-  for(const auto &base : map)
+  for (const auto &base : map)
   {
     std::string class_id = base.first;
 
@@ -1422,21 +1422,21 @@ void clang_cpp_convertert::get_base_components_methods(
 
     // pull components in
     const struct_typet::componentst &components = base_type.components();
-    for(auto component : components)
+    for (auto component : components)
     {
       // TODO: tweak access specifier
       component.set("from_base", true);
-      if(!is_duplicate_component(component, type))
+      if (!is_duplicate_component(component, type))
         to_struct_type(type).components().push_back(component);
     }
 
     // pull methods in
     const struct_typet::componentst &methods = base_type.methods();
-    for(auto method : methods)
+    for (auto method : methods)
     {
       // TODO: tweak access specifier
       method.set("from_base", true);
-      if(!is_duplicate_method(method, type))
+      if (!is_duplicate_method(method, type))
         to_struct_type(type).methods().push_back(method);
     }
   }
@@ -1448,9 +1448,9 @@ bool clang_cpp_convertert::is_duplicate_component(
 {
   const struct_typet &stype = to_struct_type(type);
   const struct_typet::componentst &components = stype.components();
-  for(const auto &existing_component : components)
+  for (const auto &existing_component : components)
   {
-    if(component.name() == existing_component.name())
+    if (component.name() == existing_component.name())
       return true;
   }
   return false;
@@ -1462,9 +1462,9 @@ bool clang_cpp_convertert::is_duplicate_method(
 {
   const struct_typet &stype = to_struct_type(type);
   const struct_typet::componentst &methods = stype.methods();
-  for(const auto &existing_method : methods)
+  for (const auto &existing_method : methods)
   {
-    if(method.name() == existing_method.name())
+    if (method.name() == existing_method.name())
       return true;
   }
   return false;
@@ -1474,14 +1474,14 @@ void clang_cpp_convertert::annotate_cpyctor(
   const clang::CXXMethodDecl &cxxmdd,
   typet &rtn_type)
 {
-  if(is_defaulted_ctor(cxxmdd) && is_cpyctor(cxxmdd))
+  if (is_defaulted_ctor(cxxmdd) && is_cpyctor(cxxmdd))
     rtn_type.set("#default_copy_cons", true);
 }
 
 bool clang_cpp_convertert::is_cpyctor(const clang::DeclContext &dcxt)
 {
-  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(&dcxt))
-    if(ctor->isCopyConstructor())
+  if (const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(&dcxt))
+    if (ctor->isCopyConstructor())
       return true;
 
   return false;
@@ -1489,8 +1489,8 @@ bool clang_cpp_convertert::is_cpyctor(const clang::DeclContext &dcxt)
 
 bool clang_cpp_convertert::is_defaulted_ctor(const clang::CXXMethodDecl &md)
 {
-  if(const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(&md))
-    if(ctor->isDefaulted())
+  if (const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(&md))
+    if (ctor->isDefaulted())
       return true;
 
   return false;
@@ -1511,7 +1511,7 @@ void clang_cpp_convertert::annotate_ctor_dtor_rtn_type(
 bool clang_cpp_convertert::is_aggregate_type(const clang::QualType &q_type)
 {
   const clang::Type &the_type = *q_type.getTypePtrOrNull();
-  switch(the_type.getTypeClass())
+  switch (the_type.getTypeClass())
   {
   case clang::Type::ConstantArray:
   case clang::Type::VariableArray:
@@ -1531,7 +1531,7 @@ bool clang_cpp_convertert::is_aggregate_type(const clang::QualType &q_type)
   {
     const clang::RecordDecl &rd =
       *(static_cast<const clang::RecordType &>(the_type)).getDecl();
-    if(
+    if (
       const clang::CXXRecordDecl *cxxrd =
         llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
       return cxxrd->isPOD();

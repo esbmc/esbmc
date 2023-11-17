@@ -5,7 +5,7 @@
 
 typet build_float_type(unsigned width)
 {
-  if(config.ansi_c.use_fixed_for_float)
+  if (config.ansi_c.use_fixed_for_float)
   {
     fixedbv_typet result;
     result.set_width(width);
@@ -15,7 +15,7 @@ typet build_float_type(unsigned width)
   floatbv_typet result;
   result.set_width(width);
 
-  switch(width)
+  switch (width)
   {
   case 16:
     result.set_f(11);
@@ -41,11 +41,11 @@ typet build_float_type(unsigned width)
 
 type2tc build_float_type2(unsigned width)
 {
-  if(config.ansi_c.use_fixed_for_float)
+  if (config.ansi_c.use_fixed_for_float)
     return fixedbv_type2tc(width, width / 2);
 
   unsigned fraction = 0;
-  switch(width)
+  switch (width)
   {
   case 16:
     fraction = 11;
@@ -182,7 +182,7 @@ typet unsigned_short_int_type()
 
 typet char_type()
 {
-  if(config.ansi_c.char_is_unsigned)
+  if (config.ansi_c.char_is_unsigned)
     return unsignedbv_typet(config.ansi_c.char_width);
 
   return signedbv_typet(config.ansi_c.char_width);
@@ -220,7 +220,7 @@ typet unsigned_wchar_type()
 
 type2tc char_type2()
 {
-  if(config.ansi_c.char_is_unsigned)
+  if (config.ansi_c.char_is_unsigned)
     return get_uint_type(config.ansi_c.char_width);
   return get_int_type(config.ansi_c.char_width);
 }
@@ -350,7 +350,7 @@ type2tc get_int64_type()
 
 type2tc get_uint_type(unsigned int sz)
 {
-  switch(sz)
+  switch (sz)
   {
   case 8:
     return get_uint8_type();
@@ -367,7 +367,7 @@ type2tc get_uint_type(unsigned int sz)
 
 type2tc get_int_type(unsigned int sz)
 {
-  switch(sz)
+  switch (sz)
   {
   case 8:
     return get_int8_type();

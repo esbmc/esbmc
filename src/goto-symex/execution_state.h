@@ -143,7 +143,7 @@ public:
   /** Reset record of what context switches were taken from this ex_state */
   void resetDFS_traversed()
   {
-    for(unsigned int i = 0; i < threads_state.size(); i++)
+    for (unsigned int i = 0; i < threads_state.size(); i++)
       DFS_traversed.at(i) = false;
   }
 
@@ -156,7 +156,7 @@ public:
   /** Set internal thread startup data */
   void set_thread_start_data(unsigned int tid, const expr2tc &argdata)
   {
-    if(tid >= thread_start_data.size())
+    if (tid >= thread_start_data.size())
     {
       log_error("Setting thread data for nonexistant thread {}", tid);
       abort();
@@ -168,7 +168,7 @@ public:
   /** Fetch internal thread startup data */
   const expr2tc &get_thread_start_data(unsigned int tid) const
   {
-    if(tid >= thread_start_data.size())
+    if (tid >= thread_start_data.size())
     {
       log_error("Setting thread data for nonexistant thread {}", tid);
       abort();

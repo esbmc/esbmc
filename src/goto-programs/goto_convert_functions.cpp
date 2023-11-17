@@ -24,11 +24,11 @@ void goto_convert_functionst::goto_convert()
 
   symbol_listt symbol_list;
   context.Foreach_operand_in_order([&symbol_list](symbolt &s) {
-    if(!s.is_type && s.type.is_code())
+    if (!s.is_type && s.type.is_code())
       symbol_list.push_back(&s);
   });
 
-  for(auto &it : symbol_list)
+  for (auto &it : symbol_list)
   {
     convert_function(*it);
   }
@@ -38,11 +38,11 @@ void goto_convert_functionst::goto_convert()
 
 bool goto_convert_functionst::hide(const goto_programt &goto_program)
 {
-  for(const auto &instruction : goto_program.instructions)
+  for (const auto &instruction : goto_program.instructions)
   {
-    for(const auto &label : instruction.labels)
+    for (const auto &label : instruction.labels)
     {
-      if(label == "__ESBMC_HIDE")
+      if (label == "__ESBMC_HIDE")
         return true;
     }
   }
@@ -54,11 +54,11 @@ void goto_convert_functionst::add_return(
   goto_functiont &f,
   const locationt &location)
 {
-  if(!f.body.instructions.empty() && f.body.instructions.back().is_return())
+  if (!f.body.instructions.empty() && f.body.instructions.back().is_return())
     return; // not needed, we have one already
 
   // see if we have an unconditional goto at the end
-  if(
+  if (
     !f.body.instructions.empty() && f.body.instructions.back().is_goto() &&
     is_true(f.body.instructions.back().guard))
     return;
@@ -85,7 +85,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   // Apply a SFINAE test: discard unused C++ templates.
   // Note: can be removed probably? as the new clang-cpp-frontend should've
   // done a pretty good job at resolving template overloading
-  if(
+  if (
     symbol.value.get("#speculative_template") == "1" &&
     symbol.value.get("#template_in_use") != "1")
     return;
@@ -94,17 +94,17 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   tmp_symbol = symbol_generator(id2string(symbol.id) + "::$tmp::");
 
   auto it = functions.function_map.find(identifier);
-  if(it == functions.function_map.end())
+  if (it == functions.function_map.end())
     functions.function_map.emplace(identifier, goto_functiont());
 
   goto_functiont &f = functions.function_map.at(identifier);
   f.type = to_code_type(symbol.type);
   f.body_available = symbol.value.is_not_nil();
 
-  if(!f.body_available)
+  if (!f.body_available)
     return;
 
-  if(!symbol.value.is_code())
+  if (!symbol.value.is_code())
   {
     log_error("got invalid code for function `{}'", id2string(identifier));
     abort();
@@ -114,7 +114,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   locationt end_location;
 
-  if(to_code(symbol.value).get_statement() == "block")
+  if (to_code(symbol.value).get_statement() == "block")
     end_location =
       static_cast<const locationt &>(to_code_block(code).end_location());
   else
@@ -135,12 +135,12 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   goto_convert_rec(code, f.body);
 
   // add non-det return value, if needed
-  if(targets.has_return_value)
+  if (targets.has_return_value)
     add_return(f, end_location);
 
   // Wrap the body of functions name __VERIFIER_atomic_* with atomic_bengin
   // and atomic_end
-  if(
+  if (
     !f.body.instructions.empty() &&
     has_prefix(id2string(identifier), "c:@F@__VERIFIER_atomic_"))
   {
@@ -153,9 +153,9 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     a_end->make_atomic_end();
     a_end->location = end_location;
 
-    Forall_goto_program_instructions(i_it, f.body)
+    Forall_goto_program_instructions (i_it, f.body)
     {
-      if(i_it->is_goto() && i_it->targets.front()->is_end_function())
+      if (i_it->is_goto() && i_it->targets.front()->is_end_function())
       {
         i_it->targets.clear();
         i_it->targets.push_back(a_end);
@@ -171,7 +171,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   f.body.update();
 
-  if(hide(f.body))
+  if (hide(f.body))
     f.body.hide = true;
 }
 
@@ -190,10 +190,10 @@ void goto_convert_functionst::collect_type(
   const irept &type,
   typename_sett &deps)
 {
-  if(type.id() == "pointer")
+  if (type.id() == "pointer")
     return;
 
-  if(type.id() == "symbol")
+  if (type.id() == "symbol")
   {
     assert(type.identifier() != "");
     deps.insert(type.identifier());
@@ -212,25 +212,25 @@ void goto_convert_functionst::collect_expr(
   const irept &expr,
   typename_sett &deps)
 {
-  if(expr.id() == "pointer")
+  if (expr.id() == "pointer")
     return;
 
-  forall_irep(it, expr.get_sub())
+  forall_irep (it, expr.get_sub())
   {
     collect_expr(*it, deps);
   }
 
-  forall_named_irep(it, expr.get_named_sub())
+  forall_named_irep (it, expr.get_named_sub())
   {
-    if(denotes_thrashable_subtype(it->first))
+    if (denotes_thrashable_subtype(it->first))
       collect_type(it->second, deps);
     else
       collect_expr(it->second, deps);
   }
 
-  forall_named_irep(it, expr.get_comments())
+  forall_named_irep (it, expr.get_comments())
   {
-    if(denotes_thrashable_subtype(it->first))
+    if (denotes_thrashable_subtype(it->first))
       collect_type(it->second, deps);
     else
       collect_expr(it->second, deps);
@@ -242,7 +242,7 @@ void goto_convert_functionst::rename_types(
   const symbolt &cur_name_sym,
   const irep_idt &sname)
 {
-  if(type.id() == "pointer")
+  if (type.id() == "pointer")
     return;
 
   // Some type symbols aren't entirely correct. This is because (in the current
@@ -258,9 +258,9 @@ void goto_convert_functionst::rename_types(
   // should have.
 
   typet type2;
-  if(type.id() == "symbol")
+  if (type.id() == "symbol")
   {
-    if(type.identifier() == sname)
+    if (type.identifier() == sname)
     {
       // A recursive symbol -- the symbol we're about to link to is in fact the
       // one that initiated this chain of renames. This leads to either infinite
@@ -274,7 +274,7 @@ void goto_convert_functionst::rename_types(
       return;
     }
 
-    if(ns.lookup(type.identifier()))
+    if (ns.lookup(type.identifier()))
     {
       // If we can just look up the current type symbol, use that.
       type2 = ns.follow((typet &)type);
@@ -286,7 +286,7 @@ void goto_convert_functionst::rename_types(
         cur_name_sym.module.as_string() + type.identifier().as_string();
 
       // Try looking that up.
-      if(ns.lookup(irep_idt(ident)))
+      if (ns.lookup(irep_idt(ident)))
       {
         irept tmptype = type;
         tmptype.identifier(irep_idt(ident));
@@ -313,15 +313,15 @@ void goto_convert_functionst::rename_exprs(
   const symbolt &cur_name_sym,
   const irep_idt &sname)
 {
-  if(expr.id() == "pointer")
+  if (expr.id() == "pointer")
     return;
 
-  Forall_irep(it, expr.get_sub())
+  Forall_irep (it, expr.get_sub())
     rename_exprs(*it, cur_name_sym, sname);
 
-  Forall_named_irep(it, expr.get_named_sub())
+  Forall_named_irep (it, expr.get_named_sub())
   {
-    if(denotes_thrashable_subtype(it->first))
+    if (denotes_thrashable_subtype(it->first))
     {
       rename_types(it->second, cur_name_sym, sname);
     }
@@ -331,7 +331,7 @@ void goto_convert_functionst::rename_exprs(
     }
   }
 
-  Forall_named_irep(it, expr.get_comments())
+  Forall_named_irep (it, expr.get_comments())
     rename_exprs(it->second, cur_name_sym, sname);
 }
 
@@ -344,11 +344,11 @@ void goto_convert_functionst::wallop_type(
   typename_mapt::iterator it = typenames.find(name);
   assert(it != typenames.end());
   std::set<irep_idt> &deps = it->second;
-  if(deps.size() == 0)
+  if (deps.size() == 0)
     return;
 
   // Iterate over our dependancies ensuring they're resolved.
-  for(const auto &dep : deps)
+  for (const auto &dep : deps)
     wallop_type(dep, typenames, sname);
 
   // And finally perform renaming.
@@ -378,7 +378,7 @@ void goto_convert_functionst::thrash_type_symbols()
 
   typename_mapt typenames;
   context.foreach_operand([this, &names, &typenames](const symbolt &s) {
-    if(names.find(s.id) != names.end())
+    if (names.find(s.id) != names.end())
     {
       typename_sett list;
       collect_expr(s.value, list);
@@ -387,7 +387,7 @@ void goto_convert_functionst::thrash_type_symbols()
     }
   });
 
-  for(auto &it : typenames)
+  for (auto &it : typenames)
     it.second.erase(it.first);
 
   // Now, repeatedly rename all types. When we encounter a type that contains
@@ -395,7 +395,7 @@ void goto_convert_functionst::thrash_type_symbols()
   // This means that we recurse to whatever depth of nested types the user
   // has. With at least a meg of stack, I doubt that's really a problem.
   std::map<irep_idt, std::set<irep_idt>>::iterator it;
-  for(it = typenames.begin(); it != typenames.end(); it++)
+  for (it = typenames.begin(); it != typenames.end(); it++)
     wallop_type(it->first, typenames, it->first);
 
   // And now all the types have a fixed form, rename types in all existing code.

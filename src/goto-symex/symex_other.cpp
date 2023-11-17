@@ -7,7 +7,7 @@
 void goto_symext::symex_other(const expr2tc code)
 {
   expr2tc code2 = code;
-  if(is_code_expression2t(code2))
+  if (is_code_expression2t(code2))
   {
     // Represents an expression that gets evaluated, but does not have any
     // other effect on execution, i.e. doesn't contain a call or assignment.
@@ -17,7 +17,7 @@ void goto_symext::symex_other(const expr2tc code)
     expr2tc operand = expr.operand;
     dereference(operand, dereferencet::READ);
   }
-  else if(is_code_cpp_del_array2t(code2) || is_code_cpp_delete2t(code2))
+  else if (is_code_cpp_del_array2t(code2) || is_code_cpp_delete2t(code2))
   {
     expr2tc deref_code(code2);
 
@@ -27,18 +27,18 @@ void goto_symext::symex_other(const expr2tc code)
 
     symex_cpp_delete(deref_code);
   }
-  else if(is_code_free2t(code2))
+  else if (is_code_free2t(code2))
   {
     symex_free(code2);
   }
-  else if(is_code_printf2t(code2))
+  else if (is_code_printf2t(code2))
   {
     replace_dynamic_allocation(code2);
     replace_nondet(code2);
     dereference(code2, dereferencet::READ);
     symex_printf(expr2tc(), code2);
   }
-  else if(is_code_asm2t(code2))
+  else if (is_code_asm2t(code2))
   {
     // Assembly statement -> do nothing.
     return;
@@ -57,7 +57,7 @@ void goto_symext::symex_decl(const expr2tc code)
   dereference(code2, dereferencet::READ);
 
   // check whether the stack limit check has been activated.
-  if(stack_limit > 0)
+  if (stack_limit > 0)
   {
     // extract the actual variable name.
     const std::string pretty_name =
@@ -84,8 +84,8 @@ void goto_symext::symex_decl(const expr2tc code)
     unsigned &index = cur_state->variable_instance_nums[identifier];
     frame.level1.rename(l1_sym, ++index);
     to_symbol2t(l1_sym).level1_num = index;
-  } while(frame.declaration_history.find(renaming::level2t::name_record(
-            to_symbol2t(l1_sym))) != frame.declaration_history.end());
+  } while (frame.declaration_history.find(renaming::level2t::name_record(
+             to_symbol2t(l1_sym))) != frame.declaration_history.end());
 
   // Rename it to the new name
   cur_state->top().level1.get_ident_name(l1_sym);
@@ -97,7 +97,7 @@ void goto_symext::symex_decl(const expr2tc code)
 
   // seen it before?
   // it should get a fresh value
-  if(cur_state->level2.current_number(l1_sym) != 0)
+  if (cur_state->level2.current_number(l1_sym) != 0)
   {
     // Dummy assignment - blank constant value isn't considered for const
     // propagation, variable number will be bumped to result in a new free
@@ -116,7 +116,7 @@ void goto_symext::symex_dead(const expr2tc code)
   dereference(code2, dereferencet::INTERNAL);
 
   // check whether the stack limit check has been activated.
-  if(stack_limit > 0)
+  if (stack_limit > 0)
     cur_state->top().decrease_stack_frame_size(code2);
 
   const code_dead2t &dead_code = to_code_dead2t(code2);
@@ -131,7 +131,7 @@ void goto_symext::symex_dead(const expr2tc code)
   cur_state->top().level1.get_ident_name(l1_sym);
 
   // Call free on alloca'd objects
-  if(identifier.as_string().find("return_value$_alloca") != std::string::npos)
+  if (identifier.as_string().find("return_value$_alloca") != std::string::npos)
     symex_free(code_free2tc(l1_sym));
 
   // Erase from level 1 propagation

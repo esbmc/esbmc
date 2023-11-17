@@ -49,19 +49,19 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
 
   // The next block will initialize the algorithms used for the analysis.
   {
-    if(opts.get_bool_option("no-slice"))
+    if (opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
     else
       algorithms.emplace_back(std::make_unique<symex_slicet>(options));
 
     // Run cache if user has specified the option
-    if(options.get_bool_option("cache-asserts"))
+    if (options.get_bool_option("cache-asserts"))
       // Store the set between runs
       algorithms.emplace_back(std::make_unique<assertion_cache>(
         config.ssa_caching_db, !options.get_bool_option("forward-condition")));
   }
 
-  if(options.get_bool_option("smt-during-symex"))
+  if (options.get_bool_option("smt-during-symex"))
   {
     runtime_solver = std::shared_ptr<smt_convt>(create_solver("", ns, options));
 
@@ -86,11 +86,11 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
 
 void bmct::successful_trace()
 {
-  if(options.get_bool_option("result-only"))
+  if (options.get_bool_option("result-only"))
     return;
 
   std::string witness_output = options.get_option("witness-output");
-  if(witness_output != "")
+  if (witness_output != "")
   {
     goto_tracet goto_trace;
     log_progress("Building successful trace");
@@ -103,13 +103,13 @@ void bmct::error_trace(
   std::shared_ptr<smt_convt> &smt_conv,
   std::shared_ptr<symex_target_equationt> &eq)
 {
-  if(options.get_bool_option("result-only"))
+  if (options.get_bool_option("result-only"))
     return;
 
   log_progress("Building error trace");
 
   bool is_compact_trace = true;
-  if(
+  if (
     options.get_bool_option("no-slice") &&
     !options.get_bool_option("compact-trace"))
     is_compact_trace = false;
@@ -118,17 +118,17 @@ void bmct::error_trace(
   build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace);
 
   std::string output_file = options.get_option("cex-output");
-  if(output_file != "")
+  if (output_file != "")
   {
     std::ofstream out(output_file);
     show_goto_trace(out, ns, goto_trace);
   }
 
   std::string witness_output = options.get_option("witness-output");
-  if(witness_output != "")
+  if (witness_output != "")
     violation_graphml_goto_trace(options, ns, goto_trace);
 
-  if(options.get_bool_option("generate-testcase"))
+  if (options.get_bool_option("generate-testcase"))
   {
     generate_testcase_metadata();
     generate_testcase("testcase.xml", eq, smt_conv);
@@ -146,7 +146,7 @@ void bmct::generate_smt_from_equation(
 {
   std::string logic;
 
-  if(!options.get_bool_option("int-encoding"))
+  if (!options.get_bool_option("int-encoding"))
   {
     logic = "bit-vector";
     logic += (!config.ansi_c.use_fixed_for_float) ? "/floating-point " : " ";
@@ -170,12 +170,12 @@ smt_convt::resultt bmct::run_decision_procedure(
 {
   generate_smt_from_equation(smt_conv, eq);
 
-  if(
+  if (
     options.get_bool_option("smt-formula-too") ||
     options.get_bool_option("smt-formula-only"))
   {
     smt_conv->dump_smt();
-    if(options.get_bool_option("smt-formula-only"))
+    if (options.get_bool_option("smt-formula-only"))
       return smt_convt::P_SMTLIB;
   }
 
@@ -206,7 +206,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
 {
   unsigned int count = 1;
   std::ostringstream oss;
-  if(config.options.get_bool_option("ssa-symbol-table"))
+  if (config.options.get_bool_option("ssa-symbol-table"))
     ::show_symbol_table_plain(ns, oss);
 
   languagest languages(ns, language_idt::C);
@@ -215,41 +215,41 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
 
   bool sliced = config.options.get_bool_option("ssa-sliced");
 
-  for(auto const &it : eq->SSA_steps)
+  for (auto const &it : eq->SSA_steps)
   {
-    if(!(it.is_assert() || it.is_assignment() || it.is_assume()))
+    if (!(it.is_assert() || it.is_assignment() || it.is_assume()))
       continue;
 
-    if(it.ignore && !sliced)
+    if (it.ignore && !sliced)
       continue;
 
     oss << "// " << it.source.pc->location_number << " ";
     oss << it.source.pc->location.as_string();
-    if(!it.comment.empty())
+    if (!it.comment.empty())
       oss << " (" << it.comment << ")";
     oss << "\n/* " << count << " */ ";
 
     std::string string_value;
     languages.from_expr(migrate_expr_back(it.cond), string_value);
 
-    if(it.is_assignment())
+    if (it.is_assignment())
     {
       oss << string_value << "\n";
     }
-    else if(it.is_assert())
+    else if (it.is_assert())
     {
       oss << "(assert)" << string_value << "\n";
     }
-    else if(it.is_assume())
+    else if (it.is_assume())
     {
       oss << "(assume)" << string_value << "\n";
     }
-    else if(it.is_renumber())
+    else if (it.is_renumber())
     {
       oss << "renumber: " << from_expr(ns, "", it.lhs) << "\n";
     }
 
-    if(!migrate_expr_back(it.guard).is_true())
+    if (!migrate_expr_back(it.guard).is_true())
     {
       languages.from_expr(migrate_expr_back(it.guard), string_value);
       oss << std::string(i2string(count).size() + 3, ' ');
@@ -272,24 +272,24 @@ void bmct::report_trace(
   bool term = options.get_bool_option("termination");
   bool show_cex = options.get_bool_option("show-cex");
 
-  switch(res)
+  switch (res)
   {
   case smt_convt::P_UNSATISFIABLE:
-    if(is && term)
+    if (is && term)
     {
     }
-    else if(!bs)
+    else if (!bs)
     {
       successful_trace();
     }
     break;
 
   case smt_convt::P_SATISFIABLE:
-    if(!bs && show_cex)
+    if (!bs && show_cex)
     {
       error_trace(runtime_solver, eq);
     }
-    else if(!is && !fc)
+    else if (!is && !fc)
     {
       error_trace(runtime_solver, eq);
     }
@@ -306,7 +306,7 @@ void bmct::report_multi_property_trace(
 {
   assert(options.get_bool_option("base-case"));
 
-  switch(res)
+  switch (res)
   {
   case smt_convt::P_UNSATISFIABLE:
     // UNSAT means that the property was correct up to K
@@ -327,7 +327,7 @@ void bmct::report_multi_property_trace(
 void bmct::report_result(smt_convt::resultt &res)
 {
   // k-induction prints its own messages
-  if(options.get_bool_option("k-induction-parallel"))
+  if (options.get_bool_option("k-induction-parallel"))
     return;
 
   bool bs = options.get_bool_option("base-case");
@@ -336,14 +336,14 @@ void bmct::report_result(smt_convt::resultt &res)
   bool term = options.get_bool_option("termination");
   bool mul = options.get_bool_option("multi-property");
 
-  switch(res)
+  switch (res)
   {
   case smt_convt::P_UNSATISFIABLE:
-    if(is && term)
+    if (is && term)
     {
       report_failure();
     }
-    else if(!bs || mul)
+    else if (!bs || mul)
     {
       report_success();
     }
@@ -354,15 +354,15 @@ void bmct::report_result(smt_convt::resultt &res)
     break;
 
   case smt_convt::P_SATISFIABLE:
-    if(!is && !fc)
+    if (!is && !fc)
     {
       report_failure();
     }
-    else if(fc)
+    else if (fc)
     {
       log_status("The forward condition is unable to prove the property");
     }
-    else if(is)
+    else if (is)
     {
       log_status("The inductive step is unable to prove the property");
     }
@@ -379,7 +379,7 @@ void bmct::report_result(smt_convt::resultt &res)
     break;
   }
 
-  if((interleaving_number > 0) && options.get_bool_option("all-runs"))
+  if ((interleaving_number > 0) && options.get_bool_option("all-runs"))
   {
     log_status("Number of generated interleavings: {}", interleaving_number);
     log_status("Number of failed interleavings: {}", interleaving_failed);
@@ -400,33 +400,33 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
   symex->options.set_option("unwind", options.get_option("unwind"));
   symex->setup_for_new_explore();
 
-  if(options.get_bool_option("schedule"))
+  if (options.get_bool_option("schedule"))
     return run_thread(eq);
 
   smt_convt::resultt res;
   do
   {
-    if(++interleaving_number > 1)
+    if (++interleaving_number > 1)
       log_status("Thread interleavings {}", interleaving_number);
 
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
 
-    if(res == smt_convt::P_SATISFIABLE)
+    if (res == smt_convt::P_SATISFIABLE)
     {
-      if(config.options.get_bool_option("smt-model"))
+      if (config.options.get_bool_option("smt-model"))
         runtime_solver->print_model();
 
-      if(config.options.get_bool_option("bidirectional"))
+      if (config.options.get_bool_option("bidirectional"))
         bidirectional_search(runtime_solver, eq);
     }
 
-    if(res)
+    if (res)
     {
-      if(res == smt_convt::P_SATISFIABLE)
+      if (res == smt_convt::P_SATISFIABLE)
         ++interleaving_failed;
 
-      if(!options.get_bool_option("all-runs"))
+      if (!options.get_bool_option("all-runs"))
         return res;
     }
     fine_timet bmc_stop = current_time();
@@ -434,10 +434,10 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     log_status("BMC program time: {}s", time2string(bmc_stop - bmc_start));
 
     // Only run for one run
-    if(options.get_bool_option("interactive-ileaves"))
+    if (options.get_bool_option("interactive-ileaves"))
       return res;
 
-  } while(symex->setup_next_formula());
+  } while (symex->setup_next_formula());
 
   return interleaving_failed > 0 ? smt_convt::P_SATISFIABLE : res;
 }
@@ -448,18 +448,18 @@ void bmct::bidirectional_search(
 {
   // We should only analyse the inductive step's cex and we're running
   // in k-induction mode
-  if(!(options.get_bool_option("inductive-step") &&
-       options.get_bool_option("k-induction")))
+  if (!(options.get_bool_option("inductive-step") &&
+        options.get_bool_option("k-induction")))
     return;
 
   // We'll walk list of SSA steps and look for inductive assignments
   std::vector<stack_framet> frames;
   unsigned assert_loop_number = 0;
-  for(auto ssait : eq->SSA_steps)
+  for (auto ssait : eq->SSA_steps)
   {
-    if(ssait.is_assert() && smt_conv->l_get(ssait.cond_ast).is_false())
+    if (ssait.is_assert() && smt_conv->l_get(ssait.cond_ast).is_false())
     {
-      if(!ssait.loop_number)
+      if (!ssait.loop_number)
         return;
 
       // Save the location of the failed assertion
@@ -471,7 +471,7 @@ void bmct::bidirectional_search(
     }
   }
 
-  for(auto f : frames)
+  for (auto f : frames)
   {
     // Look for the function
     goto_functionst::function_mapt::iterator fit =
@@ -481,22 +481,22 @@ void bmct::bidirectional_search(
     // Find function loops
     goto_loopst loops(f.function, symex->goto_functions, fit->second);
 
-    if(!loops.get_loops().size())
+    if (!loops.get_loops().size())
       continue;
 
     auto lit = loops.get_loops().begin(), lie = loops.get_loops().end();
-    while(lit != lie)
+    while (lit != lie)
     {
       auto loop_head = lit->get_original_loop_head();
 
       // Skip constraints from other loops
-      if(loop_head->loop_number == assert_loop_number)
+      if (loop_head->loop_number == assert_loop_number)
         break;
 
       ++lit;
     }
 
-    if(lit == lie)
+    if (lit == lie)
       continue;
 
     // Get the loop vars
@@ -509,36 +509,36 @@ void bmct::bidirectional_search(
     std::unordered_map<irep_idt, std::pair<expr2tc, expr2tc>, irep_id_hash>
       var_ssa_list;
 
-    for(auto ssait : eq->SSA_steps)
+    for (auto ssait : eq->SSA_steps)
     {
-      if(ssait.loop_number == lit->get_original_loop_head()->loop_number)
+      if (ssait.loop_number == lit->get_original_loop_head()->loop_number)
         break;
 
-      if(ssait.ignore)
+      if (ssait.ignore)
         continue;
 
-      if(!ssait.is_assignment())
+      if (!ssait.is_assignment())
         continue;
 
       expr2tc new_lhs = ssait.original_lhs;
       renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
 
-      if(all_loop_vars.find(new_lhs) == all_loop_vars.end())
+      if (all_loop_vars.find(new_lhs) == all_loop_vars.end())
         continue;
 
       var_ssa_list[to_symbol2t(new_lhs).thename] = {
         ssait.original_lhs, ssait.rhs};
     }
 
-    if(!var_ssa_list.size())
+    if (!var_ssa_list.size())
       return;
 
     // Query the solver for the value of each variable
     std::vector<expr2tc> equalities;
-    for(auto it : var_ssa_list)
+    for (auto it : var_ssa_list)
     {
       // We don't support arrays or pointers
-      if(is_array_type(it.second.first) || is_pointer_type(it.second.first))
+      if (is_array_type(it.second.first) || is_pointer_type(it.second.first))
         return;
 
       auto lhs = build_lhs(smt_conv, it.second.first);
@@ -550,7 +550,7 @@ void bmct::bidirectional_search(
 
     // Build new assertion
     expr2tc constraints = equalities[0];
-    for(std::size_t i = 1; i < equalities.size(); ++i)
+    for (std::size_t i = 1; i < equalities.size(); ++i)
       constraints = and2tc(constraints, equalities[i]);
 
     // and add it to the goto program
@@ -578,7 +578,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   fine_timet symex_start = current_time();
   try
   {
-    if(options.get_bool_option("schedule"))
+    if (options.get_bool_option("schedule"))
     {
       result = symex->generate_schedule_formula();
     }
@@ -588,19 +588,19 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     }
   }
 
-  catch(std::string &error_str)
+  catch (std::string &error_str)
   {
     log_error("{}", error_str);
     return smt_convt::P_ERROR;
   }
 
-  catch(const char *error_str)
+  catch (const char *error_str)
   {
     log_error("{}", error_str);
     return smt_convt::P_ERROR;
   }
 
-  catch(std::bad_alloc &)
+  catch (std::bad_alloc &)
   {
     log_error("Out of memory\n");
     return smt_convt::P_ERROR;
@@ -615,24 +615,24 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     time2string(symex_stop - symex_start),
     eq->SSA_steps.size());
 
-  if(options.get_bool_option("double-assign-check"))
+  if (options.get_bool_option("double-assign-check"))
     eq->check_for_duplicate_assigns();
 
   try
   {
     BigInt ignored;
-    for(auto &a : algorithms)
+    for (auto &a : algorithms)
     {
       a->run(eq->SSA_steps);
       ignored += a->ignored();
     }
 
-    if(
+    if (
       options.get_bool_option("program-only") ||
       options.get_bool_option("program-too"))
       show_program(eq);
 
-    if(options.get_bool_option("program-only"))
+    if (options.get_bool_option("program-only"))
       return smt_convt::P_SMTLIB;
 
     log_status(
@@ -641,7 +641,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       result->remaining_claims,
       BigInt(eq->SSA_steps.size()) - ignored);
 
-    if(options.get_bool_option("document-subgoals"))
+    if (options.get_bool_option("document-subgoals"))
     {
       std::ostringstream oss;
       document_subgoals(*eq.get(), oss);
@@ -649,15 +649,15 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return smt_convt::P_SMTLIB;
     }
 
-    if(options.get_bool_option("show-vcc"))
+    if (options.get_bool_option("show-vcc"))
     {
       show_vcc(eq);
       return smt_convt::P_SMTLIB;
     }
 
-    if(result->remaining_claims == 0)
+    if (result->remaining_claims == 0)
     {
-      if(options.get_bool_option("smt-formula-only"))
+      if (options.get_bool_option("smt-formula-only"))
       {
         log_status(
           "No VCC remaining, no SMT formula will be generated for"
@@ -668,13 +668,13 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return smt_convt::P_UNSATISFIABLE;
     }
 
-    if(!options.get_bool_option("smt-during-symex"))
+    if (!options.get_bool_option("smt-during-symex"))
     {
       runtime_solver =
         std::shared_ptr<smt_convt>(create_solver("", ns, options));
     }
 
-    if(
+    if (
       options.get_bool_option("multi-property") &&
       options.get_bool_option("base-case"))
       return multi_property_check(eq, result->remaining_claims);
@@ -682,19 +682,19 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     return run_decision_procedure(runtime_solver, eq);
   }
 
-  catch(std::string &error_str)
+  catch (std::string &error_str)
   {
     log_error("{}", error_str);
     return smt_convt::P_ERROR;
   }
 
-  catch(const char *error_str)
+  catch (const char *error_str)
   {
     log_error("{}", error_str);
     return smt_convt::P_ERROR;
   }
 
-  catch(std::bad_alloc &)
+  catch (std::bad_alloc &)
   {
     log_error("Out of memory\n");
     return smt_convt::P_ERROR;
@@ -726,14 +726,14 @@ smt_convt::resultt bmct::multi_property_check(
   const bool is_fail_fast = !fail_fast.empty() ? true : false;
   const int fail_fast_limit = is_fail_fast ? stoi(fail_fast) : 0;
   int fail_fast_cnt = 0;
-  if(is_fail_fast && fail_fast_limit < 0)
+  if (is_fail_fast && fail_fast_limit < 0)
   {
     log_error("the value of multi-fail-fast should be positive!");
     abort();
   }
 
   // TODO: This is the place to check a cache
-  for(size_t i = 1; i <= remaining_claims; i++)
+  for (size_t i = 1; i <= remaining_claims; i++)
     jobs.emplace(i);
 
   /* This is a JOB that will:
@@ -761,7 +761,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &fail_fast_limit,
                        &fail_fast_cnt](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found.
-    if(is_fail_fast && fail_fast_cnt >= fail_fast_limit)
+    if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
 
     // Since this is just a copy, we probably don't need a lock
@@ -789,10 +789,10 @@ smt_convt::resultt bmct::multi_property_check(
 
     // This try-catch is mainly for fail-fast.
 
-    if(result == smt_convt::P_SATISFIABLE)
+    if (result == smt_convt::P_SATISFIABLE)
     {
       bool is_compact_trace = true;
-      if(
+      if (
         options.get_bool_option("no-slice") &&
         !options.get_bool_option("compact-trace"))
         is_compact_trace = false;
@@ -804,14 +804,14 @@ smt_convt::resultt bmct::multi_property_check(
       // to avoid double verifying the claims that are already verified
       std::string cmt_loc = "";
 
-      for(const auto &step : goto_trace.steps)
-        if(step.type == goto_trace_stept::ASSERT)
+      for (const auto &step : goto_trace.steps)
+        if (step.type == goto_trace_stept::ASSERT)
         {
           // since we only handle one claim at a time
           // we will/should not overwrite the loc
           assert(cmt_loc == "");
           std::string loc;
-          if(step.pc->location.is_nil())
+          if (step.pc->location.is_nil())
             loc = "nil";
           else
             loc = step.pc->location.as_string();
@@ -825,7 +825,7 @@ smt_convt::resultt bmct::multi_property_check(
 
       bool is_unverified = false;
 
-      if(is_goto_cov)
+      if (is_goto_cov)
       {
         reached_mul_claims.emplace(cmt_loc);
         is_unverified = true;
@@ -837,10 +837,10 @@ smt_convt::resultt bmct::multi_property_check(
         is_unverified = ins;
       }
 
-      if(is_unverified || options.get_bool_option("keep-verified-claims"))
+      if (is_unverified || options.get_bool_option("keep-verified-claims"))
       {
         std::string output_file = options.get_option("cex-output");
-        if(output_file != "")
+        if (output_file != "")
         {
           std::ofstream out(fmt::format("{}-{}", ce_counter++, output_file));
           show_goto_trace(out, ns, goto_trace);
@@ -868,12 +868,12 @@ smt_convt::resultt bmct::multi_property_check(
   std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
   // For coverage
-  if(is_goto_cov)
+  if (is_goto_cov)
   {
     int total = goto_coveraget().get_total_instrument();
     int tracked_instance = reached_mul_claims.size();
 
-    if(total)
+    if (total)
     {
       log_success("\n[Coverage]\n");
       // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
@@ -882,11 +882,11 @@ smt_convt::resultt bmct::multi_property_check(
     }
 
     // show claims
-    if(options.get_bool_option("goto-coverage-claims"))
+    if (options.get_bool_option("goto-coverage-claims"))
     {
       // reached claims:
       log_result("Reached Assertions Instances: ");
-      for(const auto &claim : reached_mul_claims)
+      for (const auto &claim : reached_mul_claims)
       {
         log_status("  {}", claim);
       }
@@ -894,7 +894,7 @@ smt_convt::resultt bmct::multi_property_check(
 
     //TODO: show unreached claims
 
-    if(total_instance != 0)
+    if (total_instance != 0)
       log_result(
         "Assertion Instances Coverage: {}%",
         tracked_instance * 100.0 / total_instance);

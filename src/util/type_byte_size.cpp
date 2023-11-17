@@ -34,14 +34,14 @@ BigInt type_sizet::member_offset_bits(
   BigInt result = 0;
 
   // empty union generate an array
-  if(!is_struct_type(type))
+  if (!is_struct_type(type))
     return result;
 
   unsigned idx = 0;
   const struct_type2t &thetype = to_struct_type(type);
-  for(auto const &it : thetype.members)
+  for (auto const &it : thetype.members)
   {
-    if(thetype.member_names[idx] == member.as_string())
+    if (thetype.member_names[idx] == member.as_string())
       break;
 
     result += size_bits(it);
@@ -74,7 +74,7 @@ BigInt type_byte_size_default(
   {
     return type_byte_size(type, ns);
   }
-  catch(const array_type2t::dyn_sized_array_excp &e)
+  catch (const array_type2t::dyn_sized_array_excp &e)
   {
     return defaultval;
   }
@@ -82,7 +82,7 @@ BigInt type_byte_size_default(
 
 BigInt type_sizet::size_bits(const type2tc &type) const
 {
-  switch(type->type_id)
+  switch (type->type_id)
   {
   // This is a gcc extension.
   // https://gcc.gnu.org/onlinedocs/gcc-4.8.0/gcc/Pointer-Arith.html
@@ -93,13 +93,13 @@ BigInt type_sizet::size_bits(const type2tc &type) const
     return 0;
 
   case type2t::symbol_id:
-    if(ns)
+    if (ns)
       return size_bits(ns->follow(type));
     log_error("Symbolic type id in size_typet::size_bits\n{}", *type);
     abort();
 
   case type2t::cpp_name_id:
-    if(ns)
+    if (ns)
       return size_bits(ns->follow(type));
     log_error("Symbolic C++ type id in size_typet::size_bits\n{}", *type);
     abort();
@@ -122,12 +122,12 @@ BigInt type_sizet::size_bits(const type2tc &type) const
     // Attempt to compute constant array offset. If we can't, we can't
     // reasonably return anything anyway, so throw.
     const array_data &t2 = static_cast<const array_data &>(*type);
-    if(t2.size_is_infinite)
+    if (t2.size_is_infinite)
       throw array_type2t::inf_sized_array_excp();
 
     expr2tc arrsize = t2.array_size;
     simplify(arrsize);
-    if(!is_constant_int2t(arrsize))
+    if (!is_constant_int2t(arrsize))
       throw array_type2t::dyn_sized_array_excp(arrsize);
 
     BigInt subsize = size_bits(t2.subtype);
@@ -141,7 +141,7 @@ BigInt type_sizet::size_bits(const type2tc &type) const
     // so that they all start on wourd boundries. Also add any trailing bytes
     // necessary to make arrays align properly if malloc'd, see C89 6.3.3.4.
     BigInt accumulated_size = 0;
-    for(auto const &it : to_struct_type(type).members)
+    for (auto const &it : to_struct_type(type).members)
       accumulated_size += size_bits(it);
 
     // At the end of that, the tests above should have rounded accumulated size
@@ -155,7 +155,7 @@ BigInt type_sizet::size_bits(const type2tc &type) const
     // Very simple: the largest field size, rounded up to a word boundry for
     // array allocation alignment.
     BigInt max_size = 0;
-    for(auto const &it : to_union_type(type).members)
+    for (auto const &it : to_union_type(type).members)
       max_size = std::max(max_size, size_bits(it));
     return max_size;
   }
@@ -190,7 +190,7 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
    * though, since that would mean we'd unnecessarily recurse multiple times
    * into the type. */
 
-  switch(type->type_id)
+  switch (type->type_id)
   {
   // This is a gcc extension.
   // https://gcc.gnu.org/onlinedocs/gcc-4.8.0/gcc/Pointer-Arith.html
@@ -201,13 +201,13 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
     return bitsize(0);
 
   case type2t::symbol_id:
-    if(ns)
+    if (ns)
       return size_bits_expr(ns->follow(type));
     log_error("Symbolic type id in type_size_t::size_bits_expr\n{}", *type);
     abort();
 
   case type2t::cpp_name_id:
-    if(ns)
+    if (ns)
       return size_bits_expr(ns->follow(type));
     log_error("Symbolic C++ type id in type_size_t::size_bits_expr\n{}", *type);
     abort();
@@ -229,7 +229,7 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
   {
     const array_data &t2 = static_cast<const array_data &>(*type);
 
-    if(t2.size_is_infinite)
+    if (t2.size_is_infinite)
       throw array_type2t::inf_sized_array_excp();
 
     expr2tc arrsize = t2.array_size;
@@ -238,12 +238,12 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
     expr2tc subsize = size_bits_expr(t2.subtype);
     simplify(subsize);
 
-    if(is_constant_int2t(arrsize) && is_constant_int2t(subsize))
+    if (is_constant_int2t(arrsize) && is_constant_int2t(subsize))
       return bitsize(
         to_constant_int2t(subsize).value * to_constant_int2t(arrsize).value);
 
     type2tc t = bitsize_type2();
-    if(arrsize->type != t)
+    if (arrsize->type != t)
       arrsize = typecast2tc(t, arrsize);
     return mul2tc(t, subsize, arrsize);
   }
@@ -256,12 +256,12 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
     BigInt acc_cnst = 0;
     expr2tc acc_dyn;
     type2tc t = bitsize_type2();
-    for(const type2tc &member : to_struct_type(type).members)
+    for (const type2tc &member : to_struct_type(type).members)
     {
       expr2tc s = size_bits_expr(member);
-      if(is_constant_int2t(s))
+      if (is_constant_int2t(s))
         acc_cnst += to_constant_int2t(s).value;
-      else if(acc_dyn)
+      else if (acc_dyn)
         acc_dyn = add2tc(t, acc_dyn, s);
       else
         acc_dyn = s;
@@ -271,10 +271,10 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
     // up to a size that contains the required trailing padding for array
     // allocation alignment.
 
-    if(!acc_dyn)
+    if (!acc_dyn)
       return bitsize(acc_cnst);
 
-    if(acc_cnst == 0)
+    if (acc_cnst == 0)
       return acc_dyn;
 
     return add2tc(t, bitsize(acc_cnst), acc_dyn);
@@ -287,21 +287,21 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
     BigInt max_cnst = 0;
     expr2tc max_dyn;
     type2tc t = bitsize_type2();
-    for(const type2tc &elem : to_union_type(type).members)
+    for (const type2tc &elem : to_union_type(type).members)
     {
       expr2tc s = size_bits_expr(elem);
-      if(is_constant_int2t(s))
+      if (is_constant_int2t(s))
         max_cnst = std::max(max_cnst, to_constant_int2t(s).value);
-      else if(max_dyn)
+      else if (max_dyn)
         max_dyn = if2tc(t, greaterthan2tc(max_dyn, s), max_dyn, s);
       else
         max_dyn = s;
     }
 
-    if(!max_dyn)
+    if (!max_dyn)
       return bitsize(max_cnst);
 
-    if(max_cnst == 0)
+    if (max_cnst == 0)
       return max_dyn;
 
     expr2tc c = bitsize(max_cnst);
@@ -323,7 +323,7 @@ expr2tc type_byte_size_expr(const type2tc &type, const namespacet *ns)
 {
   expr2tc n = type_byte_size_bits_expr(type, ns);
   type2tc t = size_type2();
-  if(is_constant_int2t(n))
+  if (is_constant_int2t(n))
     return gen_long(t, (to_constant_int2t(n).value + 7) / 8);
   type2tc s = bitsize_type2();
   return typecast2tc(t, div2tc(s, add2tc(s, n, bitsize(7)), bitsize(8)));
@@ -331,20 +331,20 @@ expr2tc type_byte_size_expr(const type2tc &type, const namespacet *ns)
 
 expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
 {
-  if(is_symbol2t(expr))
+  if (is_symbol2t(expr))
     return bitsize(0);
 
-  if(is_index2t(expr))
+  if (is_index2t(expr))
   {
     const index2t &index = to_index2t(expr);
 
     expr2tc sub_size;
-    if(is_array_type(index.source_value))
+    if (is_array_type(index.source_value))
     {
       const array_type2t &arr_type = to_array_type(index.source_value->type);
       sub_size = size_bits_expr(arr_type.subtype);
     }
-    else if(is_string_type(index.source_value))
+    else if (is_string_type(index.source_value))
     {
       sub_size = gen_ulong(64);
     }
@@ -358,7 +358,7 @@ expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
      * standard address space. */
     expr2tc result;
     type2tc t = bitsize_type2();
-    if(is_constant_int2t(sub_size) && is_constant_int2t(index.index))
+    if (is_constant_int2t(sub_size) && is_constant_int2t(index.index))
     {
       const constant_int2t &index_val = to_constant_int2t(index.index);
       const constant_int2t &ss_val = to_constant_int2t(sub_size);
@@ -368,9 +368,9 @@ expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
     {
       /* Non constant, create multiply. */
       expr2tc the_index = index.index;
-      if(sub_size->type != t)
+      if (sub_size->type != t)
         sub_size = typecast2tc(t, sub_size);
-      if(the_index->type != t)
+      if (the_index->type != t)
         the_index = typecast2tc(t, the_index);
 
       result = mul2tc(t, sub_size, the_index);
@@ -382,12 +382,12 @@ expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
     return result;
   }
 
-  if(is_member2t(expr))
+  if (is_member2t(expr))
   {
     const member2t &memb = to_member2t(expr);
 
     BigInt result;
-    if(is_struct_type(memb.source_value->type))
+    if (is_struct_type(memb.source_value->type))
     {
       result = member_offset_bits(memb.source_value->type, memb.member);
     }
@@ -404,27 +404,27 @@ expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
     return res_expr;
   }
 
-  if(is_constant_expr(expr))
+  if (is_constant_expr(expr))
   {
     // This is a constant struct, array, union, string, etc. There's nothing
     // at a lower level; the offset is zero.
     return bitsize(0);
   }
 
-  if(is_typecast2t(expr))
+  if (is_typecast2t(expr))
   {
     // Blast straight through.
     return pointer_offset_bits(to_typecast2t(expr).from);
   }
 
-  if(is_dynamic_object2t(expr))
+  if (is_dynamic_object2t(expr))
   {
     // This is a dynamic object represented something allocated; from the static
     // pointer analysis. Assume that this is the bottom of the expression.
     return bitsize(0);
   }
 
-  if(is_dereference2t(expr))
+  if (is_dereference2t(expr))
   {
     // This is a dereference at the base of a set of index/members. Here, we
     // can in theory end up evaluating across a large set of object types. So
@@ -451,19 +451,19 @@ expr2tc compute_pointer_offset(const expr2tc &expr, const namespacet *ns)
 
 const expr2tc &get_base_object(const expr2tc &expr)
 {
-  if(is_index2t(expr))
+  if (is_index2t(expr))
     return get_base_object(to_index2t(expr).source_value);
 
-  if(is_member2t(expr))
+  if (is_member2t(expr))
     return get_base_object(to_member2t(expr).source_value);
 
-  if(is_typecast2t(expr))
+  if (is_typecast2t(expr))
     return get_base_object(to_typecast2t(expr).from);
 
-  if(is_address_of2t(expr))
+  if (is_address_of2t(expr))
     return get_base_object(to_address_of2t(expr).ptr_obj);
 
-  if(is_dereference2t(expr))
+  if (is_dereference2t(expr))
     return get_base_object(to_dereference2t(expr).value);
 
   return expr;

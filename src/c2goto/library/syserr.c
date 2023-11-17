@@ -99,7 +99,7 @@ char *strerror(int errnum)
 
   int sys_nerr = sizeof(sys_errlist) / sizeof(sys_errlist[0]);
 
-  if(errnum < 0 || errnum >= sys_nerr)
+  if (errnum < 0 || errnum >= sys_nerr)
     return "Unknown error";
 
   return sys_errlist[errnum];

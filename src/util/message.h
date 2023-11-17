@@ -68,7 +68,7 @@ struct messaget
       Args &&...args) const
     {
       FILE *f = target(mod, lvl);
-      if(!f)
+      if (!f)
         return false;
       println(f, lvl, format, fmt::make_format_args(args...));
       return true;

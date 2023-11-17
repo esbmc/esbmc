@@ -18,7 +18,7 @@ expr2tc c_sizeof(const type2tc &src, const namespacet &ns)
   // A trick to deal with infinitely sized arrays. This only
   // comes useful when we need to "bound" infinite sizes
   // (e.g., in GOTO to C translator).
-  if(is_array_type(t) && to_array_type(t).size_is_infinite)
+  if (is_array_type(t) && to_array_type(t).size_is_infinite)
   {
     // Right now we just introduce a symbol __ESBMC_INF_SIZE to represent
     // the "infinity" expression in irep1. (As of now migrating

@@ -46,7 +46,7 @@ public:
   explicit claim_slicer(const size_t claim_to_keep)
     : claim_to_keep(claim_to_keep)
   {
-    if(!claim_to_keep)
+    if (!claim_to_keep)
     {
       log_error("All the claims start from 1 (use --show-claims)");
       abort();
@@ -87,7 +87,7 @@ public:
   {
     sliced = 0;
     fine_timet algorithm_start = current_time();
-    for(auto &step : boost::adaptors::reverse(eq))
+    for (auto &step : boost::adaptors::reverse(eq))
       run_on_step(step);
     fine_timet algorithm_stop = current_time();
     log_status(

@@ -58,7 +58,7 @@ public:
   void dump() const override
   {
     log_debug("tuple-node", "name {}", name);
-    for(auto const &e : elements)
+    for (auto const &e : elements)
       e->dump();
   }
 

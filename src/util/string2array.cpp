@@ -25,18 +25,18 @@ void string2array(const exprt &src, exprt &dest)
   dest.operands().resize(string_size);
 
   exprt::operandst::iterator it = dest.operands().begin();
-  for(unsigned i = 0; i < string_size; i++, it++)
+  for (unsigned i = 0; i < string_size; i++, it++)
   {
     int ch = i >= actual_size ? 0 : str[i];
 
-    if(char_is_unsigned)
+    if (char_is_unsigned)
       ch = (unsigned char)ch;
 
     exprt &op = *it;
 
     op = from_integer(ch, char_type);
 
-    if(ch >= 32 && ch <= 126)
+    if (ch >= 32 && ch <= 126)
     {
       char ch_str[2];
       ch_str[0] = ch;

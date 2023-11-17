@@ -717,9 +717,9 @@ float sigmoidFunction(float u)
   index = (int)u * 100;
   index = index + 2000;
 
-  if(index < 0)
+  if (index < 0)
     return 0;
-  else if(index >= 4000)
+  else if (index >= 4000)
     return 1;
   else
     return lookup[index];
@@ -734,7 +734,7 @@ float dSigmoidFunction(float u)
 
 float ReLUFunction(float u)
 {
-  if(u < 0)
+  if (u < 0)
   {
     return 0.0f;
   }
@@ -743,7 +743,7 @@ float ReLUFunction(float u)
 
 float dReLUFunction(float u)
 {
-  if(u < 0)
+  if (u < 0)
   {
     return 0.0f;
   }
@@ -900,7 +900,7 @@ cudnnStatus_t cudnnActivationForward(
   int i = 0;
   int limit = 5;
 
-  for(i = 0; i < limit; i++)
+  for (i = 0; i < limit; i++)
   {
     y[i] = sigmoidFunction(x[i]);
   }
@@ -922,7 +922,7 @@ cudnnStatus_t cudnnActivationBackward(
   float *dx)
 {
   int contador = 0;
-  for(contador = 0; contador < 5; contador++)
+  for (contador = 0; contador < 5; contador++)
   {
     dx[contador] = (y[contador] * (1 - y[contador])) * dy[contador];
   }
@@ -960,15 +960,15 @@ float *universal_img2col(
 
   float *columns = (float *)__ESBMC_alloca(output_size * sizeof(float));
 
-  for(int c = 0; c < channels; c++)
+  for (int c = 0; c < channels; c++)
   {
-    for(int h = 0; h < output_height; h++)
+    for (int h = 0; h < output_height; h++)
     {
-      for(int w = 0; w < output_width; w++)
+      for (int w = 0; w < output_width; w++)
       {
-        for(int i = 0; i < block_height; i++)
+        for (int i = 0; i < block_height; i++)
         {
-          for(int j = 0; j < block_width; j++)
+          for (int j = 0; j < block_width; j++)
           {
             int row = c * block_height * block_width + i * block_width + j;
             int col = h * output_width + w;
@@ -977,7 +977,7 @@ float *universal_img2col(
             int x = w * stride + j - padding;
 
             // Check if current position is inside padding area
-            if(y >= 0 && y < height && x >= 0 && x < width)
+            if (y >= 0 && y < height && x >= 0 && x < width)
             {
               columns[row * output_height * output_width + col] =
                 data[(c * height + y) * width + x];
@@ -1073,12 +1073,12 @@ cudnnStatus_t cudnnConvolutionForward(
   float *kernel = universal_img2col(
     w, &krows, &kcols, channals, wwidth, wwidth, wwidth, wwidth);
 
-  for(int contadorZ = 0; contadorZ < rows; contadorZ++)
+  for (int contadorZ = 0; contadorZ < rows; contadorZ++)
   {
-    for(int contadorY = 0; contadorY < kcols; contadorY++)
+    for (int contadorY = 0; contadorY < kcols; contadorY++)
     {
       float result = 0;
-      for(int contadorX = 0; contadorX < cols; contadorX++)
+      for (int contadorX = 0; contadorX < cols; contadorX++)
       {
         result = (img[contadorX + contadorZ * cols] *
                   kernel[contadorX * kcols + contadorY]) +

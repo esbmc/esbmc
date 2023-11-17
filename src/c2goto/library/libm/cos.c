@@ -12,7 +12,7 @@ __ESBMC_HIDE:;
   x = fmod(x + M_PI, M_PI * 2) - M_PI; // restrict x so that -M_PI < x < M_PI
   double xsqr = x * x;
   double ab = 1;
-  while((ab > 1e-16) && (p < 15))
+  while ((ab > 1e-16) && (p < 15))
   {
     p++;
     t = (-t * xsqr) / (((p << 1) - 1) * (p << 1));

@@ -88,7 +88,7 @@ SCENARIO("irep2 hashing", "[core][irep2]")
 
     THEN("Expressions and hashes should be equal to itself")
     {
-      for(auto &e : expressions)
+      for (auto &e : expressions)
       {
         test_constructed_equally(e.first, e.first);
         test_constructed_equally(e.second, e.second);
@@ -96,7 +96,7 @@ SCENARIO("irep2 hashing", "[core][irep2]")
     }
     THEN("Expressions and hashes between pairs should be equal")
     {
-      for(auto &e : expressions)
+      for (auto &e : expressions)
         test_constructed_equally(e.first, e.second);
     }
   }
@@ -110,7 +110,7 @@ SCENARIO("irep2 hashing", "[core][irep2]")
       {gen_testing_struct(1, 2), gen_testing_struct(1, 1)}};
     THEN("Expressions and hashes between pairs should not be equal")
     {
-      for(auto &e : expressions)
+      for (auto &e : expressions)
         test_constructed_differently(e.first, e.second);
     }
   }

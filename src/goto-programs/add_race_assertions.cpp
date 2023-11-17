@@ -24,10 +24,10 @@ public:
       deref ? "__ESBMC_deref_" + id2string(object) : "tmp_" + id2string(object);
 
     const symbolt *s = context.find_symbol(identifier);
-    if(s != nullptr)
+    if (s != nullptr)
       return *s;
 
-    if(!deref)
+    if (!deref)
       w_guards.push_back(identifier);
 
     type2tc index = array_type2tc(get_bool_type(), expr2tc(), true);
@@ -52,7 +52,7 @@ public:
   {
     exprt expr = symbol_expr(get_guard_symbol(object, original_expr, deref));
 
-    if(original_expr.is_index() && expr.type().is_array())
+    if (original_expr.is_index() && expr.type().is_array())
     {
       index_exprt full_expr = to_index_expr(original_expr);
 
@@ -91,7 +91,7 @@ void w_guardst::add_initialization(goto_programt &goto_program) const
   goto_programt::targett t = goto_program.instructions.begin();
   const namespacet ns(context);
 
-  for(const auto &w_guard : w_guards)
+  for (const auto &w_guard : w_guards)
   {
     const symbolt &s = *ns.lookup(w_guard);
     exprt symbol = symbol_expr(s);
@@ -118,14 +118,14 @@ void add_race_assertions(
 
   bool is_atomic = false;
 
-  Forall_goto_program_instructions(i_it, goto_program)
+  Forall_goto_program_instructions (i_it, goto_program)
   {
     goto_programt::instructiont &instruction = *i_it;
 
-    if(instruction.is_atomic_begin())
+    if (instruction.is_atomic_begin())
       is_atomic = true;
 
-    if(
+    if (
       (instruction.is_assign() || instruction.is_other() ||
        instruction.is_return()) &&
       !is_atomic)
@@ -133,7 +133,7 @@ void add_race_assertions(
       exprt tmp_expr = migrate_expr_back(instruction.code);
       rw_sett rw_set(ns, value_sets, i_it, to_code(tmp_expr));
 
-      if(rw_set.entries.empty())
+      if (rw_set.entries.empty())
         continue;
 
       goto_programt::instructiont original_instruction;
@@ -143,7 +143,7 @@ void add_race_assertions(
       i_it++;
 
       // now add assignments for what is written -- set
-      forall_rw_set_entries(e_it, rw_set) if(e_it->second.w)
+      forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
@@ -161,7 +161,7 @@ void add_race_assertions(
       // We need to keep all instructions before the return,
       // so when we process the return we need add the
       // original instruction at the end
-      if(!original_instruction.is_return())
+      if (!original_instruction.is_return())
       {
         goto_programt::targett t = goto_program.insert(i_it);
         *t = original_instruction;
@@ -170,7 +170,7 @@ void add_race_assertions(
 
       // now add assignments for what is written -- reset
       forall_rw_set_entries(
-        e_it, rw_set) if(e_it->second.w || e_it->second.deref)
+        e_it, rw_set) if (e_it->second.w || e_it->second.deref)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
@@ -196,7 +196,7 @@ void add_race_assertions(
         i_it = ++t;
       }
 
-      if(original_instruction.is_return())
+      if (original_instruction.is_return())
       {
         goto_programt::targett t = goto_program.insert(i_it);
         *t = original_instruction;
@@ -206,7 +206,7 @@ void add_race_assertions(
       i_it--; // the for loop already counts us up
     }
 
-    if(instruction.is_atomic_end())
+    if (instruction.is_atomic_end())
       is_atomic = false;
   }
 
@@ -233,15 +233,15 @@ void add_race_assertions(
 {
   w_guardst w_guards(context);
 
-  Forall_goto_functions(f_it, goto_functions)
-    if(f_it->first != goto_functions.main_id())
+  Forall_goto_functions (f_it, goto_functions)
+    if (f_it->first != goto_functions.main_id())
       add_race_assertions(value_sets, context, f_it->second.body, w_guards);
 
   // get "main"
   goto_functionst::function_mapt::iterator m_it =
     goto_functions.function_map.find(goto_functions.main_id());
 
-  if(m_it != goto_functions.function_map.end())
+  if (m_it != goto_functions.function_map.end())
   {
     goto_programt &main = m_it->second.body;
     w_guards.add_initialization(main);

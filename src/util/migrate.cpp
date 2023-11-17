@@ -29,7 +29,7 @@ const BigInt &binary2bigint(irep_idt binary, bool is_signed)
     (is_signed) ? bin2int_map_signed : bin2int_map_unsigned;
 
   std::map<irep_idt, BigInt>::iterator it = ref.find(binary);
-  if(it != ref.end())
+  if (it != ref.end())
     return it->second;
   BigInt val = binary2integer(binary.as_string(), is_signed);
 
@@ -40,17 +40,17 @@ const BigInt &binary2bigint(irep_idt binary, bool is_signed)
 
 static expr2tc fixup_containerof_in_sizeof(const expr2tc &_expr)
 {
-  if(is_nil_expr(_expr))
+  if (is_nil_expr(_expr))
     return _expr;
 
   expr2tc expr = _expr;
 
   // Blast through all typecasts
-  while(is_typecast2t(expr))
+  while (is_typecast2t(expr))
     expr = to_typecast2t(expr).from;
 
   // Base must be null; must start with an addressof.
-  if(!is_address_of2t(expr))
+  if (!is_address_of2t(expr))
     return _expr;
 
   const address_of2t &addrof = to_address_of2t(expr);
@@ -59,9 +59,9 @@ static expr2tc fixup_containerof_in_sizeof(const expr2tc &_expr)
 
 static type2tc migrate_type0(const typet &type)
 {
-  if(type.id() == typet::t_bool)
+  if (type.id() == typet::t_bool)
   {
-    if(type.get_bool("#bitfield"))
+    if (type.get_bool("#bitfield"))
     {
       assert(!type.width().empty());
       return get_uint_type(strtol(type.width().c_str(), nullptr, 10));
@@ -69,40 +69,40 @@ static type2tc migrate_type0(const typet &type)
     return get_bool_type();
   }
 
-  if(type.id() == typet::t_signedbv)
+  if (type.id() == typet::t_signedbv)
   {
     irep_idt width = type.width();
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
     return signedbv_type2tc(iwidth);
   }
 
-  if(type.id() == typet::t_unsignedbv)
+  if (type.id() == typet::t_unsignedbv)
   {
     irep_idt width = type.width();
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
     return unsignedbv_type2tc(iwidth);
   }
 
-  if(type.id() == "c_enum" || type.id() == "incomplete_c_enum")
+  if (type.id() == "c_enum" || type.id() == "incomplete_c_enum")
   {
     // 6.7.2.2.3 of C99 says enumeration values shall have "int" types.
     return signedbv_type2tc(config.ansi_c.int_width);
   }
 
-  if(type.id() == typet::t_intcap)
+  if (type.id() == typet::t_intcap)
     return signedbv_type2tc(config.ansi_c.capability_width());
 
-  if(type.id() == typet::t_uintcap)
+  if (type.id() == typet::t_uintcap)
     return unsignedbv_type2tc(config.ansi_c.capability_width());
 
-  if(type.id() == typet::t_array)
+  if (type.id() == typet::t_array)
   {
     type2tc subtype = migrate_type(type.subtype());
 
     expr2tc size;
     bool is_infinite = false;
 
-    if(type.find(typet::a_size).id() == "infinity")
+    if (type.find(typet::a_size).id() == "infinity")
     {
       is_infinite = true;
     }
@@ -116,7 +116,7 @@ static type2tc migrate_type0(const typet &type)
 
     return array_type2tc(subtype, size, is_infinite);
   }
-  else if(type.id() == typet::t_vector)
+  else if (type.id() == typet::t_vector)
   {
     type2tc subtype = migrate_type(type.subtype());
     expr2tc size;
@@ -134,7 +134,7 @@ static type2tc migrate_type0(const typet &type)
     return vector_type2tc(subtype, size);
   }
 
-  if(type.id() == typet::t_pointer)
+  if (type.id() == typet::t_pointer)
   {
     // Don't recursively look up anything through pointers.
     type2tc subtype = migrate_type(type.subtype());
@@ -142,13 +142,13 @@ static type2tc migrate_type0(const typet &type)
     return pointer_type2tc(subtype);
   }
 
-  if(type.id() == typet::t_empty)
+  if (type.id() == typet::t_empty)
     return get_empty_type();
 
-  if(type.id() == typet::t_symbol)
+  if (type.id() == typet::t_symbol)
     return symbol_type2tc(type.identifier());
 
-  if(type.id() == typet::t_struct)
+  if (type.id() == typet::t_struct)
   {
     std::vector<type2tc> members;
     std::vector<irep_idt> names;
@@ -156,7 +156,7 @@ static type2tc migrate_type0(const typet &type)
     const struct_typet &strct = to_struct_type(type);
     const struct_union_typet::componentst comps = strct.components();
 
-    for(const auto &comp : comps)
+    for (const auto &comp : comps)
     {
       type2tc ref = migrate_type((const typet &)comp.type());
 
@@ -166,7 +166,7 @@ static type2tc migrate_type0(const typet &type)
     }
 
     irep_idt name = type.get("tag");
-    if(name.as_string() == "")
+    if (name.as_string() == "")
       name = type.get("name"); // C++
 
     bool packed = type.get_bool("packed");
@@ -174,7 +174,7 @@ static type2tc migrate_type0(const typet &type)
     return struct_type2tc(members, names, pretty_names, name, packed);
   }
 
-  if(type.id() == typet::t_union)
+  if (type.id() == typet::t_union)
   {
     std::vector<type2tc> members;
     std::vector<irep_idt> names;
@@ -182,7 +182,7 @@ static type2tc migrate_type0(const typet &type)
     const struct_union_typet &strct = to_union_type(type);
     const struct_union_typet::componentst comps = strct.components();
 
-    for(const auto &comp : comps)
+    for (const auto &comp : comps)
     {
       type2tc ref = migrate_type((const typet &)comp.type());
 
@@ -196,7 +196,7 @@ static type2tc migrate_type0(const typet &type)
     return union_type2tc(members, names, pretty_names, name);
   }
 
-  if(type.id() == typet::t_fixedbv)
+  if (type.id() == typet::t_fixedbv)
   {
     unsigned int width_bits = to_fixedbv_type(type).get_width();
     unsigned int int_bits = to_fixedbv_type(type).get_integer_bits();
@@ -204,7 +204,7 @@ static type2tc migrate_type0(const typet &type)
     return fixedbv_type2tc(width_bits, int_bits);
   }
 
-  if(type.id() == typet::t_floatbv)
+  if (type.id() == typet::t_floatbv)
   {
     unsigned int frac_bits = to_floatbv_type(type).get_f();
     unsigned int expo_bits = to_floatbv_type(type).get_e();
@@ -212,7 +212,7 @@ static type2tc migrate_type0(const typet &type)
     return floatbv_type2tc(frac_bits, expo_bits);
   }
 
-  if(type.id() == typet::t_code)
+  if (type.id() == typet::t_code)
   {
     const code_typet &ref = static_cast<const code_typet &>(type);
 
@@ -220,11 +220,11 @@ static type2tc migrate_type0(const typet &type)
     std::vector<irep_idt> arg_names;
     bool ellipsis = false;
 
-    if(ref.has_ellipsis())
+    if (ref.has_ellipsis())
       ellipsis = true;
 
     const code_typet::argumentst &old_args = ref.arguments();
-    for(const auto &old_arg : old_args)
+    for (const auto &old_arg : old_args)
     {
       type2tc tmp = migrate_type(old_arg.type());
       args.push_back(tmp);
@@ -234,7 +234,7 @@ static type2tc migrate_type0(const typet &type)
     // Don't migrate return type if it's a symbol. There are a variety of C++
     // things where a method returns itself, or similar.
     type2tc ret_type;
-    if(type.return_type().id() == typet::t_symbol)
+    if (type.return_type().id() == typet::t_symbol)
     {
       ret_type = symbol_type2tc(type.return_type().identifier());
     }
@@ -246,7 +246,7 @@ static type2tc migrate_type0(const typet &type)
     return code_type2tc(args, ret_type, arg_names, ellipsis);
   }
 
-  if(type.id() == "cpp-name")
+  if (type.id() == "cpp-name")
   {
     // No type,
     std::vector<type2tc> template_args;
@@ -255,10 +255,10 @@ static type2tc migrate_type0(const typet &type)
     irep_idt name = cpy.get_sub()[0].identifier();
 
     // Fetch possibly nonexistant template arguments.
-    if(cpy.operands().size() == 2)
+    if (cpy.operands().size() == 2)
     {
       assert(cpy.get_sub()[0].id() == "template_args");
-      forall_irep(it, cpy.get_sub())
+      forall_irep (it, cpy.get_sub())
       {
         assert((*it).id() == "type");
         type2tc tmptype = migrate_type((*it).type());
@@ -269,31 +269,31 @@ static type2tc migrate_type0(const typet &type)
     return cpp_name_type2tc(name, template_args);
   }
 
-  if(type.id().as_string().size() == 0 || type.id() == "nil")
+  if (type.id().as_string().size() == 0 || type.id() == "nil")
   {
     return get_empty_type();
   }
 
-  if(type.id() == "ellipsis")
+  if (type.id() == "ellipsis")
   {
     // Eh? Ellipsis isn't a type. It's a special case.
     return get_empty_type();
   }
 
-  if(type.id() == "destructor")
+  if (type.id() == "destructor")
   {
     // This is a destructor return type. Which is nil.
     return get_empty_type();
   }
 
-  if(type.id() == "constructor")
+  if (type.id() == "constructor")
   {
     // New operator returns something; constructor is a void method on an
     // existing object.
     return get_empty_type();
   }
 
-  if(type.id() == "incomplete_array")
+  if (type.id() == "incomplete_array")
   {
     // Hurrr. Mark as being infinite in size.
     // XXX find a way of ensuring that only extern-qualified arrays are handled
@@ -305,7 +305,7 @@ static type2tc migrate_type0(const typet &type)
     return array_type2tc(subtype, size, true);
   }
 
-  if(type.id() == "incomplete_struct" || type.id() == "incomplete_union")
+  if (type.id() == "incomplete_struct" || type.id() == "incomplete_union")
   {
     // Only time that this occurs and the type checking code doesn't complain,
     // is when we take the /address/ of an incomplete struct. That's fine,
@@ -315,7 +315,7 @@ static type2tc migrate_type0(const typet &type)
     return array_type2tc(get_uint8_type(), expr2tc(), true);
   }
 
-  if(type.id() == typet::t_string)
+  if (type.id() == typet::t_string)
   {
     irep_idt width = type.width();
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
@@ -328,7 +328,7 @@ static type2tc migrate_type0(const typet &type)
 
 type2tc migrate_type(const typet &type)
 {
-  if(type.can_carry_provenance())
+  if (type.can_carry_provenance())
     assert(
       type.id() == typet::t_pointer || type.id() == "c_enum" ||
       type.id() == typet::t_intcap || type.id() == typet::t_uintcap);
@@ -341,26 +341,26 @@ static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)
   // For some arithmetic expr, decide on the result of operating on them.
 
   // First, if either are pointers, use that.
-  if(side1.type().id() == typet::t_pointer)
+  if (side1.type().id() == typet::t_pointer)
     return side1.type();
-  if(side2.type().id() == typet::t_pointer)
+  if (side2.type().id() == typet::t_pointer)
     return side2.type();
 
   // Then, fixedbv's/floatbv's take precedence.
-  if(
+  if (
     (side1.type().id() == typet::t_fixedbv) ||
     side1.type().id() == typet::t_floatbv)
     return side1.type();
-  if(
+  if (
     (side2.type().id() == typet::t_fixedbv) ||
     side2.type().id() == typet::t_floatbv)
     return side2.type();
 
   // If one operand is bool, return the other, as that's either bool or will
   // have a higher rank.
-  if(side1.type().id() == typet::t_bool)
+  if (side1.type().id() == typet::t_bool)
     return side2.type();
-  if(side2.type().id() == typet::t_bool)
+  if (side2.type().id() == typet::t_bool)
     return side1.type();
 
   assert(
@@ -373,23 +373,23 @@ static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)
   unsigned int side1_width = atoi(side1.type().width().as_string().c_str());
   unsigned int side2_width = atoi(side2.type().width().as_string().c_str());
 
-  if(side1.type().id() == side2.type().id())
+  if (side1.type().id() == side2.type().id())
   {
-    if(side1_width > side2_width)
+    if (side1_width > side2_width)
       return side1.type();
 
     return side2.type();
   }
 
   // Differing between signed/unsigned bv type. Take unsigned if greatest.
-  if(side1.type().id() == typet::t_unsignedbv && side1_width >= side2_width)
+  if (side1.type().id() == typet::t_unsignedbv && side1_width >= side2_width)
     return side1.type();
 
-  if(side2.type().id() == typet::t_unsignedbv && side2_width >= side1_width)
+  if (side2.type().id() == typet::t_unsignedbv && side2_width >= side1_width)
     return side2.type();
 
   // Otherwise return the signed one;
-  if(side1.type().id() == typet::t_signedbv)
+  if (side1.type().id() == typet::t_signedbv)
     return side1.type();
 
   return side2.type();
@@ -404,10 +404,10 @@ static exprt splice_expr(const exprt &expr)
   exprt expr_recurse = expr;
 
   // Have we reached the bottom?
-  if(expr.operands().size() == 2)
+  if (expr.operands().size() == 2)
   {
     // Finish; optionally deduce type.
-    if(expr.type().id() == "nil")
+    if (expr.type().id() == "nil")
     {
       const typet &subexpr_type = decide_on_expr_type(expr.op0(), expr.op1());
       expr_recurse.type() = subexpr_type;
@@ -431,7 +431,7 @@ static exprt splice_expr(const exprt &expr)
 
   // Pick a type; if the incoming expr has no type, deduce it; if it does have
   // a type, use that one.
-  if(expr.type().id() == "nil")
+  if (expr.type().id() == "nil")
   {
     const typet &subexpr_type = decide_on_expr_type(base, popped);
     expr_twopart.type() = subexpr_type;
@@ -467,7 +467,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   const std::string &thestr = init.as_string();
   // If this is an existing symbol name, then we're not renamed at all. Can't
   // rely on @ and ! symbols in the string "sadly".
-  if(sym)
+  if (sym)
   {
     // This is a level0 name.
 
@@ -482,7 +482,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     type = migrate_type(sym->type);
     return symbol2tc(type, init, symbol2t::level0, 0, 0, 0, 0);
   }
-  if(
+  if (
     init.as_string().compare(0, 3, "cs$") == 0 ||
     init.as_string().compare(0, 8, "kindice$") == 0 ||
     init.as_string().compare(0, 2, "s$") == 0 ||
@@ -499,7 +499,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   size_t end_of_name_pos = at_pos;
 
   size_t and_pos, hash_pos;
-  if(thestr.find("#") == std::string::npos)
+  if (thestr.find("#") == std::string::npos)
   {
     // We're level 1.
     target_level = symbol2t::level1;
@@ -513,7 +513,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     and_pos = thestr.find("&");
     hash_pos = thestr.find("#");
 
-    if(at_pos == std::string::npos)
+    if (at_pos == std::string::npos)
     {
       // However, it's L2 global.
       target_level = symbol2t::level2_global;
@@ -524,7 +524,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   // Whatever level we're at, set the base name to be nonrenamed.
   irep_idt thename = irep_idt(thestr.substr(0, end_of_name_pos));
 
-  if(target_level != symbol2t::level2_global)
+  if (target_level != symbol2t::level2_global)
   {
     std::string atstr = thestr.substr(at_pos + 1, exm_pos - at_pos - 1);
     std::string exmstr = thestr.substr(exm_pos + 1, and_pos - exm_pos - 1);
@@ -537,7 +537,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     assert(endexmptr != exmstr.c_str());
   }
 
-  if(target_level == symbol2t::level1)
+  if (target_level == symbol2t::level1)
   {
     return symbol2tc(type, thename, target_level, level1_num, 0, thread_num, 0);
   }
@@ -556,21 +556,21 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   type2tc type;
 
-  if(expr.id() == "nil")
+  if (expr.id() == "nil")
   {
     new_expr_ref = expr2tc();
   }
-  else if(expr.id() == irept::id_symbol)
+  else if (expr.id() == irept::id_symbol)
   {
     type = migrate_type(expr.type());
     new_expr_ref = sym_name_to_symbol(expr.identifier(), type);
   }
-  else if(expr.id() == "nondet_symbol")
+  else if (expr.id() == "nondet_symbol")
   {
     type = migrate_type(expr.type());
     new_expr_ref = symbol2tc(type, "nondet$" + expr.identifier().as_string());
   }
-  else if(
+  else if (
     expr.id() == irept::id_constant && expr.type().id() != typet::t_pointer &&
     expr.type().id() != typet::t_bool && expr.type().id() != "c_enum" &&
     expr.type().id() != typet::t_fixedbv &&
@@ -580,14 +580,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     type = migrate_type(expr.type());
 
     bool is_signed = false;
-    if(type->type_id == type2t::signedbv_id)
+    if (type->type_id == type2t::signedbv_id)
       is_signed = true;
 
     BigInt val = binary2bigint(expr.value(), is_signed);
 
     new_expr_ref = constant_int2tc(type, val);
   }
-  else if(expr.id() == irept::id_constant && expr.type().id() == "c_enum")
+  else if (expr.id() == irept::id_constant && expr.type().id() == "c_enum")
   {
     type = migrate_type(expr.type());
 
@@ -595,15 +595,15 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = constant_int2tc(type, BigInt(enumval));
   }
-  else if(expr.id() == irept::id_constant && expr.type().id() == typet::t_bool)
+  else if (expr.id() == irept::id_constant && expr.type().id() == typet::t_bool)
   {
     std::string theval = expr.value().as_string();
-    if(theval == "true")
+    if (theval == "true")
       new_expr_ref = gen_true_expr();
     else
       new_expr_ref = gen_false_expr();
   }
-  else if(
+  else if (
     expr.id() == irept::id_constant && expr.type().id() == typet::t_pointer &&
     expr.value() == "NULL")
   {
@@ -612,7 +612,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = symbol2tc(type, std::string("NULL"));
   }
-  else if(
+  else if (
     expr.id() == irept::id_constant && expr.type().id() == typet::t_fixedbv)
   {
     type = migrate_type(expr.type());
@@ -621,7 +621,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = constant_fixedbv2tc(bv);
   }
-  else if(
+  else if (
     expr.id() == irept::id_constant && expr.type().id() == typet::t_floatbv)
   {
     type = migrate_type(expr.type());
@@ -630,7 +630,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = constant_floatbv2tc(bv);
   }
-  else if(expr.id() == exprt::typecast)
+  else if (expr.id() == exprt::typecast)
   {
     assert(expr.op0().id_string() != "");
     type = migrate_type(expr.type());
@@ -644,12 +644,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
-    if(old_rm.is_not_nil())
+    if (old_rm.is_not_nil())
       migrate_expr(old_rm, rounding_mode);
 
     new_expr_ref = typecast2tc(type, old_expr, rounding_mode);
   }
-  else if(expr.id() == "bitcast")
+  else if (expr.id() == "bitcast")
   {
     assert(expr.op0().id_string() != "");
     type = migrate_type(expr.type());
@@ -659,7 +659,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = bitcast2tc(type, old_expr);
   }
-  else if(expr.id() == "nearbyint")
+  else if (expr.id() == "nearbyint")
   {
     assert(expr.op0().id_string() != "");
     type = migrate_type(expr.type());
@@ -673,17 +673,17 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
-    if(old_rm.is_not_nil())
+    if (old_rm.is_not_nil())
       migrate_expr(old_rm, rounding_mode);
 
     new_expr_ref = nearbyint2tc(type, old_expr, rounding_mode);
   }
-  else if(expr.id() == typet::t_struct)
+  else if (expr.id() == typet::t_struct)
   {
     type = migrate_type(expr.type());
 
     std::vector<expr2tc> members;
-    forall_operands(it, expr)
+    forall_operands (it, expr)
     {
       expr2tc new_ref;
       migrate_expr(*it, new_ref);
@@ -693,12 +693,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = constant_struct2tc(type, members);
   }
-  else if(expr.id() == typet::t_union)
+  else if (expr.id() == typet::t_union)
   {
     type = migrate_type(expr.type());
 
     std::vector<expr2tc> members;
-    forall_operands(it, expr)
+    forall_operands (it, expr)
     {
       expr2tc new_ref;
       migrate_expr(*it, new_ref);
@@ -708,7 +708,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = constant_union2tc(type, expr.component_name(), members);
   }
-  else if(expr.id() == "string-constant")
+  else if (expr.id() == "string-constant")
   {
     std::string thestring = expr.value().as_string();
     typet thetype = expr.type();
@@ -720,7 +720,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = constant_string2tc(t, irep_idt(thestring));
   }
-  else if(
+  else if (
     (expr.id() == irept::id_constant && expr.type().id() == typet::t_array) ||
     (expr.id() == irept::id_constant && expr.type().id() == typet::t_vector) ||
     expr.id() == typet::t_array || expr.id() == typet::t_vector)
@@ -729,7 +729,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     type = migrate_type(expr.type());
 
     std::vector<expr2tc> members;
-    forall_operands(it, expr)
+    forall_operands (it, expr)
     {
       expr2tc new_ref;
       migrate_expr(*it, new_ref);
@@ -737,14 +737,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       members.push_back(new_ref);
     }
 
-    if(
+    if (
       (expr.id() == irept::id_constant && expr.type().id() == typet::t_array) ||
       expr.id() == typet::t_array)
       new_expr_ref = constant_array2tc(type, members);
     else
       new_expr_ref = constant_vector2tc(type, members);
   }
-  else if(expr.id() == exprt::arrayof)
+  else if (expr.id() == exprt::arrayof)
   {
     type = migrate_type(expr.type());
 
@@ -754,7 +754,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = constant_array_of2tc(type, new_value);
   }
-  else if(expr.id() == exprt::i_if)
+  else if (expr.id() == exprt::i_if)
   {
     type = migrate_type(expr.type());
 
@@ -765,7 +765,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = if2tc(type, cond, true_val, false_val);
   }
-  else if(expr.id() == exprt::equality)
+  else if (expr.id() == exprt::equality)
   {
     expr2tc side1, side2;
 
@@ -773,7 +773,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = equality2tc(side1, side2);
   }
-  else if(expr.id() == exprt::notequal)
+  else if (expr.id() == exprt::notequal)
   {
     expr2tc side1, side2;
 
@@ -781,7 +781,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = notequal2tc(side1, side2);
   }
-  else if(expr.id() == exprt::i_lt)
+  else if (expr.id() == exprt::i_lt)
   {
     expr2tc side1, side2;
 
@@ -789,7 +789,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = lessthan2tc(side1, side2);
   }
-  else if(expr.id() == exprt::i_gt)
+  else if (expr.id() == exprt::i_gt)
   {
     expr2tc side1, side2;
     migrate_expr(expr.op0(), side1);
@@ -797,7 +797,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = greaterthan2tc(side1, side2);
   }
-  else if(expr.id() == exprt::i_le)
+  else if (expr.id() == exprt::i_le)
   {
     expr2tc side1, side2;
 
@@ -805,7 +805,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = lessthanequal2tc(side1, side2);
   }
-  else if(expr.id() == exprt::i_ge)
+  else if (expr.id() == exprt::i_ge)
   {
     expr2tc side1, side2;
 
@@ -813,7 +813,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = greaterthanequal2tc(side1, side2);
   }
-  else if(expr.id() == exprt::i_not)
+  else if (expr.id() == exprt::i_not)
   {
     assert(expr.type().id() == typet::t_bool);
     expr2tc theval;
@@ -821,11 +821,11 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = not2tc(theval);
   }
-  else if(expr.id() == exprt::i_and)
+  else if (expr.id() == exprt::i_and)
   {
     assert(expr.type().id() == typet::t_bool);
     expr2tc side1, side2;
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -835,12 +835,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = and2tc(side1, side2);
   }
-  else if(expr.id() == exprt::i_or)
+  else if (expr.id() == exprt::i_or)
   {
     assert(expr.type().id() == typet::t_bool);
     expr2tc side1, side2;
 
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -850,7 +850,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = or2tc(side1, side2);
   }
-  else if(expr.id() == exprt::i_xor)
+  else if (expr.id() == exprt::i_xor)
   {
     assert(expr.type().id() == typet::t_bool);
     assert(expr.operands().size() == 2);
@@ -860,7 +860,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = xor2tc(side1, side2);
   }
-  else if(expr.id() == exprt::implies)
+  else if (expr.id() == exprt::implies)
   {
     assert(expr.type().id() == typet::t_bool);
     assert(expr.operands().size() == 2);
@@ -870,12 +870,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = implies2tc(side1, side2);
   }
-  else if(expr.id() == exprt::i_bitand)
+  else if (expr.id() == exprt::i_bitand)
   {
     type = migrate_type(expr.type());
 
     expr2tc side1, side2;
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -885,12 +885,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = bitand2tc(type, side1, side2);
   }
-  else if(expr.id() == exprt::i_bitor)
+  else if (expr.id() == exprt::i_bitor)
   {
     type = migrate_type(expr.type());
 
     expr2tc side1, side2;
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -900,12 +900,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = bitor2tc(type, side1, side2);
   }
-  else if(expr.id() == exprt::i_bitxor)
+  else if (expr.id() == exprt::i_bitxor)
   {
     type = migrate_type(expr.type());
 
     expr2tc side1, side2;
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -915,12 +915,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = bitxor2tc(type, side1, side2);
   }
-  else if(expr.id() == exprt::i_bitnand)
+  else if (expr.id() == exprt::i_bitnand)
   {
     type = migrate_type(expr.type());
 
     expr2tc side1, side2;
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -930,12 +930,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = bitnand2tc(type, side1, side2);
   }
-  else if(expr.id() == exprt::i_bitnor)
+  else if (expr.id() == exprt::i_bitnor)
   {
     type = migrate_type(expr.type());
 
     expr2tc side1, side2;
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -945,12 +945,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = bitnor2tc(type, side1, side2);
   }
-  else if(expr.id() == exprt::i_bitnxor)
+  else if (expr.id() == exprt::i_bitnxor)
   {
     type = migrate_type(expr.type());
 
     expr2tc side1, side2;
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -960,7 +960,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = bitnxor2tc(type, side1, side2);
   }
-  else if(expr.id() == exprt::i_bitnot)
+  else if (expr.id() == exprt::i_bitnot)
   {
     type = migrate_type(expr.type());
 
@@ -970,12 +970,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = bitnot2tc(type, value);
   }
-  else if(expr.id() == exprt::i_lshr)
+  else if (expr.id() == exprt::i_lshr)
   {
     type = migrate_type(expr.type());
 
     expr2tc side1, side2;
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -985,7 +985,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = lshr2tc(type, side1, side2);
   }
-  else if(expr.id() == "unary-")
+  else if (expr.id() == "unary-")
   {
     type = migrate_type(expr.type());
 
@@ -994,7 +994,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = neg2tc(type, theval);
   }
-  else if(expr.id() == exprt::abs)
+  else if (expr.id() == exprt::abs)
   {
     type = migrate_type(expr.type());
 
@@ -1003,12 +1003,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = abs2tc(type, theval);
   }
-  else if(expr.id() == exprt::plus)
+  else if (expr.id() == exprt::plus)
   {
     type = migrate_type(expr.type());
 
     expr2tc side1, side2;
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -1018,11 +1018,11 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = add2tc(type, side1, side2);
   }
-  else if(expr.id() == exprt::minus)
+  else if (expr.id() == exprt::minus)
   {
     type = migrate_type(expr.type());
 
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -1033,11 +1033,11 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = sub2tc(type, side1, side2);
   }
-  else if(expr.id() == exprt::mult)
+  else if (expr.id() == exprt::mult)
   {
     type = migrate_type(expr.type());
 
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -1048,7 +1048,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = mul2tc(type, side1, side2);
   }
-  else if(expr.id() == exprt::div)
+  else if (expr.id() == exprt::div)
   {
     type = migrate_type(expr.type());
 
@@ -1059,11 +1059,11 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = div2tc(type, side1, side2);
   }
-  else if(expr.id() == "ieee_add")
+  else if (expr.id() == "ieee_add")
   {
     type = migrate_type(expr.type());
 
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -1077,16 +1077,16 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
-    if(old_rm.is_not_nil())
+    if (old_rm.is_not_nil())
       migrate_expr(old_rm, rm);
 
     new_expr_ref = ieee_add2tc(type, side1, side2, rm);
   }
-  else if(expr.id() == "ieee_sub")
+  else if (expr.id() == "ieee_sub")
   {
     type = migrate_type(expr.type());
 
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -1100,16 +1100,16 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
-    if(old_rm.is_not_nil())
+    if (old_rm.is_not_nil())
       migrate_expr(old_rm, rm);
 
     new_expr_ref = ieee_sub2tc(type, side1, side2, rm);
   }
-  else if(expr.id() == "ieee_mul")
+  else if (expr.id() == "ieee_mul")
   {
     type = migrate_type(expr.type());
 
-    if(expr.operands().size() > 2)
+    if (expr.operands().size() > 2)
     {
       splice_expr(expr, new_expr_ref);
       return;
@@ -1123,12 +1123,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
-    if(old_rm.is_not_nil())
+    if (old_rm.is_not_nil())
       migrate_expr(old_rm, rm);
 
     new_expr_ref = ieee_mul2tc(type, side1, side2, rm);
   }
-  else if(expr.id() == "ieee_div")
+  else if (expr.id() == "ieee_div")
   {
     type = migrate_type(expr.type());
 
@@ -1142,12 +1142,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
-    if(old_rm.is_not_nil())
+    if (old_rm.is_not_nil())
       migrate_expr(old_rm, rm);
 
     new_expr_ref = ieee_div2tc(type, side1, side2, rm);
   }
-  else if(expr.id() == "ieee_fma")
+  else if (expr.id() == "ieee_fma")
   {
     type = migrate_type(expr.type());
 
@@ -1161,12 +1161,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
-    if(old_rm.is_not_nil())
+    if (old_rm.is_not_nil())
       migrate_expr(old_rm, rm);
 
     new_expr_ref = ieee_fma2tc(type, v1, v2, v3, rm);
   }
-  else if(expr.id() == "ieee_sqrt")
+  else if (expr.id() == "ieee_sqrt")
   {
     type = migrate_type(expr.type());
 
@@ -1178,12 +1178,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
-    if(old_rm.is_not_nil())
+    if (old_rm.is_not_nil())
       migrate_expr(old_rm, rm);
 
     new_expr_ref = ieee_sqrt2tc(type, value, rm);
   }
-  else if(expr.id() == exprt::mod)
+  else if (expr.id() == exprt::mod)
   {
     type = migrate_type(expr.type());
 
@@ -1194,7 +1194,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = modulus2tc(type, side1, side2);
   }
-  else if(expr.id() == exprt::i_shl)
+  else if (expr.id() == exprt::i_shl)
   {
     type = migrate_type(expr.type());
 
@@ -1205,7 +1205,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = shl2tc(type, side1, side2);
   }
-  else if(expr.id() == exprt::i_ashr)
+  else if (expr.id() == exprt::i_ashr)
   {
     type = migrate_type(expr.type());
 
@@ -1216,7 +1216,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = ashr2tc(type, side1, side2);
   }
-  else if(expr.id() == "pointer_offset")
+  else if (expr.id() == "pointer_offset")
   {
     type = migrate_type(expr.type());
 
@@ -1225,7 +1225,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = pointer_offset2tc(type, theval);
   }
-  else if(expr.id() == "pointer_object")
+  else if (expr.id() == "pointer_object")
   {
     type = migrate_type(expr.type());
 
@@ -1234,7 +1234,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = pointer_object2tc(type, theval);
   }
-  else if(expr.id() == exprt::id_address_of)
+  else if (expr.id() == exprt::id_address_of)
   {
     assert(expr.type().id() == typet::t_pointer);
 
@@ -1245,7 +1245,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = address_of2tc(type, theval);
   }
-  else if(
+  else if (
     expr.id() == "byte_extract_little_endian" ||
     expr.id() == "byte_extract_big_endian")
   {
@@ -1260,7 +1260,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = byte_extract2tc(type, side1, side2, big_endian);
   }
-  else if(
+  else if (
     expr.id() == "byte_update_little_endian" ||
     expr.id() == "byte_update_big_endian")
   {
@@ -1278,14 +1278,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = byte_update2tc(type, sourceval, offs, update, big_endian);
   }
-  else if(expr.id() == "with")
+  else if (expr.id() == "with")
   {
     type = migrate_type(expr.type());
 
     expr2tc sourcedata, idx;
     migrate_expr(expr.op0(), sourcedata);
 
-    if(expr.op1().id() == "member_name")
+    if (expr.op1().id() == "member_name")
     {
       idx = constant_string2tc(
         string_type2tc(1), expr.op1().get_string("component_name"));
@@ -1300,7 +1300,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = with2tc(type, sourcedata, idx, update);
   }
-  else if(expr.id() == exprt::member)
+  else if (expr.id() == exprt::member)
   {
     type = migrate_type(expr.type());
 
@@ -1309,7 +1309,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = member2tc(type, sourcedata, expr.component_name());
   }
-  else if(expr.id() == exprt::index)
+  else if (expr.id() == exprt::index)
   {
     type = migrate_type(expr.type());
 
@@ -1319,7 +1319,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = index2tc(type, source, index);
   }
-  else if(expr.id() == "memory-leak")
+  else if (expr.id() == "memory-leak")
   {
     // Memory leaks are in fact selects/indexes.
     type = migrate_type(expr.type());
@@ -1331,7 +1331,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = index2tc(type, source, index);
   }
-  else if(expr.id() == exprt::isnan)
+  else if (expr.id() == exprt::isnan)
   {
     assert(expr.operands().size() == 1);
 
@@ -1340,7 +1340,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = isnan2tc(val);
   }
-  else if(expr.id() == irept::a_width)
+  else if (expr.id() == irept::a_width)
   {
     assert(expr.operands().size() == 1);
     type = migrate_type(expr.type());
@@ -1349,7 +1349,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     type2tc inttype = unsignedbv_type2tc(config.ansi_c.int_width);
     new_expr_ref = constant_int2tc(inttype, BigInt(thewidth));
   }
-  else if(expr.id() == "same-object")
+  else if (expr.id() == "same-object")
   {
     assert(expr.operands().size() == 2);
     assert(expr.type().id() == typet::t_bool);
@@ -1358,17 +1358,17 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = same_object2tc(op0, op1);
   }
-  else if(expr.id() == "invalid-object")
+  else if (expr.id() == "invalid-object")
   {
     assert(expr.type().id() == "pointer");
     type2tc pointertype = pointer_type2tc(get_empty_type());
     new_expr_ref = symbol2tc(pointertype, "INVALID");
   }
-  else if(expr.id() == "unary+")
+  else if (expr.id() == "unary+")
   {
     migrate_expr(expr.op0(), new_expr_ref);
   }
-  else if(expr.id() == "overflow-+")
+  else if (expr.id() == "overflow-+")
   {
     assert(expr.type().id() == typet::t_bool);
     expr2tc op0, op1;
@@ -1376,7 +1376,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc add = add2tc(op0->type, op0, op1); // XXX type?
     new_expr_ref = overflow2tc(add);
   }
-  else if(expr.id() == "overflow--")
+  else if (expr.id() == "overflow--")
   {
     assert(expr.type().id() == typet::t_bool);
     expr2tc op0, op1;
@@ -1384,7 +1384,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc sub = sub2tc(op0->type, op0, op1); // XXX type?
     new_expr_ref = overflow2tc(sub);
   }
-  else if(expr.id() == "overflow-*")
+  else if (expr.id() == "overflow-*")
   {
     assert(expr.type().id() == typet::t_bool);
     expr2tc op0, op1;
@@ -1392,7 +1392,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc mul = mul2tc(op0->type, op0, op1); // XXX type?
     new_expr_ref = overflow2tc(mul);
   }
-  else if(expr.id() == "overflow-/")
+  else if (expr.id() == "overflow-/")
   {
     assert(expr.type().id() == typet::t_bool);
     expr2tc op0, op1;
@@ -1400,7 +1400,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc div = div2tc(op0->type, op0, op1); // XXX type?
     new_expr_ref = overflow2tc(div);
   }
-  else if(expr.id() == "overflow-mod")
+  else if (expr.id() == "overflow-mod")
   {
     assert(expr.type().id() == typet::t_bool);
     expr2tc op0, op1;
@@ -1408,7 +1408,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc mod = modulus2tc(op0->type, op0, op1); // XXX type?
     new_expr_ref = overflow2tc(mod);
   }
-  else if(expr.id() == "overflow-shl")
+  else if (expr.id() == "overflow-shl")
   {
     assert(expr.type().id() == typet::t_bool);
     expr2tc op0, op1;
@@ -1416,36 +1416,36 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc shl = shl2tc(op0->type, op0, op1); // XXX type?
     new_expr_ref = overflow2tc(shl);
   }
-  else if(has_prefix(expr.id_string(), "overflow-typecast-"))
+  else if (has_prefix(expr.id_string(), "overflow-typecast-"))
   {
     unsigned bits = atoi(expr.id_string().c_str() + 18);
     expr2tc operand;
     migrate_expr(expr.op0(), operand);
     new_expr_ref = overflow_cast2tc(operand, bits);
   }
-  else if(expr.id() == "overflow-unary-")
+  else if (expr.id() == "overflow-unary-")
   {
     assert(expr.type().id() == typet::t_bool);
     expr2tc operand;
     migrate_expr(expr.op0(), operand);
     new_expr_ref = overflow_neg2tc(operand);
   }
-  else if(expr.id() == "unknown")
+  else if (expr.id() == "unknown")
   {
     type = migrate_type(expr.type());
     new_expr_ref = unknown2tc(type);
   }
-  else if(expr.id() == "invalid")
+  else if (expr.id() == "invalid")
   {
     type = migrate_type(expr.type());
     new_expr_ref = invalid2tc(type);
   }
-  else if(expr.id() == "NULL-object")
+  else if (expr.id() == "NULL-object")
   {
     type = migrate_type(expr.type());
     new_expr_ref = null_object2tc(type);
   }
-  else if(expr.id() == "dynamic_object")
+  else if (expr.id() == "dynamic_object")
   {
     type = migrate_type(expr.type());
     expr2tc op0, op1;
@@ -1453,7 +1453,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     bool invalid = false;
     bool unknown = false;
-    if(is_constant_bool2t(op1))
+    if (is_constant_bool2t(op1))
     {
       invalid = to_constant_bool2t(op1).value;
     }
@@ -1465,44 +1465,45 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = dynamic_object2tc(type, op0, invalid, unknown);
   }
-  else if(expr.id() == irept::id_dereference)
+  else if (expr.id() == irept::id_dereference)
   {
     type = migrate_type(expr.type());
     expr2tc op0;
     migrate_expr(expr.op0(), op0);
     new_expr_ref = dereference2tc(type, op0);
   }
-  else if(expr.id() == "valid_object")
+  else if (expr.id() == "valid_object")
   {
     expr2tc op0;
     migrate_expr(expr.op0(), op0);
     new_expr_ref = valid_object2tc(op0);
   }
-  else if(expr.id() == "deallocated_object")
+  else if (expr.id() == "deallocated_object")
   {
     expr2tc op0;
     migrate_expr(expr.op0(), op0);
     new_expr_ref = deallocated_obj2tc(op0);
   }
-  else if(expr.id() == "dynamic_size")
+  else if (expr.id() == "dynamic_size")
   {
     expr2tc op0;
     migrate_expr(expr.op0(), op0);
     new_expr_ref = dynamic_size2tc(op0);
   }
-  else if(expr.id() == "sideeffect")
+  else if (expr.id() == "sideeffect")
   {
     expr2tc operand, thesize;
     std::vector<expr2tc> args;
-    if(
+    if (
       expr.statement() != "nondet" && expr.statement() != "cpp_new" &&
       expr.statement() != "cpp_new[]")
       migrate_expr(expr.op0(), operand);
 
-    if(expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
+    if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
       // These hide the size in a real size field,
       migrate_expr((const exprt &)expr.find("size"), thesize);
-    else if(expr.statement() != "nondet" && expr.statement() != "function_call")
+    else if (
+      expr.statement() != "nondet" && expr.statement() != "function_call")
       // For everything other than nondet,
       migrate_expr((const exprt &)expr.cmt_size(), thesize);
 
@@ -1510,72 +1511,72 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     type2tc plaintype = migrate_type(expr.type());
 
     sideeffect2t::allockind t;
-    if(expr.statement() == "malloc")
+    if (expr.statement() == "malloc")
       t = sideeffect2t::malloc;
-    else if(expr.statement() == "realloc")
+    else if (expr.statement() == "realloc")
       t = sideeffect2t::realloc;
-    else if(expr.statement() == "alloca")
+    else if (expr.statement() == "alloca")
       t = sideeffect2t::alloca;
-    else if(expr.statement() == "cpp_new")
+    else if (expr.statement() == "cpp_new")
       t = sideeffect2t::cpp_new;
-    else if(expr.statement() == "cpp_new[]")
+    else if (expr.statement() == "cpp_new[]")
       t = sideeffect2t::cpp_new_arr;
-    else if(expr.statement() == "nondet")
+    else if (expr.statement() == "nondet")
       t = sideeffect2t::nondet;
-    else if(expr.statement() == "va_arg")
+    else if (expr.statement() == "va_arg")
       t = sideeffect2t::va_arg;
-    else if(expr.statement() == "function_call")
+    else if (expr.statement() == "function_call")
     {
       t = sideeffect2t::function_call;
       const exprt &arguments = expr.op1();
-      forall_operands(it, arguments)
+      forall_operands (it, arguments)
       {
         args.emplace_back();
         migrate_expr(*it, args.back());
       }
     }
-    else if(expr.statement() == "printf")
+    else if (expr.statement() == "printf")
     {
-      for(auto const &it : expr.operands())
+      for (auto const &it : expr.operands())
       {
         expr2tc tmp_op;
         migrate_expr(it, tmp_op);
         args.push_back(tmp_op);
       }
 
-      if(expr.base_name().empty())
+      if (expr.base_name().empty())
         assert(!"No base_name for code_printf2t");
       std::string bs_name = expr.base_name().as_string();
 
       new_expr_ref = code_printf2tc(args, bs_name);
       return;
     }
-    else if(expr.statement() == "printf2")
+    else if (expr.statement() == "printf2")
     {
       t = sideeffect2t::printf2;
-      for(auto const &it : expr.operands())
+      for (auto const &it : expr.operands())
       {
         expr2tc tmp_op;
         migrate_expr(it, tmp_op);
         args.push_back(tmp_op);
       }
     }
-    else if(expr.statement() == "preincrement")
+    else if (expr.statement() == "preincrement")
     {
       t = sideeffect2t::preincrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
-    else if(expr.statement() == "postincrement")
+    else if (expr.statement() == "postincrement")
     {
       t = sideeffect2t::postincrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
-    else if(expr.statement() == "predecrement")
+    else if (expr.statement() == "predecrement")
     {
       t = sideeffect2t::predecrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
-    else if(expr.statement() == "postdecrement")
+    else if (expr.statement() == "postdecrement")
     {
       t = sideeffect2t::predecrement;
       migrate_expr(expr.op0(), new_expr_ref);
@@ -1589,13 +1590,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref =
       sideeffect2tc(plaintype, operand, thesize, args, cmt_type, t);
   }
-  else if(expr.id() == irept::id_code && expr.statement() == "assign")
+  else if (expr.id() == irept::id_code && expr.statement() == "assign")
   {
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
     new_expr_ref = code_assign2tc(op0, op1);
   }
-  else if(expr.id() == irept::id_code && expr.statement() == "decl")
+  else if (expr.id() == irept::id_code && expr.statement() == "decl")
   {
     assert(expr.op0().id() == "symbol");
     irep_idt sym_name;
@@ -1603,7 +1604,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     sym_name = expr.op0().identifier();
     new_expr_ref = code_decl2tc(thetype, sym_name);
   }
-  else if(expr.id() == irept::id_code && expr.statement() == "dead")
+  else if (expr.id() == irept::id_code && expr.statement() == "dead")
   {
     assert(expr.op0().id() == "symbol");
     irep_idt sym_name;
@@ -1611,67 +1612,67 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     sym_name = expr.op0().identifier();
     new_expr_ref = code_dead2tc(thetype, sym_name);
   }
-  else if(expr.id() == irept::id_code && expr.statement() == "printf")
+  else if (expr.id() == irept::id_code && expr.statement() == "printf")
   {
     std::vector<expr2tc> ops;
-    for(auto const &it : expr.operands())
+    for (auto const &it : expr.operands())
     {
       expr2tc tmp_op;
       migrate_expr(it, tmp_op);
       ops.push_back(tmp_op);
     }
 
-    if(expr.base_name().empty())
+    if (expr.base_name().empty())
       assert(!"No base_name for code_printf2t");
     std::string bs_name = expr.base_name().as_string();
 
     new_expr_ref = code_printf2tc(ops, bs_name);
   }
-  else if(expr.id() == irept::id_code && expr.statement() == "expression")
+  else if (expr.id() == irept::id_code && expr.statement() == "expression")
   {
     assert(expr.operands().size() == 1);
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
     new_expr_ref = code_expression2tc(theop);
   }
-  else if(expr.id() == irept::id_code && expr.statement() == "return")
+  else if (expr.id() == irept::id_code && expr.statement() == "return")
   {
     expr2tc theop;
-    if(expr.operands().size() == 1)
+    if (expr.operands().size() == 1)
       migrate_expr(expr.op0(), theop);
     else
       assert(expr.operands().size() == 0);
     new_expr_ref = code_return2tc(theop);
   }
-  else if(expr.id() == irept::id_code && expr.statement() == "free")
+  else if (expr.id() == irept::id_code && expr.statement() == "free")
   {
     assert(expr.operands().size() == 1);
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
     new_expr_ref = code_free2tc(theop);
   }
-  else if(expr.id() == irept::id_code && expr.statement() == "cpp_delete[]")
+  else if (expr.id() == irept::id_code && expr.statement() == "cpp_delete[]")
   {
     assert(expr.operands().size() == 1);
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
     new_expr_ref = code_cpp_del_array2tc(theop);
   }
-  else if(expr.id() == irept::id_code && expr.statement() == "cpp_delete")
+  else if (expr.id() == irept::id_code && expr.statement() == "cpp_delete")
   {
     assert(expr.operands().size() == 1);
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
     new_expr_ref = code_cpp_delete2tc(theop);
   }
-  else if(expr.id() == "object_descriptor")
+  else if (expr.id() == "object_descriptor")
   {
     type = migrate_type(expr.op0().type());
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
     new_expr_ref = object_descriptor2tc(type, op0, op1, 0);
   }
-  else if(expr.id() == irept::id_code && expr.statement() == "function_call")
+  else if (expr.id() == irept::id_code && expr.statement() == "function_call")
   {
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
@@ -1679,7 +1680,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     std::vector<expr2tc> args;
     const exprt &irep_args = expr.op2();
     assert(irep_args.is_not_nil());
-    forall_operands(it, irep_args)
+    forall_operands (it, irep_args)
     {
       expr2tc tmp;
       migrate_expr(*it, tmp);
@@ -1688,47 +1689,47 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = code_function_call2tc(op0, op1, args);
   }
-  else if(expr.id() == "invalid-pointer")
+  else if (expr.id() == "invalid-pointer")
   {
     expr2tc op0;
     migrate_expr(expr.op0(), op0);
     new_expr_ref = invalid_pointer2tc(op0);
   }
-  else if(expr.id() == "code" && expr.statement() == "skip")
+  else if (expr.id() == "code" && expr.statement() == "skip")
   {
     new_expr_ref = code_skip2tc(get_empty_type());
   }
-  else if(expr.id() == "code" && expr.statement() == "goto")
+  else if (expr.id() == "code" && expr.statement() == "goto")
   {
     new_expr_ref = code_goto2tc(expr.get("destination"));
   }
-  else if(expr.id() == "comma")
+  else if (expr.id() == "comma")
   {
     type = migrate_type(expr.type());
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
     new_expr_ref = code_comma2tc(type, op0, op1);
   }
-  else if(expr.id() == "code" && expr.statement() == "asm")
+  else if (expr.id() == "code" && expr.statement() == "asm")
   {
     type = migrate_type(expr.type());
     const irep_idt &str = expr.op0().value();
     new_expr_ref = code_asm2tc(type, str);
   }
-  else if(expr.id() == "code" && expr.statement() == "cpp-throw")
+  else if (expr.id() == "code" && expr.statement() == "cpp-throw")
   {
     // No type,
     const irept::subt &exceptions_thrown =
       expr.find("exception_list").get_sub();
 
     std::vector<irep_idt> expr_list;
-    for(const auto &e_it : exceptions_thrown)
+    for (const auto &e_it : exceptions_thrown)
     {
       expr_list.push_back(e_it.id());
     }
 
     expr2tc operand;
-    if(expr.operands().size() == 1)
+    if (expr.operands().size() == 1)
     {
       migrate_expr(expr.op0(), operand);
     }
@@ -1739,53 +1740,53 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = code_cpp_throw2tc(operand, expr_list);
   }
-  else if(expr.id() == "code" && expr.statement() == "throw-decl")
+  else if (expr.id() == "code" && expr.statement() == "throw-decl")
   {
     std::vector<irep_idt> expr_list;
     const irept::subt &exceptions_thrown = expr.find("throw_list").get_sub();
-    for(const auto &e_it : exceptions_thrown)
+    for (const auto &e_it : exceptions_thrown)
     {
       expr_list.push_back(e_it.id());
     }
 
     new_expr_ref = code_cpp_throw_decl2tc(expr_list);
   }
-  else if(expr.id() == "isinf")
+  else if (expr.id() == "isinf")
   {
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
     new_expr_ref = isinf2tc(theval);
   }
-  else if(expr.id() == "isnormal")
+  else if (expr.id() == "isnormal")
   {
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
     new_expr_ref = isnormal2tc(theval);
   }
-  else if(expr.id() == "isfinite")
+  else if (expr.id() == "isfinite")
   {
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
     new_expr_ref = isfinite2tc(theval);
   }
-  else if(expr.id() == "signbit")
+  else if (expr.id() == "signbit")
   {
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
     new_expr_ref = signbit2tc(theval);
   }
-  else if(expr.id() == "popcount")
+  else if (expr.id() == "popcount")
   {
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
     new_expr_ref = popcount2tc(theval);
   }
-  else if(expr.id() == "bswap")
+  else if (expr.id() == "bswap")
   {
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
@@ -1793,14 +1794,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = bswap2tc(type, theval);
   }
-  else if(expr.id() == "concat")
+  else if (expr.id() == "concat")
   {
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
     type = migrate_type(expr.type());
     new_expr_ref = concat2tc(type, op0, op1);
   }
-  else if(expr.id() == "extract")
+  else if (expr.id() == "extract")
   {
     type = migrate_type(expr.type());
 
@@ -1819,7 +1820,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
 typet migrate_type_back(const type2tc &ref)
 {
-  switch(ref->type_id)
+  switch (ref->type_id)
   {
   case type2t::bool_id:
     return bool_typet();
@@ -1838,7 +1839,7 @@ typet migrate_type_back(const type2tc &ref)
     const struct_type2t &ref2 = to_struct_type(ref);
 
     idx = 0;
-    for(auto const &it : ref2.members)
+    for (auto const &it : ref2.members)
     {
       struct_union_typet::componentt component;
       component.id("component");
@@ -1851,7 +1852,7 @@ typet migrate_type_back(const type2tc &ref)
 
     thetype.components() = comps;
     thetype.set("tag", irep_idt(ref2.name));
-    if(ref2.packed)
+    if (ref2.packed)
       thetype.set("packed", true);
     return std::move(thetype);
   }
@@ -1863,7 +1864,7 @@ typet migrate_type_back(const type2tc &ref)
     const union_type2t &ref2 = to_union_type(ref);
 
     idx = 0;
-    for(auto const &it : ref2.members)
+    for (auto const &it : ref2.members)
     {
       struct_union_typet::componentt component;
       component.id("component");
@@ -1888,7 +1889,7 @@ typet migrate_type_back(const type2tc &ref)
 
     code_typet::argumentst args;
     unsigned int i = 0;
-    for(auto const &it : ref2.arguments)
+    for (auto const &it : ref2.arguments)
     {
       args.emplace_back(migrate_type_back(it));
       args.back().set_identifier(ref2.argument_names[i]);
@@ -1898,7 +1899,7 @@ typet migrate_type_back(const type2tc &ref)
     code.arguments() = args;
     code.return_type() = ret_type;
 
-    if(ref2.ellipsis)
+    if (ref2.ellipsis)
       code.make_ellipsis();
 
     return std::move(code);
@@ -1909,7 +1910,7 @@ typet migrate_type_back(const type2tc &ref)
 
     array_typet thetype;
     thetype.subtype() = migrate_type_back(ref2.subtype);
-    if(ref2.size_is_infinite)
+    if (ref2.size_is_infinite)
     {
       thetype.set("size", "infinity");
     }
@@ -1983,11 +1984,11 @@ typet migrate_type_back(const type2tc &ref)
     name.identifier(ref2.name);
     thetype.get_sub().push_back(name);
 
-    if(ref2.template_args.size() != 0)
+    if (ref2.template_args.size() != 0)
     {
       exprt args("template_args");
       exprt &arglist = (exprt &)args.add("arguments");
-      for(auto const &it : ref2.template_args)
+      for (auto const &it : ref2.template_args)
       {
         typet tmp = migrate_type_back(it);
         exprt type("type");
@@ -2011,10 +2012,10 @@ typet migrate_type_back(const type2tc &ref)
 
 exprt migrate_expr_back(const expr2tc &ref)
 {
-  if(ref.get() == nullptr)
+  if (ref.get() == nullptr)
     return nil_exprt();
 
-  switch(ref->expr_id)
+  switch (ref->expr_id)
   {
   case expr2t::constant_int_id:
   {
@@ -2036,7 +2037,7 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::constant_bool_id:
   {
     const constant_bool2t &ref2 = to_constant_bool2t(ref);
-    if(ref2.value)
+    if (ref2.value)
       return true_exprt();
 
     return false_exprt();
@@ -2062,7 +2063,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const constant_struct2t &ref2 = to_constant_struct2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt thestruct("struct", thetype);
-    for(auto const &it : ref2.datatype_members)
+    for (auto const &it : ref2.datatype_members)
       thestruct.operands().push_back(migrate_expr_back(it));
     return thestruct;
   }
@@ -2071,7 +2072,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const constant_union2t &ref2 = to_constant_union2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt theunion("union", thetype);
-    for(auto const &it : ref2.datatype_members)
+    for (auto const &it : ref2.datatype_members)
       theunion.operands().push_back(migrate_expr_back(it));
     theunion.component_name(ref2.init_field);
     return theunion;
@@ -2081,7 +2082,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const constant_array2t &ref2 = to_constant_array2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt thearray("constant", thetype);
-    for(auto const &it : ref2.datatype_members)
+    for (auto const &it : ref2.datatype_members)
       thearray.operands().push_back(migrate_expr_back(it));
     return thearray;
   }
@@ -2090,7 +2091,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const constant_vector2t &ref2 = to_constant_vector2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt thearray("constant", thetype);
-    for(auto const &it : ref2.datatype_members)
+    for (auto const &it : ref2.datatype_members)
       thearray.operands().push_back(migrate_expr_back(it));
     return thearray;
   }
@@ -2107,21 +2108,21 @@ exprt migrate_expr_back(const expr2tc &ref)
   {
     const symbol2t &ref2 = to_symbol2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    if(has_prefix(ref2.thename.as_string(), "nondet$"))
+    if (has_prefix(ref2.thename.as_string(), "nondet$"))
     {
       exprt thesym("nondet_symbol", thetype);
       thesym.identifier(
         irep_idt(std::string(ref2.get_symbol_name().c_str() + 7)));
       return thesym;
     }
-    if(ref2.thename == "NULL")
+    if (ref2.thename == "NULL")
     {
       // Special case.
       constant_exprt const_expr(migrate_type_back(ref2.type));
       const_expr.set_value(ref2.get_symbol_name());
       return std::move(const_expr);
     }
-    else if(ref2.thename == "INVALID")
+    else if (ref2.thename == "INVALID")
     {
       exprt invalid("invalid-object", pointer_typet(empty_typet()));
       return invalid;
@@ -2534,7 +2535,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt with("with", thetype);
 
     exprt memb_name;
-    if(is_constant_string2t(ref2.update_field))
+    if (is_constant_string2t(ref2.update_field))
     {
       const constant_string2t &string_ref =
         to_constant_string2t(ref2.update_field);
@@ -2585,42 +2586,42 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt theexpr;
     theexpr.type() = thetype;
-    if(is_add2t(ref2.operand))
+    if (is_add2t(ref2.operand))
     {
       theexpr.id("overflow-+");
       const add2t &addref = to_add2t(ref2.operand);
       theexpr.copy_to_operands(
         migrate_expr_back(addref.side_1), migrate_expr_back(addref.side_2));
     }
-    else if(is_sub2t(ref2.operand))
+    else if (is_sub2t(ref2.operand))
     {
       theexpr.id("overflow--");
       const sub2t &subref = to_sub2t(ref2.operand);
       theexpr.copy_to_operands(
         migrate_expr_back(subref.side_1), migrate_expr_back(subref.side_2));
     }
-    else if(is_mul2t(ref2.operand))
+    else if (is_mul2t(ref2.operand))
     {
       theexpr.id("overflow-*");
       const mul2t &mulref = to_mul2t(ref2.operand);
       theexpr.copy_to_operands(
         migrate_expr_back(mulref.side_1), migrate_expr_back(mulref.side_2));
     }
-    else if(is_div2t(ref2.operand))
+    else if (is_div2t(ref2.operand))
     {
       theexpr.id("overflow-/");
       const div2t &divref = to_div2t(ref2.operand);
       theexpr.copy_to_operands(
         migrate_expr_back(divref.side_1), migrate_expr_back(divref.side_2));
     }
-    else if(is_modulus2t(ref2.operand))
+    else if (is_modulus2t(ref2.operand))
     {
       theexpr.id("overflow-mod");
       const modulus2t &divref = to_modulus2t(ref2.operand);
       theexpr.copy_to_operands(
         migrate_expr_back(divref.side_1), migrate_expr_back(divref.side_2));
     }
-    else if(is_shl2t(ref2.operand))
+    else if (is_shl2t(ref2.operand))
     {
       theexpr.id("overflow-shl");
       const shl2t &divref = to_shl2t(ref2.operand);
@@ -2681,7 +2682,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt op0 = migrate_expr_back(ref2.instance);
     exprt op1;
-    if(ref2.invalid)
+    if (ref2.invalid)
       op1 = true_exprt();
     else
       op1 = false_exprt();
@@ -2733,23 +2734,23 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet cmttype;
     exprt size;
 
-    if(!is_nil_type(ref2.alloctype))
+    if (!is_nil_type(ref2.alloctype))
       cmttype = migrate_type_back(ref2.alloctype);
 
-    if(!is_nil_expr(ref2.size))
+    if (!is_nil_expr(ref2.size))
       size = migrate_expr_back(ref2.size);
 
-    if(ref2.kind == sideeffect2t::function_call)
+    if (ref2.kind == sideeffect2t::function_call)
     {
       // "Operand" is 1st op,
       exprt operand = migrate_expr_back(ref2.operand);
       // 2nd op is "arguments".
       exprt args("arguments");
-      for(const auto &argument : ref2.arguments)
+      for (const auto &argument : ref2.arguments)
         args.copy_to_operands(migrate_expr_back(argument));
       theexpr.copy_to_operands(operand, args);
     }
-    else if(ref2.kind == sideeffect2t::nondet)
+    else if (ref2.kind == sideeffect2t::nondet)
     {
       ; // Do nothing
     }
@@ -2762,7 +2763,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     theexpr.cmt_type(cmttype);
     theexpr.cmt_size(size);
 
-    switch(ref2.kind)
+    switch (ref2.kind)
     {
     case sideeffect2t::malloc:
       theexpr.statement("malloc");
@@ -2843,7 +2844,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_printf2t &ref2 = to_code_printf2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("printf"));
-    for(auto const &it : ref2.operands)
+    for (auto const &it : ref2.operands)
       codeexpr.operands().push_back(migrate_expr_back(it));
     codeexpr.base_name(ref2.bs_name);
     return codeexpr;
@@ -2901,7 +2902,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt op2("arguments");
     codeexpr.copy_to_operands(op0, op1, op2);
     exprt &args = codeexpr.op2();
-    for(auto const &it : ref2.operands)
+    for (auto const &it : ref2.operands)
       args.operands().push_back(migrate_expr_back(it));
     return codeexpr;
   }
@@ -2959,7 +2960,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt codeexpr("cpp-throw");
     irept::subt &exceptions_thrown = codeexpr.add("exception_list").get_sub();
 
-    for(auto const &it : ref2.exception_list)
+    for (auto const &it : ref2.exception_list)
       exceptions_thrown.emplace_back(it);
 
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));

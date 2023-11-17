@@ -70,26 +70,26 @@ public:
   {
     goto_functionst goto_functions;
 
-    if(config.set(cmdline))
+    if (config.set(cmdline))
       return 1;
     config.options.cmdline(cmdline);
     set_verbosity_msg(VerbosityLevel::Debug);
 
-    if(!cmdline.isset("output"))
+    if (!cmdline.isset("output"))
     {
       log_error("Must set output file");
       return 1;
     }
 
-    if(parse())
+    if (parse())
       return 1;
-    if(typecheck())
+    if (typecheck())
       return 1;
 
     std::ofstream out(
       cmdline.getval("output"), std::ios::out | std::ios::binary);
 
-    if(write_goto_binary(out, context, goto_functions))
+    if (write_goto_binary(out, context, goto_functions))
     {
       log_error("Failed to write C library to binary obj");
       return 1;

@@ -4,11 +4,11 @@
 
 expr2tc build_lhs(std::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
 {
-  if(is_nil_expr(lhs))
+  if (is_nil_expr(lhs))
     return lhs;
 
   expr2tc new_lhs = lhs;
-  switch(new_lhs->expr_id)
+  switch (new_lhs->expr_id)
   {
   case expr2t::index_id:
   {
@@ -41,7 +41,7 @@ expr2tc build_lhs(std::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
 
 expr2tc build_rhs(std::shared_ptr<smt_convt> &smt_conv, const expr2tc &rhs)
 {
-  if(is_nil_expr(rhs) || is_constant_expr(rhs))
+  if (is_nil_expr(rhs) || is_constant_expr(rhs))
     return rhs;
 
   auto new_rhs = smt_conv->get(rhs);
@@ -57,12 +57,12 @@ void build_goto_trace(
 {
   unsigned step_nr = 0;
 
-  for(auto const &SSA_step : target->SSA_steps)
+  for (auto const &SSA_step : target->SSA_steps)
   {
-    if(SSA_step.hidden && is_compact_trace)
+    if (SSA_step.hidden && is_compact_trace)
       continue;
 
-    if(!smt_conv->l_get(SSA_step.guard_ast).is_true())
+    if (!smt_conv->l_get(SSA_step.guard_ast).is_true())
       continue;
 
     goto_trace_stept goto_trace_step;
@@ -77,36 +77,36 @@ void build_goto_trace(
 
     goto_trace_step.stack_trace = SSA_step.stack_trace;
 
-    if(SSA_step.is_assignment())
+    if (SSA_step.is_assignment())
     {
       goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
 
       try
       {
-        if(is_nil_expr(SSA_step.original_rhs))
+        if (is_nil_expr(SSA_step.original_rhs))
           goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
         else
           goto_trace_step.value = build_rhs(smt_conv, SSA_step.original_rhs);
       }
-      catch(const type2t::symbolic_type_excp &e)
+      catch (const type2t::symbolic_type_excp &e)
       {
         // Don't add this assignment to the cex if we couldn't build the rhs value
         continue;
       }
     }
 
-    if(SSA_step.is_output())
+    if (SSA_step.is_output())
     {
-      for(const auto &arg : SSA_step.converted_output_args)
+      for (const auto &arg : SSA_step.converted_output_args)
       {
-        if(is_constant_expr(arg))
+        if (is_constant_expr(arg))
           goto_trace_step.output_args.push_back(arg);
         else
           goto_trace_step.output_args.push_back(smt_conv->get(arg));
       }
     }
 
-    if(SSA_step.is_assert() || SSA_step.is_assume())
+    if (SSA_step.is_assert() || SSA_step.is_assume())
       goto_trace_step.guard = !smt_conv->l_get(SSA_step.cond_ast).is_false();
 
     goto_trace.steps.push_back(goto_trace_step);
@@ -119,18 +119,18 @@ void build_successful_goto_trace(
   goto_tracet &goto_trace)
 {
   unsigned step_nr = 0;
-  for(symex_target_equationt::SSA_stepst::const_iterator it =
-        target->SSA_steps.begin();
-      it != target->SSA_steps.end();
-      it++)
+  for (symex_target_equationt::SSA_stepst::const_iterator it =
+         target->SSA_steps.begin();
+       it != target->SSA_steps.end();
+       it++)
   {
-    if(
+    if (
       (it->is_assert() || it->is_assume()) &&
       (is_valid_witness_expr(ns, it->lhs)))
     {
       // When building the correctness witness, we only care about
       // asserts and assumes
-      if(!(it->is_assert() || it->is_assume()))
+      if (!(it->is_assert() || it->is_assume()))
         continue;
 
       goto_trace.steps.emplace_back();

@@ -20,15 +20,15 @@ void grapht::generate_graphml(optionst &options)
   create_graphml(graphml_node);
 
   xmlnodet graph_node;
-  if(this->witness_type == grapht::VIOLATION)
+  if (this->witness_type == grapht::VIOLATION)
     create_violation_graph_node(this->verified_file, options, graph_node);
   else
     create_correctness_graph_node(this->verified_file, options, graph_node);
 
   nodet *prev_node = nullptr;
-  for(auto &current_edge : this->edges)
+  for (auto &current_edge : this->edges)
   {
-    if(prev_node == nullptr || prev_node != current_edge.from_node)
+    if (prev_node == nullptr || prev_node != current_edge.from_node)
     {
       xmlnodet from_node_node;
       create_node_node(*current_edge.from_node, from_node_node);
@@ -44,14 +44,14 @@ void grapht::generate_graphml(optionst &options)
   }
   graphml_node.add_child("graphml.graph", graph_node);
 
-#if(BOOST_VERSION >= 105700)
+#if (BOOST_VERSION >= 105700)
   boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
 #else
   boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
 
   std::string witness_output = options.get_option("witness-output");
-  if(witness_output == "-")
+  if (witness_output == "-")
     boost::property_tree::write_xml(std::cout, graphml_node, settings);
   else
     boost::property_tree::write_xml(
@@ -60,7 +60,7 @@ void grapht::generate_graphml(optionst &options)
 
 void grapht::check_create_new_thread(BigInt thread_id, nodet *prev_node)
 {
-  if(
+  if (
     std::find(std::begin(this->threads), std::end(this->threads), thread_id) ==
     std::end(this->threads))
   {
@@ -91,7 +91,7 @@ void grapht::create_initial_edge()
 int generate_sha1_hash_for_file(const char *path, std::string &output)
 {
   FILE *file = fopen(path, "rb");
-  if(!file)
+  if (!file)
     return -1;
 
   const int bufSize = 32768;
@@ -99,7 +99,7 @@ int generate_sha1_hash_for_file(const char *path, std::string &output)
 
   crypto_hash c;
   int bytesRead = 0;
-  while((bytesRead = fread(buffer, 1, bufSize, file)))
+  while ((bytesRead = fread(buffer, 1, bufSize, file)))
     c.ingest(buffer, bytesRead);
 
   c.fin();
@@ -121,7 +121,7 @@ std::string trim(const std::string &str)
 {
   const std::string whitespace_characters = " \t\r\n";
   size_t first_non_whitespace = str.find_first_not_of(whitespace_characters);
-  if(first_non_whitespace == std::string::npos)
+  if (first_non_whitespace == std::string::npos)
     return "";
   size_t last_non_whitespace = str.find_last_not_of(whitespace_characters);
   size_t length = last_non_whitespace - first_non_whitespace + 1;
@@ -131,42 +131,42 @@ std::string trim(const std::string &str)
 void create_node_node(nodet &node, xmlnodet &nodenode)
 {
   nodenode.add("<xmlattr>.id", node.id);
-  if(node.violation)
+  if (node.violation)
   {
     xmlnodet data_violation;
     data_violation.add("<xmlattr>.key", "violation");
     data_violation.put_value("true");
     nodenode.add_child("data", data_violation);
   }
-  if(node.sink)
+  if (node.sink)
   {
     xmlnodet data_sink;
     data_sink.add("<xmlattr>.key", "sink");
     data_sink.put_value("true");
     nodenode.add_child("data", data_sink);
   }
-  if(node.entry)
+  if (node.entry)
   {
     xmlnodet data_entry;
     data_entry.add("<xmlattr>.key", "entry");
     data_entry.put_value("true");
     nodenode.add_child("data", data_entry);
   }
-  if(node.cycle_head)
+  if (node.cycle_head)
   {
     xmlnodet data_cycle_head;
     data_cycle_head.add("<xmlattr>.key", "cyclehead");
     data_cycle_head.put_value("true");
     nodenode.add_child("data", data_cycle_head);
   }
-  if(!node.invariant.empty())
+  if (!node.invariant.empty())
   {
     xmlnodet data_invariant;
     data_invariant.add("<xmlattr>.key", "invariant");
     data_invariant.put_value(node.invariant);
     nodenode.add_child("data", data_invariant);
   }
-  if(!node.invariant_scope.empty())
+  if (!node.invariant_scope.empty())
   {
     xmlnodet data_invariant;
     data_invariant.add("<xmlattr>.key", "invariant.scope");
@@ -180,70 +180,70 @@ void create_edge_node(edget &edge, xmlnodet &edgenode)
   edgenode.add("<xmlattr>.id", edge.id);
   edgenode.add("<xmlattr>.source", edge.from_node->id);
   edgenode.add("<xmlattr>.target", edge.to_node->id);
-  if(edge.start_line != c_nonset)
+  if (edge.start_line != c_nonset)
   {
     xmlnodet data_lineNumberInOrigin;
     data_lineNumberInOrigin.add("<xmlattr>.key", "startline");
     data_lineNumberInOrigin.put_value(integer2string(edge.start_line));
     edgenode.add_child("data", data_lineNumberInOrigin);
   }
-  if(edge.end_line != c_nonset)
+  if (edge.end_line != c_nonset)
   {
     xmlnodet data_endLine;
     data_endLine.add("<xmlattr>.key", "endline");
     data_endLine.put_value(integer2string(edge.end_line));
     edgenode.add_child("data", data_endLine);
   }
-  if(edge.start_offset != c_nonset)
+  if (edge.start_offset != c_nonset)
   {
     xmlnodet data_startoffset;
     data_startoffset.add("<xmlattr>.key", "startoffset");
     data_startoffset.put_value(integer2string(edge.start_offset));
     edgenode.add_child("data", data_startoffset);
   }
-  if(edge.end_offset != c_nonset)
+  if (edge.end_offset != c_nonset)
   {
     xmlnodet data_endoffset;
     data_endoffset.add("<xmlattr>.key", "endoffset");
     data_endoffset.put_value(integer2string(edge.end_offset));
     edgenode.add_child("data", data_endoffset);
   }
-  if(!edge.return_from_function.empty())
+  if (!edge.return_from_function.empty())
   {
     xmlnodet data_returnFromFunction;
     data_returnFromFunction.add("<xmlattr>.key", "returnFromFunction");
     data_returnFromFunction.put_value(edge.return_from_function);
     edgenode.add_child("data", data_returnFromFunction);
   }
-  if(!edge.enter_function.empty())
+  if (!edge.enter_function.empty())
   {
     xmlnodet data_enterFunction;
     data_enterFunction.add("<xmlattr>.key", "enterFunction");
     data_enterFunction.put_value(edge.enter_function);
     edgenode.add_child("data", data_enterFunction);
   }
-  if(!edge.assumption.empty())
+  if (!edge.assumption.empty())
   {
     xmlnodet data_assumption;
     data_assumption.add("<xmlattr>.key", "assumption");
     data_assumption.put_value(edge.assumption);
     edgenode.add_child("data", data_assumption);
   }
-  if(!edge.assumption_scope.empty())
+  if (!edge.assumption_scope.empty())
   {
     xmlnodet data_assumptionScope;
     data_assumptionScope.add("<xmlattr>.key", "assumption.scope");
     data_assumptionScope.put_value(edge.assumption_scope);
     edgenode.add_child("data", data_assumptionScope);
   }
-  if(!edge.thread_id.empty())
+  if (!edge.thread_id.empty())
   {
     xmlnodet data_thread_id;
     data_thread_id.add("<xmlattr>.key", "threadId");
     data_thread_id.put_value(edge.thread_id);
     edgenode.add_child("data", data_thread_id);
   }
-  if(!edge.create_thread.empty())
+  if (!edge.create_thread.empty())
   {
     xmlnodet data_create_thread;
     data_create_thread.add("<xmlattr>.key", "createThread");
@@ -526,16 +526,16 @@ void _create_graph_node(
   pProducer.add("<xmlattr>.key", "producer");
 
   std::string producer = options.get_option("witness-producer");
-  if(producer.empty())
+  if (producer.empty())
   {
     producer = "ESBMC " + std::string(ESBMC_VERSION);
-    if(options.get_bool_option("k-induction"))
+    if (options.get_bool_option("k-induction"))
       producer += " kind";
-    else if(options.get_bool_option("k-induction-parallel"))
+    else if (options.get_bool_option("k-induction-parallel"))
       producer += " kind";
-    else if(options.get_bool_option("falsification"))
+    else if (options.get_bool_option("falsification"))
       producer += " falsi";
-    else if(options.get_bool_option("incremental-bmc"))
+    else if (options.get_bool_option("incremental-bmc"))
       producer += " incr";
   }
 
@@ -556,14 +556,14 @@ void _create_graph_node(
   xmlnodet pProgramFile;
   pProgramFile.add("<xmlattr>.key", "programfile");
   std::string program_file = options.get_option("witness-programfile");
-  if(program_file.empty())
+  if (program_file.empty())
     pProgramFile.put_value(verifiedfile);
   else
     pProgramFile.put_value(program_file);
   graphnode.add_child("data", pProgramFile);
 
   std::string programFileHash;
-  if(program_file.empty())
+  if (program_file.empty())
     generate_sha1_hash_for_file(verifiedfile.c_str(), programFileHash);
   else
     generate_sha1_hash_for_file(program_file.c_str(), programFileHash);
@@ -574,11 +574,11 @@ void _create_graph_node(
 
   xmlnodet pDataSpecification;
   pDataSpecification.add("<xmlattr>.key", "specification");
-  if(options.get_bool_option("overflow-check"))
+  if (options.get_bool_option("overflow-check"))
     pDataSpecification.put_value("CHECK( init(main()), LTL(G ! overflow) )");
-  else if(options.get_bool_option("memory-leak-check"))
+  else if (options.get_bool_option("memory-leak-check"))
   {
-    if(options.get_bool_option("no-reachable-memory-leak"))
+    if (options.get_bool_option("no-reachable-memory-leak"))
       pDataSpecification.put_value(
         "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
     else
@@ -644,8 +644,8 @@ void reformat_assignment_array(
   BigInt pos = 0;
   std::string lhs = from_expr(ns, "", step.lhs, presentationt::WITNESS);
   std::string assignment_array = "";
-  for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
-      it != end;)
+  for (reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
+       it != end;)
   {
     std::string value = *it++;
     assignment_array += lhs + "[" + integer2string(pos) + "] = " + value + "; ";
@@ -667,8 +667,8 @@ void reformat_assignment_structs(
   using reg_itr = std::regex_token_iterator<std::string::iterator>;
   std::string lhs = from_expr(ns, "", step.lhs, presentationt::WITNESS);
   std::string assignment_struct = "";
-  for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
-      it != end;)
+  for (reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
+       it != end;)
   {
     std::string a = *it++;
     assignment_struct += lhs + a + "; ";
@@ -684,7 +684,7 @@ void check_replace_invalid_assignment(std::string &assignment)
   //assignment = std::regex_replace(assignment, e ,"$1 == $3");
   std::smatch m;
   /* looking for undesired in the assignment */
-  if(
+  if (
     std::regex_search(assignment, m, std::regex("&dynamic_([0-9]+)_value")) ||
     std::regex_search(assignment, m, std::regex("dynamic_([0-9]+)_array")) ||
     std::regex_search(assignment, m, std::regex("anonymous at")) ||
@@ -704,7 +704,7 @@ std::string
 get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
 {
   std::string assignment = "";
-  if(
+  if (
     !is_nil_expr(step.value) && is_constant_expr(step.value) &&
     is_valid_witness_step(ns, step))
   {
@@ -714,9 +714,9 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
     assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
-    if(std::regex_match(assignment, regex_array))
+    if (std::regex_match(assignment, regex_array))
       reformat_assignment_array(ns, step, assignment);
-    else if(std::regex_match(assignment, regex_structs))
+    else if (std::regex_match(assignment, regex_structs))
       reformat_assignment_structs(ns, step, assignment);
     check_replace_invalid_assignment(assignment);
   }
@@ -754,7 +754,7 @@ BigInt get_line_number(
 {
   std::string program_file = options.get_option("witness-programfile");
   /* check if it is necessary to get the relative line */
-  if(program_file.empty() || verified_file == program_file)
+  if (program_file.empty() || verified_file == program_file)
   {
     return relative_line_number;
   }
@@ -765,9 +765,9 @@ BigInt get_line_number(
   BigInt line_count = 0;
 
   /* get the relative content */
-  if(stream_relative.is_open())
+  if (stream_relative.is_open())
   {
-    while(getline(stream_relative, line) && line_count < relative_line_number)
+    while (getline(stream_relative, line) && line_count < relative_line_number)
     {
       relative_content = line;
       ++line_count;
@@ -775,9 +775,9 @@ BigInt get_line_number(
   }
   /* file for the line in the programfile */
   line_count = 1;
-  if(stream_programfile.is_open())
+  if (stream_programfile.is_open())
   {
-    while(getline(stream_programfile, line) && line != relative_content)
+    while (getline(stream_programfile, line) && line != relative_content)
     {
       ++line_count;
     }
@@ -791,9 +791,9 @@ std::string read_line(std::string file, BigInt line_number)
   std::string line_code = "";
   std::ifstream stream(file);
   BigInt line_count = 0;
-  if(stream.is_open())
+  if (stream.is_open())
   {
-    while(getline(stream, line) && line_count < line_number)
+    while (getline(stream, line) && line_count < line_number)
     {
       line_code = line;
       ++line_count;
@@ -814,7 +814,7 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options)
   std::string line_code = "";
 
   std::string program_file = options.get_option("witness-programfile");
-  if(program_file.empty() || verified_file == program_file)
+  if (program_file.empty() || verified_file == program_file)
   {
     line_code = read_line(verified_file, line_number);
   }
@@ -824,12 +824,12 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options)
       get_line_number(verified_file, line_number, options);
     line_code = read_line(program_file, program_file_line_number);
   }
-  if(std::regex_match(line_code, regex_invariants))
+  if (std::regex_match(line_code, regex_invariants))
   {
     std::regex re("(\\([a-zA-Z(-?(0-9))\\[\\]_>=+/*<~.&! \\(\\)]+\\))");
     using reg_itr = std::regex_token_iterator<std::string::iterator>;
-    for(reg_itr it{line_code.begin(), line_code.end(), re, 1}, end{};
-        it != end;)
+    for (reg_itr it{line_code.begin(), line_code.end(), re, 1}, end{};
+         it != end;)
     {
       invariant = *it++;
       break;
@@ -845,16 +845,16 @@ void generate_testcase_metadata()
   metadata.put("test-metadata.sourcecodelang", "C");
 
   std::string producer = config.options.get_option("witness-producer");
-  if(producer.empty())
+  if (producer.empty())
   {
     producer = "ESBMC " + std::string(ESBMC_VERSION);
-    if(config.options.get_bool_option("k-induction"))
+    if (config.options.get_bool_option("k-induction"))
       producer += " kind";
-    else if(config.options.get_bool_option("k-induction-parallel"))
+    else if (config.options.get_bool_option("k-induction-parallel"))
       producer += " kind";
-    else if(config.options.get_bool_option("falsification"))
+    else if (config.options.get_bool_option("falsification"))
       producer += " falsi";
-    else if(config.options.get_bool_option("incremental-bmc"))
+    else if (config.options.get_bool_option("incremental-bmc"))
       producer += " incr";
   }
 
@@ -910,10 +910,10 @@ void generate_testcase(
   std::unordered_set<std::string> nondet;
 
   auto generate_input = [&test_case, &smt_conv, &nondet](const expr2tc &expr) {
-    if(!expr || !is_symbol2t(expr))
+    if (!expr || !is_symbol2t(expr))
       return;
     const symbol2t &sym = to_symbol2t(expr);
-    if(
+    if (
       config.options.get_bool_option("generate-testcase") &&
       has_prefix(sym.thename.as_string(), "nondet$") &&
       !nondet.count(sym.thename.as_string()))
@@ -922,14 +922,14 @@ void generate_testcase(
       auto new_rhs = smt_conv->get(expr);
 
       // I don't think there is anything beyond constant int Test-Comp
-      if(is_constant_int2t(new_rhs))
+      if (is_constant_int2t(new_rhs))
         test_case << fmt::format(
           "<input>{}</input>\n", to_constant_int2t(new_rhs).value);
-      else if(is_constant_floatbv2t(new_rhs))
+      else if (is_constant_floatbv2t(new_rhs))
         test_case << fmt::format(
           "<input>{}</input>\n",
           to_constant_floatbv2t(new_rhs).value.to_ansi_c_string());
-      else if(is_constant_bool2t(new_rhs))
+      else if (is_constant_bool2t(new_rhs))
         test_case << fmt::format(
           "<input>{}</input>\n", to_constant_bool2t(new_rhs).value ? "1" : "0");
 
@@ -943,12 +943,12 @@ void generate_testcase(
       }
     }
   };
-  for(auto const &SSA_step : target->SSA_steps)
+  for (auto const &SSA_step : target->SSA_steps)
   {
-    if(!smt_conv->l_get(SSA_step.guard_ast).is_true())
+    if (!smt_conv->l_get(SSA_step.guard_ast).is_true())
       continue;
 
-    if(SSA_step.is_assignment())
+    if (SSA_step.is_assignment())
     {
       /*
          * AFAIK there are two ways to arrive here with a nondet symbol

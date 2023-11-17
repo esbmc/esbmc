@@ -26,7 +26,7 @@ static class
 
   const std::string &base_path()
   {
-    if(base.path() == "")
+    if (base.path() == "")
       base = file_operations::create_tmp_dir();
     return base.path();
   }
@@ -46,7 +46,7 @@ static class
 public:
   const std::string &header_dir()
   {
-    if(headers == "")
+    if (headers == "")
     {
       using namespace boost::filesystem;
       headers = base_path() + "/headers";
@@ -72,7 +72,7 @@ public:
   template <typename F>
   void foreach_libc_libm(F &&f)
   {
-    if(libc == "")
+    if (libc == "")
     {
       using namespace boost::filesystem;
       libc = base_path() + "/library";
@@ -100,7 +100,7 @@ const std::string *internal_libc_header_dir()
 /* copy of clang_c_convertert::get_filename_from_path(); TODO: unify */
 static std::string get_filename_from_path(std::string path)
 {
-  if(path.find_last_of('/') != std::string::npos)
+  if (path.find_last_of('/') != std::string::npos)
     return path.substr(path.find_last_of('/') + 1);
 
   return path;
@@ -109,7 +109,7 @@ static std::string get_filename_from_path(std::string path)
 void add_bundled_library_sources(contextt &context, const languaget &c_language)
 {
   /* First extract headers (if not already done) */
-  if(internal_libc_header_dir())
+  if (internal_libc_header_dir())
   {
     bool skip_fenv = false;
 #ifdef ESBMC_CHERI_CLANG_MORELLO
@@ -119,11 +119,11 @@ void add_bundled_library_sources(contextt &context, const languaget &c_language)
 
     /* Next, extract (if not already done) and process every libc/libm file. */
     internal_libc.foreach_libc_libm([&](const std::string &path) {
-      if(skip_fenv && get_filename_from_path(path) == "fenv.c")
+      if (skip_fenv && get_filename_from_path(path) == "fenv.c")
         return;
       languaget *l = c_language.new_language();
       log_status("file {}: Parsing", path);
-      if(l->parse(path) || l->typecheck(context, path))
+      if (l->parse(path) || l->typecheck(context, path))
       {
         log_error("error processing internal libc source {}", path);
         abort();

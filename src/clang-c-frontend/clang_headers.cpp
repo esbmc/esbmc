@@ -22,7 +22,7 @@ const std::string &clang_c_languaget::clang_headers_path()
    * during a run. And no more than one is required anyway */
   static auto p =
     file_operations::create_tmp_dir("esbmc-headers-%%%%-%%%%-%%%%");
-  if(!dumped)
+  if (!dumped)
   {
     dumped = true;
 #define ESBMC_FLAIL(body, size, ...)                                           \

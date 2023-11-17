@@ -88,7 +88,7 @@ public:
   /// domain.  This allows domains to be converted into program invariants.
   virtual expr2tc to_predicate(void) const
   {
-    if(is_bottom())
+    if (is_bottom())
       return gen_false_expr();
     return gen_true_expr();
   }

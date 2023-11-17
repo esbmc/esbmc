@@ -375,7 +375,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     REQUIRE(C.is_top());
 
     // Char initialization
-    for(int c = 0; c < 256; c++)
+    for (int c = 0; c < 256; c++)
     {
       A.set_lower(c);
       A.set_upper(c);
@@ -396,7 +396,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     REQUIRE(A.is_top());
 
     // Char initialization
-    for(int c = -128; c < 128; c++)
+    for (int c = -128; c < 128; c++)
     {
       A.set_lower(c);
       A.set_upper(c);
@@ -740,13 +740,13 @@ TEST_CASE("Interval templates arithmetic operations", "[ai][interval-analysis]")
     w3.upper = 129;
 
     // There is no way for me to check the order
-    for(auto &c : cut)
+    for (auto &c : cut)
     {
-      if(c == w1)
+      if (c == w1)
         check1 = true;
-      if(c == w2)
+      if (c == w2)
         check2 = true;
-      if(c == w3)
+      if (c == w3)
         check3 = true;
     }
 

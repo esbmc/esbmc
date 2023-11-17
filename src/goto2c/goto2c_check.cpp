@@ -3,7 +3,7 @@
 void goto2ct::check()
 {
   // Iterating through all available functions
-  for(auto &goto_function : goto_functions.function_map)
+  for (auto &goto_function : goto_functions.function_map)
     check(goto_function.first.as_string(), goto_function.second);
 }
 
@@ -11,7 +11,7 @@ void goto2ct::check(
   std::string function_id [[maybe_unused]],
   goto_functiont &goto_function)
 {
-  if(!goto_function.body_available)
+  if (!goto_function.body_available)
     return;
 
   // Checks for when the function body is available
@@ -26,7 +26,7 @@ void goto2ct::check(
 
 void goto2ct::check(goto_programt &goto_program)
 {
-  for(auto instruction : goto_program.instructions)
+  for (auto instruction : goto_program.instructions)
     check(instruction);
 }
 
@@ -36,13 +36,13 @@ void goto2ct::check(goto_programt::instructiont &instruction)
   // Fedor: do something for targets here
 
   // Only GOTO instructions can have targets
-  if(instruction.type != GOTO)
+  if (instruction.type != GOTO)
     assert(
       !instruction.has_target() &&
       "A non-GOTO instruction cannot have targets");
 
   // Now specific checks for each instruction
-  switch(instruction.type)
+  switch (instruction.type)
   {
   case NO_INSTRUCTION_TYPE:
     break;
@@ -236,6 +236,6 @@ void check_if_sideeffect_or_assign_expr(expr2tc expr [[maybe_unused]])
 void goto2ct::check_guard(expr2tc expr)
 {
   check_if_sideeffect_or_assign_expr(expr);
-  for(size_t i = 0; i < expr->get_num_sub_exprs(); i++)
+  for (size_t i = 0; i < expr->get_num_sub_exprs(); i++)
     check_guard(*(expr->get_sub_expr(i)));
 }

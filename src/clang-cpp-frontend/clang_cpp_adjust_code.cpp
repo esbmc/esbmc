@@ -2,7 +2,7 @@
 
 void clang_cpp_adjust::convert_expression_to_code(exprt &expr)
 {
-  if(expr.is_code())
+  if (expr.is_code())
     return;
 
   codet code("expression");
@@ -17,7 +17,7 @@ void clang_cpp_adjust::adjust_ifthenelse(codet &code)
   // In addition to the C syntax, C++ also allows a declaration
   // as condition. E.g.,
   // if(void *p=...) ...
-  if(code.op0().is_code())
+  if (code.op0().is_code())
   {
     codet decl_block = to_code(code.op0());
 
@@ -47,7 +47,7 @@ void clang_cpp_adjust::adjust_while(codet &code)
   // In addition to the C syntax, C++ also allows a declaration
   // as condition. E.g.,
   // while(void *p=...) ...
-  if(code.op0().is_code())
+  if (code.op0().is_code())
   {
     codet decl_block = to_code(code.op0());
 
@@ -77,7 +77,7 @@ void clang_cpp_adjust::adjust_switch(codet &code)
   // In addition to the C syntax, C++ also allows a declaration
   // as condition. E.g.,
   // switch(int i=...) ...
-  if(code.op0().is_code())
+  if (code.op0().is_code())
   {
     codet decl_block = to_code(code.op0());
 
@@ -107,7 +107,7 @@ void clang_cpp_adjust::adjust_for(codet &code)
   // In addition to the C syntax, C++ also allows a declaration
   // as condition. E.g.,
   // for( ; int i=...; ) ...
-  if(code.op1().is_code())
+  if (code.op1().is_code())
   {
     codet decl_block = to_code(code.op1());
 
@@ -144,18 +144,18 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
 {
   codet new_block("decl-block");
 
-  Forall_operands(it, code)
+  Forall_operands (it, code)
   {
-    if(it->is_code() && (it->statement() == "skip"))
+    if (it->is_code() && (it->statement() == "skip"))
       continue;
 
     code_declt &code_decl = to_code_decl(to_code(*it));
 
-    if(code_decl.operands().size() == 2)
+    if (code_decl.operands().size() == 2)
     {
       exprt &rhs = code_decl.rhs();
       exprt &lhs = code_decl.lhs();
-      if(
+      if (
         rhs.id() == "sideeffect" && rhs.statement() == "function_call" &&
         rhs.get_bool("constructor"))
       {
@@ -186,7 +186,7 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
         continue;
       }
 
-      if(lhs.type().get_bool("#reference"))
+      if (lhs.type().get_bool("#reference"))
       {
         // adjust rhs to address_off:
         // `int &r = g;` is turned into `int &r = &g;`

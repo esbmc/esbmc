@@ -23,7 +23,7 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
    *  copied to the `components` list in its type, which should have been
    *  done in the converter.
    */
-  if(!symbol.value.need_vptr_init() || symbol.value.is_nil())
+  if (!symbol.value.need_vptr_init() || symbol.value.is_nil())
     return;
 
   /*
@@ -39,7 +39,7 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
    *  TODO: For the time being, we just add vptr init code in ctors.
    *        We *might* need to add vptr init code in dtors in the future. But we need some TCs first.
    */
-  if(ctor_type.return_type().id() != "constructor")
+  if (ctor_type.return_type().id() != "constructor")
     return;
 
   // get the class' type where this ctor is declared
@@ -51,9 +51,9 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
     to_struct_type(ctor_class_symb->type).components();
 
   // iterate over the `components` and initialize each virtual pointers
-  for(const auto &comp : components)
+  for (const auto &comp : components)
   {
-    if(!comp.get_bool("is_vtptr"))
+    if (!comp.get_bool("is_vtptr"))
       continue;
 
     side_effect_exprt new_code("assign");

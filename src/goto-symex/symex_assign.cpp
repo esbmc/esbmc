@@ -49,14 +49,14 @@ goto_symext::goto_symext(
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
 
-  for(unsigned int idx = 0; idx < length; idx++)
+  for (unsigned int idx = 0; idx < length; idx++)
   {
     std::string::size_type next = set.find(",", idx);
     std::string val = set.substr(idx, next - idx);
     unsigned long id = atoi(val.substr(0, val.find(":", 0)).c_str());
     BigInt uw(val.substr(val.find(":", 0) + 1).c_str());
     unwind_set[id] = uw;
-    if(next == std::string::npos)
+    if (next == std::string::npos)
       break;
     idx = next;
   }
@@ -125,7 +125,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
 
 void goto_symext::do_simplify(expr2tc &expr)
 {
-  if(!no_simplify)
+  if (!no_simplify)
     simplify(expr);
 }
 
@@ -141,12 +141,12 @@ void goto_symext::symex_assign(
   // union. The rest of the model checker isn't rated for dealing with this
   // concept; perform a NOP.
   /* TODO: either we support empty classes/structs/unions, or we don't. */
-  if(is_structure_type(code.target->type))
+  if (is_structure_type(code.target->type))
   {
     const struct_union_data &t2 =
       static_cast<const struct_union_data &>(*code.target->type);
 
-    if(t2.members.empty())
+    if (t2.members.empty())
       return;
   }
 
@@ -165,15 +165,15 @@ void goto_symext::symex_assign(
   replace_dynamic_allocation(rhs);
 
   // printf expression that has lhs
-  if(is_code_printf2t(rhs))
+  if (is_code_printf2t(rhs))
   {
     symex_printf(lhs, rhs);
   }
 
-  if(is_sideeffect2t(rhs))
+  if (is_sideeffect2t(rhs))
   {
     const sideeffect2t &effect = to_sideeffect2t(rhs);
-    switch(effect.kind)
+    switch (effect.kind)
     {
     case sideeffect2t::cpp_new:
     case sideeffect2t::cpp_new_arr:
@@ -203,10 +203,10 @@ void goto_symext::symex_assign(
   }
 
   bool hidden_ssa = hidden || cur_state->top().hidden;
-  if(!hidden_ssa)
+  if (!hidden_ssa)
   {
     auto const maybe_symbol = get_base_object(lhs);
-    if(is_symbol2t(maybe_symbol))
+    if (is_symbol2t(maybe_symbol))
     {
       auto const s = to_symbol2t(maybe_symbol).thename.as_string();
       hidden_ssa |= (s.find('$') != std::string::npos) ||
@@ -226,47 +226,47 @@ void goto_symext::symex_assign_rec(
   guardt &guard,
   const bool hidden)
 {
-  if(is_symbol2t(lhs))
+  if (is_symbol2t(lhs))
   {
     symex_assign_symbol(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
-  else if(is_index2t(lhs))
+  else if (is_index2t(lhs))
   {
     symex_assign_array(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
-  else if(is_member2t(lhs))
+  else if (is_member2t(lhs))
   {
     symex_assign_member(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
-  else if(is_if2t(lhs))
+  else if (is_if2t(lhs))
   {
     symex_assign_if(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
-  else if(is_typecast2t(lhs) || is_bitcast2t(lhs))
+  else if (is_typecast2t(lhs) || is_bitcast2t(lhs))
   {
     symex_assign_typecast(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
-  else if(is_constant_string2t(lhs) || is_null_object2t(lhs))
+  else if (is_constant_string2t(lhs) || is_null_object2t(lhs))
   {
     // ignore
   }
-  else if(is_byte_extract2t(lhs))
+  else if (is_byte_extract2t(lhs))
   {
     symex_assign_byte_extract(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
-  else if(is_concat2t(lhs))
+  else if (is_concat2t(lhs))
   {
     symex_assign_concat(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
-  else if(is_constant_struct2t(lhs))
+  else if (is_constant_struct2t(lhs))
   {
     symex_assign_structure(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
-  else if(is_extract2t(lhs))
+  else if (is_extract2t(lhs))
   {
     symex_assign_extract(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
-  else if(is_bitand2t(lhs))
+  else if (is_bitand2t(lhs))
   {
     symex_assign_bitfield(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
@@ -286,13 +286,13 @@ void goto_symext::symex_assign_symbol(
   const bool hidden)
 {
   // put assignment guard in rhs
-  if(!guard.is_true())
+  if (!guard.is_true())
     rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
 
   cur_state->rename(rhs);
   do_simplify(rhs);
 
-  if(!is_nil_expr(full_rhs))
+  if (!is_nil_expr(full_rhs))
   {
     cur_state->rename(full_rhs);
     do_simplify(full_rhs);
@@ -305,7 +305,7 @@ void goto_symext::symex_assign_symbol(
   // Special case when the lhs is an array access, we need to get the
   // right symbol for the index
   expr2tc new_lhs = full_lhs;
-  if(is_index2t(new_lhs))
+  if (is_index2t(new_lhs))
     cur_state->rename(to_index2t(new_lhs).index);
 
   guardt tmp_guard(cur_state->guard);
@@ -340,7 +340,7 @@ void goto_symext::symex_assign_structure(
   // will croak after recursing. Otherwise, we are assigning to a re-constituted
   // structure, through dereferencing.
   unsigned int i = 0;
-  for(auto const &it : structtype.members)
+  for (auto const &it : structtype.members)
   {
     const expr2tc &lhs_memb = the_structure.datatype_members[i];
     expr2tc rhs_memb = member2tc(it, rhs, structtype.member_names[i]);
@@ -361,13 +361,13 @@ void goto_symext::symex_assign_typecast(
   assert(lhs->type->type_id == rhs->type->type_id);
 
   expr2tc rhs_typecasted, from;
-  if(is_typecast2t(lhs))
+  if (is_typecast2t(lhs))
   {
     assert(!is_array_type(lhs));
     assert(!is_vector_type(lhs));
 
     from = to_typecast2t(lhs).from;
-    if(is_struct_type(lhs) && lhs->type != from->type)
+    if (is_struct_type(lhs) && lhs->type != from->type)
     {
       /* See dereference_type_compare() for the conditions allowed here. */
 
@@ -414,7 +414,7 @@ void goto_symext::symex_assign_typecast(
       const std::vector<irep_idt> &lhs_name = lhs_data.member_names;
       const std::vector<type2tc> &from_type = from_data.members;
       const std::vector<irep_idt> &from_name = from_data.member_names;
-      for(size_t i = 0; i < n; i++)
+      for (size_t i = 0; i < n; i++)
       {
         new_rhs = with2tc(
           from->type,
@@ -471,7 +471,7 @@ void goto_symext::symex_assign_array(
   //   a'==a WITH [i:=e]
 
   expr2tc new_rhs = rhs;
-  if(new_rhs->type != index.type)
+  if (new_rhs->type != index.type)
     new_rhs = typecast2tc(index.type, new_rhs);
 
   new_rhs =
@@ -503,10 +503,10 @@ void goto_symext::symex_assign_member(
   expr2tc real_lhs = member.source_value;
 
   // typecasts involved? C++ does that for inheritance.
-  if(is_typecast2t(member.source_value))
+  if (is_typecast2t(member.source_value))
   {
     const typecast2t &cast = to_typecast2t(member.source_value);
-    if(is_null_object2t(cast.from))
+    if (is_null_object2t(cast.from))
     {
       // ignore
     }
@@ -577,7 +577,7 @@ void goto_symext::symex_assign_byte_extract(
   // Grief: multi dimensional arrays.
   const byte_extract2t &extract = to_byte_extract2t(lhs);
 
-  if(is_multi_dimensional_array(extract.source_value))
+  if (is_multi_dimensional_array(extract.source_value))
   {
     const array_type2t &arr_type = to_array_type(extract.source_value->type);
     assert(
@@ -632,7 +632,7 @@ void goto_symext::symex_assign_concat(
   // occur in one large grouping. Produce a list of them.
   std::list<expr2tc> operand_list;
   expr2tc cur_concat = lhs;
-  while(is_concat2t(cur_concat))
+  while (is_concat2t(cur_concat))
   {
     const concat2t &cat2 = to_concat2t(cur_concat);
     operand_list.push_back(cat2.side_2);
@@ -643,7 +643,7 @@ void goto_symext::symex_assign_concat(
   operand_list.push_back(cur_concat);
 
 #ifndef NDEBUG
-  for(auto const &foo : operand_list)
+  for (auto const &foo : operand_list)
     assert(foo->type->get_width() == 8);
 #endif
   assert((operand_list.size() * 8) == cat.type->get_width());
@@ -659,7 +659,7 @@ void goto_symext::symex_assign_concat(
   // the byte offset is always the same no matter endianness here, any byte
   // order flipping is handled at the smt layer.
   std::list<expr2tc> extracts;
-  for(unsigned int i = 0; i < operand_list.size(); i++)
+  for (unsigned int i = 0; i < operand_list.size(); i++)
   {
     expr2tc byte =
       byte_extract2tc(get_uint_type(8), rhs, gen_ulong(i), is_big_endian);
@@ -670,11 +670,11 @@ void goto_symext::symex_assign_concat(
   assert(extracts.size() == operand_list.size());
   auto lhs_it = operand_list.begin();
   auto rhs_it = extracts.begin();
-  while(lhs_it != operand_list.end())
+  while (lhs_it != operand_list.end())
   {
     expr2tc new_rhs = *rhs_it;
     const type2tc &type = (*lhs_it)->type;
-    if(new_rhs->type != type)
+    if (new_rhs->type != type)
       new_rhs = typecast2tc(type, new_rhs);
     symex_assign_rec(*lhs_it, full_lhs, new_rhs, rhs, guard, hidden);
     lhs_it++;
@@ -699,7 +699,7 @@ void goto_symext::symex_assign_extract(
   // and concats are probably the best approach for the solver to optimise for.
   unsigned int bitblob_width = ex.from->type->get_width();
   expr2tc top_part;
-  if(ex.upper != bitblob_width - 1)
+  if (ex.upper != bitblob_width - 1)
   {
     // Extract from the top of the blob down to the bit above this extract
     type2tc thetype = get_uint_type(bitblob_width - ex.upper - 1);
@@ -707,7 +707,7 @@ void goto_symext::symex_assign_extract(
   }
 
   expr2tc bottom_part;
-  if(ex.lower != 0)
+  if (ex.lower != 0)
   {
     type2tc thetype = get_uint_type(ex.lower);
     bottom_part = extract2tc(thetype, ex.from, ex.lower - 1, 0);
@@ -715,7 +715,7 @@ void goto_symext::symex_assign_extract(
 
   // We now have two or three parts: accumulate them into a bitblob sized lump
   expr2tc accuml = bottom_part;
-  if(!is_nil_expr(accuml))
+  if (!is_nil_expr(accuml))
   {
     type2tc thetype =
       get_uint_type(accuml->type->get_width() + rhs->type->get_width());
@@ -726,7 +726,7 @@ void goto_symext::symex_assign_extract(
     accuml = rhs;
   }
 
-  if(!is_nil_expr(top_part))
+  if (!is_nil_expr(top_part))
   {
     assert(
       accuml->type->get_width() + top_part->type->get_width() == bitblob_width);
@@ -798,7 +798,7 @@ void goto_symext::symex_assign_bitfield(
 
 void goto_symext::replace_nondet(expr2tc &expr)
 {
-  if(
+  if (
     is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
   {
     unsigned int &nondet_count = get_dynamic_counter();
@@ -808,7 +808,7 @@ void goto_symext::replace_nondet(expr2tc &expr)
   else
   {
     expr->Foreach_operand([this](expr2tc &e) {
-      if(!is_nil_expr(e))
+      if (!is_nil_expr(e))
         replace_nondet(e);
     });
   }
