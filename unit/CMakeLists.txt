@@ -10,6 +10,10 @@ if(ENABLE_JIMPLE_FRONTEND)
 add_subdirectory (jimple-frontend)
 endif()
 
+if(ENABLE_PYTHON_FRONTEND)
+add_subdirectory (python-frontend)
+endif()
+
 add_subdirectory(util)
 add_subdirectory(c2goto)
 add_subdirectory(irep2)
