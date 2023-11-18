@@ -3,8 +3,10 @@
 float sinf(float x)
 {
 __ESBMC_HIDE:;
-    
-	// this operational model returns zero on purpose
+
+    // unimplemented operational models
+    // should return VERIFICATION UNKNOWN
+    __ESBMC_unreachable();
 
     return 0.0f;
 }
