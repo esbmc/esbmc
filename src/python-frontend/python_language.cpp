@@ -1,5 +1,6 @@
 #include <python-frontend/python_language.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_annotation.h>
 #include <util/message.h>
 #include <util/filesystem.h>
 #include <util/c_expr2string.h>
@@ -69,6 +70,8 @@ bool python_languaget::parse(const std::string &path)
 
   std::ifstream ast_json(ast_output_dir + "/ast.json");
   ast = nlohmann::json::parse(ast_json);
+
+  add_type_annotation(ast["body"]);
 
   return false;
 }
