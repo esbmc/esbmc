@@ -13,7 +13,6 @@ int _setjmp(jmp_buf __env)
   setjmp(__env);
 }
 
-
 void longjmp(jmp_buf env, int status)
 {
   __ESBMC_unreachable();
