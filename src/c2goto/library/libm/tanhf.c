@@ -1,6 +1,6 @@
 #include <math.h>
 
-#define ALMOST_ONE 0.999999f // necessary to ensure dtanhf(x)/dx <= 1 and dlogistic(x)/dx <= 0.25
+#define ALMOST_ONE 0.9999f // necessary to ensure dtanhf(x)/dx <= 1 and dlogistic(x)/dx <= 0.25
 
 float tanhf(float x)
 {
