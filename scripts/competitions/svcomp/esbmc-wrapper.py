@@ -299,9 +299,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   if concurrency: # Concurrency only works with incremental
     command_line += "--incremental-bmc "
   elif strat == "fixed":
-    command_line += "--k-induction --max-inductive-step 3 "
+    command_line += "--incremental-bmc "
   elif strat == "kinduction":
-    command_line += "--k-induction --max-inductive-step 3 "
+    command_line += "--incremental-bmc "
   elif strat == "falsi":
     command_line += "--falsification "
   elif strat == "incr":
