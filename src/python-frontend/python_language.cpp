@@ -71,7 +71,7 @@ bool python_languaget::parse(const std::string &path)
   std::ifstream ast_json(ast_output_dir + "/ast.json");
   ast = nlohmann::json::parse(ast_json);
 
-  python_annotation<nlohmann::json> ann(ast["body"]);
+  python_annotation<nlohmann::json> ann(ast);
   ann.add_type_annotation();
 
   return false;
