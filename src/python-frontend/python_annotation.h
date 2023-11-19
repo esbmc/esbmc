@@ -24,8 +24,15 @@ public:
         // Get type from rhs variable
         else if(element["value"]["_type"] == "Name")
         {
-          // find rhs node on ast
+          // find rhs variable node in the AST
           auto rhs_node = find_node(element["value"]["id"], ast);
+          if(rhs_node.empty())
+          {
+            log_error(
+              "Variable {} not found.",
+              element["value"]["id"].get<std::string>().c_str());
+            abort();
+          }
           type = rhs_node["annotation"]["id"];
         }
         else
@@ -54,7 +61,7 @@ public:
         element["end_lineno"] = element["lineno"];
         element["simple"] = 1;
 
-        // Convert targets from
+        // Convert "targets" array to "target" object
         element["target"] = target;
         element.erase("targets");
 
