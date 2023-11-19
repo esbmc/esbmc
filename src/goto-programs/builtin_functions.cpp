@@ -1,3 +1,6 @@
+
+#include <ac_config.h>
+
 #include <cassert>
 #include <goto-programs/goto_convert_class.h>
 #include <regex>
@@ -577,6 +580,12 @@ void goto_convertt::do_function_call_symbol(
       log_error("`{}' expected to have no arguments", id2string(base_name));
       abort();
     }
+
+#if ESBMC_SVCOMP
+    /* <https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/issues/1296> */
+    if(base_name == "__builtin_unreachable")
+      return;
+#endif
 
     goto_programt::targett t = dest.add_instruction(ASSERT);
     t->guard = gen_false_expr();

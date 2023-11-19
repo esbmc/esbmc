@@ -1077,10 +1077,21 @@ static inline expr2tc gen_value_by_byte(
    *
    */
 
+  if(num_of_bytes == 0)
+    return src;
+
   /* TODO: Bitwise operations are valid for floats, but we don't have an
    * implementation, yet. Give up. */
   if(is_floatbv_type(type) || is_fixedbv_type(type))
+  {
+    unsigned int type_size = type_byte_size(type).to_uint64();
+    // HACK: this should fix the NN-benchmarks (see #1508)
+    if(
+      is_constant_int2t(value) && to_constant_int2t(value).value.is_zero() &&
+      num_of_bytes == type_size && offset == 0)
+      return gen_zero(type);
     return expr2tc();
+  }
 
   if(is_scalar_type(type) && type->get_width() == 8 && offset == 0)
     return typecast2tc(type, value);
@@ -1439,9 +1450,9 @@ void goto_symext::intrinsic_memset(
       std::string error_msg =
         fmt::format("dereference failure: trying to deref a ptr code");
 
-      expr2tc false_expr = gen_false_expr();
-      guard.guard_expr(false_expr);
-      claim(false_expr, error_msg);
+      // SAME_OBJECT(ptr, item) => DEREF ERROR
+      expr2tc check = implies2tc(item.guard, gen_false_expr());
+      claim(check, error_msg);
       continue;
     }
 
@@ -1457,8 +1468,9 @@ void goto_symext::intrinsic_memset(
         type_size - number_of_offset,
         number_of_bytes);
 
-      guard.add(gen_false_expr());
-      claim(gen_false_expr(), error_msg);
+      // SAME_OBJECT(ptr, item) => DEREF ERROR
+      expr2tc check = implies2tc(item.guard, gen_false_expr());
+      claim(check, error_msg);
       continue;
     }
 
