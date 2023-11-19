@@ -1,6 +1,7 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
+#include <util/message.h>
 
 template <class JsonType>
 class python_annotation
@@ -8,26 +9,30 @@ class python_annotation
 public:
   void add_type_annotation(nlohmann::json &ast)
   {
-//    printf("\ninput:\n");
-//    printf("%s\n", ast.dump(4).c_str());
-
     for(auto &element : ast)
     {
-      // Getting type from constant on RHS
-      if(
-        element["_type"] == "Assign" && element["type_comment"].is_null() &&
-        element["value"]["_type"] == "Constant")
+      if(element["_type"] == "Assign" && element["type_comment"].is_null())
       {
-        //        printf("input:\n");
-        //        printf("%s\n", element.dump(4).c_str());
-        //        getchar();
+        std::string type;
+        // Get type from rhs constant
+        if(element["value"]["_type"] == "Constant")
+        {
+          // Get type from rhs constant
+          auto rhs = element["value"]["value"];
+          type = get_type_from_element(rhs);
+        }
+        // Get type from rhs variable
+        else if(element["value"]["_type"] == "Name")
+        {
+          // find rhs node on ast
+          auto rhs_node = find_node(element["value"]["id"], ast);
+          type = rhs_node["annotation"]["id"];
+        }
+        else
+          continue;
 
         // Update type field
         element["_type"] = "AnnAssign";
-
-        // Get type from rhs value
-        auto rhs = element["value"]["value"];
-        std::string type = get_type_from_element(rhs);
 
         // lhs
         auto target = element["targets"][0];
@@ -58,11 +63,10 @@ public:
           element["value"]["col_offset"].get<int>() + type.size() + 1;
         element["value"]["end_col_offset"] =
           element["value"]["end_col_offset"].get<int>() + type.size() + 1;
+
+        type = "";
       }
     }
-//    printf("\noutput:\n");
-//    printf("%s\n", ast.dump(4).c_str());
-    //  exit(1);
   }
 
 private:
@@ -76,5 +80,18 @@ private:
       return std::string("float");
 
     return std::string();
+  }
+
+  const nlohmann::json
+  find_node(const std::string &node_name, const nlohmann::json &ast)
+  {
+    for(const auto &elem : ast)
+    {
+      if(
+        elem["_type"] == "AnnAssign" &&
+        elem["target"]["id"].get<std::string>() == node_name)
+        return elem;
+    }
+    return nlohmann::json();
   }
 };
