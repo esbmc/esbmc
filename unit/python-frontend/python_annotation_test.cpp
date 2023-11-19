@@ -77,7 +77,6 @@ TEST_CASE("Add type annotation")
                         "id": "n",
                         "lineno": 1
                     },
-                    "type_comment": null,
                     "value": {
                         "_type": "Constant",
                         "col_offset": 8,
@@ -93,7 +92,173 @@ TEST_CASE("Add type annotation")
             ])json");
 
     nlohmann::json expected_output;
-	output_data >> expected_output;
+    output_data >> expected_output;
+
+    python_annotation<nlohmann::json> ann;
+    ann.add_type_annotation(input_json);
+
+    REQUIRE(input_json == expected_output);
+  }
+
+  SECTION("Get LHS type from RHS type")
+  {
+    std::istringstream input_data(R"json([
+        {
+            "_type": "Assign",
+            "col_offset": 0,
+            "end_col_offset": 6,
+            "end_lineno": 1,
+            "lineno": 1,
+            "targets": [
+                {
+                    "_type": "Name",
+                    "col_offset": 0,
+                    "ctx": {
+                        "_type": "Store"
+                    },
+                    "end_col_offset": 1,
+                    "end_lineno": 1,
+                    "id": "n",
+                    "lineno": 1
+                }
+            ],
+            "type_comment": null,
+            "value": {
+                "_type": "Constant",
+                "col_offset": 4,
+                "end_col_offset": 6,
+                "end_lineno": 1,
+                "kind": null,
+                "lineno": 1,
+                "n": 10,
+                "s": 10,
+                "value": 10
+            }
+        },
+        {
+            "_type": "Assign",
+            "col_offset": 0,
+            "end_col_offset": 5,
+            "end_lineno": 2,
+            "lineno": 2,
+            "targets": [
+                {
+                    "_type": "Name",
+                    "col_offset": 0,
+                    "ctx": {
+                        "_type": "Store"
+                    },
+                    "end_col_offset": 1,
+                    "end_lineno": 2,
+                    "id": "p",
+                    "lineno": 2
+                }
+            ],
+            "type_comment": null,
+            "value": {
+                "_type": "Name",
+                "col_offset": 4,
+                "ctx": {
+                    "_type": "Load"
+                },
+                "end_col_offset": 5,
+                "end_lineno": 2,
+                "id": "n",
+                "lineno": 2
+            }
+        }
+    ])json");
+
+    nlohmann::json input_json;
+    input_data >> input_json;
+
+    std::istringstream output_data(R"json([
+        {
+            "_type": "AnnAssign",
+            "annotation": {
+                "_type": "Name",
+                "col_offset": 2,
+                "ctx": {
+                    "_type": "Load"
+                },
+                "end_col_offset": 5,
+                "end_lineno": 1,
+                "id": "int",
+                "lineno": 1
+            },
+            "col_offset": 0,
+            "end_col_offset": 10,
+            "end_lineno": 1,
+            "lineno": 1,
+            "simple": 1,
+            "target": {
+                "_type": "Name",
+                "col_offset": 0,
+                "ctx": {
+                    "_type": "Store"
+                },
+                "end_col_offset": 1,
+                "end_lineno": 1,
+                "id": "n",
+                "lineno": 1
+            },
+            "value": {
+                "_type": "Constant",
+                "col_offset": 8,
+                "end_col_offset": 10,
+                "end_lineno": 1,
+                "kind": null,
+                "lineno": 1,
+                "n": 10,
+                "s": 10,
+                "value": 10
+            }
+        },
+        {
+            "_type": "AnnAssign",
+            "annotation": {
+                "_type": "Name",
+                "col_offset": 2,
+                "ctx": {
+                    "_type": "Load"
+                },
+                "end_col_offset": 5,
+                "end_lineno": 2,
+                "id": "int",
+                "lineno": 2
+            },
+            "col_offset": 0,
+            "end_col_offset": 9,
+            "end_lineno": 2,
+            "lineno": 2,
+            "simple": 1,
+            "target": {
+                "_type": "Name",
+                "col_offset": 0,
+                "ctx": {
+                    "_type": "Store"
+                },
+                "end_col_offset": 1,
+                "end_lineno": 2,
+                "id": "p",
+                "lineno": 2
+            },
+            "value": {
+                "_type": "Name",
+                "col_offset": 8,
+                "ctx": {
+                    "_type": "Load"
+                },
+                "end_col_offset": 9,
+                "end_lineno": 2,
+                "id": "n",
+                "lineno": 2
+            }
+        }
+    ])json");
+
+    nlohmann::json expected_output;
+    output_data >> expected_output;
 
     python_annotation<nlohmann::json> ann;
     ann.add_type_annotation(input_json);

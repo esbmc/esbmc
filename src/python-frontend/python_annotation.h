@@ -65,6 +65,9 @@ public:
         element["target"] = target;
         element.erase("targets");
 
+        // Remove "type_comment" field
+        element.erase("type_comment");
+
         // Update value fields
         element["value"]["col_offset"] =
           element["value"]["col_offset"].get<int>() + type.size() + 1;
