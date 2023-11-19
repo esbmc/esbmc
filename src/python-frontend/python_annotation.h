@@ -18,19 +18,31 @@ public:
     add_annotation(ast_);
 
     // Add type annotation in function bodies
-    for(auto &element : ast_)
+    for(auto &element : ast_["body"])
     {
       if(element["_type"] == "FunctionDef")
       {
-        add_annotation(element["body"]);
+        add_annotation(element);
+        update_end_col_offset(element);
       }
     }
   }
 
 private:
+  void update_end_col_offset(nlohmann::json &ast)
+  {
+    int max_col_offset = ast["end_col_offset"];
+    for(auto &elem : ast["body"])
+    {
+      if(elem["end_col_offset"] > max_col_offset)
+        max_col_offset = elem["end_col_offset"];
+    }
+    ast["end_col_offset"] = max_col_offset;
+  }
+
   void add_annotation(nlohmann::json &body)
   {
-    for(auto &element : body)
+    for(auto &element : body["body"])
     {
       if(element["_type"] == "Assign" && element["type_comment"].is_null())
       {
@@ -45,8 +57,9 @@ private:
         // Get type from rhs variable
         else if(element["value"]["_type"] == "Name")
         {
-          // find rhs variable node in the AST
-          auto rhs_node = find_node(element["value"]["id"]);
+          // Try find rhs variable node in the global scope
+          auto rhs_node = find_node(element["value"]["id"], ast_["body"]);
+
           if(rhs_node.empty())
           {
             log_error(
@@ -112,9 +125,9 @@ private:
     return std::string();
   }
 
-  const JsonType find_node(const std::string &node_name)
+  const JsonType find_node(const std::string &node_name, const JsonType &body)
   {
-    for(const auto &elem : ast_)
+    for(const auto &elem : body)
     {
       if(
         elem["_type"] == "AnnAssign" &&
