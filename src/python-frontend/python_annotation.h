@@ -2,14 +2,35 @@
 
 #include <nlohmann/json.hpp>
 #include <util/message.h>
+#include <string>
 
 template <class JsonType>
 class python_annotation
 {
 public:
-  void add_type_annotation(nlohmann::json &ast)
+  python_annotation(nlohmann::json &ast) : ast_(ast)
   {
-    for(auto &element : ast)
+  }
+
+  void add_type_annotation()
+  {
+    // Add type annotation in global scope variables
+    add_annotation(ast_);
+
+    // Add type annotation in function bodies
+    for(auto &element : ast_)
+    {
+      if(element["_type"] == "FunctionDef")
+      {
+        add_annotation(element["body"]);
+      }
+    }
+  }
+
+private:
+  void add_annotation(nlohmann::json &body)
+  {
+    for(auto &element : body)
     {
       if(element["_type"] == "Assign" && element["type_comment"].is_null())
       {
@@ -25,7 +46,7 @@ public:
         else if(element["value"]["_type"] == "Name")
         {
           // find rhs variable node in the AST
-          auto rhs_node = find_node(element["value"]["id"], ast);
+          auto rhs_node = find_node(element["value"]["id"]);
           if(rhs_node.empty())
           {
             log_error(
@@ -79,7 +100,6 @@ public:
     }
   }
 
-private:
   std::string get_type_from_element(const JsonType &elem) const
   {
     if(elem.is_number_integer() || elem.is_number_unsigned())
@@ -92,16 +112,17 @@ private:
     return std::string();
   }
 
-  const nlohmann::json
-  find_node(const std::string &node_name, const nlohmann::json &ast)
+  const JsonType find_node(const std::string &node_name)
   {
-    for(const auto &elem : ast)
+    for(const auto &elem : ast_)
     {
       if(
         elem["_type"] == "AnnAssign" &&
-        elem["target"]["id"].get<std::string>() == node_name)
+        elem["target"]["id"].template get<std::string>() == node_name)
         return elem;
     }
     return nlohmann::json();
   }
+
+  nlohmann::json &ast_;
 };
