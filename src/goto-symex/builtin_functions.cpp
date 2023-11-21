@@ -488,7 +488,9 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
     fmt_idx = 0;
     number_of_format_args = func_call.operands.size() - 1;
   }
-  else if (func_name.find("__ESBMC_fscanf") != std::string::npos)
+  else if(
+    (func_name.find("__ESBMC_fscanf") != std::string::npos) ||
+    (func_name.find("__ESBMC_sscanf") != std::string::npos))
   {
     assert(func_call.operands.size() >= 3 && "Wrong __ESBMC_fscanf signature");
     fmt_idx = 1;

@@ -645,6 +645,7 @@ void goto_symext::run_intrinsic(
   }
   else if (
     has_prefix(symname, "c:@F@__ESBMC_scanf") ||
+    has_prefix(symname, "c:@F@__ESBMC_sscanf") ||
     has_prefix(symname, "c:@F@__ESBMC_fscanf"))
   {
     auto &ex_state = art.get_cur_state();
