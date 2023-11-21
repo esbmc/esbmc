@@ -27,7 +27,8 @@ void cse_domaint::transform(
     // Expressions that contain the target will need to be recomputed
     havoc_expr(code.target, to);
     // Target may be an expression as well
-    // TODO: skip only recursive definitions. For example, x = x + 1 should be skipped
+    // TODO: skip recursive definitions only. For example, x = x + 1 should be skipped does not
+    // makes 'x' available. However, y = x + 1 does.
     //make_expression_available(code.target);
   }
   break;
@@ -51,20 +52,24 @@ void cse_domaint::transform(
   }
   case FUNCTION_CALL:
   {
-    break;
-#if 0
-    // TODO: https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/raw/main/c/reducercommutativity/sum05-2.yml
     const code_function_call2t &func =
       to_code_function_call2t(instruction.code);
+
     // each operand should be available now (unless someone is doing a sideeffect)
+#if 0
+    // Skip functions for now, the abstract interpreter is not context-aware
+    // so it can't deal with function parameters properly.
+    // Problematic benchmark: https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/raw/main/c/reducercommutativity/sum05-2.yml
     for(const expr2tc &e : func.operands)
       make_expression_available(e);
+#endif
     if(func.ret)
     {
       havoc_expr(func.ret, to);
       make_expression_available(func.ret);
     }
-#endif
+
+    break;
   }
   default:;
   }
@@ -321,7 +326,6 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
   // 1. Let's count expressions, the idea is to go through all program statements
   //    and check if any sub-expr is already available
   std::unordered_set<expr2tc, irep2_hash> expressions_set;
-  //expressions_map expressions;
   for(auto it = (F.second.body).instructions.begin();
       it != (F.second.body).instructions.end();
       ++it)
@@ -424,10 +428,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     std::unordered_set<expr2tc, irep2_hash> local_initialized;
     for(auto &x : matched_pre_expressions)
     {
-      if(
-        !state.available_expressions.count(x) ||
-        // is_in_loop(it) ||
-        !initialized.count(x))
+      if(!state.available_expressions.count(x) || !initialized.count(x))
       {
         goto_programt::instructiont instruction;
         instruction.make_assignment();
@@ -447,10 +448,7 @@ bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
     for(auto &x : matched_post_expressions)
     {
       // First time seeing the expr
-      if(
-        !state.available_expressions.count(x) ||
-        // is_in_loop(it) ||
-        !initialized.count(x))
+      if(!state.available_expressions.count(x) || !initialized.count(x))
       {
         goto_programt::instructiont instruction;
         instruction.make_assignment();
