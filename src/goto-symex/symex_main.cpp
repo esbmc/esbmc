@@ -235,6 +235,11 @@ void goto_symext::symex_step(reachability_treet &art)
         thrown_obj_map.erase(cur_state->source.pc);
       }
 
+      if(instruction.inductive_step_instruction && is_floatbv_type(deref_code.target)) {
+        log_warning("Disabling inductive step because floats");
+        options.set_option("disable-inductive-step", true);
+      }
+
       symex_assign(code_assign2tc(std::move(deref_code)));
     }
 
