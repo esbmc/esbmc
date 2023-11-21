@@ -129,9 +129,9 @@ public:
  * Y = a + b + d;
  *
  * After:
- * __esbmc_cse_symbol$0 = a + b;
- * X = __esbmc_cse_symbol$0 + c;
- * Y = __esbmc_cse_symbol$0 + d;
+ * __ESBMC_cse_symbol$0 = a + b;
+ * X = __ESBMC_cse_symbol$0 + c;
+ * Y = __ESBMC_cse_symbol$0 + d;
  */
 class goto_cse : public goto_functions_algorithm
 {
@@ -143,6 +143,8 @@ public:
   virtual bool runOnProgram(goto_functionst &) override;
   virtual bool
   runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
+
+  // TODO: we should have a method to convert an cse_symbol back to the original expr for CE.
 
 protected:
   ait<cse_domaint> available_expressions;
