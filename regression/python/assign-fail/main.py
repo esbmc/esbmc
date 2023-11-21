@@ -1,2 +1,2 @@
-p = q  # q wasn't declared/defined
+p = q  # 'q' was not declared or defined before use
 

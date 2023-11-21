@@ -1,14 +1,13 @@
 #pragma once
 
-#include <nlohmann/json.hpp>
 #include <util/message.h>
 #include <string>
 
-template <class JsonType>
+template <class Json>
 class python_annotation
 {
 public:
-  python_annotation(nlohmann::json &ast) : ast_(ast)
+  python_annotation(Json &ast) : ast_(ast)
   {
   }
 
@@ -18,7 +17,7 @@ public:
     add_annotation(ast_);
 
     // Add type annotation in function bodies
-    for(auto &element : ast_["body"])
+    for(Json &element : ast_["body"])
     {
       if(element["_type"] == "FunctionDef")
       {
@@ -29,7 +28,7 @@ public:
   }
 
 private:
-  void update_end_col_offset(nlohmann::json &ast)
+  void update_end_col_offset(Json &ast)
   {
     int max_col_offset = ast["end_col_offset"];
     for(auto &elem : ast["body"])
@@ -40,7 +39,7 @@ private:
     ast["end_col_offset"] = max_col_offset;
   }
 
-  void add_annotation(nlohmann::json &body)
+  void add_annotation(Json &body)
   {
     for(auto &element : body["body"])
     {
@@ -57,14 +56,26 @@ private:
         // Get type from rhs variable
         else if(element["value"]["_type"] == "Name")
         {
-          // Try find rhs variable node in the global scope
-          auto rhs_node = find_node(element["value"]["id"], ast_["body"]);
+          // Find rhs variable declaration in the current function
+          auto rhs_node = find_node(element["value"]["id"], body["body"]);
+
+          // Find rhs variable in the function args
+          if(rhs_node.empty() && body.contains("args"))
+          {
+            rhs_node = find_node(element["value"]["id"], body["args"]["args"]);
+          }
+
+          // Find rhs variable node in the global scope
+          if(rhs_node.empty())
+          {
+            rhs_node = find_node(element["value"]["id"], ast_["body"]);
+          }
 
           if(rhs_node.empty())
           {
             log_error(
               "Variable {} not found.",
-              element["value"]["id"].get<std::string>().c_str());
+              element["value"]["id"].template get<std::string>().c_str());
             abort();
           }
           type = rhs_node["annotation"]["id"];
@@ -77,8 +88,8 @@ private:
 
         // lhs
         auto target = element["targets"][0];
-        int col_offset = target["col_offset"].get<int>() +
-                         strlen(target["id"].get<std::string>().c_str()) + 1;
+        int col_offset = target["col_offset"].template get<int>() +
+                         target["id"].template get<std::string>().size() + 1;
 
         // Add annotation field
         element["annotation"] = {
@@ -91,7 +102,7 @@ private:
           {"lineno", target["lineno"]}};
 
         element["end_col_offset"] =
-          element["end_col_offset"].get<int>() + type.size() + 1;
+          element["end_col_offset"].template get<int>() + type.size() + 1;
         element["end_lineno"] = element["lineno"];
         element["simple"] = 1;
 
@@ -104,16 +115,15 @@ private:
 
         // Update value fields
         element["value"]["col_offset"] =
-          element["value"]["col_offset"].get<int>() + type.size() + 1;
+          element["value"]["col_offset"].template get<int>() + type.size() + 1;
         element["value"]["end_col_offset"] =
-          element["value"]["end_col_offset"].get<int>() + type.size() + 1;
-
-        type = "";
+          element["value"]["end_col_offset"].template get<int>() + type.size() +
+          1;
       }
     }
   }
 
-  std::string get_type_from_element(const JsonType &elem) const
+  std::string get_type_from_element(const Json &elem) const
   {
     if(elem.is_number_integer() || elem.is_number_unsigned())
       return std::string("int");
@@ -125,17 +135,22 @@ private:
     return std::string();
   }
 
-  const JsonType find_node(const std::string &node_name, const JsonType &body)
+  const Json find_node(const std::string &node_name, const Json &body)
   {
-    for(const auto &elem : body)
+    for(const Json &elem : body)
     {
       if(
-        elem["_type"] == "AnnAssign" &&
-        elem["target"]["id"].template get<std::string>() == node_name)
+        (elem.contains("_type") && elem["_type"] == "AnnAssign" &&
+         elem.contains("target") && elem["target"].contains("id") &&
+         elem["target"]["id"].template get<std::string>() == node_name) ||
+        (elem.contains("_type") && elem["_type"] == "arg" &&
+         elem["arg"] == node_name))
+      {
         return elem;
+      }
     }
-    return nlohmann::json();
+    return Json();
   }
 
-  nlohmann::json &ast_;
+  Json &ast_;
 };
