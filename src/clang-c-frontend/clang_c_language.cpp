@@ -509,6 +509,7 @@ void __ESBMC_unreachable();
 
 // TODO: implement this similarly to printf
   #define fscanf __ESBMC_fscanf
+  #define sscanf __ESBMC_sscanf
 
   #define scanf __ESBMC_scanf
     )";
