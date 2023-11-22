@@ -231,14 +231,21 @@ esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
 esbmc_dargs += "--no-vla-size-check "
 
+class LibraryFeatures:
+  PTHREAD = (1 << 0)
+  KERAS2C = (1 << 1)
 
 import re
-def check_if_benchmark_contains_pthread(benchmark):
+def check_library_features(benchmark):
+  feats = 0
   with open(benchmark, "r") as f:
     for line in f:
-      if re.search("pthread_create", line.strip()):
-        return True
-  return False
+      line = line.strip()
+      if re.search("pthread_create", line):
+        feats |= LibraryFeatures.PTHREAD
+      if re.search("void k2c_simpleRNN", line):
+        feats |= LibraryFeatures.KERAS2C
+  return feats
 
 def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci):
   command_line = esbmc_path + dargs
@@ -252,8 +259,12 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   else:
     command_line += "--64 "
 
-  concurrency = ((prop in (Property.reach, Property.datarace)) and
-                 check_if_benchmark_contains_pthread(benchmark))
+  concurrency = False
+  keras2c = False
+  if prop in (Property.reach, Property.datarace):
+    features = check_library_features(benchmark)
+    concurrency = (features & LibraryFeatures.PTHREAD) != 0
+    keras2c = (features & LibraryFeatures.KERAS2C) != 0
 
   if concurrency:
     command_line += " --no-por --context-bound 2 "
@@ -288,6 +299,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
       command_line += "--no-pointer-check --no-bounds-check "
     else:
       command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR --goto-unwind --unlimited-goto-unwind "
+    if keras2c:
+      strat = "incr"
   elif prop == Property.datarace:
     # TODO: can we do better in case 'concurrency == False'?
     command_line += "--no-pointer-check --no-bounds-check --data-races-check --no-assertions "
