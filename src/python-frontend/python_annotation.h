@@ -27,6 +27,20 @@ public:
     }
   }
 
+  // Add annotation in a specific function
+  void add_type_annotation(const std::string &func_name)
+  {
+    for(Json &elem : ast_["body"])
+    {
+      if(elem["_type"] == "FunctionDef" && elem["name"] == func_name)
+      {
+        add_annotation(elem);
+        update_end_col_offset(elem);
+        return;
+      }
+    }
+  }
+
 private:
   void update_end_col_offset(Json &ast)
   {
@@ -140,11 +154,11 @@ private:
     for(const Json &elem : body)
     {
       if(
-        (elem.contains("_type") && elem["_type"] == "AnnAssign" &&
-         elem.contains("target") && elem["target"].contains("id") &&
-         elem["target"]["id"].template get<std::string>() == node_name) ||
-        (elem.contains("_type") && elem["_type"] == "arg" &&
-         elem["arg"] == node_name))
+        elem.contains("_type") &&
+        ((elem["_type"] == "AnnAssign" && elem.contains("target") &&
+          elem["target"].contains("id") &&
+          elem["target"]["id"].template get<std::string>() == node_name) ||
+         (elem["_type"] == "arg" && elem["arg"] == node_name)))
       {
         return elem;
       }
