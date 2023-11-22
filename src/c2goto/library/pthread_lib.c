@@ -470,6 +470,11 @@ __ESBMC_HIDE:;
 
 int pthread_rwlock_rdlock(pthread_rwlock_t *lock)
 {
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_assume(!__ESBMC_rwlock_field(*lock));
+  __ESBMC_rwlock_field(*lock) = 1;
+  __ESBMC_atomic_end();
   return 0;
 }
 
