@@ -535,17 +535,34 @@ __UINT64_TYPE__ __esbmc_clzll(__UINT64_TYPE__);
 bool clang_c_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  unsigned flags)
 {
-  code = c_expr2string(expr, ns);
+  code = c_expr2string(expr, ns, flags);
   return false;
 }
 
 bool clang_c_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  unsigned flags)
 {
-  code = c_type2string(type, ns);
+  code = c_type2string(type, ns, flags);
   return false;
+}
+
+unsigned clang_c_languaget::default_flags(presentationt target) const
+{
+  unsigned f = 0;
+  switch(target)
+  {
+  case HUMAN:
+    f |= c_expr2stringt::SHORT_ZERO_COMPOUNDS;
+    break;
+  case WITNESS:
+    f |= c_expr2stringt::UNIQUE_FLOAT_REPR;
+    break;
+  }
+  return f;
 }
