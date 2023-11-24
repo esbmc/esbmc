@@ -1174,7 +1174,15 @@ c_expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
   }
   else if(type.id() == "floatbv")
   {
-    dest = ieee_floatt(to_constant_expr(src)).to_ansi_c_string();
+    format_spect format;
+    ieee_floatt flt(to_constant_expr(src));
+    if(flags & UNIQUE_FLOAT_REPR)
+    {
+      /* XXX: Use some algorithm to compute the minimum precision, Grisu3 or
+       * similar. While that's not there, use the maximum defined by the type */
+      format.precision = ceil(flt.spec.f / 3.32); /* 3.32 < log_2(10) */
+    }
+    dest = flt.format(format);
 
     if(dest != "" && isdigit(dest[dest.size() - 1]))
     {
