@@ -1,5 +1,5 @@
-#ifndef CPROVER_EXPR2C_H
-#define CPROVER_EXPR2C_H
+
+#pragma once
 
 #include <map>
 #include <set>
@@ -9,14 +9,17 @@
 #include <util/std_code.h>
 #include <util/c_expr2string.h>
 
-std::string expr2c(const exprt &expr, const namespacet &ns);
-std::string type2c(const typet &type, const namespacet &ns);
-std::string typedef2c(const typet &type, const namespacet &ns);
+std::string expr2c(const exprt &expr, const namespacet &ns, unsigned flags = 0);
+std::string type2c(const typet &type, const namespacet &ns, unsigned flags = 0);
+std::string
+typedef2c(const typet &type, const namespacet &ns, unsigned flags = 0);
 
 class expr2ct : public c_expr2stringt
 {
 public:
-  explicit expr2ct(const namespacet &_ns) : c_expr2stringt(_ns)
+  using c_expr2stringt::flagst;
+
+  expr2ct(const namespacet &_ns, unsigned _flags) : c_expr2stringt(_ns, _flags)
   {
   }
   virtual ~expr2ct() = default;
@@ -84,5 +87,3 @@ protected:
 
 private:
 };
-
-#endif

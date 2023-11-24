@@ -1,5 +1,4 @@
 #include <cassert>
-#include <util/c_expr2string.h>
 #include <util/cpp_expr2string.h>
 #include <util/std_types.h>
 #include <util/symbol.h>
@@ -9,7 +8,8 @@
 class cpp_expr2stringt : public c_expr2stringt
 {
 public:
-  explicit cpp_expr2stringt(const namespacet &_ns) : c_expr2stringt(_ns)
+  cpp_expr2stringt(const namespacet &_ns, unsigned _flags)
+    : c_expr2stringt(_ns, _flags)
   {
   }
 
@@ -385,16 +385,16 @@ std::string cpp_expr2stringt::convert_code(const codet &src, unsigned indent)
 }
 
 std::string
-cpp_expr2string(const exprt &expr, const namespacet &ns)
+cpp_expr2string(const exprt &expr, const namespacet &ns, unsigned flags)
 {
-  cpp_expr2stringt cpp_expr2string(ns);
+  cpp_expr2stringt cpp_expr2string(ns, flags);
   cpp_expr2string.get_shorthands(expr);
   return cpp_expr2string.convert(expr);
 }
 
 std::string
-cpp_type2string(const typet &type, const namespacet &ns)
+cpp_type2string(const typet &type, const namespacet &ns, unsigned flags)
 {
-  cpp_expr2stringt cpp_expr2string(ns);
+  cpp_expr2stringt cpp_expr2string(ns, flags);
   return cpp_expr2string.convert(type);
 }

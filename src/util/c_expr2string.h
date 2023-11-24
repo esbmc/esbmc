@@ -9,13 +9,20 @@
 #include <util/namespace.h>
 #include <util/std_code.h>
 
-std::string c_expr2string(const exprt &expr, const namespacet &ns);
-std::string c_type2string(const typet &type, const namespacet &ns);
+std::string
+c_expr2string(const exprt &expr, const namespacet &ns, unsigned flags = 0);
+std::string
+c_type2string(const typet &type, const namespacet &ns, unsigned flags = 0);
 
 class c_expr2stringt
 {
 public:
-  explicit c_expr2stringt(const namespacet &_ns) : ns(_ns)
+  enum flagst : unsigned
+  {
+  };
+
+  c_expr2stringt(const namespacet &_ns, unsigned _flags)
+    : ns(_ns), flags(_flags)
   {
   }
   virtual ~c_expr2stringt() = default;
@@ -27,6 +34,7 @@ public:
 
 protected:
   const namespacet &ns;
+  unsigned flags;
 
   virtual std::string convert_rec(
     const typet &src,
