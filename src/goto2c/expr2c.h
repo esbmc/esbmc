@@ -9,20 +9,14 @@
 #include <util/std_code.h>
 #include <util/c_expr2string.h>
 
-std::string
-expr2c(const exprt &expr, const namespacet &ns, bool fullname = false);
-
-std::string
-type2c(const typet &type, const namespacet &ns, bool fullname = false);
-
-std::string
-typedef2c(const typet &type, const namespacet &ns, bool fullname = false);
+std::string expr2c(const exprt &expr, const namespacet &ns);
+std::string type2c(const typet &type, const namespacet &ns);
+std::string typedef2c(const typet &type, const namespacet &ns);
 
 class expr2ct : public c_expr2stringt
 {
 public:
-  expr2ct(const namespacet &_ns, const bool _fullname)
-    : c_expr2stringt(_ns, _fullname)
+  explicit expr2ct(const namespacet &_ns) : c_expr2stringt(_ns)
   {
   }
   virtual ~expr2ct() = default;

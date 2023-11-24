@@ -9,16 +9,13 @@
 #include <util/namespace.h>
 #include <util/std_code.h>
 
-std::string
-c_expr2string(const exprt &expr, const namespacet &ns, bool fullname = false);
-std::string
-c_type2string(const typet &type, const namespacet &ns, bool fullname = false);
+std::string c_expr2string(const exprt &expr, const namespacet &ns);
+std::string c_type2string(const typet &type, const namespacet &ns);
 
 class c_expr2stringt
 {
 public:
-  c_expr2stringt(const namespacet &_ns, const bool _fullname)
-    : ns(_ns), fullname(_fullname)
+  explicit c_expr2stringt(const namespacet &_ns) : ns(_ns)
   {
   }
   virtual ~c_expr2stringt() = default;
@@ -30,8 +27,6 @@ public:
 
 protected:
   const namespacet &ns;
-
-  const bool fullname;
 
   virtual std::string convert_rec(
     const typet &src,

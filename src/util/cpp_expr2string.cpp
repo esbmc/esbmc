@@ -9,8 +9,7 @@
 class cpp_expr2stringt : public c_expr2stringt
 {
 public:
-  cpp_expr2stringt(const namespacet &_ns, const bool _fullname)
-    : c_expr2stringt(_ns, _fullname)
+  explicit cpp_expr2stringt(const namespacet &_ns) : c_expr2stringt(_ns)
   {
   }
 
@@ -386,16 +385,16 @@ std::string cpp_expr2stringt::convert_code(const codet &src, unsigned indent)
 }
 
 std::string
-cpp_expr2string(const exprt &expr, const namespacet &ns, const bool fullname)
+cpp_expr2string(const exprt &expr, const namespacet &ns)
 {
-  cpp_expr2stringt cpp_expr2string(ns, fullname);
+  cpp_expr2stringt cpp_expr2string(ns);
   cpp_expr2string.get_shorthands(expr);
   return cpp_expr2string.convert(expr);
 }
 
 std::string
-cpp_type2string(const typet &type, const namespacet &ns, const bool fullname)
+cpp_type2string(const typet &type, const namespacet &ns)
 {
-  cpp_expr2stringt cpp_expr2string(ns, fullname);
+  cpp_expr2stringt cpp_expr2string(ns);
   return cpp_expr2string.convert(type);
 }
