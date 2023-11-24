@@ -220,18 +220,20 @@ languaget *new_ansi_c_language()
 bool ansi_c_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  unsigned flags)
 {
-  code = c_expr2string(expr, ns);
+  code = c_expr2string(expr, ns, flags);
   return false;
 }
 
 bool ansi_c_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  unsigned flags)
 {
-  code = c_type2string(type, ns);
+  code = c_type2string(type, ns, flags);
   return false;
 }
 

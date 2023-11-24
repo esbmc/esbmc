@@ -55,11 +55,38 @@ public:
   virtual void show_parse(std::ostream &out) = 0;
 
   // conversion of expressions
-  virtual bool
-  from_expr(const exprt &expr, std::string &code, const namespacet &ns) = 0;
+  virtual bool from_expr(
+    const exprt &expr,
+    std::string &code,
+    const namespacet &ns,
+    unsigned flags) = 0;
 
-  virtual bool
-  from_type(const typet &type, std::string &code, const namespacet &ns) = 0;
+  virtual bool from_type(
+    const typet &type,
+    std::string &code,
+    const namespacet &ns,
+    unsigned flags) = 0;
+
+  bool from_expr(const exprt &expr, std::string &code, const namespacet &ns)
+  {
+    return from_expr(expr, code, ns, default_flags(HUMAN));
+  }
+
+  bool from_type(const typet &type, std::string &code, const namespacet &ns)
+  {
+    return from_type(type, code, ns, default_flags(HUMAN));
+  }
+
+  enum presentationt
+  {
+    HUMAN,
+    WITNESS,
+  };
+
+  virtual unsigned default_flags(presentationt /* target */) const
+  {
+    return 0;
+  }
 
   virtual languaget *new_language() const = 0;
 

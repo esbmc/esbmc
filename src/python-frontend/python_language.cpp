@@ -6,6 +6,7 @@
 #include <util/c_expr2string.h>
 
 #include <cstdlib>
+#include <fstream>
 
 #include <boost/filesystem.hpp>
 #include <boost/process.hpp>
@@ -105,17 +106,34 @@ void python_languaget::show_parse(std::ostream &out)
 bool python_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  unsigned flags)
 {
-  code = c_expr2string(expr, ns);
+  code = c_expr2string(expr, ns, flags);
   return false;
 }
 
 bool python_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  unsigned flags)
 {
-  code = c_type2string(type, ns);
+  code = c_type2string(type, ns, flags);
   return false;
+}
+
+unsigned python_languaget::default_flags(presentationt target) const
+{
+  unsigned f = 0;
+  switch(target)
+  {
+  case HUMAN:
+    f |= c_expr2stringt::SHORT_ZERO_COMPOUNDS;
+    break;
+  case WITNESS:
+    f |= c_expr2stringt::UNIQUE_FLOAT_REPR;
+    break;
+  }
+  return f;
 }

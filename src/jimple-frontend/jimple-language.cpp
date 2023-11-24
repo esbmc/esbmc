@@ -22,7 +22,8 @@ bool jimple_languaget::final(contextt &context)
 bool jimple_languaget::from_type(
   const typet &,
   std::string &,
-  const namespacet &)
+  const namespacet &,
+  unsigned)
 {
   // TODO
   assert(!"Not implemented yet");
@@ -32,11 +33,19 @@ bool jimple_languaget::from_type(
 bool jimple_languaget::from_expr(
   const exprt &,
   std::string &,
-  const namespacet &)
+  const namespacet &,
+  unsigned)
 {
   // TODO
   assert(!"Not implemented yet");
   return false;
+}
+
+unsigned jimple_languaget::default_flags(presentationt) const
+{
+  // TODO
+  assert(!"Not implemented yet");
+  return 0;
 }
 
 static inline void init_variable(codet &dest, const symbolt &sym)
