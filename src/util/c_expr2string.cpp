@@ -749,6 +749,9 @@ std::string c_expr2stringt::convert_function(
 
 std::optional<std::string> c_expr2stringt::is_recursively_zero(const exprt &op)
 {
+  if(~flags & SHORT_ZERO_COMPOUNDS)
+    return {};
+
   if(op.id() == exprt::arrayof)
   {
     if(auto init = is_recursively_zero(op.op0()))
@@ -830,13 +833,10 @@ c_expr2stringt::convert_array_of(const exprt &src, unsigned precedence)
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
 
-  if(flags & SHORT_ZERO_COMPOUNDS)
-  {
-    /* Maybe there's no need to copy the initializer N times, where N is the
-     * array size? */
-    if(auto init = is_recursively_zero(src))
-      return *init;
-  }
+  /* Maybe there's no need to copy the initializer N times, where N is the
+   * array size? */
+  if(auto init = is_recursively_zero(src))
+    return *init;
 
   std::string init = convert(src.op0());
 
@@ -1232,11 +1232,15 @@ c_expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
 }
 
 std::string c_expr2stringt::convert_struct_union_body(
+  const exprt &src,
   const exprt::operandst &operands,
   const struct_union_typet::componentst &components)
 {
   size_t n = components.size();
   assert(n == operands.size());
+
+  if(auto init = is_recursively_zero(src))
+    return *init;
 
   std::string dest = "{ ";
 
@@ -1302,7 +1306,7 @@ c_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
   if(components.size() != src.operands().size())
     return convert_norep(src, precedence);
 
-  return convert_struct_union_body(src.operands(), components);
+  return convert_struct_union_body(src, src.operands(), components);
 }
 
 std::string
@@ -1337,12 +1341,15 @@ c_expr2stringt::convert_union(const exprt &src, unsigned &precedence)
      * all of them */
     assert(init.empty());
     return convert_struct_union_body(
-      operands, to_union_type(full_type).components());
+      src, operands, to_union_type(full_type).components());
   }
 }
 
 std::string c_expr2stringt::convert_array(const exprt &src, unsigned &)
 {
+  if(auto init = is_recursively_zero(src))
+    return *init;
+
   std::string dest = "{ ";
 
   forall_operands(it, src)
