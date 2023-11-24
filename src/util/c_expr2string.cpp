@@ -830,10 +830,13 @@ c_expr2stringt::convert_array_of(const exprt &src, unsigned precedence)
   if(src.operands().size() != 1)
     return convert_norep(src, precedence);
 
-  /* Special-case where C allows a shorter output and we don't have to copy
-   * the initializer N times, where N is the array size */
-  if(auto init = is_recursively_zero(src))
-    return *init;
+  if(flags & SHORT_ZERO_COMPOUNDS)
+  {
+    /* Maybe there's no need to copy the initializer N times, where N is the
+     * array size? */
+    if(auto init = is_recursively_zero(src))
+      return *init;
+  }
 
   std::string init = convert(src.op0());
 
