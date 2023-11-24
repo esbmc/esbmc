@@ -122,10 +122,10 @@ unsigned python_languaget::default_flags(presentationt target) const
   unsigned f = 0;
   switch(target)
   {
-  case HUMAN:
+  case presentationt::HUMAN:
     f |= c_expr2stringt::SHORT_ZERO_COMPOUNDS;
     break;
-  case WITNESS:
+  case presentationt::WITNESS:
     f |= c_expr2stringt::UNIQUE_FLOAT_REPR;
     break;
   }

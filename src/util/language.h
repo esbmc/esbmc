@@ -67,21 +67,29 @@ public:
     const namespacet &ns,
     unsigned flags) = 0;
 
-  bool from_expr(const exprt &expr, std::string &code, const namespacet &ns)
-  {
-    return from_expr(expr, code, ns, default_flags(HUMAN));
-  }
-
-  bool from_type(const typet &type, std::string &code, const namespacet &ns)
-  {
-    return from_type(type, code, ns, default_flags(HUMAN));
-  }
-
-  enum presentationt
+  enum class presentationt
   {
     HUMAN,
     WITNESS,
   };
+
+  bool from_expr(
+    const exprt &expr,
+    std::string &code,
+    const namespacet &ns,
+    presentationt target = presentationt::HUMAN)
+  {
+    return from_expr(expr, code, ns, default_flags(target));
+  }
+
+  bool from_type(
+    const typet &type,
+    std::string &code,
+    const namespacet &ns,
+    presentationt target = presentationt::HUMAN)
+  {
+    return from_type(type, code, ns, default_flags(target));
+  }
 
   virtual unsigned default_flags(presentationt /* target */) const
   {
@@ -112,4 +120,5 @@ protected:
   std::string smart_contract = "";
 #endif
 };
+
 #endif
