@@ -56,7 +56,6 @@ void grapht::generate_graphml(optionst &options)
     settings);
 }
 
-/* */
 void grapht::check_create_new_thread(BigInt thread_id, nodet *prev_node)
 {
   if(
@@ -73,7 +72,7 @@ void grapht::check_create_new_thread(BigInt thread_id, nodet *prev_node)
     prev_node = new_node;
   }
 }
-/* */
+
 void grapht::create_initial_edge()
 {
   nodet *first_node = new nodet();
@@ -87,7 +86,6 @@ void grapht::create_initial_edge()
   this->edges.push_back(first_edge);
 }
 
-/* */
 int generate_sha1_hash_for_file(const char *path, std::string &output)
 {
   FILE *file = fopen(path, "rb");
@@ -109,7 +107,6 @@ int generate_sha1_hash_for_file(const char *path, std::string &output)
   return 0;
 }
 
-/* */
 std::string read_file(const std::string &path)
 {
   std::ifstream t(path.c_str());
@@ -118,7 +115,6 @@ std::string read_file(const std::string &path)
   return str;
 }
 
-/* */
 std::string trim(const std::string &str)
 {
   const std::string whitespace_characters = " \t\r\n";
@@ -130,7 +126,6 @@ std::string trim(const std::string &str)
   return str.substr(first_non_whitespace, length);
 }
 
-/* */
 void create_node_node(nodet &node, xmlnodet &nodenode)
 {
   nodenode.add("<xmlattr>.id", node.id);
@@ -178,7 +173,6 @@ void create_node_node(nodet &node, xmlnodet &nodenode)
   }
 }
 
-/* */
 void create_edge_node(edget &edge, xmlnodet &edgenode)
 {
   edgenode.add("<xmlattr>.id", edge.id);
@@ -256,7 +250,6 @@ void create_edge_node(edget &edge, xmlnodet &edgenode)
   }
 }
 
-/* */
 void create_graphml(xmlnodet &graphml)
 {
   graphml.add(
@@ -520,7 +513,6 @@ void create_graphml(xmlnodet &graphml)
   graphml.add_child("graphml.key", witness_type_node);
 }
 
-/* */
 void _create_graph_node(
   std::string &verifiedfile,
   optionst &options,
@@ -613,7 +605,6 @@ void _create_graph_node(
   graphnode.add_child("data", p_creationTime);
 }
 
-/* */
 void create_violation_graph_node(
   std::string &verifiedfile,
   optionst &options,
@@ -626,7 +617,6 @@ void create_violation_graph_node(
   graphnode.add_child("data", pWitnessType);
 }
 
-/* */
 void create_correctness_graph_node(
   std::string &verifiedfile,
   optionst &options,
@@ -639,10 +629,9 @@ void create_correctness_graph_node(
   graphnode.add_child("data", pWitnessType);
 }
 
-const std::regex
+static const std::regex
   regex_array("[a-zA-Z0-9_]+ = \\{ ?(-?[0-9]+(.[0-9]+)?,? ?)+ ?\\};");
 
-/* */
 void reformat_assignment_array(
   const namespacet &ns,
   const goto_trace_stept &step,
@@ -651,7 +640,8 @@ void reformat_assignment_array(
   std::regex re{R"(((-?[0-9]+(.[0-9]+)?)))"};
   using reg_itr = std::regex_token_iterator<std::string::iterator>;
   BigInt pos = 0;
-  std::string lhs = from_expr(ns, "", step.lhs);
+  std::string lhs =
+    from_expr(ns, "", step.lhs, languaget::presentationt::WITNESS);
   std::string assignment_array = "";
   for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
       it != end;)
@@ -664,10 +654,9 @@ void reformat_assignment_array(
   assignment = assignment_array;
 }
 
-const std::regex regex_structs(
+static const std::regex regex_structs(
   "[a-zA-Z0-9_]+ = \\{ ?(\\.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?),? ?)+\\};");
 
-/* */
 void reformat_assignment_structs(
   const namespacet &ns,
   const goto_trace_stept &step,
@@ -675,7 +664,8 @@ void reformat_assignment_structs(
 {
   std::regex re{R"((((.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?))+)))"};
   using reg_itr = std::regex_token_iterator<std::string::iterator>;
-  std::string lhs = from_expr(ns, "", step.lhs);
+  std::string lhs =
+    from_expr(ns, "", step.lhs, languaget::presentationt::WITNESS);
   std::string assignment_struct = "";
   for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
       it != end;)
@@ -687,7 +677,6 @@ void reformat_assignment_structs(
   assignment = assignment_struct;
 }
 
-/* */
 void check_replace_invalid_assignment(std::string &assignment)
 {
   /* replace: SAME-OBJECT(&var1, &var2) into &var1 == &var2 (XXX check if should stay) */
@@ -711,7 +700,6 @@ void check_replace_invalid_assignment(std::string &assignment)
     assignment.clear();
 }
 
-/* */
 std::string
 get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
 {
@@ -720,9 +708,11 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
     !is_nil_expr(step.value) && is_constant_expr(step.value) &&
     is_valid_witness_step(ns, step))
   {
-    assignment += from_expr(ns, "", step.lhs, languaget::WITNESS);
+    assignment +=
+      from_expr(ns, "", step.lhs, languaget::presentationt::WITNESS);
     assignment += " = ";
-    assignment += from_expr(ns, "", step.value, languaget::WITNESS);
+    assignment +=
+      from_expr(ns, "", step.value, languaget::presentationt::WITNESS);
     assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
@@ -735,12 +725,12 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
   return assignment;
 }
 
-/* */
 bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
 {
   languagest languages(ns, language_idt::C);
   std::string lhsexpr;
-  languages.from_expr(migrate_expr_back(step.lhs), lhsexpr);
+  languages.from_expr(
+    migrate_expr_back(step.lhs), lhsexpr, languaget::presentationt::WITNESS);
   std::string location = step.pc->location.to_string();
   return (
     (location.find("built-in") & location.find("library") &
@@ -748,19 +738,18 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
      lhsexpr.find("stderr") & lhsexpr.find("sys_")) == std::string::npos);
 }
 
-/* */
 bool is_valid_witness_expr(
   const namespacet &ns,
   const irep_container<expr2t> &exp)
 {
   languagest languages(ns, language_idt::C);
   std::string value;
-  languages.from_expr(migrate_expr_back(exp), value);
+  languages.from_expr(
+    migrate_expr_back(exp), value, languaget::presentationt::WITNESS);
   return (value.find("__ESBMC") & value.find("stdin") & value.find("stdout") &
           value.find("stderr") & value.find("sys_")) == std::string::npos;
 }
 
-/* */
 BigInt get_line_number(
   std::string &verified_file,
   BigInt relative_line_number,
@@ -816,7 +805,7 @@ std::string read_line(std::string file, BigInt line_number)
   return line_code;
 }
 
-const std::regex regex_invariants(
+static const std::regex regex_invariants(
   "( "
   "+)?(__((VERIFIER|ESBMC))_)?(assume|assert)\\([a-zA-Z(-?(0-9))\\[\\]_>=+/"
   "*<~.&! \\(\\)]+\\);( +)?");

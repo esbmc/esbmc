@@ -9,14 +9,20 @@ class languagest
 public:
   // conversion of expressions
 
-  bool from_expr(const exprt &expr, std::string &code)
+  bool from_expr(
+    const exprt &expr,
+    std::string &code,
+    languaget::presentationt target = languaget::presentationt::HUMAN)
   {
-    return language->from_expr(expr, code, ns);
+    return language->from_expr(expr, code, ns, target);
   }
 
-  bool from_type(const typet &type, std::string &code)
+  bool from_type(
+    const typet &type,
+    std::string &code,
+    languaget::presentationt target = languaget::presentationt::HUMAN)
   {
-    return language->from_type(type, code, ns);
+    return language->from_type(type, code, ns, target);
   }
 
   // constructor / destructor

@@ -59,12 +59,15 @@ void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
       if(!is_nil_expr(step.value))
       {
         value_string = from_expr(
-          ns, identifier, migrate_expr_back(step.value), languaget::WITNESS);
+          ns,
+          identifier,
+          migrate_expr_back(step.value),
+          languaget::presentationt::WITNESS);
         type_string = from_type(
           ns,
           identifier,
           migrate_type_back(step.value->type),
-          languaget::WITNESS);
+          languaget::presentationt::WITNESS);
       }
 
       const symbolt *symbol = ns.lookup(identifier);
@@ -75,8 +78,8 @@ void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
         base_name = symbol->name;
         display_name = symbol->name;
         if(type_string == "")
-          type_string =
-            from_type(ns, identifier, symbol->type, languaget::WITNESS);
+          type_string = from_type(
+            ns, identifier, symbol->type, languaget::presentationt::WITNESS);
 
         xml_assignment.new_element("mode").data =
           xmlt::escape(id2string(symbol->mode));
