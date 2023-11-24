@@ -24,6 +24,12 @@ public:
      * output such as `{ 0 }` for arrays, vectors, structs and unions.
      */
     SHORT_ZERO_COMPOUNDS = 1 << 0,
+    /**
+     * \brief Output enough fractional digits such that the float can be
+     * recovered uniquely. If this flag is not set, the default precision is
+     * given by the format_spect constructor.
+     */
+    UNIQUE_FLOAT_REPR = 1 << 1,
   };
 
   c_expr2stringt(const namespacet &_ns, unsigned _flags)
