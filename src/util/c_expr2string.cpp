@@ -1042,7 +1042,7 @@ std::string c_expr2stringt::convert_symbol(const exprt &src, unsigned &)
   const irep_idt &id = src.identifier();
   std::string dest;
 
-  if(!fullname && ns_collision.find(id) == ns_collision.end())
+  if(ns_collision.find(id) == ns_collision.end())
     dest = id_shorthand(src);
   else
     dest = id2string(id);
@@ -2725,17 +2725,17 @@ std::string c_expr2stringt::convert(const exprt &src)
 }
 
 std::string
-c_expr2string(const exprt &expr, const namespacet &ns, bool fullname)
+c_expr2string(const exprt &expr, const namespacet &ns)
 {
   std::string code;
-  c_expr2stringt c_expr2string(ns, fullname);
+  c_expr2stringt c_expr2string(ns);
   c_expr2string.get_shorthands(expr);
   return c_expr2string.convert(expr);
 }
 
 std::string
-c_type2string(const typet &type, const namespacet &ns, bool fullname)
+c_type2string(const typet &type, const namespacet &ns)
 {
-  c_expr2stringt c_expr2string(ns, fullname);
+  c_expr2stringt c_expr2string(ns);
   return c_expr2string.convert(type);
 }

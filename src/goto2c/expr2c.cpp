@@ -51,22 +51,22 @@ bool expr2ct::is_typedef_struct_union(std::string tag)
     std::regex_search(id2string(tag), m, std::regex("struct[[:space:]]+.*")));
 }
 
-std::string expr2c(const exprt &expr, const namespacet &ns, bool fullname)
+std::string expr2c(const exprt &expr, const namespacet &ns)
 {
-  expr2ct expr2c(ns, fullname);
+  expr2ct expr2c(ns);
   expr2c.get_shorthands(expr);
   return expr2c.convert(expr);
 }
 
-std::string type2c(const typet &type, const namespacet &ns, bool fullname)
+std::string type2c(const typet &type, const namespacet &ns)
 {
-  expr2ct expr2c(ns, fullname);
+  expr2ct expr2c(ns);
   return expr2c.convert(type);
 }
 
-std::string typedef2c(const typet &type, const namespacet &ns, bool fullname)
+std::string typedef2c(const typet &type, const namespacet &ns)
 {
-  expr2ct expr2c(ns, fullname);
+  expr2ct expr2c(ns);
   if(type.id() == "struct" || type.id() == "union")
     return expr2c.convert_struct_union_typedef(to_struct_union_type(type));
   else
@@ -485,7 +485,7 @@ std::string expr2ct::convert_symbol(const exprt &src, unsigned &)
   const irep_idt &id = src.identifier();
   std::string dest;
 
-  if(!fullname && ns_collision.find(id) == ns_collision.end())
+  if(ns_collision.find(id) == ns_collision.end())
     dest = id_shorthand(src);
   else
     dest = id2string(id);
