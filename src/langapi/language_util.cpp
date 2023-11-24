@@ -2,8 +2,11 @@
 #include <langapi/mode.h>
 #include <memory>
 
-std::string
-from_expr(const namespacet &ns, const irep_idt &identifier, const exprt &expr)
+std::string from_expr(
+  const namespacet &ns,
+  const irep_idt &identifier,
+  const exprt &expr,
+  languaget::presentationt target)
 {
   int mode;
 
@@ -28,12 +31,15 @@ from_expr(const namespacet &ns, const irep_idt &identifier, const exprt &expr)
 
   std::unique_ptr<languaget> p(mode_table[mode].new_language());
   std::string result;
-  p->from_expr(expr, result, ns);
+  p->from_expr(expr, result, ns, target);
   return result;
 }
 
-std::string
-from_type(const namespacet &ns, const irep_idt &identifier, const typet &type)
+std::string from_type(
+  const namespacet &ns,
+  const irep_idt &identifier,
+  const typet &type,
+  languaget::presentationt target)
 {
   int mode;
 
@@ -58,7 +64,7 @@ from_type(const namespacet &ns, const irep_idt &identifier, const typet &type)
 
   std::unique_ptr<languaget> p(mode_table[mode].new_language());
   std::string result;
-  p->from_type(type, result, ns);
+  p->from_type(type, result, ns, target);
   return result;
 }
 
