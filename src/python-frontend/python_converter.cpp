@@ -72,6 +72,19 @@ static typet get_typet(const std::string &ast_type)
   return empty_typet();
 }
 
+static typet get_typet(const nlohmann::json &elem)
+{
+  if(elem.is_number_integer() || elem.is_number_unsigned())
+    return int_type();
+  else if(elem.is_boolean())
+    return bool_type();
+  else if(elem.is_number_float())
+    return float_type();
+
+  log_error("Invalid type\n");
+  abort();
+}
+
 static symbolt create_symbol(
   const std::string &module,
   const std::string &name,
@@ -189,8 +202,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 {
-  exprt unary_expr(
-    get_op(element["op"]["_type"].get<std::string>()), current_element_type);
+  typet type = current_element_type;
+  if(element["operand"].contains("value"))
+    type = get_typet(element["operand"]["value"]);
+
+  exprt unary_expr(get_op(element["op"]["_type"].get<std::string>()), type);
 
   // get subexpr
   exprt unary_sub = get_expr(element["operand"]);
