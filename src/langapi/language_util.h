@@ -6,13 +6,19 @@
 #include <util/migrate.h>
 #include <util/namespace.h>
 
-std::string
-from_expr(const namespacet &ns, const irep_idt &identifier, const exprt &exprt);
+std::string from_expr(
+  const namespacet &ns,
+  const irep_idt &identifier,
+  const exprt &exprt,
+  languaget::presentationt target = languaget::HUMAN);
 
-inline std::string
-from_expr(const namespacet &ns, const irep_idt &identifier, const expr2tc &expr)
+inline std::string from_expr(
+  const namespacet &ns,
+  const irep_idt &identifier,
+  const expr2tc &expr,
+  languaget::presentationt target = languaget::HUMAN)
 {
-  return from_expr(ns, identifier, migrate_expr_back(expr));
+  return from_expr(ns, identifier, migrate_expr_back(expr), target);
 }
 
 std::string from_expr(const exprt &expr);
@@ -22,13 +28,19 @@ inline std::string from_expr(const expr2tc &expr)
   return from_expr(migrate_expr_back(expr));
 }
 
-std::string
-from_type(const namespacet &ns, const irep_idt &identifier, const typet &type);
+std::string from_type(
+  const namespacet &ns,
+  const irep_idt &identifier,
+  const typet &type,
+  languaget::presentationt target = languaget::HUMAN);
 
-inline std::string
-from_type(const namespacet &ns, const irep_idt &identifier, const type2tc &type)
+inline std::string from_type(
+  const namespacet &ns,
+  const irep_idt &identifier,
+  const type2tc &type,
+  languaget::presentationt target = languaget::HUMAN)
 {
-  return from_type(ns, identifier, migrate_type_back(type));
+  return from_type(ns, identifier, migrate_type_back(type), target);
 }
 
 std::string from_type(const typet &type);
