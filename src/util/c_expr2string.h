@@ -180,7 +180,8 @@ protected:
 
   std::string convert_norep(const exprt &src, unsigned &precedence);
 
-  std::string convert_struct_union_body(
+  virtual std::string convert_struct_union_body(
+    const exprt &src,
     const exprt::operandst &operands,
     const struct_union_typet::componentst &components);
   virtual std::string convert_struct(const exprt &src, unsigned &precedence);
