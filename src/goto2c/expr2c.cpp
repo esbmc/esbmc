@@ -51,26 +51,26 @@ bool expr2ct::is_typedef_struct_union(std::string tag)
     std::regex_search(id2string(tag), m, std::regex("struct[[:space:]]+.*")));
 }
 
-std::string expr2c(const exprt &expr, const namespacet &ns)
+std::string expr2c(const exprt &expr, const namespacet &ns, unsigned flags)
 {
-  expr2ct expr2c(ns);
+  expr2ct expr2c(ns, flags);
   expr2c.get_shorthands(expr);
   return expr2c.convert(expr);
 }
 
-std::string type2c(const typet &type, const namespacet &ns)
+std::string type2c(const typet &type, const namespacet &ns, unsigned flags)
 {
-  expr2ct expr2c(ns);
+  expr2ct expr2c(ns, flags);
   return expr2c.convert(type);
 }
 
-std::string typedef2c(const typet &type, const namespacet &ns)
+std::string typedef2c(const typet &type, const namespacet &ns, unsigned flags)
 {
-  expr2ct expr2c(ns);
   if(type.id() == "struct" || type.id() == "union")
-    return expr2c.convert_struct_union_typedef(to_struct_union_type(type));
-  else
-    return type2c(type, ns);
+    return expr2ct(ns, flags).convert_struct_union_typedef(
+      to_struct_union_type(type));
+
+  return type2c(type, ns, flags);
 }
 
 std::string expr2ct::convert(const typet &src)
