@@ -19,6 +19,11 @@ class c_expr2stringt
 public:
   enum flagst : unsigned
   {
+    /**
+     * \brief Special case constant zero expressions where C allows a shorter
+     * output such as `{ 0 }` for arrays, vectors, structs and unions.
+     */
+    SHORT_ZERO_COMPOUNDS = 1 << 0,
   };
 
   c_expr2stringt(const namespacet &_ns, unsigned _flags)
