@@ -6,21 +6,24 @@
 #include <util/context.h>
 #include <util/namespace.h>
 
+enum class presentationt
+{
+  HUMAN,
+  WITNESS,
+};
+
 class languaget
 {
 public:
   // parse file
-
   virtual bool parse(const std::string &path) = 0;
 
   // add external dependencies of a given module to set
-
   virtual void dependencies()
   {
   }
 
   // add modules provided by currently parsed file to set
-
   virtual void modules_provided(std::set<std::string> &)
   {
   }
@@ -55,12 +58,6 @@ public:
   virtual void show_parse(std::ostream &out) = 0;
 
   // conversion of expressions
-  enum class presentationt
-  {
-    HUMAN,
-    WITNESS,
-  };
-
   bool from_expr(
     const exprt &expr,
     std::string &code,
@@ -103,6 +100,7 @@ public:
 protected:
   // function name for verification that requires this information before GOTO conversion phase.
   std::string func_name = "";
+
 #ifdef ENABLE_SOLIDITY_FRONTEND
   // smart contract source
   std::string smart_contract = "";

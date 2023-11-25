@@ -640,8 +640,7 @@ void reformat_assignment_array(
   std::regex re{R"(((-?[0-9]+(.[0-9]+)?)))"};
   using reg_itr = std::regex_token_iterator<std::string::iterator>;
   BigInt pos = 0;
-  std::string lhs =
-    from_expr(ns, "", step.lhs, languaget::presentationt::WITNESS);
+  std::string lhs = from_expr(ns, "", step.lhs, presentationt::WITNESS);
   std::string assignment_array = "";
   for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
       it != end;)
@@ -664,8 +663,7 @@ void reformat_assignment_structs(
 {
   std::regex re{R"((((.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?))+)))"};
   using reg_itr = std::regex_token_iterator<std::string::iterator>;
-  std::string lhs =
-    from_expr(ns, "", step.lhs, languaget::presentationt::WITNESS);
+  std::string lhs = from_expr(ns, "", step.lhs, presentationt::WITNESS);
   std::string assignment_struct = "";
   for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
       it != end;)
@@ -708,11 +706,9 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
     !is_nil_expr(step.value) && is_constant_expr(step.value) &&
     is_valid_witness_step(ns, step))
   {
-    assignment +=
-      from_expr(ns, "", step.lhs, languaget::presentationt::WITNESS);
+    assignment += from_expr(ns, "", step.lhs, presentationt::WITNESS);
     assignment += " = ";
-    assignment +=
-      from_expr(ns, "", step.value, languaget::presentationt::WITNESS);
+    assignment += from_expr(ns, "", step.value, presentationt::WITNESS);
     assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
@@ -730,7 +726,7 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
   languagest languages(ns, language_idt::C);
   std::string lhsexpr;
   languages.from_expr(
-    migrate_expr_back(step.lhs), lhsexpr, languaget::presentationt::WITNESS);
+    migrate_expr_back(step.lhs), lhsexpr, presentationt::WITNESS);
   std::string location = step.pc->location.to_string();
   return (
     (location.find("built-in") & location.find("library") &
@@ -744,8 +740,7 @@ bool is_valid_witness_expr(
 {
   languagest languages(ns, language_idt::C);
   std::string value;
-  languages.from_expr(
-    migrate_expr_back(exp), value, languaget::presentationt::WITNESS);
+  languages.from_expr(migrate_expr_back(exp), value, presentationt::WITNESS);
   return (value.find("__ESBMC") & value.find("stdin") & value.find("stdout") &
           value.find("stderr") & value.find("sys_")) == std::string::npos;
 }

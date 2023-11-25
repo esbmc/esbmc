@@ -10,13 +10,13 @@ std::string from_expr(
   const namespacet &ns,
   const irep_idt &identifier,
   const exprt &exprt,
-  languaget::presentationt target = languaget::presentationt::HUMAN);
+  presentationt target = presentationt::HUMAN);
 
 inline std::string from_expr(
   const namespacet &ns,
   const irep_idt &identifier,
   const expr2tc &expr,
-  languaget::presentationt target = languaget::presentationt::HUMAN)
+  presentationt target = presentationt::HUMAN)
 {
   return from_expr(ns, identifier, migrate_expr_back(expr), target);
 }
@@ -32,13 +32,13 @@ std::string from_type(
   const namespacet &ns,
   const irep_idt &identifier,
   const typet &type,
-  languaget::presentationt target = languaget::presentationt::HUMAN);
+  presentationt target = presentationt::HUMAN);
 
 inline std::string from_type(
   const namespacet &ns,
   const irep_idt &identifier,
   const type2tc &type,
-  languaget::presentationt target = languaget::presentationt::HUMAN)
+  presentationt target = presentationt::HUMAN)
 {
   return from_type(ns, identifier, migrate_type_back(type), target);
 }
