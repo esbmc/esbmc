@@ -11,13 +11,14 @@
 #include <unordered_map>
 
 static const std::unordered_map<std::string, std::string> operator_map = {
-  {"Add", "+"},          {"Sub", "-"},         {"Mult", "*"},
-  {"Div", "/"},          {"Mod", "mod"},       {"BitOr", "bitor"},
-  {"BitAnd", "bitand"},  {"BitXor", "bitxor"}, {"Invert", "bitnot"},
-  {"LShift", "shl"},     {"RShift", "ashr"},   {"USub", "unary-"},
-  {"Eq", "="},           {"Lt", "<"},          {"LtE", "<="},
-  {"NotEq", "notequal"}, {"Gt", ">"},          {"GtE", ">="},
-  {"And", "and"},        {"Or", "or"},         {"Not", "not"},
+  {"Add", "+"},         {"Sub", "-"},          {"Mult", "*"},
+  {"Div", "/"},         {"Mod", "mod"},        {"BitOr", "bitor"},
+  {"FloorDiv", "/"},    {"BitAnd", "bitand"},  {"BitXor", "bitxor"},
+  {"Invert", "bitnot"}, {"LShift", "shl"},     {"RShift", "ashr"},
+  {"USub", "unary-"},   {"Eq", "="},           {"Lt", "<"},
+  {"LtE", "<="},        {"NotEq", "notequal"}, {"Gt", ">"},
+  {"GtE", ">="},        {"And", "and"},        {"Or", "or"},
+  {"Not", "not"},
 };
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
@@ -70,6 +71,19 @@ static typet get_typet(const std::string &ast_type)
   if(ast_type == "bool")
     return bool_type();
   return empty_typet();
+}
+
+static typet get_typet(const nlohmann::json &elem)
+{
+  if(elem.is_number_integer() || elem.is_number_unsigned())
+    return int_type();
+  else if(elem.is_boolean())
+    return bool_type();
+  else if(elem.is_number_float())
+    return float_type();
+
+  log_error("Invalid type\n");
+  abort();
 }
 
 static symbolt create_symbol(
@@ -182,15 +196,54 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   typet type = (is_relational_op(op)) ? bool_type() : lhs.type();
   exprt bin_expr(get_op(op), type);
-
   bin_expr.copy_to_operands(lhs, rhs);
+
+  // floor division (//) operation corresponds to an int division with floor rounding
+  // So we need to emulate this behaviour here:
+  // int result = (num/div) - (num%div != 0 && ((num < 0) ^ (den<0)) ? 1 : 0)
+  // e.g.: -5//2 equals to -3, and 5//2 equals to 2
+  if(op == "FloorDiv")
+  {
+    // remainder = num%den;
+    exprt remainder("mod", int_type());
+    remainder.copy_to_operands(lhs, rhs);
+
+    // Get num signal
+    exprt is_num_neg("<", bool_type());
+    is_num_neg.copy_to_operands(lhs, gen_zero(int_type()));
+    // Get den signal
+    exprt is_den_neg("<", bool_type());
+    is_den_neg.copy_to_operands(rhs, gen_zero(int_type()));
+
+    // remainder != 0
+    exprt pos_remainder("notequal", bool_type());
+    pos_remainder.copy_to_operands(remainder, gen_zero(int_type()));
+
+    // diff_signals = is_num_neg ^ is_den_neg;
+    exprt diff_signals("bitxor", bool_type());
+    diff_signals.copy_to_operands(is_num_neg, is_den_neg);
+
+    exprt cond("and", bool_type());
+    cond.copy_to_operands(pos_remainder, diff_signals);
+    exprt if_expr("if", int_type());
+    if_expr.copy_to_operands(cond, gen_one(int_type()), gen_zero(int_type()));
+
+    // floor_div = (lhs / rhs) - (1 if (lhs % rhs != 0) and (lhs < 0) ^ (rhs < 0) else 0)
+    exprt floor_div("-", int_type());
+    floor_div.copy_to_operands(bin_expr, if_expr); //bin_expr contains lhs/rhs
+    return floor_div;
+  }
+
   return bin_expr;
 }
 
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 {
-  exprt unary_expr(
-    get_op(element["op"]["_type"].get<std::string>()), current_element_type);
+  typet type = current_element_type;
+  if(element["operand"].contains("value"))
+    type = get_typet(element["operand"]["value"]);
+
+  exprt unary_expr(get_op(element["op"]["_type"].get<std::string>()), type);
 
   // get subexpr
   exprt unary_sub = get_expr(element["operand"]);

@@ -69,11 +69,17 @@ bool python_languaget::parse(const std::string &path)
     return true;
   }
 
+  // Parse and generate AST
   std::ifstream ast_json(ast_output_dir + "/ast.json");
   ast = nlohmann::json::parse(ast_json);
 
+  // Add annotation
   python_annotation<nlohmann::json> ann(ast);
-  ann.add_type_annotation();
+  const std::string function = config.options.get_option("function");
+  if(!function.empty())
+    ann.add_type_annotation(function);
+  else
+    ann.add_type_annotation();
 
   return false;
 }

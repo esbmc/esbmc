@@ -1247,7 +1247,7 @@ void value_sett::assign_rec(
     {
       const expr2tc obj = object_numbering[it.first];
 
-      if(!is_unknown2t(obj))
+      if(!is_unknown2t(obj) && !is_invalid2t(obj))
         assign_rec(obj, values_rhs, suffix, add_to_sets);
     }
   }
