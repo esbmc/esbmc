@@ -6,7 +6,7 @@ std::string from_expr(
   const namespacet &ns,
   const irep_idt &identifier,
   const exprt &expr,
-  languaget::presentationt target)
+  presentationt target)
 {
   int mode;
 
@@ -39,7 +39,7 @@ std::string from_type(
   const namespacet &ns,
   const irep_idt &identifier,
   const typet &type,
-  languaget::presentationt target)
+  presentationt target)
 {
   int mode;
 
