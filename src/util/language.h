@@ -55,18 +55,6 @@ public:
   virtual void show_parse(std::ostream &out) = 0;
 
   // conversion of expressions
-  virtual bool from_expr(
-    const exprt &expr,
-    std::string &code,
-    const namespacet &ns,
-    unsigned flags) = 0;
-
-  virtual bool from_type(
-    const typet &type,
-    std::string &code,
-    const namespacet &ns,
-    unsigned flags) = 0;
-
   enum class presentationt
   {
     HUMAN,
@@ -119,6 +107,18 @@ protected:
   // smart contract source
   std::string smart_contract = "";
 #endif
+
+  virtual bool from_expr(
+    const exprt &expr,
+    std::string &code,
+    const namespacet &ns,
+    unsigned flags) = 0;
+
+  virtual bool from_type(
+    const typet &type,
+    std::string &code,
+    const namespacet &ns,
+    unsigned flags) = 0;
 };
 
 #endif
