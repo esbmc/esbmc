@@ -130,8 +130,9 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "redirects every message into a file (no stdout/stderr)"},
     {"witness-output",
-     boost::program_options::value<std::string>(),
-     "generate the verification result witness in GraphML format"},
+     boost::program_options::value<std::string>()->value_name("{ path | - }"),
+     "generate the verification result witness in GraphML format; use '-' for "
+     "output to stdout"},
     {"witness-producer", boost::program_options::value<std::string>(), ""},
     {"witness-programfile", boost::program_options::value<std::string>(), ""},
     {"old-frontend",
