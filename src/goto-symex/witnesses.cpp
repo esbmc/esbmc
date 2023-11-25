@@ -49,11 +49,13 @@ void grapht::generate_graphml(optionst &options)
 #else
   boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
-  boost::property_tree::write_xml(
-    options.get_option("witness-output"),
-    graphml_node,
-    std::locale(),
-    settings);
+
+  std::string witness_output = options.get_option("witness-output");
+  if(witness_output == "-")
+    boost::property_tree::write_xml(std::cout, graphml_node, settings);
+  else
+    boost::property_tree::write_xml(
+      witness_output, graphml_node, std::locale(), settings);
 }
 
 void grapht::check_create_new_thread(BigInt thread_id, nodet *prev_node)
@@ -892,10 +894,8 @@ void generate_testcase(
   const std::shared_ptr<symex_target_equationt> &target,
   std::shared_ptr<smt_convt> &smt_conv)
 {
-  /*
-     * Unfortunately, TestCov rely on checking for '<!DOCTYPE test' and as Boost
-     * Property Tree is not a proper XML generator... it does not support this
-     */
+  /* Unfortunately, TestCov rely on checking for '<!DOCTYPE test' and as Boost
+   * Property Tree is not a proper XML generator... it does not support this */
 
   std::ofstream test_case(file_name);
   test_case << R"(<?xml version="1.0" encoding="UTF-8" standalone="no"?>)"
