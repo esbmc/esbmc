@@ -94,6 +94,12 @@ private:
           }
           type = rhs_node["annotation"]["id"];
         }
+        // Get type from rhs binary expression
+        else if(element["value"]["_type"] == "BinOp")
+        {
+          if(element["value"]["op"]["_type"] == "FloorDiv")
+            type = "int";
+        }
         else
           continue;
 
