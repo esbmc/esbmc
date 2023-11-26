@@ -2541,6 +2541,10 @@ bool solidity_convertert::get_func_decl_ref_type(
   {
     code_typet type;
 
+    // store current state
+    const nlohmann::json *old_functionDecl = current_functionDecl;
+    const std::string old_functionName = current_functionName;
+
     // need in get_function_params()
     current_functionName = decl["name"].get<std::string>();
     current_functionDecl = &decl;
@@ -2565,8 +2569,8 @@ bool solidity_convertert::get_func_decl_ref_type(
       type.arguments().push_back(param);
     }
 
-    current_functionName = "";
-    current_functionDecl = nullptr;
+    current_functionName = old_functionName;
+    current_functionDecl = old_functionDecl;
 
     new_type = type;
     break;
@@ -3134,6 +3138,9 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
       }
     }
   }
+
+  // current_functionDecl should not be a nullptr
+  assert(current_functionDecl);
 
   // Then search "declarations" in current function scope
   const nlohmann::json &current_func = *current_functionDecl;
