@@ -3141,7 +3141,6 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
 
   // current_functionDecl should not be a nullptr
   if (current_functionDecl == nullptr)
-    ;
   {
     log_error("Empty current_functionDecl pointer.");
     abort();
