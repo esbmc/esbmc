@@ -256,7 +256,7 @@ const nlohmann::json python_converter::find_var_decl(
   const std::string &var_name,
   const nlohmann::json &json)
 {
-  for (auto &element : ast_json["body"])
+  for (auto &element : json["body"])
   {
     if (
       (element["_type"] == "AnnAssign") &&
