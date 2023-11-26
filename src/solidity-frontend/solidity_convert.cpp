@@ -3140,7 +3140,12 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
   }
 
   // current_functionDecl should not be a nullptr
-  assert(current_functionDecl);
+  if (current_functionDecl == nullptr)
+    ;
+  {
+    log_error("Empty current_functionDecl pointer.");
+    abort();
+  }
 
   // Then search "declarations" in current function scope
   const nlohmann::json &current_func = *current_functionDecl;
