@@ -100,7 +100,25 @@ bool python_languaget::typecheck(
 void python_languaget::show_parse(std::ostream &out)
 {
   out << "AST:\n";
-  out << ast.dump(4) << std::endl;
+  const std::string function = config.options.get_option("function");
+  if(function.empty())
+  {
+    out << ast.dump(4) << std::endl;
+    return;
+  }
+  else
+  {
+    for(const auto &elem : ast["body"])
+    {
+      if(elem["_type"] == "FunctionDef" && elem["name"] == function)
+      {
+        out << elem.dump(4) << std::endl;
+        return;
+      }
+    }
+  }
+  log_error("Function {} not found.\n", function.c_str());
+  abort();
 }
 
 bool python_languaget::from_expr(
