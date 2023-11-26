@@ -252,11 +252,15 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   return unary_expr;
 }
 
-const nlohmann::json python_converter::find_var_decl(const std::string &id)
+const nlohmann::json python_converter::find_var_decl(
+  const std::string &var_name,
+  const nlohmann::json &json)
 {
   for (auto &element : ast_json["body"])
   {
-    if ((element["_type"] == "AnnAssign") && (element["target"]["id"] == id))
+    if (
+      (element["_type"] == "AnnAssign") &&
+      (element["target"]["id"] == var_name))
       return element;
   }
   return nlohmann::json();
@@ -428,7 +432,19 @@ void python_converter::get_var_assign(
   {
     // Get type from declaration node
     std::string var_name = ast_node["targets"][0]["id"].get<std::string>();
-    nlohmann::json ref = find_var_decl(var_name);
+
+    // Get variable from current function
+    nlohmann::json ref;
+    for (const auto &elem : ast_json["body"])
+    {
+      if (elem["_type"] == "FunctionDef" && elem["name"] == current_func_name)
+        ref = find_var_decl(var_name, elem);
+    }
+
+    // Get variable from global scope
+    if (ref.empty())
+      ref = find_var_decl(var_name, ast_json);
+
     assert(!ref.empty());
     current_element_type =
       get_typet(ref["annotation"]["id"].get<std::string>());
@@ -503,7 +519,7 @@ void python_converter::get_compound_assign(
 {
   // Get type from declaration node
   std::string var_name = ast_node["target"]["id"].get<std::string>();
-  nlohmann::json ref = find_var_decl(var_name);
+  nlohmann::json ref = find_var_decl(var_name, ast_json);
   assert(!ref.empty());
   current_element_type = get_typet(ref["annotation"]["id"].get<std::string>());
 
