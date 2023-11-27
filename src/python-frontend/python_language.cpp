@@ -101,16 +101,16 @@ void python_languaget::show_parse(std::ostream &out)
 {
   out << "AST:\n";
   const std::string function = config.options.get_option("function");
-  if(function.empty())
+  if (function.empty())
   {
     out << ast.dump(4) << std::endl;
     return;
   }
   else
   {
-    for(const auto &elem : ast["body"])
+    for (const auto &elem : ast["body"])
     {
-      if(elem["_type"] == "FunctionDef" && elem["name"] == function)
+      if (elem["_type"] == "FunctionDef" && elem["name"] == function)
       {
         out << elem.dump(4) << std::endl;
         return;
