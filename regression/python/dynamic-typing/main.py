@@ -5,5 +5,6 @@ def foo(a:int) -> None:
   b = 10
   c = a # Infer type of lhs from function arg type (int)
 
-x = 4
-y = (x + 1) // 2
+v:uint64 = 16
+y = 1
+x = (v + y)//2
