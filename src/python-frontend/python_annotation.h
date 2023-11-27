@@ -63,10 +63,10 @@ private:
         // Get type from rhs constant
         if (element["value"]["_type"] == "Constant")
         {
-          // Get type from rhs constant
           auto rhs = element["value"]["value"];
           type = get_type_from_element(rhs);
         }
+
         // Get type from rhs variable
         else if (element["value"]["_type"] == "Name")
         {
@@ -94,14 +94,31 @@ private:
           }
           type = rhs_node["annotation"]["id"];
         }
+
         // Get type from rhs binary expression
         else if (element["value"]["_type"] == "BinOp")
         {
+          // Floor division (//) operations always result in an integer value
           if (element["value"]["op"]["_type"] == "FloorDiv")
             type = "int";
+          else
+          {
+            // If the lhs of the binary operation is a variable, its type is retrieved
+            if (element["value"]["left"]["_type"] == "Name")
+            {
+              Json left_op =
+                find_node(element["value"]["left"]["id"], body["body"]);
+              if (!left_op.empty())
+              {
+                type = left_op["annotation"]["id"];
+              }
+            }
+          }
         }
         else
           continue;
+
+        assert(!type.empty());
 
         // Update type field
         element["_type"] = "AnnAssign";
