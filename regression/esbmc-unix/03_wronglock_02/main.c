@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-
+#include <assert.h>
 #define USAGE "./wronglock <param1> <param2>\n"
 
 static int iNum1 = 1;
