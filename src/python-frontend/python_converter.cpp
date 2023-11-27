@@ -875,8 +875,14 @@ bool python_converter::convert()
 
     const code_typet::argumentst &arguments =
       to_code_type(symbol->type).arguments();
-    call.arguments().resize(
-      arguments.size(), static_cast<const exprt &>(get_nil_irep()));
+
+    // Function args are nondet values
+    for (const code_typet::argumentt &arg : arguments)
+    {
+      exprt arg_value = exprt("sideeffect", arg.type());
+      arg_value.statement("nondet");
+      call.arguments().push_back(arg_value);
+    }
 
     block_expr = call;
   }
