@@ -488,7 +488,7 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
     fmt_idx = 0;
     number_of_format_args = func_call.operands.size() - 1;
   }
-  else if(
+  else if (
     (func_name.find("__ESBMC_fscanf") != std::string::npos) ||
     (func_name.find("__ESBMC_sscanf") != std::string::npos))
   {
