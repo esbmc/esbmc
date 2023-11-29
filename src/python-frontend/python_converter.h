@@ -30,7 +30,10 @@ private:
   exprt get_function_call(const nlohmann::json &ast_block);
   exprt get_block(const nlohmann::json &ast_block);
 
-  const nlohmann::json find_var_decl(const std::string &id);
+  const nlohmann::json
+  find_var_decl(const std::string &var_name, const nlohmann::json &json);
+
+  void adjust_statement_types(exprt &lhs, exprt &rhs) const;
 
   contextt &context;
   typet current_element_type;

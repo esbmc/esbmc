@@ -67,7 +67,11 @@ static typet get_typet(const std::string &ast_type)
   if (ast_type == "float")
     return float_type();
   if (ast_type == "int")
+    /* FIXME: We need to map 'int' to another irep type that provides unlimited precision
+	https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex */
     return int_type();
+  if (ast_type == "uint64")
+    return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
   return empty_typet();
@@ -152,6 +156,51 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   return logical_expr;
 }
 
+void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
+{
+  typet &lhs_type = lhs.type();
+  typet &rhs_type = rhs.type();
+
+  auto update_symbol = [&](exprt &expr) {
+    std::string id = "py:" + python_filename + "@F@" + current_func_name + "@" +
+                     expr.name().c_str();
+    symbolt *s = context.find_symbol(id);
+    if (s != nullptr)
+    {
+      s->type = expr.type();
+      s->value.type() = expr.type();
+
+      if (
+        s->value.is_constant() ||
+        (s->value.is_signedbv() || s->value.is_unsignedbv()))
+      {
+        exprt new_value =
+          from_integer(std::stoi(s->value.value().c_str()), expr.type());
+        s->value = new_value;
+      }
+    }
+  };
+
+  if (lhs_type.width() != rhs_type.width())
+  {
+    int lhs_type_width = std::stoi(lhs_type.width().c_str());
+    int rhs_type_width = std::stoi(rhs_type.width().c_str());
+
+    if (lhs_type_width > rhs_type_width)
+    {
+      // Update rhs symbol value to match with new type
+      rhs_type = lhs_type;
+      update_symbol(rhs);
+    }
+    else
+    {
+      // Update lhs symbol value to match with new type
+      lhs_type = rhs_type;
+      update_symbol(lhs);
+    }
+  }
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   exprt lhs;
@@ -192,6 +241,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     op = element["ops"][0]["_type"].get<std::string>();
 
   assert(!op.empty());
+
+  adjust_statement_types(lhs, rhs);
+
   assert(lhs.type() == rhs.type());
 
   typet type = (is_relational_op(op)) ? bool_type() : lhs.type();
@@ -204,20 +256,21 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // e.g.: -5//2 equals to -3, and 5//2 equals to 2
   if (op == "FloorDiv")
   {
+    typet div_type = bin_expr.type();
     // remainder = num%den;
-    exprt remainder("mod", int_type());
+    exprt remainder("mod", div_type);
     remainder.copy_to_operands(lhs, rhs);
 
     // Get num signal
     exprt is_num_neg("<", bool_type());
-    is_num_neg.copy_to_operands(lhs, gen_zero(int_type()));
+    is_num_neg.copy_to_operands(lhs, gen_zero(div_type));
     // Get den signal
     exprt is_den_neg("<", bool_type());
-    is_den_neg.copy_to_operands(rhs, gen_zero(int_type()));
+    is_den_neg.copy_to_operands(rhs, gen_zero(div_type));
 
     // remainder != 0
     exprt pos_remainder("notequal", bool_type());
-    pos_remainder.copy_to_operands(remainder, gen_zero(int_type()));
+    pos_remainder.copy_to_operands(remainder, gen_zero(div_type));
 
     // diff_signals = is_num_neg ^ is_den_neg;
     exprt diff_signals("bitxor", bool_type());
@@ -225,12 +278,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
     exprt cond("and", bool_type());
     cond.copy_to_operands(pos_remainder, diff_signals);
-    exprt if_expr("if", int_type());
-    if_expr.copy_to_operands(cond, gen_one(int_type()), gen_zero(int_type()));
+    exprt if_expr("if", div_type);
+    if_expr.copy_to_operands(cond, gen_one(div_type), gen_zero(div_type));
 
     // floor_div = (lhs / rhs) - (1 if (lhs % rhs != 0) and (lhs < 0) ^ (rhs < 0) else 0)
-    exprt floor_div("-", int_type());
+    exprt floor_div("-", div_type);
     floor_div.copy_to_operands(bin_expr, if_expr); //bin_expr contains lhs/rhs
+
     return floor_div;
   }
 
@@ -252,11 +306,15 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   return unary_expr;
 }
 
-const nlohmann::json python_converter::find_var_decl(const std::string &id)
+const nlohmann::json python_converter::find_var_decl(
+  const std::string &var_name,
+  const nlohmann::json &json)
 {
-  for (auto &element : ast_json["body"])
+  for (auto &element : json["body"])
   {
-    if ((element["_type"] == "AnnAssign") && (element["target"]["id"] == id))
+    if (
+      (element["_type"] == "AnnAssign") &&
+      (element["target"]["id"] == var_name))
       return element;
   }
   return nlohmann::json();
@@ -428,7 +486,19 @@ void python_converter::get_var_assign(
   {
     // Get type from declaration node
     std::string var_name = ast_node["targets"][0]["id"].get<std::string>();
-    nlohmann::json ref = find_var_decl(var_name);
+
+    // Get variable from current function
+    nlohmann::json ref;
+    for (const auto &elem : ast_json["body"])
+    {
+      if (elem["_type"] == "FunctionDef" && elem["name"] == current_func_name)
+        ref = find_var_decl(var_name, elem);
+    }
+
+    // Get variable from global scope
+    if (ref.empty())
+      ref = find_var_decl(var_name, ast_json);
+
     assert(!ref.empty());
     current_element_type =
       get_typet(ref["annotation"]["id"].get<std::string>());
@@ -492,6 +562,8 @@ void python_converter::get_var_assign(
     return;
   }
 
+  adjust_statement_types(lhs, rhs);
+
   code_assignt code_assign(lhs, rhs);
   code_assign.location() = location_begin;
   target_block.copy_to_operands(code_assign);
@@ -503,7 +575,7 @@ void python_converter::get_compound_assign(
 {
   // Get type from declaration node
   std::string var_name = ast_node["target"]["id"].get<std::string>();
-  nlohmann::json ref = find_var_decl(var_name);
+  nlohmann::json ref = find_var_decl(var_name, ast_json);
   assert(!ref.empty());
   current_element_type = get_typet(ref["annotation"]["id"].get<std::string>());
 
@@ -557,13 +629,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   {
     // Append 'else' block to the statement
     if (ast_node["orelse"].is_array())
-    {
       else_expr = get_block(ast_node["orelse"]);
-    }
     else
-    {
       else_expr = get_expr(ast_node["orelse"]);
-    }
   }
 
   auto type = ast_node["_type"];
@@ -586,9 +654,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // Append "then" block
   code.copy_to_operands(cond, then);
   if (!else_expr.id_string().empty())
-  {
     code.copy_to_operands(else_expr);
-  }
 
   return code;
 }
@@ -809,8 +875,14 @@ bool python_converter::convert()
 
     const code_typet::argumentst &arguments =
       to_code_type(symbol->type).arguments();
-    call.arguments().resize(
-      arguments.size(), static_cast<const exprt &>(get_nil_irep()));
+
+    // Function args are nondet values
+    for (const code_typet::argumentt &arg : arguments)
+    {
+      exprt arg_value = exprt("sideeffect", arg.type());
+      arg_value.statement("nondet");
+      call.arguments().push_back(arg_value);
+    }
 
     block_expr = call;
   }
