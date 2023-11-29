@@ -415,7 +415,7 @@ void value_sett::get_value_set_rec(
 
     default:
       log_error("Unexpected side-effect: {}", *expr);
-      throw std::runtime_error("unsuported side-effect");
+      throw vsa_not_implemented_exception();
     }
   }
 
@@ -1308,7 +1308,7 @@ void value_sett::assign_rec(
   {
     log_error("[VSA] assign NYI: `{}'", get_expr_id(lhs));
     lhs->dump();
-    throw std::runtime_error("unsupported NYI");
+    throw vsa_not_implemented_exception();
   }
 }
 
@@ -1455,7 +1455,7 @@ void value_sett::apply_code(const expr2tc &code)
   {
     std::ostringstream str;
     str << code << "\nvalue_sett: unexpected statement";
-    throw std::runtime_error(str.str());
+    throw vsa_not_implemented_exception();
   }
 }
 
