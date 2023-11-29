@@ -108,7 +108,7 @@ protected:
 public:
   // TODO: clearly this shouldn't be here. The proper way is to create a new Abstract Interpreter
   // that contains a points-to analysis
-  static std::unique_ptr<value_set_analysist> vsa;
+  static std::shared_ptr<value_set_analysist> vsa;
 };
 
 #include <util/algorithms.h>
@@ -136,7 +136,7 @@ public:
 class goto_cse : public goto_functions_algorithm
 {
 public:
-  explicit goto_cse(contextt &ns) : goto_functions_algorithm(true), context(ns)
+  goto_cse(contextt &ns, std::shared_ptr<value_set_analysist> &vsa) : goto_functions_algorithm(true), context(ns), vsa(vsa)
   {
   }
 
@@ -161,6 +161,6 @@ protected:
 
 private:
   unsigned symbol_counter = 0;
-  bool program_initialized = false;
   const std::string prefix = "__ESBMC_cse_symbol";
+  std::shared_ptr<value_set_analysist> &vsa;
 };

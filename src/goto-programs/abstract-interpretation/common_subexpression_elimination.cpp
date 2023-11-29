@@ -1,6 +1,7 @@
 #include "goto-programs/goto_program.h"
 #include "irep2/irep2_expr.h"
 #include "irep2/irep2_type.h"
+#include "pointer-analysis/value_set_analysis.h"
 #include "util/std_code.h"
 #include "util/std_expr.h"
 #include <goto-programs/abstract-interpretation/common_subexpression_elimination.h>
@@ -9,7 +10,7 @@
 #include <util/prefix.h>
 #include <fmt/format.h>
 // TODO: Do an points-to abstract interpreter
-std::unique_ptr<value_set_analysist> cse_domaint::vsa = nullptr;
+std::shared_ptr<value_set_analysist> cse_domaint::vsa = nullptr;
 
 void cse_domaint::transform(
   goto_programt::const_targett from,
@@ -243,23 +244,12 @@ bool goto_cse::runOnProgram(goto_functionst &F)
 {
   // Initialization for the abstract analysis.
   const namespacet ns(context);
-
-  try
-  {
-    log_status("{}", "[CSE] Computing VSA");
-    cse_domaint::vsa = std::make_unique<value_set_analysist>(ns);
-    (*cse_domaint::vsa)(F);
-    log_status("{}", "[CSE] Computing Available Expressions for program");
-    available_expressions(F, ns);
-    log_status("{}", "[CSE] Finished computing AE for program");
-    program_initialized = true;
-  }
-  catch(...)
-  {
-    program_initialized = false;
-    log_error("Unable to initialize the GCSE");
-  }
-
+  cse_domaint::vsa = vsa;
+  log_status("{}", "[CSE] Computing Available Expressions for program");
+  available_expressions(F, ns);
+  log_status("{}", "[CSE] Finished computing AE for program");
+  // Let's release the reference. TODO: create the "VSA aware" abstract interpreter
+  cse_domaint::vsa = nullptr;
   return false;
 }
 
@@ -317,9 +307,6 @@ void goto_cse::replace_max_sub_expr(
 
 bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
 {
-  if(!program_initialized)
-    return false;
-
   if(!F.second.body_available)
     return false;
 

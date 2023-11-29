@@ -1668,12 +1668,30 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, options, ns);
     }
 
+    std::shared_ptr <value_set_analysist> vsa = std::make_shared<value_set_analysist>(ns);
+    try
+    {
+      log_status("{}", "[GOTO] Computing Value-Set Analysis (VSA)");
+      (*vsa)(goto_functions);
+    }
+    catch(...)
+    {
+      log_warning("{}", "[GOTO] Unable to compute VSA, some optimizations will be disabled");
+      vsa = nullptr;
+    }
+
     if(cmdline.isset("gcse"))
     {
       if(cmdline.isset("no-library"))
         log_warning("Using CSE with --no-library might cause huge slowdowns!");
-      goto_cse cse(context);
-      cse.run(goto_functions);
+
+      if(!vsa)
+	log_warning("[GOTO] Could not apply GCSE optimization due to VSA limitation!");
+      else
+      {	
+	goto_cse cse(context, vsa);
+	cse.run(goto_functions);
+      }
     }
 
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
