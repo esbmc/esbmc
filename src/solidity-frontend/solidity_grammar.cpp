@@ -590,6 +590,18 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return WhileStatement;
   }
+
+  //Find this in the compiled contract.solast.json file
+  else if(stmt["nodeType"] == "Continue")
+  {
+    return ContinueStmt;
+  }
+
+  else if(stmt["nodeType"] == "Break")
+  {
+    return BreakStmt;
+  }
+
   else
   {
     log_error(
@@ -612,6 +624,8 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(IfStatement)
     ENUM_TO_STR(WhileStatement)
     ENUM_TO_STR(StatementTError)
+    ENUM_TO_STR(ContinueStmt)
+    ENUM_TO_STR(BreakStmt)
   default:
   {
     assert(!"Unknown statement type");

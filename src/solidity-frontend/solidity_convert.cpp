@@ -10,6 +10,7 @@
 #include <util/std_expr.h>
 #include <util/message.h>
 #include <regex>
+#include <iostream>
 
 #include <fstream>
 
@@ -1050,6 +1051,19 @@ bool solidity_convertert::get_statement(
     new_expr = code_while;
     break;
   }
+
+  case SolidityGrammar::StatementT::ContinueStmt:
+  {
+    new_expr = code_continuet();
+    break;
+  }
+
+  case SolidityGrammar::StatementT::BreakStmt:
+  {
+    new_expr = code_breakt();
+    break;
+  }
+
   default:
   {
     assert(!"Unimplemented type in rule statement");
@@ -1635,6 +1649,7 @@ bool solidity_convertert::get_expr(
     new_expr = index_exprt(array, pos, t);
     break;
   }
+
   case SolidityGrammar::ExpressionT::NewExpression:
   {
     // 1. new dynamic array, e.g.

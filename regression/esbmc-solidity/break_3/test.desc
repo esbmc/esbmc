@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol contract.solast --function test_break --incremental-bmc
+VERIFICATION SUCCESS
