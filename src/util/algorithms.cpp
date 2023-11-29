@@ -5,7 +5,6 @@
 
 bool goto_functions_algorithm::run(goto_functionst &goto_functions)
 {
-  _goto_functions = goto_functions;
   runOnProgram(goto_functions);
   Forall_goto_functions(it, goto_functions)
   {
