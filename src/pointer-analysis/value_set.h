@@ -669,4 +669,8 @@ public:
   unsigned long xchg_num;
 };
 
+// Exceptions
+
+class vsa_not_implemented_exception {};
+
 #endif

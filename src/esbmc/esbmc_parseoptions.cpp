@@ -1671,12 +1671,17 @@ bool esbmc_parseoptionst::process_goto_program(
     std::shared_ptr <value_set_analysist> vsa = std::make_shared<value_set_analysist>(ns);
     try
     {
-      log_status("{}", "[GOTO] Computing Value-Set Analysis (VSA)");
+      log_status("Computing Value-Set Analysis (VSA)");
       (*vsa)(goto_functions);
     }
-    catch(...)
+    catch(vsa_not_implemented_exception &)
     {
-      log_warning("{}", "[GOTO] Unable to compute VSA, some optimizations will be disabled");
+      log_warning("Unable to compute VSA due to incomplete implementation. Some GOTO optimizations will be disabled");
+      vsa = nullptr;
+    }
+    catch(type2t::symbolic_type_excp &)
+    {
+      log_warning("[GOTO] Unable to compute VSA due to symbolic type. Some GOTO optimizations will be disabled");
       vsa = nullptr;
     }
 
@@ -1686,7 +1691,7 @@ bool esbmc_parseoptionst::process_goto_program(
         log_warning("Using CSE with --no-library might cause huge slowdowns!");
 
       if(!vsa)
-	log_warning("[GOTO] Could not apply GCSE optimization due to VSA limitation!");
+	log_warning("Could not apply GCSE optimization due to VSA limitation!");
       else
       {	
 	goto_cse cse(context, vsa);
