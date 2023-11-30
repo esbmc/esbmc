@@ -310,6 +310,27 @@ public:
   // Not part of original BigInt.
   void setPower2(unsigned exponent);
 
+  // Not part of original BigInt.
+  static BigInt power2(unsigned n, bool negated = false)
+  {
+    BigInt b;
+    b.setPower2(n);
+    if (negated)
+      b.negate();
+    return b;
+  }
+
+  // Not part of original BigInt.
+  static BigInt power2m1(unsigned n, bool negated = false)
+  {
+    BigInt b;
+    b.setPower2(n);
+    --b;
+    if (negated)
+      b.negate();
+    return b;
+  }
+
   void swap(BigInt &other)
   {
     std::swap(other.size, size);
