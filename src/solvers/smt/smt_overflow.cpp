@@ -59,8 +59,9 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
       // Corner case: subtracting MIN_INT from many things overflows. The result
       // should always be positive.
-      uint64_t topbit = 1ULL << (opers.side_1->type->get_width() - 1);
-      expr2tc min_int = constant_int2tc(opers.side_1->type, BigInt(topbit));
+      BigInt topbit;
+      topbit.setPower2(opers.side_1->type->get_width() - 1);
+      expr2tc min_int = constant_int2tc(opers.side_1->type, -topbit);
       expr2tc is_min_int = equality2tc(min_int, opers.side_2);
       return convert_ast(or2tc(add_overflows, is_min_int));
     }
@@ -79,8 +80,9 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     if (is_signed)
     {
       // We can't divide -MIN_INT/-1
-      uint64_t topbit = 1ULL << (opers.side_1->type->get_width() - 1);
-      expr2tc min_int = constant_int2tc(opers.side_1->type, -BigInt(topbit));
+      BigInt topbit;
+      topbit.setPower2(opers.side_1->type->get_width() - 1);
+      expr2tc min_int = constant_int2tc(opers.side_1->type, -topbit);
       expr2tc is_min_int = equality2tc(min_int, opers.side_1);
       expr2tc imp =
         implies2tc(is_min_int, greaterthan2tc(overflow.operand, zero));
@@ -183,8 +185,12 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   unsigned int pos_zero_bits = width - bits;
   unsigned int neg_one_bits = (width - bits) + 1;
 
+  BigInt ones;
+  ones.setPower2(neg_one_bits);
+  --ones;
+
   smt_astt pos_bits = mk_smt_bv(BigInt(0), pos_zero_bits);
-  smt_astt neg_bits = mk_smt_bv(BigInt((1 << neg_one_bits) - 1), neg_one_bits);
+  smt_astt neg_bits = mk_smt_bv(ones, neg_one_bits);
 
   smt_astt pos_sel = mk_extract(orig_val, width - 1, width - pos_zero_bits);
   smt_astt neg_sel = mk_extract(orig_val, width - 1, width - neg_one_bits);
@@ -211,9 +217,9 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   const overflow_neg2t &neg = to_overflow_neg2t(expr);
   unsigned int width = neg.operand->type->get_width();
 
-  BigInt Min;
-  Min.setPower2(width - 1);
-  expr2tc min_int = constant_int2tc(neg.operand->type, -Min);
+  BigInt M;
+  M.setPower2(width - 1);
+  expr2tc min_int = constant_int2tc(neg.operand->type, -M);
   expr2tc val = equality2tc(neg.operand, min_int);
   return convert_ast(val);
 }

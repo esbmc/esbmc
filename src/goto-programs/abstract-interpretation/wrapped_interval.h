@@ -1442,6 +1442,7 @@ private:
   // For bitwise intervals approximations (Warren 2002)
   static uint64_t compute_m(unsigned width)
   {
+    assert(width - 1 < 64);
     uint64_t m = (uint64_t)1 << (width - 1);
     if (width == 32)
       assert(m == 0x80000000);
