@@ -2046,7 +2046,7 @@ void fp_convt::round(
 
 smt_astt fp_convt::mk_min_exp(std::size_t ebits)
 {
-  BigInt z = -BigInt::power2m1(ebits - 1) + 1;
+  BigInt z = BigInt::power2(ebits - 1, true) + 2;
   return ctx->mk_smt_bv(z, ebits);
 }
 
