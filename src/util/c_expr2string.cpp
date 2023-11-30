@@ -1158,8 +1158,7 @@ c_expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
   else if (type.id() == "unsignedbv" || type.id() == "signedbv")
   {
     BigInt int_value = binary2integer(value, type.id() == "signedbv");
-    BigInt llong_ub;
-    llong_ub.setPower2(config.ansi_c.long_long_int_width - 1);
+    BigInt llong_ub = BigInt::power2(config.ansi_c.long_long_int_width - 1);
     if (int_value == -llong_ub)
     {
       dest = integer2string(int_value + 1);

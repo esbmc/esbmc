@@ -1878,9 +1878,7 @@ type2tc make_array_domain_type(const array_type2t &arr)
 expr2tc smt_convt::array_domain_to_width(const type2tc &type)
 {
   const unsignedbv_type2t &uint = to_unsignedbv_type(type);
-  BigInt sz;
-  sz.setPower2(uint.width);
-  return constant_int2tc(index_type2(), sz);
+  return constant_int2tc(index_type2(), BigInt::power2(uint.width));
 }
 
 static expr2tc gen_additions(const type2tc &type, std::vector<expr2tc> &exprs)

@@ -877,9 +877,7 @@ inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)
 
 inline BigInt ones(unsigned n_bits)
 {
-  BigInt r;
-  r.setPower2(n_bits);
-  return r -= 1;
+  return BigInt::power2m1(n_bits);
 }
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */
