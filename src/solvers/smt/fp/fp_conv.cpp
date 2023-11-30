@@ -117,8 +117,7 @@ smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt x, smt_astt rm)
   smt_astt none = mk_one(one_1, ebits, sbits);
   smt_astt xone = ctx->mk_ite(sgn_eq_1, none, pone);
 
-  smt_astt pow_2_sbitsm1 =
-    ctx->mk_smt_bv(BigInt::power2(sbits - 1, false), sbits);
+  smt_astt pow_2_sbitsm1 = ctx->mk_smt_bv(BigInt::power2(sbits - 1), sbits);
   smt_astt m1 = ctx->mk_bvneg(ctx->mk_smt_bv(BigInt(1), ebits));
   smt_astt t1 = ctx->mk_eq(a_sig, pow_2_sbitsm1);
   smt_astt t2 = ctx->mk_eq(a_exp, m1);
@@ -298,7 +297,7 @@ smt_astt fp_convt::mk_smt_fpbv_sqrt(smt_astt x, smt_astt rm)
   assert(sig_prime->sort->get_data_width() == sbits + 1);
 
   // This is algorithm 10.2 in the Handbook of Floating-Point Arithmetic
-  BigInt p2 = BigInt::power2(sbits + 3, false);
+  BigInt p2 = BigInt::power2(sbits + 3);
   smt_astt Q = ctx->mk_smt_bv(p2, sbits + 5);
   smt_astt R =
     ctx->mk_bvsub(ctx->mk_concat(sig_prime, ctx->mk_smt_bv(BigInt(0), 4)), Q);
@@ -877,7 +876,7 @@ smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_fpbv(
       ctx->mk_bvsub(ctx->mk_sign_ext(exp, 2), ctx->mk_sign_ext(lz, 2));
 
     // check whether exponent is within roundable (to_ebits+2) range.
-    BigInt z = BigInt::power2(to_ebits + 1, true);
+    BigInt z = -BigInt::power2(to_ebits + 1);
     smt_astt max_exp = ctx->mk_concat(
       ctx->mk_smt_bv(BigInt::power2m1(to_ebits), to_ebits + 1),
       ctx->mk_smt_bv(BigInt(0), 1));
@@ -2046,7 +2045,7 @@ void fp_convt::round(
 
 smt_astt fp_convt::mk_min_exp(std::size_t ebits)
 {
-  BigInt z = BigInt::power2(ebits - 1, true) + 2;
+  BigInt z = -BigInt::power2(ebits - 1) + 2;
   return ctx->mk_smt_bv(z, ebits);
 }
 

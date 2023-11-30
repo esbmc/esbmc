@@ -309,12 +309,10 @@ public:
   unsigned floorPow2() const;
 
   // Not part of original BigInt.
-  static BigInt power2(unsigned n, bool negated = false)
+  static BigInt power2(unsigned n)
   {
     BigInt b;
     b.setPower2(n);
-    if (negated)
-      b.negate();
     return b;
   }
 

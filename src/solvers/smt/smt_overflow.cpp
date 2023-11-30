@@ -59,7 +59,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
       // Corner case: subtracting MIN_INT from many things overflows. The result
       // should always be positive.
-      BigInt topbit = BigInt::power2(opers.side_1->type->get_width() - 1, true);
+      BigInt topbit = -BigInt::power2(opers.side_1->type->get_width() - 1);
       expr2tc min_int = constant_int2tc(opers.side_1->type, topbit);
       expr2tc is_min_int = equality2tc(min_int, opers.side_2);
       return convert_ast(or2tc(add_overflows, is_min_int));
@@ -79,7 +79,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     if (is_signed)
     {
       // We can't divide -MIN_INT/-1
-      BigInt topbit = BigInt::power2(opers.side_1->type->get_width() - 1, true);
+      BigInt topbit = -BigInt::power2(opers.side_1->type->get_width() - 1);
       expr2tc min_int = constant_int2tc(opers.side_1->type, topbit);
       expr2tc is_min_int = equality2tc(min_int, opers.side_1);
       expr2tc imp =
@@ -212,7 +212,7 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   unsigned int width = neg.operand->type->get_width();
 
   expr2tc min_int =
-    constant_int2tc(neg.operand->type, BigInt::power2(width - 1, true));
+    constant_int2tc(neg.operand->type, -BigInt::power2(width - 1));
   expr2tc val = equality2tc(neg.operand, min_int);
   return convert_ast(val);
 }
