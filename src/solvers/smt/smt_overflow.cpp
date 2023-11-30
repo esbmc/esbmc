@@ -126,7 +126,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       type2tc newtype = unsignedbv_type2tc(sz + 1);
 
       // All one bit vector is tricky, might be 64 bits wide for all we know.
-      expr2tc allonesexpr = constant_int2tc(newtype, ones(sz + 1));
+      expr2tc allonesexpr = constant_int2tc(newtype, BigInt::power2m1(sz + 1));
       smt_astt allonesvector = convert_ast(allonesexpr);
 
       // It should either be zero or all one's;
@@ -184,7 +184,7 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   unsigned int neg_one_bits = (width - bits) + 1;
 
   smt_astt pos_bits = mk_smt_bv(BigInt(0), pos_zero_bits);
-  smt_astt neg_bits = mk_smt_bv(ones(neg_one_bits), neg_one_bits);
+  smt_astt neg_bits = mk_smt_bv(BigInt::power2m1(neg_one_bits), neg_one_bits);
 
   smt_astt pos_sel = mk_extract(orig_val, width - 1, width - pos_zero_bits);
   smt_astt neg_sel = mk_extract(orig_val, width - 1, width - neg_one_bits);
