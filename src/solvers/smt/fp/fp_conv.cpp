@@ -879,11 +879,11 @@ smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_fpbv(
     // check whether exponent is within roundable (to_ebits+2) range.
     BigInt z = BigInt::power2(to_ebits + 1, true);
     smt_astt max_exp = ctx->mk_concat(
-      ctx->mk_smt_bv(BigInt::power2m1(to_ebits, false), to_ebits + 1),
+      ctx->mk_smt_bv(BigInt::power2m1(to_ebits), to_ebits + 1),
       ctx->mk_smt_bv(BigInt(0), 1));
     smt_astt min_exp = ctx->mk_smt_bv(BigInt(z + 2), to_ebits + 2);
 
-    BigInt ovft = BigInt::power2m1(to_ebits + 1, false);
+    BigInt ovft = BigInt::power2m1(to_ebits + 1);
     smt_astt first_ovf_exp = ctx->mk_smt_bv(BigInt(ovft), from_ebits + 2);
     smt_astt first_udf_exp = ctx->mk_concat(
       ctx->mk_bvneg(ctx->mk_smt_bv(BigInt(1), ebits_diff + 3)),
@@ -1685,7 +1685,7 @@ smt_astt fp_convt::mk_smt_fpbv_is_normal(smt_astt op)
   smt_astt is_zero = mk_smt_fpbv_is_zero(op);
 
   unsigned ebits = exp->sort->get_data_width();
-  smt_astt p = ctx->mk_smt_bv(BigInt::power2m1(ebits, false), ebits);
+  smt_astt p = ctx->mk_smt_bv(BigInt::power2m1(ebits), ebits);
 
   smt_astt is_special = ctx->mk_eq(exp, p);
 
@@ -1990,7 +1990,7 @@ void fp_convt::round(
   smt_astt exp_redand = ctx->mk_bvredand(biased_exp);
   smt_astt preOVF2 = ctx->mk_eq(exp_redand, one_1);
   smt_astt OVF2 = ctx->mk_and(SIGovf, preOVF2);
-  smt_astt pem2m1 = ctx->mk_smt_bv(BigInt::power2m1(ebits - 2, false), ebits);
+  smt_astt pem2m1 = ctx->mk_smt_bv(BigInt::power2m1(ebits - 2), ebits);
   biased_exp = ctx->mk_ite(OVF2, pem2m1, biased_exp);
   smt_astt OVF = ctx->mk_or(OVF1, OVF2);
 
@@ -2012,10 +2012,9 @@ void fp_convt::round(
   smt_astt zero1 = ctx->mk_smt_bv(BigInt(0), 1);
   smt_astt sgn_is_zero = ctx->mk_eq(sgn, zero1);
 
-  smt_astt max_sig =
-    ctx->mk_smt_bv(BigInt::power2m1(sbits - 1, false), sbits - 1);
+  smt_astt max_sig = ctx->mk_smt_bv(BigInt::power2m1(sbits - 1), sbits - 1);
   smt_astt max_exp = ctx->mk_concat(
-    ctx->mk_smt_bv(BigInt::power2m1(ebits - 1, false), ebits - 1),
+    ctx->mk_smt_bv(BigInt::power2m1(ebits - 1), ebits - 1),
     ctx->mk_smt_bv(BigInt(0), 1));
   smt_astt inf_sig = ctx->mk_smt_bv(BigInt(0), sbits - 1);
   smt_astt inf_exp = top_exp;
@@ -2047,19 +2046,19 @@ void fp_convt::round(
 
 smt_astt fp_convt::mk_min_exp(std::size_t ebits)
 {
-  BigInt z = BigInt::power2m1(ebits - 1, true) + 1;
+  BigInt z = -BigInt::power2m1(ebits - 1) + 1;
   return ctx->mk_smt_bv(z, ebits);
 }
 
 smt_astt fp_convt::mk_max_exp(std::size_t ebits)
 {
-  BigInt z = BigInt::power2m1(ebits - 1, false);
+  BigInt z = BigInt::power2m1(ebits - 1);
   return ctx->mk_smt_bv(z, ebits);
 }
 
 smt_astt fp_convt::mk_top_exp(std::size_t sz)
 {
-  return ctx->mk_smt_bv(BigInt::power2m1(sz, false), sz);
+  return ctx->mk_smt_bv(BigInt::power2m1(sz), sz);
 }
 
 smt_astt fp_convt::mk_bot_exp(std::size_t sz)
@@ -2137,7 +2136,7 @@ smt_astt fp_convt::mk_bias(smt_astt e)
 {
   std::size_t ebits = e->sort->get_data_width();
 
-  smt_astt bias = ctx->mk_smt_bv(BigInt::power2m1(ebits - 1, false), ebits);
+  smt_astt bias = ctx->mk_smt_bv(BigInt::power2m1(ebits - 1), ebits);
   return ctx->mk_bvadd(e, bias);
 }
 
@@ -2167,7 +2166,7 @@ smt_astt fp_convt::mk_one(smt_astt sgn, unsigned ew, unsigned sw)
     ctx->mk_concat(
       sgn,
       ctx->mk_concat(
-        ctx->mk_smt_bv(BigInt::power2m1(ew - 1, false), ew),
+        ctx->mk_smt_bv(BigInt::power2m1(ew - 1), ew),
         ctx->mk_smt_bv(BigInt(0), sw - 1))),
     mk_fpbv_sort(ew, sw - 1));
 }
