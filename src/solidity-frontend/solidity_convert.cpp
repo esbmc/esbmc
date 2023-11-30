@@ -10,7 +10,6 @@
 #include <util/std_expr.h>
 #include <util/message.h>
 #include <regex>
-#include <iostream>
 
 #include <fstream>
 
@@ -972,13 +971,13 @@ bool solidity_convertert::get_statement(
     break;
   }
 
-  case SolidityGrammar::StatementT::ContinueStmt:
+  case SolidityGrammar::StatementT::Continue:
   {
     new_expr = code_continuet();
     break;
   }
 
-  case SolidityGrammar::StatementT::BreakStmt:
+  case SolidityGrammar::StatementT::Break:
   {
     new_expr = code_breakt();
     break;
@@ -1448,7 +1447,6 @@ bool solidity_convertert::get_expr(
     new_expr = index_exprt(array, pos, t);
     break;
   }
-
   case SolidityGrammar::ExpressionT::NewExpression:
   {
     // 1. new dynamic array, e.g.

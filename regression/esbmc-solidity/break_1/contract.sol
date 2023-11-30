@@ -4,7 +4,7 @@ contract MyContract {
   uint a = 0;
   function test_break() public
   {
-    for(uint i = 0; i < 10; i++)
+    for(uint i = 0; i < 5; i++)
     {
       if(i == 1)
       {

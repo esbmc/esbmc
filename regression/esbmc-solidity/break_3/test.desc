@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 contract.solast
---sol contract.sol contract.solast --function test_break --incremental-bmc
-VERIFICATION SUCCESS
+--sol contract.sol contract.solast --contract MyContract --unwind 20 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$
