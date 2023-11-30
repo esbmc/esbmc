@@ -211,8 +211,9 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   const overflow_neg2t &neg = to_overflow_neg2t(expr);
   unsigned int width = neg.operand->type->get_width();
 
-  expr2tc min_int =
-    constant_int2tc(neg.operand->type, BigInt(1 << (width - 1)));
+  BigInt Min;
+  Min.setPower2(width - 1);
+  expr2tc min_int = constant_int2tc(neg.operand->type, -Min);
   expr2tc val = equality2tc(neg.operand, min_int);
   return convert_ast(val);
 }
