@@ -2,7 +2,7 @@
 #include <catch2/catch.hpp>
 
 #include "../testing-utils/goto_factory.h"
-#include "goto-programs/abstract-interpretation/common_subexpression_elimination.h"
+#include <goto-programs/abstract-interpretation/gcse.h>
 #include <util/prefix.h>
 /* Testing this is almost impossible without having
  * a goto_program generation interface
