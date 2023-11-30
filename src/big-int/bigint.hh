@@ -317,13 +317,10 @@ public:
   }
 
   // Not part of original BigInt.
-  static BigInt power2m1(unsigned n, bool negated = false)
+  static BigInt power2m1(unsigned n)
   {
-    BigInt b;
-    b.setPower2(n);
+    BigInt b = power2(n);
     --b;
-    if (negated)
-      b.negate();
     return b;
   }
 
