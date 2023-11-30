@@ -14,6 +14,6 @@ contract MyContract {
       a += 1;
     }
 
-    assert(a == 10);
+    assert(a == 6);
   }
 }
