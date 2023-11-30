@@ -165,20 +165,17 @@ interval_domaint::generate_modular_interval<integer_intervalt>(
   const symbol2t sym) const
 {
   auto t = sym.type;
-  BigInt b;
   integer_intervalt result;
   if (is_unsignedbv_type(t))
   {
-    b.setPower2(t->get_width());
-    result.make_le_than(b - 1);
+    result.make_le_than(BigInt::power2m1(t->get_width()));
     result.make_ge_than(0);
   }
   else if (is_signedbv_type(t))
   {
-    b.setPower2(t->get_width() - 1);
+    BigInt b = BigInt::power2(t->get_width() - 1);
     result.make_ge_than(-b);
-    b = b - 1;
-    result.make_le_than(b);
+    result.make_le_than(b - 1);
   }
   else
   {
