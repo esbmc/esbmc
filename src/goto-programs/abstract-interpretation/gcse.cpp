@@ -4,7 +4,7 @@
 #include "pointer-analysis/value_set_analysis.h"
 #include "util/std_code.h"
 #include "util/std_expr.h"
-#include <goto-programs/abstract-interpretation/common_subexpression_elimination.h>
+#include <goto-programs/abstract-interpretation/gcse.h>
 #include <ostream>
 #include <sstream>
 #include <util/prefix.h>

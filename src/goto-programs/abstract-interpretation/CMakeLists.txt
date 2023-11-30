@@ -1,4 +1,4 @@
-add_library(abstract-interpretation ai.cpp ai_domain.cpp interval_domain.cpp interval_analysis.cpp common_subexpression_elimination.cpp)
+add_library(abstract-interpretation ai.cpp ai_domain.cpp interval_domain.cpp interval_analysis.cpp gcse.cpp)
 target_include_directories(abstract-interpretation
         PUBLIC ${Boost_INCLUDE_DIRS})
 

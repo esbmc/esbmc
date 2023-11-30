@@ -1,5 +1,6 @@
-
 #pragma once
+
+// GCSE - Global Common Subexpression Elimination
 
 #include <util/message.h>
 #include <goto-programs/abstract-interpretation/ai.h>
