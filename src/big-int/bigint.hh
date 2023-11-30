@@ -306,10 +306,6 @@ public:
   // Not part of original BigInt.
   unsigned floorPow2() const;
 
-  // Sets the number to the power of two given by the exponent
-  // Not part of original BigInt.
-  void setPower2(unsigned exponent);
-
   // Not part of original BigInt.
   static BigInt power2(unsigned n, bool negated = false)
   {
@@ -338,6 +334,11 @@ public:
     std::swap(other.digit, digit);
     std::swap(other.positive, positive);
   }
+
+private:
+  // Sets the number to the power of two given by the exponent
+  // Not part of original BigInt.
+  void setPower2(unsigned exponent);
 };
 
 // Binary arithmetic operators
