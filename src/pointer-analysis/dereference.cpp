@@ -1963,6 +1963,8 @@ std::vector<expr2tc> dereferencet::extract_bytes(
     assert(src->type == base);
     if (!base_is_byte) // Don't produce a byte update of a byte.
       src = byte_extract2tc(bytetype, src, off, is_big_endian);
+    else if (!is_unsignedbv_type(base))
+      src = bitcast2tc(bytetype, src);
 
     bytes.emplace_back(src);
   }

@@ -51,7 +51,7 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
   // Easy cases, no need to concat anything
 
   /* keep this condition in sync with concat2t's assumptions */
-  if (is_bv_type(new_expr))
+  if (is_unsignedbv_type(new_expr))
     return new_expr;
 
   if (is_number_type(new_expr) || is_pointer_type(new_expr))
