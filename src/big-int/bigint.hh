@@ -245,9 +245,11 @@ public:
       positive = !positive;
     return *this;
   }
-  BigInt operator-() const
+
+  friend BigInt operator-(BigInt b)
   {
-    return BigInt(*this).negate();
+    b.negate();
+    return b;
   }
 
 #define IN_PLACE_OPERATOR(TYPE)                                                \
