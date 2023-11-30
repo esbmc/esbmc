@@ -3515,9 +3515,8 @@ public:
   concat2t(const type2tc &type, const expr2tc &forward, const expr2tc &aft)
     : concat_expr_methods(type, concat_id, forward, aft)
   {
-    /* TODO: what are the semantics of a signed-bv concatenation? */
-    assert(is_unsignedbv_type(forward) || is_signedbv_type(forward));
-    assert(is_unsignedbv_type(aft) || is_signedbv_type(aft));
+    assert(is_unsignedbv_type(forward));
+    assert(is_unsignedbv_type(aft));
   }
   concat2t(const concat2t &ref) = default;
 
