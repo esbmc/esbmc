@@ -2388,6 +2388,9 @@ expr2tc concat2t::do_simplify() const
   const BigInt &value1 = to_constant_int2t(side_1).value;
   const BigInt &value2 = to_constant_int2t(side_2).value;
 
+  assert(!value1.is_negative());
+  assert(!value2.is_negative());
+
   // k; Take the values, and concatenate. Side 1 has higher end bits.
   BigInt accuml = value1;
   accuml *= BigInt::power2(side_2->type->get_width());
