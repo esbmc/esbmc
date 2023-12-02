@@ -28,8 +28,7 @@ void cse_domaint::transform(
     // Expressions that contain the target will need to be recomputed
     havoc_expr(code.target, to);
     // Target may be an expression as well
-    // TODO: skip recursive definitions only. For example, x = x + 1 should be skipped does not
-    // makes 'x' available. However, y = x + 1 does.
+    // TODO: skip recursive definitions only. For example, x = x + 1 should be skipped as 'x' isn't available.
     //make_expression_available(code.target);
   }
   break;
