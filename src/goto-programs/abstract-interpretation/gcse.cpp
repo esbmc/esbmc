@@ -150,19 +150,17 @@ void cse_domaint::make_expression_available(const expr2tc &E)
   if(is_floatbv_type(E))
     return;
 
+  auto added = available_expressions.insert(E);
   // Did we check it already?
-  if(available_expressions.count(E))
+  if(!added.second)
     return;
-
   // Let's recursively make it available!
   E->foreach_operand(
     [this](const expr2tc &e) { make_expression_available(e); });
 
   // TODO: LHS members should always be recomputed
   if(is_with2t(E) || is_member2t(E) || is_dereference2t(E))
-    return;
-
-  available_expressions.insert(E);
+    available_expressions.erase(E);  
 }
 
 bool cse_domaint::should_remove_expr(const expr2tc &taint, const expr2tc &E)
