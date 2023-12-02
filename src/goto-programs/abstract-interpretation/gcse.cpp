@@ -243,8 +243,7 @@ void cse_domaint::havoc_expr(
 bool goto_cse::runOnProgram(goto_functionst &F)
 {
   // Initialization for the abstract analysis.
-  const namespacet ns(context);
-  cse_domaint::vsa = vsa;
+  const namespacet ns(context);  
   log_status("{}", "[CSE] Computing Available Expressions for program");
   available_expressions(F, ns);
   log_status("{}", "[CSE] Finished computing AE for program");

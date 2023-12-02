@@ -137,8 +137,9 @@ public:
 class goto_cse : public goto_functions_algorithm
 {
 public:
-  goto_cse(contextt &ns, std::shared_ptr<value_set_analysist> &vsa) : goto_functions_algorithm(true), context(ns), vsa(vsa)
+  goto_cse(contextt &ns, std::shared_ptr<value_set_analysist> &vsa) : goto_functions_algorithm(true), context(ns)
   {
+    cse_domaint::vsa = vsa;
   }
 
   virtual bool runOnProgram(goto_functionst &) override;
@@ -163,5 +164,5 @@ protected:
 private:
   unsigned symbol_counter = 0;
   const std::string prefix = "__ESBMC_cse_symbol";
-  std::shared_ptr<value_set_analysist> &vsa;
+  
 };
