@@ -1255,6 +1255,8 @@ void value_sett::assign_rec(
   {
     assert(
       is_array_type(to_index2t(lhs).source_value) ||
+      is_vector_type(to_index2t(lhs).source_value) ||
+      is_string_type(to_index2t(lhs).source_value) ||
       is_dynamic_object2t(to_index2t(lhs).source_value));
 
     assign_rec(to_index2t(lhs).source_value, values_rhs, "[]" + suffix, true);
