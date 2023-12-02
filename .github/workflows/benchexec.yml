@@ -96,7 +96,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ubuntu-latest
-      build-flags: '-b Release -e Off'
+      build-flags: '-b Release -e Off -C'
       testing: false     
 
   run-benchexec:
