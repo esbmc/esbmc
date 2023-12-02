@@ -1,9 +1,9 @@
-#include "goto-programs/goto_program.h"
-#include "irep2/irep2_expr.h"
-#include "irep2/irep2_type.h"
-#include "pointer-analysis/value_set_analysis.h"
-#include "util/std_code.h"
-#include "util/std_expr.h"
+#include <goto-programs/goto_program.h>
+#include <irep2/irep2_expr.h>
+#include <irep2/irep2_type.h>
+#include <pointer-analysis/value_set_analysis.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <ostream>
 #include <sstream>
