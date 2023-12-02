@@ -133,11 +133,13 @@ void cse_domaint::make_expression_available(const expr2tc &E)
   // So, only the first operand will be available
   if(is_and2t(E) || is_or2t(E))
   {
+    make_expression_available(is_and2t(E) ? to_and2t(E).side_1 : to_or2t(E).side_1);
     return;
   }
 
   if(is_if2t(E))
   {
+    make_expression_available(to_if2t(E).cond);
     return;
   }
   // Skip sideeffects
