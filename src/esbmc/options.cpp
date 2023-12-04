@@ -23,6 +23,18 @@ const struct group_opt_templ all_cmd_options[] = {
     {"ssa-guards", NULL, ""},
     {"ssa-sliced", NULL, "print the sliced SSAs"},
     {"ssa-no-location", NULL, ""},
+
+    // Extra code added for prob-bmc
+    {"targetfile",
+     boost::program_options::value<std::string>()->value_name("<filename>"),
+     "output interesting variables to a file"},
+    {"countersfile",
+     boost::program_options::value<std::string>()->value_name("<filename>"),
+     "output interesting variables to a file"},
+    {"totalprob",
+     boost::program_options::value<std::string>()->value_name("<filename>"),
+     "output interesting variables to a file"},
+
     {"smt-formula-only",
      NULL,
      "only show SMT formula {not supported by all solvers},"},
