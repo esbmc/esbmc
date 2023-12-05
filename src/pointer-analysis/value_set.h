@@ -671,6 +671,8 @@ public:
 
 // Exceptions
 
-class vsa_not_implemented_exception {};
+class vsa_not_implemented_exception
+{
+};
 
 #endif
