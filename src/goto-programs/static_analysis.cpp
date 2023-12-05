@@ -363,11 +363,11 @@ void static_analysis_baset::do_function_call_rec(
   {
     // ignore, can't be a function
   }
-  else if(is_dynamic_object2t(function))
+  else if (is_dynamic_object2t(function))
   {
     // TODO
   }
-  else if(is_constant_string2t(function))
+  else if (is_constant_string2t(function))
   {
     // ignore, can't be a function
   }

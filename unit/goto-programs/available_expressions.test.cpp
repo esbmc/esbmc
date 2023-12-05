@@ -27,16 +27,16 @@ public:
   // A + B + C --> [A,B,C]
   bool flatten_addition(const expr2tc &e, std::vector<std::string> &v) const
   {
-    if(is_symbol2t(e))
+    if (is_symbol2t(e))
     {
       std::string thename = to_symbol2t(e).thename.as_string();
-      if(!has_prefix(thename, "c:@__ESBMC"))
+      if (!has_prefix(thename, "c:@__ESBMC"))
         v.push_back(thename);
 
       return true;
     }
 
-    if(!is_add2t(e))
+    if (!is_add2t(e))
       return false;
 
     bool side1 = flatten_addition(to_add2t(e).side_1, v);
