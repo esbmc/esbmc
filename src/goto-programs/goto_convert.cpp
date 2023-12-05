@@ -188,7 +188,8 @@ void goto_convertt::convert_switch_case(
   goto_programt tmp;
   convert(code.code(), tmp);
 
-  goto_programt::targett target = tmp.instructions.begin();
+  goto_programt::targett target = tmp.insert(tmp.instructions.begin());
+  target->make_skip();
   target->location = code.code().location();
   dest.destructive_append(tmp);
 

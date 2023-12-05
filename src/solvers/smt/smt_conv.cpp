@@ -1878,8 +1878,7 @@ type2tc make_array_domain_type(const array_type2t &arr)
 expr2tc smt_convt::array_domain_to_width(const type2tc &type)
 {
   const unsignedbv_type2t &uint = to_unsignedbv_type(type);
-  uint64_t sz = 1ULL << uint.width;
-  return constant_int2tc(index_type2(), BigInt(sz));
+  return constant_int2tc(index_type2(), BigInt::power2(uint.width));
 }
 
 static expr2tc gen_additions(const type2tc &type, std::vector<expr2tc> &exprs)
@@ -2494,7 +2493,7 @@ expr2tc smt_convt::get_array(const type2tc &type, smt_astt array)
     w = 10;
 
   array_type2t ar = to_array_type(flatten_array_type(type));
-  expr2tc arr_size = constant_int2tc(index_type2(), BigInt(1 << w));
+  expr2tc arr_size = constant_int2tc(index_type2(), BigInt(1ULL << w));
   type2tc arr_type = array_type2tc(ar.subtype, arr_size, false);
   std::vector<expr2tc> fields;
 
@@ -2674,11 +2673,9 @@ smt_astt array_iface::default_convert_array_of(
   smt_astt newsym_ast =
     ctx->mk_fresh(arrsort, "default_array_of::", init_val->sort);
 
-  unsigned long sz = 1ULL << array_size;
-  for (unsigned long i = 0; i < sz; i++)
-  {
+  unsigned long long sz = 1ULL << array_size;
+  for (unsigned long long i = 0; i < sz; i++)
     newsym_ast = newsym_ast->update(ctx, init_val, i);
-  }
 
   return newsym_ast;
 }

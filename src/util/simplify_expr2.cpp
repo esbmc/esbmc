@@ -2388,9 +2388,12 @@ expr2tc concat2t::do_simplify() const
   const BigInt &value1 = to_constant_int2t(side_1).value;
   const BigInt &value2 = to_constant_int2t(side_2).value;
 
+  assert(!value1.is_negative());
+  assert(!value2.is_negative());
+
   // k; Take the values, and concatenate. Side 1 has higher end bits.
   BigInt accuml = value1;
-  accuml *= (1ULL << side_2->type->get_width());
+  accuml *= BigInt::power2(side_2->type->get_width());
   accuml += value2;
 
   return constant_int2tc(type, accuml);
@@ -2407,15 +2410,17 @@ expr2tc extract2t::do_simplify() const
   // generating extracts, and you have to consider performing extracts on
   // negative numbers.
   assert(is_unsignedbv_type(from->type));
-  const constant_int2t &cint = to_constant_int2t(from);
-  const BigInt &theint = cint.value;
-  assert(theint.is_positive());
+  const BigInt &theint = to_constant_int2t(from).value;
+  assert(!theint.is_negative());
+  if (!theint.is_uint64())
+    return expr2tc();
 
   // Take the value, mask and shift.
   uint64_t theval = theint.to_uint64();
   theval >>= lower;
-  theval &= (2 << upper) - 1;
-  bool isneg = (1 << (upper)) & theval;
+  if (upper + 1 < 64)
+    theval &= ~(~0ULL << (upper + 1));
+  bool isneg = (theval >> upper) & 1;
 
   if (is_signedbv_type(type) && isneg)
   {

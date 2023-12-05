@@ -875,11 +875,4 @@ inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)
   ctx->live_asts.push_back(this);
 }
 
-inline BigInt ones(unsigned n_bits)
-{
-  BigInt r;
-  r.setPower2(n_bits);
-  return r -= 1;
-}
-
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */

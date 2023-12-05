@@ -753,10 +753,7 @@ public:
   static BigInt trunc(const BigInt &b, unsigned k)
   {
     // TODO: and operation for bigint
-    BigInt r = 1;
-    r.setPower2(k);
-
-    return b.to_uint64() & (r.to_uint64() - 1);
+    return b % BigInt::power2(k);
   }
 
   static wrapped_interval
@@ -818,9 +815,7 @@ public:
     else
     {
       result.lower = 0;
-      BigInt m(1);
-      m.setPower2(k);
-      result.upper = (get_upper_bound() - 1) - (m - 1);
+      result.upper = (get_upper_bound() - 1) - BigInt::power2m1(k);
     }
     return result;
   }
@@ -847,9 +842,7 @@ public:
     if (south_pole(t).is_included(*this))
     {
       result.lower = 0;
-      BigInt m(1);
-      m.setPower2(t->get_width() - k);
-      result.upper = (m - 1);
+      result.upper = BigInt::power2m1(t->get_width() - k);
     }
     else
     {
@@ -880,11 +873,9 @@ public:
     wrapped_interval result(t);
     if (north_pole(t).is_included(*this))
     {
-      BigInt m(1);
-      m.setPower2(t->get_width() - k);
-      result.lower = (get_upper_bound() - 1) - (m - 1);
-
-      result.upper = (m - 1);
+      BigInt m = BigInt::power2m1(t->get_width() - k);
+      result.lower = (get_upper_bound() - 1) - m;
+      result.upper = m;
     }
     else
     {
@@ -1434,14 +1425,13 @@ protected:
 private:
   static BigInt compute_upper_bound(const type2tc &t)
   {
-    BigInt r(1);
-    r.setPower2(t->get_width());
-    return r;
+    return BigInt::power2(t->get_width());
   }
 
   // For bitwise intervals approximations (Warren 2002)
   static uint64_t compute_m(unsigned width)
   {
+    assert(width - 1 < 64);
     uint64_t m = (uint64_t)1 << (width - 1);
     if (width == 32)
       assert(m == 0x80000000);
