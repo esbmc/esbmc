@@ -8,6 +8,7 @@ set(inputs
            stdlib.h
            string.h
            __esbmc/stddefs.h
+           semaphore.h
 
            # pthreads
            pthread.h
