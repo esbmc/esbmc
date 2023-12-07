@@ -31,6 +31,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Expr", StatementType::EXPR},
   {"Return", StatementType::RETURN},
   {"Assert", StatementType::ASSERT},
+  {"ClassDef", StatementType::CLASS_DEFINITION},
 };
 
 static bool is_relational_op(const std::string &op)
@@ -669,7 +670,9 @@ void python_converter::get_function_definition(
   {
     type.return_type() = get_typet(return_node["id"].get<std::string>());
   }
-  else if (return_node.contains("value") && return_node["value"].is_null())
+  else if (
+    return_node.is_null() ||
+    (return_node.contains("value") && return_node["value"].is_null()))
   {
     type.return_type() = empty_typet();
   }
@@ -689,6 +692,11 @@ void python_converter::get_function_definition(
 
   // Symbol identification
   current_func_name = function_node["name"].get<std::string>();
+
+  // __init__ corresponds to the Python constructor. Here it's renamed to the class name
+  if (current_func_name == "__init__")
+    current_func_name = current_class_name;
+
   std::string id = "py:" + python_filename + "@F@" + current_func_name;
   std::string module_name =
     python_filename.substr(0, python_filename.find_last_of("."));
@@ -696,13 +704,16 @@ void python_converter::get_function_definition(
   // Iterate over function arguments
   for (const nlohmann::json &element : function_node["args"]["args"])
   {
+    // Argument name
+    std::string arg_name = element["arg"].get<std::string>();
+    if (arg_name == "self")
+      continue;
+
     // Argument type
     typet arg_type = get_typet(element["annotation"]["id"].get<std::string>());
     code_typet::argumentt arg;
     arg.type() = arg_type;
 
-    // Argument name
-    std::string arg_name = element["arg"].get<std::string>();
     arg.cmt_base_name(arg_name);
 
     // Argument id
@@ -743,6 +754,45 @@ void python_converter::get_function_definition(
 
   // Restore caller function name
   current_func_name = caller_func_name;
+}
+
+void python_converter::get_class_definition(const nlohmann::json &class_node)
+{
+  struct_typet clazz;
+  current_class_name = class_node["name"].get<std::string>();
+  clazz.tag(current_class_name);
+  std::string id = "tag-" + current_class_name;
+
+  if (context.find_symbol(id) != nullptr)
+    return;
+
+  locationt location_begin = get_location_from_decl(class_node);
+  std::string module_name = location_begin.get_file().as_string();
+
+  // Add class to symbol table
+  symbolt symbol =
+    create_symbol(module_name, current_class_name, id, location_begin, clazz);
+  symbol.is_type = true;
+  context.add(symbol);
+
+  // Iterate over class members
+  for (auto &class_member : class_node["body"])
+  {
+    if (class_member["_type"] == "FunctionDef")
+    {
+      struct_typet::componentt method;
+      std::string method_name = class_member["name"].get<std::string>();
+      if (method_name == "__init__")
+        method_name = current_class_name;
+      std::string symbol_id = "py:" + python_filename + "@C@" +
+                              current_class_name + "@F@" + method_name;
+
+      current_func_name = method_name;
+      get_function_definition(class_member);
+
+      clazz.methods().push_back(method);
+    }
+  }
 }
 
 void python_converter::get_return_statements(
@@ -814,6 +864,11 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       }
       break;
     }
+    case StatementType::CLASS_DEFINITION:
+    {
+      get_class_definition(element);
+      break;
+    }
     case StatementType::UNKNOWN:
     default:
       log_error(
@@ -823,6 +878,16 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
   }
 
   return block;
+}
+
+python_converter::python_converter(
+  contextt &_context,
+  const nlohmann::json &ast)
+  : context(_context),
+    ast_json(ast),
+    current_func_name(""),
+    current_class_name("")
+{
 }
 
 bool python_converter::convert()

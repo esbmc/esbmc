@@ -8,10 +8,7 @@ class codet;
 class python_converter
 {
 public:
-  python_converter(contextt &_context, const nlohmann::json &ast)
-    : context(_context), ast_json(ast), current_func_name("")
-  {
-  }
+  python_converter(contextt &_context, const nlohmann::json &ast);
   bool convert();
 
 private:
@@ -20,6 +17,7 @@ private:
   void
   get_return_statements(const nlohmann::json &ast_node, codet &target_block);
   void get_function_definition(const nlohmann::json &function_node);
+  void get_class_definition(const nlohmann::json &class_node);
 
   locationt get_location_from_decl(const nlohmann::json &ast_node);
   exprt get_expr(const nlohmann::json &element);
@@ -40,4 +38,5 @@ private:
   std::string python_filename;
   const nlohmann::json &ast_json;
   std::string current_func_name;
+  std::string current_class_name;
 };
