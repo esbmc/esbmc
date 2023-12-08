@@ -6,6 +6,10 @@
 #define __ESBMC_sem_count_field(a) ((a).__count)
 #define __ESBMC_sem_init_field(a) ((a).__init)
 
+/* Declaration of external variables */
+extern unsigned short int __ESBMC_num_threads_running;
+extern unsigned short int __ESBMC_blocked_threads_count;
+
 /************************* Sem manipulation routines ************************/
 
 int sem_init(sem_t *__sem, int __pshared, unsigned int __value)
