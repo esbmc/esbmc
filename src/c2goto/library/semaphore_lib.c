@@ -37,12 +37,12 @@ __ESBMC_HIDE:;
   _Bool unlocked = 1;
 
   __ESBMC_atomic_begin();
-  sem_init_check(__sem); 
+  sem_init_check(__sem);
   unlocked = (__ESBMC_sem_lock_field(*__sem) == 0);
-  if(unlocked)
+  if (unlocked)
   {
     __ESBMC_sem_count_field(*__sem) -= 1;
-    __ESBMC_assume(!__ESBMC_sem_lock_field(*__sem)); 
+    __ESBMC_assume(!__ESBMC_sem_lock_field(*__sem));
     if (!__ESBMC_sem_count_field(*__sem))
       __ESBMC_sem_lock_field(*__sem) = 1;
   }
