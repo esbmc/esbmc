@@ -1,5 +1,6 @@
 #include <semaphore.h>
 #include <limits.h>
+#include <pthread.h>
 
 #define __ESBMC_sem_lock_field(a) ((a).__lock)
 #define __ESBMC_sem_count_field(a) ((a).__count)
@@ -33,15 +34,30 @@ static int sem_init_check(sem_t *__sem)
 int sem_wait_check(sem_t *__sem)
 {
 __ESBMC_HIDE:;
+  _Bool unlocked = 1;
+
   __ESBMC_atomic_begin();
-  sem_init_check(__sem);
-  __ESBMC_sem_count_field(*__sem) -= 1;
-  __ESBMC_assert(
-    __ESBMC_sem_count_field(*__sem) < 0, "Deadlocked state in sem_wait");
-  __ESBMC_assume(!__ESBMC_sem_lock_field(*__sem));
-  if (!__ESBMC_sem_count_field(*__sem))
-    __ESBMC_sem_lock_field(*__sem) = 1;
+  sem_init_check(__sem); 
+  unlocked = (__ESBMC_sem_lock_field(*__sem) == 0);
+  if(unlocked)
+  {
+    __ESBMC_sem_count_field(*__sem) -= 1;
+    __ESBMC_assume(!__ESBMC_sem_lock_field(*__sem)); 
+    if (!__ESBMC_sem_count_field(*__sem))
+      __ESBMC_sem_lock_field(*__sem) = 1;
+  }
+  else
+  {
+    // Deadlock foo
+    __ESBMC_blocked_threads_count++;
+    // No more threads to run -> croak.
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in pthread_mutex_lock");
+  }
   __ESBMC_atomic_end();
+
+  __ESBMC_assume(unlocked);
   return 0;
 }
 
