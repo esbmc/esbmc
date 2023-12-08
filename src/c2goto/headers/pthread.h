@@ -27,6 +27,10 @@
 #define NULL 0
 #endif
 
+/* Declaration of external variables */
+extern unsigned short int __ESBMC_num_threads_running;
+extern unsigned short int __ESBMC_blocked_threads_count;
+
 /* Forward declaration required because the type is used in pthread function
  * parameters below. */
 struct timespec;
