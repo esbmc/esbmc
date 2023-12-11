@@ -32,6 +32,7 @@ private:
   find_var_decl(const std::string &var_name, const nlohmann::json &json);
   void adjust_statement_types(exprt &lhs, exprt &rhs) const;
   std::string create_symbol_id() const;
+  bool is_constructor_call(const nlohmann::json &json);
 
   contextt &context;
   typet current_element_type;
