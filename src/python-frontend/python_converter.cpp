@@ -524,11 +524,17 @@ void python_converter::get_var_assign(
     // Id and name
     std::string name, id;
     auto target = ast_node["target"];
-    if (!target.is_null() && target["_type"] == "Name")
+    if (!target.is_null())
     {
-      name = target["id"];
+      if (target["_type"] == "Name")
+        name = target["id"];
+      else if (target["_type"] == "Attribute")
+        name = target["attr"];
+
       id = create_symbol_id() + "@" + name;
     }
+
+    assert(!name.empty() && !id.empty());
 
     // Location
     location_begin = get_location_from_decl(ast_node["target"]);
@@ -700,7 +706,11 @@ void python_converter::get_function_definition(
 
   // __init__ corresponds to the Python constructor. Here it's renamed to the class name
   if (current_func_name == "__init__")
+  {
     current_func_name = current_class_name;
+    typet ctor_type("constructor");
+    type.return_type() = ctor_type;
+  }
 
   std::string id = create_symbol_id();
   std::string module_name =
@@ -818,7 +828,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
   code_blockt block;
 
-  // Iterate through the statements of the block
+  // Iterate over block statements
   for (auto &element : ast_block)
   {
     StatementType type = get_statement_type(element);
