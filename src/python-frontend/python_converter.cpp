@@ -384,6 +384,14 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       }
     }
 
+    if (is_constructor_call(element))
+    {
+      // Insert class name in the symbol id
+      std::size_t pos = symbol_id.rfind("@F");
+      if (pos != std::string::npos)
+        symbol_id.insert(pos - 2, "@C@" + func_name);
+    }
+
     const symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
     if (func_symbol == nullptr)
     {
@@ -480,6 +488,30 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   return expr;
 }
 
+bool python_converter::is_constructor_call(const nlohmann::json &json)
+{
+  if (!json.contains("_type") || json["_type"] != "Call")
+    return false;
+
+  const std::string &func_name = json["func"]["id"];
+
+  /* f:Foo = Foo()
+   * The statement is a constructor call if the function call on the
+   * rhs corresponds to the name of a class. */
+
+  bool is_ctor_call = false;
+  context.foreach_operand(
+    [&](const symbolt &s)
+    {
+      if (s.type.id() == "struct" && s.name == func_name)
+      {
+        is_ctor_call = true;
+        return;
+      }
+    });
+  return is_ctor_call;
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -512,11 +544,11 @@ void python_converter::get_var_assign(
       get_typet(ref["annotation"]["id"].get<std::string>());
   }
 
-  exprt lhs;
-
+  // Get RHS
   nlohmann::json value = ast_node["value"];
   exprt rhs = get_expr(value);
 
+  exprt lhs;
   locationt location_begin;
 
   if (ast_node["_type"] == "AnnAssign")
