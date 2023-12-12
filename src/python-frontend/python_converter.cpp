@@ -127,7 +127,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   {
     return ExpressionType::LITERAL;
   }
-  if (type == "Name")
+  if (type == "Name" || type == "Attribute")
   {
     return ExpressionType::VARIABLE_REF;
   }
@@ -454,8 +454,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::VARIABLE_REF:
   {
-    // Find the variable declaration in the current function
-    std::string var_name = element["id"].get<std::string>();
+    std::string var_name;
+    if (element["_type"] == "Name")
+      var_name = element["id"].get<std::string>();
+    else if (element["_type"] == "Attribute")
+      var_name = element["attr"].get<std::string>();
+
+    assert(!var_name.empty());
+
     std::string symbol_id = create_symbol_id() + std::string("@") + var_name;
     symbolt *symbol = context.find_symbol(symbol_id);
     if (!symbol)
