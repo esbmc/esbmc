@@ -145,14 +145,14 @@ jobs:
         run: mv $HOME/output.zip ./output.zip      
       - name: Debug Info
         run: ls
+      - uses: actions/upload-artifact@v1
+        with:
+          name: esbmc-result
+          path: output.zip  
       - name: Checkout code
         uses: actions/checkout@master
         with:
           path: esbmc-src      
-      - uses: actions/upload-artifact@v1
-        with:
-          name: esbmc-result
-          path: output.zip
       - name: Run Validation (Full)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'Full' }}
         run: ./esbmc-src/scripts/witness.sh -f

@@ -77,6 +77,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.emplace_back(
       "-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_check");
+    compiler_args.emplace_back("-Dsem_wait=sem_wait_check");
   }
   else if (config.options.get_bool_option("lock-order-check"))
   {
@@ -88,6 +89,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
     compiler_args.emplace_back(
       "-Dpthread_mutex_destroy=pthread_mutex_destroy_check");
+    compiler_args.emplace_back("-Dsem_wait=sem_wait_nocheck");
   }
   else
   {
@@ -97,6 +99,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.emplace_back(
       "-Dpthread_mutex_unlock=pthread_mutex_unlock_noassert");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
+    compiler_args.emplace_back("-Dsem_wait=sem_wait_nocheck");
   }
 
   for (auto const &def : config.ansi_c.defines)
