@@ -115,6 +115,13 @@ private:
             }
           }
         }
+        // Get type from constructor call
+        else if (
+          element["value"]["_type"] == "Call" &&
+          is_class(element["value"]["func"]["id"]))
+        {
+          type = element["value"]["func"]["id"];
+        }
         else
           continue;
 
@@ -156,6 +163,26 @@ private:
         element["value"]["end_col_offset"] =
           element["value"]["end_col_offset"].template get<int>() + type.size() +
           1;
+
+        if (element["value"].contains("args"))
+        {
+          for (auto &arg : element["value"]["args"])
+          {
+            arg["col_offset"] =
+              arg["col_offset"].template get<int>() + type.size() + 1;
+            arg["end_col_offset"] =
+              arg["end_col_offset"].template get<int>() + type.size() + 1;
+          }
+        }
+        if (element["value"].contains("func"))
+        {
+          element["value"]["func"]["col_offset"] =
+            element["value"]["func"]["col_offset"].template get<int>() +
+            type.size() + 1;
+          element["value"]["func"]["end_col_offset"] =
+            element["value"]["func"]["end_col_offset"].template get<int>() +
+            type.size() + 1;
+        }
       }
     }
   }
@@ -187,6 +214,16 @@ private:
       }
     }
     return Json();
+  }
+
+  bool is_class(const std::string &classname) const
+  {
+    for (const auto &elem : ast_["body"])
+    {
+      if (elem["_type"] == "ClassDef" && elem["name"] == classname)
+        return true;
+    }
+    return false;
   }
 
   Json &ast_;
