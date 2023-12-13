@@ -132,8 +132,17 @@ private:
 
         // lhs
         auto target = element["targets"][0];
-        int col_offset = target["col_offset"].template get<int>() +
-                         target["id"].template get<std::string>().size() + 1;
+        std::string id;
+        if (target.contains("id"))
+          id = target["id"];
+        else if (target["_type"] == "Attribute")
+          id = target["value"]["id"].template get<std::string>() + "." +
+               target["attr"].template get<std::string>(); // e.g. f.blah
+
+        assert(!id.empty());
+
+        int col_offset =
+          target["col_offset"].template get<int>() + id.size() + 1;
 
         // Add annotation field
         element["annotation"] = {
