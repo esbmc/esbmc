@@ -466,7 +466,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     symbolt *symbol = context.find_symbol(symbol_id);
     if (!symbol)
     {
-      log_error("Symbol not found\n");
+      log_error("Symbol not found: {}\n", symbol_id.c_str());
       abort();
     }
     expr = symbol_expr(*symbol);
