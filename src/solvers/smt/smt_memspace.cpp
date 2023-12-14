@@ -332,25 +332,24 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   expr2tc end_sym = symbol2tc(ptr_loc_type, end_name);
 
   /* The object spans addresses [start, end], including both endpoints */
-  expr2tc endisequal;
-  expr2tc the_size;
-  the_size = typecast2tc(ptr_loc_type, size);
+  expr2tc the_size = typecast2tc(ptr_loc_type, size);
   expr2tc start_plus_size = add2tc(ptr_loc_type, start_sym, the_size);
-  expr2tc end_value = sub2tc(ptr_loc_type, start_plus_size, constant_int2tc(ptr_loc_type, 1));
-  endisequal = equality2tc(end_value, end_sym);
+  expr2tc end_value =
+    sub2tc(ptr_loc_type, start_plus_size, constant_int2tc(ptr_loc_type, 1));
+  expr2tc endisequal = equality2tc(end_value, end_sym);
 
-  // Assert that start + offs == end
+  // Assert that start + size - 1 == end
   assert_expr(endisequal);
 
   // Even better, if we're operating in bitvector mode, it's possible that
   // the solver will try to be clever and arrange the pointer range to cross
   // the end of the address space (ie, wrap around). So, also assert that
-  // end > start
+  // end >= start
   // Except when the size is zero, which might not be statically dicoverable
   expr2tc zero_val = constant_int2tc(the_size->type, BigInt(0));
   expr2tc zeroeq = equality2tc(zero_val, the_size);
-  expr2tc wraparound = greaterthanequal2tc(end_sym, start_sym);
-  assert_expr(or2tc(zeroeq, wraparound));
+  expr2tc no_wraparound = greaterthanequal2tc(end_sym, start_sym);
+  assert_expr(or2tc(zeroeq, no_wraparound));
 
   // Generate address space layout constraints.
   finalize_pointer_chain(obj_num);
