@@ -35,39 +35,27 @@ smt_astt smt_convt::convert_ptr_cmp(
   const expr2tc &templ_expr)
 {
   // Special handling for pointer comparisons (both ops are pointers; otherwise
-  // it's obviously broken). First perform a test as to whether or not the
-  // pointer locations are greater or lower; and only involve the ptr offset
-  // if the ptr objs are the same.
-  type2tc int_type = machine_ptr;
+  // it's obviously broken).
+  assert(is_pointer_type(side1));
+  assert(is_pointer_type(side2));
+  assert(dynamic_cast<const relation_data *>(templ_expr.get()));
 
-  expr2tc ptr_obj1 = pointer_object2tc(int_type, side1);
-  expr2tc ptr_offs1 = pointer_offset2tc(signed_size_type2(), side1);
-  expr2tc ptr_obj2 = pointer_object2tc(int_type, side2);
-  expr2tc ptr_offs2 = pointer_offset2tc(signed_size_type2(), side2);
+  /* Compare just the offsets. This is compatible with both, C and CHERI-C,
+   * because we already asserted that they point to the same object (unless
+   * --no-pointer-relation-check was specified, in which case the user opted
+   * out of sanity anyway). */
 
-  expr2tc addrspacesym =
-    symbol2tc(addr_space_arr_type, get_cur_addrspace_ident());
-  expr2tc obj1_data = index2tc(addr_space_type, addrspacesym, ptr_obj1);
-  expr2tc obj2_data = index2tc(addr_space_type, addrspacesym, ptr_obj2);
-
-  expr2tc obj1_start = member2tc(int_type, obj1_data, irep_idt("start"));
-  expr2tc obj2_start = member2tc(int_type, obj2_data, irep_idt("start"));
-
-  expr2tc start_expr = templ_expr, offs_expr = templ_expr;
-
-  // To ensure we can do this in an operation independant way, we're going to
-  // clone the original comparison expression, and replace its operands with
-  // new values. Works whatever the expr is, so long as it has two operands.
-  *start_expr->get_sub_expr_nc(0) = obj1_start;
-  *start_expr->get_sub_expr_nc(1) = obj2_start;
-  *offs_expr->get_sub_expr_nc(0) = ptr_offs1;
-  *offs_expr->get_sub_expr_nc(1) = ptr_offs2;
-
-  // Those are now boolean type'd relations.
-  expr2tc is_same_obj_expr = equality2tc(ptr_obj1, ptr_obj2);
-
-  expr2tc res = if2tc(offs_expr->type, is_same_obj_expr, offs_expr, start_expr);
-  return convert_ast(res);
+  /* Create a copy of the expression and replace both sides with the respective
+   * typecasted-to-unsigned versions of the offsets. The unsigned comparison is
+   * required because objects could be larger than half the address space, in
+   * which case offsets could flip sign. */
+  type2tc type = get_uint_type(config.ansi_c.address_width);
+  type2tc stype = get_int_type(config.ansi_c.address_width);
+  expr2tc op = templ_expr;
+  relation_data &rel = static_cast<relation_data &>(*op);
+  rel.side_1 = typecast2tc(type, pointer_offset2tc(stype, side1));
+  rel.side_2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  return convert_ast(op);
 }
 
 smt_astt
