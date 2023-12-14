@@ -1,5 +1,6 @@
 #pragma once
 
+#include <python-frontend/json_utils.h>
 #include <util/message.h>
 #include <string>
 
@@ -118,7 +119,8 @@ private:
         // Get type from constructor call
         else if (
           element["value"]["_type"] == "Call" &&
-          is_class(element["value"]["func"]["id"]))
+          json_utils::is_class<Json>(
+            element["value"]["func"]["id"], ast_["body"]))
         {
           type = element["value"]["func"]["id"];
         }
@@ -223,16 +225,6 @@ private:
       }
     }
     return Json();
-  }
-
-  bool is_class(const std::string &classname) const
-  {
-    for (const auto &elem : ast_["body"])
-    {
-      if (elem["_type"] == "ClassDef" && elem["name"] == classname)
-        return true;
-    }
-    return false;
   }
 
   Json &ast_;

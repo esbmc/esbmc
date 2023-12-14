@@ -1,4 +1,5 @@
 #include <python-frontend/python_converter.h>
+#include <python-frontend/json_utils.h>
 #include <python_frontend_types.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
@@ -9,6 +10,8 @@
 #include <fstream>
 #include <regex>
 #include <unordered_map>
+
+using namespace json_utils;
 
 static const std::unordered_map<std::string, std::string> operator_map = {
   {"Add", "+"},         {"Sub", "-"},          {"Mult", "*"},
@@ -44,11 +47,7 @@ static bool is_relational_op(const std::string &op)
 static StatementType get_statement_type(const nlohmann::json &element)
 {
   auto it = statement_map.find(element["_type"]);
-  if (it != statement_map.end())
-  {
-    return it->second;
-  }
-  return StatementType::UNKNOWN;
+  return (it != statement_map.end()) ? it->second : StatementType::UNKNOWN;
 }
 
 // Convert Python/AST to irep2 operations
@@ -63,7 +62,7 @@ static std::string get_op(const std::string &op)
 }
 
 // Convert Python/AST types to irep2 types
-static typet get_typet(const std::string &ast_type)
+typet python_converter::get_typet(const std::string &ast_type)
 {
   if (ast_type == "float")
     return float_type();
@@ -75,10 +74,12 @@ static typet get_typet(const std::string &ast_type)
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
+  if (is_class(ast_type, ast_json["body"]))
+    return symbol_typet("tag-" + ast_type);
   return empty_typet();
 }
 
-static typet get_typet(const nlohmann::json &elem)
+typet python_converter::get_typet(const nlohmann::json &elem)
 {
   if (elem.is_number_integer() || elem.is_number_unsigned())
     return int_type();
@@ -844,11 +845,10 @@ void python_converter::get_class_definition(const nlohmann::json &class_node)
         symbol_expr(*context.find_symbol(create_symbol_id()));
       struct_typet::componentt method(added_method.name(), added_method.type());
       clazz.methods().push_back(method);
+      current_func_name.clear();
     }
   }
-
   added_symbol->type = clazz;
-
   current_class_name.clear();
 }
 

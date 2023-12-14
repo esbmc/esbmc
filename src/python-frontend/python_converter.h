@@ -33,6 +33,8 @@ private:
   void adjust_statement_types(exprt &lhs, exprt &rhs) const;
   std::string create_symbol_id() const;
   bool is_constructor_call(const nlohmann::json &json);
+  typet get_typet(const std::string &ast_type);
+  typet get_typet(const nlohmann::json &elem);
 
   contextt &context;
   typet current_element_type;
