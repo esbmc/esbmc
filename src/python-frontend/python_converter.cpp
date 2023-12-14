@@ -387,9 +387,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     if (is_constructor_call(element))
     {
       // Insert class name in the symbol id
-      std::size_t pos = symbol_id.rfind("@F");
+      std::size_t pos = symbol_id.rfind("@F@");
       if (pos != std::string::npos)
-        symbol_id.insert(pos - 2, "@C@" + func_name);
+        symbol_id.insert(pos, "@C@" + func_name);
     }
 
     const symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
