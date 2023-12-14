@@ -3,4 +3,4 @@ class Foo:
         self.blah:int = value
         x:int = 1/self.blah
 
-f:Foo = Foo(0)
+f = Foo(0)
