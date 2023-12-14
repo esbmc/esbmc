@@ -834,9 +834,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
      * (object, offset) structs, i.e., two pointers compare equal iff both
      * members are the same.
      *
-     * While this covers current GCC behaviour and also CHERI-C, it is not
-     * strictly what Clang does, nor what de-jure C99 says about pointer
-     * equality:
+     * While this covers current GCC behaviour, it is not strictly what Clang
+     * does, nor what de-jure C99 says about pointer equality:
      *
      *   Two pointers compare equal if and only if both are null pointers, both
      *   are pointers to the same object (including a pointer to an object and a
@@ -856,7 +855,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
      * C++ has changed this one-past behaviour in [expr.eq] to "unspecified"
      * <https://www.open-std.org/jtc1/sc22/wg21/docs/cwg_defects.html#1652>
      * and C might eventually follow the same path.
-     * CHERI-C semantics might also change in the future, see e.g.
+     *
+     * CHERI-C semantics say that only addresses should be compared, but this
+     * might also change in the future, see e.g.
      * <https://github.com/CTSRD-CHERI/llvm-project/issues/649>.
      *
      * TODO: For de-jure C compatibility we should avoid this one-past
