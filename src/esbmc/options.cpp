@@ -288,10 +288,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-div-by-zero-check", NULL, "do not do division by zero check"},
     {"no-pointer-check", NULL, "do not do pointer check"},
     {"no-align-check", NULL, "do not check pointer alignment"},
-    {"no-pointer-relation-check",
-     NULL,
-     "do not check whether pointers in order relations refer to the same "
-     "object (unsound)"},
     {"no-unlimited-scanf-check",
      NULL,
      "do not do overflow check for scanf/fscanf with unlimited character "
@@ -464,6 +460,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"git-hash", NULL, ""},
     // Check if there is two or more assingments to the same SSA instruction
     {"double-assign-check", NULL, ""},
+    {"no-pointer-relation-check",
+     NULL,
+     "do not check whether pointers in order relations refer to the same "
+     "object (unsound)"},
     // Abort if the program contains a recursion
     {"abort-on-recursion", NULL, ""},
     /* see <https://github.com/esbmc/esbmc/pull/1281> for a list of supported
