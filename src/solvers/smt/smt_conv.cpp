@@ -828,6 +828,43 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::equality_id:
   {
+    /* Compare the representations directly.
+     *
+     * This also applies to pointer-typed expressions which are represented as
+     * (object, offset) structs, i.e., two pointers compare equal iff both
+     * members are the same.
+     *
+     * While this covers current GCC behaviour and also CHERI-C, it is not
+     * strictly what Clang does, nor what de-jure C99 says about pointer
+     * equality:
+     *
+     *   Two pointers compare equal if and only if both are null pointers, both
+     *   are pointers to the same object (including a pointer to an object and a
+     *   subobject at its beginning) or function, both are pointers to one past
+     *   the last element of the same array object, or one is a pointer to one
+     *   past the end of one array object and the other is a pointer to the
+     *   start of a different array object that happens to immediately follow
+     *   the first array object in the address space.
+     *
+     * De-facto, C compilers perform optimizations based on provenance, i.e.,
+     * "one past the end pointers cannot alias another object" as soon as it
+     * *cannot* be proven that they do. Sigh. For instance
+     * <https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61502> makes for a "fun"
+     * read illuminating how reasoning works from a certain compiler's
+     * writers' points of view.
+     *
+     * C++ has changed this one-past behaviour in [expr.eq] to "unspecified"
+     * <https://www.open-std.org/jtc1/sc22/wg21/docs/cwg_defects.html#1652>
+     * and C might eventually follow the same path.
+     * CHERI-C semantics might also change in the future, see e.g.
+     * <https://github.com/CTSRD-CHERI/llvm-project/issues/649>.
+     *
+     * TODO: For de-jure C compatibility we should avoid this one-past
+     *       ambiguity - e.g. allocate one element more for each object, or
+     *       we could move pointer comparisons to symex in order to express
+     *       them properly according to the input language.
+     */
+
     auto eq = to_equality2t(expr);
 
     if (
