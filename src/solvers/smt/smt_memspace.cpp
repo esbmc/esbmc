@@ -398,7 +398,7 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     expr2tc end_j = symbol2tc(inttype, endj.str());
 
     // Formula: (i_end < j_start) || (i_start > j_end)
-    // Previous assertions ensure start < end for all objs.
+    // Previous assertions ensure start <= end for all objs of positive size.
     expr2tc lt1 = lessthan2tc(end_i, start_j);
     expr2tc gt1 = greaterthan2tc(start_i, end_j);
     expr2tc no_overlap = or2tc(lt1, gt1);
