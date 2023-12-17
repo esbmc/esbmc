@@ -11,17 +11,14 @@
 #include <cwchar>
 
 string_constantt::string_constantt(const irep_idt &value)
-  : string_constantt(value, array_typet(char_type()))
+  : string_constantt(
+      value,
+      array_typet(char_type(), constant_exprt(value.size() + 1, size_type())))
 {
 }
 
 string_constantt::string_constantt(const irep_idt &value, const typet &type)
   : exprt("string-constant", type)
-{
-  set_value(value);
-}
-
-void string_constantt::set_value(const irep_idt &value)
 {
   exprt::value(value);
 }
@@ -104,11 +101,11 @@ irep_idt string_constantt::mb_value() const
   switch (elem_width)
   {
   case 8:
-    return get_value();
+    return value();
 
   case 16:
   case 32:
-    return convert_mb(get_value().as_string(), elem_width / 8).result;
+    return convert_mb(value().as_string(), elem_width / 8).result;
   }
   log_error("illegal character width {} of string literal", elem_width);
   abort();
