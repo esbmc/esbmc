@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 class codet;
+class struct_typet;
 
 class python_converter
 {
@@ -35,6 +36,9 @@ private:
   bool is_constructor_call(const nlohmann::json &json);
   typet get_typet(const std::string &ast_type);
   typet get_typet(const nlohmann::json &elem);
+  void get_attributes_from_self(
+    const nlohmann::json &method_body,
+    struct_typet &clazz);
 
   contextt &context;
   typet current_element_type;
