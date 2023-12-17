@@ -101,7 +101,8 @@ irep_idt string_constantt::mb_value() const
 {
   /* Assume wchar_t is either char16_t or char32_t. */
   int elem_width = atoi(type().subtype().width().c_str());
-  switch (elem_width) {
+  switch (elem_width)
+  {
   case 8:
     return get_value();
 
