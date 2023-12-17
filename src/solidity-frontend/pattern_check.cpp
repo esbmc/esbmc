@@ -35,7 +35,6 @@ bool pattern_checker::do_pattern_check()
         else
         {
           // contract mode:
-          assert((*itr).contains("name"));
           log_progress(
             "Checking function {} ...",
             (*itr)["name"].get<std::string>().c_str());
