@@ -51,8 +51,8 @@ struct convert_mb
     assert(v.length() % w == 0);
     if (config.ansi_c.endianess == configt::ansi_ct::endianesst::NO_ENDIANESS)
       throw string_constantt::mb_conversion_error(fmt::format(
-        "impossible to interpret char{}_t string literal without endianness",
-        8 * w));
+        "impossible to interpret {} string literal without endianness",
+        desc()));
 
     memset(&ps, 0, sizeof(ps));
     size_t n = v.length() / w; // number of code units
@@ -75,15 +75,20 @@ struct convert_mb
 
     if (i < n)
       throw string_constantt::mb_conversion_error(fmt::format(
-        "error interpreting char{}_t string literal at {}: {}",
-        8 * w,
+        "error interpreting {} string literal at {}: {}",
+        desc(),
         i,
         strerror(errno)));
     if (!mbsinit(&ps))
       throw string_constantt::mb_conversion_error(fmt::format(
-        "error interpreting char{}_t string literal: terminates with "
+        "error interpreting {} string literal: terminates with "
         "incomplete sequence",
-        8 * w));
+        desc()));
+  }
+
+  std::string desc() const
+  {
+    return wide ? std::string("wchar_t") : fmt::format("char{}_t", 8 * w);
   }
 
   uint32_t decode(size_t k) const
