@@ -74,6 +74,11 @@ struct convert_mb
         8 * w,
         i,
         strerror(errno)));
+    if (!mbsinit(&ps))
+      throw string_constantt::mb_conversion_error(fmt::format(
+        "error interpreting char{}_t string literal: terminates with "
+        "incomplete sequence",
+        8 * w));
   }
 
   uint32_t decode(size_t k) const
