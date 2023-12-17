@@ -13,14 +13,19 @@
 string_constantt::string_constantt(const irep_idt &value)
   : string_constantt(
       value,
-      array_typet(char_type(), constant_exprt(value.size() + 1, size_type())))
+      array_typet(char_type(), constant_exprt(value.size() + 1, size_type())),
+      false)
 {
 }
 
-string_constantt::string_constantt(const irep_idt &value, const typet &type)
+string_constantt::string_constantt(
+  const irep_idt &value,
+  const typet &type,
+  bool is_wide)
   : exprt("string-constant", type)
 {
   exprt::value(value);
+  set("wide", is_wide);
 }
 
 namespace
@@ -29,13 +34,16 @@ struct convert_mb
 {
   const std::string &v;
   int w;
+  bool wide;
   bool le;
 
+  mbstate_t ps;
   std::string result;
 
-  convert_mb(const std::string &v, int w)
+  convert_mb(const std::string &v, int w, bool wide)
     : v(v),
       w(w),
+      wide(wide),
       le(
         config.ansi_c.endianess ==
         configt::ansi_ct::endianesst::IS_LITTLE_ENDIAN)
@@ -46,7 +54,6 @@ struct convert_mb
         "impossible to interpret char{}_t string literal without endianness",
         8 * w));
 
-    mbstate_t ps;
     memset(&ps, 0, sizeof(ps));
     size_t n = v.length() / w; // number of code units
     size_t i;
@@ -59,7 +66,7 @@ struct convert_mb
     for (i = 0; i < n; i++)
     {
       uint32_t c = decode(i);
-      size_t r = w == 2 ? c16rtomb(buf, c, &ps) : c32rtomb(buf, c, &ps);
+      size_t r = encode(buf, c);
       if (r == (size_t)-1)
         break;
       result.insert(result.end(), buf, buf + r);
@@ -90,22 +97,32 @@ struct convert_mb
     }
     return r;
   }
+
+  size_t encode(char *buf, uint32_t c)
+  {
+    return wide     ? wcrtomb(buf, c, &ps)
+           : w == 2 ? c16rtomb(buf, c, &ps)
+                    : c32rtomb(buf, c, &ps);
+  }
 };
 
 } // namespace
 
 irep_idt string_constantt::mb_value() const
 {
-  /* Assume wchar_t is either char16_t or char32_t. */
+  /* Assume all strings are Unicode, in particular char * and wchar_t * are also
+   * Unicode (TODO: which isn't true in China: they use GB18030). */
   int elem_width = atoi(type().subtype().width().c_str());
+  bool is_wide = get_bool("wide");
   switch (elem_width)
   {
   case 8:
+    assert(!is_wide);
     return value();
 
   case 16:
   case 32:
-    return convert_mb(value().as_string(), elem_width / 8).result;
+    return convert_mb(value().as_string(), elem_width / 8, is_wide).result;
   }
   log_error("illegal character width {} of string literal", elem_width);
   abort();

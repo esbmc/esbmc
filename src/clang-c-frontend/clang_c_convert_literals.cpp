@@ -46,14 +46,8 @@ bool clang_c_convertert::convert_string_literal(
   }
   else
   {
-    /* TODO: need to take the encoding into account, for that we should examine
-     * string_literal.getKind() to interpret the strings in the correct source
-     * and execution character sets.
-     *
-     * For now we assume all strings are Unicode, in particular char * and
-     * wchar_t * are also Unicode (which isn't true in China: they use GB18030).
-     */
-    string_constantt string(string_literal.getBytes().str(), type);
+    string_constantt string(
+      string_literal.getBytes().str(), type, string_literal.isWide());
     dest.swap(string);
   }
 
