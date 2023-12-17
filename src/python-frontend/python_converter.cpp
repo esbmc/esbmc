@@ -533,7 +533,6 @@ void python_converter::get_var_assign(
   {
     // Get type from declaration node
     std::string var_name = ast_node["targets"][0]["id"].get<std::string>();
-
     // Get variable from current function
     nlohmann::json ref;
     for (const auto &elem : ast_json["body"])
@@ -591,6 +590,24 @@ void python_converter::get_var_assign(
     symbol.value = rhs;
 
     lhs = symbol_expr(symbol);
+
+    if (target["_type"] == "Attribute" && target["value"]["id"] == "self")
+    {
+      // lhs needs to be added as member of self
+      // 1. Retrieve self from method parameters
+      std::string self_id = create_symbol_id() + "@self";
+      symbolt *self_symbol = context.find_symbol(self_id);
+      if (!self_symbol)
+        abort();
+
+      // 2. Insert member in self
+      member_exprt member(
+        symbol_exprt(self_symbol->id, self_symbol->type),
+        lhs.name(),
+        lhs.type());
+
+      lhs.swap(member); // Now lhs is self.member
+    }
 
     context.add(symbol);
   }
@@ -760,11 +777,15 @@ void python_converter::get_function_definition(
   {
     // Argument name
     std::string arg_name = element["arg"].get<std::string>();
-    if (arg_name == "self")
-      continue;
-
     // Argument type
-    typet arg_type = get_typet(element["annotation"]["id"].get<std::string>());
+    typet arg_type;
+    if (arg_name == "self")
+      arg_type = get_typet(current_class_name);
+    else
+      arg_type = get_typet(element["annotation"]["id"].get<std::string>());
+
+    assert(arg_type != typet());
+
     code_typet::argumentt arg;
     arg.type() = arg_type;
 
@@ -809,6 +830,28 @@ void python_converter::get_function_definition(
   current_func_name = caller_func_name;
 }
 
+void python_converter::get_attributes_from_self(
+  const nlohmann::json &method_body,
+  struct_typet &clazz)
+{
+  for (const auto &stmt : method_body)
+  {
+    if (
+      stmt["_type"] == "AnnAssign" && stmt["target"]["_type"] == "Attribute" &&
+      stmt["target"]["value"]["id"] == "self")
+    {
+      std::string attr_name = stmt["target"]["attr"];
+      struct_typet::componentt comp(
+        attr_name,
+        attr_name,
+        get_typet(stmt["annotation"]["id"].get<std::string>()));
+      comp.type().set("#member_name", std::string("tag-") + current_class_name);
+      comp.set_access("private");
+      clazz.components().push_back(comp);
+    }
+  }
+}
+
 void python_converter::get_class_definition(const nlohmann::json &class_node)
 {
   struct_typet clazz;
@@ -834,6 +877,8 @@ void python_converter::get_class_definition(const nlohmann::json &class_node)
   {
     if (class_member["_type"] == "FunctionDef")
     {
+      get_attributes_from_self(class_member["body"], clazz);
+
       std::string method_name = class_member["name"].get<std::string>();
       if (method_name == "__init__")
         method_name = current_class_name;
