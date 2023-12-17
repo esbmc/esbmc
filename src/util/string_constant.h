@@ -27,6 +27,13 @@ public:
   {
     return value();
   }
+
+  irep_idt mb_value() const;
+
+  class mb_conversion_error : public std::runtime_error
+  {
+    using std::runtime_error::runtime_error;
+  };
 };
 
 const string_constantt &to_string_constant(const exprt &expr);
