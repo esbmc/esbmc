@@ -21,13 +21,6 @@ public:
     return static_cast<string_constantt &>(expr);
   }
 
-  void set_value(const irep_idt &value);
-
-  const irep_idt &get_value() const
-  {
-    return value();
-  }
-
   irep_idt mb_value() const;
 
   class mb_conversion_error : public std::runtime_error
