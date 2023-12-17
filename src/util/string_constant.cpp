@@ -34,7 +34,7 @@ struct convert_mb
   int w;
   bool le;
 
-  std::vector<char> res;
+  std::string result;
 
   convert_mb(const std::string &v, int w)
     : v(v),
@@ -49,7 +49,6 @@ struct convert_mb
         "impossible to interpret char{}_t string literal without endianness",
         8 * w));
 
-    char buffer[MB_CUR_MAX];
     mbstate_t ps;
     memset(&ps, 0, sizeof(ps));
     size_t n = v.length() / w; // number of code units
@@ -58,13 +57,15 @@ struct convert_mb
     /* need to set the locale for c*rtomb() to work; we'll restore it later */
     char *loc = setlocale(LC_CTYPE, config.ansi_c.locale_name.c_str());
     assert(loc);
+    std::vector<char> buffer(MB_CUR_MAX);
+    char *buf = buffer.data();
     for (i = 0; i < n; i++)
     {
       uint32_t c = decode(i);
-      size_t r = w == 2 ? c16rtomb(buffer, c, &ps) : c32rtomb(buffer, c, &ps);
+      size_t r = w == 2 ? c16rtomb(buf, c, &ps) : c32rtomb(buf, c, &ps);
       if (r == (size_t)-1)
         break;
-      res.insert(res.end(), buffer, buffer + r);
+      result.insert(result.end(), buf, buf + r);
     }
     setlocale(LC_CTYPE, loc); // restore locale
 
@@ -92,11 +93,6 @@ struct convert_mb
     }
     return r;
   }
-
-  std::string result() const
-  {
-    return std::string(res.begin(), res.end());
-  }
 };
 
 } // namespace
@@ -111,7 +107,7 @@ irep_idt string_constantt::mb_value() const
 
   case 16:
   case 32:
-    return convert_mb(get_value().as_string(), elem_width / 8).result();
+    return convert_mb(get_value().as_string(), elem_width / 8).result;
   }
   log_error("illegal character width {} of string literal", elem_width);
   abort();
