@@ -12,7 +12,6 @@ pattern_checker::pattern_checker(
 bool pattern_checker::do_pattern_check()
 {
   // TODO: add more functions here to perform more pattern-based checks
-  log_progress("Checking function {} ...", target_func.c_str());
 
   unsigned index = 0;
   for (nlohmann::json::const_iterator itr = ast_nodes.begin();
@@ -26,9 +25,24 @@ bool pattern_checker::do_pattern_check()
       // locate the target function
       if (
         (*itr)["kind"].get<std::string>() == "function" &&
-        (*itr)["nodeType"].get<std::string>() == "FunctionDefinition" &&
-        (*itr)["name"].get<std::string>() == target_func)
-        return start_pattern_based_check(*itr);
+        (*itr)["nodeType"].get<std::string>() == "FunctionDefinition")
+      {
+        if (target_func != "")
+        {
+          log_progress("Checking function {} ...", target_func.c_str());
+          return start_pattern_based_check(*itr);
+        }
+        else
+        {
+          // contract mode:
+          assert((*itr).contains("name"));
+          log_progress(
+            "Checking function {} ...",
+            (*itr)["name"].get<std::string>().c_str());
+          if (start_pattern_based_check(*itr))
+            return true;
+        }
+      }
     }
   }
 
