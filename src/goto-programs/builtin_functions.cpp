@@ -33,16 +33,17 @@ static const std::string &get_string_constant(const exprt &expr)
   }
 
   const exprt &string = expr.op0().op0();
-  irep_idt v;
-  try
-  {
-    v = to_string_constant(string).mb_value();
-  }
-  catch (const string_constantt::mb_conversion_error &e)
-  {
-    log_warning("{}", e.what());
-    v = string.value();
-  }
+  irep_idt v = string.value();
+  if (string.id() == "string-constant")
+    try
+    {
+      v = to_string_constant(string).mb_value();
+    }
+    catch (const string_constantt::mb_conversion_error &e)
+    {
+      log_warning("{}", e.what());
+    }
+
   return v.as_string();
 }
 
