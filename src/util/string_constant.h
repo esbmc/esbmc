@@ -7,7 +7,10 @@ class string_constantt : public exprt
 {
 public:
   explicit string_constantt(const irep_idt &value);
-  explicit string_constantt(const irep_idt &value, const typet &type);
+  explicit string_constantt(
+    const irep_idt &value,
+    const typet &type,
+    bool is_wide);
 
   friend inline const string_constantt &to_string_constant(const exprt &expr)
   {

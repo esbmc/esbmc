@@ -710,15 +710,18 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else if (expr.id() == "string-constant")
   {
-    std::string thestring = expr.value().as_string();
+    irep_idt thestring = expr.value();
     typet thetype = expr.type();
     assert(thetype.add(typet::a_size).id() == irept::id_constant);
     exprt &face = (exprt &)thetype.add(typet::a_size);
     BigInt val = binary2bigint(face.value(), false);
 
+    // TODO: move this to irep2
+    bool is_wide [[maybe_unused]] = expr.get_bool("wide");
+
     type2tc t = string_type2tc(val.to_int64());
 
-    new_expr_ref = constant_string2tc(t, irep_idt(thestring));
+    new_expr_ref = constant_string2tc(t, thestring);
   }
   else if (
     (expr.id() == irept::id_constant && expr.type().id() == typet::t_array) ||
