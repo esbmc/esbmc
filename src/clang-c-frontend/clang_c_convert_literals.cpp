@@ -46,8 +46,14 @@ bool clang_c_convertert::convert_string_literal(
   }
   else
   {
-    string_constantt string(
-      string_literal.getBytes().str(), type, string_literal.isWide());
+    irep_idt kind = string_constantt::k_default;
+    if (string_literal.isWide())
+      kind = string_constantt::k_wide;
+    else if (
+      string_literal.isUTF8() || string_literal.isUTF16() ||
+      string_literal.isUTF32())
+      kind = string_constantt::k_unicode;
+    string_constantt string(string_literal.getBytes().str(), type, kind);
     dest.swap(string);
   }
 

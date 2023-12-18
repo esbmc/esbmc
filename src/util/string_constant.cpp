@@ -10,22 +10,26 @@
 #include <cuchar>
 #include <cwchar>
 
+const irep_idt string_constantt::k_default = "default";
+const irep_idt string_constantt::k_wide = "wide";
+const irep_idt string_constantt::k_unicode = "unicode";
+
 string_constantt::string_constantt(const irep_idt &value)
   : string_constantt(
       value,
       array_typet(char_type(), constant_exprt(value.size() + 1, size_type())),
-      false)
+      k_default)
 {
 }
 
 string_constantt::string_constantt(
   const irep_idt &value,
   const typet &type,
-  bool is_wide)
+  const irep_idt &kind)
   : exprt("string-constant", type)
 {
   exprt::value(value);
-  set("wide", is_wide);
+  set("kind", kind);
 }
 
 namespace
@@ -120,18 +124,71 @@ struct convert_mb
 
 } // namespace
 
+/* TODO: once we switch to C++20, unify this with convert_mb() via c8rtomb() */
+static std::string convert_utf8(const std::string &v)
+{
+  /* First convert the entire string from UTF-8 to UTF-32 in the target's
+   * endianness, then convert that to the host. This is quite slow... */
+  std::string tmp;
+  const uint8_t *p0 = reinterpret_cast<const uint8_t *>(v.data());
+  const uint8_t *p = p0;
+  const uint8_t *e = p0 + v.length();
+  bool le =
+    config.ansi_c.endianess == configt::ansi_ct::endianesst::IS_LITTLE_ENDIAN;
+  while (p != e)
+  {
+    const uint8_t *p1 = p;
+    int n = *p < 0x80   ? 1 // 0xxxxxxx
+            : *p < 0xc0 ? 0
+            : *p < 0xe0 ? 2 // 110xxxxx 10xxxxxx
+            : *p < 0xf0 ? 3 // 1110xxxx 10xxxxxx 10xxxxxx
+            : *p < 0xf8 ? 4 // 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+                        : 0;
+    if (!n || e - p < n)
+      throw string_constantt::mb_conversion_error(fmt::format(
+        "error interpreting UTF-8 string literal: invalid sequence at {}",
+        p1 - p0));
+    uint32_t c = *p++;
+    switch (n)
+    {
+    case 2:
+      c &= ~0xc0U;
+      break;
+    case 3:
+      c &= ~0xe0U;
+      break;
+    case 4:
+      c &= ~0xf0U;
+      break;
+    }
+    for (int i = 1; i < n; i++, p++)
+    {
+      if (*p < 0x80 || *p >= 0xc0)
+        throw string_constantt::mb_conversion_error(fmt::format(
+          "error interpreting UTF-8 string literal: invalid sequence at {}",
+          p1 - p0));
+      c = (c << 6) | (*p & ~0xc0U);
+    }
+    char buf[4];
+    for (int i = 0; i < 4; i++)
+      buf[i] = (c >> 8 * (le ? i : 4 - 1 - i)) & 0xff;
+    tmp.append(buf, 4);
+  }
+  return convert_mb(tmp, 4, false).result;
+}
+
 irep_idt string_constantt::mb_value() const
 {
-  /* Assume all strings are Unicode, in particular char * and wchar_t * are also
-   * Unicode (TODO: which isn't true in China: they use GB18030). */
   int elem_width = atoi(type().subtype().width().c_str());
-  bool is_wide = get_bool("wide");
+  irep_idt kind = get("kind");
+  bool is_wide = kind == k_wide;
   switch (elem_width)
   {
   case 8:
     assert(!is_wide);
-    return value();
-
+    if (kind == k_default)
+      return value();
+    return convert_utf8(value().as_string());
   case 16:
   case 32:
     return convert_mb(value().as_string(), elem_width / 8, is_wide).result;

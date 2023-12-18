@@ -6,11 +6,15 @@
 class string_constantt : public exprt
 {
 public:
+  static const irep_idt k_default;
+  static const irep_idt k_wide;
+  static const irep_idt k_unicode;
+
   explicit string_constantt(const irep_idt &value);
   explicit string_constantt(
     const irep_idt &value,
     const typet &type,
-    bool is_wide);
+    const irep_idt &kind);
 
   friend inline const string_constantt &to_string_constant(const exprt &expr)
   {
