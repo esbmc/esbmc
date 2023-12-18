@@ -476,6 +476,23 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       abort();
     }
     expr = symbol_expr(*symbol);
+    if (element["_type"] == "Attribute")
+    {
+      symbol_id = create_symbol_id() + std::string("@") +
+                  element["value"]["id"].get<std::string>();
+      symbolt *obj_symbol = context.find_symbol(symbol_id);
+      if (!obj_symbol)
+      {
+        log_error("Symbol not found: {}\n", symbol_id.c_str());
+        abort();
+      }
+      member_exprt member(
+        symbol_exprt(obj_symbol->id, obj_symbol->type),
+        expr.name(),
+        expr.type());
+
+      expr.swap(member); // Now lhs is self.member
+    }
     break;
   }
   case ExpressionType::FUNC_CALL:
@@ -592,11 +609,12 @@ void python_converter::get_var_assign(
 
     lhs = symbol_expr(symbol);
 
-    if (target["_type"] == "Attribute" && target["value"]["id"] == "self")
+    if (target["_type"] == "Attribute")
     {
       // lhs needs to be added as member of self
       // 1. Retrieve self from method parameters
-      std::string self_id = create_symbol_id() + "@self";
+      std::string self_id =
+        create_symbol_id() + "@" + target["value"]["id"].get<std::string>();
       symbolt *self_symbol = context.find_symbol(self_id);
       if (!self_symbol)
         abort();
