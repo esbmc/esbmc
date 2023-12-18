@@ -866,8 +866,9 @@ bool solidity_convertert::get_statement(
   case SolidityGrammar::StatementT::ForStatement:
   {
     // Based on rule for-statement
-    // TODO: Fix me. Currently we don't support nested for loop
-    assert(current_forStmt == nullptr);
+
+    // For nested loop
+    const nlohmann::json *old_forStmt = current_forStmt;
     current_forStmt = &stmt;
 
     // 1. annotate init
@@ -908,7 +909,7 @@ bool solidity_convertert::get_statement(
     code_for.body() = body;
 
     new_expr = code_for;
-    current_forStmt = nullptr;
+    current_forStmt = old_forStmt;
     break;
   }
   case SolidityGrammar::StatementT::IfStatement:
