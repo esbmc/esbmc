@@ -403,35 +403,6 @@ bool solidity_convertert::get_struct_class_fields(
 {
   struct_typet::componentt comp;
 
-  // switch(SolidityGrammar::get_access_t(ast_node))
-  // {
-  //   case SolidityGrammar::VisibilityT::PublicT:
-  //   {
-  //     comp.type().set("sol_vis", "public");
-  //     break;
-  //   }
-  //   case SolidityGrammar::VisibilityT::PrivateT:
-  //   {
-  //     comp.type().set("sol_vis", "private");
-  //     break;
-  //   }
-  //       case SolidityGrammar::VisibilityT::ExternalT:
-  //   {
-  //     comp.type().set("sol_vis", "external");
-  //     break;
-  //   }
-  //       case SolidityGrammar::VisibilityT::InternalT:
-  //   {
-  //     comp.type().set("sol_vis", "internal");
-  //     break;
-  //   }
-  //   case SolidityGrammar::VisibilityT::UnknownT:
-  //   default:
-  //   {
-  //     return true;
-  //   }
-  // }
-
   if (get_var_decl_ref(ast_node, comp))
     return true;
   comp.type().set("#member_name", type.name());
@@ -3900,7 +3871,6 @@ bool solidity_convertert::move_functions_to_main(
   {
     // we only handle public and external function
     // as the private and internal function cannot be directly called
-
     if (
       !skip_vis && (method.get_access().as_string() == "private" ||
                     method.get_access().as_string() == "internal"))
