@@ -505,6 +505,22 @@ BlockT get_block_t(const nlohmann::json &block)
   {
     return Statement;
   }
+  else if (block["nodeType"] == "ForStatement")
+  {
+    return BlockForStatement;
+  }
+  else if (block["nodeType"] == "IfStatement")
+  {
+    return BlockIfStatement;
+  }
+  else if (block["nodeType"] == "WhileStatement")
+  {
+    return BlockWhileStatement;
+  }
+  else if (block["nodeType"] == "ExpressionStatement")
+  {
+    return BlockExpressionStatement;
+  }
   else
   {
     log_error(
@@ -520,6 +536,10 @@ const char *block_to_str(BlockT type)
   switch (type)
   {
     ENUM_TO_STR(Statement)
+    ENUM_TO_STR(BlockForStatement)
+    ENUM_TO_STR(BlockIfStatement)
+    ENUM_TO_STR(BlockWhileStatement)
+    ENUM_TO_STR(BlockExpressionStatement)
     ENUM_TO_STR(UncheckedBlock)
     ENUM_TO_STR(BlockTError)
   default:
