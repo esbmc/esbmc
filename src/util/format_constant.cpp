@@ -20,7 +20,7 @@ std::string format_constantt::operator()(const expr2tc &expr)
     if (is_floatbv_type(expr))
       return ieee_floatt(to_constant_floatbv2t(expr).value).format(*this);
 
-    if (is_string_type(expr))
+    if (is_constant_string2t(expr))
       return to_constant_string2t(expr).value.as_string();
   }
 

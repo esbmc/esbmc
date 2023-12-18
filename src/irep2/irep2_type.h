@@ -20,7 +20,6 @@ class vector_type2t;
 class pointer_type2t;
 class fixedbv_type2t;
 class floatbv_type2t;
-class string_type2t;
 class cpp_name_type2t;
 
 // We also require in advance, the actual classes that store type data.
@@ -261,26 +260,6 @@ public:
   typedef esbmct::type2t_traits<fraction_field, exponent_field> traits;
 };
 
-class string_data : public type2t
-{
-public:
-  string_data(type2t::type_ids id, const type2tc &subtype, unsigned int w)
-    : type2t(id), subtype(subtype), width(w)
-  {
-  }
-  string_data(const string_data &ref) = default;
-
-  type2tc subtype;
-  unsigned int width;
-
-  // Type mangling:
-  typedef esbmct::field_traits<type2tc, string_data, &string_data::subtype>
-    subtype_field;
-  typedef esbmct::field_traits<unsigned int, string_data, &string_data::width>
-    width_field;
-  typedef esbmct::type2t_traits<subtype_field, width_field> traits;
-};
-
 class cpp_name_data : public type2t
 {
 public:
@@ -334,7 +313,6 @@ irep_typedefs(array, array_data);
 irep_typedefs(pointer, pointer_data);
 irep_typedefs(fixedbv, fixedbv_data);
 irep_typedefs(floatbv, floatbv_data);
-irep_typedefs(string, string_data);
 irep_typedefs(cpp_name, cpp_name_data);
 irep_typedefs(vector, array_data);
 #undef irep_typedefs
@@ -678,29 +656,6 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** String type class.
- *  Slightly artificial as original irep had no type for this; Represents the
- *  type of a string constant. Because it needs a bit width, we also store the
- *  size of the constant string in elements.
- *  @extends string_data
- */
-class string_type2t : public string_type_methods
-{
-public:
-  /** Primary constructor.
-   *  @param elements Number of 8-bit characters in string constant.
-   */
-  string_type2t(type2tc subtype, unsigned int elements)
-    : string_type_methods(string_id, subtype, elements)
-  {
-  }
-  string_type2t(const string_type2t &ref) = default;
-  unsigned int get_width() const override;
-  virtual unsigned int get_length() const;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
 /** C++ Name type.
  *  Contains a type name, but also a vector of template parameters.
  *  Something in the C++ frontend uses this; it's precise purpose is unclear.
@@ -769,7 +724,6 @@ type_macros(unsignedbv);
 type_macros(signedbv);
 type_macros(fixedbv);
 type_macros(floatbv);
-type_macros(string);
 type_macros(cpp_name);
 #undef type_macros
 #ifdef dynamic_cast

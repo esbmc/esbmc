@@ -423,7 +423,6 @@ public:
     signedbv_id,
     fixedbv_id,
     floatbv_id,
-    string_id,
     cpp_name_id,
     end_type_id
   };

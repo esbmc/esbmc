@@ -1629,7 +1629,7 @@ class constant_string2t : public constant_string_expr_methods
 {
 public:
   /** Primary constructor.
-   *  @param type Type of this string; presumably a string_type2t.
+   *  @param type Type of this string; presumably an array_type2t.
    *  @param stringref String pool'd string we're dealing with
    *  @param kind The kind of string literal:
    *              - DEFAULT: `""`
@@ -2884,9 +2884,7 @@ public:
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &index)
     : index_expr_methods(type, index_id, source, index)
   {
-    assert(
-      is_array_type(source) || is_string_type(source) ||
-      is_vector_type(source));
+    assert(is_array_type(source) || is_vector_type(source));
 #if 0
     assert(
       is_array_type(source)
