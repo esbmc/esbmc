@@ -46,4 +46,5 @@ private:
   const nlohmann::json &ast_json;
   std::string current_func_name;
   std::string current_class_name;
+  exprt* ref_instance;
 };

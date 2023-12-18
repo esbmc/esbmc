@@ -385,7 +385,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       }
     }
 
-    if (is_constructor_call(element))
+    bool is_ctor_call = is_constructor_call(element);
+
+    if (is_ctor_call)
     {
       // Insert class name in the symbol id
       std::size_t pos = symbol_id.rfind("@F@");
@@ -405,6 +407,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     call.function() = symbol_expr(*func_symbol);
     const typet &return_type = to_code_type(func_symbol->type).return_type();
     call.type() = return_type;
+
+    if (is_ctor_call)
+      call.arguments().push_back(*ref_instance); // Add self as first parameter
 
     for (const auto &arg_node : element["args"])
     {
@@ -550,11 +555,8 @@ void python_converter::get_var_assign(
       get_typet(ref["annotation"]["id"].get<std::string>());
   }
 
-  // Get RHS
-  nlohmann::json value = ast_node["value"];
-  exprt rhs = get_expr(value);
-
   exprt lhs;
+  symbolt *lhs_symbol = nullptr;
   locationt location_begin;
 
   if (ast_node["_type"] == "AnnAssign")
@@ -587,7 +589,6 @@ void python_converter::get_var_assign(
     symbol.static_lifetime = false;
     symbol.file_local = true;
     symbol.is_extern = false;
-    symbol.value = rhs;
 
     lhs = symbol_expr(symbol);
 
@@ -609,7 +610,7 @@ void python_converter::get_var_assign(
       lhs.swap(member); // Now lhs is self.member
     }
 
-    context.add(symbol);
+    lhs_symbol = context.move_symbol_to_context(symbol);
   }
   else if (ast_node["_type"] == "Assign")
   {
@@ -619,6 +620,14 @@ void python_converter::get_var_assign(
     assert(symbol);
     lhs = symbol_expr(*symbol);
   }
+
+  if (is_constructor_call(ast_node["value"]))
+    ref_instance = &lhs;
+
+  // Get RHS
+  exprt rhs = get_expr(ast_node["value"]);
+  if (lhs_symbol)
+    lhs_symbol->value = rhs;
 
   /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
    * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
@@ -636,6 +645,8 @@ void python_converter::get_var_assign(
   code_assignt code_assign(lhs, rhs);
   code_assign.location() = location_begin;
   target_block.copy_to_operands(code_assign);
+
+  ref_instance = nullptr;
 }
 
 void python_converter::get_compound_assign(
@@ -988,7 +999,8 @@ python_converter::python_converter(
   : context(_context),
     ast_json(ast),
     current_func_name(""),
-    current_class_name("")
+    current_class_name(""),
+    ref_instance(nullptr)
 {
 }
 
