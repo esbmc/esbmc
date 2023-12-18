@@ -68,12 +68,6 @@ bool solidity_convertert::convert()
       global_scope_id = (*itr)["id"];
       found_contract_def = true;
 
-      // pattern-based verification
-      // disable if it's in contract mode
-      // otherwise leads to error. To be fixed.
-      if (sol_func == "")
-        continue;
-
       assert(itr->contains("nodes"));
       auto pattern_check =
         std::make_unique<pattern_checker>((*itr)["nodes"], sol_func);
