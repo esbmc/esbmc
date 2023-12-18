@@ -142,6 +142,21 @@ void add_race_assertions(
       instruction.make_skip();
       i_it++;
 
+      // now add assignments for what is written -- reset
+      forall_rw_set_entries(
+        e_it, rw_set) if (e_it->second.w || e_it->second.deref)
+      {
+        goto_programt::targett t = goto_program.insert(i_it);
+
+        t->type = ASSIGN;
+        code_assignt theassign(
+          w_guards.get_w_guard_expr(e_it->second), false_exprt());
+        migrate_expr(theassign, t->code);
+
+        t->location = original_instruction.location;
+        i_it = ++t;
+      }
+
       // Avoid adding too much thread interleaving
       goto_programt::targett t = goto_program.insert(i_it);
       *t = ATOMIC_BEGIN;
@@ -187,21 +202,10 @@ void add_race_assertions(
         i_it = ++t;
       }
 
-      *t = ATOMIC_END;
-      i_it = ++t;
-
-      // now add assignments for what is written -- reset
-      forall_rw_set_entries(
-        e_it, rw_set) if (e_it->second.w || e_it->second.deref)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
-        t->type = ASSIGN;
-        code_assignt theassign(
-          w_guards.get_w_guard_expr(e_it->second), false_exprt());
-        migrate_expr(theassign, t->code);
-
-        t->location = original_instruction.location;
+        *t = ATOMIC_END;
         i_it = ++t;
       }
 
