@@ -264,17 +264,21 @@ public:
 class string_data : public type2t
 {
 public:
-  string_data(type2t::type_ids id, unsigned int w) : type2t(id), width(w)
+  string_data(type2t::type_ids id, const type2tc &subtype, unsigned int w)
+    : type2t(id), subtype(subtype), width(w)
   {
   }
   string_data(const string_data &ref) = default;
 
+  type2tc subtype;
   unsigned int width;
 
   // Type mangling:
+  typedef esbmct::field_traits<type2tc, string_data, &string_data::subtype>
+    subtype_field;
   typedef esbmct::field_traits<unsigned int, string_data, &string_data::width>
     width_field;
-  typedef esbmct::type2t_traits<width_field> traits;
+  typedef esbmct::type2t_traits<subtype_field, width_field> traits;
 };
 
 class cpp_name_data : public type2t
@@ -686,8 +690,8 @@ public:
   /** Primary constructor.
    *  @param elements Number of 8-bit characters in string constant.
    */
-  string_type2t(unsigned int elements)
-    : string_type_methods(string_id, elements)
+  string_type2t(type2tc subtype, unsigned int elements)
+    : string_type_methods(string_id, subtype, elements)
   {
   }
   string_type2t(const string_type2t &ref) = default;

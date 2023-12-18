@@ -288,7 +288,7 @@ expr2tc constant_string2t::to_array() const
   std::vector<expr2tc> contents;
   unsigned int length = value.as_string().size(), i;
 
-  type2tc type = get_uint8_type();
+  type2tc type = to_string_type(constant_string2t::type).subtype;
 
   for (i = 0; i < length; i++)
     contents.push_back(constant_int2tc(type, BigInt(value.as_string()[i])));
