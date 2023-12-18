@@ -69,7 +69,6 @@ public:
 
   const exprt get_w_guard_expr(const rw_sett::entryt &entry)
   {
-    assert(entry.w || entry.deref);
     return get_guard_symbol_expr(
       entry.object, entry.original_expr, entry.deref);
   }
@@ -143,8 +142,7 @@ void add_race_assertions(
       i_it++;
 
       // now add assignments for what is written -- reset
-      forall_rw_set_entries(
-        e_it, rw_set) if (e_it->second.w || e_it->second.deref)
+      forall_rw_set_entries(e_it, rw_set)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
