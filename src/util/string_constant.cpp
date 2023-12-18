@@ -59,8 +59,13 @@ struct convert_mb
     size_t i;
 
     /* need to set the locale for c*rtomb() to work; we'll restore it later */
-    char *loc = setlocale(LC_CTYPE, config.ansi_c.locale_name.c_str());
-    assert(loc);
+    std::string orig_loc = setlocale(LC_CTYPE, nullptr);
+    if (!setlocale(LC_CTYPE, config.ansi_c.locale_name.c_str()))
+      throw string_constantt::mb_conversion_error(fmt::format(
+        "error interpreting {} string literal: locale '{}' not found",
+        desc(),
+        config.ansi_c.locale_name));
+
     std::vector<char> buffer(MB_CUR_MAX);
     char *buf = buffer.data();
     for (i = 0; i < n; i++)
@@ -71,7 +76,9 @@ struct convert_mb
         break;
       result.insert(result.end(), buf, buf + r);
     }
-    setlocale(LC_CTYPE, loc); // restore locale
+
+    char *loc = setlocale(LC_CTYPE, orig_loc.c_str()); // restore locale
+    assert(loc == orig_loc);
 
     if (i < n)
       throw string_constantt::mb_conversion_error(fmt::format(
