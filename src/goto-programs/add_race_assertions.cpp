@@ -142,6 +142,36 @@ void add_race_assertions(
       instruction.make_skip();
       i_it++;
 
+      // Avoid adding too much thread interleaving
+      goto_programt::targett t = goto_program.insert(i_it);
+      *t = ATOMIC_BEGIN;
+      i_it = ++t;
+
+      // insert original statement here
+      // We need to keep all instructions before the return,
+      // so when we process the return we need add the
+      // original instruction at the end
+      if (!original_instruction.is_return())
+      {
+        goto_programt::targett t = goto_program.insert(i_it);
+
+        *t = original_instruction;
+        i_it = ++t;
+      }
+
+      // now add assertion for what is read and written
+      forall_rw_set_entries(e_it, rw_set)
+      {
+        goto_programt::targett t = goto_program.insert(i_it);
+
+        expr2tc assert;
+        migrate_expr(w_guards.get_assertion(e_it->second), assert);
+        t->make_assertion(assert);
+        t->location = original_instruction.location;
+        t->location.comment(e_it->second.get_comment());
+        i_it = ++t;
+      }
+
       // now add assignments for what is written -- set
       forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
       {
@@ -157,16 +187,8 @@ void add_race_assertions(
         i_it = ++t;
       }
 
-      // insert original statement here
-      // We need to keep all instructions before the return,
-      // so when we process the return we need add the
-      // original instruction at the end
-      if (!original_instruction.is_return())
-      {
-        goto_programt::targett t = goto_program.insert(i_it);
-        *t = original_instruction;
-        i_it = ++t;
-      }
+      *t = ATOMIC_END;
+      i_it = ++t;
 
       // now add assignments for what is written -- reset
       forall_rw_set_entries(
@@ -180,19 +202,6 @@ void add_race_assertions(
         migrate_expr(theassign, t->code);
 
         t->location = original_instruction.location;
-        i_it = ++t;
-      }
-
-      // now add assertion for what is read and written
-      forall_rw_set_entries(e_it, rw_set)
-      {
-        goto_programt::targett t = goto_program.insert(i_it);
-
-        expr2tc assert;
-        migrate_expr(w_guards.get_assertion(e_it->second), assert);
-        t->make_assertion(assert);
-        t->location = original_instruction.location;
-        t->location.comment(e_it->second.get_comment());
         i_it = ++t;
       }
 
