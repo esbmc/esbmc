@@ -53,6 +53,13 @@ struct convert_mb
         configt::ansi_ct::endianesst::IS_LITTLE_ENDIAN)
   {
     assert(v.length() % w == 0);
+    if (wide && sizeof(wchar_t) * 8 != config.ansi_c.wchar_t_width)
+      throw string_constantt::mb_conversion_error(fmt::format(
+        "error interpreting {} string literal: host and target wchar_t widths "
+        "differ: {} != {}",
+        desc(),
+        sizeof(wchar_t) * 8,
+        config.ansi_c.wchar_t_width));
     if (config.ansi_c.endianess == configt::ansi_ct::endianesst::NO_ENDIANESS)
       throw string_constantt::mb_conversion_error(fmt::format(
         "impossible to interpret {} string literal without endianness",
@@ -62,14 +69,23 @@ struct convert_mb
     size_t n = v.length() / w; // number of code units
     size_t i;
 
-    /* need to set the locale for c*rtomb() to work; we'll restore it later */
+    /* need to set the locale for (wc|c16|c32)rtomb() to work outside of ASCII;
+     * we'll restore it later */
     std::string orig_loc = setlocale(LC_CTYPE, nullptr);
-    if (!setlocale(LC_CTYPE, config.ansi_c.locale_name.c_str()))
+    char *loc = setlocale(LC_CTYPE, config.ansi_c.locale_name.c_str());
+    if (!loc)
       throw string_constantt::mb_conversion_error(fmt::format(
         "error interpreting {} string literal: locale '{}' not found",
         desc(),
         config.ansi_c.locale_name));
+    log_debug(
+      "convert_mb",
+      "switching from locale '{}' to '{}' -> '{}'",
+      orig_loc,
+      config.ansi_c.locale_name,
+      loc);
 
+    /* do not throw errors  inside this block - need to restore the locale! */
     std::vector<char> buffer(MB_CUR_MAX);
     char *buf = buffer.data();
     for (i = 0; i < n; i++)
@@ -81,7 +97,8 @@ struct convert_mb
       result.insert(result.end(), buf, buf + r);
     }
 
-    char *loc = setlocale(LC_CTYPE, orig_loc.c_str()); // restore locale
+    loc = setlocale(LC_CTYPE, orig_loc.c_str()); // restore locale
+    assert(loc);
     assert(loc == orig_loc);
 
     if (i < n)
@@ -182,15 +199,17 @@ irep_idt string_constantt::mb_value() const
   int elem_width = atoi(type().subtype().width().c_str());
   irep_idt kind = get("kind");
   bool is_wide = kind == k_wide;
+  bool is_default = kind == k_default;
   switch (elem_width)
   {
   case 8:
     assert(!is_wide);
-    if (kind == k_default)
+    if (is_default)
       return value();
     return convert_utf8(value().as_string());
   case 16:
   case 32:
+    assert(!is_default);
     return convert_mb(value().as_string(), elem_width / 8, is_wide).result;
   }
   log_error("illegal character width {} of string literal", elem_width);
