@@ -403,10 +403,34 @@ bool solidity_convertert::get_struct_class_fields(
 {
   struct_typet::componentt comp;
 
-  if (
-    SolidityGrammar::get_access_t(ast_node) ==
-    SolidityGrammar::VisibilityT::UnknownT)
-    return false;
+  // switch(SolidityGrammar::get_access_t(ast_node))
+  // {
+  //   case SolidityGrammar::VisibilityT::PublicT:
+  //   {
+  //     comp.type().set("sol_vis", "public");
+  //     break;
+  //   }
+  //   case SolidityGrammar::VisibilityT::PrivateT:
+  //   {
+  //     comp.type().set("sol_vis", "private");
+  //     break;
+  //   }
+  //       case SolidityGrammar::VisibilityT::ExternalT:
+  //   {
+  //     comp.type().set("sol_vis", "external");
+  //     break;
+  //   }
+  //       case SolidityGrammar::VisibilityT::InternalT:
+  //   {
+  //     comp.type().set("sol_vis", "internal");
+  //     break;
+  //   }
+  //   case SolidityGrammar::VisibilityT::UnknownT:
+  //   default:
+  //   {
+  //     return true;
+  //   }
+  // }
 
   if (get_var_decl_ref(ast_node, comp))
     return true;
@@ -428,6 +452,9 @@ bool solidity_convertert::get_struct_class_method(
 
   if (comp.is_code() && to_code(comp).statement() == "skip")
     return false;
+
+  if (get_access_from_decl(ast_node, comp))
+    return true;
 
   type.methods().push_back(comp);
   return false;
@@ -3856,11 +3883,29 @@ bool solidity_convertert::move_functions_to_main(
 
   // 2. construct a while-loop and move to func_body
 
+  // 2.0 check visibility setting
+  bool skip_vis =
+    config.options.get_option("no-visibility").empty() ? false : true;
+  if (skip_vis)
+  {
+    log_warning(
+      "force to verify every function, even it's an unreachable "
+      "internal/private function. This might lead to false positives.");
+  }
+
   // 2.1 construct ifthenelse statement
   const struct_typet::componentst &methods =
     to_struct_type(contract.type).methods();
   for (const auto &method : methods)
   {
+    // we only handle public and external function
+    // as the private and internal function cannot be directly called
+
+    if (
+      !skip_vis && (method.get_access().as_string() == "private" ||
+                    method.get_access().as_string() == "internal"))
+      continue;
+
     // guard: nondet_bool()
     if (context.find_symbol("c:@F@nondet_bool") == nullptr)
       return true;

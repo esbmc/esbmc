@@ -1005,6 +1005,8 @@ const char *implicit_cast_type_to_str(ImplicitCastTypeT type)
 
 VisibilityT get_access_t(const nlohmann::json &ast_node)
 {
+  if (!ast_node.contains("visibility"))
+    return UnknownT;
   std::string access = ast_node["visibility"].get<std::string>();
   if (access == "public")
   {
