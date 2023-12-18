@@ -35,7 +35,7 @@ std::string type_to_string(const constant_string_data::kindt &theval, int)
   case constant_string_data::UNICODE:
     return "unicode";
   }
-  assert(0 && "Unrecognized string_data::kindt enum value");
+  assert(0 && "Unrecognized constant_string_data::kindt enum value");
   abort();
 }
 

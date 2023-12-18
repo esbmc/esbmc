@@ -127,28 +127,6 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
     return base_type_eq_rec(type1, tmp);
   }
 
-  if (type1->type_id == type2t::string_id)
-  {
-    if (is_array_type(type2) && is_bv_type(to_array_type(type2).subtype))
-    {
-      const array_type2t &ref = to_array_type(type2);
-      if (static_cast<const bv_data &>(*ref.subtype.get()).width == 8)
-        // Both are strings, technically
-        return true;
-    }
-  }
-
-  if (type2->type_id == type2t::string_id)
-  {
-    if (is_array_type(type1) && is_bv_type(to_array_type(type1).subtype))
-    {
-      const array_type2t &ref = to_array_type(type1);
-      if (static_cast<const bv_data &>(*ref.subtype.get()).width == 8)
-        // Both are strings, technically
-        return true;
-    }
-  }
-
   if (type1->type_id != type2->type_id)
     return false;
 

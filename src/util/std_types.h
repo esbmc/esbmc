@@ -625,22 +625,6 @@ public:
 
 const floatbv_typet &to_floatbv_type(const typet &type);
 
-class string_typet : public typet
-{
-public:
-  string_typet() : typet(t_string)
-  {
-  }
-
-  friend const string_typet &to_string_type(const typet &type)
-  {
-    assert(type.id() == t_string);
-    return static_cast<const string_typet &>(type);
-  }
-};
-
-const string_typet &to_string_type(const typet &type);
-
 /**
  * @brief This type maps the vectors
  *

@@ -288,7 +288,7 @@ expr2tc constant_string2t::to_array() const
   std::vector<expr2tc> contents;
   unsigned int length = value.as_string().size(), i;
 
-  type2tc type = to_string_type(constant_string2t::type).subtype;
+  type2tc type = to_array_type(constant_string2t::type).subtype;
 
   for (i = 0; i < length; i++)
     contents.push_back(constant_int2tc(type, BigInt(value.as_string()[i])));
@@ -351,12 +351,6 @@ void with2t::assert_consistency() const
     assert(is_bv_type(update_field->type));
     assert_type_compat_for_with(
       to_vector_type(source_value->type).subtype, update_value->type);
-  }
-  else if (is_string_type(source_value))
-  {
-    assert(is_bv_type(update_field->type));
-    assert(is_bv_type(update_value->type));
-    assert(update_value->type->get_width() == config.ansi_c.char_width);
   }
   else
   {

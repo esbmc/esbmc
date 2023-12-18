@@ -637,13 +637,10 @@ void goto_checkt::bounds_check(
   expr2tc lower = greaterthanequal2tc(the_index, zero);
   add_guarded_claim(lower, name + " lower bound", "array bounds", loc, guard);
 
-  assert(is_array_type(t) || is_string_type(t) || is_vector_type(t));
+  assert(is_array_type(t) || is_vector_type(t));
 
-  const expr2tc &array_size =
-    is_array_type(t) ? to_array_type(t).array_size
-    : is_vector_type(t)
-      ? to_vector_type(t).array_size
-      : constant_int2tc(get_uint32_type(), to_string_type(t).get_length());
+  const expr2tc &array_size = is_array_type(t) ? to_array_type(t).array_size
+                                               : to_vector_type(t).array_size;
 
   // Cast size to index type
   expr2tc casted_size = typecast2tc(the_index->type, array_size);
