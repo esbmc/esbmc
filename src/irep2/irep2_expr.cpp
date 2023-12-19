@@ -296,7 +296,9 @@ expr2tc constant_string2t::to_array() const
   const std::string &s = value.as_string();
   size_t n = to_constant_int2t(arr.array_size).value.to_uint64();
   assert(n > 0); /* terminating '\0' */
-  assert((n - 1) * w == s.length());
+  assert(s.length() % w == 0);
+  size_t m = s.length() / w;
+  size_t k = std::min(n - 1, m);
 
   auto endian = config.ansi_c.endianess;
   assert(endian != configt::ansi_ct::endianesst::NO_ENDIANESS);
@@ -304,14 +306,16 @@ expr2tc constant_string2t::to_array() const
   bool le = endian == configt::ansi_ct::endianesst::IS_LITTLE_ENDIAN;
 
   std::vector<expr2tc> contents(n);
-  for (size_t i = 0; i < n - 1; i++)
+  size_t i;
+  for (i = 0; i < k; i++)
   {
     uint32_t c = 0;
     for (unsigned j = 0; j < w; j++)
       c |= (uint32_t)(unsigned char)s[w * i + j] << (le ? j : w - 1 - j);
     contents[i] = gen_long(elem_type, c);
   }
-  contents[n - 1] = gen_zero(elem_type);
+  for (; i < n; i++)
+    contents[i] = gen_zero(elem_type);
 
   expr2tc r = constant_array2tc(type, std::move(contents));
   return r;
