@@ -6,6 +6,7 @@
 #include <util/namespace.h>
 #include <util/prefix.h>
 #include <util/simplify_expr.h>
+#include <util/string_constant.h>
 #include <util/type_byte_size.h>
 
 // File for old irep -> new irep conversions.
@@ -319,7 +320,10 @@ static type2tc migrate_type0(const typet &type)
   {
     irep_idt width = type.width();
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
-    return string_type2tc(iwidth);
+    type2tc subtype = get_uint8_type();
+    if (type.subtype().is_not_nil())
+      subtype = migrate_type(type.subtype());
+    return string_type2tc(subtype, iwidth);
   }
 
   log_error("{}", type);
@@ -710,15 +714,23 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else if (expr.id() == "string-constant")
   {
-    std::string thestring = expr.value().as_string();
+    irep_idt thestring = expr.value();
     typet thetype = expr.type();
     assert(thetype.add(typet::a_size).id() == irept::id_constant);
     exprt &face = (exprt &)thetype.add(typet::a_size);
     BigInt val = binary2bigint(face.value(), false);
 
-    type2tc t = string_type2tc(val.to_int64());
+    const irep_idt &kind1 = expr.get("kind");
 
-    new_expr_ref = constant_string2tc(t, irep_idt(thestring));
+    auto kind2 = kind1 == string_constantt::k_wide ? constant_string2t::WIDE
+                 : kind1 == string_constantt::k_unicode
+                   ? constant_string2t::UNICODE
+                   : constant_string2t::DEFAULT;
+
+    type2tc s = migrate_type(thetype.subtype());
+    type2tc t = string_type2tc(s, val.to_int64());
+
+    new_expr_ref = constant_string2tc(t, thestring, kind2);
   }
   else if (
     (expr.id() == irept::id_constant && expr.type().id() == typet::t_array) ||
@@ -1288,7 +1300,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (expr.op1().id() == "member_name")
     {
       idx = constant_string2tc(
-        string_type2tc(1), expr.op1().get_string("component_name"));
+        string_type2tc(get_uint8_type(), 1),
+        expr.op1().get_string("component_name"),
+        constant_string2t::DEFAULT);
     }
     else
     {
@@ -2056,6 +2070,23 @@ exprt migrate_expr_back(const expr2tc &ref)
 
     thestring.type() = thetype;
     thestring.set("value", irep_idt(ref2.value));
+
+    irep_idt kind;
+    switch (ref2.kind)
+    {
+    case constant_string2t::DEFAULT:
+      kind = string_constantt::k_default;
+      break;
+    case constant_string2t::WIDE:
+      kind = string_constantt::k_wide;
+      break;
+    case constant_string2t::UNICODE:
+      kind = string_constantt::k_unicode;
+      break;
+    }
+    assert(!kind.empty());
+    thestring.set("kind", kind);
+
     return thestring;
   }
   case expr2t::constant_struct_id:

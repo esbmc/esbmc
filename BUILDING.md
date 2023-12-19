@@ -170,7 +170,7 @@ recommended to include at least the SMT solver Boolector.
 We have wrapped the entire build and setup of Boolector in the following command:
 
 ```
-git clone --depth=1 --branch=3.2.2 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd .. && cd ..
+git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd .. && cd ..
 ```
 
 For more details on Boolector, please refer to [its Github](https://github.com/Boolector/boolector).

@@ -13,5 +13,5 @@ type_typedefs3(vector_type, array_data);
 type_typedefs1(pointer_type, pointer_data);
 type_typedefs2(fixedbv_type, fixedbv_data);
 type_typedefs2(floatbv_type, floatbv_data);
-type_typedefs1(string_type, string_data);
+type_typedefs2(string_type, string_data);
 type_typedefs2(cpp_name_type, cpp_name_data);

@@ -210,12 +210,12 @@ typet char32_type()
 
 typet wchar_type()
 {
-  return signedbv_typet(config.ansi_c.int_width);
+  return signedbv_typet(config.ansi_c.wchar_t_width);
 }
 
 typet unsigned_wchar_type()
 {
-  return unsignedbv_typet(config.ansi_c.int_width);
+  return unsignedbv_typet(config.ansi_c.wchar_t_width);
 }
 
 type2tc char_type2()

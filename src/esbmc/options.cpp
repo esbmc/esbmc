@@ -51,14 +51,16 @@ const struct group_opt_templ all_cmd_options[] = {
      "show value-set analysis during symbolic execution"}}},
 #ifdef ENABLE_SOLIDITY_FRONTEND
   {"Solidity frontend",
-   {
-     {"sol",
-      boost::program_options::value<std::string>()->value_name("path"),
-      ".sol and .solast file names"},
-     {"contract",
-      boost::program_options::value<std::string>()->value_name("cname"),
-      "set contract name"},
-   }},
+   {{"sol",
+     boost::program_options::value<std::string>()->value_name("path"),
+     ".sol and .solast file names"},
+    {"contract",
+     boost::program_options::value<std::string>()->value_name("cname"),
+     "set contract name"},
+    {"no-visibility",
+     NULL,
+     "force to verify every function, even it's an unreachable "
+     "internal/private function"}}},
 #endif
   {"Frontend",
    {{"include,I",

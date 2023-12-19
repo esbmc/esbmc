@@ -16,6 +16,7 @@
 #include <util/simplify_expr.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/string_constant.h>
 #include <util/type_byte_size.h>
 
 static const std::string &get_string_constant(const exprt &expr)
@@ -31,7 +32,19 @@ static const std::string &get_string_constant(const exprt &expr)
     abort();
   }
 
-  return expr.op0().op0().value().as_string();
+  const exprt &string = expr.op0().op0();
+  irep_idt v = string.value();
+  if (string.id() == "string-constant")
+    try
+    {
+      v = to_string_constant(string).mb_value();
+    }
+    catch (const string_constantt::mb_conversion_error &e)
+    {
+      log_warning("{}", e.what());
+    }
+
+  return v.as_string();
 }
 
 static void get_alloc_type_rec(const exprt &src, typet &type, exprt &size)

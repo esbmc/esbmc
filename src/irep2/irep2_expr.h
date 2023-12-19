@@ -184,19 +184,34 @@ public:
 class constant_string_data : public constant2t
 {
 public:
-  constant_string_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v)
-    : constant2t(t, id), value(v)
+  enum kindt
+  {
+    DEFAULT, /* "" */
+    WIDE,    /* L"" */
+    UNICODE, /* u8"", u"" and U"" */
+  };
+
+  constant_string_data(
+    const type2tc &t,
+    expr2t::expr_ids id,
+    const irep_idt &v,
+    kindt kind)
+    : constant2t(t, id), value(v), kind(kind)
   {
   }
   constant_string_data(const constant_string_data &ref) = default;
 
   irep_idt value;
+  kindt kind;
 
   // Type mangling:
   typedef esbmct::
     field_traits<irep_idt, constant_string_data, &constant_string_data::value>
       value_field;
-  typedef esbmct::expr2t_traits<value_field> traits;
+  typedef esbmct::
+    field_traits<kindt, constant_string_data, &constant_string_data::kind>
+      kind_field;
+  typedef esbmct::expr2t_traits<value_field, kind_field> traits;
 };
 
 class symbol_data : public expr2t
@@ -1616,9 +1631,13 @@ public:
   /** Primary constructor.
    *  @param type Type of this string; presumably a string_type2t.
    *  @param stringref String pool'd string we're dealing with
+   *  @param kind The kind of string literal:
+   *              - DEFAULT: `""`
+   *              - WIDE   : `L""`
+   *              - UNICODE: `u8""`, `u""` and `U""`
    */
-  constant_string2t(const type2tc &type, const irep_idt &stringref)
-    : constant_string_expr_methods(type, constant_string_id, stringref)
+  constant_string2t(const type2tc &type, const irep_idt &stringref, kindt kind)
+    : constant_string_expr_methods(type, constant_string_id, stringref, kind)
   {
   }
   constant_string2t(const constant_string2t &ref) = default;
