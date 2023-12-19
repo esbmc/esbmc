@@ -707,8 +707,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     irep_idt thestring = expr.value();
     typet thetype = expr.type();
     assert(thetype.add(typet::a_size).id() == irept::id_constant);
-    exprt &face = (exprt &)thetype.add(typet::a_size);
-    BigInt val = binary2bigint(face.value(), false);
+    type2tc t = migrate_type(thetype);
 
     const irep_idt &kind1 = expr.get("kind");
 
@@ -716,9 +715,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
                  : kind1 == string_constantt::k_unicode
                    ? constant_string2t::UNICODE
                    : constant_string2t::DEFAULT;
-
-    type2tc s = migrate_type(thetype.subtype());
-    type2tc t = array_type2tc(s, gen_ulong(val), false);
 
     new_expr_ref = constant_string2tc(t, thestring, kind2);
   }
@@ -1289,10 +1285,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.op1().id() == "member_name")
     {
+      const irep_idt &name = expr.op1().get_string("component_name");
       idx = constant_string2tc(
-        array_type2tc(
-          get_uint8_type(), gen_ulong(sizeof("component_name")), false),
-        expr.op1().get_string("component_name"),
+        array_type2tc(get_uint8_type(), gen_ulong(name.size() + 1), false),
+        name,
         constant_string2t::DEFAULT);
     }
     else
