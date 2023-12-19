@@ -421,7 +421,7 @@ void goto_symext::symex_assign_typecast(
           new_rhs,
           constant_string2tc(
             array_type2tc(
-              get_uint8_type(), gen_ulong(from_name[i].size()), false),
+              get_uint8_type(), gen_ulong(from_name[i].size() + 1), false),
             from_name[i],
             constant_string2t::DEFAULT),
           typecast2tc(from_type[i], member2tc(lhs_type[i], rhs, lhs_name[i])));
@@ -527,7 +527,7 @@ void goto_symext::symex_assign_member(
   //   a'==a WITH [c:=e]
 
   type2tc str_type = array_type2tc(
-    get_uint8_type(), gen_ulong(component_name.as_string().size()), false);
+    get_uint8_type(), gen_ulong(component_name.as_string().size() + 1), false);
   expr2tc new_rhs = with2tc(
     real_lhs->type,
     real_lhs,
