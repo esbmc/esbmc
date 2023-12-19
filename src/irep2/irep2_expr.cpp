@@ -285,24 +285,36 @@ std::string symbol_data::get_symbol_name() const
 
 expr2tc constant_string2t::to_array() const
 {
-  std::vector<expr2tc> contents;
-  unsigned int length = value.as_string().size(), i;
+  const array_type2t &arr = to_array_type(type);
 
-  type2tc type = to_array_type(constant_string2t::type).subtype;
+  const type2tc &elem_type = arr.subtype;
+  unsigned w = elem_type->get_width();
+  assert(w % 8 == 0);
+  w /= 8;
+  assert(0 < w && w <= 4);
 
-  for (i = 0; i < length; i++)
-    contents.push_back(constant_int2tc(type, BigInt(value.as_string()[i])));
+  const std::string &s = value.as_string();
+  size_t n = to_constant_int2t(arr.array_size).value.to_uint64();
+  assert(n > 0); /* terminating '\0' */
+  assert((n - 1) * w == s.length());
 
-  // Null terminator is implied.
-  contents.push_back(constant_int2tc(type, BigInt(0)));
+  auto endian = config.ansi_c.endianess;
+  assert(endian != configt::ansi_ct::endianesst::NO_ENDIANESS);
 
-  type2tc len_tp = unsignedbv_type2tc(config.ansi_c.int_width);
-  expr2tc len_val_ref = constant_int2tc(len_tp, BigInt(contents.size()));
+  bool le = endian == configt::ansi_ct::endianesst::IS_LITTLE_ENDIAN;
 
-  type2tc arr_tp = array_type2tc(type, len_val_ref, false);
-  expr2tc final_val = constant_array2tc(arr_tp, contents);
+  std::vector<expr2tc> contents(n);
+  for (size_t i = 0; i < n - 1; i++)
+  {
+    uint32_t c = 0;
+    for (unsigned j = 0; j < w; j++)
+      c |= (uint32_t)(unsigned char)s[w * i + j] << (le ? j : w - 1 - j);
+    contents[i] = gen_long(elem_type, c);
+  }
+  contents[n - 1] = gen_zero(elem_type);
 
-  return final_val;
+  expr2tc r = constant_array2tc(type, std::move(contents));
+  return r;
 }
 
 static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
