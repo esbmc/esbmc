@@ -12,7 +12,7 @@ else()
       NAME boolector
       DOWNLOAD_ONLY YES
       GITHUB_REPOSITORY Boolector/boolector
-      GIT_TAG 3.2.2)
+      GIT_TAG 3.2.3)
 
     # We can't use ExternalProject because we need it ready
     # at configuration time
