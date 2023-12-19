@@ -25,13 +25,6 @@
 // global data, horrible
 unsigned int dereferencet::invalid_counter = 0;
 
-static inline const array_type2t get_arr_type(const expr2tc &expr)
-{
-  return (is_array_type(expr))
-           ? to_array_type(expr->type)
-           : to_array_type(to_constant_string2t(expr).to_array()->type);
-}
-
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
 // dereference operation.
@@ -1079,7 +1072,7 @@ void dereferencet::construct_from_array(
 {
   assert(is_array_type(value));
 
-  const array_type2t arr_type = get_arr_type(value);
+  const array_type2t arr_type = to_array_type(value->type);
   type2tc arr_subtype = arr_type.subtype;
 
   if (is_array_type(arr_subtype))
@@ -1517,7 +1510,7 @@ void dereferencet::construct_from_multidir_array(
   modet mode)
 {
   assert(is_array_type(value));
-  const array_type2t arr_type = get_arr_type(value);
+  const array_type2t arr_type = to_array_type(value->type);
 
   // Right: any access across the boundary of the outer dimension of this array
   // is an alignment violation as that can possess extra padding.
@@ -2139,7 +2132,7 @@ void dereferencet::bounds_check(
     return;
 
   assert(is_array_type(expr));
-  const array_type2t arr_type = get_arr_type(expr);
+  const array_type2t arr_type = to_array_type(expr->type);
 
   if (!arr_type.array_size)
   {
