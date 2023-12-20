@@ -155,7 +155,10 @@ void add_race_assertions(
         i_it = ++t;
       }
 
-      // Avoid adding too much thread interleaving
+      // Avoid adding too much thread interleaving by using atomic block
+      // tmp_A = 0;
+      // atomic {A = n; Assert tmp_A == 0; tmp_A = 1;}
+      // See https://github.com/esbmc/esbmc/pull/1544
       goto_programt::targett t = goto_program.insert(i_it);
       *t = ATOMIC_BEGIN;
       i_it = ++t;
