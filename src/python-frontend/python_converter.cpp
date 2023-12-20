@@ -488,7 +488,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       // Get object type name from symbol. e.g.: tag-MyClass
       std::string obj_type_name;
-      for (const auto &it : symbol->type.get_named_sub())
+      const typet &symbol_type =
+        (symbol->type.is_pointer()) ? symbol->type.subtype() : symbol->type;
+      for (const auto &it : symbol_type.get_named_sub())
       {
         if (it.first == "identifier")
           obj_type_name = it.second.id_string();
@@ -923,6 +925,7 @@ void python_converter::get_class_definition(const nlohmann::json &class_node)
     if (class_member["_type"] == "FunctionDef")
     {
       get_attributes_from_self(class_member["body"], clazz);
+      added_symbol->type = clazz;
 
       std::string method_name = class_member["name"].get<std::string>();
       if (method_name == "__init__")
