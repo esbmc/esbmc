@@ -234,6 +234,9 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
     else if (statement == "gcc_conditional_expression")
     {
     }
+    else if (statement == "nondet")
+    {
+    }
     else
     {
       log_error("unknown side effect: {} at {}", statement, expr.location());
