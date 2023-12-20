@@ -163,8 +163,7 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
 
-  auto update_symbol = [&](exprt &expr)
-  {
+  auto update_symbol = [&](exprt &expr) {
     std::string id = create_symbol_id() + "@" + expr.name().c_str();
     symbolt *s = context.find_symbol(id);
     if (s != nullptr)
@@ -230,8 +229,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("value"))
     rhs = get_expr(element["value"]);
 
-  auto to_side_effect_call = [](exprt &expr)
-  {
+  auto to_side_effect_call = [](exprt &expr) {
     side_effect_expr_function_callt side_effect;
     code_function_callt &code = static_cast<code_function_callt &>(expr);
     side_effect.function() = code.function();
@@ -417,9 +415,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         gen_address_of(*ref_instance)); // Add self as first parameter
 
     for (const auto &arg_node : element["args"])
-    {
       call.arguments().push_back(get_expr(arg_node));
-    }
 
     return call;
   }
@@ -628,21 +624,20 @@ void python_converter::get_var_assign(
 
     if (target["_type"] == "Attribute")
     {
-      // lhs needs to be added as member of self
-      // 1. Retrieve self from method parameters
-      std::string self_id =
+      // lhs is an attribute and needs to be added as member of the referred object
+      // 1. Retrieve created object from symbol table
+      std::string obj_id =
         create_symbol_id() + "@" + target["value"]["id"].get<std::string>();
-      symbolt *self_symbol = context.find_symbol(self_id);
-      if (!self_symbol)
+      symbolt *obj_symbol = context.find_symbol(obj_id);
+      if (!obj_symbol)
         abort();
 
-      // 2. Insert member in self
+      // 2. Insert member in the object
       member_exprt member(
-        symbol_exprt(self_symbol->id, self_symbol->type),
-        lhs.name(),
-        lhs.type());
+        symbol_exprt(obj_symbol->id, obj_symbol->type), lhs.name(), lhs.type());
 
-      lhs.swap(member); // Now lhs is self.member
+      // 3. lhs holds 'obj.member'
+      lhs.swap(member);
     }
     lhs.location() = location_begin;
 
@@ -796,18 +791,16 @@ void python_converter::get_function_definition(
     abort();
   }
 
-  current_element_type = type.return_type();
-
   // Copy caller function name
   const std::string caller_func_name = current_func_name;
 
   // Function location
   locationt location = get_location_from_decl(function_node);
 
-  // Symbol identification
+  current_element_type = type.return_type();
   current_func_name = function_node["name"].get<std::string>();
 
-  // __init__ corresponds to the Python constructor. Here it's renamed to the class name
+  // __init__() is renamed to Classname()
   if (current_func_name == "__init__")
   {
     current_func_name = current_class_name;
