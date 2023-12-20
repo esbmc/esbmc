@@ -722,6 +722,25 @@ bool solidity_convertert::get_block(
     new_expr = _block;
     break;
   }
+  case SolidityGrammar::BlockT::BlockForStatement:
+  case SolidityGrammar::BlockT::BlockIfStatement:
+  case SolidityGrammar::BlockT::BlockWhileStatement:
+  {
+    // this means only one statement in the block
+    exprt statement;
+
+    // pass directly to get_statement()
+    if (get_statement(block, statement))
+      return true;
+    convert_expression_to_code(statement);
+    new_expr = statement;
+    break;
+  }
+  case SolidityGrammar::BlockT::BlockExpressionStatement:
+  {
+    get_expr(block["expression"], new_expr);
+    break;
+  }
   default:
   {
     assert(!"Unimplemented type in rule block");
@@ -866,8 +885,9 @@ bool solidity_convertert::get_statement(
   case SolidityGrammar::StatementT::ForStatement:
   {
     // Based on rule for-statement
-    // TODO: Fix me. Currently we don't support nested for loop
-    assert(current_forStmt == nullptr);
+
+    // For nested loop
+    const nlohmann::json *old_forStmt = current_forStmt;
     current_forStmt = &stmt;
 
     // 1. annotate init
@@ -908,7 +928,7 @@ bool solidity_convertert::get_statement(
     code_for.body() = body;
 
     new_expr = code_for;
-    current_forStmt = nullptr;
+    current_forStmt = old_forStmt;
     break;
   }
   case SolidityGrammar::StatementT::IfStatement:
