@@ -69,7 +69,6 @@ public:
 
   const exprt get_w_guard_expr(const rw_sett::entryt &entry)
   {
-    assert(entry.w || entry.deref);
     return get_guard_symbol_expr(
       entry.object, entry.original_expr, entry.deref);
   }
@@ -142,6 +141,53 @@ void add_race_assertions(
       instruction.make_skip();
       i_it++;
 
+      // now add assignments for what is written -- reset
+      forall_rw_set_entries(e_it, rw_set)
+      {
+        goto_programt::targett t = goto_program.insert(i_it);
+
+        t->type = ASSIGN;
+        code_assignt theassign(
+          w_guards.get_w_guard_expr(e_it->second), false_exprt());
+        migrate_expr(theassign, t->code);
+
+        t->location = original_instruction.location;
+        i_it = ++t;
+      }
+
+      // Avoid adding too much thread interleaving by using atomic block
+      // tmp_A = 0;
+      // atomic {A = n; Assert tmp_A == 0; tmp_A = 1;}
+      // See https://github.com/esbmc/esbmc/pull/1544
+      goto_programt::targett t = goto_program.insert(i_it);
+      *t = ATOMIC_BEGIN;
+      i_it = ++t;
+
+      // insert original statement here
+      // We need to keep all instructions before the return,
+      // so when we process the return we need add the
+      // original instruction at the end
+      if (!original_instruction.is_return())
+      {
+        goto_programt::targett t = goto_program.insert(i_it);
+
+        *t = original_instruction;
+        i_it = ++t;
+      }
+
+      // now add assertion for what is read and written
+      forall_rw_set_entries(e_it, rw_set)
+      {
+        goto_programt::targett t = goto_program.insert(i_it);
+
+        expr2tc assert;
+        migrate_expr(w_guards.get_assertion(e_it->second), assert);
+        t->make_assertion(assert);
+        t->location = original_instruction.location;
+        t->location.comment(e_it->second.get_comment());
+        i_it = ++t;
+      }
+
       // now add assignments for what is written -- set
       forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
       {
@@ -157,42 +203,10 @@ void add_race_assertions(
         i_it = ++t;
       }
 
-      // insert original statement here
-      // We need to keep all instructions before the return,
-      // so when we process the return we need add the
-      // original instruction at the end
-      if (!original_instruction.is_return())
-      {
-        goto_programt::targett t = goto_program.insert(i_it);
-        *t = original_instruction;
-        i_it = ++t;
-      }
-
-      // now add assignments for what is written -- reset
-      forall_rw_set_entries(
-        e_it, rw_set) if (e_it->second.w || e_it->second.deref)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
-        t->type = ASSIGN;
-        code_assignt theassign(
-          w_guards.get_w_guard_expr(e_it->second), false_exprt());
-        migrate_expr(theassign, t->code);
-
-        t->location = original_instruction.location;
-        i_it = ++t;
-      }
-
-      // now add assertion for what is read and written
-      forall_rw_set_entries(e_it, rw_set)
-      {
-        goto_programt::targett t = goto_program.insert(i_it);
-
-        expr2tc assert;
-        migrate_expr(w_guards.get_assertion(e_it->second), assert);
-        t->make_assertion(assert);
-        t->location = original_instruction.location;
-        t->location.comment(e_it->second.get_comment());
+        *t = ATOMIC_END;
         i_it = ++t;
       }
 

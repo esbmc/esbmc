@@ -316,16 +316,6 @@ static type2tc migrate_type0(const typet &type)
     return array_type2tc(get_uint8_type(), expr2tc(), true);
   }
 
-  if (type.id() == typet::t_string)
-  {
-    irep_idt width = type.width();
-    unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
-    type2tc subtype = get_uint8_type();
-    if (type.subtype().is_not_nil())
-      subtype = migrate_type(type.subtype());
-    return string_type2tc(subtype, iwidth);
-  }
-
   log_error("{}", type);
   abort();
 }
@@ -717,8 +707,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     irep_idt thestring = expr.value();
     typet thetype = expr.type();
     assert(thetype.add(typet::a_size).id() == irept::id_constant);
-    exprt &face = (exprt &)thetype.add(typet::a_size);
-    BigInt val = binary2bigint(face.value(), false);
+    type2tc t = migrate_type(thetype);
 
     const irep_idt &kind1 = expr.get("kind");
 
@@ -726,9 +715,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
                  : kind1 == string_constantt::k_unicode
                    ? constant_string2t::UNICODE
                    : constant_string2t::DEFAULT;
-
-    type2tc s = migrate_type(thetype.subtype());
-    type2tc t = string_type2tc(s, val.to_int64());
 
     new_expr_ref = constant_string2tc(t, thestring, kind2);
   }
@@ -1299,9 +1285,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.op1().id() == "member_name")
     {
+      const irep_idt &name = expr.op1().get_string("component_name");
       idx = constant_string2tc(
-        string_type2tc(get_uint8_type(), 1),
-        expr.op1().get_string("component_name"),
+        array_type2tc(get_uint8_type(), gen_ulong(name.size() + 1), false),
+        name,
         constant_string2t::DEFAULT);
     }
     else
@@ -1984,12 +1971,6 @@ typet migrate_type_back(const type2tc &ref)
     thetype.set_width(ref2.get_width());
     return std::move(thetype);
   }
-  case type2t::string_id:
-  {
-    string_typet ret;
-    ret.width(to_string_type(ref).get_length());
-    return std::move(ret);
-  }
   case type2t::cpp_name_id:
   {
     const cpp_name_type2t &ref2 = to_cpp_name_type(ref);
@@ -2059,14 +2040,9 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::constant_string_id:
   {
     const constant_string2t &ref2 = to_constant_string2t(ref);
-    const string_type2t &typeref = to_string_type(ref->type);
     exprt thestring("string-constant");
 
-    typet thetype("array");
-    thetype.subtype() = signedbv_typet(8);
-    constant_exprt sizeexpr(signedbv_typet(32));
-    sizeexpr.set("value", integer2binary(BigInt(typeref.width), 32));
-    thetype.size(sizeexpr);
+    typet thetype = migrate_type_back(ref->type);
 
     thestring.type() = thetype;
     thestring.set("value", irep_idt(ref2.value));

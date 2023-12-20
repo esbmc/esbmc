@@ -447,11 +447,11 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     // this is due to printf_formatter does not handle the char array.
     for (auto &arg : args)
     {
-      if (is_array_type(get_base_object(arg)))
+      const expr2tc &base_expr = get_base_object(arg);
+      if (!is_constant_string2t(base_expr) && is_array_type(base_expr))
       {
         // the current expression "arg" does not hold the value info (might be a bug)
         // thus we need to look it up from the symbol table
-        const expr2tc &base_expr = get_base_object(arg);
         assert(is_symbol2t(base_expr));
         symbolt s = *ns.lookup(to_symbol2t(base_expr).thename);
         exprt dest;
@@ -1015,13 +1015,10 @@ static inline expr2tc gen_byte_expression(
    *
    */
 
-  /* Can't set string constants */
-  if (is_string_type(type))
-    return expr2tc();
-
   if (is_pointer_type(type))
     return gen_byte_expression_byte_update(
       type, src, value, num_of_bytes, offset);
+
   expr2tc result = gen_zero(type);
   auto value_downcast = typecast2tc(get_uint8_type(), value);
   auto value_upcast = typecast2tc(
