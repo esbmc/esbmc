@@ -163,7 +163,8 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
 
-  auto update_symbol = [&](exprt &expr) {
+  auto update_symbol = [&](exprt &expr)
+  {
     std::string id = create_symbol_id() + "@" + expr.name().c_str();
     symbolt *s = context.find_symbol(id);
     if (s != nullptr)
@@ -229,7 +230,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("value"))
     rhs = get_expr(element["value"]);
 
-  auto to_side_effect_call = [](exprt &expr) {
+  auto to_side_effect_call = [](exprt &expr)
+  {
     side_effect_expr_function_callt side_effect;
     code_function_callt &code = static_cast<code_function_callt &>(expr);
     side_effect.function() = code.function();
@@ -337,7 +339,9 @@ python_converter::get_location_from_decl(const nlohmann::json &ast_node)
 {
   locationt location;
   location.set_line(ast_node["lineno"].get<int>());
+  location.set_column(ast_node["col_offset"].get<int>());
   location.set_file(python_filename.c_str());
+  location.set_function(current_func_name);
   return location;
 }
 
@@ -409,7 +413,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     call.type() = return_type;
 
     if (is_ctor_call)
-      call.arguments().push_back(*ref_instance); // Add self as first parameter
+      call.arguments().push_back(
+        gen_address_of(*ref_instance)); // Add self as first parameter
 
     for (const auto &arg_node : element["args"])
     {
@@ -464,7 +469,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (element["_type"] == "Name")
       var_name = element["id"].get<std::string>();
     else if (element["_type"] == "Attribute")
-      var_name = element["attr"].get<std::string>();
+      var_name = element["value"]["id"].get<std::string>();
 
     assert(!var_name.empty());
 
@@ -476,22 +481,32 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       abort();
     }
     expr = symbol_expr(*symbol);
+
     if (element["_type"] == "Attribute")
     {
-      symbol_id = create_symbol_id() + std::string("@") +
-                  element["value"]["id"].get<std::string>();
-      symbolt *obj_symbol = context.find_symbol(symbol_id);
-      if (!obj_symbol)
-      {
-        log_error("Symbol not found: {}\n", symbol_id.c_str());
-        abort();
-      }
-      member_exprt member(
-        symbol_exprt(obj_symbol->id, obj_symbol->type),
-        expr.name(),
-        expr.type());
+      const std::string &attr_name = element["attr"].get<std::string>();
 
-      expr.swap(member); // Now lhs is self.member
+      // Get object type name from symbol. e.g.: tag-MyClass
+      std::string obj_type_name;
+      for (const auto &it : symbol->type.get_named_sub())
+      {
+        if (it.first == "identifier")
+          obj_type_name = it.second.id_string();
+      }
+      assert(!obj_type_name.empty());
+
+      // Get class definition from symbols table
+      symbolt *class_symbol = context.find_symbol(obj_type_name);
+      assert(class_symbol);
+
+      // Get attribute type from class definition
+      struct_typet &class_type =
+        static_cast<struct_typet &>(class_symbol->type);
+      assert(class_type.has_component(attr_name));
+      const typet &attr_type = class_type.get_component(attr_name).type();
+
+      expr = member_exprt(
+        symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
     }
     break;
   }
@@ -627,6 +642,7 @@ void python_converter::get_var_assign(
 
       lhs.swap(member); // Now lhs is self.member
     }
+    lhs.location() = location_begin;
 
     lhs_symbol = context.move_symbol_to_context(symbol);
   }
@@ -809,7 +825,7 @@ void python_converter::get_function_definition(
     // Argument type
     typet arg_type;
     if (arg_name == "self")
-      arg_type = get_typet(current_class_name);
+      arg_type = gen_pointer_type(get_typet(current_class_name));
     else
       arg_type = get_typet(element["annotation"]["id"].get<std::string>());
 
