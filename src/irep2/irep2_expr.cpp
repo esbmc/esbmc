@@ -311,7 +311,7 @@ expr2tc constant_string2t::to_array() const
   {
     uint32_t c = 0;
     for (unsigned j = 0; j < w; j++)
-      c |= (uint32_t)(unsigned char)s[w * i + j] << (le ? j : w - 1 - j);
+      c |= (uint32_t)(unsigned char)s[w * i + j] << 8 * (le ? j : w - 1 - j);
     contents[i] = gen_long(elem_type, c);
   }
   for (; i < n; i++)
