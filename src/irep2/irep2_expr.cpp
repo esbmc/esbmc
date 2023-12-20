@@ -350,6 +350,8 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
     assert_type_compat_for_with(
       to_pointer_type(a).subtype, to_pointer_type(b).subtype);
   }
+  else if (is_empty_type(a) || is_empty_type(b))
+    return;
   else
     assert(a == b);
 }
