@@ -1045,8 +1045,9 @@ expr2tc index2t::do_simplify() const
 
     // String constants had better be some kind of integer type
     assert(is_bv_type(type));
-    unsigned long val = str.value.as_string().c_str()[the_idx];
-    return constant_int2tc(type, BigInt(val));
+    expr2tc c = str.at(the_idx);
+    assert(c);
+    return c;
   }
 
   // Only thing this index can evaluate to is the default value of this array
