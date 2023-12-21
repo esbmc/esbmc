@@ -465,14 +465,28 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::VARIABLE_REF:
   {
     std::string var_name;
+    bool is_class_attr = false;
     if (element["_type"] == "Name")
+    {
       var_name = element["id"].get<std::string>();
+    }
     else if (element["_type"] == "Attribute")
+    {
       var_name = element["value"]["id"].get<std::string>();
+      if (is_class(var_name, ast_json["body"]))
+      {
+        var_name = "C@" + var_name;
+        is_class_attr = true;
+      }
+    }
 
     assert(!var_name.empty());
 
     std::string symbol_id = create_symbol_id() + std::string("@") + var_name;
+
+    if (element.contains("attr") && is_class_attr)
+      symbol_id += "@" + element["attr"].get<std::string>();
+
     symbolt *symbol = context.find_symbol(symbol_id);
     if (!symbol)
     {
@@ -481,7 +495,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     expr = symbol_expr(*symbol);
 
-    if (element["_type"] == "Attribute")
+    // Get instance attribute
+    if (!is_class_attr && element["_type"] == "Attribute")
     {
       const std::string &attr_name = element["attr"].get<std::string>();
 
@@ -874,6 +889,17 @@ void python_converter::get_function_definition(
   current_func_name = caller_func_name;
 }
 
+static struct_typet::componentt build_component(
+  const std::string &class_name,
+  const std::string &comp_name,
+  const typet &type)
+{
+  struct_typet::componentt comp(comp_name, comp_name, type);
+  comp.type().set("#member_name", std::string("tag-") + class_name);
+  comp.set_access("public");
+  return comp;
+}
+
 void python_converter::get_attributes_from_self(
   const nlohmann::json &method_body,
   struct_typet &clazz)
@@ -885,18 +911,17 @@ void python_converter::get_attributes_from_self(
       stmt["target"]["value"]["id"] == "self")
     {
       std::string attr_name = stmt["target"]["attr"];
-      struct_typet::componentt comp(
-        attr_name,
-        attr_name,
-        get_typet(stmt["annotation"]["id"].get<std::string>()));
-      comp.type().set("#member_name", std::string("tag-") + current_class_name);
-      comp.set_access("private");
+      typet type = get_typet(stmt["annotation"]["id"].get<std::string>());
+      struct_typet::componentt comp =
+        std::move(build_component(current_class_name, attr_name, type));
       clazz.components().push_back(comp);
     }
   }
 }
 
-void python_converter::get_class_definition(const nlohmann::json &class_node)
+void python_converter::get_class_definition(
+  const nlohmann::json &class_node,
+  codet &target_block)
 {
   struct_typet clazz;
   current_class_name = class_node["name"].get<std::string>();
@@ -919,6 +944,7 @@ void python_converter::get_class_definition(const nlohmann::json &class_node)
   // Iterate over class members
   for (auto &class_member : class_node["body"])
   {
+    // Process methods
     if (class_member["_type"] == "FunctionDef")
     {
       get_attributes_from_self(class_member["body"], clazz);
@@ -936,6 +962,17 @@ void python_converter::get_class_definition(const nlohmann::json &class_node)
       struct_typet::componentt method(added_method.name(), added_method.type());
       clazz.methods().push_back(method);
       current_func_name.clear();
+    }
+    // Process class attributes
+    else if (class_member["_type"] == "AnnAssign")
+    {
+      get_var_assign(class_member, target_block);
+      symbolt *class_attr_symbol = context.find_symbol(
+        create_symbol_id() + "@" +
+        class_member["target"]["id"].get<std::string>());
+      if (!class_attr_symbol)
+        abort();
+      class_attr_symbol->static_lifetime = true;
     }
   }
   added_symbol->type = clazz;
@@ -1013,7 +1050,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::CLASS_DEFINITION:
     {
-      get_class_definition(element);
+      get_class_definition(element, block);
       break;
     }
     case StatementType::UNKNOWN:
