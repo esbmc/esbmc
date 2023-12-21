@@ -356,7 +356,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     return;
   }
 
-  const std::string base_name = new_rhs.bs_name;
+  const std::string &base_name = new_rhs.bs_name;
 
   // get the format string base on the bs_name
   irep_idt fmt;
@@ -453,9 +453,10 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
         // the current expression "arg" does not hold the value info (might be a bug)
         // thus we need to look it up from the symbol table
         assert(is_symbol2t(base_expr));
-        symbolt s = *ns.lookup(to_symbol2t(base_expr).thename);
+        const symbolt &s = *ns.lookup(to_symbol2t(base_expr).thename);
         exprt dest;
-        array2string(s, dest);
+        if (array2string(s, dest))
+          continue;
         migrate_expr(dest, arg);
       }
     }
