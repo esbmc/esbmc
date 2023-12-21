@@ -1040,7 +1040,7 @@ expr2tc index2t::do_simplify() const
 
     const constant_string2t &str = to_constant_string2t(src);
     unsigned long the_idx = idx.as_ulong();
-    if (the_idx > str.value.as_string().size()) // allow reading null term.
+    if (the_idx >= str.array_size()) // allow reading null term.
       return expr2tc();
 
     // String constants had better be some kind of integer type
