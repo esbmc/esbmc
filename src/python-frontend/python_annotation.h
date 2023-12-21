@@ -132,14 +132,15 @@ private:
         // Update type field
         element["_type"] = "AnnAssign";
 
-        // lhs
         auto target = element["targets"][0];
         std::string id;
+        // Get lhs from simple variables on assignments.
         if (target.contains("id"))
           id = target["id"];
+        // Get lhs from members access on assignments. e.g.: x.data = 10
         else if (target["_type"] == "Attribute")
           id = target["value"]["id"].template get<std::string>() + "." +
-               target["attr"].template get<std::string>(); // e.g. f.blah
+               target["attr"].template get<std::string>();
 
         assert(!id.empty());
 
@@ -175,6 +176,8 @@ private:
           element["value"]["end_col_offset"].template get<int>() + type.size() +
           1;
 
+        /* Adjust column offset node on lines involving function
+         * calls with arguments */
         if (element["value"].contains("args"))
         {
           for (auto &arg : element["value"]["args"])
@@ -185,6 +188,7 @@ private:
               arg["end_col_offset"].template get<int>() + type.size() + 1;
           }
         }
+        // Adjust column offset in function call node
         if (element["value"].contains("func"))
         {
           element["value"]["func"]["col_offset"] =

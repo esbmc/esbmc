@@ -24,8 +24,8 @@ bool clang_c_adjust::adjust()
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
-  context.Foreach_operand_in_order(
-    [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
+  context.Foreach_operand_in_order([&symbol_list](symbolt &s)
+                                   { symbol_list.push_back(&s); });
 
   // Adjust types first, so that symbolic-type resolution always receives
   // fixed up types.
@@ -236,6 +236,8 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
     }
     else if (statement == "nondet")
     {
+      /* Bypassing side effects with `nondet` as a statement since
+       * the goto layer can handle it. */
     }
     else
     {
