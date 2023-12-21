@@ -204,13 +204,16 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 
 std::string python_converter::create_symbol_id() const
 {
-  std::string symbol_id = "py:" + python_filename;
-  if (!current_class_name.empty())
-    symbol_id += "@C@" + current_class_name;
-  if (!current_func_name.empty())
-    symbol_id += "@F@" + current_func_name;
+  std::stringstream symbol_id;
+  symbol_id << "py:" << python_filename;
 
-  return symbol_id;
+  if (!current_class_name.empty())
+    symbol_id << "@C@" << current_class_name;
+
+  if (!current_func_name.empty())
+    symbol_id << "@F@" << current_func_name;
+
+  return symbol_id.str();
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
@@ -491,11 +494,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (it.first == "identifier")
           obj_type_name = it.second.id_string();
       }
-      assert(!obj_type_name.empty());
 
       // Get class definition from symbols table
       symbolt *class_symbol = context.find_symbol(obj_type_name);
-      assert(class_symbol);
+      if (!class_symbol)
+      {
+        log_error("Class not found: {}\n", obj_type_name);
+        abort();
+      }
 
       // Get attribute type from class definition
       struct_typet &class_type =
@@ -542,15 +548,13 @@ bool python_converter::is_constructor_call(const nlohmann::json &json)
    * rhs corresponds to the name of a class. */
 
   bool is_ctor_call = false;
-  context.foreach_operand(
-    [&](const symbolt &s)
+  context.foreach_operand([&](const symbolt &s) {
+    if (s.type.id() == "struct" && s.name == func_name)
     {
-      if (s.type.id() == "struct" && s.name == func_name)
-      {
-        is_ctor_call = true;
-        return;
-      }
-    });
+      is_ctor_call = true;
+      return;
+    }
+  });
   return is_ctor_call;
 }
 
