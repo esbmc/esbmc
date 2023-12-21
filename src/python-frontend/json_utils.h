@@ -2,7 +2,6 @@
 
 namespace json_utils
 {
-
 template <typename JsonType>
 bool is_class(const std::string &name, const JsonType &json)
 {
