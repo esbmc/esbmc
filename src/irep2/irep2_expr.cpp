@@ -289,9 +289,9 @@ struct constant_string_access
 {
   const array_type2t &arr;
   const std::string &s;
-  unsigned w;
+  unsigned w; /* element size in bytes */
   bool le;
-  size_t n, m, k;
+  size_t n, m; /* array size and value length, in arr.subtype elements */
 
   explicit constant_string_access(const constant_string2t &e)
     : arr(to_array_type(e.type)),
@@ -304,10 +304,8 @@ struct constant_string_access
     assert(w % 8 == 0);
     w /= 8;
     assert(0 < w && w <= 4);
-    assert(n > 0); /* terminating '\0' */
     assert(s.length() % w == 0);
     m = s.length() / w;
-    k = std::min(n - 1, m);
   }
 
   constant_string_access(const constant_string_access &) = delete;
@@ -315,11 +313,11 @@ struct constant_string_access
 
   expr2tc operator[](size_t i) const
   {
-    if (i >= n) /* allow i == n - 1 to extract '\0' */
+    if (i >= n) /* not in array */
       return expr2tc();
 
     uint32_t c = 0;
-    if (i < k)
+    if (i < m) /* not the '\0' element */
       for (unsigned j = 0; j < w; j++)
         c |= (uint32_t)(unsigned char)s[w * i + j] << 8 * (le ? j : w - 1 - j);
     return gen_long(arr.subtype, c);
