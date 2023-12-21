@@ -2264,7 +2264,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, bool simpl_const_objects)
     {
       // out of bounds
     }
-    else
+    else if (bv_width(expr.type()) == 8) /* only for char and char8_t strings */
     {
       // terminating zero?
       char v = (i == value.size()) ? 0 : value[i.to_uint64()];
