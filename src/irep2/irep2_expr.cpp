@@ -315,7 +315,7 @@ struct constant_string_access
 
   expr2tc operator[](size_t i) const
   {
-    if (i > n) /* allow i == n to extract '\0' */
+    if (i >= n) /* allow i == n - 1 to extract '\0' */
       return expr2tc();
 
     uint32_t c = 0;
@@ -337,6 +337,11 @@ expr2tc constant_string2t::to_array() const
 
   expr2tc r = constant_array2tc(type, std::move(contents));
   return r;
+}
+
+size_t constant_string2t::array_size() const
+{
+  return to_constant_int2t(to_array_type(type).array_size).value.to_uint64();
 }
 
 expr2tc constant_string2t::at(size_t i) const

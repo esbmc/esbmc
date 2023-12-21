@@ -1646,6 +1646,12 @@ public:
   expr2tc to_array() const;
 
   /**
+   * sizeof(literal)/sizeof(*literal), i.e., the number of elements in the
+   * underlying array, including the '\0' terminator
+   */
+  size_t array_size() const;
+
+  /**
    * Extract the i-th element from the string for i between 0 and
    * to_array_type(this->type).array_size (not the same as value.c_str()[i] when
    * to_array_type(this->type).subtype != char type)
