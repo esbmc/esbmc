@@ -293,7 +293,7 @@ struct constant_string_access
   bool le;
   size_t n, m, k;
 
-  constant_string_access(const constant_string2t &e)
+  explicit constant_string_access(const constant_string2t &e)
     : arr(to_array_type(e.type)),
       s(e.value.as_string()),
       w(arr.subtype->get_width()),
@@ -309,6 +309,9 @@ struct constant_string_access
     m = s.length() / w;
     k = std::min(n - 1, m);
   }
+
+  constant_string_access(const constant_string_access &) = delete;
+  constant_string_access &operator=(const constant_string_access &) = delete;
 
   expr2tc operator[](size_t i) const
   {
