@@ -1,4 +1,7 @@
 class MyClass:
+    # Class attribute
+    class_attr:int = 50
+
     def __init__(self, value: int):
         self.data:int = value
 
@@ -14,3 +17,5 @@ obj2 = MyClass(30)
 assert(obj2.data == 30)
 obj2.data = 40
 assert(obj2.data == 40)
+
+assert(MyClass.class_attr == 50)
