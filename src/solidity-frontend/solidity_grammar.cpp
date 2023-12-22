@@ -85,17 +85,19 @@ const std::map<ElementaryTypeNameT, unsigned int> bytesn_size_map = {
 // rule contract-body-element
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
 {
-  if (
-    element["nodeType"] == "VariableDeclaration" &&
-    element["stateVariable"] == true)
+  if (element["nodeType"] == "VariableDeclaration")
   {
-    return StateVarDecl;
+    return VarDecl;
   }
   else if (
     element["nodeType"] == "FunctionDefinition" &&
     (element["kind"] == "function" || element["kind"] == "constructor"))
   {
     return FunctionDef;
+  }
+  else if (element["nodeType"] == "StructDefinition")
+  {
+    return StructDef;
   }
   else if (element["nodeType"] == "EnumDefinition")
   {
@@ -116,8 +118,9 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
 {
   switch (type)
   {
-    ENUM_TO_STR(StateVarDecl)
+    ENUM_TO_STR(VarDecl)
     ENUM_TO_STR(FunctionDef)
+    ENUM_TO_STR(StructDef)
     ENUM_TO_STR(EnumDef)
     ENUM_TO_STR(ContractBodyElementTError)
   default:
