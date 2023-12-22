@@ -25,8 +25,8 @@ bool clang_c_adjust::adjust()
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
-  context.Foreach_operand_in_order(
-    [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
+  context.Foreach_operand_in_order([&symbol_list](symbolt &s)
+                                   { symbol_list.push_back(&s); });
 
   // Adjust types first, so that symbolic-type resolution always receives
   // fixed up types.
@@ -644,8 +644,8 @@ void clang_c_adjust::adjust_side_effect_function_call(
   if (f_op.is_symbol())
   {
     const irep_idt &identifier = f_op.identifier();
-    if(exprt poly = is_gcc_polymorphic_builtin(identifier, expr.arguments());
-       poly.is_not_nil())
+    if (exprt poly = is_gcc_polymorphic_builtin(identifier, expr.arguments());
+        poly.is_not_nil())
     {
       irep_idt identifier_with_type = poly.identifier();
       auto &arguments = to_code_type(poly.type()).arguments();
@@ -653,7 +653,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
       // For all atomic/sync polymorphic built-ins (which are the ones handled
       // by typecheck_gcc_polymorphic_builtin), looking at the first parameter
       // suffices to distinguish different implementations.
-      if(arguments.front().type().is_pointer())
+      if (arguments.front().type().is_pointer())
       {
         identifier_with_type =
           id2string(identifier) + "_" +
@@ -671,9 +671,9 @@ void clang_c_adjust::adjust_side_effect_function_call(
 
       symbolt *function_symbol_with_type =
         context.find_symbol(identifier_with_type);
-      if(!function_symbol_with_type)
+      if (!function_symbol_with_type)
       {
-        for(std::size_t i = 0; i < arguments.size(); ++i)
+        for (std::size_t i = 0; i < arguments.size(); ++i)
         {
           const std::string base_name = "p_" + std::to_string(i);
 
@@ -712,7 +712,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
     else
     {
       symbolt *function_symbol = context.find_symbol(identifier);
-      if(function_symbol)
+      if (function_symbol)
       {
         // Pull symbol informations, like parameter types and location
 
@@ -725,7 +725,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
         // Restore location
         f_op.location() = location;
 
-        if(symbol.lvalue)
+        if (symbol.lvalue)
           f_op.cmt_lvalue(true);
 
         align_se_function_call_return_type(f_op, expr);

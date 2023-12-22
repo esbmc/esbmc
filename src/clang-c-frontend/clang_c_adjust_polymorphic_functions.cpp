@@ -7,7 +7,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
   const irep_idt &identifier,
   const exprt::operandst &arguments)
 {
-  if(
+  if (
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_add") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_sub") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_or") ||
@@ -35,7 +35,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result{identifier, std::move(t)};
     return result;
   }
-  else if(
+  else if (
     has_prefix(identifier.as_string(), "c:@F@__sync_bool_compare_and_swap") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_val_compare_and_swap"))
   {
@@ -45,7 +45,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
 
     const typet &base_type = to_pointer_type(ptr_arg.type()).subtype();
     typet sync_return_type = base_type;
-    if(has_prefix(identifier.as_string(), "c:@F@__sync_val_compare_and_swap"))
+    if (has_prefix(identifier.as_string(), "c:@F@__sync_val_compare_and_swap"))
       sync_return_type = bool_type();
 
     code_typet t{
@@ -57,7 +57,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result{identifier, std::move(t)};
     return result;
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__sync_lock_release"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__sync_lock_release"))
   {
     // This is polymorphic, see
     // https://gcc.gnu.org/onlinedocs/gcc/_005f_005fsync-Builtins.html
@@ -68,7 +68,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result{identifier, std::move(t)};
     return result;
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__atomic_load_n"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__atomic_load_n"))
   {
     // These are polymorphic
     // https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html
@@ -81,7 +81,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result(identifier, t);
     return result;
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__atomic_store_n"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__atomic_store_n"))
   {
     // These are polymorphic
     // https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html
@@ -97,7 +97,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result(identifier, t);
     return result;
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__atomic_exchange_n"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__atomic_exchange_n"))
   {
     // These are polymorphic
     // https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html
@@ -112,7 +112,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result(identifier, t);
     return result;
   }
-  else if(
+  else if (
     has_prefix(identifier.as_string(), "c:@F@__atomic_load") ||
     has_prefix(identifier.as_string(), "c:@F@__atomic_store"))
   {
@@ -128,7 +128,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result(identifier, t);
     return result;
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__atomic_exchange"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__atomic_exchange"))
   {
     // These are polymorphic
     // https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html
@@ -143,7 +143,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result(identifier, t);
     return result;
   }
-  else if(
+  else if (
     has_prefix(identifier.as_string(), "c:@F@__atomic_compare_exchange_n") ||
     has_prefix(identifier.as_string(), "c:@F@__atomic_compare_exchange"))
   {
@@ -155,7 +155,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     parameters.push_back(code_typet::argumentt(ptr_arg.type()));
     parameters.push_back(code_typet::argumentt(ptr_arg.type()));
 
-    if(has_prefix(identifier.as_string(), "c:@F@__atomic_compare_exchange"))
+    if (has_prefix(identifier.as_string(), "c:@F@__atomic_compare_exchange"))
       parameters.push_back(code_typet::argumentt(ptr_arg.type()));
     else
       parameters.push_back(
@@ -168,7 +168,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result(identifier, t);
     return result;
   }
-  else if(
+  else if (
     has_prefix(identifier.as_string(), "c:@F@__atomic_add_fetch") ||
     has_prefix(identifier.as_string(), "c:@F@__atomic_sub_fetch") ||
     has_prefix(identifier.as_string(), "c:@F@__atomic_and_fetch") ||
@@ -188,7 +188,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result(identifier, std::move(t));
     return result;
   }
-  else if(
+  else if (
     has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_add") ||
     has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_sub") ||
     has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_and") ||
@@ -227,7 +227,7 @@ result_symbol(const irep_idt &identifier, const typet &type, contextt &context)
 
 static void convert_expression_to_code(exprt &expr)
 {
-  if(expr.is_code())
+  if (expr.is_code())
     return;
 
   codet code("expression");
@@ -261,7 +261,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   locationt new_loc = function_symbol.location();
   new_loc.set_function(function_symbol.name());
 
-  if(
+  if (
     has_prefix(identifier.as_string(), "c:@F@__sync_add_and_fetch") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_sub_and_fetch") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_or_and_fetch") ||
@@ -271,7 +271,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   {
     // TODO
   }
-  else if(
+  else if (
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_add") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_sub") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_or") ||
@@ -296,33 +296,33 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     block.operands().push_back(assign);
 
     exprt new_expr;
-    if(has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_add"))
+    if (has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_add"))
     {
-      if(type.is_floatbv())
+      if (type.is_floatbv())
         new_expr = exprt("ieee_add", type);
       else
         new_expr = exprt("+", type);
     }
-    else if(has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_sub"))
+    else if (has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_sub"))
     {
-      if(type.is_floatbv())
+      if (type.is_floatbv())
         new_expr = exprt("ieee_sub", type);
       else
         new_expr = exprt("-", type);
     }
-    else if(has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_or"))
+    else if (has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_or"))
     {
       new_expr = exprt("or", type);
     }
-    else if(has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_and"))
+    else if (has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_and"))
     {
       new_expr = exprt("and", type);
     }
-    else if(has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_xor"))
+    else if (has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_xor"))
     {
       new_expr = exprt("bitxor", type);
     }
-    else if(has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_nand"))
+    else if (has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_nand"))
     {
       new_expr = exprt("bitand", type);
     }
@@ -349,25 +349,25 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     ret.location() = new_loc;
     block.operands().push_back(ret);
   }
-  else if(has_prefix(
-            identifier.as_string(), "c:@F@__sync_bool_compare_and_swap"))
+  else if (has_prefix(
+             identifier.as_string(), "c:@F@__sync_bool_compare_and_swap"))
   {
     // TODO
   }
-  else if(has_prefix(
-            identifier.as_string(), "c:@F@__sync_val_compare_and_swap"))
+  else if (has_prefix(
+             identifier.as_string(), "c:@F@__sync_val_compare_and_swap"))
   {
     // TODO
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__sync_lock_release"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__sync_lock_release"))
   {
     // TODO
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__sync_lock_test_and_set"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__sync_lock_test_and_set"))
   {
     // TODO
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__atomic_load_n"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__atomic_load_n"))
   {
     const typet &type = code_type.return_type();
 
@@ -396,7 +396,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     ret.location() = new_loc;
     block.operands().push_back(ret);
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__atomic_store_n"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__atomic_store_n"))
   {
     code_typet::argumentt arg0 = code_type.arguments()[0];
     code_typet::argumentt arg1 = code_type.arguments()[1];
@@ -413,11 +413,11 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     convert_expression_to_code(atomic_end);
     block.operands().push_back(atomic_end);
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__atomic_exchange_n"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__atomic_exchange_n"))
   {
     // TODO
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__atomic_load"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__atomic_load"))
   {
     code_typet::argumentt arg0 = code_type.arguments()[0];
     code_typet::argumentt arg1 = code_type.arguments()[1];
@@ -435,7 +435,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     convert_expression_to_code(atomic_end);
     block.operands().push_back(atomic_end);
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__atomic_store"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__atomic_store"))
   {
     code_typet::argumentt arg0 = code_type.arguments()[0];
     code_typet::argumentt arg1 = code_type.arguments()[1];
@@ -453,21 +453,21 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     convert_expression_to_code(atomic_end);
     block.operands().push_back(atomic_end);
   }
-  else if(has_prefix(identifier.as_string(), "c:@F@__atomic_exchange"))
+  else if (has_prefix(identifier.as_string(), "c:@F@__atomic_exchange"))
   {
     // TODO
   }
-  else if(has_prefix(
-            identifier.as_string(), "c:@F@__atomic_compare_exchange_n"))
+  else if (has_prefix(
+             identifier.as_string(), "c:@F@__atomic_compare_exchange_n"))
   {
     // TODO
   }
-  else if(has_prefix(
-            identifier.as_string(), "c:@F@__atomic_compare_exchange_n"))
+  else if (has_prefix(
+             identifier.as_string(), "c:@F@__atomic_compare_exchange_n"))
   {
     // TODO
   }
-  else if(
+  else if (
     has_prefix(identifier.as_string(), "c:@F@__atomic_add_fetch") ||
     has_prefix(identifier.as_string(), "c:@F@__atomic_sub_fetch") ||
     has_prefix(identifier.as_string(), "c:@F@__atomic_and_fetch") ||
@@ -477,7 +477,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   {
     // TODO
   }
-  else if(
+  else if (
     has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_add") ||
     has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_sub") ||
     has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_and") ||
