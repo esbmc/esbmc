@@ -28,7 +28,8 @@ solidity_convertert::solidity_convertert(
     current_functionDecl(nullptr),
     current_forStmt(nullptr),
     current_functionName(""),
-    current_contractName("")
+    current_contractName(""),
+    scope_map({})
 {
   std::ifstream in(_contract_path);
   contract_contents.assign(
@@ -156,13 +157,17 @@ bool solidity_convertert::get_decl(
   // based on each element as in Solidty grammar "rule contract-body-element"
   switch (type)
   {
-  case SolidityGrammar::ContractBodyElementT::StateVarDecl:
+  case SolidityGrammar::ContractBodyElementT::VarDecl:
   {
     return get_var_decl(ast_node, new_expr); // rule state-variable-declaration
   }
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
   {
     return get_function_definition(ast_node); // rule function-definition
+  }
+  case SolidityGrammar::ContractBodyElementT::StructDef:
+  {
+    return get_struct_class(ast_node); // rule enum-definition
   }
   case SolidityGrammar::ContractBodyElementT::EnumDef:
   {
@@ -324,14 +329,27 @@ bool solidity_convertert::get_var_decl(
   return false;
 }
 
-bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
+bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
 {
   // Convert Contract => class => struct
 
   // 1. populate name, id
   std::string id, name;
-  name = contract_def["name"];
-  id = prefix + name;
+  name = struct_def["name"];
+  if (struct_def["nodeType"].get<std::string>() == "ContractDefinition")
+    id = prefix + name;
+  else if (struct_def["nodeType"].get<std::string>() == "StructDefinition")
+    get_state_var_decl_name(
+      struct_def,
+      name,
+      id); // "c:@C@Base@Struct_Name" not "tag-struct Struct_Name"
+  else
+  {
+    log_error(
+      "Got nodeType={}. Unsupported struct type",
+      struct_def["nodeType"].get<std::string>());
+    return true;
+  }
   struct_typet t = struct_typet();
   t.tag(name);
 
@@ -342,7 +360,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
 
   // 3. populate location
   locationt location_begin;
-  get_location_from_decl(contract_def, location_begin);
+  get_location_from_decl(struct_def, location_begin);
 
   // 4. populate debug module name
   std::string debug_modulename =
@@ -355,10 +373,25 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
   symbol.is_type = true;
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
+  // populate the scope_map
+  int scp = struct_def["id"].get<int>();
+  scope_map.insert(std::pair<int, std::string>(scp, name));
+
   // 5. populate fields(state var) and method(function)
   // We have to add fields before methods as the fields are likely to be used
   // in the methods
-  nlohmann::json ast_nodes = contract_def["nodes"];
+  nlohmann::json ast_nodes;
+  if (struct_def.contains("nodes"))
+    ast_nodes = struct_def["nodes"];
+  else if (struct_def.contains("members"))
+    ast_nodes = struct_def["members"];
+  else
+  {
+    // Defining empty structs is disallowed.
+    // Contracts can be empty
+    log_warning("Empty contract.");
+  }
+
   for (nlohmann::json::iterator itr = ast_nodes.begin(); itr != ast_nodes.end();
        ++itr)
   {
@@ -367,7 +400,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
 
     switch (type)
     {
-    case SolidityGrammar::ContractBodyElementT::StateVarDecl:
+    case SolidityGrammar::ContractBodyElementT::VarDecl:
     {
       if (get_struct_class_fields(*itr, t))
         return true;
@@ -379,8 +412,11 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
         return true;
       break;
     }
+    case SolidityGrammar::ContractBodyElementT::StructDef:
     case SolidityGrammar::ContractBodyElementT::EnumDef:
     {
+      // In theory, these are part of the contract
+      // But we cannot populate them into the contract/class symbol
       break;
     }
     default:
@@ -393,6 +429,9 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &contract_def)
 
   t.location() = location_begin;
   added_symbol.type = t;
+
+  log_status("{}", added_symbol.type.to_string());
+  log_status("{}", added_symbol.value.to_string());
 
   return false;
 }
@@ -2935,19 +2974,37 @@ void solidity_convertert::get_var_decl_name(
   std::string &name,
   std::string &id)
 {
-  assert(
-    current_functionDecl); // TODO: Fix me! assuming converting local variable inside a function
-  // For non-state functions, we give it different id.
-  // E.g. for local variable i in function nondet(), it's "c:overflow_2_nondet.c@55@F@nondet@i".
   name =
     ast_node["name"]
       .get<
         std::
           string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
-  id = "c:" + get_modulename_from_path(absolute_path) + ".solast" +
-       //"@"  + std::to_string(ast_node["scope"].get<int>()) +
-       "@" + std::to_string(445) + "@" + "F" + "@" + current_functionName +
-       "@" + name;
+
+  if (current_functionDecl)
+  {
+    // converting local variable inside a function
+    // For non-state functions, we give it different id.
+    // E.g. for local variable i in function nondet(), it's "c:overflow_2_nondet.c@55@F@nondet@i".
+
+    id = "c:" + get_modulename_from_path(absolute_path) + ".solast" +
+         //"@"  + std::to_string(ast_node["scope"].get<int>()) +
+         "@" + std::to_string(445) + "@" + "F" + "@" + current_functionName +
+         "@" + name;
+  }
+  else if (ast_node.contains("scope"))
+  {
+    //! Assume it is a variable inside struct
+    int scp = ast_node["scope"].get<int>();
+    std::string struct_name = scope_map.at(scp);
+    id = "c:" + get_modulename_from_path(absolute_path) + ".solast" +
+         //"@"  + std::to_string(ast_node["scope"].get<int>()) +
+         "@" + std::to_string(445) + "@" + "F" + "@" + struct_name + "@" + name;
+  }
+  else
+  {
+    log_error("Unsupported local variable");
+    abort();
+  }
 }
 
 void solidity_convertert::get_function_definition_name(
@@ -3045,7 +3102,7 @@ void solidity_convertert::get_location_from_decl(
   // To annotate local declaration within a function
   if (
     ast_node["nodeType"] == "VariableDeclaration" &&
-    ast_node["stateVariable"] == false && ast_node["scope"] != global_scope_id)
+    ast_node["stateVariable"] == false)
   {
     assert(
       current_functionDecl); // must have a valid current function declaration
@@ -3727,13 +3784,13 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
 
   // call designated "initialization" functions
   context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
-    {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 // declare an empty array symbol and move it to the context
