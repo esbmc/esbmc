@@ -424,11 +424,13 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     new_rhs.operands.erase(new_rhs.operands.begin());
 
   std::list<expr2tc> args;
-  new_rhs.foreach_operand([this, &args](const expr2tc &e) {
-    expr2tc tmp = e;
-    do_simplify(tmp);
-    args.push_back(tmp);
-  });
+  new_rhs.foreach_operand(
+    [this, &args](const expr2tc &e)
+    {
+      expr2tc tmp = e;
+      do_simplify(tmp);
+      args.push_back(tmp);
+    });
 
   if (!is_nil_expr(lhs))
   {
@@ -1617,7 +1619,7 @@ void goto_symext::bump_call(
 static inline bool
 ends_with(std::string const &value, std::string const &ending)
 {
-  if(ending.size() > value.size())
+  if (ending.size() > value.size())
     return false;
   return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
 }
@@ -1626,7 +1628,7 @@ bool goto_symext::run_builtin(
   const code_function_call2t &func_call,
   const std::string &symname)
 {
-  if(
+  if (
     has_prefix(symname, "c:@F@__builtin_sadd") ||
     has_prefix(symname, "c:@F@__builtin_uadd") ||
     has_prefix(symname, "c:@F@__builtin_ssub") ||
@@ -1649,13 +1651,13 @@ bool goto_symext::run_builtin(
                   has_prefix(symname, "c:@F@__builtin_usub");
 
     expr2tc op;
-    if(is_mult)
+    if (is_mult)
       op = mul2tc(
         func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else if(is_add)
+    else if (is_add)
       op = add2tc(
         func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else if(is_sub)
+    else if (is_sub)
       op = sub2tc(
         func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
     else
@@ -1677,7 +1679,7 @@ bool goto_symext::run_builtin(
     return true;
   }
 
-  if(has_prefix(symname, "c:@F@__builtin_constant_p"))
+  if (has_prefix(symname, "c:@F@__builtin_constant_p"))
   {
     expr2tc op1 = func_call.operands[0];
     cur_state->rename(op1);
