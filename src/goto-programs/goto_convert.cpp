@@ -1174,31 +1174,16 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   // y: goto v
   // z: ;                <-- break target
 
-  // Print statement for debugging
-  std::cout << "Reached point A" << std::endl;
-
-  // A;
   if(code.op0().is_not_nil())
     convert(to_code(code.op0()), dest);
 
-
-  // Print statement for debugging
-  std::cout << "Reached point B" << std::endl;
-
-  // save break/continue targets
+  // save the respective break/continue targets.
   break_continue_targetst old_targets(targets);
-
-
-  // Print statement for debugging
-  std::cout << "Reached point C" << std::endl;
 
   // do the z label
   goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction(SKIP);
   z->location = code.location();
-
-  // Print statement for debugging
-  std::cout << "Reached point D" << std::endl;
 
   // do the x label
   goto_programt tmp_x;
@@ -1212,9 +1197,6 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
     exprt tmp_B = code.op2();
     convert(to_code(code.op2()), tmp_x);
   }
-
-  // Print statement for debugging
-  std::cout << "Reached point E" << std::endl;
 
   // set the targets
   targets.set_break(z);
@@ -1237,15 +1219,9 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   y->guard = gen_true_expr();
   y->location = code.location();
 
-  // Print statement for debugging
-  std::cout << "Reached point F" << std::endl;
-
   // do the w label
   goto_programt tmp_w;
   convert(to_code(code.op3()), tmp_w);
-
-  // Print statement for debugging
-  std::cout << "Reached point G" << std::endl;
 
   dest.destructive_append(tmp_branch);
   dest.destructive_append(tmp_w);
@@ -1253,10 +1229,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
 
-  // Print statement for debugging
-  std::cout << "Reached point H" << std::endl;
-
-  // restore break/continue
+  // restore break/continue (targets).
   old_targets.restore(targets);
 }
 
