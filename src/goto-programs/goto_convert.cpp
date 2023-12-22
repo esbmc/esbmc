@@ -1149,42 +1149,56 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
     abort();
   }
 
+  exprt tmp = code.op1();
+  const exprt *cond = &tmp;
+  const locationt &location = code.location();
+
+  bool mark_loop_head = true;
+
+  if(cond->has_operands()){
+    const exprt& op = cond->op0();
+    if(strcmp(op.name().c_str(), "__ESBMC_atexits") == 0 ){
+      // hack, this is some ESBMC internal loop
+      // we don't want to mark it as a loop for the purpose of invariant gen
+      mark_loop_head = false;
+    }
+  }
+
   // turn for(A; c; B) { P } into
   //  A; while(c) { P; B; }
   //-----------------------------
   //    A;
-  // u: sideeffects in c
   // v: if(!c) goto z;
   // w: P;
   // x: B;               <-- continue target
-  // y: goto u;
+  // y: goto v
   // z: ;                <-- break target
+
+  // Print statement for debugging
+  std::cout << "Reached point A" << std::endl;
 
   // A;
   if(code.op0().is_not_nil())
     convert(to_code(code.op0()), dest);
 
-  exprt tmp = code.op1();
 
-  exprt cond = tmp;
-  goto_programt sideeffects;
-
-  remove_sideeffects(cond, sideeffects);
+  // Print statement for debugging
+  std::cout << "Reached point B" << std::endl;
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
 
-  // do the u label
-  goto_programt::targett u = sideeffects.instructions.begin();
 
-  // do the v label
-  goto_programt tmp_v;
-  goto_programt::targett v = tmp_v.add_instruction();
+  // Print statement for debugging
+  std::cout << "Reached point C" << std::endl;
 
   // do the z label
   goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction(SKIP);
   z->location = code.location();
+
+  // Print statement for debugging
+  std::cout << "Reached point D" << std::endl;
 
   // do the x label
   goto_programt tmp_x;
@@ -1199,43 +1213,53 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
     convert(to_code(code.op2()), tmp_x);
   }
 
-  // optimize the v label
-  if(sideeffects.instructions.empty())
-    u = v;
+  // Print statement for debugging
+  std::cout << "Reached point E" << std::endl;
 
   // set the targets
   targets.set_break(z);
   targets.set_continue(tmp_x.instructions.begin());
 
   // v: if(!c) goto z;
-  v->make_goto(z);
-  expr2tc tmp_cond;
-  migrate_expr(cond, tmp_cond);
-  tmp_cond = not2tc(tmp_cond);
-  v->guard = tmp_cond;
-  v->location = cond.location();
+
+  goto_programt tmp_branch;
+  generate_conditional_branch(gen_not(*cond), z, location, tmp_branch, mark_loop_head);
+
+  // do the v label
+  goto_programt::targett v = tmp_branch.instructions.begin();
+
+  // do the y label
+  goto_programt tmp_y;
+  goto_programt::targett y = tmp_y.add_instruction();
+
+  // y: if(c) goto v;
+  y->make_goto(v);
+  y->guard = gen_true_expr();
+  y->location = code.location();
+
+  // Print statement for debugging
+  std::cout << "Reached point F" << std::endl;
 
   // do the w label
   goto_programt tmp_w;
   convert(to_code(code.op3()), tmp_w);
 
-  // y: goto u;
-  goto_programt tmp_y;
-  goto_programt::targett y = tmp_y.add_instruction();
-  y->make_goto(u);
-  y->guard = gen_true_expr();
-  y->location = code.location();
+  // Print statement for debugging
+  std::cout << "Reached point G" << std::endl;
 
-  dest.destructive_append(sideeffects);
-  dest.destructive_append(tmp_v);
+  dest.destructive_append(tmp_branch);
   dest.destructive_append(tmp_w);
   dest.destructive_append(tmp_x);
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
 
+  // Print statement for debugging
+  std::cout << "Reached point H" << std::endl;
+
   // restore break/continue
   old_targets.restore(targets);
 }
+
 
 void goto_convertt::convert_while(const codet &code, goto_programt &dest)
 {
