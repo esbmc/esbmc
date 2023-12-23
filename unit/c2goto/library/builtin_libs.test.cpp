@@ -20,11 +20,17 @@ void __ESBMC_atomic_end()
 {
 }
 
+#ifndef _WIN32
+#define sync_fetch(OPERATOR) __sync_fetch_and_##OPERATOR
+#else
+#define sync_fetch(OPERATOR) atomic_fetch_##OPERATOR
+#endif
+
 #define sync_fetch_generator(TYPE, OPERATOR)                                   \
   {                                                                            \
     int dest = 10;                                                             \
     TYPE value = 5;                                                            \
-    int fetch = __sync_fetch_and_##OPERATOR(&dest, value);                     \
+    int fetch = sync_fetch(OPERATOR)(&dest, value);                            \
     CHECK(dest == 15);                                                         \
     CHECK(fetch == 10);                                                        \
   }
