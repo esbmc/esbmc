@@ -283,41 +283,69 @@ std::string symbol_data::get_symbol_name() const
   }
 }
 
+namespace
+{
+struct constant_string_access
+{
+  const array_type2t &arr;
+  const std::string &s;
+  unsigned w; /* element size in bytes */
+  bool le;
+  size_t n, m; /* array size and value length, in arr.subtype elements */
+
+  explicit constant_string_access(const constant_string2t &e)
+    : arr(to_array_type(e.type)),
+      s(e.value.as_string()),
+      w(arr.subtype->get_width()),
+      le(config.ansi_c.endianess == configt::ansi_ct::IS_LITTLE_ENDIAN),
+      n(to_constant_int2t(arr.array_size).value.to_uint64())
+  {
+    assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
+    assert(w % 8 == 0);
+    w /= 8;
+    assert(0 < w && w <= 4);
+    assert(s.length() % w == 0);
+    m = s.length() / w;
+  }
+
+  constant_string_access(const constant_string_access &) = delete;
+  constant_string_access &operator=(const constant_string_access &) = delete;
+
+  expr2tc operator[](size_t i) const
+  {
+    if (i >= n) /* not in array */
+      return expr2tc();
+
+    uint32_t c = 0;
+    if (i < m) /* not the '\0' element */
+      for (unsigned j = 0; j < w; j++)
+        c |= (uint32_t)(unsigned char)s[w * i + j] << 8 * (le ? j : w - 1 - j);
+    return gen_long(arr.subtype, c);
+  }
+};
+} // namespace
+
 expr2tc constant_string2t::to_array() const
 {
-  const array_type2t &arr = to_array_type(type);
+  constant_string_access csa(*this);
+  std::vector<expr2tc> contents(csa.n);
 
-  const type2tc &elem_type = arr.subtype;
-  unsigned w = elem_type->get_width();
-  assert(w % 8 == 0);
-  w /= 8;
-  assert(0 < w && w <= 4);
-
-  const std::string &s = value.as_string();
-  size_t n = to_constant_int2t(arr.array_size).value.to_uint64();
-  assert(n > 0); /* terminating '\0' */
-  assert(s.length() % w == 0);
-  size_t m = s.length() / w;
-  size_t k = std::min(n - 1, m);
-
-  auto endian = config.ansi_c.endianess;
-  assert(endian != configt::ansi_ct::endianesst::NO_ENDIANESS);
-
-  bool le = endian == configt::ansi_ct::endianesst::IS_LITTLE_ENDIAN;
-
-  std::vector<expr2tc> contents(n);
-  size_t i;
-  for (i = 0; i < k; i++)
-  {
-    uint32_t c = 0;
-    for (unsigned j = 0; j < w; j++)
-      c |= (uint32_t)(unsigned char)s[w * i + j] << (le ? j : w - 1 - j);
-    contents[i] = gen_long(elem_type, c);
-  }
-  for (; i < n; i++)
-    contents[i] = gen_zero(elem_type);
+  for (size_t i = 0; i < csa.n; i++)
+    contents[i] = csa[i];
 
   expr2tc r = constant_array2tc(type, std::move(contents));
+  return r;
+}
+
+size_t constant_string2t::array_size() const
+{
+  return to_constant_int2t(to_array_type(type).array_size).value.to_uint64();
+}
+
+expr2tc constant_string2t::at(size_t i) const
+{
+  constant_string_access csa(*this);
+  expr2tc r = csa[i];
   return r;
 }
 
