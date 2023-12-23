@@ -25,7 +25,7 @@ void __ESBMC_atomic_end()
 #ifndef _WIN32
 #define sync_fetch(OPERATOR) __sync_fetch_and_##OPERATOR
 #else
-#define sync_fetch(OPERATOR) atomic_fetch_##OPERATOR
+#define sync_fetch(OPERATOR) std::atomic_fetch_##OPERATOR
 #endif
 
 #define sync_fetch_generator(TYPE, OPERATOR)                                   \
