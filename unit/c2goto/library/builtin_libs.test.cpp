@@ -13,8 +13,6 @@
 #define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
 
-#include <atomic>
-
 void __ESBMC_atomic_begin()
 {
 }
@@ -23,10 +21,8 @@ void __ESBMC_atomic_end()
 }
 
 #ifndef _WIN32
+
 #define sync_fetch(OPERATOR) __sync_fetch_and_##OPERATOR
-#else
-#define sync_fetch(OPERATOR) std::atomic_fetch_##OPERATOR
-#endif
 
 #define sync_fetch_generator(TYPE, OPERATOR)                                   \
   {                                                                            \
@@ -64,3 +60,4 @@ TEST_CASE("sync_fetch_add", "[core][c2goto][builtin]")
     sync_fetch_generator(char, add);
   }
 }
+#endif
