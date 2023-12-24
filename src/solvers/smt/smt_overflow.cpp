@@ -65,11 +65,10 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       return convert_ast(or2tc(add_overflows, is_min_int));
     }
 
-    // Just ensure the result is >= the operands.
-    expr2tc le1 = lessthanequal2tc(overflow.operand, opers.side_1);
-    expr2tc le2 = lessthanequal2tc(overflow.operand, opers.side_2);
-    expr2tc res = and2tc(le1, le2);
-    expr2tc inv = not2tc(res);
+    // Just ensure the result is <= the first operand.
+    expr2tc sub = sub2tc(opers.side_1->type, opers.side_1, opers.side_2);
+    expr2tc le = lessthanequal2tc(sub, opers.side_1);
+    expr2tc inv = not2tc(le);
     return convert_ast(inv);
   }
 
