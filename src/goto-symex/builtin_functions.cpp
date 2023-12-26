@@ -1622,10 +1622,9 @@ ends_with(std::string const &value, std::string const &ending)
   return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
 }
 
-bool goto_symext::run_builtin(
-  const code_function_call2t &func_call,
-  const std::string &symname)
+bool goto_symext::run_builtin(code_function_call2t &func_call)
 {
+  std::string symname = to_symbol2t(func_call.function).thename.as_string();
   if (
     has_prefix(symname, "c:@F@__builtin_sadd") ||
     has_prefix(symname, "c:@F@__builtin_uadd") ||
@@ -1664,15 +1663,15 @@ bool goto_symext::run_builtin(
       abort();
     }
 
+    // Perform overflow check and assign it to the return object
+    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
+
     // Assign result of the two arguments to the dereferenced third argument
     symex_assign(code_assign2tc(
       dereference2tc(
         to_pointer_type(func_call.operands[2]->type).subtype,
         func_call.operands[2]),
       op));
-
-    // Perform overflow check and assign it to the return object
-    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
 
     return true;
   }
@@ -1687,5 +1686,7 @@ bool goto_symext::run_builtin(
     return true;
   }
 
+  // Give up but remove the builtin prefix and hope for the best
+  to_symbol2t(func_call.function).thename = symname.replace(5, 10, "");
   return false;
 }
