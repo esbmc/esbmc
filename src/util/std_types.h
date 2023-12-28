@@ -279,9 +279,18 @@ extern inline union_typet &to_union_type(typet &type)
 class code_typet : public typet
 {
 public:
+  class argumentt;
+  typedef std::vector<argumentt> argumentst;
+
   code_typet()
   {
     id(t_code);
+  }
+
+  code_typet(argumentst _parameters, typet _return_type) : typet(t_code)
+  {
+    arguments().swap(_parameters);
+    return_type().swap(_return_type);
   }
 
   class argumentt : public exprt
@@ -340,8 +349,6 @@ public:
   {
     add(a_arguments).ellipsis(true);
   }
-
-  typedef std::vector<argumentt> argumentst;
 
   const typet &return_type() const
   {
@@ -441,6 +448,27 @@ public:
     subtype() = _subtype;
   }
 };
+
+/// \brief Cast a typet to a \ref pointer_typet
+///
+/// This is an unchecked conversion. \a type must be known to be \ref
+/// pointer_typet. Will fail with a precondition violation if type
+/// doesn't match.
+///
+/// \param type: Source type.
+/// \return Object of type \ref pointer_typet.
+inline const pointer_typet &to_pointer_type(const typet &type)
+{
+  assert(type.id() == "pointer");
+  return static_cast<const pointer_typet &>(type);
+}
+
+/// \copydoc to_pointer_type(const typet &)
+inline pointer_typet &to_pointer_type(typet &type)
+{
+  assert(type.id() == "pointer");
+  return static_cast<pointer_typet &>(type);
+}
 
 class reference_typet : public pointer_typet
 {
@@ -624,22 +652,6 @@ public:
 };
 
 const floatbv_typet &to_floatbv_type(const typet &type);
-
-class string_typet : public typet
-{
-public:
-  string_typet() : typet(t_string)
-  {
-  }
-
-  friend const string_typet &to_string_type(const typet &type)
-  {
-    assert(type.id() == t_string);
-    return static_cast<const string_typet &>(type);
-  }
-};
-
-const string_typet &to_string_type(const typet &type);
 
 /**
  * @brief This type maps the vectors

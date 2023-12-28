@@ -1,5 +1,6 @@
 #pragma once
 
+#include <python-frontend/json_utils.h>
 #include <util/message.h>
 #include <string>
 
@@ -115,6 +116,14 @@ private:
             }
           }
         }
+        // Get type from constructor call
+        else if (
+          element["value"]["_type"] == "Call" &&
+          json_utils::is_class<Json>(
+            element["value"]["func"]["id"], ast_["body"]))
+        {
+          type = element["value"]["func"]["id"];
+        }
         else
           continue;
 
@@ -123,10 +132,20 @@ private:
         // Update type field
         element["_type"] = "AnnAssign";
 
-        // lhs
         auto target = element["targets"][0];
-        int col_offset = target["col_offset"].template get<int>() +
-                         target["id"].template get<std::string>().size() + 1;
+        std::string id;
+        // Get lhs from simple variables on assignments.
+        if (target.contains("id"))
+          id = target["id"];
+        // Get lhs from members access on assignments. e.g.: x.data = 10
+        else if (target["_type"] == "Attribute")
+          id = target["value"]["id"].template get<std::string>() + "." +
+               target["attr"].template get<std::string>();
+
+        assert(!id.empty());
+
+        int col_offset =
+          target["col_offset"].template get<int>() + id.size() + 1;
 
         // Add annotation field
         element["annotation"] = {
@@ -156,6 +175,29 @@ private:
         element["value"]["end_col_offset"] =
           element["value"]["end_col_offset"].template get<int>() + type.size() +
           1;
+
+        /* Adjust column offset node on lines involving function
+         * calls with arguments */
+        if (element["value"].contains("args"))
+        {
+          for (auto &arg : element["value"]["args"])
+          {
+            arg["col_offset"] =
+              arg["col_offset"].template get<int>() + type.size() + 1;
+            arg["end_col_offset"] =
+              arg["end_col_offset"].template get<int>() + type.size() + 1;
+          }
+        }
+        // Adjust column offset in function call node
+        if (element["value"].contains("func"))
+        {
+          element["value"]["func"]["col_offset"] =
+            element["value"]["func"]["col_offset"].template get<int>() +
+            type.size() + 1;
+          element["value"]["func"]["end_col_offset"] =
+            element["value"]["func"]["end_col_offset"].template get<int>() +
+            type.size() + 1;
+        }
       }
     }
   }

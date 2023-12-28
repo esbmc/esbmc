@@ -224,7 +224,7 @@ void value_sett::get_value_set_rec(
 
 #ifndef NDEBUG
     const type2tc &source_type = idx.source_value->type;
-    assert(is_array_type(source_type) || is_string_type(source_type));
+    assert(is_array_type(source_type));
 #endif
 
     // Attach '[]' to the suffix, identifying the variable tracking all the
@@ -807,8 +807,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     // the source value, and store a reference to all those things.
     const index2t &index = to_index2t(expr);
 
-    assert(
-      is_array_type(index.source_value) || is_string_type(index.source_value));
+    assert(is_array_type(index.source_value));
 
     // Compute the offset introduced by this index.
     BigInt index_offset;
@@ -1255,7 +1254,6 @@ void value_sett::assign_rec(
   {
     assert(
       is_array_type(to_index2t(lhs).source_value) ||
-      is_string_type(to_index2t(lhs).source_value) ||
       is_dynamic_object2t(to_index2t(lhs).source_value));
 
     assign_rec(to_index2t(lhs).source_value, values_rhs, "[]" + suffix, true);

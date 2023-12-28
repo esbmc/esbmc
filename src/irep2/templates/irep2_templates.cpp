@@ -31,8 +31,6 @@ std::string fixedbv_type2t::field_names[esbmct::num_type_fields] =
   {"width", "integer_bits", "", "", ""};
 std::string floatbv_type2t::field_names[esbmct::num_type_fields] =
   {"fraction", "exponent", "", "", ""};
-std::string string_type2t::field_names[esbmct::num_type_fields] =
-  {"width", "", "", "", ""};
 std::string cpp_name_type2t::field_names[esbmct::num_type_fields] =
   {"name", "template args", "", "", ""};
 
@@ -55,7 +53,7 @@ std::string constant_array2t::field_names[esbmct::num_type_fields] =
 std::string constant_array_of2t::field_names[esbmct::num_type_fields] =
   {"initializer", "", "", "", ""};
 std::string constant_string2t::field_names[esbmct::num_type_fields] =
-  {"value", "", "", "", ""};
+  {"value", "kind", "", "", ""};
 std::string constant_vector2t::field_names[esbmct::num_type_fields] =
   {"members", "", "", "", ""};
 std::string symbol2t::field_names[esbmct::num_type_fields] =

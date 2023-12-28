@@ -51,14 +51,16 @@ const struct group_opt_templ all_cmd_options[] = {
      "show value-set analysis during symbolic execution"}}},
 #ifdef ENABLE_SOLIDITY_FRONTEND
   {"Solidity frontend",
-   {
-     {"sol",
-      boost::program_options::value<std::string>()->value_name("path"),
-      ".sol and .solast file names"},
-     {"contract",
-      boost::program_options::value<std::string>()->value_name("cname"),
-      "set contract name"},
-   }},
+   {{"sol",
+     boost::program_options::value<std::string>()->value_name("path"),
+     ".sol and .solast file names"},
+    {"contract",
+     boost::program_options::value<std::string>()->value_name("cname"),
+     "set contract name"},
+    {"no-visibility",
+     NULL,
+     "force to verify every function, even it's an unreachable "
+     "internal/private function"}}},
 #endif
   {"Frontend",
    {{"include,I",
@@ -286,7 +288,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-div-by-zero-check", NULL, "do not do division by zero check"},
     {"no-pointer-check", NULL, "do not do pointer check"},
     {"no-align-check", NULL, "do not check pointer alignment"},
-    {"no-pointer-relation-check", NULL, "do not check pointer relations"},
     {"no-unlimited-scanf-check",
      NULL,
      "do not do overflow check for scanf/fscanf with unlimited character "
@@ -459,6 +460,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"git-hash", NULL, ""},
     // Check if there is two or more assingments to the same SSA instruction
     {"double-assign-check", NULL, ""},
+    {"no-pointer-relation-check",
+     NULL,
+     "do not check whether pointers in order relations refer to the same "
+     "object (unsound)"},
     // Abort if the program contains a recursion
     {"abort-on-recursion", NULL, ""},
     /* see <https://github.com/esbmc/esbmc/pull/1281> for a list of supported

@@ -1,6 +1,7 @@
 #include <python-frontend/python_language.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation.h>
+#include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>
 #include <util/filesystem.h>
 #include <util/c_expr2string.h>
@@ -94,7 +95,14 @@ bool python_languaget::typecheck(
   const std::string & /*module*/)
 {
   python_converter converter(context, ast);
-  return converter.convert();
+  if (converter.convert())
+    return true;
+
+  clang_cpp_adjust adjuster(context);
+  if (adjuster.adjust())
+    return true;
+
+  return false;
 }
 
 void python_languaget::show_parse(std::ostream &out)

@@ -1,7 +1,7 @@
 #!/bin/sh
 
 BENCHEXEC_BIN=/usr/bin/benchexec
-BENCHEXEC_COMMON_FLAGS="-o ../esbmc-output/ -N 9 ./esbmc.xml --read-only-dir / --overlay-dir /home  -T $TIMEOUT --container"
+BENCHEXEC_COMMON_FLAGS="-o ../esbmc-output/ -N 30 ./esbmc.xml --read-only-dir / --overlay-dir /home  -T $TIMEOUT --container"
 
 # Prepare Environment to run benchexec
 setup_folder () {

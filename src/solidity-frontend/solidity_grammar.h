@@ -205,6 +205,10 @@ const char *parameter_list_to_str(ParameterListT type);
 enum BlockT
 {
   Statement = 0,
+  BlockForStatement,
+  BlockIfStatement,
+  BlockWhileStatement,
+  BlockExpressionStatement,
   UncheckedBlock,
   BlockTError
 };

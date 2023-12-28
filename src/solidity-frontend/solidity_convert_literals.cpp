@@ -76,7 +76,7 @@ bool solidity_convertert::convert_string_literal(
       integer2string(string_size),
       int_type()));
   // TODO: Handle null terminator byte
-  string_constantt string(the_value, type);
+  string_constantt string(the_value, type, string_constantt::k_default);
   dest.swap(string);
 
   return false;

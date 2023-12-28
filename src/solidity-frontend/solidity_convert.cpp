@@ -68,12 +68,6 @@ bool solidity_convertert::convert()
       global_scope_id = (*itr)["id"];
       found_contract_def = true;
 
-      // pattern-based verification
-      // disable if it's in contract mode
-      // otherwise leads to error. To be fixed.
-      if (sol_func == "")
-        continue;
-
       assert(itr->contains("nodes"));
       auto pattern_check =
         std::make_unique<pattern_checker>((*itr)["nodes"], sol_func);
@@ -409,11 +403,6 @@ bool solidity_convertert::get_struct_class_fields(
 {
   struct_typet::componentt comp;
 
-  if (
-    SolidityGrammar::get_access_t(ast_node) ==
-    SolidityGrammar::VisibilityT::UnknownT)
-    return false;
-
   if (get_var_decl_ref(ast_node, comp))
     return true;
   comp.type().set("#member_name", type.name());
@@ -434,6 +423,9 @@ bool solidity_convertert::get_struct_class_method(
 
   if (comp.is_code() && to_code(comp).statement() == "skip")
     return false;
+
+  if (get_access_from_decl(ast_node, comp))
+    return true;
 
   type.methods().push_back(comp);
   return false;
@@ -730,6 +722,25 @@ bool solidity_convertert::get_block(
     new_expr = _block;
     break;
   }
+  case SolidityGrammar::BlockT::BlockForStatement:
+  case SolidityGrammar::BlockT::BlockIfStatement:
+  case SolidityGrammar::BlockT::BlockWhileStatement:
+  {
+    // this means only one statement in the block
+    exprt statement;
+
+    // pass directly to get_statement()
+    if (get_statement(block, statement))
+      return true;
+    convert_expression_to_code(statement);
+    new_expr = statement;
+    break;
+  }
+  case SolidityGrammar::BlockT::BlockExpressionStatement:
+  {
+    get_expr(block["expression"], new_expr);
+    break;
+  }
   default:
   {
     assert(!"Unimplemented type in rule block");
@@ -874,8 +885,9 @@ bool solidity_convertert::get_statement(
   case SolidityGrammar::StatementT::ForStatement:
   {
     // Based on rule for-statement
-    // TODO: Fix me. Currently we don't support nested for loop
-    assert(current_forStmt == nullptr);
+
+    // For nested loop
+    const nlohmann::json *old_forStmt = current_forStmt;
     current_forStmt = &stmt;
 
     // 1. annotate init
@@ -916,7 +928,7 @@ bool solidity_convertert::get_statement(
     code_for.body() = body;
 
     new_expr = code_for;
-    current_forStmt = nullptr;
+    current_forStmt = old_forStmt;
     break;
   }
   case SolidityGrammar::StatementT::IfStatement:
@@ -3875,11 +3887,28 @@ bool solidity_convertert::move_functions_to_main(
 
   // 2. construct a while-loop and move to func_body
 
+  // 2.0 check visibility setting
+  bool skip_vis =
+    config.options.get_option("no-visibility").empty() ? false : true;
+  if (skip_vis)
+  {
+    log_warning(
+      "force to verify every function, even it's an unreachable "
+      "internal/private function. This might lead to false positives.");
+  }
+
   // 2.1 construct ifthenelse statement
   const struct_typet::componentst &methods =
     to_struct_type(contract.type).methods();
   for (const auto &method : methods)
   {
+    // we only handle public and external function
+    // as the private and internal function cannot be directly called
+    if (
+      !skip_vis && (method.get_access().as_string() == "private" ||
+                    method.get_access().as_string() == "internal"))
+      continue;
+
     // guard: nondet_bool()
     if (context.find_symbol("c:@F@nondet_bool") == nullptr)
       return true;

@@ -25,13 +25,6 @@
 // global data, horrible
 unsigned int dereferencet::invalid_counter = 0;
 
-static inline const array_type2t get_arr_type(const expr2tc &expr)
-{
-  return (is_array_type(expr))
-           ? to_array_type(expr->type)
-           : to_array_type(to_constant_string2t(expr).to_array()->type);
-}
-
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
 // dereference operation.
@@ -913,7 +906,7 @@ void dereferencet::build_reference_rec(
     flags |= flag_dst_union;
   else if (is_scalar_type(type))
     flags |= flag_dst_scalar;
-  else if (is_array_type(type) || is_string_type(type))
+  else if (is_array_type(type))
   {
     log_error(
       "Can't construct rvalue reference to array type during dereference\n"
@@ -932,7 +925,7 @@ void dereferencet::build_reference_rec(
     flags |= flag_src_union;
   else if (is_scalar_type(value))
     flags |= flag_src_scalar;
-  else if (is_array_type(value) || is_string_type(value))
+  else if (is_array_type(value))
     flags |= flag_src_array;
   else
   {
@@ -1077,9 +1070,9 @@ void dereferencet::construct_from_array(
   modet mode,
   unsigned long alignment)
 {
-  assert(is_array_type(value) || is_string_type(value));
+  assert(is_array_type(value));
 
-  const array_type2t arr_type = get_arr_type(value);
+  const array_type2t arr_type = to_array_type(value->type);
   type2tc arr_subtype = arr_type.subtype;
 
   if (is_array_type(arr_subtype))
@@ -1516,8 +1509,8 @@ void dereferencet::construct_from_multidir_array(
   unsigned long alignment,
   modet mode)
 {
-  assert(is_array_type(value) || is_string_type(value));
-  const array_type2t arr_type = get_arr_type(value);
+  assert(is_array_type(value));
+  const array_type2t arr_type = to_array_type(value->type);
 
   // Right: any access across the boundary of the outer dimension of this array
   // is an alignment violation as that can possess extra padding.
@@ -1934,8 +1927,6 @@ std::vector<expr2tc> dereferencet::extract_bytes(
       base = to_array_type(base).subtype;
     else if (is_vector_type(base))
       base = to_vector_type(base).subtype;
-    else if (is_string_type(base))
-      base = bytetype;
     else
       break;
 
@@ -2140,8 +2131,8 @@ void dereferencet::bounds_check(
   if (options.get_bool_option("no-bounds-check"))
     return;
 
-  assert(is_array_type(expr) || is_string_type(expr));
-  const array_type2t arr_type = get_arr_type(expr);
+  assert(is_array_type(expr));
+  const array_type2t arr_type = to_array_type(expr->type);
 
   if (!arr_type.array_size)
   {
@@ -2163,7 +2154,7 @@ void dereferencet::bounds_check(
 
   expr2tc arrsize;
   if (
-    !is_constant_array2t(expr) &&
+    !is_constant_expr(expr) &&
     has_prefix(
       ns.lookup(to_symbol2t(expr).thename)->id.as_string(), "symex_dynamic::"))
   {

@@ -1,0 +1,6 @@
+CORE
+gh-1537-no-assume.c
+--multi-property
+^VERIFICATION FAILED$
+\bassertion str0 <= str1$
+\bSAME-OBJECT\(str0, str1\)$
