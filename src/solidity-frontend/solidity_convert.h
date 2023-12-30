@@ -48,7 +48,7 @@ protected:
   std::string current_contractName;
   std::string current_fileName;
 
-  // store the ast_node["id"] of contract/struct/function/...
+  // an auxiliary data structure to store the ast_node["id"] of contract/struct/function/...
   std::unordered_map<int, std::string> scope_map;
 
   bool convert_ast_nodes(const nlohmann::json &contract_def);
