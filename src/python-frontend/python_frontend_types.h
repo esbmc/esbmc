@@ -10,6 +10,7 @@ enum class StatementType
   EXPR,
   RETURN,
   ASSERT,
+  CLASS_DEFINITION,
   UNKNOWN,
 };
 

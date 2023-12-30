@@ -356,7 +356,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     return;
   }
 
-  const std::string base_name = new_rhs.bs_name;
+  const std::string &base_name = new_rhs.bs_name;
 
   // get the format string base on the bs_name
   irep_idt fmt;
@@ -453,9 +453,10 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
         // the current expression "arg" does not hold the value info (might be a bug)
         // thus we need to look it up from the symbol table
         assert(is_symbol2t(base_expr));
-        symbolt s = *ns.lookup(to_symbol2t(base_expr).thename);
+        const symbolt &s = *ns.lookup(to_symbol2t(base_expr).thename);
         exprt dest;
-        array2string(s, dest);
+        if (array2string(s, dest))
+          continue;
         migrate_expr(dest, arg);
       }
     }
@@ -1300,23 +1301,6 @@ void goto_symext::intrinsic_memset(
   if (ex_state.cur_state->guard.is_false())
     return;
 
-  // Define a local function for translating to calling the unwinding C
-  // implementation of memset
-  auto bump_call = [this, &func_call]() -> void {
-    // We're going to execute a function call, and that's going to mess with
-    // the program counter. Set it back *onto* pointing at this intrinsic, so
-    // symex_function_call calculates the right return address. Misery.
-    cur_state->source.pc--;
-
-    expr2tc newcall = func_call.clone();
-    code_function_call2t &mutable_funccall = to_code_function_call2t(newcall);
-    mutable_funccall.function =
-      symbol2tc(get_empty_type(), "c:@F@__memset_impl");
-    // Execute call
-    symex_function_call(newcall);
-    return;
-  };
-
   /* Get the arguments
    * arg0: ptr to object
    * arg1: int for the new byte value
@@ -1344,7 +1328,7 @@ void goto_symext::intrinsic_memset(
     /* Not sure what to do here, let's rely
        * on the default implementation then */
     log_debug("memset", "Couldn't optimize memset due to precondition");
-    bump_call();
+    bump_call(func_call, "c:@F@__memset_impl");
     return;
   }
 
@@ -1352,7 +1336,7 @@ void goto_symext::intrinsic_memset(
   if (!is_constant_int2t(arg2))
   {
     log_debug("memset", "TODO: simplifier issues :/");
-    bump_call();
+    bump_call(func_call, "c:@F@__memset_impl");
     return;
   }
 
@@ -1375,7 +1359,7 @@ void goto_symext::intrinsic_memset(
     if (!item_object || !item_offset)
     {
       log_debug("memset", "Couldn't get item_object/item_offset");
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
 
@@ -1387,7 +1371,7 @@ void goto_symext::intrinsic_memset(
         "memset",
         "Item offset is symbolic: {}",
         to_symbol2t(item_offset).get_symbol_name());
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
 
@@ -1424,7 +1408,7 @@ void goto_symext::intrinsic_memset(
        */
       log_debug(
         "memset", "TODO: some simplifications are missing, bumping call");
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
 
@@ -1441,7 +1425,7 @@ void goto_symext::intrinsic_memset(
     }
     catch (const array_type2t::dyn_sized_array_excp &)
     {
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
 
@@ -1481,7 +1465,7 @@ void goto_symext::intrinsic_memset(
     if (!new_object)
     {
       log_debug("memset", "gen_value_by_byte failed");
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
     // 4. Assign the new object
@@ -1610,4 +1594,98 @@ void goto_symext::intrinsic_races_check_dereference(expr2tc &expr)
     else
       migrate_expr(gen_not(deref), expr);
   }
+}
+
+void goto_symext::bump_call(
+  const code_function_call2t &func_call,
+  const std::string &symname)
+{
+  // We're going to execute a function call, and that's going to mess with
+  // the program counter. Set it back *onto* pointing at this intrinsic, so
+  // symex_function_call calculates the right return address. Misery.
+  cur_state->source.pc--;
+
+  expr2tc newcall = func_call.clone();
+  code_function_call2t &mutable_funccall = to_code_function_call2t(newcall);
+  mutable_funccall.function = symbol2tc(get_empty_type(), symname);
+  // Execute call
+  symex_function_call(newcall);
+  return;
+}
+
+// Copied from https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
+static inline bool
+ends_with(std::string const &value, std::string const &ending)
+{
+  if (ending.size() > value.size())
+    return false;
+  return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
+}
+
+bool goto_symext::run_builtin(
+  const code_function_call2t &func_call,
+  const std::string &symname)
+{
+  if (
+    has_prefix(symname, "c:@F@__builtin_sadd") ||
+    has_prefix(symname, "c:@F@__builtin_uadd") ||
+    has_prefix(symname, "c:@F@__builtin_ssub") ||
+    has_prefix(symname, "c:@F@__builtin_usub") ||
+    has_prefix(symname, "c:@F@__builtin_smul") ||
+    has_prefix(symname, "c:@F@__builtin_umul"))
+  {
+    assert(ends_with(symname, "_overflow"));
+    assert(func_call.operands.size() == 3);
+
+    const auto &func_type = to_code_type(func_call.function->type);
+    assert(func_type.arguments[0] == func_type.arguments[1]);
+    assert(is_pointer_type(func_type.arguments[2]));
+
+    bool is_mult = has_prefix(symname, "c:@F@__builtin_smul") ||
+                   has_prefix(symname, "c:@F@__builtin_umul");
+    bool is_add = has_prefix(symname, "c:@F@__builtin_sadd") ||
+                  has_prefix(symname, "c:@F@__builtin_uadd");
+    bool is_sub = has_prefix(symname, "c:@F@__builtin_ssub") ||
+                  has_prefix(symname, "c:@F@__builtin_usub");
+
+    expr2tc op;
+    if (is_mult)
+      op = mul2tc(
+        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else if (is_add)
+      op = add2tc(
+        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else if (is_sub)
+      op = sub2tc(
+        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else
+    {
+      log_error("Unknown overflow intrinsics");
+      abort();
+    }
+
+    // Assign result of the two arguments to the dereferenced third argument
+    symex_assign(code_assign2tc(
+      dereference2tc(
+        to_pointer_type(func_call.operands[2]->type).subtype,
+        func_call.operands[2]),
+      op));
+
+    // Perform overflow check and assign it to the return object
+    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
+
+    return true;
+  }
+
+  if (has_prefix(symname, "c:@F@__builtin_constant_p"))
+  {
+    expr2tc op1 = func_call.operands[0];
+    cur_state->rename(op1);
+    symex_assign(code_assign2tc(
+      func_call.ret,
+      is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
+    return true;
+  }
+
+  return false;
 }

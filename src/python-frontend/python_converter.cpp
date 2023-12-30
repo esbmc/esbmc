@@ -1,4 +1,5 @@
 #include <python-frontend/python_converter.h>
+#include <python-frontend/json_utils.h>
 #include <python_frontend_types.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
@@ -9,6 +10,8 @@
 #include <fstream>
 #include <regex>
 #include <unordered_map>
+
+using namespace json_utils;
 
 static const std::unordered_map<std::string, std::string> operator_map = {
   {"Add", "+"},         {"Sub", "-"},          {"Mult", "*"},
@@ -31,6 +34,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Expr", StatementType::EXPR},
   {"Return", StatementType::RETURN},
   {"Assert", StatementType::ASSERT},
+  {"ClassDef", StatementType::CLASS_DEFINITION},
 };
 
 static bool is_relational_op(const std::string &op)
@@ -43,11 +47,7 @@ static bool is_relational_op(const std::string &op)
 static StatementType get_statement_type(const nlohmann::json &element)
 {
   auto it = statement_map.find(element["_type"]);
-  if (it != statement_map.end())
-  {
-    return it->second;
-  }
-  return StatementType::UNKNOWN;
+  return (it != statement_map.end()) ? it->second : StatementType::UNKNOWN;
 }
 
 // Convert Python/AST to irep2 operations
@@ -62,7 +62,7 @@ static std::string get_op(const std::string &op)
 }
 
 // Convert Python/AST types to irep2 types
-static typet get_typet(const std::string &ast_type)
+typet python_converter::get_typet(const std::string &ast_type)
 {
   if (ast_type == "float")
     return float_type();
@@ -74,10 +74,12 @@ static typet get_typet(const std::string &ast_type)
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
+  if (is_class(ast_type, ast_json["body"]))
+    return symbol_typet("tag-" + ast_type);
   return empty_typet();
 }
 
-static typet get_typet(const nlohmann::json &elem)
+typet python_converter::get_typet(const nlohmann::json &elem)
 {
   if (elem.is_number_integer() || elem.is_number_unsigned())
     return int_type();
@@ -126,7 +128,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   {
     return ExpressionType::LITERAL;
   }
-  if (type == "Name")
+  if (type == "Name" || type == "Attribute")
   {
     return ExpressionType::VARIABLE_REF;
   }
@@ -162,8 +164,7 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   typet &rhs_type = rhs.type();
 
   auto update_symbol = [&](exprt &expr) {
-    std::string id = "py:" + python_filename + "@F@" + current_func_name + "@" +
-                     expr.name().c_str();
+    std::string id = create_symbol_id() + "@" + expr.name().c_str();
     symbolt *s = context.find_symbol(id);
     if (s != nullptr)
     {
@@ -199,6 +200,20 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
       update_symbol(lhs);
     }
   }
+}
+
+std::string python_converter::create_symbol_id() const
+{
+  std::stringstream symbol_id;
+  symbol_id << "py:" << python_filename;
+
+  if (!current_class_name.empty())
+    symbol_id << "@C@" << current_class_name;
+
+  if (!current_func_name.empty())
+    symbol_id << "@F@" << current_func_name;
+
+  return symbol_id.str();
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
@@ -325,7 +340,9 @@ python_converter::get_location_from_decl(const nlohmann::json &ast_node)
 {
   locationt location;
   location.set_line(ast_node["lineno"].get<int>());
+  location.set_column(ast_node["col_offset"].get<int>());
   location.set_file(python_filename.c_str());
+  location.set_function(current_func_name);
   return location;
 }
 
@@ -350,7 +367,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
 
     locationt location = get_location_from_decl(element);
-    std::string symbol_id = "py:" + python_filename + "@F@" + func_name;
+    std::string symbol_id = create_symbol_id();
+    if (symbol_id.find("@F@") == symbol_id.npos)
+      symbol_id += std::string("@F@") + func_name;
 
     // __ESBMC_assume
     if (func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume")
@@ -371,6 +390,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       }
     }
 
+    bool is_ctor_call = is_constructor_call(element);
+
+    if (is_ctor_call)
+    {
+      // Insert class name in the symbol id
+      std::size_t pos = symbol_id.rfind("@F@");
+      if (pos != std::string::npos)
+        symbol_id.insert(pos, "@C@" + func_name);
+    }
+
     const symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
     if (func_symbol == nullptr)
     {
@@ -384,10 +413,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     const typet &return_type = to_code_type(func_symbol->type).return_type();
     call.type() = return_type;
 
+    if (is_ctor_call)
+      call.arguments().push_back(
+        gen_address_of(*ref_instance)); // Add self as first parameter
+
     for (const auto &arg_node : element["args"])
-    {
       call.arguments().push_back(get_expr(arg_node));
-    }
 
     return call;
   }
@@ -433,21 +464,54 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::VARIABLE_REF:
   {
-    // Find the variable declaration in the current function
-    std::string var_name = element["id"].get<std::string>();
-    std::string symbol_id = "py:" + python_filename + "@" + "F" + "@" +
-                            current_func_name + "@" + var_name;
+    std::string var_name;
+    if (element["_type"] == "Name")
+      var_name = element["id"].get<std::string>();
+    else if (element["_type"] == "Attribute")
+      var_name = element["value"]["id"].get<std::string>();
+
+    assert(!var_name.empty());
+
+    std::string symbol_id = create_symbol_id() + std::string("@") + var_name;
     symbolt *symbol = context.find_symbol(symbol_id);
-    if (symbol != nullptr)
+    if (!symbol)
     {
-      expr = symbol_expr(*symbol);
-    }
-    else
-    {
-      log_error("Symbol not found\n");
+      log_error("Symbol not found: {}\n", symbol_id.c_str());
       abort();
     }
+    expr = symbol_expr(*symbol);
 
+    if (element["_type"] == "Attribute")
+    {
+      const std::string &attr_name = element["attr"].get<std::string>();
+
+      // Get object type name from symbol. e.g.: tag-MyClass
+      std::string obj_type_name;
+      const typet &symbol_type =
+        (symbol->type.is_pointer()) ? symbol->type.subtype() : symbol->type;
+      for (const auto &it : symbol_type.get_named_sub())
+      {
+        if (it.first == "identifier")
+          obj_type_name = it.second.id_string();
+      }
+
+      // Get class definition from symbols table
+      symbolt *class_symbol = context.find_symbol(obj_type_name);
+      if (!class_symbol)
+      {
+        log_error("Class not found: {}\n", obj_type_name);
+        abort();
+      }
+
+      // Get attribute type from class definition
+      struct_typet &class_type =
+        static_cast<struct_typet &>(class_symbol->type);
+      assert(class_type.has_component(attr_name));
+      const typet &attr_type = class_type.get_component(attr_name).type();
+
+      expr = member_exprt(
+        symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
+    }
     break;
   }
   case ExpressionType::FUNC_CALL:
@@ -472,6 +536,28 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   return expr;
 }
 
+bool python_converter::is_constructor_call(const nlohmann::json &json)
+{
+  if (!json.contains("_type") || json["_type"] != "Call")
+    return false;
+
+  const std::string &func_name = json["func"]["id"];
+
+  /* f:Foo = Foo()
+   * The statement is a constructor call if the function call on the
+   * rhs corresponds to the name of a class. */
+
+  bool is_ctor_call = false;
+  context.foreach_operand([&](const symbolt &s) {
+    if (s.type.id() == "struct" && s.name == func_name)
+    {
+      is_ctor_call = true;
+      return;
+    }
+  });
+  return is_ctor_call;
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -486,7 +572,6 @@ void python_converter::get_var_assign(
   {
     // Get type from declaration node
     std::string var_name = ast_node["targets"][0]["id"].get<std::string>();
-
     // Get variable from current function
     nlohmann::json ref;
     for (const auto &elem : ast_json["body"])
@@ -505,10 +590,7 @@ void python_converter::get_var_assign(
   }
 
   exprt lhs;
-
-  nlohmann::json value = ast_node["value"];
-  exprt rhs = get_expr(value);
-
+  symbolt *lhs_symbol = nullptr;
   locationt location_begin;
 
   if (ast_node["_type"] == "AnnAssign")
@@ -516,11 +598,17 @@ void python_converter::get_var_assign(
     // Id and name
     std::string name, id;
     auto target = ast_node["target"];
-    if (!target.is_null() && target["_type"] == "Name")
+    if (!target.is_null())
     {
-      name = target["id"];
-      id = "py:" + python_filename + "@F@" + current_func_name + "@" + name;
+      if (target["_type"] == "Name")
+        name = target["id"];
+      else if (target["_type"] == "Attribute")
+        name = target["attr"];
+
+      id = create_symbol_id() + "@" + name;
     }
+
+    assert(!name.empty() && !id.empty());
 
     // Location
     location_begin = get_location_from_decl(ast_node["target"]);
@@ -535,21 +623,46 @@ void python_converter::get_var_assign(
     symbol.static_lifetime = false;
     symbol.file_local = true;
     symbol.is_extern = false;
-    symbol.value = rhs;
 
     lhs = symbol_expr(symbol);
 
-    context.add(symbol);
+    if (target["_type"] == "Attribute")
+    {
+      // lhs is an attribute and needs to be added as member of the referred object
+      // 1. Retrieve created object from symbol table
+      std::string obj_id =
+        create_symbol_id() + "@" + target["value"]["id"].get<std::string>();
+      symbolt *obj_symbol = context.find_symbol(obj_id);
+      if (!obj_symbol)
+        abort();
+
+      // 2. Insert member in the object
+      member_exprt member(
+        symbol_exprt(obj_symbol->id, obj_symbol->type), lhs.name(), lhs.type());
+
+      // 3. lhs holds 'obj.member'
+      lhs.swap(member);
+    }
+    lhs.location() = location_begin;
+
+    lhs_symbol = context.move_symbol_to_context(symbol);
   }
   else if (ast_node["_type"] == "Assign")
   {
     std::string name = ast_node["targets"][0]["id"].get<std::string>();
-    std::string symbol_id =
-      "py:" + python_filename + "@F@" + current_func_name + "@" + name;
+    std::string symbol_id = create_symbol_id() + "@" + name;
     symbolt *symbol = context.find_symbol(symbol_id);
     assert(symbol);
     lhs = symbol_expr(*symbol);
   }
+
+  if (is_constructor_call(ast_node["value"]))
+    ref_instance = &lhs;
+
+  // Get RHS
+  exprt rhs = get_expr(ast_node["value"]);
+  if (lhs_symbol)
+    lhs_symbol->value = rhs;
 
   /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
    * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
@@ -567,6 +680,8 @@ void python_converter::get_var_assign(
   code_assignt code_assign(lhs, rhs);
   code_assign.location() = location_begin;
   target_block.copy_to_operands(code_assign);
+
+  ref_instance = nullptr;
 }
 
 void python_converter::get_compound_assign(
@@ -596,7 +711,6 @@ static codet convert_expression_to_code(exprt &expr)
   codet code("expression");
   code.location() = expr.location();
   code.move_to_operands(expr);
-
   return code;
 }
 
@@ -669,7 +783,9 @@ void python_converter::get_function_definition(
   {
     type.return_type() = get_typet(return_node["id"].get<std::string>());
   }
-  else if (return_node.contains("value") && return_node["value"].is_null())
+  else if (
+    return_node.is_null() ||
+    (return_node.contains("value") && return_node["value"].is_null()))
   {
     type.return_type() = empty_typet();
   }
@@ -679,35 +795,48 @@ void python_converter::get_function_definition(
     abort();
   }
 
-  current_element_type = type.return_type();
-
   // Copy caller function name
   const std::string caller_func_name = current_func_name;
 
   // Function location
   locationt location = get_location_from_decl(function_node);
 
-  // Symbol identification
+  current_element_type = type.return_type();
   current_func_name = function_node["name"].get<std::string>();
-  std::string id = "py:" + python_filename + "@F@" + current_func_name;
+
+  // __init__() is renamed to Classname()
+  if (current_func_name == "__init__")
+  {
+    current_func_name = current_class_name;
+    typet ctor_type("constructor");
+    type.return_type() = ctor_type;
+  }
+
+  std::string id = create_symbol_id();
   std::string module_name =
     python_filename.substr(0, python_filename.find_last_of("."));
 
   // Iterate over function arguments
   for (const nlohmann::json &element : function_node["args"]["args"])
   {
+    // Argument name
+    std::string arg_name = element["arg"].get<std::string>();
     // Argument type
-    typet arg_type = get_typet(element["annotation"]["id"].get<std::string>());
+    typet arg_type;
+    if (arg_name == "self")
+      arg_type = gen_pointer_type(get_typet(current_class_name));
+    else
+      arg_type = get_typet(element["annotation"]["id"].get<std::string>());
+
+    assert(arg_type != typet());
+
     code_typet::argumentt arg;
     arg.type() = arg_type;
 
-    // Argument name
-    std::string arg_name = element["arg"].get<std::string>();
     arg.cmt_base_name(arg_name);
 
     // Argument id
-    std::string arg_id = "py:" + python_filename + "@" + "F" + "@" +
-                         current_func_name + "@" + arg_name;
+    std::string arg_id = id + "@" + arg_name;
     arg.cmt_identifier(arg_id);
 
     // Location
@@ -745,6 +874,74 @@ void python_converter::get_function_definition(
   current_func_name = caller_func_name;
 }
 
+void python_converter::get_attributes_from_self(
+  const nlohmann::json &method_body,
+  struct_typet &clazz)
+{
+  for (const auto &stmt : method_body)
+  {
+    if (
+      stmt["_type"] == "AnnAssign" && stmt["target"]["_type"] == "Attribute" &&
+      stmt["target"]["value"]["id"] == "self")
+    {
+      std::string attr_name = stmt["target"]["attr"];
+      struct_typet::componentt comp(
+        attr_name,
+        attr_name,
+        get_typet(stmt["annotation"]["id"].get<std::string>()));
+      comp.type().set("#member_name", std::string("tag-") + current_class_name);
+      comp.set_access("private");
+      clazz.components().push_back(comp);
+    }
+  }
+}
+
+void python_converter::get_class_definition(const nlohmann::json &class_node)
+{
+  struct_typet clazz;
+  current_class_name = class_node["name"].get<std::string>();
+  clazz.tag(current_class_name);
+  std::string id = "tag-" + current_class_name;
+
+  if (context.find_symbol(id) != nullptr)
+    return;
+
+  locationt location_begin = get_location_from_decl(class_node);
+  std::string module_name = location_begin.get_file().as_string();
+
+  // Add class to symbol table
+  symbolt symbol =
+    create_symbol(module_name, current_class_name, id, location_begin, clazz);
+  symbol.is_type = true;
+
+  symbolt *added_symbol = context.move_symbol_to_context(symbol);
+
+  // Iterate over class members
+  for (auto &class_member : class_node["body"])
+  {
+    if (class_member["_type"] == "FunctionDef")
+    {
+      get_attributes_from_self(class_member["body"], clazz);
+      added_symbol->type = clazz;
+
+      std::string method_name = class_member["name"].get<std::string>();
+      if (method_name == "__init__")
+        method_name = current_class_name;
+
+      current_func_name = method_name;
+      get_function_definition(class_member);
+
+      exprt added_method =
+        symbol_expr(*context.find_symbol(create_symbol_id()));
+      struct_typet::componentt method(added_method.name(), added_method.type());
+      clazz.methods().push_back(method);
+      current_func_name.clear();
+    }
+  }
+  added_symbol->type = clazz;
+  current_class_name.clear();
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -759,7 +956,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
   code_blockt block;
 
-  // Iterate through the statements of the block
+  // Iterate over block statements
   for (auto &element : ast_block)
   {
     StatementType type = get_statement_type(element);
@@ -814,6 +1011,11 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       }
       break;
     }
+    case StatementType::CLASS_DEFINITION:
+    {
+      get_class_definition(element);
+      break;
+    }
     case StatementType::UNKNOWN:
     default:
       log_error(
@@ -823,6 +1025,17 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
   }
 
   return block;
+}
+
+python_converter::python_converter(
+  contextt &_context,
+  const nlohmann::json &ast)
+  : context(_context),
+    ast_json(ast),
+    current_func_name(""),
+    current_class_name(""),
+    ref_instance(nullptr)
+{
 }
 
 bool python_converter::convert()
@@ -860,7 +1073,7 @@ bool python_converter::convert()
     get_function_definition(function_node);
 
     // Get function symbol
-    std::string symbol_id = "py:" + python_filename + "@F@" + function;
+    std::string symbol_id = create_symbol_id() + "@F@" + function;
     symbolt *symbol = context.find_symbol(symbol_id);
     if (!symbol)
     {

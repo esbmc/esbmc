@@ -1,9 +1,13 @@
 #include <util/array2string.h>
+#include <util/bitvector.h>
 
-void array2string(const symbolt &src, exprt &dest)
+bool array2string(const symbolt &src, exprt &dest)
 {
   if (src.type.id() != irept::id_array)
-    return;
+    return true;
+
+  if (bv_width(src.type.subtype()) != 8) // TODO: handle wide strings
+    return true;
 
   std::string value_str;
   size_t cnt = 0;
@@ -18,4 +22,5 @@ void array2string(const symbolt &src, exprt &dest)
   exprt new_expr("string-constant", src.type);
   new_expr.value(value_str);
   dest = new_expr;
+  return false;
 }

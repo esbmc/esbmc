@@ -13,6 +13,7 @@
 #include <util/prefix.h>
 #include <util/std_code.h>
 #include <util/type_byte_size.h>
+#include <util/type2name.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
@@ -233,6 +234,11 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
       adjust_side_effect_statement_expression(expr);
     else if (statement == "gcc_conditional_expression")
     {
+    }
+    else if (statement == "nondet")
+    {
+      /* Bypassing side effects with `nondet` as a statement since
+       * the goto layer can handle it. */
     }
     else
     {
@@ -638,43 +644,111 @@ void clang_c_adjust::adjust_side_effect_function_call(
   if (f_op.is_symbol())
   {
     const irep_idt &identifier = f_op.identifier();
-    symbolt *s = context.find_symbol(identifier);
-    if (s == nullptr)
+    if (exprt poly = is_gcc_polymorphic_builtin(identifier, expr.arguments());
+        poly.is_not_nil())
     {
-      // maybe this is an undeclared function
-      // let's just add it
-      symbolt new_symbol;
+      irep_idt identifier_with_type = poly.identifier();
+      auto &arguments = to_code_type(poly.type()).arguments();
 
-      new_symbol.id = identifier;
-      new_symbol.name = f_op.name();
-      new_symbol.location = expr.location();
-      new_symbol.type = f_op.type();
-      new_symbol.mode = "C";
+      // For all atomic/sync polymorphic built-ins (which are the ones handled
+      // by typecheck_gcc_polymorphic_builtin), looking at the first parameter
+      // suffices to distinguish different implementations.
+      if (arguments.front().type().is_pointer())
+      {
+        identifier_with_type =
+          id2string(identifier) + "_" +
+          type2name(to_pointer_type(arguments.front().type()).subtype());
+      }
+      else
+      {
+        identifier_with_type =
+          id2string(identifier) + "_" + type2name(arguments.front().type());
+      }
 
-      symbolt *symbol_ptr;
-      bool res = context.move(new_symbol, symbol_ptr);
-      assert(!res);
-      (void)res; // ndebug
+      poly.identifier(identifier_with_type);
+      poly.name(f_op.name());
+      poly.location() = expr.location();
 
-      // clang will complain about this already, no need for us to do the same!
+      symbolt *function_symbol_with_type =
+        context.find_symbol(identifier_with_type);
+      if (!function_symbol_with_type)
+      {
+        for (std::size_t i = 0; i < arguments.size(); ++i)
+        {
+          const std::string base_name = "p_" + std::to_string(i);
+
+          // TODO: Just like the function parameter symbols in
+          // clang_c_convertert::get_function_param, adding this symbol to the
+          // context is only necessary for the migrate code.
+          symbolt param_symbol;
+          param_symbol.id = id2string(identifier_with_type) + "::" + base_name;
+          param_symbol.name = base_name;
+          param_symbol.location = f_op.location();
+          param_symbol.type = arguments[i].type();
+          param_symbol.lvalue = true;
+          param_symbol.is_parameter = true;
+          param_symbol.file_local = true;
+
+          arguments[i].cmt_identifier(param_symbol.id);
+          arguments[i].cmt_base_name(param_symbol.name);
+
+          context.add(param_symbol);
+        }
+
+        symbolt new_symbol;
+        new_symbol.id = identifier_with_type;
+        new_symbol.name = f_op.name();
+        new_symbol.location = expr.location();
+        new_symbol.type = poly.type();
+        code_blockt implementation =
+          instantiate_gcc_polymorphic_builtin(identifier, to_symbol_expr(poly));
+        new_symbol.value = implementation;
+
+        context.add(new_symbol);
+      }
+
+      f_op = std::move(poly);
     }
     else
     {
-      // Pull symbol informations, like parameter types and location
+      symbolt *function_symbol = context.find_symbol(identifier);
+      if (function_symbol)
+      {
+        // Pull symbol informations, like parameter types and location
 
-      // Save previous location
-      locationt location = f_op.location();
+        // Save previous location
+        locationt location = f_op.location();
 
-      const symbolt &symbol = *s;
-      f_op = symbol_expr(symbol);
+        const symbolt &symbol = *function_symbol;
+        f_op = symbol_expr(symbol);
 
-      // Restore location
-      f_op.location() = location;
+        // Restore location
+        f_op.location() = location;
 
-      if (symbol.lvalue)
-        f_op.cmt_lvalue(true);
+        if (symbol.lvalue)
+          f_op.cmt_lvalue(true);
 
-      align_se_function_call_return_type(f_op, expr);
+        align_se_function_call_return_type(f_op, expr);
+      }
+      else
+      {
+        // clang will complain about this already, no need for us to do the same!
+
+        // maybe this is an undeclared function
+        // let's just add it
+        symbolt new_symbol;
+
+        new_symbol.id = identifier;
+        new_symbol.name = f_op.name();
+        new_symbol.location = expr.location();
+        new_symbol.type = f_op.type();
+        new_symbol.mode = "C";
+
+        // Adjust type
+        to_code_type(new_symbol.type).make_ellipsis();
+        to_code_type(f_op.type()).make_ellipsis();
+        context.add(new_symbol);
+      }
     }
   }
   else
