@@ -97,7 +97,7 @@ bool solidity_convertert::convert()
       add_enum_member_val(*itr);
   }
 
-  // secound round: handle contract definition only
+  // secound round: handle contract definition
   index = 0;
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
        ++itr, ++index)
@@ -108,7 +108,7 @@ bool solidity_convertert::convert()
     {
       current_contractName = (*itr)["name"].get<std::string>();
 
-      // modifier the enum first
+      // modify the enum
       nlohmann::json &ast_nodes = (*itr)["nodes"];
       for (nlohmann::json::iterator ittr = ast_nodes.begin();
            ittr != ast_nodes.end();
@@ -360,10 +360,10 @@ bool solidity_convertert::get_var_decl(
   return false;
 }
 
+// This function handles both contract and struct
+// The contract can be regarded as the class in C++, converting to a struct
 bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
 {
-  // Convert Contract => class => struct
-
   // 1. populate name, id
   std::string id, name;
   struct_typet t = struct_typet();
@@ -410,6 +410,8 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
   // populate the scope_map
+  // this map is used to find reference when there is no decl_ref_id provided in the nodes
+  // or replace the find_decl_ref in order to speed up
   int scp = struct_def["id"].get<int>();
   scope_map.insert(std::pair<int, std::string>(scp, name));
 
@@ -438,6 +440,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
     {
     case SolidityGrammar::ContractBodyElementT::VarDecl:
     {
+      // this can be both state and non-state variable
       if (get_struct_class_fields(*itr, t))
         return true;
       break;
@@ -451,8 +454,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
     case SolidityGrammar::ContractBodyElementT::StructDef:
     case SolidityGrammar::ContractBodyElementT::EnumDef:
     {
-      // In theory, these are part of the contract
-      // But we cannot populate them into the contract/class symbol
+      // skip
       break;
     }
     default:
@@ -475,7 +477,6 @@ bool solidity_convertert::get_struct_class_fields(
 {
   struct_typet::componentt comp;
 
-  // Note that the symbols are not in the table.
   if (get_var_decl_ref(ast_node, comp))
     return true;
 
@@ -1490,6 +1491,7 @@ bool solidity_convertert::get_expr(
       const nlohmann::json members = struct_ref["members"];
       const nlohmann::json args = expr["arguments"];
 
+      // popluate components
       for (unsigned int i = 0; i < inits.operands().size() && i < args.size();
            i++)
       {
@@ -1717,9 +1719,9 @@ bool solidity_convertert::get_expr(
     // 1. ContractMemberCall: contractInstance.call()
     //                        contractInstanceArray[0].call()
     //                        contractInstance.x
-    // 2. StructMemberCall struct.member
-    // 3. EnumMemberCall enum.member
-    // 4. (?)internal property
+    // 2. StructMemberCall: struct.member
+    // 3. EnumMemberCall: enum.member
+    // 4. (?)internal property: tx.origin, msg.sender, ...
 
     // Function symbol id is c:@C@referenced_function_contract_name@F@function_name#referenced_function_id
     // Using referencedDeclaration will point us to the original declared function. This works even for inherited function and overrided functions.
