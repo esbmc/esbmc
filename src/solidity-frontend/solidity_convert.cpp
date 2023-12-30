@@ -3534,7 +3534,9 @@ const nlohmann::json &solidity_convertert::find_constructor_ref(int ref_decl_id)
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
        ++itr, ++index)
   {
-    if ((*itr)["nodeType"] == "ContractDefinition")
+    if (
+      (*itr)["id"].get<int>() == ref_decl_id &&
+      (*itr)["nodeType"] == "ContractDefinition")
     {
       nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
       unsigned idx = 0;
