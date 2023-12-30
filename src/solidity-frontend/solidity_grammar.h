@@ -51,6 +51,9 @@ enum TypeNameT
   // enum
   EnumTypeName,
 
+  // struct
+  StructTypeName,
+
   // tuple
   TupleTypeName,
 
@@ -316,10 +319,16 @@ enum ExpressionT
   // Call member functions
   // equivalent toclang::Stmt::CXXMemberCallExprClass
   // i.e. x.caller();
-  MemberCallClass,
+  ContractMemberCall,
 
   // Type Converion
   ElementaryTypeNameExpression,
+
+  // Struct Member Access
+  StructMemberCall,
+
+  // Enum Member Access
+  EnumMemberCall,
 
   ExpressionTError
 };

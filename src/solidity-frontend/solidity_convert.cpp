@@ -110,6 +110,10 @@ bool solidity_convertert::convert()
 
     // reset
     current_contractName = "";
+    current_functionName = "";
+    current_functionDecl = nullptr;
+    current_forStmt = nullptr;
+    global_scope_id = 0;
   }
 
   return false; // 'false' indicates successful completion.
@@ -335,14 +339,21 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
 
   // 1. populate name, id
   std::string id, name;
+  struct_typet t = struct_typet();
+
   name = struct_def["name"];
   if (struct_def["nodeType"].get<std::string>() == "ContractDefinition")
+  {
     id = prefix + name;
+    t.tag(name);
+  }
   else if (struct_def["nodeType"].get<std::string>() == "StructDefinition")
-    get_state_var_decl_name(
-      struct_def,
-      name,
-      id); // "c:@C@Base@Struct_Name" not "tag-struct Struct_Name"
+  {
+    // "c:@C@Base@Struct_Name" not "tag-struct Struct_Name"
+    // because we might need to support multiple contract verification
+    get_state_var_decl_name(struct_def, name, id);
+    t.tag("struct " + name);
+  }
   else
   {
     log_error(
@@ -350,8 +361,6 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
       struct_def["nodeType"].get<std::string>());
     return true;
   }
-  struct_typet t = struct_typet();
-  t.tag(name);
 
   // 2. Check if the symbol is already added to the context, do nothing if it is
   // already in the context.
@@ -430,9 +439,6 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
   t.location() = location_begin;
   added_symbol.type = t;
 
-  log_status("{}", added_symbol.type.to_string());
-  log_status("{}", added_symbol.value.to_string());
-
   return false;
 }
 
@@ -442,9 +448,13 @@ bool solidity_convertert::get_struct_class_fields(
 {
   struct_typet::componentt comp;
 
+  // Note that the symbols are not in the table.
   if (get_var_decl_ref(ast_node, comp))
     return true;
+
+  comp.id("component");
   comp.type().set("#member_name", type.name());
+
   if (get_access_from_decl(ast_node, comp))
     return true;
   type.components().push_back(comp);
@@ -757,7 +767,6 @@ bool solidity_convertert::get_block(
     get_final_location_from_stmt(block, location_end);
 
     _block.end_location(location_end);
-
     new_expr = _block;
     break;
   }
@@ -1136,14 +1145,23 @@ bool solidity_convertert::get_expr(
           if (get_func_decl_ref(decl, new_expr))
             return true;
         }
-        else if (decl["nodeType"] == "EnumValue")
+        else if (decl["nodeType"] == "StructDefinition")
         {
-          if (get_enum_member_ref(decl, new_expr))
-            return true;
+          std::string name, id;
+          get_state_var_decl_name(decl, name, id);
+          if (context.find_symbol(id) == nullptr)
+          {
+            if (get_struct_class(decl))
+              return true;
+          }
+          new_expr = symbol_expr(*context.find_symbol(id));
         }
         else
         {
-          assert(!"Unsupported DeclRefExprClass type");
+          log_error(
+            "Unsupported DeclRefExprClass type, got nodeType={}",
+            decl["nodeType"].get<std::string>());
+          return true;
         }
       }
       else
@@ -1233,7 +1251,9 @@ bool solidity_convertert::get_expr(
     {
       assert(literal_type != nullptr);
 
-      if (the_value.substr(0, 2) == "0x") // meaning hex-string
+      if (
+        the_value.length() >= 2 &&
+        the_value.substr(0, 2) == "0x") // meaning hex-string
       {
         if (convert_hex_literal(the_value, new_expr))
           return true;
@@ -1352,6 +1372,78 @@ bool solidity_convertert::get_expr(
     // 1. Get callee expr
     const nlohmann::json &callee_expr_json = expr["expression"];
 
+    if (
+      callee_expr_json.contains("nodeType") &&
+      callee_expr_json["nodeType"] == "MemberAccess")
+    {
+      // ContractMemberCall
+
+      const int contract_func_id =
+        callee_expr_json["referencedDeclaration"].get<int>();
+      const nlohmann::json caller_expr_json = find_decl_ref(contract_func_id);
+      const int contract_id = caller_expr_json["scope"].get<int>();
+
+      std::string ref_contract_name;
+      if (scope_map.count(contract_id))
+        ref_contract_name = scope_map.at(contract_id);
+      else
+        get_contract_name(contract_id, ref_contract_name);
+
+      std::string name, id;
+      get_function_definition_name(caller_expr_json, name, id);
+
+      if (context.find_symbol(id) == nullptr)
+        // probably a built-in function
+        // that is not supported yet
+        return true;
+
+      const symbolt s = *context.find_symbol(id);
+      typet type = s.type;
+
+      new_expr = exprt("symbol", type);
+      new_expr.identifier(id);
+      new_expr.cmt_lvalue(true);
+      new_expr.name(name);
+      new_expr.set("#member_name", prefix + ref_contract_name);
+
+      // obtain the type of return value
+      // It can be retrieved directly from the original function declaration
+      typet t;
+      if (get_type_description(caller_expr_json["returnParameters"], t))
+        return true;
+
+      side_effect_expr_function_callt call;
+      call.function() = new_expr;
+      call.type() = t;
+
+      // populate params
+      auto param_nodes = caller_expr_json["parameters"]["parameters"];
+      unsigned num_args = 0;
+      for (const auto &arg : expr["arguments"].items())
+      {
+        nlohmann::json param = nullptr;
+        nlohmann::json::iterator itr = param_nodes.begin();
+        if (itr != param_nodes.end())
+        {
+          if ((*itr).contains("typeDescriptions"))
+          {
+            param = (*itr)["typeDescriptions"];
+          }
+          ++itr;
+        }
+
+        exprt single_arg;
+        if (get_expr(arg.value(), param, single_arg))
+          return true;
+
+        call.arguments().push_back(single_arg);
+        ++num_args;
+      }
+
+      new_expr = call;
+      break;
+    }
+
     // wrap it in an ImplicitCastExpr to perform conversion of FunctionToPointerDecay
     nlohmann::json implicit_cast_expr =
       make_implicit_cast_expr(callee_expr_json, "FunctionToPointerDecay");
@@ -1361,7 +1453,42 @@ bool solidity_convertert::get_expr(
 
     // 2. Get type
     // extract from the return_type
-    assert(callee_expr.is_symbol() && callee_expr.type().is_code());
+    assert(callee_expr.is_symbol());
+    if (expr["kind"] == "structConstructorCall")
+    {
+      // e.g. Book book = Book('Learn Java', 'TP', 1);
+      if (callee_expr.type().id() != irept::id_struct)
+        return true;
+
+      typet t = callee_expr.type();
+      exprt inits = gen_zero(t);
+
+      int ref_id = callee_expr_json["referencedDeclaration"].get<int>();
+      const nlohmann::json struct_ref = find_decl_ref(ref_id);
+      const nlohmann::json members = struct_ref["members"];
+      const nlohmann::json args = expr["arguments"];
+
+      for (unsigned int i = 0; i < inits.operands().size() && i < args.size();
+           i++)
+      {
+        exprt init;
+        if (get_expr(args.at(i), members.at(i)["typeDescriptions"], init))
+          return true;
+
+        const struct_union_typet::componentt *c =
+          &to_struct_type(t).components().at(i);
+        typet elem_type = c->type();
+
+        solidity_gen_typecast(ns, init, elem_type);
+        inits.operands().at(i) = init;
+      }
+
+      new_expr = inits;
+      break;
+    }
+
+    // funciton call expr
+    assert(callee_expr.type().is_code());
     typet type = to_code_type(callee_expr.type()).return_type();
 
     side_effect_expr_function_callt call;
@@ -1561,76 +1688,71 @@ bool solidity_convertert::get_expr(
 
     break;
   }
-  case SolidityGrammar::ExpressionT::MemberCallClass:
+  case SolidityGrammar::ExpressionT::ContractMemberCall:
+  case SolidityGrammar::ExpressionT::StructMemberCall:
+  case SolidityGrammar::ExpressionT::EnumMemberCall:
   {
-    assert(expr.contains("expression"));
-    const nlohmann::json &callee_expr_json = expr["expression"];
+    // 1. ContractMemberCall: contractInstance.call()
+    //                        contractInstanceArray[0].call()
+    //                        contractInstance.x
+    // 2. StructMemberCall struct.member
+    // 3. EnumMemberCall enum.member
+    // 4. (?)internal property
 
     // Function symbol id is c:@C@referenced_function_contract_name@F@function_name#referenced_function_id
     // Using referencedDeclaration will point us to the original declared function. This works even for inherited function and overrided functions.
+    assert(expr.contains("expression"));
+    const nlohmann::json callee_expr_json = expr["expression"];
 
-    const int caller_id =
-      callee_expr_json["referencedDeclaration"].get<std::uint16_t>();
+    const int caller_id = callee_expr_json["referencedDeclaration"].get<int>();
+
     const nlohmann::json caller_expr_json = find_decl_ref(caller_id);
-    assert(caller_expr_json.contains("scope"));
-    const int contract_id = caller_expr_json["scope"].get<std::uint16_t>();
 
-    std::string ref_contract_name;
-    get_contract_name(contract_id, ref_contract_name);
-
-    std::string name, id;
-    get_function_definition_name(caller_expr_json, name, id);
-
-    if (context.find_symbol(id) == nullptr)
-      // probably a built-in function
-      // that is not supported yet
-      return true;
-
-    const symbolt s = *context.find_symbol(id);
-    typet type = s.type;
-
-    new_expr = exprt("symbol", type);
-    new_expr.identifier(id);
-    new_expr.cmt_lvalue(true);
-    new_expr.name(name);
-    new_expr.set("#member_name", prefix + ref_contract_name);
-
-    // obtain the type of return value
-    // It can be retrieved directly from the original function declaration
-    typet t;
-    if (get_type_description(caller_expr_json["returnParameters"], t))
-      return true;
-
-    side_effect_expr_function_callt call;
-    call.function() = new_expr;
-    call.type() = t;
-
-    // populate params
-    auto param_nodes = caller_expr_json["parameters"]["parameters"];
-    unsigned num_args = 0;
-    for (const auto &arg : expr["arguments"].items())
+    switch (type)
     {
-      nlohmann::json param = nullptr;
-      nlohmann::json::iterator itr = param_nodes.begin();
-      if (itr != param_nodes.end())
-      {
-        if ((*itr).contains("typeDescriptions"))
-        {
-          param = (*itr)["typeDescriptions"];
-        }
-        ++itr;
-      }
-
-      exprt single_arg;
-      if (get_expr(arg.value(), param, single_arg))
+    case SolidityGrammar::ExpressionT::StructMemberCall:
+    {
+      exprt base;
+      if (get_expr(callee_expr_json, base))
         return true;
 
-      call.arguments().push_back(single_arg);
-      ++num_args;
-    }
-    log_debug("solidity", "  @@ num_args={}", num_args);
+      const int struct_var_id = expr["referencedDeclaration"].get<int>();
+      const nlohmann::json struct_var_ref = find_decl_ref(struct_var_id);
 
-    new_expr = call;
+      exprt comp;
+      if (get_var_decl_ref(struct_var_ref, comp))
+        return true;
+
+      assert(comp.name() == expr["memberName"]);
+      new_expr = member_exprt(base, comp.name(), comp.type());
+
+      break;
+    }
+    case SolidityGrammar::ExpressionT::ContractMemberCall:
+    {
+      // this should be handled in CallExprClass
+      log_error("Unexpected ContractMemberCall");
+      return true;
+    }
+    case SolidityGrammar::ExpressionT::EnumMemberCall:
+    {
+      log_status("111");
+      const int enum_id = expr["referencedDeclaration"].get<int>();
+      const nlohmann::json enum_member_ref = find_decl_ref(enum_id);
+      if (get_enum_member_ref(enum_member_ref, new_expr))
+        return true;
+
+      break;
+    }
+    default:
+    {
+      if (get_expr(callee_expr_json, literal_type, new_expr))
+        return true;
+
+      break;
+    }
+    }
+
     break;
   }
   case SolidityGrammar::ExpressionT::ElementaryTypeNameExpression:
@@ -2219,16 +2341,24 @@ bool solidity_convertert::get_var_decl_ref(
   else
     get_var_decl_name(decl, name, id);
 
-  typet type;
-  if (get_type_description(
-        decl["typeName"]["typeDescriptions"],
-        type)) // "type-name" as in state-variable-declaration
-    return true;
+  if (context.find_symbol(id) != nullptr)
+  {
+    new_expr = symbol_expr(*context.find_symbol(id));
+  }
+  else
+  {
+    typet type;
+    if (get_type_description(
+          decl["typeName"]["typeDescriptions"],
+          type)) // "type-name" as in state-variable-declaration
+      return true;
 
-  new_expr = exprt("symbol", type);
-  new_expr.identifier(id);
-  new_expr.cmt_lvalue(true);
-  new_expr.name(name);
+    new_expr = exprt("symbol", type);
+    new_expr.identifier(id);
+    new_expr.cmt_lvalue(true);
+    new_expr.name(name);
+  }
+
   return false;
 }
 
@@ -2505,11 +2635,19 @@ bool solidity_convertert::get_type_description(
     // e.g.
     // uint32 a = 0x432178;
     // uint16 b = uint16(a); // b will be 0x2178 now
-    //
-    // "typeDescriptions": {
-    //     "typeIdentifier": "t_type$_t_uint16_$",
-    //     "typeString": "type(uint16)"
-    // }
+    // "nodeType": "ElementaryTypeNameExpression",
+    //             "src": "155:6:0",
+    //             "typeDescriptions": {
+    //                 "typeIdentifier": "t_type$_t_uint16_$",
+    //                 "typeString": "type(uint16)"
+    //             },
+    //             "typeName": {
+    //                 "id": 10,
+    //                 "name": "uint16",
+    //                 "nodeType": "ElementaryTypeName",
+    //                 "src": "155:6:0",
+    //                 "typeDescriptions": {}
+    //             }
 
     nlohmann::json new_json;
     std::string typeIdentifier = type_name["typeIdentifier"].get<std::string>();
@@ -2534,6 +2672,42 @@ bool solidity_convertert::get_type_description(
   case SolidityGrammar::TypeNameT::EnumTypeName:
   {
     new_type = enum_type();
+    break;
+  }
+  case SolidityGrammar::TypeNameT::StructTypeName:
+  {
+    // e.g. struct ContractName.StructName
+    //   "typeDescriptions": {
+    //   "typeIdentifier": "t_struct$_Book_$8_storage",
+    //   "typeString": "struct Base.Book storage ref"
+    // }
+
+    // extract id and ref_id;
+    std::string sub = type_name["typeIdentifier"].get<std::string>();
+    sub.replace(sub.find("t_struct$_"), sizeof("t_struct$_") - 1, "");
+    if (sub.find("t_struct$") != std::string::npos)
+    {
+      //! ASSUME we are not handling nested struct
+      log_error("Unsupported nested struct");
+      return true;
+    }
+    auto pos_1 = sub.find("$");
+    auto pos_2 = sub.find("_storage");
+
+    std::string id, name;
+    const int ref_id = stoi(sub.substr(pos_1 + 1, pos_2));
+    const nlohmann::json struct_base = find_decl_ref(ref_id);
+    get_state_var_decl_name(struct_base, name, id);
+
+    if (context.find_symbol(id) == nullptr)
+    {
+      // if struct is not parsed, handle the struct first
+      if (get_struct_class(struct_base))
+        return true;
+    }
+
+    new_type = symbol_typet(id);
+
     break;
   }
   default:
@@ -2957,12 +3131,12 @@ void solidity_convertert::get_state_var_decl_name(
   // Follow the way in clang:
   //  - For state variable name, just use the ast_node["name"]
   //  - For state variable id, add prefix "c:@"
+  assert(!current_contractName.empty());
   name =
     ast_node["name"]
       .get<
         std::
           string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
-  assert(current_contractName != "");
 
   // e.g. c:@C@Base@x
   // The prefix is used to avoid duplicate names
@@ -2974,6 +3148,7 @@ void solidity_convertert::get_var_decl_name(
   std::string &name,
   std::string &id)
 {
+  assert(!current_contractName.empty());
   name =
     ast_node["name"]
       .get<
@@ -2985,20 +3160,16 @@ void solidity_convertert::get_var_decl_name(
     // converting local variable inside a function
     // For non-state functions, we give it different id.
     // E.g. for local variable i in function nondet(), it's "c:overflow_2_nondet.c@55@F@nondet@i".
-
-    id = "c:" + get_modulename_from_path(absolute_path) + ".solast" +
-         //"@"  + std::to_string(ast_node["scope"].get<int>()) +
-         "@" + std::to_string(445) + "@" + "F" + "@" + current_functionName +
-         "@" + name;
+    assert(!current_functionName.empty());
+    id = "c:@C@" + current_contractName + "@F@" + current_functionName + "@" +
+         name;
   }
   else if (ast_node.contains("scope"))
   {
     //! Assume it is a variable inside struct
     int scp = ast_node["scope"].get<int>();
     std::string struct_name = scope_map.at(scp);
-    id = "c:" + get_modulename_from_path(absolute_path) + ".solast" +
-         //"@"  + std::to_string(ast_node["scope"].get<int>()) +
-         "@" + std::to_string(445) + "@" + "F" + "@" + struct_name + "@" + name;
+    id = "c:@C@" + current_contractName + "@" + struct_name + "@" + name;
   }
   else
   {
@@ -3016,6 +3187,7 @@ void solidity_convertert::get_function_definition_name(
   //  - For function name, just use the ast_node["name"]
   // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
   std::string contract_name;
+  assert(ast_node.contains("scope"));
   get_contract_name(ast_node["scope"], contract_name);
 
   if (ast_node["kind"].get<std::string>() == "constructor")
@@ -3188,8 +3360,10 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
            itrr != ast_nodes.end();
            ++itrr, ++idx)
       {
-        // for enum-member, as enum will not defined in the function
-        if ((*itrr)["nodeType"] == "EnumDefinition")
+        // for enum-member, as enum is defined in the function
+        if (
+          (*itrr)["nodeType"] == "EnumDefinition" ||
+          (*itrr)["nodeType"] == "StructDefinition")
         {
           unsigned men_idx = 0;
           // enum cannot be empty

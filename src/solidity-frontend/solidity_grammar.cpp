@@ -135,6 +135,7 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
 TypeNameT get_type_name_t(const nlohmann::json &type_name)
 {
   // Solidity AST node has duplicate descrptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
+  //! Order matters
 
   if (type_name.contains("typeString"))
   {
@@ -186,6 +187,22 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       // For state var declaration,
       return ElementaryTypeName;
     }
+    else if (
+      type_name["typeIdentifier"].get<std::string>().find("t_enum$") !=
+      std::string::npos)
+    {
+      return EnumTypeName;
+    }
+    else if (
+      type_name["typeIdentifier"].get<std::string>().find("t_contract$") !=
+      std::string::npos)
+    {
+      return ContractTypeName;
+    }
+    else if (typeIdentifier.find("t_struct$") != std::string::npos)
+    {
+      return StructTypeName;
+    }
     else if (typeString.find("type(") != std::string::npos)
     {
       // For type conversion
@@ -209,18 +226,6 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       // ArrayToPointer decay in DeclRefExpr when dereferencing an array, e.g. a[0]
       return PointerArrayToPtr;
-    }
-    else if (
-      type_name["typeIdentifier"].get<std::string>().find("t_contract") !=
-      std::string::npos)
-    {
-      return ContractTypeName;
-    }
-    else if (
-      type_name["typeIdentifier"].get<std::string>().find("t_enum") !=
-      std::string::npos)
-    {
-      return EnumTypeName;
     }
     else
     {
@@ -263,6 +268,7 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(ContractTypeName)
     ENUM_TO_STR(TypeConversionName)
     ENUM_TO_STR(EnumTypeName)
+    ENUM_TO_STR(StructTypeName)
     ENUM_TO_STR(TypeNameTError)
   default:
   {
@@ -646,8 +652,6 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     if (expr["expression"]["nodeType"] == "NewExpression")
       return NewExpression;
-    if (expr["expression"]["nodeType"] == "MemberAccess")
-      return MemberCallClass;
     if (
       expr["expression"]["nodeType"] == "ElementaryTypeNameExpression" &&
       expr["kind"] == "typeConversion")
@@ -656,12 +660,15 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   }
   else if (expr["nodeType"] == "MemberAccess")
   {
-    // get enum.member
-    if (expr["expression"]["nodeType"] == "Identifier")
-      return DeclRefExprClass;
-
-    // get contractInstance.function
-    return CallExprClass;
+    assert(expr.contains("expression"));
+    SolidityGrammar::TypeNameT type_name =
+      get_type_name_t(expr["expression"]["typeDescriptions"]);
+    if (type_name == SolidityGrammar::TypeNameT::StructTypeName)
+      return StructMemberCall;
+    if (type_name == SolidityGrammar::TypeNameT::EnumTypeName)
+      return EnumMemberCall;
+    if (type_name == SolidityGrammar::TypeNameT::ContractTypeName)
+      return ContractMemberCall;
   }
   else if (expr["nodeType"] == "ImplicitCastExprClass")
   {
@@ -909,7 +916,9 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(ImplicitCastExprClass)
     ENUM_TO_STR(IndexAccess)
     ENUM_TO_STR(NewExpression)
-    ENUM_TO_STR(MemberCallClass)
+    ENUM_TO_STR(ContractMemberCall)
+    ENUM_TO_STR(StructMemberCall)
+    ENUM_TO_STR(EnumMemberCall)
     ENUM_TO_STR(ElementaryTypeNameExpression)
     ENUM_TO_STR(ExpressionTError)
   default:
