@@ -1167,8 +1167,7 @@ bool solidity_convertert::get_expr(
         }
         else if (decl["nodeType"] == "StructDefinition")
         {
-          std::string name, id;
-          name = decl["name"].get<std::string>();
+          std::string id;
           id = prefix + "struct " + decl["canonicalName"].get<std::string>();
 
           if (context.find_symbol(id) == nullptr)
