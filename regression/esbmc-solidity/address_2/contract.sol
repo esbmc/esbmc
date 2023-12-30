@@ -7,5 +7,5 @@ contract Base {
     function comp() public {
         address payable addr3 = payable(x);
         assert(x == addr3);
-    }   
+    }
 }
