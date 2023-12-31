@@ -44,25 +44,6 @@ inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
   }
 }
 
-static inline void get_symbols(
-  const expr2tc &expr,
-  std::unordered_set<expr2tc, irep2_hash> &symbols)
-{
-  if (is_nil_expr(expr))
-    return;
-
-  if (is_symbol2t(expr))
-  {
-    symbol2t s = to_symbol2t(expr);
-    if (s.thename.as_string().find("__ESBMC_") != std::string::npos)
-      return;
-    symbols.insert(expr);
-  }
-
-  expr->foreach_operand(
-    [&symbols](const expr2tc &e) -> void { get_symbols(e, symbols); });
-}
-
 static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 {
   // Preconditions
