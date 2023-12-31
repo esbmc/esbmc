@@ -931,6 +931,44 @@ void interval_domaint::transform(
 
   default:;
   }
+
+  /* The abstract interpreter can only affect the state 'after' the execution of the statement
+   * however, function calls need to change the parameter 'before' its execution. We can
+   * deal with this by just checking if the target instruction is a function call!
+   */
+  if (to->is_function_call())
+  {
+    const code_function_call2t &code_function_call =
+      to_code_function_call2t( to->code);
+
+    // We don't know anything about the return value
+    if (!is_nil_expr(code_function_call.ret))
+    {
+      havoc_rec(code_function_call.ret);
+    }
+     
+
+    assert(is_code_type(code_function_call.function->type));
+    const code_type2t &function =
+      to_code_type(code_function_call.function->type);
+
+    // Let's do an assignment for all parameters!
+    for (size_t i = 0; i < function.arguments.size(); i++)
+    {
+      const expr2tc &arg_value = code_function_call.operands[i];
+      const type2tc &arg_type = function.arguments[i];
+      const expr2tc arg_symbol =
+        symbol2tc(arg_type, function.argument_names[i]);
+
+      // Are we dealing with a recursive function?
+      std::unordered_set<expr2tc, irep2_hash> symbols;
+      get_symbols(arg_value, symbols);
+
+      bool is_recursive_arg = symbols.count(arg_symbol);
+      assign(code_assign2tc(arg_symbol, arg_value), is_recursive_arg); 
+    }
+  }
+
   // Let's deal with returns now.
   to--;
   if (from->is_end_function() && to->is_function_call())
