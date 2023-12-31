@@ -201,19 +201,27 @@ wrapped_interval interval_domaint::generate_modular_interval<wrapped_interval>(
 }
 
 template <class T>
-void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
+void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs, bool recursive)
 {
   assert(is_symbol2t(lhs));
+  const symbol2t &sym = to_symbol2t(lhs);
+
   // a = b
   auto b = get_interval<T>(rhs);
   if (enable_modular_intervals)
   {
-    auto a = generate_modular_interval<T>(to_symbol2t(lhs));
+    auto a = generate_modular_interval<T>(sym);
     b.intersect_with(a);
   }
-
+  
+  if (recursive)
+  {
+    auto previous = get_interval_from_symbol<T>(sym);
+    b.join(previous);
+  }
+  
   // TODO: add classic algorithm
-  update_symbol_interval(to_symbol2t(lhs), b);
+  update_symbol_interval(sym, b);
 }
 
 template <class T>
@@ -986,7 +994,7 @@ bool interval_domaint::join(const interval_domaint &b)
   return result;
 }
 
-void interval_domaint::assign(const expr2tc &expr)
+void interval_domaint::assign(const expr2tc &expr, const bool recursive)
 {
   assert(is_code_assign2t(expr));
   auto const &c = to_code_assign2t(expr);
@@ -1003,12 +1011,12 @@ void interval_domaint::assign(const expr2tc &expr)
   if (isbvop)
   {
     if (enable_wrapped_intervals)
-      apply_assignment<wrapped_interval>(c.target, c.source);
+      apply_assignment<wrapped_interval>(c.target, c.source, recursive);
     else
-      apply_assignment<integer_intervalt>(c.target, c.source);
+      apply_assignment<integer_intervalt>(c.target, c.source, recursive);
   }
   if (isfloatbvop && enable_real_intervals)
-    apply_assignment<real_intervalt>(c.target, c.source);
+      apply_assignment<real_intervalt>(c.target, c.source, recursive);
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
