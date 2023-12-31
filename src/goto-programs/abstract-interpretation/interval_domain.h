@@ -252,7 +252,7 @@ protected:
    *
    * @param assignment
    */
-  void assign(const expr2tc &assignment);
+  void assign(const expr2tc &assignment, const bool recursive = false);
 
   /**
    * @brief Applies LHS <= RHS and RHS <= LHS from assignment instructions
@@ -264,7 +264,7 @@ protected:
    * @param rhs
    */
   template <class Interval>
-  void apply_assignment(const expr2tc &lhs, const expr2tc &rhs);
+  void apply_assignment(const expr2tc &lhs, const expr2tc &rhs, bool recursive);
 
   /**
    * @brief Applies Extrapolation widening algorithm
