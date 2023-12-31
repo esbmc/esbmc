@@ -40,11 +40,6 @@ void interval_domaint::update_symbol_interval(
   const symbol2t &sym,
   const integer_intervalt value)
 {
-  // TODO: we can't handle globals
-  // as the analysis is not context-aware
-  //
-  if (has_prefix(sym.thename, "c:@"))
-    return;
   int_map[sym.thename] = value;
 }
 
