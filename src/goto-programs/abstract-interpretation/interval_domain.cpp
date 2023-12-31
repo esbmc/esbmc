@@ -894,15 +894,33 @@ void interval_domaint::transform(
     assume(instruction.guard);
     break;
 
-  case FUNCTION_CALL:
+  case RETURN:
   {
-    const code_function_call2t &code_function_call =
-      to_code_function_call2t(instruction.code);
-    if (!is_nil_expr(code_function_call.ret))
-      havoc_rec(code_function_call.ret);
-    break;
-  }
+    // After a return, all function arguments becomes nondet
+    const symbolt *current_function = ns.lookup(instruction.function);
+    type2tc t = migrate_type(current_function->type);
+    const code_type2t &function = to_code_type(t);
 
+    for (size_t i = 0; i < function.arguments.size(); i++)
+    {
+      const type2tc &arg_type = function.arguments[i];
+      const expr2tc arg_symbol =
+        symbol2tc(arg_type, function.argument_names[i]);
+      havoc_rec(arg_symbol);
+    }
+
+    /* The current implementation of the abstract interpreter do not store
+     * the return variable (which would be too tricky anyway). We can deal
+     * with this by constructing a tmp symbol in which we can apply assumptions
+     * later */
+    expr2tc return_var = symbol2tc(
+      function.ret_type, fmt::format("c:{}:ret", instruction.function));
+
+    assign(
+      code_assign2tc(return_var, to_code_return2t(instruction.code).operand));
+    
+  }
+  
   case ASSERT:
   {
     // There is a bug in Floats that need to be investigated! regression-float/nextafter
@@ -913,6 +931,25 @@ void interval_domaint::transform(
 
   default:;
   }
+  // Let's deal with returns now.
+  to--;
+  if (from->is_end_function() && to->is_function_call())
+  {
+    // TODO: deal with recursive functions
+    if (from->function == to->function)
+      return;
+    
+    const code_function_call2t &code_function_call =
+      to_code_function_call2t(to->code);
+
+    // We don't know anything about the return value
+    if (!is_nil_expr(code_function_call.ret))
+    {
+      expr2tc return_var = symbol2tc(
+      code_function_call.ret->type, fmt::format("c:{}:ret", instruction.function));
+      assign(code_assign2tc(code_function_call.ret, return_var)); 
+    }
+  }   
 }
 
 template <class IntervalMap>
