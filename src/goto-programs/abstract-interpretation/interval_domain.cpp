@@ -980,7 +980,7 @@ void interval_domaint::transform(
     const code_function_call2t &code_function_call =
       to_code_function_call2t(to->code);
 
-    // We don't know anything about the return value
+    // Apply assignment over return value
     if (!is_nil_expr(code_function_call.ret))
     {
       expr2tc return_var = symbol2tc(
