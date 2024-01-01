@@ -141,7 +141,8 @@ void dump_intervals(
   forall_goto_program_instructions (i_it, goto_function.body)
   {
     const interval_domaint &d = interval_analysis[i_it];
-    auto print_vars = [&out, &i_it](const auto &map) {
+    auto print_vars = [&out, &i_it](const auto &map)
+    {
       for (const auto &interval : map)
       {
         // "state,var,min,max,bot,top";
