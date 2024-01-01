@@ -1429,7 +1429,7 @@ private:
   {
     if (is_pointer_type(t))
       return BigInt::power2(32);
-    
+
     return BigInt::power2(t->get_width());
   }
 
