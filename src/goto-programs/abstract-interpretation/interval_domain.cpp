@@ -201,7 +201,10 @@ wrapped_interval interval_domaint::generate_modular_interval<wrapped_interval>(
 }
 
 template <class T>
-void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs, bool recursive)
+void interval_domaint::apply_assignment(
+  const expr2tc &lhs,
+  const expr2tc &rhs,
+  bool recursive)
 {
   assert(is_symbol2t(lhs));
   const symbol2t &sym = to_symbol2t(lhs);
@@ -213,13 +216,13 @@ void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs, 
     auto a = generate_modular_interval<T>(sym);
     b.intersect_with(a);
   }
-  
+
   if (recursive)
   {
     auto previous = get_interval_from_symbol<T>(sym);
     b.join(previous);
   }
-  
+
   // TODO: add classic algorithm
   update_symbol_interval(sym, b);
 }
@@ -717,7 +720,8 @@ expr2tc interval_domaint::make_expression_helper<wrapped_interval>(
     // Interval: [a,b]
     std::vector<expr2tc> disjuncts;
 
-    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w) {
+    auto convert = [this, &src, &symbol, &disjuncts](wrapped_interval &w)
+    {
       assert(*w.lower <= *w.upper);
 
       std::vector<expr2tc> s_conjuncts;
@@ -766,7 +770,8 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
     return gen_false_expr();
 
   std::vector<expr2tc> conjuncts;
-  auto typecast = [&symbol](expr2tc v) {
+  auto typecast = [&symbol](expr2tc v)
+  {
     c_implicit_typecast(v, symbol->type, *migrate_namespace_lookup);
     return v;
   };
@@ -843,10 +848,12 @@ bool contains_float(const expr2tc &e)
     return true;
 
   bool inner_float = false;
-  e->foreach_operand([&inner_float](auto &it) {
-    if (contains_float(it))
-      inner_float = true;
-  });
+  e->foreach_operand(
+    [&inner_float](auto &it)
+    {
+      if (contains_float(it))
+        inner_float = true;
+    });
 
   return inner_float;
 }
@@ -918,9 +925,8 @@ void interval_domaint::transform(
 
     assign(
       code_assign2tc(return_var, to_code_return2t(instruction.code).operand));
-    
   }
-  
+
   case ASSERT:
   {
     // There is a bug in Floats that need to be investigated! regression-float/nextafter
@@ -939,14 +945,13 @@ void interval_domaint::transform(
   if (to->is_function_call())
   {
     const code_function_call2t &code_function_call =
-      to_code_function_call2t( to->code);
+      to_code_function_call2t(to->code);
 
     // We don't know anything about the return value
     if (!is_nil_expr(code_function_call.ret))
     {
       havoc_rec(code_function_call.ret);
     }
-     
 
     assert(is_code_type(code_function_call.function->type));
     const code_type2t &function =
@@ -965,7 +970,7 @@ void interval_domaint::transform(
       get_symbols(arg_value, symbols);
 
       bool is_recursive_arg = symbols.count(arg_symbol);
-      assign(code_assign2tc(arg_symbol, arg_value), is_recursive_arg); 
+      assign(code_assign2tc(arg_symbol, arg_value), is_recursive_arg);
     }
   }
 
@@ -976,7 +981,7 @@ void interval_domaint::transform(
     // TODO: deal with recursive functions
     if (from->function == to->function)
       return;
-    
+
     const code_function_call2t &code_function_call =
       to_code_function_call2t(to->code);
 
@@ -984,10 +989,11 @@ void interval_domaint::transform(
     if (!is_nil_expr(code_function_call.ret))
     {
       expr2tc return_var = symbol2tc(
-      code_function_call.ret->type, fmt::format("c:{}:ret", instruction.function));
-      assign(code_assign2tc(code_function_call.ret, return_var)); 
+        code_function_call.ret->type,
+        fmt::format("c:{}:ret", instruction.function));
+      assign(code_assign2tc(code_function_call.ret, return_var));
     }
-  }   
+  }
 }
 
 template <class IntervalMap>
@@ -1091,7 +1097,7 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
       apply_assignment<integer_intervalt>(c.target, c.source, recursive);
   }
   if (isfloatbvop && enable_real_intervals)
-      apply_assignment<real_intervalt>(c.target, c.source, recursive);
+    apply_assignment<real_intervalt>(c.target, c.source, recursive);
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
