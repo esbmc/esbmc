@@ -21,8 +21,7 @@ inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
   if (interval.singleton() && is_bv_type(expr))
   {
     // Right now we can only do that for bitvectors (more implementation is needed for floats)
-    expr = state.make_expression_value<Interval>(
-      interval, expr->type, true);
+    expr = state.make_expression_value<Interval>(interval, expr->type, true);
     return;
   }
 
@@ -44,7 +43,6 @@ inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
     }
   }
 }
-
 
 static inline void get_symbols(
   const expr2tc &expr,
@@ -92,7 +90,7 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
     return;
   }
 
-  if(interval_domaint::enable_wrapped_intervals)
+  if (interval_domaint::enable_wrapped_intervals)
     optimize_expr_interval<wrapped_interval>(expr, state);
   else
     optimize_expr_interval<integer_intervalt>(expr, state);
