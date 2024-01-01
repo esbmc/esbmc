@@ -9,6 +9,5 @@ int foo(int n)
 
 int main()
 {
-  foo(51);
-  foo(60);
+  foo(42);
 }
