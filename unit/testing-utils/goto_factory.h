@@ -4,13 +4,13 @@
 #include <goto-programs/goto_functions.h>
 #include <langapi/language_ui.h>
 
-class program
+class program : public language_uit
 {
 public:
-  namespacet ns;
   goto_functionst functions;
-  program(namespacet ns, goto_functionst &functions)
-    : ns(ns), functions(functions)
+
+  explicit program(const cmdlinet &cmdline)
+    : language_uit(cmdline)
   {
   }
 };
@@ -31,11 +31,11 @@ public:
   };
 
   /**
-     * @brief Get the goto functions object
-     * 
-     * @param c_inputstream input stream containing the C program
-     * @return goto_functionst of the parsed object
-     */
+   * @brief Get the goto functions object
+   *
+   * @param c_inputstream input stream containing the C program
+   * @return goto_functionst of the parsed object
+   */
   static program get_goto_functions(
     std::istream &c_inputstream,
     goto_factory::Architecture arch = goto_factory::Architecture::BIT_16);

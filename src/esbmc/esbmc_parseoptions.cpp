@@ -1493,9 +1493,6 @@ bool esbmc_parseoptionst::create_goto_program(
       return true;
     }
 
-    // Ahem
-    migrate_namespace_lookup = new namespacet(context);
-
     // If the user is providing the GOTO functions, we don't need to parse
     if (cmdline.isset("binary"))
     {

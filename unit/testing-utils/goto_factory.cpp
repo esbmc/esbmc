@@ -184,28 +184,27 @@ bool goto_factory::parse(language_uit &l)
 
 program goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
 {
-  goto_functionst goto_functions;
-  language_uit lui(cmd);
-  migrate_namespace_lookup = new namespacet(lui.context);
-  if (!goto_factory::parse(lui))
+  program P(cmd);
+
+  if (goto_factory::parse(P))
   {
-    return program(lui.context, goto_functions);
+    goto_functionst &goto_functions = P.functions;
+    goto_convert(P.context, opts, goto_functions);
+
+    namespacet &ns = P.ns;
+    goto_check(ns, opts, goto_functions);
+    // remove no-op's
+    remove_no_op(goto_functions);
+
+    // Remove unreachable code
+    remove_unreachable(goto_functions);
+
+    // recalculate numbers, etc.
+    goto_functions.update();
+
+    // add loop ids
+    goto_functions.compute_loop_numbers();
   }
 
-  goto_convert(lui.context, opts, goto_functions);
-
-  namespacet ns(lui.context);
-  goto_check(ns, opts, goto_functions);
-  // remove no-op's
-  remove_no_op(goto_functions);
-
-  // Remove unreachable code
-  remove_unreachable(goto_functions);
-
-  // recalculate numbers, etc.
-  goto_functions.update();
-
-  // add loop ids
-  goto_functions.compute_loop_numbers();
-  return program(ns, goto_functions);
+  return P;
 }
