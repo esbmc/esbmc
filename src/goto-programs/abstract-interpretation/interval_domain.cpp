@@ -925,6 +925,7 @@ void interval_domaint::transform(
 
     assign(
       code_assign2tc(return_var, to_code_return2t(instruction.code).operand));
+    break;
   }
 
   case ASSERT:
@@ -935,7 +936,20 @@ void interval_domaint::transform(
     break;
   }
 
-  default:;
+  case FUNCTION_CALL:
+  case END_FUNCTION:
+  case ATOMIC_BEGIN:
+  case ATOMIC_END:
+  case NO_INSTRUCTION_TYPE:  
+  case OTHER:
+  case SKIP:
+  case LOCATION:
+  case THROW: // TODO: try/catch intervals
+  case CATCH: // TODO: try/catch intervals
+  case DEAD:
+  case THROW_DECL:
+  case THROW_DECL_END:
+    break;
   }
 
   /* The abstract interpreter can only affect the state 'after' the execution of the statement
