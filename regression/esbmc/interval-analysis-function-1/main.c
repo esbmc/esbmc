@@ -2,7 +2,7 @@
 
 int foo(int n)
 {
-  // n: [51,60]
+  // n: [42,42]
   assert(n == 42); // always holds
 }
 
