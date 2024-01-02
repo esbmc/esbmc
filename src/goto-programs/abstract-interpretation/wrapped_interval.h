@@ -1428,7 +1428,7 @@ private:
   static BigInt compute_upper_bound(const type2tc &t)
   {
     if (is_pointer_type(t))
-      return BigInt::power2(32);
+      return BigInt::power2(config.ansi_c.address_width);
 
     return BigInt::power2(t->get_width());
   }
