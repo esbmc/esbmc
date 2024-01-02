@@ -98,9 +98,6 @@ public:
       ait<interval_domaint> baseline;
       run_test<interval_domaint::wrap_mapt>(baseline, true);
     }
-    // A namespace is instatiated at goto_factory::get_goto_functions
-    // and it needs to be released now
-    delete (migrate_namespace_lookup);
   }
 
   static void set_baseline_config()

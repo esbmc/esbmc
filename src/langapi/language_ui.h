@@ -10,9 +10,15 @@ class language_uit
 public:
   language_filest language_files;
   contextt context;
+  namespacet ns;
 
   language_uit(const cmdlinet &__cmdline);
-  virtual ~language_uit() = default;
+  virtual ~language_uit() noexcept;
+
+  /* The instance of this class manages the global migrate_namespace_lookup,
+   * thus it cannot be copied. */
+  language_uit(language_uit &&) noexcept;
+  language_uit &operator=(language_uit &&) noexcept;
 
   virtual bool parse();
   virtual bool parse(const std::string &filename);

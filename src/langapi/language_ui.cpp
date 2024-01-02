@@ -6,8 +6,38 @@
 #include <util/message.h>
 #include <util/show_symbol_table.h>
 
-language_uit::language_uit(const cmdlinet &__cmdline) : _cmdline(__cmdline)
+language_uit::language_uit(const cmdlinet &__cmdline)
+  : ns(context), _cmdline(__cmdline)
 {
+  // Ahem
+  migrate_namespace_lookup = &ns;
+}
+
+language_uit::~language_uit() noexcept
+{
+}
+
+language_uit::language_uit(language_uit &&o) noexcept
+  : language_files(std::move(o.language_files)),
+    context(std::move(o.context)),
+    ns(context),
+    _cmdline(o._cmdline)
+{
+  // Ahem
+  migrate_namespace_lookup = &ns;
+}
+
+language_uit &language_uit::operator=(language_uit &&o) noexcept
+{
+  language_files = std::move(o.language_files);
+  context = std::move(o.context);
+  ns = namespacet(context);
+  assert(&_cmdline == &o._cmdline);
+
+  // Ahem
+  migrate_namespace_lookup = &ns;
+
+  return *this;
 }
 
 bool language_uit::parse()
@@ -130,5 +160,5 @@ void language_uit::show_symbol_table_xml_ui()
 
 void language_uit::show_symbol_table_plain(std::ostream &out)
 {
-  ::show_symbol_table_plain(namespacet(context), out);
+  ::show_symbol_table_plain(ns, out);
 }

@@ -36,6 +36,7 @@ public:
   }
   ~contextt() = default;
   contextt(const contextt &obj) = delete;
+  contextt(contextt &&) noexcept = default;
 
 #ifdef ENABLE_OLD_FRONTEND
   contextt &operator=(const contextt &rhs)
@@ -56,6 +57,8 @@ public:
 #else
   contextt &operator=(const contextt &rhs) = delete;
 #endif
+
+  contextt &operator=(contextt &&) noexcept = default;
 
   symbol_base_mapt symbol_base_map;
 
