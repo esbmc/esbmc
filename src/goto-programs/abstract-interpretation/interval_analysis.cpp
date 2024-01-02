@@ -9,7 +9,7 @@
 template <class Interval>
 inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
 {
-  // Only integers for now
+  // Only integers for now (more implementation is needed for floats)
   if (!(is_signedbv_type(expr->type) || is_unsignedbv_type(expr->type) ||
         is_bool_type(expr->type)))
     return;
@@ -20,7 +20,7 @@ inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
   // Singleton Propagation
   if (interval.singleton() && is_bv_type(expr))
   {
-    // Right now we can only do that for bitvectors (more implementation is needed for floats)
+    // Right now we can only do that for bitvectors
     expr = state.make_expression_value<Interval>(interval, expr->type, true);
     return;
   }
