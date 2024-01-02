@@ -13,7 +13,7 @@ public:
   namespacet ns;
 
   language_uit();
-  virtual ~language_uit() noexcept;
+  virtual ~language_uit() noexcept = default;
 
   /* The instance of this class manages the global migrate_namespace_lookup,
    * thus it cannot be copied. */
