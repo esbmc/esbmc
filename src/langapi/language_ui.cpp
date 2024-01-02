@@ -12,10 +12,6 @@ language_uit::language_uit() : ns(context)
   migrate_namespace_lookup = &ns;
 }
 
-language_uit::~language_uit() noexcept
-{
-}
-
 language_uit::language_uit(language_uit &&o) noexcept
   : language_files(std::move(o.language_files)),
     context(std::move(o.context)),
