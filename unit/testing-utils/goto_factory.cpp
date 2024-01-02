@@ -169,10 +169,10 @@ optionst goto_factory::get_default_options(cmdlinet cmd)
   return options;
 }
 
-bool goto_factory::parse(language_uit &l)
+bool goto_factory::parse(const cmdlinet &cmdline, language_uit &l)
 {
   l.context.clear();
-  if (l.parse())
+  if (l.parse(cmdline))
     return false; // TODO: This can be used to add testcases for frontend
   if (l.typecheck())
     return false;
@@ -184,9 +184,9 @@ bool goto_factory::parse(language_uit &l)
 
 program goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
 {
-  program P(cmd);
+  program P;
 
-  if (goto_factory::parse(P))
+  if (goto_factory::parse(cmd, P))
   {
     goto_functionst &goto_functions = P.functions;
     goto_convert(P.context, opts, goto_functions);

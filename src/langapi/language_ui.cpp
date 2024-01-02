@@ -6,8 +6,7 @@
 #include <util/message.h>
 #include <util/show_symbol_table.h>
 
-language_uit::language_uit(const cmdlinet &__cmdline)
-  : ns(context), _cmdline(__cmdline)
+language_uit::language_uit() : ns(context)
 {
   // Ahem
   migrate_namespace_lookup = &ns;
@@ -20,8 +19,7 @@ language_uit::~language_uit() noexcept
 language_uit::language_uit(language_uit &&o) noexcept
   : language_files(std::move(o.language_files)),
     context(std::move(o.context)),
-    ns(context),
-    _cmdline(o._cmdline)
+    ns(context)
 {
   // Ahem
   migrate_namespace_lookup = &ns;
@@ -32,7 +30,6 @@ language_uit &language_uit::operator=(language_uit &&o) noexcept
   language_files = std::move(o.language_files);
   context = std::move(o.context);
   ns = namespacet(context);
-  assert(&_cmdline == &o._cmdline);
 
   // Ahem
   migrate_namespace_lookup = &ns;
@@ -40,9 +37,9 @@ language_uit &language_uit::operator=(language_uit &&o) noexcept
   return *this;
 }
 
-bool language_uit::parse()
+bool language_uit::parse(const cmdlinet &cmdline)
 {
-  for (const auto &arg : _cmdline.args)
+  for (const auto &arg : cmdline.args)
   {
     if (parse(arg))
       return true;
@@ -99,8 +96,9 @@ bool language_uit::parse(const std::string &filename)
 #ifdef ENABLE_SOLIDITY_FRONTEND
   if (mode == get_mode(language_idt::SOLIDITY))
   {
-    if (!config.options.get_option("function").empty())
-      language.set_func_name(_cmdline.vm["function"].as<std::string>());
+    std::string fun = config.options.get_option("function");
+    if (!fun.empty())
+      language.set_func_name(fun);
 
     if (config.options.get_option("sol") == "")
     {
