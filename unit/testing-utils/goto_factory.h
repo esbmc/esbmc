@@ -8,11 +8,6 @@ class program : public language_uit
 {
 public:
   goto_functionst functions;
-
-  explicit program(const cmdlinet &cmdline)
-    : language_uit(cmdline)
-  {
-  }
 };
 
 /**
@@ -54,7 +49,7 @@ public:
   static optionst get_default_options(cmdlinet cmd);
 
 private:
-  static bool parse(language_uit &l);
+  static bool parse(const cmdlinet &cmdline, language_uit &l);
   static void
   create_file_from_istream(std::istream &c_inputstream, std::string filename);
   static void create_file_from_string(std::string &str, std::string filename);

@@ -12,7 +12,7 @@ public:
   contextt context;
   namespacet ns;
 
-  language_uit(const cmdlinet &__cmdline);
+  language_uit();
   virtual ~language_uit() noexcept;
 
   /* The instance of this class manages the global migrate_namespace_lookup,
@@ -20,7 +20,7 @@ public:
   language_uit(language_uit &&) noexcept;
   language_uit &operator=(language_uit &&) noexcept;
 
-  virtual bool parse();
+  virtual bool parse(const cmdlinet &cmdline);
   virtual bool parse(const std::string &filename);
   virtual bool typecheck();
   virtual bool final();
@@ -33,9 +33,6 @@ public:
   virtual void show_symbol_table();
   virtual void show_symbol_table_plain(std::ostream &out);
   virtual void show_symbol_table_xml_ui();
-
-protected:
-  const cmdlinet &_cmdline;
 };
 
 #endif

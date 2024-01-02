@@ -1533,7 +1533,7 @@ bool esbmc_parseoptionst::create_goto_program(
 bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
 {
   log_progress("Reading GOTO program from file");
-  for (const auto &arg : _cmdline.args)
+  for (const auto &arg : cmdline.args)
   {
     if (::read_goto_binary(arg, context, goto_functions))
     {
@@ -1555,7 +1555,7 @@ bool esbmc_parseoptionst::parse_goto_program(
 {
   try
   {
-    if (parse())
+    if (parse(cmdline))
       return true;
 
     if (cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
