@@ -64,7 +64,7 @@ language_idt language_id_by_name(const std::string &name)
   }
 }
 
-language_idt language_id_by_ext(const std::string &ext)
+static language_idt language_id_by_ext(const std::string_view &ext)
 {
   for (int i = 0;; i++)
   {
@@ -85,12 +85,7 @@ language_idt language_id_by_path(const std::string &path)
   if (ext == nullptr)
     return language_idt::NONE;
 
-  std::string extension = ext + 1;
-
-  if (extension == "")
-    return language_idt::NONE;
-
-  return language_id_by_ext(extension);
+  return language_id_by_ext(ext + 1);
 }
 
 static int get_mode(language_idt lang)
