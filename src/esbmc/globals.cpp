@@ -1,4 +1,5 @@
 #include <langapi/mode.h>
+#include <cstdint>
 
 const mode_table_et mode_table[] = {
   LANGAPI_MODE_CLANG_C,
