@@ -1855,7 +1855,7 @@ typet migrate_type_back(const type2tc &ref)
     thetype.set("tag", irep_idt(ref2.name));
     if (ref2.packed)
       thetype.set("packed", true);
-    return std::move(thetype);
+    return thetype;
   }
   case type2t::union_id:
   {
@@ -1878,7 +1878,7 @@ typet migrate_type_back(const type2tc &ref)
 
     thetype.components() = comps;
     thetype.set("tag", irep_idt(ref2.name));
-    return std::move(thetype);
+    return thetype;
   }
   case type2t::code_id:
   {
@@ -1903,7 +1903,7 @@ typet migrate_type_back(const type2tc &ref)
     if (ref2.ellipsis)
       code.make_ellipsis();
 
-    return std::move(code);
+    return code;
   }
   case type2t::array_id:
   {
@@ -1920,7 +1920,7 @@ typet migrate_type_back(const type2tc &ref)
       thetype.size() = migrate_expr_back(ref2.array_size);
     }
 
-    return std::move(thetype);
+    return thetype;
   }
   case type2t::vector_id:
   {
@@ -1931,7 +1931,7 @@ typet migrate_type_back(const type2tc &ref)
     assert(!ref2.size_is_infinite);
     thetype.size() = migrate_expr_back(ref2.array_size);
 
-    return std::move(thetype);
+    return thetype;
   }
   case type2t::pointer_id:
   {
@@ -1939,7 +1939,7 @@ typet migrate_type_back(const type2tc &ref)
 
     typet subtype = migrate_type_back(ref2.subtype);
     pointer_typet thetype(subtype);
-    return std::move(thetype);
+    return thetype;
   }
   case type2t::unsignedbv_id:
   {
@@ -1960,7 +1960,7 @@ typet migrate_type_back(const type2tc &ref)
     fixedbv_typet thetype;
     thetype.set_integer_bits(ref2.integer_bits);
     thetype.set_width(ref2.width);
-    return std::move(thetype);
+    return thetype;
   }
   case type2t::floatbv_id:
   {
@@ -1969,7 +1969,7 @@ typet migrate_type_back(const type2tc &ref)
     floatbv_typet thetype;
     thetype.set_f(ref2.fraction);
     thetype.set_width(ref2.get_width());
-    return std::move(thetype);
+    return thetype;
   }
   case type2t::cpp_name_id:
   {
@@ -2019,7 +2019,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
     theexpr.set_value(integer2binary(ref2.value, width));
-    return std::move(theexpr);
+    return theexpr;
   }
   case expr2t::constant_fixedbv_id:
   {
@@ -2127,7 +2127,7 @@ exprt migrate_expr_back(const expr2tc &ref)
       // Special case.
       constant_exprt const_expr(migrate_type_back(ref2.type));
       const_expr.set_value(ref2.get_symbol_name());
-      return std::move(const_expr);
+      return const_expr;
     }
     else if (ref2.thename == "INVALID")
     {
@@ -2146,7 +2146,7 @@ exprt migrate_expr_back(const expr2tc &ref)
 
     typecast_exprt new_expr(migrate_expr_back(ref2.from), thetype);
     new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
-    return std::move(new_expr);
+    return new_expr;
   }
   case expr2t::nearbyint_id:
   {
@@ -2167,7 +2167,7 @@ exprt migrate_expr_back(const expr2tc &ref)
       migrate_expr_back(ref2.true_value),
       migrate_expr_back(ref2.false_value));
     theif.type() = thetype;
-    return std::move(theif);
+    return theif;
   }
   case expr2t::equality_id:
   {
