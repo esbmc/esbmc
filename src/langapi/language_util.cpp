@@ -3,14 +3,16 @@
 #include <memory>
 #include <util/message.h>
 
+static language_idt language_id_from_mode(irep_idt mode)
+{
+  return mode.empty() ? language_idt::C : language_id_by_name(id2string(mode));
+}
+
 std::unique_ptr<languaget> language_from_symbol(const symbolt &symbol)
 {
-  language_idt lang = language_idt::C;
-  if (symbol.mode != "")
-    lang = language_id_by_name(id2string(symbol.mode));
-
+  language_idt lang = language_id_from_mode(symbol.mode);
   if (lang != language_idt::NONE)
-    return std::unique_ptr<languaget>(new_language(lang));
+    return new_language(lang);
 
   log_error("symbol '{}' has unknown mode '{}'", symbol.name, symbol.mode);
   abort();
@@ -19,13 +21,14 @@ std::unique_ptr<languaget> language_from_symbol(const symbolt &symbol)
 static std::unique_ptr<languaget>
 language_from_symbol_id(const namespacet &ns, const irep_idt &id)
 {
-  if (id != "")
-  {
-    const symbolt *s = ns.lookup(id);
-    if (s)
-      return language_from_symbol(*s);
-  }
-  return std::unique_ptr<languaget>(new_language(language_idt::C));
+  language_idt lang = language_idt::C;
+  if (!id.empty())
+    if (const symbolt *s = ns.lookup(id))
+      lang = language_id_from_mode(s->mode);
+
+  std::unique_ptr<languaget> l = new_language(lang);
+  assert(l);
+  return l;
 }
 
 std::string from_expr(
