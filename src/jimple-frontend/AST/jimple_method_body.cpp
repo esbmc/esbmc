@@ -49,14 +49,20 @@ void jimple_full_method_body::from_json(const json &stmts)
      * To solve this, we threat the location as a Statement.
      */
   int inner_location = -1;
-  for (auto &stmt : stmts)
+  for (const json &stmt : stmts)
   {
     std::shared_ptr<jimple_method_field> to_add;
 
     auto mode = stmt.at("object").get<std::string>();
     // I think that this is the best way without
     // adding some crazy function pointer.
-    switch (from_map[mode])
+    auto it = from_map.find(mode);
+    if (it == from_map.end())
+    {
+      log_error("Unknown type {}", stmt.dump(2));
+      abort();
+    }
+    switch (it->second)
     {
     case statement::Declaration:
     {
@@ -149,7 +155,10 @@ void jimple_full_method_body::from_json(const json &stmts)
       break;
     }
     default:
-      log_error("Unknown type {}", stmt);
+      log_error(
+        "unsupported jimple statement id {} for key '{}'",
+        static_cast<std::underlying_type_t<statement>>(it->second),
+        it->first);
       abort();
     }
 
