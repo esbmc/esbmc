@@ -25,7 +25,6 @@ struct language_desct
 
 const language_desct *language_desc(language_idt id);
 language_idt language_id_by_name(const std::string &name);
-language_idt language_id_by_ext(const std::string &ext);
 language_idt language_id_by_path(const std::string &path);
 
 // Table recording details about language modes
