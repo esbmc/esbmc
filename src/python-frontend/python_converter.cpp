@@ -475,6 +475,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       var_name = element["value"]["id"].get<std::string>();
       if (is_class(var_name, ast_json["body"]))
       {
+        // Found a class attribute
         var_name = "C@" + var_name;
         is_class_attr = true;
       }
@@ -518,14 +519,30 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         abort();
       }
 
-      // Get attribute type from class definition
       struct_typet &class_type =
         static_cast<struct_typet &>(class_symbol->type);
-      assert(class_type.has_component(attr_name));
-      const typet &attr_type = class_type.get_component(attr_name).type();
 
-      expr = member_exprt(
-        symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
+      // Get instance attribute from class component
+      if (class_type.has_component(attr_name))
+      {
+        const typet &attr_type = class_type.get_component(attr_name).type();
+        expr = member_exprt(
+          symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
+      }
+      // Fallback to class attribute when instance attribute is not found
+      else
+      {
+        // All class attributes are static symbols with ids in the format: filename@C@classname@varname
+        symbol_id = "py:" + python_filename + "@C@" + obj_type_name.substr(4) +
+                    "@" + attr_name;
+        symbolt *class_attr_symbol = context.find_symbol(symbol_id);
+        if (!class_attr_symbol)
+        {
+          log_error("Attribute {} not found\n", attr_name);
+          abort();
+        }
+        expr = symbol_expr(*class_attr_symbol);
+      }
     }
     break;
   }

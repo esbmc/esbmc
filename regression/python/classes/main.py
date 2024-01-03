@@ -19,3 +19,10 @@ obj2.data = 40
 assert(obj2.data == 40)
 
 assert(MyClass.class_attr == 50)
+obj3 = MyClass(10)
+assert(obj3.class_attr == 50)
+#MyClass.class_attr = 45
+# assert(obj3.class_attr == 45)
+# assert(obj2.class_attr == 45)
+# assert(obj1.class_attr == 45)
+# assert(MyClass.class_attr == 45)
