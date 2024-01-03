@@ -122,15 +122,6 @@ static int get_old_frontend_mode(int current_mode)
   return -1;
 }
 
-int get_mode_filename(const std::string &filename)
-{
-  language_idt id = language_id_by_path(filename);
-  if (id == language_idt::NONE)
-    return -1;
-
-  return get_mode(id);
-}
-
 languaget *new_language(language_idt lang)
 {
   int mode = get_mode(lang);
