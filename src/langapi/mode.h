@@ -83,9 +83,6 @@ languaget *new_python_language();
     language_idt::NONE, NULL                                                   \
   }
 
-int get_mode(language_idt lang);
-int get_mode(const std::string &str);
-
 languaget *new_language(language_idt lang);
 
 #endif
