@@ -2,6 +2,7 @@
 #include <cstring>
 #include <langapi/mode.h>
 #include <util/config.h>
+#include <util/language.h>
 
 static const char *const extensions_ansi_c[] = {"c", "i", nullptr};
 
@@ -113,15 +114,16 @@ static int get_old_frontend_mode(int current_mode)
   return -1;
 }
 
-languaget *new_language(language_idt lang)
+std::unique_ptr<languaget> new_language(language_idt lang)
 {
   int mode = get_mode(lang);
 
   if (mode >= 0 && config.options.get_bool_option("old-frontend"))
     mode = get_old_frontend_mode(mode);
 
-  if (mode < 0)
-    return nullptr;
+  languaget *l = nullptr;
+  if (mode >= 0)
+    l = mode_table[mode].new_language();
 
-  return mode_table[mode].new_language();
+  return std::unique_ptr<languaget>(l);
 }

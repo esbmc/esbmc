@@ -28,11 +28,11 @@ public:
   // constructor / destructor
 
   languagest(const namespacet &_ns, language_idt lang);
-  virtual ~languagest();
+  virtual ~languagest() = default;
 
 protected:
   const namespacet &ns;
-  languaget *language;
+  std::unique_ptr<languaget> language;
 };
 
 #endif

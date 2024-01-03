@@ -4,12 +4,6 @@
 #include <util/message.h>
 #include <util/std_types.h>
 
-language_filet::~language_filet()
-{
-  if (language != nullptr)
-    delete language;
-}
-
 void language_filet::get_modules()
 {
   language->modules_provided(modules);
