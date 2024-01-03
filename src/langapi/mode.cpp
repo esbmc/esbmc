@@ -92,7 +92,7 @@ language_idt language_id_by_path(const std::string &path)
   return language_id_by_ext(extension);
 }
 
-int get_mode(language_idt lang)
+static int get_mode(language_idt lang)
 {
   assert(language_desc(lang));
 
@@ -101,15 +101,6 @@ int get_mode(language_idt lang)
       return i;
 
   return -1;
-}
-
-int get_mode(const std::string &str)
-{
-  language_idt id = language_id_by_name(str);
-  if (id == language_idt::NONE)
-    return -1;
-
-  return get_mode(id);
 }
 
 static int get_old_frontend_mode(int current_mode)
