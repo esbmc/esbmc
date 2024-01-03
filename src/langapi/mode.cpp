@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstring>
 #include <langapi/mode.h>
+#include <util/config.h>
 
 static const char *const extensions_ansi_c[] = {"c", "i", nullptr};
 
@@ -111,7 +112,7 @@ int get_mode(const std::string &str)
   return get_mode(id);
 }
 
-int get_old_frontend_mode(int current_mode)
+static int get_old_frontend_mode(int current_mode)
 {
   language_idt expected = mode_table[current_mode].language_id;
   for (int i = current_mode + 1; mode_table[i].new_language; i++)
@@ -132,5 +133,13 @@ int get_mode_filename(const std::string &filename)
 
 languaget *new_language(language_idt lang)
 {
-  return mode_table[get_mode(lang)].new_language();
+  int mode = get_mode(lang);
+
+  if (mode >= 0 && config.options.get_bool_option("old-frontend"))
+    mode = get_old_frontend_mode(mode);
+
+  if (mode < 0)
+    return nullptr;
+
+  return mode_table[mode].new_language();
 }
