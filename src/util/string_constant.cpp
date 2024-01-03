@@ -34,6 +34,92 @@ string_constantt::string_constantt(
 
 namespace
 {
+/* RAII-like type to temporarily switch the locale */
+struct switch_locale
+{
+  std::string orig;
+  int cat;
+
+  switch_locale(int cat, const char *loc)
+    : orig(setlocale(cat, nullptr)), cat(cat)
+  {
+    const char *n = setlocale(cat, loc);
+    if (!n)
+      throw fmt::format("locale '{}' not found", loc);
+    log_debug(
+      "convert_mb", "switching from locale '{}' to '{}' -> '{}'", orig, loc, n);
+  }
+
+  ~switch_locale() noexcept
+  {
+    const char *n = setlocale(cat, orig.c_str()); // restore locale
+    assert(n);
+    assert(n == orig);
+  }
+};
+
+#if __APPLE__ && __MACH__
+/* Apple enjoys their users suffering to write platform-independent code, that's
+ * why they chose to *not* provide the c(16|32)rtomb functions. */
+
+typedef uint16_t char16_t;
+typedef uint32_t char32_t;
+
+static_assert(sizeof(wchar_t) == sizeof(char32_t));
+static_assert(sizeof(mbstate_t) >= sizeof(uint32_t));
+
+#define UNI_PLANE_SZ 0x10000
+#define SURR_VAL_BITS 10
+#define SURR_VAL_MASK ((1 << SURR_VAL_BITS) - 1)
+#define SURR_HI_MASK 0xd800
+#define SURR_LO_MASK 0xdc00
+#define IS_SURR(c) (((c) & ~0x7ff) == 0xd800)
+#define IS_SURR_HI(c) (((c) & ~SURR_VAL_MASK) == SURR_HI_MASK)
+#define IS_SURR_LO(c) (((c) & ~SURR_VAL_MASK) == SURR_LO_MASK)
+#define SURR_COMBINE(hi, lo)                                                   \
+  (((char32_t)(((hi)&SURR_VAL_MASK) << SURR_VAL_BITS) + UNI_PLANE_SZ) |        \
+   (char32_t)((lo)&SURR_VAL_MASK))
+
+/* Define the missing functions, statically, so once they choose to implement
+ * them in their libc, we'll be notified and have to see about the version... */
+static size_t c32rtomb(char *buf, char32_t c, mbstate_t *ps)
+{
+  return wcrtomb(buf, static_cast<wchar_t>(c), ps);
+}
+
+static size_t c16rtomb(char *buf, char16_t c, mbstate_t *ps)
+{
+  /* Initial state     <-> low surrogate not allowed
+   * Not initial state <-> low surrogate expected */
+  bool init = mbsinit(ps);
+  if (!init == !IS_SURR_LO(c))
+  {
+    errno = EILSEQ;
+    return -1;
+  }
+
+  /* We need to store 2 values in the state: the high surrogate (comes first)
+   * and a marker (in case the high surrogate was 0) */
+  uint16_t *s = reinterpret_cast<uint16_t *>(ps);
+  if (IS_SURR_HI(c))
+  {
+    assert(init);
+    s[0] = c;
+    s[1] = 1;
+    return 0;
+  }
+
+  char32_t d = c;
+  if (IS_SURR_LO(c))
+  {
+    assert(s[1] == 1);
+    d = SURR_COMBINE(s[0], c);
+    memset(ps, 0, sizeof(*ps));
+  }
+  return c32rtomb(buf, d, ps);
+}
+#endif
+
 struct convert_mb
 {
   const std::string &v;
