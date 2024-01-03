@@ -34,6 +34,13 @@ error() {
 
 # Ubuntu setup (pre-config)
 ubuntu_setup () {
+    ARCH=`uname -m`
+    if [ $ARCH = "aarch64" ]
+    then
+	echo "Detected ARM64 Linux!"
+	SOLVER_FLAGS=""
+	return
+    fi
     # Tested on ubuntu 22.04
     PKGS="\
         clang-$CLANG_VERSION clang-tidy-$CLANG_VERSION \
@@ -124,6 +131,7 @@ usage() {
     echo "  -S ON|OFF  enable/disable static build [ON for Ubuntu, OFF for macOS]"
     echo "  -c VERS    use packaged clang-VERS in a shared build on Ubuntu [11]"
     echo "  -C         build an SV-COMP version [disabled]"
+    echo "  -a         sets architecture to arm64 [disabled]"
     echo
     echo "This script prepares the environment, downloads dependencies, configures"
     echo "the ESBMC build and runs the commands to compile and install ESBMC into"
@@ -135,7 +143,7 @@ usage() {
 }
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts hb:s:e:r:dS:c:C flag
+while getopts hb:s:e:r:dS:c:C:a flag
 do
     case "${flag}" in
     h) usage; exit 0 ;;
@@ -148,6 +156,7 @@ do
     S) STATIC=$OPTARG ;; # should be capital ON or OFF
     c) CLANG_VERSION=$OPTARG ;; # LLVM/Clang major version
     C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON" ;;
+    a) BASE_ARGS="$BASE_ARGS -DLLVM_DIR=/usr/lib/llvm-11 -DClang_DIR=/usr/lib/llvm-11 -UESBMC_BUNDLE_LIBC -DESBMC_BUNDLE_LIBC=OFF" ;;
     *) exit 1 ;;
     esac
 done
