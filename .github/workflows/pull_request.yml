@@ -48,7 +48,7 @@ jobs:
     uses: ./.github/workflows/build-unix.yml
     name: ARM64 linux build
     with:
-      operating-system: [self-hosted, linux, ARM64]
+      operating-system: '[self-hosted, linux, ARM64]'
       build-flags: '-a -b DebugOpt'
       testing: false
 
