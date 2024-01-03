@@ -47,22 +47,10 @@ bool language_uit::parse(const cmdlinet &cmdline)
 bool language_uit::parse(const std::string &filename)
 {
   language_idt lang = language_id_by_path(filename);
-  int mode = get_mode(lang);
-
-  if (mode < 0)
+  if (lang == language_idt::NONE)
   {
     log_error("failed to figure out type of file {}", filename);
     return true;
-  }
-
-  if (config.options.get_bool_option("old-frontend"))
-  {
-    mode = get_old_frontend_mode(mode);
-    if (mode == -1)
-    {
-      log_error("old-frontend was not built on this version of ESBMC");
-      return true;
-    }
   }
 
   config.language = lang;
@@ -84,13 +72,21 @@ bool language_uit::parse(const std::string &filename)
 
   language_filet &lf = result.first->second;
   lf.filename = filename;
-  lf.language = mode_table[mode].new_language();
+  lf.language = new_language(lang);
+  if (!lf.language)
+  {
+    log_error(
+      "{}frontend for {} was not built on this version of ESBMC",
+      config.options.get_bool_option("old-frontend") ? "old-" : "",
+      language_desc(lang)->name);
+    return true;
+  }
   languaget &language = *lf.language;
 
   log_progress("Parsing {}", filename);
 
 #ifdef ENABLE_SOLIDITY_FRONTEND
-  if (mode == get_mode(language_idt::SOLIDITY))
+  if (lang == language_idt::SOLIDITY)
   {
     std::string fun = config.options.get_option("function");
     if (!fun.empty())
