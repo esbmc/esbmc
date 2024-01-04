@@ -163,7 +163,8 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
 
-  auto update_symbol = [&](exprt &expr) {
+  auto update_symbol = [&](exprt &expr)
+  {
     std::string id = create_symbol_id() + "@" + expr.name().c_str();
     symbolt *s = context.find_symbol(id);
     if (s != nullptr)
@@ -232,7 +233,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("value"))
     rhs = get_expr(element["value"]);
 
-  auto to_side_effect_call = [](exprt &expr) {
+  auto to_side_effect_call = [](exprt &expr)
+  {
     side_effect_expr_function_callt side_effect;
     code_function_callt &code = static_cast<code_function_callt &>(expr);
     side_effect.function() = code.function();
@@ -580,13 +582,15 @@ bool python_converter::is_constructor_call(const nlohmann::json &json)
    * rhs corresponds to the name of a class. */
 
   bool is_ctor_call = false;
-  context.foreach_operand([&](const symbolt &s) {
-    if (s.type.id() == "struct" && s.name == func_name)
+  context.foreach_operand(
+    [&](const symbolt &s)
     {
-      is_ctor_call = true;
-      return;
-    }
-  });
+      if (s.type.id() == "struct" && s.name == func_name)
+      {
+        is_ctor_call = true;
+        return;
+      }
+    });
   return is_ctor_call;
 }
 
@@ -656,27 +660,12 @@ void python_converter::get_var_assign(
     symbol.file_local = true;
     symbol.is_extern = false;
 
-    lhs = symbol_expr(symbol);
-
     if (target["_type"] == "Attribute")
-    {
-      // lhs is an attribute and needs to be added as member of the referred object
-      // 1. Retrieve created object from symbol table
-      std::string obj_id =
-        create_symbol_id() + "@" + target["value"]["id"].get<std::string>();
-      symbolt *obj_symbol = context.find_symbol(obj_id);
-      if (!obj_symbol)
-        abort();
+      lhs = get_expr(target); // lhs is a obj.member expression
+    else
+      lhs = symbol_expr(symbol); // lhs is a simple variable
 
-      // 2. Insert member in the object
-      member_exprt member(
-        symbol_exprt(obj_symbol->id, obj_symbol->type), lhs.name(), lhs.type());
-
-      // 3. lhs holds 'obj.member'
-      lhs.swap(member);
-    }
     lhs.location() = location_begin;
-
     lhs_symbol = context.move_symbol_to_context(symbol);
   }
   else if (ast_node["_type"] == "Assign")
