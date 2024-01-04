@@ -65,6 +65,10 @@ jobs:
   code-style:
     name: Check C/C++ code-style
     runs-on: ubuntu-20.04
+    permissions:
+      # Give the default GITHUB_TOKEN write permission to commit and push the
+      # added or changed files to the repository.
+      contents: write
     steps:
     - uses: actions/checkout@v2
     - name: Install Dependencies
@@ -77,8 +81,8 @@ jobs:
       run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | grep -v src/ansi-c/cpp | grep -v src/clang-c-frontend/headers/ | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
     - name: Run clang-format (tests)
       run: find unit -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh  | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
-    - name: Throws error if changes were made
-      run: git diff --exit-code --ignore-cr-at-eol
+    # Commit all changed files back to the repository
+    - uses: stefanzweifel/git-auto-commit-action@v5  
       
   cmake-lint:
     name: Check CMake modules
