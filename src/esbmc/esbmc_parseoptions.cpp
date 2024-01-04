@@ -237,7 +237,7 @@ static std::string format_target()
 // \param options - the options object created and updated by this method.
 void esbmc_parseoptionst::get_command_line_options(optionst &options)
 {
-  if(config.set(cmdline))
+  if (config.set(cmdline))
     exit(1);
 
   log_status("Target: {}", format_target());
