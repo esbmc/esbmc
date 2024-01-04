@@ -70,7 +70,7 @@ ubuntu_setup () {
     then
 	echo "Detected ARM64 Linux!"
 	# TODO: We should start using container builds in actions!
-	SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=On -DZ3_DIR=/usr -DENABLE_GOTO_CONTRACTOR=On"
+	SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=On -DZ3_DIR=/usr -DENABLE_GOTO_CONTRACTOR=OFF"
 	return
     fi
     
