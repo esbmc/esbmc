@@ -4,6 +4,15 @@
 #include <util/config.h>
 #include <util/language.h>
 
+namespace
+{
+struct language_desct
+{
+  const char *name;
+  const char *const *filename_extensions;
+};
+} // namespace
+
 static const char *const extensions_ansi_c[] = {"c", "i", nullptr};
 
 #ifdef _WIN32
@@ -31,7 +40,7 @@ static const language_desct language_desc_python = {
   "Python",
   extensions_python};
 
-const struct language_desct *language_desc(language_idt id)
+static const language_desct *language_desc(language_idt id)
 {
   switch (id)
   {
@@ -49,6 +58,12 @@ const struct language_desct *language_desc(language_idt id)
     return &language_desc_python;
   }
   return nullptr;
+}
+
+const char *language_name(language_idt lang)
+{
+  const language_desct *desc = language_desc(lang);
+  return desc ? desc->name : nullptr;
 }
 
 language_idt language_id_by_name(const std::string &name)

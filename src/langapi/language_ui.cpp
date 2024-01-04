@@ -78,7 +78,7 @@ bool language_uit::parse(const std::string &filename)
     log_error(
       "{}frontend for {} was not built on this version of ESBMC",
       config.options.get_bool_option("old-frontend") ? "old-" : "",
-      language_desc(lang)->name);
+      language_name(lang));
     return true;
   }
   languaget &language = *lf.language;
