@@ -49,7 +49,7 @@ jobs:
     name: ARM64 linux build
     with:
       operating-system: ARM64
-      build-flags: '-a -b DebugOpt'
+      build-flags: '-b DebugOpt -S OFF -B OFF'
       testing: false
 
   # Also run a build with frontend linked shared against Ubuntu's clang-13
