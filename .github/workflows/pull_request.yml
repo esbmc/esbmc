@@ -81,6 +81,8 @@ jobs:
       run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | grep -v src/ansi-c/cpp | grep -v src/clang-c-frontend/headers/ | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
     - name: Run clang-format (tests)
       run: find unit -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh  | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
+    - name: Delete downloaded Clang 11
+      run: rm -rf clang*
     # Commit all changed files back to the repository
     - uses: stefanzweifel/git-auto-commit-action@v5  
       
