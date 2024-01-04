@@ -6,6 +6,44 @@
 #include <unordered_set>
 #include <util/prefix.h>
 
+template <class Interval>
+inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
+{
+  // Only integers for now (more implementation is needed for floats)
+  if (!(is_signedbv_type(expr->type) || is_unsignedbv_type(expr->type) ||
+        is_bool_type(expr->type)))
+    return;
+
+  // Forward Analysis
+  auto interval = state.get_interval<Interval>(expr);
+
+  // Singleton Propagation
+  if (interval.singleton() && is_bv_type(expr))
+  {
+    // Right now we can only do that for bitvectors
+    expr = state.make_expression_value<Interval>(interval, expr->type, true);
+    return;
+  }
+
+  // Boolean intervals
+  if (is_bool_type(expr))
+  {
+    // Expression is always true
+    if (!interval.contains(0))
+    {
+      expr = gen_true_expr();
+      return;
+    }
+
+    // interval is [0,0] which is always false
+    if (interval.singleton())
+    {
+      expr = gen_false_expr();
+      return;
+    }
+  }
+}
+
 static inline void get_symbols(
   const expr2tc &expr,
   std::unordered_set<expr2tc, irep2_hash> &symbols)
@@ -52,35 +90,10 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
     return;
   }
 
-  // Forward Analysis
-  auto interval = state.get_interval<integer_intervalt>(expr);
-
-  // Singleton Propagation
-  if (interval.singleton() && is_bv_type(expr))
-  {
-    // Right now we can only do that for bitvectors (more implementation is needed for floats)
-    expr = state.make_expression_value<integer_intervalt>(
-      interval, expr->type, true);
-    return;
-  }
-
-  // Boolean intervals
-  if (is_bool_type(expr))
-  {
-    // Expression is always true
-    if (!interval.contains(0))
-    {
-      expr = gen_true_expr();
-      return;
-    }
-
-    // interval is [0,0] which is always false
-    if (interval.singleton())
-    {
-      expr = gen_false_expr();
-      return;
-    }
-  }
+  if (interval_domaint::enable_wrapped_intervals)
+    optimize_expr_interval<wrapped_interval>(expr, state);
+  else
+    optimize_expr_interval<integer_intervalt>(expr, state);
 
   // Try sub-expressions
   expr->Foreach_operand(

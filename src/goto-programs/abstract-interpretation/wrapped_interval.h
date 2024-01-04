@@ -12,7 +12,9 @@ public:
   explicit wrapped_interval(const type2tc &t)
     : t(t), upper_bound(compute_upper_bound(t))
   {
-    assert(is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t));
+    assert(
+      is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t) ||
+      is_pointer_type(t));
 
     lower = 0;
     upper = is_bool_type(t) ? 1 : compute_upper_bound(t) - 1;
@@ -1425,6 +1427,9 @@ protected:
 private:
   static BigInt compute_upper_bound(const type2tc &t)
   {
+    if (is_pointer_type(t))
+      return BigInt::power2(config.ansi_c.address_width);
+
     return BigInt::power2(t->get_width());
   }
 

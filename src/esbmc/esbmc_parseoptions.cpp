@@ -63,6 +63,14 @@ extern "C"
 #include <goto-programs/goto_contractor.h>
 #endif
 
+extern "C" const char buildidstring_buf[];
+extern "C" const unsigned int buildidstring_buf_size;
+
+static std::string_view esbmc_version_string()
+{
+  return {buildidstring_buf, buildidstring_buf_size};
+}
+
 enum PROCESS_TYPE
 {
   BASE_CASE,
@@ -88,8 +96,6 @@ void timeout_handler(int)
   _exit(1);
 }
 #endif
-
-extern "C" const char *const esbmc_version_string;
 
 // This transforms a string representation of a time interval
 // written in the form <number><suffix> into seconds.
@@ -242,7 +248,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("git-hash"))
   {
-    log_result("{}", esbmc_version_string);
+    log_result("{}", esbmc_version_string());
     exit(0);
   }
 
@@ -1493,9 +1499,6 @@ bool esbmc_parseoptionst::create_goto_program(
       return true;
     }
 
-    // Ahem
-    migrate_namespace_lookup = new namespacet(context);
-
     // If the user is providing the GOTO functions, we don't need to parse
     if (cmdline.isset("binary"))
     {
@@ -1536,7 +1539,7 @@ bool esbmc_parseoptionst::create_goto_program(
 bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
 {
   log_progress("Reading GOTO program from file");
-  for (const auto &arg : _cmdline.args)
+  for (const auto &arg : cmdline.args)
   {
     if (::read_goto_binary(arg, context, goto_functions))
     {
@@ -1558,7 +1561,7 @@ bool esbmc_parseoptionst::parse_goto_program(
 {
   try
   {
-    if (parse())
+    if (parse(cmdline))
       return true;
 
     if (cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))

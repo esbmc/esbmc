@@ -48,6 +48,9 @@ protected:
   std::string current_contractName;
   std::string current_fileName;
 
+  // an auxiliary data structure to store the ast_node["id"] of contract/struct/function/...
+  std::unordered_map<int, std::string> scope_map;
+
   bool convert_ast_nodes(const nlohmann::json &contract_def);
 
   // conversion functions
@@ -139,7 +142,7 @@ protected:
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
   const nlohmann::json &find_decl_ref(int ref_decl_id);
-  const nlohmann::json &find_constructor_ref(nlohmann::json &contract_def);
+  const nlohmann::json &find_constructor_ref(int ref_decl_id);
   void convert_expression_to_code(exprt &expr);
   bool check_intrinsic_function(const nlohmann::json &ast_node);
   nlohmann::json make_implicit_cast_expr(

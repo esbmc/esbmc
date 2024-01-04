@@ -1462,7 +1462,7 @@ exprt cpp_typecheck_resolvet::resolve(
       result.type() = pointer_typet();
       result.type().subtype() = empty_typet();
       result.location() = location;
-      return std::move(result);
+      return result;
     }
     else if (
       base_name == "__func__" || base_name == "__FUNCTION__" ||
@@ -1472,7 +1472,7 @@ exprt cpp_typecheck_resolvet::resolve(
       // __FUNCTION__ and __PRETTY_FUNCTION__ are GCC-specific
       string_constantt s(location.get_function());
       s.location() = location;
-      return std::move(s);
+      return s;
     }
   }
 

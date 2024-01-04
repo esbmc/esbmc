@@ -4,15 +4,10 @@
 #include <goto-programs/goto_functions.h>
 #include <langapi/language_ui.h>
 
-class program
+class program : public language_uit
 {
 public:
-  namespacet ns;
   goto_functionst functions;
-  program(namespacet ns, goto_functionst &functions)
-    : ns(ns), functions(functions)
-  {
-  }
 };
 
 /**
@@ -31,11 +26,11 @@ public:
   };
 
   /**
-     * @brief Get the goto functions object
-     * 
-     * @param c_inputstream input stream containing the C program
-     * @return goto_functionst of the parsed object
-     */
+   * @brief Get the goto functions object
+   *
+   * @param c_inputstream input stream containing the C program
+   * @return goto_functionst of the parsed object
+   */
   static program get_goto_functions(
     std::istream &c_inputstream,
     goto_factory::Architecture arch = goto_factory::Architecture::BIT_16);
@@ -54,7 +49,7 @@ public:
   static optionst get_default_options(cmdlinet cmd);
 
 private:
-  static bool parse(language_uit &l);
+  static bool parse(const cmdlinet &cmdline, language_uit &l);
   static void
   create_file_from_istream(std::istream &c_inputstream, std::string filename);
   static void create_file_from_string(std::string &str, std::string filename);
