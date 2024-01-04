@@ -30,7 +30,7 @@ struct mode_table_et
 };
 
 // List of language modes that are going to be supported in the final tool.
-// Must be declared by user of langapi, must end with HAVE_MODE_NULL.
+// Must be declared by user of langapi, must end with LANGAPI_MODE_END.
 
 extern const mode_table_et mode_table[];
 
