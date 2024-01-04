@@ -17,13 +17,7 @@ enum class language_idt : int
   PYTHON,
 };
 
-struct language_desct
-{
-  const char *name;
-  const char *const *filename_extensions;
-};
-
-const language_desct *language_desc(language_idt id);
+const char *language_name(language_idt id);
 language_idt language_id_by_name(const std::string &name);
 language_idt language_id_by_path(const std::string &path);
 
