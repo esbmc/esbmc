@@ -36,9 +36,6 @@ string_constantt::string_constantt(
 /* Apple enjoys their users suffering to write platform-independent code, that's
  * why they chose to *not* provide the c(16|32)rtomb functions. */
 
-typedef uint16_t char16_t;
-typedef uint32_t char32_t;
-
 static_assert(sizeof(wchar_t) == sizeof(char32_t));
 static_assert(sizeof(mbstate_t) >= sizeof(uint32_t));
 
@@ -58,11 +55,14 @@ static_assert(sizeof(mbstate_t) >= sizeof(uint32_t));
  * them in their libc, we'll be notified and have to see about the version... */
 static size_t c32rtomb(char *buf, char32_t c, mbstate_t *ps)
 {
+  /* Assumption: wchar_t is UTF-32, same as char32_t */
   return wcrtomb(buf, static_cast<wchar_t>(c), ps);
 }
 
 static size_t c16rtomb(char *buf, char16_t c, mbstate_t *ps)
 {
+  /* Convert from UTF-16 to UTF-32 and use c32rtomb() */
+
   /* Initial state     <-> low surrogate not allowed
    * Not initial state <-> low surrogate expected */
   bool init = mbsinit(ps);
