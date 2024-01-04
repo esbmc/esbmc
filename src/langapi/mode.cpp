@@ -79,8 +79,15 @@ language_idt language_id_by_name(const std::string &name)
   }
 }
 
-static language_idt language_id_by_ext(const std::string_view &ext)
+language_idt language_id_by_path(const std::string &path)
 {
+  const char *dot = strrchr(path.c_str(), '.');
+
+  if (dot == nullptr)
+    return language_idt::NONE;
+
+  std::string_view ext(dot + 1);
+
   for (int i = 0;; i++)
   {
     language_idt lid = static_cast<language_idt>(i);
@@ -91,16 +98,6 @@ static language_idt language_id_by_ext(const std::string_view &ext)
       if (*e == ext)
         return lid;
   }
-}
-
-language_idt language_id_by_path(const std::string &path)
-{
-  const char *ext = strrchr(path.c_str(), '.');
-
-  if (ext == nullptr)
-    return language_idt::NONE;
-
-  return language_id_by_ext(ext + 1);
 }
 
 static int get_mode(language_idt lang)
