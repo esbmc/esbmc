@@ -789,7 +789,7 @@ smt_convt::resultt bmct::multi_property_check(
     smt_convt::resultt result = runtime_solver->dec_solve();
     fine_timet sat_stop = current_time();
     log_status(
-        "Runtime decision procedure: {}s", time2string(sat_stop - sat_start));
+      "Runtime decision procedure: {}s", time2string(sat_stop - sat_start));
     // This try-catch is mainly for fail-fast.
 
     if (result == smt_convt::P_SATISFIABLE)
