@@ -5,6 +5,9 @@
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <unordered_set>
 #include <util/prefix.h>
+#include <boost/iostreams/filtering_streambuf.hpp>
+#include <boost/iostreams/copy.hpp>
+#include <boost/iostreams/filter/zlib.hpp>
 
 template <class Interval>
 inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
@@ -208,8 +211,15 @@ void interval_analysis(
     Forall_goto_functions (f_it, goto_functions)
       dump_intervals(oss, f_it->second, interval_analysis);
 
-    std::ofstream csv(csv_file);
-    csv << oss.str();
+    // to decompress:
+    // zlib-flate -uncompress intervals.csv.z interval.unz
+    std::stringstream ss{oss.str()};
+    std::ofstream file(
+      csv_file + ".z", std::ios_base::out | std::ios_base::binary);
+    boost::iostreams::filtering_streambuf<boost::iostreams::output> out;
+    out.push(boost::iostreams::zlib_compressor());
+    out.push(file);
+    boost::iostreams::copy(ss, out);
   }
 
   Forall_goto_functions (f_it, goto_functions)
