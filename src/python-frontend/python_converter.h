@@ -3,6 +3,8 @@
 #include <util/context.h>
 #include <nlohmann/json.hpp>
 
+#include <map>
+
 class codet;
 class struct_typet;
 
@@ -47,4 +49,8 @@ private:
   std::string current_func_name;
   std::string current_class_name;
   exprt *ref_instance;
+  bool is_converting_lhs = false;
+
+  // Map object to list of instance attributes
+  std::map<std::string, std::vector<std::string>> instance_attr_map;
 };
