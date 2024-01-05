@@ -230,8 +230,8 @@ enum StatementT
   IfStatement,           // rule if-statement
   WhileStatement,
   StatementTError,
-  Continue,              // rule continue
-  Break                  // rule break
+  ContinueStatement, // rule continue
+  BreakStatement     // rule break
 };
 StatementT get_statement_t(const nlohmann::json &stmt);
 const char *statement_to_str(StatementT type);

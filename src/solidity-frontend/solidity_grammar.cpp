@@ -591,14 +591,14 @@ StatementT get_statement_t(const nlohmann::json &stmt)
     return WhileStatement;
   }
 
-  else if(stmt["nodeType"] == "Continue")
+  else if (stmt["nodeType"] == "Continue")
   {
-    return Continue;
+    return ContinueStatement;
   }
 
-  else if(stmt["nodeType"] == "Break")
+  else if (stmt["nodeType"] == "Break")
   {
-    return Break;
+    return BreakStatement;
   }
 
   else
@@ -623,8 +623,8 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(IfStatement)
     ENUM_TO_STR(WhileStatement)
     ENUM_TO_STR(StatementTError)
-    ENUM_TO_STR(Continue)
-    ENUM_TO_STR(Break)
+    ENUM_TO_STR(ContinueStatement)
+    ENUM_TO_STR(BreakStatement)
   default:
   {
     assert(!"Unknown statement type");
