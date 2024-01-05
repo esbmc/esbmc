@@ -85,27 +85,7 @@ public:
 
   virtual ~languaget() = default;
 
-  inline void set_func_name(const std::string _path)
-  {
-    func_name = _path;
-  };
-
-#ifdef ENABLE_SOLIDITY_FRONTEND
-  inline void set_smart_contract_source(const std::string _path)
-  {
-    smart_contract = _path;
-  };
-#endif
-
 protected:
-  // function name for verification that requires this information before GOTO conversion phase.
-  std::string func_name = "";
-
-#ifdef ENABLE_SOLIDITY_FRONTEND
-  // smart contract source
-  std::string smart_contract = "";
-#endif
-
   virtual bool from_expr(
     const exprt &expr,
     std::string &code,

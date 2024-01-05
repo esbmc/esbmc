@@ -63,6 +63,8 @@ bool language_uit::parse(const std::string &filename)
     return true;
   }
 
+  log_progress("Parsing {}", filename);
+
   std::pair<language_filest::filemapt::iterator, bool> result =
     language_files.filemap.emplace(
       std::piecewise_construct,
@@ -82,27 +84,6 @@ bool language_uit::parse(const std::string &filename)
     return true;
   }
   languaget &language = *lf.language;
-
-  log_progress("Parsing {}", filename);
-
-#ifdef ENABLE_SOLIDITY_FRONTEND
-  if (lang == language_idt::SOLIDITY)
-  {
-    std::string fun = config.options.get_option("function");
-    if (!fun.empty())
-      language.set_func_name(fun);
-
-    if (config.options.get_option("sol") == "")
-    {
-      log_error("Please set the smart contract source file.");
-      return true;
-    }
-    else
-    {
-      language.set_smart_contract_source(config.options.get_option("sol"));
-    }
-  }
-#endif
 
   if (language.parse(filename))
   {
