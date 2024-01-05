@@ -122,35 +122,32 @@ static symbolt create_symbol(
 
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
+  if (!element.contains("_type"))
+    return ExpressionType::UNKNOWN;
+
   auto type = element["_type"];
+
   if (type == "UnaryOp")
-  {
     return ExpressionType::UNARY_OPERATION;
-  }
+
   if (type == "BinOp" || type == "Compare")
-  {
     return ExpressionType::BINARY_OPERATION;
-  }
+
   if (type == "BoolOp")
-  {
     return ExpressionType::LOGICAL_OPERATION;
-  }
+
   if (type == "Constant")
-  {
     return ExpressionType::LITERAL;
-  }
+
   if (type == "Name" || type == "Attribute")
-  {
     return ExpressionType::VARIABLE_REF;
-  }
+
   if (type == "Call")
-  {
     return ExpressionType::FUNC_CALL;
-  }
+
   if (type == "IfExp")
-  {
     return ExpressionType::IF_EXPR;
-  }
+
   return ExpressionType::UNKNOWN;
 }
 
@@ -165,7 +162,6 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     exprt operand_expr = get_expr(operand);
     logical_expr.copy_to_operands(operand_expr);
   }
-
   return logical_expr;
 }
 
@@ -596,8 +592,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   default:
   {
-    log_error(
-      "Unsupported expression type: {}", element["_type"].get<std::string>());
+    if (element.contains("_type"))
+      log_error(
+        "Unsupported expression type: {}", element["_type"].get<std::string>());
     abort();
   }
   }
@@ -708,9 +705,9 @@ void python_converter::get_var_assign(
   {
     std::string name = ast_node["targets"][0]["id"].get<std::string>();
     std::string symbol_id = create_symbol_id() + "@" + name;
-    symbolt *symbol = context.find_symbol(symbol_id);
-    assert(symbol);
-    lhs = symbol_expr(*symbol);
+    lhs_symbol = context.find_symbol(symbol_id);
+    assert(lhs_symbol);
+    lhs = symbol_expr(*lhs_symbol);
   }
 
   bool is_ctor_call = is_constructor_call(ast_node["value"]);
@@ -721,48 +718,66 @@ void python_converter::get_var_assign(
   is_converting_lhs = false;
 
   // Get RHS
-  exprt rhs = get_expr(ast_node["value"]);
-  if (lhs_symbol)
-    lhs_symbol->value = rhs;
-
-  /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
-   * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
-   */
-  if (rhs.is_function_call())
+  exprt rhs;
+  bool has_value = false;
+  if (!ast_node["value"].is_null())
   {
-    // If rhs is a constructor call so it is necessary to update lhs instance attributes with members added in self
-    if (is_ctor_call)
-    {
-      std::string func_name = ast_node["value"]["func"]["id"];
-      std::string self_id =
-        create_symbol_id() + "@C@" + func_name + "@F@" + func_name + "@self";
-      auto self_instance = instance_attr_map.find(self_id);
-      if (self_instance != instance_attr_map.end())
-      {
-        std::vector<std::string> &attr_list =
-          instance_attr_map[lhs_symbol->id.as_string()];
-
-        for (const auto &element : self_instance->second)
-        {
-          if (
-            std::find(attr_list.begin(), attr_list.end(), element) ==
-            attr_list.end())
-            attr_list.push_back(element);
-        }
-      }
-    }
-
-    // op0() refers to the left-hand side (lhs) of the function call
-    rhs.op0() = lhs;
-    target_block.copy_to_operands(rhs);
-    return;
+    rhs = get_expr(ast_node["value"]);
+    has_value = true;
   }
 
-  adjust_statement_types(lhs, rhs);
+  if (has_value)
+  {
+    if (lhs_symbol)
+      lhs_symbol->value = rhs;
 
-  code_assignt code_assign(lhs, rhs);
-  code_assign.location() = location_begin;
-  target_block.copy_to_operands(code_assign);
+    /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
+     * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
+     */
+    if (rhs.is_function_call())
+    {
+      // If rhs is a constructor call so it is necessary to update lhs instance attributes with members added in self
+      if (is_ctor_call)
+      {
+        std::string func_name = ast_node["value"]["func"]["id"];
+        std::string self_id =
+          create_symbol_id() + "@C@" + func_name + "@F@" + func_name + "@self";
+        auto self_instance = instance_attr_map.find(self_id);
+        if (self_instance != instance_attr_map.end())
+        {
+          std::vector<std::string> &attr_list =
+            instance_attr_map[lhs_symbol->id.as_string()];
+
+          for (const auto &element : self_instance->second)
+          {
+            if (
+              std::find(attr_list.begin(), attr_list.end(), element) ==
+              attr_list.end())
+              attr_list.push_back(element);
+          }
+        }
+      }
+      // op0() refers to the left-hand side (lhs) of the function call
+      rhs.op0() = lhs;
+      target_block.copy_to_operands(rhs);
+      return;
+    }
+
+    adjust_statement_types(lhs, rhs);
+
+    code_assignt code_assign(lhs, rhs);
+    code_assign.location() = location_begin;
+    target_block.copy_to_operands(code_assign);
+  }
+  else
+  {
+    lhs_symbol->value = gen_zero(current_element_type, true);
+    lhs_symbol->value.zero_initializer(true);
+
+    code_declt decl(symbol_expr(*lhs_symbol));
+    decl.location() = location_begin;
+    target_block.copy_to_operands(decl);
+  }
 
   ref_instance = nullptr;
 }
