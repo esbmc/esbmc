@@ -43,7 +43,9 @@ public:
   // type check a module in the currently parsed file
   virtual bool typecheck(contextt &context, const std::string &module) = 0;
 
-  // language id / description
+  // language id
+  /* This is used by language_filest::final() to call languaget::final() only
+   * once for each concrete languaget in case of multiple source files. */
   virtual std::string id() const
   {
     return "";
