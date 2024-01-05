@@ -19,6 +19,21 @@ languaget *new_solidity_language()
   return new solidity_languaget;
 }
 
+solidity_languaget::solidity_languaget()
+{
+  std::string fun = config.options.get_option("function");
+  if (!fun.empty())
+    func_name = fun;
+
+  std::string sol = config.options.get_option("sol");
+  if (sol.empty())
+  {
+    log_error("Please set the smart contract source file via --sol");
+    abort();
+  }
+  smart_contract = sol;
+}
+
 std::string solidity_languaget::get_temp_file()
 {
   // Create a temp file for clang-tool
