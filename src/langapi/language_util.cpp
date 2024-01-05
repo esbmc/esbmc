@@ -1,6 +1,6 @@
 #include <langapi/language_util.h>
+#include <langapi/languages.h>
 #include <langapi/mode.h>
-#include <memory>
 #include <util/message.h>
 
 static language_idt language_id_from_mode(irep_idt mode)
@@ -18,17 +18,14 @@ std::unique_ptr<languaget> language_from_symbol(const symbolt &symbol)
   abort();
 }
 
-static std::unique_ptr<languaget>
-language_from_symbol_id(const namespacet &ns, const irep_idt &id)
+static languagest
+languages_from_symbol_id(const namespacet &ns, const irep_idt &id)
 {
   language_idt lang = language_idt::C;
   if (!id.empty())
     if (const symbolt *s = ns.lookup(id))
       lang = language_id_from_mode(s->mode);
-
-  std::unique_ptr<languaget> l = new_language(lang);
-  assert(l);
-  return l;
+  return languagest(ns, lang);
 }
 
 std::string from_expr(
@@ -37,9 +34,9 @@ std::string from_expr(
   const exprt &expr,
   presentationt target)
 {
-  std::unique_ptr<languaget> p = language_from_symbol_id(ns, identifier);
+  languagest langs = languages_from_symbol_id(ns, identifier);
   std::string result;
-  p->from_expr(expr, result, ns, target);
+  langs.from_expr(expr, result, target);
   return result;
 }
 
@@ -49,9 +46,9 @@ std::string from_type(
   const typet &type,
   presentationt target)
 {
-  std::unique_ptr<languaget> p = language_from_symbol_id(ns, identifier);
+  languagest langs = languages_from_symbol_id(ns, identifier);
   std::string result;
-  p->from_type(type, result, ns, target);
+  langs.from_type(type, result, target);
   return result;
 }
 
