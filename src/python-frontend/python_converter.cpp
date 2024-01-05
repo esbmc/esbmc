@@ -61,6 +61,17 @@ static std::string get_op(const std::string &op)
   return std::string();
 }
 
+static struct_typet::componentt build_component(
+  const std::string &class_name,
+  const std::string &comp_name,
+  const typet &type)
+{
+  struct_typet::componentt comp(comp_name, comp_name, type);
+  comp.type().set("#member_name", std::string("tag-") + class_name);
+  comp.set_access("public");
+  return comp;
+}
+
 // Convert Python/AST types to irep2 types
 typet python_converter::get_typet(const std::string &ast_type)
 {
@@ -524,8 +535,38 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       struct_typet &class_type =
         static_cast<struct_typet &>(class_symbol->type);
 
+      if (is_converting_lhs)
+      {
+        // Add member in the class
+        if (!class_type.has_component(attr_name))
+        {
+          struct_typet::componentt comp = std::move(build_component(
+            class_type.tag().as_string(), attr_name, current_element_type));
+          class_type.components().push_back(comp);
+        }
+        // Add instance attribute in the objects map
+        log_status("symbolid: {}", symbol->id.as_string());
+        if (ref_instance)
+          log_status("ref_instance: {}", ref_instance->id().c_str());
+        instance_attr_map[symbol->id.as_string()].push_back(attr_name);
+      }
+
+      auto is_instance_attr = [&]() -> bool
+      {
+        auto it = instance_attr_map.find(symbol->id.as_string());
+        if (it != instance_attr_map.end())
+        {
+          for (const auto &attr : it->second)
+          {
+            if (attr == attr_name)
+              return true;
+          }
+        }
+        return false;
+      };
+
       // Get instance attribute from class component
-      if (class_type.has_component(attr_name))
+      if (class_type.has_component(attr_name) && is_instance_attr())
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = member_exprt(
@@ -661,7 +702,10 @@ void python_converter::get_var_assign(
     symbol.is_extern = false;
 
     if (target["_type"] == "Attribute")
+    {
+      is_converting_lhs = true;
       lhs = get_expr(target); // lhs is a obj.member expression
+    }
     else
       lhs = symbol_expr(symbol); // lhs is a simple variable
 
@@ -677,8 +721,12 @@ void python_converter::get_var_assign(
     lhs = symbol_expr(*symbol);
   }
 
-  if (is_constructor_call(ast_node["value"]))
+  bool is_ctor_call = is_constructor_call(ast_node["value"]);
+
+  if (is_ctor_call)
     ref_instance = &lhs;
+
+  is_converting_lhs = false;
 
   // Get RHS
   exprt rhs = get_expr(ast_node["value"]);
@@ -690,6 +738,18 @@ void python_converter::get_var_assign(
    */
   if (rhs.is_function_call())
   {
+    // If rhs is a constructor call so it is necessary to update lhs instance attributes with members added in the constructor
+    if (is_ctor_call)
+    {
+      std::string func_name = ast_node["value"]["func"]["id"];
+      std::string self_id =
+        create_symbol_id() + "@C@" + func_name + "@F@" + func_name + "@self";
+      auto self_instance = instance_attr_map.find(self_id);
+      if (self_instance != instance_attr_map.end())
+        std::swap(
+          instance_attr_map[lhs_symbol->id.as_string()], self_instance->second);
+    }
+
     // op0() refers to the left-hand side (lhs) of the function call
     rhs.op0() = lhs;
     target_block.copy_to_operands(rhs);
@@ -893,17 +953,6 @@ void python_converter::get_function_definition(
 
   // Restore caller function name
   current_func_name = caller_func_name;
-}
-
-static struct_typet::componentt build_component(
-  const std::string &class_name,
-  const std::string &comp_name,
-  const typet &type)
-{
-  struct_typet::componentt comp(comp_name, comp_name, type);
-  comp.type().set("#member_name", std::string("tag-") + class_name);
-  comp.set_access("public");
-  return comp;
 }
 
 void python_converter::get_attributes_from_self(
