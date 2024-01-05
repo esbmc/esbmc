@@ -27,6 +27,8 @@ COMPILER_ARGS=''
 STATIC=
 CLANG_VERSION=11
 
+ARCH=`uname -m`
+
 error() {
     echo "error: $*" >&2
     exit 1
@@ -34,6 +36,8 @@ error() {
 
 # Ubuntu setup (pre-config)
 ubuntu_setup () {
+    
+    
     # Tested on ubuntu 22.04
     PKGS="\
         clang-$CLANG_VERSION clang-tidy-$CLANG_VERSION \
@@ -61,6 +65,15 @@ ubuntu_setup () {
     else
         echo "Configuring static Ubuntu build"
     fi
+
+    if [ $ARCH = "aarch64" ]
+    then
+	echo "Detected ARM64 Linux!"
+	# TODO: We should start using container builds in actions!
+	SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=On -DZ3_DIR=/usr -DENABLE_GOTO_CONTRACTOR=OFF"
+	return
+    fi
+    
     sudo apt-get update &&
     sudo apt-get install -y $PKGS &&
     echo "Installing Python dependencies" &&
@@ -124,6 +137,7 @@ usage() {
     echo "  -S ON|OFF  enable/disable static build [ON for Ubuntu, OFF for macOS]"
     echo "  -c VERS    use packaged clang-VERS in a shared build on Ubuntu [11]"
     echo "  -C         build an SV-COMP version [disabled]"
+    echo "  -B ON|OFF  enable/disable esbmc bundled libc [ON]"
     echo
     echo "This script prepares the environment, downloads dependencies, configures"
     echo "the ESBMC build and runs the commands to compile and install ESBMC into"
@@ -135,7 +149,7 @@ usage() {
 }
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts hb:s:e:r:dS:c:C flag
+while getopts hb:s:e:r:dS:c:CB: flag
 do
     case "${flag}" in
     h) usage; exit 0 ;;
@@ -148,6 +162,7 @@ do
     S) STATIC=$OPTARG ;; # should be capital ON or OFF
     c) CLANG_VERSION=$OPTARG ;; # LLVM/Clang major version
     C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON" ;;
+    B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
     *) exit 1 ;;
     esac
 done
