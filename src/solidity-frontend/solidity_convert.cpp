@@ -1051,15 +1051,20 @@ bool solidity_convertert::get_statement(
     break;
   }
 
-  case SolidityGrammar::StatementT::Continue:
+  case SolidityGrammar::StatementT::ContinueStatement:
   {
     new_expr = code_continuet();
     break;
   }
 
-  case SolidityGrammar::StatementT::Break:
+  case SolidityGrammar::StatementT::BreakStatement:
   {
     new_expr = code_breakt();
+    break;
+  }
+
+  case SolidityGrammar::StatementT::StatementTError:
+  {
     break;
   }
 
