@@ -48,10 +48,6 @@ public:
   {
     return "";
   }
-  virtual std::string description() const
-  {
-    return "";
-  }
 
   // show parse tree
 
