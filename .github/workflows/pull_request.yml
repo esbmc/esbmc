@@ -45,8 +45,8 @@ jobs:
       testing: true
 
   build-arm:
-    uses: ./.github/workflows/build-unix.yml
     name: ARM64 linux build
+    uses: ./.github/workflows/build-unix.yml
     with:
       operating-system: ARM64
       build-flags: '-b DebugOpt -S OFF -B OFF'
