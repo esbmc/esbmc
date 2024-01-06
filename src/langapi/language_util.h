@@ -5,6 +5,9 @@
 #include <util/language.h>
 #include <util/migrate.h>
 #include <util/namespace.h>
+#include <util/symbol.h>
+
+std::unique_ptr<languaget> language_from_symbol(const symbolt &symbol);
 
 std::string from_expr(
   const namespacet &ns,

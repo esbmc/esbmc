@@ -8,6 +8,10 @@ class program : public language_uit
 {
 public:
   goto_functionst functions;
+
+  program() = default;
+  program(program &&) = default;
+  program &operator=(program &&) = default;
 };
 
 /**

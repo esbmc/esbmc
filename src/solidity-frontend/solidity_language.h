@@ -11,6 +11,8 @@
 class solidity_languaget : public clang_c_languaget
 {
 public:
+  solidity_languaget();
+
   bool parse(const std::string &path) override;
 
   bool final(contextt &context) override;
@@ -37,6 +39,12 @@ public:
   }
 
   bool convert_intrinsics(contextt &context);
+
+  // function name for verification that requires this information before GOTO conversion phase.
+  std::string func_name;
+
+  // smart contract source
+  std::string smart_contract;
 
   // store AST json in nlohmann::json data structure
   nlohmann::json ast_json;
