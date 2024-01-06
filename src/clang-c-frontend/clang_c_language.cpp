@@ -222,17 +222,17 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-U__BLOCKS__");
     compiler_args.push_back("-Wno-nullability-completeness");
     compiler_args.push_back("-Wno-deprecated-register");
-    /*
-     * The float ABI on macOS is 'softfp', but for AArch64 clang defaults
-     * to armv4t in 32-bit mode and the default for that is the incompatible
-     * 'soft': the system's <fenv.h> won't work.
-     */
-    if (config.ansi_c.target.is_arm() && config.ansi_c.word_size == 32)
-    {
-      compiler_args.emplace_back("-arch");
-      compiler_args.emplace_back("armv6");
-      compiler_args.push_back("-mfloat-abi=softfp");
-    }
+  }
+
+  /* The float ABI on macOS is 'softfp', but for AArch64 clang defaults
+   * to armv4t in 32-bit mode and the default for that is the incompatible
+   * 'soft': the system's <fenv.h> won't work.
+   */
+  if (config.ansi_c.target.is_arm() && config.ansi_c.word_size == 32)
+  {
+    compiler_args.emplace_back("-arch");
+    compiler_args.emplace_back("armv6");
+    compiler_args.push_back("-mfloat-abi=hard");
   }
 
   if (config.ansi_c.target.is_windows_abi())
