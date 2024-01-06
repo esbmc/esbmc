@@ -27,6 +27,26 @@ languaget *new_clang_c_language()
 
 clang_c_languaget::clang_c_languaget() = default;
 
+static std::string
+replace_all(std::string s, std::string_view what, std::string_view with)
+{
+  size_t what_len = what.length();
+  size_t with_len = with.length();
+  for (size_t p = 0; (p = s.find(what, p)) != std::string::npos; p += with_len)
+    s.replace(p, what_len, with);
+  return s;
+}
+
+static char *sysroot_envvar()
+{
+  std::string name = "ESBMC_SYSROOT";
+  name += std::to_string(config.ansi_c.word_size);
+  name += "_";
+  // technically, '-' in envvars is OK, but shells don't universally support it
+  name += replace_all(config.ansi_c.target.to_string(), "-", "_");
+  return getenv(name.c_str());
+}
+
 void clang_c_languaget::build_include_args(
   std::vector<std::string> &compiler_args)
 {
@@ -192,10 +212,7 @@ void clang_c_languaget::build_compiler_args(
   config.options.get_option("sysroot", sysroot);
   if (!sysroot.empty())
     compiler_args.push_back("--sysroot=" + sysroot);
-  else if (
-    const char *new_sysroot = getenv(
-      ("ESBMC_SYSROOT" + std::to_string(config.ansi_c.word_size) + "_" +
-      config.ansi_c.target.to_string()).c_str()))
+  else if (const char *new_sysroot = sysroot_envvar())
     compiler_args.emplace_back("--sysroot=" + std::string(new_sysroot));
   else
     compiler_args.emplace_back("--sysroot=" ESBMC_C2GOTO_SYSROOT);
