@@ -853,9 +853,9 @@ TEST_CASE("Interval Analysis - Typecast (signed)", "[ai][interval-analysis]")
   test_program T;
   T.code =
     "int main() {\n"
-    "char a = -1;\n"
+    "signed char a = -1;\n"
     "if(nondet_int()) a = -128;"
-    "int  b = (int ) a;\n"
+    "signed int  b = (signed int ) a;\n"
     "return a;\n" // a: [0, 250], b: [0,250]
     "}";
 
