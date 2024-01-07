@@ -111,7 +111,9 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "show the stack trace of function call in the counterexample"},
     {"document-subgoals", NULL, "generate subgoals documentation"},
-    {"no-arch", NULL, "don't set up an architecture"},
+    {"no-arch",
+     NULL,
+     "don't set up an architecture {deprecated, use: --arch none}"},
     {"no-library", NULL, "disable built-in abstract C library"},
     {"no-string-literal", NULL, "ignores string literals (replace by NULL)"},
     {"output-goto",
@@ -167,6 +169,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"i386-linux", NULL, "set Linux/I386 architecture (default),"},
     {"i386-win32", NULL, "set Windows/I386 architecture"},
 #endif
+    {"arch",
+     boost::program_options::value<std::string>(),
+     "set target CPU architecture; default is the host's; "
+     "note: the size of machine words is independent, see --{16,32,64}"},
     {"funsigned-char", NULL, "make \"char\" unsigned by default"},
     {"fms-extensions", NULL, "enable microsoft C extensions"}}},
   {"BMC",
