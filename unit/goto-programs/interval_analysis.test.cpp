@@ -672,10 +672,10 @@ TEST_CASE(
   test_program T;
   T.code =
     "int main() {\n"
-    "char a = 10;\n"
+    "signed char a = 10;\n"
     "if(nondet_int()) a = 1;"
-    "char b = -1;\n" // b: [-1,-1]
-    "a = b * a;\n"   // a: [-10,-1]
+    "signed char b = -1;\n" // b: [-1,-1]
+    "a = b * a;\n"          // a: [-10,-1]
     "return a;\n"
     "}";
 
