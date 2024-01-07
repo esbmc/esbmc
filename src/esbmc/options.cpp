@@ -173,7 +173,6 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "set target CPU architecture; default is the host's; "
      "note: the size of machine words is independent, see --{16,32,64}"},
-    {"funsigned-char", NULL, "make \"char\" unsigned by default"},
     {"fms-extensions", NULL, "enable microsoft C extensions"}}},
   {"BMC",
    {{"function",
