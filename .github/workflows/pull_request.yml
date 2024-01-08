@@ -49,7 +49,7 @@ jobs:
     uses: ./.github/workflows/build-unix.yml
     with:
       operating-system: ARM64
-      build-flags: '-b DebugOpt -S OFF'
+      build-flags: '-b DebugOpt -S OFF -c 13'
       testing: true
 
   build-macos-arm:
