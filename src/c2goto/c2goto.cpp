@@ -35,12 +35,6 @@ const struct group_opt_templ c2goto_options[] = {
      {"targetfile",
       boost::program_options::value<std::string>()->value_name("<filename>"),
       "output interesting variables to a file"},
-     {"countersfile",
-      boost::program_options::value<std::string>()->value_name("<filename>"),
-      "output interesting variables to a file"},
-     {"totalprob",
-      boost::program_options::value<std::string>()->value_name("<filename>"),
-      "output interesting variables to a file"},
 
      {"output",
       boost::program_options::value<std::string>()->value_name("<filename>"),

@@ -930,7 +930,7 @@ smt_astt z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     (name.find("sum_global") != std::string::npos) ||
     (name.find("cut_count") != std::string::npos) ||
     (name.find("_path_exp") != std::string::npos) ||
-    (name.find("input_") != std::string::npos))
+    (name.find("param_") != std::string::npos)) 
   {
     const std::string &filename = options.get_option("targetfile");
     if (!filename.empty())
@@ -938,8 +938,7 @@ smt_astt z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
       // print to output file
       std::ofstream out;
       out.open(filename.c_str(), std::fstream::app);
-      out << "(get-value (|" << name << "|))"
-          << "\n";
+      out << name << "\n";
       out.close();
     }
   }
