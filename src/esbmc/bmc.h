@@ -19,7 +19,8 @@ public:
   bmct(goto_functionst &funcs, optionst &opts, contextt &_context);
 
   optionst &options;
-  enum {
+  enum
+  {
     ltl_res_good,
     ltl_res_succeeding,
     ltl_res_failing,

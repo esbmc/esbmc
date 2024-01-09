@@ -1198,46 +1198,52 @@ void execution_statet::kill_monitor_thread()
   threads_state[monitor_tid].thread_ended = true;
 }
 
-static void replace_symbol_names(exprt &e, const std::string&& prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+static void replace_symbol_names(
+  exprt &e,
+  const std::string &&prefix,
+  std::map<std::string, std::string> &strings,
+  std::set<std::string> &used_syms)
 {
-
-  if (e.id() ==  "symbol") {
+  if (e.id() == "symbol")
+  {
     std::string sym = e.identifier().as_string();
     used_syms.insert(sym);
-  } else {
-    Forall_operands(it, e)
+  }
+  else
+  {
+    Forall_operands (it, e)
       replace_symbol_names(*it, std::move(prefix), strings, used_syms);
   }
 }
 
-void
-execution_statet::init_property_monitors()
+void execution_statet::init_property_monitors()
 {
   std::map<std::string, std::string> strings;
 
-  new_context.foreach_operand(
-    [&strings] (const symbolt& s)
+  new_context.foreach_operand([&strings](const symbolt &s) {
+    if (s.name.as_string().find("__ESBMC_property_") != std::string::npos)
     {
-      if (s.name.as_string().find("__ESBMC_property_") != std::string::npos) {
-        // Munge back into the shape of an actual string
-        std::string str;
-        forall_operands(iter2, s.value) {
-          char c = (char)strtol(iter2->value().as_string().c_str(), nullptr, 2);
-          if (c != 0)
-            str += c;
-          else
-            break;
-        }
-
-        strings[s.name.as_string()] = str;
+      // Munge back into the shape of an actual string
+      std::string str;
+      forall_operands (iter2, s.value)
+      {
+        char c = (char)strtol(iter2->value().as_string().c_str(), nullptr, 2);
+        if (c != 0)
+          str += c;
+        else
+          break;
       }
-    }
-  );
 
-  std::map<std::string, std::pair<std::set<std::string>, exprt> > monitors;
+      strings[s.name.as_string()] = str;
+    }
+  });
+
+  std::map<std::string, std::pair<std::set<std::string>, exprt>> monitors;
   std::map<std::string, std::string>::const_iterator str_it;
-  for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
-    if (str_it->first.find("$type") == std::string::npos) {
+  for (str_it = strings.begin(); str_it != strings.end(); str_it++)
+  {
+    if (str_it->first.find("$type") == std::string::npos)
+    {
       std::set<std::string> used_syms;
       exprt main_expr;
       std::string prop_name = str_it->first.substr(20, std::string::npos);
@@ -1253,8 +1259,8 @@ execution_statet::init_property_monitors()
 
       replace_symbol_names(main_expr, std::move(prop_name), strings, used_syms);
 
-      monitors[prop_name] = std::pair<std::set<std::string>, exprt>
-                                      (used_syms, main_expr);
+      monitors[prop_name] =
+        std::pair<std::set<std::string>, exprt>(used_syms, main_expr);
     }
   }
 }
