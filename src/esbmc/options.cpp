@@ -471,6 +471,8 @@ const struct group_opt_templ all_cmd_options[] = {
       "object (unsound)"},
      // Abort if the program contains a recursion
      {"abort-on-recursion", NULL, ""},
+     // LTL mode?
+     {"ltl", NULL, ""},
      /* see <https://github.com/esbmc/esbmc/pull/1281> for a list of supported
      * modules; check "grep -rw 'log_debug(' src" for more up-to-date info. */
      {"verbosity",
@@ -486,6 +488,11 @@ const struct group_opt_templ all_cmd_options[] = {
      // any other exploration from that point. Useful for constructing an
      // explicit multithreading path
      {"direct-interleavings", NULL, ""},
+     // Used to print out the instructions that had been identified as touching
+     // global variables, thus instructions that cause interleavings. Probably
+     // isn't sound any more seeing how we don't do the static pointer analysis
+     // any more.
+     {"show-ileave-points", NULL, ""},
      // I think this dumps the current stack of all threads on an ileave point.
      // Useful for working out the state of _all_ the threads and how they
      // evolve, also see next flag,
