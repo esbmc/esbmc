@@ -5,6 +5,8 @@
 #include <thread>
 #include <chrono>
 
+#include <iostream>
+
 #ifndef _WIN32
 #include <unistd.h>
 #include <sched.h>
@@ -46,6 +48,11 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
+
+  ltl_results_seen[ltl_res_bad] = 0;
+  ltl_results_seen[ltl_res_failing] = 0;
+  ltl_results_seen[ltl_res_succeeding] = 0;
+  ltl_results_seen[ltl_res_good] = 0;
 
   // The next block will initialize the algorithms used for the analysis.
   {
@@ -435,6 +442,22 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 
   } while (symex->setup_next_formula());
 
+  if (options.get_bool_option("ltl"))
+  {
+    // So, what was the lowest value ltl outcome that we saw?
+    if (ltl_results_seen[ltl_res_bad]) {
+      std::cout << "Final lowest outcome: LTL_BAD" << std::endl;
+    } else if (ltl_results_seen[ltl_res_failing]) {
+      std::cout << "Final lowest outcome: LTL_FAILING" << std::endl;
+    } else if (ltl_results_seen[ltl_res_succeeding]) {
+      std::cout << "Final lowest outcome: LTL_SUCCEEDING" << std::endl;
+    } else if (ltl_results_seen[ltl_res_good]) {
+      std::cout << "Final lowest outcome: LTL_GOOD" << std::endl;
+    }  else {
+      std::cout << "No traces seen, apparently" << std::endl;
+    }
+  }
+
   return interleaving_failed > 0 ? smt_convt::P_SATISFIABLE : res;
 }
 
@@ -636,6 +659,14 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return smt_convt::P_UNSATISFIABLE;
     }
 
+    if (options.get_bool_option("ltl")) {
+      int res = ltl_run_thread(eq);
+      // Record that we've seen this outcome; later decide what the least
+      // outcome was.
+      ltl_results_seen[res]++;
+      return smt_convt::P_UNSATISFIABLE;
+    }
+
     if (!options.get_bool_option("smt-during-symex"))
     {
       runtime_solver =
@@ -667,6 +698,106 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     log_error("Out of memory\n");
     return smt_convt::P_ERROR;
   }
+}
+
+int bmct::ltl_run_thread(std::shared_ptr<symex_target_equationt> &equation)
+{
+  unsigned int num_asserts = 0;
+  // LTL checking - first check for whether we have an indeterminate prefix,
+  // and then check for all others.
+
+  // Start by turning all assertions that aren't the negative prefix
+  // assertion into skips.
+  for(auto & SSA_step : equation->SSA_steps)
+  {
+    if (SSA_step.is_assert()) {
+      if (SSA_step.comment != "LTL_BAD") {
+        SSA_step.type = goto_trace_stept::SKIP;
+      } else {
+        num_asserts++;
+      }
+    }
+  }
+
+  std::cout << "Checking for LTL_BAD" << std::endl;
+  if (num_asserts != 0) {
+    if (run(equation)) {
+      std::cout << "Found trace satisfying LTL_BAD" << std::endl;
+      return ltl_res_bad;
+    }
+  } else {
+    std::cerr << "Warning: Couldn't find LTL_BAD assertion" << std::endl;
+  }
+
+  // Didn't find it; turn skip steps back into assertions.
+  for(auto & SSA_step : equation->SSA_steps)
+  {
+    if (SSA_step.type == goto_trace_stept::SKIP)
+      SSA_step.type = goto_trace_stept::ASSERT;
+  }
+
+  // Try again, with LTL_FAILING
+  num_asserts = 0;
+  for(auto & SSA_step : equation->SSA_steps)
+  {
+    if (SSA_step.is_assert()) {
+      if (SSA_step.comment != "LTL_FAILING") {
+        SSA_step.type = goto_trace_stept::SKIP;
+      } else {
+        num_asserts++;
+      }
+    }
+  }
+
+  std::cout << "Checking for LTL_FAILING" << std::endl;
+  if (num_asserts != 0) {
+    if (run(equation)) {
+      std::cout << "Found trace satisfying LTL_FAILING" << std::endl;
+      return ltl_res_failing;
+    }
+  } else {
+    std::cerr << "Warning: Couldn't find LTL_FAILING assertion" <<std::endl;
+  }
+
+  // Didn't find it; turn skip steps back into assertions.
+  for(auto & SSA_step : equation->SSA_steps)
+  {
+    if (SSA_step.type == goto_trace_stept::SKIP)
+      SSA_step.type = goto_trace_stept::ASSERT;
+  }
+
+  // Try again, with LTL_SUCCEEDING
+  num_asserts = 0;
+  for(auto & SSA_step : equation->SSA_steps)
+  {
+    if (SSA_step.is_assert()) {
+      if (SSA_step.comment != "LTL_SUCCEEDING") {
+        SSA_step.type = goto_trace_stept::SKIP;
+      } else {
+        num_asserts++;
+      }
+    }
+  }
+
+  std::cout << "Checking for LTL_SUCCEEDING" << std::endl;
+  if (num_asserts != 0) {
+    if (run(equation)) {
+      std::cout << "Found trace satisfying LTL_SUCCEEDING" << std::endl;
+      return ltl_res_succeeding;
+    }
+  } else {
+    std::cerr << "Warning: Couldn't find LTL_SUCCEEDING assertion"
+              << std::endl;
+  }
+
+  // Otherwise, we just got a good prefix.
+  for(auto & SSA_step : equation->SSA_steps)
+  {
+    if (SSA_step.type == goto_trace_stept::SKIP)
+      SSA_step.type = goto_trace_stept::ASSERT;
+  }
+
+  return ltl_res_good;
 }
 
 smt_convt::resultt bmct::multi_property_check(
