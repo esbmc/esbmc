@@ -98,9 +98,10 @@ execution_statet::execution_statet(
   nondet_count = 0;
   DFS_traversed.reserve(1);
   DFS_traversed[0] = false;
+  check_ltl = false;
   mon_thread_warning = false;
 
-  thread_cswitch_threshold = 2;
+  thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
 }
 
 execution_statet::execution_statet(const execution_statet &ex)
@@ -145,6 +146,7 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   interleaving_unviable = ex.interleaving_unviable;
   pre_goto_guard = ex.pre_goto_guard;
   mon_thread_warning = ex.mon_thread_warning;
+  check_ltl = ex.check_ltl;
 
   monitor_tid = ex.monitor_tid;
   tid_is_set = ex.tid_is_set;
@@ -1194,6 +1196,67 @@ void execution_statet::kill_monitor_thread()
     "You cannot kill monitor thread _from_ the monitor thread\n");
 
   threads_state[monitor_tid].thread_ended = true;
+}
+
+static void replace_symbol_names(exprt &e, const std::string&& prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+{
+
+  if (e.id() ==  "symbol") {
+    std::string sym = e.identifier().as_string();
+    used_syms.insert(sym);
+  } else {
+    Forall_operands(it, e)
+      replace_symbol_names(*it, std::move(prefix), strings, used_syms);
+  }
+}
+
+void
+execution_statet::init_property_monitors()
+{
+  std::map<std::string, std::string> strings;
+
+  new_context.foreach_operand(
+    [&strings] (const symbolt& s)
+    {
+      if (s.name.as_string().find("__ESBMC_property_") != std::string::npos) {
+        // Munge back into the shape of an actual string
+        std::string str;
+        forall_operands(iter2, s.value) {
+          char c = (char)strtol(iter2->value().as_string().c_str(), nullptr, 2);
+          if (c != 0)
+            str += c;
+          else
+            break;
+        }
+
+        strings[s.name.as_string()] = str;
+      }
+    }
+  );
+
+  std::map<std::string, std::pair<std::set<std::string>, exprt> > monitors;
+  std::map<std::string, std::string>::const_iterator str_it;
+  for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
+    if (str_it->first.find("$type") == std::string::npos) {
+      std::set<std::string> used_syms;
+      exprt main_expr;
+      std::string prop_name = str_it->first.substr(20, std::string::npos);
+
+      namespacet ns(new_context);
+      languagest languages(ns, language_idt::C);
+
+      std::string expr_str = strings["__ESBMC_property_" + prop_name];
+      // TODO: std::string dummy_str;
+
+      assert(!"exec-state: no to_expr() implementation");
+      // TODO: languages.to_expr(expr_str, dummy_str, main_expr, message_handler);
+
+      replace_symbol_names(main_expr, std::move(prop_name), strings, used_syms);
+
+      monitors[prop_name] = std::pair<std::set<std::string>, exprt>
+                                      (used_syms, main_expr);
+    }
+  }
 }
 
 execution_statet::ex_state_level2t::ex_state_level2t(execution_statet &ref)
