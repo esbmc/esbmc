@@ -52,5 +52,5 @@ private:
   bool is_converting_lhs = false;
 
   // Map object to list of instance attributes
-  std::map<std::string, std::vector<std::string>> instance_attr_map;
+  std::unordered_map<std::string, std::vector<std::string>> instance_attr_map;
 };
