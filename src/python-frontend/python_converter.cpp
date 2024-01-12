@@ -545,9 +545,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           class_type.components().push_back(comp);
         }
         // Add instance attribute in the objects map
-        log_status("symbolid: {}", symbol->id.as_string());
-        if (ref_instance)
-          log_status("ref_instance: {}", ref_instance->id().c_str());
         instance_attr_map[symbol->id.as_string()].push_back(attr_name);
       }
 
@@ -738,7 +735,7 @@ void python_converter::get_var_assign(
    */
   if (rhs.is_function_call())
   {
-    // If rhs is a constructor call so it is necessary to update lhs instance attributes with members added in the constructor
+    // If rhs is a constructor call so it is necessary to update lhs instance attributes with members added in self
     if (is_ctor_call)
     {
       std::string func_name = ast_node["value"]["func"]["id"];
@@ -746,8 +743,18 @@ void python_converter::get_var_assign(
         create_symbol_id() + "@C@" + func_name + "@F@" + func_name + "@self";
       auto self_instance = instance_attr_map.find(self_id);
       if (self_instance != instance_attr_map.end())
-        std::swap(
-          instance_attr_map[lhs_symbol->id.as_string()], self_instance->second);
+      {
+        std::vector<std::string> &attr_list =
+          instance_attr_map[lhs_symbol->id.as_string()];
+
+        for (const auto &element : self_instance->second)
+        {
+          if (
+            std::find(attr_list.begin(), attr_list.end(), element) ==
+            attr_list.end())
+            attr_list.push_back(element);
+        }
+      }
     }
 
     // op0() refers to the left-hand side (lhs) of the function call
