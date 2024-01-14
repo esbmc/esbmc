@@ -452,6 +452,10 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   if (get_type(vd.getType(), t))
     return true;
 
+  // Get id and name
+  std::string id, name;
+  get_decl_name(vd, name, id);
+
   // Check if we annotated it to have an infinity size
   bool no_slice = false;
   if (vd.hasAttrs())
@@ -469,12 +473,21 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
         else if (name == "__ESBMC_no_slice")
           no_slice = true;
       }
+      else if (attr->getKind() == clang::attr::Aligned)
+      {
+        const clang::AlignedAttr &aattr =
+          static_cast<const clang::AlignedAttr &>(*attr);
+
+        exprt alignment;
+        if (get_expr(*(aattr.getAlignmentExpr()), alignment))
+          return true;
+
+        t.set("alignment", alignment);
+      }
+      else
+        continue;
     }
   }
-
-  // Get id and name
-  std::string id, name;
-  get_decl_name(vd, name, id);
 
   if (no_slice)
     config.no_slice_names.emplace(id);
