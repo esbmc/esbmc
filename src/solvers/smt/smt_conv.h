@@ -616,7 +616,10 @@ public:
   smt_astt
   convert_identifier_pointer(const expr2tc &expr, const std::string &sym);
 
-  smt_astt init_pointer_obj(unsigned int obj_num, const expr2tc &size);
+  smt_astt init_pointer_obj(
+    unsigned int obj_num,
+    const expr2tc &size,
+    const typet *type);
 
   /** Checks for equality with NaN representation. */
   smt_astt convert_is_nan(const expr2tc &expr);
