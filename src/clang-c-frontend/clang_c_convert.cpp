@@ -2546,6 +2546,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       break;
     }
 
+    /*
     case clang::APValue::None:
     case clang::APValue::Indeterminate:
     case clang::APValue::Float:
@@ -2558,6 +2559,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     case clang::APValue::Union:
     case clang::APValue::AddrLabelDiff:
     case clang::APValue::MemberPointer:
+    */
+    default:
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
       ross << "Conversion of unsupported value computed by clang for expr: \"";
