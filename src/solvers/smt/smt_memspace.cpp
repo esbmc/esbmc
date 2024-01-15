@@ -197,7 +197,7 @@ void smt_convt::renumber_symbol_address(
   std::string str = sym.get_symbol_name();
 
   const typet *t = nullptr;
-  if (const symbolt *s = ns.lookup(str))
+  if (const symbolt *s = ns.lookup(sym.thename))
     t = &s->type;
 
   // Two different approaches if we do or don't have an address-of pointer
@@ -230,7 +230,8 @@ void smt_convt::renumber_symbol_address(
 
 smt_astt smt_convt::convert_identifier_pointer(
   const expr2tc &expr,
-  const std::string &symbol)
+  const std::string &symbol,
+  const typet *type)
 {
   smt_astt a;
   std::string cte, identifier;
@@ -301,11 +302,7 @@ smt_astt smt_convt::convert_identifier_pointer(
       size = constant_int2tc(ptr_loc_type, BigInt(0x10000));
     }
 
-    const typet *t = nullptr;
-    if (const symbolt *s = ns.lookup(symbol))
-      t = &s->type;
-
-    smt_astt output = init_pointer_obj(obj_num, size, t);
+    smt_astt output = init_pointer_obj(obj_num, size, type);
     assert_ast(a->eq(this, output));
   }
 
@@ -484,7 +481,12 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   if (is_symbol2t(obj.ptr_obj))
   {
     const symbol2t &symbol = to_symbol2t(obj.ptr_obj);
-    return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name());
+
+    const typet *t = nullptr;
+    if (const symbolt *s = ns.lookup(symbol.thename))
+      t = &s->type;
+
+    return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name(), t);
   }
 
   if (is_constant_string2t(obj.ptr_obj))
@@ -498,7 +500,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     // XXX Oh look -- this is vulnerable to the poison null byte.
     std::replace(identifier.begin(), identifier.end(), '\0', '_');
 
-    return convert_identifier_pointer(obj.ptr_obj, identifier);
+    return convert_identifier_pointer(obj.ptr_obj, identifier, nullptr);
   }
 
   if (is_constant_array2t(obj.ptr_obj))
@@ -512,7 +514,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     static unsigned int constarr_num = 0;
     std::stringstream ss;
     ss << "address_of_arr_const(" << constarr_num++ << ")";
-    return convert_identifier_pointer(obj.ptr_obj, ss.str());
+    return convert_identifier_pointer(obj.ptr_obj, ss.str(), nullptr);
   }
 
   if (is_if2t(obj.ptr_obj))
