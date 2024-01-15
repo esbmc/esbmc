@@ -2528,6 +2528,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       // This is probably a string constant
       clang::APValue::LValueBase base = value.getLValueBase();
+      assert(base.is<const clang::Expr *>());
       const clang::Expr *expr = base.get<const clang::Expr *>();
       if (get_expr(*expr, new_expr))
         return true;
