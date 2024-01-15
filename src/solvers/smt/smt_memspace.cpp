@@ -372,11 +372,17 @@ smt_astt smt_convt::init_pointer_obj(
   if (type)
   {
     const irept &alignment = type->find("alignment");
-    expr2tc alignment2;
-    migrate_expr(static_cast<const exprt &>(alignment), alignment2);
-    expr2tc mod = modulus2tc(
-      ptr_loc_type, start_sym, typecast2tc(ptr_loc_type, alignment2));
-    assert_expr(equality2tc(mod, gen_zero(ptr_loc_type)));
+    if (alignment.is_not_nil())
+    {
+      expr2tc alignment2;
+      migrate_expr(static_cast<const exprt &>(alignment), alignment2);
+      assert(is_constant_int2t(alignment2));
+      alignment2 = typecast2tc(ptr_loc_type, alignment2);
+      expr2tc zero = gen_zero(ptr_loc_type);
+      expr2tc mod = modulus2tc(ptr_loc_type, start_sym, alignment2);
+      expr2tc mod_is_zero = equality2tc(mod, zero);
+      assert_expr(mod_is_zero);
+    }
   }
 
   // Generate address space layout constraints.
