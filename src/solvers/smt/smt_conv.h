@@ -612,9 +612,12 @@ public:
    *  address space juggling required to make a new pointer.
    *  @param expr The symbol2tc expression of this symbol.
    *  @param sym The textual representation of this symbol.
+   *  @param type Optionally a pointer to the type of the symbol in the context.
    *  @return A pointer-typed AST representing the address of this symbol. */
-  smt_astt
-  convert_identifier_pointer(const expr2tc &expr, const std::string &sym);
+  smt_astt convert_identifier_pointer(
+    const expr2tc &expr,
+    const std::string &sym,
+    const typet *type);
 
   smt_astt init_pointer_obj(
     unsigned int obj_num,
