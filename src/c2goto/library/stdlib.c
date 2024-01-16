@@ -284,12 +284,12 @@ __ESBMC_HIDE:;
 
 int rand(void)
 {
-  return nondet_uint() % RAND_MAX;
+  return nondet_uint() % ((unsigned)RAND_MAX + 1);
 }
 
 long random(void)
 {
-  return nondet_ulong() % RAND_MAX;
+  return nondet_ulong() % ((unsigned)INT32_MAX + 1);
 }
 
 #if 0
