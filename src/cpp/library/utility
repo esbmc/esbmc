@@ -10,6 +10,8 @@
 #ifndef STL_UTILITY
 #define STL_UTILITY
 
+#include <type_traits>
+
 namespace std
 {
 
@@ -46,28 +48,17 @@ pair<T1, T2> make_pair(T1 x, T2 y)
   return (pair<T1, T2>(x, y));
 }
 
-template <class T>
-struct remove_reference
-{
-  typedef T type;
-};
+/**
+ * std::move is used to indicate that an object t may be "moved from"
+ * i.e. allowing the efficient transfer of resources from t to another object.
+ * 
+ * source: https://en.cppreference.com/w/cpp/utility/move
+ */
 
 template <class T>
-struct remove_reference<T&>
+typename std::remove_reference<T>::type &&move(T &&t) noexcept
 {
-  typedef T type;
-};
-
-template <class T>
-struct remove_reference<T&&>
-{
-  typedef T type;
-};
-
-template <class T>
-typename remove_reference<T>::type &&move(T &&t) noexcept
-{
-  return static_cast<typename remove_reference<T>::type &&>(t);
+  return static_cast<typename std::remove_reference<T>::type &&>(t);
 }
 
 } // namespace std
