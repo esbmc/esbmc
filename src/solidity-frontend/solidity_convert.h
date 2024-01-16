@@ -62,8 +62,14 @@ protected:
   bool get_function_definition(const nlohmann::json &ast_node);
   bool get_function_params(const nlohmann::json &pd, exprt &param);
   bool get_default_function(const std::string name, const std::string id);
+
+  // handle the non-contract definition, including struct/enum/error/event/abstract/...
+  bool get_noncontract_defition(nlohmann::json &ast_node);
   bool get_struct_class(const nlohmann::json &ast_node);
   void add_enum_member_val(nlohmann::json &ast_node);
+  bool get_error_definition(const nlohmann::json &ast_node);
+
+  // handle the implicit constructor
   bool add_implicit_constructor();
   bool get_implicit_ctor_call(const int ref_decl_id, exprt &new_expr);
   bool

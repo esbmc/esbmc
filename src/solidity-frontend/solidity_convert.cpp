@@ -87,14 +87,8 @@ bool solidity_convertert::convert()
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
        ++itr, ++index)
   {
-    std::string node_type = (*itr)["nodeType"].get<std::string>();
-
-    if (node_type == "StructDefinition")
-      if (get_struct_class(*itr))
-        return true;
-    if (node_type == "EnumDefinition")
-      // set the ["Value"] for each member inside enum
-      add_enum_member_val(*itr);
+    if (get_noncontract_defition(*itr))
+      return true;
   }
 
   // secound round: handle contract definition
@@ -108,14 +102,13 @@ bool solidity_convertert::convert()
     {
       current_contractName = (*itr)["name"].get<std::string>();
 
-      // modify the enum
       nlohmann::json &ast_nodes = (*itr)["nodes"];
       for (nlohmann::json::iterator ittr = ast_nodes.begin();
            ittr != ast_nodes.end();
            ++ittr)
       {
-        if ((*ittr)["nodeType"] == "EnumDefinition")
-          add_enum_member_val(*ittr);
+        if (get_noncontract_defition(*ittr))
+          return true;
       }
 
       // add a struct symbol for each contract
@@ -201,12 +194,13 @@ bool solidity_convertert::get_decl(
     return get_struct_class(ast_node); // rule enum-definition
   }
   case SolidityGrammar::ContractBodyElementT::EnumDef:
+  case SolidityGrammar::ContractBodyElementT::ErrorDef:
   {
-    break; // rule enum-definition
+    break;
   }
   default:
   {
-    assert(!"Unimplemented type in rule contract-body-element");
+    log_error("Unimplemented type in rule contract-body-element");
     return true;
   }
   }
@@ -290,6 +284,14 @@ bool solidity_convertert::get_var_decl(
 
   // 2. populate id and name
   std::string name, id;
+
+  //TODO: Omitted variable
+  if (ast_node["name"].get<std::string>().empty())
+  {
+    log_error("Omitted names are not supported.");
+    return true;
+  }
+
   if (is_state_var)
     get_state_var_decl_name(ast_node, name, id);
   else if (current_functionDecl)
@@ -453,13 +455,14 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
     }
     case SolidityGrammar::ContractBodyElementT::StructDef:
     case SolidityGrammar::ContractBodyElementT::EnumDef:
+    case SolidityGrammar::ContractBodyElementT::ErrorDef:
     {
       // skip
       break;
     }
     default:
     {
-      assert(!"Unimplemented type in rule contract-body-element");
+      log_error("Unimplemented type in rule contract-body-element");
       return true;
     }
     }
@@ -508,6 +511,27 @@ bool solidity_convertert::get_struct_class_method(
   return false;
 }
 
+bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
+{
+  std::string node_type = (ast_node)["nodeType"].get<std::string>();
+
+  if (node_type == "StructDefinition")
+  {
+    if (get_struct_class(ast_node))
+      return true;
+  }
+  else if (node_type == "EnumDefinition")
+    // set the ["Value"] for each member inside enum
+    add_enum_member_val(ast_node);
+  else if (node_type == "ErrorDefinition")
+  {
+    if (get_error_definition(ast_node))
+      return true;
+  }
+
+  return false;
+}
+
 void solidity_convertert::add_enum_member_val(nlohmann::json &ast_node)
 {
   /*
@@ -543,12 +567,94 @@ void solidity_convertert::add_enum_member_val(nlohmann::json &ast_node)
   }
 }
 
+// covert the error_definition to a function
+bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
+{
+  // e.g.
+  // error errmsg(int num1, uint num2, uint[2] addrs);
+  //   to
+  // function 'tag-erro errmsg@12'() { __ESBMC_assume(false);}
+
+  const nlohmann::json *old_functionDecl = current_functionDecl;
+  const std::string old_functionName = current_functionName;
+
+  // e.g. name: errmsg; id: tag-error errmsg@12
+  std::string name, id;
+  name = ast_node["name"].get<std::string>();
+  id = "tag-error " + name + "@" + std::to_string(ast_node["id"].get<int>());
+
+  // just to pass the internal assertions
+  current_functionName = name;
+  current_functionDecl = &ast_node;
+
+  // no return value
+  code_typet type;
+  type.return_type() = empty_typet();
+
+  locationt location_begin;
+  get_location_from_decl(ast_node, location_begin);
+  std::string debug_modulename =
+    get_modulename_from_path(location_begin.file().as_string());
+
+  symbolt symbol;
+  get_default_symbol(symbol, debug_modulename, type, name, id, location_begin);
+  symbol.lvalue = true;
+
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
+
+  // populate the params
+  SolidityGrammar::ParameterListT params =
+    SolidityGrammar::get_parameter_list_t(ast_node["parameters"]);
+  if (params == SolidityGrammar::ParameterListT::EMPTY)
+    type.make_ellipsis();
+  else
+  {
+    for (const auto &decl : ast_node["parameters"]["parameters"].items())
+    {
+      const nlohmann::json &func_param_decl = decl.value();
+
+      code_typet::argumentt param;
+      if (get_function_params(func_param_decl, param))
+        return true;
+
+      type.arguments().push_back(param);
+    }
+  }
+  added_symbol.type = type;
+
+  // construct a "__ESBMC_assume(false)" statement
+  typet return_type = bool_type();
+  return_type.set("#cpp_type", "bool");
+  code_typet convert_type;
+  convert_type.return_type() = return_type;
+
+  exprt statement = exprt("symbol", convert_type);
+  statement.cmt_lvalue(true);
+  statement.name("__ESBMC_assume");
+  statement.identifier("__ESBMC_assume");
+
+  // set false value
+
+  convert_expression_to_code(statement);
+
+  // populate it to the body
+  code_blockt body;
+  body.operands().push_back(statement);
+  added_symbol.value = body;
+
+  // restore
+  current_functionDecl = old_functionDecl;
+  current_functionName = old_functionName;
+
+  return false;
+}
+
 bool solidity_convertert::add_implicit_constructor()
 {
   std::string name, id;
   name = current_contractName;
-  id = get_ctor_call_id(current_contractName);
 
+  id = get_ctor_call_id(current_contractName);
   if (context.find_symbol(id) != nullptr)
     return false;
 
@@ -590,6 +696,8 @@ bool solidity_convertert::get_function_definition(
   // 3. Set current_scope_var_num, current_functionDecl and old_functionDecl
   current_scope_var_num = 1;
   const nlohmann::json *old_functionDecl = current_functionDecl;
+  const std::string old_functionName = current_functionName;
+
   current_functionDecl = &ast_node;
   if (
     (*current_functionDecl)["name"].get<std::string>() == "" &&
@@ -679,6 +787,7 @@ bool solidity_convertert::get_function_definition(
   // 13. Restore current_functionDecl
   current_functionDecl =
     old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
+  current_functionName = old_functionName;
 
   return false;
 }
@@ -692,26 +801,20 @@ bool solidity_convertert::get_function_params(
   if (get_type_description(pd["typeDescriptions"], param_type))
     return true;
 
-  // 2. check array: array-to-pointer decay
-  bool is_array = SolidityGrammar::get_type_name_t(pd["typeDescriptions"]);
-  if (is_array)
-  {
-    assert(!"Unimplemented - function parameter is array type");
-  }
-
-  // 3a. get id and name
+  // 2a. get id and name
   std::string id, name;
   assert(current_functionName != ""); // we are converting a function param now
   assert(current_functionDecl);
   get_var_decl_name(pd, name, id);
 
-  // 3b. handle Omitted Names in Function Definitions
+  // 2b. handle Omitted Names in Function Definitions
   if (name == "")
   {
-    //TODO
     // Items with omitted names will still be present on the stack, but they are inaccessible by name.
     // e.g. ~omitted1, ~omitted2. which is a invalid name for solidity.
     // Therefore it won't conflict with other arg names.
+    //log_error("Omitted params are not supported");
+    // return true;
     ;
   }
 
@@ -719,30 +822,28 @@ bool solidity_convertert::get_function_params(
   param.type() = param_type;
   param.cmt_base_name(name);
 
-  // 4. get location
+  // 3. get location
   locationt location_begin;
   get_location_from_decl(pd, location_begin);
 
   param.cmt_identifier(id);
   param.location() = location_begin;
 
-  // 5. get symbol
+  // 4. get symbol
   std::string debug_modulename =
     get_modulename_from_path(location_begin.file().as_string());
   symbolt param_symbol;
   get_default_symbol(
     param_symbol, debug_modulename, param_type, name, id, location_begin);
 
-  // 6. set symbol's lvalue, is_parameter and file local
+  // 5. set symbol's lvalue, is_parameter and file local
   param_symbol.lvalue = true;
   param_symbol.is_parameter = true;
   param_symbol.file_local = true;
 
-  // 7. check if function is defined: Not applicable to Solidity.
-  assert((*current_functionDecl).contains("body"));
-
-  // 8. add symbol to the context
+  // 6. add symbol to the context
   move_symbol_to_context(param_symbol);
+
   return false;
 }
 
@@ -1050,27 +1151,36 @@ bool solidity_convertert::get_statement(
     new_expr = code_while;
     break;
   }
-
   case SolidityGrammar::StatementT::ContinueStatement:
   {
     new_expr = code_continuet();
     break;
   }
-
   case SolidityGrammar::StatementT::BreakStatement:
   {
     new_expr = code_breakt();
     break;
   }
-
-  case SolidityGrammar::StatementT::StatementTError:
+  case SolidityGrammar::StatementT::RevertStatement:
   {
+    // e.g.
+    // {
+    //   "errorCall": {
+    //     "nodeType": "FunctionCall",
+    //   }
+    //   "nodeType": "RevertStatement",
+    // }
+    if (!stmt.contains("errorCall") && get_expr(stmt["errorCall"], new_expr))
+      return true;
+
     break;
   }
-
+  case SolidityGrammar::StatementT::StatementTError:
   default:
   {
-    assert(!"Unimplemented type in rule statement");
+    log_error(
+      "Unimplemented Statement type in rule statement. Got {}",
+      SolidityGrammar::statement_to_str(type));
     return true;
   }
   }
@@ -1194,6 +1304,17 @@ bool solidity_convertert::get_expr(
               return true;
           }
 
+          new_expr = symbol_expr(*context.find_symbol(id));
+        }
+        else if (decl["nodeType"] == "ErrorDefinition")
+        {
+          std::string name, id;
+          name = decl["name"].get<std::string>();
+          id =
+            "tag-error " + name + "@" + std::to_string(decl["id"].get<int>());
+
+          if (context.find_symbol(id) == nullptr)
+            return true;
           new_expr = symbol_expr(*context.find_symbol(id));
         }
         else
@@ -2447,18 +2568,19 @@ bool solidity_convertert::get_decl_ref_builtin(
   // Function to configure new_expr that has a -ve referenced id
   // -ve ref id means built-in functions or variables.
   // Add more special function names here
+  const std::string blt_name = decl["name"].get<std::string>();
   assert(
-    (decl["name"] == "assert" || decl["name"] == "require" ||
-     decl["name"] == "__ESBMC_assume" || decl["name"] == "__VERIFIER_assume") &&
+    (blt_name == "assert" || blt_name == "require" || blt_name == "revert" ||
+     blt_name == "__ESBMC_assume" || blt_name == "__VERIFIER_assume") &&
     "Unsupported built-in method");
 
   std::string name, id;
 
   // "require" keyword is virtually identical to "assume"
-  if (decl["name"] == "require")
+  if (blt_name == "require" || blt_name == "revert")
     name = "__ESBMC_assume";
   else
-    name = decl["name"].get<std::string>();
+    name = blt_name;
   id = name;
 
   // manually unrolled recursion here
@@ -2470,7 +2592,6 @@ bool solidity_convertert::get_decl_ref_builtin(
   if (
     name == "assert" || name == "__ESBMC_assume" || name == "__VERIFIER_assume")
   {
-    assert(decl["typeDescriptions"]["typeString"] == "function (bool) pure");
     // clang's assert(.) uses "signed_int" as assert(.) type (NOT the argument type),
     // while Solidity's assert uses "bool" as assert(.) type (NOT the argument type).
     return_type = bool_type();
