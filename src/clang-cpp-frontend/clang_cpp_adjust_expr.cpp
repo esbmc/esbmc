@@ -159,12 +159,14 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     clang_c_adjust::adjust_side_effect_function_call(
       to_side_effect_expr_function_call(expr));
   }
-  else if (lhs.is_symbol() && lhs.type().get_bool("#reference"))
+  else if (
+    lhs.is_symbol() &&
+    (is_reference(lhs.type()) || is_rvalue_reference(lhs.type())))
   {
     // since we modelled lvalue reference as pointers
     // turn assign expression r = 1, where r is an lvalue reference
     // into *r = 1
-    convert_lvalue_ref_to_deref_symbol(lhs);
+    convert_ref_to_deref_symbol(lhs);
   }
   else if (lhs.id() == "sideeffect" && lhs.statement() == "function_call")
   {
@@ -177,7 +179,7 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     // first adjust LHS to make sure its type aligns with the
     // function return type
     adjust_side_effect_function_call(to_side_effect_expr_function_call(lhs));
-    if (lhs.type().get_bool("#reference"))
+    if (is_reference(lhs.type()))
     {
       convert_lvalue_ref_to_deref_sideeffect(lhs);
     }
@@ -198,10 +200,12 @@ void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
     // where r is a reference
     // we turn it into (int)*r == 1
     exprt &tp_op0 = op0.op0();
-    if (tp_op0.is_symbol() && tp_op0.type().get_bool("#reference"))
-      convert_lvalue_ref_to_deref_symbol(tp_op0);
+    if (
+      tp_op0.is_symbol() &&
+      (is_reference(tp_op0.type()) || is_rvalue_reference(tp_op0.type())))
+      convert_ref_to_deref_symbol(tp_op0);
   }
-  if (op0.type().get_bool("#reference"))
+  if (is_reference(op0.type()) || is_rvalue_reference(op0.type()))
   {
     // special treatment for lvalue reference
     // if LHS is an lvalue reference, e.g.
@@ -217,9 +221,11 @@ void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
   }
 }
 
-void clang_cpp_adjust::convert_lvalue_ref_to_deref_symbol(exprt &expr)
+void clang_cpp_adjust::convert_ref_to_deref_symbol(exprt &expr)
 {
-  assert(expr.is_symbol() && expr.type().get_bool("#reference"));
+  assert(
+    expr.is_symbol() &&
+    (is_reference(expr.type()) || is_rvalue_reference(expr.type())));
 
   dereference_exprt tmp(expr, expr.type());
   tmp.location() = expr.location();
@@ -228,7 +234,7 @@ void clang_cpp_adjust::convert_lvalue_ref_to_deref_symbol(exprt &expr)
 
 void clang_cpp_adjust::convert_lvalue_ref_to_deref_sideeffect(exprt &expr)
 {
-  assert(expr.id() == "sideeffect" && expr.type().get_bool("#reference"));
+  assert(expr.id() == "sideeffect" && is_reference(expr.type()));
   dereference_exprt tmp_deref(expr, expr.type());
   tmp_deref.location() = expr.location();
   tmp_deref.set("#lvalue", true);
