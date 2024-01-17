@@ -198,6 +198,31 @@ bool clang_cpp_convertert::get_type(
     break;
   }
 
+  case clang::Type::RValueReference:
+  {
+    const clang::RValueReferenceType &rvrt =
+      static_cast<const clang::RValueReferenceType &>(the_type);
+
+    typet sub_type;
+    if (get_type(rvrt.getPointeeTypeAsWritten(), sub_type))
+      return true;
+
+    // This is done similarly to lvalue reference.
+    if (sub_type.is_struct() || sub_type.is_union())
+    {
+      struct_union_typet t = to_struct_union_type(sub_type);
+      sub_type = symbol_typet(tag_prefix + t.tag().as_string());
+    }
+
+    if (rvrt.getPointeeTypeAsWritten().isConstQualified())
+      sub_type.cmt_constant(true);
+
+    new_type = gen_pointer_type(sub_type);
+    new_type.set("#rvalue_reference", true);
+
+    break;
+  }
+
   default:
     return clang_c_convertert::get_type(the_type, new_type);
   }
