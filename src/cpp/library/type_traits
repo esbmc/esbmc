@@ -1,5 +1,4 @@
-#ifndef STL_TYPE_TRAITS
-#define STL_TYPE_TRAITS
+#pragma once
 
 namespace std {
 /**
@@ -31,6 +30,3 @@ struct remove_reference<T&&>
 };
 
 }
-
-
-#endif
