@@ -578,10 +578,10 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
   const nlohmann::json *old_functionDecl = current_functionDecl;
   const std::string old_functionName = current_functionName;
 
-  // e.g. name: errmsg; id: tag-error errmsg@12
+  // e.g. name: errmsg; id: c:@Error@errmsg#12
   std::string name, id;
   name = ast_node["name"].get<std::string>();
-  id = "tag-error " + name + "@" + std::to_string(ast_node["id"].get<int>());
+  id = "c:@Error@" + name + "#" + std::to_string(ast_node["id"].get<int>());
 
   // just to pass the internal assertions
   current_functionName = name;
@@ -633,13 +633,16 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
   statement.name("__ESBMC_assume");
   statement.identifier("__ESBMC_assume");
 
-  // set false value
+  side_effect_expr_function_callt call;
+  call.function() = statement;
+  call.type() = return_type;
+  exprt arg = false_exprt();
+  call.arguments().push_back(arg);
+  convert_expression_to_code(call);
 
-  convert_expression_to_code(statement);
-
-  // populate it to the body
+  // insert it to the body
   code_blockt body;
-  body.operands().push_back(statement);
+  body.operands().push_back(call);
   added_symbol.value = body;
 
   // restore
@@ -1170,7 +1173,7 @@ bool solidity_convertert::get_statement(
     //   }
     //   "nodeType": "RevertStatement",
     // }
-    if (!stmt.contains("errorCall") && get_expr(stmt["errorCall"], new_expr))
+    if (!stmt.contains("errorCall") || get_expr(stmt["errorCall"], new_expr))
       return true;
 
     break;
@@ -1310,8 +1313,7 @@ bool solidity_convertert::get_expr(
         {
           std::string name, id;
           name = decl["name"].get<std::string>();
-          id =
-            "tag-error " + name + "@" + std::to_string(decl["id"].get<int>());
+          id = "c:@Error@" + name + "#" + std::to_string(decl["id"].get<int>());
 
           if (context.find_symbol(id) == nullptr)
             return true;
@@ -3533,16 +3535,16 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
        ++itr, ++index)
   {
-    // this stands for the nodes outside of the contract
-    // it can be referred to the data structure itself
+    // check the nodes outside of the contract
+    // it can be referred to the data structure
     // or the members inside the structure.
+    if ((*itr)["id"] == ref_decl_id)
+      return nodes.at(index);
+
     if (
       (*itr)["nodeType"] == "EnumDefinition" ||
       (*itr)["nodeType"] == "StructDefinition")
     {
-      if ((*itr)["id"] == ref_decl_id)
-        return nodes.at(index);
-
       unsigned men_idx = 0;
       nlohmann::json &mem_nodes = nodes.at(index)["members"];
       for (nlohmann::json::iterator mem_itr = mem_nodes.begin();
@@ -3554,8 +3556,8 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
       }
     }
 
-    if (
-      (*itr)["nodeType"] == "ContractDefinition") // contains AST nodes we need
+    // check the nodes inside a contract
+    if ((*itr)["nodeType"] == "ContractDefinition")
     {
       nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
 
@@ -3564,7 +3566,9 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
            itrr != ast_nodes.end();
            ++itrr, ++idx)
       {
-        // for enum-member, as enum is defined in the function
+        if ((*itrr)["id"] == ref_decl_id)
+          return ast_nodes.at(idx);
+
         if (
           (*itrr)["nodeType"] == "EnumDefinition" ||
           (*itrr)["nodeType"] == "StructDefinition")
@@ -3581,8 +3585,6 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
               return mem_nodes.at(men_idx);
           }
         }
-        if ((*itrr)["id"] == ref_decl_id)
-          return ast_nodes.at(idx);
       }
     }
   }
