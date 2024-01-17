@@ -1661,6 +1661,20 @@ bool solidity_convertert::get_expr(
 
     // 3. Set side_effect_expr_function_callt
     unsigned num_args = 0;
+
+    // special case: handling revert and require
+    // insert a bool false as the first argument.
+    // drop the rest of params.
+    if (
+      callee_expr.type().get("#sol_name").as_string().find("revert") !=
+      std::string::npos)
+    {
+      call.arguments().push_back(false_exprt());
+      new_expr = call;
+
+      break;
+    }
+
     for (const auto &arg : expr["arguments"].items())
     {
       exprt single_arg;
@@ -1670,6 +1684,13 @@ bool solidity_convertert::get_expr(
 
       call.arguments().push_back(single_arg);
       ++num_args;
+      if (
+        callee_expr.type().get("#sol_name").as_string().find("require") !=
+        std::string::npos)
+      {
+        // __ESBMC_assume only handle one param.
+        break;
+      }
     }
     log_debug("solidity", "  @@ num_args={}", num_args);
 
@@ -2610,6 +2631,7 @@ bool solidity_convertert::get_decl_ref_builtin(
   }
 
   type = convert_type;
+  type.set("#sol_name", blt_name);
 
   new_expr = exprt("symbol", type);
   new_expr.identifier(id);
