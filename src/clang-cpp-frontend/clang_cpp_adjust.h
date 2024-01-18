@@ -77,7 +77,7 @@ public:
    * ancillary methods to support the expr/code adjustments above
    */
   void convert_expression_to_code(exprt &expr);
-  void convert_lvalue_ref_to_deref_symbol(exprt &expr);
+  void convert_ref_to_deref_symbol(exprt &expr);
   void convert_lvalue_ref_to_deref_sideeffect(exprt &expr);
   void align_se_function_call_return_type(
     exprt &f_op,
