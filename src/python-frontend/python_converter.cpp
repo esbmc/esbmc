@@ -35,7 +35,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Return", StatementType::RETURN},
   {"Assert", StatementType::ASSERT},
   {"ClassDef", StatementType::CLASS_DEFINITION},
-};
+  {"Pass", StatementType::PASS}};
 
 static bool is_relational_op(const std::string &op)
 {
@@ -1125,6 +1125,10 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       get_class_definition(element, block);
       break;
     }
+    /* "https://docs.python.org/3/tutorial/controlflow.html: "The pass statement does nothing.
+     *  It can be used when a statement is required syntactically but the program requires no action." */
+    case StatementType::PASS:
+      break;
     case StatementType::UNKNOWN:
     default:
       log_error(
