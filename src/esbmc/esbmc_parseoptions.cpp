@@ -31,6 +31,7 @@ extern "C"
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
+#include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/write_goto_binary.h>
@@ -1665,6 +1666,42 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_inline(goto_functions, options, ns);
       else
         goto_partial_inline(goto_functions, options, ns);
+    }
+
+    std::shared_ptr<value_set_analysist> vsa =
+      std::make_shared<value_set_analysist>(ns);
+    try
+    {
+      log_status("Computing Value-Set Analysis (VSA)");
+      (*vsa)(goto_functions);
+    }
+    catch (vsa_not_implemented_exception &)
+    {
+      log_warning(
+        "Unable to compute VSA due to incomplete implementation. Some GOTO "
+        "optimizations will be disabled");
+      vsa = nullptr;
+    }
+    catch (type2t::symbolic_type_excp &)
+    {
+      log_warning(
+        "[GOTO] Unable to compute VSA due to symbolic type. Some GOTO "
+        "optimizations will be disabled");
+      vsa = nullptr;
+    }
+
+    if (cmdline.isset("gcse"))
+    {
+      if (cmdline.isset("no-library"))
+        log_warning("Using CSE with --no-library might cause huge slowdowns!");
+
+      if (!vsa)
+        log_warning("Could not apply GCSE optimization due to VSA limitation!");
+      else
+      {
+        goto_cse cse(context, vsa);
+        cse.run(goto_functions);
+      }
     }
 
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))

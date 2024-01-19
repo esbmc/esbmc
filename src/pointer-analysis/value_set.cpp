@@ -380,6 +380,7 @@ void value_sett::get_value_set_rec(
     switch (side.kind)
     {
     case sideeffect2t::alloca:
+    case sideeffect2t::realloc:
     case sideeffect2t::malloc:
     {
       assert(suffix == "");
@@ -414,7 +415,7 @@ void value_sett::get_value_set_rec(
 
     default:
       log_error("Unexpected side-effect: {}", *expr);
-      abort();
+      throw vsa_not_implemented_exception();
     }
   }
 
@@ -1254,6 +1255,7 @@ void value_sett::assign_rec(
   {
     assert(
       is_array_type(to_index2t(lhs).source_value) ||
+      is_vector_type(to_index2t(lhs).source_value) ||
       is_dynamic_object2t(to_index2t(lhs).source_value));
 
     assign_rec(to_index2t(lhs).source_value, values_rhs, "[]" + suffix, true);
@@ -1290,6 +1292,11 @@ void value_sett::assign_rec(
   {
     // Ignored
   }
+  else if (is_invalid2t(lhs))
+  {
+    // Assigning an invalid object, not much we can do
+    return;
+  }
   else if (is_typecast2t(lhs))
   {
     assign_rec(to_typecast2t(lhs).from, values_rhs, suffix, add_to_sets);
@@ -1300,7 +1307,9 @@ void value_sett::assign_rec(
   }
   else
   {
-    throw std::runtime_error("assign NYI: `{}'" + get_expr_id(lhs));
+    log_error("[VSA] assign NYI: `{}'", get_expr_id(lhs));
+    lhs->dump();
+    throw vsa_not_implemented_exception();
   }
 }
 
@@ -1447,7 +1456,7 @@ void value_sett::apply_code(const expr2tc &code)
   {
     std::ostringstream str;
     str << code << "\nvalue_sett: unexpected statement";
-    throw std::runtime_error(str.str());
+    throw vsa_not_implemented_exception();
   }
 }
 
