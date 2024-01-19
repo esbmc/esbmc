@@ -2,6 +2,8 @@ class MyClass:
     def __init__(self, value: int):
         self.data:int = value
 
+class EmptyClass:
+    pass;
 
 obj1 = MyClass(5)
 assert(obj1.data == 5)
@@ -14,3 +16,5 @@ obj2 = MyClass(30)
 assert(obj2.data == 30)
 obj2.data = 40
 assert(obj2.data == 40)
+
+obj3 = EmptyClass()
