@@ -110,10 +110,10 @@ real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) const
   auto real_value = to_constant_floatbv2t(e).value;
 
   // Health check, is the convertion to double ok? See #1037
-  if (!std::isnormal(real_value.to_double()) || real_value.is_zero())
+  if (!real_value.is_normal() || real_value.is_zero())
   {
     if (real_value.is_double())
-      log_warning("ESBMC fails to to convert {} into double", *e);
+      log_warning("ESBMC fails to convert {} into double", *e);
 
     // Give up for top!
     return result;
@@ -124,17 +124,24 @@ real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) const
   value1.increment(true);
   value2.decrement(true);
 
-  if (value1.is_NaN() || value1.is_infinity())
+  if (value1.is_NaN() || value1.is_infinity() || value2.is_NaN() || value2.is_infinity())
   {
     assert(result.is_top() && !result.is_bottom());
     return result;
   }
 
   // [value2, value1]
-  // a <= value1
-  result.make_le_than(value1.to_double());
+  // a <= value1  
+  if(value1.is_double())
+    result.make_le_than(value1.to_double());
+  else
+    log_warning("Failed to convert value1: {}", value1.to_string_decimal(10));
+  
   // a >= value2
-  result.make_ge_than(value2.to_double());
+  if(value2.is_double())
+    result.make_ge_than(value2.to_double());
+  else
+    log_warning("Failed to convert value2: {}", value2.to_string_decimal(10));// 
 
   assert(!result.is_bottom());
   return result;
@@ -1106,7 +1113,7 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
     else
       apply_assignment<integer_intervalt>(c.target, c.source, recursive);
   }
-  if (isfloatbvop && enable_real_intervals)
+  else if (isfloatbvop && enable_real_intervals)
     apply_assignment<real_intervalt>(c.target, c.source, recursive);
 }
 
