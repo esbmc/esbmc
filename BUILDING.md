@@ -251,7 +251,7 @@ We have wrapped the entire build and setup of Bitwuzla in the following command:
 
 ```
 Linux/macOS:
-git clone --depth=1 --branch=0.3.0 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install
+git clone --depth=1 --branch=0.3.1 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install
 ```
 
 For more details on Bitwuzla, please refer to [its Github](https://github.com/bitwuzla/bitwuzla).
