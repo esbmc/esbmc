@@ -11,6 +11,7 @@ enum class StatementType
   RETURN,
   ASSERT,
   CLASS_DEFINITION,
+  PASS,
   UNKNOWN,
 };
 
