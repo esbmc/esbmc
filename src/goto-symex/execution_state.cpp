@@ -1226,7 +1226,7 @@ dfs_execution_statet::~dfs_execution_statet()
 std::shared_ptr<execution_statet> dfs_execution_statet::clone() const
 {
   std::shared_ptr<dfs_execution_statet> d =
-    std::shared_ptr<dfs_execution_statet>(new dfs_execution_statet(*this));
+    std::make_shared<dfs_execution_statet>(*this);
 
   // Duplicate target equation; or if we're encoding at runtime, push a context.
   if (smt_during_symex)
@@ -1250,8 +1250,7 @@ schedule_execution_statet::~schedule_execution_statet()
 std::shared_ptr<execution_statet> schedule_execution_statet::clone() const
 {
   std::shared_ptr<schedule_execution_statet> s =
-    std::shared_ptr<schedule_execution_statet>(
-      new schedule_execution_statet(*this));
+    std::make_shared<schedule_execution_statet>(*this);
 
   // Don't duplicate target equation.
   s->target = target;
@@ -1285,8 +1284,7 @@ execution_statet::state_hashing_level2t::state_hashing_level2t(
 std::shared_ptr<renaming::level2t>
 execution_statet::state_hashing_level2t::clone() const
 {
-  return std::shared_ptr<state_hashing_level2t>(
-    new state_hashing_level2t(*this));
+  return std::make_shared<state_hashing_level2t>(*this);
 }
 
 void execution_statet::state_hashing_level2t::make_assignment(
