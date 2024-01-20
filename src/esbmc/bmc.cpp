@@ -739,7 +739,7 @@ smt_convt::resultt bmct::multi_property_check(
     claim_slicer claim(i);
     claim.run(local_eq.SSA_steps, false);
 
-    // drop verified claims
+    // Drop verified claims
     bool is_verified = false;
     std::string cmt_loc = claim.claim_msg + "\t" + claim.claim_loc;
     if (is_goto_cov)
@@ -749,7 +749,7 @@ smt_convt::resultt bmct::multi_property_check(
     if (is_verified && !options.get_bool_option("keep-verified-claims"))
       return;
 
-    // slice
+    // Slice
     symex_slicet slicer(options);
     slicer.run(local_eq.SSA_steps);
 
@@ -792,17 +792,12 @@ smt_convt::resultt bmct::multi_property_check(
           // since we only handle one claim at a time
           // we will/should not overwrite the loc
           assert(cmt_loc == "");
-          std::string loc;
-          if (step.pc->location.is_nil())
-            loc = "nil";
-          else
-            loc = step.pc->location.as_string();
 
           // we use the "comment + location" to distinguish each claim
           // e.g. "Claim x: ... location line y"
           // x is unique. However, the unwinding asserts do not have these Claim x prefixes.
           // Therefore we add the location behind, as the line number y for each unwinding assert is different.
-          cmt_loc = step.comment + "\t" + loc;
+          cmt_loc = step.comment + "\t" + step.pc->location.as_string();
         }
 
       if (is_goto_cov)
