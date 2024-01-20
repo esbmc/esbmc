@@ -69,8 +69,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       funcs,
       ns,
       options,
-      std::shared_ptr<runtime_encoded_equationt>(
-        new runtime_encoded_equationt(ns, *runtime_solver)),
+      std::make_shared<runtime_encoded_equationt>(ns, *runtime_solver),
       _context);
   }
   else
@@ -79,7 +78,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       funcs,
       ns,
       options,
-      std::shared_ptr<symex_target_equationt>(new symex_target_equationt(ns)),
+      std::make_shared<symex_target_equationt>(ns),
       _context);
   }
 }
