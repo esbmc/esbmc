@@ -3343,9 +3343,10 @@ void solidity_convertert::get_state_var_decl_name(
         std::
           string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
 
-  // e.g. c:@C@Base@x
+  // e.g. c:@C@Base@x#11
   // The prefix is used to avoid duplicate names
-  id = "c:@C@" + current_contractName + "@" + name;
+  id = "c:@C@" + current_contractName + "@" + name + "#" +
+       i2string(ast_node["id"].get<std::int16_t>());
 }
 
 // parse the non-state variable
@@ -3364,10 +3365,10 @@ void solidity_convertert::get_var_decl_name(
   {
     // converting local variable inside a function
     // For non-state functions, we give it different id.
-    // E.g. for local variable i in function nondet(), it's "c:overflow_2_nondet.c@55@F@nondet@i".
+    // E.g. for local variable i in function nondet(), it's "c:@C@Base@F@nondet@i#55".
     assert(!current_functionName.empty());
     id = "c:@C@" + current_contractName + "@F@" + current_functionName + "@" +
-         name;
+         name + "#" + i2string(ast_node["id"].get<std::int16_t>());
   }
   else if (ast_node.contains("scope"))
   {
@@ -3376,9 +3377,11 @@ void solidity_convertert::get_var_decl_name(
     int scp = ast_node["scope"].get<int>();
     std::string struct_name = scope_map.at(scp);
     if (current_contractName.empty())
-      id = "c:@C@" + struct_name + "@" + name;
+      id = "c:@C@" + struct_name + "@" + name + "#" +
+           i2string(ast_node["id"].get<std::int16_t>());
     else
-      id = "c:@C@" + current_contractName + "@" + struct_name + "@" + name;
+      id = "c:@C@" + current_contractName + "@" + struct_name + "@" + name +
+           "#" + i2string(ast_node["id"].get<std::int16_t>());
   }
   else
   {
