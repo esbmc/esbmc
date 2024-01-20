@@ -412,7 +412,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     {
       if (is_ctor_call)
       {
-        // If __init__() is not defined in the class, x = MyClass() is converted to x:MyClass in get_var_assign()
+        // If __init__() is not defined in the class, x = MyClass() is converted to x:MyClass in get_var_assign().
         return exprt("empty_ctor_call");
       }
       else if (is_builtin_type(func_name))
