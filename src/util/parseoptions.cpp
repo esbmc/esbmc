@@ -65,7 +65,7 @@ int parseoptions_baset::main()
   {
     help();
     return EX_OK;
-  }  
+  }
   // install signal catcher
   install_signal_catcher();
   return doit();
