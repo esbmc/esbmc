@@ -73,11 +73,14 @@ ubuntu_setup () {
 	SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=On -DZ3_DIR=/usr -DENABLE_GOTO_CONTRACTOR=OFF"
 	return
     fi
+
+    SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_CVC5=On"
     
     sudo apt-get update &&
     sudo apt-get install -y $PKGS &&
     echo "Installing Python dependencies" &&
     pip3 install --user meson ast2json &&
+    pip3 install --user pyparsing toml &&
     meson --version &&
 
     BASE_ARGS="$BASE_ARGS \
