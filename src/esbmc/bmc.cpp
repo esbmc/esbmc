@@ -570,53 +570,25 @@ void bmct::bidirectional_search(
 
 smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 {
-  std::shared_ptr<goto_symext::symex_resultt> result;
-
   fine_timet symex_start = current_time();
   try
   {
-    if (options.get_bool_option("schedule"))
-    {
-      result = symex->generate_schedule_formula();
-    }
-    else
-    {
-      result = symex->get_next_formula();
-    }
-  }
+    goto_symext::symex_resultt result = options.get_bool_option("schedule")
+                                          ? symex->generate_schedule_formula()
+                                          : symex->get_next_formula();
 
-  catch (std::string &error_str)
-  {
-    log_error("{}", error_str);
-    return smt_convt::P_ERROR;
-  }
+    fine_timet symex_stop = current_time();
 
-  catch (const char *error_str)
-  {
-    log_error("{}", error_str);
-    return smt_convt::P_ERROR;
-  }
+    eq = std::dynamic_pointer_cast<symex_target_equationt>(result.target);
 
-  catch (std::bad_alloc &)
-  {
-    log_error("Out of memory\n");
-    return smt_convt::P_ERROR;
-  }
+    log_status(
+      "Symex completed in: {}s ({} assignments)",
+      time2string(symex_stop - symex_start),
+      eq->SSA_steps.size());
 
-  fine_timet symex_stop = current_time();
+    if (options.get_bool_option("double-assign-check"))
+      eq->check_for_duplicate_assigns();
 
-  eq = std::dynamic_pointer_cast<symex_target_equationt>(result->target);
-
-  log_status(
-    "Symex completed in: {}s ({} assignments)",
-    time2string(symex_stop - symex_start),
-    eq->SSA_steps.size());
-
-  if (options.get_bool_option("double-assign-check"))
-    eq->check_for_duplicate_assigns();
-
-  try
-  {
     BigInt ignored;
     for (auto &a : algorithms)
     {
@@ -634,8 +606,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     log_status(
       "Generated {} VCC(s), {} remaining after simplification ({} assignments)",
-      result->total_claims,
-      result->remaining_claims,
+      result.total_claims,
+      result.remaining_claims,
       BigInt(eq->SSA_steps.size()) - ignored);
 
     if (options.get_bool_option("document-subgoals"))
@@ -652,7 +624,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return smt_convt::P_SMTLIB;
     }
 
-    if (result->remaining_claims == 0)
+    if (result.remaining_claims == 0)
     {
       if (options.get_bool_option("smt-formula-only"))
       {
@@ -674,7 +646,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     if (
       options.get_bool_option("multi-property") &&
       options.get_bool_option("base-case"))
-      return multi_property_check(*eq, result->remaining_claims);
+      return multi_property_check(*eq, result.remaining_claims);
 
     return run_decision_procedure(*runtime_solver, *eq);
   }
