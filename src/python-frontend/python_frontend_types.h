@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 enum class StatementType
 {
   VARIABLE_ASSIGN,
@@ -26,3 +28,5 @@ enum class ExpressionType
   FUNC_CALL,
   UNKNOWN,
 };
+
+bool is_builtin_type(const std::string &name);

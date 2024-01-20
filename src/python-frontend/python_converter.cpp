@@ -415,6 +415,15 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         // If __init__() is not defined in the class, x = MyClass() is converted to x:MyClass in get_var_assign()
         return exprt("empty_ctor_call");
       }
+      else if (is_builtin_type(func_name))
+      {
+        // Replace the function call with a constant value. For example, x = int(1) becomes x = 1
+        typet t = get_typet(func_name);
+        if (t == int_type())
+          return from_integer(element["args"][0]["value"].get<int>(), t);
+        else if (t == bool_type())
+          return gen_boolean(element["args"][0]["value"].get<bool>());
+      }
       else
       {
         log_error("Undefined function: {}", func_name.c_str());
