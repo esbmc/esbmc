@@ -739,7 +739,9 @@ smt_convt::resultt bmct::multi_property_check(
     claim_slicer claim(i);
     claim.run(local_eq.SSA_steps, false);
 
-    // Drop verified claims
+    // Drop claims that verified to be failed
+    // we use the "comment + location" to distinguish each claim
+    // to avoid double verifying the claims that are already verified
     bool is_verified = false;
     std::string cmt_loc = claim.claim_msg + "\t" + claim.claim_loc;
     if (is_goto_cov)
@@ -769,8 +771,8 @@ smt_convt::resultt bmct::multi_property_check(
     fine_timet sat_stop = current_time();
     log_status(
       "Runtime decision procedure: {}s", time2string(sat_stop - sat_start));
-    // This try-catch is mainly for fail-fast.
 
+    // If an assertion instance is verified to be violated
     if (result == smt_convt::P_SATISFIABLE)
     {
       bool is_compact_trace = true;
@@ -782,29 +784,13 @@ smt_convt::resultt bmct::multi_property_check(
       goto_tracet goto_trace;
       build_goto_trace(local_eq, *runtime_solver, goto_trace, is_compact_trace);
 
-      // Store the comment and location of the assertion
-      // to avoid double verifying the claims that are already verified
-      std::string cmt_loc = "";
-
-      for (const auto &step : goto_trace.steps)
-        if (step.type == goto_trace_stept::ASSERT)
-        {
-          // since we only handle one claim at a time
-          // we will/should not overwrite the loc
-          assert(cmt_loc == "");
-
-          // we use the "comment + location" to distinguish each claim
-          // e.g. "Claim x: ... location line y"
-          // x is unique. However, the unwinding asserts do not have these Claim x prefixes.
-          // Therefore we add the location behind, as the line number y for each unwinding assert is different.
-          cmt_loc = step.comment + "\t" + step.pc->location.as_string();
-        }
-
+      // Store cmt_loc
       if (is_goto_cov)
         reached_mul_claims.emplace(cmt_loc);
       else
         reached_claims.emplace(cmt_loc);
 
+      // Generate Output
       std::string output_file = options.get_option("cex-output");
       if (output_file != "")
       {
@@ -816,7 +802,8 @@ smt_convt::resultt bmct::multi_property_check(
       show_goto_trace(oss, ns, goto_trace);
       log_result("{}", oss.str());
       final_result = result;
-      // update fail-fast-counter
+
+      // Update fail-fast-counter
       fail_fast_cnt++;
     }
   };
