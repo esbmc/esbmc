@@ -605,9 +605,8 @@ reachability_treet::generate_schedule_formula()
     go_next_state();
   }
 
-  return std::shared_ptr<goto_symext::symex_resultt>(
-    new goto_symext::symex_resultt(
-      schedule_target, schedule_total_claims, schedule_remaining_claims));
+  return std::make_shared<goto_symext::symex_resultt>(
+    schedule_target, schedule_total_claims, schedule_remaining_claims);
 }
 
 bool reachability_treet::restore_from_dfs_state(void *)

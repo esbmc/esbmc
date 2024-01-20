@@ -179,5 +179,5 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options);
 void generate_testcase_metadata();
 void generate_testcase(
   const std::string &file_name,
-  const std::shared_ptr<symex_target_equationt> &target,
-  std::shared_ptr<smt_convt> &smt_conv);
+  const symex_target_equationt &target,
+  smt_convt &smt_conv);
