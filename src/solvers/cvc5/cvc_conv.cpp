@@ -33,7 +33,7 @@ smt_convt::resultt cvc_convt::dec_solve()
   pre_solve();
 
   cvc5::Result r = slv.checkSat();
-  if(r.isSat())
+  if (r.isSat())
     return P_SATISFIABLE;
 
   if (r.isUnknown())
@@ -74,7 +74,7 @@ ieee_floatt cvc_convt::get_fpbv(smt_astt a)
     number.unpack(BigInt(foo.pack().toInteger().getUnsignedLong()));
 
   return number;
-  #endif
+#endif
 }
 
 BigInt cvc_convt::get_bv(smt_astt a, bool is_signed)
@@ -332,7 +332,7 @@ smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_fpbv(
   unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
 
-  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_FP_FROM_FP, {ew, sw}); 
+  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_FP_FROM_FP, {ew, sw});
 
   // AYB no idea here
   return new_ast(
@@ -349,7 +349,7 @@ cvc_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
   unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
 
-  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_FP_FROM_UBV, {ew, sw}); 
+  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_FP_FROM_UBV, {ew, sw});
 
   return new_ast(
     slv.mkTerm(
@@ -365,7 +365,7 @@ cvc_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
   unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
 
-  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_FP_FROM_SBV, {ew, sw}); 
+  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_FP_FROM_SBV, {ew, sw});
 
   return new_ast(
     slv.mkTerm(
@@ -380,13 +380,9 @@ smt_astt cvc_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
   unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
 
-  auto op2 = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_FP_FROM_IEEE_BV, {ew, sw}); 
+  auto op2 = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_FP_FROM_IEEE_BV, {ew, sw});
 
-  return new_ast(
-    slv.mkTerm(
-      op2,
-      {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
-    to);
+  return new_ast(slv.mkTerm(op2, {to_solver_smt_ast<cvc_smt_ast>(op)->a}), to);
 }
 
 smt_astt cvc_convt::mk_from_fp_to_bv(smt_astt op)
@@ -528,7 +524,8 @@ smt_astt cvc_convt::mk_smt_fpbv_is_nan(smt_astt op)
 {
   return new_ast(
     slv.mkTerm(
-      cvc5::Kind::FLOATINGPOINT_IS_NAN, {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
+      cvc5::Kind::FLOATINGPOINT_IS_NAN,
+      {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
     boolean_sort);
 }
 
@@ -536,7 +533,8 @@ smt_astt cvc_convt::mk_smt_fpbv_is_inf(smt_astt op)
 {
   return new_ast(
     slv.mkTerm(
-      cvc5::Kind::FLOATINGPOINT_IS_INF, {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
+      cvc5::Kind::FLOATINGPOINT_IS_INF,
+      {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
     boolean_sort);
 }
 
@@ -544,7 +542,8 @@ smt_astt cvc_convt::mk_smt_fpbv_is_normal(smt_astt op)
 {
   return new_ast(
     slv.mkTerm(
-      cvc5::Kind::FLOATINGPOINT_IS_NORMAL, {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
+      cvc5::Kind::FLOATINGPOINT_IS_NORMAL,
+      {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
     boolean_sort);
 }
 
@@ -552,7 +551,8 @@ smt_astt cvc_convt::mk_smt_fpbv_is_zero(smt_astt op)
 {
   return new_ast(
     slv.mkTerm(
-      cvc5::Kind::FLOATINGPOINT_IS_ZERO, {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
+      cvc5::Kind::FLOATINGPOINT_IS_ZERO,
+      {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
     boolean_sort);
 }
 
@@ -560,7 +560,8 @@ smt_astt cvc_convt::mk_smt_fpbv_is_negative(smt_astt op)
 {
   return new_ast(
     slv.mkTerm(
-      cvc5::Kind::FLOATINGPOINT_IS_NEG, {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
+      cvc5::Kind::FLOATINGPOINT_IS_NEG,
+      {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
     boolean_sort);
 }
 
@@ -568,7 +569,8 @@ smt_astt cvc_convt::mk_smt_fpbv_is_positive(smt_astt op)
 {
   return new_ast(
     slv.mkTerm(
-      cvc5::Kind::FLOATINGPOINT_IS_POS, {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
+      cvc5::Kind::FLOATINGPOINT_IS_POS,
+      {to_solver_smt_ast<cvc_smt_ast>(op)->a}),
     boolean_sort);
 }
 
@@ -727,7 +729,8 @@ smt_astt cvc_convt::mk_bvneg(smt_astt a)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   return new_ast(
-    slv.mkTerm(cvc5::Kind::BITVECTOR_NEG, {to_solver_smt_ast<cvc_smt_ast>(a)->a}),
+    slv.mkTerm(
+      cvc5::Kind::BITVECTOR_NEG, {to_solver_smt_ast<cvc_smt_ast>(a)->a}),
     a->sort);
 }
 
@@ -735,7 +738,8 @@ smt_astt cvc_convt::mk_bvnot(smt_astt a)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   return new_ast(
-    slv.mkTerm(cvc5::Kind::BITVECTOR_NOT, {to_solver_smt_ast<cvc_smt_ast>(a)->a}),
+    slv.mkTerm(
+      cvc5::Kind::BITVECTOR_NOT, {to_solver_smt_ast<cvc_smt_ast>(a)->a}),
     a->sort);
 }
 
@@ -1026,9 +1030,9 @@ smt_astt cvc_convt::mk_smt_int(const BigInt &theint)
 {
   // TODO: Is this correct? CVC5 doesn't have any call for
   // slv.mkConst(CVC5::Integer(...));
-  
+
   // AYB what to do here?
- 
+
   /*smt_sortt s = mk_int_sort();
   cvc5::Term e = slv.mkConst(CVC5::Rational(theint.to_int64()));
   return new_ast(e, s);*/
@@ -1065,8 +1069,7 @@ smt_astt cvc_convt::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_real_fp_sort(ew, sw - 1);
   smt_astt the_nan = new_ast(
-    slv.mkFloatingPointNaN(
-      s->get_exponent_width(), s->get_significand_width()),
+    slv.mkFloatingPointNaN(s->get_exponent_width(), s->get_significand_width()),
     s);
 
   if (sgn)
@@ -1163,7 +1166,7 @@ smt_astt cvc_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 
   auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
 
-  auto op = slv.mkOp(cvc5::Kind::BITVECTOR_EXTRACT, {high, low}); 
+  auto op = slv.mkOp(cvc5::Kind::BITVECTOR_EXTRACT, {high, low});
   cvc5::Term fin = slv.mkTerm(op, {ca->a});
 
   smt_sortt s = mk_bv_sort(high - low + 1);
@@ -1174,7 +1177,7 @@ smt_astt cvc_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
   auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
 
-  auto op = slv.mkOp(cvc5::Kind::BITVECTOR_SIGN_EXTEND, {topwidth}); 
+  auto op = slv.mkOp(cvc5::Kind::BITVECTOR_SIGN_EXTEND, {topwidth});
 
   cvc5::Term fin = slv.mkTerm(op, {ca->a});
 
@@ -1186,7 +1189,7 @@ smt_astt cvc_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
   auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
 
-  auto op = slv.mkOp(cvc5::Kind::BITVECTOR_ZERO_EXTEND, {topwidth}); 
+  auto op = slv.mkOp(cvc5::Kind::BITVECTOR_ZERO_EXTEND, {topwidth});
   cvc5::Term fin = slv.mkTerm(op, {ca->a});
 
   smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
@@ -1228,7 +1231,8 @@ cvc_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 smt_sortt cvc_convt::mk_bool_sort()
 {
-  return new solver_smt_sort<cvc5::Sort>(SMT_SORT_BOOL, slv.getBooleanSort(), 1);
+  return new solver_smt_sort<cvc5::Sort>(
+    SMT_SORT_BOOL, slv.getBooleanSort(), 1);
 }
 
 smt_sortt cvc_convt::mk_real_sort()
@@ -1292,7 +1296,7 @@ void cvc_convt::dump_smt()
 {
   std::ostringstream oss;
   auto const &assertions = slv.getAssertions();
-  for(auto const &a : assertions)
+  for (auto const &a : assertions)
     //AYB is this right?
     oss << a;
   log_status("{}", oss.str());
@@ -1301,7 +1305,7 @@ void cvc_convt::dump_smt()
 void cvc_smt_ast::dump() const
 {
   std::ostringstream oss;
-   //AYB TODO
-   //a.printAst(oss, 0);
+  //AYB TODO
+  //a.printAst(oss, 0);
   log_status("{}", oss.str());
 }
