@@ -51,15 +51,16 @@ bool cvc_convt::get_bool(smt_astt a)
 
 ieee_floatt cvc_convt::get_fpbv(smt_astt a)
 {
-  /*auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
+  auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
   cvc5::Term e = slv.getValue(ca->a);
-  CVC5::FloatingPoint foo = e.getFloatingPointValue();
+  //cvc5::FloatingPoint foo = e.getFloatingPointValue();
 
   ieee_floatt number(ieee_float_spect(
-    /* in mk_bvfp_sort() we added +1 for the sign bit */
+    // in mk_bvfp_sort() we added +1 for the sign bit
     a->sort->get_significand_width() - 1,
     a->sort->get_exponent_width()));
-
+  return number;
+#if 0 
   if (foo.isNaN())
     number.make_NaN();
   else if (foo.isInfinite())
@@ -72,7 +73,8 @@ ieee_floatt cvc_convt::get_fpbv(smt_astt a)
   else
     number.unpack(BigInt(foo.pack().toInteger().getUnsignedLong()));
 
-  return number;*/
+  return number;
+  #endif
 }
 
 BigInt cvc_convt::get_bv(smt_astt a, bool is_signed)
@@ -1089,12 +1091,8 @@ smt_astt cvc_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
   smt_sortt s = mk_fpbv_rm_sort();
 
-<<<<<<< HEAD:src/solvers/cvc4/cvc_conv.cpp
-  switch (rm)
-=======
   // AYB needs sorting
   /*switch(rm)
->>>>>>> 7d71f202d (adding support for cvc5):src/solvers/cvc5/cvc_conv.cpp
   {
   case ieee_floatt::ROUND_TO_EVEN:
     return new_ast(slv.mkConst(CVC5::RoundingMode::roundNearestTiesToEven), s);
@@ -1115,19 +1113,9 @@ smt_astt cvc_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
 
-<<<<<<< HEAD:src/solvers/cvc4/cvc_conv.cpp
-  CVC4::BitVector bv;
-  if (theint.is_negative() || !theint.is_uint64())
-    bv = CVC4::BitVector(integer2binary(theint, w), 2);
-  else
-    bv = CVC4::BitVector(w, theint.to_uint64());
-
-  CVC4::Expr e = em.mkConst(bv);
-=======
   // Seems we can't make negative bitvectors; so just pull the value out and
   // assume CVC is going to cut the top off correctly.
   cvc5::Term e = slv.mkBitVector(w, theint.to_uint64());
->>>>>>> 7d71f202d (adding support for cvc5):src/solvers/cvc5/cvc_conv.cpp
   return new_ast(e, s);
 }
 
@@ -1150,11 +1138,8 @@ smt_astt cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   // Standard arrangement: if we already have the name, return the expression
   // from the symbol table. If not, time for a new name.
-<<<<<<< HEAD:src/solvers/cvc4/cvc_conv.cpp
-  if (sym_tab.isBound(name))
-=======
+
   /*if(sym_tab.isBound(name))
->>>>>>> 7d71f202d (adding support for cvc5):src/solvers/cvc5/cvc_conv.cpp
   {
     cvc5::Term e = sym_tab.lookup(name);
     return new_ast(e, s);
@@ -1306,29 +1291,17 @@ smt_sortt cvc_convt::mk_fpbv_rm_sort()
 void cvc_convt::dump_smt()
 {
   std::ostringstream oss;
-<<<<<<< HEAD:src/solvers/cvc4/cvc_conv.cpp
-  auto const &assertions = smt.getAssertions();
-  for (auto const &a : assertions)
-    a.printAst(oss, 0);
-  log_debug("cvc4", "{}", oss.str());
-=======
   auto const &assertions = slv.getAssertions();
   for(auto const &a : assertions)
     //AYB is this right?
     oss << a;
-  log_debug("{}", oss.str());
->>>>>>> 7d71f202d (adding support for cvc5):src/solvers/cvc5/cvc_conv.cpp
+  log_status("{}", oss.str());
 }
 
 void cvc_smt_ast::dump() const
 {
   std::ostringstream oss;
-<<<<<<< HEAD:src/solvers/cvc4/cvc_conv.cpp
-  a.printAst(oss, 0);
-  log_status("{}", oss.str());
-=======
    //AYB TODO
    //a.printAst(oss, 0);
-  log_debug("{}", oss.str());
->>>>>>> 7d71f202d (adding support for cvc5):src/solvers/cvc5/cvc_conv.cpp
+  log_status("{}", oss.str());
 }
