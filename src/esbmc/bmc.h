@@ -31,8 +31,8 @@ protected:
   const contextt &context;
   namespacet ns;
 
-  std::shared_ptr<smt_convt> runtime_solver;
-  std::shared_ptr<reachability_treet> symex;
+  std::unique_ptr<smt_convt> runtime_solver;
+  std::unique_ptr<reachability_treet> symex;
 
   virtual smt_convt::resultt
   run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq);
