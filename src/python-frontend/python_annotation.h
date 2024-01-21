@@ -1,6 +1,7 @@
 #pragma once
 
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_frontend_types.h>
 #include <util/message.h>
 #include <string>
 
@@ -119,8 +120,9 @@ private:
         // Get type from constructor call
         else if (
           element["value"]["_type"] == "Call" &&
-          json_utils::is_class<Json>(
-            element["value"]["func"]["id"], ast_["body"]))
+          (json_utils::is_class<Json>(
+             element["value"]["func"]["id"], ast_["body"]) ||
+           is_builtin_type(element["value"]["func"]["id"])))
         {
           type = element["value"]["func"]["id"];
         }
