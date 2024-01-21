@@ -301,6 +301,12 @@ If no such directory, please go to App Store and install Xcode. If you do not ha
 
 Now we are ready to build ESBMC. Please note that we describe the same build option used in our CI/CD. If you want to all available _cmake_ options, refer to our [Options.cmake file](https://github.com/esbmc/esbmc/blob/master/scripts/cmake/Options.cmake).
 
+If you are building ESBMC-CHERI, please complete the following sections BEFORE configuring ESBMC-CHERI:
+- Preparing CHERI Clang 13 (experimental)
+  - This section helps you to build CHERI-LLVM and set up `ESBMC_CLANG`.
+- Setting up the sysroot for CHERI clang
+  - This section will get you the CHERI header files to set up `ESBMC_CHERI_HYBRID_SYSROOT` and `ESBMC_CHERI_PURECAP_SYSROOT`.
+
 First, we need to setup __cmake__, by using the following command in ESBMC_Project directory you just created:
 
 ```
