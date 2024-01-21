@@ -369,7 +369,7 @@ To obtain and install a CHERI sysroot, the
 [cheribuild](https://github.com/CTSRD-CHERI/cheribuild)
 tool is the recommended way:
 ```
-cheribuild.py cheribsd-mips64-hybrid disk-image-mips64-hybrid
+cheribuild.py cheribsd-riscv64-purecap disk-image-riscv64-purecap -d
 ```
 Once the build completed, you'll find `cheri` directory in your HOME directory.
 
