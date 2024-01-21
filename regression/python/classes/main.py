@@ -2,6 +2,7 @@ class MyClass:
     def __init__(self, value: int):
         self.data:int = value
 
+
 obj1 = MyClass(5)
 assert(obj1.data == 5)
 obj1.data = 10
