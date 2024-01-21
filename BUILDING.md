@@ -140,7 +140,7 @@ First __install ast2json:__
 pip3 install ast2json
 ```
 
-then __enable the Python frontend__ during the ESBMC build:  
+then __enable the Python frontend__ during the ESBMC build:
 ```
 -DENABLE_PYTHON_FRONTEND=On
 ```
@@ -150,7 +150,7 @@ then __enable the Python frontend__ during the ESBMC build:
 ESBMC can use the forward and backward operations from constraint programming to contract the search space exploration from the program's entry point to the property being verified and vice-versa. This (interval) contraction is enabled via the option --goto-contractor. First, the IBEX library must be installed using the instructions available at http://ibex-team.github.io/ibex-lib/install.html. Once IBEX is installed on your computer, ESBMC should be built with the option:
 
 ```
--DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=path-to-ibex 
+-DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=path-to-ibex
 ```
 
 ## Setting Up Solvers
@@ -357,16 +357,20 @@ Since CHERI support is available only for a few platforms, verifying CHERI-C
 programs that use header files from the C standard library will require a setup
 of a C standard library for one of these platforms.
 
-CHERI-enabled ESBMC defaults to the platform mips64-unknown-freebsd and
-expects the corresponding sysroot, the default of which can be configured by
-passing the CMake flags
-```
--DESBMC_CHERI_HYBRID_SYSROOT=<path> -DESBMC_CHERI_PURECAP_SYSROOT=<path>
-```
-
 To obtain and install a CHERI sysroot, the
 [cheribuild](https://github.com/CTSRD-CHERI/cheribuild)
 tool is the recommended way:
 ```
 cheribuild.py cheribsd-mips64-hybrid disk-image-mips64-hybrid
 ```
+Once the build completed, you'll find `cheri` directory in your HOME directory.
+
+CHERI-enabled ESBMC defaults to the platform mips64-unknown-freebsd and
+expects the corresponding sysroot, the default of which can be configured by
+passing the CMake flags
+```
+-DESBMC_CHERI_HYBRID_SYSROOT=<path> -DESBMC_CHERI_PURECAP_SYSROOT=<path>
+```
+e.g. the 'path' should point to `$HOME/cheri/output/rootfs-riscv64-purecap`. As for the `rootfs-riscv64-purecap` part, you may want to use a diffrent directory if you used a different variant in the `cheribuild.py` command above.
+
+
