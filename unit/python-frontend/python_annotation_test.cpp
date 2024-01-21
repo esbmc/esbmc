@@ -1192,6 +1192,5 @@ TEST_CASE("Add type annotation")
     ann.add_type_annotation();
 
     REQUIRE(input_json == expected_output);
-
   }
 }
