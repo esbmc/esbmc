@@ -48,8 +48,7 @@ protected:
 
   virtual void show_vcc(const symex_target_equationt &eq);
 
-  virtual void
-  show_vcc(std::ostream &out, const symex_target_equationt &eq);
+  virtual void show_vcc(std::ostream &out, const symex_target_equationt &eq);
 
   virtual void
   report_trace(smt_convt::resultt &res, const symex_target_equationt &eq);
@@ -59,9 +58,8 @@ protected:
 
   virtual void report_result(smt_convt::resultt &res);
 
-  virtual void bidirectional_search(
-    smt_convt &smt_conv,
-    const symex_target_equationt &eq);
+  virtual void
+  bidirectional_search(smt_convt &smt_conv, const symex_target_equationt &eq);
 
   smt_convt::resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
 
@@ -71,9 +69,8 @@ protected:
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 
-  void generate_smt_from_equation(
-    smt_convt &smt_conv,
-    symex_target_equationt &eq);
+  void
+  generate_smt_from_equation(smt_convt &smt_conv, symex_target_equationt &eq);
 };
 
 #endif
