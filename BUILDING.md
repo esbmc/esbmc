@@ -60,6 +60,8 @@ LLVM/Clang toolchain for ESBMC's frontend in case you want to verify CHERI-C
 programs as well. Note that the CHERI-support in ESBMC is experimental and
 incomplete at this point.
 
+If you are building ESBMC-CHERI, skip the following sections and go straight to Section `Preparing CHERI Clang 13 (experimental)`.
+
 ### Preparing external standard Clang (recommended for a static build)
 
 You can either download and unpack a release manually:
