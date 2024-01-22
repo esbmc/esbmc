@@ -1,6 +1,7 @@
 #ifndef CPROVER_GOTO_SYMEX_SLICE_H
 #define CPROVER_GOTO_SYMEX_SLICE_H
 
+#include <cstdint>
 #include <goto-symex/symex_target_equation.h>
 #include <util/time_stopping.h>
 #include <util/algorithms.h>
@@ -114,6 +115,11 @@ public:
    */
   std::unordered_set<std::string> depends;
 
+  /**
+   * Holds the array and indexes that the current equation depends on.
+   */
+  std::unordered_map< std::string, std::unordered_set<uint64_t>> array_depends;
+
   static expr2tc get_nondet_symbol(const expr2tc &expr);
 
   /**
@@ -156,6 +162,8 @@ protected:
    */
   template <bool Add>
   bool get_symbols(const expr2tc &expr);
+
+  bool get_array_symbols(const expr2tc &expr);
 
   /**
    * Remove unneeded assumes from the formula
