@@ -317,9 +317,9 @@ macOS:
 cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=${ESBMC_STATIC:-ON} $ESBMC_CLANG -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DBitwuzla_DIR=$PWD/../../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
 ```
 
-Note, this command uses the ESBMC_CLANG and ESBMC_STATIC variables set in the section on preparing Clang.
+Note, this command uses the ESBMC_CLANG and ESBMC_STATIC variables set in the section on preparing Clang. Note also that if you want to enable the debug mode, i.e., the internal assertions in ESBMC, you must add the option `-DCMAKE_BUILD_TYPE=Debug`.
 
-Finally, we can trigger the build process, by using the following command:
+Finally, we can trigger the build process by using the following command:
 
 ```
 cmake --build . && ninja install
