@@ -161,13 +161,6 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
 
 bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
 {
-  return run(steps, true);
-}
-
-bool claim_slicer::run(
-  symex_target_equationt::SSA_stepst &steps,
-  bool show_slice_info)
-{
   sliced = 0;
   fine_timet algorithm_start = current_time();
   size_t counter = 1;
@@ -196,6 +189,12 @@ bool claim_slicer::run(
   fine_timet algorithm_stop = current_time();
   if (show_slice_info)
     log_status(
+      "Slicing for Claim {} ({}s)",
+      claim_msg,
+      time2string(algorithm_stop - algorithm_start));
+  else
+    log_debug(
+      "c++",
       "Slicing for Claim {} ({}s)",
       claim_msg,
       time2string(algorithm_stop - algorithm_start));

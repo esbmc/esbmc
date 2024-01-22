@@ -43,8 +43,8 @@ public:
 class claim_slicer : public slicer
 {
 public:
-  explicit claim_slicer(const size_t claim_to_keep)
-    : claim_to_keep(claim_to_keep)
+  explicit claim_slicer(const size_t claim_to_keep, bool show_slice_info)
+    : claim_to_keep(claim_to_keep), show_slice_info(show_slice_info)
   {
     if (!claim_to_keep)
     {
@@ -53,10 +53,10 @@ public:
     }
   };
   bool run(symex_target_equationt::SSA_stepst &) override;
-  bool run(symex_target_equationt::SSA_stepst &, bool show_slice_info);
   size_t claim_to_keep;
   std::string claim_msg;
   std::string claim_loc;
+  bool show_slice_info;
 };
 
 /**
