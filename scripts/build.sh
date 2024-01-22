@@ -161,7 +161,16 @@ do
     d) set -x; export ESBMC_OPTS='--verbosity 9' ;;
     S) STATIC=$OPTARG ;; # should be capital ON or OFF
     c) CLANG_VERSION=$OPTARG ;; # LLVM/Clang major version
-    C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON" ;;
+    C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON"
+       SOLVER_FLAGS="\
+          -DENABLE_BOOLECTOR=On \
+    	  -DENABLE_YICES=ON \
+	  -DENABLE_CVC4=OFF \
+          -DENABLE_BITWUZLA=On \
+	  -DENABLE_Z3=On \
+          -DENABLE_Mathsat=ON \
+          -DENABLE_GOTO_CONTRACTOR=On \
+          -DACADEMIC_BUILD=ON"  ;;
     B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
     *) exit 1 ;;
     esac
