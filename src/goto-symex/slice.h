@@ -53,8 +53,10 @@ public:
     }
   };
   bool run(symex_target_equationt::SSA_stepst &) override;
+  bool run(symex_target_equationt::SSA_stepst &, bool show_slice_info);
   size_t claim_to_keep;
   std::string claim_msg;
+  std::string claim_loc;
 };
 
 /**

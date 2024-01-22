@@ -161,6 +161,13 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
 
 bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
 {
+  return run(steps, true);
+}
+
+bool claim_slicer::run(
+  symex_target_equationt::SSA_stepst &steps,
+  bool show_slice_info)
+{
   sliced = 0;
   fine_timet algorithm_start = current_time();
   size_t counter = 1;
@@ -177,6 +184,7 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
       {
         it->ignore = false;
         claim_msg = it->comment;
+        claim_loc = it->source.pc->location.as_string();
         continue;
       }
 
@@ -186,10 +194,11 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
   }
 
   fine_timet algorithm_stop = current_time();
-  log_status(
-    "Slicing for Claim {} ({}s)",
-    claim_msg,
-    time2string(algorithm_stop - algorithm_start));
+  if (show_slice_info)
+    log_status(
+      "Slicing for Claim {} ({}s)",
+      claim_msg,
+      time2string(algorithm_stop - algorithm_start));
 
   return true;
 }
