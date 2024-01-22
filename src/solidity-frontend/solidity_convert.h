@@ -4,6 +4,7 @@
 #include <memory>
 #include <stack>
 #include <map>
+#include <queue>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_types.h>

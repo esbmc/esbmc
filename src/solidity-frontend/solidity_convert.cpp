@@ -1277,11 +1277,11 @@ bool solidity_convertert::get_expr(
           "contract") != std::string::npos)
       {
         // TODO
-        assert(!"we do not handle contract type identifier for now");
+        log_error("we do not handle contract type identifier for now");
+        return true;
       }
 
       // Soldity uses +ve odd numbers to refer to var or functions declared in the contract
-      assert(expr.contains("referencedDeclaration"));
       const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
 
       if (!check_intrinsic_function(decl))
@@ -1582,10 +1582,11 @@ bool solidity_convertert::get_expr(
       // populate params
       auto param_nodes = caller_expr_json["parameters"]["parameters"];
       unsigned num_args = 0;
+      nlohmann::json param = nullptr;
+      nlohmann::json::iterator itr = param_nodes.begin();
+
       for (const auto &arg : expr["arguments"].items())
       {
-        nlohmann::json param = nullptr;
-        nlohmann::json::iterator itr = param_nodes.begin();
         if (itr != param_nodes.end())
         {
           if ((*itr).contains("typeDescriptions"))
@@ -1601,6 +1602,7 @@ bool solidity_convertert::get_expr(
 
         call.arguments().push_back(single_arg);
         ++num_args;
+        param = nullptr;
       }
 
       new_expr = call;
@@ -1659,9 +1661,6 @@ bool solidity_convertert::get_expr(
     call.function() = callee_expr;
     call.type() = type;
 
-    // 3. Set side_effect_expr_function_callt
-    unsigned num_args = 0;
-
     // special case: handling revert and require
     // insert a bool false as the first argument.
     // drop the rest of params.
@@ -1675,28 +1674,36 @@ bool solidity_convertert::get_expr(
       break;
     }
 
+    // 3. populate param
+    assert(callee_expr_json.contains("referencedDeclaration"));
+
+    //! we might use int_const instead of the original param type (e.g. uint_8).
+    nlohmann::json param_nodes = callee_expr_json["argumentTypes"];
+    nlohmann::json param = nullptr;
+    nlohmann::json::iterator itr = param_nodes.begin();
+    unsigned num_args = 0;
+
     for (const auto &arg : expr["arguments"].items())
     {
       exprt single_arg;
-
-      if (get_expr(arg.value(), literal_type, single_arg))
+      if (get_expr(arg.value(), *itr, single_arg))
         return true;
-
       call.arguments().push_back(single_arg);
+
       ++num_args;
+      ++itr;
+      param = nullptr;
+
+      // Special case: require
+      // __ESBMC_assume only handle one param.
       if (
         callee_expr.type().get("#sol_name").as_string().find("require") !=
         std::string::npos)
-      {
-        // __ESBMC_assume only handle one param.
         break;
-      }
     }
     log_debug("solidity", "  @@ num_args={}", num_args);
 
-    // 4. Convert call arguments
     new_expr = call;
-
     break;
   }
   case SolidityGrammar::ExpressionT::ImplicitCastExprClass:
@@ -2637,6 +2644,7 @@ bool solidity_convertert::get_decl_ref_builtin(
   new_expr.identifier(id);
   new_expr.cmt_lvalue(true);
   new_expr.name(name);
+
   return false;
 }
 
@@ -3554,6 +3562,13 @@ std::string solidity_convertert::get_filename_from_path(std::string path)
 const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
 {
   //TODO: Clean up this funciton. Such a mess...
+
+  if (ref_decl_id < 0)
+  {
+    log_warning("Cannot find declaration reference for the built-in function.");
+    abort();
+  }
+
   // First, search state variable nodes
   nlohmann::json &nodes = ast_json["nodes"];
   unsigned index = 0;
@@ -3623,30 +3638,50 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
 
   // Then search "declarations" in current function scope
   const nlohmann::json &current_func = *current_functionDecl;
-  if (current_func.contains("body"))
+  if (!current_func.contains("body"))
   {
-    if (current_func["body"].contains("statements"))
+    log_error(
+      "Unable to find the corresponding local variable decl. Current function "
+      "does not have a function body.");
+    abort();
+  }
+
+  // var declaration in local statements
+  // bfs visit
+  std::queue<const nlohmann::json *> body_stmts;
+  body_stmts.emplace(&current_func["body"]);
+
+  while (!body_stmts.empty())
+  {
+    const nlohmann::json &top_stmt = *(body_stmts).front();
+    for (const auto &body_stmt : top_stmt["statements"].items())
     {
-      // var declaration in local statements
-      for (const auto &body_stmt : current_func["body"]["statements"].items())
+      const nlohmann::json &stmt = body_stmt.value();
+      if (stmt["nodeType"] == "VariableDeclarationStatement")
       {
-        const nlohmann::json &stmt = body_stmt.value();
-        if (stmt["nodeType"] == "VariableDeclarationStatement")
+        for (const auto &local_decl : stmt["declarations"].items())
         {
-          for (const auto &local_decl : stmt["declarations"].items())
+          const nlohmann::json &the_decl = local_decl.value();
+          if (the_decl["id"] == ref_decl_id)
           {
-            const nlohmann::json &the_decl = local_decl.value();
-            if (the_decl["id"] == ref_decl_id)
-              return the_decl;
+            assert(the_decl.contains("nodeType"));
+            return the_decl;
           }
         }
       }
+
+      // nested block e.g.
+      // {
+      //    {
+      //        int x = 1;
+      //    }
+      // }
+      if (stmt["nodeType"] == "Block" && stmt.contains("statements"))
+        body_stmts.emplace(&stmt);
     }
-    else
-      assert(!"Unable to find the corresponding local variable decl. Function body  does not have statements.");
+
+    body_stmts.pop();
   }
-  else
-    assert(!"Unable to find the corresponding local variable decl. Current function does not have a function body.");
 
   // Search function parameter
   if (current_func.contains("parameters"))
