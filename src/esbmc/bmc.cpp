@@ -736,8 +736,8 @@ smt_convt::resultt bmct::multi_property_check(
     symex_target_equationt local_eq = eq;
 
     // Set up the current claim and disable slice info output
-    claim_slicer claim(i);
-    claim.run(local_eq.SSA_steps, false);
+    claim_slicer claim(i, false);
+    claim.run(local_eq.SSA_steps);
 
     // Drop claims that verified to be failed
     // we use the "comment + location" to distinguish each claim
