@@ -20,7 +20,7 @@ Before starting, note that ESBMC is mainly distributed under the terms of the [A
 | MathSAT   | no       | 5.5.4           |
 | Yices     | no       | 2.6.1           |
 | Z3        | no       | 4.8.9           |
-| Bitwuzla  | no       | 0.2.0           |
+| Bitwuzla  | no       | 0.3.1           |
 
 The version requirements are stable but can change between releases.
 
