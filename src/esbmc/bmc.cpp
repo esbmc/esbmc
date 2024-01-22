@@ -735,9 +735,21 @@ smt_convt::resultt bmct::multi_property_check(
     // Since this is just a copy, we probably don't need a lock
     symex_target_equationt local_eq = eq;
 
-    // Set up the current claim and slice it
+    // Set up the current claim and disable slice info output
     claim_slicer claim(i);
-    claim.run(local_eq.SSA_steps);
+    claim.run(local_eq.SSA_steps, false);
+
+    // drop verified claims
+    bool is_verified = false;
+    std::string cmt_loc = claim.claim_msg + "\t" + claim.claim_loc;
+    if (is_goto_cov)
+      is_verified = reached_mul_claims.count(cmt_loc) ? true : false;
+    else
+      is_verified = reached_claims.count(cmt_loc) ? true : false;
+    if (is_verified && !options.get_bool_option("keep-verified-claims"))
+      return;
+
+    // slice
     symex_slicet slicer(options);
     slicer.run(local_eq.SSA_steps);
 
@@ -793,45 +805,24 @@ smt_convt::resultt bmct::multi_property_check(
           cmt_loc = step.comment + "\t" + loc;
         }
 
-      bool is_unverified = false;
-
       if (is_goto_cov)
-      {
         reached_mul_claims.emplace(cmt_loc);
-        is_unverified = true;
-      }
       else
-      {
-        // the ins is true if the element was actually inserted
-        auto [it, ins] = reached_claims.emplace(cmt_loc);
-        is_unverified = ins;
-      }
+        reached_claims.emplace(cmt_loc);
 
-      if (is_unverified || options.get_bool_option("keep-verified-claims"))
+      std::string output_file = options.get_option("cex-output");
+      if (output_file != "")
       {
-        std::string output_file = options.get_option("cex-output");
-        if (output_file != "")
-        {
-          std::ofstream out(fmt::format("{}-{}", ce_counter++, output_file));
-          show_goto_trace(out, ns, goto_trace);
-        }
-        std::ostringstream oss;
-        log_fail("\n[Counterexample]\n");
-        show_goto_trace(oss, ns, goto_trace);
-        log_result("{}", oss.str());
-        final_result = result;
-        // update fail-fast-counter
-        fail_fast_cnt++;
+        std::ofstream out(fmt::format("{}-{}", ce_counter++, output_file));
+        show_goto_trace(out, ns, goto_trace);
       }
-      else
-      {
-        // we should not be here if "keep-verified-claims" is enabled
-        log_status("\nFound verified claim. Skipping...\n");
-
-        //TODO: this can still be annoying when we unind for many times
-        // e.g. '--unwind 100' will show 1 counterexample and 99 'skip's
-        // Maybe we should use log_debug instead, both in slicer.run and multi_property_check
-      }
+      std::ostringstream oss;
+      log_fail("\n[Counterexample]\n");
+      show_goto_trace(oss, ns, goto_trace);
+      log_result("{}", oss.str());
+      final_result = result;
+      // update fail-fast-counter
+      fail_fast_cnt++;
     }
   };
 
