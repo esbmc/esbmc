@@ -891,8 +891,8 @@ void generate_testcase_metadata()
 #include <goto-symex/slice.h>
 void generate_testcase(
   const std::string &file_name,
-  const std::shared_ptr<symex_target_equationt> &target,
-  std::shared_ptr<smt_convt> &smt_conv)
+  const symex_target_equationt &target,
+  smt_convt &smt_conv)
 {
   /* Unfortunately, TestCov rely on checking for '<!DOCTYPE test' and as Boost
    * Property Tree is not a proper XML generator... it does not support this */
@@ -919,7 +919,7 @@ void generate_testcase(
       !nondet.count(sym.thename.as_string()))
     {
       nondet.insert(sym.thename.as_string());
-      auto new_rhs = smt_conv->get(expr);
+      auto new_rhs = smt_conv.get(expr);
 
       // I don't think there is anything beyond constant int Test-Comp
       if (is_constant_int2t(new_rhs))
@@ -943,19 +943,18 @@ void generate_testcase(
       }
     }
   };
-  for (auto const &SSA_step : target->SSA_steps)
+  for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv->l_get(SSA_step.guard_ast).is_true())
+    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
       continue;
 
     if (SSA_step.is_assignment())
     {
-      /*
-         * AFAIK there are two ways to arrive here with a nondet symbol
-         *
-         * 1. As a plain symbol `int a = __VERIFIER_nondet_int();`
-         * 2. As a with operation `arr[4] == __VERIFIER_nondet_int();`
-         */
+      /* AFAIK there are two ways to arrive here with a nondet symbol
+       *
+       * 1. As a plain symbol `int a = __VERIFIER_nondet_int();`
+       * 2. As a with operation `arr[4] == __VERIFIER_nondet_int();`
+       */
       SSA_step.dump();
       generate_input(symex_slicet::get_nondet_symbol(SSA_step.rhs));
     }

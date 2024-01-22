@@ -4,4 +4,9 @@ class MyClass:
   def foo():
     pass
 
+class EmptyClass:
+    pass;
+
 y:int
+
+obj = EmptyClass()

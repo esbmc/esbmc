@@ -123,7 +123,7 @@ public:
   /**
    *  Create a symex result for this run.
    */
-  std::shared_ptr<goto_symext::symex_resultt> get_symex_result();
+  goto_symext::symex_resultt get_symex_result();
 
   /**
    *  Symbolically execute one instruction.

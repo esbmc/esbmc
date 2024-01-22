@@ -7,16 +7,15 @@
 #include <langapi/mode.h>
 #include <util/migrate.h>
 
-void bmct::show_vcc(
-  std::ostream &out,
-  std::shared_ptr<symex_target_equationt> &eq)
+void bmct::show_vcc(std::ostream &out, const symex_target_equationt &eq)
 {
   out << "\nVERIFICATION CONDITIONS:\n\n";
 
   languagest languages(ns, language_idt::C);
 
-  for (symex_target_equationt::SSA_stepst::iterator it = eq->SSA_steps.begin();
-       it != eq->SSA_steps.end();
+  for (symex_target_equationt::SSA_stepst::const_iterator it =
+         eq.SSA_steps.begin();
+       it != eq.SSA_steps.end();
        it++)
   {
     if (!it->is_assert() || it->ignore)
@@ -29,7 +28,7 @@ void bmct::show_vcc(
       out << it->comment << "\n";
 
     symex_target_equationt::SSA_stepst::const_iterator p_it =
-      eq->SSA_steps.begin();
+      eq.SSA_steps.begin();
 
     for (unsigned count = 1; p_it != it; p_it++)
       if (p_it->is_assume() || p_it->is_assignment())
@@ -52,7 +51,7 @@ void bmct::show_vcc(
   }
 }
 
-void bmct::show_vcc(std::shared_ptr<symex_target_equationt> &eq)
+void bmct::show_vcc(const symex_target_equationt &eq)
 {
   const std::string &filename = options.get_option("output");
 

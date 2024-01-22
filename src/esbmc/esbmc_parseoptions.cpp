@@ -1668,30 +1668,30 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, options, ns);
     }
 
-    std::shared_ptr<value_set_analysist> vsa =
-      std::make_shared<value_set_analysist>(ns);
-    try
-    {
-      log_status("Computing Value-Set Analysis (VSA)");
-      (*vsa)(goto_functions);
-    }
-    catch (vsa_not_implemented_exception &)
-    {
-      log_warning(
-        "Unable to compute VSA due to incomplete implementation. Some GOTO "
-        "optimizations will be disabled");
-      vsa = nullptr;
-    }
-    catch (type2t::symbolic_type_excp &)
-    {
-      log_warning(
-        "[GOTO] Unable to compute VSA due to symbolic type. Some GOTO "
-        "optimizations will be disabled");
-      vsa = nullptr;
-    }
-
     if (cmdline.isset("gcse"))
     {
+      std::shared_ptr<value_set_analysist> vsa =
+        std::make_shared<value_set_analysist>(ns);
+      try
+      {
+        log_status("Computing Value-Set Analysis (VSA)");
+        (*vsa)(goto_functions);
+      }
+      catch (vsa_not_implemented_exception &)
+      {
+        log_warning(
+          "Unable to compute VSA due to incomplete implementation. Some GOTO "
+          "optimizations will be disabled");
+        vsa = nullptr;
+      }
+      catch (type2t::symbolic_type_excp &)
+      {
+        log_warning(
+          "[GOTO] Unable to compute VSA due to symbolic type. Some GOTO "
+          "optimizations will be disabled");
+        vsa = nullptr;
+      }
+
       if (cmdline.isset("no-library"))
         log_warning("Using CSE with --no-library might cause huge slowdowns!");
 

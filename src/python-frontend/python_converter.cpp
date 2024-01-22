@@ -410,8 +410,25 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     const symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
     if (func_symbol == nullptr)
     {
-      log_error("Undefined function: {}", func_name.c_str());
-      abort();
+      if (is_ctor_call)
+      {
+        // If __init__() is not defined in the class, x = MyClass() is converted to x:MyClass in get_var_assign().
+        return exprt("empty_ctor_call");
+      }
+      else if (is_builtin_type(func_name))
+      {
+        // Replace the function call with a constant value. For example, x = int(1) becomes x = 1
+        typet t = get_typet(func_name);
+        if (t == int_type())
+          return from_integer(element["args"][0]["value"].get<int>(), t);
+        else if (t == bool_type())
+          return gen_boolean(element["args"][0]["value"].get<bool>());
+      }
+      else
+      {
+        log_error("Undefined function: {}", func_name.c_str());
+        abort();
+      }
     }
 
     code_function_callt call;
@@ -726,7 +743,7 @@ void python_converter::get_var_assign(
     has_value = true;
   }
 
-  if (has_value)
+  if (has_value && rhs != exprt("empty_ctor_call"))
   {
     if (lhs_symbol)
       lhs_symbol->value = rhs;
