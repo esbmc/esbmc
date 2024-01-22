@@ -34,17 +34,15 @@ bool symex_slicet::get_symbols(const expr2tc &expr)
 bool symex_slicet::get_array_symbols(const expr2tc &expr)
 {
   bool res = false;
-  expr->foreach_operand(
-    [this, &res](const expr2tc &e)
-    {
-      if (!is_nil_expr(e))
-        res |= get_array_symbols(e);
-      return res;
-    });
-  
+  expr->foreach_operand([this, &res](const expr2tc &e) {
+    if (!is_nil_expr(e))
+      res |= get_array_symbols(e);
+    return res;
+  });
+
   // This should come from assertions, the idea is that
   // ASSERT(array[42] == 2) will generate: array$foo WITH 42 := 2
-  // We can then just add anything that changes the index 42 as a dependency  
+  // We can then just add anything that changes the index 42 as a dependency
   if (is_index2t(expr))
   {
     const index2t &w = to_index2t(expr);
@@ -58,8 +56,6 @@ bool symex_slicet::get_array_symbols(const expr2tc &expr)
   }
   return false;
 }
-      
-      
 
 void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
 {
@@ -113,22 +109,24 @@ void symex_slicet::run_on_assignment(
     std::unordered_set<uint64_t> &indexes = it->second;
     for (auto v : indexes)
       if (is_with2t(SSA_step.rhs))
-	{
-	  with2t &w = to_with2t(SSA_step.rhs);
-	  if (is_constant_int2t(w.update_field) && is_symbol2t(w.source_value))
-	    {
-	      uint64_t index = to_constant_int2t(w.update_field).value.to_uint64();
-	      if (!indexes.count(index) && to_symbol2t(w.source_value).thename.as_string() == it->first)
-		{
-		  // At this point the LHS/RHS are just used as a reference of the past
-		  // Every assignment is actually an... assumption!
-		  SSA_step.cond = equality2tc(SSA_step.lhs, w.source_value);
-		}
-	    }
-	}
+      {
+        with2t &w = to_with2t(SSA_step.rhs);
+        if (is_constant_int2t(w.update_field) && is_symbol2t(w.source_value))
+        {
+          uint64_t index = to_constant_int2t(w.update_field).value.to_uint64();
+          if (
+            !indexes.count(index) &&
+            to_symbol2t(w.source_value).thename.as_string() == it->first)
+          {
+            // At this point the LHS/RHS are just used as a reference of the past
+            // Every assignment is actually an... assumption!
+            SSA_step.cond = equality2tc(SSA_step.lhs, w.source_value);
+          }
+        }
+      }
     return;
   }
-  
+
   if (!get_symbols<false>(SSA_step.lhs))
   {
     // Should we add nondet to the dependency list (mostly for test cases)?
