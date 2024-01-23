@@ -1,0 +1,8 @@
+CORE
+main.c
+--goto-coverage --unwind 1 --no-unwinding-assertions
+^Total Asserts: 2
+^Reached Assertion Instances: 1
+^Total Assertion Instances: 4
+^Assertion Instances Coverage: 25%
+^VERIFICATION FAILED$
