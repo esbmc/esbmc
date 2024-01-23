@@ -685,7 +685,6 @@ smt_convt::resultt bmct::multi_property_check(
   std::mutex result_mutex;
   std::unordered_set<std::string> reached_claims;
   // For coverage info
-  int total_instance = 0;
   std::unordered_multiset<std::string> reached_mul_claims;
   bool is_goto_cov = options.get_bool_option("goto-coverage") ||
                      options.get_bool_option("goto-coverage-claims");
@@ -723,7 +722,6 @@ smt_convt::resultt bmct::multi_property_check(
                        &result_mutex,
                        &reached_claims,
                        &reached_mul_claims,
-                       &total_instance,
                        &is_goto_cov,
                        &is_fail_fast,
                        &fail_fast_limit,
@@ -764,7 +762,6 @@ smt_convt::resultt bmct::multi_property_check(
       "Solving claim '{}' with solver {}",
       claim.claim_msg,
       runtime_solver->solver_text());
-    total_instance++;
 
     fine_timet sat_start = current_time();
     smt_convt::resultt result = runtime_solver->dec_solve();
@@ -813,14 +810,16 @@ smt_convt::resultt bmct::multi_property_check(
   // For coverage
   if (is_goto_cov)
   {
-    int total = goto_coveraget().get_total_instrument();
-    int tracked_instance = reached_mul_claims.size();
+    const int total = goto_coveraget().get_total_instrument();
+    const int tracked_instance = reached_mul_claims.size();
+    const int total_instance = goto_coveraget().get_total_assert_instance();
 
     if (total)
     {
       log_success("\n[Coverage]\n");
       // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
       log_result("Total Asserts: {}", total);
+      log_result("Reached Assertions Instances: {}", tracked_instance);
       log_result("Total Assertion Instances: {}", total_instance);
     }
 

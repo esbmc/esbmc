@@ -1785,6 +1785,7 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       goto_coveraget tmp;
       tmp.make_asserts_false(goto_functions);
+      tmp.gen_assert_instance(goto_functions);
     }
   }
 
