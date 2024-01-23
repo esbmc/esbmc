@@ -734,18 +734,28 @@ smt_convt::resultt bmct::multi_property_check(
     symex_target_equationt local_eq = eq;
 
     // Set up the current claim and disable slice info output
-    claim_slicer claim(i, false);
+    claim_slicer claim(i, false, is_goto_cov, ns);
     claim.run(local_eq.SSA_steps);
 
     // Drop claims that verified to be failed
     // we use the "comment + location" to distinguish each claim
     // to avoid double verifying the claims that are already verified
     bool is_verified = false;
-    std::string cmt_loc = claim.claim_msg + "\t" + claim.claim_loc;
+    std::string cmt_loc;
     if (is_goto_cov)
+    {
+      cmt_loc = claim.claim_msg + "\t" + claim.claim_loc;
+      // C++20 reached_mul_claims.contains
       is_verified = reached_mul_claims.count(cmt_loc) ? true : false;
+    }
     else
+    {
+      cmt_loc = claim.claim_msg + "\t" + claim.claim_loc;
       is_verified = reached_claims.count(cmt_loc) ? true : false;
+    }
+    if (is_goto_cov && is_verified)
+      // insert to the multiset before skipping the verification process
+      reached_mul_claims.emplace(cmt_loc);
     if (is_verified && !options.get_bool_option("keep-verified-claims"))
       return;
 

@@ -176,7 +176,10 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
         claim_to_keep) // this is the assertion that we should not skip!
       {
         it->ignore = false;
-        claim_msg = it->comment;
+        if (!is_goto_cov)
+          claim_msg = from_expr(ns, "", it->source.pc->guard);
+        else
+          claim_msg = it->comment;
         claim_loc = it->source.pc->location.as_string();
         continue;
       }

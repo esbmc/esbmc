@@ -1771,20 +1771,17 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       // for assertion coverage metric
       options.set_option("make-assert-false", true);
-      // no-simplify, otherwise the coverage will always be 100%
-      // seems that the simplication will remove unreachable claims
-      options.set_option("no-simplify", true);
       // for multi-property
       options.set_option("result-only", true);
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
-      options.set_option("keep-verified-claims", true);
+      options.set_option("keep-verified-claims", false);
     }
 
     if (options.get_bool_option("make-assert-false"))
     {
       goto_coveraget tmp;
-      tmp.make_asserts_false(goto_functions);
+      tmp.make_asserts_false(goto_functions, ns);
       tmp.gen_assert_instance(goto_functions);
     }
   }
