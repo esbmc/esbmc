@@ -1,4 +1,5 @@
 #include <goto-programs/goto_functions.h>
+#include <goto-programs/loop_unroll.h>
 
 class goto_coveraget
 {
@@ -18,6 +19,10 @@ public:
 
   int get_total_instrument() const;
 
+  void gen_assert_instance(goto_functionst goto_functions);
+  int get_total_assert_instance() const;
+
 protected:
   static int total_instrument;
+  static int total_assert_instance;
 };

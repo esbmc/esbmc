@@ -1,6 +1,7 @@
 #include <goto-programs/goto_coverage.h>
 
 int goto_coveraget::total_instrument = 0;
+int goto_coveraget::total_assert_instance = 0;
 
 void goto_coveraget::make_asserts_false(goto_functionst &goto_functions)
 {
@@ -77,4 +78,29 @@ void goto_coveraget::insert_false_assert(
 int goto_coveraget::get_total_instrument() const
 {
   return total_instrument;
+}
+
+// Obtain total assertion instances in goto level via goto-unwind api
+// run the algorithm on the copy of the original goto program
+void goto_coveraget::gen_assert_instance(goto_functionst goto_functions)
+{
+  // 1. execute goto uniwnd
+  bounded_loop_unroller unwind_loops;
+  unwind_loops.run(goto_functions);
+  // 2. calculate the number of assertion instance
+  Forall_goto_functions (f_it, goto_functions)
+    if (f_it->second.body_available && f_it->first != "__ESBMC_main")
+    {
+      goto_programt &goto_program = f_it->second.body;
+      Forall_goto_program_instructions (it, goto_program)
+      {
+        if (it->is_assert())
+          total_assert_instance++;
+      }
+    }
+}
+
+int goto_coveraget::get_total_assert_instance() const
+{
+  return total_assert_instance;
 }
