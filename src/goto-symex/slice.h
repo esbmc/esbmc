@@ -6,6 +6,7 @@
 #include <util/algorithms.h>
 #include <util/options.h>
 #include <boost/range/adaptor/reversed.hpp>
+#include <langapi/language_util.h>
 
 /* Base interface */
 class slicer : public ssa_step_algorithm
@@ -43,8 +44,15 @@ public:
 class claim_slicer : public slicer
 {
 public:
-  explicit claim_slicer(const size_t claim_to_keep, bool show_slice_info)
-    : claim_to_keep(claim_to_keep), show_slice_info(show_slice_info)
+  explicit claim_slicer(
+    const size_t claim_to_keep,
+    bool show_slice_info,
+    bool is_goto_cov,
+    namespacet &ns)
+    : claim_to_keep(claim_to_keep),
+      show_slice_info(show_slice_info),
+      is_goto_cov(is_goto_cov),
+      ns(ns)
   {
     if (!claim_to_keep)
     {
@@ -57,6 +65,8 @@ public:
   std::string claim_msg;
   std::string claim_loc;
   bool show_slice_info;
+  bool is_goto_cov;
+  namespacet ns;
 };
 
 /**
