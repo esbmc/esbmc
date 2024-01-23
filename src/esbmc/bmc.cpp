@@ -819,7 +819,7 @@ smt_convt::resultt bmct::multi_property_check(
       log_success("\n[Coverage]\n");
       // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
       log_result("Total Asserts: {}", total);
-      log_result("Reached Assertions Instances: {}", tracked_instance);
+      log_result("Reached Assertion Instances: {}", tracked_instance);
       log_result("Total Assertion Instances: {}", total_instance);
     }
 
