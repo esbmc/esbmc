@@ -13,7 +13,7 @@ typedef boost::property_tree::ptree xmlnodet;
 class nodet
 {
 private:
-  static short int _id;
+  static unsigned int _id;
 
 public:
   std::string id;
@@ -33,7 +33,7 @@ public:
 class edget
 {
 private:
-  static short int _id;
+  static unsigned int _id;
 
 public:
   std::string id;
