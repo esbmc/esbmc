@@ -11,8 +11,8 @@
 
 typedef boost::property_tree::ptree xmlnodet;
 
-short int nodet::_id = 0;
-short int edget::_id = 0;
+unsigned int nodet::_id = 0;
+unsigned int edget::_id = 0;
 
 void grapht::generate_graphml(optionst &options)
 {
