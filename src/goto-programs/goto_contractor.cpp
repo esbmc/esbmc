@@ -462,8 +462,7 @@ vart::vart()
 void vart::dump()
 {
   std::ostringstream oss;
-  oss << to_symbol2t(this->getSymbol()).get_symbol_name() << this->getInterval()
-      << "\n";
+  oss << this->var_name << " " << this->getInterval();
   log_status("{}", oss.str());
 }
 
@@ -670,18 +669,24 @@ expr_to_ibex_parser::create_constraint_from_expr2t(const expr2tc &expr)
   if (f == nullptr || g == nullptr)
     return nullptr;
 
+  //change expression
+  //replace
   switch (base_object->expr_id)
   {
   case expr2t::expr_ids::greaterthanequal_id:
     c = new ibex::NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars));
     break;
   case expr2t::expr_ids::greaterthan_id:
+    //if int do
+    //base_object->foreach_operand(op){};
+    //c = new ibex::NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars)+1);
     c = new ibex::NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
     break;
   case expr2t::expr_ids::lessthanequal_id:
     c = new ibex::NumConstraint(*vars, (*f)(*vars) <= (*g)(*vars));
     break;
   case expr2t::expr_ids::lessthan_id:
+    //c = new ibex::NumConstraint(*vars, (*f)(*vars) <= (*g)(*vars)-1);
     c = new ibex::NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
     break;
   case expr2t::expr_ids::equality_id:
@@ -725,12 +730,14 @@ expr_to_ibex_parser::create_constraint_from_expr2t_not(const expr2tc &expr)
     c = new ibex::NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars));
     break;
   case expr2t::expr_ids::lessthanequal_id:
+    //c = new ibex::NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars)+1);
     c = new ibex::NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
     break;
   case expr2t::expr_ids::greaterthan_id:
     c = new ibex::NumConstraint(*vars, (*f)(*vars) <= (*g)(*vars));
     break;
   case expr2t::expr_ids::greaterthanequal_id:
+    //c = new ibex::NumConstraint(*vars, (*f)(*vars) <= (*g)(*vars)-1);
     c = new ibex::NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
     break;
   case expr2t::expr_ids::notequal_id:
@@ -888,7 +895,8 @@ void interval_analysis_ibex_contractor::maps_to_domains(
   auto it = int_map.begin();
   while (it != int_map.end())
   {
-    if (map.find(it->first.as_string()) == -1)
+    auto index = map.find(it->first.as_string());
+    if (index == CspMap::NOT_FOUND)
     {
       it++;
       continue;
@@ -896,6 +904,7 @@ void interval_analysis_ibex_contractor::maps_to_domains(
 
     if (it->second.lower)
     {
+      
       map.update_lb_interval(
         it->second.get_lower().to_int64(), it->first.as_string());
     }
@@ -933,9 +942,20 @@ void interval_analysis_ibex_contractor::apply_contractor()
   auto t_0 = std::chrono::steady_clock::now();
   auto X = map.create_interval_vector();
   auto c_out = contractor.get_outer();
+  auto Y = X;
+  int i = 50;
 
   c_out->contract(X);
 
+  //Find a fixed point in 5 or fewer iterations
+  while (Y != X && i >= 0)
+  {
+    Y = X;
+    c_out->contract(X);
+    i--;
+  }
+
+  //copy results to map_outer
   map_outer = CspMap(map);
   map_outer.update_intervals(X);
   apply_time =
@@ -945,7 +965,10 @@ void interval_analysis_ibex_contractor::apply_contractor()
 
 expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
 {
-  expr2tc cond = exp;
+  expr2tc cond = gen_true_expr();
+  // "x > = y "
+  // "x >= y && x >= 0 && x <=10"
+  // "true && x >= 0 && x <=10"
 
   if (map_outer.is_empty_set())
     return gen_false_expr();
@@ -967,47 +990,42 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
         continue;
 
       //if there is a lower bound,
-      if (!isinf(var.second.getInterval().lb()))
+      if (isnormal(var.second.getInterval().lb()))
       {
         //check if it overflows when cast back to integer
-        long integer;
-        if (
-          (long)var.second.getInterval().lb() > 0 &&
-          var.second.getInterval().lb() < 0)
-          integer = (long)var.second.getInterval().lb() + 1;
+        BigInt r(0);
+        if (is_signedbv_type(X->type))
+        {
+          r.setPower2(X->type->get_width() - 1);
+          r = -r;
+        } // if its unsigned then its just zero
+
+        BigInt integerValue(0);
+
+        if (var.second.getInterval().lb() < r.to_int64())
+          integerValue = r;
         else
-          integer = (long)var.second.getInterval().lb();
+          integerValue = (long)ceil(var.second.getInterval().lb());
 
-        auto w = to_symbol2t(X).type->get_width();
-        int is_unsigned = is_unsignedbv_type(X->type) ? 0 : 1;
-        long long type_limit = -pow(2, w - is_unsigned);
-        if (integer < type_limit)
-          integer = type_limit;
-
-        auto lb = create_value_expr(integer, X->type);
+        auto lb = constant_int2tc(X->type, integerValue);
         auto cond1 = greaterthanequal2tc(X, lb);
         cond = and2tc(cond, cond1);
       }
-      if (!isinf(var.second.getInterval().ub()))
+      if (isnormal(var.second.getInterval().ub()))
       {
-        long integerValue;
+        BigInt r(0);
+        r.setPower2(
+          X->type->get_width() - (is_unsignedbv_type(X->type) ? 0 : 1));
+        r = r - 1;
 
-        if (
-          (long)var.second.getInterval().ub() < 0 &&
-          var.second.getInterval().ub() > 0)
-          integerValue = (long)var.second.getInterval().ub() - 1;
+        BigInt integerValue(0);
+
+        if (var.second.getInterval().ub() > r.to_uint64())
+          integerValue = r;
         else
-          integerValue = (long)var.second.getInterval().ub();
+          integerValue = (long)floor(var.second.getInterval().ub());
 
-        //intersect with type limits
-        auto w = to_symbol2t(X).type->get_width();
-        int is_unsigned = is_unsignedbv_type(X->type) ? 0 : 1;
-        double type_limit = pow(2, w - is_unsigned) - 1;
-
-        if (integerValue > type_limit)
-          integerValue = type_limit;
-
-        auto ub = create_value_expr(integerValue, X->type);
+        auto ub = constant_int2tc(X->type, integerValue);
         auto cond2 = lessthanequal2tc(X, ub);
         cond = and2tc(cond, cond2);
       }
@@ -1028,12 +1046,14 @@ void interval_analysis_ibex_contractor::dump()
   oss << "number of variables: " << number_of_vars << "\n";
   oss << "before : " << x1 << " diam: " << x1.diam() << std::endl;
   oss << "after : " << x2 << " diam: " << x2.diam() << std::endl;
-  oss << "Contractor parse time: " << parse_time << "\n";
-  oss << "Contractor maps_to_domains time: " << cpy_time << "\n";
-  oss << "Contractor modularize time: " << mod_time << "\n";
-  oss << "Contractor contract time: " << apply_time << "\n";
+  //oss << "Contractor parse time: " << parse_time << "\n";
+  //oss << "Contractor maps_to_domains time: " << cpy_time << "\n";
+  //oss << "Contractor modularize time: " << mod_time << "\n";
+  //oss << "Contractor contract time: " << apply_time << "\n";
   oss << "------------------------";
-  log_status("{}", oss.str());
+  map.dump();
+  map_outer.dump();
+  log_status("{}\n\n", oss.str());
 }
 
 [[maybe_unused]] void interval_analysis_ibex_contractor::modularize_intervals()
