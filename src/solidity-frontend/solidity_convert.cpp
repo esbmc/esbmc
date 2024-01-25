@@ -29,7 +29,9 @@ solidity_convertert::solidity_convertert(
     current_forStmt(nullptr),
     current_functionName(""),
     current_contractName(""),
-    scope_map({})
+    scope_map({}),
+    tgt_func(config.options.get_option("function")),
+    tgt_cnt(config.options.get_option("contract"))
 {
   std::ifstream in(_contract_path);
   contract_contents.assign(
@@ -103,6 +105,8 @@ bool solidity_convertert::convert()
   }
 
   // secound round: handle contract definition
+  // single contract verification: where the option "--contract" is set.
+  // multiple contracts verification: essentially verify the whole file.
   index = 0;
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
        ++itr, ++index)
@@ -139,10 +143,6 @@ bool solidity_convertert::convert()
       // add implicit construcor function
       if (add_implicit_constructor())
         return true;
-
-      // add function symbols to main
-      if (move_functions_to_main(current_contractName))
-        return true;
     }
 
     // reset
@@ -151,6 +151,21 @@ bool solidity_convertert::convert()
     current_functionDecl = nullptr;
     current_forStmt = nullptr;
     global_scope_id = 0;
+  }
+  // single contract
+  if (!tgt_cnt.empty())
+  {
+    // perform multi-transaction verification
+    // by adding symbols to the "sol_main()" entry function
+    if (move_functions_to_main(tgt_cnt))
+      return true;
+  }
+  // multiple contract
+  if (tgt_func.empty() && tgt_cnt.empty())
+  {
+    log_error(
+      "Multiple contracts verification is not supported yet. Aborting...");
+    abort();
   }
 
   return false; // 'false' indicates successful completion.
@@ -4329,7 +4344,7 @@ bool solidity_convertert::get_empty_array_ref(
 }
 
 /*
-  verify the contract as a whole.
+  perform multi-transaction verification
   the idea is to verify the assertions that must be held 
   in any function calling order.
 */
@@ -4337,13 +4352,11 @@ bool solidity_convertert::move_functions_to_main(
   const std::string &contractName)
 {
   // return if "function" is set or "contract" is unset
-  if (
-    !config.options.get_option("function").empty() ||
-    config.options.get_option("contract").empty())
+  if (!tgt_func.empty() || tgt_cnt.empty())
     return false;
 
   // return if it's not the target contract
-  if (contractName != config.options.get_option("contract"))
+  if (contractName != tgt_cnt)
     return false;
 
   /*
@@ -4367,6 +4380,8 @@ bool solidity_convertert::move_functions_to_main(
       if(nondet_bool) B();
     }
   }
+
+  Additionally, we need to handle the inheritance. Theoretically, we need to merge (i.e. create a copy) the public and internal state variables and functions inside Base contracts into the Derive contract. However, in practice we do not need to do so. 
   */
 
   // 0. initialize "sol_main" body and while-loop body

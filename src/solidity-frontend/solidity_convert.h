@@ -26,38 +26,6 @@ public:
   bool convert();
 
 protected:
-  contextt &context;
-  namespacet ns;
-  nlohmann::json
-    &ast_json; // json for Solidity AST. Use vector for multiple contracts
-  const std::string &sol_func;      // Solidity function to be verified
-  const std::string &contract_path; //smart contract source file
-
-  std::string absolute_path;
-  std::string contract_contents = "";
-  int global_scope_id; // scope id of "ContractDefinition"
-
-  unsigned int current_scope_var_num;
-  const nlohmann::json *current_functionDecl;
-  const nlohmann::json *current_forStmt;
-  // Use current level of BinOp type as the "anchor" type for numerical literal conversion:
-  // In order to remove the unnecessary implicit IntegralCast. We need type of current level of BinaryOperator.
-  // All numeric literals will be implicitly converted to this type. Pop it when finishing the current level of BinaryOperator.
-  // TODO: find a better way to deal with implicit type casting if it's not able to cope with compelx rules
-  std::stack<const nlohmann::json *> current_BinOp_type;
-  std::string current_functionName;
-
-  std::string current_contractName;
-  std::string current_fileName;
-
-  // Auxiliary data structures:
-  // Mapping from the Contract_id to the Contract_Name
-  std::map<int, std::string> exportedSymbolsList;
-  // Inheritance Order Record
-  std::map<std::string, std::vector<int>> linearizedBaseList;
-  // Store the ast_node["id"] of contract/struct/function/...
-  std::unordered_map<int, std::string> scope_map;
-
   bool convert_ast_nodes(const nlohmann::json &contract_def);
 
   // conversion functions
@@ -194,6 +162,38 @@ protected:
   void convert_type_expr(const namespacet &ns, exprt &dest, const typet &type);
   bool convert_hex_literal(std::string the_value, exprt &dest, const int n = 0);
 
+  contextt &context;
+  namespacet ns;
+  nlohmann::json
+    &ast_json; // json for Solidity AST. Use vector for multiple contracts
+  const std::string &sol_func;      // Solidity function to be verified
+  const std::string &contract_path; //smart contract source file
+
+  std::string absolute_path;
+  std::string contract_contents = "";
+  int global_scope_id; // scope id of "ContractDefinition"
+
+  unsigned int current_scope_var_num;
+  const nlohmann::json *current_functionDecl;
+  const nlohmann::json *current_forStmt;
+  // Use current level of BinOp type as the "anchor" type for numerical literal conversion:
+  // In order to remove the unnecessary implicit IntegralCast. We need type of current level of BinaryOperator.
+  // All numeric literals will be implicitly converted to this type. Pop it when finishing the current level of BinaryOperator.
+  // TODO: find a better way to deal with implicit type casting if it's not able to cope with compelx rules
+  std::stack<const nlohmann::json *> current_BinOp_type;
+  std::string current_functionName;
+
+  std::string current_contractName;
+  std::string current_fileName;
+
+  // Auxiliary data structures:
+  // Mapping from the Contract_id to the Contract_Name
+  std::map<int, std::string> exportedSymbolsList;
+  // Inheritance Order Record
+  std::map<std::string, std::vector<int>> linearizedBaseList;
+  // Store the ast_node["id"] of contract/struct/function/...
+  std::unordered_map<int, std::string> scope_map;
+
   static constexpr const char *mode = "C++";
 
   // The prefix for the id of each class
@@ -204,6 +204,11 @@ protected:
   // dealing with the implicit constructor call
   // this is to avoid reference to stack memory associated with local variable returned
   const nlohmann::json empty_json;
+
+  // --function
+  std::string tgt_func;
+  // --contract
+  std::string tgt_cnt;
 
 private:
   bool get_elementary_type_name_uint(
