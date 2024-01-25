@@ -80,6 +80,17 @@ bool solidity_convertert::convert()
 
   // reasoning-based verification
 
+  // populate exportedSymbolsList
+  int c_id;
+  std::string c_name;
+  for (const auto &itr : ast_json["exportedSymbols"].items())
+  {
+    //! Assume a contract has only one id
+    c_id = itr.value()[0].get<int>();
+    c_name = itr.key();
+    exportedSymbolsList.insert(std::pair<int, std::string>(c_id, c_name));
+  }
+
   // first round: handle definitions that can be outside of the contract
   // including struct, enum, interface, event, error, library...
   // noted that some can also be inside the contract, e.g. struct, enum...
@@ -110,6 +121,12 @@ bool solidity_convertert::convert()
         if (get_noncontract_defition(*ittr))
           return true;
       }
+
+      // poplulate linearizedBaseList
+      // this is esstinally the calling order of the constructor
+      for (const auto &id : (*itr)["linearizedBaseContracts"].items())
+        linearizedBaseList[current_contractName].push_back(
+          id.value().get<int>());
 
       // add a struct symbol for each contract
       // e.g. contract Base => struct Base
