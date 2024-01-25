@@ -405,6 +405,23 @@ public:
   {
     return is_empty_vector;
   }
+  void dump()
+  {
+    std::ostringstream oss;
+    oss << "This map has : " << this->n;
+    if(is_empty_vector)
+    {
+      oss << "empty vector";
+      log_status("{}",oss.str());
+      return;
+    }
+    log_status("{}",oss.str());
+
+    for(auto var:var_map)
+    {
+      var.second.dump();
+    }
+  }
 };
 //-----------------------------------------------------------------------------------------------------------------
 /// This class will parse ESBMC expressions to ibex expressions:
@@ -640,8 +657,8 @@ public:
     else if (map.var_map.size() == 0)
       return false;
 
-    ibex::CtcFixPoint *f = new ibex::CtcFixPoint(*c);
-    contractor = Contractor(f);
+    //ibex::CtcFixPoint *f = new ibex::CtcFixPoint(*c);
+    contractor = Contractor(c);
     return true;
   }
 
@@ -690,6 +707,8 @@ private:
   }
   std::ostringstream to_oss(ibex::Ctc *c)
   {
+    if (auto fixpoint = dynamic_cast<ibex::CtcFixPoint *>(c))
+      c = &(fixpoint->ctc);
     std::ostringstream oss;
     if (auto ctc_compo = dynamic_cast<ibex::CtcCompo *>(c))
       oss = list_to_oss(&ctc_compo->list, true);
