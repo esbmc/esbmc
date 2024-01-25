@@ -902,17 +902,27 @@ void interval_analysis_ibex_contractor::maps_to_domains(
       continue;
     }
 
+    auto is_unsigned = is_unsignedbv_type(
+      map.var_map.find(it->first.as_string())->second.getSymbol());
+
     if (it->second.lower)
     {
-      
-      map.update_lb_interval(
-        it->second.get_lower().to_int64(), it->first.as_string());
+      if (is_unsigned)
+        map.update_lb_interval(
+          it->second.get_lower().to_uint64(), it->first.as_string());
+      else
+        map.update_lb_interval(
+          it->second.get_lower().to_int64(), it->first.as_string());
     }
 
     if (it->second.upper)
     {
-      map.update_ub_interval(
-        it->second.get_upper().to_int64(), it->first.as_string());
+      if (is_unsigned)
+        map.update_ub_interval(
+          it->second.get_upper().to_uint64(), it->first.as_string());
+      else
+        map.update_ub_interval(
+          it->second.get_upper().to_int64(), it->first.as_string());
     }
     it++;
   }
@@ -966,9 +976,6 @@ void interval_analysis_ibex_contractor::apply_contractor()
 expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
 {
   expr2tc cond = gen_true_expr();
-  // "x > = y "
-  // "x >= y && x >= 0 && x <=10"
-  // "true && x >= 0 && x <=10"
 
   if (map_outer.is_empty_set())
     return gen_false_expr();
