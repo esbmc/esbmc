@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <stack>
+#include <vector>
 #include <map>
 #include <queue>
 #include <util/context.h>
@@ -49,7 +50,12 @@ protected:
   std::string current_contractName;
   std::string current_fileName;
 
-  // an auxiliary data structure to store the ast_node["id"] of contract/struct/function/...
+  // Auxiliary data structures:
+  // Mapping from the Contract_id to the Contract_Name
+  std::map<int, std::string> exportedSymbolsList;
+  // Inheritance Order Record
+  std::map<std::string, std::vector<int>> linearizedBaseList;
+  // Store the ast_node["id"] of contract/struct/function/...
   std::unordered_map<int, std::string> scope_map;
 
   bool convert_ast_nodes(const nlohmann::json &contract_def);
