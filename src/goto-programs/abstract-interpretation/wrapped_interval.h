@@ -12,9 +12,9 @@ public:
   explicit wrapped_interval(const type2tc &t)
     : t(t), upper_bound(compute_upper_bound(t))
   {
-    assert(is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t));
-    lower_set = true;
-    upper_set = true;
+    assert(
+      is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t) ||
+      is_pointer_type(t));
 
     lower = 0;
     upper = is_bool_type(t) ? 1 : compute_upper_bound(t) - 1;
@@ -24,7 +24,7 @@ public:
   {
     auto value = b;
     // TODO: I could use a better way here!
-    if(b.is_negative() && !b.is_zero())
+    if (b.is_negative() && !b.is_zero())
       value += get_upper_bound();
 
     assert(value >= 0);
@@ -36,7 +36,7 @@ public:
   {
     auto value = convert_to_wrap(b);
 
-    if(is_upper)
+    if (is_upper)
       upper = value;
     else
       lower = value;
@@ -47,14 +47,14 @@ public:
     auto is_signed = is_signedbv_type(t);
     auto value = is_upper ? upper : lower;
 
-    if(is_signed)
+    if (is_signed)
     {
       auto middle = get_upper_bound() / 2; // [128] 256
-      if(value >= middle)
-        value -= middle * 2;
+      if (*value >= middle)
+        *value -= middle * 2;
     }
 
-    return value;
+    return *value;
   }
 
   bool bottom = false;
@@ -72,16 +72,16 @@ public:
   {
     wrapped_interval result(w.t);
 
-    if(w.is_top())
+    if (w.is_top())
       result.bottom = true;
 
-    if(!w.is_bottom())
+    if (!w.is_bottom())
     {
       auto mod = w.get_upper_bound();
-      result.lower = (w.upper + 1) % mod;
-      result.upper = (w.lower - 1) % mod;
-      if(result.upper < 0)
-        result.upper += mod;
+      result.lower = (*w.upper + 1) % mod;
+      result.upper = (*w.lower - 1) % mod;
+      if (result.upper < 0)
+        *result.upper += mod;
     }
     return result;
   }
@@ -96,10 +96,10 @@ public:
     auto mod = compute_upper_bound(t);
     // https://torstencurdt.com/tech/posts/modulo-of-negative-numbers/
     auto lhs = (b - a) % mod;
-    if(lhs < 0)
+    if (lhs < 0)
       lhs = lhs + mod;
     auto rhs = (c - a) % mod;
-    if(rhs < 0)
+    if (rhs < 0)
       rhs = rhs + mod;
 
     return lhs <= rhs;
@@ -107,7 +107,7 @@ public:
 
   void make_le_than(const BigInt &v) override // add upper bound
   {
-    if(get_upper_bound() <= v)
+    if (get_upper_bound() <= v)
       return;
     wrapped_interval value(t);
     value.lower = get_min();
@@ -119,14 +119,14 @@ public:
 
   void make_le_than(const wrapped_interval &rhs)
   {
-    if(rhs.is_bottom())
+    if (rhs.is_bottom())
     {
       bottom = true;
       return;
     }
 
     // RHS contains upper bound (MAX_INT) we are always less than that
-    if(rhs.contains(get_max()))
+    if (rhs.contains(get_max()))
       return;
 
     wrapped_interval value(t);
@@ -146,14 +146,14 @@ public:
 
   void make_ge_than(const wrapped_interval &rhs) // add upper bound
   {
-    if(rhs.is_bottom())
+    if (rhs.is_bottom())
     {
       bottom = true;
       return;
     }
 
     // RHS contains lower bound (MIN_INT) we are always greater than that
-    if(rhs.contains(get_min()))
+    if (rhs.contains(get_min()))
       return;
 
     wrapped_interval value(t);
@@ -178,23 +178,23 @@ public:
 
   BigInt cardinality() const
   {
-    if(is_bottom())
+    if (is_bottom())
       return 0;
 
     auto mod = get_upper_bound();
     assert(mod != 0);
-    auto card = (((upper - lower) % mod) + 1);
-    if(card < 0)
+    auto card = (((*upper - *lower) % mod) + 1);
+    if (card < 0)
       card += mod;
     return card;
   }
 
   bool contains(const BigInt &e) const override
   {
-    if(is_top())
+    if (is_top())
       return true;
 
-    return wrapped_le(e, lower, upper, t);
+    return wrapped_le(e, *lower, *upper, t);
   }
 
   bool is_equal(const wrapped_interval &rhs) const
@@ -204,25 +204,25 @@ public:
 
   bool is_included(const wrapped_interval &rhs) const
   {
-    if(is_bottom() || rhs.is_top() || is_equal(rhs))
+    if (is_bottom() || rhs.is_top() || is_equal(rhs))
       return true;
-    if(is_top() || rhs.is_bottom())
+    if (is_top() || rhs.is_bottom())
       return false;
 
-    return rhs.contains(lower) && rhs.contains(upper) &&
-           (!contains(rhs.lower) || !contains(rhs.upper));
+    return rhs.contains(*lower) && rhs.contains(*upper) &&
+           (!contains(*rhs.lower) || !contains(*rhs.upper));
   }
 
   static wrapped_interval
   extend(const wrapped_interval &s, const wrapped_interval &t)
   {
-    if(s.is_included(t))
+    if (s.is_included(t))
       return t;
-    if(t.is_included(s))
+    if (t.is_included(s))
       return s;
 
     wrapped_interval result(s.t);
-    if(complement(s).is_included(t))
+    if (complement(s).is_included(t))
     {
       return result;
     }
@@ -236,9 +236,9 @@ public:
   gap(const wrapped_interval &s, const wrapped_interval &t)
   {
     wrapped_interval result(s.t);
-    if(
-      !t.is_bottom() && !s.is_bottom() && !t.contains(s.upper) &&
-      !s.contains(t.lower))
+    if (
+      !t.is_bottom() && !s.is_bottom() && !t.contains(*s.upper) &&
+      !s.contains(*t.lower))
     {
       result.lower = t.lower;
       result.upper = s.upper;
@@ -260,7 +260,7 @@ public:
     wrapped_interval bottom;
     bottom.bottom = true;
 
-    if(r.empty())
+    if (r.empty())
       return bottom;
     bottom.t = r[0].t;
     auto f = bottom;
@@ -268,23 +268,24 @@ public:
 
     // Sort by left bound
     std::sort(r.begin(), r.end(), [](auto a, auto b) {
-      if(a.is_bottom())
+      if (a.is_bottom())
         return true;
-      if(b.is_bottom())
+      if (b.is_bottom())
         return false;
 
-      return a.lower < b.lower;
+      return *a.lower < *b.lower;
     });
 
-    for(unsigned i = 0; i < r.size(); ++i)
+    for (unsigned i = 0; i < r.size(); ++i)
     {
-      if(r[i].is_top() || (wrapped_le(r[i].upper, 0, r[i].lower, r[i].t)))
+      if (
+        r[i].is_top() || (wrapped_le(*(r[i].upper), 0, *(r[i].lower), r[i].t)))
       {
         f = extend(f, r[i]);
       }
     }
 
-    for(unsigned i = 0; i < r.size(); ++i)
+    for (unsigned i = 0; i < r.size(); ++i)
     {
       g = bigger(g, gap(f, r[i]));
       f = extend(f, r[i]);
@@ -304,10 +305,10 @@ public:
     if(t.is_included(s))
       return s;
 
-    const BigInt a = s.lower;
-    const BigInt b = s.upper;
-    const BigInt c = t.lower;
-    const BigInt d = t.upper;
+    const BigInt &a = s.lower;
+    const BigInt &b = s.upper;
+    const BigInt &c = t.lower;
+    const BigInt &d = t.upper;
 
     wrapped_interval result(s.t);
 
@@ -381,27 +382,27 @@ public:
 
     std::vector<wrapped_interval> result;
 
-    if(s.is_bottom() || t.is_bottom())
+    if (s.is_bottom() || t.is_bottom())
       return result;
 
-    if(s.is_equal(t) || s.is_top())
+    if (s.is_equal(t) || s.is_top())
     {
       result.push_back(t);
       return result;
     }
 
-    if(t.is_top())
+    if (t.is_top())
     {
       result.push_back(s);
       return result;
     }
 
-    const BigInt a = s.lower;
-    const BigInt b = s.upper;
-    const BigInt c = t.lower;
-    const BigInt d = t.upper;
+    const BigInt &a = *s.lower;
+    const BigInt &b = *s.upper;
+    const BigInt &c = *t.lower;
+    const BigInt &d = *t.upper;
 
-    if(t.contains(a) && t.contains(b) && s.contains(c) && s.contains(d))
+    if (t.contains(a) && t.contains(b) && s.contains(c) && s.contains(d))
     {
       wrapped_interval a_d(s.t);
       a_d.lower = a;
@@ -416,19 +417,19 @@ public:
       return result;
     }
 
-    if(t.contains(a) && t.contains(b))
+    if (t.contains(a) && t.contains(b))
     {
       result.push_back(s);
       return result;
     }
 
-    if(s.contains(c) && s.contains(d))
+    if (s.contains(c) && s.contains(d))
     {
       result.push_back(t);
       return result;
     }
 
-    if(t.contains(a) && s.contains(d) && !t.contains(b) && !s.contains(c))
+    if (t.contains(a) && s.contains(d) && !t.contains(b) && !s.contains(c))
     {
       wrapped_interval a_d(s.t);
       a_d.lower = a;
@@ -438,7 +439,7 @@ public:
       return result;
     }
 
-    if(t.contains(b) && s.contains(c) && !t.contains(a) && !s.contains(d))
+    if (t.contains(b) && s.contains(c) && !t.contains(a) && !s.contains(d))
     {
       wrapped_interval c_b(s.t);
       c_b.lower = c;
@@ -458,39 +459,39 @@ public:
     // TODO: this will probably not be needed!
     assert(s.t == t.t);
 
-    if(s.is_included(t))
+    if (s.is_included(t))
       return s;
-    if(t.is_included(s))
+    if (t.is_included(s))
       return t;
 
-    const BigInt a = s.lower;
-    const BigInt b = s.upper;
-    const BigInt c = t.lower;
-    const BigInt d = t.upper;
+    const BigInt &a = *s.lower;
+    const BigInt &b = *s.upper;
+    const BigInt &c = *t.lower;
+    const BigInt &d = *t.upper;
 
     wrapped_interval result(s.t);
 
-    if(!t.contains(a) && !t.contains(b) && !s.contains(c) && !s.contains(d))
+    if (!t.contains(a) && !t.contains(b) && !s.contains(c) && !s.contains(d))
     {
       result.bottom = true;
       return result;
     }
 
-    if(s.contains(d) && t.contains(a))
+    if (s.contains(d) && t.contains(a))
     {
       result.lower = a;
       result.upper = d;
       return result;
     }
 
-    if(t.contains(b) && s.contains(c))
+    if (t.contains(b) && s.contains(c))
     {
       result.lower = c;
       result.upper = b;
       return result;
     }
 
-    if(
+    if (
       (s.cardinality() < t.cardinality()) ||
       (s.cardinality() == t.cardinality() && a <= c))
     {
@@ -516,47 +517,47 @@ public:
     assert(f1.t == f2.t);
     wrapped_interval result(f2.t);
 #if 1
-    if(f2.is_included(f1))
+    if (f2.is_included(f1))
       return f1;
 
     // The interval is too big already, give up to TOP
-    if(f1.cardinality() >= f1.get_upper_bound() / 2)
+    if (f1.cardinality() >= f1.get_upper_bound() / 2)
       return result;
 
     auto f1_to_f2 = over_join(f1, f2);
     assert(!f1_to_f2.is_bottom());
 
     // Lower bound keeps the same but upper increases
-    if(f1_to_f2.lower == f1.lower && f1_to_f2.upper == f2.upper)
+    if (*f1_to_f2.lower == *f1.lower && *f1_to_f2.upper == *f2.upper)
     {
       wrapped_interval double_upper(f1.t);
-      double_upper.lower = f1_to_f2.lower;
+      double_upper.lower = *f1_to_f2.lower;
       double_upper.upper =
-        ((((2 * f1.upper) - f1.lower) % f1.get_upper_bound()) + 1) %
+        ((((2 * *f1.upper) - *f1.lower) % f1.get_upper_bound()) + 1) %
         f1.get_upper_bound();
       return over_join(f1_to_f2, double_upper);
     }
 
     // Upper bound keeps the same but lower decreases
-    if(f1_to_f2.lower == f2.lower && f1_to_f2.upper == f1.upper)
+    if (*f1_to_f2.lower == *f2.lower && *f1_to_f2.upper == *f1.upper)
     {
       wrapped_interval double_lower(f1.t);
       double_lower.lower =
-        ((((2 * f1.lower) - f1.upper) % f1.get_upper_bound()) - 1) %
+        ((((2 * *f1.lower) - *f1.upper) % f1.get_upper_bound()) - 1) %
         f1.get_upper_bound();
-      double_lower.upper = f1.upper;
+      double_lower.upper = *f1.upper;
       return over_join(f1_to_f2, double_lower);
     }
 
     // Lower and upper bound of f1 is included in f2
-    if(f2.contains(f1.lower) && f2.contains(f1.upper))
+    if (f2.contains(*f1.lower) && f2.contains(*f1.upper))
     {
       wrapped_interval magic(f1.t);
       // Maintain the lower
-      magic.lower = f2.lower;
+      magic.lower = *f2.lower;
       // Increase the upper by the difference between uppers
-      magic.upper = (((f2.upper + (((2 * f1.upper) - (2 * f1.lower)) %
-                                   f1.get_upper_bound())) %
+      magic.upper = (((*f2.upper + (((2 * *f1.upper) - (2 * *f1.lower)) %
+                                    f1.get_upper_bound())) %
                       f1.get_upper_bound()) +
                      1) %
                     f1.get_upper_bound();
@@ -574,19 +575,19 @@ public:
     assert(lhs.t->get_width() == rhs.t->get_width());
     wrapped_interval result(lhs.t);
 
-    if(lhs.is_bottom() || rhs.is_bottom())
+    if (lhs.is_bottom() || rhs.is_bottom())
     {
       result.bottom = true;
       return result;
     }
 
     auto mod = lhs.get_upper_bound();
-    if(lhs.cardinality() + rhs.cardinality() <= mod)
+    if (lhs.cardinality() + rhs.cardinality() <= mod)
     {
-      result.lower = (lhs.lower + rhs.lower) % mod;
-      result.upper = (lhs.upper + rhs.upper) % mod;
-      assert(result.lower >= 0);
-      assert(result.upper >= 0);
+      result.lower = (*lhs.lower + *rhs.lower) % mod;
+      result.upper = (*lhs.upper + *rhs.upper) % mod;
+      assert(*result.lower >= 0);
+      assert(*result.upper >= 0);
     }
 
     return result;
@@ -598,23 +599,23 @@ public:
     assert(lhs.t->get_width() == rhs.t->get_width());
     wrapped_interval result(lhs.t);
 
-    if(lhs.is_bottom() || rhs.is_bottom())
+    if (lhs.is_bottom() || rhs.is_bottom())
     {
       result.bottom = true;
       return result;
     }
 
     auto mod = lhs.get_upper_bound();
-    if(lhs.cardinality() + rhs.cardinality() <= mod)
+    if (lhs.cardinality() + rhs.cardinality() <= mod)
     {
-      result.lower = (lhs.lower - rhs.upper) % mod;
-      result.upper = (lhs.upper - rhs.lower) % mod;
-      if(result.lower < 0)
-        result.lower += mod;
-      if(result.upper < 0)
-        result.upper += mod;
-      assert(result.lower >= 0);
-      assert(result.upper >= 0);
+      result.lower = (*lhs.lower - *rhs.upper) % mod;
+      result.upper = (*lhs.upper - *rhs.lower) % mod;
+      if (*result.lower < 0)
+        *result.lower += mod;
+      if (*result.upper < 0)
+        *result.upper += mod;
+      assert(*result.lower >= 0);
+      assert(*result.upper >= 0);
     }
 
     return result;
@@ -643,10 +644,10 @@ public:
   std::vector<wrapped_interval> ssplit() const
   {
     std::vector<wrapped_interval> r;
-    if(is_bottom())
+    if (is_bottom())
       return r;
 
-    if(is_top())
+    if (is_top())
     {
       wrapped_interval north(t);
       wrapped_interval south(t);
@@ -662,7 +663,7 @@ public:
       return r;
     }
 
-    if(!south_pole(t).is_included(*this))
+    if (!south_pole(t).is_included(*this))
     {
       r.push_back(*this);
       return r;
@@ -692,10 +693,10 @@ public:
   std::vector<wrapped_interval> nsplit() const
   {
     std::vector<wrapped_interval> r;
-    if(is_bottom())
+    if (is_bottom())
       return r;
 
-    if(is_top())
+    if (is_top())
     {
       wrapped_interval north(t);
       wrapped_interval south(t);
@@ -711,7 +712,7 @@ public:
       return r;
     }
 
-    if(!north_pole(t).is_included(*this))
+    if (!north_pole(t).is_included(*this))
     {
       r.push_back(*this);
       return r;
@@ -736,9 +737,9 @@ public:
   {
     std::vector<wrapped_interval> r;
 
-    for(const auto &w : u.nsplit())
+    for (const auto &w : u.nsplit())
     {
-      for(const auto &s : w.ssplit())
+      for (const auto &s : w.ssplit())
       {
         r.push_back(s);
       }
@@ -754,35 +755,32 @@ public:
   static BigInt trunc(const BigInt &b, unsigned k)
   {
     // TODO: and operation for bigint
-    BigInt r = 1;
-    r.setPower2(k);
-
-    return b.to_uint64() & (r.to_uint64() - 1);
+    return b % BigInt::power2(k);
   }
 
   static wrapped_interval
   cast(const wrapped_interval &old, const type2tc &new_type)
   {
     // Special case for Bool!
-    if(is_bool_type(new_type))
+    if (is_bool_type(new_type))
     {
       wrapped_interval boolean(new_type);
       boolean.lower = 0;
       boolean.upper = 1;
 
-      if(!old.contains(0))
+      if (!old.contains(0))
         boolean.lower = 1;
 
-      else if(old.singleton())
+      else if (old.singleton())
         boolean.upper = 0;
 
       return boolean;
     }
 
-    if(new_type->get_width() < old.t->get_width())
+    if (new_type->get_width() < old.t->get_width())
       return old.trunc(new_type);
 
-    if(is_signedbv_type(old.t))
+    if (is_signedbv_type(old.t))
       return old.sign_extension(new_type);
 
     return old.zero_extension(new_type);
@@ -792,7 +790,7 @@ public:
   {
     std::vector<wrapped_interval> parts;
 
-    for(auto &interval : ssplit())
+    for (auto &interval : ssplit())
     {
       wrapped_interval result(cast);
       result.lower = interval.lower;
@@ -805,23 +803,21 @@ public:
 
   wrapped_interval left_shift(unsigned k) const
   {
-    if(is_bottom())
+    if (is_bottom())
       return *this;
 
     wrapped_interval result(t);
-    if(
-      trunc(lower, t->get_width() - k) == lower &&
-      trunc(upper, t->get_width() - k) == upper)
+    if (
+      trunc(*lower, t->get_width() - k) == *lower &&
+      trunc(*upper, t->get_width() - k) == *upper)
     {
-      result.lower = lower << k;
-      result.upper = upper << k;
+      result.lower = *lower << k;
+      result.upper = *upper << k;
     }
     else
     {
       result.lower = 0;
-      BigInt m(1);
-      m.setPower2(k);
-      result.upper = (get_upper_bound() - 1) - (m - 1);
+      result.upper = (get_upper_bound() - 1) - BigInt::power2m1(k);
     }
     return result;
   }
@@ -829,10 +825,10 @@ public:
   static wrapped_interval
   left_shift(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    if(lhs.is_bottom())
+    if (lhs.is_bottom())
       return lhs;
 
-    if(rhs.lower == rhs.upper && !rhs.is_bottom())
+    if (rhs.lower == rhs.upper && !rhs.is_bottom())
       return lhs.left_shift(rhs.get_lower().to_uint64());
 
     wrapped_interval result(lhs.t);
@@ -841,21 +837,19 @@ public:
 
   wrapped_interval logical_right_shift(unsigned k) const
   {
-    if(is_bottom())
+    if (is_bottom())
       return *this;
 
     wrapped_interval result(t);
-    if(south_pole(t).is_included(*this))
+    if (south_pole(t).is_included(*this))
     {
       result.lower = 0;
-      BigInt m(1);
-      m.setPower2(t->get_width() - k);
-      result.upper = (m - 1);
+      result.upper = BigInt::power2m1(t->get_width() - k);
     }
     else
     {
-      result.lower = lower >> k;
-      result.upper = upper >> k;
+      result.lower = *lower >> k;
+      result.upper = *upper >> k;
     }
     return result;
   }
@@ -863,10 +857,10 @@ public:
   static wrapped_interval
   logical_right_shift(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    if(lhs.is_bottom())
+    if (lhs.is_bottom())
       return lhs;
 
-    if(rhs.lower == rhs.upper && !rhs.is_bottom())
+    if (rhs.lower == rhs.upper && !rhs.is_bottom())
       return lhs.logical_right_shift(rhs.get_lower().to_uint64());
 
     wrapped_interval result(lhs.t);
@@ -875,17 +869,15 @@ public:
 
   wrapped_interval arithmetic_right_shift(unsigned k) const
   {
-    if(is_bottom())
+    if (is_bottom())
       return *this;
 
     wrapped_interval result(t);
-    if(north_pole(t).is_included(*this))
+    if (north_pole(t).is_included(*this))
     {
-      BigInt m(1);
-      m.setPower2(t->get_width() - k);
-      result.lower = (get_upper_bound() - 1) - (m - 1);
-
-      result.upper = (m - 1);
+      BigInt m = BigInt::power2m1(t->get_width() - k);
+      result.lower = (get_upper_bound() - 1) - m;
+      result.upper = m;
     }
     else
     {
@@ -899,10 +891,10 @@ public:
     const wrapped_interval &lhs,
     const wrapped_interval &rhs)
   {
-    if(lhs.is_bottom())
+    if (lhs.is_bottom())
       return lhs;
 
-    if(rhs.lower == rhs.upper && !rhs.is_bottom())
+    if (rhs.lower == rhs.upper && !rhs.is_bottom())
       return lhs.arithmetic_right_shift(rhs.get_lower().to_uint64());
 
     wrapped_interval result(lhs.t);
@@ -913,12 +905,13 @@ public:
   equality(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     wrapped_interval result(lhs.t);
-    if(lhs.singleton() && rhs.singleton() && lhs.get_lower() == rhs.get_lower())
+    if (
+      lhs.singleton() && rhs.singleton() && lhs.get_lower() == rhs.get_lower())
     {
       result.set_lower(1);
       result.set_upper(1);
     }
-    else if(intersection(lhs, rhs).empty())
+    else if (intersection(lhs, rhs).empty())
     {
       result.set_lower(0);
       result.set_upper(0);
@@ -928,7 +921,7 @@ public:
 
   static wrapped_interval invert_bool(const wrapped_interval &i)
   {
-    if(!i.singleton())
+    if (!i.singleton())
       return i;
 
     auto result = i;
@@ -948,12 +941,12 @@ public:
   less_than(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     wrapped_interval result(lhs.t);
-    if(lhs.get_upper() < rhs.get_lower())
+    if (lhs.get_upper() < rhs.get_lower())
     {
       result.set_lower(1);
       result.set_upper(1);
     }
-    else if(lhs.get_lower() >= rhs.get_upper())
+    else if (lhs.get_lower() >= rhs.get_upper())
     {
       result.set_lower(0);
       result.set_upper(0);
@@ -970,12 +963,12 @@ public:
   less_than_equal(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     wrapped_interval result(lhs.t);
-    if(lhs.get_upper() <= rhs.get_lower())
+    if (lhs.get_upper() <= rhs.get_lower())
     {
       result.set_lower(1);
       result.set_upper(1);
     }
-    else if(lhs.get_lower() > rhs.get_upper())
+    else if (lhs.get_lower() > rhs.get_upper())
     {
       result.set_lower(0);
       result.set_upper(0);
@@ -1006,21 +999,21 @@ public:
 
     auto compute_outer_region = [this, &cast](bool bit) {
       BigInt result = 0;
-      if(bit)
+      if (bit)
         result = (compute_upper_bound(cast) - 1) - (get_upper_bound() - 1);
 
       return result;
     };
 
-    for(auto &interval : nsplit())
+    for (auto &interval : nsplit())
     {
       wrapped_interval result(cast);
       result.lower =
-        compute_outer_region(most_significant_bit(interval.lower)) +
-        interval.lower;
+        compute_outer_region(most_significant_bit(*interval.lower)) +
+        *interval.lower;
       result.upper =
-        compute_outer_region(most_significant_bit(interval.upper)) +
-        interval.upper;
+        compute_outer_region(most_significant_bit(*interval.upper)) +
+        *interval.upper;
       parts.push_back(result);
     }
 
@@ -1032,22 +1025,22 @@ public:
     wrapped_interval result(cast);
     auto k = cast->get_width();
     assert(k <= t->get_width());
-    if(is_bottom())
+    if (is_bottom())
       result.bottom = true;
 
-    else if(
-      (lower >> k) == (upper >> k) && (trunc(lower, k) <= trunc(upper, k)))
+    else if (
+      (*lower >> k) == (*upper >> k) && (trunc(*lower, k) <= trunc(*upper, k)))
     {
-      result.lower = trunc(lower, k);
-      result.upper = trunc(upper, k);
+      result.lower = trunc(*lower, k);
+      result.upper = trunc(*upper, k);
     }
 
-    else if(
-      ((lower >> k) + 1 % 2) == (upper >> k) % 2 &&
-      (trunc(lower, k) > trunc(upper, k)))
+    else if (
+      ((*lower >> k) + 1 % 2) == (*upper >> k) % 2 &&
+      (trunc(*lower, k) > trunc(*upper, k)))
     {
-      result.lower = trunc(lower, k);
-      result.upper = trunc(upper, k);
+      result.lower = trunc(*lower, k);
+      result.upper = trunc(*upper, k);
     }
     return result;
   }
@@ -1062,18 +1055,18 @@ public:
 
     auto up = lhs.get_upper_bound();
 
-    auto &a = lhs.lower;
-    auto &b = lhs.upper;
-    auto &c = rhs.lower;
-    auto &d = rhs.upper;
+    auto &a = *lhs.lower;
+    auto &b = *lhs.upper;
+    auto &c = *rhs.lower;
+    auto &d = *rhs.upper;
 
-    if(b * d - a * c < up)
+    if (b * d - a * c < up)
     {
       w_u.lower = (a * c) % up;
       w_u.upper = (b * d) % up;
     }
 
-    if(
+    if (
       ((w_s.most_significant_bit(a) == w_s.most_significant_bit(b)) ==
        (w_s.most_significant_bit(c) == w_s.most_significant_bit(d))) &&
       (b * d - a * c < up))
@@ -1081,7 +1074,7 @@ public:
       w_s.lower = a * c % up;
       w_s.upper = b * d % up;
     }
-    else if(
+    else if (
       (w_s.most_significant_bit(a) && w_s.most_significant_bit(b)) &&
       (!w_s.most_significant_bit(c) && !w_s.most_significant_bit(d)) &&
       (b * c - a * d < up))
@@ -1089,7 +1082,7 @@ public:
       w_s.lower = a * d % up;
       w_s.upper = b * c % up;
     }
-    else if(
+    else if (
       (!w_s.most_significant_bit(a) && !w_s.most_significant_bit(b)) &&
       (w_s.most_significant_bit(c) && w_s.most_significant_bit(d)) &&
       (a * d - b * c < up))
@@ -1106,9 +1099,9 @@ public:
   {
     // TODO: over-join for list
     std::vector<wrapped_interval> r;
-    for(auto &u : cut(lhs))
-      for(auto &v : cut(rhs))
-        for(auto &m : multiply_us(u, v))
+    for (auto &u : cut(lhs))
+      for (auto &v : cut(rhs))
+        for (auto &m : multiply_us(u, v))
           r.push_back(m);
     return over_join(r);
   }
@@ -1117,7 +1110,7 @@ public:
   {
     wrapped_interval r(rhs.t);
     r.lower = 0;
-    r.upper = rhs.upper - 1;
+    r.upper = *rhs.upper - 1;
     return r;
   }
 
@@ -1130,17 +1123,17 @@ public:
     zero.lower = 0;
     zero.upper = 0;
 
-    for(auto &u : s.ssplit())
-      for(auto &v : t.ssplit())
+    for (auto &u : s.ssplit())
+      for (auto &v : t.ssplit())
       {
         // Only optimize if its singleton
         auto v_non_zero = difference(v, zero);
-        if((u / v_non_zero).cardinality() == 1)
+        if ((u / v_non_zero).cardinality() == 1)
         {
           r.push_back(u - ((u / v_non_zero) * v_non_zero));
           continue;
         }
-        if(is_signedbv_type(u.t) && s.most_significant_bit(u.upper))
+        if (is_signedbv_type(u.t) && s.most_significant_bit(*u.upper))
           r.push_back(-amb(v));
         else
           r.push_back(amb(v));
@@ -1158,45 +1151,45 @@ public:
     wrapped_interval zero(lhs.t);
     zero.lower = 0;
     zero.upper = 0;
-    if(!is_signedbv_type(lhs.t))
+    if (!is_signedbv_type(lhs.t))
     {
-      for(const auto &u : lhs.ssplit())
-        for(const auto &v : rhs.ssplit())
+      for (const auto &u : lhs.ssplit())
+        for (const auto &v : rhs.ssplit())
         {
           auto non_zero = difference(v, zero);
           wrapped_interval temp(lhs.t);
-          temp.lower = u.lower / non_zero.upper;
-          temp.upper = u.upper / non_zero.lower;
+          temp.lower = *u.lower / *non_zero.upper;
+          temp.upper = *u.upper / *non_zero.lower;
           r.push_back(temp);
         }
     }
     else
     {
-      for(const auto &u : cut(lhs))
-        for(const auto &v : cut(rhs))
+      for (const auto &u : cut(lhs))
+        for (const auto &v : cut(rhs))
         {
           auto non_zero = difference(v, zero);
           wrapped_interval temp(lhs.t);
 
-          auto msb_a = temp.most_significant_bit(u.lower);
-          auto msb_c = temp.most_significant_bit(non_zero.lower);
+          auto msb_a = temp.most_significant_bit(*u.lower);
+          auto msb_c = temp.most_significant_bit(*non_zero.lower);
 
-          if(!msb_a && !msb_c)
+          if (!msb_a && !msb_c)
           {
             temp.set_lower(u.get_lower() / non_zero.get_upper());
             temp.set_upper(u.get_upper() / non_zero.get_lower());
           }
-          else if(msb_a && msb_c)
+          else if (msb_a && msb_c)
           {
             temp.set_lower(u.get_upper() / non_zero.get_lower());
             temp.set_upper(u.get_lower() / non_zero.get_upper());
           }
-          else if(!msb_a && msb_c)
+          else if (!msb_a && msb_c)
           {
             temp.set_lower(u.get_upper() / non_zero.get_upper());
             temp.set_upper(u.get_lower() / non_zero.get_lower());
           }
-          else if(msb_a && !msb_c)
+          else if (msb_a && !msb_c)
           {
             temp.set_lower(u.get_lower() / non_zero.get_lower());
             temp.set_upper(u.get_upper() / non_zero.get_upper());
@@ -1224,21 +1217,21 @@ public:
       [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
         uint64_t m, temp;
         m = compute_m(width);
-        while(m != 0)
+        while (m != 0)
         {
-          if(~a & c & m)
+          if (~a & c & m)
           {
             temp = (a | m) & -m;
-            if(temp <= b)
+            if (temp <= b)
             {
               a = temp;
               break;
             }
           }
-          else if(a & ~c & m)
+          else if (a & ~c & m)
           {
             temp = (c | m) & -m;
-            if(temp <= d)
+            if (temp <= d)
             {
               c = temp;
               break;
@@ -1252,20 +1245,20 @@ public:
       [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
         uint64_t m, temp;
         m = compute_m(width);
-        if(width == 32)
+        if (width == 32)
           assert(m == 0x80000000);
-        while(m != 0)
+        while (m != 0)
         {
-          if(b & d & m)
+          if (b & d & m)
           {
             temp = (b - m) | (m - 1);
-            if(temp >= a)
+            if (temp >= a)
             {
               b = temp;
               break;
             }
             temp = (d - m) | (m - 1);
-            if(temp >= c)
+            if (temp >= c)
             {
               d = temp;
               break;
@@ -1287,18 +1280,18 @@ public:
         uint64_t m, temp;
 
         m = compute_m(width);
-        while(m != 0)
+        while (m != 0)
         {
-          if(~a & ~c & m)
+          if (~a & ~c & m)
           {
             temp = (a | m) & -m;
-            if(temp <= b)
+            if (temp <= b)
             {
               a = temp;
               break;
             }
             temp = (c | m) & -m;
-            if(temp <= d)
+            if (temp <= d)
             {
               c = temp;
               break;
@@ -1313,21 +1306,21 @@ public:
         uint64_t m, temp;
 
         m = compute_m(width);
-        while(m != 0)
+        while (m != 0)
         {
-          if(b & ~d & m)
+          if (b & ~d & m)
           {
             temp = (b & ~m) | (m - 1);
-            if(temp >= a)
+            if (temp >= a)
             {
               b = temp;
               break;
             }
           }
-          else if(~b & d & m)
+          else if (~b & d & m)
           {
             temp = (d & ~m) | (m - 1);
-            if(temp >= c)
+            if (temp >= c)
             {
               d = temp;
               break;
@@ -1348,20 +1341,20 @@ public:
       [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
         uint64_t m, temp;
         m = compute_m(width);
-        while(m != 0)
+        while (m != 0)
         {
-          if(~a & c & m)
+          if (~a & c & m)
           {
             temp = (a | m) & -m;
-            if(temp <= b)
+            if (temp <= b)
             {
               a = temp;
             }
           }
-          else if(a & ~c & m)
+          else if (a & ~c & m)
           {
             temp = (c | m) & -m;
-            if(temp <= d)
+            if (temp <= d)
             {
               c = temp;
             }
@@ -1374,19 +1367,19 @@ public:
       [&width](uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
         uint64_t m, temp;
         m = compute_m(width);
-        while(m != 0)
+        while (m != 0)
         {
-          if(b & d & m)
+          if (b & d & m)
           {
             temp = (b - m) | (m - 1);
-            if(temp >= a)
+            if (temp >= a)
             {
               b = temp;
             }
             else
             {
               temp = (d - m) | (m - 1);
-              if(temp >= c)
+              if (temp >= c)
               {
                 d = temp;
               }
@@ -1419,10 +1412,10 @@ public:
     const wrapped_interval &true_value,
     const wrapped_interval &false_value)
   {
-    if(!cond.contains(0))
+    if (!cond.contains(0))
       return true_value;
 
-    if(cond.singleton())
+    if (cond.singleton())
       return false_value;
 
     return over_join(true_value, false_value);
@@ -1434,16 +1427,18 @@ protected:
 private:
   static BigInt compute_upper_bound(const type2tc &t)
   {
-    BigInt r(1);
-    r.setPower2(t->get_width());
-    return r;
+    if (is_pointer_type(t))
+      return BigInt::power2(config.ansi_c.address_width);
+
+    return BigInt::power2(t->get_width());
   }
 
   // For bitwise intervals approximations (Warren 2002)
   static uint64_t compute_m(unsigned width)
   {
+    assert(width - 1 < 64);
     uint64_t m = (uint64_t)1 << (width - 1);
-    if(width == 32)
+    if (width == 32)
       assert(m == 0x80000000);
     return m;
   }
@@ -1456,18 +1451,18 @@ private:
   {
     // TODO: BigInt has no support for bitwise operators
     wrapped_interval result(lhs.t);
-    if(lhs.t->get_width() > 64)
+    if (lhs.t->get_width() > 64)
       return result;
 
     std::vector<wrapped_interval> r;
-    for(auto &u : lhs.ssplit())
-      for(auto &v : rhs.ssplit())
+    for (auto &u : lhs.ssplit())
+      for (auto &v : rhs.ssplit())
       {
-        auto u_lower = u.lower.to_uint64();
-        auto u_upper = u.upper.to_uint64();
+        auto u_lower = (*u.lower).to_uint64();
+        auto u_upper = (*u.upper).to_uint64();
 
-        auto v_lower = v.lower.to_uint64();
-        auto v_upper = v.upper.to_uint64();
+        auto v_lower = (*v.lower).to_uint64();
+        auto v_upper = (*v.upper).to_uint64();
 
         wrapped_interval temp(lhs.t);
         temp.lower = min(u_lower, u_upper, v_lower, v_upper);

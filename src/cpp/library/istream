@@ -94,7 +94,7 @@ namespace std
   { is._gcount=0; return is; }
   istream& operator>> (istream& is, unsigned int &val )
   { is._gcount=0; return is; }
-#if __WORDSIZE == 64
+#if defined(__clang__) || __WORDSIZE == 64
   istream& operator>> (istream& is, long &val )
   { is._gcount=0; return is; }
   istream& operator>> (istream& is, unsigned long &val )
@@ -104,7 +104,7 @@ namespace std
   { is._gcount=0; return is; }
   istream& operator>> (istream& is, double &val )
   { is._gcount=0; return is; }
-#if 0
+#if defined(__clang__)
   istream& operator>> (istream& is, long double &val )
   { is._gcount=0; return is; }
 #endif

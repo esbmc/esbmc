@@ -26,5 +26,7 @@
 #cmakedefine ESBMC_CHERI_HYBRID_SYSROOT "@ESBMC_CHERI_HYBRID_SYSROOT@"
 #cmakedefine ESBMC_CHERI_PURECAP_SYSROOT "@ESBMC_CHERI_PURECAP_SYSROOT@"
 
+#cmakedefine ESBMC_SVCOMP 1
+
 /* Define to 1 if you have the <unistd.h> header file. */
 #cmakedefine HAVE_UNISTD 1

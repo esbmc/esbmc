@@ -11,7 +11,7 @@ void clang_cpp_maint::adjust_init(code_assignt &assignment, codet &adjusted)
   assert(assignment.operands().size() == 2);
 
   exprt &rhs = assignment.rhs();
-  if(
+  if (
     rhs.id() == "sideeffect" && rhs.statement() == "function_call" &&
     rhs.get_bool("constructor"))
   {
@@ -39,7 +39,7 @@ void clang_cpp_maint::adjust_init(code_assignt &assignment, codet &adjusted)
 
 void clang_cpp_maint::convert_expression_to_code(exprt &expr)
 {
-  if(expr.is_code())
+  if (expr.is_code())
     return;
 
   codet code("expression");

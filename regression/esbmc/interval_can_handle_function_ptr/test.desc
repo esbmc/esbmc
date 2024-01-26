@@ -1,0 +1,4 @@
+KNOWNBUG
+interval.i
+--interval-analysis
+^VERIFICATION FAILED$

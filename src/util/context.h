@@ -17,10 +17,11 @@ typedef std::vector<symbolt *> ordered_symbolst;
 typedef std::multimap<irep_idt, irep_idt> symbol_base_mapt;
 
 #define forall_symbol_base_map(it, expr, base_name)                            \
-  for(symbol_base_mapt::const_iterator it = (expr).lower_bound(base_name),     \
-                                       it_end = (expr).upper_bound(base_name); \
-      it != it_end;                                                            \
-      it++)
+  for (symbol_base_mapt::const_iterator                                        \
+         it = (expr).lower_bound(base_name),                                   \
+         it_end = (expr).upper_bound(base_name);                               \
+       it != it_end;                                                           \
+       it++)
 
 class contextt
 {
@@ -35,12 +36,13 @@ public:
   }
   ~contextt() = default;
   contextt(const contextt &obj) = delete;
+  contextt(contextt &&) noexcept = default;
 
 #ifdef ENABLE_OLD_FRONTEND
   contextt &operator=(const contextt &rhs)
   {
     // copy assignment operator for old frontend typechecking
-    if(&rhs == this) // check self assignment
+    if (&rhs == this) // check self assignment
     {
       log_error("Context is copying itself");
     }
@@ -55,6 +57,8 @@ public:
 #else
   contextt &operator=(const contextt &rhs) = delete;
 #endif
+
+  contextt &operator=(contextt &&) noexcept = default;
 
   symbol_base_mapt symbol_base_map;
 

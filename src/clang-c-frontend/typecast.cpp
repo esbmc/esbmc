@@ -53,19 +53,19 @@ union_init_component(const struct_union_typet::componentst &u, const typet &t)
   assert(!u.empty());
 
   size_t max = u.size();
-  for(size_t i = 0; i < u.size(); i++)
+  for (size_t i = 0; i < u.size(); i++)
   {
     const struct_union_typet::componentt &c = u[i];
     const typet &s = c.type();
-    if(s == t)
+    if (s == t)
       return c;
-    if(s.get_bool("#bitfield") && s.subtype() == t)
-      if(
+    if (s.get_bool("#bitfield") && s.subtype() == t)
+      if (
         max == u.size() ||
         atoi(s.width().c_str()) > atoi(u[max].type().width().c_str()))
         max = i;
   }
-  if(max == u.size())
+  if (max == u.size())
   {
     /* We should never reach here since clang frontend already checks for this
      * however... we should prevent any funny things to happen */
@@ -82,7 +82,7 @@ void clang_c_convertert::gen_typecast_to_union(
   const typet &t)
 {
   // If RHS is already of same union type, don't do anything
-  if(e.type() == t.type())
+  if (e.type() == t.type())
     return;
 
   union_exprt new_result(t);

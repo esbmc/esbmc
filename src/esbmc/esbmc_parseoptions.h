@@ -19,7 +19,7 @@ public:
   void help() override;
 
   esbmc_parseoptionst(int argc, const char **argv)
-    : parseoptions_baset(all_cmd_options, argc, argv), language_uit(cmdline)
+    : parseoptions_baset(all_cmd_options, argc, argv)
   {
   }
 
@@ -85,7 +85,7 @@ protected:
 private:
   void close_file(FILE *f)
   {
-    if(f != stdout && f != stderr)
+    if (f != stdout && f != stderr)
     {
       fclose(f);
     }

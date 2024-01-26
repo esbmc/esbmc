@@ -12,9 +12,11 @@ namespace SolidityGrammar
 // rule contract-body-element
 enum ContractBodyElementT
 {
-  StateVarDecl = 0, // rule state-variable-declaration
-  FunctionDef,      // rule function-definition
-  EnumDef,          // rule enum-definition
+  VarDecl = 0, // rule variable-declaration
+  FunctionDef, // rule function-definition
+  StructDef,   // rule struct-definition
+  EnumDef,     // rule enum-definition
+  ErrorDef,    // rule error-definition
   ContractBodyElementTError
 };
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
@@ -49,6 +51,12 @@ enum TypeNameT
 
   // enum
   EnumTypeName,
+
+  // struct
+  StructTypeName,
+
+  // tuple
+  TupleTypeName,
 
   TypeNameTError
 };
@@ -139,7 +147,7 @@ enum ElementaryTypeNameT
   STRING_LITERAL,
 
   // rule bytes
-  BYTE_ARRAY,
+  BYTES,
   BYTES1,
   BYTES2,
   BYTES3,
@@ -202,6 +210,10 @@ const char *parameter_list_to_str(ParameterListT type);
 enum BlockT
 {
   Statement = 0,
+  BlockForStatement,
+  BlockIfStatement,
+  BlockWhileStatement,
+  BlockExpressionStatement,
   UncheckedBlock,
   BlockTError
 };
@@ -218,7 +230,10 @@ enum StatementT
   ForStatement,          // rule for-statement
   IfStatement,           // rule if-statement
   WhileStatement,
-  StatementTError
+  StatementTError,
+  ContinueStatement, // rule continue
+  BreakStatement,    // rule break
+  RevertStatement    // rule revert
 };
 StatementT get_statement_t(const nlohmann::json &stmt);
 const char *statement_to_str(StatementT type);
@@ -288,6 +303,9 @@ enum ExpressionT
   // rule Tuple
   Tuple,
 
+  // rule revert
+  Revert,
+
   // FunctionCall
   CallExprClass,
 
@@ -308,10 +326,16 @@ enum ExpressionT
   // Call member functions
   // equivalent toclang::Stmt::CXXMemberCallExprClass
   // i.e. x.caller();
-  MemberCallClass,
+  ContractMemberCall,
 
   // Type Converion
   ElementaryTypeNameExpression,
+
+  // Struct Member Access
+  StructMemberCall,
+
+  // Enum Member Access
+  EnumMemberCall,
 
   ExpressionTError
 };

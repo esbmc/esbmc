@@ -123,7 +123,8 @@ function(mangle_clib output)
     "${CMAKE_CURRENT_SOURCE_DIR}/library/*.c")
   # Extract a list of C's math operational models
   file(GLOB c2goto_libm_files CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/library/libm/*.c")
+    "${CMAKE_CURRENT_SOURCE_DIR}/library/libm/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/library/libm/musl/*.c")
   file(GLOB_RECURSE c2goto_header_files CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/headers/*.h")
 

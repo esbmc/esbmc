@@ -102,6 +102,15 @@ public:
 
     triple target;
 
+    /* TODO: make this configurable.
+     *
+     * While it is not, the empty string means that we assume that the given
+     * program uses the same locale as we do ourselves. This is used for
+     * setlocale() in order to interpret string literals, see
+     * string_constantt::mb_value(). Therefore, this gives both, the source and
+     * execution character set. */
+    std::string locale_name;
+
     std::list<std::string> defines;
     std::list<std::string> include_paths;
     std::list<std::string> idirafter_paths;

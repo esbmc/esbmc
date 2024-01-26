@@ -205,6 +205,7 @@ def parse_args(argv):
 
 def main():
     args = parse_args(sys.argv)
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, 'w') as output:
         header = None
         if args.header:

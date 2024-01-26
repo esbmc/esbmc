@@ -28,7 +28,7 @@ exprt jimple_method::to_exprt(
 
   // In jimple, every non-static method has access to @this
   // In future, I will add this as a paremeter to the function call
-  if(!modifiers.is_static())
+  if (!modifiers.is_static())
   {
     auto this_type = int_type(); // TODO: support the struct type
     std::string param_id, param_name;
@@ -55,7 +55,7 @@ exprt jimple_method::to_exprt(
   }
 
   // In Jimple, every parameter is named as @parameter#
-  for(long unsigned int i = 0; i < parameters.size(); i++)
+  for (long unsigned int i = 0; i < parameters.size(); i++)
   {
     auto param_type = parameters[i]->to_typet(ctx);
 
@@ -84,7 +84,7 @@ exprt jimple_method::to_exprt(
   }
 
   // Apparently, if the type has no arguments, we assume ellipsis
-  if(!method_type.arguments().size())
+  if (!method_type.arguments().size())
     method_type.make_ellipsis();
 
   added_symbol.type = method_type;
@@ -101,7 +101,7 @@ void jimple_method::from_json(const json &j)
   // Method type
   j.at("type").get_to(type);
 
-  for(auto x : j.at("parameters"))
+  for (auto x : j.at("parameters"))
   {
     jimple_type t;
     x.get_to(t);
@@ -117,7 +117,7 @@ void jimple_method::from_json(const json &j)
   {
     j.at("throws").get_to(this->throws);
   }
-  catch(std::exception &e)
+  catch (std::exception &e)
   {
     this->throws = "(No throw)";
   }

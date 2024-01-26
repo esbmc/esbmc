@@ -32,11 +32,11 @@ bool clang_cpp_convertert::perform_virtual_dispatch(
   const clang::MemberExpr &member)
 {
   // x.F() can't be a virtual dispatch
-  if(!member.isArrow())
+  if (!member.isArrow())
     return false;
 
   const clang::Decl &decl = *member.getMemberDecl();
-  switch(decl.getKind())
+  switch (decl.getKind())
   {
   // TODO: dtor might be virtual too
   //case clang::Decl::CXXDestructor:
@@ -49,7 +49,7 @@ bool clang_cpp_convertert::perform_virtual_dispatch(
     // set LangOptions in C++ mode with RIIT enabled
     langOpts.CPlusPlus = 1;
     langOpts.RTTI = 1;
-    if(
+    if (
       member.performsVirtualDispatch(langOpts) &&
       cxxmd.getKind() != clang::Decl::CXXConstructor &&
       (is_md_virtual_or_overriding(cxxmd)))
@@ -75,7 +75,7 @@ bool clang_cpp_convertert::is_md_virtual_or_overriding(
 bool clang_cpp_convertert::is_fd_virtual_or_overriding(
   const clang::FunctionDecl &fd)
 {
-  if(const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
     return is_md_virtual_or_overriding(*md);
   else
     return false;
@@ -91,7 +91,7 @@ bool clang_cpp_convertert::get_vft_binding_expr(
    */
   // Let's start with base `x` dereferencing
   exprt base_deref;
-  if(get_vft_binding_expr_base(member, base_deref))
+  if (get_vft_binding_expr_base(member, base_deref))
     return true;
 
   // Then deal with X@vtable_pointer dereferencing
@@ -100,7 +100,7 @@ bool clang_cpp_convertert::get_vft_binding_expr(
 
   // Then deal with F dereferencing
   exprt f_expr;
-  if(get_vft_binding_expr_function(member, f_expr, vtable_ptr_deref))
+  if (get_vft_binding_expr_function(member, f_expr, vtable_ptr_deref))
     return true;
 
   new_expr.swap(f_expr);
@@ -112,7 +112,7 @@ bool clang_cpp_convertert::get_vft_binding_expr_base(
   exprt &new_expr)
 {
   exprt base;
-  if(get_expr(*member.getBase(), base))
+  if (get_expr(*member.getBase(), base))
     return true;
 
   new_expr = dereference_exprt(base, base.type());
@@ -157,7 +157,7 @@ bool clang_cpp_convertert::get_vft_binding_expr_function(
   get_decl_name(*md->getParent(), base_class_name, base_class_id);
 
   exprt comp;
-  if(get_decl(*member.getMemberDecl(), comp))
+  if (get_decl(*member.getMemberDecl(), comp))
     return true;
 
   /*

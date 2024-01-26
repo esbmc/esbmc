@@ -29,11 +29,11 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
     // check whether the assertion holds
     tvt res = rte->ask_solver_question(question);
     // we don't add this assertion to the resulting logical formula
-    if(res.is_true())
+    if (res.is_true())
       // incremental verification succeeded
       return true;
     // this assertion evaluates to false via incremental SMT solving
-    if(res.is_false())
+    if (res.is_false())
     {
       // check assertion to produce a counterexample
       assertion(gen_false_expr(), msg);
@@ -46,7 +46,7 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
     // incremental verification returned unknown
     return false;
   }
-  catch(runtime_encoded_equationt::dual_unsat_exception &e)
+  catch (runtime_encoded_equationt::dual_unsat_exception &e)
   {
     log_error(
       "This solver was unable to check this expression. Please try it with "
@@ -59,10 +59,11 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 {
   // Convert asserts in assumes, if it's not the last loop iteration
   // also, don't convert assertions added by the bidirectional search
-  if(inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
+  if (
+    inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
   {
     BigInt unwind = cur_state->loop_iterations[first_loop];
-    if(unwind < (max_unwind - 1))
+    if (unwind < (max_unwind - 1))
     {
       assume(claim_expr);
       return;
@@ -70,7 +71,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   }
 
   // Can happen when evaluating certain special intrinsics. Gulp.
-  if(cur_state->guard.is_false())
+  if (cur_state->guard.is_false())
     return;
 
   total_claims++;
@@ -81,12 +82,12 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   // first try simplifier on it
   do_simplify(new_expr);
 
-  if(is_true(new_expr))
+  if (is_true(new_expr))
     return;
 
-  if(options.get_bool_option("smt-symex-assert"))
+  if (options.get_bool_option("smt-symex-assert"))
   {
-    if(check_incremental(new_expr, msg))
+    if (check_incremental(new_expr, msg))
       // incremental verification has succeeded
       return;
   }
@@ -118,7 +119,7 @@ void goto_symext::assume(const expr2tc &the_assumption)
   cur_state->rename(assumption);
   do_simplify(assumption);
 
-  if(is_true(assumption))
+  if (is_true(assumption))
     return;
 
   cur_state->guard.guard_expr(assumption);
@@ -128,14 +129,13 @@ void goto_symext::assume(const expr2tc &the_assumption)
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
 
   // If we're assuming false, make the guard for the following statement false
-  if(is_false(the_assumption))
+  if (is_false(the_assumption))
     cur_state->guard.make_false();
 }
 
-std::shared_ptr<goto_symext::symex_resultt> goto_symext::get_symex_result()
+goto_symext::symex_resultt goto_symext::get_symex_result()
 {
-  return std::shared_ptr<goto_symext::symex_resultt>(
-    new goto_symext::symex_resultt(target, total_claims, remaining_claims));
+  return goto_symext::symex_resultt(target, total_claims, remaining_claims);
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -146,17 +146,17 @@ void goto_symext::symex_step(reachability_treet &art)
 
   // depth exceeded?
   {
-    if(depth_limit != 0 && cur_state->num_instructions > depth_limit)
+    if (depth_limit != 0 && cur_state->num_instructions > depth_limit)
       cur_state->guard.add(gen_false_expr());
     cur_state->num_instructions++;
   }
 
   // Remember the first loop we're entering
-  if(inductive_step && instruction.loop_number && !first_loop)
+  if (inductive_step && instruction.loop_number && !first_loop)
     first_loop = instruction.loop_number;
 
   // actually do instruction
-  switch(instruction.type)
+  switch (instruction.type)
   {
   case SKIP:
   case LOCATION:
@@ -169,7 +169,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
     // Potentially skip to run another function ptr target; if not,
     // continue
-    if(!run_next_function_ptr_target(false))
+    if (!run_next_function_ptr_target(false))
       cur_state->source.pc++;
     break;
 
@@ -196,10 +196,10 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case RETURN:
-    if(!cur_state->guard.is_false())
+    if (!cur_state->guard.is_false())
     {
       expr2tc thecode = instruction.code, assign;
-      if(make_return_assignment(assign, thecode))
+      if (make_return_assignment(assign, thecode))
       {
         goto_symext::symex_assign(assign);
       }
@@ -211,18 +211,18 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case ASSIGN:
-    if(!cur_state->guard.is_false())
+    if (!cur_state->guard.is_false())
     {
       code_assign2t deref_code = to_code_assign2t(instruction.code); // copy
 
       // XXX jmorse -- this is not fully symbolic.
-      if(auto it = thrown_obj_map.find(cur_state->source.pc);
-         it != thrown_obj_map.end())
+      if (auto it = thrown_obj_map.find(cur_state->source.pc);
+          it != thrown_obj_map.end())
       {
         const expr2tc &thrown_obj = it->second;
         assert(is_symbol2t(thrown_obj));
 
-        if(
+        if (
           is_pointer_type(deref_code.target->type) &&
           !is_pointer_type(thrown_obj->type))
         {
@@ -248,25 +248,25 @@ void goto_symext::symex_step(reachability_treet &art)
 
     code_function_call2t &call = to_code_function_call2t(deref_code);
 
-    if(!is_nil_expr(call.ret))
+    if (!is_nil_expr(call.ret))
     {
       dereference(call.ret, dereferencet::WRITE);
     }
 
     replace_dynamic_allocation(deref_code);
 
-    for(auto &operand : call.operands)
-      if(!is_nil_expr(operand))
+    for (auto &operand : call.operands)
+      if (!is_nil_expr(operand))
         dereference(operand, dereferencet::READ);
 
     // Always run intrinsics, whether guard is false or not. This is due to the
     // unfortunate circumstance where a thread starts with false guard due to
     // decision taken in another thread in this trace. In that case the
     // terminate intrinsic _has_ to run, or we explode.
-    if(is_symbol2t(call.function))
+    if (is_symbol2t(call.function))
     {
       const irep_idt &id = to_symbol2t(call.function).thename;
-      if(has_prefix(id.as_string(), "c:@F@__ESBMC"))
+      if (has_prefix(id.as_string(), "c:@F@__ESBMC"))
       {
         cur_state->source.pc++;
         run_intrinsic(call, art, id.as_string());
@@ -274,32 +274,41 @@ void goto_symext::symex_step(reachability_treet &art)
       }
     }
 
-    // Don't run a function call if the guard is false.
-    if(!cur_state->guard.is_false())
-    {
-      symex_function_call(deref_code);
-    }
-    else
+    if (cur_state->guard.is_false())
     {
       cur_state->source.pc++;
+      break;
     }
+
+    if (is_symbol2t(call.function))
+    {
+      const irep_idt &id = to_symbol2t(call.function).thename;
+      if (has_prefix(id.as_string(), "c:@F@__builtin"))
+      {
+        cur_state->source.pc++;
+        if (run_builtin(call, id.as_string()))
+          return;
+      }
+    }
+
+    symex_function_call(deref_code);
   }
   break;
 
   case DECL:
-    if(!cur_state->guard.is_false())
+    if (!cur_state->guard.is_false())
       symex_decl(instruction.code);
     cur_state->source.pc++;
     break;
 
   case DEAD:
-    if(!cur_state->guard.is_false())
+    if (!cur_state->guard.is_false())
       symex_dead(instruction.code);
     cur_state->source.pc++;
     break;
 
   case OTHER:
-    if(!cur_state->guard.is_false())
+    if (!cur_state->guard.is_false())
       symex_other(instruction.code);
     cur_state->source.pc++;
     break;
@@ -309,9 +318,9 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case THROW:
-    if(!cur_state->guard.is_false())
+    if (!cur_state->guard.is_false())
     {
-      if(symex_throw())
+      if (symex_throw())
         cur_state->source.pc++;
     }
     else
@@ -327,7 +336,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
   case THROW_DECL_END:
     // When we reach THROW_DECL_END, we must clear any throw_decl
-    if(stack_catch.size())
+    if (stack_catch.size())
     {
       // Get to the correct try (always the last one)
       goto_symex_statet::exceptiont *except = &stack_catch.top();
@@ -349,7 +358,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
 void goto_symext::symex_assume()
 {
-  if(cur_state->guard.is_false())
+  if (cur_state->guard.is_false())
     return;
 
   expr2tc cond = cur_state->source.pc->guard;
@@ -363,22 +372,24 @@ void goto_symext::symex_assume()
 
 void goto_symext::symex_assert()
 {
-  if(cur_state->guard.is_false())
+  if (cur_state->guard.is_false())
     return;
 
   // Don't convert if it's an user provided assertion and we're running in
   // no assertion mode or forward condition
-  if(cur_state->source.pc->location.user_provided() && no_assertions)
+  if (cur_state->source.pc->location.user_provided() && no_assertions)
     return;
 
   std::string msg = cur_state->source.pc->location.comment().as_string();
-  if(msg == "")
+  if (msg == "")
     msg = "assertion";
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
   expr2tc tmp = instruction.guard;
   replace_nondet(tmp);
+
+  intrinsic_races_check_dereference(tmp);
 
   dereference(tmp, dereferencet::READ);
   replace_dynamic_allocation(tmp);
@@ -391,121 +402,115 @@ void goto_symext::run_intrinsic(
   reachability_treet &art,
   const std::string &symname)
 {
-  if(symname == "c:@F@__ESBMC_yield")
+  if (symname == "c:@F@__ESBMC_yield")
   {
     intrinsic_yield(art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_switch_to")
+
+  if (symname == "c:@F@__ESBMC_switch_to")
   {
     intrinsic_switch_to(func_call, art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_switch_away_from")
+
+  if (symname == "c:@F@__ESBMC_switch_away_from")
   {
     intrinsic_switch_from(art);
+    return;
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_get_thread_id"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_get_thread_id"))
   {
     intrinsic_get_thread_id(func_call, art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_set_thread_internal_data")
+
+  if (symname == "c:@F@__ESBMC_set_thread_internal_data")
   {
     intrinsic_set_thread_data(func_call, art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_get_thread_internal_data")
+
+  if (symname == "c:@F@__ESBMC_get_thread_internal_data")
   {
     intrinsic_get_thread_data(func_call, art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_spawn_thread")
+
+  if (symname == "c:@F@__ESBMC_spawn_thread")
   {
     intrinsic_spawn_thread(func_call, art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_terminate_thread")
+
+  if (symname == "c:@F@__ESBMC_terminate_thread")
   {
     intrinsic_terminate_thread(art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_get_thread_state")
+
+  if (symname == "c:@F@__ESBMC_get_thread_state")
   {
     intrinsic_get_thread_state(func_call, art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_really_atomic_begin")
+
+  if (symname == "c:@F@__ESBMC_really_atomic_begin")
   {
     intrinsic_really_atomic_begin(art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_really_atomic_end")
+
+  if (symname == "c:@F@__ESBMC_really_atomic_end")
   {
     intrinsic_really_atomic_end(art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_switch_to_monitor")
+
+  if (symname == "c:@F@__ESBMC_switch_to_monitor")
   {
     intrinsic_switch_to_monitor(art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_switch_from_monitor")
+
+  if (symname == "c:@F@__ESBMC_switch_from_monitor")
   {
     intrinsic_switch_from_monitor(art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_register_monitor")
+
+  if (symname == "c:@F@__ESBMC_register_monitor")
   {
     intrinsic_register_monitor(func_call, art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_kill_monitor")
+
+  if (symname == "c:@F@__ESBMC_kill_monitor")
   {
     intrinsic_kill_monitor(art);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_memset")
+
+  if (symname == "c:@F@__ESBMC_memset")
   {
     intrinsic_memset(art, func_call);
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_get_object_size")
+
+  if (symname == "c:@F@__ESBMC_get_object_size")
   {
     intrinsic_get_object_size(func_call, art);
+    return;
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_overflow"))
-  {
-    bool is_mult = has_prefix(symname, "c:@F@__ESBMC_overflow_smul") ||
-                   has_prefix(symname, "c:@F@__ESBMC_overflow_umul");
-    bool is_add = has_prefix(symname, "c:@F@__ESBMC_overflow_sadd") ||
-                  has_prefix(symname, "c:@F@__ESBMC_overflow_uadd");
-    bool is_sub = has_prefix(symname, "c:@F@__ESBMC_overflow_ssub") ||
-                  has_prefix(symname, "c:@F@__ESBMC_overflow_usub");
 
-    assert(func_call.operands.size() == 3);
-
-    const auto &func_type = to_code_type(func_call.function->type);
-    assert(func_type.arguments[0] == func_type.arguments[1]);
-    assert(is_pointer_type(func_type.arguments[2]));
-
-    expr2tc op;
-    if(is_mult)
-      op = mul2tc(
-        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else if(is_add)
-      op = add2tc(
-        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else if(is_sub)
-      op = sub2tc(
-        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else
-    {
-      assert(0 && "Unknown overflow intrinsics");
-    }
-
-    // Assign result of the two arguments to the dereferenced third argument
-    symex_assign(code_assign2tc(
-      dereference2tc(
-        to_pointer_type(func_call.operands[2]->type).subtype,
-        func_call.operands[2]),
-      op));
-
-    // Perform overflow check and assign it to the return object
-    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
-  }
-  else if(has_prefix(symname, "c:@F@__ESBMC_convertvector"))
+  if (has_prefix(symname, "c:@F@__ESBMC_convertvector"))
   {
     assert(
       func_call.operands.size() == 1 &&
       "Wrong __ESBMC_convertvector signature");
     auto &ex_state = art.get_cur_state();
-    if(ex_state.cur_state->guard.is_false())
+    if (ex_state.cur_state->guard.is_false())
       return;
 
     auto t = func_call.ret->type;
@@ -519,7 +524,7 @@ void goto_symext::run_intrinsic(
 
     // Create new vector
     std::vector<expr2tc> members;
-    for(const auto &x : to_constant_vector2t(v).datatype_members)
+    for (const auto &x : to_constant_vector2t(v).datatype_members)
     {
       // Create a typecast call
       auto typecast = typecast2tc(subtype, x);
@@ -530,14 +535,16 @@ void goto_symext::run_intrinsic(
     expr2tc ret_ref = func_call.ret;
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
+    return;
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_shufflevector"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_shufflevector"))
   {
     assert(
       func_call.operands.size() >= 2 &&
       "Wrong __ESBMC_shufflevector signature");
     auto &ex_state = art.get_cur_state();
-    if(ex_state.cur_state->guard.is_false())
+    if (ex_state.cur_state->guard.is_false())
       return;
 
     expr2tc v1 = func_call.operands[0];
@@ -552,13 +559,13 @@ void goto_symext::run_intrinsic(
     auto v1_size = (long int)to_constant_vector2t(v1).datatype_members.size();
 
     std::vector<expr2tc> members;
-    for(long unsigned int i = 2; i < func_call.operands.size(); i++)
+    for (long unsigned int i = 2; i < func_call.operands.size(); i++)
     {
       expr2tc e = func_call.operands[i];
       ex_state.get_active_state().level2.rename(e);
 
       auto index = to_constant_int2t(e).value.to_int64();
-      if(index == -1)
+      if (index == -1)
       {
         // TODO: nondet_value
         members.push_back(to_constant_vector2t(v1).datatype_members[0]);
@@ -573,13 +580,15 @@ void goto_symext::run_intrinsic(
     expr2tc ret_ref = func_call.ret;
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
+    return;
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_atomic_load"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_atomic_load"))
   {
     assert(
       func_call.operands.size() == 3 && "Wrong __ESBMC_atomic_load signature");
     auto &ex_state = art.get_cur_state();
-    if(ex_state.cur_state->guard.is_false())
+    if (ex_state.cur_state->guard.is_false())
       return;
 
     expr2tc ptr = func_call.operands[0];
@@ -588,13 +597,15 @@ void goto_symext::run_intrinsic(
     symex_assign(code_assign2tc(
       dereference2tc(to_pointer_type(ret->type).subtype, ret),
       dereference2tc(to_pointer_type(ptr->type).subtype, ptr)));
+    return;
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_atomic_store"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_atomic_store"))
   {
     assert(
       func_call.operands.size() == 3 && "Wrong __ESBMC_atomic_store signature");
     auto &ex_state = art.get_cur_state();
-    if(ex_state.cur_state->guard.is_false())
+    if (ex_state.cur_state->guard.is_false())
       return;
 
     expr2tc ptr = func_call.operands[0];
@@ -604,29 +615,33 @@ void goto_symext::run_intrinsic(
       dereference2tc(to_pointer_type(ptr->type).subtype, ptr),
       dereference2tc(to_pointer_type(ret->type).subtype, ret)));
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_is_little_endian"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_is_little_endian"))
   {
     expr2tc is_little_endian =
       (config.ansi_c.endianess == configt::ansi_ct::IS_LITTLE_ENDIAN)
         ? gen_true_expr()
         : gen_false_expr();
     symex_assign(code_assign2tc(func_call.ret, is_little_endian));
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_no_abnormal_memory_leak")
+  else if (symname == "c:@F@__ESBMC_no_abnormal_memory_leak")
   {
     expr2tc no_abnormal_memleak =
       config.options.get_bool_option("no-abnormal-memory-leak")
         ? gen_true_expr()
         : gen_false_expr();
     symex_assign(code_assign2tc(func_call.ret, no_abnormal_memleak));
+    return;
   }
-  else if(symname == "c:@F@__ESBMC_builtin_constant_p")
+
+  if (symname == "c:@F@__ESBMC_builtin_constant_p")
   {
     assert(
       func_call.operands.size() == 1 &&
       "Wrong __ESBMC_builtin_constant_p signature");
     auto &ex_state = art.get_cur_state();
-    if(ex_state.cur_state->guard.is_false())
+    if (ex_state.cur_state->guard.is_false())
       return;
 
     expr2tc op1 = func_call.operands[0];
@@ -634,29 +649,28 @@ void goto_symext::run_intrinsic(
     symex_assign(code_assign2tc(
       func_call.ret,
       is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
-  }
-  else if(has_prefix(symname, "c:@F@__ESBMC_sync_fetch_and_add"))
-  {
-    // Already modelled in builtin_libs
     return;
   }
-  else if(
+
+  if (
     has_prefix(symname, "c:@F@__ESBMC_scanf") ||
+    has_prefix(symname, "c:@F@__ESBMC_sscanf") ||
     has_prefix(symname, "c:@F@__ESBMC_fscanf"))
   {
     auto &ex_state = art.get_cur_state();
-    if(ex_state.cur_state->guard.is_false())
+    if (ex_state.cur_state->guard.is_false())
       return;
 
     symex_input(func_call);
     return;
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_init_object"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_init_object"))
   {
     assert(
       func_call.operands.size() == 1 && "Wrong __ESBMC_init_object signature");
     auto &ex_state = art.get_cur_state();
-    if(ex_state.cur_state->guard.is_false())
+    if (ex_state.cur_state->guard.is_false())
       return;
 
     // Get the argument
@@ -665,7 +679,7 @@ void goto_symext::run_intrinsic(
     expr2tc deref = dereference2tc(get_empty_type(), arg0);
     dereference(deref, dereferencet::INTERNAL);
 
-    for(const auto &item : internal_deref_items)
+    for (const auto &item : internal_deref_items)
     {
       assert(
         is_symbol2t(item.object) &&
@@ -677,12 +691,12 @@ void goto_symext::run_intrinsic(
       {
         type_byte_size(item.object->type).to_int64();
       }
-      catch(array_type2t::dyn_sized_array_excp *e)
+      catch (array_type2t::dyn_sized_array_excp *e)
       {
         log_error("__ESBMC_init_object does not support VLAs");
         abort();
       }
-      catch(array_type2t::inf_sized_array_excp *e)
+      catch (array_type2t::inf_sized_array_excp *e)
       {
         log_error(
           "__ESBMC_init_object does not support infinite-length arrays");
@@ -701,20 +715,63 @@ void goto_symext::run_intrinsic(
 
     return;
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_memory_leak_checks"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_memory_leak_checks"))
   {
     add_memory_leak_checks();
+    return;
   }
-  else
+
+  if (symname == "c:@F@__ESBMC_bitcast")
   {
-    log_error(
-      "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
-      "The name in question: {}\n"
-      "(NB: the C spec reserves the __ prefix for the compiler and "
-      "environment)",
-      symname);
-    abort();
+    assert(func_call.operands.size() == 2 && "Wrong __ESBMC_bitcast signature");
+    expr2tc tgtptr = func_call.operands[0];
+    expr2tc srcptr = func_call.operands[1];
+    expr2tc deref;
+
+    internal_deref_items.clear();
+    deref = dereference2tc(get_empty_type(), tgtptr);
+    dereference(deref, dereferencet::INTERNAL);
+    assert(internal_deref_items.size() == 1);
+    expr2tc tgt = internal_deref_items.front().object;
+
+    internal_deref_items.clear();
+    deref = dereference2tc(get_empty_type(), srcptr);
+    dereference(deref, dereferencet::INTERNAL);
+    assert(internal_deref_items.size() == 1);
+    expr2tc src = internal_deref_items.front().object;
+
+    symex_assign(
+      code_assign2tc(tgt, bitcast2tc(tgt->type, src)), false, cur_state->guard);
+    return;
   }
+
+  if (symname == "c:@F@__ESBMC_unreachable")
+  {
+    if (options.get_bool_option("enable-unreachability-intrinsic"))
+      claim(
+        not2tc(cur_state->guard.as_expr()),
+        "reachability: unreachable code reached");
+    return;
+  }
+
+  // We simply call these functions
+  if (
+    has_prefix(symname, "c:@F@__ESBMC_pthread_start_main_hook") ||
+    has_prefix(symname, "c:@F@__ESBMC_pthread_end_main_hook") ||
+    has_prefix(symname, "c:@F@__ESBMC_atexit_handler"))
+  {
+    bump_call(func_call, symname);
+    return;
+  }
+
+  log_error(
+    "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
+    "The name in question: {}\n"
+    "(NB: the C spec reserves the __ prefix for the compiler and "
+    "environment)",
+    symname);
+  abort();
 }
 
 namespace
@@ -747,9 +804,9 @@ split_suffix_components(const std::string &suffix)
 {
   std::vector<suffix_componentt> components;
   const char *begin = suffix.c_str();
-  while(*begin)
+  while (*begin)
   {
-    if(strncmp(begin, "[]", 2) == 0)
+    if (strncmp(begin, "[]", 2) == 0)
     {
       components.emplace_back();
       begin += 2;
@@ -770,11 +827,11 @@ split_suffix_components(const std::string &suffix)
 
 void goto_symext::add_memory_leak_checks()
 {
-  if(!memory_leak_check)
+  if (!memory_leak_check)
     return;
 
   std::function<expr2tc(expr2tc)> maybe_global_target;
-  if(no_reachable_memleak)
+  if (no_reachable_memleak)
   {
     /* We've been instructed to exclude any allocated dynamic object from the
      * memory-leak check that is still reachable via global symbols.
@@ -822,17 +879,17 @@ void goto_symext::add_memory_leak_checks()
      * the user code has constructed circular data structures, maintain a set
      * of visited symbols. */
     std::unordered_set<std::string> visited;
-    for(int i = 0; !has_unknown && !globals.empty(); i++)
+    for (int i = 0; !has_unknown && !globals.empty(); i++)
     {
       std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> tmp;
-      for(const auto &[path_to_e, g] : globals)
-        for(const value_sett::entryt &e : g)
+      for (const auto &[path_to_e, g] : globals)
+        for (const value_sett::entryt &e : g)
         {
           /* Skip if already visited
            *
            * TODO: this is possibly wrongly culling paths that have different
            *       preconditions; should take path_to_e into account. */
-          if(!visited.emplace(e.identifier + e.suffix).second)
+          if (!visited.emplace(e.identifier + e.suffix).second)
             continue;
 
           /* Unfortunately, we just have the symbol id and a suffix that's only
@@ -848,7 +905,7 @@ void goto_symext::add_memory_leak_checks()
 
           /* By "global" only user-defined symbols are meant. Internally used ones
            * we can ignore. */
-          if(e.identifier == "argv'" || has_prefix(sym->name, "__ESBMC_"))
+          if (e.identifier == "argv'" || has_prefix(sym->name, "__ESBMC_"))
             continue;
           log_debug(
             "memcleanup",
@@ -877,14 +934,14 @@ void goto_symext::add_memory_leak_checks()
            * the suffix is empty, sym_expr2 already has pointer type. Otherwise
            * the symbol has a compound type. */
           std::vector<expr2tc> sub_exprs = {sym_expr2};
-          for(const suffix_componentt &c : split_suffix_components(e.suffix))
+          for (const suffix_componentt &c : split_suffix_components(e.suffix))
           {
             /* The suffix consists of a sequence of components, which are either
              * "[]" or ".name" where name is the name of some member of a
              * structure type. */
-            if(c.is_member())
+            if (c.is_member())
             {
-              for(expr2tc &p : sub_exprs)
+              for (expr2tc &p : sub_exprs)
               {
                 assert(is_structure_type(p));
                 const struct_union_data &u =
@@ -900,7 +957,7 @@ void goto_symext::add_memory_leak_checks()
             assert(is_array_type(type));
             const array_type2t &array_type = to_array_type(type);
             const expr2tc &size = array_type.array_size;
-            if(!size)
+            if (!size)
             {
               /* The user is doing evil things like pointing to infinite-size
                * arrays. Bad user. Those arrays are not "global symbols" in the
@@ -909,14 +966,14 @@ void goto_symext::add_memory_leak_checks()
               break;
             }
 
-            if(is_constant_int2t(size))
+            if (is_constant_int2t(size))
             {
               /* This could be huge. TODO: switch to the case below. */
               uint64_t n = to_constant_int2t(size).value.to_uint64();
               std::vector<expr2tc> new_sub_exprs;
               new_sub_exprs.reserve(n * sub_exprs.size());
-              for(const expr2tc &p : sub_exprs)
-                for(uint64_t i = 0; i < n; i++)
+              for (const expr2tc &p : sub_exprs)
+                for (uint64_t i = 0; i < n; i++)
                   new_sub_exprs.emplace_back(
                     index2tc(array_type.subtype, p, gen_long(size->type, i)));
               sub_exprs = std::move(new_sub_exprs);
@@ -948,13 +1005,13 @@ void goto_symext::add_memory_leak_checks()
             sub_exprs.clear();
             break;
           }
-          if(sub_exprs.empty()) /* this target is not to be handled */
+          if (sub_exprs.empty()) /* this target is not to be handled */
             continue;
 
-          if(is_symbol2t(sym_expr2))
+          if (is_symbol2t(sym_expr2))
           {
             symbol2t &s = to_symbol2t(sym_expr2);
-            if(s.rlevel == symbol2t::renaming_level::level2_global)
+            if (s.rlevel == symbol2t::renaming_level::level2_global)
             {
               /* value-set assumes L1 symbols */
               s.rlevel = symbol2t::renaming_level::level1_global;
@@ -972,12 +1029,12 @@ void goto_symext::add_memory_leak_checks()
           /* Now add the new found symbols to 'globals_point_to' and also record
            * them in 'globals'. If they were known already, we don't need to handle
            * them again. */
-          for(auto it = points_to.begin(); it != points_to.end(); ++it)
+          for (auto it = points_to.begin(); it != points_to.end(); ++it)
           {
             expr2tc target = cur_state->value_set.to_expr(it);
             /* A value-set entry can be unknown, invalid or a descriptor of an
              * object. */
-            if(is_unknown2t(target))
+            if (is_unknown2t(target))
             {
               log_debug(
                 "memcleanup-skip", "memcleanup: skipping target unknown2t");
@@ -993,7 +1050,7 @@ void goto_symext::add_memory_leak_checks()
               continue;
             }
             /* invalid targets are not objects, ignore those */
-            if(is_invalid2t(target))
+            if (is_invalid2t(target))
             {
               log_debug(
                 "memcleanup-skip", "memcleanup: skipping target invalid2t");
@@ -1007,20 +1064,20 @@ void goto_symext::add_memory_leak_checks()
             /* null-objects, constant strings and functions are interesting for
              * neither the memory-leak check nor for finding more pointers to
              * enlarge the set of reachable objects */
-            if(is_null_object2t(root_object))
+            if (is_null_object2t(root_object))
             {
               log_debug(
                 "memcleanup-skip", "memcleanup: skipping target null-object");
               continue;
             }
-            if(is_constant_string2t(root_object))
+            if (is_constant_string2t(root_object))
             {
               log_debug(
                 "memcleanup-skip",
                 "memcleanup: skipping target constant-string");
               continue;
             }
-            if(is_code_type(root_object))
+            if (is_code_type(root_object))
             {
               log_debug(
                 "memcleanup-skip", "memcleanup: skipping target of code type");
@@ -1040,7 +1097,7 @@ void goto_symext::add_memory_leak_checks()
             expr2tc adr = address_of2tc(root_object->type, root_object);
 
             expr2tc same_as_e;
-            for(const expr2tc &sub_expr : sub_exprs)
+            for (const expr2tc &sub_expr : sub_exprs)
             {
               assert(is_pointer_type(sub_expr));
               expr2tc same = same_object2tc(sub_expr, adr);
@@ -1067,23 +1124,23 @@ void goto_symext::add_memory_leak_checks()
       globals = std::move(tmp);
     }
 
-    if(log_debug(
-         "memcleanup",
-         "memcleanup: time: {}s, unknown: {}, globals point to:",
-         time2string(current_time() - start_time),
-         has_unknown))
-      for(const auto &[e, g] : globals_point_to)
+    if (log_debug(
+          "memcleanup",
+          "memcleanup: time: {}s, unknown: {}, globals point to:",
+          time2string(current_time() - start_time),
+          has_unknown))
+      for (const auto &[e, g] : globals_point_to)
         log_debug(
           "memcleanup",
           "memcleanup:  {}",
           to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name());
 
-    if(has_unknown)
+    if (has_unknown)
       maybe_global_target = [](expr2tc) { return gen_true_expr(); };
     else
       maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
         expr2tc is_any;
-        for(const auto &[e, g] : tgts)
+        for (const auto &[e, g] : tgts)
         {
           /* XXX: 'obj' is the address of a statically known dynamic object,
            *      couldn't we just statically check whether the symbol 'e'
@@ -1095,10 +1152,10 @@ void goto_symext::add_memory_leak_checks()
       };
   }
 
-  for(auto const &it : dynamic_memory)
+  for (auto const &it : dynamic_memory)
   {
     // Don't check memory leak if the object is automatically deallocated
-    if(it.auto_deallocd)
+    if (it.auto_deallocd)
     {
       log_debug(
         "memcleanup-skip", "memcleanup: not considering auto-dealloc'd");
@@ -1114,11 +1171,11 @@ void goto_symext::add_memory_leak_checks()
 
     expr2tc when = it.alloc_guard.as_expr();
 
-    if(no_reachable_memleak)
+    if (no_reachable_memleak)
     {
       expr2tc obj = get_base_object(it.obj);
       expr2tc adr = obj;
-      if(!is_if2t(obj))
+      if (!is_if2t(obj))
         adr = address_of2tc(obj->type, obj);
       expr2tc targeted = maybe_global_target(adr);
       when = and2tc(when, not2tc(targeted));

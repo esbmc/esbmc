@@ -1,6 +1,5 @@
 # For a quick check-up on dev branch pushes, giving early warning or good news.
-# just a duplicate of build.yml with Linux job only
-name: Build ESBMC - early warning on push
+name: Early warning on push
 
 on: [push]
 
@@ -14,25 +13,10 @@ jobs:
     - name: Runs testing tool unit test
       run: cd regression && python3 testing_tool_test.py
 
-  # just keep the linux job
+  # just run the linux job
   build-unix:
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-    name: Build ESBMC (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    steps:
-    - uses: actions/checkout@v2
-    - name: Build ESBMC
-      run: ./scripts/build.sh -b Debug
-    - uses: actions/upload-artifact@v1
-      with:
-        name: release-unix
-        path: ./release
-    - name: Run tests
-      run: cd build/ && ctest -j4 --output-on-failure --progress .
-    - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
-      with:
-        name: csmith-unix
-        path: ./build/csmith-error
-        if-no-files-found: ignore
+    uses: ./.github/workflows/build-unix.yml
+    with:
+      operating-system: ubuntu-latest
+      build-flags: '-b Debug'
+      testing: true

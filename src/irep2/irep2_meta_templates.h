@@ -176,7 +176,7 @@ size_t
 esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::do_crc()
   const
 {
-  if(this->crc_val != 0)
+  if (this->crc_val != 0)
     return this->crc_val;
 
   // Starting from 0, pass a crc value through all the sub-fields of this
@@ -217,7 +217,7 @@ void esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
   // without this we would screw up the field name list.
   // It escapes me why this isn't printed here anyway, it gets printed in the
   // end.
-  if(
+  if (
     std::is_same<cur_type, type2tc>::value &&
     std::is_base_of<expr2t, derived>::value)
   {
@@ -248,7 +248,7 @@ bool esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::cmp_rec(
   const derived *ref2 = static_cast<const derived *>(&ref);
   auto m_ptr = membr_ptr::value;
 
-  if(!do_type_cmp(derived_this->*m_ptr, ref2->*m_ptr))
+  if (!do_type_cmp(derived_this->*m_ptr, ref2->*m_ptr))
     return false;
 
   return superclass::cmp_rec(ref);
@@ -269,7 +269,7 @@ int esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::lt_rec(
   auto m_ptr = membr_ptr::value;
 
   tmp = do_type_lt(derived_this->*m_ptr, ref2->*m_ptr);
-  if(tmp != 0)
+  if (tmp != 0)
     return tmp;
 
   return superclass::lt_rec(ref);
@@ -324,7 +324,7 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
   auto m_ptr = membr_ptr::value;
 
   // XXX -- this takes a _reference_ to cur_idx, and maybe modifies.
-  if(do_get_sub_expr(derived_this->*m_ptr, desired, cur_idx, ptr))
+  if (do_get_sub_expr(derived_this->*m_ptr, desired, cur_idx, ptr))
     return ptr;
 
   return superclass::get_sub_expr_rec(cur_idx, desired);
@@ -344,7 +344,7 @@ expr2tc *esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
   auto m_ptr = membr_ptr::value;
 
   // XXX -- this takes a _reference_ to cur_idx, and maybe modifies.
-  if(do_get_sub_expr_nc(derived_this->*m_ptr, desired, cur_idx, ptr))
+  if (do_get_sub_expr_nc(derived_this->*m_ptr, desired, cur_idx, ptr))
     return ptr;
 
   return superclass::get_sub_expr_nc_rec(cur_idx, desired);

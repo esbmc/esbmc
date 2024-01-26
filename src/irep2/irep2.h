@@ -277,7 +277,7 @@ public:
      * From the docs: In multithreaded environment, the value returned by
      * use_count is approximate (typical implementations use a
      * memory_order_relaxed load). */
-    if(this->use_count() == 1)
+    if (this->use_count() == 1)
       return; // No point remunging oneself if we're the only user of the ptr.
 
     // Assign-operate ourself into containing a fresh copy of the data. This
@@ -312,7 +312,7 @@ public:
   size_t crc() const
   {
     const T *foo = get();
-    if(foo->crc_val != 0)
+    if (foo->crc_val != 0)
       return foo->crc_val;
 
     return foo->do_crc();
@@ -334,10 +334,10 @@ public:
 
   friend bool operator==(const irep_container &a, const irep_container &b)
   {
-    if(same(a, b))
+    if (same(a, b))
       return true;
 
-    if(!a || !b)
+    if (!a || !b)
       return false;
 
     return *a == *b; // different pointees could still compare equal
@@ -350,12 +350,12 @@ public:
 
   friend bool operator<(const irep_container &a, const irep_container &b)
   {
-    if(!b)
+    if (!b)
       return false; // If b is nil, nothing can be lower
-    if(!a)
+    if (!a)
       return true; // nil is lower than non-nil
 
-    if(same(a, b))
+    if (same(a, b))
       return false;
 
     return *a < *b;
@@ -384,7 +384,7 @@ private:
      * Instead we'll use the implementation-defined total order guaranteed by
      * std::less. */
     const T *p = a.get(), *q = b.get();
-    if(!std::less{}(p, q) && !std::less{}(q, p))
+    if (!std::less{}(p, q) && !std::less{}(q, p))
       return true; /* target is identical */
     return false;
   }
@@ -423,7 +423,6 @@ public:
     signedbv_id,
     fixedbv_id,
     floatbv_id,
-    string_id,
     cpp_name_id,
     end_type_id
   };

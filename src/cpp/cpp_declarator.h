@@ -90,16 +90,16 @@ public:
 };
 
 #define forall_cpp_declarators(it, expr)                                       \
-  for(cpp_declarationt::declaratorst::const_iterator it =                      \
-        (expr).declarators().begin();                                          \
-      it != (expr).declarators().end();                                        \
-      it++)
+  for (cpp_declarationt::declaratorst::const_iterator it =                     \
+         (expr).declarators().begin();                                         \
+       it != (expr).declarators().end();                                       \
+       it++)
 
 #define Forall_cpp_declarators(it, expr)                                       \
-  if((expr).has_operands())                                                    \
-    for(cpp_declarationt::declaratorst::iterator it =                          \
-          (expr).declarators().begin();                                        \
-        it != (expr).declarators().end();                                      \
-        it++)
+  if ((expr).has_operands())                                                   \
+    for (cpp_declarationt::declaratorst::iterator it =                         \
+           (expr).declarators().begin();                                       \
+         it != (expr).declarators().end();                                     \
+         it++)
 
 #endif

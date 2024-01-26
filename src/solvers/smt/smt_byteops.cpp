@@ -3,7 +3,7 @@
 
 smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 {
-  if(int_encoding)
+  if (int_encoding)
   {
     log_error(
       "Refusing to byte extract in integer mode; re-run in "
@@ -19,20 +19,20 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   unsigned int src_width = source->type->get_width();
 
-  if(!is_bv_type(source->type) && !is_fixedbv_type(source->type))
+  if (!is_bv_type(source->type) && !is_fixedbv_type(source->type))
     source = bitcast2tc(get_uint_type(src_width), source);
 
-  if(!is_constant_int2t(offs))
+  if (!is_constant_int2t(offs))
   {
     // The approach: the argument is now a bitvector. Just shift it the
     // appropriate amount, according to the source offset, and select out the
     // bottom byte.
-    if(offs->type->get_width() != src_width)
+    if (offs->type->get_width() != src_width)
       offs = typecast2tc(source->type, data.source_offset);
 
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
     // offset distance. The rest of these calculations will still apply.
-    if(data.big_endian)
+    if (data.big_endian)
     {
       auto data_size = type_byte_size(source->type);
       expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
@@ -54,7 +54,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
   width = data.source_value->type->get_width();
 
   unsigned int upper, lower;
-  if(!data.big_endian)
+  if (!data.big_endian)
   {
     upper = ((intref.value.to_uint64() + 1) * 8) - 1; //((i+1)*w)-1;
     lower = intref.value.to_uint64() * 8;             //i*w;
@@ -68,7 +68,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   smt_astt source_ast = convert_ast(source);
 
-  if(width <= upper)
+  if (width <= upper)
   {
     smt_sortt s = mk_int_bv_sort(8);
     return mk_smt_symbol("out_of_bounds_byte_extract", s);
@@ -79,7 +79,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
 smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
 {
-  if(int_encoding)
+  if (int_encoding)
   {
     log_error("Can't byte update in integer mode; rerun in bitvector mode");
     abort();
@@ -88,7 +88,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   const byte_update2t &data = to_byte_update2t(expr);
   assert(data.type == data.source_value->type);
 
-  if(is_array_type(data.type))
+  if (is_array_type(data.type))
   {
     type2tc subtype = to_array_type(data.type).subtype;
     BigInt sub_size_int = type_byte_size(subtype);
@@ -108,7 +108,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     return convert_ast(with);
   }
 
-  if(!is_bv_type(data.type) && !is_fixedbv_type(data.type))
+  if (!is_bv_type(data.type) && !is_fixedbv_type(data.type))
   {
     // This is a pointer or a bool, or something. We don't want to handle
     // casting of it in the body of this function, so wrap it up as a bitvector
@@ -125,24 +125,24 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     return convert_ast(cast_back);
   }
 
-  if(!is_constant_int2t(data.source_offset))
+  if (!is_constant_int2t(data.source_offset))
   {
     expr2tc source = data.source_value;
     unsigned int src_width = source->type->get_width();
     type2tc org_type;
-    if(!is_unsignedbv_type(source))
+    if (!is_unsignedbv_type(source))
     {
       org_type = source->type;
       source = bitcast2tc(get_uint_type(src_width), source);
     }
 
     expr2tc offs = data.source_offset;
-    if(!is_unsignedbv_type(offs) || offs->type->get_width() != src_width)
+    if (!is_unsignedbv_type(offs) || offs->type->get_width() != src_width)
       offs = typecast2tc(get_uint_type(src_width), offs);
 
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
     // offset distance. The rest of these calculations will still apply.
-    if(data.big_endian)
+    if (data.big_endian)
     {
       auto data_size = type_byte_size(source->type);
       expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
@@ -151,7 +151,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     }
 
     expr2tc update = data.update_value;
-    if(!is_unsignedbv_type(update) || update->type->get_width() != src_width)
+    if (!is_unsignedbv_type(update) || update->type->get_width() != src_width)
       update = typecast2tc(
         get_uint_type(src_width),
         bitcast2tc(get_uint_type(update->type->get_width()), update));
@@ -169,7 +169,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     expr2tc shl2 = shl2tc(offs->type, update, offs);
     expr2tc e = bitor2tc(offs->type, shl2, source);
 
-    if(org_type)
+    if (org_type)
       e = bitcast2tc(org_type, e);
 
     return convert_ast(e);
@@ -190,7 +190,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     to_constant_int2t(data.source_offset).value.to_uint64();
 
   // Flip location if we're in big-endian mode
-  if(data.big_endian)
+  if (data.big_endian)
   {
     unsigned int data_size =
       type_byte_size(data.source_value->type).to_uint64() - 1;
@@ -209,7 +209,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   // can update a padding byte in a struct, leading to a crazy out of bounds
   // update. Either way, leave it to the dereference layer to decide on
   // invalidity.
-  if(src_offset >= (width_op0 / 8))
+  if (src_offset >= (width_op0 / 8))
     return convert_ast(data.source_value);
 
   // Build in three parts: the most significant bits, any in the middle, and
@@ -219,7 +219,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   unsigned int bottom_of_update = (8 * src_offset);
 
   smt_astt top;
-  if(top_of_update == width_op0)
+  if (top_of_update == width_op0)
   {
     top = value;
   }
@@ -227,7 +227,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     top = mk_extract(src_value, width_op0 - 1, top_of_update);
 
   smt_astt middle;
-  if(top == value)
+  if (top == value)
   {
     middle = nullptr;
   }
@@ -237,7 +237,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   }
 
   smt_astt bottom;
-  if(src_offset == 0)
+  if (src_offset == 0)
   {
     middle = nullptr;
     bottom = value;
@@ -248,7 +248,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   // Concatenate the top and bottom, and possible middle, together.
   smt_astt concat;
 
-  if(middle != nullptr)
+  if (middle != nullptr)
     concat = mk_concat(top, middle);
   else
     concat = top;

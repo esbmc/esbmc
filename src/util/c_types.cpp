@@ -5,17 +5,17 @@
 
 typet build_float_type(unsigned width)
 {
-  if(config.ansi_c.use_fixed_for_float)
+  if (config.ansi_c.use_fixed_for_float)
   {
     fixedbv_typet result;
     result.set_width(width);
     result.set_integer_bits(width / 2);
-    return std::move(result);
+    return result;
   }
   floatbv_typet result;
   result.set_width(width);
 
-  switch(width)
+  switch (width)
   {
   case 16:
     result.set_f(11);
@@ -36,16 +36,16 @@ typet build_float_type(unsigned width)
     assert(false);
   }
 
-  return std::move(result);
+  return result;
 }
 
 type2tc build_float_type2(unsigned width)
 {
-  if(config.ansi_c.use_fixed_for_float)
+  if (config.ansi_c.use_fixed_for_float)
     return fixedbv_type2tc(width, width / 2);
 
   unsigned fraction = 0;
-  switch(width)
+  switch (width)
   {
   case 16:
     fraction = 11;
@@ -182,7 +182,7 @@ typet unsigned_short_int_type()
 
 typet char_type()
 {
-  if(config.ansi_c.char_is_unsigned)
+  if (config.ansi_c.char_is_unsigned)
     return unsignedbv_typet(config.ansi_c.char_width);
 
   return signedbv_typet(config.ansi_c.char_width);
@@ -210,17 +210,17 @@ typet char32_type()
 
 typet wchar_type()
 {
-  return signedbv_typet(config.ansi_c.int_width);
+  return signedbv_typet(config.ansi_c.wchar_t_width);
 }
 
 typet unsigned_wchar_type()
 {
-  return unsignedbv_typet(config.ansi_c.int_width);
+  return unsignedbv_typet(config.ansi_c.wchar_t_width);
 }
 
 type2tc char_type2()
 {
-  if(config.ansi_c.char_is_unsigned)
+  if (config.ansi_c.char_is_unsigned)
     return get_uint_type(config.ansi_c.char_width);
   return get_int_type(config.ansi_c.char_width);
 }
@@ -350,7 +350,7 @@ type2tc get_int64_type()
 
 type2tc get_uint_type(unsigned int sz)
 {
-  switch(sz)
+  switch (sz)
   {
   case 8:
     return get_uint8_type();
@@ -367,7 +367,7 @@ type2tc get_uint_type(unsigned int sz)
 
 type2tc get_int_type(unsigned int sz)
 {
-  switch(sz)
+  switch (sz)
   {
   case 8:
     return get_int8_type();

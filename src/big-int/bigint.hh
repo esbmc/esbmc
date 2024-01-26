@@ -245,9 +245,11 @@ public:
       positive = !positive;
     return *this;
   }
-  BigInt operator-() const
+
+  friend BigInt operator-(BigInt b)
   {
-    return BigInt(*this).negate();
+    b.negate();
+    return b;
   }
 
 #define IN_PLACE_OPERATOR(TYPE)                                                \
@@ -306,9 +308,21 @@ public:
   // Not part of original BigInt.
   unsigned floorPow2() const;
 
-  // Sets the number to the power of two given by the exponent
   // Not part of original BigInt.
-  void setPower2(unsigned exponent);
+  static BigInt power2(unsigned n)
+  {
+    BigInt b;
+    b.setPower2(n);
+    return b;
+  }
+
+  // Not part of original BigInt.
+  static BigInt power2m1(unsigned n)
+  {
+    BigInt b = power2(n);
+    --b;
+    return b;
+  }
 
   void swap(BigInt &other)
   {
@@ -317,6 +331,11 @@ public:
     std::swap(other.digit, digit);
     std::swap(other.positive, positive);
   }
+
+private:
+  // Sets the number to the power of two given by the exponent
+  // Not part of original BigInt.
+  void setPower2(unsigned exponent);
 };
 
 // Binary arithmetic operators

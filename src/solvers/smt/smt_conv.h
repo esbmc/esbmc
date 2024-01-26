@@ -217,7 +217,7 @@ public:
 
     // Chain these.
     smt_astt result = v.front();
-    for(std::size_t i = 1; i < v.size(); ++i)
+    for (std::size_t i = 1; i < v.size(); ++i)
       result = (o->*m)(result, v[i]);
 
     return result;
@@ -352,10 +352,10 @@ public:
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(std::size_t width)
   {
-    if(int_encoding)
+    if (int_encoding)
       return mk_int_sort();
 
-    if(width == 0)
+    if (width == 0)
       width = 1;
 
     return mk_bv_sort(width);
@@ -364,10 +364,10 @@ public:
   /** Create an real or floating-point/fixed-point sort */
   smt_sortt mk_real_fp_sort(std::size_t ew, std::size_t sw)
   {
-    if(int_encoding)
+    if (int_encoding)
       return mk_real_sort();
 
-    if(config.ansi_c.use_fixed_for_float)
+    if (config.ansi_c.use_fixed_for_float)
       return mk_fbv_sort(ew + sw);
 
     return fp_api->mk_fpbv_sort(ew, sw);
@@ -612,11 +612,17 @@ public:
    *  address space juggling required to make a new pointer.
    *  @param expr The symbol2tc expression of this symbol.
    *  @param sym The textual representation of this symbol.
+   *  @param type Optionally a pointer to the type of the symbol in the context.
    *  @return A pointer-typed AST representing the address of this symbol. */
-  smt_astt
-  convert_identifier_pointer(const expr2tc &expr, const std::string &sym);
+  smt_astt convert_identifier_pointer(
+    const expr2tc &expr,
+    const std::string &sym,
+    const typet *type);
 
-  smt_astt init_pointer_obj(unsigned int obj_num, const expr2tc &size);
+  smt_astt init_pointer_obj(
+    unsigned int obj_num,
+    const expr2tc &size,
+    const typet *type);
 
   /** Checks for equality with NaN representation. */
   smt_astt convert_is_nan(const expr2tc &expr);
@@ -873,13 +879,6 @@ inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)
 {
   assert(sort != nullptr);
   ctx->live_asts.push_back(this);
-}
-
-inline BigInt ones(unsigned n_bits)
-{
-  BigInt r;
-  r.setPower2(n_bits);
-  return r -= 1;
 }
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */

@@ -24,17 +24,17 @@ codet cpp_typecheckt::cpp_destructor(
   assert(!is_reference(tmp_type));
 
   // PODs don't need a destructor
-  if(cpp_is_pod(tmp_type))
+  if (cpp_is_pod(tmp_type))
   {
     new_code.make_nil();
     return new_code;
   }
 
-  if(tmp_type.id() == "array")
+  if (tmp_type.id() == "array")
   {
     const exprt &size_expr = to_array_type(tmp_type).size();
 
-    if(size_expr.id() == "infinity")
+    if (size_expr.id() == "infinity")
     {
       // don't initialize
       new_code.make_nil();
@@ -42,7 +42,7 @@ codet cpp_typecheckt::cpp_destructor(
     }
 
     BigInt s;
-    if(to_integer(size_expr, s))
+    if (to_integer(size_expr, s))
     {
       err_location(tmp_type);
       str << "array size `" << to_string(size_expr) << "' is not a constant";
@@ -54,7 +54,7 @@ codet cpp_typecheckt::cpp_destructor(
     new_code.set_statement("block");
 
     // for each element of the array, call the destructor
-    for(BigInt i = 0; i < s; ++i)
+    for (BigInt i = 0; i < s; ++i)
     {
       exprt constant = from_integer(i, int_type());
       constant.location() = location;
@@ -78,11 +78,11 @@ codet cpp_typecheckt::cpp_destructor(
 
     irep_idt dtor_name;
 
-    for(const auto &component : components)
+    for (const auto &component : components)
     {
       const typet &type = component.type();
 
-      if(
+      if (
         !component.get_bool("from_base") && type.id() == "code" &&
         type.return_type().id() == "destructor")
       {

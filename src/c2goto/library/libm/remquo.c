@@ -1,4 +1,3 @@
-#define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <fenv.h>
 #include <math.h>
@@ -8,19 +7,19 @@
   {                                                                                    \
   __ESBMC_HIDE:;                                                                       \
     /* If either argument is NaN, NaN is returned */                                   \
-    if(isnan_func(x) || isnan_func(y))                                                 \
+    if (isnan_func(x) || isnan_func(y))                                                \
       return NAN;                                                                      \
                                                                                        \
     /* If y is +0.0/-0.0 and x is not NaN, NaN is returned and FE_INVALID is raised */ \
-    if(y == 0.0)                                                                       \
+    if (y == 0.0)                                                                      \
       return NAN;                                                                      \
                                                                                        \
     /* If x is +inf/-inf and y is not NaN, NaN is returned and FE_INVALID is raised */ \
-    if(isinf_func(x))                                                                  \
+    if (isinf_func(x))                                                                 \
       return NAN;                                                                      \
                                                                                        \
     /* If y is +inf/-inf, return x */                                                  \
-    if(isinf_func(y))                                                                  \
+    if (isinf_func(y))                                                                 \
       return x;                                                                        \
                                                                                        \
     /* remainder = x - rquot * y */                                                    \

@@ -2,6 +2,7 @@
 #define CPROVER_C_EXPR2STRING_H
 
 #include <map>
+#include <optional>
 #include <set>
 #include <util/c_qualifiers.h>
 #include <util/expr.h>
@@ -9,15 +10,30 @@
 #include <util/std_code.h>
 
 std::string
-c_expr2string(const exprt &expr, const namespacet &ns, bool fullname = false);
+c_expr2string(const exprt &expr, const namespacet &ns, unsigned flags = 0);
 std::string
-c_type2string(const typet &type, const namespacet &ns, bool fullname = false);
+c_type2string(const typet &type, const namespacet &ns, unsigned flags = 0);
 
 class c_expr2stringt
 {
 public:
-  c_expr2stringt(const namespacet &_ns, const bool _fullname)
-    : ns(_ns), fullname(_fullname)
+  enum flagst : unsigned
+  {
+    /**
+     * \brief Special case constant zero expressions where C allows a shorter
+     * output such as `{ 0 }` for arrays, vectors, structs and unions.
+     */
+    SHORT_ZERO_COMPOUNDS = 1 << 0,
+    /**
+     * \brief Output enough fractional digits such that the float can be
+     * recovered uniquely. If this flag is not set, the default precision is
+     * given by the format_spect constructor.
+     */
+    UNIQUE_FLOAT_REPR = 1 << 1,
+  };
+
+  c_expr2stringt(const namespacet &_ns, unsigned _flags)
+    : ns(_ns), flags(_flags)
   {
   }
   virtual ~c_expr2stringt() = default;
@@ -29,8 +45,7 @@ public:
 
 protected:
   const namespacet &ns;
-
-  const bool fullname;
+  unsigned flags;
 
   virtual std::string convert_rec(
     const typet &src,
@@ -171,13 +186,16 @@ protected:
 
   std::string convert_norep(const exprt &src, unsigned &precedence);
 
-  std::string convert_struct_union_body(
+  virtual std::string convert_struct_union_body(
+    const exprt &src,
     const exprt::operandst &operands,
     const struct_union_typet::componentst &components);
   virtual std::string convert_struct(const exprt &src, unsigned &precedence);
   virtual std::string convert_union(const exprt &src, unsigned &precedence);
   std::string convert_array(const exprt &src, unsigned &precedence);
   std::string convert_array_list(const exprt &src, unsigned &precedence);
+
+  std::optional<std::string> is_recursively_zero(const exprt &op);
 };
 
 #endif

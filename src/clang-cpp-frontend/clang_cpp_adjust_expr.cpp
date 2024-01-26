@@ -25,17 +25,17 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
 {
   const irep_idt &statement = expr.statement();
 
-  if(statement == "cpp_new" || statement == "cpp_new[]")
+  if (statement == "cpp_new" || statement == "cpp_new[]")
   {
     adjust_new(expr);
   }
-  else if(statement == "cpp_delete" || statement == "cpp_delete[]")
+  else if (statement == "cpp_delete" || statement == "cpp_delete[]")
   {
     // adjust side effect node to explicitly call class destructor
     // e.g. the adjustment here will add the following instruction in GOTO:
     // FUNCTION_CALL:  ~t2(&(*p))
     code_function_callt destructor = get_destructor(ns, expr.type());
-    if(destructor.is_not_nil())
+    if (destructor.is_not_nil())
     {
       exprt new_object("new_object", expr.type());
       new_object.cmt_lvalue(true);
@@ -44,7 +44,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
       expr.set("destructor", destructor);
     }
   }
-  else if(statement == "temporary_object")
+  else if (statement == "temporary_object")
   {
     exprt &initializer = static_cast<exprt &>(expr.add("initializer"));
 
@@ -53,7 +53,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
 
     adjust_function_call_arguments(constructor_call);
   }
-  else if(statement == "assign")
+  else if (statement == "assign")
   {
     adjust_side_effect_assign(expr);
   }
@@ -63,7 +63,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
 
 void clang_cpp_adjust::adjust_new(exprt &expr)
 {
-  if(expr.initializer().is_not_nil())
+  if (expr.initializer().is_not_nil())
   {
     exprt &initializer = static_cast<exprt &>(expr.add("initializer"));
     adjust_expr(initializer);
@@ -86,7 +86,7 @@ void clang_cpp_adjust::adjust_member(member_exprt &expr)
    * dot operator, e.g. OBJECT.setX();
    * or arrow operator, e.g.OBJECT->setX();
    */
-  if(expr.type().is_code() && !expr.get_string("component_name").empty())
+  if (expr.type().is_code() && !expr.get_string("component_name").empty())
   {
     adjust_cpp_member(expr);
   }
@@ -131,7 +131,7 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
   exprt &lhs = expr.op0();
   exprt &rhs = expr.op1();
 
-  if(
+  if (
     rhs.id() == "sideeffect" && rhs.statement() == "function_call" &&
     rhs.get_bool("constructor"))
   {
@@ -140,10 +140,9 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     // where bleh has been declared and there exists a corresponding symbol
     side_effect_expr_function_callt &rhs_func_call =
       to_side_effect_expr_function_call(rhs);
-    exprt &f_op = rhs_func_call.function();
 
     // callee must be a constructor
-    assert(f_op.type().return_type().id() == "constructor");
+    assert(rhs_func_call.function().type().return_type().id() == "constructor");
 
     // just populate rhs' argument and replace the entire expression
     exprt &lhs = expr.op0();
@@ -160,14 +159,16 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     clang_c_adjust::adjust_side_effect_function_call(
       to_side_effect_expr_function_call(expr));
   }
-  else if(lhs.is_symbol() && lhs.type().get_bool("#reference"))
+  else if (
+    lhs.is_symbol() &&
+    (is_reference(lhs.type()) || is_rvalue_reference(lhs.type())))
   {
     // since we modelled lvalue reference as pointers
     // turn assign expression r = 1, where r is an lvalue reference
     // into *r = 1
-    convert_lvalue_ref_to_deref_symbol(lhs);
+    convert_ref_to_deref_symbol(lhs);
   }
-  else if(lhs.id() == "sideeffect" && lhs.statement() == "function_call")
+  else if (lhs.id() == "sideeffect" && lhs.statement() == "function_call")
   {
     // deal with X(a) = 5; where X(a) returns an lvalue reference which
     // is modelled as a pointer. Hence we got to align the LHS with RHS:
@@ -178,7 +179,7 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     // first adjust LHS to make sure its type aligns with the
     // function return type
     adjust_side_effect_function_call(to_side_effect_expr_function_call(lhs));
-    if(lhs.type().get_bool("#reference"))
+    if (is_reference(lhs.type()))
     {
       convert_lvalue_ref_to_deref_sideeffect(lhs);
     }
@@ -192,17 +193,19 @@ void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
   clang_c_adjust::adjust_expr_rel(expr);
 
   exprt &op0 = expr.op0();
-  if(op0.is_typecast())
+  if (op0.is_typecast())
   {
     // special treatment for lvalue reference typecasting
     // if lhs is a typecast of lvalue reference, e.g. (int)r == 1
     // where r is a reference
     // we turn it into (int)*r == 1
     exprt &tp_op0 = op0.op0();
-    if(tp_op0.is_symbol() && tp_op0.type().get_bool("#reference"))
-      convert_lvalue_ref_to_deref_symbol(tp_op0);
+    if (
+      tp_op0.is_symbol() &&
+      (is_reference(tp_op0.type()) || is_rvalue_reference(tp_op0.type())))
+      convert_ref_to_deref_symbol(tp_op0);
   }
-  if(op0.type().get_bool("#reference"))
+  if (is_reference(op0.type()) || is_rvalue_reference(op0.type()))
   {
     // special treatment for lvalue reference
     // if LHS is an lvalue reference, e.g.
@@ -218,9 +221,11 @@ void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
   }
 }
 
-void clang_cpp_adjust::convert_lvalue_ref_to_deref_symbol(exprt &expr)
+void clang_cpp_adjust::convert_ref_to_deref_symbol(exprt &expr)
 {
-  assert(expr.is_symbol() && expr.type().get_bool("#reference"));
+  assert(
+    expr.is_symbol() &&
+    (is_reference(expr.type()) || is_rvalue_reference(expr.type())));
 
   dereference_exprt tmp(expr, expr.type());
   tmp.location() = expr.location();
@@ -229,7 +234,7 @@ void clang_cpp_adjust::convert_lvalue_ref_to_deref_symbol(exprt &expr)
 
 void clang_cpp_adjust::convert_lvalue_ref_to_deref_sideeffect(exprt &expr)
 {
-  assert(expr.id() == "sideeffect" && expr.type().get_bool("#reference"));
+  assert(expr.id() == "sideeffect" && is_reference(expr.type()));
   dereference_exprt tmp_deref(expr, expr.type());
   tmp_deref.location() = expr.location();
   tmp_deref.set("#lvalue", true);
@@ -244,10 +249,10 @@ void clang_cpp_adjust::adjust_function_call_arguments(
 
   exprt::operandst &arguments = expr.arguments();
 
-  for(unsigned i = 0; i < arguments.size(); i++)
+  for (unsigned i = 0; i < arguments.size(); i++)
   {
     exprt &op = arguments[i];
-    if(op.is_typecast() && op.type().get_bool("#reference"))
+    if (op.is_typecast() && op.type().get_bool("#reference"))
     {
       // special treatment for lvalue reference in function parameter list
       // e.g. for F(a), where F is a function taking an int lvalue reference.
@@ -274,6 +279,6 @@ void clang_cpp_adjust::align_se_function_call_return_type(
   // align the side effect's type at callsite with the
   // function return type. But ignore constructors
   const typet &return_type = (typet &)f_op.type().return_type();
-  if(return_type.id() != "constructor")
+  if (return_type.id() != "constructor")
     expr.type() = return_type;
 }

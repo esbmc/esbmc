@@ -21,7 +21,7 @@ void convert_character_literal(const std::string &src, std::string &dest)
   assert(src[0] == '\'' || src[0] == 'L');
   assert(src[src.size() - 1] == '\'');
 
-  if(src[0] == 'L')
+  if (src[0] == 'L')
     unescape_string(std::string(src, 2, src.size() - 3), dest);
   else
     unescape_string(std::string(src, 1, src.size() - 2), dest);
@@ -40,19 +40,19 @@ void convert_character_literal(const std::string &src, exprt &dest)
 
   type = typet("unsignedbv");
 
-  if(value.size() == 0)
+  if (value.size() == 0)
     throw "empty character literal";
-  if(value.size() == 1)
+  if (value.size() == 1)
   {
     type = char_type();
     type.set("#cpp_type", "char");
     dest = from_integer(value[0], type);
   }
-  else if(value.size() >= 2 && value.size() <= 4)
+  else if (value.size() >= 2 && value.size() <= 4)
   {
     BigInt x = 0;
 
-    for(unsigned i = 0; i < value.size(); i++)
+    for (unsigned i = 0; i < value.size(); i++)
     {
       BigInt z = (unsigned char)(value[i]);
       z = z << ((value.size() - i - 1) * 8);

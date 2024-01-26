@@ -19,12 +19,27 @@ languaget *new_solidity_language()
   return new solidity_languaget;
 }
 
+solidity_languaget::solidity_languaget()
+{
+  std::string fun = config.options.get_option("function");
+  if (!fun.empty())
+    func_name = fun;
+
+  std::string sol = config.options.get_option("sol");
+  if (sol.empty())
+  {
+    log_error("Please set the smart contract source file via --sol");
+    abort();
+  }
+  smart_contract = sol;
+}
+
 std::string solidity_languaget::get_temp_file()
 {
   // Create a temp file for clang-tool
   // needed to convert intrinsics
   auto p = boost::filesystem::temp_directory_path();
-  if(!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
+  if (!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
   {
     log_error("Can't find temporary directory (needed to convert intrinsics)");
     abort();
@@ -33,7 +48,7 @@ std::string solidity_languaget::get_temp_file()
   // Create temporary directory
   p += "/esbmc_solidity_temp";
   boost::filesystem::create_directory(p);
-  if(!boost::filesystem::is_directory(p))
+  if (!boost::filesystem::is_directory(p))
   {
     log_error(
       "Can't create temporary directory (needed to convert intrinsics)");
@@ -63,17 +78,17 @@ bool solidity_languaget::parse(const std::string &path)
   std::ifstream ast_json_file_stream(path);
   std::string new_line, ast_json_content;
 
-  while(getline(ast_json_file_stream, new_line))
+  while (getline(ast_json_file_stream, new_line))
   {
-    if(new_line.find(".sol =======") != std::string::npos)
+    if (new_line.find(".sol =======") != std::string::npos)
     {
       break;
     }
   }
-  while(getline(ast_json_file_stream, new_line))
+  while (getline(ast_json_file_stream, new_line))
   {
     // file pointer continues from "=== *.sol ==="
-    if(new_line.find(".sol =======") == std::string::npos)
+    if (new_line.find(".sol =======") == std::string::npos)
     {
       ast_json_content = ast_json_content + new_line + "\n";
     }
@@ -92,7 +107,7 @@ bool solidity_languaget::parse(const std::string &path)
 bool solidity_languaget::convert_intrinsics(contextt &context)
 {
   clang_c_convertert converter(context, ASTs, "C++");
-  if(converter.convert())
+  if (converter.convert())
     return true;
 
   return false;
@@ -107,7 +122,7 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
 
   solidity_convertert converter(
     new_context, ast_json, func_name, smart_contract);
-  if(converter.convert()) // Add Solidity symbols to the context
+  if (converter.convert()) // Add Solidity symbols to the context
     return true;
 
   // migrate from clang_c_adjust to clang_cpp_adjust
@@ -115,13 +130,13 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   // to adjust the created temporary object
   // otherwise it would raise "unknown side effect: temporary_object"
   clang_cpp_adjust adjuster(new_context);
-  if(adjuster.adjust())
+  if (adjuster.adjust())
     return true;
 
-  if(c_link(
-       context,
-       new_context,
-       module)) // also populates language_uit::context
+  if (c_link(
+        context,
+        new_context,
+        module)) // also populates language_uit::context
     return true;
 
   return false;

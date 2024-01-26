@@ -10,7 +10,7 @@ cmake_policy(SET CMP0091 NEW)
 project (ESBMC)
 
 set (ESBMC_VERSION_MAJOR 7)
-set (ESBMC_VERSION_MINOR 3)
+set (ESBMC_VERSION_MINOR 4)
 set (ESBMC_VERSION_PATCH 0)
 set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
@@ -30,10 +30,21 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(STATUS "Setting build type to '${default_build_type}' as none was specified.")
   set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
       STRING "Choose the type of build." FORCE)
-  # Set the possible values of build type for cmake-gui
-  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
-    "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Sanitizer")
 endif()
+
+# Set the possible values of build type for cmake-gui
+set(CMAKE_CXX_FLAGS_DEBUGOPT "-O2 -g" CACHE STRING "C++ compiler flags for DebugOpt build" FORCE)
+set(CMAKE_C_FLAGS_DEBUGOPT "-O2 -g" CACHE STRING "C compiler flags for DebugOpt build" FORCE)
+#set(CMAKE_EXE_LINKER_FLAGS_DEBUGOPT "")
+#set(CMAKE_SHARED_LINKER_FLAGS_DEBUGOPT "")
+mark_as_advanced(
+  CMAKE_CXX_FLAGS_DEBUGOPT
+  CMAKE_C_FLAGS_DEBUGOPT
+  #CMAKE_EXE_LINKER_FLAGS_DEBUGOPT
+  #CMAKE_SHARED_LINKER_FLAGS_DEBUGOPT
+)
+set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+             "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Sanitizer" "DebugOpt")
 
 set(ESBMC_CXX_Clang_DEFAULTS -Wall -Wextra -pipe)
 set(ESBMC_CXX_GNU_DEFAULTS -Wall -Wextra -pipe)

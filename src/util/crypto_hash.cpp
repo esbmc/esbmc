@@ -17,7 +17,7 @@ public:
 
 bool crypto_hash::operator<(const crypto_hash &h2) const
 {
-  if(memcmp(hash, h2.hash, sizeof(hash)) < 0)
+  if (memcmp(hash, h2.hash, sizeof(hash)) < 0)
     return true;
 
   return false;
@@ -26,7 +26,7 @@ bool crypto_hash::operator<(const crypto_hash &h2) const
 std::string crypto_hash::to_string() const
 {
   std::ostringstream buf;
-  for(unsigned int i : hash)
+  for (unsigned int i : hash)
     buf << std::hex << std::setfill('0') << std::setw(8) << i;
 
   return buf.str();

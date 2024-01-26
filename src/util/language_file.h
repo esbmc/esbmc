@@ -22,16 +22,10 @@ class language_filet
 public:
   std::set<std::string> modules;
 
-  class languaget *language;
+  std::unique_ptr<languaget> language;
   std::string filename;
 
   void get_modules();
-
-  language_filet()
-  {
-    language = nullptr;
-  }
-  ~language_filet();
 };
 
 class language_filest

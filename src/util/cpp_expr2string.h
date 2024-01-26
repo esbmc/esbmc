@@ -1,19 +1,10 @@
-#ifndef CPROVER_CPP_EXPR2STRING_H
-#define CPROVER_CPP_EXPR2STRING_H
 
-#include <string>
+#pragma once
 
-class exprt;
-class namespacet;
-class typet;
+#include <util/c_expr2string.h>
 
-std::string cpp_expr2string(
-  const exprt &expr,
-  const namespacet &ns,
-  const bool fullname = false);
-std::string cpp_type2string(
-  const typet &type,
-  const namespacet &ns,
-  const bool fullname = false);
+std::string
+cpp_expr2string(const exprt &expr, const namespacet &ns, unsigned flags = 0);
 
-#endif
+std::string
+cpp_type2string(const typet &type, const namespacet &ns, unsigned flags = 0);

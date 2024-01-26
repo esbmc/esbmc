@@ -32,16 +32,18 @@
 cudaError_t
 __cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind)
 {
+  __ESBMC_atomic_begin();
   __ESBMC_assert(count > 0, "Size to be allocated may not be less than zero");
 
   char *cdst = (char *)dst;
   const char *csrc = (const char *)src;
   int numbytes = count / (sizeof(char));
 
-  for(int i = 0; i < numbytes; i++)
+  for (int i = 0; i < numbytes; i++)
     cdst[i] = csrc[i];
 
   lastError = CUDA_SUCCESS;
+  __ESBMC_atomic_end();
   return CUDA_SUCCESS;
 }
 
@@ -53,12 +55,13 @@ cudaError_t cudaMemcpy(T1 dst, T2 src, size_t count, enum cudaMemcpyKind kind)
 
 cudaError_t cudaMalloc(void **devPtr, size_t size)
 {
+  __ESBMC_atomic_begin();
   cudaError_t tmp;
   //pre-conditions
   __ESBMC_assert(size > 0, "Size to be allocated may not be less than zero");
   *devPtr = malloc(size);
 
-  if(*devPtr == NULL)
+  if (*devPtr == NULL)
     tmp = CUDA_ERROR_OUT_OF_MEMORY;
   else
     tmp = CUDA_SUCCESS;
@@ -67,13 +70,16 @@ cudaError_t cudaMalloc(void **devPtr, size_t size)
   __ESBMC_assert(tmp == CUDA_SUCCESS, "Memory was not allocated");
 
   lastError = tmp;
+  __ESBMC_atomic_end();
   return tmp;
 }
 
 cudaError_t cudaFree(void *devPtr)
 {
+  __ESBMC_atomic_begin();
   free(devPtr);
   lastError = CUDA_SUCCESS;
+  __ESBMC_atomic_end();
   return CUDA_SUCCESS;
 }
 
@@ -81,7 +87,7 @@ const char *cudaGetErrorString(cudaError_t error)
 {
   char *erroReturn;
 
-  switch(error)
+  switch (error)
   {
   case 0:
     return "CUDA_SUCCESS";
@@ -282,21 +288,20 @@ void cudaDeviceInsert(int device)
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
   //Verifies that the device exists in the list
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   {
-    if(auxDevice->id == device)
+    if (auxDevice->id == device)
     {
       //printf("\nDevice existing");
       //return 0;
     }
     auxDevice = auxDevice->prox;
   }
-
   //Insert new device
   cudaDeviceList_t *newCudaDevice;
 
   newCudaDevice = (cudaDeviceList_t *)__ESBMC_alloca(sizeof(cudaDeviceList_t));
-  if(newCudaDevice == NULL)
+  if (newCudaDevice == NULL)
     return;
 
   newCudaDevice->id = device;
@@ -304,7 +309,7 @@ void cudaDeviceInsert(int device)
   //newCudaDevice->deviceProp.regsPerBlock = var; //Insert fields to deviceProp
   newCudaDevice->prox = NULL;
 
-  if(cudaDeviceList == NULL)
+  if (cudaDeviceList == NULL)
   {
     cudaDeviceList = newCudaDevice;
   }
@@ -313,7 +318,6 @@ void cudaDeviceInsert(int device)
     newCudaDevice->prox = cudaDeviceList;
     cudaDeviceList = newCudaDevice;
   }
-
   //	return 1;
 }
 
@@ -321,14 +325,15 @@ void cudaDeviceInsert(int device)
 void cudaPrintDevice()
 {
   //printf("\n\n*** CUDA Device\n");
-
+  __ESBMC_atomic_begin();
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   {
     //printf("->Device: %d Active:%d\n",auxDevice->id,auxDevice->active);
     auxDevice = auxDevice->prox;
   }
+  __ESBMC_atomic_end();
 }
 
 //Searching for a device in the devices list
@@ -336,9 +341,9 @@ int searchCudaDevice(int device)
 {
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   {
-    if(auxDevice->id == device)
+    if (auxDevice->id == device)
     {
       return 1;
     }
@@ -355,11 +360,11 @@ int cudaDeviceActive(int device)
 {
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   {
-    if(auxDevice->id == device)
+    if (auxDevice->id == device)
     {
-      if(auxDevice->active == 1)
+      if (auxDevice->active == 1)
       {
         return 1;
       }
@@ -377,9 +382,9 @@ int cudaDeviceStart(int device)
 {
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   {
-    if(auxDevice->id == device)
+    if (auxDevice->id == device)
     {
       auxDevice->active = 1;
       return 1;
@@ -394,11 +399,11 @@ cudaError_t cudaSetDevice(int device)
 {
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   { //Scroll through the list
-    if(auxDevice->id == device)
+    if (auxDevice->id == device)
     { //Checks if the device
-      if(auxDevice->active == 1)
+      if (auxDevice->active == 1)
       {                                     //Verifies that the device is active
         return cudaErrorDeviceAlreadyInUse; //cudaErrorDeviceAlreadyInUse
         lastError = cudaErrorDeviceAlreadyInUse;
@@ -460,11 +465,13 @@ cudaError_t cudaMemcpyToSymbol(
   size_t offset __dv(0),
   enum cudaMemcpyKind kind __dv(cudaMemcpyHostToDevice))
 {
+  __ESBMC_atomic_begin();
   cudaError_t out;
 
   out = __cudaMemcpy((void *)(symbol), (const void *)src, count, kind);
 
   lastError = out;
+  __ESBMC_atomic_end();
   return out;
 }
 
@@ -475,11 +482,13 @@ cudaError_t cudaMemcpyFromSymbol(
   size_t offset __dv(0),
   enum cudaMemcpyKind kind __dv(cudaMemcpyDeviceToHost))
 {
+  __ESBMC_atomic_begin();
   cudaError_t out;
 
   out = __cudaMemcpy((void *)dst, (const void *)(symbol), count, kind);
 
   lastError = out;
+  __ESBMC_atomic_end();
   return out;
 }
 
@@ -497,9 +506,9 @@ cudaGetDeviceProperties(struct cudaDeviceProp *prop, int device)
 
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  while(auxDevice != NULL)
+  while (auxDevice != NULL)
   {
-    if(auxDevice->id == device)
+    if (auxDevice->id == device)
     {
       deviceChosen = auxDevice->deviceProp;
       prop = &deviceChosen;
@@ -507,7 +516,6 @@ cudaGetDeviceProperties(struct cudaDeviceProp *prop, int device)
     }
     auxDevice = auxDevice->prox;
   }
-
   return CUDA_ERROR_INVALID_VALUE;
 }
 
@@ -526,9 +534,10 @@ threadsList_t *cudaThreadList = NULL;
 
 cudaError_t cudaThreadSynchronize()
 {
+  __ESBMC_atomic_begin();
   cudaError_t tmp;
 
-  while(cudaThreadList != NULL)
+  while (cudaThreadList != NULL)
   {
     threadsList_t *node;
     pthread_join(cudaThreadList->thread, NULL);
@@ -537,6 +546,7 @@ cudaError_t cudaThreadSynchronize()
     free(node);
   }
   lastError = CUDA_SUCCESS;
+  __ESBMC_atomic_end();
   return CUDA_SUCCESS;
 }
 

@@ -1,9 +1,13 @@
-#include "python-frontend/python_language.h"
-#include "python-frontend/python_converter.h"
-#include "util/message.h"
-#include "util/filesystem.h"
+#include <python-frontend/python_language.h>
+#include <python-frontend/python_converter.h>
+#include <python-frontend/python_annotation.h>
+#include <clang-cpp-frontend/clang_cpp_adjust.h>
+#include <util/message.h>
+#include <util/filesystem.h>
+#include <util/c_expr2string.h>
 
 #include <cstdlib>
+#include <fstream>
 
 #include <boost/filesystem.hpp>
 #include <boost/process.hpp>
@@ -23,7 +27,7 @@ static const std::string &dump_python_script()
   static bool dumped = false;
   static auto p =
     file_operations::create_tmp_dir("esbmc-python-astgen-%%%%-%%%%-%%%%");
-  if(!dumped)
+  if (!dumped)
   {
     dumped = true;
 #define ESBMC_FLAIL(body, size, ...)                                           \
@@ -45,7 +49,7 @@ bool python_languaget::parse(const std::string &path)
   log_debug("python", "Parsing: {}", path);
 
   fs::path script(path);
-  if(!fs::exists(script))
+  if (!fs::exists(script))
     return true;
 
   ast_output_dir = dump_python_script();
@@ -60,14 +64,23 @@ bool python_languaget::parse(const std::string &path)
   // Wait for execution
   process.wait();
 
-  if(process.exit_code())
+  if (process.exit_code())
   {
     log_error("Python execution failed");
     return true;
   }
 
+  // Parse and generate AST
   std::ifstream ast_json(ast_output_dir + "/ast.json");
   ast = nlohmann::json::parse(ast_json);
+
+  // Add annotation
+  python_annotation<nlohmann::json> ann(ast);
+  const std::string function = config.options.get_option("function");
+  if (!function.empty())
+    ann.add_type_annotation(function);
+  else
+    ann.add_type_annotation();
 
   return false;
 }
@@ -82,29 +95,71 @@ bool python_languaget::typecheck(
   const std::string & /*module*/)
 {
   python_converter converter(context, ast);
-  return converter.convert();
+  if (converter.convert())
+    return true;
+
+  clang_cpp_adjust adjuster(context);
+  if (adjuster.adjust())
+    return true;
+
+  return false;
 }
 
 void python_languaget::show_parse(std::ostream &out)
 {
   out << "AST:\n";
-  out << ast.dump(4) << std::endl;
+  const std::string function = config.options.get_option("function");
+  if (function.empty())
+  {
+    out << ast.dump(4) << std::endl;
+    return;
+  }
+  else
+  {
+    for (const auto &elem : ast["body"])
+    {
+      if (elem["_type"] == "FunctionDef" && elem["name"] == function)
+      {
+        out << elem.dump(4) << std::endl;
+        return;
+      }
+    }
+  }
+  log_error("Function {} not found.\n", function.c_str());
+  abort();
 }
 
 bool python_languaget::from_expr(
-  const exprt & /*expr*/,
-  std::string & /*code*/,
-  const namespacet & /*ns*/)
+  const exprt &expr,
+  std::string &code,
+  const namespacet &ns,
+  unsigned flags)
 {
-  assert(!"Not implemented yet");
+  code = c_expr2string(expr, ns, flags);
   return false;
 }
 
 bool python_languaget::from_type(
-  const typet & /*type*/,
-  std::string & /*code*/,
-  const namespacet & /*ns*/)
+  const typet &type,
+  std::string &code,
+  const namespacet &ns,
+  unsigned flags)
 {
-  assert(!"Not implemented yet");
+  code = c_type2string(type, ns, flags);
   return false;
+}
+
+unsigned python_languaget::default_flags(presentationt target) const
+{
+  unsigned f = 0;
+  switch (target)
+  {
+  case presentationt::HUMAN:
+    f |= c_expr2stringt::SHORT_ZERO_COMPOUNDS;
+    break;
+  case presentationt::WITNESS:
+    f |= c_expr2stringt::UNIQUE_FLOAT_REPR;
+    break;
+  }
+  return f;
 }

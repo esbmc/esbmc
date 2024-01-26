@@ -53,9 +53,9 @@ public:
 
     int compare(const name_record &ref) const
     {
-      if(base_name.get_no() < ref.base_name.get_no())
+      if (base_name.get_no() < ref.base_name.get_no())
         return -1;
-      if(base_name.get_no() > ref.base_name.get_no())
+      if (base_name.get_no() > ref.base_name.get_no())
         return 1;
 
       return 0;
@@ -63,14 +63,14 @@ public:
 
     bool operator<(const name_record &ref) const
     {
-      if(compare(ref) == -1)
+      if (compare(ref) == -1)
         return true;
       return false;
     }
 
     bool operator==(const name_record &ref) const
     {
-      if(compare(ref) == 0)
+      if (compare(ref) == 0)
         return true;
       return false;
     }
@@ -156,29 +156,29 @@ public:
 
     int compare(const name_record &ref) const
     {
-      if(hash < ref.hash)
+      if (hash < ref.hash)
         return -1;
-      if(hash > ref.hash)
+      if (hash > ref.hash)
         return 1;
 
-      if(base_name < ref.base_name)
+      if (base_name < ref.base_name)
         return -1;
-      if(ref.base_name < base_name)
+      if (ref.base_name < base_name)
         return 1;
 
-      if(lev < ref.lev)
+      if (lev < ref.lev)
         return -1;
-      if(lev > ref.lev)
+      if (lev > ref.lev)
         return 1;
 
-      if(l1_num < ref.l1_num)
+      if (l1_num < ref.l1_num)
         return -1;
-      if(l1_num > ref.l1_num)
+      if (l1_num > ref.l1_num)
         return 1;
 
-      if(t_num < ref.t_num)
+      if (t_num < ref.t_num)
         return -1;
-      if(t_num > ref.t_num)
+      if (t_num > ref.t_num)
         return 1;
 
       return 0;
@@ -186,14 +186,14 @@ public:
 
     bool operator<(const name_record &ref) const
     {
-      if(compare(ref) == -1)
+      if (compare(ref) == -1)
         return true;
       return false;
     }
 
     bool operator==(const name_record &ref) const
     {
-      if(compare(ref) == 0)
+      if (compare(ref) == 0)
         return true;
       return false;
     }

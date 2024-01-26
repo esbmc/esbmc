@@ -38,12 +38,12 @@ public:
   bool has_base(const irep_idt &id) const
   {
     const irept::subt &b = bases();
-    forall_irep(it, b)
+    forall_irep (it, b)
     {
       assert(it->id() == "bases");
       const irept &type = it->find("type");
       assert(type.id() == "symbol");
-      if(type.get("identifier") == id)
+      if (type.get("identifier") == id)
         return true;
     }
 

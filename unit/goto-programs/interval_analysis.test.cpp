@@ -22,7 +22,7 @@ public:
 
   void run_configs(bool needs_overflow_support = false)
   {
-    if(!needs_overflow_support)
+    if (!needs_overflow_support)
     {
       // Common Interval Analysis (Linear from -infinity into +infinity)
       SECTION("Baseline")
@@ -129,44 +129,44 @@ public:
     interval_analysis(P.functions, P.ns);
     CHECK(P.functions.function_map.size() > 0);
 
-    Forall_goto_functions(f_it, P.functions)
+    Forall_goto_functions (f_it, P.functions)
     {
-      if(f_it->first == "c:@F@main")
+      if (f_it->first == "c:@F@main")
       {
         REQUIRE(f_it->second.body_available);
-        forall_goto_program_instructions(i_it, f_it->second.body)
+        forall_goto_program_instructions (i_it, f_it->second.body)
         {
           const auto &to_check =
             property.find(i_it->location.get_line().as_string());
-          if(to_check != property.end())
+          if (to_check != property.end())
           {
             auto state = get_map<IntervalMap>(interval_analysis[i_it]);
 
-            for(auto property_it = to_check->second.begin();
-                property_it != to_check->second.end();
-                property_it++)
+            for (auto property_it = to_check->second.begin();
+                 property_it != to_check->second.end();
+                 property_it++)
             {
-              if(!property_it->should_contain && !precise_intervals)
+              if (!property_it->should_contain && !precise_intervals)
                 continue;
 
               const auto &value = property_it->v;
 
               // we need to find the actual interval however... getting the original name is hard
               auto interval = state.begin();
-              for(; interval != state.end(); interval++)
+              for (; interval != state.end(); interval++)
               {
                 auto real_name = interval->first.as_string();
                 auto var_name = property_it->var;
 
-                if(var_name.size() > real_name.size())
+                if (var_name.size() > real_name.size())
                   continue;
 
-                if(std::equal(
-                     var_name.rbegin(), var_name.rend(), real_name.rbegin()))
+                if (std::equal(
+                      var_name.rbegin(), var_name.rend(), real_name.rbegin()))
                   break;
               }
 
-              if(interval == state.end())
+              if (interval == state.end())
               {
                 CAPTURE(
                   precise_intervals,
@@ -180,14 +180,9 @@ public:
               // Hack to get values!
               auto cpy = interval->second;
               cpy.set_lower(value);
-              CAPTURE(
-                interval->second.get_lower(),
-                interval->second.get_upper(),
-                cpy.get_lower(),
-                property_it->var,
-                i_it->location.get_line().as_string());
+              assert(cpy.lower);
               REQUIRE(
-                interval->second.contains(cpy.lower) ==
+                interval->second.contains(*cpy.lower) ==
                 property_it->should_contain);
             }
           }
@@ -394,7 +389,7 @@ TEST_CASE(
     "a = -52;\n"
     "b = 2;\n" // a: [-52, -52]
     "} else {\n"
-    "b = 4;\n" // a: [-50, MAX_INT]
+    "b = 4;\n" // a: [-49, MAX_INT]
     "a = 51;\n"
     "b = 4;\n" // a: [51, 51]
     "}\n"
@@ -405,7 +400,7 @@ TEST_CASE(
   T.property["4"].push_back({"@F@main@a", -50, true});
   T.property["6"].push_back({"@F@main@a", -52, true});
   T.property["8"].push_back({"@F@main@a", (long long)pow(2, 31) - 1, true});
-  T.property["8"].push_back({"@F@main@a", -50, true});
+  T.property["8"].push_back({"@F@main@a", -49, true});
   T.property["10"].push_back({"@F@main@a", 51, true});
   T.property["13"].push_back({"@F@main@a", -52, true});
 
@@ -511,7 +506,6 @@ TEST_CASE(
 
   T.run_configs();
 }
-
 TEST_CASE("Interval Analysis - While Statement", "[ai][interval-analysis]")
 {
   // Setup global options here

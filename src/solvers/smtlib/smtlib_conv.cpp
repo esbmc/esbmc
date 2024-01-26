@@ -150,7 +150,7 @@ smt_convt *create_new_smtlib_solver(
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  if(!options.get_bool_option("smt-formula-only"))
+  if (!options.get_bool_option("smt-formula-only"))
     log_warning(
       "[smtlib] the smtlib interface solving is unstable. Please, "
       "use it with --smt-formula-only for production");
@@ -163,11 +163,11 @@ smt_convt *create_new_smtlib_solver(
 void smtlib_convt::dump_smt()
 {
   auto path = config.options.get_option("output");
-  if(path != "")
+  if (path != "")
   {
     assert(emit_opt_output);
     emit_opt_output.emit("%s\n", "(check-sat)");
-    if(path == "-")
+    if (path == "-")
       log_status("SMT formula written to standard output");
     else
       log_status("SMT formula written to output file {}", path);
@@ -178,12 +178,12 @@ smtlib_convt::file_emitter::file_emitter(const std::string &path)
   : out_stream(nullptr)
 {
   // We may be being instructed to just output to a file.
-  if(path == "")
+  if (path == "")
     return;
 
   // Open a file, do nothing else.
   out_stream = path == "-" ? stdout : fopen(path.c_str(), "w");
-  if(!out_stream)
+  if (!out_stream)
   {
     log_error("Failed to open \"{}\": {}", path, strerror(errno));
     abort();
@@ -192,14 +192,14 @@ smtlib_convt::file_emitter::file_emitter(const std::string &path)
 
 smtlib_convt::file_emitter::~file_emitter() noexcept
 {
-  if(out_stream)
+  if (out_stream)
     fclose(out_stream);
 }
 
 smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
   : out_stream(nullptr), in_stream(nullptr), org_sigpipe_handler(nullptr)
 {
-  if(cmd == "")
+  if (cmd == "")
     return;
 
   // Setup: open a pipe to the smtlib solver. There seems to be no standard C++
@@ -212,20 +212,20 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
   log_error("smtlib works only in unix systems");
   abort();
 #else
-  if(pipe(inpipe) != 0)
+  if (pipe(inpipe) != 0)
   {
     log_error("Couldn't open a pipe for smtlib solver");
     abort();
   }
 
-  if(pipe(outpipe) != 0)
+  if (pipe(outpipe) != 0)
   {
     log_error("Couldn't open a pipe for smtlib solver");
     abort();
   }
 
   pid_t solver_proc_pid = fork();
-  if(solver_proc_pid == 0)
+  if (solver_proc_pid == 0)
   {
     close(outpipe[1]);
     close(inpipe[0]);
@@ -237,7 +237,7 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
     close(inpipe[1]);
 
     const char *shell = getenv("SHELL");
-    if(!shell || !*shell)
+    if (!shell || !*shell)
       shell = "sh";
 
     // Voila
@@ -257,7 +257,7 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
     in_stream = fdopen(inpipe[0], "r");
 
     org_sigpipe_handler = reinterpret_cast<void *>(signal(SIGPIPE, SIG_IGN));
-    if(org_sigpipe_handler == SIG_ERR)
+    if (org_sigpipe_handler == SIG_ERR)
     {
       log_error("registering SIGPIPE handler: {}", strerror(errno));
       abort();
@@ -338,12 +338,12 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
 
 smtlib_convt::process_emitter::~process_emitter() noexcept
 {
-  if(out_stream)
+  if (out_stream)
     fclose(out_stream);
-  if(in_stream)
+  if (in_stream)
     fclose(in_stream);
 #ifndef _WIN32
-  if(org_sigpipe_handler)
+  if (org_sigpipe_handler)
     signal(SIGPIPE, reinterpret_cast<void (*)(int)>(org_sigpipe_handler));
 #endif
 }
@@ -373,7 +373,7 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
   const smtlib_smt_sort *sort = static_cast<const smtlib_smt_sort *>(s);
   std::stringstream ss;
 
-  switch(sort->id)
+  switch (sort->id)
   {
   case SMT_SORT_INT:
     return "Int";
@@ -404,10 +404,10 @@ unsigned int smtlib_convt::emit_terminal_ast(
   std::stringstream ss;
   const smtlib_smt_sort *sort = static_cast<const smtlib_smt_sort *>(ast->sort);
 
-  switch(ast->kind)
+  switch (ast->kind)
   {
   case SMT_FUNC_INT:
-    if(ast->intval.is_negative())
+    if (ast->intval.is_negative())
     {
       // Negative integers need to be constructed from unary minus and a literal
       ss << "(- " << integer2string(-ast->intval) << ")";
@@ -420,7 +420,7 @@ unsigned int smtlib_convt::emit_terminal_ast(
     }
     return 0;
   case SMT_FUNC_BOOL:
-    if(ast->boolval)
+    if (ast->boolval)
       output = "true";
     else
       output = "false";
@@ -476,7 +476,7 @@ unsigned int smtlib_convt::emit_ast(
   assert(ast->args.size() <= 4);
   std::string args[4];
 
-  switch(ast->kind)
+  switch (ast->kind)
   {
   case SMT_FUNC_INT:
   case SMT_FUNC_BOOL:
@@ -489,7 +489,7 @@ unsigned int smtlib_convt::emit_ast(
     // Continue.
   }
 
-  if(auto it = temp_symbols.find(ast); it != temp_symbols.end())
+  if (auto it = temp_symbols.find(ast); it != temp_symbols.end())
   {
     output = it->second;
     return 0;
@@ -503,7 +503,7 @@ unsigned int smtlib_convt::emit_ast(
 
   temp_symbols.emplace(ast, tempname);
 
-  for(unsigned long int i = 0; i < ast->args.size(); i++)
+  for (unsigned long int i = 0; i < ast->args.size(); i++)
     brace_level += emit_ast(
       static_cast<const smtlib_smt_ast *>(ast->args[i]), args[i], temp_symbols);
 
@@ -513,7 +513,7 @@ unsigned int smtlib_convt::emit_ast(
 
   // This asts function
   assert(static_cast<size_t>(ast->kind) < smt_func_name_table.size());
-  if(ast->kind == SMT_FUNC_EXTRACT)
+  if (ast->kind == SMT_FUNC_EXTRACT)
   {
     // Extract is an indexed function
     emit("(_ extract %d %d)", ast->extract_high, ast->extract_low);
@@ -524,7 +524,7 @@ unsigned int smtlib_convt::emit_ast(
   }
 
   // Its operands
-  for(unsigned long int i = 0; i < ast->args.size(); i++)
+  for (unsigned long int i = 0; i < ast->args.size(); i++)
     emit(" %s", args[i].c_str());
 
   // End func enclosing brace, then operand to let (two braces).
@@ -552,7 +552,7 @@ void smtlib_convt::emit_ast(const smtlib_smt_ast *ast) const
   emit("%s", output.c_str());
 
   // Emit a ton of end braces.
-  for(unsigned int i = 0; i < brace_level; i++)
+  for (unsigned int i = 0; i < brace_level; i++)
     emit("%c", ')');
 }
 
@@ -591,7 +591,7 @@ smt_convt::resultt smtlib_convt::dec_solve()
   flush();
 
   // If we're just outputing to a file, this is where we terminate.
-  if(!emit_proc)
+  if (!emit_proc)
     return smt_convt::P_SMTLIB;
 
   // And read in the output
@@ -599,17 +599,17 @@ smt_convt::resultt smtlib_convt::dec_solve()
   smtlibparse(TOK_START_SAT);
 
   // This should generate on sexpr. See what it is.
-  if(smtlib_output->token == TOK_KW_SAT)
+  if (smtlib_output->token == TOK_KW_SAT)
   {
     return smt_convt::P_SATISFIABLE;
   }
-  if(smtlib_output->token == TOK_KW_UNSAT)
+  if (smtlib_output->token == TOK_KW_UNSAT)
   {
     return smt_convt::P_UNSATISFIABLE;
   }
-  else if(smtlib_output->token == TOK_KW_ERROR)
+  else if (smtlib_output->token == TOK_KW_ERROR)
   {
-    log_error("SMTLIB solver returned error: \"{}\"", smtlib_output->data);
+    log_error("SMTLIB solver returned: \"{}\"", smtlib_output->data);
     return smt_convt::P_ERROR;
   }
   else
@@ -630,14 +630,14 @@ sexpr smtlib_convt::get_value(smt_astt a) const
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_VALUE);
 
-  if(smtlib_output->token == TOK_KW_ERROR)
+  if (smtlib_output->token == TOK_KW_ERROR)
   {
     log_error(
       "Error from smtlib solver when fetching literal value: \"{}\"",
       smtlib_output->data);
     abort();
   }
-  else if(smtlib_output->token != 0)
+  else if (smtlib_output->token != 0)
   {
     log_error("Unrecognized response to get-value from smtlib solver");
     abort();
@@ -664,7 +664,7 @@ sexpr smtlib_convt::get_value(smt_astt a) const
 static BigInt interp_numeric(const sexpr &respval, bool is_signed)
 {
   yytokentype tok = static_cast<yytokentype>(respval.token);
-  switch(tok)
+  switch (tok)
   {
   case TOK_DECIMAL:
     return string2integer(respval.data);
@@ -706,7 +706,7 @@ static std::string read_all(FILE *in)
 {
   std::string r;
   char buf[4096];
-  for(size_t rd; (rd = fread(buf, 1, sizeof(buf), in));)
+  for (size_t rd; (rd = fread(buf, 1, sizeof(buf), in));)
     r.insert(r.size(), buf, rd);
   return r;
 }
@@ -714,17 +714,17 @@ static std::string read_all(FILE *in)
 template <typename... Ts>
 void smtlib_convt::emit(const Ts &...ts) const
 {
-  if(emit_proc)
+  if (emit_proc)
     emit_proc.emit(ts...);
-  if(emit_opt_output)
+  if (emit_opt_output)
     emit_opt_output.emit(ts...);
 }
 
 void smtlib_convt::flush() const
 {
-  if(emit_proc)
+  if (emit_proc)
     emit_proc.flush();
-  if(emit_opt_output)
+  if (emit_opt_output)
     emit_opt_output.flush();
 }
 
@@ -738,7 +738,7 @@ void smtlib_convt::process_emitter::emit(const char *fmt, Ts &&...ts) const
 {
   /* TODO: other error handling */
   errno = 0;
-  if(fprintf(out_stream, fmt, ts...) < 0 && errno == EPIPE)
+  if (fprintf(out_stream, fmt, ts...) < 0 && errno == EPIPE)
     throw external_process_died(read_all(in_stream));
 }
 
@@ -746,7 +746,7 @@ void smtlib_convt::process_emitter::flush() const
 {
   /* TODO: other error handling */
   errno = 0;
-  if(fflush(out_stream) == EOF && errno == EPIPE)
+  if (fflush(out_stream) == EOF && errno == EPIPE)
     throw external_process_died(read_all(in_stream));
 }
 
@@ -773,12 +773,12 @@ tvt smtlib_convt::l_get(smt_astt a)
   sexpr second = get_value(a);
 
   // And finally we have our value. It should be true or false.
-  if(second.token == TOK_KW_TRUE)
+  if (second.token == TOK_KW_TRUE)
     return tvt(true);
-  if(second.token == TOK_KW_FALSE)
+  if (second.token == TOK_KW_FALSE)
     return tvt(false);
 
-  if(second.token == TOK_SIMPLESYM && second.data == "???")
+  if (second.token == TOK_SIMPLESYM && second.data == "???")
   {
     /* Yices sometimes returns '???', e.g. when using get-value of stores */
     return tvt(tvt::TV_UNKNOWN);
@@ -786,9 +786,9 @@ tvt smtlib_convt::l_get(smt_astt a)
 
   /* Boolector sometimes returns #b0 or #b1 for Bool-sorted constants */
   BigInt m = interp_numeric(second, false);
-  if(m == 0)
+  if (m == 0)
     return tvt(false);
-  if(m == 1)
+  if (m == 1)
     return tvt(true);
 
   abort();
@@ -798,9 +798,9 @@ bool smtlib_convt::get_bool(smt_astt a)
 {
   tvt tv = l_get(a);
 
-  if(tv.is_true())
+  if (tv.is_true())
     return true;
-  if(tv.is_false())
+  if (tv.is_false())
     return false;
 
   abort();
@@ -808,10 +808,10 @@ bool smtlib_convt::get_bool(smt_astt a)
 
 const std::string smtlib_convt::solver_text()
 {
-  if(emit_proc)
+  if (emit_proc)
     return "'" + options.get_option("smtlib-solver-prog") + "'";
 
-  if(emit_opt_output)
+  if (emit_opt_output)
     return "Text output";
 
   return "<smtlib:none>";
@@ -875,14 +875,14 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 
   symbol_tablet::iterator it = symbol_table.find(name);
 
-  if(it != symbol_table.end())
+  if (it != symbol_table.end())
     return a;
 
   // Record the type of this symbol
   struct symbol_table_rec record = {name, ctx_level, s};
   symbol_table.insert(record);
 
-  if(s->id == SMT_SORT_STRUCT)
+  if (s->id == SMT_SORT_STRUCT)
     return a;
 
   // As this is the first time, declare that symbol to the solver.
@@ -968,7 +968,7 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 
 int smtliberror(int startsym [[maybe_unused]], const std::string &error)
 {
-  log_error("SMTLIB response parsing error: \"{}\"", error);
+  log_error("SMTLIB response parsing: \"{}\"", error);
   abort();
 }
 

@@ -12,19 +12,19 @@ unsigned pointer_logict::add_object(const expr2tc &expr)
 {
   // remove any index/member
 
-  if(expr->expr_id == expr2t::index_id)
+  if (expr->expr_id == expr2t::index_id)
   {
     const index2t &index = static_cast<const index2t &>(*expr.get());
     return add_object(index.source_value);
   }
-  if(expr->expr_id == expr2t::member_id)
+  if (expr->expr_id == expr2t::member_id)
   {
     const member2t &memb = static_cast<const member2t &>(*expr.get());
     return add_object(memb.source_value);
   }
   std::pair<objectst::iterator, bool> ret =
     objects.insert(std::pair<expr2tc, unsigned int>(expr, 0));
-  if(!ret.second)
+  if (!ret.second)
     return ret.first->second;
 
   // Initialize object number.
@@ -45,16 +45,16 @@ pointer_logict::pointer_expr(const pointert &pointer, const type2tc &type) const
 {
   type2tc pointer_type = pointer_type2tc(get_empty_type());
 
-  if(pointer.object == null_object) // NULL?
+  if (pointer.object == null_object) // NULL?
   {
     return symbol2tc(type, irep_idt("NULL"));
   }
-  if(pointer.object == invalid_object) // INVALID?
+  if (pointer.object == invalid_object) // INVALID?
   {
     return symbol2tc(type, irep_idt("INVALID"));
   }
 
-  if(pointer.object >= objects.size())
+  if (pointer.object >= objects.size())
   {
     return symbol2tc(type, irep_idt("INVALID" + i2string(pointer.object)));
   }
@@ -72,19 +72,19 @@ expr2tc pointer_logict::object_rec(
   const type2tc &pointer_type,
   const expr2tc &src) const
 {
-  if(is_array_type(src->type))
+  if (is_array_type(src->type))
   {
     const array_type2t &arrtype = to_array_type(*src->type.get());
     BigInt size = type_byte_size(arrtype.subtype);
 
-    if(size == 0)
+    if (size == 0)
       return src;
 
     BigInt index = offset / size;
     BigInt rest = offset % size;
 
     type2tc inttype;
-    if(arrtype.array_size)
+    if (arrtype.array_size)
       inttype = arrtype.array_size->type;
     else
       inttype = unsignedbv_type2tc(config.ansi_c.int_width);
@@ -93,7 +93,7 @@ expr2tc pointer_logict::object_rec(
 
     return object_rec(rest, pointer_type, newindex);
   }
-  if(is_structure_type(src))
+  if (is_structure_type(src))
   {
     const struct_union_data &data_ref =
       dynamic_cast<const struct_union_data &>(*src->type);
@@ -103,7 +103,7 @@ expr2tc pointer_logict::object_rec(
 
     assert(offset >= 0);
 
-    if(offset == 0) // the struct itself
+    if (offset == 0) // the struct itself
       return src;
 
     BigInt current_offset = 1;
@@ -111,17 +111,17 @@ expr2tc pointer_logict::object_rec(
     assert(offset >= current_offset);
 
     unsigned int idx = 0;
-    for(auto const &it : members)
+    for (auto const &it : members)
     {
       assert(offset >= current_offset);
 
       BigInt sub_size = type_byte_size(it);
 
-      if(sub_size == 0)
+      if (sub_size == 0)
         return src;
 
       BigInt new_offset = current_offset + sub_size;
-      if(new_offset > offset)
+      if (new_offset > offset)
       {
         // found it
         expr2tc tmp = member2tc(it, src, member_names[idx]);

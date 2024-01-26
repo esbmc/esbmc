@@ -76,12 +76,12 @@ void exprt::make_typecast(const typet &_type)
 
 void exprt::make_not()
 {
-  if(is_true())
+  if (is_true())
   {
     make_false();
     return;
   }
-  if(is_false())
+  if (is_false())
   {
     make_true();
     return;
@@ -89,7 +89,7 @@ void exprt::make_not()
 
   exprt new_expr;
 
-  if(id() == i_not && operands().size() == 1)
+  if (id() == i_not && operands().size() == 1)
   {
     new_expr.swap(operands().front());
   }
@@ -144,7 +144,7 @@ void exprt::negate()
 {
   const irep_idt &type_id = type().id();
 
-  if(type_id == "bool")
+  if (type_id == "bool")
     make_not();
   else
     make_nil();
@@ -157,30 +157,30 @@ bool exprt::is_boolean() const
 
 bool exprt::is_zero() const
 {
-  if(is_constant())
+  if (is_constant())
   {
     const std::string &value = get_string(a_value);
     const irep_idt &type_id = type().id_string();
 
-    if(type_id == "unsignedbv" || type_id == "signedbv")
+    if (type_id == "unsignedbv" || type_id == "signedbv")
     {
       BigInt int_value = binary2integer(value, false);
-      if(int_value == 0)
+      if (int_value == 0)
         return true;
     }
-    else if(type_id == "fixedbv")
+    else if (type_id == "fixedbv")
     {
-      if(fixedbvt(to_constant_expr(*this)) == 0)
+      if (fixedbvt(to_constant_expr(*this)) == 0)
         return true;
     }
-    else if(type_id == "floatbv")
+    else if (type_id == "floatbv")
     {
-      if(ieee_floatt(to_constant_expr(*this)) == 0)
+      if (ieee_floatt(to_constant_expr(*this)) == 0)
         return true;
     }
-    else if(type_id == "pointer")
+    else if (type_id == "pointer")
     {
-      if(value == "NULL")
+      if (value == "NULL")
         return true;
     }
   }
@@ -190,25 +190,25 @@ bool exprt::is_zero() const
 
 bool exprt::is_one() const
 {
-  if(is_constant())
+  if (is_constant())
   {
     const std::string &value = get_string(a_value);
     const irep_idt &type_id = type().id_string();
 
-    if(type_id == "unsignedbv" || type_id == "signedbv")
+    if (type_id == "unsignedbv" || type_id == "signedbv")
     {
       BigInt int_value = binary2integer(value, false);
-      if(int_value == 1)
+      if (int_value == 1)
         return true;
     }
-    else if(type_id == "fixedbv")
+    else if (type_id == "fixedbv")
     {
-      if(fixedbvt(to_constant_expr(*this)) == 1)
+      if (fixedbvt(to_constant_expr(*this)) == 1)
         return true;
     }
-    else if(type_id == "floatbv")
+    else if (type_id == "floatbv")
     {
-      if(ieee_floatt(to_constant_expr(*this)) == 1)
+      if (ieee_floatt(to_constant_expr(*this)) == 1)
         return true;
     }
   }
@@ -218,14 +218,14 @@ bool exprt::is_one() const
 
 bool exprt::sum(const exprt &expr)
 {
-  if(!is_constant() || !expr.is_constant())
+  if (!is_constant() || !expr.is_constant())
     return true;
-  if(type() != expr.type())
+  if (type() != expr.type())
     return true;
 
   const irep_idt &type_id = type().id();
 
-  if(type_id == "unsignedbv" || type_id == "signedbv")
+  if (type_id == "unsignedbv" || type_id == "signedbv")
   {
     set(
       a_value,
@@ -235,14 +235,14 @@ bool exprt::sum(const exprt &expr)
         atoi(type().width().c_str())));
     return false;
   }
-  if(type_id == "fixedbv")
+  if (type_id == "fixedbv")
   {
     fixedbvt f(to_constant_expr(*this));
     f += fixedbvt(to_constant_expr(expr));
     *this = f.to_expr();
     return false;
   }
-  else if(type_id == "floatbv")
+  else if (type_id == "floatbv")
   {
     ieee_floatt f(to_constant_expr(*this));
     f += ieee_floatt(to_constant_expr(expr));
@@ -255,14 +255,14 @@ bool exprt::sum(const exprt &expr)
 
 bool exprt::mul(const exprt &expr)
 {
-  if(!is_constant() || !expr.is_constant())
+  if (!is_constant() || !expr.is_constant())
     return true;
-  if(type() != expr.type())
+  if (type() != expr.type())
     return true;
 
   const irep_idt &type_id = type().id();
 
-  if(type_id == "unsignedbv" || type_id == "signedbv")
+  if (type_id == "unsignedbv" || type_id == "signedbv")
   {
     set(
       a_value,
@@ -272,14 +272,14 @@ bool exprt::mul(const exprt &expr)
         atoi(type().width().c_str())));
     return false;
   }
-  if(type_id == "fixedbv")
+  if (type_id == "fixedbv")
   {
     fixedbvt f(to_constant_expr(*this));
     f *= fixedbvt(to_constant_expr(expr));
     *this = f.to_expr();
     return false;
   }
-  else if(type_id == "floatbv")
+  else if (type_id == "floatbv")
   {
     ieee_floatt f(to_constant_expr(*this));
     f *= ieee_floatt(to_constant_expr(expr));
@@ -292,15 +292,15 @@ bool exprt::mul(const exprt &expr)
 
 bool exprt::subtract(const exprt &expr)
 {
-  if(!is_constant() || !expr.is_constant())
+  if (!is_constant() || !expr.is_constant())
     return true;
 
-  if(type() != expr.type())
+  if (type() != expr.type())
     return true;
 
   const irep_idt &type_id = type().id();
 
-  if(type_id == "unsignedbv" || type_id == "signedbv")
+  if (type_id == "unsignedbv" || type_id == "signedbv")
   {
     set(
       a_value,
@@ -310,14 +310,14 @@ bool exprt::subtract(const exprt &expr)
         atoi(type().width().c_str())));
     return false;
   }
-  if(type_id == "fixedbv")
+  if (type_id == "fixedbv")
   {
     fixedbvt f(to_constant_expr(*this));
     f -= fixedbvt(to_constant_expr(expr));
     *this = f.to_expr();
     return false;
   }
-  else if(type_id == "floatbv")
+  else if (type_id == "floatbv")
   {
     ieee_floatt f(to_constant_expr(*this));
     f -= ieee_floatt(to_constant_expr(expr));
@@ -332,13 +332,13 @@ const locationt &exprt::find_location() const
 {
   const locationt &l = location();
 
-  if(l.is_not_nil())
+  if (l.is_not_nil())
     return l;
 
-  forall_operands(it, (*this))
+  forall_operands (it, (*this))
   {
     const locationt &l = it->find_location();
-    if(l.is_not_nil())
+    if (l.is_not_nil())
       return l;
   }
 

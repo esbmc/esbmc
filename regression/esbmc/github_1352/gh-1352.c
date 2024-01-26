@@ -17,9 +17,10 @@ int getUserInput()
 void printFractal(char **fractal, int n)
 {
     int i, j;
-    for(i=0; i<pow(2,n); i++)
+    double N = pow(2,n);
+    for(i=0; i<N; i++)
     {
-        for(j=0; j<pow(2,n); j++)
+        for(j=0; j<N; j++)
         {
             printf("%c", fractal[i][j]);
         }
@@ -46,16 +47,17 @@ void generateFractal(char **fractal, int n, int x, int y)
 int main()
 {
     int n = getUserInput();
-    char **fractal = (char **)malloc(pow(2,n) * sizeof(char *));
+    double N = pow(2,n);
+    char **fractal = (char **)malloc(N * sizeof(char *));
     int i, j;
-    for(i=0; i<pow(2,n); i++)
-        fractal[i] = (char *)malloc(pow(2,n) * sizeof(char));
-    for(i=0; i<pow(2,n); i++)
-        for(j=0; j<pow(2,n); j++)
+    for(i=0; i<N; i++)
+        fractal[i] = (char *)malloc(N * sizeof(char));
+    for(i=0; i<N; i++)
+        for(j=0; j<N; j++)
             fractal[i][j] = ' ';
     generateFractal(fractal, n, 0, 0);
     printFractal(fractal, n);
-    for(i=0; i<pow(2,n); i++)
+    for(i=0; i<N; i++)
         free(fractal[i]);
     free(fractal);
     return 0;

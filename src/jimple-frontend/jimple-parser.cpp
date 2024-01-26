@@ -15,7 +15,7 @@ bool jimple_languaget::parse(const std::string &path)
     root.load_file(path);
   }
 
-  catch(std::exception &e)
+  catch (std::exception &e)
   {
     log_error("{}", e.what());
     return true;

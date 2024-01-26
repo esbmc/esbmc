@@ -3,9 +3,9 @@
 
 void parse_flags(std::string::const_iterator &it, format_tokent &curtok)
 {
-  while(*it == '#' || *it == '0' || *it == '-' || *it == ' ' || *it == '+')
+  while (*it == '#' || *it == '0' || *it == '-' || *it == ' ' || *it == '+')
   {
-    switch(*it)
+    switch (*it)
     {
     case '#':
       curtok.flags.push_back(format_tokent::ALTERNATE);
@@ -31,25 +31,25 @@ void parse_flags(std::string::const_iterator &it, format_tokent &curtok)
 
 void parse_field_width(std::string::const_iterator &it, format_tokent &curtok)
 {
-  if(*it == '*')
+  if (*it == '*')
   {
     curtok.flags.push_back(format_tokent::ASTERISK);
     it++;
   }
 
   std::string tmp;
-  for(; isdigit(*it); it++)
+  for (; isdigit(*it); it++)
     tmp += *it;
   curtok.field_width = string2integer(tmp);
 }
 
 void parse_precision(std::string::const_iterator &it, format_tokent &curtok)
 {
-  if(*it == '.')
+  if (*it == '.')
   {
     it++;
 
-    if(*it == '*')
+    if (*it == '*')
     {
       curtok.flags.push_back(format_tokent::ASTERISK);
       it++;
@@ -57,7 +57,7 @@ void parse_precision(std::string::const_iterator &it, format_tokent &curtok)
     else
     {
       std::string tmp;
-      for(; isdigit(*it); it++)
+      for (; isdigit(*it); it++)
         tmp += *it;
       curtok.precision = string2integer(tmp);
     }
@@ -68,31 +68,31 @@ void parse_length_modifier(
   std::string::const_iterator &it,
   format_tokent &curtok)
 {
-  if(*it == 'h')
+  if (*it == 'h')
   {
     it++;
-    if(*it == 'h')
+    if (*it == 'h')
       it++;
     curtok.length_modifier = format_tokent::LEN_h;
   }
-  else if(*it == 'l')
+  else if (*it == 'l')
   {
     it++;
-    if(*it == 'l')
+    if (*it == 'l')
       it++;
     curtok.length_modifier = format_tokent::LEN_l;
   }
-  else if(*it == 'L')
+  else if (*it == 'L')
   {
     it++;
     curtok.length_modifier = format_tokent::LEN_L;
   }
-  else if(*it == 'j')
+  else if (*it == 'j')
   {
     it++;
     curtok.length_modifier = format_tokent::LEN_j;
   }
-  else if(*it == 't')
+  else if (*it == 't')
   {
     it++;
     curtok.length_modifier = format_tokent::LEN_L;
@@ -104,7 +104,7 @@ void parse_conversion_specifier(
   std::string::const_iterator &it,
   format_tokent &curtok)
 {
-  switch(*it)
+  switch (*it)
   {
   case 'd':
   case 'i':
@@ -152,18 +152,18 @@ void parse_conversion_specifier(
   {
     std::string tmp;
     it++;
-    if(*it == '^') // if it's there, it must be first
+    if (*it == '^') // if it's there, it must be first
     {
       tmp += '^';
       it++;
-      if(*it == ']') // if it's there, it must be here
+      if (*it == ']') // if it's there, it must be here
       {
         tmp += ']';
         it++;
       }
     }
 
-    for(; it != arg_string.end() && *it != ']'; it++)
+    for (; it != arg_string.end() && *it != ']'; it++)
       tmp += *it;
 
     break;
@@ -181,15 +181,15 @@ bool parse_format_string(
 {
   token_list.clear();
 
-  if(format_arg.id() == "string-constant")
+  if (format_arg.id() == "string-constant")
   {
     const std::string &arg_string = format_arg.value().as_string();
 
     std::string::const_iterator it = arg_string.begin();
 
-    while(it != arg_string.end())
+    while (it != arg_string.end())
     {
-      if(*it == '%')
+      if (*it == '%')
       {
         token_list.push_back(format_tokent());
         format_tokent &curtok = token_list.back();
@@ -203,11 +203,11 @@ bool parse_format_string(
       }
       else
       {
-        if(token_list.back().type != format_tokent::TEXT)
+        if (token_list.back().type != format_tokent::TEXT)
           token_list.push_back(format_tokent(format_tokent::TEXT));
 
         std::string tmp;
-        for(; it != arg_string.end() && *it != '%'; it++)
+        for (; it != arg_string.end() && *it != '%'; it++)
           tmp += *it;
 
         token_list.back().value = tmp;

@@ -17,9 +17,9 @@ struct fmt::formatter<BigInt>
   constexpr auto parse(format_parse_context &ctx)
   {
     auto it = ctx.begin(), end = ctx.end();
-    if(it != end && (*it == 'd'))
+    if (it != end && (*it == 'd'))
       presentation = *it++;
-    if(it != end && *it != '}')
+    if (it != end && *it != '}')
       throw format_error("invalid format");
     return it;
   }
@@ -29,7 +29,7 @@ struct fmt::formatter<BigInt>
   auto format(const BigInt &p, FormatContext &ctx)
   {
     int base;
-    switch(presentation)
+    switch (presentation)
     {
     case 'd':
       base = 10;

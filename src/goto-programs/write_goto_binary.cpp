@@ -26,15 +26,15 @@ bool write_goto_binary(
   });
 
   unsigned cnt = 0;
-  forall_goto_functions(it, functions)
-    if(it->second.body_available)
+  forall_goto_functions (it, functions)
+    if (it->second.body_available)
       cnt++;
 
   write_long(out, cnt);
 
-  for(auto &it : functions.function_map)
+  for (auto &it : functions.function_map)
   {
-    if(it.second.body_available)
+    if (it.second.body_available)
     {
       it.second.body.compute_location_numbers();
       write_string(out, it.first.as_string());

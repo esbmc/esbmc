@@ -1,5 +1,5 @@
-#ifndef CPROVER_EXPR2C_H
-#define CPROVER_EXPR2C_H
+
+#pragma once
 
 #include <map>
 #include <set>
@@ -9,20 +9,17 @@
 #include <util/std_code.h>
 #include <util/c_expr2string.h>
 
+std::string expr2c(const exprt &expr, const namespacet &ns, unsigned flags = 0);
+std::string type2c(const typet &type, const namespacet &ns, unsigned flags = 0);
 std::string
-expr2c(const exprt &expr, const namespacet &ns, bool fullname = false);
-
-std::string
-type2c(const typet &type, const namespacet &ns, bool fullname = false);
-
-std::string
-typedef2c(const typet &type, const namespacet &ns, bool fullname = false);
+typedef2c(const typet &type, const namespacet &ns, unsigned flags = 0);
 
 class expr2ct : public c_expr2stringt
 {
 public:
-  expr2ct(const namespacet &_ns, const bool _fullname)
-    : c_expr2stringt(_ns, _fullname)
+  using c_expr2stringt::flagst;
+
+  expr2ct(const namespacet &_ns, unsigned _flags) : c_expr2stringt(_ns, _flags)
   {
   }
   virtual ~expr2ct() = default;
@@ -46,7 +43,7 @@ protected:
   std::string convert_struct_union_body(
     const exprt &src,
     const exprt::operandst &operands,
-    const struct_union_typet::componentst &components);
+    const struct_union_typet::componentst &components) override;
   std::string convert_struct(const exprt &src, unsigned &precedence) override;
   std::string convert_union(const exprt &src, unsigned &precedence) override;
 
@@ -90,5 +87,3 @@ protected:
 
 private:
 };
-
-#endif

@@ -26,12 +26,20 @@ public:
   void show_parse(std::ostream &out) override;
 
   // conversion from expression into string
-  bool from_expr(const exprt &expr, std::string &code, const namespacet &ns)
-    override;
+  bool from_expr(
+    const exprt &expr,
+    std::string &code,
+    const namespacet &ns,
+    unsigned flags) override;
 
   // conversion from type into string
-  bool from_type(const typet &type, std::string &code, const namespacet &ns)
-    override;
+  bool from_type(
+    const typet &type,
+    std::string &code,
+    const namespacet &ns,
+    unsigned flags) override;
+
+  unsigned default_flags(presentationt target) const override;
 
   virtual languaget *new_language() const override
   {

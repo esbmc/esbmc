@@ -21,12 +21,12 @@ parseoptions_baset::parseoptions_baset(
 
 void parseoptions_baset::set_verbosity_msg(VerbosityLevel v)
 {
-  if(cmdline.isset("verbosity"))
-    for(std::string s : cmdline.get_values("verbosity")) // copy
+  if (cmdline.isset("verbosity"))
+    for (std::string s : cmdline.get_values("verbosity")) // copy
     {
       char *mod = nullptr;
       char *verb = s.data();
-      if(char *colon = strchr(verb, ':'))
+      if (char *colon = strchr(verb, ':'))
       {
         mod = verb;
         *colon = '\0';
@@ -34,12 +34,12 @@ void parseoptions_baset::set_verbosity_msg(VerbosityLevel v)
       }
 
       VerbosityLevel w = (VerbosityLevel)atoi(verb);
-      if(w < VerbosityLevel::None)
+      if (w < VerbosityLevel::None)
         w = VerbosityLevel::None;
-      else if(w > VerbosityLevel::Debug)
+      else if (w > VerbosityLevel::Debug)
         w = VerbosityLevel::Debug;
 
-      if(mod)
+      if (mod)
         messaget::state.modules[mod] = w;
       else
         v = w;
@@ -57,11 +57,11 @@ void parseoptions_baset::help()
 
 int parseoptions_baset::main()
 {
-  if(exception_occured)
+  if (exception_occured)
   {
     return EX_USAGE;
   }
-  if(cmdline.isset("help") || cmdline.isset("explain"))
+  if (cmdline.isset("help") || cmdline.isset("explain"))
   {
     help();
     return EX_OK;

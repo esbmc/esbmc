@@ -8,9 +8,9 @@ void messaget::statet::println(
   fmt::string_view format,
   fmt::format_args args)
 {
-  if(config.options.get_bool_option("color"))
+  if (config.options.get_bool_option("color"))
   {
-    switch(lvl)
+    switch (lvl)
     {
     case VerbosityLevel::Error:
       fmt::print(f, fmt::fg(fmt::color::red) | fmt::emphasis::bold, "[ERROR] ");
@@ -39,8 +39,10 @@ void messaget::statet::println(
   }
   else
   {
-    if(lvl == VerbosityLevel::Error)
+    if (lvl == VerbosityLevel::Error)
       fmt::print(f, "ERROR: ");
+    if (lvl == VerbosityLevel::Warning)
+      fmt::print(f, "WARNING: ");
     fmt::vprint(f, format, args);
   }
 
@@ -50,8 +52,8 @@ void messaget::statet::println(
 FILE *messaget::statet::target(const char *mod, VerbosityLevel lvl) const
 {
   VerbosityLevel l = verbosity;
-  if(mod)
-    if(auto it = modules.find(mod); it != modules.end())
+  if (mod)
+    if (auto it = modules.find(mod); it != modules.end())
       l = it->second;
   return lvl > l ? nullptr : out;
 }

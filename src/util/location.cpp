@@ -9,27 +9,27 @@ std::string locationt::as_string() const
   const irep_idt &column = get_column();
   const irep_idt &function = get_function();
 
-  if(file != "")
+  if (file != "")
   {
-    if(dest != "")
+    if (dest != "")
       dest += " ";
     dest += "file " + id2string(file);
   }
-  if(line != "")
+  if (line != "")
   {
-    if(dest != "")
+    if (dest != "")
       dest += " ";
     dest += "line " + id2string(line);
   }
-  if(column != "")
+  if (column != "")
   {
-    if(dest != "")
+    if (dest != "")
       dest += " ";
     dest += "column " + id2string(column);
   }
-  if(function != "")
+  if (function != "")
   {
-    if(dest != "")
+    if (dest != "")
       dest += " ";
     dest += "function " + id2string(function);
   }
@@ -39,7 +39,7 @@ std::string locationt::as_string() const
 
 std::ostream &operator<<(std::ostream &out, const locationt &location)
 {
-  if(location.is_nil())
+  if (location.is_nil())
     return out;
 
   out << location.as_string();

@@ -68,15 +68,17 @@ static __ESBMC_thread_key *head = NULL;
 
 int insert_key_value(pthread_key_t key, const void *value)
 {
+  __ESBMC_atomic_begin();
   __ESBMC_thread_key *l =
     (__ESBMC_thread_key *)__ESBMC_alloca(sizeof(__ESBMC_thread_key));
-  if(l == NULL)
+  if (l == NULL)
     return -1;
   l->thread = __ESBMC_get_thread_id();
   l->key = key;
   l->value = value;
   l->next = (head == NULL) ? NULL : head;
   head = l;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -85,7 +87,7 @@ __ESBMC_thread_key *search_key(pthread_key_t key)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_thread_key *l = head;
-  while(l != NULL && l->thread != __ESBMC_get_thread_id())
+  while (l != NULL && l->thread != __ESBMC_get_thread_id())
     l = l->next;
   return ((l == NULL) ? 0 : l);
   __ESBMC_atomic_end();
@@ -96,16 +98,16 @@ int delete_key(__ESBMC_thread_key *l)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_thread_key *tmp;
-  if(head == NULL)
+  if (head == NULL)
     return -1;
   tmp = head;
-  if(head != l)
+  if (head != l)
   {
-    while(tmp->next != NULL && tmp->next != l)
+    while (tmp->next != NULL && tmp->next != l)
       tmp = tmp->next;
     tmp->next = l->next;
   }
-  else if(l->next != NULL)
+  else if (l->next != NULL)
     head = l->next;
   return 0;
   __ESBMC_atomic_end();
@@ -113,7 +115,7 @@ __ESBMC_HIDE:;
 
 /************************** Thread creation and exit **************************/
 
-void pthread_start_main_hook(void)
+void __ESBMC_pthread_start_main_hook(void)
 {
   __ESBMC_atomic_begin();
   __ESBMC_num_total_threads++;
@@ -121,7 +123,7 @@ void pthread_start_main_hook(void)
   __ESBMC_atomic_end();
 }
 
-void pthread_end_main_hook(void)
+void __ESBMC_pthread_end_main_hook(void)
 {
   // We want to be able to access this internal accounting data atomically,
   // but that'll never be permitted by POR, which will see the access and try
@@ -142,10 +144,10 @@ __ESBMC_HIDE:;
   // The order of destructor calls is unspecified if more than one destructor
   // exists for a thread when it exits.
   // source: https://linux.die.net/man/3/pthread_key_create
-  for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
+  for (unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
     __ESBMC_thread_key *l = search_key(i);
-    if(__ESBMC_thread_key_destructors[i] && l->value)
+    if (__ESBMC_thread_key_destructors[i] && l->value)
     {
       __ESBMC_thread_key_destructors[i](&l->value);
       delete_key(l);
@@ -207,6 +209,8 @@ __ESBMC_HIDE:;
   return 0; // We never fail
 }
 
+#pragma clang diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void pthread_exit(void *retval)
 {
 __ESBMC_HIDE:;
@@ -226,6 +230,7 @@ __ESBMC_HIDE:;
   // Ensure that there is no subsequent execution path
   __ESBMC_assume(0);
 }
+#pragma clang diagnostic pop
 
 pthread_t pthread_self(void)
 {
@@ -241,7 +246,7 @@ __ESBMC_HIDE:;
   // waiting for its completion. That fact can be used for deadlock detection
   // elsewhere.
   _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
-  if(!ended)
+  if (!ended)
   {
     __ESBMC_blocked_threads_count++;
     // If there are now no more threads unblocked, croak.
@@ -251,7 +256,7 @@ __ESBMC_HIDE:;
   }
 
   // Fetch exit code
-  if(retval != NULL)
+  if (retval != NULL)
     *retval = __ESBMC_pthread_end_values[(int)thread];
 
   // In all circumstances, allow a switch away from this thread to permit
@@ -276,7 +281,7 @@ __ESBMC_HIDE:;
   __ESBMC_assume(ended);
 
   // Fetch exit code
-  if(retval != NULL)
+  if (retval != NULL)
     *retval = __ESBMC_pthread_end_values[(int)thread];
 
   __ESBMC_atomic_end();
@@ -304,7 +309,7 @@ int pthread_mutex_initializer(pthread_mutex_t *mutex)
   // check whether this mutex has been initialized via
   // PTHREAD_MUTEX_INITIALIZER
   __ESBMC_atomic_begin();
-  if(__ESBMC_mutex_lock_field(*mutex) == 0)
+  if (__ESBMC_mutex_lock_field(*mutex) == 0)
     pthread_mutex_init(mutex, NULL);
   __ESBMC_atomic_end();
   return 0;
@@ -335,7 +340,9 @@ __ESBMC_HIDE:;
 int pthread_mutex_unlock_noassert(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -361,7 +368,7 @@ __ESBMC_HIDE:;
 
   unlocked = (__ESBMC_mutex_lock_field(*mutex) == 0);
 
-  if(unlocked)
+  if (unlocked)
   {
     __ESBMC_mutex_lock_field(*mutex) = 1;
   }
@@ -401,7 +408,7 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
   int res = EBUSY;
-  if(__ESBMC_mutex_lock_field(*mutex) != 0)
+  if (__ESBMC_mutex_lock_field(*mutex) != 0)
     goto PTHREAD_MUTEX_TRYLOCK_END;
 
   pthread_mutex_lock(mutex);
@@ -455,12 +462,19 @@ int pthread_rwlock_init(
   const pthread_rwlockattr_t *attr)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
 int pthread_rwlock_rdlock(pthread_rwlock_t *lock)
 {
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_assume(!__ESBMC_rwlock_field(*lock));
+  __ESBMC_rwlock_field(*lock) = 1;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -475,7 +489,7 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
   int res = 1;
-  if(__ESBMC_rwlock_field(*lock))
+  if (__ESBMC_rwlock_field(*lock))
     goto PTHREAD_RWLOCK_TRYWRLOCK_END;
 
   __ESBMC_rwlock_field(*lock) = 1;
@@ -489,7 +503,9 @@ PTHREAD_RWLOCK_TRYWRLOCK_END:
 int pthread_rwlock_unlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -532,14 +548,18 @@ __ESBMC_HIDE:;
 int pthread_cond_destroy(pthread_cond_t *__cond)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*__cond) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
 extern int pthread_cond_signal(pthread_cond_t *__cond)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*__cond) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -549,7 +569,7 @@ do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex, _Bool assrt)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
-  if(assrt)
+  if (assrt)
     __ESBMC_assert(
       __ESBMC_mutex_lock_field(*mutex),
       "caller must hold pthread mutex lock in pthread_cond_wait");
@@ -563,7 +583,7 @@ __ESBMC_HIDE:;
   // this helps detect.
   __ESBMC_blocked_threads_count++;
   // No more threads to run -> croak.
-  if(assrt)
+  if (assrt)
     __ESBMC_assert(
       __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
       "Deadlocked state in pthread_mutex_lock");
@@ -644,9 +664,9 @@ __ESBMC_HIDE:;
   // store the newly created key value at *key
   *key = __ESBMC_next_thread_key++;
   // check whether we have failed to insert the key into our list.
-  if(result < 0)
+  if (result < 0)
   {
-    if(nondet_bool())
+    if (nondet_bool())
     {
       // Insufficient memory exists to create the key.
       result = ENOMEM;
@@ -675,7 +695,7 @@ __ESBMC_HIDE:;
   // If no thread-specific data value is associated with key,
   // then the value NULL shall be returned.
   void *result = NULL;
-  if(key <= __ESBMC_next_thread_key)
+  if (key <= __ESBMC_next_thread_key)
   {
     // Return the thread-specific data value associated
     // with the given key.
@@ -697,13 +717,13 @@ __ESBMC_HIDE:;
   int result;
   __ESBMC_atomic_begin();
   result = insert_key_value(key, value);
-  if(result < 0)
+  if (result < 0)
   {
     // Insufficient memory exists to associate
     // the value with the key.
     result = ENOMEM;
   }
-  else if(value == NULL)
+  else if (value == NULL)
   {
     // The key value is invalid.
     result = EINVAL;
@@ -744,7 +764,7 @@ __ESBMC_HIDE:;
     !__ESBMC_pthread_thread_detach[(int)threadid],
     "Attempting to detach an already detached thread results in unspecified "
     "behavior");
-  if(
+  if (
     __ESBMC_pthread_thread_ended[(int)threadid] ||
     (int)threadid > __ESBMC_num_total_threads)
     result = ESRCH; // No thread with the ID thread could be found.

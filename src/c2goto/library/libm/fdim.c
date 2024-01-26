@@ -1,4 +1,3 @@
-#define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
 
@@ -6,7 +5,7 @@
   type name(type x, type y)                                                    \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-    if(isnan_func(x) || isnan_func(y))                                         \
+    if (isnan_func(x) || isnan_func(y))                                        \
       return NAN;                                                              \
                                                                                \
     return (x > y ? x - y : 0.0);                                              \

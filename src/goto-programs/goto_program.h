@@ -12,16 +12,16 @@
 #include <util/std_code.h>
 
 #define forall_goto_program_instructions(it, program)                          \
-  for(goto_programt::instructionst::const_iterator it =                        \
-        (program).instructions.begin();                                        \
-      it != (program).instructions.end();                                      \
-      it++)
+  for (goto_programt::instructionst::const_iterator it =                       \
+         (program).instructions.begin();                                       \
+       it != (program).instructions.end();                                     \
+       it++)
 
 #define Forall_goto_program_instructions(it, program)                          \
-  for(goto_programt::instructionst::iterator it =                              \
-        (program).instructions.begin();                                        \
-      it != (program).instructions.end();                                      \
-      it++)
+  for (goto_programt::instructionst::iterator it =                             \
+         (program).instructions.begin();                                       \
+       it != (program).instructions.end();                                     \
+       it++)
 
 typedef enum
 {
@@ -393,11 +393,11 @@ public:
     //! Returns true if the instruction is a backwards branch.
     bool is_backwards_goto() const
     {
-      if(!is_goto())
+      if (!is_goto())
         return false;
 
-      for(auto target : targets)
-        if(target->location_number <= location_number)
+      for (auto target : targets)
+        if (target->location_number <= location_number)
           return true;
 
       return false;
@@ -405,10 +405,10 @@ public:
 
     bool operator<(const class instructiont i1) const
     {
-      if(function < i1.function)
+      if (function < i1.function)
         return true;
 
-      if(location_number < i1.location_number)
+      if (location_number < i1.location_number)
         return true;
 
       return false;
@@ -456,7 +456,7 @@ public:
   void insert_swap(targett target, goto_programt &p)
   {
     assert(target != instructions.end());
-    if(p.instructions.empty())
+    if (p.instructions.empty())
       return;
     insert_swap(target, p.instructions.front());
     auto next = std::next(target);
@@ -527,9 +527,9 @@ public:
   /// named functions.
   void update_instructions_function(const irep_idt &function_id)
   {
-    for(auto &instruction : instructions)
+    for (auto &instruction : instructions)
     {
-      if(instruction.function.empty())
+      if (instruction.function.empty())
       {
         instruction.function = function_id;
       }
@@ -542,7 +542,7 @@ public:
   //! Compute location numbers
   void compute_location_numbers(unsigned &nr)
   {
-    for(auto &instruction : instructions)
+    for (auto &instruction : instructions)
       instruction.location_number = nr++;
   }
 

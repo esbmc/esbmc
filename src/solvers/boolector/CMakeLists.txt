@@ -3,6 +3,8 @@ include(CPM)
 
 if(DEFINED Boolector_DIR)
   set(ENABLE_BOOLECTOR ON)
+elseif(EXISTS $ENV{HOME}/boolector)
+  set(ENABLE_BOOLECTOR ON)
 else()
   if(ENABLE_BOOLECTOR AND DOWNLOAD_DEPENDENCIES)
     # Sadly... Boolector requires some manual execution
@@ -12,7 +14,7 @@ else()
       NAME boolector
       DOWNLOAD_ONLY YES
       GITHUB_REPOSITORY Boolector/boolector
-      GIT_TAG 3.2.2)
+      GIT_TAG 3.2.3)
 
     # We can't use ExternalProject because we need it ready
     # at configuration time
@@ -40,9 +42,6 @@ else()
 
 endif()
 
-if(EXISTS $ENV{HOME}/boolector)
-  set(ENABLE_BOOLECTOR ON)
-endif()
 
 if(ENABLE_BOOLECTOR)
   find_package(Boolector REQUIRED HINTS ${Boolector_DIR}/lib/cmake

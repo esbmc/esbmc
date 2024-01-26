@@ -1,4 +1,3 @@
-#define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
 
@@ -10,14 +9,14 @@
     int y_is_nan = isnan_func(y);                                              \
                                                                                \
     /* If both argument are NaN, NaN is returned */                            \
-    if(x_is_nan && y_is_nan)                                                   \
+    if (x_is_nan && y_is_nan)                                                  \
       return NAN;                                                              \
                                                                                \
     /* If one arg is NaN, the other is returned */                             \
-    if(x_is_nan)                                                               \
+    if (x_is_nan)                                                              \
       return y;                                                                \
                                                                                \
-    if(y_is_nan)                                                               \
+    if (y_is_nan)                                                              \
       return x;                                                                \
                                                                                \
     return (x < y ? x : y);                                                    \

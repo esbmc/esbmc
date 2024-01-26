@@ -157,7 +157,7 @@ public:
   // set to next representable number towards plus infinity
   void increment(bool distinguish_zero = false)
   {
-    if(is_zero() && get_sign() && distinguish_zero)
+    if (is_zero() && get_sign() && distinguish_zero)
       negate();
     else
       next_representable(true);
@@ -166,7 +166,7 @@ public:
   // set to previous representable number towards minus infinity
   void decrement(bool distinguish_zero = false)
   {
-    if(is_zero() && !get_sign() && distinguish_zero)
+    if (is_zero() && !get_sign() && distinguish_zero)
       negate();
     else
       next_representable(false);
@@ -199,7 +199,7 @@ public:
 
   bool is_finite() const
   {
-    return !(infinity_flag && NaN_flag);
+    return !infinity_flag && !NaN_flag;
   }
 
   bool is_normal() const;

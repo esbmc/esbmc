@@ -12,15 +12,15 @@ simple_shell_unescape(const char *s, const char *var)
 {
   static const char WHITE[] = " \t\r\n\f\v";
 
-  if(!s)
+  if (!s)
     return {};
   std::vector<std::string> split;
-  while(*s)
+  while (*s)
   {
     /* skip white-space */
-    while(*s && strchr(WHITE, *s))
+    while (*s && strchr(WHITE, *s))
       s++;
-    if(!*s)
+    if (!*s)
       break;
     std::string arg;
     enum : char
@@ -30,16 +30,16 @@ simple_shell_unescape(const char *s, const char *var)
       SQUOT = '\'',
       ESC = '\\',
     } mode = NONE;
-    while(*s)
+    while (*s)
     {
-      switch(mode)
+      switch (mode)
       {
       case NONE:
         /* white-space delimits strings */
-        if(strchr(WHITE, *s))
+        if (strchr(WHITE, *s))
           goto done;
         /* special chars in this mode */
-        switch(*s)
+        switch (*s)
         {
         case '\'':
           mode = SQUOT;
@@ -53,7 +53,7 @@ simple_shell_unescape(const char *s, const char *var)
           /* skip first backslash */
           mode = ESC;
           s++;
-          if(!*s)
+          if (!*s)
             goto done;
           mode = NONE;
           break;
@@ -61,7 +61,7 @@ simple_shell_unescape(const char *s, const char *var)
         break;
       case SQUOT:
         /* the only special char in single-quote mode is ' */
-        switch(*s)
+        switch (*s)
         {
         case '\'':
           mode = NONE;
@@ -71,7 +71,7 @@ simple_shell_unescape(const char *s, const char *var)
         break;
       case DQUOT:
         /* special chars in double-quote mode */
-        switch(*s)
+        switch (*s)
         {
         case '"':
           mode = NONE;
@@ -79,10 +79,10 @@ simple_shell_unescape(const char *s, const char *var)
           continue;
         case '\\':
           mode = ESC;
-          if(!s[1])
+          if (!s[1])
             goto done;
           mode = DQUOT;
-          if(strchr("\\\"", s[1]))
+          if (strchr("\\\"", s[1]))
             s++;
           break;
         }
@@ -94,7 +94,7 @@ simple_shell_unescape(const char *s, const char *var)
       arg.push_back(*s++);
     }
   done:
-    if(mode)
+    if (mode)
     {
       log_warning(
         "cannot parse environment variable {}: unfinished {}, ignoring...",
@@ -134,11 +134,11 @@ const std::list<std::string> &cmdlinet::get_values(const char *option) const
 const char *cmdlinet::getval(const char *option) const
 {
   cmdlinet::options_mapt::const_iterator value = options_map.find(option);
-  if(value == options_map.end())
+  if (value == options_map.end())
   {
     return (const char *)nullptr;
   }
-  if(value->second.empty())
+  if (value->second.empty())
   {
     return (const char *)nullptr;
   }
@@ -152,15 +152,15 @@ bool cmdlinet::parse(
 {
   clear();
   unsigned int i = 0;
-  for(; opts[i].groupname != "end"; i++)
+  for (; opts[i].groupname != "end"; i++)
   {
     boost::program_options::options_description op_desc(opts[i].groupname);
     std::vector<opt_templ> groupoptions = opts[i].options;
-    for(std::vector<opt_templ>::iterator it = groupoptions.begin();
-        it != groupoptions.end();
-        ++it)
+    for (std::vector<opt_templ>::iterator it = groupoptions.begin();
+         it != groupoptions.end();
+         ++it)
     {
-      if(!it->type_default_value)
+      if (!it->type_default_value)
       {
         op_desc.add_options()(it->optstring, it->description);
       }
@@ -174,11 +174,11 @@ bool cmdlinet::parse(
   }
   std::vector<opt_templ> hidden_group_options = opts[i + 1].options;
   boost::program_options::options_description hidden_cmdline_options;
-  for(std::vector<opt_templ>::iterator it = hidden_group_options.begin();
-      it != hidden_group_options.end() && it->optstring[0] != '\0';
-      ++it)
+  for (std::vector<opt_templ>::iterator it = hidden_group_options.begin();
+       it != hidden_group_options.end() && it->optstring[0] != '\0';
+       ++it)
   {
-    if(!it->type_default_value)
+    if (!it->type_default_value)
     {
       hidden_cmdline_options.add_options()(it->optstring, "");
     }
@@ -208,32 +208,32 @@ bool cmdlinet::parse(
         .run(),
       vm);
   }
-  catch(std::exception &e)
+  catch (std::exception &e)
   {
-    log_error("ESBMC error: {}", e.what());
+    log_error("{}", e.what());
     return true;
   }
 
-  if(vm.count("input-file"))
+  if (vm.count("input-file"))
     args = vm["input-file"].as<std::vector<std::string>>();
 
-  for(auto &it : vm)
+  for (auto &it : vm)
   {
     std::list<std::string> res;
     std::string option_name = it.first;
     const boost::any &value = vm[option_name].value();
-    if(const int *v = boost::any_cast<int>(&value))
+    if (const int *v = boost::any_cast<int>(&value))
     {
       res.emplace_front(std::to_string(*v));
     }
-    else if(const std::string *v = boost::any_cast<std::string>(&value))
+    else if (const std::string *v = boost::any_cast<std::string>(&value))
     {
       res.emplace_front(*v);
     }
-    else if(
+    else if (
       const std::vector<int> *v = boost::any_cast<std::vector<int>>(&value))
     {
-      for(auto iter = v->begin(); iter != v->end(); ++iter)
+      for (auto iter = v->begin(); iter != v->end(); ++iter)
       {
         res.emplace_front(std::to_string(*iter));
       }
@@ -246,19 +246,19 @@ bool cmdlinet::parse(
     }
     std::pair<options_mapt::iterator, bool> result =
       options_map.insert(options_mapt::value_type(option_name, res));
-    if(!result.second)
+    if (!result.second)
       result.first->second = res;
   }
-  for(std::vector<opt_templ>::iterator it = hidden_group_options.begin();
-      it != hidden_group_options.end() && it->optstring[0] != '\0';
-      ++it)
+  for (std::vector<opt_templ>::iterator it = hidden_group_options.begin();
+       it != hidden_group_options.end() && it->optstring[0] != '\0';
+       ++it)
   {
-    if(it->description[0] != '\0' && vm.count(it->description))
+    if (it->description[0] != '\0' && vm.count(it->description))
     {
       std::list<std::string> value = get_values(it->description);
       std::pair<options_mapt::iterator, bool> result =
         options_map.insert(options_mapt::value_type(it->optstring, value));
-      if(!result.second)
+      if (!result.second)
         result.first->second = value;
     }
   }

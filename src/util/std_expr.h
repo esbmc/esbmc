@@ -2,7 +2,9 @@
 #define CPROVER_STD_EXPR_H
 
 #include <cassert>
+#include <util/bitvector.h>
 #include <util/expr.h>
+#include <util/mp_arith.h>
 
 class transt : public exprt
 {
@@ -554,7 +556,7 @@ public:
   {
     const exprt *p = &object();
 
-    while(p->id() == exprt::member || p->id() == exprt::index)
+    while (p->id() == exprt::member || p->id() == exprt::index)
     {
       assert(p->operands().size() != 0);
       p = &p->op0();
@@ -697,9 +699,9 @@ public:
 
   and_exprt(const exprt::operandst &op) : exprt(exprt::i_and, typet("bool"))
   {
-    if(op.empty())
+    if (op.empty())
       make_true();
-    else if(op.size() == 1)
+    else if (op.size() == 1)
       *this = static_cast<const and_exprt &>(op.front());
     else
       operands() = op;
@@ -742,9 +744,9 @@ public:
 
   or_exprt(const exprt::operandst &op) : exprt(exprt::i_or, typet("bool"))
   {
-    if(op.empty())
+    if (op.empty())
       make_false();
-    else if(op.size() == 1)
+    else if (op.size() == 1)
       *this = static_cast<const or_exprt &>(op.front());
     else
       operands() = op;
@@ -1047,6 +1049,14 @@ public:
   {
     set("#cformat", _cformat);
     set_value(_value);
+  }
+
+  constant_exprt(const BigInt &value, const typet &type)
+    : constant_exprt(
+        integer2binary(value, bv_width(type)),
+        integer2string(value),
+        type)
+  {
   }
 
   inline const irep_idt &get_value() const

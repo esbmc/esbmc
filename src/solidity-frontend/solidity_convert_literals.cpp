@@ -14,11 +14,8 @@ bool solidity_convertert::convert_integer_literal(
   exprt &dest)
 {
   typet type;
-  if(get_type_description(integer_literal, type))
+  if (get_type_description(integer_literal, type))
     return true;
-
-  assert(
-    type.is_unsignedbv() || type.is_signedbv()); // for "_x=100", false || true
 
   exprt the_val;
   // extract the value: unsigned
@@ -38,18 +35,18 @@ bool solidity_convertert::convert_bool_literal(
   exprt &dest)
 {
   typet type;
-  if(get_type_description(bool_literal, type))
+  if (get_type_description(bool_literal, type))
     return true;
 
   assert(type.is_bool());
 
-  if(the_value == "true")
+  if (the_value == "true")
   {
     dest = true_exprt();
     return false;
   }
 
-  if(the_value == "false")
+  if (the_value == "false")
   {
     dest = false_exprt();
     return false;
@@ -79,7 +76,7 @@ bool solidity_convertert::convert_string_literal(
       integer2string(string_size),
       int_type()));
   // TODO: Handle null terminator byte
-  string_constantt string(the_value, type);
+  string_constantt string(the_value, type, string_constantt::k_default);
   dest.swap(string);
 
   return false;
@@ -95,14 +92,14 @@ bool solidity_convertert::convert_hex_literal(
   const int n)
 {
   // remove "0x" prefix
-  if(the_value.length() >= 2)
-    if(the_value.substr(0, 2) == "0x")
+  if (the_value.length() >= 2)
+    if (the_value.substr(0, 2) == "0x")
     {
       the_value.erase(0, 2);
     }
 
   typet type;
-  if(n)
+  if (n)
     type = unsignedbv_typet(n);
   else
     type = size_type();

@@ -49,6 +49,7 @@ option(ENABLE_CSMITH "Add csmith Tests (default: OFF) (depends: ENABLE_REGRESSIO
 option(BENCHBRINGUP "Run a user-specified benchmark in Github workflow" OFF)
 option(DOWNLOAD_DEPENDENCIES "Download and build dpendencies if needed (default: OFF)" OFF)
 option(ACADEMIC_BUILD "Check and Enable libs that available only in Academic builds (default: OFF)" OFF)
+option(ESBMC_SVCOMP "Enable an SV-COMP build of ESBMC (default: OFF)" OFF)
 
 #############################
 # PRE-BUILT DEPENDENCIES
@@ -60,12 +61,18 @@ set(DEFAULT_LLVM_NAME "llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt")
 set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.12.2/z3-4.12.2-x64-win.zip")
 set(DEFAULT_Z3_NAME z3-4.12.2-x64-win)
 
+set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-win64-msvc.zip")
+set(MATHSAT_NAME "mathsat-5.6.10-win64-msvc")
+
 else()
 set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz")
 set(DEFAULT_LLVM_NAME "clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04")
 
 set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.12.2/z3-4.12.2-x64-glibc-2.35.zip")
 set(DEFAULT_Z3_NAME z3-4.12.2-x64-glibc-2.35)
+
+set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-linux-x86_64.tar.gz")
+set(MATHSAT_NAME "mathsat-5.6.10-linux-x86_64")
 endif()
 
 set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")

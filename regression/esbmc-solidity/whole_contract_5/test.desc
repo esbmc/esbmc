@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 contract.solast
 --sol example1.sol --contract Robot --unwind 3 --no-unwinding-assertions
 ^VERIFICATION FAILED$

@@ -6,6 +6,7 @@
 #include <util/algorithms.h>
 #include <util/options.h>
 #include <boost/range/adaptor/reversed.hpp>
+#include <langapi/language_util.h>
 
 /* Base interface */
 class slicer : public ssa_step_algorithm
@@ -43,10 +44,17 @@ public:
 class claim_slicer : public slicer
 {
 public:
-  explicit claim_slicer(const size_t claim_to_keep)
-    : claim_to_keep(claim_to_keep)
+  explicit claim_slicer(
+    const size_t claim_to_keep,
+    bool show_slice_info,
+    bool is_goto_cov,
+    namespacet &ns)
+    : claim_to_keep(claim_to_keep),
+      show_slice_info(show_slice_info),
+      is_goto_cov(is_goto_cov),
+      ns(ns)
   {
-    if(!claim_to_keep)
+    if (!claim_to_keep)
     {
       log_error("All the claims start from 1 (use --show-claims)");
       abort();
@@ -55,6 +63,10 @@ public:
   bool run(symex_target_equationt::SSA_stepst &) override;
   size_t claim_to_keep;
   std::string claim_msg;
+  std::string claim_loc;
+  bool show_slice_info;
+  bool is_goto_cov;
+  namespacet ns;
 };
 
 /**
@@ -87,7 +99,7 @@ public:
   {
     sliced = 0;
     fine_timet algorithm_start = current_time();
-    for(auto &step : boost::adaptors::reverse(eq))
+    for (auto &step : boost::adaptors::reverse(eq))
       run_on_step(step);
     fine_timet algorithm_stop = current_time();
     log_status(

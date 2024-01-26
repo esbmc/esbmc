@@ -1,4 +1,4 @@
 CORE
 main.c
---context-bound 4 --32
+--context-bound 4 --32 --incremental-bmc
 ^VERIFICATION FAILED$

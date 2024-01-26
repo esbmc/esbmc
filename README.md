@@ -17,7 +17,7 @@ document explains the necessary installation steps.
 ![Build All Solvers](https://github.com/esbmc/esbmc/workflows/Build%20All%20Solvers/badge.svg)
 [![codecov](https://codecov.io/gh/esbmc/esbmc/branch/master/graph/badge.svg)](https://codecov.io/gh/esbmc/esbmc)
 
-ESBMC (the Efficient SMT-based Context-Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++, Kotlin, and Solidity programs. It can automatically verify predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions. In addition, ESBMC supports the Clang compiler as its C/C++ frontend, the Soot framework via Jimple as its Java/Kotlin frontend, IEEE floating-point arithmetic for various SMT solvers, implements the Solidity grammar production rules as its Solidity frontend.  In addition, ESBMC implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
+ESBMC (the Efficient SMT-based Context-Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++, CUDA, CHERI, Kotlin, Python, and Solidity programs. It can automatically verify predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions. In addition, ESBMC supports the Clang compiler as its C/C++/CHERI/CUDA frontend, the Soot framework via Jimple as its Java/Kotlin frontend, the ast2json package as its Python frontend, implements the Solidity grammar production rules as its Solidity frontend, and IEEE floating-point arithmetic for various SMT solvers. In addition, ESBMC implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
 
 To build ESBMC, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. To get started, we recommend first reading some of the background material/publications to understand exactly what this technique can provide, for example, our SV-COMP papers, which are available [online](https://ssvlab.github.io/esbmc/publications.html).
 
@@ -43,8 +43,7 @@ While our main website is [esbmc.org](http://esbmc.org).
 
 The figure below illustrates the current ESBMC architecture. The tool inputs a C/C++/CUDA, Java/Kotlin, Solidity, or CHERI-C program, then converts an abstract syntax tree (AST) into a state transition system called a GOTO program. Its symbolic execution engine unrolls the GOTO program and generates a sequence of static single assignments (SSAs). The SSAs are then converted to an SMT formula, which is satisfiable if and only if the program contains errors.
 
-
-![esbmc-architecture-v2](https://github.com/esbmc/esbmc/assets/3694109/28c423a3-39a2-41f1-828d-cb40dfbe4743)
+![esbmc-architecture-v3](https://github.com/esbmc/esbmc/assets/3694109/fe609179-14bc-4f3d-b507-a3b003f732ae)
 
 ### Awards
 
@@ -80,7 +79,7 @@ The figure below illustrates the current ESBMC architecture. The tool inputs a C
 
 ### Features
 
-ESBMC aims to support all of C99/C11, and detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of problems that can be detected include:
+ESBMC detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of implementation errors that can be detected include:
  * User-specified assertion failures
  * Out-of-bounds array access
  * Illegal pointer dereferences, such as:

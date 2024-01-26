@@ -15,7 +15,7 @@ exprt jimple_full_method_body::to_exprt(
   code_blockt block;
 
   // For each Jimple Statement
-  for(auto const &stmt : this->members)
+  for (auto const &stmt : this->members)
   {
     // Generate the equivalent exprt of the jimple statement
     auto expression = stmt->to_exprt(ctx, class_name, function_name);
@@ -24,7 +24,7 @@ exprt jimple_full_method_body::to_exprt(
     auto l = jimple_ast::get_location(class_name, function_name);
 
     // If the original line is known, then we set it
-    if(stmt->line_location != -1)
+    if (stmt->line_location != -1)
       l.set_line(stmt->line_location);
 
     expression.location() = l;
@@ -49,14 +49,20 @@ void jimple_full_method_body::from_json(const json &stmts)
      * To solve this, we threat the location as a Statement.
      */
   int inner_location = -1;
-  for(auto &stmt : stmts)
+  for (const json &stmt : stmts)
   {
     std::shared_ptr<jimple_method_field> to_add;
 
     auto mode = stmt.at("object").get<std::string>();
     // I think that this is the best way without
     // adding some crazy function pointer.
-    switch(from_map[mode])
+    auto it = from_map.find(mode);
+    if (it == from_map.end())
+    {
+      log_error("Unknown type {}", stmt.dump(2));
+      abort();
+    }
+    switch (it->second)
     {
     case statement::Declaration:
     {
@@ -149,7 +155,10 @@ void jimple_full_method_body::from_json(const json &stmts)
       break;
     }
     default:
-      log_error("Unknown type {}", stmt);
+      log_error(
+        "unsupported jimple statement id {} for key '{}'",
+        static_cast<std::underlying_type_t<statement>>(it->second),
+        it->first);
       abort();
     }
 
@@ -160,7 +169,7 @@ void jimple_full_method_body::from_json(const json &stmts)
 std::string jimple_full_method_body::to_string() const
 {
   std::ostringstream oss;
-  for(auto &x : members)
+  for (auto &x : members)
   {
     oss << "\n\t\t" << x->to_string();
   }

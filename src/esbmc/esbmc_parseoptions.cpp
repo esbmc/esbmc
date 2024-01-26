@@ -31,6 +31,7 @@ extern "C"
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
+#include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/write_goto_binary.h>
@@ -63,6 +64,14 @@ extern "C"
 #include <goto-programs/goto_contractor.h>
 #endif
 
+extern "C" const char buildidstring_buf[];
+extern "C" const unsigned int buildidstring_buf_size;
+
+static std::string_view esbmc_version_string()
+{
+  return {buildidstring_buf, buildidstring_buf_size};
+}
+
 enum PROCESS_TYPE
 {
   BASE_CASE,
@@ -89,8 +98,6 @@ void timeout_handler(int)
 }
 #endif
 
-extern "C" const char *const esbmc_version_string;
-
 // This transforms a string representation of a time interval
 // written in the form <number><suffix> into seconds.
 // The following suffixes corresponding to time units are supported:
@@ -110,9 +117,9 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
 {
   uint64_t mult;
   int len = strlen(str);
-  if(!isdigit(str[len - 1]))
+  if (!isdigit(str[len - 1]))
   {
-    switch(str[len - 1])
+    switch (str[len - 1])
     {
     case 's':
       mult = 1;
@@ -160,9 +167,9 @@ uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
 {
   uint64_t mult;
   int len = strlen(str);
-  if(!isdigit(str[len - 1]))
+  if (!isdigit(str[len - 1]))
   {
-    switch(str[len - 1])
+    switch (str[len - 1])
     {
     case 'b':
       mult = 1;
@@ -194,7 +201,7 @@ uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
 static std::string format_target()
 {
   const char *endian = nullptr;
-  switch(config.ansi_c.endianess)
+  switch (config.ansi_c.endianess)
   {
   case configt::ansi_ct::IS_LITTLE_ENDIAN:
     endian = "little";
@@ -208,7 +215,7 @@ static std::string format_target()
   }
   assert(endian);
   const char *lib = nullptr;
-  switch(config.ansi_c.lib)
+  switch (config.ansi_c.lib)
   {
   case configt::ansi_ct::LIB_NONE:
     lib = "system";
@@ -231,7 +238,7 @@ static std::string format_target()
 // \param options - the options object created and updated by this method.
 void esbmc_parseoptionst::get_command_line_options(optionst &options)
 {
-  if(config.set(cmdline))
+  if (config.set(cmdline))
     exit(1);
 
   log_status("Target: {}", format_target());
@@ -240,13 +247,13 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   options.cmdline(cmdline);
   set_verbosity_msg();
 
-  if(cmdline.isset("git-hash"))
+  if (cmdline.isset("git-hash"))
   {
-    log_result("{}", esbmc_version_string);
+    log_result("{}", esbmc_version_string());
     exit(0);
   }
 
-  if(cmdline.isset("list-solvers"))
+  if (cmdline.isset("list-solvers"))
   {
     // Generated for us by autoconf,
     log_result("Available solvers: {}", ESBMC_AVAILABLE_SOLVERS);
@@ -257,23 +264,23 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // that are used by ESBMC at later stages but which are not available
   // through CMD, setting groups of options based depending on
   // particular CMD flags)
-  if(cmdline.isset("bv"))
+  if (cmdline.isset("bv"))
     options.set_option("int-encoding", false);
 
-  if(cmdline.isset("ir"))
+  if (cmdline.isset("ir"))
     options.set_option("int-encoding", true);
 
-  if(cmdline.isset("fixedbv"))
+  if (cmdline.isset("fixedbv"))
     options.set_option("fixedbv", true);
   else
     options.set_option("floatbv", true);
 
-  if(cmdline.isset("context-bound"))
+  if (cmdline.isset("context-bound"))
     options.set_option("context-bound", cmdline.getval("context-bound"));
   else
     options.set_option("context-bound", -1);
 
-  if(cmdline.isset("deadlock-check"))
+  if (cmdline.isset("deadlock-check"))
   {
     options.set_option("deadlock-check", true);
     options.set_option("atomicity-check", false);
@@ -281,18 +288,18 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("deadlock-check", false);
 
-  if(cmdline.isset("compact-trace"))
+  if (cmdline.isset("compact-trace"))
     options.set_option("no-slice", true);
 
-  if(cmdline.isset("smt-during-symex"))
+  if (cmdline.isset("smt-during-symex"))
   {
     log_status("Enabling --no-slice due to presence of --smt-during-symex");
     options.set_option("no-slice", true);
   }
 
-  if(cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard"))
+  if (cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard"))
   {
-    if(!cmdline.isset("smt-during-symex"))
+    if (!cmdline.isset("smt-during-symex"))
     {
       log_error(
         "Please explicitly specify --smt-during-symex if you want "
@@ -302,7 +309,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 
   // check the user's parameters to run incremental verification
-  if(!cmdline.isset("unlimited-k-steps"))
+  if (!cmdline.isset("unlimited-k-steps"))
   {
     // Get max number of iterations
     BigInt max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
@@ -311,7 +318,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
     // check whether k-step is greater than max-k-step
-    if(k_step_inc >= max_k_step)
+    if (k_step_inc >= max_k_step)
     {
       log_error(
         "Please specify --k-step smaller than max-k-step if you want "
@@ -320,14 +327,14 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     }
   }
 
-  if(cmdline.isset("base-case"))
+  if (cmdline.isset("base-case"))
   {
     options.set_option("base-case", true);
     options.set_option("no-unwinding-assertions", true);
     options.set_option("partial-loops", false);
   }
 
-  if(cmdline.isset("forward-condition"))
+  if (cmdline.isset("forward-condition"))
   {
     options.set_option("forward-condition", true);
     options.set_option("no-unwinding-assertions", false);
@@ -335,21 +342,21 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-assertions", true);
   }
 
-  if(cmdline.isset("inductive-step"))
+  if (cmdline.isset("inductive-step"))
   {
     options.set_option("inductive-step", true);
     options.set_option("no-unwinding-assertions", true);
     options.set_option("partial-loops", false);
   }
 
-  if(
+  if (
     cmdline.isset("overflow-check") || cmdline.isset("unsigned-overflow-check"))
     options.set_option("disable-inductive-step", true);
 
-  if(cmdline.isset("ub-shift-check"))
+  if (cmdline.isset("ub-shift-check"))
     options.set_option("ub-shift-check", true);
 
-  if(cmdline.isset("timeout"))
+  if (cmdline.isset("timeout"))
   {
 #ifdef _WIN32
     log_error("Timeout unimplemented on Windows, sorry");
@@ -362,7 +369,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 #endif
   }
 
-  if(cmdline.isset("memlimit"))
+  if (cmdline.isset("memlimit"))
   {
 #ifdef _WIN32
     log_error("Can't memlimit on Windows, sorry");
@@ -373,7 +380,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     struct rlimit lim;
     lim.rlim_cur = size;
     lim.rlim_max = size;
-    if(setrlimit(RLIMIT_DATA, &lim) != 0)
+    if (setrlimit(RLIMIT_DATA, &lim) != 0)
     {
       perror("Couldn't set memory limit");
       abort();
@@ -383,11 +390,11 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
 #ifndef _WIN32
   struct rlimit lim;
-  if(cmdline.isset("enable-core-dump"))
+  if (cmdline.isset("enable-core-dump"))
   {
     lim.rlim_cur = RLIM_INFINITY;
     lim.rlim_max = RLIM_INFINITY;
-    if(setrlimit(RLIMIT_CORE, &lim) != 0)
+    if (setrlimit(RLIMIT_CORE, &lim) != 0)
     {
       perror("Couldn't unlimit core dump size");
       abort();
@@ -397,7 +404,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     lim.rlim_cur = 0;
     lim.rlim_max = 0;
-    if(setrlimit(RLIMIT_CORE, &lim) != 0)
+    if (setrlimit(RLIMIT_CORE, &lim) != 0)
     {
       perror("Couldn't disable core dump size");
       abort();
@@ -405,16 +412,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
-  // parallel solving activates "--multi-property"
-  if(cmdline.isset("parallel-solving"))
-  {
-    options.set_option("result-only", true);
-    options.set_option("base-case", true);
-    options.set_option("multi-property", true);
-  }
-
   // If multi-property is on, we should set result-only and base-case
-  if(cmdline.isset("multi-property"))
+  if (cmdline.isset("multi-property"))
   {
     options.set_option("result-only", true);
     options.set_option("base-case", true);
@@ -438,7 +437,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 int esbmc_parseoptionst::doit()
 {
   // Configure msg output
-  if(cmdline.isset("file-output"))
+  if (cmdline.isset("file-output"))
   {
     FILE *f = fopen(cmdline.getval("file-output"), "w+");
     /* TODO: handle failure */
@@ -454,11 +453,11 @@ int esbmc_parseoptionst::doit()
     config.this_architecture(),
     config.this_operating_system());
 
-  if(cmdline.isset("version"))
+  if (cmdline.isset("version"))
     return 0;
 
   // Unwinding of transition systems
-  if(cmdline.isset("module") || cmdline.isset("gen-interface"))
+  if (cmdline.isset("module") || cmdline.isset("gen-interface"))
   {
     log_error("This version has no support for hardware modules.");
     return 1;
@@ -466,7 +465,7 @@ int esbmc_parseoptionst::doit()
 
   // Preprocess the input program.
   // (This will not have any effect if OLD_FRONTEND is not enabled.)
-  if(cmdline.isset("preprocess"))
+  if (cmdline.isset("preprocess"))
   {
     preprocessing();
     return 0;
@@ -475,7 +474,7 @@ int esbmc_parseoptionst::doit()
   // Initialize goto_functions algorithms
   {
     // Loop unrolling
-    if(cmdline.isset("goto-unwind") && !cmdline.isset("unwind"))
+    if (cmdline.isset("goto-unwind") && !cmdline.isset("unwind"))
     {
       size_t unroll_limit = cmdline.isset("unlimited-goto-unwind") ? -1 : 1000;
       goto_preprocess_algorithms.push_back(
@@ -483,9 +482,8 @@ int esbmc_parseoptionst::doit()
     }
 
     // Explicitly marking all declared variables as "nondet"
-    if(cmdline.isset("initialize-nondet-variables"))
-      goto_preprocess_algorithms.emplace_back(
-        std::make_unique<mark_decl_as_non_det>(context));
+    goto_preprocess_algorithms.emplace_back(
+      std::make_unique<mark_decl_as_non_det>(context));
   }
 
   // Run this before the main flow. This method performs its own
@@ -494,7 +492,7 @@ int esbmc_parseoptionst::doit()
   // Eventually we will modify it and implement parallel version for all
   // available strategies. Just run it first before everything else
   // for now.
-  if(cmdline.isset("k-induction-parallel"))
+  if (cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
 
   // Parse ESBMC options (CMD + set internal options)
@@ -502,12 +500,12 @@ int esbmc_parseoptionst::doit()
   get_command_line_options(options);
 
   // Create and preprocess a GOTO program
-  if(get_goto_program(options, goto_functions))
+  if (get_goto_program(options, goto_functions))
     return 6;
 
   // Output claims about this program
   // (Fedor: should be moved to the output method perhaps)
-  if(cmdline.isset("show-claims"))
+  if (cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
     show_claims(ns, goto_functions);
@@ -516,15 +514,15 @@ int esbmc_parseoptionst::doit()
 
   // Set user-specified claims
   // (Fedor: should be moved to the preprocessing method perhaps)
-  if(set_claims(goto_functions))
+  if (set_claims(goto_functions))
     return 7;
 
   // Leave without doing any Bounded Model Checking
-  if(options.get_bool_option("skip-bmc"))
+  if (options.get_bool_option("skip-bmc"))
     return 0;
 
   // Now run one of the chosen strategies
-  if(
+  if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
     cmdline.isset("falsification") || cmdline.isset("k-induction"))
     return do_bmc_strategy(options, goto_functions);
@@ -550,13 +548,13 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   // Process type
   PROCESS_TYPE process_type = PARENT;
 
-  if(pipe(forward_pipe))
+  if (pipe(forward_pipe))
   {
     log_status("\nPipe Creation Failed, giving up.");
     _exit(1);
   }
 
-  if(pipe(backward_pipe))
+  if (pipe(backward_pipe))
   {
     log_status("\nPipe Creation Failed, giving up.");
     _exit(1);
@@ -570,18 +568,18 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   short num_p = 0;
 
   // We need to fork 3 times: one for each step
-  for(unsigned p = 0; p < 3; ++p)
+  for (unsigned p = 0; p < 3; ++p)
   {
     pid_t pid = fork();
 
-    if(pid == -1)
+    if (pid == -1)
     {
       log_status("\nFork Failed, giving up.");
       _exit(1);
     }
 
     // Child process
-    if(!pid)
+    if (!pid)
     {
       process_type = PROCESS_TYPE(p);
       break;
@@ -592,7 +590,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     ++num_p;
   }
 
-  if(process_type == PARENT && num_p != 3)
+  if (process_type == PARENT && num_p != 3)
   {
     log_error("Child processes were not created sucessfully.");
     abort();
@@ -600,23 +598,23 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
   optionst options;
 
-  if(process_type != PARENT)
+  if (process_type != PARENT)
   {
     // Get full set of options
     get_command_line_options(options);
 
     // Generate goto functions and set claims
-    if(get_goto_program(options, goto_functions))
+    if (get_goto_program(options, goto_functions))
       return 6;
 
-    if(cmdline.isset("show-claims"))
+    if (cmdline.isset("show-claims"))
     {
       const namespacet ns(context);
       show_claims(ns, goto_functions);
       return 0;
     }
 
-    if(set_claims(goto_functions))
+    if (set_claims(goto_functions))
       return 7;
   }
 
@@ -629,7 +627,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
   // All processes were created successfully
-  switch(process_type)
+  switch (process_type)
   {
   case PARENT:
   {
@@ -643,13 +641,13 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
            is_solution = max_k_step;
 
     // Keep reading until we find an answer
-    while(!(bc_finished && fc_finished && is_finished))
+    while (!(bc_finished && fc_finished && is_finished))
     {
       // Perform read and interpret the number of bytes read
       int read_size = read(forward_pipe[0], &a_result, sizeof(resultt));
-      if(read_size != sizeof(resultt))
+      if (read_size != sizeof(resultt))
       {
-        if(read_size == 0)
+        if (read_size == 0)
         {
           // Client hung up; continue on, but don't interpret the result.
           ;
@@ -666,15 +664,15 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Eventually the parent process will check if the child process is alive
 
       // Check base case process
-      if(!bc_finished)
+      if (!bc_finished)
       {
         int status;
         pid_t result = waitpid(children_pid[0], &status, WNOHANG);
-        if(result == 0)
+        if (result == 0)
         {
           // Child still alive
         }
-        else if(result == -1)
+        else if (result == -1)
         {
           // Error
         }
@@ -686,15 +684,15 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
 
       // Check forward condition process
-      if(!fc_finished)
+      if (!fc_finished)
       {
         int status;
         pid_t result = waitpid(children_pid[1], &status, WNOHANG);
-        if(result == 0)
+        if (result == 0)
         {
           // Child still alive
         }
-        else if(result == -1)
+        else if (result == -1)
         {
           // Error
         }
@@ -706,15 +704,15 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
 
       // Check inductive step process
-      if(!is_finished)
+      if (!is_finished)
       {
         int status;
         pid_t result = waitpid(children_pid[2], &status, WNOHANG);
-        if(result == 0)
+        if (result == 0)
         {
           // Child still alive
         }
-        else if(result == -1)
+        else if (result == -1)
         {
           // Error
         }
@@ -725,7 +723,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
       }
 
-      switch(a_result.type)
+      switch (a_result.type)
       {
       case BASE_CASE:
         bc_finished = true;
@@ -743,24 +741,22 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         break;
 
       default:
-        log_error(
-          "Message from unrecognized k-induction child "
-          "process");
+        log_error("Message from unrecognized k-induction child process");
         abort();
       }
 
       // If either the base case found a bug or the forward condition
       // finds a solution, present the result
-      if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
+      if (bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
         break;
 
       // If the either the forward condition or inductive step finds a
       // solution, first check if base case couldn't find a bug in that code,
       // if there is no bug, inductive step can present the result
-      if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
+      if (fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
       {
         // If base case finished, then we can present the result
-        if(bc_finished)
+        if (bc_finished)
           break;
 
         // Otherwise, kill the inductive step process
@@ -779,10 +775,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         (void)len; //ndebug
       }
 
-      if(is_finished && (is_solution != 0) && (is_solution != max_k_step))
+      if (is_finished && (is_solution != 0) && (is_solution != max_k_step))
       {
         // If base case finished, then we can present the result
-        if(bc_finished)
+        if (bc_finished)
           break;
 
         // Otherwise, kill the forward condition process
@@ -802,11 +798,11 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
     }
 
-    for(int i : children_pid)
+    for (int i : children_pid)
       kill(i, SIGKILL);
 
     // Check if a solution was found by the base case
-    if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
+    if (bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
     {
       log_result(
         "\nBug found by the base case (k = {})\nVERIFICATION FAILED",
@@ -815,11 +811,11 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     }
 
     // Check if a solution was found by the forward condition
-    if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
+    if (fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
     {
       // We should only present the result if the base case finished
       // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
-      if(bc_finished && (bc_solution != max_k_step))
+      if (bc_finished && (bc_solution != max_k_step))
       {
         log_success(
           "\nSolution found by the forward condition; "
@@ -831,11 +827,11 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     }
 
     // Check if a solution was found by the inductive step
-    if(is_finished && (is_solution != 0) && (is_solution != max_k_step))
+    if (is_finished && (is_solution != 0) && (is_solution != max_k_step))
     {
       // We should only present the result if the base case finished
       // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
-      if(bc_finished && (bc_solution != max_k_step))
+      if (bc_finished && (bc_solution != max_k_step))
       {
         log_success(
           "\nSolution found by the inductive step "
@@ -871,7 +867,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A bug was found, we send the step where it was found
     // 2. It couldn't find a bug
-    for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+    for (BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
     {
       bmct bmc(goto_functions, options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
@@ -884,13 +880,13 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       {
         res = do_bmc(bmc);
       }
-      catch(...)
+      catch (...)
       {
         break;
       }
 
       // Send information to parent if no bug was found
-      if(res == smt_convt::P_SATISFIABLE)
+      if (res == smt_convt::P_SATISFIABLE)
       {
         r.k = k_step.to_uint64();
 
@@ -899,7 +895,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
-        log_status("BASE CASE PROCESS FINISHED.\n");
+        log_status("Base case process finished (bug found).\n");
         return true;
       }
 
@@ -908,14 +904,14 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Perform read and interpret the number of bytes read
       struct resultt a_result;
       int read_size = read(backward_pipe[0], &a_result, sizeof(resultt));
-      if(read_size != sizeof(resultt))
+      if (read_size != sizeof(resultt))
       {
-        if(read_size == 0)
+        if (read_size == 0)
         {
           // Client hung up; continue on, but don't interpret the result.
           continue;
         }
-        if(read_size == -1 && errno == EAGAIN)
+        if (read_size == -1 && errno == EAGAIN)
         {
           // No data available yet
           continue;
@@ -936,7 +932,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // If the value being asked is greater or equal the current step,
       // then we can stop the base case. It can be equal, because we
       // have just checked the current value of k
-      if(a_result.k < k_step)
+      if (a_result.k < k_step)
         break;
 
       // Otherwise, we just need to check the base case for k = a_result.k
@@ -950,7 +946,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
-    log_status("BASE CASE PROCESS FINISHED.\n");
+    log_status("Base case process finished (no bug found).\n");
     return false;
   }
 
@@ -975,7 +971,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
     // 2. It couldn't find a proof
-    for(BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
+    for (BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
       bmct bmc(goto_functions, options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
@@ -988,16 +984,16 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       {
         res = do_bmc(bmc);
       }
-      catch(...)
+      catch (...)
       {
         break;
       }
 
-      if(options.get_bool_option("disable-forward-condition"))
+      if (options.get_bool_option("disable-forward-condition"))
         break;
 
       // Send information to parent if no bug was found
-      if(res == smt_convt::P_UNSATISFIABLE)
+      if (res == smt_convt::P_UNSATISFIABLE)
       {
         r.k = k_step.to_uint64();
 
@@ -1006,7 +1002,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
-        log_status("FORWARD CONDITION PROCESS FINISHED.");
+        log_status("Forward condition process finished (safety proven).");
         return false;
       }
     }
@@ -1018,7 +1014,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
-    log_status("FORWARD CONDITION PROCESS FINISHED.");
+    log_status("Forward condition process finished (safety not proven).");
     return true;
   }
 
@@ -1042,7 +1038,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
     // 2. It couldn't find a proof
-    for(BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
+    for (BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
       bmct bmc(goto_functions, options, context);
 
@@ -1056,16 +1052,16 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       {
         res = do_bmc(bmc);
       }
-      catch(...)
+      catch (...)
       {
         break;
       }
 
-      if(options.get_bool_option("disable-inductive-step"))
+      if (options.get_bool_option("disable-inductive-step"))
         break;
 
       // Send information to parent if no bug was found
-      if(res == smt_convt::P_UNSATISFIABLE)
+      if (res == smt_convt::P_UNSATISFIABLE)
       {
         r.k = k_step.to_uint64();
 
@@ -1074,7 +1070,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
-        log_status("INDUCTIVE STEP PROCESS FINISHED.");
+        log_status("Inductive process finished (safety proven).");
         return false;
       }
     }
@@ -1086,7 +1082,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
-    log_status("INDUCTIVE STEP PROCESS FINISHED.");
+    log_status("Inductive process finished (safety not proven).");
     return true;
   }
 
@@ -1132,31 +1128,31 @@ int esbmc_parseoptionst::do_bmc_strategy(
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
-  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  for (BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
     // k-induction
-    if(options.get_bool_option("k-induction"))
+    if (options.get_bool_option("k-induction"))
     {
-      if(is_base_case_violated(options, goto_functions, k_step).is_true())
+      if (is_base_case_violated(options, goto_functions, k_step).is_true())
         return 1;
 
-      if(does_forward_condition_hold(options, goto_functions, k_step)
-           .is_false())
+      if (does_forward_condition_hold(options, goto_functions, k_step)
+            .is_false())
         return 0;
 
       // Don't run inductive step for k_step == 1
-      if(k_step > 1)
+      if (k_step > 1)
       {
-        if(is_inductive_step_violated(options, goto_functions, k_step)
-             .is_false())
+        if (is_inductive_step_violated(options, goto_functions, k_step)
+              .is_false())
           return 0;
       }
     }
     // termination
-    if(options.get_bool_option("termination"))
+    if (options.get_bool_option("termination"))
     {
-      if(does_forward_condition_hold(options, goto_functions, k_step)
-           .is_false())
+      if (does_forward_condition_hold(options, goto_functions, k_step)
+            .is_false())
         return 0;
 
       /* Disable this for now as it is causing more than 100 errors on SV-COMP
@@ -1165,19 +1161,19 @@ int esbmc_parseoptionst::do_bmc_strategy(
       */
     }
     // incremental-bmc
-    if(options.get_bool_option("incremental-bmc"))
+    if (options.get_bool_option("incremental-bmc"))
     {
-      if(is_base_case_violated(options, goto_functions, k_step).is_true())
+      if (is_base_case_violated(options, goto_functions, k_step).is_true())
         return 1;
 
-      if(does_forward_condition_hold(options, goto_functions, k_step)
-           .is_false())
+      if (does_forward_condition_hold(options, goto_functions, k_step)
+            .is_false())
         return 0;
     }
     // falsification
-    if(options.get_bool_option("falsification"))
+    if (options.get_bool_option("falsification"))
     {
-      if(is_base_case_violated(options, goto_functions, k_step).is_true())
+      if (is_base_case_violated(options, goto_functions, k_step).is_true())
         return 1;
     }
   }
@@ -1214,7 +1210,7 @@ tvt esbmc_parseoptionst::is_base_case_violated(
   bmct bmc(goto_functions, options, context);
 
   log_status("Checking base case, k = {:d}", k_step);
-  switch(do_bmc(bmc))
+  switch (do_bmc(bmc))
   {
   case smt_convt::P_UNSATISFIABLE:
     return tvt(tvt::TV_FALSE);
@@ -1253,7 +1249,7 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
   goto_functionst &goto_functions,
   const BigInt &k_step)
 {
-  if(options.get_bool_option("disable-forward-condition"))
+  if (options.get_bool_option("disable-forward-condition"))
     return tvt(tvt::TV_UNKNOWN);
 
   options.set_option("base-case", false);
@@ -1278,7 +1274,7 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
   // Restore the no assertion flag, before checking the other steps
   options.set_option("no-assertions", no_assertions);
 
-  switch(res)
+  switch (res)
   {
   case smt_convt::P_SATISFIABLE:
     return tvt(tvt::TV_TRUE);
@@ -1322,10 +1318,10 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   goto_functionst &goto_functions,
   const BigInt &k_step)
 {
-  if(options.get_bool_option("disable-inductive-step"))
+  if (options.get_bool_option("disable-inductive-step"))
     return tvt(tvt::TV_UNKNOWN);
 
-  if(
+  if (
     strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) <
     k_step.to_uint64())
     return tvt(tvt::TV_UNKNOWN);
@@ -1340,7 +1336,7 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   bmct bmc(goto_functions, options, context);
 
   log_progress("Checking inductive step, k = {:d}", k_step);
-  switch(do_bmc(bmc))
+  switch (do_bmc(bmc))
   {
   case smt_convt::P_SATISFIABLE:
     return tvt(tvt::TV_TRUE);
@@ -1382,11 +1378,11 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
   log_progress("Starting Bounded Model Checking");
 
   smt_convt::resultt res = bmc.start_bmc();
-  if(res == smt_convt::P_ERROR)
+  if (res == smt_convt::P_ERROR)
     abort();
 
 #ifdef HAVE_SENDFILE_ESBMC
-  if(bmc.options.get_bool_option("memstats"))
+  if (bmc.options.get_bool_option("memstats"))
   {
     int fd = open("/proc/self/status", O_RDONLY);
     sendfile(2, fd, nullptr, 100000);
@@ -1401,23 +1397,23 @@ bool esbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
 {
   try
   {
-    if(cmdline.isset("claim"))
+    if (cmdline.isset("claim"))
       ::set_claims(goto_functions, cmdline.get_values("claim"));
   }
 
-  catch(const char *e)
+  catch (const char *e)
   {
     log_error("{}", e);
     return true;
   }
 
-  catch(const std::string &e)
+  catch (const std::string &e)
   {
     log_error("{}", e);
     return true;
   }
 
-  catch(int)
+  catch (int)
   {
     return true;
   }
@@ -1445,7 +1441,7 @@ bool esbmc_parseoptionst::get_goto_program(
   try
   {
     fine_timet create_start = current_time();
-    if(create_goto_program(options, goto_functions))
+    if (create_goto_program(options, goto_functions))
       return true;
     fine_timet create_stop = current_time();
     log_status(
@@ -1453,29 +1449,29 @@ bool esbmc_parseoptionst::get_goto_program(
       time2string(create_stop - create_start));
 
     fine_timet process_start = current_time();
-    if(process_goto_program(options, goto_functions))
+    if (process_goto_program(options, goto_functions))
       return true;
     fine_timet process_stop = current_time();
     log_status(
       "GOTO program processing time: {}s",
       time2string(process_stop - process_start));
-    if(output_goto_program(options, goto_functions))
+    if (output_goto_program(options, goto_functions))
       return true;
   }
 
-  catch(const char *e)
+  catch (const char *e)
   {
     log_error("{}", e);
     return true;
   }
 
-  catch(const std::string &e)
+  catch (const std::string &e)
   {
     log_error("{}", e);
     return true;
   }
 
-  catch(std::bad_alloc &)
+  catch (std::bad_alloc &)
   {
     log_error("Out of memory");
     return true;
@@ -1498,41 +1494,38 @@ bool esbmc_parseoptionst::create_goto_program(
 {
   try
   {
-    if(cmdline.args.size() == 0)
+    if (cmdline.args.size() == 0)
     {
       log_error("Please provide a program to verify");
       return true;
     }
 
-    // Ahem
-    migrate_namespace_lookup = new namespacet(context);
-
     // If the user is providing the GOTO functions, we don't need to parse
-    if(cmdline.isset("binary"))
+    if (cmdline.isset("binary"))
     {
-      if(read_goto_binary(goto_functions))
+      if (read_goto_binary(goto_functions))
         return true;
     }
     else
     {
-      if(parse_goto_program(options, goto_functions))
+      if (parse_goto_program(options, goto_functions))
         return true;
     }
   }
 
-  catch(const char *e)
+  catch (const char *e)
   {
     log_error("{}", e);
     return true;
   }
 
-  catch(const std::string &e)
+  catch (const std::string &e)
   {
     log_error("{}", e);
     return true;
   }
 
-  catch(std::bad_alloc &)
+  catch (std::bad_alloc &)
   {
     log_error("Out of memory");
     return true;
@@ -1547,9 +1540,9 @@ bool esbmc_parseoptionst::create_goto_program(
 bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
 {
   log_progress("Reading GOTO program from file");
-  for(const auto &arg : _cmdline.args)
+  for (const auto &arg : cmdline.args)
   {
-    if(::read_goto_binary(arg, context, goto_functions))
+    if (::read_goto_binary(arg, context, goto_functions))
     {
       log_error("Failed to open `{}'", arg);
       return true;
@@ -1569,35 +1562,35 @@ bool esbmc_parseoptionst::parse_goto_program(
 {
   try
   {
-    if(parse())
+    if (parse(cmdline))
       return true;
 
-    if(cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
+    if (cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
     {
       assert(language_files.filemap.size());
       languaget &language = *language_files.filemap.begin()->second.language;
       std::ostringstream oss;
       language.show_parse(oss);
       log_status("{}", oss.str());
-      if(cmdline.isset("parse-tree-only"))
+      if (cmdline.isset("parse-tree-only"))
         return true;
     }
 
     // Typecheking (old frontend) or adjust (clang frontend)
-    if(typecheck())
+    if (typecheck())
       return true;
-    if(final())
+    if (final())
       return true;
 
     // we no longer need any parse trees or language files
     clear_parse();
 
-    if(cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
+    if (cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
     {
       std::ostringstream oss;
       show_symbol_table_plain(oss);
       log_status("{}", oss.str());
-      if(cmdline.isset("symbol-table-only"))
+      if (cmdline.isset("symbol-table-only"))
         return true;
     }
 
@@ -1605,19 +1598,19 @@ bool esbmc_parseoptionst::parse_goto_program(
     goto_convert(context, options, goto_functions);
   }
 
-  catch(const char *e)
+  catch (const char *e)
   {
     log_error("{}", e);
     return true;
   }
 
-  catch(const std::string &e)
+  catch (const std::string &e)
   {
     log_error("{}", e);
     return true;
   }
 
-  catch(std::bad_alloc &)
+  catch (std::bad_alloc &)
   {
     log_error("Out of memory");
     return true;
@@ -1647,32 +1640,76 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
 
+    bool is_no_remove = cmdline.isset("multi-property") ||
+                        cmdline.isset("goto-coverage") ||
+                        cmdline.isset("goto-coverage-claims");
+
     // Start by removing all no-op instructions and unreachable code
-    if(!cmdline.isset("no-remove-no-op"))
+    if (!(cmdline.isset("no-remove-no-op")))
       remove_no_op(goto_functions);
 
-    if(!cmdline.isset("no-remove-unreachable"))
+    // We should skip this 'remove-unreachable' removal in goto-cov and multi-property
+    // - multi-property wants to find all the bugs in the src code
+    // - goto-coverage wants to find out unreached codes (asserts)
+    // - however, the optimisation below will remove codes during the Goto stage
+    if (!(cmdline.isset("no-remove-unreachable") || is_no_remove))
       remove_unreachable(goto_functions);
 
     // Apply all the initialized algorithms
-    for(auto &algorithm : goto_preprocess_algorithms)
+    for (auto &algorithm : goto_preprocess_algorithms)
       algorithm->run(goto_functions);
 
     // do partial inlining
-    if(!cmdline.isset("no-inlining"))
+    if (!cmdline.isset("no-inlining"))
     {
-      if(cmdline.isset("full-inlining"))
+      if (cmdline.isset("full-inlining"))
         goto_inline(goto_functions, options, ns);
       else
         goto_partial_inline(goto_functions, options, ns);
     }
 
-    if(cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
+    if (cmdline.isset("gcse"))
+    {
+      std::shared_ptr<value_set_analysist> vsa =
+        std::make_shared<value_set_analysist>(ns);
+      try
+      {
+        log_status("Computing Value-Set Analysis (VSA)");
+        (*vsa)(goto_functions);
+      }
+      catch (vsa_not_implemented_exception &)
+      {
+        log_warning(
+          "Unable to compute VSA due to incomplete implementation. Some GOTO "
+          "optimizations will be disabled");
+        vsa = nullptr;
+      }
+      catch (type2t::symbolic_type_excp &)
+      {
+        log_warning(
+          "[GOTO] Unable to compute VSA due to symbolic type. Some GOTO "
+          "optimizations will be disabled");
+        vsa = nullptr;
+      }
+
+      if (cmdline.isset("no-library"))
+        log_warning("Using CSE with --no-library might cause huge slowdowns!");
+
+      if (!vsa)
+        log_warning("Could not apply GCSE optimization due to VSA limitation!");
+      else
+      {
+        goto_cse cse(context, vsa);
+        cse.run(goto_functions);
+      }
+    }
+
+    if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {
       interval_analysis(goto_functions, ns, options);
     }
 
-    if(
+    if (
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
       cmdline.isset("k-induction-parallel"))
     {
@@ -1682,10 +1719,12 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_k_induction(goto_functions);
     }
 
-    if(cmdline.isset("goto-contractor"))
+    if (
+      cmdline.isset("goto-contractor") ||
+      cmdline.isset("goto-contractor-condition"))
     {
 #ifdef ENABLE_GOTO_CONTRACTOR
-      goto_contractor(goto_functions);
+      goto_contractor(goto_functions, ns, options);
 #else
       log_error(
         "Current build does not support contractors. If ibex is installed, add "
@@ -1695,22 +1734,22 @@ bool esbmc_parseoptionst::process_goto_program(
 #endif
     }
 
-    if(cmdline.isset("termination"))
+    if (cmdline.isset("termination"))
       goto_termination(goto_functions);
 
     goto_check(ns, options, goto_functions);
 
     // Once again, remove all unreachable and no-op code that could have been
     // introduced by the above algorithms
-    if(!cmdline.isset("no-remove-no-op"))
+    if (!(cmdline.isset("no-remove-no-op")))
       remove_no_op(goto_functions);
 
-    if(!cmdline.isset("no-remove-unreachable"))
+    if (!(cmdline.isset("no-remove-unreachable") || is_no_remove))
       remove_unreachable(goto_functions);
 
     goto_functions.update();
 
-    if(cmdline.isset("data-races-check"))
+    if (cmdline.isset("data-races-check"))
     {
       log_status("Adding Data Race Checks");
 
@@ -1721,33 +1760,45 @@ bool esbmc_parseoptionst::process_goto_program(
 
       value_set_analysis.update(goto_functions);
     }
-
-    if(cmdline.isset("goto-coverage") || cmdline.isset("make-assert-false"))
-    {
-      goto_coveraget tmp;
-      tmp.make_asserts_false(goto_functions);
-    }
-
-    if(cmdline.isset("goto-coverage") || cmdline.isset("add-false-assert"))
+    if (cmdline.isset("add-false-assert"))
     {
       goto_coveraget tmp;
       tmp.add_false_asserts(goto_functions);
     }
+
+    //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
+    if (cmdline.isset("goto-coverage") || cmdline.isset("goto-coverage-claims"))
+    {
+      // for assertion coverage metric
+      options.set_option("make-assert-false", true);
+      // for multi-property
+      options.set_option("result-only", true);
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", false);
+    }
+
+    if (options.get_bool_option("make-assert-false"))
+    {
+      goto_coveraget tmp;
+      tmp.make_asserts_false(goto_functions, ns);
+      tmp.gen_assert_instance(goto_functions);
+    }
   }
 
-  catch(const char *e)
+  catch (const char *e)
   {
     log_error("{}", e);
     return true;
   }
 
-  catch(const std::string &e)
+  catch (const std::string &e)
   {
     log_error("{}", e);
     return true;
   }
 
-  catch(std::bad_alloc &)
+  catch (std::bad_alloc &)
   {
     log_error("Out of memory");
     return true;
@@ -1775,14 +1826,14 @@ bool esbmc_parseoptionst::output_goto_program(
     namespacet ns(context);
 
     // show it?
-    if(cmdline.isset("show-loops"))
+    if (cmdline.isset("show-loops"))
     {
       show_loop_numbers(goto_functions);
       return true;
     }
 
     // show it?
-    if(cmdline.isset("show-goto-value-sets"))
+    if (cmdline.isset("show-goto-value-sets"))
     {
       value_set_analysist value_set_analysis(ns);
       value_set_analysis(goto_functions);
@@ -1793,12 +1844,12 @@ bool esbmc_parseoptionst::output_goto_program(
     }
 
     // Write the GOTO program into a binary
-    if(cmdline.isset("output-goto"))
+    if (cmdline.isset("output-goto"))
     {
       log_status("Writing GOTO program to file");
       std::ofstream oss(
         cmdline.getval("output-goto"), std::ios::out | std::ios::binary);
-      if(write_goto_binary(oss, context, goto_functions))
+      if (write_goto_binary(oss, context, goto_functions))
       {
         log_error("Failed to generate goto binary file"); // TODO: explain why
         abort();
@@ -1808,20 +1859,20 @@ bool esbmc_parseoptionst::output_goto_program(
 
     // Output the GOTO program to the log (and terminate or continue) in
     // a human-readable format
-    if(
+    if (
       cmdline.isset("goto-functions-too") ||
       cmdline.isset("goto-functions-only"))
     {
       std::ostringstream oss;
       goto_functions.output(ns, oss);
       log_status("{}", oss.str());
-      if(cmdline.isset("goto-functions-only"))
+      if (cmdline.isset("goto-functions-only"))
         return true;
     }
 
     // Translate the GOTO program to C and output it into the log or
     // a specified output file
-    if(cmdline.isset("goto2c"))
+    if (cmdline.isset("goto2c"))
     {
       // Creating a translator here
       goto2ct goto2c(ns, goto_functions);
@@ -1830,7 +1881,7 @@ bool esbmc_parseoptionst::output_goto_program(
       std::string res = goto2c.translate();
 
       const std::string &filename = options.get_option("output");
-      if(!filename.empty())
+      if (!filename.empty())
       {
         // Outputting the translated program into the output file
         std::ofstream out(filename);
@@ -1843,13 +1894,13 @@ bool esbmc_parseoptionst::output_goto_program(
     }
   }
 
-  catch(const char *e)
+  catch (const char *e)
   {
     log_error("{}", e);
     return true;
   }
 
-  catch(const std::string &e)
+  catch (const std::string &e)
   {
     log_error("{}", e);
     return true;
@@ -1864,7 +1915,7 @@ void esbmc_parseoptionst::preprocessing()
 {
   try
   {
-    if(cmdline.args.size() != 1)
+    if (cmdline.args.size() != 1)
     {
       log_error("Please provide one program to preprocess");
       return;
@@ -1874,29 +1925,29 @@ void esbmc_parseoptionst::preprocessing()
 
     // To test that the file exists,
     std::ifstream infile(filename.c_str());
-    if(!infile)
+    if (!infile)
     {
       log_error("failed to open input file");
       return;
     }
 #ifdef ENABLE_OLD_FRONTEND
     std::ostringstream oss;
-    if(c_preprocess(filename, oss, false))
+    if (c_preprocess(filename, oss, false))
       log_error("PREPROCESSING ERROR");
     log_status("{}", oss.str());
 #endif
   }
-  catch(const char *e)
+  catch (const char *e)
   {
     log_error("{}", e);
   }
 
-  catch(const std::string &e)
+  catch (const std::string &e)
   {
     log_error("{}", e);
   }
 
-  catch(std::bad_alloc &)
+  catch (std::bad_alloc &)
   {
     log_error("Out of memory");
   }

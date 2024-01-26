@@ -21,18 +21,18 @@
 #include <assert.h>
 void test_tmp_folder(const unsigned int *Data, size_t Size)
 {
-  if(Size != 1)
+  if (Size != 1)
     return;
 
   const unsigned int MAX_LENGTH = 10;
   const char *format = "esbmc-fuzz-%%%%-%%%%-%%%%";
 
   unsigned test_length = Data[0] % MAX_LENGTH;
-  if(test_length > MAX_LENGTH) // to prevent some cast issue
+  if (test_length > MAX_LENGTH) // to prevent some cast issue
     return;
   std::set<std::string> names;
 
-  for(int i = 0; i < test_length; i++)
+  for (int i = 0; i < test_length; i++)
   {
     auto entry = file_operations::get_unique_tmp_path(format);
     assert(

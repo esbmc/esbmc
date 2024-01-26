@@ -63,8 +63,8 @@ public:
   bool has_unassigned() const
   {
     const argumentst &_arguments = arguments();
-    for(const auto &_argument : _arguments)
-      if(
+    for (const auto &_argument : _arguments)
+      if (
         _argument.id() == "unassigned" || _argument.type().id() == "unassigned")
         return true;
 

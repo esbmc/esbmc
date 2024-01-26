@@ -26,10 +26,10 @@ void clang_cpp_languaget::force_file_type()
 {
   // C++ standard
   std::string cppstd = config.options.get_option("cppstd");
-  if(!cppstd.empty())
+  if (!cppstd.empty())
   {
     auto it = std::find(standards.begin(), standards.end(), cppstd);
-    if(it == standards.end())
+    if (it == standards.end())
     {
       log_error("Invalid C++ standard: {}", cppstd);
       abort();
@@ -39,7 +39,7 @@ void clang_cpp_languaget::force_file_type()
   std::string clangstd = cppstd.empty() ? "-std=c++03" : "-std=c++" + cppstd;
   compiler_args.push_back(clangstd);
 
-  if(
+  if (
     !config.options.get_bool_option("no-abstracted-cpp-includes") &&
     !config.options.get_bool_option("no-library"))
   {
@@ -79,14 +79,14 @@ bool clang_cpp_languaget::typecheck(
   contextt new_context;
 
   clang_cpp_convertert converter(new_context, ASTs, "C++");
-  if(converter.convert())
+  if (converter.convert())
     return true;
 
   clang_cpp_adjust adjuster(new_context);
-  if(adjuster.adjust())
+  if (adjuster.adjust())
     return true;
 
-  if(c_link(context, new_context, module))
+  if (c_link(context, new_context, module))
     return true;
 
   return false;
@@ -102,17 +102,19 @@ bool clang_cpp_languaget::final(contextt &context)
 bool clang_cpp_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  unsigned flags)
 {
-  code = cpp_expr2string(expr, ns);
+  code = cpp_expr2string(expr, ns, flags);
   return false;
 }
 
 bool clang_cpp_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  unsigned flags)
 {
-  code = cpp_type2string(type, ns);
+  code = cpp_type2string(type, ns, flags);
   return false;
 }

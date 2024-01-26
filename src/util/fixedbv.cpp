@@ -67,20 +67,20 @@ void fixedbvt::round(const fixedbv_spect &dest_spec)
 
   BigInt result = v;
 
-  if(new_fraction_bits > old_fraction_bits)
+  if (new_fraction_bits > old_fraction_bits)
     result = v * power(2, new_fraction_bits - old_fraction_bits);
-  else if(new_fraction_bits < old_fraction_bits)
+  else if (new_fraction_bits < old_fraction_bits)
   {
     // may need to round
     BigInt p = power(2, old_fraction_bits - new_fraction_bits);
     BigInt div = v / p;
     BigInt rem = v % p;
-    if(rem < 0)
+    if (rem < 0)
       rem = -rem;
 
-    if(rem * 2 >= p)
+    if (rem * 2 >= p)
     {
-      if(v < 0)
+      if (v < 0)
         --div;
       else
         ++div;
@@ -92,7 +92,7 @@ void fixedbvt::round(const fixedbv_spect &dest_spec)
   unsigned old_integer_bits = spec.integer_bits;
   unsigned new_integer_bits = dest_spec.integer_bits;
 
-  if(old_integer_bits > new_integer_bits)
+  if (old_integer_bits > new_integer_bits)
   {
     // Need to cut off some higher bits.
     fixedbvt tmp;
@@ -147,7 +147,7 @@ fixedbvt &fixedbvt::operator%=(const fixedbvt &y)
   z.from_integer(z.to_integer());
   z *= y;
   // ensure z has the same sign as *this
-  if(v.is_negative() != z.v.is_negative())
+  if (v.is_negative() != z.v.is_negative())
     z.v.negate();
   *this -= z;
   return *this;
@@ -166,7 +166,7 @@ std::string fixedbvt::format(const format_spect &format_spec) const
   BigInt int_value = v;
   BigInt factor = power(2, fraction_bits); //BigInt(1)<<fraction_bits;
 
-  if(int_value.is_negative())
+  if (int_value.is_negative())
   {
     dest += '-';
     int_value.negate();
@@ -175,7 +175,7 @@ std::string fixedbvt::format(const format_spect &format_spec) const
   std::string base_10_string =
     integer2string(int_value * power(10, fraction_bits) / factor);
 
-  while(base_10_string.size() <= fraction_bits)
+  while (base_10_string.size() <= fraction_bits)
     base_10_string = "0" + base_10_string;
 
   std::string integer_part =
@@ -187,14 +187,14 @@ std::string fixedbvt::format(const format_spect &format_spec) const
   dest += integer_part;
 
   // strip trailing zeros
-  while(!fraction_part.empty() &&
-        fraction_part[fraction_part.size() - 1] == '0')
+  while (!fraction_part.empty() &&
+         fraction_part[fraction_part.size() - 1] == '0')
     fraction_part.resize(fraction_part.size() - 1);
 
-  if(!fraction_part.empty())
+  if (!fraction_part.empty())
     dest += "." + fraction_part;
 
-  while(dest.size() < format_spec.min_width)
+  while (dest.size() < format_spec.min_width)
     dest = " " + dest;
 
   return dest;

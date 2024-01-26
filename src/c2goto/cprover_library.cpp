@@ -95,22 +95,22 @@ static void generate_symbol_deps(
 {
   std::pair<irep_idt, irep_idt> type;
 
-  if(irep.id() == "symbol")
+  if (irep.id() == "symbol")
   {
     type = std::pair<irep_idt, irep_idt>(name, irep.identifier());
     deps.insert(type);
     return;
   }
 
-  forall_irep(irep_it, irep.get_sub())
+  forall_irep (irep_it, irep.get_sub())
   {
-    if(irep_it->id() == "symbol")
+    if (irep_it->id() == "symbol")
     {
       type = std::pair<irep_idt, irep_idt>(name, irep_it->identifier());
       deps.insert(type);
       generate_symbol_deps(name, *irep_it, deps);
     }
-    else if(irep_it->id() == "argument")
+    else if (irep_it->id() == "argument")
     {
       type = std::pair<irep_idt, irep_idt>(name, irep_it->cmt_identifier());
       deps.insert(type);
@@ -121,14 +121,14 @@ static void generate_symbol_deps(
     }
   }
 
-  forall_named_irep(irep_it, irep.get_named_sub())
+  forall_named_irep (irep_it, irep.get_named_sub())
   {
-    if(irep_it->second.id() == "symbol")
+    if (irep_it->second.id() == "symbol")
     {
       type = std::pair<irep_idt, irep_idt>(name, irep_it->second.identifier());
       deps.insert(type);
     }
-    else if(irep_it->second.id() == "argument")
+    else if (irep_it->second.id() == "argument")
     {
       type =
         std::pair<irep_idt, irep_idt>(name, irep_it->second.cmt_identifier());
@@ -153,10 +153,10 @@ static void ingest_symbol(
   std::multimap<irep_idt, irep_idt>::const_iterator it;
 
   range = deps.equal_range(name);
-  if(range.first == range.second)
+  if (range.first == range.second)
     return;
 
-  for(it = range.first; it != range.second; it++)
+  for (it = range.first; it != range.second; it++)
     to_include.push_back(it->second);
 
   deps.erase(name);
@@ -164,7 +164,7 @@ static void ingest_symbol(
 
 void add_cprover_library(contextt &context, const languaget *c_language)
 {
-  if(config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
+  if (config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
     return;
 
   contextt new_ctx, store_ctx;
@@ -173,12 +173,11 @@ void add_cprover_library(contextt &context, const languaget *c_language)
   std::list<irep_idt> to_include;
   const buffer *clib;
 
-  switch(config.ansi_c.word_size)
+  switch (config.ansi_c.word_size)
   {
   case 16:
     log_warning(
-      "Warning: this version of ESBMC does not have a C library "
-      "for 16 bit machines");
+      "this version of ESBMC does not have a C library for 16 bit machines");
     return;
   case 32:
   case 64:
@@ -191,15 +190,15 @@ void add_cprover_library(contextt &context, const languaget *c_language)
   clib = &clibs[config.ansi_c.cheri][!config.ansi_c.use_fixed_for_float]
                [config.ansi_c.word_size == 64];
 
-  if(clib->size == 0)
+  if (clib->size == 0)
   {
-    if(c_language)
+    if (c_language)
       return add_bundled_library_sources(context, *c_language);
-    log_error("error: Zero-lengthed internal C library");
+    log_error("Zero-lengthed internal C library");
     abort();
   }
 
-  if(read_goto_binary_array(clib->start, clib->size, new_ctx, goto_functions))
+  if (read_goto_binary_array(clib->start, clib->size, new_ctx, goto_functions))
     abort();
 
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
@@ -229,26 +228,26 @@ void add_cprover_library(contextt &context, const languaget *c_language)
   new_ctx.foreach_operand(
     [&context, &store_ctx, &symbol_deps, &to_include](const symbolt &s) {
       const symbolt *symbol = context.find_symbol(s.id);
-      if(symbol != nullptr && symbol->value.is_nil())
+      if (symbol != nullptr && symbol->value.is_nil())
       {
         store_ctx.add(s);
         ingest_symbol(s.id, symbol_deps, to_include);
       }
     });
 
-  for(std::list<irep_idt>::const_iterator nameit = to_include.begin();
-      nameit != to_include.end();
-      nameit++)
+  for (std::list<irep_idt>::const_iterator nameit = to_include.begin();
+       nameit != to_include.end();
+       nameit++)
   {
     symbolt *s = new_ctx.find_symbol(*nameit);
-    if(s != nullptr)
+    if (s != nullptr)
     {
       store_ctx.add(*s);
       ingest_symbol(*nameit, symbol_deps, to_include);
     }
   }
 
-  if(c_link(context, store_ctx, "<built-in-library>"))
+  if (c_link(context, store_ctx, "<built-in-library>"))
   {
     // Merging failed
     log_error("Failed to merge C library");

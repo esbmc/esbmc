@@ -51,14 +51,16 @@ const struct group_opt_templ all_cmd_options[] = {
      "show value-set analysis during symbolic execution"}}},
 #ifdef ENABLE_SOLIDITY_FRONTEND
   {"Solidity frontend",
-   {
-     {"sol",
-      boost::program_options::value<std::string>()->value_name("path"),
-      ".sol and .solast file names"},
-     {"contract",
-      boost::program_options::value<std::string>()->value_name("cname"),
-      "set contract name"},
-   }},
+   {{"sol",
+     boost::program_options::value<std::string>()->value_name("path"),
+     ".sol and .solast file names"},
+    {"contract",
+     boost::program_options::value<std::string>()->value_name("cname"),
+     "set contract name"},
+    {"no-visibility",
+     NULL,
+     "force to verify every function, even it's an unreachable "
+     "internal/private function"}}},
 #endif
   {"Frontend",
    {{"include,I",
@@ -92,6 +94,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-inlining", NULL, "disable inlining function calls"},
     {"full-inlining", NULL, "perform full inlining of function calls"},
     {"all-claims", NULL, "keep all claims"},
+    {"keep-verified-claims",
+     NULL,
+     "do not skip verified claims in multi-property verificaiton"},
     {"show-loops", NULL, "show the loops in the program"},
     {"show-claims", NULL, "only show claims"},
     {"show-vcc", NULL, "show the verification conditions"},
@@ -120,13 +125,16 @@ const struct group_opt_templ all_cmd_options[] = {
     {"version", NULL, "show current ESBMC version and exit"},
     {"cex-output",
      boost::program_options::value<std::string>(),
-     "save the counterexample into a file"},
+     "save the counterexample into a file or, "
+     "in multi-property mode, multiple files with name prefix 'N-' "
+     "where 'N' is a decimal increasing from zero"},
     {"file-output",
      boost::program_options::value<std::string>(),
      "redirects every message into a file (no stdout/stderr)"},
     {"witness-output",
-     boost::program_options::value<std::string>(),
-     "generate the verification result witness in GraphML format"},
+     boost::program_options::value<std::string>()->value_name("{ path | - }"),
+     "generate the verification result witness in GraphML format; use '-' for "
+     "output to stdout"},
     {"witness-producer", boost::program_options::value<std::string>(), ""},
     {"witness-programfile", boost::program_options::value<std::string>(), ""},
     {"old-frontend",
@@ -181,8 +189,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"unroll-loops", NULL, ""},
     {"no-slice", NULL, "do not remove unused equations"},
     {"multi-fail-fast",
-     NULL,
-     "stops after first VCC violation in multi property mode"},
+     boost::program_options::value<int>()->value_name("n"),
+     "stops after first n VCC violation found in multi property mode"},
     {"no-slice-name",
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "name"),
@@ -191,10 +199,6 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "id"),
      "disable slicing for the symbol with the given id"},
-    {"initialize-nondet-variables",
-     NULL,
-     "initialize declarations with nondet expression (if it hasn`t a default "
-     "value)"},
     {"goto-unwind", NULL, "unroll bounded loops at goto level"},
     {"unlimited-goto-unwind",
      NULL,
@@ -225,9 +229,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"bitwuzla", NULL, "use Bitwuzla"},
     {"bv", NULL, "use solver with bit-vector arithmetic"},
     {"ir", NULL, "use solver with integer/real arithmetic"},
-    {"parallel-solving",
-     NULL,
-     "solve each VCC in parallel (this activates --multi-property)"},
     {"smtlib", NULL, "use SMT lib format"},
     {"default-solver",
      boost::program_options::value<std::string>()->value_name("<solver>"),
@@ -287,7 +288,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-div-by-zero-check", NULL, "do not do division by zero check"},
     {"no-pointer-check", NULL, "do not do pointer check"},
     {"no-align-check", NULL, "do not check pointer alignment"},
-    {"no-pointer-relation-check", NULL, "do not check pointer relations"},
     {"no-unlimited-scanf-check",
      NULL,
      "do not do overflow check for scanf/fscanf with unlimited character "
@@ -330,7 +330,11 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("label"),
      "check if label is unreachable"},
     {"force-malloc-success", NULL, "do not check for malloc/new failure"},
-    {"malloc-zero-is-null", NULL, "force malloc(0) to return NULL"}}},
+    {"malloc-zero-is-null", NULL, "force malloc(0) to return NULL"},
+    {"enable-unreachability-intrinsic",
+     NULL,
+     "enable the functionality of the __ESBMC_unreachable() intrinsic, which "
+     "results in a verification failure when its call is reachable"}}},
   {"k-induction",
    {{"base-case", NULL, "check the base case"},
     {"forward-condition", NULL, "check the forward condition"},
@@ -338,7 +342,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"k-induction", NULL, "prove by k-induction "},
     {"goto-contractor",
      NULL,
-     "enable contractor-based interval refinements on goto level"},
+     "enable contractor-based interval refinements on goto level on asserts"},
+    {"goto-contractor-condition",
+     NULL,
+     "enable contractor-based interval refinements on goto level on "
+     "conditions"},
     {"k-induction-parallel",
      NULL,
      "prove by k-induction, running each step on a separate process"},
@@ -415,6 +423,9 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "evaluates assumptions/guards as boolean operators, accelerating the "
      "convergence (Integers, Reals)"},
+    {"interval-analysis-ibex-contractor",
+     NULL,
+     "enable use of ibex contractors"},
     {"interval-analysis-extrapolate",
      NULL,
      "enables use of extrapolation in abstract states (all)"},
@@ -439,6 +450,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"enable-core-dump", NULL, "do not disable core dump output"},
     {"no-simplify", NULL, "do not simplify any expression"},
     {"no-propagation", NULL, "disable constant propagation"},
+    {"gcse",
+     NULL,
+     "adds intermediate variables to precompute common sub-expressions between "
+     "assignments"},
     {"add-symex-value-sets",
      NULL,
      "enable value-set analysis for pointers and add assumes to the "
@@ -449,6 +464,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"git-hash", NULL, ""},
     // Check if there is two or more assingments to the same SSA instruction
     {"double-assign-check", NULL, ""},
+    {"no-pointer-relation-check",
+     NULL,
+     "do not check whether pointers in order relations refer to the same "
+     "object (unsound)"},
     // Abort if the program contains a recursion
     {"abort-on-recursion", NULL, ""},
     /* see <https://github.com/esbmc/esbmc/pull/1281> for a list of supported
@@ -481,7 +500,12 @@ const struct group_opt_templ all_cmd_options[] = {
     {"make-assert-false", NULL, "convert every assertion to false"},
     {"goto-coverage",
      NULL,
-     "this activates --add-false-assert and --make-assert-false"}}},
+     "this activates --make-assert-false and --multi-property, "
+     "deactivates --keep-verified-claims, and "
+     "shows the coverage of assertion instances"},
+    {"goto-coverage-claims",
+     NULL,
+     "enable goto-coverage and shows all reached claims"}}},
   {"end", {{"", NULL, "end of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "instruction"},

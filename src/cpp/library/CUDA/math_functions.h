@@ -38,14 +38,14 @@ float __powf_gpu(float x, float y)
 {
   int result = 1;
 
-  if(y == 0)
+  if (y == 0)
     return result;
 
-  if(y < 0)
+  if (y < 0)
     return 1 / __powf_gpu(x, -y);
   else
   {
-    for(int i = 0; i < y; ++i)
+    for (int i = 0; i < y; ++i)
       result *= x;
 
     return result;

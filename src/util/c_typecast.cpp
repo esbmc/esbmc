@@ -83,109 +83,109 @@ bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type)
 {
   // check qualifiers
 
-  if(
+  if (
     src_type.id() == "pointer" && dest_type.id() == "pointer" &&
     src_type.subtype().cmt_constant() && !dest_type.subtype().cmt_constant())
     return true;
 
-  if(src_type == dest_type)
+  if (src_type == dest_type)
     return false;
 
   const std::string &src_type_id = src_type.id_string();
 
-  if(src_type_id == "bool")
+  if (src_type_id == "bool")
   {
-    if(dest_type.id() == "unsignedbv")
+    if (dest_type.id() == "unsignedbv")
       return false;
-    if(dest_type.id() == "signedbv")
+    if (dest_type.id() == "signedbv")
       return false;
-    if(dest_type.id() == "pointer")
+    if (dest_type.id() == "pointer")
       return false;
-    if(dest_type.id() == "floatbv")
+    if (dest_type.id() == "floatbv")
       return false;
-    if(dest_type.id() == "fixedbv")
+    if (dest_type.id() == "fixedbv")
       return false;
-    if(dest_type.id() == "c_enum")
+    if (dest_type.id() == "c_enum")
       return false;
-    if(dest_type.id() == typet::t_intcap)
+    if (dest_type.id() == typet::t_intcap)
       return false;
-    if(dest_type.id() == typet::t_uintcap)
+    if (dest_type.id() == typet::t_uintcap)
       return false;
   }
-  else if(
+  else if (
     src_type_id == "unsignedbv" || src_type_id == "signedbv" ||
     src_type_id == "c_enum" || src_type_id == "incomplete_c_enum" ||
     src_type.id() == typet::t_intcap || src_type.id() == typet::t_uintcap)
   {
-    if(dest_type.id() == "unsignedbv")
+    if (dest_type.id() == "unsignedbv")
       return false;
-    if(dest_type.is_bool())
+    if (dest_type.is_bool())
       return false;
-    if(dest_type.id() == "signedbv")
+    if (dest_type.id() == "signedbv")
       return false;
-    if(dest_type.id() == "floatbv")
+    if (dest_type.id() == "floatbv")
       return false;
-    if(dest_type.id() == "fixedbv")
+    if (dest_type.id() == "fixedbv")
       return false;
-    if(dest_type.id() == "pointer")
+    if (dest_type.id() == "pointer")
       return false;
-    if(dest_type.id() == "c_enum")
+    if (dest_type.id() == "c_enum")
       return false;
-    if(dest_type.id() == "incomplete_c_enum")
+    if (dest_type.id() == "incomplete_c_enum")
       return false;
-    if(dest_type.id() == typet::t_intcap)
+    if (dest_type.id() == typet::t_intcap)
       return false;
-    if(dest_type.id() == typet::t_uintcap)
+    if (dest_type.id() == typet::t_uintcap)
       return false;
   }
-  else if(src_type_id == "floatbv" || src_type_id == "fixedbv")
+  else if (src_type_id == "floatbv" || src_type_id == "fixedbv")
   {
-    if(dest_type.is_bool())
+    if (dest_type.is_bool())
       return false;
-    if(dest_type.id() == "signedbv")
+    if (dest_type.id() == "signedbv")
       return false;
-    if(dest_type.id() == "unsignedbv")
+    if (dest_type.id() == "unsignedbv")
       return false;
-    if(dest_type.id() == "floatbv")
+    if (dest_type.id() == "floatbv")
       return false;
-    if(dest_type.id() == "fixedbv")
+    if (dest_type.id() == "fixedbv")
       return false;
-    if(dest_type.id() == typet::t_intcap)
+    if (dest_type.id() == typet::t_intcap)
       return false;
-    if(dest_type.id() == typet::t_uintcap)
+    if (dest_type.id() == typet::t_uintcap)
       return false;
   }
-  else if(
+  else if (
     src_type_id == "array" || src_type_id == "incomplete_array" ||
     src_type_id == "pointer")
   {
-    if(dest_type.id() == "pointer")
+    if (dest_type.id() == "pointer")
     {
       const irept &dest_subtype = dest_type.subtype();
       const irept &src_subtype = src_type.subtype();
 
-      if(src_subtype == dest_subtype)
+      if (src_subtype == dest_subtype)
         return false;
-      else if(
+      else if (
         src_subtype.id() == "empty" || // from void to anything
         dest_subtype.id() == "empty")  // to void from anything
         return false;
     }
 
-    if(
+    if (
       (dest_type.is_array() || dest_type.id() == "incomplete_array") &&
       (src_type.subtype() == dest_type.subtype()))
       return false;
 
-    if(dest_type.is_bool())
+    if (dest_type.is_bool())
       return false;
-    if(dest_type.id() == "unsignedbv")
+    if (dest_type.id() == "unsignedbv")
       return false;
-    if(dest_type.id() == "signedbv")
+    if (dest_type.id() == "signedbv")
       return false;
-    if(dest_type.id() == typet::t_intcap)
+    if (dest_type.id() == typet::t_intcap)
       return false;
-    if(dest_type.id() == typet::t_uintcap)
+    if (dest_type.id() == typet::t_uintcap)
       return false;
   }
 
@@ -202,76 +202,76 @@ bool check_c_implicit_typecast(
   // function, in particular cmt_constant and things like "natural" or
   // "integer", so they're deleted here.
 
-  if(src_type == dest_type)
+  if (src_type == dest_type)
     return false;
 
-  if(is_bool_type(src_type))
+  if (is_bool_type(src_type))
   {
-    if(is_unsignedbv_type(dest_type))
+    if (is_unsignedbv_type(dest_type))
       return false;
-    if(is_signedbv_type(dest_type))
+    if (is_signedbv_type(dest_type))
       return false;
-    if(is_pointer_type(dest_type))
+    if (is_pointer_type(dest_type))
       return false;
-    if(is_fixedbv_type(dest_type))
+    if (is_fixedbv_type(dest_type))
       return false;
   }
-  else if(is_bv_type(src_type))
+  else if (is_bv_type(src_type))
   {
-    if(is_bool_type(dest_type))
+    if (is_bool_type(dest_type))
       return false;
-    if(is_unsignedbv_type(dest_type))
+    if (is_unsignedbv_type(dest_type))
       return false;
-    if(is_signedbv_type(dest_type))
+    if (is_signedbv_type(dest_type))
       return false;
-    if(is_pointer_type(dest_type))
+    if (is_pointer_type(dest_type))
       return false;
-    if(is_fixedbv_type(dest_type))
+    if (is_fixedbv_type(dest_type))
       return false;
   }
-  else if(is_fixedbv_type(src_type))
+  else if (is_fixedbv_type(src_type))
   {
-    if(is_bool_type(dest_type))
+    if (is_bool_type(dest_type))
       return false;
-    if(is_unsignedbv_type(dest_type))
+    if (is_unsignedbv_type(dest_type))
       return false;
-    if(is_signedbv_type(dest_type))
+    if (is_signedbv_type(dest_type))
       return false;
-    if(is_fixedbv_type(dest_type))
+    if (is_fixedbv_type(dest_type))
       return false;
   }
-  else if(is_array_type(src_type) || is_pointer_type(src_type))
+  else if (is_array_type(src_type) || is_pointer_type(src_type))
   {
-    if(is_pointer_type(dest_type))
+    if (is_pointer_type(dest_type))
     {
       type2tc dest_subtype = to_pointer_type(dest_type).subtype;
       type2tc src_subtype = to_pointer_type(src_type).subtype;
 
-      if(src_subtype == dest_subtype)
+      if (src_subtype == dest_subtype)
         return false;
-      else if(
+      else if (
         is_empty_type(src_subtype) || // from void to anything
         is_empty_type(dest_subtype))  // to void from anything
         return false;
     }
 
-    if(is_array_type(dest_type))
+    if (is_array_type(dest_type))
     {
       type2tc src_subtype;
-      if(is_pointer_type(src_type))
+      if (is_pointer_type(src_type))
         src_subtype = to_pointer_type(src_type).subtype;
       else
         src_subtype = to_array_type(src_type).subtype;
 
-      if(src_subtype == to_array_type(dest_type).subtype)
+      if (src_subtype == to_array_type(dest_type).subtype)
         return false;
     }
 
-    if(is_bool_type(dest_type))
+    if (is_bool_type(dest_type))
       return false;
-    if(is_unsignedbv_type(dest_type))
+    if (is_unsignedbv_type(dest_type))
       return false;
-    if(is_signedbv_type(dest_type))
+    if (is_signedbv_type(dest_type))
       return false;
   }
 
@@ -280,7 +280,7 @@ bool check_c_implicit_typecast(
 
 typet c_typecastt::follow_with_qualifiers(const typet &src_type)
 {
-  if(src_type.id() != "symbol")
+  if (src_type.id() != "symbol")
     return src_type;
 
   c_qualifierst qualifiers(src_type);
@@ -293,7 +293,7 @@ typet c_typecastt::follow_with_qualifiers(const typet &src_type)
 
 type2tc c_typecastt::follow_with_qualifiers(const type2tc &src_type)
 {
-  if(!is_symbol_type(src_type))
+  if (!is_symbol_type(src_type))
     return src_type;
 
   type2tc dest_type = ns.follow(src_type);
@@ -307,55 +307,55 @@ c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
 {
   unsigned width = atoi(type.width().c_str());
 
-  if(type.id() == "signedbv")
+  if (type.id() == "signedbv")
   {
-    if(width <= config.ansi_c.char_width)
+    if (width <= config.ansi_c.char_width)
       return CHAR;
-    else if(width <= config.ansi_c.int_width)
+    else if (width <= config.ansi_c.int_width)
       return INT;
-    else if(width <= config.ansi_c.long_int_width)
+    else if (width <= config.ansi_c.long_int_width)
       return LONG;
-    else if(width <= config.ansi_c.long_long_int_width)
+    else if (width <= config.ansi_c.long_long_int_width)
       return LONGLONG;
   }
-  else if(type.id() == "unsignedbv")
+  else if (type.id() == "unsignedbv")
   {
-    if(width <= config.ansi_c.char_width)
+    if (width <= config.ansi_c.char_width)
       return UCHAR;
-    else if(width <= config.ansi_c.int_width)
+    else if (width <= config.ansi_c.int_width)
       return UINT;
-    else if(width <= config.ansi_c.long_int_width)
+    else if (width <= config.ansi_c.long_int_width)
       return ULONG;
-    else if(width <= config.ansi_c.long_long_int_width)
+    else if (width <= config.ansi_c.long_long_int_width)
       return ULONGLONG;
   }
-  else if(type.is_bool())
+  else if (type.is_bool())
     return BOOL;
-  else if(type.id() == "floatbv" || type.id() == "fixedbv")
+  else if (type.id() == "floatbv" || type.id() == "fixedbv")
   {
-    if(width <= config.ansi_c.single_width)
+    if (width <= config.ansi_c.single_width)
       return SINGLE;
-    else if(width <= config.ansi_c.double_width)
+    else if (width <= config.ansi_c.double_width)
       return DOUBLE;
-    else if(width <= config.ansi_c.long_double_width)
+    else if (width <= config.ansi_c.long_double_width)
       return LONGDOUBLE;
   }
-  else if(type.id() == "pointer")
+  else if (type.id() == "pointer")
   {
-    if(type.subtype().id() == "empty")
+    if (type.subtype().id() == "empty")
       return VOIDPTR;
     else
       return PTR;
   }
-  else if(type.is_array() || type.id() == "incomplete_array")
+  else if (type.is_array() || type.id() == "incomplete_array")
   {
     return PTR;
   }
-  else if(type.id() == "c_enum" || type.id() == "incomplete_c_enum")
+  else if (type.id() == "c_enum" || type.id() == "incomplete_c_enum")
   {
     return INT;
   }
-  else if(type.id() == "symbol")
+  else if (type.id() == "symbol")
     return get_c_type(ns.follow(type));
 
   return OTHER;
@@ -363,60 +363,60 @@ c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
 
 c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
 {
-  if(is_signedbv_type(type))
+  if (is_signedbv_type(type))
   {
     unsigned width = to_signedbv_type(type).width;
 
-    if(width <= config.ansi_c.char_width)
+    if (width <= config.ansi_c.char_width)
       return CHAR;
-    else if(width <= config.ansi_c.int_width)
+    else if (width <= config.ansi_c.int_width)
       return INT;
-    else if(width <= config.ansi_c.long_int_width)
+    else if (width <= config.ansi_c.long_int_width)
       return LONG;
-    else if(width <= config.ansi_c.long_long_int_width)
+    else if (width <= config.ansi_c.long_long_int_width)
       return LONGLONG;
-    if(width <= config.ansi_c.int_128_width)
+    if (width <= config.ansi_c.int_128_width)
       return INT128;
   }
-  else if(is_unsignedbv_type(type))
+  else if (is_unsignedbv_type(type))
   {
     unsigned width = to_unsignedbv_type(type).width;
 
-    if(width <= config.ansi_c.char_width)
+    if (width <= config.ansi_c.char_width)
       return UCHAR;
-    else if(width <= config.ansi_c.int_width)
+    else if (width <= config.ansi_c.int_width)
       return UINT;
-    else if(width <= config.ansi_c.long_int_width)
+    else if (width <= config.ansi_c.long_int_width)
       return ULONG;
-    else if(width <= config.ansi_c.long_long_int_width)
+    else if (width <= config.ansi_c.long_long_int_width)
       return ULONGLONG;
-    if(width <= config.ansi_c.int_128_width)
+    if (width <= config.ansi_c.int_128_width)
       return UINT128;
   }
-  else if(is_bool_type(type))
+  else if (is_bool_type(type))
     return BOOL;
-  else if(is_fixedbv_type(type))
+  else if (is_fixedbv_type(type))
   {
     unsigned width = to_fixedbv_type(type).width;
-    if(width <= config.ansi_c.single_width)
+    if (width <= config.ansi_c.single_width)
       return SINGLE;
-    else if(width <= config.ansi_c.double_width)
+    else if (width <= config.ansi_c.double_width)
       return DOUBLE;
-    else if(width <= config.ansi_c.long_double_width)
+    else if (width <= config.ansi_c.long_double_width)
       return LONGDOUBLE;
   }
-  else if(is_pointer_type(type))
+  else if (is_pointer_type(type))
   {
-    if(is_empty_type(to_pointer_type(type).subtype))
+    if (is_empty_type(to_pointer_type(type).subtype))
       return VOIDPTR;
     else
       return PTR;
   }
-  else if(is_array_type(type))
+  else if (is_array_type(type))
   {
     return PTR;
   }
-  else if(is_symbol_type(type))
+  else if (is_symbol_type(type))
     return get_c_type(ns.follow(type));
 
   return OTHER;
@@ -428,10 +428,10 @@ void c_typecastt::implicit_typecast_arithmetic(exprt &expr, c_typet c_type)
 
   const typet &expr_type = ns.follow(expr.type());
 
-  switch(c_type)
+  switch (c_type)
   {
   case PTR:
-    if(expr_type.is_array())
+    if (expr_type.is_array())
     {
       new_type.id("pointer");
       new_type.subtype() = expr_type.subtype();
@@ -483,7 +483,7 @@ void c_typecastt::implicit_typecast_arithmetic(exprt &expr, c_typet c_type)
     return;
   }
 
-  if(new_type != expr_type)
+  if (new_type != expr_type)
     do_typecast(expr, new_type);
 }
 
@@ -493,10 +493,10 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr, c_typet c_type)
 
   const type2tc &expr_type = ns.follow(expr->type);
 
-  switch(c_type)
+  switch (c_type)
   {
   case PTR:
-    if(is_array_type(expr_type))
+    if (is_array_type(expr_type))
     {
       new_type = pointer_type2tc(to_array_type(expr_type).subtype);
       break;
@@ -548,9 +548,9 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr, c_typet c_type)
     return;
   }
 
-  if(new_type != expr_type)
+  if (new_type != expr_type)
   {
-    if(is_pointer_type(new_type) && is_array_type(expr_type))
+    if (is_pointer_type(new_type) && is_array_type(expr_type))
     {
       const array_type2t &arr_type = to_array_type(expr_type);
       const pointer_type2t &ptr_type = to_pointer_type(new_type);
@@ -599,11 +599,11 @@ void c_typecastt::implicit_typecast_followed(
   const typet &src_type,
   const typet &dest_type)
 {
-  if(dest_type.id() == "pointer")
+  if (dest_type.id() == "pointer")
   {
     // special case: 0 == NULL
 
-    if(
+    if (
       expr.is_zero() &&
       (src_type.id() == "unsignedbv" || src_type.id() == "signedbv"))
     {
@@ -612,7 +612,7 @@ void c_typecastt::implicit_typecast_followed(
       return; // ok
     }
 
-    if(
+    if (
       src_type.id() == "pointer" || src_type.is_array() ||
       src_type.id() == "incomplete_array")
     {
@@ -621,19 +621,19 @@ void c_typecastt::implicit_typecast_followed(
       const typet &src_sub = ns.follow(src_type.subtype());
       const typet &dest_sub = ns.follow(dest_type.subtype());
 
-      if(src_sub.id() == "empty" || dest_sub.id() == "empty")
+      if (src_sub.id() == "empty" || dest_sub.id() == "empty")
       {
         // from/to void is always good
       }
-      else if(base_type_eq(dest_type.subtype(), src_type.subtype(), ns))
+      else if (base_type_eq(dest_type.subtype(), src_type.subtype(), ns))
       {
       }
-      else if(src_sub.is_code() && dest_sub.is_code())
+      else if (src_sub.is_code() && dest_sub.is_code())
       {
         // very generous:
         // between any two function pointers it's ok
       }
-      else if(is_number(src_sub) && is_number(dest_sub))
+      else if (is_number(src_sub) && is_number(dest_sub))
       {
         // also generous: between any to scalar types it's ok
       }
@@ -642,17 +642,17 @@ void c_typecastt::implicit_typecast_followed(
 
       // check qualifiers
 
-      if(
+      if (
         src_type.subtype().cmt_constant() &&
         !dest_type.subtype().cmt_constant())
         warnings.emplace_back("disregarding const");
 
-      if(
+      if (
         src_type.subtype().cmt_volatile() &&
         !dest_type.subtype().cmt_volatile())
         warnings.emplace_back("disregarding volatile");
 
-      if(src_type == dest_type)
+      if (src_type == dest_type)
       {
         expr.type() = src_type; // because of qualifiers
       }
@@ -662,7 +662,7 @@ void c_typecastt::implicit_typecast_followed(
       return; // ok
     }
 
-    if(src_type.id() == "struct")
+    if (src_type.id() == "struct")
     {
       // We got a case to convert derived class object to base base class pointer, e.g.:
       //  Convert from `derived_obj` to `(Base*)&derived_obj`
@@ -675,7 +675,7 @@ void c_typecastt::implicit_typecast_followed(
       expr.swap(base_ptr);
     }
 
-    if(dest_type.get_bool("#reference"))
+    if (dest_type.get_bool("#reference"))
     {
       // if a destination type is an lvalue reference,
       // which has been modelled as a pointer, but
@@ -688,7 +688,7 @@ void c_typecastt::implicit_typecast_followed(
 
       // got to make sure the subtypes match each other
       // to prevent anything that may surprise us.
-      if(dest_type.subtype().id() == src_type.id())
+      if (dest_type.subtype().id() == src_type.id())
       {
         address_of_exprt tmp_addr;
         tmp_addr.type() = dest_type;
@@ -698,9 +698,9 @@ void c_typecastt::implicit_typecast_followed(
       }
     }
   }
-  else if(dest_type.id() == "array")
+  else if (dest_type.id() == "array")
   {
-    if(expr.id() == "string-constant")
+    if (expr.id() == "string-constant")
     {
       expr.type() = dest_type;
 
@@ -712,9 +712,9 @@ void c_typecastt::implicit_typecast_followed(
     }
   }
 
-  if(check_c_implicit_typecast(src_type, dest_type))
+  if (check_c_implicit_typecast(src_type, dest_type))
     errors.emplace_back("implicit conversion not permitted");
-  else if(src_type != dest_type)
+  else if (src_type != dest_type)
     do_typecast(expr, dest_type);
 }
 
@@ -723,12 +723,12 @@ void c_typecastt::implicit_typecast_followed(
   const type2tc &src_type,
   const type2tc &dest_type)
 {
-  if(is_pointer_type(dest_type))
+  if (is_pointer_type(dest_type))
   {
     const pointer_type2t &dest_ptr_type = to_pointer_type(dest_type);
     // special case: 0 == NULL
 
-    if(
+    if (
       is_constant_int2t(expr) && to_constant_int2t(expr).value == 0 &&
       (is_unsignedbv_type(src_type) || is_signedbv_type(src_type)))
     {
@@ -736,11 +736,11 @@ void c_typecastt::implicit_typecast_followed(
       return; // ok
     }
 
-    if(is_pointer_type(src_type) || is_array_type(src_type))
+    if (is_pointer_type(src_type) || is_array_type(src_type))
     {
       // we are quite generous about pointers
       type2tc src_subtype;
-      if(is_pointer_type(src_type))
+      if (is_pointer_type(src_type))
         src_subtype = to_pointer_type(src_type).subtype;
       else
         src_subtype = to_array_type(src_type).subtype;
@@ -748,26 +748,26 @@ void c_typecastt::implicit_typecast_followed(
       const type2tc &src_sub = ns.follow(src_subtype);
       const type2tc &dest_sub = ns.follow(dest_ptr_type.subtype);
 
-      if(is_empty_type(src_sub) || is_empty_type(dest_sub))
+      if (is_empty_type(src_sub) || is_empty_type(dest_sub))
       {
         // from/to void is always good
       }
-      else if(base_type_eq(dest_ptr_type.subtype, src_subtype, ns))
+      else if (base_type_eq(dest_ptr_type.subtype, src_subtype, ns))
       {
       }
-      else if(is_code_type(src_sub) && is_code_type(dest_sub))
+      else if (is_code_type(src_sub) && is_code_type(dest_sub))
       {
         // very generous:
         // between any two function pointers it's ok
       }
-      else if(is_bv_type(src_sub) && is_bv_type(dest_sub))
+      else if (is_bv_type(src_sub) && is_bv_type(dest_sub))
       {
         // also generous: between any to scalar types it's ok
       }
       else
         warnings.push_back("incompatible pointer types");
 
-      if(src_type == dest_type)
+      if (src_type == dest_type)
       {
         expr.get()->type = src_type; // because of qualifiers
       }
@@ -778,9 +778,9 @@ void c_typecastt::implicit_typecast_followed(
     }
   }
 
-  if(check_c_implicit_typecast(src_type, dest_type))
+  if (check_c_implicit_typecast(src_type, dest_type))
     errors.push_back("implicit conversion not permitted");
-  else if(src_type != dest_type)
+  else if (src_type != dest_type)
     do_typecast(expr, dest_type);
 }
 
@@ -797,12 +797,12 @@ void c_typecastt::implicit_typecast_arithmetic(exprt &expr1, exprt &expr2)
   implicit_typecast_arithmetic(expr1, max_type);
   implicit_typecast_arithmetic(expr2, max_type);
 
-  if(max_type == PTR)
+  if (max_type == PTR)
   {
-    if(c_type1 == VOIDPTR)
+    if (c_type1 == VOIDPTR)
       do_typecast(expr1, expr2.type());
 
-    if(c_type2 == VOIDPTR)
+    if (c_type2 == VOIDPTR)
       do_typecast(expr2, expr1.type());
   }
 }
@@ -820,12 +820,12 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr1, expr2tc &expr2)
   implicit_typecast_arithmetic(expr1, max_type);
   implicit_typecast_arithmetic(expr2, max_type);
 
-  if(max_type == PTR)
+  if (max_type == PTR)
   {
-    if(c_type1 == VOIDPTR)
+    if (c_type1 == VOIDPTR)
       do_typecast(expr1, expr2->type);
 
-    if(c_type2 == VOIDPTR)
+    if (c_type2 == VOIDPTR)
       do_typecast(expr2, expr1->type);
   }
 }
@@ -837,34 +837,34 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
 
   const typet &dest_type = ns.follow(dest.type());
 
-  if(dest_type.is_array() || dest_type.is_incomplete_array())
+  if (dest_type.is_array() || dest_type.is_incomplete_array())
   {
     index_exprt index;
     index.array() = dest;
     index.index() = gen_zero(index_type());
     index.type() = dest_type.subtype();
     dest = gen_address_of(index);
-    if(ns.follow(dest.type()) != ns.follow(type))
+    if (ns.follow(dest.type()) != ns.follow(type))
       dest.make_typecast(type);
     return;
   }
 
-  if(dest_type != type)
+  if (dest_type != type)
   {
     dest.make_typecast(type);
 
-    if(dest.op0().is_constant())
+    if (dest.op0().is_constant())
     {
       // preserve #c_sizeof_type -- don't make it a reference!
       const irept c_sizeof_type = dest.op0().c_sizeof_type();
 
-      if(!no_simplify)
+      if (!no_simplify)
       {
         simplify_exprt simplify_expr;
         simplify_expr.simplify_typecast(dest, false);
       }
 
-      if(c_sizeof_type.is_not_nil())
+      if (c_sizeof_type.is_not_nil())
         dest.c_sizeof_type(c_sizeof_type);
     }
   }
@@ -877,18 +877,18 @@ void c_typecastt::do_typecast(expr2tc &dest, const type2tc &type)
 
   const type2tc &dest_type = ns.follow(dest->type);
 
-  if(is_array_type(dest_type))
+  if (is_array_type(dest_type))
   {
     const array_type2t &arr_type = to_array_type(dest_type);
     expr2tc index = index2tc(arr_type.subtype, dest, gen_zero(index_type2()));
     expr2tc tmp = address_of2tc(arr_type.subtype, index);
     dest = tmp;
-    if(ns.follow(dest->type) != ns.follow(type))
+    if (ns.follow(dest->type) != ns.follow(type))
       dest = typecast2tc(type, dest);
     return;
   }
 
-  if(dest_type != type)
+  if (dest_type != type)
   {
     dest = typecast2tc(type, dest);
 
