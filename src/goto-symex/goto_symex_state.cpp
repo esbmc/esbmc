@@ -131,13 +131,11 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   // with chains to extract data from them.
   // FIXME: actually benchmark this and look at timing results, it may be
   // important benchmarks (i.e. TACAS) work better with some propagation
-  if(is_with2t(expr))
+  if (is_with2t(expr))
   {
     const with2t &with = to_with2t(expr);
     if(is_struct_type(with.source_value))
-    {
       return true;
-    }
     return false;
   }
 
