@@ -134,11 +134,11 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if(is_with2t(expr))
   {
     const with2t &with = to_with2t(expr);
-    if(is_constant_array_of2t(with.source_value))
+    if(is_struct_type(with.source_value))
     {
-      return false;
+      return true;
     }
-    return true;
+    return false;
   }
 
   if(
