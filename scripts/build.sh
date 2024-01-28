@@ -81,6 +81,7 @@ ubuntu_setup () {
     echo "Installing Python dependencies" &&
     pip3 install --user meson ast2json &&
     pip3 install --user pyparsing toml &&
+    pip3 install --user pyparsing tomli &&
     meson --version &&
 
     BASE_ARGS="$BASE_ARGS \
