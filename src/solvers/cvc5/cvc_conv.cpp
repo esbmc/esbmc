@@ -296,14 +296,9 @@ cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
   const cvc_smt_ast *mfrom = to_solver_smt_ast<cvc_smt_ast>(from);
 
   // AYB TODO, width is too large
-  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_UBV, {width}); 
+  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_UBV, {width});
 
-  return new_ast(
-    slv.mkTerm(
-      op,
-      {mrm->a,
-       mfrom->a}),
-    mk_bv_sort(width));
+  return new_ast(slv.mkTerm(op, {mrm->a, mfrom->a}), mk_bv_sort(width));
 }
 
 smt_astt
@@ -317,14 +312,9 @@ cvc_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width)
   const cvc_smt_ast *mfrom = to_solver_smt_ast<cvc_smt_ast>(from);
 
   // AYB TODO, width is too large
-  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_SBV, {width}); 
+  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_SBV, {width});
 
-  return new_ast(
-    slv.mkTerm(
-      op,
-      {mrm->a,
-       mfrom->a}),
-    mk_bv_sort(width));
+  return new_ast(slv.mkTerm(op, {mrm->a, mfrom->a}), mk_bv_sort(width));
 }
 
 smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_fpbv(
@@ -1046,11 +1036,12 @@ smt_astt cvc_convt::mk_smt_fpbv(const ieee_floatt &thereal)
   assert(thereal.spec.width() <= 64);
   smt_sortt s = mk_real_fp_sort(thereal.spec.e, thereal.spec.f);
 
-
-  cvc5::Term float_bv = slv.mkBitVector(thereal.spec.width(), thereal.pack().to_uint64());
+  cvc5::Term float_bv =
+    slv.mkBitVector(thereal.spec.width(), thereal.pack().to_uint64());
   return new_ast(
     slv.mkFloatingPoint(
-      s->get_exponent_width(), s->get_significand_width(), float_bv), s);
+      s->get_exponent_width(), s->get_significand_width(), float_bv),
+    s);
 }
 
 smt_astt cvc_convt::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
@@ -1074,7 +1065,7 @@ smt_astt cvc_convt::mk_smt_fpbv_inf(bool sign, unsigned ew, unsigned sw)
   cvc5::Term t = sign ? slv.mkFloatingPointNegInf(
                           s->get_exponent_width(), s->get_significand_width())
                       : slv.mkFloatingPointPosInf(
-						  s->get_exponent_width(), s->get_significand_width());
+                          s->get_exponent_width(), s->get_significand_width());
 
   return new_ast(t, s);
 }
@@ -1083,16 +1074,20 @@ smt_astt cvc_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
   smt_sortt s = mk_fpbv_rm_sort();
 
-  switch(rm)
+  switch (rm)
   {
   case ieee_floatt::ROUND_TO_EVEN:
-    return new_ast(slv.mkRoundingMode(cvc5::RoundingMode::ROUND_NEAREST_TIES_TO_EVEN), s);
+    return new_ast(
+      slv.mkRoundingMode(cvc5::RoundingMode::ROUND_NEAREST_TIES_TO_EVEN), s);
   case ieee_floatt::ROUND_TO_MINUS_INF:
-    return new_ast(slv.mkRoundingMode(cvc5::RoundingMode::ROUND_TOWARD_NEGATIVE), s);
+    return new_ast(
+      slv.mkRoundingMode(cvc5::RoundingMode::ROUND_TOWARD_NEGATIVE), s);
   case ieee_floatt::ROUND_TO_PLUS_INF:
-    return new_ast(slv.mkRoundingMode(cvc5::RoundingMode::ROUND_TOWARD_POSITIVE), s);
+    return new_ast(
+      slv.mkRoundingMode(cvc5::RoundingMode::ROUND_TOWARD_POSITIVE), s);
   case ieee_floatt::ROUND_TO_ZERO:
-    return new_ast(slv.mkRoundingMode(cvc5::RoundingMode::ROUND_TOWARD_ZERO), s);
+    return new_ast(
+      slv.mkRoundingMode(cvc5::RoundingMode::ROUND_TOWARD_ZERO), s);
   default:
     break;
   }
