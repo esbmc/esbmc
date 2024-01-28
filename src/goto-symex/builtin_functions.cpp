@@ -162,9 +162,8 @@ expr2tc goto_symext::symex_mem(
 
   symbol.type.dynamic(true);
 
-  // alignment of max_align_t; 8 for 32-bit, 16 for 64-bit
   symbol.type.set(
-    "alignment", constant_exprt(config.ansi_c.word_size * 2 / 8, size_type()));
+    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
 
   symbol.mode = "C";
 
