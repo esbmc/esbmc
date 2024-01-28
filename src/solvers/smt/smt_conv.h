@@ -206,22 +206,8 @@ public:
 
   smt_astt convert_assign(const expr2tc &expr);
 
-  /** Make an n-ary function application.
-   *  Takes a vector of smt_ast's, and creates a single
-   *  function app over all the smt_ast's.
-   */
-  template <typename Object, typename Method>
-  smt_astt make_n_ary(const Object o, const Method m, const ast_vec &v)
-  {
-    assert(!v.empty());
-
-    // Chain these.
-    smt_astt result = v.front();
-    for (std::size_t i = 1; i < v.size(); ++i)
-      result = (o->*m)(result, v[i]);
-
-    return result;
-  }
+  smt_astt make_n_ary_and(const ast_vec &v);
+  smt_astt make_n_ary_or(const ast_vec &v);
 
   /** Create the inverse of an smt_ast. Equivalent to a 'not' operation.
    *  @param a The ast to invert. Must be boolean sorted.

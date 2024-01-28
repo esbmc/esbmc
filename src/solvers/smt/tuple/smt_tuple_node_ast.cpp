@@ -120,9 +120,6 @@ smt_astt tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 
   assert(sort->get_tuple_type() == other->sort->get_tuple_type());
 
-  if (data.members.empty())
-    return ctx->mk_smt_bool(true); // empty conjunction is true
-
   // Iterate through each field and encode an equality.
   for (unsigned int i = 0; i < data.members.size(); i++)
   {
@@ -132,7 +129,7 @@ smt_astt tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   }
 
   // Create an ast representing the fact that all the members are equal.
-  return ctx->make_n_ary(ctx, &smt_convt::mk_and, eqs);
+  return ctx->make_n_ary_and(eqs);
 }
 
 smt_astt tuple_node_smt_ast::update(
