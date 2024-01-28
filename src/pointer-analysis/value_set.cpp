@@ -792,7 +792,21 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     // Any symbol we refer to, store into the destination object map.
     // Given that this is a simple symbol, we can be sure that the offset to
     // it is zero.
-    insert(dest, expr, objectt(true, 0));
+    objectt obj(true, 0);
+
+    if (is_symbol2t(expr))
+    {
+      if (const symbolt *sym = ns.lookup(to_symbol2t(expr).thename))
+      {
+        if (const irept &a = sym->type.find("alignment"); a.is_not_nil())
+        {
+          irep_idt v = static_cast<const exprt &>(a).value();
+          obj.offset_alignment = string2integer(v.as_string(), 2).to_uint64();
+        }
+      }
+    }
+
+    insert(dest, expr, obj);
     return;
   }
 
