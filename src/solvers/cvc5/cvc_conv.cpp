@@ -1297,15 +1297,12 @@ void cvc_convt::dump_smt()
   std::ostringstream oss;
   auto const &assertions = slv.getAssertions();
   for (auto const &a : assertions)
-    //AYB is this right?
-    oss << a;
+    oss << a.toString();
   log_status("{}", oss.str());
 }
 
 void cvc_smt_ast::dump() const
 {
   std::ostringstream oss;
-  //AYB TODO
-  //a.printAst(oss, 0);
-  log_status("{}", oss.str());
+  log_status("{}", a.toString());
 }
