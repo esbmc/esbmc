@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <util/c_types.h>
 #include <cvc_conv.h>
 
@@ -287,6 +288,7 @@ cvc_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
 smt_astt
 cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
 {
+  assert(width <= UINT32_MAX);
   // Conversion from float to integers always truncate, so we assume
   // the round mode to be toward zero
   const cvc_smt_ast *mrm =
@@ -294,19 +296,20 @@ cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
   const cvc_smt_ast *mfrom = to_solver_smt_ast<cvc_smt_ast>(from);
 
   // AYB TODO, width is too large
-  /*auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_UBV, {width}); 
+  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_UBV, {width}); 
 
   return new_ast(
     slv.mkTerm(
       op,
       {mrm->a,
        mfrom->a}),
-    mk_bv_sort(width));*/
+    mk_bv_sort(width));
 }
 
 smt_astt
 cvc_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width)
 {
+  assert(width <= UINT32_MAX);
   // Conversion from float to integers always truncate, so we assume
   // the round mode to be toward zero
   const cvc_smt_ast *mrm =
@@ -314,14 +317,14 @@ cvc_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width)
   const cvc_smt_ast *mfrom = to_solver_smt_ast<cvc_smt_ast>(from);
 
   // AYB TODO, width is too large
-  /*auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_SBV, {width}); 
+  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_SBV, {width}); 
 
   return new_ast(
     slv.mkTerm(
       op,
       {mrm->a,
        mfrom->a}),
-    mk_bv_sort(width));*/
+    mk_bv_sort(width));
 }
 
 smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_fpbv(
@@ -1028,14 +1031,8 @@ smt_astt cvc_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt cvc_convt::mk_smt_int(const BigInt &theint)
 {
-  // TODO: Is this correct? CVC5 doesn't have any call for
-  // slv.mkConst(CVC5::Integer(...));
-
-  // AYB what to do here?
-
-  /*smt_sortt s = mk_int_sort();
-  cvc5::Term e = slv.mkConst(CVC5::Rational(theint.to_int64()));
-  return new_ast(e, s);*/
+  cvc5::Term e = slv.mkInteger(theint.to_int64());
+  return new_ast(e, mk_int_sort());
 }
 
 smt_astt cvc_convt::mk_smt_real(const std::string &str)
@@ -1046,23 +1043,14 @@ smt_astt cvc_convt::mk_smt_real(const std::string &str)
 
 smt_astt cvc_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
+  assert(thereal.spec.width() <= 64);
   smt_sortt s = mk_real_fp_sort(thereal.spec.e, thereal.spec.f);
 
-  const BigInt sig = thereal.get_fraction();
 
-  // If the number is denormal, we set the exponent to 0
-  const BigInt exp =
-    thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
-
-  std::string smt_str = thereal.get_sign() ? "1" : "0";
-  smt_str += integer2binary(exp, thereal.spec.e);
-  smt_str += integer2binary(sig, thereal.spec.f);
-
-  //AYB last argument needs to be a term not a string
-  /*return new_ast(
+  cvc5::Term float_bv = slv.mkBitVector(thereal.spec.width(), thereal.pack().to_uint64());
+  return new_ast(
     slv.mkFloatingPoint(
-      s->get_exponent_width(), s->get_significand_width(), smt_str),
-    s);*/
+      s->get_exponent_width(), s->get_significand_width(), float_bv), s);
 }
 
 smt_astt cvc_convt::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
@@ -1078,36 +1066,36 @@ smt_astt cvc_convt::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
   return the_nan;
 }
 
-smt_astt cvc_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
+smt_astt cvc_convt::mk_smt_fpbv_inf(bool sign, unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_real_fp_sort(ew, sw - 1);
-  //AYB with new API we either make a positive or negative infinity...
-  /*return new_ast(
-    slv.mkConst(CVC5::FloatingPoint::makeInf(
-      CVC5::FloatingPointSize(
-        s->get_exponent_width(), s->get_significand_width()),
-      sgn)),
-    s);*/
+
+  // TODO: some template magic?
+  cvc5::Term t = sign ? slv.mkFloatingPointNegInf(
+                          s->get_exponent_width(), s->get_significand_width())
+                      : slv.mkFloatingPointPosInf(
+						  s->get_exponent_width(), s->get_significand_width());
+
+  return new_ast(t, s);
 }
 
 smt_astt cvc_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
   smt_sortt s = mk_fpbv_rm_sort();
 
-  // AYB needs sorting
-  /*switch(rm)
+  switch(rm)
   {
   case ieee_floatt::ROUND_TO_EVEN:
-    return new_ast(slv.mkConst(CVC5::RoundingMode::roundNearestTiesToEven), s);
+    return new_ast(slv.mkRoundingMode(cvc5::RoundingMode::ROUND_NEAREST_TIES_TO_EVEN), s);
   case ieee_floatt::ROUND_TO_MINUS_INF:
-    return new_ast(slv.mkConst(CVC5::RoundingMode::roundTowardNegative), s);
+    return new_ast(slv.mkRoundingMode(cvc5::RoundingMode::ROUND_TOWARD_NEGATIVE), s);
   case ieee_floatt::ROUND_TO_PLUS_INF:
-    return new_ast(slv.mkConst(CVC5::RoundingMode::roundTowardPositive), s);
+    return new_ast(slv.mkRoundingMode(cvc5::RoundingMode::ROUND_TOWARD_POSITIVE), s);
   case ieee_floatt::ROUND_TO_ZERO:
-    return new_ast(slv.mkConst(CVC5::RoundingMode::roundTowardZero), s);
+    return new_ast(slv.mkRoundingMode(cvc5::RoundingMode::ROUND_TOWARD_ZERO), s);
   default:
     break;
-  }*/
+  }
 
   abort();
 }
@@ -1287,9 +1275,9 @@ smt_sortt cvc_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 
 smt_sortt cvc_convt::mk_fpbv_rm_sort()
 {
-  // AYB TODO
-  /*return new solver_smt_sort<cvc5::Sort>(
-    SMT_SORT_FPBV_RM, slv.roundingModeType(), 3);*/
+  // TODO: Not sure about this
+  return new solver_smt_sort<cvc5::Sort>(
+    SMT_SORT_FPBV_RM, slv.getRoundingModeSort(), 3);
 }
 
 void cvc_convt::dump_smt()
