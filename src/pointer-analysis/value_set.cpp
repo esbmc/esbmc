@@ -800,8 +800,12 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
       {
         if (const irept &a = sym->type.find("alignment"); a.is_not_nil())
         {
+          assert(a.is_constant());
           irep_idt v = static_cast<const exprt &>(a).value();
-          obj.offset_alignment = string2integer(v.as_string(), 2).to_uint64();
+          BigInt V = binary2integer(v.as_string(), false);
+          assert(V.is_positive());
+          assert(V <= UINT_MAX);
+          obj.offset_alignment = V.to_uint64();
         }
       }
     }
