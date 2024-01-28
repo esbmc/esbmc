@@ -72,13 +72,16 @@ void value_sett::output(std::ostream &out) const
         result = from_expr(ns, identifier, o);
       else
       {
-        // Everything else, display as a triple of <object, offset, type>.
+        // Everything else, display as a tuple of <object, offset, align, type>.
         result = "<" + from_expr(ns, identifier, o) + ", ";
 
-        if (o_it->second.offset_is_set)
-          result += integer2string(o_it->second.offset) + "";
+        const objectt &obj = o_it->second;
+        if (obj.offset_is_set)
+          result += integer2string(obj.offset) + "";
         else
           result += "*";
+
+        result += ", " + std::to_string(obj.offset_alignment);
 
         result += ", " + from_type(ns, identifier, o->type);
 
