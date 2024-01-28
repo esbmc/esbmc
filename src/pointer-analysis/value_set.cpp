@@ -796,17 +796,17 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
 
     if (is_symbol2t(expr))
     {
-      if (const symbolt *sym = ns.lookup(to_symbol2t(expr).thename))
+      const symbolt *sym = ns.lookup(to_symbol2t(expr).thename);
+      assert(sym);
+      const irept &a = sym->type.find("alignment");
+      if (a.is_not_nil())
       {
-        if (const irept &a = sym->type.find("alignment"); a.is_not_nil())
-        {
-          assert(a.is_constant());
-          irep_idt v = static_cast<const exprt &>(a).value();
-          BigInt V = binary2integer(v.as_string(), false);
-          assert(V.is_positive());
-          assert(V <= UINT_MAX);
-          obj.offset_alignment = V.to_uint64();
-        }
+        assert(a.is_constant());
+        irep_idt v = static_cast<const exprt &>(a).value();
+        BigInt V = binary2integer(v.as_string(), false);
+        assert(V.is_positive());
+        assert(V <= UINT_MAX);
+        obj.offset_alignment = V.to_uint64();
       }
     }
 
