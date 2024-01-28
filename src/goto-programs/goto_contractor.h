@@ -409,15 +409,15 @@ public:
   {
     std::ostringstream oss;
     oss << "This map has : " << this->n;
-    if(is_empty_vector)
+    if (is_empty_vector)
     {
       oss << "empty vector";
-      log_status("{}",oss.str());
+      log_status("{}", oss.str());
       return;
     }
-    log_status("{}",oss.str());
+    log_status("{}", oss.str());
 
-    for(auto var:var_map)
+    for (auto var : var_map)
     {
       var.second.dump();
     }
