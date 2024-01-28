@@ -1044,6 +1044,7 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
 void interval_analysis_ibex_contractor::dump()
 {
   std::ostringstream oss;
+  bool is_timed = false;
   auto number_of_vars = map.size();
   auto x1 = map.create_interval_vector();
   auto x2 = map_outer.create_interval_vector();
@@ -1053,10 +1054,13 @@ void interval_analysis_ibex_contractor::dump()
   oss << "number of variables: " << number_of_vars << "\n";
   oss << "before : " << x1 << " diam: " << x1.diam() << std::endl;
   oss << "after : " << x2 << " diam: " << x2.diam() << std::endl;
-  //oss << "Contractor parse time: " << parse_time << "\n";
-  //oss << "Contractor maps_to_domains time: " << cpy_time << "\n";
-  //oss << "Contractor modularize time: " << mod_time << "\n";
-  //oss << "Contractor contract time: " << apply_time << "\n";
+  if (is_timed)
+  {
+    oss << "Contractor parse time: " << parse_time << "\n";
+    oss << "Contractor maps_to_domains time: " << cpy_time << "\n";
+    oss << "Contractor modularize time: " << mod_time << "\n";
+    oss << "Contractor contract time: " << apply_time << "\n";
+  }
   oss << "------------------------";
   map.dump();
   map_outer.dump();

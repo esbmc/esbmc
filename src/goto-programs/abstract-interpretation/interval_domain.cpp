@@ -1240,11 +1240,6 @@ void interval_domaint::assume(const expr2tc &cond)
       contractor.apply_contractor();
       new_cond = contractor.result_of_outer(new_cond);
       simplify(new_cond);
-      new_cond->dump();
-    }
-    else
-    {
-     // return;
     }
   }
 #endif
