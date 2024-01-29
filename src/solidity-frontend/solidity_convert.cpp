@@ -129,6 +129,7 @@ bool solidity_convertert::convert()
       for (const auto &id : (*itr)["linearizedBaseContracts"].items())
         linearizedBaseList[current_contractName].push_back(
           id.value().get<int>());
+      assert(!linearizedBaseList[current_contractName].empty());
 
       // add a struct symbol for each contract
       // e.g. contract Base => struct Base
@@ -3441,11 +3442,18 @@ void solidity_convertert::get_function_definition_name(
   get_contract_name(ast_node["scope"], contract_name);
 
   if (ast_node["kind"].get<std::string>() == "constructor")
+  {
     name = contract_name;
+    // constructors cannot be overridden, primarily because they don't have names
+    // to align with the implicit constructor, we do not add the 'id'
+    id = "c:@C@" + contract_name + "@F@" + name + "#";
+  }
   else
+  {
     name = ast_node["name"].get<std::string>();
-  id = "c:@C@" + contract_name + "@F@" + name + "#" +
-       i2string(ast_node["id"].get<std::int16_t>());
+    id = "c:@C@" + contract_name + "@F@" + name + "#" +
+         i2string(ast_node["id"].get<std::int16_t>());
+  }
 }
 
 unsigned int solidity_convertert::add_offset(
@@ -4379,7 +4387,9 @@ bool solidity_convertert::move_functions_to_main(
     }
   }
 
-  Additionally, we need to handle the inheritance. Theoretically, we need to merge (i.e. create a copy) the public and internal state variables and functions inside Base contracts into the Derive contract. However, in practice we do not need to do so. 
+  Additionally, we need to handle the inheritance. Theoretically, we need to merge (i.e. create a copy) the public and internal state variables and functions inside Base contracts into the Derive contract. However, in practice we do not need to do so. Instead, we 
+    - call the constructors based on the linearizedBaseList 
+    - add the inherited public function call to the if-body 
   */
 
   // 0. initialize "sol_main" body and while-loop body
@@ -4391,91 +4401,112 @@ bool solidity_convertert::move_functions_to_main(
   func_body.make_block();
 
   // 1. get constructor call
-
-  // 1.1 get contract symbol ("tag-contractName")
-  const std::string id = prefix + contractName;
-  if (context.find_symbol(id) == nullptr)
-    return true;
-  const symbolt &contract = *context.find_symbol(id);
-  assert(contract.type.is_struct() && "A contract should be a struct");
-
-  // 1.2 construct a constructor call and move to func_body
-  std::string ctor_id;
-  ctor_id = get_ctor_call_id(contractName);
-
-  if (context.find_symbol(ctor_id) == nullptr)
+  const std::vector<int> &id_list = linearizedBaseList[contractName];
+  // iterating from the end to the beginning
+  if (id_list.empty())
   {
-    // if the input contract name is not found in the src file, return true
     log_error("Input contract is not found in the source file.");
     return true;
   }
-  const symbolt &constructor = *context.find_symbol(ctor_id);
-  code_function_callt call;
-  call.location() = constructor.location;
-  call.function() = symbol_expr(constructor);
 
-  // move to "sol_main" body
-  func_body.move_to_operands(call);
-
-  // 2. construct a while-loop and move to func_body
-
-  // 2.0 check visibility setting
-  bool skip_vis =
-    config.options.get_option("no-visibility").empty() ? false : true;
-  if (skip_vis)
+  for (auto it = id_list.rbegin(); it != id_list.rend(); ++it)
   {
-    log_warning(
-      "force to verify every function, even it's an unreachable "
-      "internal/private function. This might lead to false positives.");
-  }
-
-  // 2.1 construct ifthenelse statement
-  const struct_typet::componentst &methods =
-    to_struct_type(contract.type).methods();
-  for (const auto &method : methods)
-  {
-    // we only handle public and external function
-    // as the private and internal function cannot be directly called
-    if (
-      !skip_vis && (method.get_access().as_string() == "private" ||
-                    method.get_access().as_string() == "internal"))
-      continue;
-
-    // guard: nondet_bool()
-    if (context.find_symbol("c:@F@nondet_bool") == nullptr)
+    // 1.1 get contract symbol ("tag-contractName")
+    std::string c_name = exportedSymbolsList[*it];
+    const std::string id = prefix + c_name;
+    if (context.find_symbol(id) == nullptr)
       return true;
-    const symbolt &guard = *context.find_symbol("c:@F@nondet_bool");
+    const symbolt &contract = *context.find_symbol(id);
+    assert(contract.type.is_struct() && "A contract should be a struct");
 
-    side_effect_expr_function_callt guard_expr;
-    guard_expr.name("nondet_bool");
-    guard_expr.identifier("c:@F@nondet_bool");
-    guard_expr.location() = guard.location;
-    guard_expr.cmt_lvalue(true);
-    guard_expr.function() = symbol_expr(guard);
+    // 1.2 construct a constructor call and move to func_body
+    const std::string ctor_id = get_ctor_call_id(c_name);
 
-    // then: function_call
-    const std::string func_id = method.identifier().as_string();
-    // skip constructor
-    if (func_id == ctor_id)
-      continue;
-
-    if (context.find_symbol(func_id) == nullptr)
+    if (context.find_symbol(ctor_id) == nullptr)
+    {
+      // if the input contract name is not found in the src file, return true
+      log_error("Input contract is not found in the source file.");
       return true;
-    const symbolt &func = *context.find_symbol(func_id);
-    code_function_callt then_expr;
-    then_expr.location() = func.location;
-    then_expr.function() = symbol_expr(func);
-    const code_typet::argumentst &arguments =
-      to_code_type(func.type).arguments();
-    then_expr.arguments().resize(
-      arguments.size(), static_cast<const exprt &>(get_nil_irep()));
+    }
+    const symbolt &constructor = *context.find_symbol(ctor_id);
+    code_function_callt call;
+    call.location() = constructor.location;
+    call.function() = symbol_expr(constructor);
 
-    // ifthenelse-statement:
-    codet if_expr("ifthenelse");
-    if_expr.copy_to_operands(guard_expr, then_expr);
+    // move to "sol_main" body
+    func_body.move_to_operands(call);
 
-    // move to while-loop body
-    while_body.move_to_operands(if_expr);
+    // 2. construct a while-loop and move to func_body
+
+    // 2.0 check visibility setting
+    bool skip_vis =
+      config.options.get_option("no-visibility").empty() ? false : true;
+    if (skip_vis)
+    {
+      log_warning(
+        "force to verify every function, even it's an unreachable "
+        "internal/private function. This might lead to false positives.");
+    }
+
+    // 2.1 construct ifthenelse statement
+    const struct_typet::componentst &methods =
+      to_struct_type(contract.type).methods();
+    bool is_tgt_cnt = c_name == tgt_cnt ? true : false;
+
+    for (const auto &method : methods)
+    {
+      // we only handle public (and external) function
+      // as the private and internal function cannot be directly called
+      if (is_tgt_cnt)
+      {
+        if (
+          !skip_vis && method.get_access().as_string() != "public" &&
+          method.get_access().as_string() != "external")
+          continue;
+      }
+      else
+      {
+        // this means functions inherited from base contracts
+        if (!skip_vis && method.get_access().as_string() != "public")
+          continue;
+      }
+
+      // skip constructor
+      const std::string func_id = method.identifier().as_string();
+      if (func_id == ctor_id)
+        continue;
+
+      // guard: nondet_bool()
+      if (context.find_symbol("c:@F@nondet_bool") == nullptr)
+        return true;
+      const symbolt &guard = *context.find_symbol("c:@F@nondet_bool");
+
+      side_effect_expr_function_callt guard_expr;
+      guard_expr.name("nondet_bool");
+      guard_expr.identifier("c:@F@nondet_bool");
+      guard_expr.location() = guard.location;
+      guard_expr.cmt_lvalue(true);
+      guard_expr.function() = symbol_expr(guard);
+
+      // then: function_call
+      if (context.find_symbol(func_id) == nullptr)
+        return true;
+      const symbolt &func = *context.find_symbol(func_id);
+      code_function_callt then_expr;
+      then_expr.location() = func.location;
+      then_expr.function() = symbol_expr(func);
+      const code_typet::argumentst &arguments =
+        to_code_type(func.type).arguments();
+      then_expr.arguments().resize(
+        arguments.size(), static_cast<const exprt &>(get_nil_irep()));
+
+      // ifthenelse-statement:
+      codet if_expr("ifthenelse");
+      if_expr.copy_to_operands(guard_expr, then_expr);
+
+      // move to while-loop body
+      while_body.move_to_operands(if_expr);
+    }
   }
 
   // while-cond:
@@ -4502,6 +4533,7 @@ bool solidity_convertert::move_functions_to_main(
   main_type.return_type() = empty_typet();
   std::string sol_id = "c:@" + contractName + "@F@sol_main";
   std::string sol_name = "sol_main";
+  const symbolt &contract = *context.find_symbol(prefix + tgt_cnt);
   new_symbol.location = contract.location;
   std::string debug_modulename =
     get_modulename_from_path(contract.location.file().as_string());
