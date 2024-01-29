@@ -11,7 +11,7 @@ else()
 
 	# Require python pyparsing!
         message("[cvc5] Configuring")
-        execute_process(COMMAND ./configure.sh --auto-download --prefix=${cvc5_BINARY_DIR}
+        execute_process(COMMAND ./configure.sh --auto-download --prefix=${cvc5_BINARY_DIR} --static
                             WORKING_DIRECTORY ${cvc5_SOURCE_DIR})
 
         message("[cvc5] Building")
