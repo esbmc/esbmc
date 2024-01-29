@@ -34,11 +34,10 @@ void show_claims(
     {
       count++;
       log_status(
-        "Claim {}:\n  {}\n  {}\n  {}\n",
+        "Claim {}:\n  {}\n  {}\n",
         count,
         instruction.location,
-        "assertion",
-        from_expr(ns, identifier, instruction.guard));
+        "exception: assertion failed");
     }
 #endif
   }
