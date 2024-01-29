@@ -413,6 +413,8 @@ public:
    *  and is read-only. */
   bool is_transition_blocked_by_mpor() const
   {
+    if (active_thread == 0)
+      return false;
     return mpor_says_no;
   }
 
