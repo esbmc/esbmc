@@ -1,6 +1,6 @@
 pragma solidity >=0.5.0;
 
-contract test {
+contract Base {
     FreshJuiceSize choice;
 
     function setLarge() public {

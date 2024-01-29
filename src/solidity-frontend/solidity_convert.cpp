@@ -83,13 +83,11 @@ bool solidity_convertert::convert()
   // reasoning-based verification
 
   // populate exportedSymbolsList
-  int c_id;
-  std::string c_name;
   for (const auto &itr : ast_json["exportedSymbols"].items())
   {
     //! Assume a contract has only one id
-    c_id = itr.value()[0].get<int>();
-    c_name = itr.key();
+    int c_id = itr.value()[0].get<int>();
+    std::string c_name = itr.key();
     exportedSymbolsList.insert(std::pair<int, std::string>(c_id, c_name));
   }
 
@@ -4406,7 +4404,11 @@ bool solidity_convertert::move_functions_to_main(
   ctor_id = get_ctor_call_id(contractName);
 
   if (context.find_symbol(ctor_id) == nullptr)
+  {
+    // if the input contract name is not found in the src file, return true
+    log_error("Input contract is not found in the source file.");
     return true;
+  }
   const symbolt &constructor = *context.find_symbol(ctor_id);
   code_function_callt call;
   call.location() = constructor.location;
