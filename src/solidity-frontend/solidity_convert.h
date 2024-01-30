@@ -46,7 +46,8 @@ protected:
 
   // handle the implicit constructor
   bool add_implicit_constructor();
-  bool get_implicit_ctor_call(const int ref_decl_id, exprt &new_expr);
+  bool
+  get_implicit_ctor_call(exprt &new_expr, const std::string &contract_name);
   bool
   get_struct_class_fields(const nlohmann::json &ast_node, struct_typet &type);
   bool
@@ -125,7 +126,10 @@ protected:
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
   const nlohmann::json &find_decl_ref(int ref_decl_id);
-  const nlohmann::json &find_constructor_ref(int ref_decl_id);
+  const nlohmann::json &
+  find_decl_ref(int ref_decl_id, std::string &contract_name);
+  const nlohmann::json &
+  find_constructor_ref(int ref_decl_id);
   void convert_expression_to_code(exprt &expr);
   bool check_intrinsic_function(const nlohmann::json &ast_node);
   nlohmann::json make_implicit_cast_expr(
