@@ -2016,8 +2016,6 @@ bool solidity_convertert::get_current_contract_name(
   const nlohmann::json &ast_node,
   std::string &contract_name)
 {
-  nlohmann::json &nodes = ast_json["nodes"];
-
   // check if it is recorded in the scope_map
   if (ast_node.contains("scope"))
   {
@@ -2028,17 +2026,23 @@ bool solidity_convertert::get_current_contract_name(
     return false;
   }
 
-  // utilize the find_decl_ref
-  if (ast_node.contains("id"))
-  {
-    return false;
-  }
-
-  // otherwise implicit constructor
+  // implicit constructor
   if (ast_node.empty())
   {
     contract_name = current_contractName;
-    return true;
+    return false;
+  }
+
+  // utilize the find_decl_ref
+  if (ast_node.contains("id"))
+  {
+    const int ref_id = ast_node["id"].get<int>();
+    // exportedSymbolsList == contract_name_list
+    if (exportedSymbolsList.count(ref_id))
+      contract_name = exportedSymbolsList[ref_id];
+    else
+      find_decl_ref(ref_id, contract_name);
+    return false;
   }
 
   // unexpected
@@ -3624,7 +3628,15 @@ std::string solidity_convertert::get_filename_from_path(std::string path)
   return path; // for _x, it just returns "overflow_2.c" because the test program is in the same dir as esbmc binary
 }
 
+// A wrapper to obtain additional contract_name info
 const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
+{
+  std::string empty_str = "";
+  return find_decl_ref(ref_decl_id, empty_str);
+}
+
+const nlohmann::json &
+solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
 {
   //TODO: Clean up this funciton. Such a mess...
 
@@ -3664,6 +3676,7 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
     // check the nodes inside a contract
     if ((*itr)["nodeType"] == "ContractDefinition")
     {
+      contract_name = (*itr)["name"].get<std::string>();
       nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
 
       unsigned idx = 0;
@@ -3693,6 +3706,9 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
       }
     }
   }
+
+  //! otherwise, assume it is current_contractName
+  contract_name = current_contractName;
 
   // current_functionDecl should not be a nullptr
   if (current_functionDecl == nullptr)
@@ -4126,21 +4142,21 @@ bool solidity_convertert::get_constructor_call(
   int ref_decl_id = callee_expr_json["typeName"]["referencedDeclaration"];
   exprt callee;
 
+  const std::string contract_name = exportedSymbolsList[ref_decl_id];
+  assert(!contract_name.empty());
+
   const nlohmann::json constructor_ref = find_constructor_ref(ref_decl_id);
 
   // Special handling of implicit constructor
   // since there is no ast nodes for implicit constructor
   if (constructor_ref.empty())
-    return get_implicit_ctor_call(ref_decl_id, new_expr);
+    return get_implicit_ctor_call(new_expr, contract_name);
 
   if (get_func_decl_ref(constructor_ref, callee))
     return true;
 
   // obtain the type info
-  std::string name, id;
-  if (get_current_contract_name(constructor_ref, name))
-    return true;
-  id = prefix + name;
+  std::string id = prefix + contract_name;
   if (context.find_symbol(id) == nullptr)
     return true;
 
@@ -4183,18 +4199,15 @@ bool solidity_convertert::get_constructor_call(
 }
 
 bool solidity_convertert::get_implicit_ctor_call(
-  const int ref_decl_id,
-  exprt &new_expr)
+  exprt &new_expr,
+  const std::string &contract_name)
 {
   // to obtain the type info
   std::string name, id;
-  const nlohmann::json empty_node = {};
-  if (get_current_contract_name(empty_node, name))
-    return true;
-  id = get_ctor_call_id(name);
+
+  id = get_ctor_call_id(contract_name);
   if (context.find_symbol(id) == nullptr)
     return true;
-
   const symbolt &s = *context.find_symbol(id);
   typet type = s.type;
 
