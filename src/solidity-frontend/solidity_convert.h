@@ -128,8 +128,7 @@ protected:
   const nlohmann::json &find_decl_ref(int ref_decl_id);
   const nlohmann::json &
   find_decl_ref(int ref_decl_id, std::string &contract_name);
-  const nlohmann::json &
-  find_constructor_ref(int ref_decl_id);
+  const nlohmann::json &find_constructor_ref(int ref_decl_id);
   void convert_expression_to_code(exprt &expr);
   bool check_intrinsic_function(const nlohmann::json &ast_node);
   nlohmann::json make_implicit_cast_expr(
@@ -170,8 +169,8 @@ protected:
 
   contextt &context;
   namespacet ns;
-  nlohmann::json
-    &ast_json; // json for Solidity AST. Use vector for multiple contracts
+  // json for Solidity AST. Use vector for multiple contracts
+  nlohmann::json &ast_json;
   const std::string &sol_func;      // Solidity function to be verified
   const std::string &contract_path; //smart contract source file
 
