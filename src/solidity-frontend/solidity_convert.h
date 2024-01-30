@@ -99,7 +99,9 @@ protected:
     std::string &name,
     std::string &id);
   bool get_constructor_call(const nlohmann::json &ast_node, exprt &new_expr);
-  bool get_contract_name(const int ref_decl_id, std::string &contract_name);
+  bool get_current_contract_name(
+    const nlohmann::json &ast_node,
+    std::string &contract_name);
   bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
 
   // line number and locations
