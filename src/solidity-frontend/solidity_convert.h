@@ -171,12 +171,15 @@ protected:
   namespacet ns;
   // json for Solidity AST. Use vector for multiple contracts
   nlohmann::json &ast_json;
-  const std::string &sol_func;      // Solidity function to be verified
-  const std::string &contract_path; //smart contract source file
+  // Solidity function to be verified
+  const std::string &sol_func;
+  //smart contract source file
+  const std::string &contract_path;
 
   std::string absolute_path;
   std::string contract_contents = "";
-  int global_scope_id; // scope id of "ContractDefinition"
+  // scope id of "ContractDefinition"
+  int global_scope_id;
 
   unsigned int current_scope_var_num;
   const nlohmann::json *current_functionDecl;
