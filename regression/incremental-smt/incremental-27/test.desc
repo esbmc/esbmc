@@ -1,4 +1,4 @@
 CORE
 main.c
---k-induction --add-symex-value-sets --no-pointer-check --max-k-step 5 --smt-during-symex --context-bound 2
+--k-induction --add-symex-value-sets --no-pointer-check --max-k-step 5 --smt-during-symex
 ^VERIFICATION UNKNOWN$
