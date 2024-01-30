@@ -609,10 +609,10 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
   const nlohmann::json *old_functionDecl = current_functionDecl;
   const std::string old_functionName = current_functionName;
 
-  // e.g. name: errmsg; id: c:@Error@errmsg#12
+  // e.g. name: errmsg; id: sol:@Error@errmsg#12
   std::string name, id;
   name = ast_node["name"].get<std::string>();
-  id = "c:@Error@" + name + "#" + std::to_string(ast_node["id"].get<int>());
+  id = "sol:@Error@" + name + "#" + std::to_string(ast_node["id"].get<int>());
 
   // just to pass the internal assertions
   current_functionName = name;
@@ -1343,7 +1343,8 @@ bool solidity_convertert::get_expr(
         {
           std::string name, id;
           name = decl["name"].get<std::string>();
-          id = "c:@Error@" + name + "#" + std::to_string(decl["id"].get<int>());
+          id =
+            "sol:@Error@" + name + "#" + std::to_string(decl["id"].get<int>());
 
           if (context.find_symbol(id) == nullptr)
             return true;
@@ -1917,7 +1918,7 @@ bool solidity_convertert::get_expr(
     // 3. EnumMemberCall: enum.member
     // 4. (?)internal property: tx.origin, msg.sender, ...
 
-    // Function symbol id is c:@C@referenced_function_contract_name@F@function_name#referenced_function_id
+    // Function symbol id is sol:@C@referenced_function_contract_name@F@function_name#referenced_function_id
     // Using referencedDeclaration will point us to the original declared function. This works even for inherited function and overrided functions.
     assert(expr.contains("expression"));
     const nlohmann::json callee_expr_json = expr["expression"];
@@ -3387,7 +3388,7 @@ void solidity_convertert::get_state_var_decl_name(
 {
   // Follow the way in clang:
   //  - For state variable name, just use the ast_node["name"]
-  //  - For state variable id, add prefix "c:@"
+  //  - For state variable id, add prefix "sol:@"
   std::string contract_name;
   if (get_current_contract_name(ast_node, contract_name))
   {
@@ -3400,9 +3401,9 @@ void solidity_convertert::get_state_var_decl_name(
         std::
           string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
 
-  // e.g. c:@C@Base@x#11
+  // e.g. sol:@C@Base@x#11
   // The prefix is used to avoid duplicate names
-  id = "c:@C@" + contract_name + "@" + name + "#" +
+  id = "sol:@C@" + contract_name + "@" + name + "#" +
        i2string(ast_node["id"].get<std::int16_t>());
 }
 
@@ -3429,11 +3430,11 @@ void solidity_convertert::get_var_decl_name(
   {
     // converting local variable inside a function
     // For non-state functions, we give it different id.
-    // E.g. for local variable i in function nondet(), it's "c:@C@Base@F@nondet@i#55".
+    // E.g. for local variable i in function nondet(), it's "sol:@C@Base@F@nondet@i#55".
 
     // As the local variable inside the function will not be inherited, we can use current_functionName
     assert(!current_functionName.empty());
-    id = "c:@C@" + contract_name + "@F@" + current_functionName + "@" + name +
+    id = "sol:@C@" + contract_name + "@F@" + current_functionName + "@" + name +
          "#" + i2string(ast_node["id"].get<std::int16_t>());
   }
   else if (ast_node.contains("scope"))
@@ -3443,10 +3444,10 @@ void solidity_convertert::get_var_decl_name(
     int scp = ast_node["scope"].get<int>();
     std::string struct_name = scope_map.at(scp);
     if (current_contractName.empty())
-      id = "c:@C@" + struct_name + "@" + name + "#" +
+      id = "sol:@C@" + struct_name + "@" + name + "#" +
            i2string(ast_node["id"].get<std::int16_t>());
     else
-      id = "c:@C@" + contract_name + "@" + struct_name + "@" + name + "#" +
+      id = "sol:@C@" + contract_name + "@" + struct_name + "@" + name + "#" +
            i2string(ast_node["id"].get<std::int16_t>());
   }
   else
@@ -3477,12 +3478,12 @@ void solidity_convertert::get_function_definition_name(
     name = contract_name;
     // constructors cannot be overridden, primarily because they don't have names
     // to align with the implicit constructor, we do not add the 'id'
-    id = "c:@C@" + contract_name + "@F@" + name + "#";
+    id = "sol:@C@" + contract_name + "@F@" + name + "#";
   }
   else
   {
     name = ast_node["name"].get<std::string>();
-    id = "c:@C@" + contract_name + "@F@" + name + "#" +
+    id = "sol:@C@" + contract_name + "@F@" + name + "#" +
          i2string(ast_node["id"].get<std::int16_t>());
   }
 }
@@ -3501,7 +3502,7 @@ unsigned int solidity_convertert::add_offset(
 std::string
 solidity_convertert::get_ctor_call_id(const std::string &contract_name)
 {
-  return "c:@C@" + contract_name + "@F@" + contract_name + "#";
+  return "sol:@C@" + contract_name + "@F@" + contract_name + "#";
 }
 
 std::string
@@ -4336,12 +4337,12 @@ bool solidity_convertert::get_empty_array_ref(
   nlohmann::json callee_arg_json = expr["arguments"][0];
 
   // get unique label
-  // e.g. "c:@C@BASE@array#14"
+  // e.g. "sol:@C@BASE@array#14"
   //TODO: FIX ME. This will probably not work in multi-contract verification.
   std::string label = std::to_string(callee_expr_json["id"].get<int>());
   std::string name, id;
   name = "array#" + label;
-  id = "c:@C@" + current_contractName + "@" + name;
+  id = "sol:@C@" + current_contractName + "@" + name;
 
   // Get Location
   locationt location_begin;
@@ -4573,7 +4574,7 @@ bool solidity_convertert::move_functions_to_main(
   symbolt new_symbol;
   code_typet main_type;
   main_type.return_type() = empty_typet();
-  std::string sol_id = "c:@" + contractName + "@F@sol_main";
+  std::string sol_id = "sol:@" + contractName + "@F@sol_main";
   std::string sol_name = "sol_main";
   const symbolt &contract = *context.find_symbol(prefix + tgt_cnt);
   new_symbol.location = contract.location;
