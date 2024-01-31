@@ -1,4 +1,4 @@
 CORE
 main.c
---force-malloc-success --unwind 3
+--force-malloc-success --unwind 3 --context-bound 2
 ^VERIFICATION SUCCESSFUL$
