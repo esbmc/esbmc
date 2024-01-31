@@ -23,15 +23,19 @@ typet jimple_type::get_base_type(const contextt &ctx) const
 
   default:
     auto symbol = ctx.find_symbol("tag-" + name);
-    if (symbol == nullptr)
-      throw "Type not found: " + name;
+    if(symbol == nullptr)
+    {
+      // Skip error, lets just send a integer then
+      return int_type();
+    }
+      //throw "Type not found: " + name;
     return pointer_typet(symbol->type);
   }
 }
 
 typet jimple_type::to_typet(const contextt &ctx) const
 {
-  if (is_array())
+  if(is_array())
     return get_arr_type(ctx);
   return get_base_type(ctx);
 }
