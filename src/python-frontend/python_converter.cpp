@@ -346,8 +346,12 @@ locationt
 python_converter::get_location_from_decl(const nlohmann::json &ast_node)
 {
   locationt location;
-  location.set_line(ast_node["lineno"].get<int>());
-  location.set_column(ast_node["col_offset"].get<int>());
+  if (ast_node.contains("lineno"))
+    location.set_line(ast_node["lineno"].get<int>());
+
+  if (ast_node.contains("col_offset"))
+    location.set_column(ast_node["col_offset"].get<int>());
+
   location.set_file(python_filename.c_str());
   location.set_function(current_func_name);
   return location;
@@ -412,8 +416,32 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     {
       if (is_ctor_call)
       {
-        // If __init__() is not defined in the class, x = MyClass() is converted to x:MyClass in get_var_assign().
-        return exprt("empty_ctor_call");
+        // Invoke __init__ for a base class when it is not defined in the current class
+        auto class_node = json_utils::find_class(ast_json["body"], func_name);
+        if (class_node != nlohmann::json() && !class_node["bases"].empty())
+        {
+          const std::string &base_class =
+            class_node["bases"][0]["id"].get<std::string>();
+
+          std::size_t pos = symbol_id.rfind("@C@" + func_name);
+
+          symbol_id.replace(
+            pos,
+            std::string("@C@" + func_name + "@F@" + func_name).length(),
+            std::string("@C@" + base_class + "@F@" + base_class));
+
+          func_symbol = context.find_symbol(symbol_id.c_str());
+          if (!func_symbol)
+            return exprt("_init_undefined");
+
+          base_ctor_called = true;
+        }
+        else
+        {
+          // If __init__() is not defined for the class,
+          // an assignment (x = MyClass()) is converted to a declaration (x:MyClass) in get_var_assign().
+          return exprt("_init_undefined");
+        }
       }
       else if (is_builtin_type(func_name))
       {
@@ -743,7 +771,7 @@ void python_converter::get_var_assign(
     has_value = true;
   }
 
-  if (has_value && rhs != exprt("empty_ctor_call"))
+  if (has_value && rhs != exprt("_init_undefined"))
   {
     if (lhs_symbol)
       lhs_symbol->value = rhs;
@@ -757,8 +785,17 @@ void python_converter::get_var_assign(
       if (is_ctor_call)
       {
         std::string func_name = ast_node["value"]["func"]["id"];
+
+        if (base_ctor_called)
+        {
+          auto class_node = json_utils::find_class(ast_json["body"], func_name);
+          func_name = class_node["bases"][0]["id"].get<std::string>();
+          base_ctor_called = false;
+        }
+
         std::string self_id =
           create_symbol_id() + "@C@" + func_name + "@F@" + func_name + "@self";
+
         auto self_instance = instance_attr_map.find(self_id);
         if (self_instance != instance_attr_map.end())
         {
@@ -1029,6 +1066,22 @@ void python_converter::get_class_definition(
   symbol.is_type = true;
 
   symbolt *added_symbol = context.move_symbol_to_context(symbol);
+
+  // Iterate over base classes
+  for (auto &base_class : class_node["bases"])
+  {
+    const std::string &base_class_name = base_class["id"].get<std::string>();
+    // Get class definition from symbols table
+    symbolt *class_symbol = context.find_symbol("tag-" + base_class_name);
+    if (!class_symbol)
+    {
+      log_error("Base class not found: {}\n", base_class_name);
+      abort();
+    }
+    struct_typet &class_type = static_cast<struct_typet &>(class_symbol->type);
+    for (auto component : class_type.components())
+      clazz.components().push_back(component);
+  }
 
   // Iterate over class members
   for (auto &class_member : class_node["body"])

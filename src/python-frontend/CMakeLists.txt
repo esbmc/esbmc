@@ -9,7 +9,8 @@
          ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/pythonastgen.h
   )
 
-add_library(pythonfrontend STATIC python_language.cpp python_converter.cpp pythonastgen.c python_frontend_types.cpp)
+add_library(pythonfrontend STATIC python_language.cpp python_converter.cpp
+            pythonastgen.c python_frontend_types.cpp)
 
 target_include_directories(pythonfrontend
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
