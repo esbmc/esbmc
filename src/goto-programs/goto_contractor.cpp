@@ -1033,10 +1033,9 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
   return cond;
 }
 
-void interval_analysis_ibex_contractor::dump()
+void interval_analysis_ibex_contractor::dump(bool is_timed)
 {
   std::ostringstream oss;
-  bool is_timed = false;
   auto number_of_vars = map.size();
   auto x1 = map.create_interval_vector();
   auto x2 = map_outer.create_interval_vector();
