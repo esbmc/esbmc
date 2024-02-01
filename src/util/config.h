@@ -77,6 +77,13 @@ public:
       return (cheri_concentrate ? 2 : 4) * address_width;
     }
 
+    // alignment of max_align_t (in bytes)
+    unsigned int max_alignment() const noexcept
+    {
+      // 8 for 32-bit, 16 for 64-bit
+      return word_size * 2 / char_width;
+    }
+
     bool char_is_unsigned;
     bool use_fixed_for_float;
 

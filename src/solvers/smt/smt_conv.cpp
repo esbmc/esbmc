@@ -2532,12 +2532,19 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
         fmt::underlying(expr->type->type_id));
       abort();
     }
-    else
+    else if (!is_code_type(expr))
     {
       log_warning(
         "Unimplemented type'd expression ({}) in smt get. Returning zero!",
         fmt::underlying(expr->type->type_id));
       return gen_zero(expr->type);
+    }
+    else
+    {
+      log_warning(
+        "Unimplemented type'd expression ({}) in smt get. Returning nil!",
+        fmt::underlying(expr->type->type_id));
+      return expr2tc();
     }
   }
 }

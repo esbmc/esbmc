@@ -162,6 +162,9 @@ expr2tc goto_symext::symex_mem(
 
   symbol.type.dynamic(true);
 
+  symbol.type.set(
+    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+
   symbol.mode = "C";
 
   new_context.add(symbol);
