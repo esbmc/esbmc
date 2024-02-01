@@ -406,7 +406,7 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
   if (partial_loops && !config.options.get_bool_option("termination"))
     return;
 
-  unsigned loop_id = cur_state->source.pc->loop_number;
+  unsigned loop_number = cur_state->source.pc->loop_number;
 
   expr2tc negated_cond = guard;
   make_not(negated_cond);
@@ -414,7 +414,7 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
   if (!no_unwinding_assertions)
   {
     // generate unwinding assertion
-    claim(negated_cond, "unwinding assertion loop " + i2string(loop_id));
+    claim(negated_cond, "unwinding assertion loop " + i2string(loop_number));
   }
   else
   {
