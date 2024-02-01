@@ -669,24 +669,18 @@ expr_to_ibex_parser::create_constraint_from_expr2t(const expr2tc &expr)
   if (f == nullptr || g == nullptr)
     return nullptr;
 
-  //change expression
-  //replace
   switch (base_object->expr_id)
   {
   case expr2t::expr_ids::greaterthanequal_id:
     c = new ibex::NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars));
     break;
   case expr2t::expr_ids::greaterthan_id:
-    //if int do
-    //base_object->foreach_operand(op){};
-    //c = new ibex::NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars)+1);
     c = new ibex::NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
     break;
   case expr2t::expr_ids::lessthanequal_id:
     c = new ibex::NumConstraint(*vars, (*f)(*vars) <= (*g)(*vars));
     break;
   case expr2t::expr_ids::lessthan_id:
-    //c = new ibex::NumConstraint(*vars, (*f)(*vars) <= (*g)(*vars)-1);
     c = new ibex::NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
     break;
   case expr2t::expr_ids::equality_id:
@@ -730,14 +724,12 @@ expr_to_ibex_parser::create_constraint_from_expr2t_not(const expr2tc &expr)
     c = new ibex::NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars));
     break;
   case expr2t::expr_ids::lessthanequal_id:
-    //c = new ibex::NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars)+1);
     c = new ibex::NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
     break;
   case expr2t::expr_ids::greaterthan_id:
     c = new ibex::NumConstraint(*vars, (*f)(*vars) <= (*g)(*vars));
     break;
   case expr2t::expr_ids::greaterthanequal_id:
-    //c = new ibex::NumConstraint(*vars, (*f)(*vars) <= (*g)(*vars)-1);
     c = new ibex::NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
     break;
   case expr2t::expr_ids::notequal_id:
