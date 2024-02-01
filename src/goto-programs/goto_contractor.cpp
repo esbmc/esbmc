@@ -995,7 +995,7 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
         BigInt r(0);
         if (is_signedbv_type(X->type))
         {
-          r.setPower2(X->type->get_width() - 1);
+          r = r.power2(X->type->get_width() - 1);
           r = -r;
         } // if its unsigned then its just zero
 
@@ -1013,7 +1013,7 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
       if (isnormal(var.second.getInterval().ub()))
       {
         BigInt r(0);
-        r.setPower2(
+        r = r.power2(
           X->type->get_width() - (is_unsignedbv_type(X->type) ? 0 : 1));
         r = r - 1;
 
