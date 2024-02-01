@@ -667,7 +667,7 @@ public:
 
   expr2tc result_of_outer(expr2tc exp);
 
-  void dump();
+  void dump(bool is_timed);
 
   [[maybe_unused]] void modularize_intervals();
 
