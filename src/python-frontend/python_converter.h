@@ -51,6 +51,7 @@ private:
   std::string current_class_name;
   exprt *ref_instance;
   bool is_converting_lhs = false;
+  bool base_ctor_called = false;
 
   // Map object to list of instance attributes
   std::unordered_map<std::string, std::vector<std::string>> instance_attr_map;
