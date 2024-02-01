@@ -707,8 +707,6 @@ private:
   }
   std::ostringstream to_oss(ibex::Ctc *c)
   {
-    if (auto fixpoint = dynamic_cast<ibex::CtcFixPoint *>(c))
-      c = &(fixpoint->ctc);
     std::ostringstream oss;
     if (auto ctc_compo = dynamic_cast<ibex::CtcCompo *>(c))
       oss = list_to_oss(&ctc_compo->list, true);
