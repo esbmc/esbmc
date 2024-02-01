@@ -1,4 +1,4 @@
 CORE
-main.c
+main.cpp
 --cheri hybrid
 ^VERIFICATION SUCCESSFUL$
