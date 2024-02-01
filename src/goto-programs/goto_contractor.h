@@ -657,7 +657,6 @@ public:
     else if (map.var_map.size() == 0)
       return false;
 
-    //ibex::CtcFixPoint *f = new ibex::CtcFixPoint(*c);
     contractor = Contractor(c);
     return true;
   }
