@@ -392,6 +392,25 @@ void goto_convertt::cpp_new_initializer(
   else
   {
     initializer = (code_expressiont &)rhs.initializer();
+
+    if (!initializer.op0().get_bool("constructor"))
+    {
+      // for auto *p = Foo(3) and int *p = 3
+      // constructor case:  init is Foo(&(*new_object), 3)
+      // other case: init is 3,
+      // we turn "3" into "*new_object = 3"
+      side_effect_exprt assignment("assign");
+      assignment.type() = rhs.type().subtype();
+
+      // the new object
+      exprt new_object("new_object");
+      new_object.set("#lvalue", true);
+      new_object.type() = rhs.type().subtype();
+
+      assignment.move_to_operands(new_object, initializer.op0());
+      initializer.expression() = assignment;
+    }
+
     // XXX jmorse, const-qual misery
     const_cast<exprt &>(rhs).remove("initializer");
   }

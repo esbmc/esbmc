@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--multi-property
+^VERIFICATION FAILED$
