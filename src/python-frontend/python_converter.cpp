@@ -335,7 +335,7 @@ const nlohmann::json python_converter::find_var_decl(
   for (auto &element : json["body"])
   {
     if (
-      (element["_type"] == "AnnAssign") &&
+      (element["_type"] == "AnnAssign") && (element["target"]).contains("id") &&
       (element["target"]["id"] == var_name))
       return element;
   }
@@ -359,9 +359,20 @@ python_converter::get_location_from_decl(const nlohmann::json &ast_node)
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
+  bool is_member_function_call = false;
+
   if (element.contains("func") && element["_type"] == "Call")
   {
-    std::string func_name = element["func"]["id"];
+    std::string func_name;
+    if (element["func"]["_type"] == "Name")
+    {
+      func_name = element["func"]["id"];
+    }
+    else if (element["func"]["_type"] == "Attribute")
+    {
+      func_name = element["func"]["attr"];
+      is_member_function_call = true;
+    }
 
     // nondet_X() functions restricted to basic types supported in Python
     std::regex pattern(
@@ -403,12 +414,29 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     bool is_ctor_call = is_constructor_call(element);
 
-    if (is_ctor_call)
+    if (is_ctor_call || is_member_function_call)
     {
       // Insert class name in the symbol id
       std::size_t pos = symbol_id.rfind("@F@");
       if (pos != std::string::npos)
-        symbol_id.insert(pos, "@C@" + func_name);
+      {
+        if (is_ctor_call)
+        {
+          symbol_id.insert(pos, "@C@" + func_name);
+        }
+        else if (is_member_function_call)
+        {
+          // Get class name from obj annotation
+          auto obj_node =
+            find_var_decl(element["func"]["value"]["id"], ast_json);
+          if (obj_node == nlohmann::json())
+            abort();
+
+          std::string obj_type =
+            obj_node["annotation"]["id"].get<std::string>();
+          symbol_id.insert(pos, "@C@" + obj_type);
+        }
+      }
     }
 
     const symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
@@ -465,9 +493,22 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     const typet &return_type = to_code_type(func_symbol->type).return_type();
     call.type() = return_type;
 
+    // Add self as first parameter
     if (is_ctor_call)
-      call.arguments().push_back(
-        gen_address_of(*ref_instance)); // Add self as first parameter
+    {
+      // Self is the lhs
+      assert(ref_instance);
+      call.arguments().push_back(gen_address_of(*ref_instance));
+    }
+    else if (is_member_function_call)
+    {
+      // Self is the obj instance from obj.method() call
+      std::string symbol_id = create_symbol_id() + "@" +
+                              element["func"]["value"]["id"].get<std::string>();
+      symbolt *obj_symbol = context.find_symbol(symbol_id);
+      assert(obj_symbol);
+      call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    }
 
     for (const auto &arg_node : element["args"])
       call.arguments().push_back(get_expr(arg_node));
@@ -649,7 +690,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
 bool python_converter::is_constructor_call(const nlohmann::json &json)
 {
-  if (!json.contains("_type") || json["_type"] != "Call")
+  if (
+    !json.contains("_type") || json["_type"] != "Call" ||
+    !json["func"].contains("id"))
     return false;
 
   const std::string &func_name = json["func"]["id"];
