@@ -43,6 +43,11 @@ private:
     const nlohmann::json &method_body,
     struct_typet &clazz);
 
+  symbolt *find_function_in_base_classes(
+    const std::string &class_name,
+    std::string symbol_id,
+    std::string method_name, bool is_ctor) const;
+
   contextt &context;
   typet current_element_type;
   std::string python_filename;
