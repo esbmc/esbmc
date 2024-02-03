@@ -397,6 +397,24 @@ symbolt *python_converter::find_function_in_base_classes(
   return func;
 }
 
+std::string python_converter::get_classname_from_symbol_id(
+  const std::string &symbol_id) const
+{
+  // This function might return "Base" for a symbol_id as: py:main.py@C@Base@F@foo@self
+
+  std::string class_name;
+  size_t class_pos = symbol_id.find("@C@");
+  size_t func_pos = symbol_id.find("@F@");
+
+  if (class_pos != std::string::npos && func_pos != std::string::npos)
+  {
+    size_t length = func_pos - (class_pos + 3); // "+3" to ignore "@C@"
+    // Extract substring between "@C@" and "@F@"
+    class_name = symbol_id.substr(class_pos + 3, length);
+  }
+  return class_name;
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   bool is_member_function_call = false;
@@ -404,6 +422,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (element.contains("func") && element["_type"] == "Call")
   {
     std::string func_name;
+    std::string obj_name;
     if (element["func"]["_type"] == "Name")
     {
       func_name = element["func"]["id"];
@@ -411,6 +430,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     else if (element["func"]["_type"] == "Attribute")
     {
       func_name = element["func"]["attr"];
+      obj_name = element["func"]["value"]["id"];
       is_member_function_call = true;
     }
 
@@ -429,15 +449,15 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
 
     locationt location = get_location_from_decl(element);
-    std::string symbol_id = create_symbol_id();
-    if (symbol_id.find("@F@") == symbol_id.npos)
-      symbol_id += std::string("@F@") + func_name;
+    std::string func_symbol_id = create_symbol_id();
+    if (func_symbol_id.find("@F@") == func_symbol_id.npos)
+      func_symbol_id += std::string("@F@") + func_name;
 
     // __ESBMC_assume
     if (func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume")
     {
-      symbol_id = func_name;
-      if (context.find_symbol(symbol_id.c_str()) == nullptr)
+      func_symbol_id = func_name;
+      if (context.find_symbol(func_symbol_id.c_str()) == nullptr)
       {
         // Create/init symbol
         symbolt symbol;
@@ -446,7 +466,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         symbol.location = location;
         symbol.type = code_typet();
         symbol.name = func_name;
-        symbol.id = symbol_id;
+        symbol.id = func_symbol_id;
 
         context.add(symbol);
       }
@@ -458,7 +478,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     std::string class_name;
     if (is_ctor_call || is_member_function_call)
     {
-      std::size_t pos = symbol_id.rfind("@F@");
+      std::size_t pos = func_symbol_id.rfind("@F@");
       if (pos != std::string::npos)
       {
         if (is_ctor_call)
@@ -466,26 +486,24 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         else if (is_member_function_call)
         {
           // Get class name from obj annotation
-          auto obj_node =
-            find_var_decl(element["func"]["value"]["id"], ast_json);
+          auto obj_node = find_var_decl(obj_name, ast_json);
           if (obj_node == nlohmann::json())
             abort();
 
           class_name = obj_node["annotation"]["id"].get<std::string>();
         }
-
-        symbol_id.insert(pos, "@C@" + class_name);
+        func_symbol_id.insert(pos, "@C@" + class_name);
       }
     }
 
-    const symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
+    const symbolt *func_symbol = context.find_symbol(func_symbol_id.c_str());
     if (func_symbol == nullptr)
     {
       if (is_ctor_call || is_member_function_call)
       {
         // Get method from a base class when it is not defined in the current class
         func_symbol = find_function_in_base_classes(
-          class_name, symbol_id, func_name, is_ctor_call);
+          class_name, func_symbol_id, func_name, is_ctor_call);
 
         if (is_ctor_call)
         {
@@ -499,7 +517,14 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         }
         else if (is_member_function_call)
         {
-          // Update obj attributes changed through self
+          // Update obj attributes from self
+          const std::string obj_symbol_id = create_symbol_id() + "@" + obj_name;
+          assert(context.find_symbol(obj_symbol_id));
+
+          update_instance_from_self(
+            get_classname_from_symbol_id(func_symbol->id.as_string()),
+            func_name,
+            obj_symbol_id);
         }
       }
       else if (is_builtin_type(func_name))
@@ -743,6 +768,29 @@ bool python_converter::is_constructor_call(const nlohmann::json &json)
   return is_ctor_call;
 }
 
+void python_converter::update_instance_from_self(
+  const std::string &class_name,
+  const std::string &func_name,
+  const std::string &obj_symbol_id)
+{
+  std::string self_id =
+    create_symbol_id() + "@C@" + class_name + "@F@" + func_name + "@self";
+
+  auto self_instance = instance_attr_map.find(self_id);
+  if (self_instance != instance_attr_map.end())
+  {
+    std::vector<std::string> &attr_list = instance_attr_map[obj_symbol_id];
+
+    for (const auto &element : self_instance->second)
+    {
+      if (
+        std::find(attr_list.begin(), attr_list.end(), element) ==
+        attr_list.end())
+        attr_list.push_back(element);
+    }
+  }
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -867,23 +915,8 @@ void python_converter::get_var_assign(
           base_ctor_called = false;
         }
 
-        std::string self_id =
-          create_symbol_id() + "@C@" + func_name + "@F@" + func_name + "@self";
-
-        auto self_instance = instance_attr_map.find(self_id);
-        if (self_instance != instance_attr_map.end())
-        {
-          std::vector<std::string> &attr_list =
-            instance_attr_map[lhs_symbol->id.as_string()];
-
-          for (const auto &element : self_instance->second)
-          {
-            if (
-              std::find(attr_list.begin(), attr_list.end(), element) ==
-              attr_list.end())
-              attr_list.push_back(element);
-          }
-        }
+        update_instance_from_self(
+          func_name, func_name, lhs_symbol->id.as_string());
       }
       // op0() refers to the left-hand side (lhs) of the function call
       rhs.op0() = lhs;

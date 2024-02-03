@@ -14,4 +14,4 @@ assert obj.x == 10  # Base::__init__ adds x attribute
 
 v:int = 5
 obj.foo(v) # Calls base class method
-assert obj.y == 5 # Base::foo() adds y attribute
+assert obj.y == 6 # This assert fails
