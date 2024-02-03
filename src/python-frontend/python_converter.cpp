@@ -368,11 +368,10 @@ symbolt *python_converter::find_function_in_base_classes(
   // Find class node in the AST
   auto class_node = json_utils::find_class(ast_json["body"], class_name);
 
-  std::string current_class = class_name;
-  std::string current_func_name = (is_ctor) ? class_name : method_name;
-
   if (class_node != nlohmann::json())
   {
+    std::string current_class = class_name;
+    std::string current_func_name = (is_ctor) ? class_name : method_name;
     // Search for method in all bases classes
     for (const auto &base_class_node : class_node["bases"])
     {
@@ -417,10 +416,9 @@ std::string python_converter::get_classname_from_symbol_id(
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
-  bool is_member_function_call = false;
-
   if (element.contains("func") && element["_type"] == "Call")
   {
+    bool is_member_function_call = false;
     std::string func_name;
     std::string obj_name;
     if (element["func"]["_type"] == "Name")
