@@ -469,6 +469,19 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
         else if (name == "__ESBMC_no_slice")
           no_slice = true;
       }
+      else if (attr->getKind() == clang::attr::Aligned)
+      {
+        const clang::AlignedAttr &aattr =
+          static_cast<const clang::AlignedAttr &>(*attr);
+
+        exprt alignment;
+        if (get_expr(*(aattr.getAlignmentExpr()), alignment))
+          return true;
+
+        t.set("alignment", alignment);
+      }
+      else
+        continue;
     }
   }
 
@@ -2490,6 +2503,74 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if (get_atomic_expr(atm, new_expr))
       return true;
+
+    break;
+  }
+
+  case clang::Stmt::SourceLocExprClass:
+  {
+    /* From Clang docs: Represents a function call to one of __builtin_LINE(),
+     * __builtin_COLUMN(), __builtin_FUNCTION(), __builtin_FUNCSIG(),
+     * __builtin_FILE(), __builtin_FILE_NAME() or __builtin_source_location().
+     */
+
+    const clang::SourceLocExpr &loc =
+      static_cast<const clang::SourceLocExpr &>(stmt);
+    clang::APValue value = loc.EvaluateInContext(*ASTContext, nullptr);
+
+    /* An APValue represents some constant. For constants derived from source
+     * locations, it could either be a string (file / function name) or an int
+     * (line / column number). */
+
+    switch (value.getKind())
+    {
+    case clang::APValue::LValue:
+    {
+      // This is probably a string constant
+      clang::APValue::LValueBase base = value.getLValueBase();
+      assert(base.is<const clang::Expr *>());
+      const clang::Expr *expr = base.get<const clang::Expr *>();
+      if (get_expr(*expr, new_expr))
+        return true;
+      break;
+    }
+
+    case clang::APValue::Int:
+    {
+      const llvm::APSInt &Int = value.getInt();
+      int width = Int.getBitWidth();
+      assert(width <= 64);
+      int64_t v = Int.getSExtValue();
+      new_expr = constant_exprt(
+        integer2binary(v, width), integer2string(v), signedbv_typet(width));
+      break;
+    }
+
+    /*
+    case clang::APValue::None:
+    case clang::APValue::Indeterminate:
+    case clang::APValue::Float:
+    case clang::APValue::FixedPoint:
+    case clang::APValue::ComplexInt:
+    case clang::APValue::ComplexFloat:
+    case clang::APValue::Vector:
+    case clang::APValue::Array:
+    case clang::APValue::Struct:
+    case clang::APValue::Union:
+    case clang::APValue::AddrLabelDiff:
+    case clang::APValue::MemberPointer:
+    */
+    default:
+      std::ostringstream oss;
+      llvm::raw_os_ostream ross(oss);
+      ross << "Conversion of unsupported value computed by clang for expr: \"";
+      ross << stmt.getStmtClassName() << "\" to expression"
+           << "\n";
+      stmt.dump(ross, *ASTContext);
+      ross.flush();
+      log_error("{}", oss.str());
+      return true;
+    }
 
     break;
   }

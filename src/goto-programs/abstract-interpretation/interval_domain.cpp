@@ -40,11 +40,6 @@ void interval_domaint::update_symbol_interval(
   const symbol2t &sym,
   const integer_intervalt value)
 {
-  // TODO: we can't handle globals
-  // as the analysis is not context-aware
-  //
-  if (has_prefix(sym.thename, "c:@"))
-    return;
   int_map[sym.thename] = value;
 }
 
@@ -115,10 +110,10 @@ real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) const
   auto real_value = to_constant_floatbv2t(e).value;
 
   // Health check, is the convertion to double ok? See #1037
-  if (!std::isnormal(real_value.to_double()) || real_value.is_zero())
+  if (!real_value.is_normal() || real_value.is_zero())
   {
     if (real_value.is_double())
-      log_warning("ESBMC fails to to convert {} into double", *e);
+      log_warning("ESBMC fails to convert {} into double", *e);
 
     // Give up for top!
     return result;
@@ -129,7 +124,9 @@ real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) const
   value1.increment(true);
   value2.decrement(true);
 
-  if (value1.is_NaN() || value1.is_infinity())
+  if (
+    value1.is_NaN() || value1.is_infinity() || value2.is_NaN() ||
+    value2.is_infinity())
   {
     assert(result.is_top() && !result.is_bottom());
     return result;
@@ -137,9 +134,17 @@ real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) const
 
   // [value2, value1]
   // a <= value1
-  result.make_le_than(value1.to_double());
+  if (value1.is_double())
+    result.make_le_than(value1.to_double());
+  else
+    log_warning("Failed to convert value1: {}", value1.to_string_decimal(10));
+
   // a >= value2
-  result.make_ge_than(value2.to_double());
+  if (value2.is_double())
+    result.make_ge_than(value2.to_double());
+  else
+    log_warning(
+      "Failed to convert value2: {}", value2.to_string_decimal(10)); //
 
   assert(!result.is_bottom());
   return result;
@@ -206,19 +211,30 @@ wrapped_interval interval_domaint::generate_modular_interval<wrapped_interval>(
 }
 
 template <class T>
-void interval_domaint::apply_assignment(const expr2tc &lhs, const expr2tc &rhs)
+void interval_domaint::apply_assignment(
+  const expr2tc &lhs,
+  const expr2tc &rhs,
+  bool recursive)
 {
   assert(is_symbol2t(lhs));
+  const symbol2t &sym = to_symbol2t(lhs);
+
   // a = b
   auto b = get_interval<T>(rhs);
   if (enable_modular_intervals)
   {
-    auto a = generate_modular_interval<T>(to_symbol2t(lhs));
+    auto a = generate_modular_interval<T>(sym);
     b.intersect_with(a);
   }
 
+  if (recursive)
+  {
+    auto previous = get_interval_from_symbol<T>(sym);
+    b.join(previous);
+  }
+
   // TODO: add classic algorithm
-  update_symbol_interval(to_symbol2t(lhs), b);
+  update_symbol_interval(sym, b);
 }
 
 template <class T>
@@ -891,12 +907,30 @@ void interval_domaint::transform(
     assume(instruction.guard);
     break;
 
-  case FUNCTION_CALL:
+  case RETURN:
   {
-    const code_function_call2t &code_function_call =
-      to_code_function_call2t(instruction.code);
-    if (!is_nil_expr(code_function_call.ret))
-      havoc_rec(code_function_call.ret);
+    // After a return, all function arguments becomes nondet
+    const symbolt *current_function = ns.lookup(instruction.function);
+    type2tc t = migrate_type(current_function->type);
+    const code_type2t &function = to_code_type(t);
+
+    for (size_t i = 0; i < function.arguments.size(); i++)
+    {
+      const type2tc &arg_type = function.arguments[i];
+      const expr2tc arg_symbol =
+        symbol2tc(arg_type, function.argument_names[i]);
+      havoc_rec(arg_symbol);
+    }
+
+    /* The current implementation of the abstract interpreter do not store
+     * the return variable (which would be too tricky anyway). We can deal
+     * with this by constructing a tmp symbol in which we can apply assumptions
+     * later */
+    expr2tc return_var = symbol2tc(
+      function.ret_type, fmt::format("c:{}:ret", instruction.function));
+
+    assign(
+      code_assign2tc(return_var, to_code_return2t(instruction.code).operand));
     break;
   }
 
@@ -908,7 +942,77 @@ void interval_domaint::transform(
     break;
   }
 
-  default:;
+  case FUNCTION_CALL:
+  case END_FUNCTION:
+  case ATOMIC_BEGIN:
+  case ATOMIC_END:
+  case NO_INSTRUCTION_TYPE:
+  case OTHER:
+  case SKIP:
+  case LOCATION:
+  case THROW: // TODO: try/catch intervals
+  case CATCH: // TODO: try/catch intervals
+  case DEAD:
+  case THROW_DECL:
+  case THROW_DECL_END:
+    break;
+  }
+
+  /* The abstract interpreter can only affect the state 'after' the execution of the statement
+   * however, function calls need to change the parameter 'before' its execution. We can
+   * deal with this by just checking if the target instruction is a function call!
+   */
+  if (to->is_function_call())
+  {
+    const code_function_call2t &code_function_call =
+      to_code_function_call2t(to->code);
+
+    // We don't know anything about the return value
+    if (!is_nil_expr(code_function_call.ret))
+    {
+      havoc_rec(code_function_call.ret);
+    }
+
+    assert(is_code_type(code_function_call.function->type));
+    const code_type2t &function =
+      to_code_type(code_function_call.function->type);
+
+    // Let's do an assignment for all parameters!
+    for (size_t i = 0; i < function.arguments.size(); i++)
+    {
+      const expr2tc &arg_value = code_function_call.operands[i];
+      const type2tc &arg_type = function.arguments[i];
+      const expr2tc arg_symbol =
+        symbol2tc(arg_type, function.argument_names[i]);
+
+      // Are we dealing with a recursive function?
+      std::unordered_set<expr2tc, irep2_hash> symbols;
+      get_symbols(arg_value, symbols);
+
+      bool is_recursive_arg = symbols.count(arg_symbol);
+      assign(code_assign2tc(arg_symbol, arg_value), is_recursive_arg);
+    }
+  }
+
+  // Let's deal with returns now.
+  to--;
+  if (from->is_end_function() && to->is_function_call())
+  {
+    // TODO: deal with recursive functions
+    if (from->function == to->function)
+      return;
+
+    const code_function_call2t &code_function_call =
+      to_code_function_call2t(to->code);
+
+    // Apply assignment over return value
+    if (!is_nil_expr(code_function_call.ret))
+    {
+      expr2tc return_var = symbol2tc(
+        code_function_call.ret->type,
+        fmt::format("c:{}:ret", instruction.function));
+      assign(code_assign2tc(code_function_call.ret, return_var));
+    }
   }
 }
 
@@ -991,7 +1095,7 @@ bool interval_domaint::join(const interval_domaint &b)
   return result;
 }
 
-void interval_domaint::assign(const expr2tc &expr)
+void interval_domaint::assign(const expr2tc &expr, const bool recursive)
 {
   assert(is_code_assign2t(expr));
   auto const &c = to_code_assign2t(expr);
@@ -1008,12 +1112,12 @@ void interval_domaint::assign(const expr2tc &expr)
   if (isbvop)
   {
     if (enable_wrapped_intervals)
-      apply_assignment<wrapped_interval>(c.target, c.source);
+      apply_assignment<wrapped_interval>(c.target, c.source, recursive);
     else
-      apply_assignment<integer_intervalt>(c.target, c.source);
+      apply_assignment<integer_intervalt>(c.target, c.source, recursive);
   }
-  if (isfloatbvop && enable_real_intervals)
-    apply_assignment<real_intervalt>(c.target, c.source);
+  else if (isfloatbvop && enable_real_intervals)
+    apply_assignment<real_intervalt>(c.target, c.source, recursive);
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)

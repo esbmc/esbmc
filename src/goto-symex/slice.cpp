@@ -176,7 +176,14 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
         claim_to_keep) // this is the assertion that we should not skip!
       {
         it->ignore = false;
-        claim_msg = it->comment;
+        if (!is_goto_cov)
+          // obtain the guard info from the assertions
+          claim_msg = from_expr(ns, "", it->source.pc->guard);
+        else
+          // in goto-coverage mode, the assertions are converted to assert(0）
+          // the original guards are stored in comment.
+          claim_msg = it->comment;
+        claim_loc = it->source.pc->location.as_string();
         continue;
       }
 
@@ -186,10 +193,17 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
   }
 
   fine_timet algorithm_stop = current_time();
-  log_status(
-    "Slicing for Claim {} ({}s)",
-    claim_msg,
-    time2string(algorithm_stop - algorithm_start));
+  if (show_slice_info)
+    log_status(
+      "Slicing for Claim {} ({}s)",
+      claim_msg,
+      time2string(algorithm_stop - algorithm_start));
+  else
+    log_debug(
+      "c++",
+      "Slicing for Claim {} ({}s)",
+      claim_msg,
+      time2string(algorithm_stop - algorithm_start));
 
   return true;
 }

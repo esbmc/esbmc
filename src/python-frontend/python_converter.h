@@ -3,6 +3,8 @@
 #include <util/context.h>
 #include <nlohmann/json.hpp>
 
+#include <map>
+
 class codet;
 class struct_typet;
 
@@ -18,7 +20,8 @@ private:
   void
   get_return_statements(const nlohmann::json &ast_node, codet &target_block);
   void get_function_definition(const nlohmann::json &function_node);
-  void get_class_definition(const nlohmann::json &class_node);
+  void
+  get_class_definition(const nlohmann::json &class_node, codet &target_block);
 
   locationt get_location_from_decl(const nlohmann::json &ast_node);
   exprt get_expr(const nlohmann::json &element);
@@ -47,4 +50,8 @@ private:
   std::string current_func_name;
   std::string current_class_name;
   exprt *ref_instance;
+  bool is_converting_lhs = false;
+
+  // Map object to list of instance attributes
+  std::unordered_map<std::string, std::vector<std::string>> instance_attr_map;
 };

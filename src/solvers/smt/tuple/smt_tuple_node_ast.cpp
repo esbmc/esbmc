@@ -129,7 +129,7 @@ smt_astt tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   }
 
   // Create an ast representing the fact that all the members are equal.
-  return ctx->make_n_ary(ctx, &smt_convt::mk_and, eqs);
+  return ctx->make_n_ary_and(eqs);
 }
 
 smt_astt tuple_node_smt_ast::update(

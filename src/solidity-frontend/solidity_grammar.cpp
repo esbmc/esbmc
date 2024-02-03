@@ -103,6 +103,10 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   {
     return EnumDef;
   }
+  else if (element["nodeType"] == "ErrorDefinition")
+  {
+    return ErrorDef;
+  }
   else
   {
     log_error(
@@ -122,6 +126,7 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
     ENUM_TO_STR(FunctionDef)
     ENUM_TO_STR(StructDef)
     ENUM_TO_STR(EnumDef)
+    ENUM_TO_STR(ErrorDef)
     ENUM_TO_STR(ContractBodyElementTError)
   default:
   {
@@ -590,15 +595,17 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return WhileStatement;
   }
-
   else if (stmt["nodeType"] == "Continue")
   {
     return ContinueStatement;
   }
-
   else if (stmt["nodeType"] == "Break")
   {
     return BreakStatement;
+  }
+  else if (stmt["nodeType"] == "RevertStatement")
+  {
+    return RevertStatement;
   }
 
   else
@@ -625,6 +632,7 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(StatementTError)
     ENUM_TO_STR(ContinueStatement)
     ENUM_TO_STR(BreakStatement)
+    ENUM_TO_STR(RevertStatement)
   default:
   {
     assert(!"Unknown statement type");

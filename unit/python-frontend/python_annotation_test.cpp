@@ -1048,4 +1048,149 @@ TEST_CASE("Add type annotation")
 
     REQUIRE(input_json.dump(2) == expected_output.dump(2));
   }
+
+  SECTION("Get type from built-in function call")
+  {
+    std::istringstream input_data(R"json({
+    "_type": "Module",
+    "body": [
+        {
+            "_type": "Assign",
+            "col_offset": 0,
+            "end_col_offset": 10,
+            "end_lineno": 1,
+            "lineno": 1,
+            "targets": [
+                {
+                    "_type": "Name",
+                    "col_offset": 0,
+                    "ctx": {
+                        "_type": "Store"
+                    },
+                    "end_col_offset": 1,
+                    "end_lineno": 1,
+                    "id": "x",
+                    "lineno": 1
+                }
+            ],
+            "type_comment": null,
+            "value": {
+                "_type": "Call",
+                "args": [
+                    {
+                        "_type": "Constant",
+                        "col_offset": 8,
+                        "end_col_offset": 9,
+                        "end_lineno": 1,
+                        "kind": null,
+                        "lineno": 1,
+                        "n": 1,
+                        "s": 1,
+                        "value": 1
+                    }
+                ],
+                "col_offset": 4,
+                "end_col_offset": 10,
+                "end_lineno": 1,
+                "func": {
+                    "_type": "Name",
+                    "col_offset": 4,
+                    "ctx": {
+                        "_type": "Load"
+                    },
+                    "end_col_offset": 7,
+                    "end_lineno": 1,
+                    "id": "int",
+                    "lineno": 1
+                },
+                "keywords": [],
+                "lineno": 1
+            }
+        }
+    ],
+    "filename": "blah.py",
+    "type_ignores": []
+    })json");
+
+    nlohmann::json input_json;
+    input_data >> input_json;
+
+    std::istringstream output_data(R"json({
+    "_type": "Module",
+    "body": [
+        {
+            "_type": "AnnAssign",
+            "annotation": {
+                "_type": "Name",
+                "col_offset": 2,
+                "ctx": {
+                    "_type": "Load"
+                },
+                "end_col_offset": 5,
+                "end_lineno": 1,
+                "id": "int",
+                "lineno": 1
+            },
+            "col_offset": 0,
+            "end_col_offset": 14,
+            "end_lineno": 1,
+            "lineno": 1,
+            "simple": 1,
+            "target": {
+                "_type": "Name",
+                "col_offset": 0,
+                "ctx": {
+                    "_type": "Store"
+                },
+                "end_col_offset": 1,
+                "end_lineno": 1,
+                "id": "x",
+                "lineno": 1
+            },
+            "value": {
+                "_type": "Call",
+                "args": [
+                    {
+                        "_type": "Constant",
+                        "col_offset": 12,
+                        "end_col_offset": 13,
+                        "end_lineno": 1,
+                        "kind": null,
+                        "lineno": 1,
+                        "n": 1,
+                        "s": 1,
+                        "value": 1
+                    }
+                ],
+                "col_offset": 8,
+                "end_col_offset": 14,
+                "end_lineno": 1,
+                "func": {
+                    "_type": "Name",
+                    "col_offset": 8,
+                    "ctx": {
+                        "_type": "Load"
+                    },
+                    "end_col_offset": 11,
+                    "end_lineno": 1,
+                    "id": "int",
+                    "lineno": 1
+                },
+                "keywords": [],
+                "lineno": 1
+            }
+        }
+    ],
+    "filename": "blah.py",
+    "type_ignores": []
+    })json");
+
+    nlohmann::json expected_output;
+    output_data >> expected_output;
+
+    python_annotation<nlohmann::json> ann(input_json);
+    ann.add_type_annotation();
+
+    REQUIRE(input_json == expected_output);
+  }
 }

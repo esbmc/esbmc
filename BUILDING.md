@@ -20,7 +20,7 @@ Before starting, note that ESBMC is mainly distributed under the terms of the [A
 | MathSAT   | no       | 5.5.4           |
 | Yices     | no       | 2.6.1           |
 | Z3        | no       | 4.8.9           |
-| Bitwuzla  | no       | 0.2.0           |
+| Bitwuzla  | no       | 0.3.1           |
 
 The version requirements are stable but can change between releases.
 
@@ -59,6 +59,8 @@ distributed by the developers or the distribution, or to use a CHERI-enabled
 LLVM/Clang toolchain for ESBMC's frontend in case you want to verify CHERI-C
 programs as well. Note that the CHERI-support in ESBMC is experimental and
 incomplete at this point.
+
+If you are building ESBMC-CHERI, skip the following sections and go straight to Section `Preparing CHERI Clang 13 (experimental)`.
 
 ### Preparing external standard Clang (recommended for a static build)
 
@@ -140,7 +142,7 @@ First __install ast2json:__
 pip3 install ast2json
 ```
 
-then __enable the Python frontend__ during the ESBMC build:  
+then __enable the Python frontend__ during the ESBMC build:
 ```
 -DENABLE_PYTHON_FRONTEND=On
 ```
@@ -150,7 +152,7 @@ then __enable the Python frontend__ during the ESBMC build:
 ESBMC can use the forward and backward operations from constraint programming to contract the search space exploration from the program's entry point to the property being verified and vice-versa. This (interval) contraction is enabled via the option --goto-contractor. First, the IBEX library must be installed using the instructions available at http://ibex-team.github.io/ibex-lib/install.html. Once IBEX is installed on your computer, ESBMC should be built with the option:
 
 ```
--DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=path-to-ibex 
+-DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=path-to-ibex
 ```
 
 ## Setting Up Solvers
@@ -251,7 +253,7 @@ We have wrapped the entire build and setup of Bitwuzla in the following command:
 
 ```
 Linux/macOS:
-git clone --depth=1 --branch=0.3.0 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install
+git clone --depth=1 --branch=0.3.1 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install
 ```
 
 For more details on Bitwuzla, please refer to [its Github](https://github.com/bitwuzla/bitwuzla).
@@ -299,6 +301,12 @@ If no such directory, please go to App Store and install Xcode. If you do not ha
 
 Now we are ready to build ESBMC. Please note that we describe the same build option used in our CI/CD. If you want to all available _cmake_ options, refer to our [Options.cmake file](https://github.com/esbmc/esbmc/blob/master/scripts/cmake/Options.cmake).
 
+If you are building ESBMC-CHERI, please complete the following sections BEFORE configuring ESBMC-CHERI:
+- Preparing CHERI Clang 13 (experimental)
+  - This section helps you to build CHERI-LLVM and set up `ESBMC_CLANG`.
+- Setting up the sysroot for CHERI clang
+  - This section will get you the CHERI header files to set up `ESBMC_CHERI_HYBRID_SYSROOT` and `ESBMC_CHERI_PURECAP_SYSROOT`.
+
 First, we need to setup __cmake__, by using the following command in ESBMC_Project directory you just created:
 
 ```
@@ -309,9 +317,9 @@ macOS:
 cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=${ESBMC_STATIC:-ON} $ESBMC_CLANG -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DBitwuzla_DIR=$PWD/../../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
 ```
 
-Note, this command uses the ESBMC_CLANG and ESBMC_STATIC variables set in the section on preparing Clang.
+Note, this command uses the ESBMC_CLANG and ESBMC_STATIC variables set in the section on preparing Clang. Note also that if you want to enable the debug mode, i.e., the internal assertions in ESBMC, you must add the option `-DCMAKE_BUILD_TYPE=Debug`.
 
-Finally, we can trigger the build process, by using the following command:
+Finally, we can trigger the build process by using the following command:
 
 ```
 cmake --build . && ninja install
@@ -357,16 +365,20 @@ Since CHERI support is available only for a few platforms, verifying CHERI-C
 programs that use header files from the C standard library will require a setup
 of a C standard library for one of these platforms.
 
+To obtain and install a CHERI sysroot, the
+[cheribuild](https://github.com/CTSRD-CHERI/cheribuild)
+tool is the recommended way:
+```
+cheribuild.py cheribsd-riscv64-purecap disk-image-riscv64-purecap -d
+```
+Once the build completed, you'll find `cheri` directory in your HOME directory.
+
 CHERI-enabled ESBMC defaults to the platform mips64-unknown-freebsd and
 expects the corresponding sysroot, the default of which can be configured by
 passing the CMake flags
 ```
 -DESBMC_CHERI_HYBRID_SYSROOT=<path> -DESBMC_CHERI_PURECAP_SYSROOT=<path>
 ```
+e.g. the 'path' should point to `$HOME/cheri/output/rootfs-riscv64-purecap`. As for the `rootfs-riscv64-purecap` part, you may want to use a diffrent directory if you used a different variant in the `cheribuild.py` command above.
 
-To obtain and install a CHERI sysroot, the
-[cheribuild](https://github.com/CTSRD-CHERI/cheribuild)
-tool is the recommended way:
-```
-cheribuild.py cheribsd-mips64-hybrid disk-image-mips64-hybrid
-```
+

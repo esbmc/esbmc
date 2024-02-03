@@ -31,49 +31,46 @@ protected:
   const contextt &context;
   namespacet ns;
 
-  std::shared_ptr<smt_convt> runtime_solver;
-  std::shared_ptr<reachability_treet> symex;
-  virtual smt_convt::resultt run_decision_procedure(
-    std::shared_ptr<smt_convt> &smt_conv,
-    std::shared_ptr<symex_target_equationt> &eq);
+  std::unique_ptr<smt_convt> runtime_solver;
+  std::unique_ptr<reachability_treet> symex;
 
-  virtual void show_program(std::shared_ptr<symex_target_equationt> &eq);
+  virtual smt_convt::resultt
+  run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq);
+
+  virtual void show_program(const symex_target_equationt &eq);
   virtual void report_success();
   virtual void report_failure();
 
-  virtual void error_trace(
-    std::shared_ptr<smt_convt> &smt_conv,
-    std::shared_ptr<symex_target_equationt> &eq);
+  virtual void
+  error_trace(smt_convt &smt_conv, const symex_target_equationt &eq);
 
   virtual void successful_trace();
 
-  virtual void show_vcc(std::shared_ptr<symex_target_equationt> &eq);
+  virtual void show_vcc(const symex_target_equationt &eq);
+
+  virtual void show_vcc(std::ostream &out, const symex_target_equationt &eq);
 
   virtual void
-  show_vcc(std::ostream &out, std::shared_ptr<symex_target_equationt> &eq);
-
-  virtual void report_trace(
-    smt_convt::resultt &res,
-    std::shared_ptr<symex_target_equationt> &eq);
+  report_trace(smt_convt::resultt &res, const symex_target_equationt &eq);
 
   virtual void
   report_multi_property_trace(smt_convt::resultt &res, const std::string &msg);
 
   virtual void report_result(smt_convt::resultt &res);
 
-  virtual void bidirectional_search(
-    std::shared_ptr<smt_convt> &smt_conv,
-    std::shared_ptr<symex_target_equationt> &eq);
+  virtual void
+  bidirectional_search(smt_convt &smt_conv, const symex_target_equationt &eq);
 
   smt_convt::resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
+
   smt_convt::resultt multi_property_check(
-    std::shared_ptr<symex_target_equationt> &eq,
+    const symex_target_equationt &eq,
     size_t remaining_claims);
+
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 
-  void generate_smt_from_equation(
-    std::shared_ptr<smt_convt> &smt_conv,
-    std::shared_ptr<symex_target_equationt> &eq);
+  void
+  generate_smt_from_equation(smt_convt &smt_conv, symex_target_equationt &eq);
 };
 
 #endif

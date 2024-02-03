@@ -31,6 +31,7 @@ extern "C"
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
+#include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/write_goto_binary.h>
@@ -1667,6 +1668,42 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, options, ns);
     }
 
+    if (cmdline.isset("gcse"))
+    {
+      std::shared_ptr<value_set_analysist> vsa =
+        std::make_shared<value_set_analysist>(ns);
+      try
+      {
+        log_status("Computing Value-Set Analysis (VSA)");
+        (*vsa)(goto_functions);
+      }
+      catch (vsa_not_implemented_exception &)
+      {
+        log_warning(
+          "Unable to compute VSA due to incomplete implementation. Some GOTO "
+          "optimizations will be disabled");
+        vsa = nullptr;
+      }
+      catch (type2t::symbolic_type_excp &)
+      {
+        log_warning(
+          "[GOTO] Unable to compute VSA due to symbolic type. Some GOTO "
+          "optimizations will be disabled");
+        vsa = nullptr;
+      }
+
+      if (cmdline.isset("no-library"))
+        log_warning("Using CSE with --no-library might cause huge slowdowns!");
+
+      if (!vsa)
+        log_warning("Could not apply GCSE optimization due to VSA limitation!");
+      else
+      {
+        goto_cse cse(context, vsa);
+        cse.run(goto_functions);
+      }
+    }
+
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {
       interval_analysis(goto_functions, ns, options);
@@ -1734,20 +1771,18 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       // for assertion coverage metric
       options.set_option("make-assert-false", true);
-      // no-simplify, otherwise the coverage will always be 100%
-      // seems that the simplication will remove unreachable claims
-      options.set_option("no-simplify", true);
       // for multi-property
       options.set_option("result-only", true);
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
-      options.set_option("keep-verified-claims", true);
+      options.set_option("keep-verified-claims", false);
     }
 
     if (options.get_bool_option("make-assert-false"))
     {
       goto_coveraget tmp;
-      tmp.make_asserts_false(goto_functions);
+      tmp.make_asserts_false(goto_functions, ns);
+      tmp.gen_assert_instance(goto_functions);
     }
   }
 

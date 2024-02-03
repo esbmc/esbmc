@@ -693,4 +693,23 @@ inline expr2tc distribute_vector_operation(
   return result;
 }
 
+inline void get_symbols(
+  const expr2tc &expr,
+  std::unordered_set<expr2tc, irep2_hash> &symbols)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  if (is_symbol2t(expr))
+  {
+    symbol2t s = to_symbol2t(expr);
+    if (s.thename.as_string().find("__ESBMC_") != std::string::npos)
+      return;
+    symbols.insert(expr);
+  }
+
+  expr->foreach_operand(
+    [&symbols](const expr2tc &e) -> void { get_symbols(e, symbols); });
+}
+
 #endif /* UTIL_IREP2_UTILS_H_ */

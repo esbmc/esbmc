@@ -196,6 +196,10 @@ void smt_convt::renumber_symbol_address(
   const symbol2t &sym = to_symbol2t(addr_symbol);
   std::string str = sym.get_symbol_name();
 
+  const typet *t = nullptr;
+  if (const symbolt *s = ns.lookup(sym.thename))
+    t = &s->type;
+
   // Two different approaches if we do or don't have an address-of pointer
   // variable already.
 
@@ -206,7 +210,7 @@ void smt_convt::renumber_symbol_address(
     // object number, and nondeterministically pick the new value.
 
     unsigned int new_obj_num = pointer_logic.back().get_free_obj_num();
-    smt_astt output = init_pointer_obj(new_obj_num, new_size);
+    smt_astt output = init_pointer_obj(new_obj_num, new_size, t);
 
     // Now merge with the old value for all future address-of's
 
@@ -216,7 +220,7 @@ void smt_convt::renumber_symbol_address(
   {
     // Newly bumped pointer. Still needs a new number though.
     unsigned int obj_num = pointer_logic.back().get_free_obj_num();
-    smt_astt output = init_pointer_obj(obj_num, new_size);
+    smt_astt output = init_pointer_obj(obj_num, new_size, t);
 
     // Store in renumbered store.
     renumber_mapt::value_type v(str, output);
@@ -226,7 +230,8 @@ void smt_convt::renumber_symbol_address(
 
 smt_astt smt_convt::convert_identifier_pointer(
   const expr2tc &expr,
-  const std::string &symbol)
+  const std::string &symbol,
+  const typet *type)
 {
   smt_astt a;
   std::string cte, identifier;
@@ -297,7 +302,7 @@ smt_astt smt_convt::convert_identifier_pointer(
       size = constant_int2tc(ptr_loc_type, BigInt(0x10000));
     }
 
-    smt_astt output = init_pointer_obj(obj_num, size);
+    smt_astt output = init_pointer_obj(obj_num, size, type);
     assert_ast(a->eq(this, output));
   }
 
@@ -308,7 +313,10 @@ smt_astt smt_convt::convert_identifier_pointer(
   return a;
 }
 
-smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
+smt_astt smt_convt::init_pointer_obj(
+  unsigned int obj_num,
+  const expr2tc &size,
+  const typet *type)
 {
   std::vector<expr2tc> membs;
   const struct_type2t &ptr_struct = to_struct_type(pointer_struct);
@@ -357,6 +365,22 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   // end >= start
   expr2tc no_wraparound = greaterthanequal2tc(end_sym, start_sym);
   assert_expr(no_wraparound);
+
+  if (type)
+  {
+    const irept &alignment = type->find("alignment");
+    if (alignment.is_not_nil())
+    {
+      expr2tc alignment2;
+      migrate_expr(static_cast<const exprt &>(alignment), alignment2);
+      assert(is_constant_int2t(alignment2));
+      alignment2 = typecast2tc(ptr_loc_type, alignment2);
+      expr2tc zero = gen_zero(ptr_loc_type);
+      expr2tc mod = modulus2tc(ptr_loc_type, start_sym, alignment2);
+      expr2tc mod_is_zero = equality2tc(mod, zero);
+      assert_expr(mod_is_zero);
+    }
+  }
 
   // Generate address space layout constraints.
   finalize_pointer_chain(obj_num);
@@ -457,7 +481,12 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   if (is_symbol2t(obj.ptr_obj))
   {
     const symbol2t &symbol = to_symbol2t(obj.ptr_obj);
-    return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name());
+
+    const typet *t = nullptr;
+    if (const symbolt *s = ns.lookup(symbol.thename))
+      t = &s->type;
+
+    return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name(), t);
   }
 
   if (is_constant_string2t(obj.ptr_obj))
@@ -471,7 +500,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     // XXX Oh look -- this is vulnerable to the poison null byte.
     std::replace(identifier.begin(), identifier.end(), '\0', '_');
 
-    return convert_identifier_pointer(obj.ptr_obj, identifier);
+    return convert_identifier_pointer(obj.ptr_obj, identifier, nullptr);
   }
 
   if (is_constant_array2t(obj.ptr_obj))
@@ -485,7 +514,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     static unsigned int constarr_num = 0;
     std::stringstream ss;
     ss << "address_of_arr_const(" << constarr_num++ << ")";
-    return convert_identifier_pointer(obj.ptr_obj, ss.str());
+    return convert_identifier_pointer(obj.ptr_obj, ss.str(), nullptr);
   }
 
   if (is_if2t(obj.ptr_obj))

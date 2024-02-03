@@ -1,10 +1,12 @@
 /// \file
 /// Interval Analysis
 
+#include "interval_analysis.h"
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <unordered_set>
 #include <util/prefix.h>
+#include <goto-programs/goto_loops.h>
 
 template <class Interval>
 inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
@@ -42,25 +44,6 @@ inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
       return;
     }
   }
-}
-
-static inline void get_symbols(
-  const expr2tc &expr,
-  std::unordered_set<expr2tc, irep2_hash> &symbols)
-{
-  if (is_nil_expr(expr))
-    return;
-
-  if (is_symbol2t(expr))
-  {
-    symbol2t s = to_symbol2t(expr);
-    if (s.thename.as_string().find("__ESBMC_") != std::string::npos)
-      return;
-    symbols.insert(expr);
-  }
-
-  expr->foreach_operand(
-    [&symbols](const expr2tc &e) -> void { get_symbols(e, symbols); });
 }
 
 static void optimize_expression(expr2tc &expr, const interval_domaint &state)
@@ -101,7 +84,7 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
   simplify(expr);
 }
 
-void instrument_intervals(
+void optimize_function(
   const ait<interval_domaint> &interval_analysis,
   goto_functiont &goto_function)
 {
@@ -113,41 +96,135 @@ void instrument_intervals(
     // Singleton Propagation
     optimize_expression(i_it->code, d);
     optimize_expression(i_it->guard, d);
+  }
+}
 
-    // TODO: Move Guard Simplification to here
+/*
+ * Instrument an assume containing all the restriction for the set of symbols
+ */
+inline void instrument_symbol_constraints(
+  const ait<interval_domaint> &interval_analysis,
+  std::unordered_set<expr2tc, irep2_hash> symbols,
+  goto_programt::instructionst::iterator &it,
+  goto_functiont &goto_function)
+{
+  std::vector<expr2tc> symbol_constraints;
+  const interval_domaint &d = interval_analysis[it];
+  for (const auto &symbol_expr : symbols)
+  {
+    expr2tc tmp = d.make_expression(symbol_expr);
+    if (!is_true(tmp))
+      symbol_constraints.push_back(tmp);
   }
 
-  // Instrumentation of assumptions
+  if (!symbol_constraints.empty())
+  {
+    goto_programt::instructiont instruction;
+    instruction.make_assumption(conjunction(symbol_constraints));
+    instruction.inductive_step_instruction = config.options.is_kind();
+    instruction.location = it->location;
+    instruction.function = it->function;
+    goto_function.body.insert_swap(it++, instruction);
+  }
+}
+
+/**
+ * Instrument loops with all variables that are affected by it (not only the guards)
+ *
+ * Before:
+ * before-loop
+ * 1 : IF !(COND == 0) GOTO 2
+ * X = Y // X changes and Y is read-only
+ * ...
+ * GOTO 1
+ * 2: after-loop
+ *
+ * After:
+ * before-loop
+ * ASSUME (COND >= some_value && ... && Y <= some_value2)
+ * 1: IF !(COND == 0) GOTO 2
+ * X = Y // X changes and Y is read-only
+ * ...
+ * ASSUME (COND >= some_value && ... && Y <= some_value2)
+ * GOTO 1
+ * 2: ASSUME (COND >= some_value && ... && Y <= some_value2)
+ * after-loop
+ */
+void instrument_loops(
+  const ait<interval_domaint> &interval_analysis,
+  goto_functionst &program)
+{
+  Forall_goto_functions (f_it, program)
+  {
+    if (!f_it->second.body_available)
+      continue;
+
+    auto loop = goto_loopst(f_it->first, program, f_it->second);
+    for (auto l : loop.get_loops())
+    {
+      std::unordered_set<expr2tc, irep2_hash> symbols;
+      for (auto v : l.get_modified_loop_vars())
+        symbols.insert(v);
+
+      for (auto v : l.get_unmodified_loop_vars())
+        symbols.insert(v);
+
+      // TODO: Instrument before-loop
+      // Assumption during the loop
+      auto it = l.get_original_loop_exit();
+      instrument_symbol_constraints(
+        interval_analysis, symbols, it, f_it->second);
+      // it was incremented, we are now in the next instruction
+      instrument_symbol_constraints(
+        interval_analysis, symbols, it, f_it->second);
+    }
+  }
+}
+
+void instrument_intervals(
+  const ait<interval_domaint> &interval_analysis,
+  goto_functiont &goto_function,
+  const INTERVAL_INSTRUMENTATION_MODE instrument_mode)
+{
+  assert(instrument_mode != INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE);
+  if (!goto_function.body_available)
+    return;
+  std::unordered_set<expr2tc, irep2_hash> function_symbols;
   Forall_goto_program_instructions (i_it, goto_function.body)
   {
-    if (!(i_it->is_goto() || i_it->is_assume() || i_it->is_assert()))
-      continue;
-
-    // Let's instrument everything that affect the current instruction
-    std::unordered_set<expr2tc, irep2_hash> symbols;
-    get_symbols(i_it->code, symbols);
-    get_symbols(i_it->guard, symbols);
-
-    if (!symbols.size())
-      continue;
-
-    const interval_domaint &d = interval_analysis[i_it];
-    std::vector<expr2tc> symbol_constraints;
-    for (const auto &symbol_expr : symbols)
+    get_symbols(i_it->code, function_symbols);
+    get_symbols(i_it->guard, function_symbols);
+  }
+  Forall_goto_program_instructions (i_it, goto_function.body)
+  {
+    std::unordered_set<expr2tc, irep2_hash> local_symbols;
+    get_symbols(i_it->code, local_symbols);
+    get_symbols(i_it->guard, local_symbols);
+    switch (instrument_mode)
     {
-      expr2tc tmp = d.make_expression(symbol_expr);
-      if (!is_true(tmp))
-        symbol_constraints.push_back(tmp);
-    }
-
-    if (!symbol_constraints.empty())
-    {
-      goto_programt::instructiont instruction;
-      instruction.make_assumption(conjunction(symbol_constraints));
-      instruction.inductive_step_instruction = config.options.is_kind();
-      instruction.location = i_it->location;
-      instruction.function = i_it->function;
-      goto_function.body.insert_swap(i_it++, instruction);
+    case INTERVAL_INSTRUMENTATION_MODE::NO_INSTRUMENTATION:
+    case INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE:
+      return;
+    case INTERVAL_INSTRUMENTATION_MODE::ALL_INSTRUCTIONS_FULL:
+      instrument_symbol_constraints(
+        interval_analysis, function_symbols, i_it, goto_function);
+      break;
+    case INTERVAL_INSTRUMENTATION_MODE::ALL_INSTRUCTIONS_LOCAL:
+      instrument_symbol_constraints(
+        interval_analysis, local_symbols, i_it, goto_function);
+      break;
+    case INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_FULL:
+      if (!(i_it->is_goto() || i_it->is_assume() || i_it->is_assert()))
+        continue;
+      instrument_symbol_constraints(
+        interval_analysis, function_symbols, i_it, goto_function);
+      break;
+    case INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL:
+      if (!(i_it->is_goto() || i_it->is_assume() || i_it->is_assert()))
+        continue;
+      instrument_symbol_constraints(
+        interval_analysis, local_symbols, i_it, goto_function);
+      break;
     }
   }
 }
@@ -187,8 +264,10 @@ void dump_intervals(
 void interval_analysis(
   goto_functionst &goto_functions,
   const namespacet &ns,
-  const optionst &options)
+  const optionst &options,
+  const INTERVAL_INSTRUMENTATION_MODE instrument_mode)
 {
+  // TODO: add options for instrumentation mode
   ait<interval_domaint> interval_analysis;
   interval_domaint::set_options(options);
   interval_analysis(goto_functions, ns);
@@ -213,7 +292,18 @@ void interval_analysis(
   }
 
   Forall_goto_functions (f_it, goto_functions)
-    instrument_intervals(interval_analysis, f_it->second);
+  {
+    optimize_function(interval_analysis, f_it->second);
+  }
 
+  if (instrument_mode == INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE)
+    instrument_loops(interval_analysis, goto_functions);
+  else
+  {
+    Forall_goto_functions (f_it, goto_functions)
+    {
+      instrument_intervals(interval_analysis, f_it->second, instrument_mode);
+    }
+  }
   goto_functions.update();
 }

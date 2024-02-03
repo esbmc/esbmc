@@ -16,6 +16,7 @@ enum ContractBodyElementT
   FunctionDef, // rule function-definition
   StructDef,   // rule struct-definition
   EnumDef,     // rule enum-definition
+  ErrorDef,    // rule error-definition
   ContractBodyElementTError
 };
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
@@ -231,7 +232,8 @@ enum StatementT
   WhileStatement,
   StatementTError,
   ContinueStatement, // rule continue
-  BreakStatement     // rule break
+  BreakStatement,    // rule break
+  RevertStatement    // rule revert
 };
 StatementT get_statement_t(const nlohmann::json &stmt);
 const char *statement_to_str(StatementT type);
@@ -300,6 +302,9 @@ enum ExpressionT
 
   // rule Tuple
   Tuple,
+
+  // rule revert
+  Revert,
 
   // FunctionCall
   CallExprClass,

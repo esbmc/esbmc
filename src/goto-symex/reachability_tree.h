@@ -215,7 +215,7 @@ public:
    *  Explores a new thread interleaving and returns its trace.
    *  @return A symex_resultt recording the trace that we just generated.
    */
-  std::shared_ptr<goto_symext::symex_resultt> get_next_formula();
+  goto_symext::symex_resultt get_next_formula();
 
   /**
    *  Run threads in --schedule manner.
@@ -223,7 +223,7 @@ public:
    *  trace.
    *  @return Symex result representing all interleavings
    */
-  std::shared_ptr<goto_symext::symex_resultt> generate_schedule_formula();
+  goto_symext::symex_resultt generate_schedule_formula();
 
   /**
    *  Reset ex_state stack to unexplored state.

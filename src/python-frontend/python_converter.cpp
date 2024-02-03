@@ -35,7 +35,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Return", StatementType::RETURN},
   {"Assert", StatementType::ASSERT},
   {"ClassDef", StatementType::CLASS_DEFINITION},
-};
+  {"Pass", StatementType::PASS}};
 
 static bool is_relational_op(const std::string &op)
 {
@@ -59,6 +59,17 @@ static std::string get_op(const std::string &op)
     return it->second;
   }
   return std::string();
+}
+
+static struct_typet::componentt build_component(
+  const std::string &class_name,
+  const std::string &comp_name,
+  const typet &type)
+{
+  struct_typet::componentt comp(comp_name, comp_name, type);
+  comp.type().set("#member_name", std::string("tag-") + class_name);
+  comp.set_access("public");
+  return comp;
 }
 
 // Convert Python/AST types to irep2 types
@@ -111,35 +122,32 @@ static symbolt create_symbol(
 
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
+  if (!element.contains("_type"))
+    return ExpressionType::UNKNOWN;
+
   auto type = element["_type"];
+
   if (type == "UnaryOp")
-  {
     return ExpressionType::UNARY_OPERATION;
-  }
+
   if (type == "BinOp" || type == "Compare")
-  {
     return ExpressionType::BINARY_OPERATION;
-  }
+
   if (type == "BoolOp")
-  {
     return ExpressionType::LOGICAL_OPERATION;
-  }
+
   if (type == "Constant")
-  {
     return ExpressionType::LITERAL;
-  }
+
   if (type == "Name" || type == "Attribute")
-  {
     return ExpressionType::VARIABLE_REF;
-  }
+
   if (type == "Call")
-  {
     return ExpressionType::FUNC_CALL;
-  }
+
   if (type == "IfExp")
-  {
     return ExpressionType::IF_EXPR;
-  }
+
   return ExpressionType::UNKNOWN;
 }
 
@@ -154,7 +162,6 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     exprt operand_expr = get_expr(operand);
     logical_expr.copy_to_operands(operand_expr);
   }
-
   return logical_expr;
 }
 
@@ -403,8 +410,25 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     const symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
     if (func_symbol == nullptr)
     {
-      log_error("Undefined function: {}", func_name.c_str());
-      abort();
+      if (is_ctor_call)
+      {
+        // If __init__() is not defined in the class, x = MyClass() is converted to x:MyClass in get_var_assign().
+        return exprt("empty_ctor_call");
+      }
+      else if (is_builtin_type(func_name))
+      {
+        // Replace the function call with a constant value. For example, x = int(1) becomes x = 1
+        typet t = get_typet(func_name);
+        if (t == int_type())
+          return from_integer(element["args"][0]["value"].get<int>(), t);
+        else if (t == bool_type())
+          return gen_boolean(element["args"][0]["value"].get<bool>());
+      }
+      else
+      {
+        log_error("Undefined function: {}", func_name.c_str());
+        abort();
+      }
     }
 
     code_function_callt call;
@@ -465,14 +489,29 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::VARIABLE_REF:
   {
     std::string var_name;
+    bool is_class_attr = false;
     if (element["_type"] == "Name")
+    {
       var_name = element["id"].get<std::string>();
+    }
     else if (element["_type"] == "Attribute")
+    {
       var_name = element["value"]["id"].get<std::string>();
+      if (is_class(var_name, ast_json["body"]))
+      {
+        // Found a class attribute
+        var_name = "C@" + var_name;
+        is_class_attr = true;
+      }
+    }
 
     assert(!var_name.empty());
 
     std::string symbol_id = create_symbol_id() + std::string("@") + var_name;
+
+    if (element.contains("attr") && is_class_attr)
+      symbol_id += "@" + element["attr"].get<std::string>();
+
     symbolt *symbol = context.find_symbol(symbol_id);
     if (!symbol)
     {
@@ -481,7 +520,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     expr = symbol_expr(*symbol);
 
-    if (element["_type"] == "Attribute")
+    // Get instance attribute
+    if (!is_class_attr && element["_type"] == "Attribute")
     {
       const std::string &attr_name = element["attr"].get<std::string>();
 
@@ -503,14 +543,56 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         abort();
       }
 
-      // Get attribute type from class definition
       struct_typet &class_type =
         static_cast<struct_typet &>(class_symbol->type);
-      assert(class_type.has_component(attr_name));
-      const typet &attr_type = class_type.get_component(attr_name).type();
 
-      expr = member_exprt(
-        symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
+      if (is_converting_lhs)
+      {
+        // Add member in the class
+        if (!class_type.has_component(attr_name))
+        {
+          struct_typet::componentt comp = std::move(build_component(
+            class_type.tag().as_string(), attr_name, current_element_type));
+          class_type.components().push_back(comp);
+        }
+        // Add instance attribute in the objects map
+        instance_attr_map[symbol->id.as_string()].push_back(attr_name);
+      }
+
+      auto is_instance_attr = [&]() -> bool {
+        auto it = instance_attr_map.find(symbol->id.as_string());
+        if (it != instance_attr_map.end())
+        {
+          for (const auto &attr : it->second)
+          {
+            if (attr == attr_name)
+              return true;
+          }
+        }
+        return false;
+      };
+
+      // Get instance attribute from class component
+      if (class_type.has_component(attr_name) && is_instance_attr())
+      {
+        const typet &attr_type = class_type.get_component(attr_name).type();
+        expr = member_exprt(
+          symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
+      }
+      // Fallback to class attribute when instance attribute is not found
+      else
+      {
+        // All class attributes are static symbols with ids in the format: filename@C@classname@varname
+        symbol_id = "py:" + python_filename + "@C@" + obj_type_name.substr(4) +
+                    "@" + attr_name;
+        symbolt *class_attr_symbol = context.find_symbol(symbol_id);
+        if (!class_attr_symbol)
+        {
+          log_error("Attribute {} not found\n", attr_name);
+          abort();
+        }
+        expr = symbol_expr(*class_attr_symbol);
+      }
     }
     break;
   }
@@ -527,8 +609,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   default:
   {
-    log_error(
-      "Unsupported expression type: {}", element["_type"].get<std::string>());
+    if (element.contains("_type"))
+      log_error(
+        "Unsupported expression type: {}", element["_type"].get<std::string>());
     abort();
   }
   }
@@ -624,62 +707,94 @@ void python_converter::get_var_assign(
     symbol.file_local = true;
     symbol.is_extern = false;
 
-    lhs = symbol_expr(symbol);
-
     if (target["_type"] == "Attribute")
     {
-      // lhs is an attribute and needs to be added as member of the referred object
-      // 1. Retrieve created object from symbol table
-      std::string obj_id =
-        create_symbol_id() + "@" + target["value"]["id"].get<std::string>();
-      symbolt *obj_symbol = context.find_symbol(obj_id);
-      if (!obj_symbol)
-        abort();
-
-      // 2. Insert member in the object
-      member_exprt member(
-        symbol_exprt(obj_symbol->id, obj_symbol->type), lhs.name(), lhs.type());
-
-      // 3. lhs holds 'obj.member'
-      lhs.swap(member);
+      is_converting_lhs = true;
+      lhs = get_expr(target); // lhs is a obj.member expression
     }
-    lhs.location() = location_begin;
+    else
+      lhs = symbol_expr(symbol); // lhs is a simple variable
 
+    lhs.location() = location_begin;
     lhs_symbol = context.move_symbol_to_context(symbol);
   }
   else if (ast_node["_type"] == "Assign")
   {
     std::string name = ast_node["targets"][0]["id"].get<std::string>();
     std::string symbol_id = create_symbol_id() + "@" + name;
-    symbolt *symbol = context.find_symbol(symbol_id);
-    assert(symbol);
-    lhs = symbol_expr(*symbol);
+    lhs_symbol = context.find_symbol(symbol_id);
+    assert(lhs_symbol);
+    lhs = symbol_expr(*lhs_symbol);
   }
 
-  if (is_constructor_call(ast_node["value"]))
+  bool is_ctor_call = is_constructor_call(ast_node["value"]);
+
+  if (is_ctor_call)
     ref_instance = &lhs;
 
-  // Get RHS
-  exprt rhs = get_expr(ast_node["value"]);
-  if (lhs_symbol)
-    lhs_symbol->value = rhs;
+  is_converting_lhs = false;
 
-  /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
-   * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
-   */
-  if (rhs.is_function_call())
+  // Get RHS
+  exprt rhs;
+  bool has_value = false;
+  if (!ast_node["value"].is_null())
   {
-    // op0() refers to the left-hand side (lhs) of the function call
-    rhs.op0() = lhs;
-    target_block.copy_to_operands(rhs);
-    return;
+    rhs = get_expr(ast_node["value"]);
+    has_value = true;
   }
 
-  adjust_statement_types(lhs, rhs);
+  if (has_value && rhs != exprt("empty_ctor_call"))
+  {
+    if (lhs_symbol)
+      lhs_symbol->value = rhs;
 
-  code_assignt code_assign(lhs, rhs);
-  code_assign.location() = location_begin;
-  target_block.copy_to_operands(code_assign);
+    /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
+     * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
+     */
+    if (rhs.is_function_call())
+    {
+      // If rhs is a constructor call so it is necessary to update lhs instance attributes with members added in self
+      if (is_ctor_call)
+      {
+        std::string func_name = ast_node["value"]["func"]["id"];
+        std::string self_id =
+          create_symbol_id() + "@C@" + func_name + "@F@" + func_name + "@self";
+        auto self_instance = instance_attr_map.find(self_id);
+        if (self_instance != instance_attr_map.end())
+        {
+          std::vector<std::string> &attr_list =
+            instance_attr_map[lhs_symbol->id.as_string()];
+
+          for (const auto &element : self_instance->second)
+          {
+            if (
+              std::find(attr_list.begin(), attr_list.end(), element) ==
+              attr_list.end())
+              attr_list.push_back(element);
+          }
+        }
+      }
+      // op0() refers to the left-hand side (lhs) of the function call
+      rhs.op0() = lhs;
+      target_block.copy_to_operands(rhs);
+      return;
+    }
+
+    adjust_statement_types(lhs, rhs);
+
+    code_assignt code_assign(lhs, rhs);
+    code_assign.location() = location_begin;
+    target_block.copy_to_operands(code_assign);
+  }
+  else
+  {
+    lhs_symbol->value = gen_zero(current_element_type, true);
+    lhs_symbol->value.zero_initializer(true);
+
+    code_declt decl(symbol_expr(*lhs_symbol));
+    decl.location() = location_begin;
+    target_block.copy_to_operands(decl);
+  }
 
   ref_instance = nullptr;
 }
@@ -885,18 +1000,17 @@ void python_converter::get_attributes_from_self(
       stmt["target"]["value"]["id"] == "self")
     {
       std::string attr_name = stmt["target"]["attr"];
-      struct_typet::componentt comp(
-        attr_name,
-        attr_name,
-        get_typet(stmt["annotation"]["id"].get<std::string>()));
-      comp.type().set("#member_name", std::string("tag-") + current_class_name);
-      comp.set_access("private");
+      typet type = get_typet(stmt["annotation"]["id"].get<std::string>());
+      struct_typet::componentt comp =
+        std::move(build_component(current_class_name, attr_name, type));
       clazz.components().push_back(comp);
     }
   }
 }
 
-void python_converter::get_class_definition(const nlohmann::json &class_node)
+void python_converter::get_class_definition(
+  const nlohmann::json &class_node,
+  codet &target_block)
 {
   struct_typet clazz;
   current_class_name = class_node["name"].get<std::string>();
@@ -919,6 +1033,7 @@ void python_converter::get_class_definition(const nlohmann::json &class_node)
   // Iterate over class members
   for (auto &class_member : class_node["body"])
   {
+    // Process methods
     if (class_member["_type"] == "FunctionDef")
     {
       get_attributes_from_self(class_member["body"], clazz);
@@ -936,6 +1051,17 @@ void python_converter::get_class_definition(const nlohmann::json &class_node)
       struct_typet::componentt method(added_method.name(), added_method.type());
       clazz.methods().push_back(method);
       current_func_name.clear();
+    }
+    // Process class attributes
+    else if (class_member["_type"] == "AnnAssign")
+    {
+      get_var_assign(class_member, target_block);
+      symbolt *class_attr_symbol = context.find_symbol(
+        create_symbol_id() + "@" +
+        class_member["target"]["id"].get<std::string>());
+      if (!class_attr_symbol)
+        abort();
+      class_attr_symbol->static_lifetime = true;
     }
   }
   added_symbol->type = clazz;
@@ -1013,9 +1139,13 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::CLASS_DEFINITION:
     {
-      get_class_definition(element);
+      get_class_definition(element, block);
       break;
     }
+    /* "https://docs.python.org/3/tutorial/controlflow.html: "The pass statement does nothing.
+     *  It can be used when a statement is required syntactically but the program requires no action." */
+    case StatementType::PASS:
+      break;
     case StatementType::UNKNOWN:
     default:
       log_error(
