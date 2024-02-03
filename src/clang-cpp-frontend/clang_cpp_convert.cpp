@@ -495,6 +495,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(member_call.getType(), type))
       return true;
 
+    callee_expr.dump();
+
     side_effect_expr_function_callt call;
     call.function() = callee_expr;
     call.type() = type;
@@ -515,6 +517,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
       call.arguments().push_back(single_arg);
     }
+
+    call.dump();
 
     new_expr = call;
     break;

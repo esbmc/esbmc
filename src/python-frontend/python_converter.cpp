@@ -357,6 +357,46 @@ python_converter::get_location_from_decl(const nlohmann::json &ast_node)
   return location;
 }
 
+symbolt *python_converter::find_function_in_base_classes(
+  const std::string &class_name,
+  std::string symbol_id,
+  std::string method_name,
+  bool is_ctor) const
+{
+  symbolt *func = nullptr;
+
+  // Find class node in the AST
+  auto class_node = json_utils::find_class(ast_json["body"], class_name);
+
+  std::string current_class = class_name;
+  std::string current_func_name = (is_ctor) ? class_name : method_name;
+
+  if (class_node != nlohmann::json())
+  {
+    // Search for method in all bases classes
+    for (const auto &base_class_node : class_node["bases"])
+    {
+      const std::string &base_class = base_class_node["id"].get<std::string>();
+      if (is_ctor)
+        method_name = base_class;
+
+      std::size_t pos = symbol_id.rfind("@C@" + current_class);
+
+      symbol_id.replace(
+        pos,
+        std::string("@C@" + current_class + "@F@" + current_func_name).length(),
+        std::string("@C@" + base_class + "@F@" + method_name));
+
+      if ((func = context.find_symbol(symbol_id.c_str())))
+        return func;
+
+      current_class = base_class;
+    }
+  }
+
+  return func;
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   bool is_member_function_call = false;
@@ -414,16 +454,15 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     bool is_ctor_call = is_constructor_call(element);
 
+    // Insert class name in the symbol id
+    std::string class_name;
     if (is_ctor_call || is_member_function_call)
     {
-      // Insert class name in the symbol id
       std::size_t pos = symbol_id.rfind("@F@");
       if (pos != std::string::npos)
       {
         if (is_ctor_call)
-        {
-          symbol_id.insert(pos, "@C@" + func_name);
-        }
+          class_name = func_name;
         else if (is_member_function_call)
         {
           // Get class name from obj annotation
@@ -432,43 +471,35 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           if (obj_node == nlohmann::json())
             abort();
 
-          std::string obj_type =
-            obj_node["annotation"]["id"].get<std::string>();
-          symbol_id.insert(pos, "@C@" + obj_type);
+          class_name = obj_node["annotation"]["id"].get<std::string>();
         }
+
+        symbol_id.insert(pos, "@C@" + class_name);
       }
     }
 
     const symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
     if (func_symbol == nullptr)
     {
-      if (is_ctor_call)
+      if (is_ctor_call || is_member_function_call)
       {
-        // Invoke __init__ for a base class when it is not defined in the current class
-        auto class_node = json_utils::find_class(ast_json["body"], func_name);
-        if (class_node != nlohmann::json() && !class_node["bases"].empty())
+        // Get method from a base class when it is not defined in the current class
+        func_symbol = find_function_in_base_classes(
+          class_name, symbol_id, func_name, is_ctor_call);
+
+        if (is_ctor_call)
         {
-          const std::string &base_class =
-            class_node["bases"][0]["id"].get<std::string>();
-
-          std::size_t pos = symbol_id.rfind("@C@" + func_name);
-
-          symbol_id.replace(
-            pos,
-            std::string("@C@" + func_name + "@F@" + func_name).length(),
-            std::string("@C@" + base_class + "@F@" + base_class));
-
-          func_symbol = context.find_symbol(symbol_id.c_str());
           if (!func_symbol)
+          {
+            // If __init__() is not defined for the class and bases,
+            // an assignment (x = MyClass()) is converted to a declaration (x:MyClass) in get_var_assign().
             return exprt("_init_undefined");
-
+          }
           base_ctor_called = true;
         }
-        else
+        else if (is_member_function_call)
         {
-          // If __init__() is not defined for the class,
-          // an assignment (x = MyClass()) is converted to a declaration (x:MyClass) in get_var_assign().
-          return exprt("_init_undefined");
+          // Update obj attributes changed through self
         }
       }
       else if (is_builtin_type(func_name))
