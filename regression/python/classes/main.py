@@ -18,4 +18,4 @@ assert(obj2.x == 30)
 obj2.x = 40
 assert(obj2.x == 40)
 
-obj2.foo()
+obj2.foo() # Calling base class method
