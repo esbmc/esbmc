@@ -120,7 +120,8 @@ protected:
   std::string get_src_from_json(const nlohmann::json &ast_node);
 
   symbolt *move_symbol_to_context(symbolt &symbol);
-  bool move_functions_to_main(const std::string &contractName);
+  bool multi_transaction_verification(const std::string &contractName);
+  bool multi_contract_verification();
 
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
@@ -196,9 +197,9 @@ protected:
 
   // Auxiliary data structures:
   // Mapping from the Contract_id to the Contract_Name
-  std::map<int, std::string> exportedSymbolsList;
+  std::unordered_map<int, std::string> exportedSymbolsList;
   // Inheritance Order Record <contract_name, Contract_id>
-  std::map<std::string, std::vector<int>> linearizedBaseList;
+  std::unordered_map<std::string, std::vector<int>> linearizedBaseList;
   // Store the ast_node["id"] of contract/struct/function/...
   std::unordered_map<int, std::string> scope_map;
 
