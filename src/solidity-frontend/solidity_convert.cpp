@@ -10,6 +10,7 @@
 #include <util/std_expr.h>
 #include <util/message.h>
 #include <regex>
+#include <iostream>
 
 #include <fstream>
 
@@ -40,7 +41,7 @@ solidity_convertert::solidity_convertert(
 
 bool solidity_convertert::convert()
 {
-  // This function consists of two parts:
+  // This function consists of two output:
   //  1. First, we perform pattern-based verificaiton
   //  2. Then we populate the context with symbols annotated based on the each AST node, and hence prepare for the GOTO conversion.
 
@@ -414,6 +415,16 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
     id = prefix + "struct " + struct_def["canonicalName"].get<std::string>();
     t.tag("struct " + name);
   }
+  // else if(struct_def["nodeType"].get<std::string>() == "TupleExpression")
+  // {
+  //   std::cout << "In getStruct, checking struct_def " << struct_def << "\n" <<  std::endl;
+  //   //Conversion of tuple to struct so tuple has no default name
+  //   name = "tuple";
+  //   // tag-struct random Name
+  //   id = prefix + name;
+  //   t.tag(name);
+  // }
+
   else
   {
     log_error(
@@ -1544,10 +1555,20 @@ bool solidity_convertert::get_expr(
     }
 
     // case 3
+    //Function we need to implement
     case SolidityGrammar::TypeNameT::TupleTypeName: // case 3
     {
-      log_error("Currently we do not handle tuple.");
-      abort();
+      // assert(literal_type != nullptr);
+      //There isn't one single literal type because there are many different types inside a tuple
+      //Use expr instead
+      std::vector<nlohmann::json> elem_tuple_types = make_struct_elementary_types(expr["typeDescriptions"]);
+      std::cout << "Testing " << expr["nodeType"] << std::endl;
+
+      get_struct_class(expr);
+
+      // log_error("Currently we do not handle tuple.");
+      // abort();
+      break;
     }
 
     // case 2
@@ -4072,6 +4093,103 @@ nlohmann::json solidity_convertert::make_array_elementary_type(
   elementary_type = {{"typeIdentifier", t_type}, {"typeString", type}};
 
   return elementary_type;
+}
+
+std::vector<std::string> splitByDelimiter(const std::string &str, const std::string &delimiter)
+{
+  std::vector<std::string> output;
+  size_t startPos = 0;
+  size_t endPos;
+  std::string token;
+  
+  while ((endPos = str.find(delimiter, startPos)) != std::string::npos) {
+      // endPos updates itself every iteration if delimiter is present
+      token = str.substr(startPos, endPos - startPos);
+      if (!token.empty()) {
+          output.push_back(token);
+      }
+      // startPos will start from the part of the string where
+      // the delimiter is removed
+      startPos = endPos + delimiter.length();
+  }
+  // Add the last part
+  token = str.substr(startPos);
+  if (!token.empty()) {
+      output.push_back(token);
+  }
+
+  return output;
+}
+
+std::vector<nlohmann::json> solidity_convertert::make_struct_elementary_types(
+  const nlohmann::json &type_descrpt)
+{
+  // Function used to extract the elementary types inside a tuple
+  // A tuple has many different variables which may contain different types
+  
+  // type_descrpt is of the form: 
+  // {"typeIdentifier":"t_tuple$_...","typeString":"tuple(...)"}
+  
+  // Our objective is to convert the typeIdentifier and typeStrings
+  // into multiple sub type_descrpts
+
+  /*
+    e.g.
+    {
+      "typeIdentifier":"t_tuple$_t_uint256_$_t_bool_$_t_string_memory_ptr_$",
+      "typeString":"tuple(uint256,bool,string memory)"
+    }
+
+     convert to
+
+    [
+     "typeDescriptions": {
+        "typeIdentifier": "t_uint256",
+       "typeString": "uint256"
+      }, 
+
+     "typeDescriptions": {
+        "typeIdentifier": "t_bool",
+       "typeString": "bool"
+      }, 
+
+     "typeDescriptions": {
+        "typeIdentifier": "t_string_memory_ptr",
+       "typeString": "string memory"
+      }      
+    ]
+  */
+
+  // We first need to preprocess type description here
+
+  std::vector<nlohmann::json> arr_elementary_types;
+  std::string typeIdentifier = type_descrpt["typeIdentifier"];
+  std::string typeString = type_descrpt["typeString"];
+
+  std::string dataStructure = typeIdentifier.substr(0,8);
+  assert(dataStructure == "t_tuple$");
+
+  // typeId has the form of
+  // t_uint256_$_t_bool_$_t_string_memory_ptr
+  std::string typeId = typeIdentifier.substr(9, (typeIdentifier.length()-11));
+
+  // typeStr has the form of 
+  // uint256,bool,string memory
+  std::string typeStr = typeString.substr(6, (typeString.length() - 7));
+
+  //Separate accordingly
+  std::vector<std::string> typeIdArr = splitByDelimiter(typeId, "_$_");
+  std::vector<std::string> typeStrArr = splitByDelimiter(typeStr, ",");
+
+  //Loop through both typeIdArr and typeStrArr to create array
+  nlohmann::json elementary_type;
+  for(unsigned int i = 0; i < typeIdArr.size(); i++)
+  {
+    elementary_type = {{"typeIdentifier", typeIdArr[i]}, {"typeString", typeStrArr[i]}};
+    arr_elementary_types.push_back(elementary_type);
+  }
+
+  return arr_elementary_types;
 }
 
 nlohmann::json solidity_convertert::make_array_to_pointer_type(

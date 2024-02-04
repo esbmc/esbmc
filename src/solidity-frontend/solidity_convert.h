@@ -137,6 +137,7 @@ protected:
   nlohmann::json make_return_type_from_typet(typet type);
   nlohmann::json make_pointee_type(const nlohmann::json &sub_expr);
   nlohmann::json make_array_elementary_type(const nlohmann::json &type_descrpt);
+  std::vector<nlohmann::json> make_struct_elementary_types(const nlohmann::json &type_descrpt);
   nlohmann::json make_array_to_pointer_type(const nlohmann::json &type_descrpt);
   std::string get_array_size(const nlohmann::json &type_descrpt);
   bool is_dyn_array(const nlohmann::json &json_in);
