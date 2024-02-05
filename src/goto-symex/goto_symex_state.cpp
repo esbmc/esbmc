@@ -94,6 +94,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     if (s.thename == "NULL")
       return true;
 
+    if (s.thename == "symex_dynamic::dynamic_2_value")
+      return false;
+
     // By propagation nondet symbols, we can achieve some speed up but the
     // counterexample will be missing a lot of information, so not really worth it
     if (s.thename.as_string().find("nondet$symex::nondet") != std::string::npos)
@@ -112,10 +115,12 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
     // Use noconst as a flag to indicate (and short-circuit) when a non
     // constant propagatable expr is found.
-    expr->foreach_operand([this, &noconst](const expr2tc &e) {
-      if (noconst && !constant_propagation(e))
-        noconst = false;
-    });
+    expr->foreach_operand(
+      [this, &noconst](const expr2tc &e)
+      {
+        if (noconst && !constant_propagation(e))
+          noconst = false;
+      });
 
     return noconst;
   }
@@ -132,7 +137,16 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   // FIXME: actually benchmark this and look at timing results, it may be
   // important benchmarks (i.e. TACAS) work better with some propagation
   if (is_with2t(expr))
+  {
+    const with2t &with = to_with2t(expr);
+    if (!constant_propagation(with.source_value))
+      return false;
+    if (is_struct_type(expr))
+    {
+      return true;
+    }
     return false;
+  }
 
   if (
     is_constant_struct2t(expr) || is_constant_union2t(expr) ||
@@ -140,10 +154,12 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   {
     bool noconst = true;
 
-    expr->foreach_operand([this, &noconst](const expr2tc &e) {
-      if (noconst && !constant_propagation(e))
-        noconst = false;
-    });
+    expr->foreach_operand(
+      [this, &noconst](const expr2tc &e)
+      {
+        if (noconst && !constant_propagation(e))
+          noconst = false;
+      });
 
     return noconst;
   }
@@ -216,14 +232,16 @@ void goto_symex_statet::rename_type(expr2tc &expr)
     if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       rename(arr_size);
 
-    type->Foreach_subtype([this](type2tc &t) {
-      if (!is_array_type(t))
-        return;
+    type->Foreach_subtype(
+      [this](type2tc &t)
+      {
+        if (!is_array_type(t))
+          return;
 
-      expr2tc &arr_size = to_array_type(t).array_size;
-      if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-        rename(arr_size);
-    });
+        expr2tc &arr_size = to_array_type(t).array_size;
+        if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+          rename(arr_size);
+      });
   }
 
   /* All subexpressions' types should also be renamed, this is in line with
