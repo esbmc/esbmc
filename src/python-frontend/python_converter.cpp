@@ -335,8 +335,8 @@ const nlohmann::json python_converter::find_var_decl(
   for (auto &element : json["body"])
   {
     if (
-      (element["_type"] == "AnnAssign") && (element["target"]).contains("id") &&
-      (element["target"]["id"] == var_name))
+      element["_type"] == "AnnAssign" && element["target"].contains("id") &&
+      element["target"]["id"] == var_name)
       return element;
   }
   return nlohmann::json();
@@ -359,7 +359,7 @@ python_converter::get_location_from_decl(const nlohmann::json &ast_node)
 
 symbolt *python_converter::find_function_in_base_classes(
   const std::string &class_name,
-  std::string symbol_id,
+  const std::string &symbol_id,
   std::string method_name,
   bool is_ctor) const
 {
@@ -372,6 +372,7 @@ symbolt *python_converter::find_function_in_base_classes(
   {
     std::string current_class = class_name;
     std::string current_func_name = (is_ctor) ? class_name : method_name;
+    std::string sym_id = symbol_id;
     // Search for method in all bases classes
     for (const auto &base_class_node : class_node["bases"])
     {
@@ -379,14 +380,14 @@ symbolt *python_converter::find_function_in_base_classes(
       if (is_ctor)
         method_name = base_class;
 
-      std::size_t pos = symbol_id.rfind("@C@" + current_class);
+      std::size_t pos = sym_id.rfind("@C@" + current_class);
 
-      symbol_id.replace(
+      sym_id.replace(
         pos,
         std::string("@C@" + current_class + "@F@" + current_func_name).length(),
         std::string("@C@" + base_class + "@F@" + method_name));
 
-      if ((func = context.find_symbol(symbol_id.c_str())))
+      if ((func = context.find_symbol(sym_id.c_str())))
         return func;
 
       current_class = base_class;
@@ -778,14 +779,8 @@ void python_converter::update_instance_from_self(
   if (self_instance != instance_attr_map.end())
   {
     std::set<std::string> &attr_list = instance_attr_map[obj_symbol_id];
-
-    for (const auto &element : self_instance->second)
-    {
-      if (
-        std::find(attr_list.begin(), attr_list.end(), element) ==
-        attr_list.end())
-        attr_list.insert(element);
-    }
+    attr_list.insert(
+      self_instance->second.begin(), self_instance->second.end());
   }
 }
 
@@ -1184,7 +1179,7 @@ void python_converter::get_class_definition(
       abort();
     }
     struct_typet &class_type = static_cast<struct_typet &>(class_symbol->type);
-    for (auto component : class_type.components())
+    for (const auto &component : class_type.components())
       clazz.components().emplace_back(component);
   }
 
