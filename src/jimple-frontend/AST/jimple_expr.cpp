@@ -33,6 +33,10 @@ exprt jimple_symbol::to_exprt(
   const std::string &function_name) const
 {
   // 1. Look over the local scope
+  if (var_name == "null")
+    {
+      return gen_zero(int_type());
+    }
   auto symbol_name = get_symbol_name(class_name, function_name, var_name);
   symbolt &s = *ctx.find_symbol(symbol_name);
 

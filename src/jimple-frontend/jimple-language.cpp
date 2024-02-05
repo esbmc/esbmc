@@ -144,7 +144,11 @@ void jimple_languaget::setup_main(contextt &context)
       matches.push_back(it->second);
   }
   if (matches.empty())
-    abort();
+    {
+      log_error("Could not find entry point, please specify with --function");
+      abort();
+    }
+    
 
   main_symbol = matches.front();
 

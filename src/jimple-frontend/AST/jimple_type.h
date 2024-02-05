@@ -61,6 +61,7 @@ private:
        INT}, // We dont really care about the initialization of this mode
     {"java.lang.String", BASE_TYPES::INT},         // TODO: handle this properly
     {"java.lang.AssertionError", BASE_TYPES::INT}, // TODO: handle this properly
+    {"java.lang.Exception", BASE_TYPES::INT}, // TODO: handle this properly// 
     {"java.security.InvalidParameterException", BASE_TYPES::INT}, // TODO: handle this properly
     {"java.lang.Runtime", BASE_TYPES::INT},        // TODO: handle this properly
     {"java.lang.Class", BASE_TYPES::INT},          // TODO: handle this properly

@@ -381,6 +381,12 @@ exprt jimple_invoke::to_exprt(
     return skip;
   }
 
+  if(base_class == "java.lang.Exception")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
   if(base_class == "java.security.InvalidParameterException")
   {
     code_skipt skip;
@@ -484,8 +490,9 @@ exprt jimple_invoke::to_exprt(
   auto symbol = ctx.find_symbol(oss.str());
 
   if(!symbol)
-  {
-    throw fmt::format("Couldn't find: {}", oss.str());
+    {
+      log_error("Could not find Method {} from Class {}", method, base_class);
+      abort();
   }
   call.function() = symbol_expr(*symbol);
 
