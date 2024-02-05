@@ -988,7 +988,7 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
         isinf(var.second.getInterval().ub()))
         continue;
 
-      BigInt upper_limit,lower_limit(0);
+      BigInt upper_limit, lower_limit(0);
       upper_limit = BigInt::power2(
         X->type->get_width() - (is_unsignedbv_type(X->type) ? 0 : 1));
       upper_limit = upper_limit - 1;
@@ -1005,7 +1005,7 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
 
         if (var.second.getInterval().lb() < lower_limit.to_int64())
           integerValue = lower_limit;
-        else if(var.second.getInterval().lb() > upper_limit.to_uint64())
+        else if (var.second.getInterval().lb() > upper_limit.to_uint64())
           integerValue = upper_limit;
         else
           integerValue = (long)ceil(var.second.getInterval().lb());
