@@ -945,7 +945,7 @@ void interval_analysis_ibex_contractor::apply_contractor()
   auto X = map.create_interval_vector();
   auto c_out = contractor.get_outer();
   auto Y = X;
-  int i = 50;
+  int i = 5;
 
   c_out->contract(X);
 
@@ -988,21 +988,25 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
         isinf(var.second.getInterval().ub()))
         continue;
 
-      //if there is a lower bound,
+      BigInt upper_limit,lower_limit(0);
+      upper_limit = BigInt::power2(
+        X->type->get_width() - (is_unsignedbv_type(X->type) ? 0 : 1));
+      upper_limit = upper_limit - 1;
+
+      if (is_signedbv_type(X->type))
+      {
+        lower_limit = BigInt::power2(X->type->get_width() - 1);
+        lower_limit = -lower_limit;
+      } //if its unsigned then its just zero
+
       if (isnormal(var.second.getInterval().lb()))
       {
-        //check if it overflows when cast back to integer
-        BigInt r(0);
-        if (is_signedbv_type(X->type))
-        {
-          r = r.power2(X->type->get_width() - 1);
-          r = -r;
-        } // if its unsigned then its just zero
-
         BigInt integerValue(0);
 
-        if (var.second.getInterval().lb() < r.to_int64())
-          integerValue = r;
+        if (var.second.getInterval().lb() < lower_limit.to_int64())
+          integerValue = lower_limit;
+        else if(var.second.getInterval().lb() > upper_limit.to_uint64())
+          integerValue = upper_limit;
         else
           integerValue = (long)ceil(var.second.getInterval().lb());
 
@@ -1012,15 +1016,12 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
       }
       if (isnormal(var.second.getInterval().ub()))
       {
-        BigInt r(0);
-        r = r.power2(
-          X->type->get_width() - (is_unsignedbv_type(X->type) ? 0 : 1));
-        r = r - 1;
-
         BigInt integerValue(0);
 
-        if (var.second.getInterval().ub() > r.to_uint64())
-          integerValue = r;
+        if (var.second.getInterval().ub() > upper_limit.to_uint64())
+          integerValue = upper_limit;
+        else if (var.second.getInterval().ub() < lower_limit.to_int64())
+          integerValue = lower_limit;
         else
           integerValue = (long)floor(var.second.getInterval().ub());
 
