@@ -94,7 +94,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     if (s.thename == "NULL")
       return true;
 
-    if (s.thename.as_string().find("symex_dynamic::dynamic") != std::string::npos)
+    if (
+      s.thename.as_string().find("symex_dynamic::dynamic") != std::string::npos)
       return true;
 
     // By propagation nondet symbols, we can achieve some speed up but the
@@ -139,7 +140,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (is_with2t(expr))
   {
     const with2t &with = to_with2t(expr);
-    if (is_symbol2t(with.source_value) && constant_propagation(with.source_value))
+    if (
+      is_symbol2t(with.source_value) && constant_propagation(with.source_value))
       return false;
     if (is_struct_type(expr))
     {
