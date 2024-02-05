@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 #include <map>
+#include <set>
 
 class codet;
 class struct_typet;
@@ -67,5 +68,5 @@ private:
   bool base_ctor_called = false;
 
   // Map object to list of instance attributes
-  std::unordered_map<std::string, std::vector<std::string>> instance_attr_map;
+  std::unordered_map<std::string, std::set<std::string>> instance_attr_map;
 };
