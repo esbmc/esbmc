@@ -679,7 +679,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           class_type.components().push_back(comp);
         }
         // Add instance attribute in the objects map
-        instance_attr_map[symbol->id.as_string()].push_back(attr_name);
+        instance_attr_map[symbol->id.as_string()].insert(attr_name);
       }
 
       auto is_instance_attr = [&]() -> bool {
@@ -777,14 +777,14 @@ void python_converter::update_instance_from_self(
   auto self_instance = instance_attr_map.find(self_id);
   if (self_instance != instance_attr_map.end())
   {
-    std::vector<std::string> &attr_list = instance_attr_map[obj_symbol_id];
+    std::set<std::string> &attr_list = instance_attr_map[obj_symbol_id];
 
     for (const auto &element : self_instance->second)
     {
       if (
         std::find(attr_list.begin(), attr_list.end(), element) ==
         attr_list.end())
-        attr_list.push_back(element);
+        attr_list.insert(element);
     }
   }
 }
@@ -1185,7 +1185,7 @@ void python_converter::get_class_definition(
     }
     struct_typet &class_type = static_cast<struct_typet &>(class_symbol->type);
     for (auto component : class_type.components())
-      clazz.components().push_back(component);
+      clazz.components().emplace_back(component);
   }
 
   // Iterate over class members
