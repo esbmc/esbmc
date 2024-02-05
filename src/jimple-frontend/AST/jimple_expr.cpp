@@ -34,9 +34,9 @@ exprt jimple_symbol::to_exprt(
 {
   // 1. Look over the local scope
   if (var_name == "null")
-    {
-      return gen_zero(int_type());
-    }
+  {
+    return gen_zero(int_type());
+  }
   auto symbol_name = get_symbol_name(class_name, function_name, var_name);
   symbolt &s = *ctx.find_symbol(symbol_name);
 
@@ -61,20 +61,20 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
 
   // TODO: hashmap, the standard is not stable enough yet
   // It is still a work in progress in the parser: https://github.com/rafaelsamenezes/jimple_parser
-  if(expr_type == "constant")
+  if (expr_type == "constant")
   {
     jimple_constant c;
     c.from_json(j);
     return std::make_shared<jimple_constant>(c);
   }
 
-  if(expr_type == "string_constant")
+  if (expr_type == "string_constant")
   {
     jimple_constant c;
     return std::make_shared<jimple_constant>(c);
   }
 
-  if(expr_type == "class_reference")
+  if (expr_type == "class_reference")
   {
     std::string key;
     j.at("value").get_to(key);
@@ -86,83 +86,83 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
     return std::make_shared<jimple_constant>(c);
   }
 
-  if(expr_type == "symbol")
+  if (expr_type == "symbol")
   {
     jimple_symbol c;
     c.from_json(j);
     return std::make_shared<jimple_symbol>(c);
   }
 
-  if(expr_type == "static_invoke")
+  if (expr_type == "static_invoke")
   {
     jimple_expr_invoke c;
     c.from_json(j);
     return std::make_shared<jimple_expr_invoke>(c);
   }
 
-  if(expr_type == "virtual_invoke")
+  if (expr_type == "virtual_invoke")
   {
     jimple_virtual_invoke c;
     c.from_json(j);
     return std::make_shared<jimple_virtual_invoke>(c);
   }
 
-  if(expr_type == "binop")
+  if (expr_type == "binop")
   {
     jimple_binop c;
     c.from_json(j);
     return std::make_shared<jimple_binop>(c);
   }
 
-  if(expr_type == "cast")
+  if (expr_type == "cast")
   {
     jimple_cast c;
     c.from_json(j);
     return std::make_shared<jimple_cast>(c);
   }
 
-  if(expr_type == "lengthof")
+  if (expr_type == "lengthof")
   {
     jimple_lengthof c;
     c.from_json(j);
     return std::make_shared<jimple_lengthof>(c);
   }
 
-  if(expr_type == "newarray")
+  if (expr_type == "newarray")
   {
     jimple_newarray c;
     c.from_json(j);
     return std::make_shared<jimple_newarray>(c);
   }
 
-  if(expr_type == "new")
+  if (expr_type == "new")
   {
     jimple_new c;
     c.from_json(j);
     return std::make_shared<jimple_new>(c);
   }
 
-  if(expr_type == "array_index")
+  if (expr_type == "array_index")
   {
     jimple_deref c;
     c.from_json(j);
     return std::make_shared<jimple_deref>(c);
   }
 
-  if(expr_type == "nondet")
+  if (expr_type == "nondet")
   {
     jimple_nondet c;
     return std::make_shared<jimple_nondet>(c);
   }
 
-  if(expr_type == "static_member")
+  if (expr_type == "static_member")
   {
     jimple_static_member c;
     c.from_json(j.at("signature"));
     return std::make_shared<jimple_static_member>(c);
   }
 
-  if(expr_type == "local_member")
+  if (expr_type == "local_member")
   {
     jimple_virtual_member c;
     c.from_json(j);
@@ -290,40 +290,41 @@ exprt jimple_expr_invoke::to_exprt(
   const std::string &function_name) const
 {
   // TODO: Move intrinsics to backend
-  if(base_class == "kotlin.jvm.internal.Intrinsics")
+  if (base_class == "kotlin.jvm.internal.Intrinsics")
   {
     code_skipt skip;
     return skip;
   }
 
   // TODO: Move intrinsics to backend
-  if(base_class == "java.lang.Runtime")
+  if (base_class == "java.lang.Runtime")
   {
     code_skipt skip;
     return skip;
   }
 
   // TODO: Move intrinsics to backend
-  if(base_class == "android.content.Intent")
+  if (base_class == "android.content.Intent")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(method == "inflate_1")
+  if (method == "inflate_1")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(method == "getRoot_1")
+  if (method == "getRoot_1")
   {
     code_skipt skip;
     return skip;
   }
 
-  bool is_parse_int = (base_class == "java.lang.Integer") && (method == "parseInt_1");
-  if(is_parse_int)
+  bool is_parse_int =
+    (base_class == "java.lang.Integer") && (method == "parseInt_1");
+  if (is_parse_int)
   {
     code_blockt block;
     exprt rhs = exprt("sideeffect", int_type());
@@ -333,7 +334,7 @@ exprt jimple_expr_invoke::to_exprt(
     return block;
   }
 
-  if(method == "isChecked_1")
+  if (method == "isChecked_1")
   {
     code_blockt block;
     exprt rhs = exprt("sideeffect", uint_type());
@@ -342,7 +343,7 @@ exprt jimple_expr_invoke::to_exprt(
     return block;
   }
 
-   if(is_nondet_call())
+  if (is_nondet_call())
   {
     code_skipt skip;
     return skip;
@@ -401,70 +402,70 @@ exprt jimple_virtual_invoke::to_exprt(
   const std::string &function_name) const
 {
   // TODO: Move intrinsics to backend
-  if(base_class == "kotlin.jvm.internal.Intrinsics")
+  if (base_class == "kotlin.jvm.internal.Intrinsics")
   {
     code_skipt skip;
     return skip;
   }
 
   // TODO: Move intrinsics to backend
-  if(base_class == "java.lang.Runtime")
+  if (base_class == "java.lang.Runtime")
   {
     code_skipt skip;
     return skip;
   }
 
   // TODO: Move intrinsics to backend
-  if(base_class == "java.lang.Class")
+  if (base_class == "java.lang.Class")
   {
     code_skipt skip;
     return skip;
   }
 
   // TODO: Move intrinsics to backend
-  if(base_class == "android.widget.EditText")
+  if (base_class == "android.widget.EditText")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(base_class == "java.lang.Object")
-  {
-    code_skipt skip;
-    return skip;
-  }
-  
-  if(method == "getLayoutInflater_1")
+  if (base_class == "java.lang.Object")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(method == "inflate_1")
+  if (method == "getLayoutInflater_1")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(method == "getRoot_1")
+  if (method == "inflate_1")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(method == "setContentView_2")
+  if (method == "getRoot_1")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(method == "findViewById_2")
+  if (method == "setContentView_2")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(method == "isChecked_1")
+  if (method == "findViewById_2")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if (method == "isChecked_1")
   {
     code_blockt block;
     exprt rhs = exprt("sideeffect", int_type());
@@ -474,7 +475,7 @@ exprt jimple_virtual_invoke::to_exprt(
     return block;
   }
 
-  if(is_nondet_call())
+  if (is_nondet_call())
   {
     jimple_nondet nondet(method);
     return nondet.to_exprt(ctx, class_name, function_name);
@@ -505,7 +506,7 @@ exprt jimple_virtual_invoke::to_exprt(
     block.operands().push_back(assign);
   }
 
-  for(long unsigned int i = 0; i < parameters.size(); i++)
+  for (long unsigned int i = 0; i < parameters.size(); i++)
   {
     // Just adding the arguments should be enough to set the parameters
     auto parameter_expr =
@@ -539,17 +540,17 @@ exprt jimple_newarray::to_exprt(
   typet alloc_type = base_type.is_pointer() ? base_type.subtype() : base_type;
   exprt alloc_size = size->to_exprt(ctx, class_name, function_name);
 
-  if(alloc_size.is_nil())
+  if (alloc_size.is_nil())
     alloc_size = from_integer(1, uint_type());
 
-  if(alloc_type.is_nil())
+  if (alloc_type.is_nil())
     alloc_type = char_type();
 
   /*
   if(alloc_type.id() == "symbol")
     alloc_type = ns.follow(alloc_type);
 */
-  if(alloc_size.type() != uint_type())
+  if (alloc_size.type() != uint_type())
   {
     //alloc_size.make_typecast(uint_type());
     //simplify(alloc_size);
@@ -664,7 +665,7 @@ exprt jimple_static_member::to_exprt(
   symbolt &s = *ctx.find_symbol(symbol_name);
   member_exprt op(symbol_expr(s), "tag-" + field, s.type);
   exprt &base = op.struct_op();
-  if(base.type().is_pointer())
+  if (base.type().is_pointer())
   {
     exprt deref("dereference");
     deref.type() = base.type().subtype();
@@ -691,14 +692,14 @@ exprt jimple_virtual_member::to_exprt(
 {
   auto result = gen_zero(type->to_typet(ctx));
   // Fix this
-  if(from == "com.example.jimplebmc.databinding.ActivityMainBinding")
+  if (from == "com.example.jimplebmc.databinding.ActivityMainBinding")
     return result;
 
-  if(from.find(".databinding.") != std::string::npos)
+  if (from.find(".databinding.") != std::string::npos)
     return result;
 
   auto inner_symbol = ctx.find_symbol("tag-" + from);
-  if(!inner_symbol)
+  if (!inner_symbol)
   {
     throw fmt::format("Unsupported virtual member: {}", from);
   }
@@ -709,7 +710,7 @@ exprt jimple_virtual_member::to_exprt(
   symbolt &s = *ctx.find_symbol(symbol_name);
   member_exprt op(symbol_expr(s), "tag-" + field, type->to_typet(ctx));
   exprt &base = op.struct_op();
-  if(base.type().is_pointer())
+  if (base.type().is_pointer())
   {
     exprt deref("dereference");
     deref.type() = base.type().subtype();

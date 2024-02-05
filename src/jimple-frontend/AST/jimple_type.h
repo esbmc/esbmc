@@ -61,29 +61,35 @@ private:
        INT}, // We dont really care about the initialization of this mode
     {"java.lang.String", BASE_TYPES::INT},         // TODO: handle this properly
     {"java.lang.AssertionError", BASE_TYPES::INT}, // TODO: handle this properly
-    {"java.lang.Exception", BASE_TYPES::INT}, // TODO: handle this properly// 
-    {"java.security.InvalidParameterException", BASE_TYPES::INT}, // TODO: handle this properly
-    {"java.lang.Runtime", BASE_TYPES::INT},        // TODO: handle this properly
-    {"java.lang.Class", BASE_TYPES::INT},          // TODO: handle this properly
-
+    {"java.lang.Exception", BASE_TYPES::INT}, // TODO: handle this properly//
+    {"java.security.InvalidParameterException",
+     BASE_TYPES::INT},                      // TODO: handle this properly
+    {"java.lang.Runtime", BASE_TYPES::INT}, // TODO: handle this properly
+    {"java.lang.Class", BASE_TYPES::INT},   // TODO: handle this properly
 
     // Android stuff
-    {"androidx.navigation.ui.AppBarConfiguration", BASE_TYPES::INT},          // TODO: handle this properly
-    {"android.content.Intent", BASE_TYPES::INT},          // TODO: handle this properly
-    {"android.text.Editable", BASE_TYPES::INT},          // TODO: handle this properly
-    {"androidx.coordinatorlayout.widget.CoordinatorLayout", BASE_TYPES::INT},          // TODO: handle this properly
-    {"android.view.LayoutInflater", BASE_TYPES::INT},          // TODO: handle this properly
-    {"androidx.appcompat.widget.Toolbar", BASE_TYPES::INT},          // TODO: handle this properly
+    {"androidx.navigation.ui.AppBarConfiguration",
+     BASE_TYPES::INT},                           // TODO: handle this properly
+    {"android.content.Intent", BASE_TYPES::INT}, // TODO: handle this properly
+    {"android.text.Editable", BASE_TYPES::INT},  // TODO: handle this properly
+    {"androidx.coordinatorlayout.widget.CoordinatorLayout",
+     BASE_TYPES::INT}, // TODO: handle this properly
+    {"android.view.LayoutInflater",
+     BASE_TYPES::INT}, // TODO: handle this properly
+    {"androidx.appcompat.widget.Toolbar",
+     BASE_TYPES::INT}, // TODO: handle this properly
 
     // Events
-    {"android.widget.Button", BASE_TYPES::INT},          // TODO: handle this properly
-    {"android.widget.EditText", BASE_TYPES::INT},          // TODO: handle this properly
-    {"android.view.View", BASE_TYPES::INT},          // TODO: handle this properly
-    {"android.os.Bundle", BASE_TYPES::INT},          // TODO: handle this properly
+    {"android.widget.Button", BASE_TYPES::INT},   // TODO: handle this properly
+    {"android.widget.EditText", BASE_TYPES::INT}, // TODO: handle this properly
+    {"android.view.View", BASE_TYPES::INT},       // TODO: handle this properly
+    {"android.os.Bundle", BASE_TYPES::INT},       // TODO: handle this properly
 
     // Fix this properly!
-    {"com.example.jimplebmc.databinding.ActivityMainBinding", BASE_TYPES::INT},          // TODO: handle this properly
-    {"com.example.jimplebmc.MainActivity$$ExternalSyntheticLambda0", BASE_TYPES::INT},          // TODO: handle this properly
+    {"com.example.jimplebmc.databinding.ActivityMainBinding",
+     BASE_TYPES::INT}, // TODO: handle this properly
+    {"com.example.jimplebmc.MainActivity$$ExternalSyntheticLambda0",
+     BASE_TYPES::INT}, // TODO: handle this properly
 
     {"__other", BASE_TYPES::OTHER}};
 };

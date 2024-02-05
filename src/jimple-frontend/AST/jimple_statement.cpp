@@ -341,82 +341,83 @@ exprt jimple_invoke::to_exprt(
   const std::string &function_name) const
 {
   // TODO: Move intrinsics to backend
-  if(base_class == "kotlin.jvm.internal.Intrinsics")
+  if (base_class == "kotlin.jvm.internal.Intrinsics")
   {
     code_skipt skip;
     return skip;
   }
 
   // TODO: Move intrinsics to backend
-  if(base_class == "java.lang.Runtime")
+  if (base_class == "java.lang.Runtime")
   {
     code_skipt skip;
     return skip;
   }
 
   // Don't care for the default object constructor
-  if(base_class == "java.lang.Object")
+  if (base_class == "java.lang.Object")
   {
     code_skipt skip;
     return skip;
   }
 
   // Don't care for Random
-  if(base_class == "java.util.Random")
+  if (base_class == "java.util.Random")
   {
     code_skipt skip;
     return skip;
   }
 
   // Don't care for Random
-  if(base_class == "java.lang.String")
+  if (base_class == "java.lang.String")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(base_class == "java.lang.AssertionError")
+  if (base_class == "java.lang.AssertionError")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(base_class == "java.lang.Exception")
+  if (base_class == "java.lang.Exception")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(base_class == "java.security.InvalidParameterException")
+  if (base_class == "java.security.InvalidParameterException")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(base_class == "android.widget.Button")
+  if (base_class == "android.widget.Button")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(base_class == "android.content.Intent" && method == "<init>_3")
-  { 
+  if (base_class == "android.content.Intent" && method == "<init>_3")
+  {
     // TODO: Fix this!
     jimple_symbol s(variable);
-    code_assignt asd(s.to_exprt(ctx, class_name, function_name),
-    parameters[1]->to_exprt(ctx, base_class, function_name));
+    code_assignt asd(
+      s.to_exprt(ctx, class_name, function_name),
+      parameters[1]->to_exprt(ctx, base_class, function_name));
     //code_expressiont asd(parameters[1]->to_exprt(ctx, base_class, function_name));
-    
-    return asd; 
+
+    return asd;
   }
 
-  if(method == "startActivity_2")
+  if (method == "startActivity_2")
   {
     code_function_callt call;
 
     std::ostringstream oss;
     oss << class_name << ":" << function_name << "@" << variable;
-    
+
     auto target = config.options.get_option("target");
     int i = jimple::get_reference(target);
     auto class_obj = parameters[0]->to_exprt(ctx, class_name, function_name);
@@ -434,49 +435,51 @@ exprt jimple_invoke::to_exprt(
 
     call.function() = symbol_expr(added_symbol);
     exprt value_operand = from_integer(i, int_type());
-    
+
     equality_exprt check(class_obj, value_operand);
     call.arguments().push_back(gen_not(check));
     return call;
   }
 
-  if(base_class == "androidx.appcompat.app.AppCompatActivity")
+  if (base_class == "androidx.appcompat.app.AppCompatActivity")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(base_class == "com.example.jimplebmc.MainActivity$$ExternalSyntheticLambda0")
+  if (
+    base_class ==
+    "com.example.jimplebmc.MainActivity$$ExternalSyntheticLambda0")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(base_class.find("$$ExternalSyntheticLambda") != std::string::npos)
+  if (base_class.find("$$ExternalSyntheticLambda") != std::string::npos)
   {
     code_skipt skip;
     return skip;
   }
 
-  if(method == "getLayoutInflater_1")
+  if (method == "getLayoutInflater_1")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(method == "setContentView_2")
+  if (method == "setContentView_2")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(method == "findViewById_2")
+  if (method == "findViewById_2")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(method == "setSupportActionBar_2")
+  if (method == "setSupportActionBar_2")
   {
     code_skipt skip;
     return skip;
@@ -489,14 +492,14 @@ exprt jimple_invoke::to_exprt(
   oss << base_class << ":" << method;
   auto symbol = ctx.find_symbol(oss.str());
 
-  if(!symbol)
-    {
-      log_error("Could not find Method {} from Class {}", method, base_class);
-      abort();
+  if (!symbol)
+  {
+    log_error("Could not find Method {} from Class {}", method, base_class);
+    abort();
   }
   call.function() = symbol_expr(*symbol);
 
-  if(variable != "")
+  if (variable != "")
   {
     // Let's add @THIS
     auto this_expression =

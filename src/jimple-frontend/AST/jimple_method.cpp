@@ -117,7 +117,7 @@ void jimple_method::from_json(const json &j)
   {
     // j.at("throws").get_to(this->throws);
   }
-  catch(std::exception &e)
+  catch (std::exception &e)
   {
     this->throws = "(No throw)";
   }

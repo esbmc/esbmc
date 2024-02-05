@@ -160,22 +160,24 @@ exprt jimple_file::to_exprt(contextt &ctx) const
 
   // TODO: This is the most horrible hack that i've ever done
   // Add the methods and definitions
-  for(auto const &field : body)
+  for (auto const &field : body)
   {
-    if(!std::dynamic_pointer_cast<jimple_class_field>(field))
+    if (!std::dynamic_pointer_cast<jimple_class_field>(field))
     {
-        auto func = std::dynamic_pointer_cast<jimple_method>(field);
-        if(func->name.find("onCreate") != std::string::npos) field->to_exprt(ctx, name, name);
+      auto func = std::dynamic_pointer_cast<jimple_method>(field);
+      if (func->name.find("onCreate") != std::string::npos)
+        field->to_exprt(ctx, name, name);
     }
   }
 
   // Add the methods and definitions
-  for(auto const &field : body)
+  for (auto const &field : body)
   {
-    if(!std::dynamic_pointer_cast<jimple_class_field>(field))
+    if (!std::dynamic_pointer_cast<jimple_class_field>(field))
     {
       auto func = std::dynamic_pointer_cast<jimple_method>(field);
-      if(func->name.find("onCreate") == std::string::npos) field->to_exprt(ctx, name, name);
+      if (func->name.find("onCreate") == std::string::npos)
+        field->to_exprt(ctx, name, name);
     }
   }
   return e;
