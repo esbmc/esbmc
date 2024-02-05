@@ -46,7 +46,7 @@ private:
 
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
-    std::string symbol_id,
+    const std::string &symbol_id,
     std::string method_name,
     bool is_ctor) const;
 
