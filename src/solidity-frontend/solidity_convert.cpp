@@ -152,7 +152,7 @@ bool solidity_convertert::convert()
     global_scope_id = 0;
   }
   // single contract
-  if (!tgt_cnt.empty())
+  if (!tgt_cnt.empty() && tgt_func.empty())
   {
     // perform multi-transaction verification
     // by adding symbols to the "sol_main()" entry function
