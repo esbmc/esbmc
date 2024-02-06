@@ -414,7 +414,7 @@ public:
     }
     log_status("{}", oss.str());
 
-    for (const auto& var : var_map)
+    for (const auto &var : var_map)
     {
       var.second.dump();
     }
