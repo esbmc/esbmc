@@ -459,7 +459,7 @@ vart::vart()
 {
 }
 
-void vart::dump()
+void vart::dump() const
 {
   std::ostringstream oss;
   oss << this->var_name << " " << this->getInterval();
@@ -999,7 +999,7 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
         lower_limit = -lower_limit;
       } //if its unsigned then its just zero
 
-      if (isnormal(var.second.getInterval().lb()))
+      if (isfinite(var.second.getInterval().lb()))
       {
         BigInt integerValue(0);
 
@@ -1014,7 +1014,7 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
         auto cond1 = greaterthanequal2tc(X, lb);
         cond = and2tc(cond, cond1);
       }
-      if (isnormal(var.second.getInterval().ub()))
+      if (isfinite(var.second.getInterval().ub()))
       {
         BigInt integerValue(0);
 
