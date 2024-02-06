@@ -152,19 +152,18 @@ bool solidity_convertert::convert()
     global_scope_id = 0;
   }
   // single contract
-  if (!tgt_cnt.empty())
+  if (!tgt_cnt.empty() && tgt_func.empty())
   {
     // perform multi-transaction verification
     // by adding symbols to the "sol_main()" entry function
-    if (move_functions_to_main(tgt_cnt))
+    if (multi_transaction_verification(tgt_cnt))
       return true;
   }
   // multiple contract
   if (tgt_func.empty() && tgt_cnt.empty())
   {
-    log_error(
-      "Multiple contracts verification is not supported yet. Aborting...");
-    abort();
+    if (multi_contract_verification())
+      return true;
   }
 
   return false; // 'false' indicates successful completion.
@@ -4397,17 +4396,9 @@ bool solidity_convertert::get_empty_array_ref(
   the idea is to verify the assertions that must be held 
   in any function calling order.
 */
-bool solidity_convertert::move_functions_to_main(
+bool solidity_convertert::multi_transaction_verification(
   const std::string &contractName)
 {
-  // return if "function" is set or "contract" is unset
-  if (!tgt_func.empty() || tgt_cnt.empty())
-    return false;
-
-  // return if it's not the target contract
-  if (contractName != tgt_cnt)
-    return false;
-
   /*
   convert the verifying contract to a "sol_main" function, e.g.
 
@@ -4475,6 +4466,10 @@ bool solidity_convertert::move_functions_to_main(
     code_function_callt call;
     call.location() = constructor.location;
     call.function() = symbol_expr(constructor);
+    const code_typet::argumentst &arguments =
+      to_code_type(constructor.type).arguments();
+    call.arguments().resize(
+      arguments.size(), static_cast<const exprt &>(get_nil_irep()));
 
     // move to "sol_main" body
     func_body.move_to_operands(call);
@@ -4494,7 +4489,7 @@ bool solidity_convertert::move_functions_to_main(
     // 2.1 construct ifthenelse statement
     const struct_typet::componentst &methods =
       to_struct_type(contract.type).methods();
-    bool is_tgt_cnt = c_name == tgt_cnt ? true : false;
+    bool is_tgt_cnt = c_name == contractName ? true : false;
 
     for (const auto &method : methods)
     {
@@ -4570,13 +4565,12 @@ bool solidity_convertert::move_functions_to_main(
   func_body.move_to_operands(code_while);
 
   // 3. add "sol_main" to symbol table
-
   symbolt new_symbol;
   code_typet main_type;
   main_type.return_type() = empty_typet();
-  std::string sol_id = "sol:@" + contractName + "@F@sol_main";
-  std::string sol_name = "sol_main";
-  const symbolt &contract = *context.find_symbol(prefix + tgt_cnt);
+  const std::string sol_name = "sol_main_" + contractName;
+  const std::string sol_id = "sol:@C@" + contractName + "@F@" + sol_name;
+  const symbolt &contract = *context.find_symbol(prefix + contractName);
   new_symbol.location = contract.location;
   std::string debug_modulename =
     get_modulename_from_path(contract.location.file().as_string());
@@ -4601,7 +4595,133 @@ bool solidity_convertert::move_functions_to_main(
   added_symbol.value = func_body;
 
   // 4. set "sol_main" as main function
-  config.main = "sol_main";
+  // this will be overwrite in multi-contract mode.
+  config.main = sol_name;
 
+  return false;
+}
+
+/*
+  This function perform multi-transaction verification on each contract in isolation.
+  To do so, we construct nondetered switch_case;
+*/
+bool solidity_convertert::multi_contract_verification()
+{
+  // 0. initialize "sol_main" body and switch body
+  codet func_body, switch_body;
+  static_lifetime_init(context, switch_body);
+  static_lifetime_init(context, func_body);
+
+  switch_body.make_block();
+  func_body.make_block();
+  // 1. construct switch-case
+  int cnt = 0;
+  for (const auto &sym : exportedSymbolsList)
+  {
+    // 1.1 construct multi-transaction verification entry function
+    // function "sol_main_contractname" will be created and inserted to the symbol table.
+    const std::string &c_name = sym.second;
+    if (multi_transaction_verification(c_name))
+      return true;
+
+    // 1.2 construct a "case n"
+    exprt case_cond = constant_exprt(
+      integer2binary(cnt, bv_width(int_type())),
+      integer2string(cnt),
+      int_type());
+
+    // 1.3 construct case body: entry function + break
+    codet case_body;
+    static_lifetime_init(context, case_body);
+    case_body.make_block();
+
+    // func_call: sol_main_contractname
+    const std::string sub_sol_id = "sol:@C@" + c_name + "@F@sol_main_" + c_name;
+    if (context.find_symbol(sub_sol_id) == nullptr)
+      return true;
+
+    const symbolt &func = *context.find_symbol(sub_sol_id);
+    code_function_callt func_expr;
+    func_expr.location() = func.location;
+    func_expr.function() = symbol_expr(func);
+    const code_typet::argumentst &arguments =
+      to_code_type(func.type).arguments();
+    func_expr.arguments().resize(
+      arguments.size(), static_cast<const exprt &>(get_nil_irep()));
+    case_body.move_to_operands(func_expr);
+
+    // break statement
+    exprt break_expr = code_breakt();
+    case_body.move_to_operands(break_expr);
+
+    // 1.4 construct case statement
+    code_switch_caset switch_case;
+    switch_case.case_op() = case_cond;
+    convert_expression_to_code(case_body);
+    switch_case.code() = to_code(case_body);
+
+    // 1.5 move to switch body
+    switch_body.move_to_operands(switch_case);
+
+    // update case number counter
+    ++cnt;
+  }
+
+  // 2. move switch to func_body
+  // 2.1 construct nondet_uint jump condition
+  if (context.find_symbol("c:@F@nondet_uint") == nullptr)
+    return true;
+  const symbolt &cond = *context.find_symbol("c:@F@nondet_uint");
+
+  side_effect_expr_function_callt cond_expr;
+  cond_expr.name("nondet_uint");
+  cond_expr.identifier("c:@F@nondet_uint");
+  cond_expr.location() = cond.location;
+  cond_expr.cmt_lvalue(true);
+  cond_expr.function() = symbol_expr(cond);
+
+  // 2.2 construct switch statement
+  code_switcht code_switch;
+  code_switch.value() = cond_expr;
+  code_switch.body() = switch_body;
+  func_body.move_to_operands(code_switch);
+
+  // 3. add "sol_main" to symbol table
+  symbolt new_symbol;
+  code_typet main_type;
+  main_type.return_type() = empty_typet();
+  const std::string sol_id = "sol:@F@sol_main";
+  const std::string sol_name = "sol_main";
+
+  if (
+    context.find_symbol(prefix + exportedSymbolsList.begin()->second) ==
+    nullptr)
+    return true;
+  // use first contract's location
+  const symbolt &contract =
+    *context.find_symbol(prefix + exportedSymbolsList.begin()->second);
+  new_symbol.location = contract.location;
+  std::string debug_modulename =
+    get_modulename_from_path(contract.location.file().as_string());
+  get_default_symbol(
+    new_symbol,
+    debug_modulename,
+    main_type,
+    sol_name,
+    sol_id,
+    new_symbol.location);
+
+  new_symbol.lvalue = true;
+  new_symbol.is_extern = false;
+  new_symbol.file_local = false;
+
+  symbolt &added_symbol = *context.move_symbol_to_context(new_symbol);
+
+  // no params
+  main_type.make_ellipsis();
+
+  added_symbol.type = main_type;
+  added_symbol.value = func_body;
+  config.main = sol_name;
   return false;
 }
