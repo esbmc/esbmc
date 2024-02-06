@@ -38,17 +38,14 @@ private:
 
 public:
   size_t getIndex() const;
-
   vart();
-
-public:
   vart(const string &varName, const expr2tc &symbol, const size_t &index);
   const ibex::Interval &getInterval() const;
   void setInterval(const ibex::Interval &interval);
   bool isIntervalChanged() const;
   void setIntervalChanged(bool intervalChanged);
   const expr2tc &getSymbol() const;
-  void dump();
+  void dump() const;
 };
 
 class Contractor
@@ -417,7 +414,7 @@ public:
     }
     log_status("{}", oss.str());
 
-    for (auto var : var_map)
+    for (const auto& var : var_map)
     {
       var.second.dump();
     }
