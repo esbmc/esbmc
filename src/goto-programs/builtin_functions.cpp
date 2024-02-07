@@ -330,20 +330,6 @@ void goto_convertt::do_cpp_new(
   valid_expr.copy_to_operands(lhs);
   exprt neg_valid_expr = gen_not(valid_expr);
 
-  exprt pointer_offset_expr("pointer_offset", pointer_type());
-  pointer_offset_expr.copy_to_operands(lhs);
-
-  equality_exprt offset_is_zero_expr(
-    pointer_offset_expr, gen_zero(pointer_type()));
-
-  // first assume that it's available and that it's a dynamic object
-  goto_programt::targett t_a = dest.add_instruction(ASSUME);
-  t_a->location = rhs.find_location();
-  migrate_expr(neg_valid_expr, t_a->guard);
-
-  migrate_expr(valid_expr, t_a->guard);
-  t_a->guard = not2tc(t_a->guard);
-
   // set size
   //nec: ex37.c
   exprt dynamic_size("dynamic_size", size_type());

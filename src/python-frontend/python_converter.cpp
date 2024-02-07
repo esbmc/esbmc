@@ -335,8 +335,8 @@ const nlohmann::json python_converter::find_var_decl(
   for (auto &element : json["body"])
   {
     if (
-      (element["_type"] == "AnnAssign") &&
-      (element["target"]["id"] == var_name))
+      element["_type"] == "AnnAssign" && element["target"].contains("id") &&
+      element["target"]["id"] == var_name)
       return element;
   }
   return nlohmann::json();
@@ -346,18 +346,92 @@ locationt
 python_converter::get_location_from_decl(const nlohmann::json &ast_node)
 {
   locationt location;
-  location.set_line(ast_node["lineno"].get<int>());
-  location.set_column(ast_node["col_offset"].get<int>());
+  if (ast_node.contains("lineno"))
+    location.set_line(ast_node["lineno"].get<int>());
+
+  if (ast_node.contains("col_offset"))
+    location.set_column(ast_node["col_offset"].get<int>());
+
   location.set_file(python_filename.c_str());
   location.set_function(current_func_name);
   return location;
+}
+
+symbolt *python_converter::find_function_in_base_classes(
+  const std::string &class_name,
+  const std::string &symbol_id,
+  std::string method_name,
+  bool is_ctor) const
+{
+  symbolt *func = nullptr;
+
+  // Find class node in the AST
+  auto class_node = json_utils::find_class(ast_json["body"], class_name);
+
+  if (class_node != nlohmann::json())
+  {
+    std::string current_class = class_name;
+    std::string current_func_name = (is_ctor) ? class_name : method_name;
+    std::string sym_id = symbol_id;
+    // Search for method in all bases classes
+    for (const auto &base_class_node : class_node["bases"])
+    {
+      const std::string &base_class = base_class_node["id"].get<std::string>();
+      if (is_ctor)
+        method_name = base_class;
+
+      std::size_t pos = sym_id.rfind("@C@" + current_class);
+
+      sym_id.replace(
+        pos,
+        std::string("@C@" + current_class + "@F@" + current_func_name).length(),
+        std::string("@C@" + base_class + "@F@" + method_name));
+
+      if ((func = context.find_symbol(sym_id.c_str())))
+        return func;
+
+      current_class = base_class;
+    }
+  }
+
+  return func;
+}
+
+std::string python_converter::get_classname_from_symbol_id(
+  const std::string &symbol_id) const
+{
+  // This function might return "Base" for a symbol_id as: py:main.py@C@Base@F@foo@self
+
+  std::string class_name;
+  size_t class_pos = symbol_id.find("@C@");
+  size_t func_pos = symbol_id.find("@F@");
+
+  if (class_pos != std::string::npos && func_pos != std::string::npos)
+  {
+    size_t length = func_pos - (class_pos + 3); // "+3" to ignore "@C@"
+    // Extract substring between "@C@" and "@F@"
+    class_name = symbol_id.substr(class_pos + 3, length);
+  }
+  return class_name;
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (element.contains("func") && element["_type"] == "Call")
   {
-    std::string func_name = element["func"]["id"];
+    bool is_member_function_call = false;
+    std::string func_name;
+    std::string obj_name;
+    if (element["func"]["_type"] == "Name")
+    {
+      func_name = element["func"]["id"];
+    }
+    else if (element["func"]["_type"] == "Attribute")
+    {
+      func_name = element["func"]["attr"];
+      obj_name = element["func"]["value"]["id"];
+      is_member_function_call = true;
+    }
 
     // nondet_X() functions restricted to basic types supported in Python
     std::regex pattern(
@@ -374,15 +448,15 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
 
     locationt location = get_location_from_decl(element);
-    std::string symbol_id = create_symbol_id();
-    if (symbol_id.find("@F@") == symbol_id.npos)
-      symbol_id += std::string("@F@") + func_name;
+    std::string func_symbol_id = create_symbol_id();
+    if (func_symbol_id.find("@F@") == func_symbol_id.npos)
+      func_symbol_id += std::string("@F@") + func_name;
 
     // __ESBMC_assume
     if (func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume")
     {
-      symbol_id = func_name;
-      if (context.find_symbol(symbol_id.c_str()) == nullptr)
+      func_symbol_id = func_name;
+      if (context.find_symbol(func_symbol_id.c_str()) == nullptr)
       {
         // Create/init symbol
         symbolt symbol;
@@ -391,7 +465,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         symbol.location = location;
         symbol.type = code_typet();
         symbol.name = func_name;
-        symbol.id = symbol_id;
+        symbol.id = func_symbol_id;
 
         context.add(symbol);
       }
@@ -399,21 +473,58 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     bool is_ctor_call = is_constructor_call(element);
 
-    if (is_ctor_call)
+    // Insert class name in the symbol id
+    std::string class_name;
+    if (is_ctor_call || is_member_function_call)
     {
-      // Insert class name in the symbol id
-      std::size_t pos = symbol_id.rfind("@F@");
+      std::size_t pos = func_symbol_id.rfind("@F@");
       if (pos != std::string::npos)
-        symbol_id.insert(pos, "@C@" + func_name);
+      {
+        if (is_ctor_call)
+          class_name = func_name;
+        else if (is_member_function_call)
+        {
+          // Get class name from obj annotation
+          auto obj_node = find_var_decl(obj_name, ast_json);
+          if (obj_node == nlohmann::json())
+            abort();
+
+          class_name = obj_node["annotation"]["id"].get<std::string>();
+        }
+        func_symbol_id.insert(pos, "@C@" + class_name);
+      }
     }
 
-    const symbolt *func_symbol = context.find_symbol(symbol_id.c_str());
+    const symbolt *func_symbol = context.find_symbol(func_symbol_id.c_str());
     if (func_symbol == nullptr)
     {
-      if (is_ctor_call)
+      if (is_ctor_call || is_member_function_call)
       {
-        // If __init__() is not defined in the class, x = MyClass() is converted to x:MyClass in get_var_assign().
-        return exprt("empty_ctor_call");
+        // Get method from a base class when it is not defined in the current class
+        func_symbol = find_function_in_base_classes(
+          class_name, func_symbol_id, func_name, is_ctor_call);
+
+        if (is_ctor_call)
+        {
+          if (!func_symbol)
+          {
+            // If __init__() is not defined for the class and bases,
+            // an assignment (x = MyClass()) is converted to a declaration (x:MyClass) in get_var_assign().
+            return exprt("_init_undefined");
+          }
+          base_ctor_called = true;
+        }
+        else if (is_member_function_call)
+        {
+          // Update obj attributes from self
+          const std::string obj_symbol_id = create_symbol_id() + "@" + obj_name;
+          assert(context.find_symbol(obj_symbol_id));
+
+          update_instance_from_self(
+            get_classname_from_symbol_id(func_symbol->id.as_string()),
+            func_name,
+            obj_symbol_id);
+        }
       }
       else if (is_builtin_type(func_name))
       {
@@ -437,9 +548,22 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     const typet &return_type = to_code_type(func_symbol->type).return_type();
     call.type() = return_type;
 
+    // Add self as first parameter
     if (is_ctor_call)
-      call.arguments().push_back(
-        gen_address_of(*ref_instance)); // Add self as first parameter
+    {
+      // Self is the lhs
+      assert(ref_instance);
+      call.arguments().push_back(gen_address_of(*ref_instance));
+    }
+    else if (is_member_function_call)
+    {
+      // Self is the obj instance from obj.method() call
+      std::string symbol_id = create_symbol_id() + "@" +
+                              element["func"]["value"]["id"].get<std::string>();
+      symbolt *obj_symbol = context.find_symbol(symbol_id);
+      assert(obj_symbol);
+      call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    }
 
     for (const auto &arg_node : element["args"])
       call.arguments().push_back(get_expr(arg_node));
@@ -556,7 +680,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           class_type.components().push_back(comp);
         }
         // Add instance attribute in the objects map
-        instance_attr_map[symbol->id.as_string()].push_back(attr_name);
+        instance_attr_map[symbol->id.as_string()].insert(attr_name);
       }
 
       auto is_instance_attr = [&]() -> bool {
@@ -621,7 +745,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
 bool python_converter::is_constructor_call(const nlohmann::json &json)
 {
-  if (!json.contains("_type") || json["_type"] != "Call")
+  if (
+    !json.contains("_type") || json["_type"] != "Call" ||
+    !json["func"].contains("id"))
     return false;
 
   const std::string &func_name = json["func"]["id"];
@@ -639,6 +765,23 @@ bool python_converter::is_constructor_call(const nlohmann::json &json)
     }
   });
   return is_ctor_call;
+}
+
+void python_converter::update_instance_from_self(
+  const std::string &class_name,
+  const std::string &func_name,
+  const std::string &obj_symbol_id)
+{
+  std::string self_id =
+    create_symbol_id() + "@C@" + class_name + "@F@" + func_name + "@self";
+
+  auto self_instance = instance_attr_map.find(self_id);
+  if (self_instance != instance_attr_map.end())
+  {
+    std::set<std::string> &attr_list = instance_attr_map[obj_symbol_id];
+    attr_list.insert(
+      self_instance->second.begin(), self_instance->second.end());
+  }
 }
 
 void python_converter::get_var_assign(
@@ -743,7 +886,7 @@ void python_converter::get_var_assign(
     has_value = true;
   }
 
-  if (has_value && rhs != exprt("empty_ctor_call"))
+  if (has_value && rhs != exprt("_init_undefined"))
   {
     if (lhs_symbol)
       lhs_symbol->value = rhs;
@@ -757,22 +900,16 @@ void python_converter::get_var_assign(
       if (is_ctor_call)
       {
         std::string func_name = ast_node["value"]["func"]["id"];
-        std::string self_id =
-          create_symbol_id() + "@C@" + func_name + "@F@" + func_name + "@self";
-        auto self_instance = instance_attr_map.find(self_id);
-        if (self_instance != instance_attr_map.end())
-        {
-          std::vector<std::string> &attr_list =
-            instance_attr_map[lhs_symbol->id.as_string()];
 
-          for (const auto &element : self_instance->second)
-          {
-            if (
-              std::find(attr_list.begin(), attr_list.end(), element) ==
-              attr_list.end())
-              attr_list.push_back(element);
-          }
+        if (base_ctor_called)
+        {
+          auto class_node = json_utils::find_class(ast_json["body"], func_name);
+          func_name = class_node["bases"][0]["id"].get<std::string>();
+          base_ctor_called = false;
         }
+
+        update_instance_from_self(
+          func_name, func_name, lhs_symbol->id.as_string());
       }
       // op0() refers to the left-hand side (lhs) of the function call
       rhs.op0() = lhs;
@@ -1029,6 +1166,22 @@ void python_converter::get_class_definition(
   symbol.is_type = true;
 
   symbolt *added_symbol = context.move_symbol_to_context(symbol);
+
+  // Iterate over base classes
+  for (auto &base_class : class_node["bases"])
+  {
+    const std::string &base_class_name = base_class["id"].get<std::string>();
+    // Get class definition from symbols table
+    symbolt *class_symbol = context.find_symbol("tag-" + base_class_name);
+    if (!class_symbol)
+    {
+      log_error("Base class not found: {}\n", base_class_name);
+      abort();
+    }
+    struct_typet &class_type = static_cast<struct_typet &>(class_symbol->type);
+    for (const auto &component : class_type.components())
+      clazz.components().emplace_back(component);
+  }
 
   // Iterate over class members
   for (auto &class_member : class_node["body"])

@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 #include <map>
+#include <set>
 
 class codet;
 class struct_typet;
@@ -43,6 +44,19 @@ private:
     const nlohmann::json &method_body,
     struct_typet &clazz);
 
+  symbolt *find_function_in_base_classes(
+    const std::string &class_name,
+    const std::string &symbol_id,
+    std::string method_name,
+    bool is_ctor) const;
+
+  void update_instance_from_self(
+    const std::string &class_name,
+    const std::string &func_name,
+    const std::string &obj_symbol_id);
+
+  std::string get_classname_from_symbol_id(const std::string &symbol_id) const;
+
   contextt &context;
   typet current_element_type;
   std::string python_filename;
@@ -51,7 +65,8 @@ private:
   std::string current_class_name;
   exprt *ref_instance;
   bool is_converting_lhs = false;
+  bool base_ctor_called = false;
 
   // Map object to list of instance attributes
-  std::unordered_map<std::string, std::vector<std::string>> instance_attr_map;
+  std::unordered_map<std::string, std::set<std::string>> instance_attr_map;
 };

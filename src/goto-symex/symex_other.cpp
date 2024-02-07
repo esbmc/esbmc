@@ -19,13 +19,15 @@ void goto_symext::symex_other(const expr2tc code)
   }
   else if (is_code_cpp_del_array2t(code2) || is_code_cpp_delete2t(code2))
   {
-    expr2tc deref_code(code2);
+    replace_dynamic_allocation(code2);
+    replace_nondet(code2);
 
-    replace_dynamic_allocation(deref_code);
-    replace_nondet(deref_code);
-    dereference(deref_code, dereferencet::READ);
+    const auto &code_expr = static_cast<const code_expression_data &>(*code2);
 
-    symex_cpp_delete(deref_code);
+    expr2tc deref = code_expr.operand;
+    dereference(deref, dereferencet::FREE);
+
+    symex_cpp_delete(deref);
   }
   else if (is_code_free2t(code2))
   {

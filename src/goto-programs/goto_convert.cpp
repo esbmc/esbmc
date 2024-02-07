@@ -1128,16 +1128,6 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
   goto_programt::targett t_c = dest.add_instruction(ASSIGN);
   t_c->code = assign2;
   t_c->location = code.location();
-
-  exprt deallocated_expr("deallocated_object", bool_typet());
-  deallocated_expr.copy_to_operands(tmp_op);
-
-  //indicate that memory has been deallocated
-  assign = code_assignt(deallocated_expr, true_exprt());
-  migrate_expr(assign, assign2);
-  goto_programt::targett t_d = dest.add_instruction(ASSIGN);
-  t_d->code = assign2;
-  t_d->location = code.location();
 }
 
 void goto_convertt::convert_assert(const codet &code, goto_programt &dest)
