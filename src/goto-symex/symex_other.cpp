@@ -17,26 +17,14 @@ void goto_symext::symex_other(const expr2tc code)
     expr2tc operand = expr.operand;
     dereference(operand, dereferencet::READ);
   }
-  else if (is_code_cpp_delete2t(code2))
+  else if (is_code_cpp_del_array2t(code2) || is_code_cpp_delete2t(code2))
   {
     replace_dynamic_allocation(code2);
     replace_nondet(code2);
 
-    const code_cpp_delete2t &code = to_code_cpp_delete2t(code2);
+    const auto &code_expr = static_cast<const code_expression_data &>(*code2);
 
-    expr2tc deref = code.operand;
-    dereference(deref, dereferencet::FREE);
-
-    symex_cpp_delete(deref);
-  }
-  else if (is_code_cpp_del_array2t(code2))
-  {
-    replace_dynamic_allocation(code2);
-    replace_nondet(code2);
-
-    const code_cpp_del_array2t &code = to_code_cpp_del_array2t(code2);
-
-    expr2tc deref = code.operand;
+    expr2tc deref = code_expr.operand;
     dereference(deref, dereferencet::FREE);
 
     symex_cpp_delete(deref);
