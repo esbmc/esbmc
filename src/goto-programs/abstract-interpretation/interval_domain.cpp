@@ -1238,7 +1238,7 @@ void interval_domaint::assume(const expr2tc &cond)
     {
       contractor.maps_to_domains(int_map, real_map);
       contractor.apply_contractor();
-      new_cond = contractor.result_of_outer(new_cond);
+      new_cond = contractor.result_of_outer();
       simplify(new_cond);
     }
   }

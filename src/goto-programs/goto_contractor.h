@@ -662,7 +662,7 @@ public:
 
   void apply_contractor();
 
-  expr2tc result_of_outer(expr2tc exp);
+  expr2tc result_of_outer();
 
   void dump(bool is_timed);
 
