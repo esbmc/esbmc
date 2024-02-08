@@ -965,7 +965,7 @@ void interval_analysis_ibex_contractor::apply_contractor()
       .count();
 }
 
-expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
+expr2tc interval_analysis_ibex_contractor::result_of_outer()
 {
   expr2tc cond = gen_true_expr();
 
