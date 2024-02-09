@@ -268,7 +268,7 @@ bool ai_baset::do_function_call_rec(
 
   /* NOTE: Ideally we could let the domains deal with this with a more grained level.
      For example, a function pointer that has no parameters can only affect global state.
-     However, I do not thing its a good idea to optimize for a hacky behaviour. Let's first
+     However, I do not think its a good idea to optimize for a hacky behaviour. Let's first
      fix the AI. */
   tmp_state->make_entry();
   return merge(*tmp_state, l_call, l_return);
