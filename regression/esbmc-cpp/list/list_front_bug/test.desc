@@ -1,13 +1,4 @@
-<?xml version='1.0' encoding='utf-8'?>
-<test-case>
-  <item_01_test_case_version>Versão 1.0</item_01_test_case_version>
-  <item_02_id>esbmc-list</item_02_id>
-  <item_03_summary>Aims to analyze the main function from module: esbmc-list</item_03_summary>
-  <item_04_file_C_to_test>main.cpp </item_04_file_C_to_test>
-  <item_05_option_to_run_esbmc>--unwind 3 --no-unwinding-assertions --timeout 900</item_05_option_to_run_esbmc>
-  <item_06_expected_result>^VERIFICATION FAILED$</item_06_expected_result>
-  <item_07_test_importance>High</item_07_test_importance>
-  <item_08_execution_type>Automated</item_08_execution_type>
-  <item_09_author>Ceteli/UFAM</item_09_author>
-<item_10_mode>KNOWNBUG</item_10_mode>
-</test-case>
+KNOWNBUG
+main.cpp
+--unwind 3 --no-unwinding-assertions --timeout 900
+^VERIFICATION FAILED$
