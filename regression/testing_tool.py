@@ -42,64 +42,13 @@ FAIL_MODES = ["KNOWNBUG"]
 # Bring up a single benchmark
 BENCHMARK_BRINGUP = False
 
-class BaseTest:
+class TestCase:
     """This class is responsible to:
        (a) parse and validate test descriptions.
        (b) hold functions to manipulate and generate commands with test case"""
 
     def _initialize_test_case(self):
         """Reads test description and initialize this object"""
-        raise NotImplementedError
-
-    def generate_run_argument_list(self, *tool):
-        """Generates run command list to be used in Popen"""
-        result = list(tool)
-        result.append(os.path.join(self.test_dir, self.test_file))
-        for x in shlex.split(self.test_args):
-            if x != "":
-                p = os.path.join(self.test_dir, x)
-                result.append(p if os.path.exists(p) else x)
-        if BaseTest.SMT_ONLY:
-            result.append("--smtlib")
-            result.append("--smt-formula-only")
-            result.append("--output")
-            result.append(f"{self.test_dir}.smt2")
-            result.append("--array-flattener")
-
-        return result
-
-    def mark_test_as_knownbug(self, issue: str):
-        """This will change the test.desc marking the test
-            as a KNOWNBUG and (if supported) add the issue
-            to it"""
-        raise NotImplementedError
-
-    def __str__(self):
-        return f'[{self.name}]: {self.test_dir}, {self.test_mode}'
-
-    def __init__(self, test_dir: str, name: str):
-        assert os.path.exists(test_dir)
-        assert os.path.exists(os.path.join(test_dir, "test.desc"))
-        self.name = name
-        self.test_dir = test_dir
-        self.test_args = None
-        self.test_file = None
-        self.test_mode = "CORE"
-        self._initialize_test_case()
-
-    """Ignore regex and only check for crashes"""
-    RUN_ONLY = False
-    """SMT only test"""
-    SMT_ONLY = False
-
-
-class CTestCase(BaseTest):
-    """This specialization will parse C test descriptions"""
-
-    def __init__(self, test_dir: str, name: str):
-        super().__init__(test_dir, name)
-
-    def _initialize_test_case(self):
         with open(os.path.join(self.test_dir, "test.desc")) as fp:
             # First line - TEST MODE
             self.test_mode = fp.readline().strip()
@@ -120,87 +69,55 @@ class CTestCase(BaseTest):
                 self.test_regex.append(line.strip())
 
 
-class XMLTestCase(BaseTest):
-    """This specialization will parse XML test descriptions"""
-
-    UNSUPPORTED_OPTIONS = ["--timeout", "--memlimit"]
-
-    def __init__(self, test_dir: str, name: str):
-        super().__init__(test_dir, name)
-
-    def mark_test_as_knownbug(self, issue: str):
-        et = ET.parse(os.path.join(self.test_dir, "test.desc"))
-        root = et.getroot()
-        mode_tag = ET.SubElement(root, 'item_10_mode')
-        mode_tag.text = 'KNOWNBUG'
-
-        motive_tag = ET.SubElement(root, 'item_11_issue')
-        motive_tag.text = issue
-
-        et.write(os.path.join(self.test_dir, "test.desc"), encoding="utf-8", xml_declaration=True)
-
-
-
-    def _initialize_test_case(self):
-        root = ET.parse(os.path.join(self.test_dir, "test.desc")).getroot()
-        self.version: str = root[0].text.strip()
-        self.module: str = root[1].text.strip()
-        self.description: str = root[2].text.strip()
-        self.test_file: str = root[3].text.strip()
-        try:
-            self.test_args: str = root[4].text.strip()
-        except:
-            self.test_args: str = ""
-        # TODO: Multiline regex
-        self.test_regex = [root[5].text.strip()]
-        self.priority = root[6].text.strip()
-        self.execution_type = root[7].text.strip()
-        self.author = root[8].text.strip()
-
-        try:
-            self.test_mode = root[9].text.strip()
-        except:
-            self.test_mode = "CORE"
-        finally:
-            assert self.test_mode in SUPPORTED_TEST_MODES, str(
-                self.test_mode) + " is not supported"
-        assert os.path.exists(os.path.join(self.test_dir, self.test_file))
-
     def generate_run_argument_list(self, *tool):
-        result = super().generate_run_argument_list(*tool)
-        for x in self.__class__.UNSUPPORTED_OPTIONS:
-            try:
-                index = result.index(x)
-                result.pop(index)
-                result.pop(index)
-            except ValueError:
-                pass
+        """Generates run command list to be used in Popen"""
+        result = list(tool)
+        result.append(os.path.join(self.test_dir, self.test_file))
+        for x in shlex.split(self.test_args):
+            if x != "":
+                p = os.path.join(self.test_dir, x)
+                result.append(p if os.path.exists(p) else x)
+        if TestCase.SMT_ONLY:
+            result.append("--smtlib")
+            result.append("--smt-formula-only")
+            result.append("--output")
+            result.append(f"{self.test_dir}.smt2")
+            result.append("--array-flattener")
 
         return result
 
+    def __str__(self):
+        return f'[{self.name}]: {self.test_dir}, {self.test_mode}'
 
-class TestParser:
+    def __init__(self, test_dir: str, name: str):
+        assert os.path.exists(test_dir)
+        assert os.path.exists(os.path.join(test_dir, "test.desc"))
+        self.name = name
+        self.test_dir = test_dir
+        self.test_args = None
+        self.test_file = None
+        self.test_mode = "CORE"
+        self._initialize_test_case()
 
-    MODES = {"C_TEST": CTestCase, "XML": XMLTestCase}
+    def save_test(self):
+        """Replaces original test with the current configuration"""
+        test_desc_path = os.path.join(self.test_dir, "test.desc")
+        assert(os.path.isfile(test_desc_path))
+        with open(test_desc_path, 'w') as f:
+            f.write(f"{self.test_mode}\n")
+            f.write(f"{self.test_file}\n")
+            f.write(f"{self.test_args}\n")
+            for re in self.test_regex:
+                f.write(f"{re}\n")
 
-    @staticmethod
-    def detect_mode_by_header(first_line: str) -> str:
-        # Look at the header of a file to determine testmode
-        # TODO: This should use a better way to detect if its an XML file
-        if first_line == "<?xml version='1.0' encoding='utf-8'?>":
-            return "XML"
-        elif first_line in SUPPORTED_TEST_MODES:
-            return "C_TEST"
-        raise ValueError(f'Invalid file header: {first_line}')
 
-    @staticmethod
-    def from_file(test_dir: str, name: str) -> BaseTest:
-        """Tries to open a file and selects which class to parse the file"""
-        file_path = os.path.join(test_dir, "test.desc")
-        assert os.path.exists(file_path), file_path
-        with open(file_path) as fp:
-            first_line = fp.readline().strip()
-            return TestParser.MODES[TestParser.detect_mode_by_header(first_line)](test_dir, name)
+    """Ignore regex and only check for crashes"""
+    RUN_ONLY = False
+    """SMT only test"""
+    SMT_ONLY = False
+    """Options that should be removed"""
+    UNSUPPORTED_OPTIONS = ["--timeout", "--memlimit"]
+
 
 
 class Executor:
@@ -208,7 +125,7 @@ class Executor:
         self.tool = shlex.split(tool)
         self.timeout = RegressionBase.TIMEOUT
 
-    def run(self, test_case: BaseTest):
+    def run(self, test_case: TestCase):
         """Execute the test case with `executable`"""
         cmd = test_case.generate_run_argument_list(*self.tool)
 
@@ -236,10 +153,8 @@ def get_test_objects(base_dir: str):
     listdir = os.listdir(base_dir)
     directories = [x for x in listdir if os.path.isdir(
         os.path.join(base_dir, x))]
-    assert len(directories) > 5
-    tests = [TestParser.from_file(os.path.join(base_dir, x), x)
+    tests = [TestCase(os.path.join(base_dir, x), x)
              for x in directories]
-    assert len(tests) > 5
     return tests
 
 class RegressionBase(unittest.TestCase):
@@ -269,7 +184,7 @@ def _add_test(test_case, executor):
             timeout_message ="\nTIMEOUT TEST: " + str(test_case.test_dir)
             self.fail(timeout_message)
 
-        if BaseTest.RUN_ONLY:
+        if TestCase.RUN_ONLY:
             if rc != 0:
                 self.fail(f"Wrong output for process. Bombed out with exit code {rc}")
             return
@@ -310,23 +225,9 @@ def _add_test(test_case, executor):
     return test
 
 
-def create_tests(executor_path: str, base_dir: str, mode: str):
-    assert mode in SUPPORTED_TEST_MODES, str(mode) + " is not supported"
-    executor = Executor(executor_path)
-
-    test_cases = get_test_objects(base_dir)
-    print(f'Found {len(test_cases)} test cases')
-    assert len(test_cases) > 0
-    for test_case in test_cases:
-        if test_case.test_mode == mode or mode == "ALL":
-            test_func = _add_test(test_case, executor)
-            setattr(RegressionBase, 'test_{0}'.format(
-                test_case.name), test_func)
-
-
 def gen_one_test(base_dir: str, test: str, executor_path: str, modes):
     executor = Executor(executor_path)
-    test_case = TestParser.from_file(os.path.join(base_dir, test), test)
+    test_case = TestCase(os.path.join(base_dir, test), test)
     if test_case.test_mode not in modes:
         exit(10)
     test_func = _add_test(test_case, executor)
@@ -365,13 +266,10 @@ def _arg_parsing():
 
     if(main_args.smt_test):
         print("Checking SMT generation only")
-        BaseTest.RUN_ONLY = True
-        BaseTest.SMT_ONLY = True
+        TestCase.RUN_ONLY = True
+        TestCase.SMT_ONLY = True
 
-    if main_args.file:
-        gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
-    else:
-        create_tests(main_args.tool, regression_path, main_args.mode)
+    gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)    
 
 def main():
     _arg_parsing()
