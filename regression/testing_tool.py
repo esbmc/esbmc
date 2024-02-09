@@ -84,6 +84,14 @@ class TestCase:
             result.append(f"{self.test_dir}.smt2")
             result.append("--array-flattener")
 
+        for x in TestCase.UNSUPPORTED_OPTIONS:
+            try:
+                index = result.index(x)
+                result.pop(index)
+                result.pop(index)
+            except ValueError:
+                pass    
+
         return result
 
     def __str__(self):
