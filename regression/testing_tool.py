@@ -279,3 +279,29 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Utilities for REPL. This helps us to do batch changes over all tests.
+# Example:
+# 1. Invoke python3 in shell
+# 2. `import testing_tool`
+# 3. `testing_tool.apply_transform_over_tests(testing_tool.print_test)`
+
+# TODO We probably should obtain this from CMake somehow
+TEST_SUITES = [ "bitwuzla", "cvc", "mathsat", "smtlib", "z3", "esbmc-solidity", "Interval-analysis-ibex-contractor",
+                "esbmc-old", "jimple", "python", "cheri-c", "cheri-128", "esbmc-cpp/cpp", "esbmc-cpp/cbmc", "esbmc-cpp/polymorphism_bringup",
+                "esbmc-cpp/inheritance_bringup", "esbmc-cpp/bug_fixes", "esbmc-cpp/OM_sanity_checks", "esbmc-cpp/string", "esbmc-cpp/stream",
+                "esbmc-cpp/gcc-template-tests", "esbmc-cpp/template", "esbmc-cpp/algorithm", "esbmc-cpp/deque", "esbmc-cpp/list", "esbmc-cpp/map",
+                "esbmc-cpp/multimap", "esbmc-cpp/multiset", "esbmc-cpp/priority_queue", "esbmc-cpp/queue", "esbmc-cpp/set", "esbmc-cpp/stack",
+                "esbmc-cpp/unix", "esbmc-cpp/vector", "esbmc-cpp11/cpp", "esbmc-cpp11/constructors", "esbmc-cpp11/new-delete", "esbmc-cpp11/reference",
+                "esbmc-unix", "esbmc-unix2", "esbmc", "cbmc", "cstd", "llvm", "floats", "floats-regression", "k-induction", "csmith", "k-induction-parallel",
+                "cuda/benchmarks", "cuda/Supported_long_time", "nonz3", "incremental-smt", "extensions", "cuda/COM_sanity_checks", "linux"]
+
+def apply_transform_over_tests(functor):
+    for base_dir in TEST_SUITES:
+        test_cases = get_test_objects(base_dir)
+        for test_case in test_cases:
+            functor(test_case)
+
+def print_test(test: TestCase):
+    print(str(test))
+
