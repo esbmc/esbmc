@@ -1,5 +1,95 @@
 Release Notes of the ESBMC model checker
 
+*** Version 7.5
+* Clang-C++ Frontend
+- Improved C++ dangling pointer checking (#1648).
+- Improved C++ double delete (#1648).
+- Fixed the cpp new initialization (#1636).
+- Fixed the copy and move constructor (#1614).
+- Support rvalue references C++11 (#1595).
+* Solidity Frontend
+- Support Multiple Contract Verification (#1640).
+- Bug fixes for Inheritance (#1624).
+- Scope fix (#1606).
+- Support Error Handling (#1598).
+- Supported struct data structure and fixed bugs (#1563).
+- Fixed nested loop and one-statement block (#1546).
+- Fixed Visibility (#1545).
+- Support pattern-base checking in contract mode (#1543).
+- Continue and Break Keyword Supported (#1529).
+* Python Frontend
+- Inheritance and overriding (#1639).
+- Empty class instantiation and built-in functions support (#1608).
+- Support pass statement and var declarations without initialization (#1602).
+- Support for Class attributes (#1587).
+- Class definition and instantiation (#1552).
+- Support for // operator (#1522).
+- Add type inference for dynamic variables (#1515).
+- Python frontend: Add support for recursion (#1481).
+- Adjust types and re-enable tests (#1441).
+- Add support for non-determinism (#1439).
+- Optimize --function handling (#1438).
+- Add support for conditional operator and function flag (#1437).
+* Jimple frontend
+- Jimple throws are now shown at --show-claims (#1632).
+* Abstract Interpretation
+- Interval analysis now inverts boolean correctly (#1625).
+- VSA is now only computed with GCSE flag (#1607).
+- Instrumentation for interval loop invariants (#1603).
+- Wrapped intervals can now optimize expressions (#1566).
+- Support for context-aware intervals (#1564).
+* GOTO contractors
+- Ibex fixpoint was causing crashes; fixed-point is done manually now (#1638).
+- Integers (signed and unsigned) and floats are converted from one to another correctly now (#1638).
+* Concurrency
+- Fixed monolithic partial order-reduction (#1633)
+- Optimise the efficiency of data race detection (#1544).
+- Support for "printf" for data races check (#1477).
+- Take cur_state->guard into account for creating a new thread (#1463).
+- Fixing dereference in data-races check (#1460).
+- Optimise index races check (#1456).
+* Operational models
+- Add libm musl float OMs used in svcomp24 (#1601).
+- Fix range of rand() and random() to include upper endpoint (#1596).
+- Add Operational Model for semaphore (#1536).
+- Added sscanf OM (#1519).
+- Add OM for pthread_rwlock_rdlock (#1516).
+- Rework of the support for builtins (#1435).
+* Memory model
+- Pass alignment attribute constraint through to smt (#1593).
+- Value-set considers alignment of references to symbols (#1629).
+- SMT memspace fixes (#1538).
+- Fixed crash caused by invalid id in value set (#1514).
+- Distinguish between valid-memsafety and valid-memcleanup (#1482).
+- Infinity array bounds are no longer checked (#1432).
+* General improvements
+- Added missing unwinding assertion loopid (#1635).
+- Protect make_n_ary() from being called with empty list (#1627).
+- Fixed overflow in ID node from witness generation (#1623).
+- Fixed incorrect assertion coverage (#1619).
+- SV-Comp builds includes all supported solvers (#1613).
+- Remove shared_ptr from being used unnecessarily in API (#1612).
+- Improved build instructions for ESBMC-CHERI (#1611).
+- Performance improvement for multi-property verification (#1605).
+- Update Bitwuzla to v0.3.1 (#1604).
+- Show decision runtime for each claim (#1578).
+- Added ARM64 build into CI (#1575).
+- Fixed overflow- encoding (#1560).
+- Fix the general case for string-literal to array conversion (#1549).
+- Update Boolector to v3.2.3 (#1542).
+- Simplify BigInt power2 API (#1532).
+- Do not overwrite location of first instruction during goto-conversion (#1530).
+- Optimize floats memset for zero initialization (#1509).
+- Intrinsic memset claim fix (#1506).
+- Interpret non-adorned fptrs in function argument list (#1503).
+- Add __ESBMC_unreachable() and --enable-unreachability-intrinsic (#1502).
+- Interpret __builtin_unreachable() as no-op for sv-comp (#1500).
+- Fixed wrong line number in if-then-else (#1491).
+- Put some effort into representing array_of terms to the user (#1488).
+- symex_input: use source location of intrinsic for assignments (#1472).
+- Added short circuit for one byte types in optimized memset (#1467).
+- strerror: fix integer overflow (#1457).
+
 *** Version 7.4
 * Python Frontend
 - Support for logical and/or (#1423)
