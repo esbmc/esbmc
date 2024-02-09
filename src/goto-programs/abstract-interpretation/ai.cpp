@@ -264,8 +264,7 @@ bool ai_baset::do_function_call_rec(
 
   // TODO: We really should have a points-to for the AI.
   get_state(l_return);
-  std::unique_ptr<statet> tmp_state(
-				    make_temporary_state(get_state(l_call)));
+  std::unique_ptr<statet> tmp_state(make_temporary_state(get_state(l_call)));
 
   /* NOTE: Ideally we could let the domains deal with this with a more grained level.
      For example, a function pointer that has no parameters can only affect global state.
