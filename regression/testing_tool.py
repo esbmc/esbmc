@@ -345,7 +345,7 @@ TEST_SUITES = [
     "jimple",
     "k-induction",
     "k-induction-parallel",
-    "linux"
+    "linux",
     "llvm",
     "mathsat",
     "nonz3",
