@@ -959,13 +959,13 @@ public:
       Examples (signed char):
 
       - get_interval_bounds([10, 127]) --> <10, 127>
-      - get_interval_bounds([10, 128]) --> <-128, 10>
-      - get_interval_bounds([10, 255]) --> <-128, 10>
+      - get_interval_bounds([10, 128]) --> <-128, 127>
+      - get_interval_bounds([10, 255]) --> <-128, 127>
       - get_interval_bounds([129, 130]) --> <-127, -126>
       - get_interval_bounds([255, 10]) --> <-1, 10>
 
-      @warning This is not to represent a range interval, wrapped can have holes!
-      From the example: [10, 128] contains both <-128, 10> but it does not contain 9 or -127!
+      Note: This is not to represent a range interval, wrapped can have holes!
+      From the example: [10, 128] contains both <-128, 127> but it does not contain 9 or -127!
   */
   std::pair<BigInt, BigInt> get_interval_bounds() const
   {
