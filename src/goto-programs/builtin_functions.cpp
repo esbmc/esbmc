@@ -319,10 +319,16 @@ void goto_convertt::do_cpp_new(
     simplify(alloc_size);
   }
 
+  exprt new_expr("sideeffect", lhs.type());
+  new_expr.statement(rhs.statement());
+  new_expr.cmt_size(alloc_size);
+  new_expr.cmt_type(alloc_size.type());
+  new_expr.location() = rhs.find_location();
+
   // produce new object
   goto_programt::targett t_n = dest.add_instruction(ASSIGN);
-  exprt assign_expr = code_assignt(lhs, rhs);
-  migrate_expr(assign_expr, t_n->code);
+  exprt new_assign = code_assignt(lhs, new_expr);
+  migrate_expr(new_assign, t_n->code);
   t_n->location = rhs.find_location();
 
   // set up some expressions
