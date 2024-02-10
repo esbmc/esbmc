@@ -1502,7 +1502,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
       // These hide the size in a real size field,
-      migrate_expr((const exprt &)expr.find("size"), thesize);
+      migrate_expr((const exprt &)expr.cmt_size(), thesize);
     else if (
       expr.statement() != "nondet" && expr.statement() != "function_call")
       // For everything other than nondet,
