@@ -1488,3 +1488,66 @@ TEST_CASE("Bitnot Operations", "[ai][interval-analysis]")
     REQUIRE(*r.upper == 255); // 0xFF
   }
 }
+
+TEST_CASE("Wrapped interval bounds", "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+  wrapped_interval w1(get_int_type(8));
+  std::pair<BigInt, BigInt> result;
+  SECTION("[10, 127] --> <10, 127>")
+  {
+    w1.lower = 10; 
+    w1.upper = 127;
+
+    result = w1.get_interval_bounds();
+    CAPTURE(result.first, result.second);
+    REQUIRE(result.first == 10); 
+    REQUIRE(result.second == 127);
+  }
+
+  SECTION("[10, 128] --> <-128, 127>")
+  {
+    w1.lower = 10;  
+    w1.upper = 128; 
+
+    result = w1.get_interval_bounds();
+    CAPTURE(result.first, result.second);
+    REQUIRE(result.first == -128); 
+    REQUIRE(result.second == 127); 
+  }
+
+  SECTION("[10, 255] --> <-128, 127>")
+  {
+    w1.lower = 10;  
+    w1.upper = 255; 
+
+    result = w1.get_interval_bounds();
+    CAPTURE(result.first, result.second);
+    REQUIRE(result.first == -128);
+    REQUIRE(result.second == 127);
+  }
+
+  SECTION("[129, 130] --> <-127, -126>")
+  {
+    w1.lower = 129;  
+    w1.upper = 130; 
+
+    result = w1.get_interval_bounds();
+    CAPTURE(result.first, result.second);
+    REQUIRE(result.first == -127);
+    REQUIRE(result.second == -126);
+  }
+
+  SECTION("[255, 10] --> <-1, 10>")
+  {
+    w1.lower = 255;  
+    w1.upper = 10; 
+
+    result = w1.get_interval_bounds();
+    CAPTURE(result.first, result.second);
+    REQUIRE(result.first == -1);
+    REQUIRE(result.second == 10);
+  }
+
+}
+
