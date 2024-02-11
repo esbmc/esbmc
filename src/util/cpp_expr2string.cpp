@@ -317,7 +317,7 @@ std::string cpp_expr2stringt::convert_cpp_new(const exprt &src, unsigned)
   {
     dest = "new";
 
-    std::string tmp_size = convert(static_cast<const exprt &>(src.size_irep()));
+    std::string tmp_size = convert(static_cast<const exprt &>(src.cmt_size()));
 
     dest += " ";
     dest += convert(src.type().subtype());
