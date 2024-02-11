@@ -304,8 +304,6 @@ void goto_convertt::do_cpp_new(
     expr2tc sz_expr = constant_int2tc(size_type2(), sz);
     expr2tc byte_size = mul2tc(size_type2(), alloc_units, sz_expr);
     alloc_size = migrate_expr_back(byte_size);
-
-    const_cast<irept &>(rhs.size_irep()) = alloc_size;
   }
   else
     alloc_size = from_integer(1, size_type());
@@ -319,10 +317,9 @@ void goto_convertt::do_cpp_new(
     simplify(alloc_size);
   }
 
-  exprt new_expr("sideeffect", lhs.type());
+  exprt new_expr("sideeffect", rhs.type());
   new_expr.statement(rhs.statement());
   new_expr.cmt_size(alloc_size);
-  new_expr.cmt_type(alloc_size.type());
   new_expr.location() = rhs.find_location();
 
   // produce new object
