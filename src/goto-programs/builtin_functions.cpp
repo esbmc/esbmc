@@ -521,7 +521,7 @@ void goto_convertt::do_function_call_symbol(
       dest.add_instruction(is_assume ? ASSUME : ASSERT);
     migrate_expr(arguments.front(), t->guard);
 
-    t->sliceable = base_name == "__ESBMC_sliceable_assume";
+    t->sliceable = is_assume && base_name == "__ESBMC_sliceable_assume";
 
     // The user may have re-declared the assert or assume functions to take an
     // integer argument, rather than a boolean. This leads to problems at the

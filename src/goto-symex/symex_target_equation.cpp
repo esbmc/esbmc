@@ -106,7 +106,7 @@ void symex_target_equationt::assertion(
   SSA_step.comment = msg;
   SSA_step.stack_trace = stack_trace;
   SSA_step.loop_number = loop_number;
-  SSA_step.sliceable = true;
+  SSA_step.sliceable = false;
 
   if (debug_print)
     debug_print_step(SSA_step);
