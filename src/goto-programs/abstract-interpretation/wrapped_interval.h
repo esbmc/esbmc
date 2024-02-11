@@ -954,7 +954,7 @@ public:
     return invert_bool(equality(lhs, rhs));
   }
 
-  /** @brief flatten all intervals cuts into a BigInt pair. 
+  /** @brief Computes the minimum and maximum value inside the interval
 
       Examples (signed char):
 
