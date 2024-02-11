@@ -139,7 +139,7 @@ public:
 
     bool inductive_assertion;
 
-    // for slicer
+    // for slicer (assumptions only)
     bool sliceable;
 
     //! is this node a branch target?
