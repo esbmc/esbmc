@@ -979,7 +979,7 @@ public:
 
       minimum = std::min(minimum, local_min);
       maximum = std::max(maximum, local_max);
-    }   
+    }
     return std::make_pair(minimum, maximum);
   }
 
