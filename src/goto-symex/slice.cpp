@@ -37,7 +37,7 @@ void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
 
 void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
 {
-  if (!slice_assumes)
+  if (!slice_assumes && !SSA_step.sliceable)
   {
     get_symbols<true>(SSA_step.guard);
     get_symbols<true>(SSA_step.cond);

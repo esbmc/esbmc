@@ -53,7 +53,8 @@ public:
     const expr2tc &guard,
     const expr2tc &cond,
     const sourcet &source,
-    unsigned loop_number) override;
+    unsigned loop_number,
+    const bool sliceable) override;
 
   // record an assertion
   // cond is destroyed
@@ -127,6 +128,7 @@ public:
     // for ASSUME/ASSERT
     expr2tc cond;
     std::string comment;
+    bool sliceable;
 
     // for OUTPUT
     std::string format_string;
@@ -136,7 +138,7 @@ public:
     smt_astt guard_ast, cond_ast;
     std::list<expr2tc> converted_output_args;
 
-    // for slicing
+    // to mark step as uneeded
     bool ignore;
 
     // for visibility
@@ -145,7 +147,7 @@ public:
     // for bidirectional search
     unsigned loop_number;
 
-    SSA_stept() : ignore(false), hidden(false)
+    SSA_stept() : sliceable(false), ignore(false), hidden(false)
     {
     }
 
