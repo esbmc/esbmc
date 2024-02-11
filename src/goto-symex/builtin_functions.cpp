@@ -542,9 +542,9 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
 void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
 {
-  bool do_array;
+  expr2tc size = code.size;
 
-  do_array = (code.kind == sideeffect2t::cpp_new_arr);
+  bool do_array = (code.kind == sideeffect2t::cpp_new_arr);
 
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
@@ -588,18 +588,12 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
 
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
+  expr2tc ptr_rhs(rhs);
 
   symex_assign(code_assign2tc(lhs, rhs), true);
 
-  // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
-  expr2tc sym = symbol2tc(sym_type, "__ESBMC_is_dynamic");
-
-  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), lhs);
-  expr2tc idx = index2tc(get_bool_type(), sym, ptr_obj);
-  expr2tc truth = gen_true_expr();
-
-  symex_assign(code_assign2tc(idx, truth), true);
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
+  track_new_pointer(ptr_obj, newtype, size);
 
   dynamic_memory.emplace_back(
     rhs_copy, cur_state->guard, false, symbol.name.as_string());

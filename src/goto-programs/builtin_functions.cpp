@@ -328,27 +328,6 @@ void goto_convertt::do_cpp_new(
   migrate_expr(new_assign, t_n->code);
   t_n->location = rhs.find_location();
 
-  // set up some expressions
-  exprt valid_expr("valid_object", typet("bool"));
-  valid_expr.copy_to_operands(lhs);
-  exprt neg_valid_expr = gen_not(valid_expr);
-
-  // set size
-  //nec: ex37.c
-  exprt dynamic_size("dynamic_size", size_type());
-  dynamic_size.copy_to_operands(lhs);
-  dynamic_size.location() = rhs.find_location();
-  goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
-  exprt assign = code_assignt(dynamic_size, alloc_size);
-  migrate_expr(assign, t_s_s->code);
-  t_s_s->location = rhs.find_location();
-
-  // now set alloc bit
-  goto_programt::targett t_s_a = dest.add_instruction(ASSIGN);
-  assign = code_assignt(valid_expr, true_exprt());
-  migrate_expr(assign, t_s_a->code);
-  t_s_a->location = rhs.find_location();
-
   // run initializer
   dest.destructive_append(tmp_initializer);
 }
