@@ -270,7 +270,7 @@ void goto_symext::track_new_pointer(
 
 void goto_symext::symex_free(const expr2tc &expr)
 {
-  const code_free2t &code = to_code_free2t(expr);
+  const auto &code = static_cast<const code_expression_data &>(*expr);
 
   // Trigger 'free'-mode dereference of this pointer. Should generate various
   // dereference failure callbacks.
@@ -599,22 +599,10 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
     rhs_copy, cur_state->guard, false, symbol.name.as_string());
 }
 
-void goto_symext::symex_cpp_delete(const expr2tc &expr)
+// XXX - implement as a call to free?
+void goto_symext::symex_cpp_delete(const expr2tc &)
 {
-  const auto &code_expr = static_cast<const code_expression_data &>(*expr);
-
-  expr2tc deref = code_expr.operand;
-  dereference(deref, dereferencet::FREE);
-
-  // Clear the alloc bit.
-  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
-  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), code_expr.operand);
-  dereference(ptr_obj, dereferencet::READ);
-
-  expr2tc valid_sym = symbol2tc(sym_type, valid_ptr_arr_name);
-  expr2tc valid_index_expr = index2tc(get_bool_type(), valid_sym, ptr_obj);
-  expr2tc falsity = gen_false_expr();
-  symex_assign(code_assign2tc(valid_index_expr, falsity), true);
+  //bool do_array=code.statement()=="delete[]";
 }
 
 void goto_symext::intrinsic_yield(reachability_treet &art)
