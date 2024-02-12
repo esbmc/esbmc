@@ -8,31 +8,35 @@
 
 namespace std
 {
-    // Forward declaration of istream and ostream
-    class istream;
-    class ostream;
+// Forward declaration of istream and ostream
+class istream;
+class ostream;
 
-    // Definition of iostream
-    class iostream: public ostream, public istream
-    {
-    public:
-        // Default constructor
-        iostream() : ostream(), istream() {}
+// Definition of iostream
+class iostream : public ostream, public istream
+{
+public:
+  // Default constructor
+  iostream() : ostream(), istream()
+  {
+  }
 
-        // Destructor
-        virtual ~iostream () {}
+  // Destructor
+  virtual ~iostream()
+  {
+  }
 
-        // Disabled copy assignment operator
-        iostream& operator=(const iostream&);
-    };
+  // Disabled copy assignment operator
+  iostream &operator=(const iostream &);
+};
 
-    // Declaration of standard input/output streams
-    extern istream cin;
-    extern ostream cout;
-    extern ostream cerr;
+// Declaration of standard input/output streams
+extern istream cin;
+extern ostream cout;
+extern ostream cerr;
 
-    // Definition of standard end-of-line character
-    const char endl = '\n';
-}
+// Definition of standard end-of-line character
+const char endl = '\n';
+} // namespace std
 
 #endif
