@@ -203,7 +203,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"unlimited-goto-unwind",
      NULL,
      "do not unroll bounded loops at goto level"},
-    {"slice-assumes", NULL, "remove unused assume statements"},
     {"extended-try-analysis", NULL, ""},
     {"skip-bmc", NULL, ""}}},
   {"Incremental BMC",

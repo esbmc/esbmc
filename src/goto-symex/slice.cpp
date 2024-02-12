@@ -31,13 +31,21 @@ bool symex_slicet::get_symbols(const expr2tc &expr)
 
 void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
 {
+  if (SSA_step.sliceable)
+  {
+    log_error(
+      "[slicer] Found a sliceable assertion. Something very bad must have "
+      "happened");
+    abort();
+  }
+   
   get_symbols<true>(SSA_step.guard);
   get_symbols<true>(SSA_step.cond);
 }
 
 void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
 {
-  if (!slice_assumes && !SSA_step.sliceable)
+  if (!SSA_step.sliceable)
   {
     get_symbols<true>(SSA_step.guard);
     get_symbols<true>(SSA_step.cond);
@@ -68,6 +76,8 @@ void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
 void symex_slicet::run_on_assignment(
   symex_target_equationt::SSA_stept &SSA_step)
 {
+  if (!SSA_step.sliceable)
+    log_warning("[slicer] there is no support for unsliceable assignments. Slicing it...");
   assert(is_symbol2t(SSA_step.lhs));
   // TODO: create an option to ignore nondet symbols (test case generation)
 
@@ -107,6 +117,8 @@ void symex_slicet::run_on_assignment(
 void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
+    if (!SSA_step.sliceable)
+    log_warning("[slicer] there is no support for unsliceable renumbering. Slicing it...");
 
   if (!get_symbols<false>(SSA_step.lhs))
   {
