@@ -341,7 +341,7 @@ public:
         type(NO_INSTRUCTION_TYPE),
         inductive_step_instruction(false),
         inductive_assertion(false),
-	sliceable(false),
+        sliceable(false),
         location_number(0),
         loop_number(unsigned(0)),
         target_number(unsigned(-1))
@@ -354,7 +354,7 @@ public:
         type(_type),
         inductive_step_instruction(false),
         inductive_assertion(false),
-	sliceable(false),
+        sliceable(false),
         location_number(0),
         loop_number(unsigned(0)),
         target_number(unsigned(-1))
@@ -375,8 +375,7 @@ public:
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(instruction.loop_number, loop_number);
-      std::swap(
-        sliceable, instruction.sliceable);
+      std::swap(sliceable, instruction.sliceable);
     }
 
     //! A globally unique number to identify a program location.

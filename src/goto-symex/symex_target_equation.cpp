@@ -83,7 +83,7 @@ void symex_target_equationt::assumption(
   SSA_step.source = source;
   SSA_step.loop_number = loop_number;
   SSA_step.sliceable = sliceable;
-  
+
   if (debug_print)
     debug_print_step(SSA_step);
 }
