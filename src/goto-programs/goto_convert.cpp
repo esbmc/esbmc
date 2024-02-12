@@ -1116,18 +1116,6 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
   goto_programt::targett t_f = dest.add_instruction(OTHER);
   t_f->code = code_cpp_delete2tc(tmp_op2);
   t_f->location = code.location();
-
-  // now do "delete"
-  exprt valid_expr("valid_object", bool_typet());
-  valid_expr.copy_to_operands(tmp_op);
-
-  // clear alloc bit
-  exprt assign = code_assignt(valid_expr, false_exprt());
-  expr2tc assign2;
-  migrate_expr(assign, assign2);
-  goto_programt::targett t_c = dest.add_instruction(ASSIGN);
-  t_c->code = assign2;
-  t_c->location = code.location();
 }
 
 void goto_convertt::convert_assert(const codet &code, goto_programt &dest)

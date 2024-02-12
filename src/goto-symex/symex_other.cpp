@@ -22,12 +22,7 @@ void goto_symext::symex_other(const expr2tc code)
     replace_dynamic_allocation(code2);
     replace_nondet(code2);
 
-    const auto &code_expr = static_cast<const code_expression_data &>(*code2);
-
-    expr2tc deref = code_expr.operand;
-    dereference(deref, dereferencet::FREE);
-
-    symex_cpp_delete(deref);
+    symex_cpp_delete(code2);
   }
   else if (is_code_free2t(code2))
   {
