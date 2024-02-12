@@ -128,7 +128,7 @@ namespace std
 
 namespace std {
   //Output manipulators
-  ostream& endl ( ostream& os ) { return os; }
+  //ostream& endl ( ostream& os ) { return os; }
   ostream& ends ( ostream& os );
 }
 
