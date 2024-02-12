@@ -8,10 +8,6 @@
 
 namespace std
 {
-// Forward declaration of istream and ostream
-class istream;
-class ostream;
-
 // Definition of iostream
 class iostream : public ostream, public istream
 {
