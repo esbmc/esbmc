@@ -200,6 +200,16 @@ public:
 
   unsigned component_number(const irep_idt &component_name) const;
   typet component_type(const irep_idt &component_name) const;
+
+  const componentst &methods() const
+  {
+    return (const componentst &)(find(a_methods).get_sub());
+  }
+
+  componentst &methods()
+  {
+    return (componentst &)(add(a_methods).get_sub());
+  }
 };
 
 extern inline const struct_union_typet &to_struct_union_type(const typet &type)
@@ -226,16 +236,6 @@ public:
   }
 
   bool is_prefix_of(const struct_typet &other) const;
-
-  const componentst &methods() const
-  {
-    return (const componentst &)(find(a_methods).get_sub());
-  }
-
-  componentst &methods()
-  {
-    return (componentst &)(add(a_methods).get_sub());
-  }
 };
 
 extern inline const struct_typet &to_struct_type(const typet &type)
