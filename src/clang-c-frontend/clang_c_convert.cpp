@@ -807,8 +807,9 @@ bool clang_c_convertert::get_type(
   const clang::QualType &q_type,
   typet &new_type)
 {
-  const clang::Type &the_type = *q_type.getTypePtrOrNull();
-  if (get_type(the_type, new_type))
+  const clang::Type *the_type = q_type.getTypePtrOrNull();
+  assert(the_type);
+  if (get_type(*the_type, new_type))
     return true;
 
   if (q_type.isConstQualified())
@@ -1054,7 +1055,8 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     get_decl_name(rd, name, id);
 
     /* record in context if not already there */
-    get_struct_union_class(rd);
+    if (get_struct_union_class(rd))
+      return true;
 
     /* symbolic type referring to that type */
     new_type = symbol_typet(id);
