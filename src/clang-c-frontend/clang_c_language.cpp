@@ -435,12 +435,6 @@ void __VERIFIER_atomic_end();
 /* Causes a verification error when its call is reachable; internal use in math
  * models */
 void __ESBMC_unreachable();
-
-// TODO: implement this similarly to printf
-  #define fscanf __ESBMC_fscanf
-  #define sscanf __ESBMC_sscanf
-
-  #define scanf __ESBMC_scanf
     )";
 
   if (config.ansi_c.cheri)

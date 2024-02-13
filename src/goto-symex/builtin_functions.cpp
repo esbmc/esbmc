@@ -483,20 +483,17 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
   assert(is_symbol2t(func_call.function));
 
   unsigned number_of_format_args, fmt_idx;
-  const std::string func_name =
-    to_symbol2t(func_call.function).thename.as_string();
+  const irep_idt func_name = to_symbol2t(func_call.function).thename;
 
-  if (func_name.find("__ESBMC_scanf") != std::string::npos)
+  if (func_name == "c:@F@scanf")
   {
-    assert(func_call.operands.size() >= 2 && "Wrong __ESBMC_scanf signature");
+    assert(func_call.operands.size() >= 2 && "Wrong scanf signature");
     fmt_idx = 0;
     number_of_format_args = func_call.operands.size() - 1;
   }
-  else if (
-    (func_name.find("__ESBMC_fscanf") != std::string::npos) ||
-    (func_name.find("__ESBMC_sscanf") != std::string::npos))
+  else if (func_name == "c:@F@fscanf" || func_name == "c:@F@sscanf")
   {
-    assert(func_call.operands.size() >= 3 && "Wrong __ESBMC_fscanf signature");
+    assert(func_call.operands.size() >= 3 && "Wrong fscanf/sscanf signature");
     fmt_idx = 1;
     number_of_format_args = func_call.operands.size() - 2;
   }

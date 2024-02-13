@@ -296,12 +296,12 @@ void goto_checkt::input_overflow_check(
 
   unsigned number_of_format_args, fmt_idx;
 
-  if (func_name.find("__ESBMC_scanf") != std::string::npos)
+  if (func_name == "c:@F@scanf")
   {
     fmt_idx = 0;
     number_of_format_args = func_call.operands.size() - 1;
   }
-  else if (func_name.find("__ESBMC_fscanf") != std::string::npos)
+  else if (func_name == "c:@F@fscanf" || func_name == "c:@F@sscanf")
   {
     fmt_idx = 1;
     number_of_format_args = func_call.operands.size() - 2;

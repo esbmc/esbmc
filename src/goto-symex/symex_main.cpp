@@ -272,6 +272,18 @@ void goto_symext::symex_step(reachability_treet &art)
         run_intrinsic(call, art, id.as_string());
         return;
       }
+
+      if (id == "c:@F@scanf" || id == "c:@F@sscanf" || id == "c:@F@fscanf")
+      {
+        cur_state->source.pc++;
+
+        auto &ex_state = art.get_cur_state();
+        if (ex_state.cur_state->guard.is_false())
+          return;
+
+        symex_input(call);
+        return;
+      }
     }
 
     if (cur_state->guard.is_false())
@@ -649,19 +661,6 @@ void goto_symext::run_intrinsic(
     symex_assign(code_assign2tc(
       func_call.ret,
       is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
-    return;
-  }
-
-  if (
-    has_prefix(symname, "c:@F@__ESBMC_scanf") ||
-    has_prefix(symname, "c:@F@__ESBMC_sscanf") ||
-    has_prefix(symname, "c:@F@__ESBMC_fscanf"))
-  {
-    auto &ex_state = art.get_cur_state();
-    if (ex_state.cur_state->guard.is_false())
-      return;
-
-    symex_input(func_call);
     return;
   }
 
