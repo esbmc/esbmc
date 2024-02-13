@@ -395,9 +395,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  if (get_struct_union_class_methods_decls(*rd_def, t))
-    return true;
-
   /* We successfully constructed the type of this symbol; replace the
    * symbol with the incomplete type by one with the now-complete type
    * definition.
@@ -407,7 +404,10 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   symbolt symbol = *sym;
   context.erase_symbol(symbol.id);
   symbol.type = t;
-  context.move_symbol_to_context(symbol);
+  sym = context.move_symbol_to_context(symbol);
+
+  if (get_struct_union_class_methods_decls(*rd_def, sym->type))
+    return true;
 
   return false;
 }
