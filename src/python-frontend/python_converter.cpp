@@ -675,8 +675,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         // Add member in the class
         if (!class_type.has_component(attr_name))
         {
-          struct_typet::componentt comp = std::move(build_component(
-            class_type.tag().as_string(), attr_name, current_element_type));
+          struct_typet::componentt comp = build_component(
+            class_type.tag().as_string(), attr_name, current_element_type);
           class_type.components().push_back(comp);
         }
         // Add instance attribute in the objects map
@@ -1139,7 +1139,7 @@ void python_converter::get_attributes_from_self(
       std::string attr_name = stmt["target"]["attr"];
       typet type = get_typet(stmt["annotation"]["id"].get<std::string>());
       struct_typet::componentt comp =
-        std::move(build_component(current_class_name, attr_name, type));
+        build_component(current_class_name, attr_name, type);
       clazz.components().push_back(comp);
     }
   }
