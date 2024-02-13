@@ -56,7 +56,7 @@ pair<T1, T2> make_pair(T1 x, T2 y)
  */
 
 template <class T>
-typename std::remove_reference<T>::type &&move(T &&t) noexcept
+typename std::remove_reference<T>::type &&move(T &&t)
 {
   return static_cast<typename std::remove_reference<T>::type &&>(t);
 }
