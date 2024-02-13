@@ -1012,13 +1012,13 @@ public:
   static wrapped_interval
   greater_than_equal(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    return less_than(rhs, lhs);
+    return less_than_equal(rhs, lhs);
   }
 
   static wrapped_interval
   greater_than(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    return less_than_equal(rhs, lhs);
+    return less_than(rhs, lhs);
   }
 
   wrapped_interval sign_extension(const type2tc &cast) const
