@@ -495,7 +495,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
       const auto &bit_op = dynamic_cast<const bit_2ops &>(*e);
       auto lhs = get_interval<T>(bit_op.side_1);
       auto rhs = get_interval<T>(bit_op.side_2);
-
+      lhs.type = bit_op.side_1->type;
+      rhs.type = bit_op.side_2->type;
       if (is_shl2t(e))
         result = T::left_shift(lhs, rhs);
 
