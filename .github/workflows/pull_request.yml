@@ -84,8 +84,12 @@ jobs:
     - name: Delete downloaded Clang 11
       run: rm -rf clang*
     # Commit all changed files back to the repository
-    - uses: stefanzweifel/git-auto-commit-action@v5  
-      
+    - uses: stefanzweifel/git-auto-commit-action@v5
+      if: ${{ ! startsWith(github.head_ref, 'fb/') }}
+    - name: Throws error if changes were made
+      run: git diff --exit-code --ignore-cr-at-eol
+      if: ${{ startsWith(github.head_ref, 'fb/') }}
+
   cmake-lint:
     name: Check CMake modules
     runs-on: ubuntu-20.04
