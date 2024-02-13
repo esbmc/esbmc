@@ -606,10 +606,6 @@ void goto_convertt::do_function_call_symbol(
     a->location = function.location();
     a->location.user_provided(true);
   }
-  else if (base_name == "printf")
-  {
-    do_printf(lhs, function, arguments, dest, base_name);
-  }
   else if (
     (base_name == "__ESBMC_atomic_begin") ||
     (base_name == "__VERIFIER_atomic_begin"))
