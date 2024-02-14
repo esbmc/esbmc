@@ -46,7 +46,7 @@ public:
 #if __cplusplus >= 201103L // Check if C++11 or later is being used
   bad_cast() noexcept;
 #else
-  bad_cast()
+  bad_cast() throw()
   {
   }
 #endif
@@ -76,7 +76,7 @@ public:
 #if __cplusplus >= 201103L // Check if C++11 or later is being used
   bad_typeid() noexcept;
 #else
-  bad_typeid()
+  bad_typeid() throw()
   {
   }
 #endif
