@@ -1,6 +1,7 @@
 #pragma once
 
-namespace std {
+namespace std
+{
 /**
  * If the type T is a reference type, provides the member typedef
  * type which is the type referred to by T. Otherwise type is T.
@@ -18,15 +19,15 @@ struct remove_reference
 };
 
 template <class T>
-struct remove_reference<T&>
+struct remove_reference<T &>
 {
   typedef T type;
 };
-
+#if __cplusplus >= 201103L // Check if C++11 or later is being used
 template <class T>
-struct remove_reference<T&&>
+struct remove_reference<T &&>
 {
   typedef T type;
 };
-
-}
+#endif
+} // namespace std
