@@ -88,10 +88,6 @@ ubuntu_setup () {
     SOLVER_FLAGS="$SOLVER_FLAGS \
         -DENABLE_Z3=ON \
     " &&
-    # Hack: Boolector might fail to download some dependencies using curl (maybe we should patch it?)
-    # curl: (60) SSL: no alternative certificate subject name matches target host name 'codeload.github.com'
-    # As a unsafe workaround... we can just tell curl to be unsafe
-    echo "insecure" > $HOME/.curlrc
 }
 
 ubuntu_post_setup () {
