@@ -87,7 +87,7 @@ ubuntu_setup () {
     " &&
     SOLVER_FLAGS="$SOLVER_FLAGS \
         -DENABLE_Z3=ON \
-    " &&
+    " 
 }
 
 ubuntu_post_setup () {
