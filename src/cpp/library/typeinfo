@@ -10,21 +10,26 @@
 #ifndef STL_TYPEINFO
 #define STL_TYPEINFO
 
-#include "definitions.h"
-#include "exception"
+#include <exception>
 
-namespace std {
-class type_info {
+#include "definitions.h"
+
+namespace std
+{
+class type_info
+{
 public:
-	virtual ~type_info() {
-	}
-	bool operator==(const type_info& rhs) const;
-	bool operator!=(const type_info& rhs) const;
-	bool before(const type_info& rhs) const;
-	const char* name() const;
+  virtual ~type_info()
+  {
+  }
+  bool operator==(const type_info &rhs) const;
+  bool operator!=(const type_info &rhs) const;
+  bool before(const type_info &rhs) const;
+  const char *name() const;
+
 private:
-	type_info(const type_info& rhs);
-	type_info& operator=(const type_info& rhs);
+  type_info(const type_info &rhs);
+  type_info &operator=(const type_info &rhs);
 };
 
 /**
@@ -35,25 +40,40 @@ private:
  *  this class (or something derived from this class) is thrown.
  *  */
 
-class bad_cast: public exception {
+class bad_cast : public exception
+{
 public:
-	bad_cast() {
-	}
-	virtual ~bad_cast() {
-	}
-	virtual const char* what() const {
-	}
+  bad_cast()
+  {
+  }
+#if __cplusplus >= 201103L // Check if C++11 or later is being used
+  virtual ~bad_cast() noexcept
+  {
+  }
+  virtual const char *what() const noexcept
+  {
+    return "Bad cast";
+  }
+#endif
 };
 
-class bad_typeid: public exception {
+class bad_typeid : public exception
+{
 public:
-	bad_typeid() {
-	}
-	virtual ~bad_typeid() {
-	}
-	virtual const char* what() const {
-	}
+  bad_typeid()
+  {
+  }
+#if __cplusplus >= 201103L // Check if C++11 or later is being used
+  virtual ~bad_typeid() noexcept
+  {
+  }
+  virtual const char *what() const noexcept
+  {
+    return "Bad typeid";
+  }
+#endif
 };
 
-}
+} // namespace std
+
 #endif
