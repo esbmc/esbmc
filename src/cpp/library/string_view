@@ -1,0 +1,52 @@
+#include <cstddef>
+
+namespace std
+{
+class string_view
+{
+public:
+  // Constructors
+  string_view();
+  string_view(const char *str);
+  string_view(const char *str, size_t len);
+
+  // Destructor
+  ~string_view();
+
+  // Capacity
+  size_t size();
+  size_t length();
+  size_t max_size();
+  bool empty();
+
+  // Element access
+  const char &operator[](size_t pos) const;
+  const char &at(size_t pos) const;
+  const char &front() const;
+  const char &back() const;
+  const char *data();
+
+  // Modifiers
+  void remove_prefix(size_t n);
+  void remove_suffix(size_t n);
+  void swap(string_view &sv);
+  void clear();
+
+  // Operations
+  size_t copy(char *dest, size_t count, size_t pos = 0) const;
+  int compare(string_view sv) const;
+  bool starts_with(string_view sv) const;
+  bool ends_with(string_view sv) const;
+  size_t find(string_view sv, size_t pos = 0) const;
+  size_t find_first_of(string_view sv, size_t pos = 0) const;
+  size_t find_first_not_of(string_view sv, size_t pos = 0) const;
+
+  // Non-member functions
+  friend bool operator==(string_view lhs, string_view rhs);
+  friend bool operator!=(string_view lhs, string_view rhs);
+  friend bool operator<(string_view lhs, string_view rhs);
+  friend bool operator<=(string_view lhs, string_view rhs);
+  friend bool operator>(string_view lhs, string_view rhs);
+  friend bool operator>=(string_view lhs, string_view rhs);
+};
+} // namespace std
