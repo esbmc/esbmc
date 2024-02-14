@@ -218,6 +218,14 @@ bool configt::set(const cmdlinet &cmdline)
     req_target++;
   }
 
+  if (cmdline.isset("arch"))
+  {
+    arch = cmdline.getval("arch");
+    if (arch == "none")
+      os = "elf";
+    req_target++;
+  }
+
   /* CHERI-TODO: remove, either determine through sysroot or leave to user to specify */
   if (ansi_c.cheri)
   {
@@ -241,7 +249,8 @@ bool configt::set(const cmdlinet &cmdline)
   {
     log_error(
       "only at most one target can be specified via "
-      "--i386-{{win32,macos,linux}}, --ppc-macos, --cheri and --no-arch");
+      "--i386-{{win32,macos,linux}}, --ppc-macos, --cheri, --no-arch and "
+      "--arch");
     return true;
   }
 

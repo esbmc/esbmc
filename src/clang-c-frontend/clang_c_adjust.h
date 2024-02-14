@@ -41,6 +41,7 @@ protected:
    * and other IRs derived from exprt
    */
   void adjust_expr(exprt &expr);
+  virtual void adjust_expr_ifthenelse_ops(exprt &expr);
   void adjust_side_effect_assignment(exprt &expr);
   void adjust_side_effect_function_call(side_effect_expr_function_callt &expr);
   void adjust_side_effect_statement_expression(side_effect_exprt &expr);

@@ -282,3 +282,13 @@ void clang_cpp_adjust::align_se_function_call_return_type(
   if (return_type.id() != "constructor")
     expr.type() = return_type;
 }
+
+void clang_cpp_adjust::adjust_expr_ifthenelse_ops(exprt &expr)
+{
+  const typet &t1 = expr.op1().type();
+  const typet &t2 = expr.op2().type();
+  if (is_number(t1) && is_number(t2) && t1 == t2)
+    return;
+
+  clang_c_adjust::adjust_expr_ifthenelse_ops(expr);
+}

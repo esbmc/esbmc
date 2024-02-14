@@ -129,8 +129,7 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     // If the condition is not of boolean type, it must be casted
     gen_typecast(ns, expr.op0(), bool_type());
 
-    // Typecast both the true and false results
-    gen_typecast_arithmetic(ns, expr.op1(), expr.op2());
+    adjust_expr_ifthenelse_ops(expr);
   }
   else if (expr.id() == "builtin_va_arg")
   {
@@ -167,6 +166,12 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     // Just check operands of everything else
     adjust_operands(expr);
   }
+}
+
+void clang_c_adjust::adjust_expr_ifthenelse_ops(exprt &expr)
+{
+  // Typecast both the true and false results
+  gen_typecast_arithmetic(ns, expr.op1(), expr.op2());
 }
 
 void clang_c_adjust::adjust_symbol(exprt &expr)
