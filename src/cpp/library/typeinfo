@@ -43,31 +43,58 @@ private:
 class bad_cast : public exception
 {
 public:
+#if __cplusplus >= 201103L // Check if C++11 or later is being used
+  bad_cast() noexcept;
+#else
   bad_cast()
   {
   }
+#endif
 #if __cplusplus >= 201103L // Check if C++11 or later is being used
   virtual ~bad_cast() noexcept
   {
   }
   virtual const char *what() const noexcept
   {
+    return "Bad cast";
   }
+#else
+  virtual ~bad_cast()
+  {
+  }
+  virtual const char *what() const throw()
+  {
+    return "Bad cast";
+  }
+
 #endif
 };
 
 class bad_typeid : public exception
 {
 public:
+#if __cplusplus >= 201103L // Check if C++11 or later is being used
+  bad_typeid() noexcept;
+#else
   bad_typeid()
   {
   }
+#endif
 #if __cplusplus >= 201103L // Check if C++11 or later is being used
   virtual ~bad_typeid() noexcept
   {
   }
   virtual const char *what() const noexcept
   {
+    return "Bad typeid";
+  }
+#else
+  virtual ~bad_typeid()
+  {
+  }
+  virtual const char *what() const throw()
+  {
+    return "Bad typeid";
   }
 #endif
 };
