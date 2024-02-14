@@ -52,7 +52,6 @@ public:
   }
   virtual const char *what() const noexcept
   {
-    return "Bad cast";
   }
 #endif
 };
@@ -69,7 +68,6 @@ public:
   }
   virtual const char *what() const noexcept
   {
-    return "Bad typeid";
   }
 #endif
 };
