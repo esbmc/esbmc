@@ -43,7 +43,13 @@ OPT2FLAGS = {
     '--cheri'        : {'cheri'},
     '--old-frontend' : {'old'},
 } | { # Strategy related
+    '--k-induction'    : {'kind'},
+    '--incremental-bmc': {'incr'},
+    '--falsification'  : {'falsify'},
+    '--termination'    : {'term'},
+} | { # Optimiziation related
     '--interval-analysis': {'ia'},
+    '--gcse'             : {'gcse'},
 }
 
 BUG = 'bug'
@@ -106,7 +112,7 @@ def query(qstr, tcs):
     return list(filter(matches, tcs))
 
 def usage():
-    print('usage: %s [-OPTS] [REG_PATH [REG_PATH [...]]]' %
+    print('usage: %s [-OPTS] [--] [REG_PATH [REG_PATH [...]]]' %
           (sys.argv[0] if len(sys.argv) > 0 else 'regdb.py'))
     print('''
 Options:
