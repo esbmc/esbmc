@@ -14,7 +14,7 @@
 #include "definitions.h"
 #include "utility"
 
-typedef bool(funcao)(int arg1, int arg2);
+typedef bool(function)(int arg1, int arg2);
 
 namespace std
 {
