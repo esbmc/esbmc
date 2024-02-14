@@ -72,6 +72,12 @@ bool python_languaget::parse(const std::string &path)
 
   // Parse and generate AST
   std::ifstream ast_json(ast_output_dir + "/ast.json");
+  if (!ast_json.good())
+  {
+    log_error("<python-parser> ast.json was not generated\n");
+    exit(1);
+  }
+
   ast = nlohmann::json::parse(ast_json);
 
   // Add annotation

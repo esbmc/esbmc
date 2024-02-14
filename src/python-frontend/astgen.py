@@ -33,18 +33,18 @@ def process_imports(node, output_dir):
 
     # Generate json file for each imported class or function
     for name_node in node.names:
-        generate_ast_json(filename, output_dir, name_node.name)
+        generate_ast_json(filename, name_node.name, output_dir, None)
 
 
-def generate_ast_json(filename, output_dir, imported_name):
-    with open(filename, "r") as source:
+def generate_ast_json(python_filename, import_list, output_dir, output_file):
+    with open(python_filename, "r") as source:
         tree = ast.parse(source.read())
 
     # Filter elements from the module
     relevant_nodes = []
-    if imported_name:
+    if import_list:
         for node in tree.body:
-            if isinstance(node, ast.ClassDef) or isinstance(node, ast.FunctionDef) and node.name == imported_class_name:
+            if isinstance(node, ast.ClassDef) or isinstance(node, ast.FunctionDef) and node.name == import_list:
                 relevant_nodes.append(node)
                 break
 
@@ -55,9 +55,13 @@ def generate_ast_json(filename, output_dir, imported_name):
     else:
         ast_json = ast2json_module.ast2json(tree)
 
-    ast_json["filename"] = filename
+    ast_json["filename"] = python_filename
 
-    json_filename = os.path.join(output_dir, f"{os.path.basename(filename)}.json")
+    if output_file:
+        json_filename = os.path.join(output_dir, output_file)
+    else:
+        python_filename = python_filename[:-3]
+        json_filename = os.path.join(output_dir, f"{os.path.basename(python_filename)}.json")
 
     with open(json_filename, "w") as json_file:
         json.dump(ast_json, json_file, indent=4)
@@ -80,7 +84,7 @@ def main():
             process_imports(node, output_dir)
 
     # Generate json for main file from AST
-    generate_ast_json(filename, output_dir, None)
+    generate_ast_json(filename, None, output_dir, "ast.json")
 
 
 if __name__ == "__main__":
