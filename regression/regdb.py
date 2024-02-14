@@ -46,11 +46,13 @@ OPT2FLAGS = {
     '--interval-analysis': {'ia'},
 }
 
+BUG = 'bug'
+
 FLAG_DESC = {}
 
 def list_flags(verbose : bool):
     # collect
-    flgs = {'bug'} | EXTENSIONS.keys()
+    flgs = {BUG} | EXTENSIONS.keys()
     for v in OPT2FLAGS.values():
         flgs |= v
     # output
@@ -67,7 +69,7 @@ def list_flags(verbose : bool):
 def flags(tc : TestCase):
     r = set()
     if tc.test_mode in FAIL_MODES:
-        r.add('bug')
+        r.add(BUG)
     opts = tc.generate_run_argument_list('true')[1:]
     for opt in opts:
         f = set()
