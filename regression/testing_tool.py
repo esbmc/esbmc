@@ -356,8 +356,9 @@ TEST_SUITES = [
 
 def apply_transform_over_tests(functor):
     # Always double check TEST_SUITE variable!
+    script_dir_path = os.path.dirname(os.path.relpath(__file__))
     for base_dir in TEST_SUITES:
-        test_cases = get_test_objects(base_dir)
+        test_cases = get_test_objects(os.path.join(script_dir_path, base_dir))
         for test_case in test_cases:
             functor(test_case)
 
