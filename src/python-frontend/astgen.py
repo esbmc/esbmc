@@ -57,6 +57,13 @@ def generate_ast_json(python_filename, import_list, output_dir, output_file):
 
     ast_json["filename"] = python_filename
 
+    # Add ESBMC data
+    esbmc_data = {
+        "_type": "ESBMC",
+        "ast_output_dir": output_dir
+    }
+    ast_json["body"].append(esbmc_data)
+
     if output_file:
         json_filename = os.path.join(output_dir, output_file)
     else:

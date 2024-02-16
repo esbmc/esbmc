@@ -35,7 +35,9 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Return", StatementType::RETURN},
   {"Assert", StatementType::ASSERT},
   {"ClassDef", StatementType::CLASS_DEFINITION},
-  {"Pass", StatementType::PASS}};
+  {"Pass", StatementType::PASS},
+  {"ImportFrom", StatementType::IMPORT},
+  {"ESBMC", StatementType::ESBMC}};
 
 static bool is_relational_op(const std::string &op)
 {
@@ -46,6 +48,9 @@ static bool is_relational_op(const std::string &op)
 
 static StatementType get_statement_type(const nlohmann::json &element)
 {
+  if (!element.contains("_type"))
+    return StatementType::UNKNOWN;
+
   auto it = statement_map.find(element["_type"]);
   return (it != statement_map.end()) ? it->second : StatementType::UNKNOWN;
 }
@@ -1298,6 +1303,10 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     /* "https://docs.python.org/3/tutorial/controlflow.html: "The pass statement does nothing.
      *  It can be used when a statement is required syntactically but the program requires no action." */
     case StatementType::PASS:
+      break;
+    // Imports are handled by astgen.py so we can just ignore here.
+    case StatementType::IMPORT:
+    case StatementType::ESBMC:
       break;
     case StatementType::UNKNOWN:
     default:
