@@ -1,9 +1,12 @@
 #ifndef STL_ITERATOR
 #define STL_ITERATOR
 
+
 #include "iostream"
-#include "utility"
+#include "vector"
+#include "streambuf"
 #include "string"
+#include "utility"
 
 namespace std
 {
@@ -74,37 +77,6 @@ void advance(InputIterator &i, Distance n);
 template <class InputIterator>
 typename iterator_traits<InputIterator>::difference_type
 distance(InputIterator first, InputIterator last);
-
-template <class Container>
-back_insert_iterator<Container> back_inserter(Container &x);
-
-template <class Container>
-front_insert_iterator<Container> front_inserter(Container &x);
-
-template <class Container, class Inserter>
-insert_iterator<Container> inserter(Container &x, Inserter i);
-
-template <class Iterator>
-class reverse_iterator : public iterator
-{
-public:
-  typedef iterator_traits::difference_type difference_type;
-  typedef iterator_traits::pointer pointer;
-  typedef iterator_traits::reference reference;
-
-  Iterator base() const;
-  reference operator*() const;
-  reverse_iterator operator+(difference_type n) const;
-  reverse_iterator &operator++();
-  reverse_iterator operator++(int);
-  reverse_iterator &operator+=(difference_type n);
-  reverse_iterator operator-(difference_type n) const;
-  reverse_iterator &operator--();
-  reverse_iterator operator--(int);
-  reverse_iterator &operator-=(difference_type n);
-  pointer operator->() const;
-  reference operator[](difference_type n) const;
-};
 
 template <class Container>
 class back_insert_iterator
@@ -206,6 +178,43 @@ public:
   }
 };
 
+template <class Container>
+back_insert_iterator<Container> back_inserter(Container &x);
+
+template <class Container>
+front_insert_iterator<Container> front_inserter(Container &x);
+
+template <class Container, class Inserter>
+insert_iterator<Container> inserter(Container &x, Inserter i);
+
+
+template <class Iterator>
+class reverse_iterator : public std::iterator<typename std::iterator_traits<Iterator>::iterator_category,
+                                              typename std::iterator_traits<Iterator>::value_type,
+                                              typename std::iterator_traits<Iterator>::difference_type,
+                                              typename std::iterator_traits<Iterator>::pointer,
+                                              typename std::iterator_traits<Iterator>::reference>
+{
+public:
+    typedef typename std::iterator_traits<Iterator>::difference_type difference_type;
+    typedef typename std::iterator_traits<Iterator>::pointer pointer;
+    typedef typename std::iterator_traits<Iterator>::reference reference;
+
+    Iterator base() const;
+    reference operator*() const;
+    reverse_iterator operator+(difference_type n) const;
+    reverse_iterator& operator++();
+    reverse_iterator operator++(int);
+    reverse_iterator& operator+=(difference_type n);
+    reverse_iterator operator-(difference_type n) const;
+    reverse_iterator& operator--();
+    reverse_iterator operator--(int);
+    reverse_iterator& operator-=(difference_type n);
+    pointer operator->() const;
+    reference operator[](difference_type n) const;
+};
+
+
 template <
   class T,
   class charT = char,
@@ -255,7 +264,7 @@ public:
 	}*/
 };
 
-template <class T, class charT = char, class traits = char_traits<charT>>
+template <class T, class charT = char, class traits = char_traits<charT> >
 class ostream_iterator
   : public iterator<output_iterator_tag, void, void, void, void>
 {
@@ -305,80 +314,54 @@ public:
   }
 };
 
-template <class charT = char, class traits = char_traits<charT>>
-class istreambuf_iterator : public iterator<
-                              input_iterator_tag,
-                              charT,
-                              typename traits::off_type,
-                              charT *,
-                              charT &>
+#if 0
+template <class charT = char, class traits = std::char_traits<charT> >
+class istreambuf_iterator : public std::iterator<std::input_iterator_tag, charT, typename traits::off_type, charT*, charT&>
 {
 public:
-  typedef charT char_type;
-  typedef traits traits_type;
-  typedef typename traits::int_type int_type;
-  typedef basic_streambuf<charT, traits> streambuf_type;
-  typedef istream istream_type;
+    typedef charT char_type;
+    typedef traits traits_type;
+    typedef typename traits::int_type int_type;
+    typedef std::basic_streambuf<charT, traits> streambuf_type;
+    typedef std::basic_istream<charT, traits> istream_type;
 
-  class proxy
-  {
-    charT keep_;
-    streambuf_type *sbuf_;
-
-  public:
-    proxy(charT c, streambuf_type *sbuf) : keep_(c), sbuf_(sbuf)
+    class proxy
     {
-    }
-    charT operator*()
+        charT keep_;
+        streambuf_type* sbuf_;
+
+    public:
+        proxy(charT c, streambuf_type* sbuf) : keep_(c), sbuf_(sbuf) {}
+        charT operator*() { return keep_; }
+    };
+
+    istreambuf_iterator() throw() : sbuf_(0) {}
+    istreambuf_iterator(istream_type& s) throw() : sbuf_(s.rdbuf()) {}
+    istreambuf_iterator(streambuf_type* s) throw() : sbuf_(s) {}
+    istreambuf_iterator(const proxy& p) throw() : sbuf_(p.sbuf_) {}
+
+    charT operator*() const { return sbuf_->sgetc(); }
+    istreambuf_iterator<charT, traits>& operator++() { sbuf_->sbumpc(); return *this; }
+    proxy operator++(int) { return proxy(sbuf_->sbumpc(), sbuf_); }
+
+    bool equal(istreambuf_iterator& b) const
     {
-      return keep_;
+        if (sbuf_ == 0 || *(*this) == traits::eof())
+        {
+            if (b.sbuf_ == 0 || *b == traits::eof())
+                return true;
+        }
+        else if (b.sbuf_ != 0 && *b != traits::eof())
+            return true;
+        return false;
     }
-  };
-
-  istreambuf_iterator() throw() : sbuf_(0)
-  {
-  }
-  istreambuf_iterator(istream_type &s) throw()
-  {
-  }
-  istreambuf_iterator(streambuf_type *s) throw() : sbuf_(s)
-  {
-  }
-  istreambuf_iterator(const proxy &p) throw() : sbuf_(p.sbuf_)
-  {
-  }
-
-  charT operator*() const
-  {
-    return sbuf_->sgetc();
-  }
-  istreambuf_iterator<charT, traits> &operator++()
-  {
-    sbuf_->sbumpc();
-    return *this;
-  }
-  proxy operator++(int)
-  {
-    return proxy(sbuf_->sbumpc(), sbuf_);
-  }
-
-  bool equal(istreambuf_iterator &b) const
-  {
-    if (sbuf_ == 0 || *(*this) == traits::eof())
-    {
-      if (b.sbuf_ == 0 || *b == traits::eof())
-        return true;
-    }
-    else if (b.sbuf_ != 0 && *b != traits::eof())
-      return true;
-    return false;
-  }
 
 private:
-  streambuf_type *sbuf_;
+    streambuf_type* sbuf_;
 };
 
-template <class charT = char, class traits = char_traits<charT>>
+
+template <class charT = char, class traits = char_traits<charT> >
 class ostreambuf_iterator
   : public iterator<output_iterator_tag, charT, void, charT *, charT &>
 {
@@ -420,5 +403,6 @@ private:
 };
 
 } // namespace std
-
+#endif
+} // namespace std
 #endif

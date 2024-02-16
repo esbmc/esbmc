@@ -1065,7 +1065,7 @@ inline ostream &operator<<(ostream &o, string)
   return o;
 }
 
-inline ostream &operator<<(ostream &o, struct iterator &)
+inline ostream &operator<<(ostream &o, string::iterator &)
 {
   return o;
 }
