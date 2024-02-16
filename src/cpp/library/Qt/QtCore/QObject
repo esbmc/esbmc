@@ -24,9 +24,15 @@ Author: Felipe Rodrigues
 class QObject
 {
 public:
-	QObject ( QObject * parent = 0 ){}
-	~QObject (){}
-	static bool connect(QPushButton *, const char *, const char *, const char *){}
+  QObject(QObject *parent = 0)
+  {
+  }
+  ~QObject()
+  {
+  }
+  static bool connect(QPushButton *, const char *, const char *, const char *)
+  {
+  }
 
 #if 0	
 	static bool connect(const QObject *sender, const char *signal,
@@ -42,5 +48,4 @@ public:
 #endif
         ){}
 #endif
-
 };

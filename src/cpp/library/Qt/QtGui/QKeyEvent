@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QKeyEvent {
+class QKeyEvent
+{
 public:
-	QKeyEvent();
-	~QKeyEvent();
+  QKeyEvent();
+  ~QKeyEvent();
 };

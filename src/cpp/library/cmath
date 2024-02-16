@@ -6,55 +6,84 @@
  * there. But we don't want theirs... */
 #define _GLIBCXX_INCLUDE_NEXT_C_HEADERS
 #if __has_include(<sys/_types.h>) /* FreeBSD nonsense about __char{16,32}_t */
-# include <sys/_types.h>
+#include <sys/_types.h>
 #endif
 /* Support LLVM's libc++, which defines the float and long double overloads
  * in the top-level :: namespace in <math.h> when __cplusplus is set. These
  * clash with our definitions due to the exception declaration. */
 #pragma push_macro("__cplusplus")
 #undef __cplusplus
-extern "C" {
+extern "C"
+{
 #include <math.h>
 }
 #pragma pop_macro("__cplusplus") // restore macro
 
-namespace std {
+namespace std
+{
 
-inline float       abs(float num) { return ::fabsf(num); }
-inline double      abs(double num) { return ::fabs(num); }
-inline long double abs(long double num) { return ::fabsl(num); }
+inline float abs(float num)
+{
+  return ::fabsf(num);
+}
+inline double abs(double num)
+{
+  return ::fabs(num);
+}
+inline long double abs(long double num)
+{
+  return ::fabsl(num);
+}
 
-using ::fabsf;
 using ::fabs;
+using ::fabsf;
 using ::fabsl;
 
 /* TODO: also declare these in <cstdlib> */
-inline float       fabs(float num) { return ::fabsf(num); }
-inline long double fabs(long double num) { return ::fabsl(num); }
+inline float fabs(float num)
+{
+  return ::fabsf(num);
+}
+inline long double fabs(long double num)
+{
+  return ::fabsl(num);
+}
 
 /* TODO:
 template <typename Integer>
 double fabs(Integer num);
  */
 
-#define CIMPORT1(name) \
-	using ::name ## f; \
-	using ::name; \
-	using ::name ## l; \
-	inline float name(float num) { return ::name ## f(num); } \
-	inline long double name(long double num) { return ::name ## l(num); } \
-	/* TODO: \
+#define CIMPORT1(name)                                                         \
+  using ::name##f;                                                             \
+  using ::name;                                                                \
+  using ::name##l;                                                             \
+  inline float name(float num)                                                 \
+  {                                                                            \
+    return ::name##f(num);                                                     \
+  }                                                                            \
+  inline long double name(long double num)                                     \
+  {                                                                            \
+    return ::name##l(num);                                                     \
+  }                                                                            \
+  /* TODO: \
 	template <typename Integer> \
 	double name(Integer num); \
 	 */
 
-#define CIMPORT2(name) \
-	using ::name ## f; \
-	using ::name; \
-	using ::name ## l; \
-	inline float name(float a, float b) { return ::name ## f(a, b); } \
-	inline long double name(long double a, long double b) { return ::name ## l(a, b); } \
-	/* TODO: \
+#define CIMPORT2(name)                                                         \
+  using ::name##f;                                                             \
+  using ::name;                                                                \
+  using ::name##l;                                                             \
+  inline float name(float a, float b)                                          \
+  {                                                                            \
+    return ::name##f(a, b);                                                    \
+  }                                                                            \
+  inline long double name(long double a, long double b)                        \
+  {                                                                            \
+    return ::name##l(a, b);                                                    \
+  }                                                                            \
+  /* TODO: \
 	template <typename Integer> \
 	double name(Integer num); \
 	 */
@@ -78,31 +107,49 @@ CIMPORT2(pow)
 CIMPORT1(sqrt)
 CIMPORT2(fmod)
 
-using ::frexpf;
 using ::frexp;
+using ::frexpf;
 using ::frexpl;
-inline float frexp(float num, int *exp) { return ::frexpf(num, exp); }
-inline long double frexp(long double num, int *exp) { return ::frexpl(num, exp); }
+inline float frexp(float num, int *exp)
+{
+  return ::frexpf(num, exp);
+}
+inline long double frexp(long double num, int *exp)
+{
+  return ::frexpl(num, exp);
+}
 /* TODO:
 template <typename Integer>
 double frexp(Integer num, int *exp);
  */
 
-using ::ldexpf;
 using ::ldexp;
+using ::ldexpf;
 using ::ldexpl;
-inline float ldexp(float num, int exp) { return ::ldexpf(num, exp); }
-inline long double ldexp(long double num, int exp) { return ::ldexpl(num, exp); }
+inline float ldexp(float num, int exp)
+{
+  return ::ldexpf(num, exp);
+}
+inline long double ldexp(long double num, int exp)
+{
+  return ::ldexpl(num, exp);
+}
 /* TODO:
 template <typename Integer>
 double ldexp(Integer num, int exp);
  */
 
-using ::modff;
 using ::modf;
+using ::modff;
 using ::modfl;
-inline float modf(float num, float *iptr) { return ::modff(num, iptr); }
-inline long double modf(long double num, long double *iptr) { return ::modfl(num, iptr); }
+inline float modf(float num, float *iptr)
+{
+  return ::modff(num, iptr);
+}
+inline long double modf(long double num, long double *iptr)
+{
+  return ::modfl(num, iptr);
+}
 /* TODO:
 template <typename Integer>
 double modf(Integer num, double *iptr);
@@ -111,4 +158,4 @@ double modf(Integer num, double *iptr);
 #undef CIMPORT1
 #undef CIMPORT2
 
-}
+} // namespace std
