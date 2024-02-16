@@ -12,8 +12,13 @@
 
 class QWidget;
 
-class QPushButton{
+class QPushButton
+{
 public:
-	QPushButton ( QWidget * parent = 0 ){}
-	QPushButton ( const QString & text, QWidget * parent = 0 ){}
+  QPushButton(QWidget *parent = 0)
+  {
+  }
+  QPushButton(const QString &text, QWidget *parent = 0)
+  {
+  }
 };

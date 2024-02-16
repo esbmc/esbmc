@@ -14,14 +14,16 @@
 typedef int jmp_buf;
 #endif
 
-int setjmp(jmp_buf env) {
-	env = 0;
-	return env;
+int setjmp(jmp_buf env)
+{
+  env = 0;
+  return env;
 }
 
-void longjmp(jmp_buf env, int val) {
-	env = val;
-	return (void) env;
+void longjmp(jmp_buf env, int val)
+{
+  env = val;
+  return (void)env;
 }
 
 #endif
