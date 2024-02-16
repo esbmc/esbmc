@@ -100,6 +100,23 @@ bool python_languaget::typecheck(
   contextt &context,
   const std::string & /*module*/)
 {
+  // Convert imported modules
+  for (const auto& elem : ast["body"])
+  {
+    if (elem["_type"] == "ImportFrom")
+    {
+      std::stringstream module_path;
+      module_path << ast_output_dir << "/" << elem["module"].get<std::string>()
+                  << ".json";
+      std::ifstream imported_file(module_path.str());
+      nlohmann::json imported_module_json;
+      imported_file >> imported_module_json;
+
+      python_converter converter(context, imported_module_json);
+      converter.convert();
+    }
+  }
+
   python_converter converter(context, ast);
   if (converter.convert())
     return true;
