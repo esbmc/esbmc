@@ -1,4 +1,4 @@
-#include <cisco646>
+#include <ciso646>
 int main () {
   return 0;
 }
