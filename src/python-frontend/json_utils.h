@@ -38,7 +38,7 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   for (const auto &obj : ast_json)
   {
     // Check if the current object has the _type field and its value is "ImportFrom"
-    if (obj.contains("_type") && obj["_type"] == "ImportFrom")
+    if (obj["_type"] == "ImportFrom")
     {
       std::stringstream module_path;
       module_path

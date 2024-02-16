@@ -1401,23 +1401,31 @@ bool python_converter::convert()
   codet main_code = convert_expression_to_code(block_expr);
 
   // Create and populate "main" symbol
-  symbolt main_symbol;
 
-  code_typet main_type;
-  main_type.return_type() = empty_typet();
-
-  main_symbol.id = "__ESBMC_main";
-  main_symbol.name = "__ESBMC_main";
-  main_symbol.type.swap(main_type);
-  main_symbol.value.swap(main_code);
-  main_symbol.lvalue = true;
-  main_symbol.is_extern = false;
-  main_symbol.file_local = false;
-
-  if (context.move(main_symbol))
+  if (symbolt *main_symbol = context.find_symbol("__ESBMC_main"))
   {
-    log_error("main already defined by another language module");
-    return true;
+    main_symbol->value.copy_to_operands(main_code);
+  }
+  else
+  {
+    symbolt new_main_symbol;
+
+    code_typet main_type;
+    main_type.return_type() = empty_typet();
+
+    new_main_symbol.id = "__ESBMC_main";
+    new_main_symbol.name = "__ESBMC_main";
+    new_main_symbol.type.swap(main_type);
+    new_main_symbol.value.swap(main_code);
+    new_main_symbol.lvalue = true;
+    new_main_symbol.is_extern = false;
+    new_main_symbol.file_local = false;
+
+    if (context.move(new_main_symbol))
+    {
+      log_error("main already defined by another language module");
+      return true;
+    }
   }
 
   return false;
