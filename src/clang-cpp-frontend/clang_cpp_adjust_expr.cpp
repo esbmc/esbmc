@@ -190,6 +190,7 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     {
       convert_lvalue_ref_to_deref_sideeffect(lhs);
     }
+    adjust_expr(rhs);
   }
   else
     clang_c_adjust::adjust_side_effect(expr);
