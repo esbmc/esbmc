@@ -1,16 +1,3 @@
-/*******************************************************************
- Module:
-
- Author: Felipe Rodrigues
- Created in: September 2012
- Updated in: March 2023 by Kunjian Song
-
- Ref:
- https://en.cppreference.com/w/cpp/header/exception
- https://cplusplus.com/reference/exception/
-
- \*******************************************************************/
-
 #ifndef STL_EXCEPTION
 #define STL_EXCEPTION
 

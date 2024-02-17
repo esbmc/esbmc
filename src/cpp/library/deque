@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Felipe Rodrigues and Lucas Cordeiro
-
-Date: February 2012
-
-\*******************************************************************/
-
 #ifndef __STL_DEQUE
 #define __STL_DEQUE
 
