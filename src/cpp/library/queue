@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Author: Lucas Cordeiro and Felipe Rodrigues
-
-Date: September 2012
-
-\*******************************************************************/
-
 #ifndef STL_QUEUE
 #define STL_QUEUE
 
