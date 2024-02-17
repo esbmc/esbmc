@@ -69,6 +69,13 @@ void clang_cpp_adjust::adjust_new(exprt &expr)
     adjust_expr(initializer);
   }
 
+  if (expr.size_irep().is_not_nil())
+  {
+    exprt new_size = static_cast<const exprt &>(expr.size_irep());
+    adjust_expr(new_size);
+    expr.size(new_size);
+  }
+
   // Set sizeof and cmt_sizeof_type
   exprt size_of = c_sizeof(expr.type().subtype(), ns);
   size_of.set("#c_sizeof_type", expr.type().subtype());
