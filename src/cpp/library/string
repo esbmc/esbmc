@@ -987,7 +987,7 @@ namespace std
 string::string()
 {
   str = new char[1];
-  str = "";
+  str[0] = '\0'; // Assign the null terminator to represent an empty string
   _size = 0;
 }
 
