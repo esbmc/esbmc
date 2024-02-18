@@ -1263,8 +1263,6 @@ char &string::operator[](size_t pos)
 
 char string::at(size_t pos) const
 {
-  __ESBMC_assert((pos < this->_size), "Error! Invalid access memory area");
-
   if (pos >= this->length())
   {
     // TODO: when we support try-catch, replace the assert with the throw statement below
