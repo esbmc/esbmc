@@ -986,7 +986,8 @@ namespace std
 {
 string::string()
 {
-  // In C++ string::empty means a string object with size 0.
+  str = new char[1];
+  str[0] = '\0'; // Assign the null terminator to represent an empty string
   _size = 0;
 }
 
