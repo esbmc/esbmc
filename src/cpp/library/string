@@ -876,7 +876,7 @@ public:
   size_t copy(char *s, size_t n, size_t pos = 0) const;
   const char *data() const;
 
-  string &substr(size_t pos, size_t n)
+  string substr(size_t pos, size_t n)
   {
   __ESBMC_HIDE:
     __ESBMC_assert(
@@ -893,10 +893,11 @@ public:
     }
     one[k] = '\0';
     string tmp(one);
+    delete[] one; // Freeing dynamically allocated memory
     return tmp;
   }
 
-  string &substr(size_t pos) const
+  string substr(size_t pos) const
   {
   __ESBMC_HIDE:
     __ESBMC_assert(
@@ -912,10 +913,11 @@ public:
     }
     one[k] = '\0';
     string tmp(one);
+    delete[] one; // Freeing dynamically allocated memory
     return tmp;
   }
 
-  string::iterator &begin() const
+  string::iterator begin() const
   {
     int i;
     string::iterator first(this->str);
