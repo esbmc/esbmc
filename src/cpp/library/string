@@ -986,8 +986,7 @@ namespace std
 {
 string::string()
 {
-  str = new char[1];
-  str[0] = '\0'; // Assign the null terminator to represent an empty string
+  // In C++ string::empty means a string object with size 0.
   _size = 0;
 }
 
@@ -2424,6 +2423,8 @@ __ESBMC_HIDE:
       }
     }
   }
+  // Return npos if the character is not found
+  return npos;
 }
 
 size_t string::find_first_of(const string &s, size_t pos) const
@@ -2456,6 +2457,8 @@ __ESBMC_HIDE:
       }
     }
   }
+  // Return npos if the character is not found
+  return npos;
 }
 
 size_t string::find_first_of(char c, size_t pos) const
@@ -2476,6 +2479,8 @@ __ESBMC_HIDE:
       return i;
     }
   }
+  // Return npos if the character is not found
+  return npos;
 }
 
 size_t string::find_first_not_of(const string &s, size_t pos) const
@@ -2514,6 +2519,8 @@ __ESBMC_HIDE:
       return i;
     }
   }
+  // Return npos if the character is not found
+  return npos;
 }
 
 size_t string::find_first_not_of(const char *s, size_t pos) const
@@ -2552,6 +2559,8 @@ __ESBMC_HIDE:
       return i;
     }
   }
+  // Return npos if the character is not found
+  return npos;
 }
 
 size_t string::find_first_not_of(char c, size_t pos) const
@@ -2579,6 +2588,8 @@ __ESBMC_HIDE:
   {
     return i;
   }
+  // Return npos if the character is not found
+  return npos;
 }
 
 size_t string::find_last_of(const string &s, size_t pos) const
@@ -2611,6 +2622,8 @@ __ESBMC_HIDE:
       }
     }
   }
+  // Return npos if the character is not found
+  return npos;
 }
 
 size_t string::find_last_of(const char *s, size_t pos) const
@@ -2643,6 +2656,8 @@ __ESBMC_HIDE:
       }
     }
   }
+  // Return npos if the character is not found
+  return npos;
 }
 
 size_t string::find_last_of(char *s) const
@@ -2676,6 +2691,8 @@ size_t string::find_last_of(char *s) const
       }
     }
   }
+  // Return npos if the character is not found
+  return npos;
 }
 
 size_t string::find_last_of(char c, size_t pos) const
