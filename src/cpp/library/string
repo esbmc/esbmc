@@ -1318,8 +1318,8 @@ __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
   this->_size = strlen(s);
   this->str = new char[this->_size + 1];
-  string tmp = string(strcpy(this->c_str(), s));
-  return tmp;
+  strcpy(this->str, s); // Copy the contents of s to str
+  return *this; // Return a reference to the modified string object
 }
 
 string &string::operator=(char s)
