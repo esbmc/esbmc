@@ -1,7 +1,6 @@
 #ifndef STL_ITERATOR
 #define STL_ITERATOR
 
-
 #include "iostream"
 #include "vector"
 #include "streambuf"
