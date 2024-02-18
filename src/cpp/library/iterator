@@ -356,7 +356,7 @@ public:
     }
 
 private:
-    streambuf_type* sbuf_;
+  streambuf_type* sbuf_;
 };
 
 
