@@ -2698,6 +2698,7 @@ __ESBMC_HIDE:
       return i;
     }
   }
+  return npos; // Return npos when the character is not found
 }
 
 size_t string::rfind(char c, size_t pos) const
@@ -2708,6 +2709,7 @@ __ESBMC_HIDE:
   for (i = len; i > 0; i--)
     if (this->str[i] == c)
       return i;
+  return npos; // Return npos when the character is not found
 }
 
 size_t string::rfind(string &s, size_t pos) const
