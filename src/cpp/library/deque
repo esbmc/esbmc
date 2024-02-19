@@ -362,7 +362,7 @@ public:
     _capacity = n;
   }
 
-  explicit deque(void t[], void *addr) : _size(0), _capacity(1)
+  explicit deque(void *t, void *addr) : _size(0), _capacity(1)
   {
     int i = 0;
     T *t1 = (T *)t;
@@ -408,8 +408,8 @@ public:
     buf[0] = T();
     for (int i = 0; i < n; i++)
       push_back(u);
-    int n = _size + 1;
-    buf[n] = T();
+    int n1 = _size + 1;
+    buf[n1] = T();
     verify_capacity();
   }
 
@@ -427,7 +427,7 @@ public:
     verify_capacity();
   }
 
-  void assign(void t1[], void *t2)
+  void assign(void *t1, void *t2)
   {
     int i = 0;
     _size = 0;
