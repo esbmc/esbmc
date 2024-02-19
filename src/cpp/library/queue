@@ -14,7 +14,7 @@ namespace std
 template <
   class T,
   class Container = vector<T>,
-  class Compare = less<typename Container::value_type>>
+  class Compare = less<typename Container::value_type> >
 class priority_queue
 {
   T buf[QUEUE_CAPACITY];
@@ -93,7 +93,7 @@ public:
   }
 };
 
-template <class T, class Container = deque<T>>
+template <class T, class Container = deque<T> >
 class queue
 {
   T buf[QUEUE_CAPACITY];
