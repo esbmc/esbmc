@@ -2619,7 +2619,13 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(tte.getType(), type))
       return true;
 
-    new_expr = constant_exprt(tte.getValue() ? 1 : 0, type);
+    assert(type.id() == typet::t_bool);
+
+    if (tte.getValue())
+      new_expr = true_exprt();
+    else
+      new_expr = false_exprt();
+
     break;
   }
 

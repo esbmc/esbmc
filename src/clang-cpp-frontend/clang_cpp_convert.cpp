@@ -687,18 +687,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
-  case clang::Stmt::TypeTraitExprClass:
-  {
-    const clang::TypeTraitExpr &tt =
-      static_cast<const clang::TypeTraitExpr &>(stmt);
-
-    if (tt.getValue())
-      new_expr = true_exprt();
-    else
-      new_expr = false_exprt();
-    break;
-  }
-
   case clang::Stmt::CXXConstructExprClass:
   {
     const clang::CXXConstructExpr &cxxc =
