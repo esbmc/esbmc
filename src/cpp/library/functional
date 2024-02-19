@@ -13,7 +13,7 @@ struct unary_function {
 template <class Predicate>
 class unary_negate {
 protected:
-    Predicate fn;
+  Predicate fn;
 
 public:
     explicit unary_negate(const Predicate &pred) : fn(pred) {}
@@ -37,7 +37,7 @@ struct binary_function {
 template <class Predicate>
 class binary_negate {
 protected:
-    Predicate fn;
+  Predicate fn;
 
 public:
     explicit binary_negate(const Predicate &pred) : fn(pred) {}
