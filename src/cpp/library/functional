@@ -4,43 +4,55 @@
 namespace std
 {
 
-template <class Predicate>
-class unary_negate
-  : public unary_function<typename Predicate::argument_type, bool>
-{
-protected:
-  Predicate fn;
-
-public:
-  explicit unary_negate(const Predicate &pred) : fn(pred)
-  {
-  }
-  bool operator()(const typename Predicate::argument_type &x) const
-  {
-    return !fn(x);
-  }
+template <class Arg, class Result>
+struct unary_function {
+    typedef Arg argument_type;
+    typedef Result result_type;
 };
 
 template <class Predicate>
-class binary_negate : public binary_function<
-                        typename Predicate::first_argument_type,
-                        typename Predicate::second_argument_type,
-                        bool>
-{
+class unary_negate {
 protected:
-  Predicate fn;
+    Predicate fn;
 
 public:
-  explicit binary_negate(const Predicate &pred) : fn(pred)
-  {
-  }
-  bool operator()(
-    const typename Predicate::first_argument_type &x,
-    const typename Predicate::second_argument_type &y) const
-  {
-    return !fn(x, y);
-  }
+    explicit unary_negate(const Predicate &pred) : fn(pred) {}
+
+    // Define a functor type compatible with unary_negate
+    template <class Arg>
+    struct result : std::unary_function<Arg, bool> {};
+
+    bool operator()(const typename Predicate::argument_type &x) const {
+        return !fn(x);
+    }
 };
+
+template <class Arg1, class Arg2, class Result>
+struct binary_function {
+    typedef Arg1 first_argument_type;
+    typedef Arg2 second_argument_type;
+    typedef Result result_type;
+};
+
+template <class Predicate>
+class binary_negate {
+protected:
+    Predicate fn;
+
+public:
+    explicit binary_negate(const Predicate &pred) : fn(pred) {}
+
+    // Define a functor type compatible with binary_negate
+    template <class Arg1, class Arg2>
+    struct result : std::binary_function<Arg1, Arg2, bool> {};
+
+    bool operator()(
+        const typename Predicate::first_argument_type &x,
+        const typename Predicate::second_argument_type &y) const {
+        return !fn(x, y);
+    }
+};
+
 
 template <class Operation>
 class binder1st : public unary_function<
@@ -208,21 +220,6 @@ public:
   {
     return (p.*pmem)();
   }
-};
-
-template <class Arg, class Result>
-struct unary_function
-{
-  typedef Arg argument_type;
-  typedef Result result_type;
-};
-
-template <class Arg1, class Arg2, class Result>
-struct binary_function
-{
-  typedef Arg1 first_argument_type;
-  typedef Arg2 second_argument_type;
-  typedef Result result_type;
 };
 
 template <class T>
@@ -413,36 +410,36 @@ const_mem_fun_t<S, T> mem_fun(S (T::*f)() const)
 {
   return const_mem_fun_t<S, T>(f);
 }
-
+#if 0
 template <class S, class T, class A>
 const_mem_fun1_t<S, T, A> mem_fun(S (T::*f)(A) const)
 {
   return const_mem_fun1_t<S, T, A>(f);
 }
-
+#endif
 template <class S, class T>
 mem_fun_ref_t<S, T> mem_fun_ref(S (T::*f)())
 {
   return mem_fun_ref_t<S, T>(f);
 }
-
+#if 0
 template <class S, class T, class A>
 mem_fun1_ref_t<S, T, A> mem_fun_ref(S (T::*f)(A))
 {
   return mem_fun1_ref_t<S, T, A>(f);
 }
-
+#endif
 template <class S, class T>
 const_mem_fun_ref_t<S, T> mem_fun_ref(S (T::*f)() const)
 {
   return const_mem_fun_ref_t<S, T>(f);
 }
-
+#if 0
 template <class S, class T, class A>
 const_mem_fun1_ref_t<S, T, A> mem_fun_ref(S (T::*f)(A) const)
 {
   return const_mem_fun1_ref_t<S, T, A>(f);
 }
+#endif
 } // namespace std
-
 #endif
