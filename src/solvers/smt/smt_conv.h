@@ -541,10 +541,6 @@ public:
   /** @{
    *  @name Internal foo. */
 
-  /** Convert expression and assert that it is true or false, according to the
-   *  value argument */
-  virtual void set_to(const expr2tc &expr, bool value);
-
   /** Create a free variable with the given sort, and a unique name, with the
    *  prefix given in 'tag' */
   virtual smt_astt

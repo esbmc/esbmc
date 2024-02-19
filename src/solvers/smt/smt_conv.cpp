@@ -215,14 +215,6 @@ smt_astt smt_convt::imply_ast(smt_astt a, smt_astt b)
   return mk_implies(a, b);
 }
 
-void smt_convt::set_to(const expr2tc &expr, bool value)
-{
-  smt_astt a = convert_ast(expr);
-  if (value == false)
-    a = invert_ast(a);
-  assert_ast(a);
-}
-
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);

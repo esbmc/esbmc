@@ -7,16 +7,13 @@
 namespace std
 {
 #define STACK_CAPACITY 20
-template <class T, class Container = deque<T>>
+template <class T, class Container = deque<T> >
 class stack
 {
   T buf[STACK_CAPACITY];
-  int _top = 0;
+  size_t _top;
 
 public:
-  stack() : _top(0)
-  {
-  }
   stack(const Container &ctnr = Container()) : _top(0)
   {
   }

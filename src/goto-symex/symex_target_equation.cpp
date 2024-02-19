@@ -200,7 +200,9 @@ void symex_target_equationt::convert_internal_step(
         expr2tc sym =
           symbol2tc(tmp->type, "symex::output::" + i2string(output_count++));
         expr2tc eq = equality2tc(sym, tmp);
-        smt_conv.set_to(eq, true);
+        smt_astt assign = smt_conv.convert_assign(eq);
+        if (ssa_smt_trace)
+          assign->dump();
         step.converted_output_args.push_back(sym);
       }
     }
