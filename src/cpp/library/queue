@@ -18,9 +18,9 @@ template <
 class priority_queue
 {
   T buf[QUEUE_CAPACITY];
-  int _size = 0;
-  T head = 0;
-  T tail = 0;
+  size_t _size;
+  T head;
+  T tail;
 
 public:
   priority_queue() : _size(0), head(0), tail(0)
@@ -39,7 +39,7 @@ public:
   }
   void push(const T &x)
   {
-    int i = 0;
+    size_t i = 0;
     T tmp = x, y;
     while ((x < this->buf[i]) && (i != this->_size))
     {
@@ -97,9 +97,9 @@ template <class T, class Container = deque<T> >
 class queue
 {
   T buf[QUEUE_CAPACITY];
-  int _size = 0;
-  int head = 0;
-  int tail = 0;
+  size_t _size;
+  size_t head;
+  size_t tail;
 
 public:
   queue() : _size(0), head(0), tail(0)
