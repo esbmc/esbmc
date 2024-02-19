@@ -4,6 +4,7 @@ CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/Attr.h>
 #include <clang/AST/Expr.h>
+#include <clang/AST/ExprCXX.h> /* clang::TypeTraitExpr */
 #include <clang/AST/ParentMapContext.h>
 #include <clang/AST/QualTypeNames.h>
 #include <clang/AST/Type.h>
@@ -2586,6 +2587,41 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   case clang::Stmt::MSAsmStmtClass:
     new_expr = code_skipt();
     break;
+
+  /* According to Clang docs:
+   *
+   * A type trait used in the implementation of various C++11 and Library TR1
+   * trait templates.
+   *   __is_pod(int) == true
+   *   __is_enum(std::string) == false
+   *   __is_trivially_constructible(vector<int>, int*, int*)
+   *
+   * But it is also used for __builtin_types_compatible_p(ty1, ty2). */
+  case clang::Stmt::TypeTraitExprClass:
+  {
+    const clang::TypeTraitExpr &tte =
+      static_cast<const clang::TypeTraitExpr &>(stmt);
+
+    if (tte.isValueDependent())
+    {
+      std::ostringstream oss;
+      llvm::raw_os_ostream ross(oss);
+      ross << "Conversion of unsupported value-dependent type-trait expr: \"";
+      ross << stmt.getStmtClassName() << "\" to expression"
+           << "\n";
+      stmt.dump(ross, *ASTContext);
+      ross.flush();
+      log_error("{}", oss.str());
+      return true;
+    }
+
+    typet type;
+    if (get_type(tte.getType(), type))
+      return true;
+
+    new_expr = constant_exprt(tte.getValue() ? 1 : 0, type);
+    break;
+  }
 
   default:
   {
