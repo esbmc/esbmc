@@ -147,6 +147,7 @@ elseif(WIN32)
                     llvm
                     floats
                     k-induction
+                    windows
                     ${REGRESSIONS_JIMPLE}
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_CVC}
