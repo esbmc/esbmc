@@ -16,7 +16,7 @@ SOLVERS = [
     'cvc',
     'mathsat',
     'yices',
-    'bitwuzla'
+    'bitwuzla',
 ]
 
 EXTENSIONS = {
@@ -38,10 +38,10 @@ OPT2FLAGS = {
     '--little-endian': {'endian=little'},
     '--big-endian'   : {'endian=big'},
     '--no-arch'      : {'endian=none', 'arch=none'},
-    '--ppc-macos'    : {'arch=ppc', 'os=macos', 'bitw=32'},
-    '--i386-macos'   : {'arch=x86', 'os=macos', 'bitw=32'},
-    '--i386-linux'   : {'arch=x86', 'os=linux', 'bitw=32'},
-    '--i386-win32'   : {'arch=x86', 'os=win', 'bitw=32'},
+    '--ppc-macos'    : {'arch=ppc', 'os=macos'},
+    '--i386-macos'   : {'arch=x86', 'os=macos'},
+    '--i386-linux'   : {'arch=x86', 'os=linux'},
+    '--i386-win32'   : {'arch=x86', 'os=win'},
     '--cheri'        : {'cheri'},
     '--old-frontend' : {'old'},
 } | { # Strategy related
