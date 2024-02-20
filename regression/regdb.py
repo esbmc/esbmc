@@ -62,7 +62,7 @@ class Flag(str):
     def __new__(cls, s):
         assert len(s) > 0
         assert s[0] not in '+-', "invalid flag: '%s'" % s
-        assert all(c not in '()|&' for c in s), "invalid flag: '%s'" % s
+        assert all(c not in '()|&%' for c in s), "invalid flag: '%s'" % s
         return super().__new__(cls, s)
 
     @property
@@ -154,6 +154,24 @@ class GlobPattern(Predicate):
     def __call__(self, flgs : set[Flag]) -> bool:
         return any(f.matches(self.gpat) for f in flgs)
 
+# if category is set, allow only one value
+class Consistent(Predicate):
+    def __init__(self):
+        super().__init__('%%consistent', None)
+        self.unique = {}
+        for f in known_flags():
+            fcat = f.category
+            if fcat is not None:
+                self.unique.setdefault(fcat, set()).add(f)
+
+    def __call__(self, flags : set[Flag]):
+        return all(len(flags & uniqs) <= 1 for uniqs in self.unique.values())
+
+NAMED_PREDICATES = {str(pred): pred for pred in [
+    Consistent(),
+]}
+assert all(k[0] == '%' for k in NAMED_PREDICATES)
+
 def parse_formula(s : str, debug = False) -> Predicate:
     def Factor(s):
         if debug:
@@ -176,6 +194,8 @@ def parse_formula(s : str, debug = False) -> Predicate:
         s = s[:term]
         if debug:
             print("fin3 s: '%s', t: '%s'" % (s, t))
+        if s[0] == '%':
+            return t, NAMED_PREDICATES[s]
         return t, GlobPattern(s)
 
     def Product(s):
@@ -223,13 +243,20 @@ the default is to search the built-in list of all non-disabled regression tests.
 
 QUERY is an infix formula (! or - for negation, & or space for conjunction, |
 for disjunction) over glob patterns being matched against flags of test cases.
-QUERY has this grammar (with spaces allowed between any components):
+QUERY has this grammar (with spaces allowed around any of Formula, Product and
+Factor):
 
-  Formula ::= Product ('|' Product)*
-  Product ::= Factor ('&'? Factor)*
-  Factor  ::= '(' Formula ')'
-            | ('!' | '-') Factor
-            | GlobPattern
+  Formula   ::= Product ('|' Product)*
+  Product   ::= Factor ('&'? Factor)*
+  Factor    ::= '(' Formula ')'
+              | ('!' | '-') Factor
+              | '%' Predicate
+              | GlobPattern
+  Predicate ::= 'consistent'
+
+The named predicate 'consistent' is true iff the set of flags of a test case are
+consistent, that is, for categorized flags of the form CATEGORY=VALUE at most
+one VALUE is allowed per CATEGORY.
 '''[:-1])
 
 def main():
