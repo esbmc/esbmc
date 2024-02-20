@@ -50,6 +50,9 @@ private:
     std::string method_name,
     bool is_ctor) const;
 
+  symbolt *
+  find_function_in_imported_modules(const std::string &symbol_id) const;
+
   void update_instance_from_self(
     const std::string &class_name,
     const std::string &func_name,
