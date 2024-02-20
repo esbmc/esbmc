@@ -47,6 +47,7 @@ public:
   void adjust_expr_rel(exprt &expr) override;
   void adjust_new(exprt &expr);
   void adjust_cpp_member(member_exprt &expr);
+  void adjust_if(exprt &expr) override;
 
   /**
    * methods for implicit GOTO code generation
