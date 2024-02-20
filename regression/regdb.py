@@ -109,19 +109,11 @@ def flags(tc : TestCase) -> set[Flag]:
     if tc.test_mode in FAIL_MODES:
         r.add(Flag(BUG))
     for opt in tc.generate_run_argument_list('true')[1:]:
-        f = set()
         if os.path.exists(opt) and os.path.isfile(os.path.realpath(opt)):
             # probably an input file
             ext = opt[opt.rfind('.') + 1:]
-            for lang, exts in EXTENSIONS.items():
-                if ext in exts:
-                    f = {Flag(lang)}
-                    break
-        else:
-            # not a file, so it's an option
-            f = {Flag(g) for g in OPT2FLAGS.get(opt, f)}
-        # add all the new flags to the ones we already accumulated
-        r |= f
+            r |= {Flag(lang) for lang, exts in EXTENSIONS.items() if ext in exts}
+        r |= {Flag(g) for g in OPT2FLAGS.get(opt, set())}
     return r
 
 class Predicate:
