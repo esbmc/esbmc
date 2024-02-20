@@ -50,8 +50,11 @@ OPT2FLAGS = {
     '--falsification'  : {'strat=falsify'},
     '--termination'    : {'strat=term'},
 } | { # Optimiziation related
-    '--interval-analysis': {'ia'},
-    '--gcse'             : {'gcse'},
+    '--interval-analysis'                : {'ia'},
+    '--interval-analysis-ibex-contractor': {'ia', 'ibex'},
+    '--gcse'                             : {'gcse'},
+    '--goto-contractor'                  : {'ibex'},
+    '--goto-contractor-condition'        : {'ibex'},
 }
 
 BUG = 'bug'
