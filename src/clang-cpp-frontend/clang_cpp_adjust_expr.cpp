@@ -1,5 +1,7 @@
+#include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/c_sizeof.h>
+#include <util/c_types.h>
 #include <util/destructor.h>
 #include <util/expr_util.h>
 
@@ -128,6 +130,19 @@ void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
   assert(comp_symb->type.is_code());
   exprt method_call = symbol_expr(*comp_symb);
   expr.swap(method_call);
+}
+
+void clang_cpp_adjust::adjust_if(exprt &expr)
+{
+  // Check all operands
+  adjust_operands(expr);
+
+  // If the condition is not of boolean type, it must be casted
+  gen_typecast(ns, expr.op0(), bool_type());
+
+  // Typecast both the true and false results
+  gen_typecast(ns, expr.op1(), expr.type());
+  gen_typecast(ns, expr.op2(), expr.type());
 }
 
 void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
