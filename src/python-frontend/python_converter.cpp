@@ -402,6 +402,29 @@ symbolt *python_converter::find_function_in_base_classes(
   return func;
 }
 
+symbolt *python_converter::find_function_in_imported_modules(
+  const std::string &symbol_id) const
+{
+  for (const auto &obj : ast_json["body"])
+  {
+    if (obj["_type"] == "ImportFrom")
+    {
+      std::string imported_file =
+        json_utils::get_path_from_module(
+          ast_json["body"], obj["module"].get<std::string>()) +
+        ".py";
+
+      std::regex regex_path("(py:)([^@]+)");
+      std::string imported_symbol =
+        std::regex_replace(symbol_id, regex_path, "$1" + imported_file);
+
+      if (symbolt *func_symbol = context.find_symbol(imported_symbol.c_str()))
+        return func_symbol;
+    }
+  }
+  return nullptr;
+}
+
 std::string python_converter::get_classname_from_symbol_id(
   const std::string &symbol_id) const
 {
@@ -501,6 +524,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
 
     const symbolt *func_symbol = context.find_symbol(func_symbol_id.c_str());
+
+    // Find function in imported modules
+    if (!func_symbol)
+      func_symbol = find_function_in_imported_modules(func_symbol_id);
+
     if (func_symbol == nullptr)
     {
       if (is_ctor_call || is_member_function_call)
