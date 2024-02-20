@@ -670,7 +670,7 @@ public:
 
     reverse_iterator &operator--()
     {
-      if (this->it_pos == this->it_size)
+      if (this->it_pos == *(this->it_size))
       {
         this->it_pos = 0;
       }
@@ -684,7 +684,7 @@ public:
     }
     reverse_iterator operator--(int)
     {
-      if (this->it_pos == this->it_size)
+      if (this->it_pos == *(this->it_size))
       {
         this->it_pos = 0;
       }
@@ -1573,7 +1573,7 @@ public:
 
     reverse_iterator &operator--()
     {
-      if (this->it_pos == this->it_size)
+      if (this->it_pos == *(this->it_size))
       {
         this->it_pos = 0;
       }
@@ -1587,7 +1587,7 @@ public:
     }
     reverse_iterator operator--(int)
     {
-      if (this->it_pos == this->it_size)
+      if (this->it_pos == *(this->it_size))
       {
         this->it_pos = 0;
       }
