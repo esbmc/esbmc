@@ -18,9 +18,15 @@ template <
 class priority_queue
 {
   T buf[QUEUE_CAPACITY];
+#if __cplusplus >= 201103L // Check if C++11 or later is being used
+  size_t _size = 0;
+  T head = 0;
+  T tail = 0;
+#else  
   size_t _size;
   T head;
   T tail;
+#endif
 
 public:
   priority_queue() : _size(0), head(0), tail(0)
@@ -97,9 +103,15 @@ template <class T, class Container = deque<T> >
 class queue
 {
   T buf[QUEUE_CAPACITY];
+#if __cplusplus >= 201103L // Check if C++11 or later is being used
+  size_t _size = 0;
+  size_t head = 0;
+  size_t tail = 0;
+#else  
   size_t _size;
   size_t head;
   size_t tail;
+#endif
 
 public:
   queue() : _size(0), head(0), tail(0)
