@@ -2024,8 +2024,10 @@ bool solidity_convertert::get_current_contract_name(
     int scope_id = ast_node["scope"];
 
     if (scope_map.count(scope_id))
+    {
       contract_name = scope_map[scope_id];
-    return false;
+      return false;
+    }
   }
 
   // implicit constructor
@@ -3420,7 +3422,7 @@ void solidity_convertert::get_var_decl_name(
     log_error("Internal error when obtaining the contract name. Aborting...");
     abort();
   }
-
+  assert(!contract_name.empty());
   name =
     ast_node["name"]
       .get<
@@ -3444,7 +3446,7 @@ void solidity_convertert::get_var_decl_name(
     //! Assume it is a variable inside struct
     int scp = ast_node["scope"].get<int>();
     std::string struct_name = scope_map.at(scp);
-    if (current_contractName.empty())
+    if (contract_name.empty())
       id = "sol:@C@" + struct_name + "@" + name + "#" +
            i2string(ast_node["id"].get<std::int16_t>());
     else
