@@ -610,8 +610,17 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     if (mtemp.isBoundToLvalueReference())
-      new_expr = address_of_exprt(tmp);
-    else
+    {
+      symbolt &sym = init_anon_symbol(
+        tmp,
+        location,
+        "materialized-temporary",
+        mtemp.getStorageDuration() == clang::SD_Static);
+
+      new_expr = address_of_exprt(symbol_expr(sym));
+      new_expr.type().set("#reference", true);
+    }
+    else // TODO: otherwise it's an rvalue-ref, should also become an address
       new_expr.swap(tmp);
 
     break;
