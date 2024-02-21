@@ -449,6 +449,17 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXDefaultInitExprClass:
+  {
+    const clang::CXXDefaultInitExpr &cxxdie =
+      static_cast<const clang::CXXDefaultInitExpr &>(stmt);
+
+    if (get_expr(*cxxdie.getExpr(), new_expr))
+      return true;
+
+    break;
+  }
+
   case clang::Stmt::CXXDynamicCastExprClass:
   {
     const clang::CXXDynamicCastExpr &cast =
