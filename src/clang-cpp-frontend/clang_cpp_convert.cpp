@@ -1147,6 +1147,9 @@ bool clang_cpp_convertert::get_decl_ref(
     if (id.empty() && name.empty())
       name_param_and_continue(*param, id, name, new_expr);
 
+    if (is_reference(new_expr.type()) || is_rvalue_reference(new_expr.type()))
+      new_expr = dereference_exprt(new_expr, new_expr.type());
+
     return false;
   }
   case clang::Decl::CXXConstructor:
@@ -1168,21 +1171,25 @@ bool clang_cpp_convertert::get_decl_ref(
     assert(md);
     annotate_ctor_dtor_rtn_type(*md, fd_type.return_type());
 
-    break;
+    new_expr = exprt("symbol", type);
+    new_expr.identifier(id);
+    new_expr.cmt_lvalue(true);
+    new_expr.name(name);
+
+    return false;
   }
 
   default:
   {
-    return clang_c_convertert::get_decl_ref(decl, new_expr);
+    if (clang_c_convertert::get_decl_ref(decl, new_expr))
+      return true;
+
+    if (is_reference(new_expr.type()) || is_rvalue_reference(new_expr.type()))
+      new_expr = dereference_exprt(new_expr, new_expr.type());
+
+    return false;
   }
   }
-
-  new_expr = exprt("symbol", type);
-  new_expr.identifier(id);
-  new_expr.cmt_lvalue(true);
-  new_expr.name(name);
-
-  return false;
 }
 
 bool clang_cpp_convertert::annotate_class_field(
