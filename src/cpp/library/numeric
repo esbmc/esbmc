@@ -1,6 +1,8 @@
 #ifndef __STL_NUMERIC
 #define __STL_NUMERIC
 
+#include <iterator>
+
 namespace std
 {
 
@@ -30,7 +32,7 @@ OutputIterator adjacent_difference(
   InputIterator last,
   OutputIterator result)
 {
-  iterator_traits<InputIterator>::value_type val, prev;
+  typename iterator_traits<InputIterator>::value_type val, prev;
   *result++ = prev = *first++;
   while (first != last)
   {
@@ -48,7 +50,7 @@ OutputIterator adjacent_difference(
   OutputIterator result,
   BinaryOperation binary_op)
 {
-  iterator_traits<InputIterator>::value_type val, prev;
+  typename iterator_traits<InputIterator>::value_type val, prev;
   *result++ = prev = *first++;
   while (first != last)
   {
@@ -94,7 +96,7 @@ template <class InputIterator, class OutputIterator>
 OutputIterator
 partial_sum(InputIterator first, InputIterator last, OutputIterator result)
 {
-  iterator_traits<InputIterator>::value_type val;
+  typename iterator_traits<InputIterator>::value_type val;
   *result++ = val = *first++;
   while (first != last)
     *result++ = val = val + *first++;
@@ -108,7 +110,7 @@ OutputIterator partial_sum(
   OutputIterator result,
   BinaryOperation binary_op)
 {
-  iterator_traits<InputIterator>::value_type val;
+  typename iterator_traits<InputIterator>::value_type val;
   *result++ = val = *first++;
   while (first != last)
     *result++ = val = binary_op(val, *first++);
@@ -118,3 +120,4 @@ OutputIterator partial_sum(
 } // namespace std
 
 #endif
+
