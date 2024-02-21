@@ -409,14 +409,9 @@ symbolt *python_converter::find_function_in_imported_modules(
   {
     if (obj["_type"] == "ImportFrom")
     {
-      std::string imported_file =
-        json_utils::get_path_from_module(
-          ast_json["body"], obj["module"].get<std::string>()) +
-        ".py";
-
-      std::regex regex_path("(py:)([^@]+)");
-      std::string imported_symbol =
-        std::regex_replace(symbol_id, regex_path, "$1" + imported_file);
+      std::regex pattern("py:(.*?)@");
+      std::string imported_symbol = std::regex_replace(
+        symbol_id, pattern, "py:" + obj["full_path"].get<std::string>() + "@");
 
       if (symbolt *func_symbol = context.find_symbol(imported_symbol.c_str()))
         return func_symbol;
@@ -1360,9 +1355,16 @@ python_converter::python_converter(
 
 bool python_converter::convert()
 {
-  python_filename = ast_json["filename"].get<std::string>();
+  code_typet main_type;
+  main_type.return_type() = empty_typet();
 
-  exprt block_expr;
+  symbolt main_symbol;
+  main_symbol.id = "__ESBMC_main";
+  main_symbol.name = "__ESBMC_main";
+  main_symbol.type.swap(main_type);
+  main_symbol.lvalue = true;
+  main_symbol.is_extern = false;
+  main_symbol.file_local = false;
 
   // Handle --function option
   const std::string function = config.options.get_option("function");
@@ -1417,43 +1419,47 @@ bool python_converter::convert()
       call.arguments().push_back(arg_value);
     }
 
-    block_expr = call;
+    convert_expression_to_code(call);
+    main_symbol.value.swap(call);
   }
   else
   {
-    // Convert all statements
-    block_expr = get_block(ast_json["body"]);
-  }
-
-  // Get main function code
-  codet main_code = convert_expression_to_code(block_expr);
-
-  // Create and populate "main" symbol
-
-  if (symbolt *main_symbol = context.find_symbol("__ESBMC_main"))
-  {
-    main_symbol->value.copy_to_operands(main_code);
-  }
-  else
-  {
-    symbolt new_main_symbol;
-
-    code_typet main_type;
-    main_type.return_type() = empty_typet();
-
-    new_main_symbol.id = "__ESBMC_main";
-    new_main_symbol.name = "__ESBMC_main";
-    new_main_symbol.type.swap(main_type);
-    new_main_symbol.value.swap(main_code);
-    new_main_symbol.lvalue = true;
-    new_main_symbol.is_extern = false;
-    new_main_symbol.file_local = false;
-
-    if (context.move(new_main_symbol))
+    // Convert imported modules
+    for (const auto &elem : ast_json["body"])
     {
-      log_error("main already defined by another language module");
-      return true;
+      if (elem["_type"] == "ImportFrom")
+      {
+        std::stringstream module_path;
+        module_path << ast_json["ast_output_dir"].get<std::string>() << "/"
+                    << elem["module"].get<std::string>() << ".json";
+        std::ifstream imported_file(module_path.str());
+        nlohmann::json imported_module_json;
+        imported_file >> imported_module_json;
+
+        python_filename = imported_module_json["filename"].get<std::string>();
+        exprt imported_code = get_block(imported_module_json["body"]);
+        convert_expression_to_code(imported_code);
+
+        // Add imported code to main symbol
+        main_symbol.value.swap(imported_code);
+      }
     }
+
+    // Convert main statements
+    python_filename = ast_json["filename"].get<std::string>();
+    exprt main_block = get_block(ast_json["body"]);
+    codet main_code = convert_expression_to_code(main_block);
+
+    if (main_symbol.value.is_code())
+      main_symbol.value.copy_to_operands(main_code);
+    else
+      main_symbol.value.swap(main_code);
+  }
+
+  if (context.move(main_symbol))
+  {
+    log_error("main already defined by another language module");
+    return true;
   }
 
   return false;
