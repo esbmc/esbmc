@@ -6,6 +6,9 @@
 namespace std
 {
 
+template <class T>
+class valarray;
+
 class slice
 {
   slice();
@@ -190,6 +193,7 @@ class valarray
   void resize(size_t sz, T c = T());
   valarray<T> shift(int n) const;
   size_t size() const;
+  #if 0
   T sum() const;
   template <class T>
   valarray<T> abs(const valarray<T> &x);
@@ -231,6 +235,7 @@ class valarray
   valarray<T> tan(const valarray<T> &x);
   template <class T>
   valarray<T> tanh(const valarray<T> &x);
+  #endif
 };
 
 template <class T>
