@@ -1,12 +1,3 @@
-/*******************************************************************
- Module:
-
- Author: Felipe Rodrigues
-
- Date: September 2012
-
- \*******************************************************************/
-
 #ifndef STL_TYPEINFO
 #define STL_TYPEINFO
 
