@@ -1293,11 +1293,9 @@ public:
     while (first != last)
       erase(first++);
   }
-
   void swap(set &x)
   {
-    set aux;
-    aux = *this;
+    set aux(*this); // Use copy constructor to create aux as a copy of *this
     *this = x;
     x = aux;
   }
