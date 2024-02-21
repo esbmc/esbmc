@@ -120,4 +120,3 @@ OutputIterator partial_sum(
 } // namespace std
 
 #endif
-
