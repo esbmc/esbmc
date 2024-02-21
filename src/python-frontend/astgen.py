@@ -26,19 +26,23 @@ def process_imports(node, output_dir):
     
     # Check if module is available/installed
     module = import_module_by_name(module_name)
-
     filename = module.__file__
+
+    # Remove the 'c' at the end for .pyc files, if present
     if filename.endswith('.pyc'):
-        filename = filename[:-1]  # Remove the 'c' at the end for .pyc files
+        filename = filename[:-1]
+
+    # Add fullpath in import node recovered from importlib
+    node.full_path = filename
 
     # Generate json file for each imported class or function
     for name_node in node.names:
-        generate_ast_json(filename, name_node.name, output_dir, None)
+        with open(filename, "r") as source:
+          tree = ast.parse(source.read())
+        generate_ast_json(tree, filename, name_node.name, output_dir, None)
 
 
-def generate_ast_json(python_filename, import_list, output_dir, output_file):
-    with open(python_filename, "r") as source:
-        tree = ast.parse(source.read())
+def generate_ast_json(tree, python_filename, import_list, output_dir, output_file):
 
     # Filter elements from the module
     relevant_nodes = []
@@ -49,19 +53,12 @@ def generate_ast_json(python_filename, import_list, output_dir, output_file):
                 break
 
     ast2json_module = import_module_by_name("ast2json")
-
-    if relevant_nodes:
-        ast_json = ast2json_module.ast2json(ast.Module(body=relevant_nodes))
-    else:
-        ast_json = ast2json_module.ast2json(tree)
-
+    ast_json = ast2json_module.ast2json(ast.Module(body=relevant_nodes) if relevant_nodes else tree)
     ast_json["filename"] = python_filename
+    ast_json["ast_output_dir"] = output_dir
 
     # Add ESBMC data
-    esbmc_data = {
-        "_type": "ESBMC",
-        "ast_output_dir": output_dir
-    }
+    esbmc_data = {"_type": "ESBMC", "ast_output_dir": output_dir}
     ast_json["body"].append(esbmc_data)
 
     if output_file:
@@ -79,6 +76,8 @@ def main():
     filename = sys.argv[1]
     output_dir = sys.argv[2]
 
+    sys.path.append(os.path.dirname(filename))
+
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -91,7 +90,7 @@ def main():
             process_imports(node, output_dir)
 
     # Generate json for main file from AST
-    generate_ast_json(filename, None, output_dir, "ast.json")
+    generate_ast_json(tree, filename, None, output_dir, "ast.json")
 
 
 if __name__ == "__main__":
