@@ -1071,10 +1071,8 @@ public:
   };
 
   // construct/copy/destroy:
-  explicit set(const Compare &comp = Compare()) : _size(0)
+  explicit set(const Compare &comp = Compare()) : _size(0), rule(comp)
   {
-    _size = 0;
-    this->rule = comp;
   }
 
   explicit set(Key v1[], Key *v2)
@@ -1108,11 +1106,6 @@ public:
     }
     _size = i;
     std::sort(buf, buf + _size /*,rule*/);
-  }
-
-  set() : _size(0)
-  {
-    _size = 0;
   }
 
   set(const set &x)
