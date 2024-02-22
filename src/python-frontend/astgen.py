@@ -32,10 +32,10 @@ def process_imports(node, output_dir):
     if filename.endswith('.pyc'):
         filename = filename[:-1]
 
-    # Add fullpath in import node recovered from importlib
+    # Add the full path recovered from importlib to the import node
     node.full_path = filename
 
-    # Generate json file for each imported class or function
+    # Generate JSON file for each import
     for name_node in node.names:
         with open(filename, "r") as source:
           try:
@@ -45,19 +45,17 @@ def process_imports(node, output_dir):
         generate_ast_json(tree, filename, name_node.name, output_dir, None)
 
 
-def generate_ast_json(tree, python_filename, import_list, output_dir, output_file):
-
-    # Filter elements from the module
-    relevant_nodes = []
-    if import_list:
+def generate_ast_json(tree, python_filename, element_to_import, output_dir, output_file):
+    # Filter elements to be imported from the module
+    filtered_nodes = []
+    if element_to_import:
         for node in tree.body:
-            if isinstance(node, ast.ClassDef) or isinstance(node, ast.FunctionDef):
-                if  node.name == import_list:
-                  relevant_nodes.append(node)
+            if (isinstance(node, ast.ClassDef) or isinstance(node, ast.FunctionDef)) and node.name == element_to_import:
+                  filtered_nodes.append(node)
                   break
 
     ast2json_module = import_module_by_name("ast2json")
-    ast_json = ast2json_module.ast2json(ast.Module(body=relevant_nodes) if relevant_nodes else tree)
+    ast_json = ast2json_module.ast2json(ast.Module(body=filtered_nodes) if filtered_nodes else tree)
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
 
