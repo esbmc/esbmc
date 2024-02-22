@@ -51,9 +51,10 @@ def generate_ast_json(tree, python_filename, import_list, output_dir, output_fil
     relevant_nodes = []
     if import_list:
         for node in tree.body:
-            if isinstance(node, ast.ClassDef) or isinstance(node, ast.FunctionDef) and node.name == import_list:
-                relevant_nodes.append(node)
-                break
+            if isinstance(node, ast.ClassDef) or isinstance(node, ast.FunctionDef):
+                if  node.name == import_list:
+                  relevant_nodes.append(node)
+                  break
 
     ast2json_module = import_module_by_name("ast2json")
     ast_json = ast2json_module.ast2json(ast.Module(body=relevant_nodes) if relevant_nodes else tree)
