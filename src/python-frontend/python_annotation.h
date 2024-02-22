@@ -121,7 +121,7 @@ private:
         else if (
           element["value"]["_type"] == "Call" &&
           (json_utils::is_class<Json>(
-             element["value"]["func"]["id"], ast_["body"]) ||
+             element["value"]["func"]["id"], ast_) ||
            is_builtin_type(element["value"]["func"]["id"])))
         {
           type = element["value"]["func"]["id"];
