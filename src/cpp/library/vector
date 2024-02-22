@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module:
-
-Authors: Lucas Cordeiro and Hendrio Marques
-
-Date: August 2012
-
-\*******************************************************************/
-
 #ifndef __STL_VECTOR
 #define __STL_VECTOR
 
