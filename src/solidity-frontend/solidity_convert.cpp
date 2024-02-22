@@ -102,7 +102,28 @@ bool solidity_convertert::convert()
       return true;
   }
 
-  // secound round: handle contract definition
+  // second round: populate linearizedBaseList
+  // this is to obtain the contract name list
+  index = 0;
+  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
+       ++itr, ++index)
+  {
+    std::string node_type = (*itr)["nodeType"].get<std::string>();
+
+    if (node_type == "ContractDefinition") // rule source-unit
+    {
+      current_contractName = (*itr)["name"].get<std::string>();
+
+      // poplulate linearizedBaseList
+      // this is esstinally the calling order of the constructor
+      for (const auto &id : (*itr)["linearizedBaseContracts"].items())
+        linearizedBaseList[current_contractName].push_back(
+          id.value().get<int>());
+      assert(!linearizedBaseList[current_contractName].empty());
+    }
+  }
+
+  // third round: handle contract definition
   // single contract verification: where the option "--contract" is set.
   // multiple contracts verification: essentially verify the whole file.
   index = 0;
@@ -124,13 +145,6 @@ bool solidity_convertert::convert()
           return true;
       }
 
-      // poplulate linearizedBaseList
-      // this is esstinally the calling order of the constructor
-      for (const auto &id : (*itr)["linearizedBaseContracts"].items())
-        linearizedBaseList[current_contractName].push_back(
-          id.value().get<int>());
-      assert(!linearizedBaseList[current_contractName].empty());
-
       // add a struct symbol for each contract
       // e.g. contract Base => struct Base
       if (get_struct_class(*itr))
@@ -151,6 +165,8 @@ bool solidity_convertert::convert()
     current_forStmt = nullptr;
     global_scope_id = 0;
   }
+
+  // Do Verification
   // single contract
   if (!tgt_cnt.empty() && tgt_func.empty())
   {
@@ -608,10 +624,14 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
   const nlohmann::json *old_functionDecl = current_functionDecl;
   const std::string old_functionName = current_functionName;
 
-  // e.g. name: errmsg; id: sol:@Error@errmsg#12
+  // e.g. name: errmsg; id: sol:@errmsg#12
+  const int id_num = ast_node["id"].get<int>();
   std::string name, id;
   name = ast_node["name"].get<std::string>();
-  id = "sol:@Error@" + name + "#" + std::to_string(ast_node["id"].get<int>());
+  id = "sol:@" + name + "#" + std::to_string(id_num);
+
+  // update scope map
+  scope_map.insert(std::pair<int, std::string>(id_num, name));
 
   // just to pass the internal assertions
   current_functionName = name;
@@ -1353,8 +1373,7 @@ bool solidity_convertert::get_expr(
         {
           std::string name, id;
           name = decl["name"].get<std::string>();
-          id =
-            "sol:@Error@" + name + "#" + std::to_string(decl["id"].get<int>());
+          id = "sol:@" + name + "#" + std::to_string(decl["id"].get<int>());
 
           if (context.find_symbol(id) == nullptr)
             return true;
@@ -2023,10 +2042,14 @@ bool solidity_convertert::get_current_contract_name(
   {
     int scope_id = ast_node["scope"];
 
-    if (scope_map.count(scope_id))
+    if (exportedSymbolsList.count(scope_id))
     {
-      contract_name = scope_map[scope_id];
-      return false;
+      std::string c_name = exportedSymbolsList[scope_id];
+      if (linearizedBaseList.count(c_name))
+      {
+        contract_name = c_name;
+        return false;
+      }
     }
   }
 
@@ -2041,9 +2064,13 @@ bool solidity_convertert::get_current_contract_name(
   if (ast_node.contains("id"))
   {
     const int ref_id = ast_node["id"].get<int>();
-    // exportedSymbolsList == contract_name_list
+
     if (exportedSymbolsList.count(ref_id))
-      contract_name = exportedSymbolsList[ref_id];
+    {
+      std::string c_name = exportedSymbolsList[ref_id];
+      if (linearizedBaseList.count(c_name))
+        contract_name = exportedSymbolsList[ref_id];
+    }
     else
       find_decl_ref(ref_id, contract_name);
     return false;
@@ -3406,8 +3433,11 @@ void solidity_convertert::get_state_var_decl_name(
 
   // e.g. sol:@C@Base@x#11
   // The prefix is used to avoid duplicate names
-  id = "sol:@C@" + contract_name + "@" + name + "#" +
-       i2string(ast_node["id"].get<std::int16_t>());
+  if (!contract_name.empty())
+    id = "sol:@C@" + contract_name + "@" + name + "#" +
+         i2string(ast_node["id"].get<std::int16_t>());
+  else
+    id = "sol:@" + name + "#" + i2string(ast_node["id"].get<std::int16_t>());
 }
 
 // parse the non-state variable
@@ -3422,32 +3452,38 @@ void solidity_convertert::get_var_decl_name(
     log_error("Internal error when obtaining the contract name. Aborting...");
     abort();
   }
-  assert(!contract_name.empty());
+
   name =
     ast_node["name"]
       .get<
         std::
           string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
 
-  if (current_functionDecl)
+  if (
+    current_functionDecl && !contract_name.empty() &&
+    !current_functionName.empty())
   {
     // converting local variable inside a function
     // For non-state functions, we give it different id.
     // E.g. for local variable i in function nondet(), it's "sol:@C@Base@F@nondet@i#55".
 
     // As the local variable inside the function will not be inherited, we can use current_functionName
-    assert(!current_functionName.empty());
     id = "sol:@C@" + contract_name + "@F@" + current_functionName + "@" + name +
          "#" + i2string(ast_node["id"].get<std::int16_t>());
   }
   else if (ast_node.contains("scope"))
   {
     // This means we are handling a local variable which is not inside a function body.
-    //! Assume it is a variable inside struct
+    //! Assume it is a variable inside struct/error
     int scp = ast_node["scope"].get<int>();
+    if (scope_map.count(scp) == 0)
+    {
+      log_error("cannot find struct/error name");
+      abort();
+    }
     std::string struct_name = scope_map.at(scp);
     if (contract_name.empty())
-      id = "sol:@C@" + struct_name + "@" + name + "#" +
+      id = "sol:@" + struct_name + "@" + name + "#" +
            i2string(ast_node["id"].get<std::int16_t>());
     else
       id = "sol:@C@" + contract_name + "@" + struct_name + "@" + name + "#" +
@@ -3677,6 +3713,24 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
       }
     }
 
+    if ((*itr)["nodeType"] == "ErrorDefinition")
+    {
+      if (
+        (*itr).contains("parameters") &&
+        ((*itr)["parameters"]).contains("parameters"))
+      {
+        unsigned men_idx = 0;
+        nlohmann::json &mem_nodes = (*itr)["parameters"]["parameters"];
+        for (nlohmann::json::iterator mem_itr = mem_nodes.begin();
+             mem_itr != mem_nodes.end();
+             ++mem_itr, ++men_idx)
+        {
+          if ((*mem_itr)["id"] == ref_decl_id)
+            return mem_nodes.at(men_idx);
+        }
+      }
+    }
+
     // check the nodes inside a contract
     if ((*itr)["nodeType"] == "ContractDefinition")
     {
@@ -3696,7 +3750,6 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
           (*itrr)["nodeType"] == "StructDefinition")
         {
           unsigned men_idx = 0;
-
           nlohmann::json &mem_nodes = ast_nodes.at(idx)["members"];
 
           for (nlohmann::json::iterator mem_itr = mem_nodes.begin();
@@ -3705,6 +3758,24 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
           {
             if ((*mem_itr)["id"] == ref_decl_id)
               return mem_nodes.at(men_idx);
+          }
+        }
+
+        if ((*itr)["nodeType"] == "ErrorDefinition")
+        {
+          if (
+            (*itr).contains("parameters") &&
+            ((*itr)["parameters"]).contains("parameters"))
+          {
+            unsigned men_idx = 0;
+            nlohmann::json &mem_nodes = (*itr)["parameters"]["parameters"];
+            for (nlohmann::json::iterator mem_itr = mem_nodes.begin();
+                 mem_itr != mem_nodes.end();
+                 ++mem_itr, ++men_idx)
+            {
+              if ((*mem_itr)["id"] == ref_decl_id)
+                return mem_nodes.at(men_idx);
+            }
           }
         }
       }
@@ -3726,7 +3797,8 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
   if (!current_func.contains("body"))
   {
     log_error(
-      "Unable to find the corresponding local variable decl. Current function "
+      "Unable to find the corresponding local variable decl. Current "
+      "function "
       "does not have a function body.");
     abort();
   }
@@ -4147,7 +4219,7 @@ bool solidity_convertert::get_constructor_call(
   exprt callee;
 
   const std::string contract_name = exportedSymbolsList[ref_decl_id];
-  assert(!contract_name.empty());
+  assert(linearizedBaseList.count(contract_name) && !contract_name.empty());
 
   const nlohmann::json constructor_ref = find_constructor_ref(ref_decl_id);
 
@@ -4347,9 +4419,16 @@ bool solidity_convertert::get_empty_array_ref(
   // e.g. "sol:@C@BASE@array#14"
   //TODO: FIX ME. This will probably not work in multi-contract verification.
   std::string label = std::to_string(callee_expr_json["id"].get<int>());
-  std::string name, id;
+  std::string name, id, contract_name;
+  if (get_current_contract_name(expr, contract_name))
+  {
+    log_error("Internal error when obtaining the contract name. Aborting...");
+    abort();
+  }
+
+  assert(!contract_name.empty());
   name = "array#" + label;
-  id = "sol:@C@" + current_contractName + "@" + name;
+  id = "sol:@C@" + contract_name + "@" + name;
 
   // Get Location
   locationt location_begin;
@@ -4629,8 +4708,14 @@ bool solidity_convertert::multi_contract_verification()
     // 1.1 construct multi-transaction verification entry function
     // function "sol_main_contractname" will be created and inserted to the symbol table.
     const std::string &c_name = sym.second;
-    if (multi_transaction_verification(c_name))
-      return true;
+    if (linearizedBaseList.count(c_name))
+    {
+      if (multi_transaction_verification(c_name))
+        return true;
+    }
+    else
+      //! Assume is not a contract (e.g. error type)
+      continue;
 
     // 1.2 construct a "case n"
     exprt case_cond = constant_exprt(
@@ -4702,12 +4787,11 @@ bool solidity_convertert::multi_contract_verification()
   const std::string sol_name = "sol_main";
 
   if (
-    context.find_symbol(prefix + exportedSymbolsList.begin()->second) ==
-    nullptr)
+    context.find_symbol(prefix + linearizedBaseList.begin()->first) == nullptr)
     return true;
   // use first contract's location
   const symbolt &contract =
-    *context.find_symbol(prefix + exportedSymbolsList.begin()->second);
+    *context.find_symbol(prefix + linearizedBaseList.begin()->first);
   new_symbol.location = contract.location;
   std::string debug_modulename =
     get_modulename_from_path(contract.location.file().as_string());
