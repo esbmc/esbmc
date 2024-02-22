@@ -70,11 +70,15 @@ bool python_languaget::parse(const std::string &path)
     return true;
   }
 
+  std::stringstream script_path;
+  script_path << ast_output_dir << "/" << script.stem().string() << ".json";
+
   // Parse and generate AST
-  std::ifstream ast_json(ast_output_dir + "/ast.json");
+  std::ifstream ast_json(script_path.str());
   if (!ast_json.good())
   {
-    log_error("<python-parser> ast.json was not generated\n");
+    log_error(
+      "<python-parser> {} was not generated\n", script_path.str().c_str());
     exit(1);
   }
 

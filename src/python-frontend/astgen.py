@@ -59,11 +59,7 @@ def generate_ast_json(tree, python_filename, element_to_import, output_dir, outp
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
 
-    if output_file:
-        json_filename = os.path.join(output_dir, output_file)
-    else:
-        python_filename = python_filename[:-3]
-        json_filename = os.path.join(output_dir, f"{os.path.basename(python_filename)}.json")
+    json_filename = os.path.join(output_dir, f"{os.path.basename(python_filename[:-3])}.json")
 
     with open(json_filename, "w") as json_file:
         json.dump(ast_json, json_file, indent=4)
