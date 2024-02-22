@@ -36,8 +36,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Assert", StatementType::ASSERT},
   {"ClassDef", StatementType::CLASS_DEFINITION},
   {"Pass", StatementType::PASS},
-  {"ImportFrom", StatementType::IMPORT},
-  {"ESBMC", StatementType::ESBMC}};
+  {"ImportFrom", StatementType::IMPORT}};
 
 static bool is_relational_op(const std::string &op)
 {
@@ -90,7 +89,7 @@ typet python_converter::get_typet(const std::string &ast_type)
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
-  if (is_class(ast_type, ast_json["body"]))
+  if (is_class(ast_type, ast_json))
     return symbol_typet("tag-" + ast_type);
   return empty_typet();
 }
@@ -649,7 +648,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     else if (element["_type"] == "Attribute")
     {
       var_name = element["value"]["id"].get<std::string>();
-      if (is_class(var_name, ast_json["body"]))
+      if (is_class(var_name, ast_json))
       {
         // Found a class attribute
         var_name = "C@" + var_name;
@@ -1329,7 +1328,6 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       break;
     // Imports are handled by astgen.py so we can just ignore here.
     case StatementType::IMPORT:
-    case StatementType::ESBMC:
       break;
     case StatementType::UNKNOWN:
     default:

@@ -38,7 +38,10 @@ def process_imports(node, output_dir):
     # Generate json file for each imported class or function
     for name_node in node.names:
         with open(filename, "r") as source:
-          tree = ast.parse(source.read())
+          try:
+            tree = ast.parse(source.read())
+          except UnicodeDecodeError:
+              continue
         generate_ast_json(tree, filename, name_node.name, output_dir, None)
 
 
@@ -56,10 +59,6 @@ def generate_ast_json(tree, python_filename, import_list, output_dir, output_fil
     ast_json = ast2json_module.ast2json(ast.Module(body=relevant_nodes) if relevant_nodes else tree)
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
-
-    # Add ESBMC data
-    esbmc_data = {"_type": "ESBMC", "ast_output_dir": output_dir}
-    ast_json["body"].append(esbmc_data)
 
     if output_file:
         json_filename = os.path.join(output_dir, output_file)

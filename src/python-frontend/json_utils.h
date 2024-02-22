@@ -15,46 +15,28 @@ JsonType find_class(const JsonType &ast_json, const std::string &class_name)
 }
 
 template <typename JsonType>
-std::string
-get_path_from_module(const JsonType &ast_json, const std::string &module_name)
-{
-  auto esbmc_data =
-    std::find_if(ast_json.begin(), ast_json.end(), [&](const JsonType &obj) {
-      return obj["_type"] == "ESBMC" && obj.contains("ast_output_dir");
-    });
-
-  if (esbmc_data == ast_json.end())
-    abort();
-
-  std::stringstream module_path;
-
-  module_path << esbmc_data->at("ast_output_dir").template get<std::string>()
-              << "/" << module_name;
-
-  return module_path.str();
-}
-
-template <typename JsonType>
 bool is_class(const std::string &name, const JsonType &ast_json)
 {
   // Find class definition in the current json
-  if (find_class(ast_json, name) != JsonType())
+  if (find_class(ast_json["body"], name) != JsonType())
     return true;
 
   // Find class definition in imported modules
-  for (const auto &obj : ast_json)
+  for (const auto &obj : ast_json["body"])
   {
     // Check if the current object has the _type field and its value is "ImportFrom"
     if (obj["_type"] == "ImportFrom")
     {
-      std::string module_path = get_path_from_module(
-        ast_json, obj["module"].template get<std::string>());
+      std::stringstream module_path;
+      module_path << ast_json["ast_output_dir"].template get<std::string>()
+                  << "/" << obj["module"].template get<std::string>()
+                  << ".json";
 
-      std::ifstream imported_file(module_path + ".json");
+      std::ifstream imported_file(module_path.str());
       JsonType imported_module_json;
       imported_file >> imported_module_json;
 
-      if (is_class(name, imported_module_json["body"]))
+      if (is_class(name, imported_module_json))
         return true;
     }
   }

@@ -15,7 +15,6 @@ enum class StatementType
   CLASS_DEFINITION,
   PASS,
   IMPORT,
-  ESBMC, // An internal statement to encode metadata in the JSON AST (see esbmc_data at astgen.py)
   UNKNOWN,
 };
 
