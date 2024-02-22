@@ -22,47 +22,69 @@ def import_module_by_name(module_name):
 
 
 def process_imports(node, output_dir):
+    """
+    Process import statements in the AST node.
+
+    Parameters:
+        - node: The import node to process.
+        - output_dir: The directory to save the generated JSON files.
+    """
+
     module_name = node.module
     
     # Check if module is available/installed
     module = import_module_by_name(module_name)
     filename = module.__file__
 
-    # Remove the 'c' at the end for .pyc files, if present
-    if filename.endswith('.pyc'):
-        filename = filename[:-1]
-
     # Add the full path recovered from importlib to the import node
     node.full_path = filename
 
-    # Generate JSON file for each import
-    for name_node in node.names:
+    # Generate JSON file for imported elements
+    try:
         with open(filename, "r") as source:
-          try:
             tree = ast.parse(source.read())
-          except UnicodeDecodeError:
-              continue
-        generate_ast_json(tree, filename, name_node.name, output_dir, None)
+            imported_elements = node.names
+            generate_ast_json(tree, filename, imported_elements, output_dir)
+    except UnicodeDecodeError as e:
+        pass
 
 
-def generate_ast_json(tree, python_filename, element_to_import, output_dir, output_file):
+def generate_ast_json(tree, python_filename, elements_to_import, output_dir):
+    """
+    Generate AST JSON from the given Python AST tree.
+
+    Parameters:
+        - tree: The Python AST tree.
+        - python_filename: The filename of the Python source file.
+        - elements_to_import: The elements (classes or functions) to be imported from the module.
+        - output_dir: The directory to save the generated JSON file.
+    """
+
     # Filter elements to be imported from the module
     filtered_nodes = []
-    if element_to_import:
+    if elements_to_import is not None and elements_to_import:
         for node in tree.body:
-            if (isinstance(node, ast.ClassDef) or isinstance(node, ast.FunctionDef)) and node.name == element_to_import:
-                  filtered_nodes.append(node)
-                  break
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+                for elem_info in elements_to_import:
+                    if node.name == elem_info.name:
+                        filtered_nodes.append(node)
 
+
+    # Convert AST to JSON
     ast2json_module = import_module_by_name("ast2json")
     ast_json = ast2json_module.ast2json(ast.Module(body=filtered_nodes) if filtered_nodes else tree)
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
 
+    # Construct JSON filename
     json_filename = os.path.join(output_dir, f"{os.path.basename(python_filename[:-3])}.json")
 
-    with open(json_filename, "w") as json_file:
-        json.dump(ast_json, json_file, indent=4)
+    # Write AST JSON to file
+    try:
+        with open(json_filename, "w") as json_file:
+            json.dump(ast_json, json_file, indent=4)
+    except Exception as e:
+        print(f"Error writing JSON file: {e}")
 
 
 def main():
@@ -70,6 +92,7 @@ def main():
     filename = sys.argv[1]
     output_dir = sys.argv[2]
 
+    # Include the current directory for import search
     sys.path.append(os.path.dirname(filename))
 
     if not os.path.exists(output_dir):
@@ -80,11 +103,11 @@ def main():
         
     # Handle imports
     for node in ast.walk(tree):
-        if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
             process_imports(node, output_dir)
 
-    # Generate json for main file from AST
-    generate_ast_json(tree, filename, None, output_dir, "ast.json")
+    # Generate JSON from AST for the main file.
+    generate_ast_json(tree, filename, None, output_dir)
 
 
 if __name__ == "__main__":

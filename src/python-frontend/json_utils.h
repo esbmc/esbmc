@@ -24,7 +24,6 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   // Find class definition in imported modules
   for (const auto &obj : ast_json["body"])
   {
-    // Check if the current object has the _type field and its value is "ImportFrom"
     if (obj["_type"] == "ImportFrom")
     {
       std::stringstream module_path;
