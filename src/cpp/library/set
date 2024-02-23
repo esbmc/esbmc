@@ -715,7 +715,7 @@ public:
   }
 };
 
-template <class Key, class Compare = less<Key> >
+template <class Key, class Compare = less<Key>>
 class set
 {
 public:
@@ -740,14 +740,18 @@ public:
     int pos;
     key_type *base;
 
-iterator(const iterator &i) : pos(i.pos), base(i.base) {}
+    iterator(const iterator &i) : pos(i.pos), base(i.base)
+    {
+    }
 
-iterator(key_type *bbase, int ppos) : pos(ppos), base(bbase)
-{
-  __ESBMC_assert(bbase != NULL, "Invalid null pointer");
-}
+    iterator(key_type *bbase, int ppos) : pos(ppos), base(bbase)
+    {
+      __ESBMC_assert(bbase != NULL, "Invalid null pointer");
+    }
 
-iterator() : pos(0), base(NULL) {}
+    iterator() : pos(0), base(NULL)
+    {
+    }
 
     iterator &operator=(const iterator &i)
     {
