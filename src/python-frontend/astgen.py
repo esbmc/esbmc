@@ -104,7 +104,7 @@ def main():
 
     with open(filename, "r") as source:
         tree = ast.parse(source.read())
-        
+
     # Handle imports
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
