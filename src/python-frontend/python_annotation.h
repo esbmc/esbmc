@@ -120,8 +120,7 @@ private:
         // Get type from constructor call
         else if (
           element["value"]["_type"] == "Call" &&
-          (json_utils::is_class<Json>(
-             element["value"]["func"]["id"], ast_) ||
+          (json_utils::is_class<Json>(element["value"]["func"]["id"], ast_) ||
            is_builtin_type(element["value"]["func"]["id"])))
         {
           type = element["value"]["func"]["id"];
