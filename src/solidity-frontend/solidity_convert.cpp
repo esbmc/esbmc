@@ -4420,15 +4420,17 @@ bool solidity_convertert::get_empty_array_ref(
   //TODO: FIX ME. This will probably not work in multi-contract verification.
   std::string label = std::to_string(callee_expr_json["id"].get<int>());
   std::string name, id, contract_name;
-  if (get_current_contract_name(expr, contract_name))
+  if (get_current_contract_name(callee_expr_json, contract_name))
   {
     log_error("Internal error when obtaining the contract name. Aborting...");
     abort();
   }
 
-  assert(!contract_name.empty());
   name = "array#" + label;
-  id = "sol:@C@" + contract_name + "@" + name;
+  if(!contract_name.empty())
+    id = "sol:@C@" + contract_name + "@" + name;
+  else
+    id = "sol:@" + name;
 
   // Get Location
   locationt location_begin;
