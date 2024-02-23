@@ -1007,16 +1007,16 @@ INT_X unsigned_2_signed_min_extend(UINT_X a, UINT_X b, UINT_X n)
     const interval_templatet<BigInt> &lhs,                                     \
     const interval_templatet<BigInt> &rhs) const                               \
   {                                                                            \
-    assert(lhs.type && rhs.type);                                              \
+    assert(lhs.type &&rhs.type);                                               \
     interval_templatet<BigInt> result;                                         \
-    if(!lhs.lower || !lhs.upper || !rhs.lower || !rhs.upper)                   \
-       return result;                                                          \
+    if (!lhs.lower || !lhs.upper || !rhs.lower || !rhs.upper)                  \
+      return result;                                                           \
     if (is_unsignedbv_type(*lhs.type) && is_unsignedbv_type(*rhs.type))        \
     {                                                                          \
       result.set_lower(UINT_FUNC(MIN_UFUNC, lhs, rhs));                        \
       result.set_upper(UINT_FUNC(MAX_UFUNC, lhs, rhs));                        \
     }                                                                          \
-    else if (is_signedbv_type(*lhs.type) && is_signedbv_type(*rhs.type))            \
+    else if (is_signedbv_type(*lhs.type) && is_signedbv_type(*rhs.type))       \
     {                                                                          \
       result.set_lower(INT_FUNC(MIN_FUNC, lhs, rhs));                          \
       result.set_upper(INT_FUNC(MAX_FUNC, lhs, rhs));                          \
