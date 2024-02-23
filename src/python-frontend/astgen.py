@@ -36,7 +36,7 @@ def process_imports(node, output_dir):
     else: #ImportFrom
         module_name = node.module
         imported_elements = node.names
-    
+
     # Check if module is available/installed
     module = import_module_by_name(module_name)
     filename = module.__file__
@@ -49,7 +49,7 @@ def process_imports(node, output_dir):
         with open(filename, "r") as source:
             tree = ast.parse(source.read())
             generate_ast_json(tree, filename, imported_elements, output_dir)
-    except UnicodeDecodeError as e:
+    except UnicodeDecodeError:
         pass
 
 
