@@ -30,7 +30,12 @@ def process_imports(node, output_dir):
         - output_dir: The directory to save the generated JSON files.
     """
 
-    module_name = node.module
+    if isinstance(node, (ast.Import)):
+        module_name = node.names[0].name
+        imported_elements = None
+    else: #ImportFrom
+        module_name = node.module
+        imported_elements = node.names
     
     # Check if module is available/installed
     module = import_module_by_name(module_name)
@@ -43,7 +48,6 @@ def process_imports(node, output_dir):
     try:
         with open(filename, "r") as source:
             tree = ast.parse(source.read())
-            imported_elements = node.names
             generate_ast_json(tree, filename, imported_elements, output_dir)
     except UnicodeDecodeError as e:
         pass
