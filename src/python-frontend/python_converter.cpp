@@ -36,7 +36,8 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Assert", StatementType::ASSERT},
   {"ClassDef", StatementType::CLASS_DEFINITION},
   {"Pass", StatementType::PASS},
-  {"ImportFrom", StatementType::IMPORT}};
+  {"ImportFrom", StatementType::IMPORT},
+  {"Import", StatementType::IMPORT}};
 
 static bool is_relational_op(const std::string &op)
 {
@@ -213,10 +214,11 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   }
 }
 
-std::string python_converter::create_symbol_id() const
+std::string
+python_converter::create_symbol_id(const std::string &filename) const
 {
   std::stringstream symbol_id;
-  symbol_id << "py:" << python_filename;
+  symbol_id << "py:" << filename;
 
   if (!current_class_name.empty())
     symbol_id << "@C@" << current_class_name;
@@ -225,6 +227,11 @@ std::string python_converter::create_symbol_id() const
     symbol_id << "@F@" << current_func_name;
 
   return symbol_id.str();
+}
+
+std::string python_converter::create_symbol_id() const
+{
+  return create_symbol_id(python_filename);
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
@@ -439,11 +446,13 @@ std::string python_converter::get_classname_from_symbol_id(
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
+  // TODO: Refactor into different classes/functions
   if (element.contains("func") && element["_type"] == "Call")
   {
     bool is_member_function_call = false;
-    std::string func_name;
-    std::string obj_name;
+    bool is_imported_module_call = false;
+    std::string func_name, obj_name;
+
     if (element["func"]["_type"] == "Name")
     {
       func_name = element["func"]["id"];
@@ -452,7 +461,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     {
       func_name = element["func"]["attr"];
       obj_name = element["func"]["value"]["id"];
-      is_member_function_call = true;
+      if (json_utils::is_module(obj_name, ast_json))
+        is_imported_module_call = true;
+      else
+        is_member_function_call = true;
     }
 
     // nondet_X() functions restricted to basic types supported in Python
@@ -470,7 +482,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
 
     locationt location = get_location_from_decl(element);
-    std::string func_symbol_id = create_symbol_id();
+
+    std::string func_symbol_id =
+      (is_imported_module_call) ? create_symbol_id(imported_modules[obj_name])
+                                : create_symbol_id();
+
     if (func_symbol_id.find("@F@") == func_symbol_id.npos)
       func_symbol_id += std::string("@F@") + func_name;
 
@@ -1425,16 +1441,21 @@ bool python_converter::convert()
     // Convert imported modules
     for (const auto &elem : ast_json["body"])
     {
-      if (elem["_type"] == "ImportFrom")
+      if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
       {
+        const std::string &module_name = (elem["_type"] == "ImportFrom")
+                                           ? elem["module"]
+                                           : elem["names"][0]["name"];
         std::stringstream module_path;
         module_path << ast_json["ast_output_dir"].get<std::string>() << "/"
-                    << elem["module"].get<std::string>() << ".json";
+                    << module_name << ".json";
         std::ifstream imported_file(module_path.str());
         nlohmann::json imported_module_json;
         imported_file >> imported_module_json;
 
         python_filename = imported_module_json["filename"].get<std::string>();
+        imported_modules.emplace(module_name, python_filename);
+
         exprt imported_code = get_block(imported_module_json["body"]);
         convert_expression_to_code(imported_code);
 

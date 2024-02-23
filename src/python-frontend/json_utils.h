@@ -1,5 +1,8 @@
 #pragma once
 
+#include <string>
+#include <fstream>
+
 namespace json_utils
 {
 template <typename JsonType>
@@ -41,6 +44,16 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   }
 
   return false;
+}
+
+template <typename JsonType>
+bool is_module(const std::string &module_name, const JsonType &ast)
+{
+  std::stringstream file_path;
+  file_path << ast["ast_output_dir"].template get<std::string>() << "/"
+            << module_name << ".json";
+  std::ifstream file(file_path.str());
+  return file.is_open();
 }
 
 template <typename JsonType>
