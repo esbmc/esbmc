@@ -740,22 +740,14 @@ public:
     int pos;
     key_type *base;
 
-    iterator(const iterator &i)
-    {
-      pos = i.pos;
-      base = i.base;
-    }
+iterator(const iterator &i) : pos(i.pos), base(i.base) {}
 
-    iterator(key_type *bbase, int ppos)
-    {
-      __ESBMC_assert(bbase != NULL, "Invalid null pointer");
-      pos = ppos;
-      base = bbase;
-    }
+iterator(key_type *bbase, int ppos) : pos(ppos), base(bbase)
+{
+  __ESBMC_assert(bbase != NULL, "Invalid null pointer");
+}
 
-    iterator()
-    {
-    }
+iterator() : pos(0), base(NULL) {}
 
     iterator &operator=(const iterator &i)
     {
