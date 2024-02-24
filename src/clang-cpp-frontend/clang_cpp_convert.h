@@ -513,6 +513,13 @@ protected:
    *  md: clang AST representing a C++ method
    */
   bool is_ConstructorOrDestructor(const clang::CXXMethodDecl &md);
+  /*
+   * Check if expr is a temporary object
+   * if not, convert expr to a temporary object
+   * Arguments:
+   *  expr: ESBMC IR to represent Function call
+   */
+  void make_temporary(exprt &expr);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

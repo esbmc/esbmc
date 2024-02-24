@@ -583,6 +583,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*cxxbtmp.getSubExpr(), new_expr))
       return true;
 
+    make_temporary(new_expr);
+
     break;
   }
 
@@ -745,13 +747,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_constructor_call(cxxtoe, new_expr))
       return true;
 
-    // make the temporary
-    side_effect_exprt tmp_obj("temporary_object", new_expr.type());
-    codet code_expr("expression");
-    code_expr.operands().push_back(new_expr);
-    tmp_obj.initializer(code_expr);
-    tmp_obj.location() = new_expr.location();
-    new_expr.swap(tmp_obj);
+    make_temporary(new_expr);
 
     break;
   }
@@ -1581,4 +1577,18 @@ bool clang_cpp_convertert::is_ConstructorOrDestructor(
 {
   return md.getKind() == clang::Decl::CXXConstructor ||
          md.getKind() == clang::Decl::CXXDestructor;
+}
+
+void clang_cpp_convertert::make_temporary(exprt &expr)
+{
+  if (expr.statement() != "temporary_object")
+  {
+    // make the temporary
+    side_effect_exprt tmp_obj("temporary_object", expr.type());
+    codet code_expr("expression");
+    code_expr.operands().push_back(expr);
+    tmp_obj.initializer(code_expr);
+    tmp_obj.location() = expr.location();
+    expr.swap(tmp_obj);
+  }
 }
