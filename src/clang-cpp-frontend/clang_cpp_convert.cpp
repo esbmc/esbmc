@@ -1412,8 +1412,7 @@ void clang_cpp_convertert::get_base_map(
     const clang::CXXRecordDecl &base_cxxrd =
       *(base.getType().getTypePtr()->getAsCXXRecordDecl());
 
-    if (get_struct_union_class(base_cxxrd))
-      continue;
+    get_struct_union_class(base_cxxrd);
 
     // recursively get more bases for this `base`
     if (base_cxxrd.bases_begin() != base_cxxrd.bases_end())
