@@ -49,6 +49,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   else if (statement == "temporary_object")
   {
     exprt &initializer = static_cast<exprt &>(expr.add("initializer"));
+    adjust_expr(initializer);
 
     side_effect_expr_function_callt &constructor_call =
       to_side_effect_expr_function_call(initializer.op0());
