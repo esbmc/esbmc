@@ -51,10 +51,13 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
     exprt &initializer = static_cast<exprt &>(expr.add("initializer"));
     adjust_expr(initializer);
 
-    side_effect_expr_function_callt &constructor_call =
-      to_side_effect_expr_function_call(initializer.op0());
+    if (!initializer.op0().is_constant())
+    {
+      side_effect_expr_function_callt &constructor_call =
+        to_side_effect_expr_function_call(initializer.op0());
 
-    adjust_function_call_arguments(constructor_call);
+      adjust_function_call_arguments(constructor_call);
+    }
   }
   else if (statement == "assign")
   {
