@@ -76,7 +76,9 @@ public:
 
     iterator &operator--()
     {
-      return iterator(--pointer, --pos, vec_pos);
+      --pointer;
+      --pos;
+      return *this;
     }
     iterator operator--(int b)
     {
