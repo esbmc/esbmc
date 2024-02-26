@@ -460,7 +460,7 @@ namespace std {
 	};
 #endif
 
-template <class Key, class T, class Compare = less<Key>>
+template <class Key, class T, class Compare = less<Key> >
 class map
 {
 public:
@@ -1363,10 +1363,7 @@ public:
 #endif
 };
 
-template <class Key, class T, class Compare>
-void swap(map<Key, T, Compare> &, vector<Key, T, Compare> &);
-
-template <class Key, class T, class Compare = less<Key>>
+template <class Key, class T, class Compare = less<Key> >
 class multimap
 {
 public:
