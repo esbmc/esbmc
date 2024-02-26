@@ -730,7 +730,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
 
     this_mapt::iterator it = this_map.find(address);
-    if (this_map.find(address) == this_map.end())
+    if (it == this_map.end())
     {
       log_error(
         "Pointer `this' for method {} was not added to scope",
