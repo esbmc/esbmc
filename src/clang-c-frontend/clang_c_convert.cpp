@@ -1109,7 +1109,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       static_cast<const clang::LValueReferenceType &>(the_type);
 
     typet sub_type;
-    if (get_type(lvrt.getPointeeTypeAsWritten(), sub_type))
+    if (get_type(lvrt.getPointeeType(), sub_type))
       return true;
 
     if (sub_type.is_struct() || sub_type.is_union())
@@ -1134,7 +1134,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
      *
      * So for a const ref, we need to annotate it here
      */
-    if (lvrt.getPointeeTypeAsWritten().isConstQualified())
+    if (lvrt.getPointeeType().isConstQualified())
       sub_type.cmt_constant(true);
 
     new_type = gen_pointer_type(sub_type);

@@ -204,7 +204,7 @@ bool clang_cpp_convertert::get_type(
       static_cast<const clang::RValueReferenceType &>(the_type);
 
     typet sub_type;
-    if (get_type(rvrt.getPointeeTypeAsWritten(), sub_type))
+    if (get_type(rvrt.getPointeeType(), sub_type))
       return true;
 
     // This is done similarly to lvalue reference.
@@ -214,7 +214,7 @@ bool clang_cpp_convertert::get_type(
       sub_type = symbol_typet(tag_prefix + t.tag().as_string());
     }
 
-    if (rvrt.getPointeeTypeAsWritten().isConstQualified())
+    if (rvrt.getPointeeType().isConstQualified())
       sub_type.cmt_constant(true);
 
     new_type = gen_pointer_type(sub_type);
