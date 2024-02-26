@@ -599,8 +599,9 @@ void c_typecastt::implicit_typecast_followed(
   const typet &src_type,
   const typet &dest_type)
 {
-  if ((is_reference(dest_type) || is_rvalue_reference(dest_type)) &&
-      !(is_reference(src_type) || is_rvalue_reference(src_type)))
+  if (
+    (is_reference(dest_type) || is_rvalue_reference(dest_type)) &&
+    !(is_reference(src_type) || is_rvalue_reference(src_type)))
   {
     // if a destination type is an lvalue reference,
     // which has been modelled as a pointer, but
@@ -614,7 +615,9 @@ void c_typecastt::implicit_typecast_followed(
     // got to make sure the subtypes match each other
     // to prevent anything that may surprise us.
 
-    if (ns.follow(dest_type.subtype()).id() == src_type.id()) // TODO: remove this condition
+    if (
+      ns.follow(dest_type.subtype()).id() ==
+      src_type.id()) // TODO: remove this condition
     {
       address_of_exprt addr(expr);
       addr.location() = expr.location();
@@ -624,12 +627,14 @@ void c_typecastt::implicit_typecast_followed(
     }
     else
     {
-      log_debug("c-typecast",
+      log_debug(
+        "c-typecast",
         "implicit typecast of non-reference to incompatible reference type?");
     }
   }
-  else if ((is_reference(src_type) || is_rvalue_reference(src_type)) &&
-           !(is_reference(dest_type) || is_rvalue_reference(dest_type)))
+  else if (
+    (is_reference(src_type) || is_rvalue_reference(src_type)) &&
+    !(is_reference(dest_type) || is_rvalue_reference(dest_type)))
   {
     log_debug("c-typecast", "src-ref to non-ref dest");
     if (ns.follow(src_type.subtype()).id() == dest_type.id())
@@ -642,7 +647,8 @@ void c_typecastt::implicit_typecast_followed(
     }
     else
     {
-      log_debug("c-typecast",
+      log_debug(
+        "c-typecast",
         "implicit typecast of reference to incompatible non-reference type?");
     }
   }
