@@ -5,6 +5,8 @@
 #include <assert.h>
 
 #include "stdexcept"
+#include <utility> /* std::move */
+#include <new> /* placement-new */
 
 #define VECTOR_CAPACITY 500
 
@@ -448,6 +450,28 @@ public:
       position++;
       first++;
     }
+  }
+
+  iterator insert(const_iterator pos, size_type count, const T &value)
+  {
+    size_type at = pos - buf;
+#if 0 /* TODO: can't use placement-new, yet: needs more frontend support */
+    reserve(_size + count);
+    for (size_type i = _size; i > at; i--)
+# if __cplusplus >= 201103L // Check if C++11 or later is being used
+      new(&buf[i + count - 1]) T(std::move(buf[i - 1]));
+# else
+      new(&buf[i + count - 1]) T(buf[i - 1]);
+# endif
+    _size += count;
+#else
+    resize(_size + count);
+    for (size_type i = _size; i > at; i--)
+      buf[i + count - 1] = buf[i - 1];
+#endif
+    for (size_type i = 0; i < count; i++)
+      buf[i + at] = value;
+    return buf + at;
   }
 
   iterator erase(iterator position)
