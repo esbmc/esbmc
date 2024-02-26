@@ -263,6 +263,7 @@ void execution_statet::symex_step(reachability_treet &art)
       // TODO: we should support verifying memory leaks in multi-threaded C programs.
       assume(gen_false_expr());
       end_thread();
+      interleaving_unviable = true;
     }
     else
     {
