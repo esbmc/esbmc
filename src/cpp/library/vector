@@ -15,230 +15,6 @@ template <class T>
 class vector
 {
 public:
-  class iterator
-  {
-  public:
-    T *pointer;
-    int pos;
-    T *vec_pos;
-
-    iterator(const iterator &i)
-    {
-      pointer = i.pointer;
-      pos = i.pos;
-      vec_pos = i.vec_pos;
-    }
-    iterator()
-    {
-    }
-    iterator(T *p)
-    {
-      pointer = p;
-    }
-    iterator(T *ppointer, int ppos, T *pvec_pos)
-    {
-      pointer = ppointer;
-      pos = ppos;
-      vec_pos = pvec_pos;
-    }
-    iterator &operator=(const iterator &i)
-    {
-      pointer = i.pointer;
-      pos = i.pos;
-      vec_pos = i.vec_pos;
-      return *this;
-    }
-
-    T *operator->()
-    {
-      return pointer;
-    }
-
-    T &operator*()
-    {
-      if (vec_pos != 0)
-        return vec_pos[pos];
-      else
-        return *pointer;
-    }
-
-    iterator &operator++()
-    {
-      ++pointer;
-      ++pos;
-      return *this;
-    }
-
-    iterator operator++(int b)
-    {
-      return iterator(pointer++, pos++, vec_pos);
-    }
-
-    iterator &operator--()
-    {
-      --pointer;
-      --pos;
-      return *this;
-    }
-    iterator operator--(int b)
-    {
-      return iterator(pointer--, pos--, vec_pos);
-    }
-
-    bool operator==(const iterator &i) const
-    {
-      return (pointer == i.pointer);
-    }
-    bool operator==(int i) const
-    {
-      return (pos == i);
-    }
-    bool operator!=(const iterator &i) const
-    {
-      return (pointer != i.pointer);
-    }
-
-    bool operator<(const iterator &i) const
-    {
-      return (pointer < i.pointer);
-    }
-    bool operator>(const iterator &i) const
-    {
-      return (pointer > i.pointer);
-    }
-
-    bool operator<=(const iterator &i) const
-    {
-      return (pointer <= i.pointer);
-    }
-    bool operator>=(const iterator &i) const
-    {
-      return (pointer >= i.pointer);
-    }
-
-    iterator operator+(int n) const
-    {
-      return iterator(pointer + n, pos + n, vec_pos);
-    }
-    iterator operator-(int n) const
-    {
-      return iterator(pointer - n, pos - n, vec_pos);
-    }
-    iterator operator-(const iterator &i)
-    {
-      return iterator(pointer - i.pos, pos - i.pos, vec_pos);
-    }
-
-    iterator &operator+=(int n)
-    {
-      return iterator(pointer += n, pos += n, vec_pos);
-    }
-    iterator &operator-=(int n)
-    {
-      return iterator(pointer -= n, pos -= n, vec_pos);
-    }
-  };
-
-  class const_iterator
-  {
-  public:
-    T *pointer;
-    int pos;
-    T *vec_pos;
-
-    const_iterator(const const_iterator &i)
-    {
-      pointer = i.pointer;
-      pos = i.pos;
-      vec_pos = i.vec_pos;
-    }
-    const_iterator()
-    {
-    }
-    const_iterator(T *p)
-    {
-      pointer = p;
-    }
-    const_iterator(T *ppointer, int ppos, T *pvec_pos)
-    {
-      pointer = ppointer;
-      pos = ppos;
-      vec_pos = pvec_pos;
-    }
-    const_iterator &operator=(const const_iterator &i)
-    {
-      pointer = i.pointer;
-      pos = i.pos;
-      vec_pos = i.vec_pos;
-      return *this;
-    }
-
-    T *operator->();
-
-    T &operator*()
-    {
-      return vec_pos[pos];
-    }
-
-    const_iterator &operator++()
-    {
-      return const_iterator(++pointer, ++pos, vec_pos);
-    }
-    const_iterator operator++(int b)
-    {
-      return const_iterator(pointer++, pos++, vec_pos);
-    }
-
-    const_iterator &operator--()
-    {
-      return const_iterator(--pointer, --pos, vec_pos);
-    }
-    const_iterator operator--(int b)
-    {
-      return const_iterator(pointer--, pos--, vec_pos);
-    }
-
-    bool operator==(const const_iterator &i) const
-    {
-      return (pointer == i.pointer);
-    }
-    bool operator!=(const const_iterator &i) const
-    {
-      return (pointer != i.pointer);
-    }
-
-    bool operator<(const const_iterator &i) const
-    {
-      return (pointer < i.pointer);
-    }
-    bool operator>(const const_iterator &i) const
-    {
-      return (pointer > i.pointer);
-    }
-
-    bool operator<=(const const_iterator &) const;
-    bool operator>=(const const_iterator &) const;
-
-    const_iterator operator+(int n) const
-    {
-      return const_iterator(pointer + n, pos + n, vec_pos);
-    }
-    const_iterator operator-(int n) const
-    {
-      return const_iterator(pointer - n, pos - n, vec_pos);
-    }
-    const_iterator operator-(const const_iterator &) const;
-
-    const_iterator &operator+=(int n)
-    {
-      return const_iterator(pointer += n, pos += n, vec_pos);
-    }
-    const_iterator &operator-=(int n)
-    {
-      return const_iterator(pointer -= n, pos -= n, vec_pos);
-    }
-  };
-
   class reverse_iterator
   {
   public:
@@ -341,6 +117,9 @@ public:
   typedef T value_type;
   typedef T *pointer;
   typedef const T *const_pointer;
+
+  typedef pointer iterator;
+  typedef const_pointer const_iterator;
 
   // construct:
   explicit vector() : _size(0), _capacity(1)
@@ -461,33 +240,23 @@ public:
   // iterators:
   iterator begin()
   {
-    iterator buffer(buf, 0, buf);
-    return buffer;
+    return buf;
   }
 
   const_iterator begin() const
   {
-    const_iterator buffer(buf, 0, buf);
-    return buffer;
+    return buf;
   }
 
   iterator end()
   {
     assert(_size >= 0);
-    iterator buffer;
-    int n = _size;
-    buffer.pointer = buf + n;
-    buffer.pos = n;
-    buffer.vec_pos = buf;
-    return buffer;
+    return buf + _size;
   }
 
   const_iterator end() const
   {
-    int n = _size;
-    buf[n] = T();
-    const_iterator buffer(buf + n, n, buf);
-    return buffer;
+    return buf + _size;
   }
 
   reverse_iterator rbegin()
@@ -561,11 +330,6 @@ public:
     return;
   }
 
-  void resize(iterator i)
-  {
-    _size = i.pos;
-    reserve(_size);
-  }
   size_type capacity() const
   {
     assert(0 <= _size && _size <= _capacity);
@@ -657,69 +421,39 @@ public:
 
   iterator insert(iterator position, const T &x)
   {
+    size_type at = position - buf;
+
     // Fist, give us space for one more item.
     buf = static_cast<T *>(realloc(buf, sizeof(T) * (_size + 1)));
 
     // We need to shift all fields at or above the position iterator up
     // one place. Backwards copy to avoid overwriting existing data.
-    for (int i = _size - 1; i >= position.pos; i--)
+    for (int i = _size - 1; i >= at; i--)
     {
       buf[i + 1] = buf[i];
     }
 
     // And now install the new value.
-    buf[position.pos] = x;
+    buf[at] = x;
     _size++;
     _capacity = _size;
-    return position;
-  }
-
-  void insert(iterator position, size_type n, const T &x)
-  {
-    // Allocate some more memory.
-    buf = static_cast<T *>(realloc(buf, sizeof(T) * (_size + n)));
-
-    // Like normal insert, but we have to shift each existing field upwards
-    // n positions.
-    if (_size != 0)
-    {
-      for (int i = _size - 1; i >= position.pos; i--)
-      {
-        buf[i + n] = buf[i];
-      }
-    }
-
-    // Now install the new field value.
-    for (int i = 0; i < n; i++)
-    {
-      buf[i + position.pos] = x;
-    }
-
-    _size += n;
-    _capacity = n;
+    return buf + at;
   }
 
   void insert(iterator position, iterator first, iterator last)
   {
     while (first != last)
     {
-      insert(position++, *first);
+      position = insert(position, *first);
+      position++;
       first++;
-    }
-  }
-
-  void insert(iterator position, T n[], T *x)
-  {
-    int j = 0;
-    while ((n + j) < x)
-    {
-      insert(position++, n[j++]);
     }
   }
 
   iterator erase(iterator position)
   {
-    for (int i = position.pos; i < _size - 1; i++)
+    size_type at = position - buf;
+    for (int i = at; i < _size - 1; i++)
     {
       buf[i] = buf[i + 1];
     }
