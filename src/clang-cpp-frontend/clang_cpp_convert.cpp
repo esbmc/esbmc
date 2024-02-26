@@ -286,7 +286,8 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if (cxxrd->bases_begin() != cxxrd->bases_end())
     {
       base_map bases;
-      get_base_map(*cxxrd, bases);
+      if (get_base_map(*cxxrd, bases))
+        return true;
       get_base_components_methods(bases, type);
     }
   }
@@ -1395,7 +1396,7 @@ symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
   return (context.find_symbol(id));
 }
 
-void clang_cpp_convertert::get_base_map(
+bool clang_cpp_convertert::get_base_map(
   const clang::CXXRecordDecl &cxxrd,
   base_map &map)
 {
@@ -1408,11 +1409,13 @@ void clang_cpp_convertert::get_base_map(
     const clang::CXXRecordDecl &base_cxxrd =
       *(base.getType().getTypePtr()->getAsCXXRecordDecl());
 
-    get_struct_union_class(base_cxxrd);
+    if (get_struct_union_class(base_cxxrd))
+      return true;
 
     // recursively get more bases for this `base`
     if (base_cxxrd.bases_begin() != base_cxxrd.bases_end())
-      get_base_map(base_cxxrd, map);
+      if (get_base_map(base_cxxrd, map))
+        return true;
 
     // get base class id
     std::string class_id, class_name;
@@ -1426,6 +1429,8 @@ void clang_cpp_convertert::get_base_map(
     (void)status;
     assert(status.second);
   }
+
+  return false;
 }
 
 void clang_cpp_convertert::get_base_components_methods(
