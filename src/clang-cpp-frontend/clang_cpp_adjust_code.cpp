@@ -146,7 +146,7 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
 
   Forall_operands (it, code)
   {
-    if (it->is_code() && (it->statement() == "skip"))
+    if (it->is_code() && it->statement() == "skip")
       continue;
 
     adjust_expr(*it);
@@ -165,7 +165,7 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
         // BLAH(&bleh);
 
         // First, create new decl without rhs
-        code_declt object(code_decl.lhs());
+        code_declt object(lhs);
         new_block.copy_to_operands(object);
 
         // Get rhs - this represents the constructor call
@@ -176,7 +176,7 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
         exprt::operandst &rhs_args = init.arguments();
         // the original lhs needs to be the first arg, then followed by others:
         //  BLAH(&bleh, arg1, arg2, ...);
-        rhs_args.insert(rhs_args.begin(), address_of_exprt(code_decl.lhs()));
+        rhs_args.insert(rhs_args.begin(), address_of_exprt(lhs));
 
         // Now convert the side_effect into an expression
         convert_expression_to_code(init);
@@ -185,15 +185,6 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
         new_block.copy_to_operands(init);
 
         continue;
-      }
-
-      if (lhs.type().get_bool("#reference"))
-      {
-        // adjust rhs to address_off:
-        // `int &r = g;` is turned into `int &r = &g;`
-        exprt result_expr = exprt("address_of", rhs.type());
-        result_expr.copy_to_operands(rhs.op0());
-        rhs.swap(result_expr);
       }
     }
 
