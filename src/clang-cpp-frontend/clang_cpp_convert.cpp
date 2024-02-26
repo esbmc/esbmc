@@ -764,7 +764,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   }
 
   default:
-    return clang_c_convertert::get_expr(stmt, new_expr);
+    if (clang_c_convertert::get_expr(stmt, new_expr))
+      return true;
+    break;
   }
 
   new_expr.location() = location;
@@ -1158,9 +1160,13 @@ bool clang_cpp_convertert::get_decl_ref(
       name_param_and_continue(*param, id, name, new_expr);
 
     if (is_reference(new_expr.type()) || is_rvalue_reference(new_expr.type()))
+    {
       new_expr = dereference_exprt(new_expr, new_expr.type());
+      new_expr.set("#lvalue", true);
+      new_expr.set("#implicit", true);
+    }
 
-    return false;
+    break;
   }
   case clang::Decl::CXXConstructor:
   {
@@ -1186,7 +1192,7 @@ bool clang_cpp_convertert::get_decl_ref(
     new_expr.cmt_lvalue(true);
     new_expr.name(name);
 
-    return false;
+    break;
   }
 
   default:
@@ -1195,11 +1201,17 @@ bool clang_cpp_convertert::get_decl_ref(
       return true;
 
     if (is_reference(new_expr.type()) || is_rvalue_reference(new_expr.type()))
+    {
       new_expr = dereference_exprt(new_expr, new_expr.type());
+      new_expr.set("#lvalue", true);
+      new_expr.set("#implicit", true);
+    }
 
-    return false;
+    break;
   }
   }
+
+  return false;
 }
 
 bool clang_cpp_convertert::annotate_class_field(
