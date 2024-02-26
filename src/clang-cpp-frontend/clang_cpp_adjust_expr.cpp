@@ -124,7 +124,7 @@ void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
    *      * type: ...
    *      * id: <setX_clang_ID>
    */
-  const symbolt *comp_symb = namespacet(context).lookup(expr.component_name());
+  const symbolt *comp_symb = ns.lookup(expr.component_name());
   assert(comp_symb);
   // compoment's type shall be the same as member_exprt's type
   // and both are of the type `code`
