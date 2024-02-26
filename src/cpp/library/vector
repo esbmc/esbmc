@@ -465,9 +465,14 @@ public:
 # endif
     _size += count;
 #else
+    size_type sz = _size;
     resize(_size + count);
-    for (size_type i = _size; i > at; i--)
+    for (size_type i = sz; i > at; i--)
+# if __cplusplus >= 201103L // Check if C++11 or later is being used
+      buf[i + count - 1] = std::move(buf[i - 1]);
+# else
       buf[i + count - 1] = buf[i - 1];
+# endif
 #endif
     for (size_type i = 0; i < count; i++)
       buf[i + at] = value;
