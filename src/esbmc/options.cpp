@@ -498,15 +498,23 @@ const struct group_opt_templ all_cmd_options[] = {
      "insert a false assertion at the beginning of each function/branch and "
      "the end of each function"},
     {"make-assert-false", NULL, "convert every assertion to false"},
-    {"goto-coverage",
+    {"assertion-coverage",
      NULL,
-     "this activates --make-assert-false and --multi-property, "
+     "this activates --multi-property, "
      "deactivates --keep-verified-claims, and "
      "shows the coverage of assertion instances"},
-    {"goto-coverage-claims",
+    {"assertion-coverage-claims",
      NULL,
-     "enable goto-coverage and shows all reached claims"}}},
-  {"end", {{"", NULL, "end of options"}}},
+     "enable assertion-coverage and shows all reached claims"},
+     {"condition-coverage",
+     NULL,
+     "this activates --multi-property, "
+     "deactivates --keep-verified-claims, and "
+     "shows the coverage of condition statements"},
+    {"condition-coverage-claims",
+     NULL,
+     "enable condition-coverage and shows the instrumented claims"}}},
+  {"end", {{"", NULL, "end of options"},}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "instruction"},
     {"explain,h", NULL, ""}}}};

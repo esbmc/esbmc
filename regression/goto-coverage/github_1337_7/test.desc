@@ -1,6 +1,6 @@
 CORE
 main.c
---goto-unwind --goto-coverage
+--goto-unwind --assertion-coverage
 ^Total Asserts: 10
 ^Total Assertion Instances: 10
 ^Assertion Instances Coverage: 100%
