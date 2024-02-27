@@ -316,7 +316,6 @@ void goto_symext::symex_assign_symbol(
     assert(is_symbol2t(renamed_lhs));
     update_symbol_interval(to_symbol2t(renamed_lhs), get_interval(rhs));
   }
-    
 
   // do the assignment
   target->assignment(

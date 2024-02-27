@@ -1,8 +1,7 @@
 #include "util/threeval.h"
 #include <goto-symex/goto_symex.h>
 
-tvt goto_symext::eval_boolean_expression(
-  const expr2tc &cond) const
+tvt goto_symext::eval_boolean_expression(const expr2tc &cond) const
 {
   wrapped_interval interval = get_interval(cond);
 
@@ -17,8 +16,8 @@ tvt goto_symext::eval_boolean_expression(
   return tvt(tvt::TV_UNKNOWN);
 }
 
-
-wrapped_interval goto_symext::get_interval_from_symbol(const symbol2t &sym) const
+wrapped_interval
+goto_symext::get_interval_from_symbol(const symbol2t &sym) const
 {
   auto it = intervals.find(sym.thename);
   return it != intervals.end() ? it->second : wrapped_interval(sym.type);
@@ -28,7 +27,7 @@ wrapped_interval goto_symext::get_interval(const expr2tc &e) const
   log_status("Obtaining interval for expression");
   wrapped_interval result(e->type);
 
-    switch (e->expr_id)
+  switch (e->expr_id)
   {
   case expr2t::constant_bool_id:
     result.set_lower(to_constant_bool2t(e).is_true());
@@ -36,13 +35,13 @@ wrapped_interval goto_symext::get_interval(const expr2tc &e) const
     break;
 
   case expr2t::constant_int_id:
-    {
+  {
     auto value = to_constant_int2t(e).value;
     result.set_lower(value);
     result.set_upper(value);
     assert(!result.is_bottom());
     break;
-    }
+  }
 
   case expr2t::symbol_id:
     result = get_interval_from_symbol(to_symbol2t(e));
@@ -93,7 +92,6 @@ wrapped_interval goto_symext::get_interval(const expr2tc &e) const
         break;
       }
 
-      
       // Both sides are false, then false
       if (lhs.is_false() && rhs.is_false())
       {
@@ -183,27 +181,27 @@ wrapped_interval goto_symext::get_interval(const expr2tc &e) const
   case expr2t::mul_id:
   case expr2t::div_id:
   case expr2t::modulus_id:
-    {
-      const auto &arith_op = dynamic_cast<const arith_2ops &>(*e);
-      auto lhs = get_interval(arith_op.side_1);
-      auto rhs = get_interval(arith_op.side_2);
+  {
+    const auto &arith_op = dynamic_cast<const arith_2ops &>(*e);
+    auto lhs = get_interval(arith_op.side_1);
+    auto rhs = get_interval(arith_op.side_2);
 
-      if (is_add2t(e))
-        result = lhs + rhs;
+    if (is_add2t(e))
+      result = lhs + rhs;
 
-      else if (is_sub2t(e))
-        result = lhs - rhs;
+    else if (is_sub2t(e))
+      result = lhs - rhs;
 
-      else if (is_mul2t(e))
-        result = lhs * rhs;
+    else if (is_mul2t(e))
+      result = lhs * rhs;
 
-      else if (is_div2t(e))
-        result = lhs / rhs;
+    else if (is_div2t(e))
+      result = lhs / rhs;
 
-      else if (is_modulus2t(e))
-        result = lhs % rhs;
-    }
-    break;
+    else if (is_modulus2t(e))
+      result = lhs % rhs;
+  }
+  break;
 
   case expr2t::shl_id:
   case expr2t::ashr_id:
@@ -214,35 +212,35 @@ wrapped_interval goto_symext::get_interval(const expr2tc &e) const
   case expr2t::bitnand_id:
   case expr2t::bitnor_id:
   case expr2t::bitnxor_id:
-    {
-      const auto &bit_op = dynamic_cast<const bit_2ops &>(*e);
-      auto lhs = get_interval(bit_op.side_1);
-      auto rhs = get_interval(bit_op.side_2);
+  {
+    const auto &bit_op = dynamic_cast<const bit_2ops &>(*e);
+    auto lhs = get_interval(bit_op.side_1);
+    auto rhs = get_interval(bit_op.side_2);
 
-      if (is_shl2t(e))
-        result = wrapped_interval::left_shift(lhs, rhs);
-      else if (is_ashr2t(e))
-        result = wrapped_interval::arithmetic_right_shift(lhs, rhs);
+    if (is_shl2t(e))
+      result = wrapped_interval::left_shift(lhs, rhs);
+    else if (is_ashr2t(e))
+      result = wrapped_interval::arithmetic_right_shift(lhs, rhs);
 
-      else if (is_lshr2t(e))
-        result = wrapped_interval::logical_right_shift(lhs, rhs);
+    else if (is_lshr2t(e))
+      result = wrapped_interval::logical_right_shift(lhs, rhs);
 
-      else if (is_bitor2t(e))
-        result = lhs | rhs;
+    else if (is_bitor2t(e))
+      result = lhs | rhs;
 
-      else if (is_bitand2t(e))
-        result = lhs & rhs;
-      else if (is_bitxor2t(e))
-        result = lhs ^ rhs;
+    else if (is_bitand2t(e))
+      result = lhs & rhs;
+    else if (is_bitxor2t(e))
+      result = lhs ^ rhs;
 
-      else if (is_bitnand2t(e))
-        result = wrapped_interval::bitnot(lhs & rhs);
-      else if (is_bitnor2t(e))
-        result = wrapped_interval::bitnot(lhs | rhs);
-      else if (is_bitnxor2t(e))
-        result = wrapped_interval::bitnot(lhs ^ rhs);
-    }
-    break;
+    else if (is_bitnand2t(e))
+      result = wrapped_interval::bitnot(lhs & rhs);
+    else if (is_bitnor2t(e))
+      result = wrapped_interval::bitnot(lhs | rhs);
+    else if (is_bitnxor2t(e))
+      result = wrapped_interval::bitnot(lhs ^ rhs);
+  }
+  break;
 
   case expr2t::bitnot_id:
     result = wrapped_interval::bitnot(get_interval(to_bitnot2t(e).value));
@@ -359,7 +357,7 @@ void goto_symext::assume_rec(const expr2tc &cond, bool negation)
       apply_assume_symbol_truth<wrapped_interval>(
           to_symbol2t(cond), negation);
     }
-    #endif
+#endif
   }
   //added in case "cond = false" which happens when the ibex contractor results in empty set.
   else if (is_constant_bool2t(cond))
@@ -424,7 +422,7 @@ void goto_symext::assume_rec(
   assert(id == expr2t::lessthanequal_id);
 
   if (is_bv_type(lhs) && is_bv_type(rhs))
-      apply_assume_less(lhs, rhs);
+    apply_assume_less(lhs, rhs);
 }
 
 void goto_symext::update_symbol_interval(
@@ -434,9 +432,7 @@ void goto_symext::update_symbol_interval(
   intervals[sym.thename] = value;
 }
 
-void goto_symext::apply_assume_less(
-  const expr2tc &a,
-  const expr2tc &b)
+void goto_symext::apply_assume_less(const expr2tc &a, const expr2tc &b)
 {
   // 1. Apply contractor algorithms
   // 2. Update refs

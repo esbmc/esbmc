@@ -842,16 +842,16 @@ protected:
 
   std::unordered_map<irep_idt, wrapped_interval, irep_id_hash> intervals;
   wrapped_interval get_interval(const expr2tc &) const;
-  void update_symbol_interval(const symbol2t &sym,const wrapped_interval value);
+  void
+  update_symbol_interval(const symbol2t &sym, const wrapped_interval value);
   void apply_assume_less(const expr2tc &a, const expr2tc &b);
   void assume_rec(const expr2tc &expr, bool negation = false);
   void assume_rec(const expr2tc &lhs, expr2t::expr_ids id, const expr2tc &rhs);
 
   tvt eval_boolean_expression(const expr2tc &cond) const;
-  wrapped_interval get_interval_from_symbol(const symbol2t &) const; 
+  wrapped_interval get_interval_from_symbol(const symbol2t &) const;
   tvt assume_expression(const expr2tc &);
   void make_bottom();
-  
 
   /* Exception Handling.
    * This will stack the try-catch blocks, so we always know which catch
