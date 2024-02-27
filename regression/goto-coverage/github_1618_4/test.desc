@@ -1,6 +1,6 @@
 CORE
 main.c
---goto-coverage --unwind 4 --no-unwinding-assertions
+--assertion-coverage --unwind 4 --no-unwinding-assertions
 ^Total Asserts: 2
 ^Reached Assertion Instances: 4
 ^Total Assertion Instances: 4

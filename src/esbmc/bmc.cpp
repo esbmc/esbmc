@@ -785,8 +785,10 @@ smt_convt::resultt bmct::multi_property_check(
   std::unordered_set<std::string> reached_claims;
   // For coverage info
   std::unordered_multiset<std::string> reached_mul_claims;
-  bool is_goto_cov = options.get_bool_option("goto-coverage") ||
-                     options.get_bool_option("goto-coverage-claims");
+  bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
+                       options.get_bool_option("assertion-coverage-claims");
+  bool is_cond_cov = options.get_bool_option("condition-coverage") ||
+                     options.get_bool_option("condition-coverage-claims");
   // For multi-fail-fast
   const std::string fail_fast = options.get_option("multi-fail-fast");
   const bool is_fail_fast = !fail_fast.empty() ? true : false;
@@ -821,7 +823,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &result_mutex,
                        &reached_claims,
                        &reached_mul_claims,
-                       &is_goto_cov,
+                       &is_assert_cov,
+                       &is_cond_cov,
                        &is_fail_fast,
                        &fail_fast_limit,
                        &fail_fast_cnt](const size_t &i) {
@@ -833,6 +836,7 @@ smt_convt::resultt bmct::multi_property_check(
     symex_target_equationt local_eq = eq;
 
     // Set up the current claim and disable slice info output
+    bool is_goto_cov = is_assert_cov || is_cond_cov;
     claim_slicer claim(i, false, is_goto_cov, ns);
     claim.run(local_eq.SSA_steps);
 
@@ -841,7 +845,7 @@ smt_convt::resultt bmct::multi_property_check(
     // to avoid double verifying the claims that are already verified
     bool is_verified = false;
     std::string cmt_loc;
-    if (is_goto_cov)
+    if (is_assert_cov)
     {
       cmt_loc = claim.claim_msg + "\t" + claim.claim_loc;
       // C++20 reached_mul_claims.contains
@@ -852,7 +856,7 @@ smt_convt::resultt bmct::multi_property_check(
       cmt_loc = claim.claim_msg + "\t" + claim.claim_loc;
       is_verified = reached_claims.count(cmt_loc) ? true : false;
     }
-    if (is_goto_cov && is_verified)
+    if (is_assert_cov && is_verified)
       // insert to the multiset before skipping the verification process
       reached_mul_claims.emplace(cmt_loc);
     if (is_verified && !options.get_bool_option("keep-verified-claims"))
@@ -891,7 +895,7 @@ smt_convt::resultt bmct::multi_property_check(
       build_goto_trace(local_eq, *runtime_solver, goto_trace, is_compact_trace);
 
       // Store cmt_loc
-      if (is_goto_cov)
+      if (is_assert_cov)
         reached_mul_claims.emplace(cmt_loc);
       else
         reached_claims.emplace(cmt_loc);
@@ -917,7 +921,8 @@ smt_convt::resultt bmct::multi_property_check(
   std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
   // For coverage
-  if (is_goto_cov)
+  // Assertion Coverage:
+  if (is_assert_cov)
   {
     const int total = goto_coveraget().get_total_instrument();
     const int tracked_instance = reached_mul_claims.size();
@@ -933,7 +938,7 @@ smt_convt::resultt bmct::multi_property_check(
     }
 
     // show claims
-    if (options.get_bool_option("goto-coverage-claims"))
+    if (options.get_bool_option("assertion-coverage-claims"))
     {
       // reached claims:
       for (const auto &claim : reached_mul_claims)
@@ -952,5 +957,30 @@ smt_convt::resultt bmct::multi_property_check(
       log_result("Assertion Instances Coverage: 0%");
   }
 
+  // Condition Coverage:
+  if (is_cond_cov)
+  {
+    const int total = goto_coveraget().get_total_instrument();
+    const int tracked_instance = reached_mul_claims.size();
+    const int total_instance = goto_coveraget().get_total_assert_instance();
+
+    // show claims
+    if (options.get_bool_option("condition-coverage-claims"))
+    {
+      // reached claims:
+      for (const auto &claim : reached_claims)
+      {
+        // TODO: better output
+        log_status("  {}", claim);
+      }
+    }
+
+    if (total_instance != 0)
+      log_result(
+        "Condition Instances Coverage: {}%",
+        tracked_instance * 100.0 / total_instance);
+    else
+      log_result("Condition Instances Coverage: 0%");
+  }
   return final_result;
 }

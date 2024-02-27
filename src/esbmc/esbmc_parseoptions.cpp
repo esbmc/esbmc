@@ -1699,8 +1699,8 @@ bool esbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     bool is_no_remove = cmdline.isset("multi-property") ||
-                        cmdline.isset("goto-coverage") ||
-                        cmdline.isset("goto-coverage-claims");
+                        cmdline.isset("assertion-coverage") ||
+                        cmdline.isset("assertion-coverage-claims");
 
     // Start by removing all no-op instructions and unreachable code
     if (!(cmdline.isset("no-remove-no-op")))
@@ -1708,7 +1708,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // We should skip this 'remove-unreachable' removal in goto-cov and multi-property
     // - multi-property wants to find all the bugs in the src code
-    // - goto-coverage wants to find out unreached codes (asserts)
+    // - assertion-coverage wants to find out unreached codes (asserts)
     // - however, the optimisation below will remove codes during the Goto stage
     if (!(cmdline.isset("no-remove-unreachable") || is_no_remove))
       remove_unreachable(goto_functions);
@@ -1821,29 +1821,49 @@ bool esbmc_parseoptionst::process_goto_program(
 
       value_set_analysis.update(goto_functions);
     }
-    if (cmdline.isset("add-false-assert"))
-    {
-      goto_coveraget tmp;
-      tmp.add_false_asserts(goto_functions);
-    }
 
     //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
-    if (cmdline.isset("goto-coverage") || cmdline.isset("goto-coverage-claims"))
+    if (
+      cmdline.isset("assertion-coverage") ||
+      cmdline.isset("assertion-coverage-claims"))
     {
-      // for assertion coverage metric
-      options.set_option("make-assert-false", true);
       // for multi-property
       options.set_option("result-only", true);
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
+
+      goto_coveraget tmp(ns);
+      tmp.make_asserts_false(goto_functions);
+      tmp.count_assert_instance(goto_functions);
+    }
+
+    if (
+      cmdline.isset("condition-coverage") ||
+      cmdline.isset("condition-coverage-claims"))
+    {
+      // for multi-property
+      options.set_option("result-only", true);
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", false);
+
+      goto_coveraget tmp(ns);
+      tmp.make_asserts_true(goto_functions);
+      tmp.add_cond_cov_assert(goto_functions);
+      tmp.count_assert_instance(goto_functions);
     }
 
     if (options.get_bool_option("make-assert-false"))
     {
-      goto_coveraget tmp;
-      tmp.make_asserts_false(goto_functions, ns);
-      tmp.gen_assert_instance(goto_functions);
+      goto_coveraget tmp(ns);
+      tmp.make_asserts_false(goto_functions);
+    }
+
+    if (cmdline.isset("add-false-assert"))
+    {
+      goto_coveraget tmp(ns);
+      tmp.add_false_asserts(goto_functions);
     }
   }
 
