@@ -379,7 +379,15 @@ void goto_symext::symex_assume()
   dereference(cond, dereferencet::READ);
   replace_dynamic_allocation(cond);
 
-  assume(cond);
+  tvt interval_check = assume_expression(cond);
+
+  if (interval_check.is_known())
+  {
+    log_status("Managed to improve an assumption");
+      assume(interval_check.is_true() ? gen_true_expr() : gen_false_expr());
+    }
+  else
+    assume(cond);
 }
 
 void goto_symext::symex_assert()
@@ -406,7 +414,15 @@ void goto_symext::symex_assert()
   dereference(tmp, dereferencet::READ);
   replace_dynamic_allocation(tmp);
 
-  claim(tmp, msg);
+  tvt interval_check = assume_expression(tmp);
+
+  if (interval_check.is_known())
+  {
+    log_status("Managed to improve an assertion");
+    claim(interval_check.is_true() ? gen_true_expr() : gen_false_expr(), msg);
+    }
+  else
+    claim(tmp, msg);
 }
 
 void goto_symext::run_intrinsic(
