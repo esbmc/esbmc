@@ -513,14 +513,17 @@ const struct group_opt_templ all_cmd_options[] = {
       "insert a false assertion at the beginning of each function/branch and "
       "the end of each function"},
      {"make-assert-false", NULL, "convert every assertion to false"},
-     {"goto-coverage",
+     {"assertion-coverage-claims",
       NULL,
-      "this activates --make-assert-false and --multi-property, "
+      "enable assertion-coverage and shows all reached claims"},
+     {"condition-coverage",
+      NULL,
+      "this activates --multi-property, "
       "deactivates --keep-verified-claims, and "
-      "shows the coverage of assertion instances"},
-     {"goto-coverage-claims",
+      "shows the coverage of condition statements"},
+     {"condition-coverage-claims",
       NULL,
-      "enable goto-coverage and shows all reached claims"},
+      "enable condition-coverage and shows the instrumented claims"},
      {"segfault-handler", NULL, "print stacktrace on segmentation fault"},
    }},
   {"end", {{"", NULL, "end of options"}}},
