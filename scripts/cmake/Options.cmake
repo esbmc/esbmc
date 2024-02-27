@@ -58,8 +58,8 @@ if(WIN32)
 set(DEFAULT_LLVM_URL "https://gitlab.com/Anthonysdu/llvm11/-/raw/main/llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt.zip")
 set(DEFAULT_LLVM_NAME "llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt")
 
-set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.12.2/z3-4.12.2-x64-win.zip")
-set(DEFAULT_Z3_NAME z3-4.12.2-x64-win)
+set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.12.6/z3-4.12.6-x64-win.zip")
+set(DEFAULT_Z3_NAME z3-4.12.6-x64-win)
 
 set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-win64-msvc.zip")
 set(MATHSAT_NAME "mathsat-5.6.10-win64-msvc")
