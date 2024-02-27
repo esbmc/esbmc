@@ -384,8 +384,8 @@ void goto_symext::symex_assume()
   if (interval_check.is_known())
   {
     log_status("Managed to improve an assumption");
-      assume(interval_check.is_true() ? gen_true_expr() : gen_false_expr());
-    }
+    assume(interval_check.is_true() ? gen_true_expr() : gen_false_expr());
+  }
   else
     assume(cond);
 }
@@ -420,7 +420,7 @@ void goto_symext::symex_assert()
   {
     log_status("Managed to improve an assertion");
     claim(interval_check.is_true() ? gen_true_expr() : gen_false_expr(), msg);
-    }
+  }
   else
     claim(tmp, msg);
 }
