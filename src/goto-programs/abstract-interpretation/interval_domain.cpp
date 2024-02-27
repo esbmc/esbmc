@@ -285,17 +285,16 @@ interval_domaint::get_top_interval_from_expr(const expr2tc &e) const
 template <class T>
 T interval_domaint::interpolate_intervals(const T &before, const T &after)
 {
+  // More details on Principles of Abstract Interpretation.
+  // The intuition here is that if an extrapolated (infinity) interval
+  // is being reduced after the state, then we can contract on the limits.
+  // Note that this requires that the `before` is extrapolated.
   T result;
-
-  // before: [-infinity, +infinity], after: [a,b] ==> [a,b]
   bool lower_increased = !before.lower && after.lower;
   bool upper_decreased = !before.upper && after.upper;
 
-  if (lower_increased)
-    result.lower = after.lower;
-
-  if (upper_decreased)
-    result.upper = after.upper;
+  result.lower = lower_increased ? after.lower : before.lower;
+  result.upper = upper_decreased ? after.upper : before.upper;
   return result;
 }
 
@@ -1038,6 +1037,7 @@ bool interval_domaint::join(
     }
     else
     {
+      
       auto previous = new_it->second; // [0,0] ... [0, +inf]
       auto after = b_it->second;      // [1,100] ... [1, 100]
       new_it->second.join(after);     // HULL // [0,100] ... [0, +inf]
