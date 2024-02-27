@@ -34,7 +34,7 @@ public:
   /// Bound value
   std::optional<T> lower, upper;
   /// Type to be used for shift operations
-  type2tc type = empty_type2tc();
+  type2tc type;
   T get_lower() const
   {
     return get(false);
