@@ -960,18 +960,21 @@ smt_convt::resultt bmct::multi_property_check(
   // Condition Coverage:
   if (is_cond_cov)
   {
-    const int total = goto_coveraget().get_total_instrument();
-    const int tracked_instance = reached_mul_claims.size();
-    const int total_instance = goto_coveraget().get_total_assert_instance();
+    const std::unordered_set<std::string> &total_cond_assert =
+      goto_coveraget().get_total_cond_assert();
+    const int tracked_instance = reached_claims.size();
+    const int total_instance = total_cond_assert.size();
 
     // show claims
     if (options.get_bool_option("condition-coverage-claims"))
     {
       // reached claims:
-      for (const auto &claim : reached_claims)
+      for (const auto &claim : total_cond_assert)
       {
-        // TODO: better output
-        log_status("  {}", claim);
+        if (reached_claims.count(claim))
+          log_status("  {} : SATISFIED", claim);
+        else
+          log_status("  {} : FAILED", claim);
       }
     }
 

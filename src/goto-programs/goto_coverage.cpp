@@ -2,6 +2,7 @@
 
 int goto_coveraget::total_instrument = 0;
 int goto_coveraget::total_assert_instance = 0;
+std::unordered_set<std::string> total_cond_assert = {};
 
 void goto_coveraget::make_asserts_false(goto_functionst &goto_functions)
 {
@@ -122,6 +123,11 @@ int goto_coveraget::get_total_assert_instance() const
   return total_assert_instance;
 }
 
+std::unordered_set<std::string> goto_coveraget::get_total_cond_assert() const
+{
+  return total_cond_assert;
+}
+
 /*
   Condition Coverage: fault injection
   1. find condition statements, this includes the converted for_loop/while
@@ -147,8 +153,14 @@ void goto_coveraget::add_cond_cov_assert(goto_functionst &goto_functions)
         {
           const expr2tc old_guard = it->guard;
           insert_assert(goto_program, it, old_guard);
+          std::string idf =
+            from_expr(ns, "", old_guard) + "\t" + it->location.as_string();
+          total_cond_assert.insert(idf);
+
           make_not(it->guard);
           insert_assert(goto_program, it, it->guard);
+          idf = from_expr(ns, "", it->guard) + "\t" + it->location.as_string();
+          total_cond_assert.insert(idf);
         }
       }
     }
