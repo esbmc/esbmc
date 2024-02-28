@@ -8,24 +8,21 @@ bool symex_contains_float(const expr2tc &e)
     return true;
 
   bool result = false;
-  e->foreach_operand(
-    [&result](const expr2tc &o)
-    {
-      if(!result)
-	result |= symex_contains_float(o);
-    });
+  e->foreach_operand([&result](const expr2tc &o) {
+    if (!result)
+      result |= symex_contains_float(o);
+  });
   return result;
 }
-
 
 tvt goto_symext::eval_boolean_expression(const expr2tc &cond) const
 {
   // TODO: cache :)
-  
+
   // TODO: Deal with floats :(
   if (symex_contains_float(cond))
     return tvt(tvt::TV_UNKNOWN);
-  
+
   wrapped_interval interval = get_interval(cond);
 
   // If the interval does not contain zero then it's always true
@@ -396,12 +393,17 @@ void goto_symext::assume_rec(const expr2tc &cond, bool negation)
 void goto_symext::apply_assignment(expr2tc &lhs, expr2tc &rhs)
 {
   // TODO: overflows
-  const static bool overflow_mode = config.options.get_bool_option("overflow-check");
+  const static bool overflow_mode =
+    config.options.get_bool_option("overflow-check");
   if (overflow_mode)
     return;
-  
-  const bool lhs_precondition = (is_signedbv_type(lhs) || is_unsignedbv_type(lhs)) && !symex_contains_float(lhs) && is_symbol2t(lhs);
-  const bool rhs_precondition = (is_signedbv_type(rhs) || is_unsignedbv_type(rhs)) && !symex_contains_float(rhs);
+
+  const bool lhs_precondition =
+    (is_signedbv_type(lhs) || is_unsignedbv_type(lhs)) &&
+    !symex_contains_float(lhs) && is_symbol2t(lhs);
+  const bool rhs_precondition =
+    (is_signedbv_type(rhs) || is_unsignedbv_type(rhs)) &&
+    !symex_contains_float(rhs);
   if (lhs_precondition && rhs_precondition)
   {
     assert(is_symbol2t(lhs));
@@ -493,11 +495,11 @@ void goto_symext::apply_assume_less(const expr2tc &a, const expr2tc &b)
 tvt goto_symext::assume_expression(const expr2tc &e)
 {
   // TODO: overflows
-  const static bool overflow_mode = config.options.get_bool_option("overflow-check");
+  const static bool overflow_mode =
+    config.options.get_bool_option("overflow-check");
   if (overflow_mode)
     return tvt(tvt::TV_UNKNOWN);
 
-  
   tvt result = eval_boolean_expression(e);
 
   if (result.is_false())
