@@ -708,6 +708,8 @@ void c_typecastt::implicit_typecast_followed(
       if (src_type == dest_type)
       {
         expr.type() = src_type; // because of qualifiers
+        if (dest_type.get_bool("#reference"))
+          expr.type().set("#reference", true);
       }
       else
         do_typecast(expr, dest_type);

@@ -610,19 +610,17 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*mtemp.getSubExpr(), tmp))
       return true;
 
-    if (mtemp.isBoundToLvalueReference())
-    {
-      symbolt &sym = init_anon_symbol(
-        tmp,
-        location,
-        "materialized-temporary",
-        mtemp.getStorageDuration() == clang::SD_Static);
+    side_effect_exprt temporary("temporary_object");
+    temporary.type() = tmp.type();
+    temporary.copy_to_operands(tmp);
 
-      new_expr = address_of_exprt(symbol_expr(sym));
-      new_expr.type().set("#reference", true);
-    }
-    else // TODO: otherwise it's an rvalue-ref, should also become an address
-      new_expr.swap(tmp);
+    address_of_exprt addr(temporary);
+    if (mtemp.isBoundToLvalueReference())
+      addr.type().set("#reference", true);
+    else
+      addr.type().set("#rvalue_reference", true);
+
+    new_expr.swap(addr);
 
     break;
   }
@@ -758,8 +756,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_constructor_call(cxxtoe, new_expr))
       return true;
 
-    make_temporary(new_expr);
-
     break;
   }
 
@@ -796,21 +792,15 @@ bool clang_cpp_convertert::get_constructor_call(
   auto it = parents.begin();
   const clang::Decl *objectDecl = it->get<clang::Decl>();
 
-  if (!objectDecl && need_new_object(it->get<clang::Stmt>(), constructor_call))
-  {
-    address_of_exprt tmp_expr;
-    tmp_expr.type() = pointer_typet();
-    tmp_expr.type().subtype() = type;
+  /* TODO: Investigate when it's possible to avoid the temporary object, see
+   *       need_new_object(it->get<clang::Stmt>(), constructor_call) */
+  exprt this_object = exprt("new_object");
+  this_object.set("#lvalue", true);
+  this_object.type() = type;
 
-    exprt new_object("new_object");
-    new_object.set("#lvalue", true);
-    new_object.type() = type;
-
-    tmp_expr.operands().resize(0);
-    tmp_expr.move_to_operands(new_object);
-
-    call.arguments().push_back(tmp_expr);
-  }
+  /* first parameter is address to the object to be constructed */
+  address_of_exprt tmp_expr(this_object);
+  call.arguments().push_back(tmp_expr);
 
   // Calling base constructor from derived constructor
   if (new_expr.base_ctor_derived())
@@ -828,8 +818,8 @@ bool clang_cpp_convertert::get_constructor_call(
 
   call.set("constructor", 1);
 
-  // We don't build a temporary obejct around it.
-  // We follow the old cpp frontend to just add the ctor function call.
+  make_temporary(call);
+
   new_expr.swap(call);
 
   return false;

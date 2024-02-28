@@ -27,7 +27,7 @@ void clang_cpp_maint::adjust_init(code_assignt &assignment, codet &adjusted)
     exprt::operandst &rhs_args = init.arguments();
     // the original lhs needs to be the first arg, then followed by others:
     //  BLAH(&bleh, arg1, arg2, ...);
-    rhs_args.insert(rhs_args.begin(), address_of_exprt(assignment.lhs()));
+    rhs_args[0] = address_of_exprt(assignment.lhs());
 
     // Now convert the side_effect into an expression
     convert_expression_to_code(init);

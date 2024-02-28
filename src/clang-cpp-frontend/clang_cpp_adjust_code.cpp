@@ -152,42 +152,6 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
     adjust_expr(*it);
     code_declt &code_decl = to_code_decl(to_code(*it));
 
-    if (code_decl.operands().size() == 2)
-    {
-      exprt &rhs = code_decl.rhs();
-      exprt &lhs = code_decl.lhs();
-      if (
-        rhs.id() == "sideeffect" && rhs.statement() == "function_call" &&
-        rhs.get_bool("constructor"))
-      {
-        // turn declaration struct BLAH bleh = BLAH() into two instructions:
-        // struct BLAH bleh;
-        // BLAH(&bleh);
-
-        // First, create new decl without rhs
-        code_declt object(lhs);
-        new_block.copy_to_operands(object);
-
-        // Get rhs - this represents the constructor call
-        side_effect_expr_function_callt &init =
-          to_side_effect_expr_function_call(rhs);
-
-        // Get lhs - this represents the `this` pointer
-        exprt::operandst &rhs_args = init.arguments();
-        // the original lhs needs to be the first arg, then followed by others:
-        //  BLAH(&bleh, arg1, arg2, ...);
-        rhs_args.insert(rhs_args.begin(), address_of_exprt(lhs));
-
-        // Now convert the side_effect into an expression
-        convert_expression_to_code(init);
-
-        // and copy to new_block
-        new_block.copy_to_operands(init);
-
-        continue;
-      }
-    }
-
     new_block.copy_to_operands(code_decl);
   }
 
