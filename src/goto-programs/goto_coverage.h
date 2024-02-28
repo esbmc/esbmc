@@ -1,6 +1,7 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loop_unroll.h>
 #include <langapi/language_util.h>
+#include <unordered_set>
 
 class goto_coveraget
 {
@@ -34,9 +35,11 @@ public:
 
   void count_assert_instance(goto_functionst goto_functions);
   int get_total_assert_instance() const;
+  std::unordered_set<std::string> get_total_cond_assert() const;
 
 protected:
   static int total_instrument;
   static int total_assert_instance;
+  static std::unordered_set<std::string> total_cond_assert;
   namespacet ns;
 };
