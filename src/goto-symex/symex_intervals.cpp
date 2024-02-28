@@ -2,15 +2,15 @@
 #include "util/threeval.h"
 #include <goto-symex/goto_symex.h>
 
-bool symex_contains_float(const expr2tc &e)
+bool symex_contains_unsupported(const expr2tc &e)
 {
-  if (is_floatbv_type(e))
+  if (is_floatbv_type(e) || is_fixedbv_type(e) || is_pointer_type(e))
     return true;
 
   bool result = false;
   e->foreach_operand([&result](const expr2tc &o) {
     if (!result)
-      result |= symex_contains_float(o);
+      result |= symex_contains_unsupported(o);
   });
   return result;
 }
@@ -20,7 +20,7 @@ tvt goto_symext::eval_boolean_expression(const expr2tc &cond) const
   // TODO: cache :)
 
   // TODO: Deal with floats :(
-  if (symex_contains_float(cond))
+  if (symex_contains_unsupported(cond))
     return tvt(tvt::TV_UNKNOWN);
 
   wrapped_interval interval = get_interval(cond);
@@ -202,6 +202,7 @@ wrapped_interval goto_symext::get_interval(const expr2tc &e) const
   case expr2t::modulus_id:
   {
     const auto &arith_op = dynamic_cast<const arith_2ops &>(*e);
+    e->dump();
     auto lhs = get_interval(arith_op.side_1);
     auto rhs = get_interval(arith_op.side_2);
 
@@ -400,10 +401,10 @@ void goto_symext::apply_assignment(expr2tc &lhs, expr2tc &rhs)
 
   const bool lhs_precondition =
     (is_signedbv_type(lhs) || is_unsignedbv_type(lhs)) &&
-    !symex_contains_float(lhs) && is_symbol2t(lhs);
+    !symex_contains_unsupported(lhs) && is_symbol2t(lhs);
   const bool rhs_precondition =
     (is_signedbv_type(rhs) || is_unsignedbv_type(rhs)) &&
-    !symex_contains_float(rhs);
+    !symex_contains_unsupported(rhs);
   if (lhs_precondition && rhs_precondition)
   {
     assert(is_symbol2t(lhs));
