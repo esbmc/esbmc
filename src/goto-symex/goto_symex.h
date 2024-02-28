@@ -845,6 +845,7 @@ protected:
   void
   update_symbol_interval(const symbol2t &sym, const wrapped_interval value);
   void apply_assume_less(const expr2tc &a, const expr2tc &b);
+  void apply_assignment(expr2tc &a, expr2tc &b);
   void assume_rec(const expr2tc &expr, bool negation = false);
   void assume_rec(const expr2tc &lhs, expr2t::expr_ids id, const expr2tc &rhs);
 

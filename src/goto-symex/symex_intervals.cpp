@@ -1,8 +1,31 @@
+#include "irep2/irep2_type.h"
 #include "util/threeval.h"
 #include <goto-symex/goto_symex.h>
 
+bool symex_contains_float(const expr2tc &e)
+{
+  if (is_floatbv_type(e))
+    return true;
+
+  bool result = false;
+  e->foreach_operand(
+    [&result](const expr2tc &o)
+    {
+      if(!result)
+	result |= symex_contains_float(o);
+    });
+  return result;
+}
+
+
 tvt goto_symext::eval_boolean_expression(const expr2tc &cond) const
 {
+  // TODO: cache :)
+  
+  // TODO: Deal with floats :(
+  if (symex_contains_float(cond))
+    return tvt(tvt::TV_UNKNOWN);
+  
   wrapped_interval interval = get_interval(cond);
 
   // If the interval does not contain zero then it's always true
@@ -24,7 +47,6 @@ goto_symext::get_interval_from_symbol(const symbol2t &sym) const
 }
 wrapped_interval goto_symext::get_interval(const expr2tc &e) const
 {
-  log_status("Obtaining interval for expression");
   wrapped_interval result(e->type);
 
   switch (e->expr_id)
@@ -371,6 +393,22 @@ void goto_symext::assume_rec(const expr2tc &cond, bool negation)
     log_debug("interval", "[assume_rec] Missing support: {}", *cond);
 }
 
+void goto_symext::apply_assignment(expr2tc &lhs, expr2tc &rhs)
+{
+  // TODO: overflows
+  const static bool overflow_mode = config.options.get_bool_option("overflow-check");
+  if (overflow_mode)
+    return;
+  
+  const bool lhs_precondition = (is_signedbv_type(lhs) || is_unsignedbv_type(lhs)) && !symex_contains_float(lhs) && is_symbol2t(lhs);
+  const bool rhs_precondition = (is_signedbv_type(rhs) || is_unsignedbv_type(rhs)) && !symex_contains_float(rhs);
+  if (lhs_precondition && rhs_precondition)
+  {
+    assert(is_symbol2t(lhs));
+    update_symbol_interval(to_symbol2t(lhs), get_interval(rhs));
+  }
+}
+
 void goto_symext::assume_rec(
   const expr2tc &lhs,
   expr2t::expr_ids id,
@@ -454,7 +492,12 @@ void goto_symext::apply_assume_less(const expr2tc &a, const expr2tc &b)
 
 tvt goto_symext::assume_expression(const expr2tc &e)
 {
-  log_status("Assuming expression");
+  // TODO: overflows
+  const static bool overflow_mode = config.options.get_bool_option("overflow-check");
+  if (overflow_mode)
+    return tvt(tvt::TV_UNKNOWN);
+
+  
   tvt result = eval_boolean_expression(e);
 
   if (result.is_false())
