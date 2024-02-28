@@ -787,13 +787,17 @@ bool clang_cpp_convertert::get_constructor_call(
   call.function() = callee_decl;
   call.type() = type;
 
+  /* TODO: Investigate when it's possible to avoid the temporary object:
+
   // Try to get the object that this constructor is constructing
   auto parents = ASTContext->getParents(constructor_call);
   auto it = parents.begin();
   const clang::Decl *objectDecl = it->get<clang::Decl>();
+  if (!objectDecl && need_new_object(it->get<clang::Stmt>(), constructor_call))
+    [...]
 
-  /* TODO: Investigate when it's possible to avoid the temporary object, see
-   *       need_new_object(it->get<clang::Stmt>(), constructor_call) */
+   */
+
   exprt this_object = exprt("new_object");
   this_object.set("#lvalue", true);
   this_object.type() = type;
