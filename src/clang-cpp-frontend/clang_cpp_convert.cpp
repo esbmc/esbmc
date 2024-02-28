@@ -798,17 +798,19 @@ bool clang_cpp_convertert::get_constructor_call(
 
    */
 
-  exprt this_object = exprt("new_object");
-  this_object.set("#lvalue", true);
-  this_object.type() = type;
-
-  /* first parameter is address to the object to be constructed */
-  address_of_exprt tmp_expr(this_object);
-  call.arguments().push_back(tmp_expr);
-
   // Calling base constructor from derived constructor
   if (new_expr.base_ctor_derived())
     gen_typecast_base_ctor_call(callee_decl, call, new_expr);
+  else
+  {
+    exprt this_object = exprt("new_object");
+    this_object.set("#lvalue", true);
+    this_object.type() = type;
+
+    /* first parameter is address to the object to be constructed */
+    address_of_exprt tmp_expr(this_object);
+    call.arguments().push_back(tmp_expr);
+  }
 
   // Do args
   for (const clang::Expr *arg : constructor_call.arguments())
@@ -822,7 +824,8 @@ bool clang_cpp_convertert::get_constructor_call(
 
   call.set("constructor", 1);
 
-  make_temporary(call);
+  if (!new_expr.base_ctor_derived())
+    make_temporary(call);
 
   new_expr.swap(call);
 
