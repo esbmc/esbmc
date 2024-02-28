@@ -465,7 +465,7 @@ expr2tc dereferencet::dereference(
   if (!is_pointer_type(orig_src))
     src = typecast2tc(pointer_type2tc(get_empty_type()), src);
 
-  type2tc type = to_type;
+  type2tc type = ns.follow(to_type);
 
   // collect objects dest may point to
   value_setst::valuest points_to_set;
