@@ -2749,6 +2749,8 @@ public:
   address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
     : address_of_expr_methods(pointer_type2tc(subtype), address_of_id, ptrobj)
   {
+    assert(ptrobj->expr_id != expr2t::constant_int_id);
+    assert(ptrobj->expr_id != expr2t::address_of_id);
   }
   address_of2t(const address_of2t &ref) = default;
 
