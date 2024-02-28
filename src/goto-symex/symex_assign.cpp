@@ -311,11 +311,7 @@ void goto_symext::symex_assign_symbol(
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
 
-  if (is_signedbv_type(rhs) || is_unsignedbv_type(rhs))
-  {
-    assert(is_symbol2t(renamed_lhs));
-    update_symbol_interval(to_symbol2t(renamed_lhs), get_interval(rhs));
-  }
+  apply_assignment(renamed_lhs, rhs);
 
   // do the assignment
   target->assignment(
