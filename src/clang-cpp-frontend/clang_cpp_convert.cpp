@@ -911,7 +911,8 @@ bool clang_cpp_convertert::get_function_body(
             abort();
           }
 
-          build_member_from_component(fd, lhs);
+          build_member_from_component(
+            fd, lhs.id() == "dereference" ? lhs.op0() : lhs);
 
           exprt rhs;
           if (get_expr(*init->getInit(), rhs))
