@@ -1,4 +1,4 @@
-#include "util/threeval.h"
+#include <util/threeval.h>
 #include <goto-symex/goto_symex.h>
 
 bool symex_contains_unsupported(const expr2tc &e)
@@ -25,7 +25,6 @@ tvt goto_symext::eval_boolean_expression(const expr2tc &cond) const
     return tvt(tvt::TV_UNKNOWN);
 
   wrapped_interval interval = get_interval(cond);
-
   // If the interval does not contain zero then it's always true
   if (!interval.contains(0))
     return tvt(tvt::TV_TRUE);
