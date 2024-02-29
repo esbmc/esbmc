@@ -1,4 +1,4 @@
 CORE
 main.cpp
-
+--cppstd 17
 ^VERIFICATION SUCCESSFUL$
