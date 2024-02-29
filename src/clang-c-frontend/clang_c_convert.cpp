@@ -1738,6 +1738,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*compound.getInitializer(), initializer))
       return true;
 
+    typet t = initializer.type();
+
     /* A compound literal is an LValue that has associated static or automatic
      * storage, depending on whether it appears in file or block scope.
      * Therefore, in C, for instance a pointer to it can be taken and used
@@ -1751,9 +1753,38 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
      * corresponding type. Thus, we introduce a new symbol to represent it.
      */
 
-    symbolt &cl = init_anon_symbol(
-      initializer, location, "compound-literal", compound.isFileScope());
+    /* Give the symbol a recognizable name to show in the counter-example */
+    std::string path = location.file().as_string();
+    std::string name_prefix =
+      path + ":" + location.get_line().as_string() + "$compound-literal$";
+    symbolt &cl = anon_symbol.new_symbol(context, t, name_prefix);
+    /* .name and .id have already been assigned by new_symbol() above */
+    get_default_symbol(
+      cl, get_modulename_from_path(path), t, cl.name, cl.id, location);
+
+    cl.static_lifetime = !current_block || compound.isFileScope();
+    cl.is_extern = false;
+    cl.file_local = true;
+    cl.value = initializer;
+
     new_expr = symbol_expr(cl);
+
+    if (!cl.static_lifetime)
+    {
+      /* The underlying storage is automatic here, i.e., local. In order for
+       * it to be recognized as being local in ESBMC, it requires a declaration,
+       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one. */
+      code_declt decl(new_expr);
+      decl.operands().push_back(initializer);
+
+      current_block->operands().push_back(decl);
+    }
+    else
+    {
+      /* Symbols appearing in file scope do not need a declaration.
+       * clang_c_main::static_lifetime_init() takes care of the initialization.
+       */
+    }
 
     break;
   }
@@ -2615,48 +2646,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   new_expr.location() = location;
   return false;
-}
-
-symbolt &clang_c_convertert::init_anon_symbol(
-  const exprt &initializer,
-  const locationt &location,
-  const std::string &anon_context,
-  bool file_scope)
-{
-  typet t = initializer.type();
-
-  /* Give the symbol a recognizable name to show in the counter-example */
-  std::string path = location.file().as_string();
-  std::string name_prefix =
-    path + ":" + location.get_line().as_string() + "$" + anon_context + "$";
-  symbolt &sym = anon_symbol.new_symbol(context, t, name_prefix);
-  /* .name and .id have already been assigned by new_symbol() above */
-  get_default_symbol(
-    sym, get_modulename_from_path(path), t, sym.name, sym.id, location);
-
-  sym.static_lifetime = !current_block || file_scope;
-  sym.is_extern = false;
-  sym.file_local = true;
-  sym.value = initializer;
-
-  if (!sym.static_lifetime)
-  {
-    /* The underlying storage is automatic here, i.e., local. In order for
-     * it to be recognized as being local in ESBMC, it requires a declaration,
-     * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one. */
-    code_declt decl(symbol_expr(sym));
-    decl.operands().push_back(initializer);
-
-    current_block->operands().push_back(decl);
-  }
-  else
-  {
-    /* Symbols appearing in file scope do not need a declaration.
-     * clang_c_main::static_lifetime_init() takes care of the initialization.
-     */
-  }
-
-  return sym;
 }
 
 void clang_c_convertert::get_enum_value(
