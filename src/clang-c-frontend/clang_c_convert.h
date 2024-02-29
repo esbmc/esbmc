@@ -205,12 +205,6 @@ protected:
     irep_idt unique_name,
     locationt location);
 
-  symbolt &init_anon_symbol(
-    const exprt &initializer,
-    const locationt &location,
-    const std::string &anon_context,
-    bool file_scope);
-
   void
   get_decl_name(const clang::NamedDecl &vd, std::string &id, std::string &name);
 
