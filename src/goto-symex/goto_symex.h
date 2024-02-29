@@ -840,7 +840,7 @@ protected:
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
 
-  std::unordered_map<irep_idt, wrapped_interval, irep_id_hash> intervals;
+  std::unordered_map<std::string, wrapped_interval> intervals;
   wrapped_interval get_interval(const expr2tc &) const;
   void
   update_symbol_interval(const symbol2t &sym, const wrapped_interval value);
