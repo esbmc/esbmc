@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 contract.solast
 --function D --sol contract.sol
 ^VERIFICATION SUCCESSFUL$
