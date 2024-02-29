@@ -3,7 +3,9 @@
 
 bool symex_contains_unsupported(const expr2tc &e)
 {
-  if (is_floatbv_type(e) || is_fixedbv_type(e) || is_pointer_type(e) || is_structure_type(e) || is_vector_type(e) || is_array_type(e))
+  if (
+    is_floatbv_type(e) || is_fixedbv_type(e) || is_pointer_type(e) ||
+    is_structure_type(e) || is_vector_type(e) || is_array_type(e))
     return true;
 
   bool result = false;
