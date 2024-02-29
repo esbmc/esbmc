@@ -732,10 +732,12 @@ bool solidity_convertert::get_function_definition(
   const std::string old_functionName = current_functionName;
 
   current_functionDecl = &ast_node;
+  bool is_ctor = false;
   if (
     (*current_functionDecl)["name"].get<std::string>() == "" &&
     (*current_functionDecl)["kind"] == "constructor")
   {
+    is_ctor = true;
     if (get_current_contract_name(*current_functionDecl, current_functionName))
       return true;
   }
@@ -780,14 +782,17 @@ bool solidity_convertert::get_function_definition(
 
   // 11. Convert parameters, if no parameter, assume ellipis
   //  - Convert params before body as they may get referred by the statement in the body
+  if (is_ctor)
+  {
+    /* need (type *) as first parameter, this is equivalent to the 'this'
+     * pointer in C++ */
+    code_typet::argumentt param(pointer_typet(type.return_type()));
+    type.arguments().push_back(param);
+  }
+
   SolidityGrammar::ParameterListT params =
     SolidityGrammar::get_parameter_list_t(ast_node["parameters"]);
-  if (params == SolidityGrammar::ParameterListT::EMPTY)
-  {
-    // assume ellipsis if the function has no parameters
-    type.make_ellipsis();
-  }
-  else
+  if (params != SolidityGrammar::ParameterListT::EMPTY)
   {
     // convert parameters if the function has them
     // update the typet, since typet contains parameter annotations
@@ -801,6 +806,12 @@ bool solidity_convertert::get_function_definition(
 
       type.arguments().push_back(param);
     }
+  }
+
+  if (type.arguments().empty())
+  {
+    // assume ellipsis if the function has no parameters
+    type.make_ellipsis();
   }
 
   added_symbol.type = type;
@@ -1887,15 +1898,6 @@ bool solidity_convertert::get_expr(
     // first, call the constructor
     if (get_constructor_call(expr, new_expr))
       return true;
-
-    // break if the constructor call needs arguments
-    // it would be reckoned as a memeber call.
-    side_effect_expr_function_callt e =
-      to_side_effect_expr_function_call(new_expr);
-    if (e.arguments().size())
-    {
-      break;
-    }
 
     side_effect_exprt tmp_obj("temporary_object", new_expr.type());
     codet code_expr("expression");
@@ -4169,6 +4171,10 @@ bool solidity_convertert::get_constructor_call(
 
   auto param_nodes = constructor_ref["parameters"]["parameters"];
   unsigned num_args = 0;
+
+  exprt new_obj("new_object");
+  new_obj.type() = type;
+  call.arguments().push_back(address_of_exprt(new_obj));
 
   for (const auto &arg : ast_node["arguments"].items())
   {
