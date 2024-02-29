@@ -1,10 +1,9 @@
-#include "irep2/irep2_type.h"
 #include "util/threeval.h"
 #include <goto-symex/goto_symex.h>
 
 bool symex_contains_unsupported(const expr2tc &e)
 {
-  if (is_floatbv_type(e) || is_fixedbv_type(e) || is_pointer_type(e))
+  if (is_floatbv_type(e) || is_fixedbv_type(e) || is_pointer_type(e) || is_structure_type(e) || is_vector_type(e) || is_array_type(e))
     return true;
 
   bool result = false;
@@ -499,6 +498,9 @@ tvt goto_symext::assume_expression(const expr2tc &e)
   const static bool overflow_mode =
     config.options.get_bool_option("overflow-check");
   if (overflow_mode)
+    return tvt(tvt::TV_UNKNOWN);
+
+  if (symex_contains_unsupported(e))
     return tvt(tvt::TV_UNKNOWN);
 
   tvt result = eval_boolean_expression(e);
