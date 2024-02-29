@@ -129,7 +129,7 @@ void goto_symext::assume(const expr2tc &the_assumption)
     assumption = interval_check.is_true() ? gen_true_expr() : gen_false_expr();
 
   if (is_true(assumption))
-    return;    
+    return;
 
   cur_state->guard.guard_expr(assumption);
 
@@ -387,7 +387,7 @@ void goto_symext::symex_assume()
   replace_nondet(cond);
   dereference(cond, dereferencet::READ);
   replace_dynamic_allocation(cond);
-  assume(cond);  
+  assume(cond);
 }
 
 void goto_symext::symex_assert()
@@ -413,7 +413,7 @@ void goto_symext::symex_assert()
 
   dereference(tmp, dereferencet::READ);
   replace_dynamic_allocation(tmp);
-  claim(tmp, msg);  
+  claim(tmp, msg);
 }
 
 void goto_symext::run_intrinsic(
