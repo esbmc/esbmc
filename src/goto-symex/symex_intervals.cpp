@@ -38,7 +38,7 @@ tvt goto_symext::eval_boolean_expression(const expr2tc &cond) const
 wrapped_interval
 goto_symext::get_interval_from_symbol(const symbol2t &sym) const
 {
-  auto it = intervals.find(sym.thename);
+  auto it = intervals.find(sym.get_symbol_name());
   return it != intervals.end() ? it->second : wrapped_interval(sym.type);
 }
 wrapped_interval goto_symext::get_interval(const expr2tc &e) const
@@ -469,7 +469,7 @@ void goto_symext::update_symbol_interval(
   const symbol2t &sym,
   const wrapped_interval value)
 {
-  intervals[sym.thename] = value;
+  intervals[sym.get_symbol_name()] = value;
 }
 
 void goto_symext::apply_assume_less(const expr2tc &a, const expr2tc &b)
