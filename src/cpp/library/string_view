@@ -1,9 +1,10 @@
 
 #pragma once
 
-#include <cstddef>
-#include <climits>
+#include <cstddef> /* size_t */
+#include <cstdint> /* SIZE_MAX */
 #include <cstring>
+#include <algorithm> /* std::swap, std::min */
 
 namespace std
 {
@@ -26,7 +27,7 @@ public:
   static constexpr size_t npos = size_t(-1);
 
   // Constructors
-  string_view() : str(nullptr), len(0) {}
+  string_view() : len(0) {}
   string_view(const char *str) : str(str), len(strlen(str)) {}
   string_view(const char *str, size_t len) : str(str), len(len) {}
 
