@@ -396,7 +396,7 @@ typedef irep_container<expr2t> expr2tc;
 typedef std::pair<std::string, std::string> member_entryt;
 typedef std::list<member_entryt> list_of_memberst;
 
-class irep2t : public std::enable_shared_from_this<irep2t>
+class irep2t
 {
 };
 
