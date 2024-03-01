@@ -11,19 +11,34 @@ namespace ksptr
 using cnt_t =
   std::conditional_t<sizeof(long) < sizeof(void *), long long, long>;
 
+class control_block /* meta-data together with the concrete data */
+{
+  template <typename T>
+  friend class sptr;
+
+  cnt_t use_count;
+};
+
 /**
  * A somewhat dumbed-down shared_ptr implementation, still missing weak pointers
  * and reference/array support. The purpose of this class is to provide
  * shared pointers that
+ *
  * (a) do not have an atomic reference count, and
  * (b) do not provide for separate storage of control block and actual data,
  *     which allows to reduce space.
+ *
+ * This comes with restrictions on T: It must have control_block as a unique
+ * base class. Furthermore, since the control_block itself doesn't provide a
+ * (virtual) destructor, casting to sptr<control_block> generally isn't a good
+ * idea.
  */
 template <typename T>
 class sptr
 {
   static_assert(!std::is_reference_v<T>, "reference types are not supported");
   static_assert(!std::is_array_v<T>, "array types are not supported");
+  static_assert(std::is_convertible_v<T *, control_block *>);
 
   template <typename S>
   friend class sptr;
@@ -36,37 +51,17 @@ protected:
   {
   };
 
-  struct control_block /* meta-data together with the concrete data */
-  {
-    cnt_t use_count;
-    alignas(T) char value[sizeof(T)];
-  };
-
   control_block *cb;
 
   T *ptr() const noexcept
   {
-    return reinterpret_cast<T *>(cb->value);
-  }
-
-  static void dtor(void *p)
-  {
-    reinterpret_cast<T *>(p)->~T();
+    return static_cast<T *>(cb);
   }
 
   template <typename... Args>
-  explicit sptr(make, Args &&...args) : cb(new control_block)
+  explicit sptr(make, Args &&...args) : cb(new T(std::forward<Args>(args)...))
   {
-    try
-    {
-      new (ptr()) T(std::forward<Args>(args)...);
-      cb->use_count = 1;
-    }
-    catch (...)
-    {
-      delete cb;
-      throw;
-    }
+    cb->use_count = 1;
   }
 
 public:
@@ -94,19 +89,14 @@ public:
     typename S,
     typename = std::enable_if_t<std::is_convertible_v<S *, T *>>>
   constexpr sptr(sptr<S> o) noexcept
-    : cb(reinterpret_cast<control_block *>(o.cb))
+    : cb(std::exchange(o.cb, nullptr))
   {
-    assert(static_cast<T *>(o.ptr()) == ptr());
-    o.cb = nullptr;
   }
 
   ~sptr()
   {
     if (cb && !--cb->use_count)
-    {
-      dtor(ptr());
-      delete cb;
-    }
+      delete ptr();
   }
 
   /* swap & assignment operators */
