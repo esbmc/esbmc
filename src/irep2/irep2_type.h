@@ -292,8 +292,8 @@ public:
   template <typename... Args>                                                  \
   inline type2tc basename##_type2tc(Args &&...args)                            \
   {                                                                            \
-    return type2tc(                           \
-      ksptr::make_shared<basename##_type2t>(std::forward<Args>(args)...));    \
+    return type2tc(                                                            \
+      ksptr::make_shared<basename##_type2t>(std::forward<Args>(args)...));     \
   }                                                                            \
   typedef esbmct::                                                             \
     type_methods2<basename##_type2t, superclass, superclass::traits>           \

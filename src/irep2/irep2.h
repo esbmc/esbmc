@@ -220,8 +220,7 @@ public:
   // Obviously this is fairly unwise because any std::shared_ptr
   // won't be using the detach facility to manipulate things, however it's
   // necessary for std::make_shared.
-  explicit irep_container(ksptr::sptr<T> &&p)
-    : ksptr::sptr<T>(std::move(p))
+  explicit irep_container(ksptr::sptr<T> &&p) : ksptr::sptr<T>(std::move(p))
   {
   }
 

@@ -278,8 +278,8 @@ static expr2tc simplify_arith_2ops(
     // Were we able to simplify the sides?
     if ((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_op(
-        ksptr::make_shared<constructor>(type, simplied_side_1, simplied_side_2));
+      expr2tc new_op(ksptr::make_shared<constructor>(
+        type, simplied_side_1, simplied_side_2));
 
       return typecast_check_return(type, new_op);
     }
