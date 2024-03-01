@@ -1409,8 +1409,8 @@ public:
   template <typename... Args>                                                  \
   inline expr2tc basename##2tc(Args && ...args)                                \
   {                                                                            \
-    return expr2tc(std::static_pointer_cast<expr2t>(                           \
-      std::make_shared<basename##2t>(std::forward<Args>(args)...)));           \
+    return expr2tc(                           \
+      ksptr::make_shared<basename##2t>(std::forward<Args>(args)...));         \
   }                                                                            \
   typedef esbmct::expr_methods2<basename##2t, superclass, superclass::traits>  \
     basename##_expr_methods;                                                   \

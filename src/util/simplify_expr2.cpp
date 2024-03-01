@@ -279,7 +279,7 @@ static expr2tc simplify_arith_2ops(
     if ((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
       expr2tc new_op(
-        std::make_shared<constructor>(type, simplied_side_1, simplied_side_2));
+        ksptr::make_shared<constructor>(type, simplied_side_1, simplied_side_2));
 
       return typecast_check_return(type, new_op);
     }
@@ -669,7 +669,7 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
     // Were we able to simplify anything?
     if (value != to_simplify)
     {
-      expr2tc new_neg(std::make_shared<constructor>(type, to_simplify));
+      expr2tc new_neg(ksptr::make_shared<constructor>(type, to_simplify));
       return typecast_check_return(type, new_neg);
     }
 
@@ -1094,7 +1094,7 @@ static expr2tc simplify_logic_2ops(
     if ((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
       expr2tc new_op(
-        std::make_shared<constructor>(simplied_side_1, simplied_side_2));
+        ksptr::make_shared<constructor>(simplied_side_1, simplied_side_2));
 
       return typecast_check_return(type, new_op);
     }
@@ -1412,7 +1412,7 @@ static expr2tc do_bit_munge_operation(
   if (side_1 != simplified_side_1 || side_2 != simplified_side_2)
     return typecast_check_return(
       type,
-      expr2tc(std::make_shared<constructor>(
+      expr2tc(ksptr::make_shared<constructor>(
         type, simplified_side_1, simplified_side_2)));
 
   return expr2tc();
@@ -1871,7 +1871,7 @@ static expr2tc simplify_relations(
     if ((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
       expr2tc new_op(
-        std::make_shared<constructor>(simplied_side_1, simplied_side_2));
+        ksptr::make_shared<constructor>(simplied_side_1, simplied_side_2));
 
       return typecast_check_return(type, new_op);
     }
@@ -1985,7 +1985,7 @@ static expr2tc simplify_floatbv_relations(
   if ((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
   {
     expr2tc new_op(
-      std::make_shared<constructor>(simplied_side_1, simplied_side_2));
+      ksptr::make_shared<constructor>(simplied_side_1, simplied_side_2));
 
     return typecast_check_return(type, new_op);
   }
@@ -2453,7 +2453,7 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
     // Were we able to simplify anything?
     if (value != to_simplify)
     {
-      expr2tc new_neg(std::make_shared<constructor>(to_simplify));
+      expr2tc new_neg(ksptr::make_shared<constructor>(to_simplify));
       return typecast_check_return(type, new_neg);
     }
 
@@ -2638,7 +2638,7 @@ static expr2tc simplify_floatbv_2ops(
     // Were we able to simplify the sides?
     if ((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_op(std::make_shared<constructor>(
+      expr2tc new_op(ksptr::make_shared<constructor>(
         type, simplied_side_1, simplied_side_2, rounding_mode));
 
       return typecast_check_return(type, new_op);

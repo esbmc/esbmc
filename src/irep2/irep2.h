@@ -33,6 +33,8 @@
 #include <util/irep.h>
 #include <vector>
 
+#include <util/ksptr.hh>
+
 // Ahead of time: a list of all expressions and types, in a preprocessing
 // list, for enumerating later. Should avoid manually enumerating anywhere
 // else.
@@ -202,7 +204,7 @@ class constant_vector2t;
  *  this class provides.
  */
 template <class T>
-class irep_container : private std::shared_ptr<T>
+class irep_container : private ksptr::sptr<T>
 {
 public:
   constexpr irep_container() noexcept = default;
@@ -218,8 +220,8 @@ public:
   // Obviously this is fairly unwise because any std::shared_ptr
   // won't be using the detach facility to manipulate things, however it's
   // necessary for std::make_shared.
-  explicit irep_container(std::shared_ptr<T> &&p)
-    : std::shared_ptr<T>(std::move(p))
+  explicit irep_container(ksptr::sptr<T> &&p)
+    : ksptr::sptr<T>(std::move(p))
   {
   }
 
@@ -248,14 +250,14 @@ public:
 
   const T *get() const noexcept
   {
-    return std::shared_ptr<T>::get();
+    return ksptr::sptr<T>::get();
   }
 
   // the non-const versions detach
   T *get() // never throws
   {
     detach();
-    T *tmp = std::shared_ptr<T>::get();
+    T *tmp = ksptr::sptr<T>::get();
     tmp->crc_val = 0;
     return tmp;
   }
@@ -283,24 +285,22 @@ public:
     // Assign-operate ourself into containing a fresh copy of the data. This
     // creates a new reference counted object, and assigns it to ourself,
     // which causes the existing reference to be decremented.
-    const T *foo = std::shared_ptr<T>::get();
+    const T *foo = ksptr::sptr<T>::get();
     *this = foo->clone();
   }
 
-  using std::shared_ptr<T>::operator bool;
-  using std::shared_ptr<T>::reset;
+  using ksptr::sptr<T>::operator bool;
+  using ksptr::sptr<T>::reset;
 
-  friend void swap(irep_container &a, irep_container &b)
+  friend void swap(irep_container &a, irep_container &b) noexcept
   {
     using std::swap;
-    swap(
-      static_cast<std::shared_ptr<T> &>(a),
-      static_cast<std::shared_ptr<T> &>(b));
+    swap(static_cast<ksptr::sptr<T> &>(a), static_cast<ksptr::sptr<T> &>(b));
   }
 
-  void swap(irep_container &b)
+  void swap(irep_container &b) noexcept
   {
-    std::shared_ptr<T>::swap(b);
+    ksptr::sptr<T>::swap(b);
   }
 
   irep_container simplify() const

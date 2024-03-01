@@ -123,7 +123,7 @@ auto esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::clone()
   // container.
   // Generally, storing an irep in a bare std::shared_ptr loses the detach
   // facility and breaks everything, this is an exception.
-  return base_container2tc(std::make_shared<derived>(*derived_this));
+  return base_container2tc(ksptr::make_shared<derived>(*derived_this));
 }
 
 template <
