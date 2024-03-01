@@ -6,7 +6,7 @@
 class goto_coveraget
 {
 public:
-  explicit goto_coveraget(namespacet &ns) : ns(ns){};
+  explicit goto_coveraget(const namespacet &ns) : ns(ns){};
   // add an assert(0)
   // - at the beginning of each GOTO program
   // - at the beginning of each branch body
@@ -25,7 +25,7 @@ public:
   void make_asserts_true(goto_functionst &goto_functions);
 
   // condition cov
-  void add_cond_cov_assert(goto_functionst &goto_functions);
+  void add_cond_cov_assert(goto_functionst &goto_functions, const std::string &filename);
 
   int get_total_instrument() const;
 
@@ -38,4 +38,5 @@ protected:
   static int total_assert_instance;
   static std::unordered_set<std::string> total_cond_assert;
   namespacet ns;
+  std::string filename;
 };

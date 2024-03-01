@@ -23,7 +23,7 @@ else()
 endif()
 
 if (LLVM_PACKAGE_BUGREPORT STREQUAL https://github.com/CTSRD-CHERI/llvm-project/issues)
-  set(ESBMC_CHERI_CLANG ON)
+  set(ESBMC_CHERI_CLANG OFF)
   message(STATUS "Clang is CHERI-enabled, enabling CHERI support.")
 elseif(EXISTS "${CLANG_INSTALL_PREFIX}/include/llvm/Support/Morello.h")
   set(ESBMC_CHERI_CLANG ON)
