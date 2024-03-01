@@ -2,7 +2,7 @@
 
 int goto_coveraget::total_instrument = 0;
 int goto_coveraget::total_assert_instance = 0;
-std::unordered_set<std::string> total_cond_assert = {};
+std::unordered_set<std::string> goto_coveraget::total_cond_assert = {};
 
 void goto_coveraget::make_asserts_false(goto_functionst &goto_functions)
 {
@@ -73,7 +73,7 @@ void goto_coveraget::add_false_asserts(goto_functionst &goto_functions)
       }
 
       goto_programt::targett it = goto_program.instructions.begin();
-      insert_false_assert(goto_program, it);
+      insert_assert(goto_program, it, gen_false_expr());
     }
 }
 
