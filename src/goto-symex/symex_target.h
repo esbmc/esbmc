@@ -78,6 +78,22 @@ public:
     const expr2tc &size,
     const sourcet &source) = 0;
 
+  /**
+   * @brief Replaces trace symbols from expression with their values
+   *
+   * For example, for a trace `a0 = nondet_symbol(0); a1 = a0 + 1; guard = a1 > 5)`
+   * calling this function with "guard" will result in:
+   *
+   * - keep_local_variables(true): a1 > 5
+   * - keep_local_variables(false): nondet_symbol(0) + 1 > 5
+   *
+   * @param expr
+   * @param keep_local_variables
+   */
+  virtual void reconstruct_symbolic_expression(
+    expr2tc &expr,
+    bool keep_local_variables) const = 0;
+
   // Abstract method, with the purpose of duplicating a symex_targett from the
   // subclass.
   virtual std::shared_ptr<symex_targett> clone() const = 0;

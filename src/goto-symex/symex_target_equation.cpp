@@ -379,6 +379,41 @@ unsigned int symex_target_equationt::clear_assertions()
   return num_asserts;
 }
 
+// To be used by reconstruct_symbolic_expression
+void symex_target_equationt::replace_rec(
+  const SSA_stept &step,
+  expr2tc &e,
+  bool keep_local) const
+{
+  assert(step.is_assignment());
+  if (is_symbol2t(e))
+  {
+    const std::string lhs_name = to_symbol2t(step.lhs).get_symbol_name();
+    if (keep_local && lhs_name.find("goto_symex::") == std::string::npos)
+      return;
+
+    if (lhs_name == to_symbol2t(e).get_symbol_name())
+      e = step.rhs;
+  }
+
+  e->Foreach_operand([&step, &keep_local, this](expr2tc &inner)
+                     { replace_rec(step, inner, keep_local); });
+}
+
+void symex_target_equationt::reconstruct_symbolic_expression(
+  expr2tc &expr,
+  bool keep_local_variables) const
+{
+  keep_local_variables = true;
+  for(auto rit = SSA_steps.rbegin();  rit != SSA_steps.rend(); rit++)
+  {
+    if(!rit->is_assignment())
+      continue;
+
+    replace_rec(*rit, expr, keep_local_variables);
+  }
+}
+
 runtime_encoded_equationt::runtime_encoded_equationt(
   const namespacet &_ns,
   smt_convt &_conv)
