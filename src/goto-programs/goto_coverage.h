@@ -13,10 +13,6 @@ public:
   // - before each END_FUNCTION statement
   void add_false_asserts(goto_functionst &goto_functions);
 
-  // insert an assert(0) as instrumentation BEFORE each instruction
-  void
-  insert_false_assert(goto_programt &goto_program, goto_programt::targett &it);
-
   void insert_assert(
     goto_programt &goto_program,
     goto_programt::targett &it,
