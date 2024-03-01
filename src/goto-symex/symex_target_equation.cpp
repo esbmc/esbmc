@@ -396,8 +396,9 @@ void symex_target_equationt::replace_rec(
       e = step.rhs;
   }
 
-  e->Foreach_operand([&step, &keep_local, this](expr2tc &inner)
-                     { replace_rec(step, inner, keep_local); });
+  e->Foreach_operand([&step, &keep_local, this](expr2tc &inner) {
+    replace_rec(step, inner, keep_local);
+  });
 }
 
 void symex_target_equationt::reconstruct_symbolic_expression(
@@ -405,9 +406,9 @@ void symex_target_equationt::reconstruct_symbolic_expression(
   bool keep_local_variables) const
 {
   keep_local_variables = true;
-  for(auto rit = SSA_steps.rbegin();  rit != SSA_steps.rend(); rit++)
+  for (auto rit = SSA_steps.rbegin(); rit != SSA_steps.rend(); rit++)
   {
-    if(!rit->is_assignment())
+    if (!rit->is_assignment())
       continue;
 
     replace_rec(*rit, expr, keep_local_variables);
