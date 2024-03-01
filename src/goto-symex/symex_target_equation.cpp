@@ -405,7 +405,6 @@ void symex_target_equationt::reconstruct_symbolic_expression(
   expr2tc &expr,
   bool keep_local_variables) const
 {
-  keep_local_variables = true;
   for (auto rit = SSA_steps.rbegin(); rit != SSA_steps.rend(); rit++)
   {
     if (!rit->is_assignment())
