@@ -509,7 +509,14 @@ tvt goto_symext::assume_expression(const expr2tc &e)
   if (result.is_false())
     return result;
 
-  assume_rec(e);
+  // TODO: we can't cut from the original symbol e.g.,
+  //
+  // int a = * ? 0 : 10 // a1: [0,10]
+  // if(a < 5)
+  //   ... a1: [0,4] is wrong. We need to maintain a set of guards over the symbol.
+  // Or just move towards SSA as well
+
+  //assume_rec(e);
 
   return result;
 }
