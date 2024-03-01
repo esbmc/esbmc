@@ -17,12 +17,6 @@ public:
   stack(const Container &ctnr = Container()) : _top(0)
   {
   }
-  stack(std::deque<int> ctnr) : _top(ctnr.size())
-  {
-  }
-  stack(std::vector<int> ctnr) : _top(ctnr.size())
-  {
-  }
 
   void inc_top()
   {
