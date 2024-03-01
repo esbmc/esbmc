@@ -140,7 +140,9 @@ std::unordered_set<std::string> goto_coveraget::get_total_cond_assert() const
     if(a>1)
   then run multi-property
 */
-void goto_coveraget::add_cond_cov_assert(goto_functionst &goto_functions)
+void goto_coveraget::add_cond_cov_assert(
+  goto_functionst &goto_functions,
+  const std::string &filename)
 {
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
@@ -149,7 +151,9 @@ void goto_coveraget::add_cond_cov_assert(goto_functionst &goto_functions)
       Forall_goto_program_instructions (it, goto_program)
       {
         // e.g. IF !(a > 1) THEN GOTO 3
-        if (!is_true(it->guard) && it->is_goto())
+        if (
+          !is_true(it->guard) && it->is_goto() &&
+          filename == it->location.file().as_string())
         {
           const expr2tc old_guard = it->guard;
           insert_assert(goto_program, it, old_guard);
