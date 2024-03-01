@@ -960,6 +960,8 @@ smt_convt::resultt bmct::multi_property_check(
   // Condition Coverage:
   if (is_cond_cov)
   {
+    log_success("\n[Coverage]\n");
+
     const std::unordered_set<std::string> &total_cond_assert =
       goto_coveraget(ns).get_total_cond_assert();
     const int tracked_instance = reached_claims.size();

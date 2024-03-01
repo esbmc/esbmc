@@ -1850,7 +1850,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
       goto_coveraget tmp(ns);
       tmp.make_asserts_true(goto_functions);
-      tmp.add_cond_cov_assert(goto_functions);
+      tmp.add_cond_cov_assert(goto_functions, cmdline.args[0]);
       tmp.count_assert_instance(goto_functions);
     }
 
