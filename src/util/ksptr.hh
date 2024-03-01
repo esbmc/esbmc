@@ -8,8 +8,8 @@ namespace ksptr
 {
 /* A type that is large enough to count any number of copies existing in memory
  * (even on Windows) */
-typedef std::conditional_t<sizeof(void *) >= sizeof(long), long long, long>
-  cnt_t;
+using cnt_t =
+  std::conditional_t<sizeof(long) < sizeof(void *), long long, long>;
 
 /**
  * A somewhat dumbed-down shared_ptr implementation, still missing weak pointers
@@ -39,17 +39,7 @@ protected:
   struct control_block /* meta-data together with the concrete data */
   {
     cnt_t use_count;
-    void (*dtor)(void *);
     alignas(T) char value[sizeof(T)];
-
-    explicit control_block(void (*dtor)(void *)) : use_count(1), dtor(dtor)
-    {
-    }
-
-    ~control_block()
-    {
-      dtor(value);
-    }
   };
 
   control_block *cb;
@@ -59,11 +49,24 @@ protected:
     return reinterpret_cast<T *>(cb->value);
   }
 
-  template <typename... Args>
-  explicit sptr(make, Args &&...args)
-    : cb(new control_block([](void *p) { reinterpret_cast<T *>(p)->~T(); }))
+  static void dtor(void *p)
   {
-    new (ptr()) T(std::forward<Args>(args)...);
+    reinterpret_cast<T *>(p)->~T();
+  }
+
+  template <typename... Args>
+  explicit sptr(make, Args &&...args) : cb(new control_block)
+  {
+    try
+    {
+      new (ptr()) T(std::forward<Args>(args)...);
+      cb->use_count = 1;
+    }
+    catch (...)
+    {
+      delete cb;
+      throw;
+    }
   }
 
 public:
@@ -93,13 +96,17 @@ public:
   constexpr sptr(sptr<S> o) noexcept
     : cb(reinterpret_cast<control_block *>(o.cb))
   {
+    assert(static_cast<T *>(o.ptr()) == ptr());
     o.cb = nullptr;
   }
 
   ~sptr()
   {
     if (cb && !--cb->use_count)
+    {
+      dtor(ptr());
       delete cb;
+    }
   }
 
   /* swap & assignment operators */

@@ -398,6 +398,8 @@ typedef std::list<member_entryt> list_of_memberst;
 
 class irep2t
 {
+public:
+  virtual ~irep2t() noexcept = default;
 };
 
 /** Base class for all types.
