@@ -1,6 +1,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/json_utils.h>
 #include <python_frontend_types.h>
+#include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
 #include <util/arith_tools.h>
@@ -56,8 +57,20 @@ static StatementType get_statement_type(const nlohmann::json &element)
 }
 
 // Convert Python/AST to irep2 operations
-static std::string get_op(const std::string &op)
+static std::string get_op(const std::string &op, const typet &type)
 {
+  if (type.is_floatbv())
+  {
+    if (op == "Add")
+      return "ieee_add";
+    if (op == "Sub")
+      return "ieee_sub";
+    if (op == "Mult")
+      return "ieee_mul";
+    if (op == "Div")
+      return "ieee_div";
+  }
+
   auto it = operator_map.find(op);
   if (it != operator_map.end())
   {
@@ -81,7 +94,7 @@ static struct_typet::componentt build_component(
 typet python_converter::get_typet(const std::string &ast_type)
 {
   if (ast_type == "float")
-    return float_type();
+    return double_type();
   if (ast_type == "int")
     /* FIXME: We need to map 'int' to another irep type that provides unlimited precision
 	https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex */
@@ -159,7 +172,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   std::string op(element["op"]["_type"].get<std::string>());
-  exprt logical_expr(get_op(op), bool_type());
+  exprt logical_expr(get_op(op, bool_type()), bool_type());
 
   // Iterate over operands of logical operations (and/or)
   for (const auto &operand : element["values"])
@@ -280,7 +293,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   assert(lhs.type() == rhs.type());
 
   typet type = (is_relational_op(op)) ? bool_type() : lhs.type();
-  exprt bin_expr(get_op(op), type);
+  exprt bin_expr(get_op(op, type), type);
   bin_expr.copy_to_operands(lhs, rhs);
 
   // floor division (//) operation corresponds to an int division with floor rounding
@@ -330,7 +343,8 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   if (element["operand"].contains("value"))
     type = get_typet(element["operand"]["value"]);
 
-  exprt unary_expr(get_op(element["op"]["_type"].get<std::string>()), type);
+  exprt unary_expr(
+    get_op(element["op"]["_type"].get<std::string>(), type), type);
 
   // get subexpr
   exprt unary_sub = get_expr(element["operand"]);
@@ -643,14 +657,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::LITERAL:
   {
     auto value = element["value"];
-    if (element["value"].is_number_integer())
-    {
+    if (value.is_number_integer())
       expr = from_integer(value.get<int>(), int_type());
-    }
-    else if (element["value"].is_boolean())
-    {
+    else if (value.is_boolean())
       expr = gen_boolean(value.get<bool>());
-    }
+    else if (value.is_number_float())
+      convert_float_literal(value.dump(), expr);
     break;
   }
   case ExpressionType::VARIABLE_REF:
