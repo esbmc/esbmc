@@ -9,8 +9,13 @@
          ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/pythonastgen.h
   )
 
-add_library(pythonfrontend STATIC python_language.cpp python_converter.cpp
-            pythonastgen.c python_frontend_types.cpp)
+add_library(pythonfrontend STATIC
+            python_language.cpp
+            python_converter.cpp
+            pythonastgen.c
+            python_frontend_types.cpp
+            ${CMAKE_SOURCE_DIR}/src/ansi-c/parse_float.cpp
+            ${CMAKE_SOURCE_DIR}/src/ansi-c/convert_float_literal.cpp)
 
 target_include_directories(pythonfrontend
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
