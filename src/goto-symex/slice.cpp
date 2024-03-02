@@ -104,23 +104,24 @@ void symex_slicet::run_on_assignment(
   // We can't really apply magic renumbering for now. We can, convert expressions into identities
   if (it != array_depends.end() && is_with2t(SSA_step.rhs))
   {
-
     with2t &w = to_with2t(SSA_step.rhs);
     bool can_slice = is_constant_int2t(w.update_field);
     // TODO: support for symbolic constraints
-    if(!can_slice)
+    if (!can_slice)
       it->second.insert(w.update_field);
-    for(const expr2tc &index : it->second) {
-      if(!can_slice)
+    for (const expr2tc &index : it->second)
+    {
+      if (!can_slice)
         break;
 
-      if(!is_constant_int2t(index))
+      if (!is_constant_int2t(index))
         can_slice = false;
       else
-        can_slice &= to_constant_int2t(index).value != to_constant_int2t(w.update_field).value;
+        can_slice &= to_constant_int2t(index).value !=
+                     to_constant_int2t(w.update_field).value;
     }
 
-    if(can_slice)
+    if (can_slice)
       SSA_step.cond = equality2tc(SSA_step.lhs, w.source_value);
   }
 
