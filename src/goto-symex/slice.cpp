@@ -46,11 +46,10 @@ bool symex_slicet::get_array_symbols(const expr2tc &expr)
   if (is_index2t(expr))
   {
     const index2t &w = to_index2t(expr);
-    if (is_symbol2t(w.source_value) && is_constant_int2t(w.index))
+    if (is_symbol2t(w.source_value))
     {
       const symbol2t &s = to_symbol2t(w.source_value);
-      const constant_int2t &i = to_constant_int2t(w.index);
-      array_depends[s.thename.as_string()].emplace(i.value.to_uint64());
+      array_depends[s.thename.as_string()].emplace(w.index);
       return true;
     }
   }
@@ -103,28 +102,26 @@ void symex_slicet::run_on_assignment(
 
   auto it = array_depends.find(to_symbol2t(SSA_step.lhs).thename.as_string());
   // We can't really apply magic renumbering for now. We can, convert expressions into identities
-  if (it != array_depends.end())
+  if (it != array_depends.end() && is_with2t(SSA_step.rhs))
   {
-    // TODO: This If chain is terrible.
-    std::unordered_set<uint64_t> &indexes = it->second;
-    for (auto v : indexes)
-      if (is_with2t(SSA_step.rhs))
-      {
-        with2t &w = to_with2t(SSA_step.rhs);
-        if (is_constant_int2t(w.update_field) && is_symbol2t(w.source_value))
-        {
-          uint64_t index = to_constant_int2t(w.update_field).value.to_uint64();
-          if (
-            !indexes.count(index) &&
-            to_symbol2t(w.source_value).thename.as_string() == it->first)
-          {
-            // At this point the LHS/RHS are just used as a reference of the past
-            // Every assignment is actually an... assumption!
-            SSA_step.cond = equality2tc(SSA_step.lhs, w.source_value);
-          }
-        }
-      }
-    return;
+
+    with2t &w = to_with2t(SSA_step.rhs);
+    bool can_slice = is_constant_int2t(w.update_field);
+    // TODO: support for symbolic constraints
+    if(!can_slice)
+      it->second.insert(w.update_field);
+    for(const expr2tc &index : it->second) {
+      if(!can_slice)
+        break;
+
+      if(!is_constant_int2t(index))
+        can_slice = false;
+      else
+        can_slice &= to_constant_int2t(index).value != to_constant_int2t(w.update_field).value;
+    }
+
+    if(can_slice)
+      SSA_step.cond = equality2tc(SSA_step.lhs, w.source_value);
   }
 
   if (!get_symbols<false>(SSA_step.lhs))

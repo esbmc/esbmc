@@ -118,7 +118,7 @@ public:
   /**
    * Holds the array and indexes that the current equation depends on.
    */
-  std::unordered_map<std::string, std::unordered_set<uint64_t>> array_depends;
+  std::unordered_map<std::string, std::unordered_set<expr2tc, irep2_hash>> array_depends;
 
   static expr2tc get_nondet_symbol(const expr2tc &expr);
 
