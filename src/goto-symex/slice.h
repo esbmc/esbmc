@@ -112,7 +112,6 @@ public:
     return true;
   }
 
-
   /**
    * Iterate over all steps of the \eq in order,
    * replacing ID operations of the form "symbol = symbol".
