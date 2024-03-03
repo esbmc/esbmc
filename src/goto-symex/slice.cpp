@@ -293,3 +293,49 @@ expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
     return expr2tc();
   }
 }
+
+void replace_symbol_on_expression(expr2tc &step, const std::unordered_map<std::string, expr2tc> symbol_map)
+{
+  if(!step)
+    return;
+   if(is_symbol2t(step))
+   {
+     auto it = symbol_map.find(to_symbol2t(step).get_symbol_name());
+     if(it != symbol_map.end())
+       step = it->second;
+   }
+   step->Foreach_operand([&symbol_map](expr2tc &e){ replace_symbol_on_expression(e, symbol_map);});
+}
+
+void symex_slicet::slice_id_operations(symex_target_equationt::SSA_stepst &eq) {
+  std::unordered_map<std::string, expr2tc> symbol_map;
+
+  for (auto &step : eq)
+  {
+    // Helper definition
+    typedef goto_trace_stept::typet ssa_type;
+    replace_symbol_on_expression(step.cond, symbol_map);
+    replace_symbol_on_expression(step.guard, symbol_map);
+    replace_symbol_on_expression(step.rhs, symbol_map);
+    replace_symbol_on_expression(step.lhs, symbol_map);
+    switch (step.type)
+    {
+    case ssa_type::ASSIGNMENT:
+    {
+      assert(is_equality2t(step.cond));
+      equality2t &eq = to_equality2t(step.cond);
+      assert(is_symbol2t(eq.side_1));
+      if(is_symbol2t(eq.side_2))
+      {
+        symbol_map[to_symbol2t(eq.side_1).get_symbol_name()] = eq.side_2;
+        step.ignore = true;
+        ++sliced;
+      }
+
+      break;
+    }
+    default:
+      break;
+    }
+  }
+}

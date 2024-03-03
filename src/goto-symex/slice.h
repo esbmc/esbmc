@@ -102,6 +102,8 @@ public:
     fine_timet algorithm_start = current_time();
     for (auto &step : boost::adaptors::reverse(eq))
       run_on_step(step);
+
+    slice_id_operations(eq);
     fine_timet algorithm_stop = current_time();
     log_status(
       "Slicing time: {}s (removed {} assignments)",
@@ -109,6 +111,14 @@ public:
       sliced);
     return true;
   }
+
+
+  /**
+   * Iterate over all steps of the \eq in order,
+   * replacing ID operations of the form "symbol = symbol".
+   * @param eq
+   */
+  void slice_id_operations(symex_target_equationt::SSA_stepst &eq);
 
   /**
    * Holds the symbols the current equation depends on.
