@@ -975,9 +975,10 @@ smt_convt::resultt bmct::multi_property_check(
       {
         if (reached_claims.count(claim))
           log_status("  {} : SATISFIED", claim);
-        else
-          log_status("  {} : FAILED", claim);
       }
+
+      // short-circuited:
+      // e.g. if both assert(a==1); and assert(!(a==1));
     }
 
     if (total_instance != 0)
