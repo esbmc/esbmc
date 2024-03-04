@@ -837,8 +837,20 @@ bool clang_cpp_convertert::get_constructor_call(
    */
 
   // Calling base constructor from derived constructor
+
+  // auto parents = ASTContext->getParents(constructor_call);
+  // auto it = parents.begin();
+  // const clang::Decl *objectDecl = it->get<clang::Decl>();
+  // need_new_object(it->get<clang::Stmt>(), constructor_call);
+
+  bool need_new_obj = false;
+
   if (new_expr.base_ctor_derived())
     gen_typecast_base_ctor_call(callee_decl, call, new_expr);
+  else if (new_expr.get_bool("memberInit"))
+  {
+    // do nothing
+  }
   else
   {
     exprt this_object = exprt("new_object");
@@ -848,6 +860,8 @@ bool clang_cpp_convertert::get_constructor_call(
     /* first parameter is address to the object to be constructed */
     address_of_exprt tmp_expr(this_object);
     call.arguments().push_back(tmp_expr);
+
+    need_new_obj = true;
   }
 
   // Do args
@@ -862,7 +876,7 @@ bool clang_cpp_convertert::get_constructor_call(
 
   call.set("constructor", 1);
 
-  if (!new_expr.base_ctor_derived())
+  if (need_new_obj)
     make_temporary(call);
 
   new_expr.swap(call);
@@ -953,6 +967,7 @@ bool clang_cpp_convertert::get_function_body(
             fd, lhs.id() == "dereference" ? lhs.op0() : lhs);
 
           exprt rhs;
+          rhs.set("memberInit", 1);
           if (get_expr(*init->getInit(), rhs))
             return true;
 
