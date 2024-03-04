@@ -25,15 +25,34 @@ public:
   void make_asserts_true(goto_functionst &goto_functions);
 
   // condition cov
-  void add_cond_cov_assert(goto_functionst &goto_functions, const std::string &filename);
-
+  void
+  gen_cond_cov(goto_functionst &goto_functions, const std::string &filename);
+  exprt handle_single_guard(exprt &guard);
+  void add_cond_cov_lhs_assert(
+    const exprt &expr,
+    goto_programt &goto_program,
+    goto_programt::targett &it);
+  void add_cond_cov_rhs_assert(
+    const std::string &op_tp,
+    const exprt &expr,
+    const exprt &atom,
+    goto_programt &goto_program,
+    goto_programt::targett &it);
   int get_total_instrument() const;
-
   void count_assert_instance(goto_functionst goto_functions);
   int get_total_assert_instance() const;
   std::unordered_set<std::string> get_total_cond_assert() const;
 
 protected:
+  // turn a OP b OP c into a list a, b, c
+  static void collect_operands(
+    const exprt &expr,
+    std::list<exprt> &operands,
+    std::list<irep_idt> &operators,
+    bool &flag);
+
+  static void collect_atom_operands(const exprt &expr, std::set<exprt> &atoms);
+
   static int total_instrument;
   static int total_assert_instance;
   static std::unordered_set<std::string> total_cond_assert;
