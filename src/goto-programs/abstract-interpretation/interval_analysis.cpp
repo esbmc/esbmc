@@ -112,7 +112,7 @@ inline void instrument_symbol_constraints(
   std::vector<expr2tc> symbol_constraints;
   auto state_iterator = interval_analysis.state_map.find(it);
   // We may be trying to instrument an unreachable state
-  if(state_iterator == interval_analysis.state_map.end())
+  if (state_iterator == interval_analysis.state_map.end())
     return;
   const interval_domaint &d = state_iterator->second;
   for (const auto &symbol_expr : symbols)
