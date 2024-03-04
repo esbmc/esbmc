@@ -111,6 +111,7 @@ set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
                       esbmc-cpp11/constructors
                       esbmc-cpp11/new-delete
                       esbmc-cpp11/reference
+                      esbmc-cpp11/template
                       )
 
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
