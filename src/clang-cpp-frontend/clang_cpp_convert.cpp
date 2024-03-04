@@ -23,6 +23,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/std_expr.h>
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
+#include <util/c_types.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -756,6 +757,32 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_constructor_call(cxxtoe, new_expr))
       return true;
 
+    break;
+  }
+
+  case clang::Stmt::SizeOfPackExprClass:
+  {
+    const clang::SizeOfPackExpr &size_of_pack =
+      static_cast<const clang::SizeOfPackExpr &>(stmt);
+    if (size_of_pack.isValueDependent())
+    {
+      std::ostringstream oss;
+      llvm::raw_os_ostream ross(oss);
+      ross << "Conversion of unsupported value-dependent size-of-pack expr: \"";
+      ross << stmt.getStmtClassName() << "\" to expression"
+           << "\n";
+      stmt.dump(ross, *ASTContext);
+      ross.flush();
+      log_error("{}", oss.str());
+      return true;
+    }
+    else
+    {
+      new_expr = constant_exprt(
+        integer2binary(size_of_pack.getPackLength(), bv_width(size_type())),
+        integer2string(size_of_pack.getPackLength()),
+        size_type());
+    }
     break;
   }
 
