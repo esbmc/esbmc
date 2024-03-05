@@ -1,6 +1,7 @@
 /// \file
 /// Interval Domain
 // TODO: Ternary operators, lessthan into lessthanequal for integers
+#include "irep.h"
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <goto-programs/abstract-interpretation/bitwise_bounds.h>
 #include <util/arith_tools.h>
@@ -246,8 +247,8 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after)
   bool upper_increased = !after.upper || (before.upper && after.upper &&
                                           *after.upper > *before.upper);
 
-  if ((lower_decreased || upper_increased) && !widening_under_approximate_bound)
-    return result;
+  //if ((lower_decreased || upper_increased) && !widening_under_approximate_bound)
+  //  return result;
 
   // Set lower bound: if we didn't decrease then just update the interval
   if (!lower_decreased)
@@ -870,6 +871,8 @@ void interval_domaint::transform(
   ai_baset &,
   const namespacet &ns)
 {
+  from->dump();
+  to->dump();
   (void)ns;
 
   const goto_programt::instructiont &instruction = *from;
@@ -1018,65 +1021,59 @@ void interval_domaint::transform(
 
 template <class IntervalMap>
 bool interval_domaint::join(
-  IntervalMap &new_map,
-  const IntervalMap &previous_map)
+  IntervalMap &a0,
+  const IntervalMap &a1)
 {
+  // Terrible convention, a0 is both the state before join and
+  // the map that needs to be updated
+  IntervalMap &updated_map = a0;  
   bool result = false;
-  for (auto new_it = new_map.begin(); new_it != new_map.end();) // no new_it++
+  std::unordered_set<irep_idt, irep_id_hash> symbol_map;
+  for(const auto &myPair : a0)
+    symbol_map.insert(myPair.first);
+  for(const auto &myPair : a1)
+    symbol_map.insert(myPair.first);
+
+  // Here we apply the HULL operation (before, after)
+  for(const irep_idt &symbol : symbol_map)
   {
-    // search for the variable that needs to be merged
-    // containers have different sizes and ordering
-    const auto b_it = previous_map.find(new_it->first);
-    const auto f_it = fixpoint_map.find(new_it->first);
-    if (b_it == previous_map.end())
+    const auto previous_it = a0.find(symbol);
+    const auto next_it = a1.find(symbol);
+    const auto &update_it = previous_it;
+
+    // HULL(TOP, next_it) = TOP
+    if(previous_it == a0.end())
     {
-      new_it = new_map.erase(new_it);
-      if (f_it != fixpoint_map.end())
-        fixpoint_map.erase(f_it);
+      update_it->second = next_it->second;
       result = true;
+      continue;
     }
-    else
+
+    // HULL (previous_it, TOP) = TOP
+    if(next_it == a1.end())
     {
-      
-      auto previous = new_it->second; // [0,0] ... [0, +inf]
-      auto after = b_it->second;      // [1,100] ... [1, 100]
-      new_it->second.join(after);     // HULL // [0,100] ... [0, +inf]
-      // Did we reach a fixpoint?
-      if (new_it->second != previous)
-      {
-        if (f_it != fixpoint_map.end())
-          f_it->second += 1;
-        else
-          fixpoint_map[new_it->first] = 0;
-
-        result = true;
-        // Try to extrapolate
-        if (
-          widening_extrapolate && fixpoint_map[new_it->first] > fixpoint_limit)
-        {
-          new_it->second = extrapolate_intervals(
-            previous,
-            new_it
-              ->second); // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
-        }
-      }
-
-      else
-      {
-        // Found a fixpoint, we might try to narrow now!
-        if (widening_narrowing)
-        {
-          after = interpolate_intervals(
-            new_it->second,
-            b_it
-              ->second); // ([0,100], [1,100] --> [0,100] ... ([0,inf], [1,100] --> [0,100]))
-          result |= new_it->second != after;
-          new_it->second = after;
-        }
-      }
-
-      new_it++;
+      result = true;
+      updated_map.erase(symbol);
+      continue;
     }
+
+    const auto before = previous_it->second; // [0,0]
+    const auto &after = next_it->second; // [1,100]
+    update_it->second.join(after);
+    const auto &joined = update_it->second;
+    if(before != joined)
+    {
+      result = true;
+      if (widening_extrapolate)
+        {
+        }
+    }
+    else if(before != after && widening_narrowing)
+    {
+      // Narrowing
+    }
+
+ 
   }
   return result;
 }
