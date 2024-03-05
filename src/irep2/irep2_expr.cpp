@@ -264,19 +264,28 @@ std::string symbol_data::get_symbol_name() const
   case level0:
     return thename.as_string();
   case level1:
-    return thename.as_string() + "?" + i2string(level1_num) + "!" +
-           i2string(thread_num);
+  {
+    std::ostringstream ss;
+    ss << thename.as_string() << "?" << level1_num << "!" << thread_num;
+    return ss.str();
+  }
   case level2:
-    return thename.as_string() + "?" + i2string(level1_num) + "!" +
-           i2string(thread_num) + "&" + i2string(node_num) + "#" +
-           i2string(level2_num);
+  {
+    std::ostringstream ss;
+    ss << thename.as_string() << "?" << level1_num << "!"
+       << thread_num << "&" << node_num << "#" << level2_num;
+    return ss.str();
+  }
   case level1_global:
     // Just return global name,
     return thename.as_string();
   case level2_global:
+  {
     // Global name with l2 details
-    return thename.as_string() + "&" + i2string(node_num) + "#" +
-           i2string(level2_num);
+    std::ostringstream ss;
+    ss << thename.as_string() << "&" << node_num << "#" << level2_num;
+    return ss.str();
+  }
   default:
     assert(0 && "Unrecognized renaming level enum");
     abort();
