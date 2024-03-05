@@ -158,9 +158,8 @@
   BOOST_PP_LIST_CONS(unsignedbv,                                               \
   BOOST_PP_LIST_CONS(signedbv,                                                 \
   BOOST_PP_LIST_CONS(fixedbv,                                                  \
-  BOOST_PP_LIST_CONS(string,                                                   \
   BOOST_PP_LIST_CONS(cpp_name,                                                 \
-  BOOST_PP_LIST_NIL))))))))))))))
+  BOOST_PP_LIST_NIL)))))))))))))
 // clang-format on
 
 // Even crazier forward decs,
