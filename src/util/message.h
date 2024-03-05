@@ -135,13 +135,14 @@ struct messaget
     FMT_STRING(fmt),                                                           \
     ##__VA_ARGS__)
 #define log_debug(mod, fmt, ...)                                               \
-  messaget::state.logln(                                                       \
-    mod,                                                                       \
-    VerbosityLevel::Debug,                                                     \
-    __FILE__,                                                                  \
-    __LINE__,                                                                  \
-    FMT_STRING(fmt),                                                           \
-    ##__VA_ARGS__)
+  (messaget::state.target(mod, VerbosityLevel::Debug) &&                       \
+   messaget::state.logln(                                                      \
+     mod,                                                                      \
+     VerbosityLevel::Debug,                                                    \
+     __FILE__,                                                                 \
+     __LINE__,                                                                 \
+     FMT_STRING(fmt),                                                          \
+     ##__VA_ARGS__))
 
 // TODO: Eventually this will be removed
 #ifdef ENABLE_OLD_FRONTEND
