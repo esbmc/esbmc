@@ -330,23 +330,22 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     tmp_guard -= cur_state->guard;
   }
 
-  for (const auto &[variable, _] : variables)
+  for (const auto &[variable, value] : variables)
   {
-    if (
-      goto_state.level2.current_number(variable) ==
-      cur_state->level2.current_number(variable))
-      continue; // not changed
-
     if (variable.base_name == guard_identifier_s)
       continue; // just a guard
 
-    if (has_prefix(variable.base_name.as_string(), "symex::invalid_object"))
+    if (has_prefix(variable.base_name, "symex::invalid_object"))
       continue;
 
+    auto goto_value = goto_variables.find(variable);
     // If the variable was deleted in this branch, don't create an assignment
     // for it
-    if (goto_variables.find(variable) == goto_variables.end())
+    if (goto_value == goto_variables.end())
       continue;
+
+    if (goto_value->second.count == value.count)
+      continue; // not changed
 
     // changed!
     const symbolt &symbol = *ns.lookup(variable.base_name);
