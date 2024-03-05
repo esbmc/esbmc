@@ -5,35 +5,11 @@
 #include <list>
 #include <unordered_map>
 #include <string>
+#include <string_view>
 #include <vector>
 
-struct string_ptrt
-{
-  const char *s;
-  size_t len;
-
-  const char *c_str() const
-  {
-    return s;
-  }
-
-  explicit string_ptrt(const char *_s);
-
-  explicit string_ptrt(const std::string &_s) : s(_s.c_str()), len(_s.size())
-  {
-  }
-
-  bool operator==(const string_ptrt &other) const;
-};
-
-class string_ptr_hash
-{
-public:
-  size_t operator()(const string_ptrt s) const
-  {
-    return std::hash<std::string>{}(s.s);
-  }
-};
+typedef std::string_view string_ptrt;
+typedef std::hash<string_ptrt> string_ptr_hash;
 
 class string_containert
 {
@@ -44,6 +20,11 @@ public:
   }
 
   unsigned operator[](const std::string &s)
+  {
+    return get(s);
+  }
+
+  unsigned operator[](const string_ptrt &s)
   {
     return get(s);
   }
@@ -73,8 +54,7 @@ protected:
   typedef std::unordered_map<string_ptrt, size_t, string_ptr_hash> hash_tablet;
   hash_tablet hash_table;
 
-  unsigned get(const char *s);
-  unsigned get(const std::string &s);
+  unsigned get(string_ptrt s);
 
   typedef std::list<std::string> string_listt;
   string_listt string_list;
