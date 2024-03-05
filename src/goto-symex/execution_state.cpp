@@ -837,7 +837,8 @@ void execution_statet::get_expr_globals(
       name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
       name == "c:@__ESBMC_is_dynamic" ||
       name == "c:@__ESBMC_blocked_threads_count" ||
-      name.find("c:pthread_lib") != std::string::npos)
+      name.find("c:pthread_lib") != std::string::npos ||
+      name == "c:@__ESBMC_rounding_mode")
     {
       return;
     }
