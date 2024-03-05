@@ -11,5 +11,5 @@ add_library(irep2 templates/irep2_templates_expr_data.cpp
 target_include_directories(irep2 PUBLIC ${Boost_INCLUDE_DIRS})
 target_link_libraries(irep2 PUBLIC fmt::fmt
   PUBLIC ${Boost_LIBRARIES}
+  PUBLIC bigint
   PRIVATE crypto_hash)
-

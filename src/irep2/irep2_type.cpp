@@ -280,3 +280,38 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
 
   abort();
 }
+
+namespace ksptr {
+
+FreeList::FreeList() : object_sizes(128)
+{
+  memset(free_lists, 0, sizeof(free_lists));
+}
+
+FreeList::~FreeList()
+{
+  size_t kept = 0, n = 0;
+  for (size_t sz = 0; sz < 16; sz++)
+    for (control_block *cb = free_lists[sz]; cb; cb = cb->next)
+      kept += sz * 8, n++;
+  log_status("free-lists: reused: {}, kept: {}k in {} objects",
+             reused, kept >> 10, n);
+}
+
+size_t sptrs_alive = 0, sptrs_max = 0;
+
+Arena::~Arena()
+{
+  size_t n = 0;
+  for (Block *b = head; b; b = b->next)
+    n++;
+  log_status("arena: {} blocks, total {}k", n, (sizeof(Block::data) * n) >> 10);
+  log_status("sptrs alive {} max {}", sptrs_alive, sptrs_max);
+}
+
+void *Arena::alloc(size_t n)
+{
+  return singleton()._alloc(n);
+}
+
+}

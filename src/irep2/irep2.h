@@ -33,7 +33,7 @@
 #include <util/irep.h>
 #include <vector>
 
-#include <util/ksptr.hh>
+#include <irep2/ksptr.hh>
 
 // Ahead of time: a list of all expressions and types, in a preprocessing
 // list, for enumerating later. Should avoid manually enumerating anywhere
