@@ -109,15 +109,15 @@ protected:
   * @return True if the join increases the set represented by *this, False if
   *   there is no change.
   */
-  bool join(const interval_domaint &b);
+  bool join(const interval_domaint &b, const goto_programt::const_targett &to);
 
 public:
   bool merge(
     const interval_domaint &b,
     goto_programt::const_targett,
-    goto_programt::const_targett)
+    goto_programt::const_targett to)
   {
-    return join(b);
+    return join(b, to);
   }
 
   void clear_state()
@@ -404,7 +404,7 @@ public:
 
 protected:
   template <class IntervalMap>
-  bool join(IntervalMap &new_map, const IntervalMap &previous_map);
+  bool join(IntervalMap &new_map, const IntervalMap &previous_map, const bool is_guard_instruction = true);
 
   /**
    * @brief Sets new interval for symbol
