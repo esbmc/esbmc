@@ -1020,7 +1020,8 @@ void interval_domaint::transform(
 template <class IntervalMap>
 bool interval_domaint::join(
   IntervalMap &a0,
-  const IntervalMap &a1)
+  const IntervalMap &a1,
+  const bool should_extrapolate_instruction)
 {
   // Terrible convention, a0 is both the state before join and
   // the map that needs to be updated
@@ -1063,9 +1064,8 @@ bool interval_domaint::join(
     if(before != joined)
     {
       result = true;
-      if (widening_extrapolate)
-        {
-        }
+      if (widening_extrapolate && should_extrapolate_instruction)
+          update_it->second = extrapolate_intervals(before, update_it->second);
     }
     else if(before != after && widening_narrowing)
     {
@@ -1077,7 +1077,7 @@ bool interval_domaint::join(
   return result;
 }
 
-bool interval_domaint::join(const interval_domaint &b)
+bool interval_domaint::join(const interval_domaint &b, const goto_programt::const_targett &to)
 {
   if (b.is_bottom())
     return false;
@@ -1087,8 +1087,10 @@ bool interval_domaint::join(const interval_domaint &b)
     return true;
   }
 
-  bool result = join(int_map, b.int_map) || join(real_map, b.real_map) ||
-                join(wrap_map, b.wrap_map);
+  const bool is_guard = to->is_assume() || to->is_assert() || (to->is_goto() && !is_true(to->guard));
+
+  bool result = join(int_map, b.int_map, is_guard) || join(real_map, b.real_map, is_guard) ||
+                join(wrap_map, b.wrap_map, is_guard);
   return result;
 }
 
