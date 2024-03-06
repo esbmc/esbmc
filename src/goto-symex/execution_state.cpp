@@ -18,6 +18,15 @@
 
 unsigned int execution_statet::node_count = 0;
 unsigned int execution_statet::dynamic_counter = 0;
+const std::unordered_set<std::string> execution_statet::excludedNames = {
+  "c:@__ESBMC_alloc",
+  "c:@__ESBMC_alloc_size",
+  "c:@__ESBMC_is_dynamic",
+  "c:@__ESBMC_blocked_threads_count",
+  "c:@__ESBMC_rounding_mode",
+  "c:@__ESBMC_pthread_thread_running",
+  "c:@__ESBMC_pthread_thread_ended",
+  "c:@__ESBMC_pthread_thread_detach"};
 
 execution_statet::execution_statet(
   const goto_functionst &goto_functions,
@@ -833,13 +842,7 @@ void execution_statet::get_expr_globals(
     if (!symbol)
       return;
 
-    if (
-      name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
-      name == "c:@__ESBMC_is_dynamic" ||
-      name == "c:@__ESBMC_blocked_threads_count" ||
-      name.find("c:pthread_lib") != std::string::npos ||
-      name == "c:@__ESBMC_rounding_mode" ||
-      name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
+    if (isExcluded(name))
     {
       return;
     }
@@ -1329,4 +1332,10 @@ execution_statet::state_hashing_level2t::generate_l2_state_hash() const
   c.ingest(data, total * hash_sz);
   c.fin();
   return c;
+}
+
+bool execution_statet::isExcluded(const std::string &name)
+{
+  return excludedNames.count(name) > 0 ||
+         name.find("c:pthread_lib") != std::string::npos;
 }
