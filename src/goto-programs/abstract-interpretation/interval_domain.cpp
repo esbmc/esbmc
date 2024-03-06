@@ -871,8 +871,6 @@ void interval_domaint::transform(
   ai_baset &,
   const namespacet &ns)
 {
-  from->dump();
-  to->dump();
   (void)ns;
 
   const goto_programt::instructiont &instruction = *from;
@@ -1044,8 +1042,9 @@ bool interval_domaint::join(
     // HULL(TOP, next_it) = TOP
     if(previous_it == a0.end())
     {
-      update_it->second = next_it->second;
-      result = true;
+      // Narrowing
+      //update_it->second = next_it->second;
+      //result = true;
       continue;
     }
 
