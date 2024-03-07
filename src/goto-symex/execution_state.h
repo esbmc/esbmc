@@ -490,9 +490,6 @@ public:
    *  produced code when the monitor is to be ended. */
   void kill_monitor_thread();
 
-  /** Whether to ignore this variable name to avoid context switch. */
-  bool isExcluded(const std::string &name);
-
 public:
   /** Pointer to reachability_treet that owns this ex_state */
   reachability_treet *owning_rt;
@@ -598,9 +595,6 @@ protected:
    *  switching? */
   bool smt_thread_guard;
 
-  /** Global variables excluded from context switching
-   *  Ususally these are __ESBMC variables */
-  static const std::unordered_set<std::string> excludedNames;
   // Static stuff:
 
 public:
