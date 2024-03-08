@@ -106,6 +106,7 @@ protected:
   {
     working_set.insert(
       std::pair<unsigned, goto_programt::const_targett>(l->location_number, l));
+
   }
 
   // true = found something new
@@ -162,6 +163,13 @@ protected:
   virtual statet &get_state(goto_programt::const_targett l) = 0;
   virtual const statet &find_state(goto_programt::const_targett l) const = 0;
   virtual std::unique_ptr<statet> make_temporary_state(const statet &s) = 0;
+
+  // Widening operations
+  typedef std::map<goto_programt::const_targett, std::set<goto_programt::const_targett>>
+    reverse_goto_index;
+  reverse_goto_index reverse_map;
+  bool narrowing_mode = false;
+  std::set<goto_programt::const_targett> narrowing_set;  
 };
 
 // domainT is expected to be derived from ai_domain_baseT
