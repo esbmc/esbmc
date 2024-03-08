@@ -1044,6 +1044,11 @@ bool interval_domaint::join(
     if(previous_it == a0.end())
     {
       // Narrowing
+      if(widening_narrowing && config.narrowing_mode)
+      {
+        a0[symbol] = next_it->second;
+        result = true;
+      }
       //update_it->second = next_it->second;
       //result = true;
       continue;
@@ -1067,9 +1072,10 @@ bool interval_domaint::join(
       if (widening_extrapolate && should_extrapolate_instruction)
           update_it->second = extrapolate_intervals(before, update_it->second);
     }
-    else if(before != after && widening_narrowing)
+    else if(before != after && widening_narrowing && config.narrowing_mode  )
     {
-      // Narrowing
+        update_it->second = interpolate_intervals(before, after);
+        result = true;
     }
 
  
