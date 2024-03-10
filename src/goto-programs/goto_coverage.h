@@ -27,15 +27,17 @@ public:
   // condition cov
   void
   gen_cond_cov(goto_functionst &goto_functions, const std::string &filename);
-  exprt handle_single_guard(exprt &guard);
-  void add_cond_cov_lhs_assert(
+  exprt handle_single_guard(exprt &guard, bool &flag);
+  void add_cond_cov_init_assert(
     const exprt &expr,
     goto_programt &goto_program,
     goto_programt::targett &it);
   void add_cond_cov_rhs_assert(
-    const std::string &op_tp,
-    const exprt &expr,
-    const exprt &atom,
+    const irep_idt &op_tp,
+    exprt::operandst::iterator &top_ptr,
+    exprt::operandst::iterator &rhs_ptr,
+    const exprt &pre_cond,
+    const exprt &rhs,
     goto_programt &goto_program,
     goto_programt::targett &it);
   int get_total_instrument() const;
@@ -45,11 +47,10 @@ public:
 
 protected:
   // turn a OP b OP c into a list a, b, c
-  static void collect_operands(
-    const exprt &expr,
-    std::list<exprt> &operands,
-    std::list<irep_idt> &operators,
-    bool &flag);
+  static void
+  collect_operands(const exprt &expr, std::list<exprt> &operands, bool &flag);
+  static void
+  collect_operators(const exprt &expr, std::list<std::string> &operators);
 
   static void collect_atom_operands(const exprt &expr, std::set<exprt> &atoms);
 
