@@ -506,7 +506,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"assertion-coverage-claims",
      NULL,
      "enable assertion-coverage and shows all reached claims"},
-     {"condition-coverage",
+    {"condition-coverage",
      NULL,
      "this activates --multi-property, "
      "deactivates --keep-verified-claims, and "
@@ -514,7 +514,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"condition-coverage-claims",
      NULL,
      "enable condition-coverage and shows the instrumented claims"}}},
-  {"end", {{"", NULL, "end of options"},}},
+  {"end",
+   {
+     {"", NULL, "end of options"},
+   }},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "instruction"},
     {"explain,h", NULL, ""}}}};
