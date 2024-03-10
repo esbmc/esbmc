@@ -158,59 +158,91 @@ void goto_coveraget::gen_cond_cov(
           !is_true(it->guard) && it->is_goto() &&
           filename == it->location.file().as_string())
         {
-          // preprocessing
+          // preprocessing: if(true) ==> if(true == true)
           exprt guard = migrate_expr_back(it->guard);
-          guard = handle_single_guard(guard);
-          log_status("111");
+          bool dump = false;
+          guard = handle_single_guard(guard, dump);
+
           // split the guard
           std::list<exprt> operands;
-          std::list<irep_idt> operators;
-          bool dump = false;
-          collect_operands(guard, operands, operators, dump);
-
+          std::list<std::string> operators;
+          dump = false;
+          collect_operands(guard, operands, dump);
+          collect_operators(guard, operators);
           assert(!operators.empty());
-          for (const auto &i : operators)
-            log_status("{}", i.as_string());
-
-          for (const auto &i : operands)
-            log_status("{}", i.to_string());
 
           auto opd = operands.begin();
           auto opt = operators.begin();
 
           // fisrt atoms
           std::set<exprt> atoms;
-          exprt &lhs = *opd;
-          collect_atom_operands(lhs, atoms);
-          add_cond_cov_lhs_assert(*atoms.begin(), goto_program, it);
+          collect_atom_operands(*opd, atoms);
+          add_cond_cov_init_assert(*atoms.begin(), goto_program, it);
 
+          // set up pointer to re-build the binary tree
+          //   ||       <-- top_ptr
+          // a    &&
+          //     b   c   <--- rhs_ptr
+          exprt root;
+          root.operands().push_back(*opd);
+          exprt::operandst::iterator top_ptr = root.operands().begin();
+          exprt::operandst::iterator rhs_ptr = top_ptr;
+          std::vector<exprt::operandst::iterator> top_ptr_stack;
           opd++;
+
           while (opd != operands.end() && opt != operators.end())
           {
-            // rhs
-            atoms = {};
-            const exprt &rhs = *opd;
-            collect_atom_operands(rhs, atoms);
-            assert(atoms.size() == 1);
+            if (*opt == "(")
+            {
+              if (!top_ptr->is_empty())
+              {
+                // store
+                top_ptr_stack.push_back(top_ptr);
+                top_ptr = rhs_ptr;
+              }
+              ++opt;
+              continue;
+            }
+            else if (*opt == ")")
+            {
+              if (!top_ptr_stack.empty())
+              {
+                // retrieve top_ptr
+                top_ptr = top_ptr_stack.back();
+                top_ptr_stack.pop_back();
+              }
+              ++opt;
+              continue;
+            }
+            else if (*opt == "&&" || *opt == "||")
+            {
+              // get atom
+              atoms = {};
+              const exprt elem = *opd;
+              collect_atom_operands(elem, atoms);
+              assert(atoms.size() == 1);
+              const auto &atom = *atoms.begin();
+              irep_idt op = (*opt) == "&&" ? exprt::id_and : exprt::id_or;
+              add_cond_cov_rhs_assert(
+                op, top_ptr, rhs_ptr, root, atom, goto_program, it);
+            }
+            else
+            {
+              log_error("Unexpected operators");
+              abort();
+            }
 
-            const auto &atom = *atoms.begin();
-            exprt pre_cond_expr = exprt("and", bool_type());
-            pre_cond_expr.operands().push_back(lhs);
-            pre_cond_expr.operands().push_back(atom);
-            add_cond_cov_rhs_assert(
-              (*opt).as_string(), pre_cond_expr, atom, goto_program, it);
-            lhs = pre_cond_expr;
-
-            // update
-            opd++;
+            // update counter
+            ++opd;
             ++opt;
           }
+          assert(!top_ptr_stack.empty());
         }
       }
     }
 }
 
-void goto_coveraget::add_cond_cov_lhs_assert(
+void goto_coveraget::add_cond_cov_init_assert(
   const exprt &expr,
   goto_programt &goto_program,
   goto_programt::targett &it)
@@ -231,21 +263,36 @@ void goto_coveraget::add_cond_cov_lhs_assert(
 }
 
 void goto_coveraget::add_cond_cov_rhs_assert(
-  const std::string &op_tp,
-  const exprt &lhs,
-  const exprt &atom,
+  const irep_idt &op_tp,
+  exprt::operandst::iterator &top_ptr,
+  exprt::operandst::iterator &rhs_ptr,
+  const exprt &pre_cond,
+  const exprt &rhs,
   goto_programt &goto_program,
   goto_programt::targett &it)
 {
-  exprt and_expr = exprt(op_tp, bool_type());
-  and_expr.operands().push_back(lhs);
-  and_expr.operands().push_back(atom);
-  expr2tc guard;
-  migrate_expr(and_expr, guard);
-  expr2tc a_guard;
-  migrate_expr(atom, a_guard);
+  // 0. store previous state
+  exprt old_top = *top_ptr;
 
-  // modified insert_assert
+  // 1. build new joined expr
+  exprt join_expr = exprt(op_tp, bool_type());
+  exprt not_expr = exprt("not", bool_type());
+  not_expr.operands().push_back(rhs);
+  join_expr.operands().push_back(*top_ptr);
+  join_expr.operands().push_back(not_expr);
+
+  // 2. replace top_expr with the joined expr
+  // the pre_cond is also changed during this process
+  *top_ptr = join_expr;
+
+  // 3. obtain guard
+  expr2tc guard;
+  migrate_expr(pre_cond.op0(), guard);
+  expr2tc a_guard;
+  migrate_expr(rhs, a_guard);
+  make_not(a_guard);
+
+  // 4. modified insert_assert
   goto_programt::targett t = goto_program.insert(it);
   t->type = ASSERT;
   t->guard = guard;
@@ -260,15 +307,13 @@ void goto_coveraget::add_cond_cov_rhs_assert(
     from_expr(ns, "", a_guard) + "\t" + it->location.as_string();
   total_cond_assert.insert(idf);
 
-  // reversal
-  and_expr.clear();
-  and_expr = exprt(op_tp, bool_type());
-  exprt not_expr = exprt("not", bool_type());
-  not_expr.operands().push_back(atom);
-  and_expr.operands().push_back(lhs);
-  and_expr.operands().push_back(not_expr);
-  migrate_expr(and_expr, guard);
-  make_not(a_guard);
+  // 5. reversal
+  join_expr.clear();
+  join_expr = exprt(op_tp, bool_type());
+  join_expr.operands().push_back(old_top);
+  join_expr.operands().push_back(rhs);
+  *top_ptr = join_expr;
+  migrate_expr(pre_cond.op0(), guard);
   t = goto_program.insert(it);
   t->type = ASSERT;
   t->guard = guard;
@@ -281,6 +326,10 @@ void goto_coveraget::add_cond_cov_rhs_assert(
 
   idf = from_expr(ns, "", a_guard) + "\t" + it->location.as_string();
   total_cond_assert.insert(idf);
+
+  // 6. update rhs_ptr
+  rhs_ptr = top_ptr->operands().begin();
+  rhs_ptr++;
 }
 
 /*
@@ -289,7 +338,6 @@ void goto_coveraget::add_cond_cov_rhs_assert(
 void goto_coveraget::collect_operands(
   const exprt &expr,
   std::list<exprt> &operands,
-  std::list<irep_idt> &operators,
   bool &flag)
 {
   const std::string &id = expr.id().as_string();
@@ -297,12 +345,12 @@ void goto_coveraget::collect_operands(
   if ((id == "and" || id == "or") && flag == false)
   {
     bool flg0 = false;
-    collect_operands(expr.op0(), operands, operators, flg0);
+    collect_operands(expr.op0(), operands, flg0);
     if (!flg0)
       operands.push_back(expr.op0());
-    operators.push_back(id);
+    // operators.push_back(id);
     bool flg1 = false;
-    collect_operands(expr.op1(), operands, operators, flg1);
+    collect_operands(expr.op1(), operands, flg1);
     if (!flg1)
       operands.push_back(expr.op1());
     flag = true;
@@ -310,8 +358,7 @@ void goto_coveraget::collect_operands(
   else
   {
     forall_operands (it, expr)
-      collect_operands(*it, operands, operators, flag);
-    flag |= false;
+      collect_operands(*it, operands, flag);
   }
 }
 
@@ -330,33 +377,71 @@ void goto_coveraget::collect_atom_operands(
   }
 }
 
-exprt goto_coveraget::handle_single_guard(exprt &expr)
+void goto_coveraget::collect_operators(
+  const exprt &expr,
+  std::list<std::string> &operators)
+{
+  std::string str = from_expr(expr);
+  std::list<std::string> opt;
+  for (std::size_t i = 0; i < str.length(); i++)
+  {
+    if (str[i] == '|' && str[i + 1] == '|')
+    {
+      opt.push_back("||");
+      i++;
+    }
+    else if (str[i] == '&' && str[i + 1] == '&')
+    {
+      opt.push_back("&&");
+      i++;
+    }
+    else if (str[i] == '(')
+      opt.push_back("(");
+    else if (str[i] == ')')
+      opt.push_back(")");
+  }
+  operators = opt;
+
+  // add implied parentheses in boolean expression
+  // e.g. if(a&&b || c&&d) ==> if((a&&b) || (c&&d))
+  // general rule: add parenthesis between || and &&
+  //TODO
+}
+
+exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
 {
   if (
     expr.operands().size() == 1 ||
     (expr.operands().size() == 0 && expr.id() == "constant"))
   {
     // e.g. if(!(a++)) => if(!(a++!=0) ！=0) if(true) ==> if(1==0)
+    bool flg0 = false;
     Forall_operands (it, expr)
-      *it = handle_single_guard(*it);
-
-    exprt not_eq_expr = exprt("notequal", bool_type());
-    exprt new_expr = constant_exprt(
-      integer2binary(string2integer("0"), bv_width(int_type())),
-      "0",
-      int_type());
-    not_eq_expr.operands().push_back(expr);
-    not_eq_expr.operands().push_back(new_expr);
-    return not_eq_expr;
+    {
+      *it = handle_single_guard(*it, flg0);
+    }
+    flag = true;
+    if (!flg0)
+    {
+      exprt not_eq_expr = exprt("notequal", bool_type());
+      expr2tc tmp = gen_true_expr();
+      exprt new_expr = migrate_expr_back(tmp);
+      not_eq_expr.operands().push_back(expr);
+      not_eq_expr.operands().push_back(new_expr);
+      return not_eq_expr;
+    }
+    else
+      return expr;
   }
 
-  else if (expr.id() == exprt::id_and || expr.id() == exprt::id_or)
+  if (
+    (expr.id() == exprt::id_and || expr.id() == exprt::id_or) && flag == false)
   {
     Forall_operands (it, expr)
     {
-      std::set<exprt> tmp;
-      collect_atom_operands(*it, tmp);
-      if (tmp.empty())
+      bool flg0 = false;
+      *it = handle_single_guard(*it, flg0);
+      if (!flg0)
       {
         // e.g. (a+1) && (b+2 == 1) => (a+1 != 0) && (b+2 == 1)
         exprt not_eq_expr = exprt("notequal", bool_type());
@@ -369,12 +454,19 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
         *it = not_eq_expr;
       }
     }
-  }
-  else
-  {
-    Forall_operands (it, expr)
-      *it = handle_single_guard(*it);
+    flag = true;
   }
 
+  const std::string &id = expr.id().as_string();
+  if (!(id == "=" || id == "notequal" || id == ">" || id == "<" || id == ">=" ||
+        id == "<="))
+  {
+    Forall_operands (it, expr)
+    {
+      *it = handle_single_guard(*it, flag);
+    }
+  }
+  else
+    flag = true;
   return expr;
 }
