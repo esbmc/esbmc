@@ -333,7 +333,7 @@ void goto_coveraget::add_cond_cov_rhs_assert(
 }
 
 /*
-  - flag: if we have handled one 
+  - flag: if we have handled one
 */
 void goto_coveraget::collect_operands(
   const exprt &expr,
@@ -405,7 +405,7 @@ void goto_coveraget::collect_operators(
   // add implied parentheses in boolean expression
   // e.g. if(a&&b || c&&d) ==> if((a&&b) || (c&&d))
   // general rule: add parenthesis between || and &&
-  //TODO
+  // TODO
 }
 
 exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
