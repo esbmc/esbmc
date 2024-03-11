@@ -312,7 +312,10 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   join_expr.operands().emplace_back(old_top);
   join_expr.operands().emplace_back(rhs);
   *top_ptr = join_expr;
+
   migrate_expr(pre_cond.op0(), guard);
+  migrate_expr(rhs, a_guard);
+
   t = goto_program.insert(it);
   t->type = ASSERT;
   t->guard = guard;
