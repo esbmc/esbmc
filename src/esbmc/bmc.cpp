@@ -964,7 +964,7 @@ smt_convt::resultt bmct::multi_property_check(
 
     const std::unordered_set<std::string> &total_cond_assert =
       goto_coveraget(ns).get_total_cond_assert();
-    const int tracked_instance = reached_claims.size();
+    int tracked_instance = 0;
     const int total_instance = total_cond_assert.size();
 
     // show claims
@@ -974,19 +974,53 @@ smt_convt::resultt bmct::multi_property_check(
       for (const auto &claim : total_cond_assert)
       {
         if (reached_claims.count(claim))
+        {
           log_status("  {} : SATISFIED", claim);
+          tracked_instance++;
+          reached_claims.erase(claim);
+
+          // reversal
+          std::string delimiter = "\t";
+          auto pos = claim.find(delimiter);
+          std::string claim_msg = claim.substr(0, pos);
+          std::string claim_loc = claim.substr(pos + 1);
+          if (
+            claim_msg[0] == '!' && claim_msg[1] == '(' &&
+            claim_msg.back() == ')')
+          {
+            // e.g. !(a==1)
+            std::string r_claim =
+              claim_msg.substr(2, claim_msg.length() - 3) + "\t" + claim_loc;
+            if (reached_claims.count(r_claim))
+              log_status("  {} : SATISFIED", r_claim);
+            else
+              log_status("  {} : UNSATISFIED", r_claim);
+            tracked_instance++;
+            reached_claims.erase(r_claim);
+          }
+          else
+          {
+            std::string r_claim = "!(" + claim_msg + ")" + "\t" + claim_loc;
+            if (reached_claims.count(r_claim))
+              log_status("  {} : SATISFIED", r_claim);
+            else
+              log_status("  {} : UNSATISFIED", r_claim);
+            tracked_instance++;
+            reached_claims.erase(r_claim);
+          }
+        }
       }
 
-      // short-circuited:
+      // TODO
+      // show short-circuited:
       // e.g. if both assert(a==1); and assert(!(a==1));
     }
 
     if (total_instance != 0)
       log_result(
-        "Condition Instances Coverage: {}%",
-        tracked_instance * 100.0 / total_instance);
+        "Condition Coverage: {}%", tracked_instance * 100.0 / total_instance);
     else
-      log_result("Condition Instances Coverage: 0%");
+      log_result("Condition Coverage: 0%");
   }
   return final_result;
 }
