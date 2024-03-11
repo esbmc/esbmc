@@ -2,7 +2,6 @@
 /// Abstract Interpretation
 
 #include "ai.h"
-#include "goto-programs/goto_program.h"
 
 #include <cassert>
 #include <memory>
@@ -95,8 +94,6 @@ bool ai_baset::fixedpoint(
 {
   working_sett working_set;
 
-  config.narrowing_mode = false;
-
   // Put the first location in the working set
   if (!goto_program.empty())
     put_in_working_set(working_set, goto_program.instructions.begin());
@@ -112,23 +109,6 @@ bool ai_baset::fixedpoint(
       new_data = true;
   }
 
-  config.narrowing_mode = true;
-
-  for(const auto &it : reverse_map)
-  {
-    for(const auto &itt : it.second)
-      put_in_working_set(working_set, itt);
-  }
-
-  while (!working_set.empty())
-  {
-    goto_programt::const_targett l = get_next(working_set);
-
-    // goto_program is really only needed for iterator manipulation
-    if (visit(l, working_set, goto_program, goto_functions, ns))
-      new_data = true;
-  }
-  config.narrowing_mode = false;
   return new_data;
 }
 
@@ -151,8 +131,6 @@ bool ai_baset::visit(
     if (to_l == goto_program.instructions.end())
       continue;
 
-    if(to_l->is_goto())
-      reverse_map[to_l].insert(l);
     std::unique_ptr<statet> tmp_state(make_temporary_state(current));
 
     statet &new_values = *tmp_state;
@@ -176,21 +154,6 @@ bool ai_baset::visit(
 
       if (merge(new_values, l, to_l))
         have_new_values = true;
-    }
-
-    if(config.narrowing_mode && have_new_values)
-    {
-      for(const auto &prev : reverse_map[to_l])
-      {
-        if(prev == l)
-          continue;
-        statet &current = get_state(prev);
-        std::unique_ptr<statet> tmp_state(make_temporary_state(current));
-
-        statet &new_values = *tmp_state;
-        new_values.transform(prev, to_l, *this, ns);
-        merge(new_values, prev, to_l);
-      }
     }
 
     if (have_new_values)
