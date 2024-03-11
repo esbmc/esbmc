@@ -103,6 +103,20 @@ typet python_converter::get_typet(const std::string &ast_type)
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
+  if (ast_type == "bytes")
+  {
+    typet char_type = signed_char_type();
+    char_type.set("#cpp_type", "signed_char");
+    typet t = array_typet(
+      char_type,
+      constant_exprt(
+        integer2binary(
+          BigInt(5), bv_width(size_type())), // TODO: Get string size
+        integer2string(BigInt(5)),
+        size_type()));
+    t.dump();
+    return t;
+  }
   if (is_class(ast_type, ast_json))
     return symbol_typet("tag-" + ast_type);
   return empty_typet();
