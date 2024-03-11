@@ -73,6 +73,9 @@ set(DEFAULT_Z3_NAME z3-4.12.6-x64-glibc-2.35)
 
 set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-linux-x86_64.tar.gz")
 set(MATHSAT_NAME "mathsat-5.6.10-linux-x86_64")
+  
+set(DEFAULT_CVC_URL "https://github.com/cvc5/cvc5/releases/download/latest/cvc5-Linux-static-2024-03-08-20e739f.zip")
+set(DEFAULT_CVC_NAME cvc5-Linux-static)
 endif()
 
 set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")
@@ -81,6 +84,8 @@ set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted dir
 set(ESBMC_Z3_URL ${DEFAULT_Z3_URL} CACHE STRING "URL to download prebuilt Z3")
 set(ESBMC_Z3_NAME ${DEFAULT_Z3_NAME} CACHE STRING "Name of the extracted directory of Z3")
 
+set(ESBMC_CVC_URL ${DEFAULT_CVC_URL} CACHE STRING "URL to download prebuilt CVC")
+set(ESBMC_CVC_NAME ${DEFAULT_CVC_NAME} CACHE STRING "Name of the extracted directory of CVC")
 #############################
 # CMake extra Vars
 #############################
