@@ -206,11 +206,13 @@ private:
   std::string get_type_from_element(const Json &elem) const
   {
     if (elem.is_number_integer() || elem.is_number_unsigned())
-      return std::string("int");
-    else if (elem.is_boolean())
-      return std::string("bool");
-    else if (elem.is_number_float())
-      return std::string("float");
+      return "int";
+    if (elem.is_number_float())
+      return "float";
+    if (elem.is_boolean())
+      return "bool";
+    if (elem.is_string())
+      return "str";
 
     return std::string();
   }
