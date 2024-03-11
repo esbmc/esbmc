@@ -184,7 +184,7 @@ void goto_coveraget::gen_cond_cov(
           // a    &&
           //     b   c   <--- rhs_ptr
           exprt root;
-          root.operands().push_back(*opd);
+          root.operands().emplace_back(*opd);
           exprt::operandst::iterator top_ptr = root.operands().begin();
           exprt::operandst::iterator rhs_ptr = top_ptr;
           std::vector<exprt::operandst::iterator> top_ptr_stack;
@@ -197,7 +197,7 @@ void goto_coveraget::gen_cond_cov(
               if (!top_ptr->is_empty())
               {
                 // store
-                top_ptr_stack.push_back(top_ptr);
+                top_ptr_stack.emplace_back(top_ptr);
                 top_ptr = rhs_ptr;
               }
               ++opt;
@@ -236,7 +236,6 @@ void goto_coveraget::gen_cond_cov(
             ++opd;
             ++opt;
           }
-          assert(!top_ptr_stack.empty());
         }
       }
     }
@@ -277,9 +276,9 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   // 1. build new joined expr
   exprt join_expr = exprt(op_tp, bool_type());
   exprt not_expr = exprt("not", bool_type());
-  not_expr.operands().push_back(rhs);
-  join_expr.operands().push_back(*top_ptr);
-  join_expr.operands().push_back(not_expr);
+  not_expr.operands().emplace_back(rhs);
+  join_expr.operands().emplace_back(*top_ptr);
+  join_expr.operands().emplace_back(not_expr);
 
   // 2. replace top_expr with the joined expr
   // the pre_cond is also changed during this process
@@ -310,8 +309,8 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   // 5. reversal
   join_expr.clear();
   join_expr = exprt(op_tp, bool_type());
-  join_expr.operands().push_back(old_top);
-  join_expr.operands().push_back(rhs);
+  join_expr.operands().emplace_back(old_top);
+  join_expr.operands().emplace_back(rhs);
   *top_ptr = join_expr;
   migrate_expr(pre_cond.op0(), guard);
   t = goto_program.insert(it);
@@ -347,12 +346,12 @@ void goto_coveraget::collect_operands(
     bool flg0 = false;
     collect_operands(expr.op0(), operands, flg0);
     if (!flg0)
-      operands.push_back(expr.op0());
-    // operators.push_back(id);
+      operands.emplace_back(expr.op0());
+    // operators.emplace_back(id);
     bool flg1 = false;
     collect_operands(expr.op1(), operands, flg1);
     if (!flg1)
-      operands.push_back(expr.op1());
+      operands.emplace_back(expr.op1());
     flag = true;
   }
   else
@@ -387,25 +386,92 @@ void goto_coveraget::collect_operators(
   {
     if (str[i] == '|' && str[i + 1] == '|')
     {
-      opt.push_back("||");
+      opt.emplace_back("||");
       i++;
     }
     else if (str[i] == '&' && str[i + 1] == '&')
     {
-      opt.push_back("&&");
+      opt.emplace_back("&&");
       i++;
     }
     else if (str[i] == '(')
-      opt.push_back("(");
+      opt.emplace_back("(");
     else if (str[i] == ')')
-      opt.push_back(")");
+      opt.emplace_back(")");
   }
-  operators = opt;
 
   // add implied parentheses in boolean expression
   // e.g. if(a&&b || c&&d) ==> if((a&&b) || (c&&d))
   // general rule: add parenthesis between || and &&
-  // TODO
+  // (&&||&&)
+  std::list<std::string> tmp;
+  std::string lst_op = "";
+  std::vector<std::string> pnt_stk;
+  for (auto &op : opt)
+  {
+    if (op == "(")
+    {
+      if (pnt_stk.empty())
+      {
+        operators.insert(operators.end(), tmp.begin(), tmp.end());
+        tmp.clear();
+      }
+      pnt_stk.emplace_back("(");
+    }
+    else if (op == ")")
+    {
+      tmp.emplace_back(")");
+      tmp.emplace_front("(");
+      if (!pnt_stk.empty())
+        pnt_stk.pop_back();
+
+      if (pnt_stk.empty())
+      {
+        operators.insert(operators.end(), tmp.begin(), tmp.end());
+        tmp.clear();
+      }
+    }
+    else if (op == "&&" && lst_op == "||")
+    {
+      if (pnt_stk.empty())
+      {
+        operators.insert(operators.end(), tmp.begin(), tmp.end());
+        tmp.clear();
+      }
+      pnt_stk.push_back("(");
+      tmp.emplace_back(op);
+    }
+    else if (op == "||" && lst_op == "&&")
+    {
+      tmp.emplace_front("(");
+      tmp.emplace_back(")");
+      if (!pnt_stk.empty())
+        pnt_stk.pop_back();
+
+      if (pnt_stk.empty())
+      {
+        operators.insert(operators.end(), tmp.begin(), tmp.end());
+        tmp.clear();
+      }
+      tmp.emplace_back(op);
+    }
+    else
+    {
+      tmp.emplace_back(op);
+    }
+    lst_op = op;
+  }
+
+  if (!tmp.empty())
+  {
+    while (!pnt_stk.empty())
+    {
+      tmp.emplace_back(")");
+      tmp.emplace_front("(");
+      pnt_stk.pop_back();
+    }
+    operators.insert(operators.end(), tmp.begin(), tmp.end());
+  }
 }
 
 exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
@@ -426,8 +492,8 @@ exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
       exprt not_eq_expr = exprt("notequal", bool_type());
       expr2tc tmp = gen_true_expr();
       exprt new_expr = migrate_expr_back(tmp);
-      not_eq_expr.operands().push_back(expr);
-      not_eq_expr.operands().push_back(new_expr);
+      not_eq_expr.operands().emplace_back(expr);
+      not_eq_expr.operands().emplace_back(new_expr);
       return not_eq_expr;
     }
     else
@@ -449,8 +515,8 @@ exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
           integer2binary(string2integer("0"), bv_width(int_type())),
           "0",
           int_type());
-        not_eq_expr.operands().push_back(*it);
-        not_eq_expr.operands().push_back(new_expr);
+        not_eq_expr.operands().emplace_back(*it);
+        not_eq_expr.operands().emplace_back(new_expr);
         *it = not_eq_expr;
       }
     }
