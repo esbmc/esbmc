@@ -151,10 +151,6 @@ public:
 
   // For caching ssa assertions
   assert_db ssa_caching_db;
-
-  // For AI to known the correct mode
-  bool narrowing_mode = false;
-  bool extrapolate_mode = false;
 };
 
 extern configt config;
