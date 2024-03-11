@@ -677,6 +677,20 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       expr = gen_boolean(value.get<bool>());
     else if (value.is_number_float())
       convert_float_literal(value.dump(), expr);
+    else if (value.is_string() && current_element_type.is_array())
+    {
+      expr = gen_zero(current_element_type);
+      typet t = signed_char_type();
+      unsigned int i = 0;
+      for (char &ch : element["value"].get<std::string>())
+      {
+        exprt char_value = constant_exprt(
+          integer2binary(BigInt(ch), bv_width(t)),
+          integer2string(BigInt(ch)),
+          t);
+        expr.operands().at(i++) = char_value;
+      }
+    }
     break;
   }
   case ExpressionType::VARIABLE_REF:
