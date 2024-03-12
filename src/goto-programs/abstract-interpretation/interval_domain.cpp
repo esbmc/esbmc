@@ -1,7 +1,6 @@
 /// \file
 /// Interval Domain
 // TODO: Ternary operators, lessthan into lessthanequal for integers
-#include "irep.h"
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <goto-programs/abstract-interpretation/bitwise_bounds.h>
 #include <util/arith_tools.h>
@@ -247,8 +246,8 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after)
   bool upper_increased = !after.upper || (before.upper && after.upper &&
                                           *after.upper > *before.upper);
 
-  //if ((lower_decreased || upper_increased) && !widening_under_approximate_bound)
-  //  return result;
+  if ((lower_decreased || upper_increased) && !widening_under_approximate_bound)
+    return result;
 
   // Set lower bound: if we didn't decrease then just update the interval
   if (!lower_decreased)
@@ -1044,8 +1043,10 @@ bool interval_domaint::join(
     if(previous_it == a0.end())
     {
       // Narrowing
-      //update_it->second = next_it->second;
-      //result = true;
+      if(widening_narrowing)
+      {
+        // TODO: Narrowing needs more fixes
+      }
       continue;
     }
 
@@ -1070,6 +1071,7 @@ bool interval_domaint::join(
     else if(before != after && widening_narrowing)
     {
       // Narrowing
+      // TODO: Narrowing needs more fixes
     }
 
  
