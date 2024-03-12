@@ -9,7 +9,7 @@ if(EXISTS $ENV{HOME}/cvc5)
 else()
   if(ENABLE_CVC5 AND DOWNLOAD_DEPENDENCIES)
         download_zip_and_extract(CVC ${ESBMC_CVC_URL})
-        set(CVC5_DIR ${CMAKE_BINARY_DIR}/CVC/${ESBMC_CVC_NAME} PARENT_SCOPE)
+        set(CVC5_DIR ${CMAKE_BINARY_DIR}/CVC/${ESBMC_CVC_NAME})
     endif()
 endif()
 
