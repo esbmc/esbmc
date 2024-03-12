@@ -847,9 +847,10 @@ bool clang_cpp_convertert::get_constructor_call(
 
   if (new_expr.base_ctor_derived())
     gen_typecast_base_ctor_call(callee_decl, call, new_expr);
-  else if (new_expr.get_bool("memberInit"))
+  else if (
+    new_expr.get_bool("memberInit") &&
+    !callee_decl.type().return_type().get_bool("#copy_cons"))
   {
-    // do nothing
   }
   else
   {
@@ -1581,8 +1582,8 @@ void clang_cpp_convertert::annotate_cpyctor(
   const clang::CXXMethodDecl &cxxmdd,
   typet &rtn_type)
 {
-  if (is_defaulted_ctor(cxxmdd) && is_cpyctor(cxxmdd))
-    rtn_type.set("#default_copy_cons", true);
+  if (is_cpyctor(cxxmdd))
+    rtn_type.set("#copy_cons", true);
 }
 
 bool clang_cpp_convertert::is_cpyctor(const clang::DeclContext &dcxt)
