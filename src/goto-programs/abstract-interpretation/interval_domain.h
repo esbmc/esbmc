@@ -404,7 +404,10 @@ public:
 
 protected:
   template <class IntervalMap>
-  bool join(IntervalMap &new_map, const IntervalMap &previous_map, const bool is_guard_instruction = true);
+  bool join(
+    IntervalMap &new_map,
+    const IntervalMap &previous_map,
+    const bool is_guard_instruction = true);
 
   /**
    * @brief Sets new interval for symbol

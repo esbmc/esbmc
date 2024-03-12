@@ -1024,26 +1024,26 @@ bool interval_domaint::join(
 {
   // Terrible convention, a0 is both the state before join and
   // the map that needs to be updated
-  IntervalMap &updated_map = a0;  
+  IntervalMap &updated_map = a0;
   bool result = false;
   std::unordered_set<irep_idt, irep_id_hash> symbol_map;
-  for(const auto &myPair : a0)
+  for (const auto &myPair : a0)
     symbol_map.insert(myPair.first);
-  for(const auto &myPair : a1)
+  for (const auto &myPair : a1)
     symbol_map.insert(myPair.first);
 
   // Here we apply the HULL operation (before, after)
-  for(const irep_idt &symbol : symbol_map)
+  for (const irep_idt &symbol : symbol_map)
   {
     const auto previous_it = a0.find(symbol);
     const auto next_it = a1.find(symbol);
     const auto &update_it = previous_it;
 
     // HULL(TOP, next_it) = TOP
-    if(previous_it == a0.end())
+    if (previous_it == a0.end())
     {
       // Narrowing
-      if(widening_narrowing)
+      if (widening_narrowing)
       {
         // TODO: Narrowing needs more fixes
       }
@@ -1051,7 +1051,7 @@ bool interval_domaint::join(
     }
 
     // HULL (previous_it, TOP) = TOP
-    if(next_it == a1.end())
+    if (next_it == a1.end())
     {
       result = true;
       updated_map.erase(symbol);
@@ -1059,27 +1059,27 @@ bool interval_domaint::join(
     }
 
     const auto before = previous_it->second; // [0,0]
-    const auto &after = next_it->second; // [1,100]
+    const auto &after = next_it->second;     // [1,100]
     update_it->second.join(after);
     const auto &joined = update_it->second;
-    if(before != joined)
+    if (before != joined)
     {
       result = true;
       if (widening_extrapolate && should_extrapolate_instruction)
-          update_it->second = extrapolate_intervals(before, update_it->second);
+        update_it->second = extrapolate_intervals(before, update_it->second);
     }
-    else if(before != after && widening_narrowing)
+    else if (before != after && widening_narrowing)
     {
       // Narrowing
       // TODO: Narrowing needs more fixes
     }
-
- 
   }
   return result;
 }
 
-bool interval_domaint::join(const interval_domaint &b, const goto_programt::const_targett &to)
+bool interval_domaint::join(
+  const interval_domaint &b,
+  const goto_programt::const_targett &to)
 {
   if (b.is_bottom())
     return false;
@@ -1089,9 +1089,11 @@ bool interval_domaint::join(const interval_domaint &b, const goto_programt::cons
     return true;
   }
 
-  const bool is_guard = to->is_assume() || to->is_assert() || (to->is_goto() && !is_true(to->guard));
+  const bool is_guard = to->is_assume() || to->is_assert() ||
+                        (to->is_goto() && !is_true(to->guard));
 
-  bool result = join(int_map, b.int_map, is_guard) || join(real_map, b.real_map, is_guard) ||
+  bool result = join(int_map, b.int_map, is_guard) ||
+                join(real_map, b.real_map, is_guard) ||
                 join(wrap_map, b.wrap_map, is_guard);
   return result;
 }
