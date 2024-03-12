@@ -837,12 +837,6 @@ bool clang_cpp_convertert::get_constructor_call(
    */
 
   // Calling base constructor from derived constructor
-
-  // auto parents = ASTContext->getParents(constructor_call);
-  // auto it = parents.begin();
-  // const clang::Decl *objectDecl = it->get<clang::Decl>();
-  // need_new_object(it->get<clang::Stmt>(), constructor_call);
-
   bool need_new_obj = false;
 
   if (new_expr.base_ctor_derived())
