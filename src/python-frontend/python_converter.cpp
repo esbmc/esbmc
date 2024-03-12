@@ -91,7 +91,7 @@ static struct_typet::componentt build_component(
 }
 
 // Convert Python/AST types to irep2 types
-typet python_converter::get_typet(const std::string &ast_type)
+typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
 {
   if (ast_type == "float")
     return double_type();
@@ -110,11 +110,9 @@ typet python_converter::get_typet(const std::string &ast_type)
     typet t = array_typet(
       char_type,
       constant_exprt(
-        integer2binary(
-          BigInt(5), bv_width(size_type())), // TODO: Get string size
-        integer2string(BigInt(5)),
+        integer2binary(BigInt(type_size), bv_width(size_type())),
+        integer2string(BigInt(type_size)),
         size_type()));
-    t.dump();
     return t;
   }
   if (is_class(ast_type, ast_json))
@@ -874,8 +872,12 @@ void python_converter::get_var_assign(
   if (ast_node.contains("annotation"))
   {
     // Get type from current annotation node
+    size_t type_size = 0;
+    if (ast_node["value"].contains("value") && ast_node["value"]["value"].is_string())
+      type_size = ast_node["value"]["value"].get<std::string>().size();
+
     current_element_type =
-      get_typet(ast_node["annotation"]["id"].get<std::string>());
+      get_typet(ast_node["annotation"]["id"].get<std::string>(), type_size);
   }
   else
   {

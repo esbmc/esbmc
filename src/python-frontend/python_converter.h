@@ -39,7 +39,7 @@ private:
   std::string create_symbol_id() const;
   std::string create_symbol_id(const std::string &filename) const;
   bool is_constructor_call(const nlohmann::json &json);
-  typet get_typet(const std::string &ast_type);
+  typet get_typet(const std::string &ast_type, size_t type_size = 0);
   typet get_typet(const nlohmann::json &elem);
   void get_attributes_from_self(
     const nlohmann::json &method_body,
