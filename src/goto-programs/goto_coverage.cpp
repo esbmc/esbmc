@@ -261,6 +261,20 @@ void goto_coveraget::add_cond_cov_init_assert(
   total_cond_assert.insert(idf);
 }
 
+/*
+  algo:
+  if(b==0 && c > 90)
+  => assert(b==0)
+  => assert(!(b==0));
+  => assert(!(b==0 && c>90))
+  => assert(!(b==0 && !(c>90)))
+
+  if(b==0 || c > 90)
+  => assert(b==0)
+  => assert((b==0));
+  => assert(!(!b==0 && c>90))
+  => assert(!(!b==0 && !(c>90)))
+*/
 void goto_coveraget::add_cond_cov_rhs_assert(
   const irep_idt &op_tp,
   exprt::operandst::iterator &top_ptr,
@@ -271,22 +285,35 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   goto_programt::targett &it)
 {
   // 0. store previous state
-  exprt old_top = *top_ptr;
+  exprt old_top_ptr = *top_ptr;
 
   // 1. build new joined expr
-  exprt join_expr = exprt(op_tp, bool_type());
-  exprt not_expr = exprt("not", bool_type());
-  not_expr.operands().emplace_back(rhs);
-  join_expr.operands().emplace_back(*top_ptr);
-  join_expr.operands().emplace_back(not_expr);
+  exprt lhs_expr;
+  if (op_tp == exprt::id_or)
+  {
+    exprt not_expr = exprt("not", bool_type());
+    not_expr.operands().emplace_back(*top_ptr);
+    lhs_expr = not_expr;
+  }
+  else
+    lhs_expr = *top_ptr;
+
+  exprt rhs_not_expr = exprt("not", bool_type());
+  rhs_not_expr.operands().emplace_back(rhs);
+  exprt join_expr = exprt(exprt::id_and, bool_type());
+  join_expr.operands().emplace_back(lhs_expr);
+  join_expr.operands().emplace_back(rhs_not_expr);
 
   // 2. replace top_expr with the joined expr
   // the pre_cond is also changed during this process
   *top_ptr = join_expr;
 
+  exprt join_not_expr = exprt("not", bool_type());
+  join_not_expr.operands().emplace_back(pre_cond.op0());
+
   // 3. obtain guard
   expr2tc guard;
-  migrate_expr(pre_cond.op0(), guard);
+  migrate_expr(join_not_expr, guard);
   expr2tc a_guard;
   migrate_expr(rhs, a_guard);
   make_not(a_guard);
@@ -307,13 +334,17 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   total_cond_assert.insert(idf);
 
   // 5. reversal
-  join_expr.clear();
-  join_expr = exprt(op_tp, bool_type());
-  join_expr.operands().emplace_back(old_top);
-  join_expr.operands().emplace_back(rhs);
-  *top_ptr = join_expr;
+  join_not_expr.clear();
 
-  migrate_expr(pre_cond.op0(), guard);
+  exprt join_rev_expr = exprt(exprt::id_and, bool_type());
+  join_rev_expr.operands().emplace_back(lhs_expr);
+  join_rev_expr.operands().emplace_back(rhs);
+
+  *top_ptr = join_rev_expr;
+  join_not_expr = exprt("not", bool_type());
+  join_not_expr.operands().emplace_back(pre_cond.op0());
+
+  migrate_expr(join_not_expr, guard);
   migrate_expr(rhs, a_guard);
 
   t = goto_program.insert(it);
@@ -328,6 +359,14 @@ void goto_coveraget::add_cond_cov_rhs_assert(
 
   idf = from_expr(ns, "", a_guard) + "\t" + it->location.as_string();
   total_cond_assert.insert(idf);
+
+  // update *top_ptr;
+  join_expr.clear();
+  *top_ptr = old_top_ptr;
+  join_expr = exprt(op_tp, bool_type());
+  join_expr.operands().emplace_back(*top_ptr);
+  join_expr.operands().emplace_back(rhs);
+  *top_ptr = join_expr;
 
   // 6. update rhs_ptr
   rhs_ptr = top_ptr->operands().begin();
@@ -384,6 +423,18 @@ void goto_coveraget::collect_operators(
   std::list<std::string> &operators)
 {
   std::string str = from_expr(expr);
+  // prepocess: remove parenthesis in type_cast
+  // e.g. if(return_bool()) ==> IF !(_Bool)return_value$_return_bool$1
+  //                        ==> IF !return_value$_return_bool$1
+  // !FIXME: maybe this should be regex like \(\_[A-Za-z]+\) iF there are other typecasts
+  const std::string subStr = "(_Bool)";
+  size_t pos = str.find(subStr);
+  while (pos != std::string::npos)
+  {
+    str.erase(pos, subStr.length());
+    pos = str.find(subStr, pos);
+  }
+
   std::list<std::string> opt;
   for (std::size_t i = 0; i < str.length(); i++)
   {
@@ -403,6 +454,10 @@ void goto_coveraget::collect_operators(
       opt.emplace_back(")");
   }
 
+  // remove the most outside ()
+  opt.pop_front();
+  opt.pop_back();
+
   // add implied parentheses in boolean expression
   // e.g. if(a&&b || c&&d) ==> if((a&&b) || (c&&d))
   // general rule: add parenthesis between || and &&
@@ -414,7 +469,7 @@ void goto_coveraget::collect_operators(
   {
     if (op == "(")
     {
-      if (pnt_stk.empty())
+      if (pnt_stk.empty() && !tmp.empty())
       {
         operators.insert(operators.end(), tmp.begin(), tmp.end());
         tmp.clear();
@@ -428,7 +483,7 @@ void goto_coveraget::collect_operators(
       if (!pnt_stk.empty())
         pnt_stk.pop_back();
 
-      if (pnt_stk.empty())
+      if (pnt_stk.empty() && !tmp.empty())
       {
         operators.insert(operators.end(), tmp.begin(), tmp.end());
         tmp.clear();
@@ -436,7 +491,7 @@ void goto_coveraget::collect_operators(
     }
     else if (op == "&&" && lst_op == "||")
     {
-      if (pnt_stk.empty())
+      if (pnt_stk.empty() && !tmp.empty())
       {
         operators.insert(operators.end(), tmp.begin(), tmp.end());
         tmp.clear();
@@ -451,7 +506,7 @@ void goto_coveraget::collect_operators(
       if (!pnt_stk.empty())
         pnt_stk.pop_back();
 
-      if (pnt_stk.empty())
+      if (pnt_stk.empty() && !tmp.empty())
       {
         operators.insert(operators.end(), tmp.begin(), tmp.end());
         tmp.clear();
@@ -479,11 +534,9 @@ void goto_coveraget::collect_operators(
 
 exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
 {
-  if (
-    expr.operands().size() == 1 ||
-    (expr.operands().size() == 0 && expr.id() == "constant"))
+  if (expr.operands().size() <= 1)
   {
-    // e.g. if(!(a++)) => if(!(a++!=0) ！=0) if(true) ==> if(1==0)
+    // e.g. if(!(a++)) => if(!(a++==1) == 1) if(true) ==> if(1==1)
     bool flg0 = false;
     Forall_operands (it, expr)
     {
@@ -492,7 +545,7 @@ exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
     flag = true;
     if (!flg0)
     {
-      exprt not_eq_expr = exprt("notequal", bool_type());
+      exprt not_eq_expr = exprt("=", bool_type());
       expr2tc tmp = gen_true_expr();
       exprt new_expr = migrate_expr_back(tmp);
       not_eq_expr.operands().emplace_back(expr);
