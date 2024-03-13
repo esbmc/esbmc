@@ -567,7 +567,7 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "this activates --multi-property, "
      "deactivates --keep-verified-claims, and "
-     "shows the coverage of condition statements"},
+     "shows the coverage of condition statements (Short-circuit evaluation)"},
     {"condition-coverage-claims",
      NULL,
      "enable condition-coverage and shows the instrumented claims"}}},
