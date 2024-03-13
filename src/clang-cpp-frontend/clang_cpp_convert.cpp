@@ -836,10 +836,6 @@ bool clang_cpp_convertert::get_constructor_call(
 
    */
 
-  auto parents = ASTContext->getParents(constructor_call);
-  auto it = parents.begin();
-  const clang::Decl *objectDecl = it->get<clang::Decl>();
-
   // Calling base constructor from derived constructor
   bool need_new_obj = false;
 
@@ -852,7 +848,7 @@ bool clang_cpp_convertert::get_constructor_call(
     In this case, use members to construct the object directly
     */
   }
-  else if(!objectDecl)
+  else
   {
     exprt this_object = exprt("new_object");
     this_object.set("#lvalue", true);
