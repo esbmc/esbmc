@@ -36,7 +36,7 @@ public:
     const irep_idt &op_tp,
     exprt::operandst::iterator &top_ptr,
     exprt::operandst::iterator &rhs_ptr,
-    const exprt &pre_cond,
+    const exprt::operandst::iterator &root_ptr,
     const exprt &rhs,
     goto_programt &goto_program,
     goto_programt::targett &it);

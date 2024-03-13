@@ -185,6 +185,7 @@ void goto_coveraget::gen_cond_cov(
           //     b   c   <--- rhs_ptr
           exprt root;
           root.operands().emplace_back(*opd);
+          const exprt::operandst::iterator root_ptr = root.operands().begin();
           exprt::operandst::iterator top_ptr = root.operands().begin();
           exprt::operandst::iterator rhs_ptr = top_ptr;
           std::vector<exprt::operandst::iterator> top_ptr_stack;
@@ -220,11 +221,12 @@ void goto_coveraget::gen_cond_cov(
               atoms = {};
               const exprt elem = *opd;
               collect_atom_operands(elem, atoms);
+
               assert(atoms.size() == 1);
               const auto &atom = *atoms.begin();
               irep_idt op = (*opt) == "&&" ? exprt::id_and : exprt::id_or;
               add_cond_cov_rhs_assert(
-                op, top_ptr, rhs_ptr, root, atom, goto_program, it);
+                op, top_ptr, rhs_ptr, root_ptr, atom, goto_program, it);
             }
             else
             {
@@ -233,6 +235,7 @@ void goto_coveraget::gen_cond_cov(
             }
 
             // update counter
+            assert(opd != operands.end() && opt != operators.end());
             ++opd;
             ++opt;
           }
@@ -273,21 +276,30 @@ void goto_coveraget::add_cond_cov_init_assert(
   => assert(b==0)
   => assert((b==0));
   => assert(!(!b==0 && c>90))
-  => assert(!(!b==0 && !(c>90)))
+  => assert(!(!(b==0) && !(c>90)))
 */
 void goto_coveraget::add_cond_cov_rhs_assert(
   const irep_idt &op_tp,
   exprt::operandst::iterator &top_ptr,
   exprt::operandst::iterator &rhs_ptr,
-  const exprt &pre_cond,
+  const exprt::operandst::iterator &root_ptr,
   const exprt &rhs,
   goto_programt &goto_program,
   goto_programt::targett &it)
 {
-  // 0. store previous state
-  exprt old_top_ptr = *top_ptr;
+  /* 
+  example:
+     root
+      ||  <- root_ptr
+   &&   b <- top_ptr/rhs_ptr
+  a  a  
+  */
 
-  // 1. build new joined expr
+  // 0. store previous state
+  const exprt old_top = *top_ptr;
+  const exprt old_root = *root_ptr;
+
+  // 2. build new joined expr
   exprt lhs_expr;
   if (op_tp == exprt::id_or)
   {
@@ -304,21 +316,39 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   join_expr.operands().emplace_back(lhs_expr);
   join_expr.operands().emplace_back(rhs_not_expr);
 
-  // 2. replace top_expr with the joined expr
-  // the pre_cond is also changed during this process
+  // 3. replace top_expr with the joined expr
+  // the rhs of (*root_ptr) is also changed during this process
   *top_ptr = join_expr;
 
-  exprt join_not_expr = exprt("not", bool_type());
-  join_not_expr.operands().emplace_back(pre_cond.op0());
+  // 1. preprocess for pre_cond lhs
+  bool pre_cond_flg = false;
+  if (root_ptr->has_operands() && root_ptr->operands().size() == 2)
+  {
+    const irep_idt sub_id = (*root_ptr).op0().id();
+    pre_cond_flg = (sub_id == exprt::id_or || sub_id == exprt::id_and ||
+                    sub_id == exprt::id_not) &&
+                   (*root_ptr).id() == exprt::id_or;
+    if (pre_cond_flg)
+    {
+      // change 'a && a or b' to 'not (a && a) and b'
+      exprt not_pre_cond = exprt("not", bool_type());
+      not_pre_cond.operands().emplace_back(root_ptr->op0());
+      root_ptr->op0() = not_pre_cond;
+      root_ptr->id(exprt::id_and);
+    }
+  }
 
-  // 3. obtain guard
+  exprt join_not_expr = exprt("not", bool_type());
+  join_not_expr.operands().emplace_back(*root_ptr);
+
+  // 4. obtain guard
   expr2tc guard;
   migrate_expr(join_not_expr, guard);
   expr2tc a_guard;
   migrate_expr(rhs, a_guard);
   make_not(a_guard);
 
-  // 4. modified insert_assert
+  // 5. modified insert_assert
   goto_programt::targett t = goto_program.insert(it);
   t->type = ASSERT;
   t->guard = guard;
@@ -333,7 +363,9 @@ void goto_coveraget::add_cond_cov_rhs_assert(
     from_expr(ns, "", a_guard) + "\t" + it->location.as_string();
   total_cond_assert.insert(idf);
 
-  // 5. reversal
+  // 6. reversal
+  *root_ptr = old_root;
+  *top_ptr = old_top;
   join_not_expr.clear();
 
   exprt join_rev_expr = exprt(exprt::id_and, bool_type());
@@ -341,8 +373,16 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   join_rev_expr.operands().emplace_back(rhs);
 
   *top_ptr = join_rev_expr;
+  if (pre_cond_flg)
+  {
+    exprt not_pre_cond = exprt("not", bool_type());
+    not_pre_cond.operands().emplace_back(root_ptr->op0());
+    root_ptr->op0() = not_pre_cond;
+    root_ptr->id(exprt::id_and);
+  }
+
   join_not_expr = exprt("not", bool_type());
-  join_not_expr.operands().emplace_back(pre_cond.op0());
+  join_not_expr.operands().emplace_back(*root_ptr);
 
   migrate_expr(join_not_expr, guard);
   migrate_expr(rhs, a_guard);
@@ -360,15 +400,23 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   idf = from_expr(ns, "", a_guard) + "\t" + it->location.as_string();
   total_cond_assert.insert(idf);
 
-  // update *top_ptr;
+  // 7. restore root_ptr
+  // noted that this should be done before the updating of *top_ptr
+  if (pre_cond_flg)
+  {
+    // change 'not (a && a) and b' back to 'a && a or b'
+    *root_ptr = old_root;
+  }
+
+  // 8. update *top_ptr;
   join_expr.clear();
-  *top_ptr = old_top_ptr;
+  *top_ptr = old_top;
   join_expr = exprt(op_tp, bool_type());
   join_expr.operands().emplace_back(*top_ptr);
   join_expr.operands().emplace_back(rhs);
   *top_ptr = join_expr;
 
-  // 6. update rhs_ptr
+  // 9. update rhs_ptr
   rhs_ptr = top_ptr->operands().begin();
   rhs_ptr++;
 }
