@@ -841,10 +841,12 @@ bool clang_cpp_convertert::get_constructor_call(
 
   if (new_expr.base_ctor_derived())
     gen_typecast_base_ctor_call(callee_decl, call, new_expr);
-  else if (
-    new_expr.get_bool("memberInit") &&
-    !callee_decl.type().return_type().get_bool("#copy_cons"))
+  else if (new_expr.get_bool("#member_init"))
   {
+    /*
+    struct A {}; struct B {A a; B(int _a) : a(_a) {}};
+    In this case, use variables to construct the object directly
+    */
   }
   else
   {
@@ -962,7 +964,7 @@ bool clang_cpp_convertert::get_function_body(
             fd, lhs.id() == "dereference" ? lhs.op0() : lhs);
 
           exprt rhs;
-          rhs.set("memberInit", 1);
+          rhs.set("#member_init", 1);
           if (get_expr(*init->getInit(), rhs))
             return true;
 
