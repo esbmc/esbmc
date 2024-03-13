@@ -1091,7 +1091,7 @@ bool interval_domaint::join(
 
   const bool is_if_goto = to->is_goto() && !is_true(to->guard);
   const bool is_guard = to->is_assume() || to->is_assert() || is_if_goto;
-                        
+
   // Prevent short-circuit
   bool result = false;
   result |= join(int_map, b.int_map, is_guard);
