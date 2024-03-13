@@ -299,8 +299,8 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   /* 
   example:
      root
-      ||  <- root_ptr
-   &&   b <- top_ptr/rhs_ptr
+      ||  <- root_ptr/top_ptr
+   &&   b <- rhs_ptr/top_ptr
   a  a  
   */
 
@@ -333,9 +333,10 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   bool pre_cond_flg = false;
   if (root_ptr->has_operands() && root_ptr->operands().size() == 2)
   {
-    const irep_idt sub_id = (*root_ptr).op0().id();
-    pre_cond_flg = (sub_id == exprt::id_or || sub_id == exprt::id_and ||
-                    sub_id == exprt::id_not) &&
+    const std::string sub_id = (*root_ptr).op0().id().as_string();
+    // pre_cond_flg: the lhs should be an atom.
+    pre_cond_flg = (sub_id != "constant" && sub_id != "symbol") &&
+                   (*root_ptr).op0().has_operands() &&
                    (*root_ptr).id() == exprt::id_or;
     if (pre_cond_flg)
     {
@@ -594,7 +595,9 @@ void goto_coveraget::collect_operators(
 
 exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
 {
-  if (expr.operands().size() <= 1)
+  if (
+    expr.operands().size() == 1 ||
+    (expr.operands().size() == 0 && expr.id().as_string() == "constant"))
   {
     // e.g. if(!(a++)) => if(!(a++==1) == 1) if(true) ==> if(1==1)
     bool flg0 = false;
