@@ -1089,12 +1089,14 @@ bool interval_domaint::join(
     return true;
   }
 
-  const bool is_guard = to->is_assume() || to->is_assert() ||
-                        (to->is_goto() && !is_true(to->guard));
-
-  bool result = join(int_map, b.int_map, is_guard) ||
-                join(real_map, b.real_map, is_guard) ||
-                join(wrap_map, b.wrap_map, is_guard);
+  const bool is_if_goto = to->is_goto() && !is_true(to->guard);
+  const bool is_guard = to->is_assume() || to->is_assert() || is_if_goto;
+                        
+  // Prevent short-circuit
+  bool result = false;
+  result |= join(int_map, b.int_map, is_guard);
+  result |= join(real_map, b.real_map, is_guard);
+  result |= join(wrap_map, b.wrap_map, is_guard);
   return result;
 }
 
