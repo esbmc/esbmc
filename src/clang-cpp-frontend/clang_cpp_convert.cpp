@@ -836,6 +836,10 @@ bool clang_cpp_convertert::get_constructor_call(
 
    */
 
+  auto parents = ASTContext->getParents(constructor_call);
+  auto it = parents.begin();
+  const clang::Decl *objectDecl = it->get<clang::Decl>();
+
   // Calling base constructor from derived constructor
   bool need_new_obj = false;
 
@@ -844,11 +848,11 @@ bool clang_cpp_convertert::get_constructor_call(
   else if (new_expr.get_bool("#member_init"))
   {
     /*
-    struct A {}; struct B {A a; B(int _a) : a(_a) {}};
-    In this case, use variables to construct the object directly
+    struct A {A(int _a){}}; struct B {A a; B(int _a) : a(_a) {}};
+    In this case, use members to construct the object directly
     */
   }
-  else
+  else if(!objectDecl)
   {
     exprt this_object = exprt("new_object");
     this_object.set("#lvalue", true);
