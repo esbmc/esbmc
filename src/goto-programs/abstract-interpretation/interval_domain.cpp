@@ -1039,8 +1039,10 @@ bool interval_domaint::join(
     const auto next_it = a1.find(symbol);
     const auto &update_it = previous_it;
 
+    const bool previous_is_top = previous_it == a0.end();
+
     // HULL(TOP, next_it) = TOP
-    if (previous_it == a0.end())
+    if (previous_is_top)
     {
       // Narrowing
       if (widening_narrowing)
@@ -1050,8 +1052,9 @@ bool interval_domaint::join(
       continue;
     }
 
+    const bool next_is_top = next_it == a1.end();
     // HULL (previous_it, TOP) = TOP
-    if (next_it == a1.end())
+    if (next_is_top)
     {
       result = true;
       updated_map.erase(symbol);
