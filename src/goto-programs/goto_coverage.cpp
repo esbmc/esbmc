@@ -325,11 +325,11 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   join_expr.operands().emplace_back(lhs_expr);
   join_expr.operands().emplace_back(rhs_not_expr);
 
-  // 3. replace top_expr with the joined expr
+  // 2. replace top_expr with the joined expr
   // the rhs of (*root_ptr) is also changed during this process
   *top_ptr = join_expr;
 
-  // 1. preprocess for pre_cond lhs
+  // 3. preprocess for pre_cond lhs
   bool pre_cond_flg = false;
   if (root_ptr->has_operands() && root_ptr->operands().size() == 2)
   {
