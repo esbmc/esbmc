@@ -513,7 +513,7 @@ void goto_coveraget::collect_operators(
   }
 
   // remove the most outside '(' and ')'
-  if (opt.front() == "(" and opt.back() == ")")
+  if (opt.front() == "(" && opt.back() == ")")
   {
     opt.pop_front();
     opt.pop_back();
