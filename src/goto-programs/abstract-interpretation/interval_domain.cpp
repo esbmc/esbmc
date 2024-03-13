@@ -1047,7 +1047,13 @@ bool interval_domaint::join(
       // Narrowing
       if (widening_narrowing)
       {
-        // TODO: Narrowing needs more fixes
+        /* TODO: Narrowing needs more fixes
+         * This happens due to the Abstract Interpreter
+         * being unable to merge the information that is
+         * coming before the loop (see #1738)
+        */ 
+        log_error("Narrowing is currently disabled. See GitHub issue #1738 for more details");
+        abort();
       }
       continue;
     }
@@ -1073,8 +1079,13 @@ bool interval_domaint::join(
     }
     else if (before != after && widening_narrowing)
     {
-      // Narrowing
-      // TODO: Narrowing needs more fixes
+        /* TODO: Narrowing needs more fixes
+         * This happens due to the Abstract Interpreter
+         * being unable to merge the information that is
+         * coming before the loop (see #1738)
+        */ 
+        log_error("Narrowing is currently disabled. See GitHub issue #1738 for more details");
+        abort();
     }
   }
   return result;
