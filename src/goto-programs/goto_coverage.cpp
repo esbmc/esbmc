@@ -158,6 +158,15 @@ void goto_coveraget::gen_cond_cov(
           !is_true(it->guard) && it->is_goto() &&
           filename == it->location.file().as_string())
         {
+          if (to_not2t(it->guard).value->expr_id == expr2t::typecast_id)
+          {
+            //! bug:
+            //! e.g. if(return_bool()) => !(_Bool)return_value$_return_bool$1
+            //! the 'migrate_expr_back(it->guard)' will leads to migrate expr failed
+            log_error("Internal error when handling function boolean return");
+            abort();
+          }
+
           // preprocessing: if(true) ==> if(true == true)
           exprt guard = migrate_expr_back(it->guard);
           bool dump = false;
@@ -502,9 +511,12 @@ void goto_coveraget::collect_operators(
       opt.emplace_back(")");
   }
 
-  // remove the most outside ()
-  opt.pop_front();
-  opt.pop_back();
+  // remove the most outside '(' and ')'
+  if (opt.front() == "(" and opt.back() == ")")
+  {
+    opt.pop_front();
+    opt.pop_back();
+  }
 
   // add implied parentheses in boolean expression
   // e.g. if(a&&b || c&&d) ==> if((a&&b) || (c&&d))
