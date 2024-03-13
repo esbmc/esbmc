@@ -783,7 +783,7 @@ smt_convt::resultt bmct::multi_property_check(
   std::unordered_set<size_t> jobs;
   std::mutex result_mutex;
   std::unordered_set<std::string> reached_claims;
-  // For coverage info  
+  // For coverage info
   std::unordered_multiset<std::string> reached_mul_claims;
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
