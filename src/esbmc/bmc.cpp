@@ -783,7 +783,7 @@ smt_convt::resultt bmct::multi_property_check(
   std::unordered_set<size_t> jobs;
   std::mutex result_mutex;
   std::unordered_set<std::string> reached_claims;
-  // For coverage info
+  // For coverage info  
   std::unordered_multiset<std::string> reached_mul_claims;
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
@@ -968,53 +968,60 @@ smt_convt::resultt bmct::multi_property_check(
     const int total_instance = total_cond_assert.size();
 
     // show claims
-    if (options.get_bool_option("condition-coverage-claims"))
-    {
-      // reached claims:
-      for (const auto &claim : total_cond_assert)
-      {
-        if (reached_claims.count(claim))
-        {
-          log_status("  {} : SATISFIED", claim);
-          tracked_instance++;
-          reached_claims.erase(claim);
+    bool cond_show_claims =
+      options.get_bool_option("condition-coverage-claims");
 
-          // reversal
-          std::string delimiter = "\t";
-          auto pos = claim.find(delimiter);
-          std::string claim_msg = claim.substr(0, pos);
-          std::string claim_loc = claim.substr(pos + 1);
-          if (
-            claim_msg[0] == '!' && claim_msg[1] == '(' &&
-            claim_msg.back() == ')')
+    // reached claims:
+    for (const auto &claim : total_cond_assert)
+    {
+      if (reached_claims.count(claim))
+      {
+        if (cond_show_claims)
+          log_status("  {} : SATISFIED", claim);
+        tracked_instance++;
+        reached_claims.erase(claim);
+
+        // reversal
+        std::string delimiter = "\t";
+        auto pos = claim.find(delimiter);
+        std::string claim_msg = claim.substr(0, pos);
+        std::string claim_loc = claim.substr(pos + 1);
+        if (
+          claim_msg[0] == '!' && claim_msg[1] == '(' && claim_msg.back() == ')')
+        {
+          // e.g. !(a==1)
+          std::string r_claim =
+            claim_msg.substr(2, claim_msg.length() - 3) + "\t" + claim_loc;
+          if (cond_show_claims)
           {
-            // e.g. !(a==1)
-            std::string r_claim =
-              claim_msg.substr(2, claim_msg.length() - 3) + "\t" + claim_loc;
             if (reached_claims.count(r_claim))
               log_status("  {} : SATISFIED", r_claim);
             else
               log_status("  {} : UNSATISFIED", r_claim);
-            tracked_instance++;
-            reached_claims.erase(r_claim);
           }
-          else
+          tracked_instance++;
+          reached_claims.erase(r_claim);
+        }
+        else
+        {
+          std::string r_claim = "!(" + claim_msg + ")" + "\t" + claim_loc;
+          if (cond_show_claims)
           {
-            std::string r_claim = "!(" + claim_msg + ")" + "\t" + claim_loc;
             if (reached_claims.count(r_claim))
               log_status("  {} : SATISFIED", r_claim);
             else
               log_status("  {} : UNSATISFIED", r_claim);
-            tracked_instance++;
-            reached_claims.erase(r_claim);
           }
+
+          tracked_instance++;
+          reached_claims.erase(r_claim);
         }
       }
-
-      // TODO
-      // show short-circuited:
-      // e.g. if both assert(a==1); and assert(!(a==1));
     }
+
+    // TODO
+    // show short-circuited:
+    // e.g. if both assert(a==1); and assert(!(a==1));
 
     if (total_instance != 0)
       log_result(
