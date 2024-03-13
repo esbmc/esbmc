@@ -1,0 +1,5 @@
+CORE
+main.c
+--condition-coverage
+^Condition Coverage: 50%
+^VERIFICATION FAILED$
