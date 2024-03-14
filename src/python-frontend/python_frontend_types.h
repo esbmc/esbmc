@@ -20,13 +20,14 @@ enum class StatementType
 
 enum class ExpressionType
 {
-  UNARY_OPERATION,
   BINARY_OPERATION,
+  UNARY_OPERATION,
+  FUNC_CALL,
+  IF_EXPR,
   LOGICAL_OPERATION,
   LITERAL,
-  IF_EXPR,
+  SUBSCRIPT,
   VARIABLE_REF,
-  FUNC_CALL,
   UNKNOWN,
 };
 

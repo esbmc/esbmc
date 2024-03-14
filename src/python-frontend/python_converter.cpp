@@ -178,6 +178,9 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   if (type == "IfExp")
     return ExpressionType::IF_EXPR;
 
+  if (type == "Subscript")
+    return ExpressionType::SUBSCRIPT;
+
   return ExpressionType::UNKNOWN;
 }
 
@@ -812,6 +815,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     expr = get_conditional_stm(element);
     break;
   }
+  case ExpressionType::SUBSCRIPT:
+  {
+    exprt array = get_expr(element["value"]);
+    typet t = array.type().subtype();
+    exprt pos = get_expr(element["slice"]);
+    expr = index_exprt(array, pos, t);
+    break;
+  }
   default:
   {
     if (element.contains("_type"))
@@ -873,7 +884,9 @@ void python_converter::get_var_assign(
   {
     // Get type from current annotation node
     size_t type_size = 0;
-    if (ast_node["value"].contains("value") && ast_node["value"]["value"].is_string())
+    if (
+      ast_node["value"].contains("value") &&
+      ast_node["value"]["value"].is_string())
       type_size = ast_node["value"]["value"].get<std::string>().size();
 
     current_element_type =
