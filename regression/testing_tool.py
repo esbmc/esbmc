@@ -206,7 +206,8 @@ def _add_test(test_case, executor):
             timeout_message ="\nTIMEOUT TEST: " + str(test_case.test_dir)
             self.fail(timeout_message)
         RC_SMTLIB = rc == 3
-        if TestCase.SMT_ONLY and TestCase.SMT_SOLVER and RC_SMTLIB:
+        SMT2_FILE_EXISTS = os.path.exists(f"{test_case.test_dir}.smt2")
+        if TestCase.SMT_ONLY and TestCase.SMT_SOLVER and RC_SMTLIB and SMT2_FILE_EXISTS:
             # Try formula on SMT solver we are only interested in crashes
             smt_command = [TestCase.SMT_SOLVER, f"{test_case.test_dir}.smt2"]
             try:
