@@ -65,8 +65,13 @@ private:
         // Get type from rhs constant
         if (element["value"]["_type"] == "Constant")
         {
-          auto rhs = element["value"]["value"];
-          type = get_type_from_element(rhs);
+          if (element["value"].contains("esbmc_type_annotation"))
+            type = element["value"]["esbmc_type_annotation"];
+          else
+          {
+            auto rhs = element["value"]["value"];
+            type = get_type_from_element(rhs);
+          }
         }
 
         // Get type from rhs variable
