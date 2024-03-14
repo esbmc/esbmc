@@ -21,6 +21,14 @@ def import_module_by_name(module_name):
         sys.exit(1)
 
 
+def add_type_annotation(node):
+    value_node = node.value
+    if isinstance(value_node, ast.Str):
+        value_node.esbmc_type_annotation = "str"
+    elif isinstance(value_node, ast.Bytes):
+        value_node.esbmc_type_annotation = "bytes"
+
+
 def process_imports(node, output_dir):
     """
     Process import statements in the AST node.
@@ -109,6 +117,8 @@ def main():
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             process_imports(node, output_dir)
+        elif isinstance(node, ast.Assign):
+            add_type_annotation(node)
 
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)
