@@ -213,7 +213,10 @@ private:
            is_builtin_type(element["value"]["func"]["id"]) ||
            is_consensus_type(element["value"]["func"]["id"])))
           type = element["value"]["func"]["id"];
-
+        else if (
+          element["value"]["_type"] == "Call" &&
+          is_consensus_func(element["value"]["func"]["id"]))
+          type = get_type_from_consensus_func(element["value"]["func"]["id"]);
         else
           continue;
 

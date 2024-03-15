@@ -44,3 +44,7 @@ bool is_builtin_type(const std::string &name);
 
 // TODO: Add a compilation flag or move it to a specific implementation
 bool is_consensus_type(const std::string &name);
+
+bool is_consensus_func(const std::string &name);
+
+std::string get_type_from_consensus_func(const std::string &name);
