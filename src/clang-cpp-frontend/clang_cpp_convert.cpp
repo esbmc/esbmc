@@ -797,6 +797,14 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXNullPtrLiteralExprClass:
+  {
+    typet t = unsignedbv_typet(config.ansi_c.pointer_width());
+
+    new_expr = gen_zero(t);
+    break;
+  }
+
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))
       return true;
