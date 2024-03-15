@@ -55,6 +55,26 @@ private:
     ast["end_col_offset"] = max_col_offset;
   }
 
+  std::string get_type_from_constant(Json &element)
+  {
+    if (element["value"].contains("esbmc_type_annotation"))
+      return element["value"]["esbmc_type_annotation"]
+        .template get<std::string>();
+
+    auto rhs = element["value"]["value"];
+
+    if (rhs.is_number_integer() || rhs.is_number_unsigned())
+      return "int";
+    if (rhs.is_number_float())
+      return "float";
+    if (rhs.is_boolean())
+      return "bool";
+    if (rhs.is_string())
+      return "str";
+
+    return std::string();
+  }
+
   void add_annotation(Json &body)
   {
     for (auto &element : body["body"])
@@ -65,16 +85,9 @@ private:
         // Get type from rhs constant
         if (element["value"]["_type"] == "Constant")
         {
-          if (element["value"].contains("esbmc_type_annotation"))
-            type = element["value"]["esbmc_type_annotation"];
-          else
-          {
-            auto rhs = element["value"]["value"];
-            type = get_type_from_element(rhs);
-          }
+          type = get_type_from_constant(element);
         }
-
-        // Get type from rhs variable
+        // Get type from RHS variable
         else if (element["value"]["_type"] == "Name")
         {
           // Find rhs variable declaration in the current function
@@ -82,15 +95,11 @@ private:
 
           // Find rhs variable in the function args
           if (rhs_node.empty() && body.contains("args"))
-          {
             rhs_node = find_node(element["value"]["id"], body["args"]["args"]);
-          }
 
           // Find rhs variable node in the global scope
           if (rhs_node.empty())
-          {
             rhs_node = find_node(element["value"]["id"], ast_["body"]);
-          }
 
           if (rhs_node.empty())
           {
@@ -99,10 +108,11 @@ private:
               element["value"]["id"].template get<std::string>().c_str());
             abort();
           }
+
+          // Get type from RHS type annotation
           type = rhs_node["annotation"]["id"];
         }
-
-        // Get type from rhs binary expression
+        // Get type from RHS binary expression
         else if (element["value"]["_type"] == "BinOp")
         {
           // Floor division (//) operations always result in an integer value
@@ -110,15 +120,13 @@ private:
             type = "int";
           else
           {
-            // If the lhs of the binary operation is a variable, its type is retrieved
-            if (element["value"]["left"]["_type"] == "Name")
+            // If the LHS of the binary operation is a variable, its type is retrieved
+            Json &lhs = element["value"]["left"];
+            if (lhs["_type"] == "Name")
             {
-              Json left_op =
-                find_node(element["value"]["left"]["id"], body["body"]);
+              Json left_op = find_node(lhs["id"], body["body"]);
               if (!left_op.empty())
-              {
                 type = left_op["annotation"]["id"];
-              }
             }
           }
         }
@@ -206,20 +214,6 @@ private:
         }
       }
     }
-  }
-
-  std::string get_type_from_element(const Json &elem) const
-  {
-    if (elem.is_number_integer() || elem.is_number_unsigned())
-      return "int";
-    if (elem.is_number_float())
-      return "float";
-    if (elem.is_boolean())
-      return "bool";
-    if (elem.is_string())
-      return "str";
-
-    return std::string();
   }
 
   const Json find_node(const std::string &node_name, const Json &body)
