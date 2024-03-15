@@ -1397,6 +1397,11 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "__uint128";
     break;
 
+  case clang::BuiltinType::NullPtr:
+    new_type = pointer_type();
+    c_type = "uintptr_t";
+    break;
+
 #ifdef ESBMC_CHERI_CLANG
   case clang::BuiltinType::IntCap:
     new_type = intcap_typet();
@@ -1822,10 +1827,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXNullPtrLiteralExprClass:
   case clang::Stmt::GNUNullExprClass:
   {
-    const clang::GNUNullExpr &gnun =
-      static_cast<const clang::GNUNullExpr &>(stmt);
+    const clang::Expr &gnun =
+      static_cast<const clang::Expr &>(stmt);
 
     typet t;
     if (get_type(gnun.getType(), t))
