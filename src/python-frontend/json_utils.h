@@ -35,6 +35,9 @@ bool is_class(const std::string &name, const JsonType &ast_json)
                   << ".json";
 
       std::ifstream imported_file(module_path.str());
+      if (!imported_file.is_open())
+        return false;
+
       JsonType imported_module_json;
       imported_file >> imported_module_json;
 
