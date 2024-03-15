@@ -106,6 +106,8 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
+  if (ast_type == "uint256" || ast_type == "BLSFieldElement")
+    return uint256_type();
   if (ast_type == "bytes")
   {
     typet char_type = signed_char_type();
