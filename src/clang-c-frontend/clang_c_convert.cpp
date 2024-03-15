@@ -1830,8 +1830,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   case clang::Stmt::CXXNullPtrLiteralExprClass:
   case clang::Stmt::GNUNullExprClass:
   {
-    const clang::Expr &gnun =
-      static_cast<const clang::Expr &>(stmt);
+    const clang::Expr &gnun = static_cast<const clang::Expr &>(stmt);
 
     typet t;
     if (get_type(gnun.getType(), t))
