@@ -1,5 +1,7 @@
+#include <cstdint>
 #include <goto-symex/slice.h>
 
+#include <unordered_set>
 #include <util/prefix.h>
 static bool no_slice(const symbol2t &sym)
 {
@@ -29,8 +31,35 @@ bool symex_slicet::get_symbols(const expr2tc &expr)
   return res;
 }
 
+bool symex_slicet::get_array_symbols(const expr2tc &expr)
+{
+  bool res = false;
+  expr->foreach_operand([this, &res](const expr2tc &e) {
+    if (!is_nil_expr(e))
+      res |= get_array_symbols(e);
+    return res;
+  });
+
+  // This should come from assertions, the idea is that
+  // ASSERT(array[42] == 2) will generate: array$foo WITH 42 := 2
+  // We can then just add anything that changes the index 42 as a dependency
+  if (is_index2t(expr))
+  {
+    const index2t &w = to_index2t(expr);
+    if (is_symbol2t(w.source_value))
+    {
+      const symbol2t &s = to_symbol2t(w.source_value);
+      array_depends[s.thename.as_string()].emplace(w.index);
+      return true;
+    }
+  }
+  return false;
+}
+
 void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
 {
+  get_array_symbols(SSA_step.guard);
+  get_array_symbols(SSA_step.cond);
   get_symbols<true>(SSA_step.guard);
   get_symbols<true>(SSA_step.cond);
 }
@@ -70,6 +99,31 @@ void symex_slicet::run_on_assignment(
 {
   assert(is_symbol2t(SSA_step.lhs));
   // TODO: create an option to ignore nondet symbols (test case generation)
+
+  auto it = array_depends.find(to_symbol2t(SSA_step.lhs).thename.as_string());
+  // We can't really apply magic renumbering for now. We can, convert expressions into identities
+  if (it != array_depends.end() && is_with2t(SSA_step.rhs))
+  {
+    with2t &w = to_with2t(SSA_step.rhs);
+    bool can_slice = is_constant_int2t(w.update_field);
+    // TODO: support for symbolic constraints
+    if (!can_slice)
+      it->second.insert(w.update_field);
+    for (const expr2tc &index : it->second)
+    {
+      if (!can_slice)
+        break;
+
+      if (!is_constant_int2t(index))
+        can_slice = false;
+      else
+        can_slice &= to_constant_int2t(index).value !=
+                     to_constant_int2t(w.update_field).value;
+    }
+
+    if (can_slice)
+      SSA_step.cond = equality2tc(SSA_step.lhs, w.source_value);
+  }
 
   if (!get_symbols<false>(SSA_step.lhs))
   {
@@ -237,5 +291,55 @@ expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
   }
   default:
     return expr2tc();
+  }
+}
+
+void replace_symbol_on_expression(
+  expr2tc &step,
+  const std::unordered_map<std::string, expr2tc> symbol_map)
+{
+  if (!step)
+    return;
+  if (is_symbol2t(step))
+  {
+    auto it = symbol_map.find(to_symbol2t(step).get_symbol_name());
+    if (it != symbol_map.end())
+      step = it->second;
+  }
+  step->Foreach_operand(
+    [&symbol_map](expr2tc &e) { replace_symbol_on_expression(e, symbol_map); });
+}
+
+void symex_slicet::slice_id_operations(symex_target_equationt::SSA_stepst &eq)
+{
+  std::unordered_map<std::string, expr2tc> symbol_map;
+
+  for (auto &step : eq)
+  {
+    // Helper definition
+    typedef goto_trace_stept::typet ssa_type;
+    replace_symbol_on_expression(step.cond, symbol_map);
+    replace_symbol_on_expression(step.guard, symbol_map);
+    replace_symbol_on_expression(step.rhs, symbol_map);
+    replace_symbol_on_expression(step.lhs, symbol_map);
+    switch (step.type)
+    {
+    case ssa_type::ASSIGNMENT:
+    {
+      assert(is_equality2t(step.cond));
+      equality2t &eq = to_equality2t(step.cond);
+      assert(is_symbol2t(eq.side_1));
+      if (is_symbol2t(eq.side_2))
+      {
+        symbol_map[to_symbol2t(eq.side_1).get_symbol_name()] = eq.side_2;
+        step.ignore = true;
+        ++sliced;
+      }
+
+      break;
+    }
+    default:
+      break;
+    }
   }
 }
