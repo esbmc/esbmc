@@ -2,12 +2,12 @@
 #define _ESBMC_SOLVERS_CVC_CVC_CONV_H_
 
 #include <solvers/smt/smt_conv.h>
-#include <cvc4/cvc4.h>
+#include <cvc5/cvc5.h>
 
-class cvc_smt_ast : public solver_smt_ast<CVC4::Expr>
+class cvc_smt_ast : public solver_smt_ast<cvc5::Term>
 {
 public:
-  using solver_smt_ast<CVC4::Expr>::solver_smt_ast;
+  using solver_smt_ast<cvc5::Term>::solver_smt_ast;
   ~cvc_smt_ast() override = default;
   void dump() const override;
 };
@@ -154,9 +154,7 @@ public:
 
   unsigned int to_bv_counter;
 
-  CVC4::ExprManager em;
-  CVC4::SmtEngine smt;
-  CVC4::SymbolTable sym_tab;
+  cvc5::Solver slv;
 };
 
 #endif /* _ESBMC_SOLVERS_CVC_CVC_CONV_H_ */

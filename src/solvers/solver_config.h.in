@@ -10,7 +10,7 @@
 #define BOOLECTOR
 #endif
 
-#if @ESBMC_ENABLE_cvc4@
+#if @ESBMC_ENABLE_cvc5@
 #define USECVC
 #endif
 

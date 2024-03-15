@@ -177,15 +177,19 @@ git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd 
 
 For more details on Boolector, please refer to [its Github](https://github.com/Boolector/boolector).
 
-### Setting Up CVC4 (Linux Only)
+### Setting Up CVC5
 
-We have wrapped the entire build and setup of CVC4 in the following command:
+We have wrapped the entire build and setup of CVC5 in the following command:
 
 ```
-pip3 install toml && git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j4 && make install && cd .. && cd ..
+Linux:
+
+
+macOS:
+pip3 install toml && git clone https://github.com/CVC5/CVC5.git && cd CVC5 && git reset --hard 4cb2ab9 && ./configure.sh --prefix=../cvc5 --auto-download --static --no-static-binary && cd build && make -j4 && make install && cd .. && cd ..
 ```
 
-If you need more details on CVC4, please refer to [its Github](https://github.com/CVC4/CVC4).
+If you need more details on CVC5, please refer to [its Github](https://github.com/CVC5/CVC5).
 
 ### Setting Up MathSAT
 
