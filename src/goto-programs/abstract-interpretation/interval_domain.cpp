@@ -285,17 +285,16 @@ interval_domaint::get_top_interval_from_expr(const expr2tc &e) const
 template <class T>
 T interval_domaint::interpolate_intervals(const T &before, const T &after)
 {
+  // More details on Principles of Abstract Interpretation.
+  // The intuition here is that if an extrapolated (infinity) interval
+  // is being reduced after the state, then we can contract on the limits.
+  // Note that this requires that the `before` is extrapolated.
   T result;
-
-  // before: [-infinity, +infinity], after: [a,b] ==> [a,b]
   bool lower_increased = !before.lower && after.lower;
   bool upper_decreased = !before.upper && after.upper;
 
-  if (lower_increased)
-    result.lower = after.lower;
-
-  if (upper_decreased)
-    result.upper = after.upper;
+  result.lower = lower_increased ? after.lower : before.lower;
+  result.upper = upper_decreased ? after.upper : before.upper;
   return result;
 }
 
@@ -1019,69 +1018,86 @@ void interval_domaint::transform(
 
 template <class IntervalMap>
 bool interval_domaint::join(
-  IntervalMap &new_map,
-  const IntervalMap &previous_map)
+  IntervalMap &a0,
+  const IntervalMap &a1,
+  const bool should_extrapolate_instruction)
 {
+  // Terrible convention, a0 is both the state before join and
+  // the map that needs to be updated
+  IntervalMap &updated_map = a0;
   bool result = false;
-  for (auto new_it = new_map.begin(); new_it != new_map.end();) // no new_it++
+  std::unordered_set<irep_idt, irep_id_hash> symbol_map;
+  for (const auto &myPair : a0)
+    symbol_map.insert(myPair.first);
+  for (const auto &myPair : a1)
+    symbol_map.insert(myPair.first);
+
+  // Here we apply the HULL operation (before, after)
+  for (const irep_idt &symbol : symbol_map)
   {
-    // search for the variable that needs to be merged
-    // containers have different sizes and ordering
-    const auto b_it = previous_map.find(new_it->first);
-    const auto f_it = fixpoint_map.find(new_it->first);
-    if (b_it == previous_map.end())
+    const auto previous_it = a0.find(symbol);
+    const auto next_it = a1.find(symbol);
+    const auto &update_it = previous_it;
+
+    const bool previous_is_top = previous_it == a0.end();
+
+    // HULL(TOP, next_it) = TOP
+    if (previous_is_top)
     {
-      new_it = new_map.erase(new_it);
-      if (f_it != fixpoint_map.end())
-        fixpoint_map.erase(f_it);
-      result = true;
+      // Narrowing
+      if (widening_narrowing)
+      {
+        /* TODO: Narrowing needs more fixes
+         * This happens due to the Abstract Interpreter
+         * being unable to merge the information that is
+         * coming before the loop (see #1738)
+        */
+        log_error(
+          "Narrowing is currently disabled. See GitHub issue #1738 for more "
+          "details");
+        abort();
+      }
+      continue;
     }
-    else
+
+    const bool next_is_top = next_it == a1.end();
+    // HULL (previous_it, TOP) = TOP
+    if (next_is_top)
     {
-      auto previous = new_it->second; // [0,0] ... [0, +inf]
-      auto after = b_it->second;      // [1,100] ... [1, 100]
-      new_it->second.join(after);     // HULL // [0,100] ... [0, +inf]
-      // Did we reach a fixpoint?
-      if (new_it->second != previous)
-      {
-        if (f_it != fixpoint_map.end())
-          f_it->second += 1;
-        else
-          fixpoint_map[new_it->first] = 0;
+      result = true;
+      updated_map.erase(symbol);
+      continue;
+    }
 
-        result = true;
-        // Try to extrapolate
-        if (
-          widening_extrapolate && fixpoint_map[new_it->first] > fixpoint_limit)
-        {
-          new_it->second = extrapolate_intervals(
-            previous,
-            new_it
-              ->second); // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
-        }
-      }
-
-      else
-      {
-        // Found a fixpoint, we might try to narrow now!
-        if (widening_narrowing)
-        {
-          after = interpolate_intervals(
-            new_it->second,
-            b_it
-              ->second); // ([0,100], [1,100] --> [0,100] ... ([0,inf], [1,100] --> [0,100]))
-          result |= new_it->second != after;
-          new_it->second = after;
-        }
-      }
-
-      new_it++;
+    const auto before = previous_it->second; // [0,0]
+    const auto &after = next_it->second;     // [1,100]
+    update_it->second.join(after);
+    const auto &joined = update_it->second;
+    if (before != joined)
+    {
+      result = true;
+      if (widening_extrapolate && should_extrapolate_instruction)
+        update_it->second = extrapolate_intervals(before, update_it->second);
+    }
+    else if (before != after && widening_narrowing)
+    {
+      /* TODO: Narrowing needs more fixes
+         * This happens due to the Abstract Interpreter
+         * being unable to merge the information that is
+         * coming before the loop (see #1738)
+        */
+      log_error(
+        "Narrowing is currently disabled. See GitHub issue #1738 for more "
+        "details");
+      abort();
     }
   }
   return result;
 }
 
-bool interval_domaint::join(const interval_domaint &b)
+bool interval_domaint::join(
+  const interval_domaint &b,
+  const goto_programt::const_targett &to)
 {
   if (b.is_bottom())
     return false;
@@ -1091,8 +1107,14 @@ bool interval_domaint::join(const interval_domaint &b)
     return true;
   }
 
-  bool result = join(int_map, b.int_map) || join(real_map, b.real_map) ||
-                join(wrap_map, b.wrap_map);
+  const bool is_if_goto = to->is_goto() && !is_true(to->guard);
+  const bool is_guard = to->is_assume() || to->is_assert() || is_if_goto;
+
+  // Prevent short-circuit
+  bool result = false;
+  result |= join(int_map, b.int_map, is_guard);
+  result |= join(real_map, b.real_map, is_guard);
+  result |= join(wrap_map, b.wrap_map, is_guard);
   return result;
 }
 

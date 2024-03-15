@@ -170,7 +170,8 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     exprt base_symbol = arg.op0();
     assert(base_symbol.op0().id() == "symbol");
     // TODO: wrap base symbol into dereference if it's a member
-    rhs_func_call.arguments().push_back(arg);
+    exprt::operandst &arguments = rhs_func_call.arguments();
+    arguments.insert(arguments.begin(), arg);
 
     expr.swap(rhs);
 

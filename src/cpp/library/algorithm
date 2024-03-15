@@ -3,7 +3,7 @@
 
 //#include "iterator"
 #include "definitions.h"
-#include "utility"
+#include <utility>
 
 typedef bool(function)(int arg1, int arg2);
 
@@ -537,6 +537,7 @@ BidIt2 copy_backward(BidIt1 first, BidIt1 last, BidIt2 dest)
   return dest;
 }
 
+#if __cplusplus < 201103L /* <type_traits> provides it for C++ >= 11 */
 template <class Ty>
 void swap(Ty &a, Ty &b)
 {
@@ -544,6 +545,7 @@ void swap(Ty &a, Ty &b)
   a = b;
   b = c;
 }
+#endif
 
 template <class FwdIt1, class FwdIt2>
 FwdIt2 swap_ranges(FwdIt1 first1, FwdIt1 last1, FwdIt2 last2)

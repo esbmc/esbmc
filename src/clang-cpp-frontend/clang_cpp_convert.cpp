@@ -118,6 +118,16 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
+  case clang::Decl::VarTemplate:
+  {
+    const clang::VarTemplateDecl &vd =
+      static_cast<const clang::VarTemplateDecl &>(decl);
+
+    if (get_template_decl(&vd, false, new_expr))
+      return true;
+    break;
+  }
+
   case clang::Decl::Friend:
   {
     const clang::FriendDecl &fd = static_cast<const clang::FriendDecl &>(decl);
@@ -130,6 +140,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
   // We can ignore any these declarations
   case clang::Decl::ClassTemplatePartialSpecialization:
+  case clang::Decl::VarTemplatePartialSpecialization:
   case clang::Decl::Using:
   case clang::Decl::UsingShadow:
   case clang::Decl::UsingDirective:
@@ -826,8 +837,17 @@ bool clang_cpp_convertert::get_constructor_call(
    */
 
   // Calling base constructor from derived constructor
+  bool need_new_obj = false;
+
   if (new_expr.base_ctor_derived())
     gen_typecast_base_ctor_call(callee_decl, call, new_expr);
+  else if (new_expr.get_bool("#member_init"))
+  {
+    /*
+    struct A {A(int _a){}}; struct B {A a; B(int _a) : a(_a) {}};
+    In this case, use members to construct the object directly
+    */
+  }
   else
   {
     exprt this_object = exprt("new_object");
@@ -837,6 +857,8 @@ bool clang_cpp_convertert::get_constructor_call(
     /* first parameter is address to the object to be constructed */
     address_of_exprt tmp_expr(this_object);
     call.arguments().push_back(tmp_expr);
+
+    need_new_obj = true;
   }
 
   // Do args
@@ -851,7 +873,7 @@ bool clang_cpp_convertert::get_constructor_call(
 
   call.set("constructor", 1);
 
-  if (!new_expr.base_ctor_derived())
+  if (need_new_obj)
     make_temporary(call);
 
   new_expr.swap(call);
@@ -942,6 +964,7 @@ bool clang_cpp_convertert::get_function_body(
             fd, lhs.id() == "dereference" ? lhs.op0() : lhs);
 
           exprt rhs;
+          rhs.set("#member_init", 1);
           if (get_expr(*init->getInit(), rhs))
             return true;
 
@@ -1555,8 +1578,8 @@ void clang_cpp_convertert::annotate_cpyctor(
   const clang::CXXMethodDecl &cxxmdd,
   typet &rtn_type)
 {
-  if (is_defaulted_ctor(cxxmdd) && is_cpyctor(cxxmdd))
-    rtn_type.set("#default_copy_cons", true);
+  if (is_cpyctor(cxxmdd))
+    rtn_type.set("#copy_cons", true);
 }
 
 bool clang_cpp_convertert::is_cpyctor(const clang::DeclContext &dcxt)
