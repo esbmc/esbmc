@@ -254,8 +254,6 @@ void dump_intervals(
           interval.second.is_top());
       }
     };
-    d.enable_wrapped_intervals ? print_vars(d.get_wrap_map())
-                               : print_vars(d.get_int_map());
   }
 }
 

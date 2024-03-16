@@ -23,6 +23,8 @@ public:
 
   interval_templatet() = default;
 
+  explicit interval_templatet(const type2tc &) { }
+
   explicit interval_templatet(const T &x) : lower(x), upper(x)
   {
   }
