@@ -15,6 +15,8 @@ enum class StatementType
   CLASS_DEFINITION,
   PASS,
   IMPORT,
+  BREAK,
+  CONTINUE,
   UNKNOWN,
 };
 
