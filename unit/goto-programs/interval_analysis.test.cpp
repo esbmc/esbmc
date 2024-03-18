@@ -526,14 +526,12 @@ TEST_CASE("Interval Analysis - While Statement", "[ai][interval-analysis]")
     "}";
 
   T.property["5"].push_back({"@F@main@a", 99, true});
-#if 0
   T.property["2"].push_back({"@F@main@a", 0, true});
   T.property["5"].push_back({"@F@main@a", 0, true});
 
   T.property["7"].push_back({"@F@main@a", 1, true});
   T.property["7"].push_back({"@F@main@a", 100, true});
   T.property["9"].push_back({"@F@main@a", 100, true});
-  #endif
 
   T.run_configs();
 }
