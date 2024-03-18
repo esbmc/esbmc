@@ -13,14 +13,8 @@
 #include <util/mp_arith.h>
 #include <util/threeval.h>
 #include <boost/multiprecision/cpp_bin_float.hpp>
+#include <variant>
 
-using integer_intervalt =  interval_templatet<BigInt>;
-using real_intervalt =
-  interval_templatet<boost::multiprecision::cpp_bin_float_100>;
-
-using interval = std::variant<std::shared_ptr<integer_intervalt>, std::shared_ptr<real_intervalt>, std::shared_ptr<wrapped_interval>>;
-
-using interval_map = std::unordered_map<irep_idt, interval, irep_id_hash>;
 /**
  * @brief Trivial, conjunctive interval domain for both float
  *        and integers. The categorization 'float' and 'integers'
@@ -29,6 +23,14 @@ using interval_map = std::unordered_map<irep_idt, interval, irep_id_hash>;
 class interval_domaint : public ai_domain_baset
 {
 public:
+  using integer_intervalt =  interval_templatet<BigInt>;
+  using real_intervalt =
+    interval_templatet<boost::multiprecision::cpp_bin_float_100>;
+
+  using interval = std::variant<std::shared_ptr<integer_intervalt>, std::shared_ptr<real_intervalt>, std::shared_ptr<wrapped_interval>>;
+
+  using interval_map = std::unordered_map<irep_idt, interval, irep_id_hash>;
+
   interval_domaint() : bottom(true)
   {
   }
