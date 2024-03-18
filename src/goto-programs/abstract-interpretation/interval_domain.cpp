@@ -973,8 +973,8 @@ void interval_domaint::transform(
   case ASSERT:
   {
     // There is a bug in Floats that need to be investigated! regression-float/nextafter
-    //    if (!contains_float(instruction.guard) && enable_assume_asserts)
-    assume(instruction.guard);
+    if (!contains_float(instruction.guard) && enable_assume_asserts)
+      assume(instruction.guard);
     break;
   }
 
