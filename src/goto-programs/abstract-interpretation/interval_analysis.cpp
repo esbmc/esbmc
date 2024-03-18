@@ -76,7 +76,7 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
   if (interval_domaint::enable_wrapped_intervals)
     optimize_expr_interval<wrapped_interval>(expr, state);
   else
-    optimize_expr_interval<integer_intervalt>(expr, state);
+    optimize_expr_interval<interval_domaint::integer_intervalt>(expr, state);
 
   // Try sub-expressions
   expr->Foreach_operand(
