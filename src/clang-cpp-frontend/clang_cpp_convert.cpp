@@ -947,29 +947,29 @@ bool clang_cpp_convertert::get_function_body(
 
         if (!init->isBaseInitializer())
         {
-          exprt lhs;
           if (init->isMemberInitializer())
           {
+            exprt lhs;
             // parsing non-static member initializer
             if (get_decl_ref(*init->getMember(), lhs))
               return true;
+
+            build_member_from_component(
+              fd, lhs.id() == "dereference" ? lhs.op0() : lhs);
+
+            exprt rhs;
+            rhs.set("#member_init", 1);
+            if (get_expr(*init->getInit(), rhs))
+              return true;
+
+            initializer = side_effect_exprt("assign", lhs.type());
+            initializer.copy_to_operands(lhs, rhs);
           }
           else
           {
             log_error("Unsupported initializer in {}", __func__);
             abort();
           }
-
-          build_member_from_component(
-            fd, lhs.id() == "dereference" ? lhs.op0() : lhs);
-
-          exprt rhs;
-          rhs.set("#member_init", 1);
-          if (get_expr(*init->getInit(), rhs))
-            return true;
-
-          initializer = side_effect_exprt("assign", lhs.type());
-          initializer.copy_to_operands(lhs, rhs);
         }
         else
         {
