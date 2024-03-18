@@ -37,6 +37,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Assert", StatementType::ASSERT},
   {"ClassDef", StatementType::CLASS_DEFINITION},
   {"Pass", StatementType::PASS},
+  {"Break", StatementType::BREAK},
   {"ImportFrom", StatementType::IMPORT},
   {"Import", StatementType::IMPORT}};
 
@@ -1391,6 +1392,12 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     case StatementType::CLASS_DEFINITION:
     {
       get_class_definition(element, block);
+      break;
+    }
+    case StatementType::BREAK:
+    {
+      code_breakt break_expr;
+      block.move_to_operands(break_expr);
       break;
     }
     /* "https://docs.python.org/3/tutorial/controlflow.html: "The pass statement does nothing.
