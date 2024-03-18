@@ -848,6 +848,16 @@ bool clang_cpp_convertert::get_constructor_call(
     In this case, use members to construct the object directly
     */
   }
+  else if (new_expr.get_bool("#delegating_ctor"))
+  {
+    // get symbol for this
+    symbolt *s = context.find_symbol(new_expr.get("#delegating_ctor_this"));
+    const symbolt &this_symbol = *s;
+    assert(s);
+    exprt implicit_this_symb = symbol_expr(this_symbol);
+
+    call.arguments().push_back(implicit_this_symb);
+  }
   else
   {
     exprt this_object = exprt("new_object");
@@ -964,6 +974,15 @@ bool clang_cpp_convertert::get_function_body(
 
             initializer = side_effect_exprt("assign", lhs.type());
             initializer.copy_to_operands(lhs, rhs);
+          }
+          else if (init->isDelegatingInitializer())
+          {
+            initializer.set(
+              "#delegating_ctor_this",
+              ftype.arguments().at(0).get("#identifier"));
+            initializer.set("#delegating_ctor", 1);
+            if (get_expr(*init->getInit(), initializer))
+              return true;
           }
           else
           {
