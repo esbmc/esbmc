@@ -16,6 +16,7 @@ enum class StatementType
   PASS,
   IMPORT,
   BREAK,
+  CONTINUE,
   UNKNOWN,
 };
 
