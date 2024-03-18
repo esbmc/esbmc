@@ -185,10 +185,10 @@ public:
                 continue; // Var not present means TOP (which is always correct)
               }
 
-              const interval &ref_variant = interval_it->second;
+              const interval_domaint::interval &ref_variant = interval_it->second;
 	      REQUIRE(Index == ref_variant.index());
 	      const auto &ref = std::get<Index>(ref_variant);
-	      integer_intervalt cpy = *ref;
+              interval_domaint::integer_intervalt cpy = *ref;
 	      cpy.set_lower(value);
 	      CAPTURE(
 		      ref->is_top(),
