@@ -91,11 +91,11 @@ __ESBMC_HIDE:;
   {
     c1 = (unsigned char)*s1++;
     c2 = (unsigned char)*s2++;
-    if (c1 == '\0')
+    if (c1 != c2) // Return immediately if characters are different
       return c1 - c2;
-  } while (c1 == c2);
+  } while (c1 != '\0'); // Loop until c1 is '\0'
 
-  return c1 - c2;
+  return 0; // Strings are identical
 }
 
 int strncmp(const char *s1, const char *s2, size_t n)
