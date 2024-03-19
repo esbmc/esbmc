@@ -15,9 +15,9 @@ template <size_t Index, class Interval>
 Interval interval_domaint::get_interval_from_variant(const symbol2t &sym) const
 {
   const auto &it = intervals.find(sym.thename);
-  if (it != intervals.end())
+  // TODO: mix floats/integer
+  if (it != intervals.end() && it->second.index() == Index)
   {
-    assert(it->second.index() == Index);
     return *std::get<Index>(it->second);
   }
   return Interval(sym.type);
@@ -89,7 +89,6 @@ void interval_domaint::apply_assume_symbol_truth(
   const symbol2t &sym,
   bool is_false)
 {
-  sym.dump();
   Interval interval = get_interval_from_symbol<Interval>(sym);
   // [0,0]
   if (is_false)
