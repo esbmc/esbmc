@@ -392,8 +392,6 @@ public:
     }
   }
 
-
-
 private:
   size_t n = 0;
   bool is_empty_vector = false;
@@ -461,7 +459,6 @@ private:
   bool is_unsupported_operator_in_constraint_not(const expr2tc &expr);
 
 public:
-
   expr_to_ibex_parser(CspMap *map, ibex::Variable *vars)
   {
     this->map = map;
@@ -662,7 +659,7 @@ public:
 
   [[maybe_unused]] void modularize_intervals();
 
-      void interval_to_domain(
+  void interval_to_domain(
     const std::optional<BigInt> &lower,
     const std::optional<BigInt> &upper,
     const std::string &name)
@@ -681,9 +678,8 @@ public:
     if (lower)
       map.update_lb_interval(*lower, name);
     if (upper)
-      map.update_ub_interval(*upper, name);    
+      map.update_ub_interval(*upper, name);
   }
-
 
 private:
   ibex::IntervalVector domains;

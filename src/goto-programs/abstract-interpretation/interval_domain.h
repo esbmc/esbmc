@@ -23,11 +23,14 @@
 class interval_domaint : public ai_domain_baset
 {
 public:
-  using integer_intervalt =  interval_templatet<BigInt>;
+  using integer_intervalt = interval_templatet<BigInt>;
   using real_intervalt =
     interval_templatet<boost::multiprecision::cpp_bin_float_100>;
 
-  using interval = std::variant<std::shared_ptr<integer_intervalt>, std::shared_ptr<real_intervalt>, std::shared_ptr<wrapped_interval>>;
+  using interval = std::variant<
+    std::shared_ptr<integer_intervalt>,
+    std::shared_ptr<real_intervalt>,
+    std::shared_ptr<wrapped_interval>>;
 
   using interval_map = std::unordered_map<irep_idt, interval, irep_id_hash>;
 
@@ -184,12 +187,12 @@ public:
   virtual bool
   ai_simplify(expr2tc &condition, const namespacet &ns) const override;
 
-    interval_map intervals;
+  interval_map intervals;
+
 protected:
   // Abstract state information
   /// Is this state a bottom. I.e., there is a contradiction between an assignment and an assume
   bool bottom;
-
 
   /**
    * @brief Recursively explores an Expression until it reaches a symbol. If the
@@ -273,7 +276,8 @@ protected:
    * @param rhs
    */
   template <class Interval>
-  Interval extrapolate_intervals(const Interval &before, const Interval &after) const;
+  Interval
+  extrapolate_intervals(const Interval &before, const Interval &after) const;
 
   /**
    * @brief Applies Interpolation narrowing algorithm
@@ -358,7 +362,10 @@ public:
   Interval get_interval_from_variant(const symbol2t &sym) const;
 
   template <class Interval>
-  bool join_intervals(const std::shared_ptr<Interval> &after, std::shared_ptr<Interval> &dst, bool can_extrapolate) const;
+  bool join_intervals(
+    const std::shared_ptr<Interval> &after,
+    std::shared_ptr<Interval> &dst,
+    bool can_extrapolate) const;
 
   /**
    * @brief Get the interval from constant expression

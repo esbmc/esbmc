@@ -22,10 +22,8 @@ public:
 
   void run_configs(bool needs_overflow_support = false)
   {
-
     if (!needs_overflow_support)
     {
-     
       // Common Interval Analysis (Linear from -infinity into +infinity)
       SECTION("Baseline")
       {
@@ -52,7 +50,6 @@ public:
         ait<interval_domaint> baseline;
         run_test<0>(baseline);
       }
-
 
       SECTION("Contractor")
       {
@@ -93,9 +90,7 @@ public:
         ait<interval_domaint> baseline;
         run_test<2>(baseline);
       }
-
     }
-
 
     SECTION("Wrapped Intervals + Arithmetic + Bitwise")
     {
@@ -106,9 +101,7 @@ public:
       interval_domaint::enable_interval_bitwise_arithmetic = true;
       ait<interval_domaint> baseline;
       run_test<2>(baseline, true);
-     
     }
-
   }
 
   static void set_baseline_config()
@@ -185,19 +178,22 @@ public:
                 continue; // Var not present means TOP (which is always correct)
               }
 
-              const interval_domaint::interval &ref_variant = interval_it->second;
-	      REQUIRE(Index == ref_variant.index());
-	      const auto &ref = std::get<Index>(ref_variant);
+              const interval_domaint::interval &ref_variant =
+                interval_it->second;
+              REQUIRE(Index == ref_variant.index());
+              const auto &ref = std::get<Index>(ref_variant);
               interval_domaint::integer_intervalt cpy = *ref;
-	      cpy.set_lower(value);
-	      CAPTURE(
-		      ref->is_top(),
-		      ref->is_bottom(),
-		      property_it->should_contain,
-		      cpy.get_lower());
-	      REQUIRE((ref->is_top() || ref->is_bottom() || ref->upper || ref->lower));
-	      ref->dump();
-	      REQUIRE(ref->contains(cpy.get_lower()) == property_it->should_contain);      	    
+              cpy.set_lower(value);
+              CAPTURE(
+                ref->is_top(),
+                ref->is_bottom(),
+                property_it->should_contain,
+                cpy.get_lower());
+              REQUIRE((
+                ref->is_top() || ref->is_bottom() || ref->upper || ref->lower));
+              ref->dump();
+              REQUIRE(
+                ref->contains(cpy.get_lower()) == property_it->should_contain);
             }
           }
         }

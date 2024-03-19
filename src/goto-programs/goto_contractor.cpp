@@ -317,7 +317,7 @@ void goto_contractort::goto_contractor_condition(
           }
 
           interval_analysis(goto_functions, namespacet);
-          for (const auto &i : interval_analysis[i_it].intervals)            
+          for (const auto &i : interval_analysis[i_it].intervals)
           {
             if (i.second.index() != 0)
               continue;
@@ -395,19 +395,19 @@ void goto_contractort::goto_contractor_condition(
 
         //get intervals and convert them to ibex intervals by updating the map
         interval_analysis(goto_functions, namespacet);
-        for (const auto &i : interval_analysis[i_it].intervals)            
-          {
-            if (i.second.index() != 0)
-              continue;
+        for (const auto &i : interval_analysis[i_it].intervals)
+        {
+          if (i.second.index() != 0)
+            continue;
 
-            const interval_templatet<BigInt> &value = *std::get<0>(i.second);
-            if (value.lower)
-              map.update_lb_interval(
-                value.get_lower().to_int64(), i.first.as_string());
-            if (value.upper)
-              map.update_ub_interval(
-                value.get_upper().to_int64(), i.first.as_string());
-          }
+          const interval_templatet<BigInt> &value = *std::get<0>(i.second);
+          if (value.lower)
+            map.update_lb_interval(
+              value.get_lower().to_int64(), i.first.as_string());
+          if (value.upper)
+            map.update_ub_interval(
+              value.get_upper().to_int64(), i.first.as_string());
+        }
 
         auto X = map.create_interval_vector();
 
@@ -1106,4 +1106,3 @@ void interval_analysis_ibex_contractor::dump(bool is_timed)
     std::chrono::duration<double>(std::chrono::steady_clock::now() - t_0)
       .count();
 }
-
