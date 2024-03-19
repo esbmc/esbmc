@@ -1309,7 +1309,7 @@ void interval_domaint::assume(const expr2tc &cond)
         {
         case 0:
         {
-          integer_intervalt &int_interval = *std::get<0>(i.second);
+          const integer_intervalt &int_interval = *std::get<0>(i.second);
           std::optional<BigInt> upper;
           std::optional<BigInt> lower;
           if (int_interval.upper)
@@ -1317,10 +1317,11 @@ void interval_domaint::assume(const expr2tc &cond)
           if (int_interval.lower)
             lower = int_interval.get_lower();
           contractor.interval_to_domain(lower, upper, i.first.as_string());
+          break;
         }
         case 1:
         {
-          real_intervalt &real_interval = *std::get<1>(i.second);
+          const real_intervalt &real_interval = *std::get<1>(i.second);
           std::optional<double> upper;
           std::optional<double> lower;
           if (real_interval.upper)
@@ -1328,6 +1329,7 @@ void interval_domaint::assume(const expr2tc &cond)
           if (real_interval.lower)
             lower = (double)real_interval.get_lower();
           contractor.interval_to_domain(lower, upper, i.first.as_string());
+          break;
         }
         default:
           break;
