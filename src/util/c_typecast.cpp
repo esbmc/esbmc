@@ -600,8 +600,8 @@ void c_typecastt::implicit_typecast_followed(
   const typet &dest_type)
 {
   if (
-    (is_reference(dest_type) || is_rvalue_reference(dest_type)) &&
-    !(is_reference(src_type) || is_rvalue_reference(src_type)))
+    is_lvalue_or_rvalue_reference(dest_type) &&
+    !is_lvalue_or_rvalue_reference(src_type))
   {
     // if a destination type is an lvalue reference,
     // which has been modelled as a pointer, but
@@ -633,8 +633,8 @@ void c_typecastt::implicit_typecast_followed(
     }
   }
   else if (
-    (is_reference(src_type) || is_rvalue_reference(src_type)) &&
-    !(is_reference(dest_type) || is_rvalue_reference(dest_type)))
+    is_lvalue_or_rvalue_reference(src_type) &&
+    !is_lvalue_or_rvalue_reference(dest_type))
   {
     log_debug("c-typecast", "src-ref to non-ref dest");
     if (ns.follow(src_type.subtype()).id() == dest_type.id())
