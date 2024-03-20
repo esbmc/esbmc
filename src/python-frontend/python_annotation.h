@@ -165,16 +165,24 @@ private:
         }
 
         // Get type from RHS variable
-        else if (element["value"]["_type"] == "Name")
+        else if (
+          element["value"]["_type"] == "Name" ||
+          element["value"]["_type"] == "Subscript")
         {
+          std::string rhs_var_name;
+          if (element["value"]["_type"] == "Name")
+            rhs_var_name = element["value"]["id"];
+          else if (element["value"]["_type"] == "Subscript")
+            rhs_var_name = element["value"]["value"]["id"];
+
           // Find RHS variable declaration in the current scope
           auto rhs_node =
-            find_annotated_assign(element["value"]["id"], body["body"]);
+            find_annotated_assign(rhs_var_name, body["body"]);
 
           // Find RHS variable declaration in the current function
           if (rhs_node.empty() && current_func)
             rhs_node = find_annotated_assign(
-              element["value"]["id"], (*current_func)["body"]);
+              rhs_var_name, (*current_func)["body"]);
 
           // Find RHS variable in the function args
           if (rhs_node.empty() && body.contains("args"))
