@@ -1226,7 +1226,7 @@ bool clang_cpp_convertert::get_decl_ref(
     if (id.empty() && name.empty())
       name_param_and_continue(*param, id, name, new_expr);
 
-    if (is_reference(new_expr.type()) || is_rvalue_reference(new_expr.type()))
+    if (is_lvalue_or_rvalue_reference(new_expr.type()))
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
       new_expr.set("#lvalue", true);
@@ -1267,7 +1267,7 @@ bool clang_cpp_convertert::get_decl_ref(
     if (clang_c_convertert::get_decl_ref(decl, new_expr))
       return true;
 
-    if (is_reference(new_expr.type()) || is_rvalue_reference(new_expr.type()))
+    if (is_lvalue_or_rvalue_reference(new_expr.type()))
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
       new_expr.set("#lvalue", true);
