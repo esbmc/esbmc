@@ -116,6 +116,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
   // Declaration of variables
   case clang::Decl::Var:
+  case clang::Decl::VarTemplateSpecialization:
   {
     const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(decl);
     return get_var(vd, new_expr);
