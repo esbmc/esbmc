@@ -37,10 +37,29 @@ function(add_esbmc_regression_test folder modes test)
       LABELS "regression;${folder}")
 endfunction()
 
+function(add_smtlib_regression_test folder modes test)
+    set(test_name "smtlib/${folder}/${test}")
+    add_test(NAME ${test_name}
+             COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
+                     --tool=${ESBMC_BIN}
+                     --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
+                     --modes ${modes}
+                     --file=${test}
+                     --smt_test
+                     --smt_solver=z3
+                     ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
+    # TODO: Testing Tool should have a command to dump the TAG of a test		   
+    set_tests_properties(${test_name}
+      PROPERTIES SKIP_RETURN_CODE 10
+      LABELS "smtz3;${folder}")
+endfunction()
 function(add_esbmc_regression folder modes)
     SUBDIRLIST(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
     foreach(test ${SUBDIRS})
         add_esbmc_regression_test(${folder} "${modes}" ${test})
+        if(UNIX AND NOT APPLE)    
+            add_smtlib_regression_test(${folder} "${modes}" ${test})
+        endif()
     endforeach()
 endfunction()
 
