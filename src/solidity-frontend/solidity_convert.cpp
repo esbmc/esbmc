@@ -83,9 +83,18 @@ bool solidity_convertert::convert()
   // reasoning-based verification
 
   // populate exportedSymbolsList
+  // e..g
+  //  "exportedSymbols": {
+  //       "Base": [      --> Contract Name
+  //           8
+  //       ],
+  //       "tt": [        --> Error Name
+  //           7
+  //       ]
+  //   }
   for (const auto &itr : ast_json["exportedSymbols"].items())
   {
-    //! Assume a contract has only one id
+    //! Assume it has only one id
     int c_id = itr.value()[0].get<int>();
     std::string c_name = itr.key();
     exportedSymbolsList.insert(std::pair<int, std::string>(c_id, c_name));
@@ -2067,6 +2076,8 @@ bool solidity_convertert::get_current_contract_name(
 
     if (exportedSymbolsList.count(ref_id))
     {
+      // this can be contract, error, et al.
+      // therefore, we utilize the linearizedBaseList to make sure it's really a contract
       std::string c_name = exportedSymbolsList[ref_id];
       if (linearizedBaseList.count(c_name))
         contract_name = exportedSymbolsList[ref_id];
@@ -3671,8 +3682,9 @@ std::string solidity_convertert::get_filename_from_path(std::string path)
 // A wrapper to obtain additional contract_name info
 const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
 {
-  std::string empty_str = "";
-  return find_decl_ref(ref_decl_id, empty_str);
+  // An empty contract name means that the node outside any contracts.
+  std::string empty_contract_name = "";
+  return find_decl_ref(ref_decl_id, empty_contract_name);
 }
 
 const nlohmann::json &
@@ -3734,9 +3746,10 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
     // check the nodes inside a contract
     if ((*itr)["nodeType"] == "ContractDefinition")
     {
+      // update the contract name first
       contract_name = (*itr)["name"].get<std::string>();
-      nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
 
+      nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
       unsigned idx = 0;
       for (nlohmann::json::iterator itrr = ast_nodes.begin();
            itrr != ast_nodes.end();
@@ -3785,103 +3798,103 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
   //! otherwise, assume it is current_contractName
   contract_name = current_contractName;
 
-  // current_functionDecl should not be a nullptr
-  if (current_functionDecl == nullptr)
+  if (current_functionDecl != nullptr)
   {
-    log_error("Empty current_functionDecl pointer.");
-    abort();
-  }
-
-  // Then search "declarations" in current function scope
-  const nlohmann::json &current_func = *current_functionDecl;
-  if (!current_func.contains("body"))
-  {
-    log_error(
-      "Unable to find the corresponding local variable decl. Current "
-      "function "
-      "does not have a function body.");
-    abort();
-  }
-
-  // var declaration in local statements
-  // bfs visit
-  std::queue<const nlohmann::json *> body_stmts;
-  body_stmts.emplace(&current_func["body"]);
-
-  while (!body_stmts.empty())
-  {
-    const nlohmann::json &top_stmt = *(body_stmts).front();
-    for (const auto &body_stmt : top_stmt["statements"].items())
+    // Then search "declarations" in current function scope
+    const nlohmann::json &current_func = *current_functionDecl;
+    if (!current_func.contains("body"))
     {
-      const nlohmann::json &stmt = body_stmt.value();
-      if (stmt["nodeType"] == "VariableDeclarationStatement")
-      {
-        for (const auto &local_decl : stmt["declarations"].items())
-        {
-          const nlohmann::json &the_decl = local_decl.value();
-          if (the_decl["id"] == ref_decl_id)
-          {
-            assert(the_decl.contains("nodeType"));
-            return the_decl;
-          }
-        }
-      }
-
-      // nested block e.g.
-      // {
-      //    {
-      //        int x = 1;
-      //    }
-      // }
-      if (stmt["nodeType"] == "Block" && stmt.contains("statements"))
-        body_stmts.emplace(&stmt);
+      log_error(
+        "Unable to find the corresponding local variable decl. Current "
+        "function "
+        "does not have a function body.");
+      abort();
     }
 
-    body_stmts.pop();
-  }
+    // var declaration in local statements
+    // bfs visit
+    std::queue<const nlohmann::json *> body_stmts;
+    body_stmts.emplace(&current_func["body"]);
 
-  // Search function parameter
-  if (current_func.contains("parameters"))
-  {
-    if (current_func["parameters"]["parameters"].size())
+    while (!body_stmts.empty())
     {
-      // var decl in function parameter array
-      for (const auto &param_decl :
-           current_func["parameters"]["parameters"].items())
+      const nlohmann::json &top_stmt = *(body_stmts).front();
+      for (const auto &body_stmt : top_stmt["statements"].items())
       {
-        const nlohmann::json &param = param_decl.value();
-        assert(param["nodeType"] == "VariableDeclaration");
-        if (param["id"] == ref_decl_id)
-          return param;
+        const nlohmann::json &stmt = body_stmt.value();
+        if (stmt["nodeType"] == "VariableDeclarationStatement")
+        {
+          for (const auto &local_decl : stmt["declarations"].items())
+          {
+            const nlohmann::json &the_decl = local_decl.value();
+            if (the_decl["id"] == ref_decl_id)
+            {
+              assert(the_decl.contains("nodeType"));
+              return the_decl;
+            }
+          }
+        }
+
+        // nested block e.g.
+        // {
+        //    {
+        //        int x = 1;
+        //    }
+        // }
+        if (stmt["nodeType"] == "Block" && stmt.contains("statements"))
+          body_stmts.emplace(&stmt);
+      }
+
+      body_stmts.pop();
+    }
+
+    // Search function parameter
+    if (current_func.contains("parameters"))
+    {
+      if (current_func["parameters"]["parameters"].size())
+      {
+        // var decl in function parameter array
+        for (const auto &param_decl :
+             current_func["parameters"]["parameters"].items())
+        {
+          const nlohmann::json &param = param_decl.value();
+          assert(param["nodeType"] == "VariableDeclaration");
+          if (param["id"] == ref_decl_id)
+            return param;
+        }
       }
     }
   }
 
   // if no matching state or local var decl, search decl in current_forStmt
-  const nlohmann::json &current_for = *current_forStmt;
-  if (current_for.contains("initializationExpression"))
+  if (current_forStmt != nullptr)
   {
-    if (current_for["initializationExpression"].contains("declarations"))
+    const nlohmann::json &current_for = *current_forStmt;
+    if (current_for.contains("initializationExpression"))
     {
-      assert(current_for["initializationExpression"]["declarations"]
-               .size()); // Assuming a non-empty declaration array
-      const nlohmann::json &decls =
-        current_for["initializationExpression"]["declarations"];
-      for (const auto &init_decl : decls.items())
+      if (current_for["initializationExpression"].contains("declarations"))
       {
-        const nlohmann::json &the_decl = init_decl.value();
-        if (the_decl["id"] == ref_decl_id)
-          return the_decl;
+        assert(current_for["initializationExpression"]["declarations"]
+                 .size()); // Assuming a non-empty declaration array
+        const nlohmann::json &decls =
+          current_for["initializationExpression"]["declarations"];
+        for (const auto &init_decl : decls.items())
+        {
+          const nlohmann::json &the_decl = init_decl.value();
+          if (the_decl["id"] == ref_decl_id)
+            return the_decl;
+        }
       }
+      else
+        assert(!"Unable to find the corresponding local variable decl. No local declarations found in current For-Statement");
     }
     else
-      assert(!"Unable to find the corresponding local variable decl. No local declarations found in current For-Statement");
+      assert(!"Unable to find the corresponding local variable decl. Current For-Statement does not have any init.");
   }
-  else
-    assert(!"Unable to find the corresponding local variable decl. Current For-Statement does not have any init.");
 
-  assert(!"should not be here - no matching ref decl id found");
-  return ast_json;
+  // Instead of reporting errors here, we return an empty json
+  // and leave the error handling to the caller.
+  return empty_json;
 }
 
 // return construcor node

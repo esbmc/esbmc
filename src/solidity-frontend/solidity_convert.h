@@ -192,11 +192,13 @@ protected:
   std::stack<const nlohmann::json *> current_BinOp_type;
   std::string current_functionName;
 
+  //! Be careful of using 'current_contractName'. This might lead to trouble in inheritance.
+  //! If you are not sure, use 'get_current_contract_name' instead.
   std::string current_contractName;
   std::string current_fileName;
 
   // Auxiliary data structures:
-  // Mapping from the Contract_id to the Contract_Name
+  // Mapping from the node 'id' to the exported symbol (i.e. contract, error, ....)
   std::unordered_map<int, std::string> exportedSymbolsList;
   // Inheritance Order Record <contract_name, Contract_id>
   std::unordered_map<std::string, std::vector<int>> linearizedBaseList;
