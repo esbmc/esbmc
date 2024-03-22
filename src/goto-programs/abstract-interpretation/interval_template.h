@@ -230,7 +230,7 @@ public:
   // Wether *this \subseteq other
   bool is_subseteq(const interval_templatet &other) const
   {
-   if ((!lower && other.lower) || (!upper && other.upper))
+    if ((!lower && other.lower) || (!upper && other.upper))
       return false;
     if (other.lower && *lower < *other.lower)
       return false;
