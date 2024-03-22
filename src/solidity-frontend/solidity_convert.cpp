@@ -1352,6 +1352,8 @@ bool solidity_convertert::get_expr(
 
       // Soldity uses +ve odd numbers to refer to var or functions declared in the contract
       const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
+      if (decl == empty_json)
+        return true;
 
       if (!check_intrinsic_function(decl))
       {
@@ -1613,6 +1615,9 @@ bool solidity_convertert::get_expr(
       const int contract_func_id =
         callee_expr_json["referencedDeclaration"].get<int>();
       const nlohmann::json caller_expr_json = find_decl_ref(contract_func_id);
+      if (caller_expr_json == empty_json)
+        return true;
+
       std::string ref_contract_name;
       if (get_current_contract_name(caller_expr_json, ref_contract_name))
         return true;
@@ -1695,6 +1700,9 @@ bool solidity_convertert::get_expr(
 
       int ref_id = callee_expr_json["referencedDeclaration"].get<int>();
       const nlohmann::json struct_ref = find_decl_ref(ref_id);
+      if (struct_ref == empty_json)
+        return true;
+
       const nlohmann::json members = struct_ref["members"];
       const nlohmann::json args = expr["arguments"];
 
@@ -1808,6 +1816,9 @@ bool solidity_convertert::get_expr(
 
         const nlohmann::json &decl = find_decl_ref(
           expr["baseExpression"]["referencedDeclaration"].get<int>());
+        if (decl == empty_json)
+          return true;
+
         if (get_var_decl_ref(decl, src_val))
           return true;
 
@@ -1835,6 +1846,8 @@ bool solidity_convertert::get_expr(
     {
       const nlohmann::json &decl =
         find_decl_ref(expr["baseExpression"]["referencedDeclaration"]);
+      if (decl == empty_json)
+        return true;
       if (get_var_decl_ref(decl, array))
         return true;
     }
@@ -1955,6 +1968,8 @@ bool solidity_convertert::get_expr(
     const int caller_id = callee_expr_json["referencedDeclaration"].get<int>();
 
     const nlohmann::json caller_expr_json = find_decl_ref(caller_id);
+    if (caller_expr_json == empty_json)
+      return true;
 
     switch (type)
     {
@@ -1966,6 +1981,8 @@ bool solidity_convertert::get_expr(
 
       const int struct_var_id = expr["referencedDeclaration"].get<int>();
       const nlohmann::json struct_var_ref = find_decl_ref(struct_var_id);
+      if (struct_var_ref == empty_json)
+        return true;
 
       exprt comp;
       if (get_var_decl_ref(struct_var_ref, comp))
@@ -1986,6 +2003,9 @@ bool solidity_convertert::get_expr(
     {
       const int enum_id = expr["referencedDeclaration"].get<int>();
       const nlohmann::json enum_member_ref = find_decl_ref(enum_id);
+      if (enum_member_ref == empty_json)
+        return true;
+
       if (get_enum_member_ref(enum_member_ref, new_expr))
         return true;
 
@@ -4440,7 +4460,7 @@ bool solidity_convertert::get_empty_array_ref(
   }
 
   name = "array#" + label;
-  if(!contract_name.empty())
+  if (!contract_name.empty())
     id = "sol:@C@" + contract_name + "@" + name;
   else
     id = "sol:@" + name;
