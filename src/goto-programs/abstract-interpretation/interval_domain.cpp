@@ -14,9 +14,9 @@
 template <size_t Index, class Interval>
 Interval interval_domaint::get_interval_from_variant(const symbol2t &sym) const
 {
-  const auto &it = intervals.find(sym.thename);
+  const auto &it = intervals->find(sym.thename);
   // TODO: mix floats/integer
-  if (it != intervals.end() && it->second.index() == Index)
+  if (it != intervals->end() && it->second.index() == Index)
   {
     return *std::get<Index>(it->second);
   }
@@ -44,46 +44,49 @@ interval_domaint::get_interval_from_symbol(const symbol2t &sym) const
   return get_interval_from_variant<2, wrapped_interval>(sym);
 }
 
-template <>
-void interval_domaint::update_symbol_interval(
-  const symbol2t &sym,
-  const interval_domaint::integer_intervalt value)
+template <size_t Index, class Interval>
+void interval_domaint::update_symbol_from_variant(const symbol2t &sym, const Interval &value)
 {
-  if (value.is_top())
+  const auto &it = intervals->find(sym.thename);
+  const bool is_new_value_top = value.is_top();
+
+  // Are we actually changing it?
+  if ((it == intervals->end() && is_new_value_top) || (it != intervals->end() && *std::get<Index>(it->second) == value))
+    return;
+
+  copy_if_needed();
+  if (is_new_value_top)
   {
-    intervals.erase(sym.thename);
+    intervals->erase(sym.thename);
     return;
   }
 
-  intervals[sym.thename] =
-    std::make_shared<interval_domaint::integer_intervalt>(value);
+  (*intervals)[sym.thename] = std::make_shared<Interval>(value);
+}
+
+
+template <>
+void interval_domaint::update_symbol_interval(
+  const symbol2t &sym,
+  const interval_domaint::integer_intervalt &value)
+{
+  update_symbol_from_variant<0, interval_domaint::integer_intervalt>(sym,value);
 }
 
 template <>
 void interval_domaint::update_symbol_interval(
   const symbol2t &sym,
-  const interval_domaint::real_intervalt value)
+  const interval_domaint::real_intervalt &value)
 {
-  if (value.is_top())
-  {
-    intervals.erase(sym.thename);
-    return;
-  }
-  intervals[sym.thename] =
-    std::make_shared<interval_domaint::real_intervalt>(value);
+  update_symbol_from_variant<1, interval_domaint::real_intervalt>(sym,value);
 }
 
 template <>
 void interval_domaint::update_symbol_interval(
   const symbol2t &sym,
-  const wrapped_interval value)
+  const wrapped_interval &value)
 {
-  if (value.is_top())
-  {
-    intervals.erase(sym.thename);
-    return;
-  }
-  intervals[sym.thename] = std::make_shared<wrapped_interval>(value);
+  update_symbol_from_variant<2, wrapped_interval>(sym,value);
 }
 
 template <class Interval>
@@ -672,20 +675,20 @@ template <>
 bool interval_domaint::is_mapped<interval_domaint::integer_intervalt>(
   const symbol2t &sym) const
 {
-  return intervals.find(sym.thename) != intervals.end();
+  return intervals->find(sym.thename) != intervals->end();
 }
 
 template <>
 bool interval_domaint::is_mapped<interval_domaint::real_intervalt>(
   const symbol2t &sym) const
 {
-  return intervals.find(sym.thename) != intervals.end();
+  return intervals->find(sym.thename) != intervals->end();
 }
 
 template <>
 bool interval_domaint::is_mapped<wrapped_interval>(const symbol2t &sym) const
 {
-  return intervals.find(sym.thename) != intervals.end();
+  return intervals->find(sym.thename) != intervals->end();
 }
 
 template <>
@@ -871,7 +874,7 @@ void interval_domaint::output(std::ostream &out) const
     return;
   }
 
-  for (const auto &i : intervals)
+  for (const auto &i : *intervals)
   {
     switch (i.second.index())
     {
@@ -1175,6 +1178,8 @@ bool interval_domaint::join(
     }
     result |= join_changed;
   }
+
+  
   return result;
 }
 
@@ -1182,19 +1187,31 @@ bool interval_domaint::join(
   const interval_domaint &b,
   const goto_programt::const_targett &to)
 {
-  if (b.is_bottom())
+  if (b.is_bottom() || is_top())
     return false;
-  if (is_bottom())
+  if (is_bottom() || b.is_top())
   {
-    *this = b;
+    bottom = false;
+    intervals = b.intervals;
     return true;
   }
+
+  if (intervals == b.intervals)
+    return false;
+
+  // Possible optimization here. "b" might have a copy already
+  // so we could just change it directly. However, while testing
+  // hardware category I found out that most of cases we will need
+  // to do a copy anyway. For btor2c-lazyMod.cal91.c:
+  // 26900 copies were needed vs 600 not needed. Probably not worth
+  // to expend much time on this.
+  copy_if_needed();
 
   const bool is_if_goto = to->is_goto() && !is_true(to->guard);
   const bool is_guard = to->is_assume() || to->is_assert() || is_if_goto;
 
   // Prevent short-circuit
-  bool result = join(intervals, b.intervals, is_guard);
+  bool result = join(*intervals, *b.intervals, is_guard);
   return result;
 }
 
@@ -1241,7 +1258,9 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
     // Reset the interval domain if it is being reasigned (-infinity, +infinity).
     irep_idt identifier = is_symbol2t(expr) ? to_symbol2t(expr).thename
                                             : to_code_decl2t(expr).value;
-    intervals.erase(identifier);
+    if (intervals->count(identifier))
+      copy_if_needed();
+    intervals->erase(identifier);
   }
   else
     log_debug("interval", "[havoc_rec] Missing support: {}", *expr);
@@ -1332,7 +1351,7 @@ void interval_domaint::assume(const expr2tc &cond)
     interval_analysis_ibex_contractor contractor;
     if (contractor.parse_guard(new_cond))
     {
-      for (const auto &i : intervals)
+      for (const auto &i : *intervals)
       {
         switch (i.second.index())
         {

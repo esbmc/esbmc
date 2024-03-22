@@ -106,12 +106,14 @@ public:
     goto_programt::const_targett,
     goto_programt::const_targett to)
   {
-    return join(b, to);
+    const bool result = join(b, to);
+    copied = false;
+    return result;
   }
 
   void clear_state()
   {
-    intervals.clear();
+    intervals = get_empty();
   }
 
   // no states
@@ -140,7 +142,7 @@ public:
 
   bool is_top() const override final
   {
-    return !bottom && intervals.empty();
+    return !bottom && intervals->empty();
   }
 
   /**
@@ -187,7 +189,23 @@ public:
   virtual bool
   ai_simplify(expr2tc &condition, const namespacet &ns) const override;
 
-  interval_map intervals;
+  std::shared_ptr<interval_map> intervals;
+  bool copied = false;
+
+  static std::shared_ptr<interval_map> get_empty()
+  {
+    static std::shared_ptr<interval_map> map = std::make_shared<interval_map>();
+    return map;
+  }
+  void copy_if_needed()
+  {
+    if (copied)
+      return;
+    std::shared_ptr<interval_map> cpy = std::make_shared<interval_map>();
+    *cpy = *intervals;
+    intervals = cpy;
+    copied = true;    
+  }
 
 protected:
   // Abstract state information
@@ -407,7 +425,11 @@ protected:
    * @param value
    */
   template <class Interval>
-  void update_symbol_interval(const symbol2t &sym, const Interval value);
+  void update_symbol_interval(const symbol2t &sym, const Interval &value);
+
+  template <size_t Index, class Interval>
+  void update_symbol_from_variant(const symbol2t &sym, const Interval &value);
+
 };
 
 #endif // CPROVER_ANALYSES_INTERVAL_DOMAIN_H
