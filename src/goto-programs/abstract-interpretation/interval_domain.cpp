@@ -1077,8 +1077,9 @@ bool interval_domaint::join_intervals(
   return false;
 }
 
-
-bool do_is_subset(const interval_domaint::interval &a, const interval_domaint::interval &b)
+bool do_is_subset(
+  const interval_domaint::interval &a,
+  const interval_domaint::interval &b)
 {
   //  return false;
   if (a.index() != 0)
@@ -1108,10 +1109,8 @@ bool interval_domaint::join(
     }
 
     if (!do_is_subset(myPair.second, next_it->second))
-      symbol_map.insert(myPair.first);   
-    
+      symbol_map.insert(myPair.first);
   }
-
 
   // Here we apply the HULL operation (before, after)
   for (const irep_idt &symbol : symbol_map)
