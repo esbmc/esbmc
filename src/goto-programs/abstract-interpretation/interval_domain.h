@@ -204,7 +204,7 @@ public:
     std::shared_ptr<interval_map> cpy = std::make_shared<interval_map>();
     *cpy = *intervals;
     intervals = cpy;
-    copied = true;    
+    copied = true;
   }
 
 protected:
@@ -429,7 +429,6 @@ protected:
 
   template <size_t Index, class Interval>
   void update_symbol_from_variant(const symbol2t &sym, const Interval &value);
-
 };
 
 #endif // CPROVER_ANALYSES_INTERVAL_DOMAIN_H

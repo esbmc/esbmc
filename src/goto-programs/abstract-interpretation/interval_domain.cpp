@@ -45,13 +45,17 @@ interval_domaint::get_interval_from_symbol(const symbol2t &sym) const
 }
 
 template <size_t Index, class Interval>
-void interval_domaint::update_symbol_from_variant(const symbol2t &sym, const Interval &value)
+void interval_domaint::update_symbol_from_variant(
+  const symbol2t &sym,
+  const Interval &value)
 {
   const auto &it = intervals->find(sym.thename);
   const bool is_new_value_top = value.is_top();
 
   // Are we actually changing it?
-  if ((it == intervals->end() && is_new_value_top) || (it != intervals->end() && *std::get<Index>(it->second) == value))
+  if (
+    (it == intervals->end() && is_new_value_top) ||
+    (it != intervals->end() && *std::get<Index>(it->second) == value))
     return;
 
   copy_if_needed();
@@ -64,13 +68,13 @@ void interval_domaint::update_symbol_from_variant(const symbol2t &sym, const Int
   (*intervals)[sym.thename] = std::make_shared<Interval>(value);
 }
 
-
 template <>
 void interval_domaint::update_symbol_interval(
   const symbol2t &sym,
   const interval_domaint::integer_intervalt &value)
 {
-  update_symbol_from_variant<0, interval_domaint::integer_intervalt>(sym,value);
+  update_symbol_from_variant<0, interval_domaint::integer_intervalt>(
+    sym, value);
 }
 
 template <>
@@ -78,7 +82,7 @@ void interval_domaint::update_symbol_interval(
   const symbol2t &sym,
   const interval_domaint::real_intervalt &value)
 {
-  update_symbol_from_variant<1, interval_domaint::real_intervalt>(sym,value);
+  update_symbol_from_variant<1, interval_domaint::real_intervalt>(sym, value);
 }
 
 template <>
@@ -86,7 +90,7 @@ void interval_domaint::update_symbol_interval(
   const symbol2t &sym,
   const wrapped_interval &value)
 {
-  update_symbol_from_variant<2, wrapped_interval>(sym,value);
+  update_symbol_from_variant<2, wrapped_interval>(sym, value);
 }
 
 template <class Interval>
@@ -1179,7 +1183,6 @@ bool interval_domaint::join(
     result |= join_changed;
   }
 
-  
   return result;
 }
 
