@@ -1077,6 +1077,16 @@ bool interval_domaint::join_intervals(
   return false;
 }
 
+
+bool do_is_subset(const interval_domaint::interval &a, const interval_domaint::interval &b)
+{
+  //  return false;
+  if (a.index() != 0)
+    return false;
+
+  return std::get<0>(b)->is_subseteq(*std::get<0>(a));
+}
+
 template <class IntervalMap>
 bool interval_domaint::join(
   IntervalMap &a0,
@@ -1089,9 +1099,19 @@ bool interval_domaint::join(
   bool result = false;
   std::unordered_set<irep_idt, irep_id_hash> symbol_map;
   for (const auto &myPair : a0)
-    symbol_map.insert(myPair.first);
-  for (const auto &myPair : a1)
-    symbol_map.insert(myPair.first);
+  {
+    const auto next_it = a1.find(myPair.first);
+    if (next_it == a1.end())
+    {
+      symbol_map.insert(myPair.first);
+      continue;
+    }
+
+    if (!do_is_subset(myPair.second, next_it->second))
+      symbol_map.insert(myPair.first);   
+    
+  }
+
 
   // Here we apply the HULL operation (before, after)
   for (const irep_idt &symbol : symbol_map)
