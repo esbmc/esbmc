@@ -153,8 +153,8 @@ public:
               const auto &value = property_it->v;
 
               // we need to find the actual interval however... getting the original name is hard
-              auto interval_it = state.begin();
-              for (; interval_it != state.end(); interval_it++)
+              auto interval_it = state->begin();
+              for (; interval_it != state->end(); interval_it++)
               {
                 auto real_name = interval_it->first.as_string();
                 auto var_name = property_it->var;
@@ -167,7 +167,7 @@ public:
                   break;
               }
 
-              if (interval_it == state.end())
+              if (interval_it == state->end())
               {
                 CAPTURE(
                   precise_intervals,
