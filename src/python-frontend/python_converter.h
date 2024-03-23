@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/context.h>
+#include <util/namespace.h>
 #include <nlohmann/json.hpp>
 
 #include <map>
@@ -8,6 +9,7 @@
 
 class codet;
 class struct_typet;
+class function_id;
 
 class python_converter
 {
@@ -30,6 +32,7 @@ private:
   exprt get_binary_operator_expr(const nlohmann::json &element);
   exprt get_logical_operator_expr(const nlohmann::json &element);
   exprt get_conditional_stm(const nlohmann::json &ast_node);
+  function_id build_function_id(const nlohmann::json &element);
   exprt get_function_call(const nlohmann::json &ast_block);
   exprt get_block(const nlohmann::json &ast_block);
 
@@ -62,6 +65,7 @@ private:
   std::string get_classname_from_symbol_id(const std::string &symbol_id) const;
 
   contextt &context;
+  namespacet ns;
   typet current_element_type;
   std::string python_filename;
   const nlohmann::json &ast_json;
