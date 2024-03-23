@@ -56,7 +56,7 @@ void goto_contractort::get_intervals(
         while (it != map.var_map.end())
         {
           auto var_name = to_symbol2t(it->second.getSymbol()).get_symbol_name();
-          auto _new_interval = interval_analysis[i_it].intervals[var_name];
+          auto _new_interval = interval_analysis[i_it].intervals->at(var_name);
           if (_new_interval.index() != 0)
           {
             it++;
@@ -317,7 +317,7 @@ void goto_contractort::goto_contractor_condition(
           }
 
           interval_analysis(goto_functions, namespacet);
-          for (const auto &i : interval_analysis[i_it].intervals)
+          for (const auto &i : *interval_analysis[i_it].intervals)
           {
             if (i.second.index() != 0)
               continue;
@@ -395,7 +395,7 @@ void goto_contractort::goto_contractor_condition(
 
         //get intervals and convert them to ibex intervals by updating the map
         interval_analysis(goto_functions, namespacet);
-        for (const auto &i : interval_analysis[i_it].intervals)
+        for (const auto &i : *interval_analysis[i_it].intervals)
         {
           if (i.second.index() != 0)
             continue;
