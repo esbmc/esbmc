@@ -871,7 +871,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     exprt array = get_expr(element["value"]);
     typet t = array.type().subtype();
-    exprt pos = get_expr(element["slice"]);
+    const nlohmann::json &slice = element["slice"];
+    exprt pos = get_expr(slice);
+
+    // Adjust negative indexes
+    if (slice.contains("op") && slice["op"]["_type"] == "USub")
+    {
+      BigInt v = binary2integer(pos.op0().value().c_str(), true);
+      v *= -1;
+      array_typet t = static_cast<array_typet &>(array.type());
+      BigInt s = binary2integer(t.size().value().c_str(), true);
+      v += s;
+      pos = from_integer(v, pos.type());
+    }
     expr = index_exprt(array, pos, t);
     break;
   }
