@@ -32,6 +32,8 @@ public:
     std::shared_ptr<real_intervalt>,
     std::shared_ptr<wrapped_interval>>;
 
+  // Map of variables into intervals.
+  // If a key does not exist then imply the TOP interval.
   using interval_map = std::unordered_map<irep_idt, interval, irep_id_hash>;
 
   interval_domaint() : bottom(true)
