@@ -875,6 +875,7 @@ smt_convt::resultt bmct::multi_property_check(
       options.get_bool_option("condition-coverage-claims");
 
     // reached claims:
+    auto total_cond_assert_cpy = total_cond_assert;
     for (const auto &claim : total_cond_assert)
     {
       if (reached_claims.count(claim))
@@ -883,6 +884,7 @@ smt_convt::resultt bmct::multi_property_check(
           log_status("  {} : SATISFIED", claim);
         tracked_instance++;
         reached_claims.erase(claim);
+        total_cond_assert_cpy.erase(claim);
 
         // reversal
         std::string delimiter = "\t";
@@ -902,8 +904,11 @@ smt_convt::resultt bmct::multi_property_check(
             else
               log_status("  {} : UNSATISFIED", r_claim);
           }
-          tracked_instance++;
+
+          if (reached_claims.count(r_claim))
+            tracked_instance++;
           reached_claims.erase(r_claim);
+          total_cond_assert_cpy.erase(r_claim);
         }
         else
         {
@@ -916,15 +921,23 @@ smt_convt::resultt bmct::multi_property_check(
               log_status("  {} : UNSATISFIED", r_claim);
           }
 
-          tracked_instance++;
+          if (reached_claims.count(r_claim))
+            tracked_instance++;
           reached_claims.erase(r_claim);
+          total_cond_assert_cpy.erase(r_claim);
         }
       }
     }
 
-    // TODO
     // show short-circuited:
-    // e.g. if both assert(a==1); and assert(!(a==1));
+    assert(reached_claims.empty());
+    if (cond_show_claims)
+    {
+      log_status(
+        "Short Circuited Conditions:  {}", total_cond_assert_cpy.size());
+      for (const auto &claim : total_cond_assert_cpy)
+        log_status("  {}", claim);
+    }
 
     if (total_instance != 0)
       log_result(

@@ -55,10 +55,8 @@ protected:
   collect_operands(const exprt &expr, std::list<exprt> &operands, bool &flag);
   static void
   collect_operators(const exprt &expr, std::list<std::string> &operators);
-
   static void collect_atom_operands(const exprt &expr, std::set<exprt> &atoms);
 
-  static std::unordered_set<std::string> total_cond_assert;
   namespacet ns;
   goto_functionst &goto_functions;
   std::string filename;
