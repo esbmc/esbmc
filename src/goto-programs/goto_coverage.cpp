@@ -1,8 +1,5 @@
 #include <goto-programs/goto_coverage.h>
 
-// cond cov
-std::unordered_set<std::string> goto_coveraget::total_cond_assert = {};
-
 void goto_coveraget::make_asserts_false()
 {
   log_progress("Converting all assertions to false...");
@@ -293,14 +290,11 @@ void goto_coveraget::add_cond_cov_init_assert(
 
   insert_assert(goto_program, it, guard);
   std::string idf = from_expr(ns, "", guard) + "\t" + it->location.as_string();
-  total_cond_assert.insert(idf);
 
   // reversal
   make_not(guard);
   insert_assert(goto_program, it, guard);
   idf = from_expr(ns, "", guard) + "\t" + it->location.as_string();
-  ;
-  total_cond_assert.insert(idf);
 }
 
 /*
@@ -400,7 +394,6 @@ void goto_coveraget::add_cond_cov_rhs_assert(
 
   std::string idf =
     from_expr(ns, "", a_guard) + "\t" + it->location.as_string();
-  total_cond_assert.insert(idf);
 
   // 6. reversal
   *root_ptr = old_root;
@@ -436,7 +429,6 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   it = ++t;
 
   idf = from_expr(ns, "", a_guard) + "\t" + it->location.as_string();
-  total_cond_assert.insert(idf);
 
   // 7. restore root_ptr
   // noted that this should be done before the updating of *top_ptr
