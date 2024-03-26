@@ -1,6 +1,5 @@
 #include <goto-programs/goto_contractor.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
-#include <goto-programs/abstract-interpretation/interval_analysis.h>
 
 void goto_contractor(
   goto_functionst &goto_functions,
@@ -57,7 +56,13 @@ void goto_contractort::get_intervals(
         while (it != map.var_map.end())
         {
           auto var_name = to_symbol2t(it->second.getSymbol()).get_symbol_name();
-          auto new_interval = interval_analysis[i_it].get_int_map()[var_name];
+          auto _new_interval = interval_analysis[i_it].intervals->at(var_name);
+          if (_new_interval.index() != 0)
+          {
+            it++;
+            continue;
+          }
+          interval_templatet<BigInt> new_interval = *std::get<0>(_new_interval);
           if (!new_interval.is_top())
           {
             auto lb = new_interval.get_lower().to_int64();
@@ -312,18 +317,18 @@ void goto_contractort::goto_contractor_condition(
           }
 
           interval_analysis(goto_functions, namespacet);
-          auto interval_map = interval_analysis[i_it].get_int_map();
-          auto it = interval_map.begin();
-
-          while (it != interval_map.end())
+          for (const auto &i : *interval_analysis[i_it].intervals)
           {
-            if (it->second.lower)
+            if (i.second.index() != 0)
+              continue;
+
+            const interval_templatet<BigInt> &value = *std::get<0>(i.second);
+            if (value.lower)
               map.update_lb_interval(
-                it->second.get_lower().to_int64(), it->first.as_string());
-            if (it->second.upper)
+                value.get_lower().to_int64(), i.first.as_string());
+            if (value.upper)
               map.update_ub_interval(
-                it->second.get_upper().to_int64(), it->first.as_string());
-            it++;
+                value.get_upper().to_int64(), i.first.as_string());
           }
 
           auto in = contractor.get_inner();
@@ -390,18 +395,20 @@ void goto_contractort::goto_contractor_condition(
 
         //get intervals and convert them to ibex intervals by updating the map
         interval_analysis(goto_functions, namespacet);
-        auto interval_map = interval_analysis[i_it].get_int_map();
-        auto it = interval_map.begin();
-        while (it != interval_map.end())
+        for (const auto &i : *interval_analysis[i_it].intervals)
         {
-          if (it->second.lower)
+          if (i.second.index() != 0)
+            continue;
+
+          const interval_templatet<BigInt> &value = *std::get<0>(i.second);
+          if (value.lower)
             map.update_lb_interval(
-              it->second.get_lower().to_int64(), it->first.as_string());
-          if (it->second.upper)
+              value.get_lower().to_int64(), i.first.as_string());
+          if (value.upper)
             map.update_ub_interval(
-              it->second.get_upper().to_int64(), it->first.as_string());
-          it++;
+              value.get_upper().to_int64(), i.first.as_string());
         }
+
         auto X = map.create_interval_vector();
 
         out->contract(X);
@@ -879,6 +886,7 @@ void expr_to_ibex_parser::parse_error(const expr2tc &expr)
   log_debug("contractor", "{}", oss.str());
 }
 
+#if 0
 void interval_analysis_ibex_contractor::maps_to_domains(
   int_mapt int_map,
   real_mapt real_map)
@@ -938,7 +946,7 @@ void interval_analysis_ibex_contractor::maps_to_domains(
     std::chrono::duration<double>(std::chrono::steady_clock::now() - t_0)
       .count();
 }
-
+#endif
 void interval_analysis_ibex_contractor::apply_contractor()
 {
   auto t_0 = std::chrono::steady_clock::now();
