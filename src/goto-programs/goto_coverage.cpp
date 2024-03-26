@@ -205,7 +205,10 @@ void goto_coveraget::gen_cond_cov()
           dump = false;
           collect_operands(guard, operands, dump);
           collect_operators(guard, operators);
-          assert(!operators.empty());
+
+          // e.g. if(a == 1)
+          if (operands.empty())
+            operands.push_back(guard);
 
           auto opd = operands.begin();
           auto opt = operators.begin();
@@ -213,6 +216,12 @@ void goto_coveraget::gen_cond_cov()
           // fisrt atoms
           std::set<exprt> atoms;
           collect_atom_operands(*opd, atoms);
+          if (atoms.empty())
+          {
+            log_error(
+              "Internal error when collecting atom condition expression.");
+            abort();
+          }
           add_cond_cov_init_assert(*atoms.begin(), goto_program, it);
 
           // set up pointer to re-build the binary tree
@@ -516,6 +525,9 @@ void goto_coveraget::collect_operators(
   std::list<std::string> opt;
   for (std::size_t i = 0; i < str.length(); i++)
   {
+    if (str[i] == ' ')
+      continue;
+
     if (str[i] == '|' && str[i + 1] == '|')
     {
       opt.emplace_back("||");
