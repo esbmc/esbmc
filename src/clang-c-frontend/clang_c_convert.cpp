@@ -3444,8 +3444,8 @@ void clang_c_convertert::get_decl_name(
       name = "__anon_constructor_at_" + location_begin_str;
       std::replace(name.begin(), name.end(), '.', '_');
 
-      id = "tag-" + name;
-      return;
+      // "id" will be derived from USR so break instead of return here
+      break;
     }
     break;
 
