@@ -1068,7 +1068,13 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
   case clang::Type::Enum:
   {
-    new_type = enum_type();
+    const clang::EnumType &ent = static_cast<const clang::EnumType &>(the_type);
+
+    clang::QualType q_type = ent.getDecl()->getPromotionType();
+
+    if (get_type(q_type, new_type))
+      return true;
+
     break;
   }
 
@@ -1695,7 +1701,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       const auto *e =
         llvm::dyn_cast<clang::EnumConstantDecl>(member.getMemberDecl()))
     {
-      get_enum_value(e, new_expr);
+      if (get_enum_value(e, new_expr))
+        return true;
+
       break;
     }
 
@@ -2654,16 +2662,16 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   return false;
 }
 
-void clang_c_convertert::get_enum_value(
+bool clang_c_convertert::get_enum_value(
   const clang::EnumConstantDecl *e,
   exprt &new_expr)
 {
   assert(e);
-  // For enum constants, we get their value directly
-  new_expr = constant_exprt(
-    integer2binary(e->getInitVal().getSExtValue(), bv_width(int_type())),
-    integer2string(e->getInitVal().getSExtValue()),
-    int_type());
+
+  if (get_expr(*e->getInitExpr(), new_expr))
+    return true;
+
+  return false;
 }
 
 bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
@@ -2672,7 +2680,9 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   // to the name
   if (const auto *e = llvm::dyn_cast<clang::EnumConstantDecl>(&d))
   {
-    get_enum_value(e, new_expr);
+    if (get_enum_value(e, new_expr))
+      return true;
+
     return false;
   }
 
