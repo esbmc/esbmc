@@ -1,13 +1,9 @@
 #include <goto-programs/goto_coverage.h>
 
-// assert cov
-int goto_coveraget::total_instrument = 0;
-int goto_coveraget::total_assert_instance = 0;
-
 // cond cov
 std::unordered_set<std::string> goto_coveraget::total_cond_assert = {};
 
-void goto_coveraget::make_asserts_false(goto_functionst &goto_functions)
+void goto_coveraget::make_asserts_false()
 {
   log_progress("Converting all assertions to false...");
   Forall_goto_functions (f_it, goto_functions)
@@ -20,16 +16,15 @@ void goto_coveraget::make_asserts_false(goto_functionst &goto_functions)
         if (it->is_assert())
         {
           it->guard = gen_false_expr();
-          it->location.property("assertion");
+          it->location.property("instrumented assertion");
           it->location.comment(from_expr(ns, "", old_guard));
           it->location.user_provided(true);
-          total_instrument++;
         }
       }
     }
 }
 
-void goto_coveraget::make_asserts_true(goto_functionst &goto_functions)
+void goto_coveraget::make_asserts_true()
 {
   log_progress("Converting all assertions to true...");
   Forall_goto_functions (f_it, goto_functions)
@@ -42,16 +37,16 @@ void goto_coveraget::make_asserts_true(goto_functionst &goto_functions)
         if (it->is_assert())
         {
           it->guard = gen_true_expr();
+          // not an instrumentation
           it->location.property("assertion");
           it->location.comment(from_expr(ns, "", old_guard));
           it->location.user_provided(true);
-          total_instrument++;
         }
       }
     }
 }
 
-void goto_coveraget::add_false_asserts(goto_functionst &goto_functions)
+void goto_coveraget::add_false_asserts()
 {
   log_progress("Adding false assertions...");
   Forall_goto_functions (f_it, goto_functions)
@@ -89,45 +84,82 @@ void goto_coveraget::insert_assert(
   t->type = ASSERT;
   t->guard = guard;
   t->location = it->location;
-  t->location.property("assertion");
+  t->location.property("instrumented assertion");
   t->location.comment(from_expr(ns, "", guard));
   t->location.user_provided(true);
   it = ++t;
-  total_instrument++;
 }
 
 int goto_coveraget::get_total_instrument() const
 {
+  int total_instrument = 0;
+  forall_goto_functions (f_it, goto_functions)
+    if (f_it->second.body_available && f_it->first != "__ESBMC_main")
+    {
+      const goto_programt &goto_program = f_it->second.body;
+      forall_goto_program_instructions (it, goto_program)
+      {
+        if (
+          it->is_assert() &&
+          it->location.property().as_string() == "instrumented assertion" &&
+          it->location.user_provided() == true)
+        {
+          total_instrument++;
+        }
+      }
+    }
   return total_instrument;
 }
 
 // Count the total assertion instances in goto level via goto-unwind api
 // run the algorithm on the copy of the original goto program
-void goto_coveraget::count_assert_instance(goto_functionst goto_functions)
+int goto_coveraget::get_total_assert_instance() const
 {
   // 1. execute goto uniwnd
+  int total_assert_instance = 0;
   bounded_loop_unroller unwind_loops;
   unwind_loops.run(goto_functions);
   // 2. calculate the number of assertion instance
-  Forall_goto_functions (f_it, goto_functions)
+  forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
-      goto_programt &goto_program = f_it->second.body;
-      Forall_goto_program_instructions (it, goto_program)
+      const goto_programt &goto_program = f_it->second.body;
+      forall_goto_program_instructions (it, goto_program)
       {
-        if (it->is_assert())
+        if (
+          it->is_assert() &&
+          it->location.property().as_string() == "instrumented assertion" &&
+          it->location.user_provided() == true)
           total_assert_instance++;
       }
     }
-}
-
-int goto_coveraget::get_total_assert_instance() const
-{
   return total_assert_instance;
 }
 
 std::unordered_set<std::string> goto_coveraget::get_total_cond_assert() const
 {
+  std::unordered_set<std::string> total_cond_assert = {};
+  std::string idf = "";
+
+  forall_goto_functions (f_it, goto_functions)
+  {
+    if (f_it->second.body_available && f_it->first != "__ESBMC_main")
+    {
+      const goto_programt &goto_program = f_it->second.body;
+      forall_goto_program_instructions (it, goto_program)
+      {
+        if (
+          it->is_assert() &&
+          it->location.property().as_string() == "instrumented assertion" &&
+          it->location.user_provided() == true)
+        {
+          idf = it->location.comment().as_string() + "\t" +
+                it->location.as_string();
+          total_cond_assert.insert(idf);
+        }
+      }
+    }
+  }
   return total_cond_assert;
 }
 
@@ -143,9 +175,7 @@ std::unordered_set<std::string> goto_coveraget::get_total_cond_assert() const
     if(a>1)
   then run multi-property
 */
-void goto_coveraget::gen_cond_cov(
-  goto_functionst &goto_functions,
-  const std::string &filename)
+void goto_coveraget::gen_cond_cov()
 {
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
@@ -363,11 +393,10 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   t->type = ASSERT;
   t->guard = guard;
   t->location = it->location;
-  t->location.property("assertion");
+  t->location.property("instrumented assertion");
   t->location.comment(from_expr(ns, "", a_guard));
   t->location.user_provided(true);
   it = ++t;
-  total_instrument++;
 
   std::string idf =
     from_expr(ns, "", a_guard) + "\t" + it->location.as_string();
@@ -401,11 +430,10 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   t->type = ASSERT;
   t->guard = guard;
   t->location = it->location;
-  t->location.property("assertion");
+  t->location.property("instrumented assertion");
   t->location.comment(from_expr(ns, "", a_guard));
   t->location.user_provided(true);
   it = ++t;
-  total_instrument++;
 
   idf = from_expr(ns, "", a_guard) + "\t" + it->location.as_string();
   total_cond_assert.insert(idf);
