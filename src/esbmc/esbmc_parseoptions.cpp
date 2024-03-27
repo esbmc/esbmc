@@ -116,7 +116,7 @@ static void segfault_handler(int sig)
     dprintf(STDERR_FILENO, "\nMemory map:\n");
     for (ssize_t rd; (rd = read(fd, buffer, sizeof(buffer))) > 0 ||
                      (rd == -1 && errno == EINTR);)
-      rd = write(STDERR_FILENO, buffer, rd);
+      rd = write(STDERR_FILENO, buffer, rd < 0 ? 0 : rd);
     close(fd);
   }
   ::raise(sig);
