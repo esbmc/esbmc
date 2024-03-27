@@ -192,6 +192,7 @@ void clang_cpp_convertert::get_decl_name(
 
   default:
     clang_c_convertert::get_decl_name(nd, name, id);
+    return;
   }
 
   clang::SmallString<128> DeclUSR;
