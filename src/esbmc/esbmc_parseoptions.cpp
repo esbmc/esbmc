@@ -103,6 +103,27 @@ void timeout_handler(int)
 #endif
 
 #ifndef _WIN32
+/* This will produce output on stderr that looks somewhat like this:
+ *   Signal 6, backtrace:
+ *   src/esbmc/esbmc(+0xad52e)[0x556c5dcdb52e]
+ *   /lib64/libc.so.6(+0x39d50)[0x7f7a8f475d50]
+ *   /lib64/libc.so.6(+0x89d9c)[0x7f7a8f4c5d9c]
+ *   /lib64/libc.so.6(raise+0x12)[0x7f7a8f475ca2]
+ *   /lib64/libc.so.6(abort+0xd3)[0x7f7a8f45e4ed]
+ *   src/esbmc/esbmc(+0x62e3e5)[0x556c5e25c3e5]
+ *   src/esbmc/esbmc(+0x61f7f1)[0x556c5e24d7f1]
+ *   [...]
+ *
+ *   Memory map:
+ *   [...]
+ *
+ * The backtrace can be translated into proper function symbols via addr2line,
+ * e.g.
+ *
+ *   cat bt | tr -d '[]' | tr '()' ' ' | grep esbmc | \
+ *   while read f a b; do echo $a | tr -d '+'; done | \
+ *   xargs addr2line -iapfCr -e src/esbmc/esbmc
+ */
 static void segfault_handler(int sig)
 {
   ::signal(sig, SIG_DFL);
