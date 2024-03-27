@@ -2668,12 +2668,16 @@ bool clang_c_convertert::get_enum_value(
 {
   assert(e);
 
-  if (e->getInitExpr() == nullptr)
+  if (!e->getInitExpr())
+  {
     new_expr = constant_exprt(
       integer2binary(e->getInitVal().getSExtValue(), bv_width(int_type())),
       integer2string(e->getInitVal().getSExtValue()),
       int_type());
-  else if (get_expr(*e->getInitExpr(), new_expr))
+    return false;
+  }
+
+  if (get_expr(*e->getInitExpr(), new_expr))
     return true;
 
   return false;
