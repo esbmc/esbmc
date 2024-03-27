@@ -205,7 +205,7 @@ protected:
     irep_idt unique_name,
     locationt location);
 
-  void
+  virtual void
   get_decl_name(const clang::NamedDecl &vd, std::string &id, std::string &name);
 
   void
