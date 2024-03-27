@@ -3426,29 +3426,6 @@ void clang_c_convertert::get_decl_name(
       return;
     }
     break;
-
-  case clang::Decl::CXXConstructor:
-    if (name.empty())
-    {
-      // Anonymous constructor, generate a name based on the type
-      const clang::CXXConstructorDecl &cd =
-        static_cast<const clang::CXXConstructorDecl &>(nd);
-
-      locationt location_begin;
-      get_location_from_decl(cd, location_begin);
-      std::string location_begin_str = location_begin.file().as_string() + "_" +
-                                       location_begin.function().as_string() +
-                                       "_" + location_begin.line().as_string() +
-                                       "_" +
-                                       location_begin.column().as_string();
-      name = "__anon_constructor_at_" + location_begin_str;
-      std::replace(name.begin(), name.end(), '.', '_');
-
-      // "id" will be derived from USR so break instead of return here
-      break;
-    }
-    break;
-
   default:
     if (name.empty())
     {
