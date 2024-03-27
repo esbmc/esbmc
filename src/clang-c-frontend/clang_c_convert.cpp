@@ -1070,7 +1070,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
   {
     const clang::EnumType &ent = static_cast<const clang::EnumType &>(the_type);
 
-    clang::QualType q_type = ent.getDecl()->getPromotionType();
+    clang::QualType q_type = ent.getDecl()->getIntegerType();
 
     if (get_type(q_type, new_type))
       return true;
