@@ -114,6 +114,9 @@ set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
                       esbmc-cpp11/template
                       )
 
+# list of C++14 test suites
+set(REGRESSIONS_CPP14 esbmc-cpp14/template)
+
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)
     set(REGRESSIONS esbmc-unix
@@ -180,6 +183,7 @@ else()
                     ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
                     incremental-smt
+                    ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP11}
                     ${REGRESSIONS_CPP03}
                     ${REGRESSIONS_GOTO_CONTRACTOR}

@@ -4,6 +4,7 @@
 #include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
+#include <util/c_typecast.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
 #include <util/message.h>
@@ -475,28 +476,81 @@ std::string python_converter::get_classname_from_symbol_id(
   return class_name;
 }
 
+function_id python_converter::build_function_id(const nlohmann::json &element)
+{
+  const std::string __ESBMC_get_object_size = "__ESBMC_get_object_size";
+  const std::string __ESBMC_assume = "__ESBMC_assume";
+  const std::string __VERIFIER_assume = "__VERIFIER_assume";
+
+  bool is_member_function_call = false;
+  const nlohmann::json &func_json = element["func"];
+  const std::string &func_type = func_json["_type"];
+  std::string func_name, obj_name;
+  std::string func_symbol_id = create_symbol_id();
+
+  if (func_type == "Name")
+    func_name = func_json["id"];
+  else if (func_type == "Attribute")
+  {
+    func_name = func_json["attr"];
+    obj_name = func_json["value"]["id"];
+    if (json_utils::is_module(obj_name, ast_json))
+      func_symbol_id = create_symbol_id(imported_modules[obj_name]);
+    else
+      is_member_function_call = true;
+  }
+
+  if (func_name == "len")
+  {
+    func_name = __ESBMC_get_object_size;
+    func_symbol_id = "c:@F@" + __ESBMC_get_object_size;
+  }
+  else if (func_name == __ESBMC_assume || func_name == __VERIFIER_assume)
+    func_symbol_id = func_name;
+  else if (func_symbol_id.find("@F@") == std::string::npos)
+    func_symbol_id += "@F@" + func_name;
+
+  bool is_ctor_call = is_constructor_call(element);
+
+  // Insert class name in the symbol id
+  std::string class_name;
+  if (is_ctor_call || is_member_function_call)
+  {
+    std::size_t pos = func_symbol_id.rfind("@F@");
+    if (pos != std::string::npos)
+    {
+      if (is_ctor_call)
+        class_name = func_name;
+      else if (is_member_function_call)
+      {
+        assert(!obj_name.empty());
+        auto obj_node = find_var_decl(obj_name, ast_json);
+        if (obj_node == nlohmann::json())
+          abort();
+
+        class_name = obj_node["annotation"]["id"].get<std::string>();
+      }
+      func_symbol_id.insert(pos, "@C@" + class_name);
+    }
+  }
+
+  return {func_name, func_symbol_id, class_name};
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   // TODO: Refactor into different classes/functions
   if (element.contains("func") && element["_type"] == "Call")
   {
     bool is_member_function_call = false;
-    bool is_imported_module_call = false;
-    std::string func_name, obj_name;
-
-    if (element["func"]["_type"] == "Name")
+    if (element["func"]["_type"] == "Attribute")
     {
-      func_name = element["func"]["id"];
-    }
-    else if (element["func"]["_type"] == "Attribute")
-    {
-      func_name = element["func"]["attr"];
-      obj_name = element["func"]["value"]["id"];
-      if (json_utils::is_module(obj_name, ast_json))
-        is_imported_module_call = true;
-      else
+      if (!json_utils::is_module(element["func"]["value"]["id"], ast_json))
         is_member_function_call = true;
     }
+
+    function_id func_id = build_function_id(element);
+    std::string func_name(func_id.function_name);
 
     // nondet_X() functions restricted to basic types supported in Python
     std::regex pattern(
@@ -513,56 +567,30 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
 
     locationt location = get_location_from_decl(element);
+    const std::string func_symbol_id(func_id.symbol_id);
+    assert(!func_symbol_id.empty());
 
-    std::string func_symbol_id =
-      (is_imported_module_call) ? create_symbol_id(imported_modules[obj_name])
-                                : create_symbol_id();
-
-    if (func_symbol_id.find("@F@") == func_symbol_id.npos)
-      func_symbol_id += std::string("@F@") + func_name;
-
-    // __ESBMC_assume
-    if (func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume")
+    if (
+      func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume" ||
+      func_name == "__ESBMC_get_object_size")
     {
-      func_symbol_id = func_name;
       if (context.find_symbol(func_symbol_id.c_str()) == nullptr)
       {
         // Create/init symbol
-        symbolt symbol;
-        symbol.mode = "C";
-        symbol.module = python_filename;
-        symbol.location = location;
-        symbol.type = code_typet();
-        symbol.name = func_name;
-        symbol.id = func_symbol_id;
+        code_typet code_type;
+        if (func_name == "__ESBMC_get_object_size")
+        {
+          code_type.return_type() = int_type();
+          code_type.arguments().push_back(pointer_typet(empty_typet()));
+        }
 
+        symbolt symbol = create_symbol(
+          python_filename, func_name, func_symbol_id, location, code_type);
         context.add(symbol);
       }
     }
 
     bool is_ctor_call = is_constructor_call(element);
-
-    // Insert class name in the symbol id
-    std::string class_name;
-    if (is_ctor_call || is_member_function_call)
-    {
-      std::size_t pos = func_symbol_id.rfind("@F@");
-      if (pos != std::string::npos)
-      {
-        if (is_ctor_call)
-          class_name = func_name;
-        else if (is_member_function_call)
-        {
-          // Get class name from obj annotation
-          auto obj_node = find_var_decl(obj_name, ast_json);
-          if (obj_node == nlohmann::json())
-            abort();
-
-          class_name = obj_node["annotation"]["id"].get<std::string>();
-        }
-        func_symbol_id.insert(pos, "@C@" + class_name);
-      }
-    }
 
     const symbolt *func_symbol = context.find_symbol(func_symbol_id.c_str());
 
@@ -575,6 +603,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       if (is_ctor_call || is_member_function_call)
       {
         // Get method from a base class when it is not defined in the current class
+        const std::string class_name(func_id.class_name);
+
         func_symbol = find_function_in_base_classes(
           class_name, func_symbol_id, func_name, is_ctor_call);
 
@@ -591,6 +621,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         else if (is_member_function_call)
         {
           // Update obj attributes from self
+          const std::string &obj_name = element["func"]["value"]["id"];
           const std::string obj_symbol_id = create_symbol_id() + "@" + obj_name;
           assert(context.find_symbol(obj_symbol_id));
 
@@ -640,7 +671,26 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
 
     for (const auto &arg_node : element["args"])
-      call.arguments().push_back(get_expr(arg_node));
+    {
+      exprt arg = get_expr(arg_node);
+      if (func_name == "__ESBMC_get_object_size")
+      {
+        c_typecastt c_typecast(ns);
+        c_typecast.implicit_typecast(arg, pointer_typet(empty_typet()));
+      }
+      call.arguments().push_back(arg);
+    }
+
+    if (func_name == "__ESBMC_get_object_size")
+    {
+      side_effect_expr_function_callt sideeffect;
+      sideeffect.function() = call.function();
+      sideeffect.arguments() = call.arguments();
+      sideeffect.location() = call.location();
+      sideeffect.type() =
+        static_cast<const typet &>(call.function().type().return_type());
+      return sideeffect;
+    }
 
     return call;
   }
@@ -821,7 +871,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     exprt array = get_expr(element["value"]);
     typet t = array.type().subtype();
-    exprt pos = get_expr(element["slice"]);
+    const nlohmann::json &slice = element["slice"];
+    exprt pos = get_expr(slice);
+
+    // Adjust negative indexes
+    if (slice.contains("op") && slice["op"]["_type"] == "USub")
+    {
+      BigInt v = binary2integer(pos.op0().value().c_str(), true);
+      v *= -1;
+      array_typet t = static_cast<array_typet &>(array.type());
+      BigInt s = binary2integer(t.size().value().c_str(), true);
+      v += s;
+      pos = from_integer(v, pos.type());
+    }
     expr = index_exprt(array, pos, t);
     break;
   }
@@ -1429,6 +1491,7 @@ python_converter::python_converter(
   contextt &_context,
   const nlohmann::json &ast)
   : context(_context),
+    ns(_context),
     ast_json(ast),
     current_func_name(""),
     current_class_name(""),

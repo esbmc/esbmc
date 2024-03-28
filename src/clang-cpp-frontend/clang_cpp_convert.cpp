@@ -900,6 +900,16 @@ bool clang_cpp_convertert::get_constructor_call(
     In this case, use members to construct the object directly
     */
   }
+  else if (new_expr.get_bool("#delegating_ctor"))
+  {
+    // get symbol for this
+    symbolt *s = context.find_symbol(new_expr.get("#delegating_ctor_this"));
+    const symbolt &this_symbol = *s;
+    assert(s);
+    exprt implicit_this_symb = symbol_expr(this_symbol);
+
+    call.arguments().push_back(implicit_this_symb);
+  }
   else
   {
     exprt this_object = exprt("new_object");
@@ -999,11 +1009,31 @@ bool clang_cpp_convertert::get_function_body(
 
         if (!init->isBaseInitializer())
         {
-          exprt lhs;
           if (init->isMemberInitializer())
           {
+            exprt lhs;
             // parsing non-static member initializer
             if (get_decl_ref(*init->getMember(), lhs))
+              return true;
+
+            build_member_from_component(
+              fd, lhs.id() == "dereference" ? lhs.op0() : lhs);
+
+            exprt rhs;
+            rhs.set("#member_init", 1);
+            if (get_expr(*init->getInit(), rhs))
+              return true;
+
+            initializer = side_effect_exprt("assign", lhs.type());
+            initializer.copy_to_operands(lhs, rhs);
+          }
+          else if (init->isDelegatingInitializer())
+          {
+            initializer.set(
+              "#delegating_ctor_this",
+              ftype.arguments().at(0).get("#identifier"));
+            initializer.set("#delegating_ctor", 1);
+            if (get_expr(*init->getInit(), initializer))
               return true;
           }
           else
@@ -1011,17 +1041,6 @@ bool clang_cpp_convertert::get_function_body(
             log_error("Unsupported initializer in {}", __func__);
             abort();
           }
-
-          build_member_from_component(
-            fd, lhs.id() == "dereference" ? lhs.op0() : lhs);
-
-          exprt rhs;
-          rhs.set("#member_init", 1);
-          if (get_expr(*init->getInit(), rhs))
-            return true;
-
-          initializer = side_effect_exprt("assign", lhs.type());
-          initializer.copy_to_operands(lhs, rhs);
         }
         else
         {
@@ -1259,7 +1278,7 @@ bool clang_cpp_convertert::get_decl_ref(
     if (id.empty() && name.empty())
       name_param_and_continue(*param, id, name, new_expr);
 
-    if (is_reference(new_expr.type()) || is_rvalue_reference(new_expr.type()))
+    if (is_lvalue_or_rvalue_reference(new_expr.type()))
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
       new_expr.set("#lvalue", true);
@@ -1300,7 +1319,7 @@ bool clang_cpp_convertert::get_decl_ref(
     if (clang_c_convertert::get_decl_ref(decl, new_expr))
       return true;
 
-    if (is_reference(new_expr.type()) || is_rvalue_reference(new_expr.type()))
+    if (is_lvalue_or_rvalue_reference(new_expr.type()))
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
       new_expr.set("#lvalue", true);
