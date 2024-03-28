@@ -185,13 +185,19 @@ void goto_coveraget::gen_cond_cov()
           !is_true(it->guard) && it->is_goto() &&
           filename == it->location.file().as_string())
         {
+          // e.g.
+          //    GOTO 2;
+          //    2: IF(...);
+          if (it->is_target())
+            target_num = it->target_number;
+
           if (to_not2t(it->guard).value->expr_id == expr2t::typecast_id)
           {
+            it->dump();
             //! bug:
             //! e.g. if(return_bool()) => !(_Bool)return_value$_return_bool$1
             //! the 'migrate_expr_back(it->guard)' will leads to migrate expr failed
             log_error("Internal error when handling function boolean return");
-            abort();
           }
 
           // preprocessing: if(true) ==> if(true == true)
@@ -285,6 +291,7 @@ void goto_coveraget::gen_cond_cov()
             ++opt;
           }
         }
+        target_num = -1;
       }
     }
 }
@@ -299,6 +306,28 @@ void goto_coveraget::add_cond_cov_init_assert(
 
   insert_assert(goto_program, it, guard);
   std::string idf = from_expr(ns, "", guard) + "\t" + it->location.as_string();
+
+  if (target_num != -1)
+  {
+    // update target
+    Forall_goto_program_instructions (itt, goto_program)
+    {
+      //! assume only one target
+      if (
+        itt->is_goto() && itt->has_target() &&
+        itt->get_target()->target_number == target_num)
+      {
+        --it;
+        // update src (GOTO x)
+        itt->set_target(it);
+        // add tgt_num to the instrumentation  (x: ASSERT)
+        it->target_number = target_num;
+        // rm original tgt_num
+        ++it;
+        it->target_number = -1;
+      }
+    }
+  }
 
   // reversal
   make_not(guard);

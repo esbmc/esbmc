@@ -7,12 +7,18 @@ class goto_coveraget
 {
 public:
   explicit goto_coveraget(const namespacet &ns, goto_functionst &goto_functions)
-    : ns(ns), goto_functions(goto_functions){};
+    : ns(ns), goto_functions(goto_functions)
+  {
+    target_num = -1;
+  };
   explicit goto_coveraget(
     const namespacet &ns,
     goto_functionst &goto_functions,
     const std::string filename)
-    : ns(ns), goto_functions(goto_functions), filename(filename){};
+    : ns(ns), goto_functions(goto_functions), filename(filename)
+  {
+    target_num = -1;
+  };
   // add an assert(0)
   // - at the beginning of each GOTO program
   // - at the beginning of each branch body
@@ -60,4 +66,5 @@ protected:
   namespacet ns;
   goto_functionst &goto_functions;
   std::string filename;
+  unsigned int target_num;
 };
