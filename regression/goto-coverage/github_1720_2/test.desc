@@ -1,0 +1,6 @@
+CORE
+main.c
+--condition-coverage-claims
+^Short-circuited Conditions:  2
+^Condition Coverage: 37.5%
+^VERIFICATION FAILED$

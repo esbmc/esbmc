@@ -1,4 +1,4 @@
 CORE
 main.c
---multi-property --goto-coverage
+--multi-property --assertion-coverage
 ^VERIFICATION FAILED$

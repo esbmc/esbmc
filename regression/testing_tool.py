@@ -352,6 +352,7 @@ TEST_SUITES = [
     "python",
     "smtlib",
     "z3",
+    "goto-coverage",
 ]
 
 def apply_transform_over_tests(functor):
