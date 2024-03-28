@@ -642,8 +642,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       }
       else
       {
-        log_error("Undefined function: {}", func_name.c_str());
-        abort();
+        log_warning("Undefined function: {}", func_name.c_str());
+        return exprt();
       }
     }
 
