@@ -54,6 +54,8 @@ extern "C"
 
 #ifndef _WIN32
 #include <sys/wait.h>
+#include <execinfo.h>
+#include <fcntl.h>
 #endif
 
 #ifdef ENABLE_OLD_FRONTEND
@@ -63,6 +65,8 @@ extern "C"
 #ifdef ENABLE_GOTO_CONTRACTOR
 #include <goto-programs/goto_contractor.h>
 #endif
+
+#define BT_BUF_SIZE 256
 
 extern "C" const char buildidstring_buf[];
 extern "C" const unsigned int buildidstring_buf_size;
@@ -95,6 +99,48 @@ void timeout_handler(int)
   // occur on exit, but more importantly doesn't mix well with signal handlers,
   // and results in the allocator locking against itself. So use _exit instead
   _exit(1);
+}
+#endif
+
+#ifndef _WIN32
+/* This will produce output on stderr that looks somewhat like this:
+ *   Signal 6, backtrace:
+ *   src/esbmc/esbmc(+0xad52e)[0x556c5dcdb52e]
+ *   /lib64/libc.so.6(+0x39d50)[0x7f7a8f475d50]
+ *   /lib64/libc.so.6(+0x89d9c)[0x7f7a8f4c5d9c]
+ *   /lib64/libc.so.6(raise+0x12)[0x7f7a8f475ca2]
+ *   /lib64/libc.so.6(abort+0xd3)[0x7f7a8f45e4ed]
+ *   src/esbmc/esbmc(+0x62e3e5)[0x556c5e25c3e5]
+ *   src/esbmc/esbmc(+0x61f7f1)[0x556c5e24d7f1]
+ *   [...]
+ *
+ *   Memory map:
+ *   [...]
+ *
+ * The backtrace can be translated into proper function symbols via addr2line,
+ * e.g.
+ *
+ *   cat bt | tr -d '[]' | tr '()' ' ' | grep esbmc | \
+ *   while read f a b; do echo $a | tr -d '+'; done | \
+ *   xargs addr2line -iapfCr -e src/esbmc/esbmc
+ */
+static void segfault_handler(int sig)
+{
+  ::signal(sig, SIG_DFL);
+  void *buffer[BT_BUF_SIZE];
+  int n = backtrace(buffer, BT_BUF_SIZE);
+  dprintf(STDERR_FILENO, "\nSignal %d, backtrace:\n", sig);
+  backtrace_symbols_fd(buffer, n, STDERR_FILENO);
+  int fd = open("/proc/self/maps", O_RDONLY);
+  if (fd != -1)
+  {
+    dprintf(STDERR_FILENO, "\nMemory map:\n");
+    for (ssize_t rd; (rd = read(fd, buffer, sizeof(buffer))) > 0 ||
+                     (rd == -1 && errno == EINTR);)
+      rd = write(STDERR_FILENO, buffer, rd < 0 ? 0 : rd);
+    close(fd);
+  }
+  ::raise(sig);
 }
 #endif
 
@@ -409,6 +455,14 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
       perror("Couldn't disable core dump size");
       abort();
     }
+  }
+#endif
+
+#ifndef _WIN32
+  if (cmdline.isset("segfault-handler"))
+  {
+    signal(SIGSEGV, segfault_handler);
+    signal(SIGABRT, segfault_handler);
   }
 #endif
 
