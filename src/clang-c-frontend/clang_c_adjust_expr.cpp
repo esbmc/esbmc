@@ -720,7 +720,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
 
         if (symbol.lvalue)
           f_op.cmt_lvalue(true);
-
+          
         align_se_function_call_return_type(f_op, expr);
       }
       else
@@ -745,7 +745,10 @@ void clang_c_adjust::adjust_side_effect_function_call(
     }
   }
   else
+  {
+    align_se_function_call_return_type(f_op, expr);
     adjust_expr(f_op);
+  }
 
   // do implicit dereference
   if (f_op.is_address_of() && f_op.implicit() && (f_op.operands().size() == 1))
