@@ -213,17 +213,22 @@ void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
   clang_c_adjust::adjust_expr_rel(expr);
 
   exprt &op0 = expr.op0();
-  if (op0.is_typecast())
+  convert_reference(op0);
+}
+
+void clang_cpp_adjust::convert_reference(exprt &expr)
+{
+  if (expr.is_typecast())
   {
     // special treatment for lvalue reference typecasting
     // if lhs is a typecast of lvalue reference, e.g. (int)r == 1
     // where r is a reference
     // we turn it into (int)*r == 1
-    exprt &tp_op0 = op0.op0();
+    exprt &tp_op0 = expr.op0();
     if (tp_op0.is_symbol() && is_lvalue_or_rvalue_reference(tp_op0.type()))
       convert_ref_to_deref_symbol(tp_op0);
   }
-  if (is_lvalue_or_rvalue_reference(op0.type()))
+  if (is_lvalue_or_rvalue_reference(expr.type()))
   {
     // special treatment for lvalue reference
     // if LHS is an lvalue reference, e.g.
@@ -231,11 +236,11 @@ void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
     // but RHS is not a pointer. We got to dereference the LHS
     // and turn it into:
     //  *r == 1 *F(a) == 1
-    dereference_exprt tmp_deref(op0, op0.type());
-    tmp_deref.location() = op0.location();
+    dereference_exprt tmp_deref(expr, expr.type());
+    tmp_deref.location() = expr.location();
     tmp_deref.set("#lvalue", true);
     tmp_deref.set("#implicit", true);
-    op0.swap(tmp_deref);
+    expr.swap(tmp_deref);
   }
 }
 
@@ -258,6 +263,14 @@ void clang_cpp_adjust::convert_lvalue_ref_to_deref_sideeffect(exprt &expr)
   expr.swap(tmp_deref);
 }
 
+void clang_cpp_adjust::adjust_expr_binary_arithmetic(exprt &expr)
+{
+  clang_c_adjust::adjust_expr_binary_arithmetic(expr);
+
+  for (auto &op : expr.operands())
+    convert_reference(op);
+}
+
 void clang_cpp_adjust::adjust_function_call_arguments(
   side_effect_expr_function_callt &expr)
 {
@@ -271,6 +284,6 @@ void clang_cpp_adjust::align_se_function_call_return_type(
   // align the side effect's type at callsite with the
   // function return type. But ignore constructors
   const typet &return_type = (typet &)f_op.type().return_type();
-  if (return_type.id() != "constructor")
+  if (return_type.id() != "constructor" && return_type.is_not_nil())
     expr.type() = return_type;
 }

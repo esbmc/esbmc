@@ -720,7 +720,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
 
         if (symbol.lvalue)
           f_op.cmt_lvalue(true);
-          
+
         align_se_function_call_return_type(f_op, expr);
       }
       else
