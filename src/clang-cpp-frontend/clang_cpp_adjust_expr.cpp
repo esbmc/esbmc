@@ -53,7 +53,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
     exprt &initializer = (exprt &)expr.find("initializer");
     adjust_expr(initializer);
   }
-  else if (statement == "assign")
+  else if (has_prefix(id2string(statement), "assign"))
   {
     adjust_side_effect_assign(expr);
   }
@@ -206,6 +206,9 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
   }
   else
     clang_c_adjust::adjust_side_effect(expr);
+
+  for (auto &op : expr.operands())
+    convert_reference(op);
 }
 
 void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
