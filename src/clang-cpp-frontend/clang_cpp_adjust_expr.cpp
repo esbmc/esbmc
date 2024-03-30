@@ -215,8 +215,8 @@ void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
 {
   clang_c_adjust::adjust_expr_rel(expr);
 
-  exprt &op0 = expr.op0();
-  convert_reference(op0);
+  for (auto &op : expr.operands())
+    convert_reference(op);
 }
 
 void clang_cpp_adjust::convert_reference(exprt &expr)
