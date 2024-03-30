@@ -53,7 +53,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
     exprt &initializer = (exprt &)expr.find("initializer");
     adjust_expr(initializer);
   }
-  else if (has_prefix(id2string(statement), "assign"))
+  else if (statement == "assign")
   {
     adjust_side_effect_assign(expr);
   }
@@ -206,14 +206,12 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
   }
   else
     clang_c_adjust::adjust_side_effect(expr);
-
-  for (auto &op : expr.operands())
-    convert_reference(op);
 }
 
-void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
+void clang_cpp_adjust::adjust_reference(exprt &expr)
 {
-  clang_c_adjust::adjust_expr_rel(expr);
+  if (!expr.has_operands())
+    return;
 
   for (auto &op : expr.operands())
     convert_reference(op);
@@ -264,14 +262,6 @@ void clang_cpp_adjust::convert_lvalue_ref_to_deref_sideeffect(exprt &expr)
   tmp_deref.set("#lvalue", true);
   tmp_deref.set("#implicit", true);
   expr.swap(tmp_deref);
-}
-
-void clang_cpp_adjust::adjust_expr_binary_arithmetic(exprt &expr)
-{
-  clang_c_adjust::adjust_expr_binary_arithmetic(expr);
-
-  for (auto &op : expr.operands())
-    convert_reference(op);
 }
 
 void clang_cpp_adjust::adjust_function_call_arguments(
