@@ -2352,6 +2352,9 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
   case expr2t::member_id:
   {
+    const member2t &mem = to_member2t(res);
+    expr2tc mem_src = mem.source_value;
+
     if (is_array_type(expr))
     {
       if (extracting_from_array_tuple_is_error)
@@ -2363,6 +2366,10 @@ expr2tc smt_convt::get(const expr2tc &expr)
       }
       return expr2tc(); // TODO: ??? This is horrible
     }
+    else if (
+      is_symbol2t(mem_src) && !is_pointer_type(expr) && !is_struct_type(expr))
+      return get_by_type(res);
+
     simplify(res);
     return res;
   }
