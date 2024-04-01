@@ -66,5 +66,5 @@ protected:
   namespacet ns;
   goto_functionst &goto_functions;
   std::string filename;
-  unsigned int target_num;
+  int target_num;
 };
