@@ -20,6 +20,7 @@
 #include <util/type_byte_size.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <limits>
+#include <chrono>
 
 void goto_contractor(
   goto_functionst &goto_functions,
