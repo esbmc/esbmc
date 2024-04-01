@@ -191,17 +191,10 @@ void goto_coveraget::gen_cond_cov()
           if (it->is_target())
             target_num = it->target_number;
 
-          if (to_not2t(it->guard).value->expr_id == expr2t::typecast_id)
-          {
-            it->dump();
-            //! bug:
-            //! e.g. if(return_bool()) => !(_Bool)return_value$_return_bool$1
-            //! the 'migrate_expr_back(it->guard)' will leads to migrate expr failed
-            log_error("Internal error when handling function boolean return");
-          }
-
           // preprocessing: if(true) ==> if(true == true)
           exprt guard = migrate_expr_back(it->guard);
+          //log_status("guard:{}",guard);
+
           bool dump = false;
           guard = handle_single_guard(guard, dump);
 
@@ -310,22 +303,34 @@ void goto_coveraget::add_cond_cov_init_assert(
   if (target_num != -1)
   {
     // update target
+    std::vector<goto_programt::instructiont::targett> tgt_list;
     Forall_goto_program_instructions (itt, goto_program)
     {
       //! assume only one target
       if (
         itt->is_goto() && itt->has_target() &&
-        itt->get_target()->target_number == target_num)
+        itt->get_target()->target_number == (unsigned)target_num)
       {
-        --it;
-        // update src (GOTO x)
-        itt->set_target(it);
-        // add tgt_num to the instrumentation  (x: ASSERT)
-        it->target_number = target_num;
-        // rm original tgt_num
-        ++it;
-        it->target_number = -1;
+        tgt_list.push_back(itt);
       }
+    }
+
+    if (!tgt_list.empty())
+    {
+      //! do not change the order
+      // 1. rm original tgt_num
+      it->target_number = -1;
+
+      // 2. add tgt_num to the instrumentation  (x: ASSERT)
+      --it;
+      it->target_number = target_num;
+
+      // 3. update src (GOTO x)
+      for (auto &itt : tgt_list)
+        itt->set_target(it);
+
+      // 4. reset
+      ++it;
     }
   }
 
