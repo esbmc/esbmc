@@ -561,13 +561,12 @@ void goto_coveraget::collect_operators(
   {
     if (str[i] == ' ')
       continue;
-
-    if (str[i] == '|' && str[i + 1] == '|')
+    else if (str[i] == '|' && i + 1 < str.length() && str[i + 1] == '|')
     {
       opt.emplace_back("||");
       i++;
     }
-    else if (str[i] == '&' && str[i + 1] == '&')
+    else if (str[i] == '&' && i + 1 < str.length() && str[i + 1] == '&')
     {
       opt.emplace_back("&&");
       i++;
@@ -576,13 +575,6 @@ void goto_coveraget::collect_operators(
       opt.emplace_back("(");
     else if (str[i] == ')')
       opt.emplace_back(")");
-  }
-
-  // remove the most outside '(' and ')'
-  if (opt.front() == "(" && opt.back() == ")")
-  {
-    opt.pop_front();
-    opt.pop_back();
   }
 
   // add implied parentheses in boolean expression

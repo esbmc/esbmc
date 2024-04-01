@@ -2,13 +2,13 @@
 #include <assert.h>
 #include <stdbool.h>
 
-bool func() { return nondet_bool(); }
+bool func() { return false; }
 
 int main()
 {
   bool a = nondet_bool();
   bool b = true;
-  if (b || func() && a && b)
+  if (b && func() || a && b)
   {
     assert(1);
   }
