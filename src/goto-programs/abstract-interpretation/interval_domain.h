@@ -34,6 +34,7 @@ public:
 
   // Map of variables into intervals.
   // If a key does not exist then imply the TOP interval.
+  // If a key exists then the shared_ptr must point to a valid place
   using interval_map = std::unordered_map<irep_idt, interval, irep_id_hash>;
 
   interval_domaint() : bottom(true)
