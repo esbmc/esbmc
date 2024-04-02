@@ -1,5 +1,13 @@
 #include <goto-programs/goto_coverage.h>
 
+std::string goto_coveraget::get_filename_from_path(std::string path)
+{
+  if (path.find_last_of('/') != std::string::npos)
+    return path.substr(path.find_last_of('/') + 1);
+
+  return path;
+}
+
 void goto_coveraget::make_asserts_false()
 {
   log_progress("Converting all assertions to false...");
@@ -180,10 +188,12 @@ void goto_coveraget::gen_cond_cov()
       goto_programt &goto_program = f_it->second.body;
       Forall_goto_program_instructions (it, goto_program)
       {
+        const std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
+        filename = get_filename_from_path(filename);
+
         // e.g. IF !(a > 1) THEN GOTO 3
-        if (
-          !is_true(it->guard) && it->is_goto() &&
-          filename == it->location.file().as_string())
+        if (!is_true(it->guard) && it->is_goto() && filename == cur_filename)
         {
           // e.g.
           //    GOTO 2;
@@ -193,7 +203,6 @@ void goto_coveraget::gen_cond_cov()
 
           // preprocessing: if(true) ==> if(true == true)
           exprt guard = migrate_expr_back(it->guard);
-          //log_status("guard:{}",guard);
 
           bool dump = false;
           guard = handle_single_guard(guard, dump);
