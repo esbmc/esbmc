@@ -1035,6 +1035,7 @@ smt_convt::resultt bmct::multi_property_check(
       }
     }
 
+    //! the reached_claim might not be empty (due to unwinding assertions)
     // show short-circuited:
     // to distinguish with unreachable, we utilize the location info
     for (const auto &claim : total_cond_assert_cpy)
@@ -1045,7 +1046,7 @@ smt_convt::resultt bmct::multi_property_check(
       if (reached_instance_loc.count(claim_loc))
         short_circuit_instance.insert(claim);
     }
-    assert(reached_claims.empty());
+
     if (cond_show_claims)
     {
       log_status(
