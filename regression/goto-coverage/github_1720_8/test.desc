@@ -1,5 +1,4 @@
 CORE
 main.c
 --condition-coverage-claims
-^Condition Coverage: 83.33333333333333%
 ^VERIFICATION FAILED$
