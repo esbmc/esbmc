@@ -482,6 +482,7 @@ const struct group_opt_templ all_cmd_options[] = {
      {"ltl", NULL, ""},
      /* see <https://github.com/esbmc/esbmc/pull/1281> for a list of supported
      * modules; check "grep -rw 'log_debug(' src" for more up-to-date info. */
+<<<<<<< HEAD
      {"verbosity",
       boost::program_options::value<std::vector<std::string>>(),
       "Verbosity of log output, can be given multiple times. Parameter is "
@@ -527,6 +528,54 @@ const struct group_opt_templ all_cmd_options[] = {
      {"segfault-handler", NULL, "print stacktrace on segmentation fault"},
    }},
   {"end", {{"", NULL, "end of options"}}},
+=======
+    {"verbosity",
+     boost::program_options::value<std::vector<std::string>>(),
+     "Verbosity of log output, can be given multiple times. Parameter is "
+     "either a decimal N or 'module:N' to set the log-level of debug messages "
+     "of the module to N; without module, it sets the global log-level"},
+    // --break-at $insnnum will cause ESBMC to execute a trap
+    // instruction when it executes the designated GOTO instruction number.
+    {"break-at", boost::program_options::value<std::string>(), ""},
+    // I added some intrinsics along the line of "__ESBMC_switch_to_thread"
+    // that immediately transitioned to a particular thread and didn't allow
+    // any other exploration from that point. Useful for constructing an
+    // explicit multithreading path
+    {"direct-interleavings", NULL, ""},
+    // I think this dumps the current stack of all threads on an ileave point.
+    // Useful for working out the state of _all_ the threads and how they
+    // evolve, also see next flag,
+    {"print-stack-traces", NULL, ""},
+    // At every ileave point ESBMC stops and asks the user what thread to
+    // transition to. Useful again for trying to replicate a particular context
+    // switch order, or quickly explore what's reachable.
+    {"interactive-ileaves", NULL, ""},
+    {"add-false-assert",
+     NULL,
+     "insert a false assertion at the beginning of each function/branch and "
+     "the end of each function"},
+    {"make-assert-false", NULL, "convert every assertion to false"},
+    {"assertion-coverage",
+     NULL,
+     "this activates --multi-property, "
+     "deactivates --keep-verified-claims, and "
+     "shows the coverage of assertion instances"},
+    {"assertion-coverage-claims",
+     NULL,
+     "enable assertion-coverage and shows all reached claims"},
+    {"condition-coverage",
+     NULL,
+     "this activates --multi-property, "
+     "deactivates --keep-verified-claims, and "
+     "shows the coverage of condition statements"},
+    {"condition-coverage-claims",
+     NULL,
+     "enable condition-coverage and shows the instrumented claims"}}},
+  {"end",
+   {
+     {"", NULL, "end of options"},
+   }},
+>>>>>>> de6ceece5 ([Coverage] fix code style)
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "instruction"},
     {"explain,h", NULL, ""}}}};
