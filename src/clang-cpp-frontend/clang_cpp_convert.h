@@ -23,6 +23,11 @@ protected:
 
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
 
+  void get_decl_name(
+    const clang::NamedDecl &nd,
+    std::string &name,
+    std::string &id) override;
+
   /**
    *  Get reference to a declared variable or function, e.g:
    *   - getting the callee for CXXConstructExpr

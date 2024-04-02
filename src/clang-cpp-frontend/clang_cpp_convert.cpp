@@ -159,6 +159,58 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
+void clang_cpp_convertert::get_decl_name(
+  const clang::NamedDecl &nd,
+  std::string &name,
+  std::string &id)
+{
+  id = name = clang_c_convertert::get_decl_name(nd);
+
+  switch (nd.getKind())
+  {
+  case clang::Decl::CXXConstructor:
+    if (name.empty())
+    {
+      // Anonymous constructor, generate a name based on the type
+      const clang::CXXConstructorDecl &cd =
+        static_cast<const clang::CXXConstructorDecl &>(nd);
+
+      locationt location_begin;
+      get_location_from_decl(cd, location_begin);
+      std::string location_begin_str = location_begin.file().as_string() + "_" +
+                                       location_begin.function().as_string() +
+                                       "_" + location_begin.line().as_string() +
+                                       "_" +
+                                       location_begin.column().as_string();
+      name = "__anon_constructor_at_" + location_begin_str;
+      std::replace(name.begin(), name.end(), '.', '_');
+
+      // "id" will be derived from USR so break instead of return here
+      break;
+    }
+    break;
+
+  default:
+    clang_c_convertert::get_decl_name(nd, name, id);
+    return;
+  }
+
+  clang::SmallString<128> DeclUSR;
+  if (!clang::index::generateUSRForDecl(&nd, DeclUSR))
+  {
+    id = DeclUSR.str().str();
+    return;
+  }
+
+  // Otherwise, abort
+  std::ostringstream oss;
+  llvm::raw_os_ostream ross(oss);
+  ross << "Unable to generate the USR for:\n";
+  nd.dump(ross);
+  ross.flush();
+  log_error("{}", oss.str());
+  abort();
+}
 bool clang_cpp_convertert::get_type(
   const clang::QualType &q_type,
   typet &new_type)
@@ -1226,7 +1278,7 @@ bool clang_cpp_convertert::get_decl_ref(
     if (id.empty() && name.empty())
       name_param_and_continue(*param, id, name, new_expr);
 
-    if (is_reference(new_expr.type()) || is_rvalue_reference(new_expr.type()))
+    if (is_lvalue_or_rvalue_reference(new_expr.type()))
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
       new_expr.set("#lvalue", true);
@@ -1267,7 +1319,7 @@ bool clang_cpp_convertert::get_decl_ref(
     if (clang_c_convertert::get_decl_ref(decl, new_expr))
       return true;
 
-    if (is_reference(new_expr.type()) || is_rvalue_reference(new_expr.type()))
+    if (is_lvalue_or_rvalue_reference(new_expr.type()))
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
       new_expr.set("#lvalue", true);
@@ -1392,7 +1444,7 @@ bool clang_cpp_convertert::annotate_class_method(
 
   // annotate name
   std::string method_id, method_name;
-  clang_c_convertert::get_decl_name(cxxmdd, method_name, method_id);
+  get_decl_name(cxxmdd, method_name, method_id);
   new_expr.name(method_id);
 
   // annotate access
@@ -1515,7 +1567,7 @@ bool clang_cpp_convertert::get_base_map(
 
     // get base class id
     std::string class_id, class_name;
-    clang_c_convertert::get_decl_name(base_cxxrd, class_name, class_id);
+    get_decl_name(base_cxxrd, class_name, class_id);
 
     // avoid adding the same base, e.g. in case of diamond problem
     if (map.find(class_id) != map.end())

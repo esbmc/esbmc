@@ -179,7 +179,7 @@ protected:
 
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
-  void get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
+  bool get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
 
   virtual bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
 
@@ -205,7 +205,7 @@ protected:
     irep_idt unique_name,
     locationt location);
 
-  void
+  virtual void
   get_decl_name(const clang::NamedDecl &vd, std::string &id, std::string &name);
 
   void

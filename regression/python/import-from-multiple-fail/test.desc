@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: Undefined function: sub$
+^WARNING: Undefined function: sub$

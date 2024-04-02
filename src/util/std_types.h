@@ -481,6 +481,7 @@ public:
 
 bool is_reference(const typet &type);
 bool is_rvalue_reference(const typet &type);
+bool is_lvalue_or_rvalue_reference(const typet &type);
 
 class bv_typet : public typet
 {
