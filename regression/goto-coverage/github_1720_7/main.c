@@ -8,7 +8,8 @@ int main()
 {
   bool a = nondet_bool();
   bool b =  true;
-  if (b && func() || a && b) 
+  auto c = nondet_bool();
+  if (b && c|| a && b) 
   {
     assert(1);
   }

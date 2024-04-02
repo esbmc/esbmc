@@ -38,6 +38,18 @@ public:
 
   // condition cov
   void gen_cond_cov();
+  int get_total_instrument() const;
+  int get_total_assert_instance() const;
+  std::unordered_set<std::string> get_total_cond_assert() const;
+  std::string get_filename_from_path(std::string path);
+
+protected:
+  // turn a OP b OP c into a list a, b, c
+  static void
+  collect_operands(const exprt &expr, std::list<exprt> &operands, bool &flag);
+  static void
+  collect_operators(const exprt &expr, std::list<std::string> &operators);
+  static void collect_atom_operands(const exprt &expr, std::set<exprt> &atoms);
   exprt handle_single_guard(exprt &guard, bool &flag);
   void add_cond_cov_init_assert(
     const exprt &expr,
@@ -51,17 +63,6 @@ public:
     const exprt &rhs,
     goto_programt &goto_program,
     goto_programt::targett &it);
-  int get_total_instrument() const;
-  int get_total_assert_instance() const;
-  std::unordered_set<std::string> get_total_cond_assert() const;
-
-protected:
-  // turn a OP b OP c into a list a, b, c
-  static void
-  collect_operands(const exprt &expr, std::list<exprt> &operands, bool &flag);
-  static void
-  collect_operators(const exprt &expr, std::list<std::string> &operators);
-  static void collect_atom_operands(const exprt &expr, std::set<exprt> &atoms);
 
   namespacet ns;
   goto_functionst &goto_functions;

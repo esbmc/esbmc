@@ -1,6 +1,5 @@
 CORE
 main.c
 --condition-coverage-claims
-^Short-circuited Conditions:  0
 ^Condition Coverage: 50%
 ^VERIFICATION FAILED$
