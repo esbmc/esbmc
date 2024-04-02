@@ -537,12 +537,12 @@ void goto_coveraget::collect_atom_operands(
   const exprt &expr,
   std::set<exprt> &atoms)
 {
-  const std::string &id = expr.id().as_string();
+  const auto &id = expr.id();
   forall_operands (it, expr)
     collect_atom_operands(*it, atoms);
   if (
-    id == "=" || id == "notequal" || id == ">" || id == "<" || id == ">=" ||
-    id == "<=")
+    id == exprt::equality || id == exprt::notequal || id == exprt::i_lt ||
+    id == exprt::i_gt || id == exprt::i_le || id == exprt::i_ge)
   {
     atoms.insert(expr);
   }
@@ -587,7 +587,9 @@ void goto_coveraget::collect_operators(
   }
 
   // add implied parentheses in boolean expression
-  // e.g. if(a&&b || c&&d) ==> if((a&&b) || (c&&d))
+  // e.g.
+  //   if(a&&b || c&&d) ==> if((a&&b) || (c&&d))
+  //   (a == 1 || b != 2 && (b == 3 || a == 1)) => (a == 1 || (b != 2 && (b == 3 || a == 1)))
   // general rule: add parenthesis between || and &&
   // (&&||&&)
   std::list<std::string> tmp;
@@ -599,6 +601,7 @@ void goto_coveraget::collect_operators(
     {
       if (pnt_stk.empty() && !tmp.empty())
       {
+        // combine
         operators.insert(operators.end(), tmp.begin(), tmp.end());
         tmp.clear();
       }
@@ -619,7 +622,7 @@ void goto_coveraget::collect_operators(
     }
     else if (op == "&&" && lst_op == "||")
     {
-      if (pnt_stk.empty() && !tmp.empty())
+      if (!tmp.empty())
       {
         operators.insert(operators.end(), tmp.begin(), tmp.end());
         tmp.clear();
@@ -664,7 +667,7 @@ exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
 {
   if (
     expr.operands().size() == 1 ||
-    (expr.operands().size() == 0 && expr.id().as_string() == "constant"))
+    (expr.operands().size() == 0 && expr.id() == exprt::constant))
   {
     // e.g. if(!(a++)) => if(!(a++==1) == 1) if(true) ==> if(1==1)
     bool flg0 = false;
@@ -709,9 +712,9 @@ exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
     flag = true;
   }
 
-  const std::string &id = expr.id().as_string();
-  if (!(id == "=" || id == "notequal" || id == ">" || id == "<" || id == ">=" ||
-        id == "<="))
+  const auto &id = expr.id();
+  if (!(id == exprt::equality || id == exprt::notequal || id == exprt::i_lt ||
+        id == exprt::i_gt || id == exprt::i_le || id == exprt::i_ge))
   {
     Forall_operands (it, expr)
     {
