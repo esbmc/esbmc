@@ -305,8 +305,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     // Convert all the arguments and store them in 'args'.
     unsigned int i = 0;
-    expr->foreach_operand(
-      [this, &args, &i](const expr2tc &e) { args[i++] = convert_ast(e); });
+    expr->foreach_operand([this, &args, &i](const expr2tc &e)
+                          { args[i++] = convert_ast(e); });
   }
   }
 
@@ -2355,7 +2355,11 @@ expr2tc smt_convt::get(const expr2tc &expr)
     const member2t &mem = to_member2t(res);
     expr2tc mem_src = mem.source_value;
 
-    if (is_array_type(expr))
+    if (is_symbol2t(mem_src) && !is_pointer_type(expr) && !is_struct_type(expr))
+    {
+      return get_by_type(res);
+    }
+    else if (is_array_type(expr))
     {
       if (extracting_from_array_tuple_is_error)
       {
@@ -2366,9 +2370,6 @@ expr2tc smt_convt::get(const expr2tc &expr)
       }
       return expr2tc(); // TODO: ??? This is horrible
     }
-    else if (
-      is_symbol2t(mem_src) && !is_pointer_type(expr) && !is_struct_type(expr))
-      return get_by_type(res);
 
     simplify(res);
     return res;
@@ -2408,26 +2409,30 @@ expr2tc smt_convt::get(const expr2tc &expr)
     if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       arr_size = get(arr_size);
 
-    res->type->Foreach_subtype([this](type2tc &t) {
-      if (!is_array_type(t))
-        return;
+    res->type->Foreach_subtype(
+      [this](type2tc &t)
+      {
+        if (!is_array_type(t))
+          return;
 
-      expr2tc &arr_size = to_array_type(t).array_size;
-      if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-        arr_size = get(arr_size);
-    });
+        expr2tc &arr_size = to_array_type(t).array_size;
+        if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+          arr_size = get(arr_size);
+      });
   }
 
   // Recurse on operands
   bool have_all = true;
-  res->Foreach_operand([this, &have_all](expr2tc &e) {
-    expr2tc new_e;
-    if (e)
-      new_e = get(e);
-    e = new_e;
-    if (!e)
-      have_all = false;
-  });
+  res->Foreach_operand(
+    [this, &have_all](expr2tc &e)
+    {
+      expr2tc new_e;
+      if (e)
+        new_e = get(e);
+      e = new_e;
+      if (!e)
+        have_all = false;
+    });
 
   // And simplify
   if (have_all)
