@@ -1,0 +1,5 @@
+CORE
+main.c
+--condition-coverage-claims --goto-unwind 
+^Condition Coverage: 100%
+^VERIFICATION FAILED$
