@@ -292,9 +292,9 @@ void interval_analysis(
 
   Forall_goto_functions (f_it, goto_functions)
   {
-    //optimize_function(interval_analysis, f_it->second);
+    optimize_function(interval_analysis, f_it->second);
   }
-
+#if 0
   if (instrument_mode == INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE)
     instrument_loops(interval_analysis, goto_functions);
   else
@@ -304,6 +304,7 @@ void interval_analysis(
       instrument_intervals(interval_analysis, f_it->second, instrument_mode);
     }
   }
+  #endif
   goto_functions.update();
 
   fine_timet algorithm_stop = current_time();
