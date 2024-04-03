@@ -222,9 +222,10 @@ void clang_cpp_adjust::convert_reference(exprt &expr)
   if (expr.is_typecast())
   {
     // special treatment for lvalue reference typecasting
-    // if lhs is a typecast of lvalue reference, e.g. (int)r == 1
+    // if lhs is a typecast of lvalue reference,
+    // e.g. (int)r == 1, (int)r + 1, (int)r += 1
     // where r is a reference
-    // we turn it into (int)*r == 1
+    // we turn it into (int)*r
     exprt &tp_op0 = expr.op0();
     if (tp_op0.is_symbol() && is_lvalue_or_rvalue_reference(tp_op0.type()))
       convert_ref_to_deref_symbol(tp_op0);
@@ -232,11 +233,12 @@ void clang_cpp_adjust::convert_reference(exprt &expr)
   if (is_lvalue_or_rvalue_reference(expr.type()))
   {
     // special treatment for lvalue reference
-    // if LHS is an lvalue reference, e.g.
-    //  r == 1 or F(a) == 1 where F is a function that returns a reference
-    // but RHS is not a pointer. We got to dereference the LHS
+    // if LHS is an lvalue reference,
+    // e.g. r == 1, r += 1 or F(a) == 1 where F is a function that
+    // returns a reference but RHS is not a pointer.
+    // We got to dereference the LHS
     // and turn it into:
-    //  *r == 1 *F(a) == 1
+    //  *r, *F(a)
     dereference_exprt tmp_deref(expr, expr.type());
     tmp_deref.location() = expr.location();
     tmp_deref.set("#lvalue", true);
