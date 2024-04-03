@@ -513,11 +513,9 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
-  bool aggregate_value_init = is_aggregate_type(vd.getType());
-
   if (
     symbol.static_lifetime && !symbol.is_extern &&
-    (!vd.hasInit() || aggregate_value_init))
+    (!vd.hasInit() || is_aggregate_type(vd.getType())))
   {
     // the type might contains symbolic types,
     // replace them with complete types before generating zero initialization
@@ -571,7 +569,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
       return true;
 
     bool aggregate_without_init =
-      aggregate_value_init &&
+      is_aggregate_type(vd.getType()) &&
       stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
 
     added_symbol = context.move_symbol_to_context(symbol);
