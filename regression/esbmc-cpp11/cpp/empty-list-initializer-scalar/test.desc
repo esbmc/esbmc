@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--cppstd 11
+^VERIFICATION SUCCESSFUL$

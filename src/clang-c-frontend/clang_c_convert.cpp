@@ -2058,6 +2058,21 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             init_union_field->getName().str());
       }
     }
+    else if (
+      init_stmt.getNumInits() == 0 && init_stmt.getType()->isScalarType())
+    {
+      /* We have a list initializer with no elements.
+       * So per https://en.cppreference.com/w/cpp/language/list_initialization
+       * we perform value-initialization.
+       * > Otherwise, if the braced-init-list has no elements, T is value-initialized.
+       * And per https://en.cppreference.com/w/cpp/language/value_initialization
+       * > The effects of value-initialization are:
+       * > ...
+       * > - Otherwise, the object is zero-initialized.
+       * So we just zero-initialize the object.
+       */
+      inits = gen_zero(t);
+    }
     else
     {
       assert(init_stmt.getNumInits() == 1);
