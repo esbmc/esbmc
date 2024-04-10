@@ -1593,26 +1593,33 @@ void clang_cpp_convertert::get_base_components_methods(
     symbolt *s = context.find_symbol(class_id);
     assert(s);
 
-    const struct_typet &base_type = to_struct_type(s->type);
-
-    // pull components in
-    const struct_typet::componentst &components = base_type.components();
-    for (auto component : components)
+    irep_idt id = s->type.id();
+    if (id != "incomplete_struct" && id != "incomplete_union")
     {
-      // TODO: tweak access specifier
-      component.set("from_base", true);
-      if (!is_duplicate_component(component, type))
-        to_struct_type(type).components().push_back(component);
-    }
+      /* TODO: might need to pull in methods and components from incomplete
+       *       types as well somehow */
 
-    // pull methods in
-    const struct_typet::componentst &methods = base_type.methods();
-    for (auto method : methods)
-    {
-      // TODO: tweak access specifier
-      method.set("from_base", true);
-      if (!is_duplicate_method(method, type))
-        to_struct_type(type).methods().push_back(method);
+      const struct_typet &base_type = to_struct_type(s->type);
+
+      // pull components in
+      const struct_typet::componentst &components = base_type.components();
+      for (auto component : components)
+      {
+        // TODO: tweak access specifier
+        component.set("from_base", true);
+        if (!is_duplicate_component(component, type))
+          to_struct_type(type).components().push_back(component);
+      }
+
+      // pull methods in
+      const struct_typet::componentst &methods = base_type.methods();
+      for (auto method : methods)
+      {
+        // TODO: tweak access specifier
+        method.set("from_base", true);
+        if (!is_duplicate_method(method, type))
+          to_struct_type(type).methods().push_back(method);
+      }
     }
   }
 }
