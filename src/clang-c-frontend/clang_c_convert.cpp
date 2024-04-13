@@ -354,6 +354,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if (!rd_def)
     return false;
 
+  if (!rd.isCompleteDefinition())
+    return false;
+
   /* Don't continue if it's not incomplete; use the .incomplete() flag to avoid
    * infinite recursion if the type we're defining refers to itself
    * (via pointers): it either is already being defined (up the stack somewhere)
@@ -1053,10 +1056,13 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     std::string id, name;
     get_decl_name(rd, name, id);
-
-    /* record in context if not already there */
-    if (get_struct_union_class(rd))
-      return true;
+    symbolt *s = context.find_symbol(id);
+    if (!s)
+    {
+      /* record in context if not already there */
+      if (get_struct_union_class(rd))
+        return true;
+    }
 
     /* symbolic type referring to that type */
     new_type = symbol_typet(id);
