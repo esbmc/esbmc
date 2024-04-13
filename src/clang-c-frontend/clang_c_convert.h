@@ -206,7 +206,7 @@ protected:
     locationt location);
 
   virtual void
-  get_decl_name(const clang::NamedDecl &vd, std::string &id, std::string &name);
+  get_decl_name(const clang::NamedDecl &vd, std::string &name, std::string &id);
 
   void
   get_start_location_from_stmt(const clang::Stmt &stmt, locationt &location);
