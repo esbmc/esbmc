@@ -350,10 +350,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * b) the type is being referred to under a pointer inside another type
    *    definition and up to this definition has not been defined, yet.
    */
-  clang::RecordDecl *rd_def = rd.getDefinition();
-  if (!rd_def)
-    return false;
-
   if (!rd.isCompleteDefinition())
     return false;
 
@@ -364,6 +360,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if (!sym->type.incomplete())
     return false;
   sym->type.remove(irept::a_incomplete);
+
+  clang::RecordDecl *rd_def = rd.getDefinition();
+  assert(rd_def);
 
   /* it has a definition, now build the complete type */
   struct_union_typet t(c_tag);
