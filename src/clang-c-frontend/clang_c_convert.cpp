@@ -292,6 +292,13 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
 bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
+  return get_struct_union_class(rd, false);
+}
+
+bool clang_c_convertert::get_struct_union_class(
+  const clang::RecordDecl &rd,
+  bool only_forward_declare)
+{
   if (rd.isInterface())
   {
     log_error("Interface is not supported");
@@ -358,6 +365,10 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * (via pointers): it either is already being defined (up the stack somewhere)
    * or it's already a complete struct or union in the context. */
   if (!sym->type.incomplete())
+    return false;
+
+  /* If we're only forward declaring, we don't need to complete the type */
+  if (only_forward_declare)
     return false;
   sym->type.remove(irept::a_incomplete);
 
